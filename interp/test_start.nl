@@ -97,14 +97,10 @@ fn sha256(data) -> int {
     var total_size = data_size + 1 + pad_len + 8;
 
     /* Initial hash values per FIPS 180-4 Section 5.3.3. */
-    var H0 = 1779033703;
-    var H1 = 3144134277;
-    var H2 = 1013904242;
-    var H3 = 2773480762;
-    var H4 = 1359893119;
-    var H5 = 2600822924;
-    var H6 = 528734635;
-    var H7 = 1541459225;
+    var H = [
+        1779033703, 3144134277, 1013904242, 2773480762,
+        1359893119, 2600822924, 528734635,  1541459225,
+    ];
 
     /* Process each 64-byte block. */
     var blk_off = 0;
@@ -125,14 +121,14 @@ fn sha256(data) -> int {
         }
 
         /* --- Initialize working variables from current hash state. --- */
-        var a = H0;
-        var b = H1;
-        var c = H2;
-        var d = H3;
-        var e = H4;
-        var f = H5;
-        var g = H6;
-        var h = H7;
+        var a = H[0];
+        var b = H[1];
+        var c = H[2];
+        var d = H[3];
+        var e = H[4];
+        var f = H[5];
+        var g = H[6];
+        var h = H[7];
 
         /* --- 64 compression rounds using K[t] and W[t]. --- */
         var t = 0;
@@ -169,21 +165,24 @@ fn sha256(data) -> int {
         }
 
         /* --- Add compressed chunk to current hash state. --- */
-        H0 ← (H0 + a) & 4294967295;
-        H1 ← (H1 + b) & 4294967295;
-        H2 ← (H2 + c) & 4294967295;
-        H3 ← (H3 + d) & 4294967295;
-        H4 ← (H4 + e) & 4294967295;
-        H5 ← (H5 + f) & 4294967295;
-        H6 ← (H6 + g) & 4294967295;
-        H7 ← (H7 + h) & 4294967295;
+        var v = [a, b, c, d, e, f, g, h];
+        var k = 0;
+        while (k < 8) {
+            H[k] ← (H[k] + v[k]) & 4294967295;
+            k ← k + 1;
+        }
 
         blk_off ← blk_off + 64;
     }
 
-    /* Return packed final hash: H0«224 | … | H7. */
-    return (H0 « 224) | (H1 « 192) | (H2 « 160) | (H3 « 128) |
-           (H4 « 96) | (H5 « 64) | (H6 « 32) | H7;
+    /* Pack final hash: H[0]«224 | … | H[7]. */
+    var hash = 0;
+    var k = 0;
+    while (k < 8) {
+        hash ← hash | (H[k] « ((7 - k) * 32));
+        k ← k + 1;
+    }
+    return hash;
 }
 
 @start
