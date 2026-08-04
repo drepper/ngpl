@@ -120,52 +120,48 @@ fn sha256(data) -> int {
             j ← j + 1;
         }
 
-        /* --- Initialize working variables from current hash state. --- */
-        var a = H[0];
-        var b = H[1];
-        var c = H[2];
-        var d = H[3];
-        var e = H[4];
-        var f = H[5];
-        var g = H[6];
-        var h = H[7];
+        /* --- Initialize working variables v[0..7] from H[0..7]. --- */
+        var v = new i32[8];
+        var k = 0;
+        while (k < 8) {
+            v[k] ← H[k];
+            k ← k + 1;
+        }
 
         /* --- 64 compression rounds using K[t] and W[t]. --- */
         var t = 0;
         while (t < 64) {
             /* Σ₁(e) = ROTR(6,e) ⊕ ROTR(11,e) ⊕ ROTR(25,e). */
-            var s1 = ((e ↻ 6) ^ (e ↻ 11) ^ (e ↻ 25)) & 4294967295;
+            var s1 = ((v[4] ↻ 6) ^ (v[4] ↻ 11) ^ (v[4] ↻ 25)) & 4294967295;
 
             /* ch(e,f,g) = (e ∧ f) ⊕ (¬e ∧ g). */
-            var ch = (e & f) ^ (~e & g);
+            var ch = (v[4] & v[5]) ^ (~v[4] & v[6]);
 
             /* t1 = h + Σ₁ + ch + K[t] + W[t]. */
-            var t1 = (h + s1 + ch + K[t] + W[t]) & 4294967295;
+            var t1 = (v[7] + s1 + ch + K[t] + W[t]) & 4294967295;
 
             /* Σ₀(a) = ROTR(2,a) ⊕ ROTR(13,a) ⊕ ROTR(22,a). */
-            var s0 = ((a ↻ 2) ^ (a ↻ 13) ^ (a ↻ 22)) & 4294967295;
+            var s0 = ((v[0] ↻ 2) ^ (v[0] ↻ 13) ^ (v[0] ↻ 22)) & 4294967295;
 
             /* maj(a,b,c) = (a ∧ b) ⊕ (a ∧ c) ⊕ (b ∧ c). */
-            var maj = (a & b) ^ (a & c) ^ (b & c);
+            var maj = (v[0] & v[1]) ^ (v[0] & v[2]) ^ (v[1] & v[2]);
 
             /* t2 = Σ₀ + maj. */
             var t2 = (s0 + maj) & 4294967295;
 
-            /* Shift working variables. */
-            h ← g;
-            g ← f;
-            f ← e;
-            e ← (d + t1) & 4294967295;
-            d ← c;
-            c ← b;
-            b ← a;
-            a ← (t1 + t2) & 4294967295;
+            /* Shift working variables right by one position. */
+            var n = 7;
+            while (n > 0) {
+                v[n] ← v[n - 1];
+                n ← n - 1;
+            }
+            v[0] ← (t1 + t2) & 4294967295;
+            v[4] ← (v[4] + t1) & 4294967295;
 
             t ← t + 1;
         }
 
         /* --- Add compressed chunk to current hash state. --- */
-        var v = [a, b, c, d, e, f, g, h];
         var k = 0;
         while (k < 8) {
             H[k] ← (H[k] + v[k]) & 4294967295;
