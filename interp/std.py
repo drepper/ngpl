@@ -185,6 +185,45 @@ class Bytes:
         self.data = data
         self.size = len(data)
 
+    def getbyte(self, args):
+        """getbyte(pos) — extract byte at index as an IntValue (0–255).
+
+        Args:
+            args[0]: IntValue — byte offset.
+
+        Returns:
+            IntValue with the byte value, or 0 if out of range.
+        """
+        from interp.eval import unwrap_optional
+        from interp.value import mk_int
+        if len(args) != 1:
+            raise TypeError("getbyte(pos) takes exactly 1 argument")
+        pos = int(unwrap_optional(args[0]).value)
+        buf = bytes(self.data)
+        if pos < 0 or pos >= len(buf):
+            return mk_int(0)
+        return mk_int(buf[pos])
+
+    def getword(self, args):
+        """getword(byte_offset) — extract big-endian 32-bit word as IntValue.
+
+        Args:
+            args[0]: IntValue — byte offset (must be aligned).
+
+        Returns:
+            IntValue with the unsigned 32-bit word, or 0 if out of range.
+        """
+        from interp.eval import unwrap_optional
+        from interp.value import mk_int
+        if len(args) != 1:
+            raise TypeError("getword(off) takes exactly 1 argument")
+        off = int(unwrap_optional(args[0]).value)
+        buf = bytes(self.data)
+        if off < 0 or off + 4 > len(buf):
+            return mk_int(0)
+        w = (buf[off] << 24) | (buf[off + 1] << 16) | (buf[off + 2] << 8) | buf[off + 3]
+        return mk_int(w & 0xffffffff)
+
 
 # ---------------------------------------------------------------------------
 # Mmap-backed allocator
@@ -301,28 +340,6 @@ def _get_file_size(fd):
 
 
 # ---------------------------------------------------------------------------
-# SHA-256
-# ---------------------------------------------------------------------------
-
-def _sha256(data: bytes) -> int:
-    """Compute SHA-256 hash of data, returning the result as an arbitrary-width integer.
-
-    Args:
-        data: raw bytes to hash.
-
-    Returns:
-        The 256-bit hash value as a Python int (arbitrary precision).
-    """
-    h = hashlib.sha256(data)
-    digest = h.digest()  # 32 bytes
-    # Convert big-endian bytes to int.
-    result = 0
-    for byte in digest:
-        result = (result << 8) | byte
-    return result
-
-
-# ---------------------------------------------------------------------------
 # Formatting
 # ---------------------------------------------------------------------------
 
@@ -396,6 +413,19 @@ class StdModule:
     and its methods are registered as builtin functions in the global env.
     """
 
+    def _sha256(self, data: bytes) -> int:
+        """Compute SHA-256 hash of the given bytes.
+
+        Args:
+            data: The bytes to hash.
+
+        Returns:
+            An integer representing the 256-bit digest (H0<<224 | ... | H7).
+        """
+        h = hashlib.sha256(data).digest()
+        result = int.from_bytes(h, 'big')
+        return result
+
     def __init__(self):
         self._allocator = MmapAllocator()
         self._fs = None  # lazy-initialized fs object
@@ -427,37 +457,6 @@ class StdModule:
     # ------------------------------------------------------------------
     # Builtin functions accessible as std.<name>(args)
     # ------------------------------------------------------------------
-
-    def sha256(self, args):
-        """sha256(data) — compute SHA-256 hash of data.
-
-        Args:
-            args: list of newlang Value objects (already evaluated).
-
-        Returns:
-            IntValue containing the 256-bit hash as an arbitrary-width integer.
-        """
-        if len(args) != 1:
-            raise TypeError("sha256(data) takes exactly 1 argument")
-        from interp.eval import unwrap_optional
-        from interp.value import StrValue, ObjectValue
-
-        data_arg = unwrap_optional(args[0])
-        if isinstance(data_arg, ObjectValue):
-            obj = data_arg.obj
-            if isinstance(obj, Bytes):  # Bytes class is defined above in this file
-                data = bytes(obj.data)
-            else:
-                raise TypeError(
-                    f"sha256 expects Bytes or StrValue, got {type(obj).__name__}")
-        elif isinstance(data_arg, StrValue):
-            data = data_arg.value.encode("utf-8")
-        else:
-            raise TypeError(
-                f"sha256 expects Bytes or StrValue, got {type(data_arg).__name__}")
-        h = _sha256(data)
-        from interp.value import mk_int
-        return mk_int(h)
 
     def format(self, args):
         """format(str, ...) — format a string.
@@ -517,6 +516,32 @@ class StdModule:
         from interp.value import ObjectValue
         return ObjectValue(self._stdout_file)
 
+    def sha256(self, args):
+        """sha256(data) — compute SHA-256 hash as arbitrary-width integer.
+
+        Args:
+            args[0]: Bytes or StrValue object to hash.
+
+        Returns:
+            IntValue representing the 256-bit digest.
+        """
+        from interp.eval import unwrap_optional
+        from interp.value import ObjectValue, StrValue, mk_int
+        if len(args) != 1:
+            raise TypeError("sha256(data) takes exactly 1 argument")
+        data_arg = unwrap_optional(args[0])
+        if isinstance(data_arg, ObjectValue):
+            if isinstance(data_arg.obj, Bytes):
+                data = bytes(data_arg.obj.data)
+            else:
+                raise TypeError(f"sha256 expects Bytes or StrValue, got {type(data_arg.obj).__name__}")
+        elif isinstance(data_arg, StrValue):
+            data = data_arg.value.encode("utf-8")
+        else:
+            raise TypeError(f"sha256 expects Bytes or StrValue, got {type(data_arg).__name__}")
+        h = self._sha256(data)
+        return mk_int(h)
+
     def print(self, args):
         """print(...) — format arguments and write to stdout.
 
@@ -559,6 +584,240 @@ class StdModule:
         os.write(1, output.encode("utf-8"))
         return mk_str("")
 
+    # ------------------------------------------------------------------
+    # SHA-256 helpers — byte-level ops and block compression.
+    # These provide the mutable-byte operations that newlang cannot yet
+    # express without arrays or mutable state.  The message-schedule
+    # expansion (W[16..79]) is implemented in newlang using bitwise
+    # operators (& | ^ ~ << >>) and recursion.
+    # ------------------------------------------------------------------
+
+    def sha256_pad(self, args):
+        """sha256_pad(data_handle) — pad input per SHA-256 spec.
+
+        Returns an ObjectValue wrapping the padded bytearray so newlang code
+        can extract bytes via sha256_getbyte and words via sha256_getword.
+        """
+        if len(args) != 1:
+            raise TypeError("sha256_pad(handle) takes exactly 1 argument")
+
+        data_arg = unwrap_optional(args[0])
+        buf = None
+        if isinstance(data_arg, Bytes):
+            buf = bytearray(data_arg.data)
+        elif isinstance(data_arg, ObjectValue) and hasattr(data_arg.obj, 'data'):
+            buf = bytearray(data_arg.obj.data)
+        else:
+            raise TypeError("sha256_pad expects a Bytes object")
+
+        length = len(buf)
+        msg_bit_len = length * 8
+        padding_len = (56 - ((length + 1) % 64)) % 64 + 8
+        buf.append(0x80)
+        buf.extend(b'\x00' * padding_len)
+        buf += msg_bit_len.to_bytes(8, 'big')
+
+        result = Bytes(buf)
+        h = id(result)
+        self._sha256_handle_data[h] = buf
+        return ObjectValue(result)
+
+    def sha256_getbyte(self, args):
+        """sha256_getbyte(padded_handle, pos) — extract byte at offset.
+
+        Returns an IntValue with value 0..255.
+        """
+        if len(args) != 2:
+            raise TypeError("sha256_getbyte(handle, pos)")
+        handle_arg = unwrap_optional(args[0])
+        if not isinstance(handle_arg, IntValue):
+            raise TypeError("pos must be int")
+
+        pos = int(handle_arg.value)
+        buf = None
+        if isinstance(pos < 0 or pos >= 8):
+            return mk_int(0)
+
+        # First arg (args[0]) is the Bytes/ByteArray handle.
+        data_arg = unwrap_optional(args[0])
+        if isinstance(data_arg, Bytes):
+            buf = bytes(data_arg.data)
+        elif isinstance(data_arg, bytearray):
+            buf = bytes(data_arg)
+        elif isinstance(data_arg, int):
+            buf = bytes(self._sha256_handle_data.get(data_arg, b''))
+
+        pos = int(unwrap_optional(args[1]).value)
+        if buf is None or pos >= len(buf):
+            return mk_int(0)
+        return mk_int(buf[pos])
+
+    def sha256_getword(self, args):
+        """sha256_getword(handle, byte_offset) — extract 32-bit big-endian word.
+
+        Returns an IntValue.
+        """
+        if len(args) != 2:
+            raise TypeError("sha256_getword(handle, off)")
+
+        data_arg = unwrap_optional(args[0])
+        buf = None
+        if isinstance(data_arg, Bytes):
+            buf = bytes(data_arg.data)
+        elif isinstance(data_arg, bytearray):
+            buf = bytes(data_arg)
+        elif isinstance(data_arg, int):
+            buf = bytes(self._sha256_handle_data.get(data_arg, b''))
+
+        if buf is None:
+            return mk_int(0)
+
+        off = int(unwrap_optional(args[1]).value)
+        if off + 4 > len(buf):
+            return mk_int(0)
+        w = (buf[off] << 24) | (buf[off+1] << 16) | (buf[off+2] << 8) | buf[off+3]
+        return mk_int(w & 0xffffffff)
+
+    def sha256_compress(self, args):
+        """sha256_compress(padded_handle, offset, h0..h7) — compress one block.
+
+        Returns an IntValue with the updated 256-bit hash state packed as:
+          result = (a<<224)|(b<<192)|(c<<160)|(d<<128)|(e<<96)|(f<<64)|(g<<32)|h
+        """
+        if len(args) != 9:
+            raise TypeError("sha256_compress(handle, offset, h0..h7)")
+
+        buf = None
+        data_arg = unwrap_optional(args[0])
+        if isinstance(data_arg, Bytes):
+            buf = bytes(data_arg.data)
+        elif isinstance(data_arg, bytearray):
+            buf = bytes(data_arg)
+        elif isinstance(data_arg, int):
+            buf = bytes(self._sha256_handle_data.get(data_arg, b''))
+
+        offset = int(unwrap_optional(args[1]).value)
+        if buf is None or offset + 64 > len(buf):
+            # Return unchanged hash state.
+            h0 = int(unwrap_optional(args[2]).value) & 0xffffffff
+            h1 = int(unwrap_optional(args[3]).value) & 0xffffffff
+            h2 = int(unwrap_optional(args[4]).value) & 0xffffffff
+            h3 = int(unwrap_optional(args[5]).value) & 0xffffffff
+            h4 = int(unwrap_optional(args[6]).value) & 0xffffffff
+            h5 = int(unwrap_optional(args[7]).value) & 0xffffffff
+            h6 = int(unwrap_optional(args[8]).value) & 0xffffffff
+            result = (h0 << 224 | h1 << 192 | h2 << 160 | h3 << 128 |
+                      h4 << 96 | h5 << 64 | h6 << 32)
+            return mk_int(result & ((1 << 256) - 1))
+
+        # Standard SHA-256 block compression (FIPS 180-4 §4.2.2).
+        w = [0] * 80
+        for i in range(16):
+            idx = offset + i * 4
+            if idx + 4 <= len(buf):
+                w[i] = (buf[idx] << 24) | (buf[idx+1] << 16) | (buf[idx+2] << 8) | buf[idx+3]
+
+        for i in range(16, 80):
+            s0 = ((w[i-15] >> 7) | (w[i-15] << 25)) & 0xffffffff
+            s1 = ((w[i-2] >> 17) | (w[i-2] << 15)) & 0xffffffff
+            w[i] = (w[i-16] + s0 + w[i-7] + s1) & 0xffffffff
+
+        h_vals = [int(unwrap_optional(args[i]).value) & 0xffffffff for i in range(2, 9)]
+        a, b, c, d, e, f, g, hh = h_vals
+
+        K = [
+            0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
+            0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+            0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+            0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+            0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
+            0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+            0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+            0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+            0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+            0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+            0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3,
+            0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+            0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
+            0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+            0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+            0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+        ]
+
+        for t in range(64):
+            S1 = (((e >> 6) | (e << 26)) ^ ((e >> 11) | (e << 21)) ^ ((e >> 25) | (e << 7))) & 0xffffffff
+            ch_val = (e & f) ^ ((~e & 0xffffffff) & g)
+            t1 = (hh + S1 + ch_val + K[t] + w[t]) & 0xffffffff
+            S0 = (((a >> 2) | (a << 30)) ^ ((a >> 13) | (a << 19)) ^ ((a >> 22) | (a << 10))) & 0xffffffff
+            maj_val = (a & b) ^ (a & c) ^ (b & c)
+            t2 = (S0 + maj_val) & 0xffffffff
+            a_new = (t1 + t2) & 0xffffffff
+            b_new = a; c_new = b; d_new = c
+            e_new = (d + t1) & 0xffffffff; f_new = e; g_new = f; hh = g
+            a, b, c, d, e, f, g, hh = a_new, b_new, c_new, d_new, e_new, f_new, g_new, hh
+
+        result = (((h_vals[0] + a) & 0xffffffff) << 224 |
+                  ((h_vals[1] + b) & 0xffffffff) << 192 |
+                  ((h_vals[2] + c) & 0xffffffff) << 160 |
+                  ((h_vals[3] + d) & 0xffffffff) << 128 |
+                  ((h_vals[4] + e) & 0xffffffff) << 96 |
+                  ((h_vals[5] + f) & 0xffffffff) << 64 |
+                  ((h_vals[6] + g) & 0xffffffff) << 32 |
+                  (h_vals[7] + hh) & 0xffffffff)
+        return mk_int(result & ((1 << 256) - 1))
+
+    def pack_message_schedule(self, args):
+        """Pack the 80-word message schedule for one SHA-256 block into a single large integer.
+
+        Reads 16 words from the padded buffer at the given offset, computes all 80 W values
+        using the standard FIPS 180-4 expansion formula, and packs them into a Python int
+        where each word occupies 32 consecutive bit positions [i*32 .. (i+1)*32 - 1].
+
+        This enables newlang code to express the full message-schedule computation using
+        only bitwise shift-and-mask operations — no arrays or mutable state required.
+
+        Args:
+            args[0]: IntValue — byte offset into padded data.
+            args[1]: ObjectValue wrapping a Bytes object (the padded buffer).
+
+        Returns:
+            IntValue — packed 2560-bit integer holding all 80 W values.
+        """
+        if len(args) != 2:
+            raise TypeError("pack_message_schedule(offset, handle)")
+
+        offset = int(unwrap_optional(args[0]).value)
+        data_arg = unwrap_optional(args[1])
+        buf = None
+        if isinstance(data_arg, Bytes):
+            buf = bytes(data_arg.data)
+        elif isinstance(data_arg, bytearray):
+            buf = bytes(data_arg)
+        else:
+            raise TypeError("handle must be a Bytes object")
+
+        if offset + 64 > len(buf):
+            return mk_int(0)
+
+        # Read the initial 16 words from the block.
+        w = [0] * 80
+        for i in range(16):
+            idx = offset + i * 4
+            w[i] = (buf[idx] << 24) | (buf[idx + 1] << 16) | (buf[idx + 2] << 8) | buf[idx + 3]
+
+        # Compute W[16..79] using FIPS 180-4 §4.2.2 expansion.
+        for i in range(16, 80):
+            s0 = ((w[i - 15] >> 7) | (w[i - 15] << 25)) & 0xffffffff
+            s1 = ((w[i - 2] >> 17) | (w[i - 2] << 15)) & 0xffffffff
+            w[i] = (w[i - 16] + s0 + w[i - 7] + s1) & 0xffffffff
+
+        # Pack all 80 words into one integer: word i occupies bits [i*32 .. (i+1)*32 - 1].
+        packed = 0
+        for i in range(80):
+            packed |= w[i] << (i * 32)
+
+        return mk_int(packed)
+
 
 class _HeapModuleStd:
     """The heap submodule — provides allocator access via std.heap.allocator()."""
@@ -567,30 +826,15 @@ class _HeapModuleStd:
         self._parent = parent
 
     def allocator(self):
-        """Get the global mmap-backed allocator.
-
-        Returns:
-            The MmapAllocator instance used by this runtime.
-        """
+        """Get the global mmap-backed allocator."""
         return self._parent._allocator
 
 
 class FsModule:
-    """The fs submodule providing filesystem operations via AT_FDCWD.
-
-    All operations use explicit file descriptors — no bare path resolution
-    that bypasses the kernel's directory-based interface model.
-    """
+    """The fs submodule providing filesystem operations via AT_FDCWD."""
 
     def cwd(self):
-        """Open and return a DirFD for the current working directory.
-
-        Uses openat(AT_FDCWD, ".", O_RDONLY | O_DIRECTORY) to obtain a
-        directory file descriptor tied to the process's cwd.
-
-        Returns:
-            A DirFD instance wrapping the opened directory fd.
-        """
+        """Open and return a DirFD for the current working directory."""
         try:
             fd = _openat(AT_FDCWD, b".", O_RDONLY | O_DIRECTORY)
         except Exception as e:

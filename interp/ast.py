@@ -150,3 +150,26 @@ class GetAttr:
     def __init__(self, obj, attr):
         self.obj = obj
         self.attr = attr
+
+
+class ArrayLit:
+    """Array literal: [expr, expr, ...]."""
+
+    def __init__(self, elements):
+        self.elements = elements  # list of expression AST nodes
+
+
+class Subscript:
+    """Subscript access: obj[index_expr]."""
+
+    def __init__(self, obj, index):
+        self.obj = obj       # any expression node (VarRef, GetAttr, Subscript)
+        self.index = index   # an expression AST node for the index
+
+
+class ArrayAlloc:
+    """Dynamic array allocation: new i32[size_expr]."""
+
+    def __init__(self, element_type, size_expr):
+        self.element_type = element_type  # type string like "i32", "u64"
+        self.size_expr = size_expr        # expression AST node for the count

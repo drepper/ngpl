@@ -170,6 +170,31 @@ class BuiltinBoundMethod(Value):
         return meth(*args)
 
 
+class ArrayValue(Value):
+    """A mutable array of runtime Values with dynamic growth.
+
+    Elements can be read via get() and written via set().
+    Setting an index beyond the current length zero-fills the gap.
+    """
+
+    __slots__ = ("elements",)
+
+    def __init__(self, elements=None):
+        self.elements = list(elements) if elements else []
+
+    def get(self, index: int) -> Value:
+        """Return element at index; returns IntValue(0) if out of range."""
+        if 0 <= index < len(self.elements):
+            return self.elements[index]
+        return mk_int(0)
+
+    def set(self, index: int, value: Value):
+        """Set element at index. Grows the array with zero-fill as needed."""
+        while len(self.elements) <= index:
+            self.elements.append(mk_int(0))
+        self.elements[index] = value
+
+
 def mk_int(value, width="i64"):
     """Create an IntValue."""
     return IntValue(value, width)

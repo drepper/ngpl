@@ -9,6 +9,7 @@ from interp.ast import (
     IntLit, StrLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
+    ArrayLit, Subscript, ArrayAlloc,
 )
 from interp.lexer import Token
 
@@ -71,14 +72,16 @@ class Parser:
         """Parse the full token stream into a list of top-level definitions."""
         definitions = []
         while not self._check("EOF"):
-            self._try_eat("NEWLINE")
+            # Skip all consecutive newlines (including multiple blank lines).
+            while self._try_eat("NEWLINE"):
+                pass
             definition = self._parse_definition()
             if definition is not None:
                 definitions.append(definition)
         return definitions
 
     def _parse_definition(self):
-        """Parse a single top-level definition (function or variable)."""
+        """Parse a single top-level definition (function, const, or variable)."""
         is_start = False
         if self._check("START"):
             self._eat("START")
@@ -87,6 +90,15 @@ class Parser:
 
         if self._check("FN"):
             return self._parse_function_def(is_start)
+        elif self._check("CONST"):
+            # Top-level const: parse as a statement-like definition.
+            self._eat("CONST")
+            name_tok = self._eat("IDENT")
+            self._eat("PUNCT", "=")
+            init_expr = self._parse_or_expr()
+            # Top-level consts don't need semicolons; skip if present.
+            self._try_eat("PUNCT", ";")
+            return ("const_assign", name_tok.value, init_expr)
         elif self._check("VAR", "LET"):
             return self._parse_var_def()
         elif self._check("EOF"):
@@ -102,16 +114,22 @@ class Parser:
 
         self._eat("PUNCT", "(")
         params = []
-        if not (self._cur().type == "PUNCT" and self._cur().value == ")"):
-            while True:
-                param_name_tok = self._eat("IDENT")
-                param_type = None
-                if self._try_eat("PUNCT", ":"):
-                    type_tok = self._eat("IDENT")
-                    param_type = type_tok.value
-                params.append((param_name_tok.value, param_type))
-                if not self._try_eat("PUNCT", ","):
-                    break
+        while True:
+            # Skip any leading newlines before each parameter (for multi-line lists).
+            while self._try_eat("NEWLINE"):
+                pass
+            if self._check("PUNCT") and self._cur().value == ")":
+                break
+            param_name_tok = self._eat("IDENT")
+            param_type = None
+            if self._try_eat("PUNCT", ":"):
+                type_tok = self._eat("IDENT")
+                param_type = type_tok.value
+            params.append((param_name_tok.value, param_type))
+            # Skip a single newline after comma (multi-line parameter lists).
+            self._try_eat("NEWLINE")
+            if not self._try_eat("PUNCT", ","):
+                break
         self._eat("PUNCT", ")")
 
         ret_type = None
@@ -163,11 +181,23 @@ class Parser:
 
     def _parse_statement(self):
         """Parse a single statement."""
+        # Skip leading newlines (e.g. blank lines between statements).
+        while self._try_eat("NEWLINE"):
+            pass
+
         if self._check("EOF"):
             return None
 
         if self._check("VAR", "LET"):
             return self._parse_var_def()
+
+        if self._check("CONST"):
+            self._eat("CONST")
+            name_tok = self._eat("IDENT")
+            self._eat("PUNCT", "=")
+            init_expr = self._parse_or_expr()
+            self._try_eat("PUNCT", ";")
+            return ("const_assign", name_tok.value, init_expr)
 
         if self._check("IF"):
             return self._parse_if_stmt()
@@ -177,6 +207,57 @@ class Parser:
 
         if self._check("RETURN"):
             return self._parse_return_stmt()
+
+        # General assignment: LHS ← RHS  |  LHS = RHS.
+        # LHS can be an identifier or subscript chain (arr[i]).
+        # Peek ahead past brackets/newlines to find a top-level ← or = on this line.
+        if self._check("IDENT") or (self._check("PUNCT") and self._cur().value == "("):
+            saved_pos = self.pos
+            bracket_depth = 0
+            found_assign_op = None  # "←" or "="
+            while saved_pos < len(self.tokens):
+                t = self.tokens[saved_pos]
+                if t.type == "NEWLINE" or t.type == ";":
+                    break
+                if t.type == "PUNCT":
+                    if t.value == "[": bracket_depth += 1
+                    elif t.value == "]": bracket_depth -= 1
+                if t.type == "OP" and t.value == "←" and bracket_depth == 0:
+                    found_assign_op = "←"
+                    break
+                saved_pos += 1
+
+            # Also check for ASCII '=' at top level (not inside brackets).
+            if not found_assign_op:
+                bp2 = self.pos
+                bd2 = 0
+                while bp2 < len(self.tokens):
+                    t2 = self.tokens[bp2]
+                    if t2.type == "NEWLINE" or t2.type == ";":
+                        break
+                    if t2.type == "PUNCT":
+                        if t2.value == "[": bd2 += 1
+                        elif t2.value == "]": bd2 -= 1
+                    if t2.type == "PUNCT" and t2.value == "=" and bd2 == 0:
+                        # Make sure it's not part of a comparison (==).
+                        if bp2 + 1 < len(self.tokens) and \
+                           self.tokens[bp2 + 1].type == "PUNCT" and \
+                           self.tokens[bp2 + 1].value == "=":
+                            pass  # skip ==
+                        else:
+                            found_assign_op = "="
+                            break
+                    bp2 += 1
+
+            if found_assign_op:
+                lhs = self._parse_or_expr()
+                if found_assign_op == "←":
+                    self._eat("OP", "←")
+                else:
+                    self._eat("PUNCT", "=")
+                rhs = self._parse_or_expr()
+                self._try_eat("PUNCT", ";")
+                return ("assign_stmt", lhs, rhs)
 
         expr = self._parse_or_expr()
         self._try_eat("PUNCT", ";")
@@ -230,10 +311,19 @@ class Parser:
     # Expression parsing (precedence climbing)
     # ------------------------------------------------------------------
 
+    def _skip_nl(self):
+        """Skip any NEWLINE tokens (for multi-line expressions)."""
+        while self._check("NEWLINE"):
+            self.pos += 1
+
     def _parse_or_expr(self):
         """or_expr → and_expr ('or' and_expr)*"""
         left = self._parse_and_expr()
-        while self._try_eat("OR"):
+        while True:
+            self._skip_nl()
+            if not self._try_eat("OR"):
+                break
+            self._skip_nl()
             right = self._parse_and_expr()
             left = BinOp("or", left, right)
         return left
@@ -241,27 +331,95 @@ class Parser:
     def _parse_and_expr(self):
         """and_expr → cmp_expr ('and' cmp_expr)*"""
         left = self._parse_cmp_expr()
-        while self._try_eat("AND"):
+        while True:
+            self._skip_nl()
+            if not self._try_eat("AND"):
+                break
+            self._skip_nl()
             right = self._parse_cmp_expr()
             left = BinOp("and", left, right)
         return left
 
     def _parse_cmp_expr(self):
-        """cmp_expr → add_expr (('==' | '!=' | '<' | '>' | '<=' | '>=') add_expr)*"""
-        left = self._parse_add_expr()
-        while self._check("OP") and self._cur().value in ("==", "!=", "<", ">", "<=", ">="):
+        """cmp_expr → shift_expr (('==' | '!=' | '<' | '>' | '<=' | '>=') shift_expr)*"""
+        left = self._parse_shift_expr()
+        while True:
+            self._skip_nl()
+            if not (self._check("OP") and self._cur().value in ("==", "!=", "<", ">", "<=", ">=")):
+                break
             op_tok = self._cur()
             self.pos += 1
-            right = self._parse_add_expr()
+            self._skip_nl()
+            right = self._parse_shift_expr()
             left = BinOp(op_tok.value, left, right)
+        return left
+
+    def _parse_shift_expr(self):
+        """shift_expr → bitwise_or (('<<' | '>>') bitwise_or)*"""
+        left = self._parse_bitwise_or()
+        while True:
+            self._skip_nl()
+            if not (self._check("OP") and self._cur().value in ("<<", ">>")):
+                break
+            op_tok = self._cur()
+            self.pos += 1
+            self._skip_nl()
+            right = self._parse_bitwise_or()
+            left = BinOp(op_tok.value, left, right)
+        return left
+
+    def _parse_bitwise_or(self):
+        """bitwise_or → bitwise_xor ('|' bitwise_xor)*"""
+        left = self._parse_bitwise_xor()
+        while True:
+            self._skip_nl()
+            if not (self._check("OP") and self._cur().value == "|"):
+                break
+            op_tok = self._cur()
+            self.pos += 1
+            self._skip_nl()
+            right = self._parse_bitwise_xor()
+            left = BinOp("|", left, right)
+        return left
+
+    def _parse_bitwise_xor(self):
+        """bitwise_xor → bitwise_and ('^' bitwise_and)*"""
+        left = self._parse_bitwise_and()
+        while True:
+            self._skip_nl()
+            if not (self._check("OP") and self._cur().value == "^"):
+                break
+            op_tok = self._cur()
+            self.pos += 1
+            self._skip_nl()
+            right = self._parse_bitwise_and()
+            left = BinOp("^", left, right)
+        return left
+
+    def _parse_bitwise_and(self):
+        """bitwise_and → add_expr ('&' add_expr)*"""
+        left = self._parse_add_expr()
+        while True:
+            self._skip_nl()
+            if not (self._check("OP") and self._cur().value == "&"):
+                break
+            op_tok = self._cur()
+            self.pos += 1
+            self._skip_nl()
+            right = self._parse_add_expr()
+            left = BinOp("&", left, right)
         return left
 
     def _parse_add_expr(self):
         """add_expr → mul_expr (('+' | '-') mul_expr)*"""
         left = self._parse_mul_expr()
-        while self._check("OP") and self._cur().value in ("+", "-"):
+        while True:
+            self._skip_nl()
+            if not (self._check("OP") and self._cur().value in ("+", "-")):
+                break
             op_tok = self._cur()
             self.pos += 1
+            self._skip_nl()
             right = self._parse_mul_expr()
             left = BinOp(op_tok.value, left, right)
         return left
@@ -269,19 +427,27 @@ class Parser:
     def _parse_mul_expr(self):
         """mul_expr → unary (('*' | '/') unary)*"""
         left = self._parse_unary()
-        while self._check("OP") and self._cur().value in ("*", "/"):
+        while True:
+            self._skip_nl()
+            if not (self._check("OP") and self._cur().value in ("*", "/")):
+                break
             op_tok = self._cur()
             self.pos += 1
+            self._skip_nl()
             right = self._parse_unary()
             left = BinOp(op_tok.value, left, right)
         return left
 
     def _parse_unary(self):
-        """unary → ('-' | 'not') unary | primary"""
+        """unary → ('-' | '~' | 'not') unary | primary"""
         if self._check("OP") and self._cur().value == "-":
             self.pos += 1
             operand = self._parse_unary()
             return UnaryOp("-", operand)
+        if self._check("OP") and self._cur().value == "~":
+            self.pos += 1
+            operand = self._parse_unary()
+            return UnaryOp("~", operand)
         if self._check("NOT"):
             self._eat("NOT")
             operand = self._parse_unary()
@@ -289,12 +455,12 @@ class Parser:
         return self._parse_primary()
 
     def _parse_primary(self):
-        """primary → atom ('.' ident)*
+        """primary → atom (('.' ident | '[' expr ']')* | '(' args ')')
 
-        An atom is a literal, parenthesized expression, some(...), or an identifier.
-        If the atom starts with an identifier followed by '(', it is a function call.
-        Dotted chains (obj.method, fs.cwd, get_stdout().fd) are parsed as a sequence
-        of GetAttr nodes built up from left to right.
+        An atom is a literal, parenthesized expression, array literal, some(...),
+        new allocation, or an identifier. Dotted chains (obj.method) and subscript
+        chains (arr[i]) are parsed as GetAttr/Subscript nodes built up from left
+        to right in a single pass.
         """
         tok = self._cur()
 
@@ -327,10 +493,37 @@ class Parser:
             self._eat("PUNCT", ")")
             return OptSome(value)
 
+        # Array literal [...].
+        if tok.type == "PUNCT" and tok.value == "[":
+            self.pos += 1
+            elements = []
+            while True:
+                self._skip_nl()
+                if self._check("PUNCT") and self._cur().value == "]":
+                    break
+                expr = self._parse_or_expr()
+                elements.append(expr)
+                self._skip_nl()
+                if not self._try_eat("PUNCT", ","):
+                    break
+            self._eat("PUNCT", "]")
+            return ArrayLit(elements)
+
+        # Dynamic array allocation: new type[size].
+        if tok.type == "IDENT" and tok.value == "new":
+            self.pos += 1  # eat "new"
+            type_tok = self._eat("IDENT")
+            self._eat("PUNCT", "[")
+            size_expr = self._parse_or_expr()
+            self._skip_nl()
+            self._eat("PUNCT", "]")
+            return ArrayAlloc(type_tok.value, size_expr)
+
         # Parenthesized expression.
         if tok.type == "PUNCT" and tok.value == "(":
             self.pos += 1
             expr = self._parse_or_expr()
+            self._skip_nl()
             self._eat("PUNCT", ")")
             return expr
 
@@ -346,16 +539,35 @@ class Parser:
             else:
                 node = VarRef(name)
 
-            # Chain attribute/method accesses: .ident or .ident(...)
-            while (self._cur().type == "PUNCT" and self._cur().value == "."):
-                self.pos += 1  # eat the "."
-                attr_tok = self._eat("IDENT")
-                attr_name = attr_tok.value
-                if (self._cur().type == "PUNCT" and self._cur().value == "("):
+            # Chain attribute/method/subscript accesses in order:
+            #   .ident → GetAttr
+            #   [expr] → Subscript
+            #   (args) → MethodCall (on previous node)
+            while True:
+                if self._check("PUNCT") and self._cur().value == ".":
+                    self.pos += 1
+                    attr_tok = self._eat("IDENT")
+                    attr_name = attr_tok.value
+                    if self._check("PUNCT") and self._cur().value == "(":
+                        args = self._parse_call_args()
+                        node = MethodCall(node, attr_name, args)
+                    else:
+                        node = GetAttr(node, attr_name)
+                elif self._check("PUNCT") and self._cur().value == "[":
+                    self.pos += 1
+                    index_expr = self._parse_or_expr()
+                    self._skip_nl()
+                    self._eat("PUNCT", "]")
+                    node = Subscript(node, index_expr)
+                elif self._check("PUNCT") and self._cur().value == "(":
                     args = self._parse_call_args()
-                    node = MethodCall(node, attr_name, args)
+                    if isinstance(node, VarRef):
+                        node = FuncCall(node.name, args)
+                    else:
+                        # Method call on any previous expression.
+                        node = MethodCall(node, "__call__", args)
                 else:
-                    node = GetAttr(node, attr_name)
+                    break
 
             return node
 
@@ -365,11 +577,18 @@ class Parser:
         """Parse function/method call arguments: ( arg, arg, ... )."""
         self._eat("PUNCT", "(")
         args = []
-        if not (self._cur().type == "PUNCT" and self._cur().value == ")"):
-            while True:
-                arg = self._parse_or_expr()
-                args.append(arg)
-                if not self._try_eat("PUNCT", ","):
-                    break
+        while True:
+            # Skip leading newlines (multi-line argument lists).
+            while self._try_eat("NEWLINE"):
+                pass
+            if self._check("PUNCT") and self._cur().value == ")":
+                break
+            arg = self._parse_or_expr()
+            args.append(arg)
+            # Skip newlines after comma.
+            while self._try_eat("NEWLINE"):
+                pass
+            if not self._try_eat("PUNCT", ","):
+                break
         self._eat("PUNCT", ")")
         return args

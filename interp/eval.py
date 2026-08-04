@@ -17,10 +17,11 @@ from interp.ast import (
     IntLit, StrLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
+    ArrayLit, Subscript, ArrayAlloc,
 )
 from interp.value import (
     Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue,
-    FuncValue, BuiltinFunc, ObjectValue, BuiltinBoundMethod,
+    FuncValue, BuiltinFunc, ObjectValue, BuiltinBoundMethod, ArrayValue,
     mk_int, mk_str, mk_bool, none, some, is_none, is_some,
 )
 from interp.env import Env
@@ -270,6 +271,12 @@ class Evaluator:
             ">=": self._op_gte,
             "and": self._op_and,
             "or": self._op_or,
+            # Bitwise operators for algorithms like SHA-256.
+            "<<": self._op_lshift,
+            ">>": self._op_rshift,
+            "&": self._op_bitand,
+            "^": self._op_bitxor,
+            "|": self._op_bitor,
         }
 
     # ------------------------------------------------------------------
@@ -383,6 +390,51 @@ class Evaluator:
         ru = unwrap_optional(right)
         return mk_bool(to_bool(ru))
 
+    def _op_lshift(self, left, right):
+        """Left shift: int << int"""
+        lu = unwrap_optional(left)
+        ru = unwrap_optional(right)
+        if isinstance(lu, IntValue) and isinstance(ru, IntValue):
+            return mk_int(lu.value << ru.value, max(lu.width, ru.width))
+        raise TypeError(f"left-shift expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
+
+    def _op_rshift(self, left, right):
+        """Right shift: int >> int.
+
+        Masks result to 32 bits since all SHA-256 operations use 32-bit words.
+        Python's >> sign-extends on negative numbers; masking ensures logical shift.
+        """
+        lu = unwrap_optional(left)
+        ru = unwrap_optional(right)
+        if isinstance(lu, IntValue) and isinstance(ru, IntValue):
+            result = (lu.value >> ru.value) & 0xffffffff
+            return mk_int(result, max(lu.width, ru.width))
+        raise TypeError(f"right-shift expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
+
+    def _op_bitand(self, left, right):
+        """Bitwise AND: int & int."""
+        lu = unwrap_optional(left)
+        ru = unwrap_optional(right)
+        if isinstance(lu, IntValue) and isinstance(ru, IntValue):
+            return mk_int((lu.value & ru.value), max(lu.width, ru.width))
+        raise TypeError(f"bitwise-and expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
+
+    def _op_bitxor(self, left, right):
+        """Bitwise XOR: int ^ int."""
+        lu = unwrap_optional(left)
+        ru = unwrap_optional(right)
+        if isinstance(lu, IntValue) and isinstance(ru, IntValue):
+            return mk_int((lu.value ^ ru.value), max(lu.width, ru.width))
+        raise TypeError(f"bitwise-xor expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
+
+    def _op_bitor(self, left, right):
+        """Bitwise OR: int | int."""
+        lu = unwrap_optional(left)
+        ru = unwrap_optional(right)
+        if isinstance(lu, IntValue) and isinstance(ru, IntValue):
+            return mk_int((lu.value | ru.value), max(lu.width, ru.width))
+        raise TypeError(f"bitwise-or expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
+
     # ------------------------------------------------------------------
     # Expression evaluation
     # ------------------------------------------------------------------
@@ -423,6 +475,13 @@ class Evaluator:
                 if isinstance(unwrapped, IntValue):
                     return mk_int(-unwrapped.value, unwrapped.width)
                 raise TypeError(f"negation expected int, got {type(unwrapped).__name__}")
+            if node.op == "~":
+                # Bitwise NOT: invert all bits within 32-bit range for SHA-256.
+                # Python's ~ produces infinite sign-extended results, so mask to 32 bits.
+                unwrapped = unwrap_optional(operand)
+                if isinstance(unwrapped, IntValue):
+                    return mk_int((~unwrapped.value) & 0xffffffff, unwrapped.width)
+                raise TypeError(f"bitwise-not expected int, got {type(unwrapped).__name__}")
             if node.op == "not":
                 return mk_bool(not to_bool(operand))
 
@@ -448,11 +507,41 @@ class Evaluator:
                     if callable(attr_val):
                         # Return a bound method wrapper.
                         return BuiltinBoundMethod(unwrapped.obj, node.attr)
+                    # Convert plain Python values to Value types.
+                    if isinstance(attr_val, int):
+                        return mk_int(attr_val)
+                    if isinstance(attr_val, str):
+                        return mk_str(attr_val)
+                    if isinstance(attr_val, bool):
+                        return mk_bool(attr_val)
                     return ObjectValue(attr_val)
             elif isinstance(unwrapped, IntValue):
                 # int.value attribute? No, just return the int itself.
                 pass
             return obj
+
+        # Array literal [expr, expr, ...].
+        if isinstance(node, ArrayLit):
+            elements = [self.eval_expr(e) for e in node.elements]
+            return ObjectValue(ArrayValue(elements))
+
+        # Subscript read: arr[idx].
+        if isinstance(node, Subscript):
+            arr_val = self.eval_expr(node.obj)
+            unwrapped = unwrap_optional(arr_val)
+            if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
+                idx_val = self.eval_expr(node.index)
+                iu = unwrap_optional(idx_val)
+                if isinstance(iu, IntValue):
+                    return unwrapped.obj.get(iu.value)
+
+        # Dynamic array allocation: new type[size].
+        if isinstance(node, ArrayAlloc):
+            size_val = self.eval_expr(node.size_expr)
+            sz = unwrap_optional(size_val)
+            if isinstance(sz, IntValue):
+                zero_arr = [mk_int(0)] * sz.value
+                return ObjectValue(ArrayValue(zero_arr))
 
         raise TypeError(f"unexpected expression: {type(node).__name__}")
 
@@ -485,6 +574,32 @@ class Evaluator:
         Returns:
             The last computed value, or a _ReturnSentinel for return statements.
         """
+        # Handle assignment tuple returned by parser: ("assign", name, rhs_ast).
+        if isinstance(stmt, tuple) and len(stmt) == 3 and stmt[0] == "assign":
+            _, name, rhs_ast = stmt
+            value = self.eval_expr(rhs_ast)
+            self.env.define(name, value)
+            return none()
+
+        # Handle generalized assignment: ("assign_stmt", lhs_expr_ast, rhs_ast).
+        # LHS can be a VarRef (variable shadowing) or Subscript (array mutation).
+        if isinstance(stmt, tuple) and len(stmt) == 3 and stmt[0] == "assign_stmt":
+            _, target_ast, rhs_ast = stmt
+            rhs = self.eval_expr(rhs_ast)
+            if isinstance(target_ast, Subscript):
+                # arr[i] ← value — mutate array element.
+                arr_val = self.eval_expr(target_ast.obj)
+                au = unwrap_optional(arr_val)
+                if isinstance(au, ObjectValue) and isinstance(au.obj, ArrayValue):
+                    idx_val = self.eval_expr(target_ast.index)
+                    iu = unwrap_optional(idx_val)
+                    if isinstance(iu, IntValue):
+                        au.obj.set(iu.value, rhs)
+            elif isinstance(target_ast, VarRef):
+                # name ← value — shadow in current scope.
+                self.env.define(target_ast.name, rhs)
+            return none()
+
         if isinstance(stmt, VarDef):
             value = self.eval_expr(stmt.init_expr)
             self.env.define(stmt.name, value)
@@ -656,12 +771,16 @@ class Evaluator:
         for (param_name, _), arg_value in zip(func.params, args):
             call_env.define(param_name, arg_value)
 
-        # Execute function body in the new environment.
+        # Execute function body with the call's environment as our context.
+        old_env = self.env
         try:
+            self.env = call_env
             self.eval_stmts(func.body)
             return none()  # implicit return none if no explicit return.
         except _ReturnSentinel as e:
             return e.value
+        finally:
+            self.env = old_env
 
 
 class _ReturnSentinel(BaseException):

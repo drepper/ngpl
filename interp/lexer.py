@@ -45,15 +45,16 @@ KEYWORDS = {
     "not": "NOT",
     "some": "SOME",
     "start": "START",
+    "const": "CONST",
 }
 
 # Double-character operators that must be checked before single ones.
 DOUBLE_OPS = {
-    "==", "!=", "<=", ">=", "->", "←",
+    "==", "!=", "<=", ">=", "->", "<<", ">>",
 }
 
 # Single-character operators.
-SINGLE_OPS = set("+-*/%=<>!&|^~.,;:(){}[]")
+SINGLE_OPS = set("+-*/%=<>!&|^~.,;:(){}[]←")
 
 
 class LexerError(Exception):
@@ -207,11 +208,15 @@ def tokenize(src: str):
                 pos = end + 1
             continue
 
-        # Block comment.
+        # Block comment — count newlines to keep line counter accurate.
         if ch == "/" and pos + 1 < length and src[pos + 1] == "*":
             end = src.find("*/", pos + 2)
             if end == -1:
                 raise LexerError("unterminated block comment", line, col)
+            # Count newlines inside the block comment.
+            comment_text = src[pos:end + 2]
+            line += comment_text.count("\n")
+            col = len(comment_text) - comment_text.rfind("\n") - 1
             pos = end + 2
             continue
 
@@ -252,7 +257,7 @@ def tokenize(src: str):
             # = is syntactic (variable definition), not an operator.
             if ch == "=" or ch in ",.;:(){}[]":
                 tokens.append(Token("PUNCT", ch, line, col))
-            elif ch in "+-*/%<>!&|^~":
+            elif ch in "+-*/%<>!&|^~" or ch == "←":
                 tokens.append(Token("OP", ch, line, col))
             pos += 1
             col += 1
@@ -261,6 +266,7 @@ def tokenize(src: str):
         # Identifier or keyword.
         if ch.isalpha() or ch == "_" or ord(ch) > 127:
             name_start = pos
+            pos += 1  # Always advance past the first character to avoid infinite loop on non-alnum Unicode chars.
             while pos < length and (src[pos].isalnum() or src[pos] in "_'→"):
                 pos += 1
             name = src[name_start:pos]

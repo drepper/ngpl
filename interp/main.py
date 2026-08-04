@@ -19,8 +19,9 @@ import os
 from interp.lexer import tokenize
 from interp.parser import Parser
 from interp.env import Env
+from interp.ast import FuncDef as ASTFuncDef
 from interp.value import (
-    FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue,
+    FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
 )
 from interp.eval import Evaluator
 
@@ -65,11 +66,24 @@ def main():
     env = Env()
     setup_std_env(env)
 
+    # Evaluate and register top-level const definitions (static arrays).
+    evaluator = Evaluator(env)
+    for defn in definitions:
+        if isinstance(defn, tuple) and len(defn) == 3 and defn[0] == "const_assign":
+            _, name, init_expr = defn
+            arr_value = evaluator.eval_expr(init_expr)
+            env.define(name, arr_value)
+
     # Register all function definitions in the global environment.
     for defn in definitions:
         if isinstance(defn, FuncValue):
             env.define(defn.name, defn)
-        elif hasattr(defn, "name"):  # FuncDef from AST
+        elif isinstance(defn, ASTFuncDef):
+            # Convert AST-level FuncDef to runtime FuncValue.
+            fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type)
+            env.define(defn.name, fv)
+        elif not isinstance(defn, tuple):
+            # VarDef or other non-tuple definition — register by name.
             env.define(defn.name, defn)
 
     # Find and execute the startup function.
