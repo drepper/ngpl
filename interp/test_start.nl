@@ -162,11 +162,7 @@ fn sha256(data) -> int {
         }
 
         /* --- Add compressed chunk to current hash state. --- */
-        var k = 0;
-        while (k < 8) {
-            H[k] ← (H[k] + v[k]) & 4294967295;
-            k ← k + 1;
-        }
+        H ← (H + v) & 4294967295;
 
         blk_off ← blk_off + 64;
     }

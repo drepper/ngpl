@@ -462,6 +462,28 @@ class Evaluator:
         raise TypeError(f"rotate-right expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     # ------------------------------------------------------------------
+    # Array element-wise dispatch
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _as_array(val):
+        u = unwrap_optional(val)
+        if isinstance(u, ObjectValue) and isinstance(u.obj, ArrayValue):
+            return u.obj
+        return None
+
+    def _apply_binop(self, op_fn, left, right):
+        la = self._as_array(left)
+        ra = self._as_array(right)
+        if la is not None and ra is not None:
+            return ObjectValue(ArrayValue([op_fn(l, r) for l, r in zip(la.elements, ra.elements)]))
+        if la is not None:
+            return ObjectValue(ArrayValue([op_fn(l, right) for l in la.elements]))
+        if ra is not None:
+            return ObjectValue(ArrayValue([op_fn(left, r) for r in ra.elements]))
+        return op_fn(left, right)
+
+    # ------------------------------------------------------------------
     # Expression evaluation
     # ------------------------------------------------------------------
 
@@ -492,7 +514,7 @@ class Evaluator:
         if isinstance(node, BinOp):
             left = self.eval_expr(node.left)
             right = self.eval_expr(node.right)
-            return self._ops[node.op](left, right)
+            return self._apply_binop(self._ops[node.op], left, right)
 
         if isinstance(node, UnaryOp):
             operand = self.eval_expr(node.operand)
