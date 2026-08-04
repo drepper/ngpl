@@ -277,6 +277,10 @@ class Evaluator:
             "&": self._op_bitand,
             "^": self._op_bitxor,
             "|": self._op_bitor,
+            "«": self._op_lshift,
+            "»": self._op_rshift,
+            "↺": self._op_rotl,
+            "↻": self._op_rotr,
         }
 
     # ------------------------------------------------------------------
@@ -434,6 +438,28 @@ class Evaluator:
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_int((lu.value | ru.value), max(lu.width, ru.width))
         raise TypeError(f"bitwise-or expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
+
+    def _op_rotl(self, left, right):
+        """32-bit rotate left: int ↺ int."""
+        lu = unwrap_optional(left)
+        ru = unwrap_optional(right)
+        if isinstance(lu, IntValue) and isinstance(ru, IntValue):
+            n = ru.value & 31
+            val = lu.value & 0xffffffff
+            result = ((val << n) | (val >> (32 - n))) & 0xffffffff
+            return mk_int(result, max(lu.width, ru.width))
+        raise TypeError(f"rotate-left expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
+
+    def _op_rotr(self, left, right):
+        """32-bit rotate right: int ↻ int."""
+        lu = unwrap_optional(left)
+        ru = unwrap_optional(right)
+        if isinstance(lu, IntValue) and isinstance(ru, IntValue):
+            n = ru.value & 31
+            val = lu.value & 0xffffffff
+            result = ((val >> n) | (val << (32 - n))) & 0xffffffff
+            return mk_int(result, max(lu.width, ru.width))
+        raise TypeError(f"rotate-right expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     # ------------------------------------------------------------------
     # Expression evaluation

@@ -50,7 +50,7 @@ fn get_padded_byte(data, pos, data_size, total_size) -> int {
     if (pos >= len_start) {
         var bit_len = data_size * 8;
         var byte_idx = pos - len_start;
-        return (bit_len >> ((7 - byte_idx) * 8)) & 255;
+        return (bit_len » ((7 - byte_idx) * 8)) & 255;
     }
     return 0;
 }
@@ -61,7 +61,7 @@ fn get_padded_word(data, off, data_size, total_size) -> int {
     var b1 = get_padded_byte(data, off + 1, data_size, total_size);
     var b2 = get_padded_byte(data, off + 2, data_size, total_size);
     var b3 = get_padded_byte(data, off + 3, data_size, total_size);
-    return ((b0 << 24) | (b1 << 16) | (b2 << 8) | b3) & 4294967295;
+    return ((b0 « 24) | (b1 « 16) | (b2 « 8) | b3) & 4294967295;
 }
 
 /* ---------------------------------------------------------------------------
@@ -69,27 +69,20 @@ fn get_padded_word(data, off, data_size, total_size) -> int {
  * --------------------------------------------------------------------------- */
 
 fn expand_s0(prev) -> int {
-    /* ROTR(7,x) ^ ROTR(18,x) ^ SHR(3,x). */
-    var r0_a = ((prev >> 7) | (prev << 25)) & 4294967295;
-    var r0_b = ((prev >> 18) | (prev << 14)) & 4294967295;
-    var r0_c = prev >> 3;
-    return (r0_a ^ r0_b ^ r0_c) & 4294967295;
+    /* σ₀(x) = ROTR(7,x) ⊕ ROTR(18,x) ⊕ SHR(3,x). */
+    return ((prev ↻ 7) ^ (prev ↻ 18) ^ (prev » 3)) & 4294967295;
 }
 
 fn expand_s1(prev) -> int {
-    /* ROTR(17,x) ^ ROTR(19,x) ^ SHR(10,x). */
-    var r1_a = ((prev >> 17) | (prev << 15)) & 4294967295;
-    var r1_b = ((prev >> 19) | (prev << 13)) & 4294967295;
-    var r1_c = prev >> 10;
-    return (r1_a ^ r1_b ^ r1_c) & 4294967295;
+    /* σ₁(x) = ROTR(17,x) ⊕ ROTR(19,x) ⊕ SHR(10,x). */
+    return ((prev ↻ 17) ^ (prev ↻ 19) ^ (prev » 10)) & 4294967295;
 }
 
 /* ---------------------------------------------------------------------------
  * sha256(data) — full SHA-256 implementation in pure newlang.
  *
- * Uses a mutable array for the message schedule W[0..63] and subscript
- * access to read round constants K[t].  All 64 compression rounds are
- * expressed as a while-loop with bitwise operations only.
+ * Uses « » for shifts, ↺ ↻ for rotations, and subscript access for the
+ * message schedule W[0..63] and round constants K[t].
  * --------------------------------------------------------------------------- */
 
 fn sha256(data) -> int {
@@ -144,29 +137,25 @@ fn sha256(data) -> int {
         /* --- 64 compression rounds using K[t] and W[t]. --- */
         var t = 0;
         while (t < 64) {
-            /* S1(e) = ROTR(6,e) ^ ROTR(11,e) ^ ROTR(25,e). */
-            var s1 = (((e >> 6) | (e << 26)) & 4294967295 ^
-                       ((e >> 11) | (e << 21)) & 4294967295 ^
-                       ((e >> 25) | (e << 7)) & 4294967295);
+            /* Σ₁(e) = ROTR(6,e) ⊕ ROTR(11,e) ⊕ ROTR(25,e). */
+            var s1 = ((e ↻ 6) ^ (e ↻ 11) ^ (e ↻ 25)) & 4294967295;
 
-            /* ch(e,f,g) = (e & f) ^ (~e & g). */
+            /* ch(e,f,g) = (e ∧ f) ⊕ (¬e ∧ g). */
             var ch = (e & f) ^ (~e & g);
 
-            /* t1 = h + S1 + ch + K[t] + W[t]. */
+            /* t1 = h + Σ₁ + ch + K[t] + W[t]. */
             var t1 = (h + s1 + ch + K[t] + W[t]) & 4294967295;
 
-            /* S0(a) = ROTR(2,a) ^ ROTR(13,a) ^ ROTR(22,a). */
-            var s0 = (((a >> 2) | (a << 30)) & 4294967295 ^
-                       ((a >> 13) | (a << 19)) & 4294967295 ^
-                       ((a >> 22) | (a << 10)) & 4294967295);
+            /* Σ₀(a) = ROTR(2,a) ⊕ ROTR(13,a) ⊕ ROTR(22,a). */
+            var s0 = ((a ↻ 2) ^ (a ↻ 13) ^ (a ↻ 22)) & 4294967295;
 
-            /* maj(a,b,c) = (a & b) ^ (a & c) ^ (b & c). */
+            /* maj(a,b,c) = (a ∧ b) ⊕ (a ∧ c) ⊕ (b ∧ c). */
             var maj = (a & b) ^ (a & c) ^ (b & c);
 
-            /* t2 = S0 + maj. */
+            /* t2 = Σ₀ + maj. */
             var t2 = (s0 + maj) & 4294967295;
 
-            /* Shift working variables and recurse. */
+            /* Shift working variables. */
             h ← g;
             g ← f;
             f ← e;
@@ -192,9 +181,9 @@ fn sha256(data) -> int {
         blk_off ← blk_off + 64;
     }
 
-    /* Return packed final hash: H0<<224 | ... | H7. */
-    return (H0 << 224) | (H1 << 192) | (H2 << 160) | (H3 << 128) |
-           (H4 << 96) | (H5 << 64) | (H6 << 32) | H7;
+    /* Return packed final hash: H0«224 | … | H7. */
+    return (H0 « 224) | (H1 « 192) | (H2 « 160) | (H3 « 128) |
+           (H4 « 96) | (H5 « 64) | (H6 « 32) | H7;
 }
 
 @start

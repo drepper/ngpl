@@ -355,11 +355,11 @@ class Parser:
         return left
 
     def _parse_shift_expr(self):
-        """shift_expr → bitwise_or (('<<' | '>>') bitwise_or)*"""
+        """shift_expr → bitwise_or (('<<' | '>>' | '«' | '»' | '↺' | '↻') bitwise_or)*"""
         left = self._parse_bitwise_or()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value in ("<<", ">>")):
+            if not (self._check("OP") and self._cur().value in ("<<", ">>", "«", "»", "↺", "↻")):
                 break
             op_tok = self._cur()
             self.pos += 1
