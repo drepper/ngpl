@@ -143,7 +143,7 @@ class Parser:
         return FuncDef(name, params, ret_type, body, is_start)
 
     def _parse_var_def(self):
-        """Parse: var name [:type] = expr"""
+        """Parse: var name [:type] = expr  |  var name : type[size] = init"""
         keyword = self._cur().value
         self._eat(keyword.upper())
         name_tok = self._eat("IDENT")
@@ -151,6 +151,15 @@ class Parser:
         type_annotation = None
         if self._try_eat("PUNCT", ":"):
             type_annotation = self._eat("IDENT").value
+            if self._check("PUNCT") and self._cur().value == "[":
+                self.pos += 1
+                size_expr = self._parse_or_expr()
+                self._eat("PUNCT", "]")
+                self._eat("PUNCT", "=")
+                init_expr = self._parse_or_expr()
+                self._try_eat("PUNCT", ";")
+                return VarDef(name_tok.value, type_annotation,
+                              ArrayAlloc(type_annotation, size_expr, init_expr))
 
         self._eat("PUNCT", "=")
         init_expr = self._parse_or_expr()

@@ -594,13 +594,13 @@ class Evaluator:
                     elems = unwrapped.obj.elements[s.value:e.value + 1]
                     return ObjectValue(ArrayValue(list(elems)))
 
-        # Dynamic array allocation: new type[size].
+        # Array allocation: new type[size] or var name : type[size] = init.
         if isinstance(node, ArrayAlloc):
             size_val = self.eval_expr(node.size_expr)
             sz = unwrap_optional(size_val)
             if isinstance(sz, IntValue):
-                zero_arr = [mk_int(0)] * sz.value
-                return ObjectValue(ArrayValue(zero_arr))
+                init_val = self.eval_expr(node.init_expr) if node.init_expr is not None else mk_int(0)
+                return ObjectValue(ArrayValue([init_val] * sz.value))
 
         raise TypeError(f"unexpected expression: {type(node).__name__}")
 

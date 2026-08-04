@@ -86,8 +86,6 @@ fn expand_s1(prev) -> int {
  * --------------------------------------------------------------------------- */
 
 fn sha256(data) -> int {
-    var W = new i32[64];
-
     var data_size = data.size;
 
     /* Compute padded message length per SHA-256 spec. */
@@ -106,6 +104,7 @@ fn sha256(data) -> int {
     var blk_off = 0;
     while (blk_off < total_size) {
         /* --- Load W[0..15] from the current block (with padding overlay). --- */
+        var W : i32[64] = 0;
         var i = 0;
         while (i < 16) {
             W[i] ← get_padded_word(data, blk_off + (i * 4), data_size, total_size);
@@ -120,13 +119,8 @@ fn sha256(data) -> int {
             j ← j + 1;
         }
 
-        /* --- Initialize working variables v[0..7] from H[0..7]. --- */
-        var v = new i32[8];
-        var k = 0;
-        while (k < 8) {
-            v[k] ← H[k];
-            k ← k + 1;
-        }
+        /* --- Working variables: copy of current hash state. --- */
+        var v = H[0…7];
 
         /* --- 64 compression rounds using K[t] and W[t]. --- */
         var t = 0;

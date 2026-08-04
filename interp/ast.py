@@ -177,8 +177,9 @@ class SliceAccess:
 
 
 class ArrayAlloc:
-    """Dynamic array allocation: new i32[size_expr]."""
+    """Array allocation: new type[size] or var name : type[size] = init."""
 
-    def __init__(self, element_type, size_expr):
+    def __init__(self, element_type, size_expr, init_expr=None):
         self.element_type = element_type  # type string like "i32", "u64"
         self.size_expr = size_expr        # expression AST node for the count
+        self.init_expr = init_expr        # optional per-element initializer
