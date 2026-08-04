@@ -399,6 +399,7 @@ class StdModule:
     def __init__(self):
         self._allocator = MmapAllocator()
         self._fs = None  # lazy-initialized fs object
+        self._heap = None  # lazy-initialized heap submodule
         self._stdout_file = StdoutFile()
 
     @property
@@ -408,6 +409,13 @@ class StdModule:
             self._fs = FsModule()
         return self._fs
 
+    @property
+    def heap(self):
+        """Lazy-access to the heap allocator management."""
+        if self._heap is None:
+            self._heap = _HeapModuleStd(self)
+        return self._heap
+
     def get_allocator(self):
         """Get a reference to the global allocator.
 
@@ -415,6 +423,156 @@ class StdModule:
             The MmapAllocator instance used by this runtime.
         """
         return self._allocator
+
+    # ------------------------------------------------------------------
+    # Builtin functions accessible as std.<name>(args)
+    # ------------------------------------------------------------------
+
+    def sha256(self, args):
+        """sha256(data) — compute SHA-256 hash of data.
+
+        Args:
+            args: list of newlang Value objects (already evaluated).
+
+        Returns:
+            IntValue containing the 256-bit hash as an arbitrary-width integer.
+        """
+        if len(args) != 1:
+            raise TypeError("sha256(data) takes exactly 1 argument")
+        from interp.eval import unwrap_optional
+        from interp.value import StrValue, ObjectValue
+
+        data_arg = unwrap_optional(args[0])
+        if isinstance(data_arg, ObjectValue):
+            obj = data_arg.obj
+            if isinstance(obj, Bytes):  # Bytes class is defined above in this file
+                data = bytes(obj.data)
+            else:
+                raise TypeError(
+                    f"sha256 expects Bytes or StrValue, got {type(obj).__name__}")
+        elif isinstance(data_arg, StrValue):
+            data = data_arg.value.encode("utf-8")
+        else:
+            raise TypeError(
+                f"sha256 expects Bytes or StrValue, got {type(data_arg).__name__}")
+        h = _sha256(data)
+        from interp.value import mk_int
+        return mk_int(h)
+
+    def format(self, args):
+        """format(str, ...) — format a string.
+
+        Concatenates all argument values into a single string and returns it.
+        This is the pure formatting function; side-effect operations like
+        printing to stdout are handled by the caller using ``std.get_stdout().fd``
+        with an appropriate write call.
+
+        Args:
+            args: list of newlang Value objects — each is converted to a string
+                  and concatenated.
+
+        Returns:
+            StrValue with the concatenated result (no trailing newline).
+        """
+        from interp.eval import unwrap_optional
+        from interp.value import IntValue, BoolValue, StrValue, ObjectValue, mk_str
+
+        parts = []
+        for arg in args:
+            uv = unwrap_optional(arg)
+            if isinstance(uv, IntValue):
+                # Large integers (e.g. hashes) formatted as hex; small ones decimal.
+                if uv.value.bit_length() > 32 or uv.value < 0:
+                    parts.append(format(uv.value, "x"))
+                else:
+                    parts.append(str(uv.value))
+            elif isinstance(uv, BoolValue):
+                parts.append("true" if uv.value else "false")
+            elif isinstance(uv, StrValue):
+                parts.append(uv.value)
+            elif isinstance(uv, ObjectValue):
+                obj = uv.obj
+                if isinstance(obj, Bytes):
+                    parts.append(f"<bytes {len(obj.data)}>")
+                elif isinstance(obj, int):
+                    parts.append(format(obj, "x") if obj.bit_length() > 32 else str(obj))
+                else:
+                    parts.append(f"<{type(obj).__name__}>")
+            else:
+                parts.append(str(uv))
+
+        return mk_str("".join(parts))
+
+    def get_stdout(self, args):
+        """get_stdout() — get a file descriptor for the standard output.
+
+        Args:
+            args: argument list (unused).
+
+        Returns:
+            ObjectValue wrapping the StdoutFile instance.
+        """
+        if len(args) != 0:
+            raise TypeError("get_stdout() takes no arguments")
+        from interp.value import ObjectValue
+        return ObjectValue(self._stdout_file)
+
+    def print(self, args):
+        """print(...) — format arguments and write to stdout.
+
+        This is a convenience function that concatenates all argument values
+        (like format) and writes the result followed by a newline to stdout.
+
+        Args:
+            args: list of newlang Value objects.
+
+        Returns:
+            NoneValue.
+        """
+        from interp.eval import unwrap_optional
+        from interp.value import IntValue, BoolValue, StrValue, ObjectValue, mk_str
+
+        parts = []
+        for arg in args:
+            uv = unwrap_optional(arg)
+            if isinstance(uv, IntValue):
+                if uv.value.bit_length() > 32 or uv.value < 0:
+                    parts.append(format(uv.value, "x"))
+                else:
+                    parts.append(str(uv.value))
+            elif isinstance(uv, BoolValue):
+                parts.append("true" if uv.value else "false")
+            elif isinstance(uv, StrValue):
+                parts.append(uv.value)
+            elif isinstance(uv, ObjectValue):
+                obj = uv.obj
+                if isinstance(obj, int):
+                    parts.append(str(obj))
+                elif isinstance(obj, Bytes):
+                    parts.append(f"<bytes {len(obj.data)}>")
+                else:
+                    parts.append(f"<{type(obj).__name__}>")
+            else:
+                parts.append(str(uv))
+
+        output = "".join(parts) + "\n"
+        os.write(1, output.encode("utf-8"))
+        return mk_str("")
+
+
+class _HeapModuleStd:
+    """The heap submodule — provides allocator access via std.heap.allocator()."""
+
+    def __init__(self, parent):
+        self._parent = parent
+
+    def allocator(self):
+        """Get the global mmap-backed allocator.
+
+        Returns:
+            The MmapAllocator instance used by this runtime.
+        """
+        return self._parent._allocator
 
 
 class FsModule:

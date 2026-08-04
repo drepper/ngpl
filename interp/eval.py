@@ -543,13 +543,71 @@ class Evaluator:
         return self._do_call(func, args)
 
     def _call_method(self, obj: Value, method_name: str, args):
-        """Call a method on an object value."""
+        """Call a method on an object value.
+
+        For builtin-style methods (like StdModule.sha256(args)) that accept a
+        single list of already-evaluated Values, we detect this by checking the
+        method signature — if it has exactly one parameter named "args" after
+        self, we pass the list as-is.  Otherwise we unpack args for ordinary
+        Python methods like ``fs.cwd()``.
+        """
+        import inspect
+
         unwrapped = unwrap_optional(obj)
         if isinstance(unwrapped, ObjectValue):
             python_obj = unwrapped.obj
             meth = getattr(python_obj, method_name, None)
             if meth is not None and callable(meth):
-                # Unwrap newlang Value objects to native Python values.
+                # Detect builtin-style method: takes exactly one "args" list.
+                try:
+                    sig = inspect.signature(meth)
+                    params = list(sig.parameters.values())
+                    is_builtin_style = (
+                        len(params) == 1 and params[0].name == "args"
+                    )
+                except (ValueError, TypeError):
+                    # Some builtins don't have signatures — default to unpacking.
+                    is_builtin_style = False
+
+                if is_builtin_style:
+                    result = meth(args)
+                else:
+                    # Unwrap Values for normal Python method calls.
+                    py_args = []
+                    for a in args:
+                        au = unwrap_optional(a)
+                        if isinstance(au, StrValue):
+                            py_args.append(au.value)
+                        elif isinstance(au, IntValue):
+                            py_args.append(au.value)
+                        elif isinstance(au, BoolValue):
+                            py_args.append(au.value)
+                        elif isinstance(au, ObjectValue):
+                            py_args.append(au.obj)
+                        else:
+                            py_args.append(a)
+                    result = meth(*py_args)
+
+                # Wrap non-Value results in ObjectValue.
+                if not isinstance(result, Value):
+                    return ObjectValue(result)
+                return result
+
+        # Fallback: try the original value's attribute.
+        meth = getattr(obj, method_name, None)
+        if meth is not None and callable(meth):
+            try:
+                sig = inspect.signature(meth)
+                params = list(sig.parameters.values())
+                is_builtin_style = (
+                    len(params) == 1 and params[0].name == "args"
+                )
+            except (ValueError, TypeError):
+                is_builtin_style = False
+
+            if is_builtin_style:
+                result = meth(args)
+            else:
                 py_args = []
                 for a in args:
                     au = unwrap_optional(a)
@@ -560,20 +618,11 @@ class Evaluator:
                     elif isinstance(au, BoolValue):
                         py_args.append(au.value)
                     elif isinstance(au, ObjectValue):
-                        # For ObjectValue args, pass the wrapped Python object.
                         py_args.append(au.obj)
                     else:
                         py_args.append(a)
                 result = meth(*py_args)
-                # Wrap non-Value results in ObjectValue.
-                if not isinstance(result, Value):
-                    return ObjectValue(result)
-                return result
 
-        # Fallback: try the original value's attribute.
-        meth = getattr(obj, method_name, None)
-        if meth is not None and callable(meth):
-            result = meth(*args)
             if not isinstance(result, Value):
                 return ObjectValue(result)
             return result
