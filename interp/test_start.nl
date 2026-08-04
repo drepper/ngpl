@@ -30,7 +30,7 @@ const K = [
  * --------------------------------------------------------------------------- */
 
 fn data_rem_64(data_size) -> int {
-    var rem = data_size;
+    var rem := data_size;
     while (rem >= 64) { rem ← rem - 64; }
     return rem;
 }
@@ -46,10 +46,10 @@ fn data_rem_64(data_size) -> int {
 fn get_padded_byte(data, pos, data_size, total_size) -> int {
     if (pos < data_size) { return data.getbyte(pos); }
     if (pos == data_size) { return 128; }
-    var len_start = total_size - 8;
+    var len_start := total_size - 8;
     if (pos >= len_start) {
-        var bit_len = data_size * 8;
-        var byte_idx = pos - len_start;
+        var bit_len := data_size * 8;
+        var byte_idx := pos - len_start;
         return (bit_len » ((7 - byte_idx) * 8)) & 255;
     }
     return 0;
@@ -57,10 +57,10 @@ fn get_padded_byte(data, pos, data_size, total_size) -> int {
 
 fn get_padded_word(data, off, data_size, total_size) -> int {
     if (off + 4 <= data_size) { return data.getword(off); }
-    var b0 = get_padded_byte(data, off, data_size, total_size);
-    var b1 = get_padded_byte(data, off + 1, data_size, total_size);
-    var b2 = get_padded_byte(data, off + 2, data_size, total_size);
-    var b3 = get_padded_byte(data, off + 3, data_size, total_size);
+    var b0 := get_padded_byte(data, off, data_size, total_size);
+    var b1 := get_padded_byte(data, off + 1, data_size, total_size);
+    var b2 := get_padded_byte(data, off + 2, data_size, total_size);
+    var b3 := get_padded_byte(data, off + 3, data_size, total_size);
     return ((b0 « 24) | (b1 « 16) | (b2 « 8) | b3) & 4294967295;
 }
 
@@ -86,33 +86,33 @@ fn expand_s1(prev) -> int {
  * --------------------------------------------------------------------------- */
 
 fn sha256(data) -> int {
-    var data_size = data.size;
+    var data_size := data.size;
 
     /* Compute padded message length per SHA-256 spec. */
-    var rem = data_rem_64(data_size);
-    var pad_len = 55 - rem;
+    var rem := data_rem_64(data_size);
+    var pad_len := 55 - rem;
     if (pad_len < 0) { pad_len ← pad_len + 64; }
-    var total_size = data_size + 1 + pad_len + 8;
+    var total_size := data_size + 1 + pad_len + 8;
 
     /* Initial hash values per FIPS 180-4 Section 5.3.3. */
-    var H = [
+    var H := [
         1779033703, 3144134277, 1013904242, 2773480762,
         1359893119, 2600822924, 528734635,  1541459225,
     ];
 
     /* Process each 64-byte block. */
-    var blk_off = 0;
+    var blk_off := 0;
     while (blk_off < total_size) {
         /* --- Load W[0..15] from the current block (with padding overlay). --- */
         var W : i32[64] = 0;
-        var i = 0;
+        var i := 0;
         while (i < 16) {
             W[i] ← get_padded_word(data, blk_off + (i * 4), data_size, total_size);
             i ← i + 1;
         }
 
         /* --- Message-schedule expansion: W[16..63]. --- */
-        var j = 16;
+        var j := 16;
         while (j < 64) {
             W[j] ← (W[j - 16] + expand_s0(W[j - 15]) +
                      W[j - 7] + expand_s1(W[j - 2])) & 4294967295;
@@ -120,28 +120,28 @@ fn sha256(data) -> int {
         }
 
         /* --- Working variables: copy of current hash state. --- */
-        var v = H[0…7];
+        var v := H[0…7];
 
         /* --- 64 compression rounds using K[t] and W[t]. --- */
-        var t = 0;
+        var t := 0;
         while (t < 64) {
             /* Σ₁(e) = ROTR(6,e) ⊕ ROTR(11,e) ⊕ ROTR(25,e). */
-            var s1 = ((v[4] ↻ 6) ^ (v[4] ↻ 11) ^ (v[4] ↻ 25)) & 4294967295;
+            var s1 := ((v[4] ↻ 6) ^ (v[4] ↻ 11) ^ (v[4] ↻ 25)) & 4294967295;
 
             /* ch(e,f,g) = (e ∧ f) ⊕ (¬e ∧ g). */
-            var ch = (v[4] & v[5]) ^ (~v[4] & v[6]);
+            var ch := (v[4] & v[5]) ^ (~v[4] & v[6]);
 
             /* t1 = h + Σ₁ + ch + K[t] + W[t]. */
-            var t1 = (v[7] + s1 + ch + K[t] + W[t]) & 4294967295;
+            var t1 := (v[7] + s1 + ch + K[t] + W[t]) & 4294967295;
 
             /* Σ₀(a) = ROTR(2,a) ⊕ ROTR(13,a) ⊕ ROTR(22,a). */
-            var s0 = ((v[0] ↻ 2) ^ (v[0] ↻ 13) ^ (v[0] ↻ 22)) & 4294967295;
+            var s0 := ((v[0] ↻ 2) ^ (v[0] ↻ 13) ^ (v[0] ↻ 22)) & 4294967295;
 
             /* maj(a,b,c) = (a ∧ b) ⊕ (a ∧ c) ⊕ (b ∧ c). */
-            var maj = (v[0] & v[1]) ^ (v[0] & v[2]) ^ (v[1] & v[2]);
+            var maj := (v[0] & v[1]) ^ (v[0] & v[2]) ^ (v[1] & v[2]);
 
             /* t2 = Σ₀ + maj. */
-            var t2 = (s0 + maj) & 4294967295;
+            var t2 := (s0 + maj) & 4294967295;
 
             /* Shift working variables right by one position. */
             v[1…7] ← v[0…6];
@@ -158,8 +158,8 @@ fn sha256(data) -> int {
     }
 
     /* Pack final hash: H[0]«224 | … | H[7]. */
-    var hash = 0;
-    var k = 0;
+    var hash := 0;
+    var k := 0;
     while (k < 8) {
         hash ← hash | (H[k] « ((7 - k) * 32));
         k ← k + 1;
@@ -169,9 +169,9 @@ fn sha256(data) -> int {
 
 @start
 fn main() -> none {
-    var dir = std.fs.cwd();
-    var file = dir.openFile("CLAUDE.md");
-    var data = file.read_file(std.heap.allocator());
-    var hash = sha256(data);
+    var dir := std.fs.cwd();
+    var file := dir.openFile("CLAUDE.md");
+    var data := file.read_file(std.heap.allocator());
+    var hash := sha256(data);
     std.print(hash);
 }
