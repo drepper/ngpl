@@ -9,7 +9,7 @@ from interp.ast import (
     IntLit, StrLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
-    ArrayLit, Subscript, ArrayAlloc,
+    ArrayLit, Subscript, SliceAccess, ArrayAlloc,
 )
 from interp.lexer import Token
 
@@ -555,10 +555,17 @@ class Parser:
                         node = GetAttr(node, attr_name)
                 elif self._check("PUNCT") and self._cur().value == "[":
                     self.pos += 1
-                    index_expr = self._parse_or_expr()
-                    self._skip_nl()
-                    self._eat("PUNCT", "]")
-                    node = Subscript(node, index_expr)
+                    start_expr = self._parse_or_expr()
+                    if self._check("PUNCT") and self._cur().value == "…":
+                        self.pos += 1
+                        end_expr = self._parse_or_expr()
+                        self._skip_nl()
+                        self._eat("PUNCT", "]")
+                        node = SliceAccess(node, start_expr, end_expr)
+                    else:
+                        self._skip_nl()
+                        self._eat("PUNCT", "]")
+                        node = Subscript(node, start_expr)
                 elif self._check("PUNCT") and self._cur().value == "(":
                     args = self._parse_call_args()
                     if isinstance(node, VarRef):

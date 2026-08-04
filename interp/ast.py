@@ -167,6 +167,15 @@ class Subscript:
         self.index = index   # an expression AST node for the index
 
 
+class SliceAccess:
+    """Slice access: obj[start…end] (inclusive on both ends)."""
+
+    def __init__(self, obj, start, end):
+        self.obj = obj
+        self.start = start
+        self.end = end
+
+
 class ArrayAlloc:
     """Dynamic array allocation: new i32[size_expr]."""
 

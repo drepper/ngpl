@@ -17,7 +17,7 @@ from interp.ast import (
     IntLit, StrLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
-    ArrayLit, Subscript, ArrayAlloc,
+    ArrayLit, Subscript, SliceAccess, ArrayAlloc,
 )
 from interp.value import (
     Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue,
@@ -583,6 +583,17 @@ class Evaluator:
                 if isinstance(iu, IntValue):
                     return unwrapped.obj.get(iu.value)
 
+        # Slice read: arr[start…end] (inclusive).
+        if isinstance(node, SliceAccess):
+            arr_val = self.eval_expr(node.obj)
+            unwrapped = unwrap_optional(arr_val)
+            if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
+                s = unwrap_optional(self.eval_expr(node.start))
+                e = unwrap_optional(self.eval_expr(node.end))
+                if isinstance(s, IntValue) and isinstance(e, IntValue):
+                    elems = unwrapped.obj.elements[s.value:e.value + 1]
+                    return ObjectValue(ArrayValue(list(elems)))
+
         # Dynamic array allocation: new type[size].
         if isinstance(node, ArrayAlloc):
             size_val = self.eval_expr(node.size_expr)
@@ -634,7 +645,18 @@ class Evaluator:
         if isinstance(stmt, tuple) and len(stmt) == 3 and stmt[0] == "assign_stmt":
             _, target_ast, rhs_ast = stmt
             rhs = self.eval_expr(rhs_ast)
-            if isinstance(target_ast, Subscript):
+            if isinstance(target_ast, SliceAccess):
+                # arr[s…e] ← rhs_array — copy elements into slice.
+                arr_val = self.eval_expr(target_ast.obj)
+                au = unwrap_optional(arr_val)
+                if isinstance(au, ObjectValue) and isinstance(au.obj, ArrayValue):
+                    s = unwrap_optional(self.eval_expr(target_ast.start))
+                    e = unwrap_optional(self.eval_expr(target_ast.end))
+                    rhs_arr = self._as_array(rhs)
+                    if isinstance(s, IntValue) and isinstance(e, IntValue) and rhs_arr is not None:
+                        for i, val in enumerate(rhs_arr.elements):
+                            au.obj.set(s.value + i, val)
+            elif isinstance(target_ast, Subscript):
                 # arr[i] ← value — mutate array element.
                 arr_val = self.eval_expr(target_ast.obj)
                 au = unwrap_optional(arr_val)

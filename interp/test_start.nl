@@ -150,11 +150,7 @@ fn sha256(data) -> int {
             var t2 = (s0 + maj) & 4294967295;
 
             /* Shift working variables right by one position. */
-            var n = 7;
-            while (n > 0) {
-                v[n] ← v[n - 1];
-                n ← n - 1;
-            }
+            v[1…7] ← v[0…6];
             v[0] ← (t1 + t2) & 4294967295;
             v[4] ← (v[4] + t1) & 4294967295;
 
