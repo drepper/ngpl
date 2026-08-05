@@ -197,6 +197,10 @@ class Parser:
             if self._try_eat("PUNCT", ":"):
                 if self._check("IDENT"):
                     type_ann = self._eat("IDENT").value
+                    if self._check("PUNCT") and self._cur().value == "[":
+                        self.pos += 1
+                        self._eat("PUNCT", "]")
+                        type_ann += "[]"
             self._eat("PUNCT", "=")
             init_expr = self._parse_or_expr()
             self._try_eat("PUNCT", ";")
@@ -397,13 +401,17 @@ class Parser:
             type_annotation = self._eat("IDENT").value
             if self._check("PUNCT") and self._cur().value == "[":
                 self.pos += 1
-                size_expr = self._parse_or_expr()
-                self._eat("PUNCT", "]")
-                self._eat("PUNCT", "=")
-                init_expr = self._parse_or_expr()
-                self._try_eat("PUNCT", ";")
-                return VarDef(name_tok.value, type_annotation,
-                              ArrayAlloc(type_annotation, size_expr, init_expr),
+                if self._check("PUNCT") and self._cur().value == "]":
+                    self.pos += 1
+                    type_annotation += "[]"
+                else:
+                    size_expr = self._parse_or_expr()
+                    self._eat("PUNCT", "]")
+                    self._eat("PUNCT", "=")
+                    init_expr = self._parse_or_expr()
+                    self._try_eat("PUNCT", ";")
+                    return VarDef(name_tok.value, type_annotation,
+                                  ArrayAlloc(type_annotation, size_expr, init_expr),
                               is_const)
 
         if not has_colon:

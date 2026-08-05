@@ -25,12 +25,12 @@ fn test_right_fold_subtract → ∅:
     var result := (λa : int, b : int → int: a - b) ⍀ [1, 2, 3]
     assert_eq(result, 2)
 
-/* Right fold: with init. */
+/* Right fold: with init (non-trivial init that differs from no-init). */
 @test
 fn test_right_fold_with_init → ∅:
-    /* f(1, f(2, f(3, 0))) = 1 - (2 - (3 - 0)) = 2 */
-    var result := (λa : int, b : int → int: a - b) ⍀ ([1, 2, 3], 0)
-    assert_eq(result, 2)
+    /* f(1, f(2, f(3, 5))) = 1 - (2 - (3 - 5)) = 1 - (2 - (-2)) = 1 - 4 = -3 */
+    var result := (λa : int, b : int → int: a - b) ⍀ ([1, 2, 3], 5)
+    assert_eq(result, -3)
 
 /* Left fold: string concatenation without init. */
 @test
@@ -68,6 +68,12 @@ fn test_left_fold_bit_pack → ∅:
     var result := (λacc : int, h : int → int: (acc « 8) | h) ⌿ ([0xAB, 0xCD, 0xEF], 0)
     assert_eq(result, 0xABCDEF)
 
+/* Left fold: bit packing with non-zero init to verify init is used. */
+@test
+fn test_left_fold_bit_pack_init → ∅:
+    var result := (λacc : int, h : int → int: (acc « 8) | h) ⌿ ([0xCD, 0xEF], 0xAB)
+    assert_eq(result, 0xABCDEF)
+
 /* Left fold with a named function, no init. */
 fn add x : int, y : int → int:
     x + y
@@ -89,12 +95,12 @@ fn test_left_fold_single → ∅:
     var result := (λa : int, b : int → int: a + b) ⌿ [7]
     assert_eq(result, 7)
 
-/* Right fold: accumulator from right. */
+/* Right fold: accumulator from right with non-trivial init. */
 @test
 fn test_right_fold_build → ∅:
-    var result := (λa : int, b : int → int: a + b * 2) ⍀ ([1, 2, 3], 0)
-    /* f(3, 0) = 3, f(2, 3) = 2+6=8, f(1, 8) = 1+16=17 */
-    assert_eq(result, 17)
+    /* f(3, 10) = 3+20=23, f(2, 23) = 2+46=48, f(1, 48) = 1+96=97 */
+    var result := (λa : int, b : int → int: a + b * 2) ⍀ ([1, 2, 3], 10)
+    assert_eq(result, 97)
 
 /* Error: fold without init on empty container. */
 @test
