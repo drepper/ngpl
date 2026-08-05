@@ -34,11 +34,11 @@ const K : u32 = [
  * --------------------------------------------------------------------------- */
 
 fn get_padded_byte(data, pos : usize, data_size : usize, total_size : usize) -> ?u8 {
-    if (pos >= total_size) { return none; }
-    if (pos < data_size) { return data.getbyte(pos); }
-    if (pos == data_size) { return 128; }
+    if pos >= total_size { return none; }
+    if pos < data_size { return data.getbyte(pos); }
+    if pos == data_size { return 128; }
     var len_start := total_size - 8;
-    if (pos >= len_start) {
+    if pos >= len_start {
         var bit_len := data_size * 8;
         var byte_idx := pos - len_start;
         return (bit_len » ((7 - byte_idx) * 8)) & 255;
@@ -47,8 +47,8 @@ fn get_padded_byte(data, pos : usize, data_size : usize, total_size : usize) -> 
 }
 
 fn get_padded_word(data, off : usize, data_size : usize, total_size : usize) -> ?u32 {
-    if (off + 4 <= data_size) { return data.getword(off); }
-    if (off >= total_size) { return none; }
+    if off + 4 <= data_size { return data.getword(off); }
+    if off >= total_size { return none; }
     var b0 : u32 = get_padded_byte(data, off, data_size, total_size) ?? 0;
     var b1 : u32 = get_padded_byte(data, off + 1, data_size, total_size) ?? 0;
     var b2 : u32 = get_padded_byte(data, off + 2, data_size, total_size) ?? 0;
@@ -83,7 +83,7 @@ fn sha256(data) -> ?int {
     /* Compute padded message length per SHA-256 spec. */
     var rem : usize = data_size % 64;
     var pad_len : usize = 55 - rem;
-    if (rem > 55) { pad_len ← pad_len + 64; }
+    if rem > 55 { pad_len ← pad_len + 64; }
     var total_size : usize = data_size + 1 + pad_len + 8;
 
     /* Initial hash values per FIPS 180-4 Section 5.3.3. */
@@ -94,18 +94,18 @@ fn sha256(data) -> ?int {
 
     /* Process each 64-byte block. */
     var blk_off : usize = 0;
-    while (blk_off < total_size) {
+    while blk_off < total_size {
         /* --- Load W[0..15] from the current block (with padding overlay). --- */
         var W : u32[64] = 0;
         var i : u32 = 0;
-        while (i < 16) {
+        while i < 16 {
             W[i] ← get_padded_word(data, blk_off + (i * 4), data_size, total_size)?;
             i ← i + 1;
         }
 
         /* --- Message-schedule expansion: W[16..63]. --- */
         var j : u32 = 16;
-        while (j < 64) {
+        while j < 64 {
             W[j] ← W[j - 16] + expand_s0(W[j - 15]) +
                     W[j - 7] + expand_s1(W[j - 2]);
             j ← j + 1;
@@ -116,7 +116,7 @@ fn sha256(data) -> ?int {
 
         /* --- 64 compression rounds using K[t] and W[t]. --- */
         var t : u32 = 0;
-        while (t < 64) {
+        while t < 64 {
             /* Σ₁(e) = ROTR(6,e) ⊕ ROTR(11,e) ⊕ ROTR(25,e). */
             var s1 := (v[4] ↻ 6) ^ (v[4] ↻ 11) ^ (v[4] ↻ 25);
 
@@ -152,7 +152,7 @@ fn sha256(data) -> ?int {
     /* Pack final hash: H[0]«224 | … | H[7]. */
     var hash := 0;
     var k : u32 = 0;
-    while (k < 8) {
+    while k < 8 {
         hash ← (hash « 32) | H[k];
         k ← k + 1;
     }

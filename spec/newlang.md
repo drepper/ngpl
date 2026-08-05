@@ -168,7 +168,7 @@ fn add(a : int, b : int) -> int {
 }
 
 fn abs(x : int) -> int {
-    if (x < 0) { return -x; }
+    if x < 0 { return -x; }
     x
 }
 
@@ -187,9 +187,9 @@ A function that may fail to produce a value declares an **optional return type**
 #### Declaration
 
 ```
-fn get_padded_byte(data, pos, data_size, total_size) -> ?u8 {
-    if (pos >= total_size) { return none; }
-    if (pos < data_size) { return data.getbyte(pos); }
+fn get_padded_byte(data, pos : usize, data_size : usize, total_size : usize) -> ?u8 {
+    if pos >= total_size { return none; }
+    if pos < data_size { return data.getbyte(pos); }
     ...
     0
 }
@@ -202,7 +202,7 @@ A function with return type `?u8` auto-wraps non-`none` return values in `some`.
 The `?` operator unwraps an optional value or **propagates** `none` to the enclosing function:
 
 ```
-fn get_padded_word(data, off, data_size, total_size) -> ?u32 {
+fn get_padded_word(data, off : usize, data_size : usize, total_size : usize) -> ?u32 {
     var b0 : u32 = get_padded_byte(data, off, data_size, total_size)?;
     ...
 }
@@ -242,13 +242,13 @@ A function that returns `none` for absent data, a caller that substitutes a defa
 
 ```
 fn get_padded_byte(...) -> ?u8 {
-    if (pos >= total_size) { return none; }
+    if pos >= total_size { return none; }
     ...
     none                                         /* zero-padding zone */
 }
 
 fn get_padded_word(...) -> ?u32 {
-    if (off >= total_size) { return none; }       /* fully out of range */
+    if off >= total_size { return none; }         /* fully out of range */
     var b0 : u32 = get_padded_byte(...) ?? 0;    /* absent bytes → 0 */
     var b1 : u32 = get_padded_byte(...) ?? 0;
     var b2 : u32 = get_padded_byte(...) ?? 0;

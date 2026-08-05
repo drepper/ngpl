@@ -302,7 +302,7 @@ class Parser:
         return ExprStmt(expr)
 
     def _parse_if_stmt(self):
-        """Parse: if cond { stmts } (elif cond { stmts })* (else { stmts })?"""
+        """Parse: if expr { stmts } (elif expr { stmts })* (else { stmts })?"""
         self._eat("IF")
         cond = self._parse_or_expr()
         cons_body = self._parse_block()
@@ -330,7 +330,7 @@ class Parser:
         return IfStmt(cond, cons_body, alt)
 
     def _parse_while_stmt(self):
-        """Parse: while cond { stmts }"""
+        """Parse: while expr { stmts }"""
         self._eat("WHILE")
         cond = self._parse_or_expr()
         body = self._parse_block()
