@@ -1137,8 +1137,14 @@ class Evaluator:
 
     @staticmethod
     def _is_builtin_value(val: Value) -> bool:
-        """Check if a value is a builtin that doesn't need explicit capture."""
+        """Check if a value doesn't need explicit capture in a lambda.
+
+        Builtins, enum types, module objects, and non-replaceable
+        user-defined functions are always accessible.
+        """
         if isinstance(val, (BuiltinFunc, EnumType)):
+            return True
+        if isinstance(val, FuncValue) and not val.is_replaceable:
             return True
         if isinstance(val, ObjectValue) and not isinstance(val.obj, ArrayValue):
             return True

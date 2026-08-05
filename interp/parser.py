@@ -138,6 +138,7 @@ class Parser:
         is_start = False
         is_test = False
         is_flag = False
+        is_replaceable = False
         test_refs: list[str] = []
         expect_annotations: list[tuple[str, str]] = []
 
@@ -145,6 +146,10 @@ class Parser:
             if self._check("START"):
                 self._eat("START")
                 is_start = True
+                self._try_eat("NEWLINE")
+            elif self._check("REPLACEABLE"):
+                self._eat("REPLACEABLE")
+                is_replaceable = True
                 self._try_eat("NEWLINE")
             elif self._check("TEST"):
                 self._eat("TEST")
@@ -182,7 +187,8 @@ class Parser:
             return self._parse_enum_def(is_flag)
 
         if self._check("FN"):
-            return self._parse_function_def(is_start, is_test, test_refs, expect_annotations)
+            return self._parse_function_def(is_start, is_test, test_refs, expect_annotations,
+                                            is_replaceable)
         elif self._check("CONST"):
             self._eat("CONST")
             name_tok = self._eat("IDENT")
@@ -204,7 +210,8 @@ class Parser:
                 f"got {self._tok_display(self._cur())}")
 
     def _parse_function_def(self, is_start, is_test=False, test_refs=None,
-                            expect_annotations: list[tuple[str, str]] | None = None):
+                            expect_annotations: list[tuple[str, str]] | None = None,
+                            is_replaceable: bool = False):
         """Parse: fn name [params] (-> ret_type)? block
 
         The parameter list has no delimiters; it is terminated by -> (return
@@ -276,14 +283,14 @@ class Parser:
             except ParseError as e:
                 body = []
                 fdef = FuncDef(name, params, ret_type, body, is_start, is_test,
-                               test_refs, expect_annotations)
+                               test_refs, expect_annotations, is_replaceable)
                 fdef._parse_error = str(e)
                 self._skip_to_next_definition()
                 return fdef
         else:
             body = self._parse_block()
         return FuncDef(name, params, ret_type, body, is_start, is_test,
-                       test_refs, expect_annotations)
+                       test_refs, expect_annotations, is_replaceable)
 
     def _parse_dotted_name(self) -> str:
         """Parse a possibly dotted name like 'std.errors'."""

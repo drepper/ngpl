@@ -1115,15 +1115,20 @@ Anonymous functions are introduced with the `λ` (U+03BB, GREEK SMALL LETTER LAM
 The lambda body has a restricted environment:
 
 - **Built-in functions** (e.g., `assert`, `assert_eq`), **enum types**, and **module objects** (e.g., `std`) are always accessible without capture.
-- **User-defined variables and functions** must appear in the capture list to be used in the body.
-- If no capture list is present (no `|…|` at all), the lambda cannot reference any user-defined names from the enclosing scope.
+- **Non-replaceable user-defined functions** (the default) are always accessible without capture.  Since their binding is immutable, the lambda can safely reference them.
+- **`@replaceable` functions** and **variables** must appear in the capture list to be used in the body.
+- If no capture list is present (no `|…|` at all), the lambda cannot reference any capturable names from the enclosing scope.
 - If a capture list is present but a referenced name is missing from it, a compile-time error is raised.
 
 ```
+fn helper x : i32 -> i32:
+    x + 100
+
 var offset = 10
-var f = λx |offset|: x + offset    // OK: offset is captured
-var g = λx: x + offset              // ERROR: references 'offset' but has no capture list
-var h = λx ||: x + offset           // ERROR: 'offset' not in the capture list
+var f = λx |offset|: helper(x) + offset   // OK: helper is non-replaceable, offset is captured
+var g = λx: helper(x)                      // OK: helper needs no capture
+var h = λx: x + offset                     // ERROR: references 'offset' but has no capture list
+var k = λx ||: x + offset                  // ERROR: 'offset' not in the capture list
 ```
 
 #### Calling Lambdas
@@ -1185,6 +1190,26 @@ var mul = λx, y: x * y
 var triple = mul(3)
 assert_eq(15, triple(5))
 ```
+
+#### The `@replaceable` Attribute
+
+By default, functions are immutable bindings — once defined, their implementation cannot change.  Such functions are always accessible inside lambdas without being listed in the capture list, because the lambda's reference to the function can never become stale.
+
+A function marked `@replaceable` can have its implementation swapped at runtime (see the language specification for function replacement).  Because its binding is mutable, a `@replaceable` function **must** be captured explicitly:
+
+```
+@replaceable
+fn strategy x : i32 -> i32:
+    x * 2
+
+// Must capture — strategy could change after the lambda is created
+var f = λx |strategy|: strategy(x)
+
+// ERROR: strategy is @replaceable and not captured
+var g = λx ||: strategy(x)
+```
+
+This distinction ensures that lambdas with no capture list or an empty capture list are guaranteed to be pure with respect to user-defined state — they depend only on their parameters and immutable bindings.
 
 #### Ignored Lambda Warning
 

@@ -130,6 +130,31 @@ fn test_lambda_empty_capture:
   var f = λx ||: x * 2
   assert_eq(8, f(4))
 
+// Non-replaceable function accessible without capture
+fn helper x: i32 -> i32:
+  x + 100
+
+@test
+fn test_lambda_nonreplaceable_func:
+  var f = λx: helper(x)
+  assert_eq(105, f(5))
+
+// Replaceable function requires capture
+@replaceable
+fn mutable_fn x: i32 -> i32:
+  x * 2
+
+@test
+fn test_lambda_replaceable_captured:
+  var f = λx |mutable_fn|: mutable_fn(x)
+  assert_eq(10, f(5))
+
+// Replaceable function without capture causes error
+@test
+@expect error "not in the capture list"
+fn test_lambda_replaceable_uncaptured:
+  var f = λx ||: mutable_fn(x)
+
 @start
 fn main:
   0

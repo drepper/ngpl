@@ -246,14 +246,16 @@ class ExpectedValue(Value):
 class FuncValue(Value):
     """A user-defined function (closure over an environment)."""
 
-    __slots__ = ("name", "params", "body", "env", "ret_type")
+    __slots__ = ("name", "params", "body", "env", "ret_type", "is_replaceable")
 
-    def __init__(self, name, params, body, env, ret_type=None):
+    def __init__(self, name, params, body, env, ret_type=None,
+                 is_replaceable: bool = False):
         self.name = name
-        self.params = params      # list of (param_name, param_type)
-        self.body = body          # list of statement AST nodes
-        self.env = env            # environment snapshot at definition time
+        self.params = params
+        self.body = body
+        self.env = env
         self.ret_type = ret_type
+        self.is_replaceable = is_replaceable
 
 
 class LambdaValue(Value):

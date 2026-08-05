@@ -98,7 +98,8 @@ class FuncDef:
 
     def __init__(self, name, params, ret_type, body, is_start=False,
                  is_test=False, test_refs=None,
-                 expect_annotations: list[tuple[str, str]] | None = None):
+                 expect_annotations: list[tuple[str, str]] | None = None,
+                 is_replaceable: bool = False):
         self.name = name
         self.params = params
         self.ret_type = ret_type
@@ -107,6 +108,7 @@ class FuncDef:
         self.is_test = is_test
         self.test_refs: list[str] = test_refs or []
         self.expect_annotations: list[tuple[str, str]] = expect_annotations or []
+        self.is_replaceable = is_replaceable
 
 
 class VarDef:

@@ -239,7 +239,8 @@ def main():
             if defn.ret_type is not None and not validate_type(defn.ret_type):
                 raise TypeError(
                     f"in {defn.name}: unknown return type '{defn.ret_type}'")
-            fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type)
+            fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,
+                          defn.is_replaceable)
             env.define(defn.name, fv)
 
             if defn.is_start:
@@ -274,7 +275,8 @@ def main():
                 errors_produced.append(("error", str(e)))
 
         if not errors_produced:
-            fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type)
+            fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,
+                          defn.is_replaceable)
             eval_inst = Evaluator(env)
             try:
                 eval_inst._call_user_func(fv, [])
