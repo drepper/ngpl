@@ -1701,6 +1701,34 @@ static_assert(x)                       /* ERROR: not a compile-time constant */
 |---------|-------|------|-----|---------------|
 | Compile-time assert | `static_assert` | `const_assert!` (nightly) | `comptime` + assert | `static_assert` / `static_assert_eq` |
 
+#### Type Introspection
+
+Two built-in functions return reified type values that can be compared for equality:
+
+- `@typeof(expr)` — evaluates the expression and returns a `type` value representing its runtime type.  The type name reflects the concrete type: `int`, `i32`, `u8`, `str`, `bool`, `\N{EMPTY SET}`, `array`, `tuple`, `fn`, `\N{GREEK SMALL LETTER LAMDA}`, or an enum name.
+
+- `@resultof(func)` — looks up a named function and returns a `type` value for its declared return type.
+
+Type values can be compared with `==` and used with `assert_eq` and `static_assert_eq`:
+
+```
+var x : i32 = 10
+assert_eq(@typeof(x), @typeof(x + 1))         /* both are i32 */
+
+fn example → i32: 42
+assert_eq(@resultof(example), @typeof(x))      /* i32 == i32 */
+
+/* With static_assert_eq for compile-time checks */
+static_assert_eq(@typeof(42), @typeof(1 + 2))  /* both are int */
+static_assert_eq(@typeof("a"), @typeof("b"))   /* both are str */
+```
+
+| Feature | C++ | Rust | Zig | This language |
+|---------|-----|------|-----|---------------|
+| Type-of expression | `decltype(expr)` | — | `@TypeOf` | `@typeof(expr)` |
+| Return type query | `decltype(f())` | — | `@typeInfo` | `@resultof(func)` |
+| Type equality | `std::is_same_v` | `TypeId` | `==` | `==` |
+
 #### Test Output
 
 In normal mode, only failing tests produce output — passing tests are silent.  All standalone tests run before aborting, so every failure is reported in one pass.  Referenced tests that fail during execution terminate the program immediately.

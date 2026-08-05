@@ -15,7 +15,7 @@ from interp.ast import (
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, EnumDef,
     LambdaExpr, ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
-    StaticAssert, StaticAssertEq,
+    StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr,
 )
 from interp.lexer import Token, KEYWORDS
 
@@ -996,6 +996,20 @@ class Parser:
             self._skip_nl()
             self._eat("PUNCT", ")")
             return EnumerateExpr(expr)
+        if self._check("TYPEOF"):
+            self._eat("TYPEOF")
+            self._eat("PUNCT", "(")
+            expr = self._parse_or_expr()
+            self._skip_nl()
+            self._eat("PUNCT", ")")
+            return TypeOfExpr(expr)
+        if self._check("RESULTOF"):
+            self._eat("RESULTOF")
+            self._eat("PUNCT", "(")
+            name_tok = self._eat("IDENT")
+            self._skip_nl()
+            self._eat("PUNCT", ")")
+            return ResultOfExpr(name_tok.value)
         node = self._parse_primary()
         if self._check("OP") and self._cur().value == "?":
             self.pos += 1

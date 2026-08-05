@@ -22,12 +22,12 @@ from interp.ast import (
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr,
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
-    StaticAssert, StaticAssertEq,
+    StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr,
 )
 from interp.value import (
     Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
     FuncValue, LambdaValue, BuiltinFunc, ObjectValue, BuiltinBoundMethod,
-    ArrayValue, TupleValue, EnumType, EnumValue, RangeValue,
+    ArrayValue, TupleValue, EnumType, EnumValue, RangeValue, TypeValue,
     mk_int, mk_int_wrap, mk_str, mk_bool, none, some, is_none, is_some,
     resolve_width, wrap_int, coerce_to_type, coerce_arg, _TYPE_BITS, FAST_TYPES,
     _split_optional_type, MAX_TENSOR_RANK,
@@ -140,6 +140,10 @@ def _collect_refs(node) -> set[str]:
         refs |= _collect_refs(node.data)
     elif isinstance(node, EnumerateExpr):
         refs |= _collect_refs(node.expr)
+    elif isinstance(node, TypeOfExpr):
+        refs |= _collect_refs(node.expr)
+    elif isinstance(node, ResultOfExpr):
+        refs.add(node.name)
     elif isinstance(node, TupleLit):
         for e in node.elements:
             refs |= _collect_refs(e)
@@ -158,6 +162,8 @@ def _is_const_expr(node) -> bool:
         return all(_is_const_expr(e) for e in node.elements)
     if isinstance(node, TupleLit):
         return all(_is_const_expr(e) for e in node.elements)
+    if isinstance(node, (TypeOfExpr, ResultOfExpr)):
+        return True
     return False
 
 
@@ -836,6 +842,10 @@ class Evaluator:
                 if eu.value != au.value:
                     raise TypeError(
                         f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
+            elif isinstance(eu, TypeValue) and isinstance(au, TypeValue):
+                if eu.name != au.name:
+                    raise TypeError(
+                        f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
             else:
                 raise TypeError(
                     f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
@@ -1004,6 +1014,21 @@ class Evaluator:
 
         if isinstance(node, EnumerateExpr):
             raise TypeError("@enumerate can only be used inside foreach")
+
+        if isinstance(node, TypeOfExpr):
+            val = self.eval_expr(node.expr)
+            return TypeValue(self._value_type_name(val))
+
+        if isinstance(node, ResultOfExpr):
+            try:
+                func = self.env.lookup(node.name)
+            except KeyError:
+                raise TypeError(f"@resultof: unknown function '{node.name}'")
+            if isinstance(func, FuncValue):
+                return TypeValue(func.ret_type or "\N{EMPTY SET}")
+            if isinstance(func, BuiltinFunc):
+                return TypeValue("builtin")
+            raise TypeError(f"@resultof: '{node.name}' is not a function")
 
         if isinstance(node, LambdaExpr):
             return self._eval_lambda_expr(node)
@@ -1454,6 +1479,42 @@ class Evaluator:
         if isinstance(val, ObjectValue) and not isinstance(val.obj, ArrayValue):
             return True
         return False
+
+    @staticmethod
+    def _value_type_name(val: Value) -> str:
+        """Return the type name string for a runtime value."""
+        u = unwrap_optional(val)
+        if isinstance(u, IntValue):
+            return u.width
+        if isinstance(u, StrValue):
+            return "str"
+        if isinstance(u, BoolValue):
+            return "bool"
+        if isinstance(u, NoneValue):
+            return "\N{EMPTY SET}"
+        if isinstance(u, SomeValue):
+            return Evaluator._value_type_name(u.value) + "?"
+        if isinstance(u, ExpectedValue):
+            if u.is_ok():
+                return Evaluator._value_type_name(u.ok_value) + "!"
+            return "err"
+        if isinstance(u, FuncValue):
+            return "fn"
+        if isinstance(u, LambdaValue):
+            return "\N{GREEK SMALL LETTER LAMDA}"
+        if isinstance(u, BuiltinFunc):
+            return "builtin"
+        if isinstance(u, TupleValue):
+            return "tuple"
+        if isinstance(u, EnumValue):
+            return u.enum_type.name
+        if isinstance(u, ObjectValue) and isinstance(u.obj, ArrayValue):
+            return "array"
+        if isinstance(u, RangeValue):
+            return "range"
+        if isinstance(u, TypeValue):
+            return "type"
+        return "unknown"
 
     def _eval_lambda_expr(self, node: LambdaExpr):
         """Evaluate a lambda expression: validate captures and build LambdaValue."""

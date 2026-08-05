@@ -288,6 +288,26 @@ class CatchStmt:
         self.body = body
 
 
+class TypeOfExpr:
+    """Type-of expression: @typeof(expr).
+
+    Returns a TypeValue representing the runtime type of the expression.
+    """
+
+    def __init__(self, expr):
+        self.expr = expr
+
+
+class ResultOfExpr:
+    """Result-of expression: @resultof(func_name).
+
+    Returns a TypeValue representing the return type of the named function.
+    """
+
+    def __init__(self, name: str):
+        self.name = name
+
+
 class StaticAssert:
     """Compile-time assertion: static_assert(cond) or static_assert(cond, msg).
 

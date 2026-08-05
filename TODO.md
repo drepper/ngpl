@@ -16,5 +16,5 @@ checkmark, commit the change, and change back to main.
     If the expression is not compile-time constant raise a compilation error/crash the interpreter.
     add tests
 
-[ ] add @typeof(EXPR) and @resultof(FCT).  These builtin functions return types which can be tested for
+[x] add @typeof(EXPR) and @resultof(FCT).  These builtin functions return types which can be tested for
     equality with other types.  Use it in examples using static_assert_eq etc.  Depends on static_assert.

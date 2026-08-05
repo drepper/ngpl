@@ -488,6 +488,24 @@ class ArrayValue(Value):
         self.elements[index] = value
 
 
+class TypeValue(Value):
+    """A reified type, produced by @typeof and @resultof.
+
+    Supports equality comparison so it can be used with static_assert_eq.
+    """
+
+    __slots__ = ("name",)
+
+    def __init__(self, name: str):
+        self.name = name
+
+    def display(self):
+        return self.name
+
+    def to_python(self):
+        return self.name
+
+
 def _is_unsigned(width: str) -> bool:
     """Return True if width names an unsigned integer type."""
     return width.startswith("u") or width in ("byte", "usize")

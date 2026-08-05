@@ -58,6 +58,8 @@ KEYWORDS = {
     "replaceable": "REPLACEABLE",
     "catch": "CATCH",
     "enumerate": "ENUMERATE",
+    "typeof": "TYPEOF",
+    "resultof": "RESULTOF",
 }
 
 # Double-character operators that must be checked before single ones.
