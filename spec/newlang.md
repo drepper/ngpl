@@ -302,6 +302,37 @@ fn abs(x : int) -> int { if x < 0 { return -x; } x }
 ```
 
 
+### Const Local Variables
+
+The `const` keyword can be used in place of `var` to define a local variable that cannot be modified after initialization:
+
+```
+const pi := 3
+const max_size : u32 = 1024
+```
+
+A `const` variable is initialized exactly like a `var` — with `:=` for type-inferred definitions or `: type =` for explicitly typed ones.  After initialization, any attempt to reassign or redefine the variable is a compile-time (or runtime, in the interpreter) error:
+
+```
+const x := 42
+x ← 99              /* ERROR: cannot assign to const variable 'x' */
+var x := 99          /* ERROR: cannot redefine const variable 'x' */
+```
+
+The `const` keyword at function scope is distinct from module-level `const` declarations, which define global constants.  Both prevent modification, but module-level constants are visible across the entire compilation unit while function-scope `const` variables follow normal scoping rules.
+
+`foreach` loop variables are implicitly `const` — they do not require the keyword.
+
+#### Design Rationale
+
+| Feature | C/C++ | Rust | Zig | Go | This language |
+|---------|-------|------|-----|----|---------------|
+| Local immutability | `const` | default (`let`) | `const` | no | `const` |
+| Mutable keyword | (default) | `mut` | `var` | (default) | `var` |
+
+Unlike Rust where immutability is the default (`let` vs `let mut`), this language defaults to mutability (`var`) and opts into immutability (`const`).  This matches C/C++ and Zig conventions and avoids cluttering code with `mut` annotations in imperative-style code where most variables are modified.
+
+
 ### Optional Types and the `?` Operator
 
 A function that may fail to produce a value declares an **optional return type** by prefixing the type with `?`.  The optional type `?T` can hold either a value of type `T` (wrapped in `some`) or `none` (absence of a value).

@@ -175,8 +175,9 @@ class Parser:
         return FuncDef(name, params, ret_type, body, is_start, is_test, test_refs)
 
     def _parse_var_def(self):
-        """Parse: var name := expr  |  var name : type = expr  |  var name : type[size] = init"""
+        """Parse: var/const name := expr  |  var/const name : type = expr  |  var name : type[size] = init"""
         keyword = self._cur().value
+        is_const = keyword == "const"
         self._eat(keyword.upper())
         name_tok = self._eat("IDENT")
 
@@ -192,13 +193,14 @@ class Parser:
                     init_expr = self._parse_or_expr()
                     self._try_eat("PUNCT", ";")
                     return VarDef(name_tok.value, type_annotation,
-                                  ArrayAlloc(type_annotation, size_expr, init_expr))
+                                  ArrayAlloc(type_annotation, size_expr, init_expr),
+                                  is_const)
 
         self._eat("PUNCT", "=")
         init_expr = self._parse_or_expr()
         self._try_eat("PUNCT", ";")
 
-        return VarDef(name_tok.value, type_annotation, init_expr)
+        return VarDef(name_tok.value, type_annotation, init_expr, is_const)
 
     # ------------------------------------------------------------------
     # Block parsing (brace-delimited or layout-driven)
@@ -266,20 +268,8 @@ class Parser:
         if self._check("EOF"):
             return None
 
-        if self._check("VAR", "LET"):
+        if self._check("VAR", "LET", "CONST"):
             return self._parse_var_def()
-
-        if self._check("CONST"):
-            self._eat("CONST")
-            name_tok = self._eat("IDENT")
-            type_ann = None
-            if self._try_eat("PUNCT", ":"):
-                if self._check("IDENT"):
-                    type_ann = self._eat("IDENT").value
-            self._eat("PUNCT", "=")
-            init_expr = self._parse_or_expr()
-            self._try_eat("PUNCT", ";")
-            return ("const_assign", name_tok.value, type_ann, init_expr)
 
         if self._check("IF"):
             return self._parse_if_stmt()

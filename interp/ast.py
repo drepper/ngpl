@@ -110,10 +110,11 @@ class FuncDef:
 class VarDef:
     """Variable definition with initializer."""
 
-    def __init__(self, name, type_annotation, init_expr):
+    def __init__(self, name, type_annotation, init_expr, is_const: bool = False):
         self.name = name
         self.type_annotation = type_annotation  # type string or None
         self.init_expr = init_expr
+        self.is_const = is_const
 
 
 class ExprStmt:

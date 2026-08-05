@@ -739,18 +739,20 @@ class Evaluator:
             elif isinstance(target_ast, VarRef):
                 if target_ast.name in self._frozen_vars:
                     raise TypeError(
-                        f"cannot assign to foreach variable '{target_ast.name}'")
+                        f"cannot assign to const variable '{target_ast.name}'")
                 self.env.define(target_ast.name, rhs)
             return none()
 
         if isinstance(stmt, VarDef):
             if stmt.name in self._frozen_vars:
                 raise TypeError(
-                    f"cannot redefine foreach variable '{stmt.name}'")
+                    f"cannot redefine const variable '{stmt.name}'")
             value = self.eval_expr(stmt.init_expr)
             if stmt.type_annotation is not None:
                 value = coerce_to_type(value, stmt.type_annotation)
             self.env.define(stmt.name, value)
+            if stmt.is_const:
+                self._frozen_vars.add(stmt.name)
             return none()
 
         if isinstance(stmt, ExprStmt):
