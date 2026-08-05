@@ -2165,3 +2165,48 @@ The grouping by integer ranges allows category checks:  runtime errors are in 10
 | Cross-type comparison | allowed | error | error | error |
 
 The `@flag` attribute eliminates the boilerplate of manually assigning powers of two and defining bitwise operations.  The automatic `nil` member for zero-valued flag sets prevents the common bug of forgetting to define an "empty" state.  Scoped access prevents name collisions between members of different enums.
+
+
+### Standard Library: Memory Allocators
+
+The standard library provides two allocator subsystems under the `std` module: a global heap allocator and per-instance arena allocators.  Both return allocator objects with an `alloc(size)` method that yields a byte buffer.
+
+#### Heap Allocator (`std.heap`)
+
+```
+var alloc := std.heap.allocator()
+var buf := alloc.alloc(4096)
+```
+
+`std.heap.allocator()` returns the global mmap-backed allocator.  It uses a bump-pointer strategy within large (4 MiB minimum) anonymous mmap regions.  Individual allocations cannot be freed; the allocator is intended for long-lived program state.
+
+#### Arena Allocator (`std.arena`)
+
+```
+var alloc := std.arena.allocator()
+var dir := std.fs.cwd()
+var file := dir.openFile("data.bin")
+var data := file.read_file(alloc)
+/* ... use data ... */
+alloc.deinit()
+```
+
+`std.arena.allocator()` creates a new, independent arena allocator each time it is called.  Like the heap allocator, it uses mmap-backed bump allocation.  The key difference is the `deinit()` method: calling it releases all memory regions owned by the arena at once, without tracking individual allocations.
+
+| Method | Description |
+|--------|-------------|
+| `alloc(size)` | Allocate `size` bytes from the arena; returns a byte buffer |
+| `deinit()` | Release all memory owned by this arena; further `alloc` calls raise an error |
+
+Arenas are useful when a group of allocations share a common lifetime (e.g., processing a single request or computing a hash).  The pattern is: create an arena, perform all allocations from it, then `deinit()` when the work is complete.
+
+#### Comparison
+
+| Feature | `std.heap` | `std.arena` |
+|---------|-----------|-------------|
+| Instance | global singleton | per-call, independent |
+| Individual free | no | no |
+| Bulk free | no | `deinit()` releases all |
+| Use case | long-lived program state | scoped, bounded-lifetime work |
+
+Both allocators accept the same interface (`alloc(size)`) and can be passed interchangeably to functions like `file.read_file(allocator)`.

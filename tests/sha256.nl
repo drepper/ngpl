@@ -159,8 +159,10 @@ fn test_sha256_448bit → ∅:
 
 @start
 fn main → ∅:
+    var alloc := std.arena.allocator()
     var dir := std.fs.cwd()
     var file := dir.openFile("CLAUDE.md")
-    var data := file.read_file(std.heap.allocator())
+    var data := file.read_file(alloc)
     var hash := sha256(data)
+    alloc.deinit()
     std.print(hash)

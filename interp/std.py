@@ -431,6 +431,7 @@ class StdModule:
         self._allocator = MmapAllocator()
         self._fs = None  # lazy-initialized fs object
         self._heap = None  # lazy-initialized heap submodule
+        self._arena = None  # lazy-initialized arena submodule
         self._stdout_file = StdoutFile()
 
     @property
@@ -446,6 +447,13 @@ class StdModule:
         if self._heap is None:
             self._heap = _HeapModuleStd(self)
         return self._heap
+
+    @property
+    def arena(self):
+        """Lazy-access to the arena allocator submodule."""
+        if self._arena is None:
+            self._arena = _ArenaModuleStd()
+        return self._arena
 
     def get_allocator(self):
         """Get a reference to the global allocator.
@@ -847,6 +855,55 @@ class StdModule:
         return mk_int(packed)
 
 
+class ArenaAllocator:
+    """Arena allocator backed by mmap().
+
+    Allocates from a bump pointer within mmap regions.  Individual
+    allocations cannot be freed; deinit() releases all regions at once.
+    Each call to std.arena.allocator() creates a fresh, independent arena.
+    """
+
+    __slots__ = ("_regions", "_offset", "_capacity", "_alive")
+
+    def __init__(self):
+        self._regions: list[mmap.mmap] = []
+        self._offset = 0
+        self._capacity = 0
+        self._alive = True
+
+    def _grow(self, min_size: int):
+        size = max(4 * 1024 * 1024, ((min_size + 4095) // 4096) * 4096)
+        try:
+            region = mmap.mmap(-1, size, mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS,
+                               MmapAllocator.PROT_READ | MmapAllocator.PROT_WRITE)
+        except OSError as e:
+            raise MemoryError(f"arena mmap failed: {e}")
+        self._regions.append(region)
+        self._offset = 0
+        self._capacity = size
+
+    def alloc(self, size: int):
+        if not self._alive:
+            raise MemoryError("arena has been deinitialized")
+        if size <= 0:
+            return Bytes(bytearray(0))
+        if self._offset + size > self._capacity:
+            self._grow(size)
+        buf = bytearray(size)
+        region = self._regions[-1]
+        region[self._offset:self._offset + size] = buf
+        self._offset += size
+        return Bytes(buf)
+
+    def deinit(self):
+        for region in self._regions:
+            region.close()
+        self._regions.clear()
+        self._offset = 0
+        self._capacity = 0
+        self._alive = False
+
+
 class _HeapModuleStd:
     """The heap submodule — provides allocator access via std.heap.allocator()."""
 
@@ -856,6 +913,14 @@ class _HeapModuleStd:
     def allocator(self):
         """Get the global mmap-backed allocator."""
         return self._parent._allocator
+
+
+class _ArenaModuleStd:
+    """The arena submodule — provides arena allocator creation via std.arena.allocator()."""
+
+    def allocator(self):
+        """Create and return a new arena allocator."""
+        return ArenaAllocator()
 
 
 class FsModule:

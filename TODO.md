@@ -26,3 +26,8 @@ checkmark, commit the change, and change back to main.
 [x] add support for currying function and test it.  Create functions and in a new function curry them
     and then use the result in calls to generate.  Repeat the same with lambda functions.  Document
     the language changes.
+
+[x] implement arena allocators in std.  Provide std.arena.allocator() to get an arena allocator
+    with the usual alloc member etc.  Also provide a deinit member function which can be used to
+    deallocate all memory.  use it in main of sha256.nl instead of std.heap allocator.  After the
+    sha256 call call deinit on the allocator
