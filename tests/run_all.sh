@@ -30,6 +30,7 @@ tests=(
     "$testdir"/test_static_assert.nl
     "$testdir"/test_typeof.nl
     "$testdir"/test_fold.nl
+    "$testdir"/test_curry.nl
     "$testdir"/sha256.nl
 )
 

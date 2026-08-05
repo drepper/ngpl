@@ -1303,7 +1303,7 @@ add(5)                             // WARNING: lambda value is not used
 | Lambda syntax | `\x -> x+1` | `\|x\| x+1` | `lambda x: x+1` | `λx : int → int: x+1` |
 | Capture | implicit | explicit (`move`) | implicit | explicit (`\|…\|`) |
 | Currying | automatic | no | no | automatic |
-| Multi-expression body | no (one expr) | yes (block) | no (one expr) | no (one expr) |
+| Multi-expression body | no (one expr) | yes (block) | no (one expr) | yes (block or layout) |
 | Unused lambda warning | no | yes (unused `Result`) | no | yes |
 
 The explicit capture list follows the principle that a lambda's dependencies should be visible at the definition site.  Unlike Rust's closure inference, this language requires the programmer to declare what is captured — making the lambda self-documenting and preventing accidental capture of mutable state.
@@ -1635,6 +1635,17 @@ fn add x : int, y : int → int:
     x + y
 
 var total := ⌿(add, [10, 20, 30], 0)   // 60
+```
+
+Currying and fold combine naturally.  A curried function produces the mapping, and fold reduces the result:
+
+```
+fn multiply a : int, b : int → int:
+    a * b
+
+var triple := multiply(3)
+var tripled := generate(triple, 1…5)   // [3, 6, 9, 12, 15]
+var total := ⌿(add, tripled, 0)        // 45
 ```
 
 #### Design Rationale

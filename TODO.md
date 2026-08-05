@@ -23,6 +23,6 @@ checkmark, commit the change, and change back to main.
     container, the third the start value.  Choose glyphs, document, test.  Update the sha256 to use
     left fold to compute the return value.
 
-[ ] add support for currying function and test it.  Create functions and in a new function curry them
+[x] add support for currying function and test it.  Create functions and in a new function curry them
     and then use the result in calls to generate.  Repeat the same with lambda functions.  Document
     the language changes.
