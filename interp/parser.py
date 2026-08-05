@@ -15,7 +15,7 @@ from interp.ast import (
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, EnumDef,
     LambdaExpr, ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
-    StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr,
+    StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, FoldExpr,
 )
 from interp.lexer import Token, KEYWORDS
 
@@ -1010,6 +1010,23 @@ class Parser:
             self._skip_nl()
             self._eat("PUNCT", ")")
             return ResultOfExpr(name_tok.value)
+        if self._check("OP") and self._cur().value in ("\N{APL FUNCTIONAL SYMBOL SLASH BAR}",
+                                                        "\N{APL FUNCTIONAL SYMBOL BACKSLASH BAR}"):
+            direction = "left" if self._cur().value == "\N{APL FUNCTIONAL SYMBOL SLASH BAR}" else "right"
+            self.pos += 1
+            self._eat("PUNCT", "(")
+            func = self._parse_or_expr()
+            self._skip_nl()
+            self._eat("PUNCT", ",")
+            self._skip_nl()
+            container = self._parse_or_expr()
+            self._skip_nl()
+            self._eat("PUNCT", ",")
+            self._skip_nl()
+            init = self._parse_or_expr()
+            self._skip_nl()
+            self._eat("PUNCT", ")")
+            return FoldExpr(direction, func, container, init)
         node = self._parse_primary()
         if self._check("OP") and self._cur().value == "?":
             self.pos += 1

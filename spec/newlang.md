@@ -1566,6 +1566,91 @@ This is clearer than the equivalent `64 ⍴ generate(load_word, 0…15)` because
 Using a dedicated glyph avoids overloading `+` (which is element-wise addition on arrays) and is visually distinct from arithmetic.
 
 
+### Fold Operators (`⌿` and `⍀`)
+
+The fold operators reduce a container to a single value by repeatedly applying a binary function.  Two variants are provided:
+
+- **Left fold** `⌿` (U+233F, APL FUNCTIONAL SYMBOL SLASH BAR): processes elements left-to-right.
+- **Right fold** `⍀` (U+2340, APL FUNCTIONAL SYMBOL BACKSLASH BAR): processes elements right-to-left.
+
+#### Syntax
+
+```
+⌿(func, container, init)
+⍀(func, container, init)
+```
+
+- **func**: a binary function (named function, lambda, or any callable).
+- **container**: an array or range to fold over.
+- **init**: the initial accumulator value.
+
+#### Semantics
+
+Left fold applies the function with the accumulator as the first argument and the current element as the second, processing elements from first to last:
+
+```
+⌿(f, [a, b, c], init) = f(f(f(init, a), b), c)
+```
+
+Right fold applies the function with the current element as the first argument and the accumulator as the second, processing elements from last to first:
+
+```
+⍀(f, [a, b, c], init) = f(a, f(b, f(c, init)))
+```
+
+When the container is empty, both folds return the initial value unchanged.
+
+#### Examples
+
+Summation using left fold:
+
+```
+var total := ⌿(λa : int, b : int → int: a + b, [1, 2, 3, 4, 5], 0)
+// total = 15
+```
+
+Bit packing (used in SHA-256 to assemble the final hash from eight 32-bit words):
+
+```
+var hash := ⌿(λacc : int, h : int → int: (acc « 32) | h, H, 0)
+```
+
+String concatenation:
+
+```
+var joined := ⌿(λacc : str, s : str → str: acc + s, ["a", "b", "c"], "")
+// joined = "abc"
+```
+
+Folding over a range:
+
+```
+var sum := ⌿(λa : int, b : int → int: a + b, 1…100, 0)
+```
+
+Named functions work as well:
+
+```
+fn add x : int, y : int → int:
+    x + y
+
+var total := ⌿(add, [10, 20, 30], 0)   // 60
+```
+
+#### Design Rationale
+
+| Feature | APL/BQN | Haskell | Rust | Python | This language |
+|---------|---------|---------|------|--------|---------------|
+| Left fold | `/` (reduce) | `foldl` | `.fold()` | `functools.reduce` | `⌿` |
+| Right fold | N/A | `foldr` | `.rfold()` | N/A | `⍀` |
+| Init value | optional | required | required | optional | required |
+| Syntax | operator | function | method | function | glyph |
+
+The glyph choice follows the APL tradition of using `/` and `\` with bar modifiers.  APL's `/` (reduce) is a left fold; the bar modifier distinguishes the two directions visually.  Requiring an explicit initial value (unlike APL's optional identity element) avoids the need for default values per type and prevents errors on empty containers.
+
+Both folds accept arrays and ranges as containers.  Using a non-iterable value (such as a scalar integer) is a type error.
+
+
 ### The `catch` Statement
 
 The `catch` statement provides scoped error handling at the syntactic level.  Unlike exception systems in C++ or Java, `catch` blocks do **not** intercept errors from called functions.  Only errors that originate from operations directly written inside the `catch` block are caught.

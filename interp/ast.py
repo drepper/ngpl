@@ -339,6 +339,22 @@ class EnumerateExpr:
         self.expr = expr
 
 
+class FoldExpr:
+    """Fold expression: ⌿(func, container, init) or ⍀(func, container, init).
+
+    direction: "left" or "right"
+    func: expression evaluating to a callable
+    container: expression evaluating to an iterable
+    init: expression for the initial accumulator value
+    """
+
+    def __init__(self, direction: str, func, container, init):
+        self.direction = direction
+        self.func = func
+        self.container = container
+        self.init = init
+
+
 class EnumDef:
     """Enum type definition at top level.
 

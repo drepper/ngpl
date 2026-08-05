@@ -618,6 +618,13 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
                 f"got {type(value).__name__}")
         return value
 
+    if param_type == "str":
+        if not isinstance(value, StrValue):
+            raise TypeError(
+                f"{func_name}: argument '{param_name}' expected str, "
+                f"got {type(value).__name__}")
+        return value
+
     if param_type == "\N{EMPTY SET}":
         if not isinstance(value, NoneValue):
             raise TypeError(

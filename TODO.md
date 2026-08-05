@@ -18,3 +18,11 @@ checkmark, commit the change, and change back to main.
 
 [x] add @typeof(EXPR) and @resultof(FCT).  These builtin functions return types which can be tested for
     equality with other types.  Use it in examples using static_assert_eq etc.  Depends on static_assert.
+
+[x] Add operators for left and right fold.  The first parameter is a function, the second the
+    container, the third the start value.  Choose glyphs, document, test.  Update the sha256 to use
+    left fold to compute the return value.
+
+[ ] add support for currying function and test it.  Create functions and in a new function curry them
+    and then use the result in calls to generate.  Repeat the same with lambda functions.  Document
+    the language changes.

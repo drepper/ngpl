@@ -22,7 +22,7 @@ from interp.ast import (
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr,
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
-    StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr,
+    StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, FoldExpr,
 )
 from interp.value import (
     Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
@@ -147,6 +147,10 @@ def _collect_refs(node) -> set[str]:
     elif isinstance(node, TupleLit):
         for e in node.elements:
             refs |= _collect_refs(e)
+    elif isinstance(node, FoldExpr):
+        refs |= _collect_refs(node.func)
+        refs |= _collect_refs(node.container)
+        refs |= _collect_refs(node.init)
     return refs
 
 
@@ -1037,6 +1041,9 @@ class Evaluator:
             elements = [self.eval_expr(e) for e in node.elements]
             return TupleValue(elements)
 
+        if isinstance(node, FoldExpr):
+            return self._eval_fold(node)
+
         if isinstance(node, ReshapeExpr):
             shape = self.eval_expr(node.shape)
             data = self.eval_expr(node.data)
@@ -1460,6 +1467,33 @@ class Evaluator:
                 dims[1:], source, etype, offset + i * inner_size)
             rows.append(row)
         return ObjectValue(ArrayValue(rows))
+
+    # ------------------------------------------------------------------
+    # Fold operators
+    # ------------------------------------------------------------------
+
+    def _eval_fold(self, node: FoldExpr) -> Value:
+        """Evaluate a fold expression: left fold ⌿ or right fold ⍀."""
+        func = self.eval_expr(node.func)
+        container_val = self.eval_expr(node.container)
+        acc = self.eval_expr(node.init)
+
+        cu = unwrap_optional(container_val)
+        if isinstance(cu, RangeValue):
+            elements = [mk_int(i) for i in cu.to_list()]
+        elif isinstance(cu, ObjectValue) and isinstance(cu.obj, ArrayValue):
+            elements = list(cu.obj.elements)
+        else:
+            raise TypeError(
+                f"fold requires array or range, got {type(cu).__name__}")
+
+        if node.direction == "left":
+            for elem in elements:
+                acc = self._do_call(func, [acc, elem])
+        else:
+            for elem in reversed(elements):
+                acc = self._do_call(func, [elem, acc])
+        return acc
 
     # ------------------------------------------------------------------
     # Lambda support

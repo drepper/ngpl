@@ -129,11 +129,8 @@ fn sha256 data : byte[] → int?:
         /* --- Add compressed chunk to current hash state. --- */
         H ← @wrap(H + v)
 
-    /* Pack final hash: H[0]«224 | … | H[7]. */
-    var hash := 0
-    foreach h := H:
-        hash ← (hash « 32) | h
-    hash
+    /* Pack final hash: H[0]«224 | … | H[7] using left fold. */
+    ⌿(λacc : int, h : int → int: (acc « 32) | h, H, 0)
 
 /* ---------------------------------------------------------------------------
  * Unit tests — FIPS 180-4 test vectors for SHA-256.
