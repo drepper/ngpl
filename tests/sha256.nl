@@ -46,16 +46,16 @@ fn get_padded_byte(data : byte[], pos : usize, total_size : usize) -> ?u8:
 
 fn get_padded_word(data : byte[], off : usize, total_size : usize) -> ?u32:
     if off + 4 <= data.sizeof:
-        var b0 : u32 = data[off]
-        var b1 : u32 = data[off + 1]
-        var b2 : u32 = data[off + 2]
-        var b3 : u32 = data[off + 3]
+        const b0 : u32 = data[off]
+        const b1 : u32 = data[off + 1]
+        const b2 : u32 = data[off + 2]
+        const b3 : u32 = data[off + 3]
         return (b0 « 24) | (b1 « 16) | (b2 « 8) | b3
     if off >= total_size: return none
-    var b0 : u32 = get_padded_byte(data, off, total_size) ?? 0
-    var b1 : u32 = get_padded_byte(data, off + 1, total_size) ?? 0
-    var b2 : u32 = get_padded_byte(data, off + 2, total_size) ?? 0
-    var b3 : u32 = get_padded_byte(data, off + 3, total_size) ?? 0
+    const b0 : u32 = get_padded_byte(data, off, total_size) ?? 0
+    const b1 : u32 = get_padded_byte(data, off + 1, total_size) ?? 0
+    const b2 : u32 = get_padded_byte(data, off + 2, total_size) ?? 0
+    const b3 : u32 = get_padded_byte(data, off + 3, total_size) ?? 0
     (b0 « 24) | (b1 « 16) | (b2 « 8) | b3
 
 /* ---------------------------------------------------------------------------
