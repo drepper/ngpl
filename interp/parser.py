@@ -233,21 +233,22 @@ class Parser:
             param_type = None
             if (self._check("PUNCT") and self._cur().value == ":" and
                     self.pos + 1 < len(self.tokens) and
-                    (self.tokens[self.pos + 1].type == "IDENT" or
-                     (self.tokens[self.pos + 1].type == "OP" and
-                      self.tokens[self.pos + 1].value == "?"))):
+                    self.tokens[self.pos + 1].type == "IDENT"):
                 self._eat("PUNCT", ":")
-                if self._check("OP") and self._cur().value == "?":
-                    self.pos += 1
-                    type_tok = self._eat("IDENT")
-                    param_type = "?" + type_tok.value
-                else:
-                    type_tok = self._eat("IDENT")
-                    param_type = type_tok.value
+                type_tok = self._eat("IDENT")
+                param_type = type_tok.value
                 if self._check("PUNCT") and self._cur().value == "[":
                     self.pos += 1
                     self._eat("PUNCT", "]")
                     param_type += "[]"
+                if self._check("OP") and self._cur().value == "?":
+                    self.pos += 1
+                    param_type += "?"
+                    if self._check("IDENT"):
+                        param_type += self._parse_dotted_name()
+                elif self._check("OP") and self._cur().value == "!":
+                    self.pos += 1
+                    param_type += "?std.errors"
             params.append((param_name_tok.value, param_type))
             self._try_eat("NEWLINE")
             if not self._try_eat("PUNCT", ","):
@@ -255,14 +256,18 @@ class Parser:
 
         ret_type = None
         if self._try_eat("OP", "->"):
-            if self._check("OP") and self._cur().value == "?":
-                self.pos += 1
-                type_tok = self._eat("IDENT")
-                ret_type = "?" + type_tok.value
-            elif self._check("IDENT", "NONE", "OPT"):
+            if self._check("IDENT", "NONE", "OPT"):
                 ret_tok = self._cur()
                 self.pos += 1
                 ret_type = ret_tok.value
+                if self._check("OP") and self._cur().value == "?":
+                    self.pos += 1
+                    ret_type += "?"
+                    if self._check("IDENT"):
+                        ret_type += self._parse_dotted_name()
+                elif self._check("OP") and self._cur().value == "!":
+                    self.pos += 1
+                    ret_type += "?std.errors"
 
         if expect_annotations:
             try:
@@ -278,6 +283,16 @@ class Parser:
             body = self._parse_block()
         return FuncDef(name, params, ret_type, body, is_start, is_test,
                        test_refs, expect_annotations)
+
+    def _parse_dotted_name(self) -> str:
+        """Parse a possibly dotted name like 'std.errors'."""
+        name = self._eat("IDENT").value
+        while (self._check("PUNCT") and self._cur().value == "." and
+               self.pos + 1 < len(self.tokens) and
+               self.tokens[self.pos + 1].type == "IDENT"):
+            self.pos += 1
+            name += "." + self._eat("IDENT").value
+        return name
 
     def _parse_enum_def(self, is_flag: bool = False):
         """Parse: enum Name [: underlying_type] : INDENT members DEDENT
@@ -568,15 +583,17 @@ class Parser:
             var_type = None
             if (self._check("PUNCT") and self._cur().value == ":" and
                     self.pos + 1 < len(self.tokens) and
-                    (self.tokens[self.pos + 1].type == "IDENT" or
-                     (self.tokens[self.pos + 1].type == "OP" and
-                      self.tokens[self.pos + 1].value == "?"))):
+                    self.tokens[self.pos + 1].type == "IDENT"):
                 self._eat("PUNCT", ":")
+                var_type = self._eat("IDENT").value
                 if self._check("OP") and self._cur().value == "?":
                     self.pos += 1
-                    var_type = "?" + self._eat("IDENT").value
-                else:
-                    var_type = self._eat("IDENT").value
+                    var_type += "?"
+                    if self._check("IDENT"):
+                        var_type += self._parse_dotted_name()
+                elif self._check("OP") and self._cur().value == "!":
+                    self.pos += 1
+                    var_type += "?std.errors"
             vars_list.append((name_tok.value, var_type))
             if not self._try_eat("PUNCT", ","):
                 break

@@ -53,9 +53,10 @@ fn error_assert_mismatch -> none:
 
 /* --- division by zero ----------------------------------------------------- */
 
-@expect error "division by zero"
+@expect error "expected error.*division_by_zero"
 fn error_div_zero -> none:
     var x := 10 / 0
+    var y := x + 1
 
 /* --- parse errors --------------------------------------------------------- */
 

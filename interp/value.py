@@ -204,6 +204,45 @@ class SomeValue(Value):
         return self.value.to_python()
 
 
+class ExpectedValue(Value):
+    """A result type that holds either a success value or an error value.
+
+    Analogous to Result<T,E> in Rust or std::expected<T,E> in C++.
+    Exactly one of ok_value or err_value is set; the other is None.
+    """
+
+    __slots__ = ("ok_value", "err_value")
+
+    def __init__(self, ok_value: Value | None = None,
+                 err_value: Value | None = None):
+        self.ok_value = ok_value
+        self.err_value = err_value
+
+    @staticmethod
+    def ok(value: Value) -> "ExpectedValue":
+        return ExpectedValue(ok_value=value)
+
+    @staticmethod
+    def err(error: Value) -> "ExpectedValue":
+        return ExpectedValue(err_value=error)
+
+    def is_ok(self) -> bool:
+        return self.ok_value is not None
+
+    def is_err(self) -> bool:
+        return self.err_value is not None
+
+    def display(self) -> str:
+        if self.ok_value is not None:
+            return f"ok({self.ok_value.display()})"
+        return f"err({self.err_value.display()})"
+
+    def to_python(self):
+        if self.ok_value is not None:
+            return self.ok_value.to_python()
+        raise ValueError(f"expected value contains error: {self.err_value.display()}")
+
+
 class FuncValue(Value):
     """A user-defined function (closure over an environment)."""
 
@@ -425,12 +464,33 @@ def is_some(value):
     return isinstance(value, SomeValue)
 
 
+def is_expected_err(value):
+    """Check if a value is an ExpectedValue holding an error."""
+    return isinstance(value, ExpectedValue) and value.is_err()
+
+
+def _split_optional_type(type_name: str) -> tuple[str, str | None]:
+    """Split a type string into base type and optional/expected error type.
+
+    Returns (base, None) for plain types, (base, "") for T? optionals,
+    (base, error_type) for T?E expected types.
+    """
+    qpos = type_name.find("?")
+    if qpos < 0:
+        return type_name, None
+    return type_name[:qpos], type_name[qpos + 1:]
+
+
 def validate_type(type_name: str) -> bool:
-    """Return True if type_name is a known builtin type (with optional/array modifiers)."""
-    base = type_name.lstrip("?")
+    """Return True if type_name is a known builtin type (with optional/expected/array modifiers)."""
+    base, opt_err = _split_optional_type(type_name)
     if base.endswith("[]"):
         base = base[:-2]
-    return base in BUILTIN_TYPES
+    if not base in BUILTIN_TYPES:
+        return False
+    if opt_err is not None and opt_err != "":
+        return True
+    return True
 
 
 def validate_param_type(param_type: str, func_name: str, param_name: str):
@@ -442,13 +502,21 @@ def validate_param_type(param_type: str, func_name: str, param_name: str):
 
 def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str) -> "Value":
     """Coerce a runtime argument to match a declared parameter type."""
-    if param_type.startswith("?"):
-        inner = param_type[1:]
+    base, opt_err = _split_optional_type(param_type)
+    if opt_err is not None and opt_err == "":
         if isinstance(value, NoneValue):
             return value
         if isinstance(value, SomeValue):
-            return SomeValue(coerce_arg(value.value, inner, func_name, param_name))
-        return SomeValue(coerce_arg(value, inner, func_name, param_name))
+            return SomeValue(coerce_arg(value.value, base, func_name, param_name))
+        if isinstance(value, ExpectedValue):
+            return value
+        return SomeValue(coerce_arg(value, base, func_name, param_name))
+    if opt_err is not None and opt_err != "":
+        if isinstance(value, ExpectedValue):
+            return value
+        if isinstance(value, NoneValue):
+            return value
+        return ExpectedValue.ok(coerce_arg(value, base, func_name, param_name))
 
     if param_type == "bool":
         if not isinstance(value, BoolValue):

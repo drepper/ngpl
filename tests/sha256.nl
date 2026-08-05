@@ -33,7 +33,7 @@ const K : u32 = [
  * beyond the original data.
  * --------------------------------------------------------------------------- */
 
-fn get_padded_byte data : byte[], pos : usize, total_size : usize -> ?u8:
+fn get_padded_byte data : byte[], pos : usize, total_size : usize -> u8?:
     if pos >= total_size: return none
     if pos < data.sizeof: return data[pos]
     if pos == data.sizeof: return 128
@@ -44,7 +44,7 @@ fn get_padded_byte data : byte[], pos : usize, total_size : usize -> ?u8:
         return (bit_len » ((7 - byte_idx) * 8)) & 255
     none
 
-fn get_padded_word data : byte[], off : usize, total_size : usize -> ?u32:
+fn get_padded_word data : byte[], off : usize, total_size : usize -> u32?:
     if off + 4 <= data.sizeof:
         const b0 : u32 = data[off]
         const b1 : u32 = data[off + 1]
@@ -75,7 +75,7 @@ fn expand_s1 prev : u32 -> u32:
  * message schedule W[0..63] and round constants K[t].
  * --------------------------------------------------------------------------- */
 
-fn sha256 data : byte[] -> ?int:
+fn sha256 data : byte[] -> int?:
     /* Compute padded message length per SHA-256 spec. */
     const rem : usize = data.sizeof % 64
     const pad_len : usize = (119 - rem) % 64

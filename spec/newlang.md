@@ -462,7 +462,7 @@ fn test_something -> none:
 
 #### Disambiguation
 
-The `:` character serves double duty: it introduces a type annotation after a parameter name, and it introduces a layout block.  The parser disambiguates by looking ahead: if `:` is followed by an identifier (a type name) or `?` (an optional type prefix), it is a type annotation.  Otherwise, it starts the function body.
+The `:` character serves double duty: it introduces a type annotation after a parameter name, and it introduces a layout block.  The parser disambiguates by looking ahead: if `:` is followed by an identifier (a type name), it is a type annotation.  Otherwise, it starts the function body.  Optional (`T?`) and expected (`T?E`) postfixes are parsed after the base type identifier.
 
 This means a no-parameter function with no return type uses `:` directly:
 
@@ -562,28 +562,28 @@ The `const` keyword at function scope is distinct from module-level `const` decl
 Unlike Rust where immutability is the default (`let` vs `let mut`), this language defaults to mutability (`var`) and opts into immutability (`const`).  This matches C/C++ and Zig conventions and avoids cluttering code with `mut` annotations in imperative-style code where most variables are modified.
 
 
-### Optional Types and the `?` Operator
+### Optional Types (`T?`)
 
-A function that may fail to produce a value declares an **optional return type** by prefixing the type with `?`.  The optional type `?T` can hold either a value of type `T` (wrapped in `some`) or `none` (absence of a value).
+A function that may fail to produce a value declares an **optional return type** by appending `?` to the type name.  The optional type `T?` can hold either a value of type `T` (wrapped in `some`) or `none` (absence of a value).
 
 #### Declaration
 
 ```
-fn get_padded_byte data : byte[], pos : usize, total_size : usize -> ?u8:
+fn get_padded_byte data : byte[], pos : usize, total_size : usize -> u8?:
     if pos >= total_size: return none
     if pos < data.sizeof: return data[pos]
     ...
     0
 ```
 
-A function with return type `?u8` auto-wraps non-`none` return values in `some`.  Returning `none` explicitly signals absence.  The caller receives either `some(value)` or `none`.
+A function with return type `u8?` auto-wraps non-`none` return values in `some`.  Returning `none` explicitly signals absence.  The caller receives either `some(value)` or `none`.
 
 #### The `?` Postfix Operator
 
 The `?` operator unwraps an optional value or **propagates** `none` to the enclosing function:
 
 ```
-fn get_padded_word data : byte[], off : usize, total_size : usize -> ?u32:
+fn get_padded_word data : byte[], off : usize, total_size : usize -> u32?:
     var b0 : u32 = get_padded_byte(data, off, total_size)?
     ...
 ```
@@ -592,7 +592,7 @@ Semantics of `expr?`:
 
 1. If `expr` evaluates to `some(v)`, the `?` expression evaluates to `v`.
 2. If `expr` evaluates to `none`, the enclosing function immediately returns `none`.
-3. If the enclosing function does not have an optional return type (`?T`), using `?` is a **compile error**.
+3. If the enclosing function does not have an optional or expected return type (`T?` or `T?E`), using `?` is a **compile error**.
 
 This matches Rust's `?` operator.  The compile-time restriction ensures that `none` propagation is always visible in the function signature — a function that cannot fail cannot silently swallow failures from callees.
 
@@ -601,7 +601,7 @@ This matches Rust's `?` operator.  The compile-time restriction ensures that `no
 The `??` operator provides a default value when an optional is `none`:
 
 ```
-var b0 : u32 = get_padded_byte(data, off, data_size, total_size) ?? 0;
+var b0 : u32 = get_padded_byte(data, off, total_size) ?? 0
 ```
 
 Semantics of `expr ?? default`:
@@ -614,19 +614,119 @@ Unlike `?` which propagates `none`, `??` recovers from it.  This is the right ch
 
 #### Type Widening on Assignment
 
-When the unwrapped value has a narrower unsigned type than the target variable, implicit widening is permitted.  For example, `get_padded_byte` returns `?u8`; after `??` or `?` produces a `u8` value, assigning it to a `u32` variable widens it.  This is safe because every `u8` value is representable as `u32`.
+When the unwrapped value has a narrower unsigned type than the target variable, implicit widening is permitted.  For example, `get_padded_byte` returns `u8?`; after `??` or `?` produces a `u8` value, assigning it to a `u32` variable widens it.  This is safe because every `u8` value is representable as `u32`.
+
+
+### Expected Types (`T?E`) and Result Handling
+
+An **expected type** `T?E` represents a computation that either succeeds with a value of type `T` or fails with an error of type `E`.  This is the language's counterpart to `Result<T,E>` in Rust and `std::expected<T,E>` in C++26.
+
+#### Syntax
+
+The `?` postfix on a type introduces an optional when no error type follows, and an expected when an error type is named:
+
+| Syntax | Meaning |
+|--------|---------|
+| `T?` | optional — success (`some(v)`) or absence (`none`) |
+| `T?E` | expected — success (`ok(v)`) or error (`err(e)` where `e` is of type `E`) |
+| `T!` | abbreviation for `T?std.errors` |
+
+```
+fn safe_div a : int, b : int -> int?std.errors:
+    (a / b)?
+```
+
+Since `std.errors` is the most common error type, the abbreviation `T!` is provided:
+
+```
+fn safe_div a : int, b : int -> int!:
+    (a / b)?
+```
+
+`int!` is exactly equivalent to `int?std.errors` — both in parameter types and return types.
+
+#### Constructors
+
+An expected value is either `ok(value)` or `err(error)`:
+
+- **`ok(v)`**: holds a success value.  Functions with an expected return type auto-wrap non-error return values in `ok`, just as optional-returning functions auto-wrap in `some`.
+- **`err(e)`**: holds an error value of the declared error type `E`.
+
+#### Division Returns Expected Values
+
+Integer division and remainder (`/`, `%`) return an expected value with error type `std.errors` rather than raising a runtime exception:
+
+```
+var x := 10 / 3           /* ok(3) — successful division */
+var y := 10 / 0           /* err(std.errors.division_by_zero) */
+```
+
+This means division by zero is a **recoverable error** rather than an immediate program abort.  The caller chooses the error-handling strategy:
+
+```
+/* Recovery with ?? */
+var result := (10 / 0) ?? -1         /* result is -1 */
+
+/* Propagation with ? (requires T?E or T? return type) */
+fn compute x : int -> int?std.errors:
+    var q := (x / 2)?                /* propagates error if x/2 fails */
+    q + 10
+```
+
+#### The `?` Operator on Expected Values
+
+The `?` postfix operator works on both optional and expected values:
+
+| Input | Behavior |
+|-------|----------|
+| `some(v)` | evaluates to `v` |
+| `none` | returns `none` from enclosing function |
+| `ok(v)` | evaluates to `v` |
+| `err(e)` | returns `err(e)` from enclosing function (if return type is `T?E`) or `none` (if `T?`) |
+
+The enclosing function must declare a compatible return type; using `?` in a function that returns a plain type is a compile error.
+
+When an expected-error is propagated to a function with an optional return type (`T?`), the error is converted to `none` — the error detail is discarded.  When propagated to a function with an expected return type (`T?E`), the error is preserved.
+
+#### The `??` Operator on Expected Values
+
+The `??` operator works on both optional and expected values.  For an expected error, the right-hand side provides the fallback:
+
+```
+var safe := (x / y) ?? 0            /* 0 on division by zero */
+var padded := get_padded_byte(data, pos, total_size) ?? 0  /* 0 on absent byte */
+```
+
+| Input | Behavior |
+|-------|----------|
+| `some(v)` or `ok(v)` | evaluates to `v` |
+| `none` or `err(e)` | evaluates to the right-hand side |
+
+#### Implicit Unwrapping
+
+When an expected value holding `ok(v)` is used in an operation that expects a plain value (arithmetic, comparison, etc.), it is automatically unwrapped to `v`.  An expected value holding `err(e)` raises a runtime error at the point of use:
+
+```
+var x := 10 / 3      /* x is ok(3) */
+var y := x + 1        /* x auto-unwraps to 3, y is 4 */
+
+var z := 10 / 0       /* z is err(std.errors.division_by_zero) */
+var w := z + 1        /* runtime error: unwrap of expected error */
+```
+
+This ensures that errors cannot be silently ignored — they must be handled (with `?` or `??`) or they surface at the next use site.
 
 #### Example: Combining `?` and `??`
 
 A function that returns `none` for absent data, a caller that substitutes a default, and an outer function that propagates structural failure:
 
 ```
-fn get_padded_byte ... -> ?u8:
+fn get_padded_byte ... -> u8?:
     if pos >= total_size: return none
     ...
     none                                         /* zero-padding zone */
 
-fn get_padded_word ... -> ?u32:
+fn get_padded_word ... -> u32?:
     if off >= total_size: return none             /* fully out of range */
     var b0 : u32 = get_padded_byte(...) ?? 0     /* absent bytes → 0 */
     var b1 : u32 = get_padded_byte(...) ?? 0
@@ -634,26 +734,30 @@ fn get_padded_word ... -> ?u32:
     var b3 : u32 = get_padded_byte(...) ?? 0
     (b0 « 24) | (b1 « 16) | (b2 « 8) | b3
 
-fn sha256 data -> ?int:
+fn sha256 data -> int?:
     ...
     W[i] ← get_padded_word(...)?                 /* propagates none */
     ...
     hash
 ```
 
-`get_padded_word` uses `??` to substitute 0 for absent bytes (zero-padding), while using `?` is unnecessary here — absent individual bytes are expected, not erroneous.  `sha256` uses `?` to propagate `none` from `get_padded_word`, which only returns `none` for entirely out-of-range positions.
+Expected values and optionals compose naturally: a function returning `T?` can use `?` to propagate errors from callees returning `T?E` — the error is converted to `none`.  A function returning `T?E` can propagate both expected-errors and optional-nones.
 
 #### Design Rationale
 
-| Feature | Rust | Zig | Swift | This language |
-|---------|------|-----|-------|---------------|
-| Optional type | `Option<T>` | `?T` | `T?` | `?T` |
-| Propagation | `?` operator | `orelse` / `catch` | — | `?` operator |
-| Default value | `.unwrap_or(v)` | `orelse` | `??` | `??` operator |
-| Compile-time check | Yes (must return `Result`/`Option`) | Yes | — | Yes (must return `?T`) |
-| Auto-wrapping | No (explicit `Some`) | No | No | Yes (return value auto-wrapped) |
+| Feature | Rust | C++26 | Zig | Swift | This language |
+|---------|------|-------|-----|-------|---------------|
+| Optional type | `Option<T>` | `std::optional<T>` | `?T` | `T?` | `T?` |
+| Result type | `Result<T,E>` | `std::expected<T,E>` | `!T` (error union) | — | `T?E` |
+| Propagation | `?` operator | — | `try` / `catch` | — | `?` operator |
+| Default value | `.unwrap_or(v)` | `.value_or(v)` | `orelse` | `??` | `??` operator |
+| Compile-time check | Yes | Yes | Yes | — | Yes (must return `T?` or `T?E`) |
+| Auto-wrapping | No (explicit `Some`/`Ok`) | No | No | No | Yes (auto `some`/`ok`) |
+| Division error | panic | UB | — | — | `err(std.errors.division_by_zero)` |
 
-The auto-wrapping of return values simplifies the common case: a function returning `?u8` can write `return 42;` instead of `return some(42);`.  The compiler handles the wrapping.  Only `none` must be written explicitly, since it represents a deliberate absence rather than a normal value.
+The unified `?` syntax for both optional and expected types is intentional: both represent computations that may not produce a value, differing only in whether the failure carries a reason.  The postfix `T?` / `T?E` notation follows Swift's convention for optionals while extending it to expected types — the error type `E` appears naturally after `?`, keeping the syntax compact and context-free.
+
+Division returning an expected value rather than panicking reflects the language's philosophy that errors should be **data**, not **exceptions**.  The caller decides the policy: propagate with `?`, recover with `??`, or let implicit unwrapping catch the error at the next use site.  This is analogous to Rust's approach where division on types implementing `checked_div` returns `Option<T>`, but here the error carries a typed reason (`std.errors.division_by_zero`) via the expected type.
 
 
 ### Function Parameter Types
@@ -670,7 +774,9 @@ Only built-in types are currently accepted as parameter types:
 | Unsigned integers | `u8`, `u16`, `u32`, `u64`, `usize` |
 | Arbitrary-precision | `int` |
 | Other | `bool`, `none` |
-| Optional | `?` prefix on any of the above (e.g., `?u32`, `?bool`) |
+| Optional | `?` postfix on any of the above (e.g., `u32?`, `bool?`) |
+| Expected | `?E` postfix where `E` is an error type (e.g., `u32?std.errors`) |
+| Expected (short) | `!` postfix, abbreviation for `?std.errors` (e.g., `u32!`) |
 
 Using an unknown type name is a compile error (caught when the function definition is processed, before any call).
 
@@ -684,10 +790,14 @@ When an argument is passed to a typed parameter:
 
 3. **`none`.**  The argument must be `NoneValue`.
 
-4. **Optional types (`?T`).**  Three cases:
+4. **Optional types (`T?`).**  Three cases:
    - `none` passes through as `NoneValue`.
    - A `some(v)` value has its inner value coerced to `T`.
    - A plain (non-optional) value of type `T` is automatically wrapped in `some`.
+
+5. **Expected types (`T?E`).**  Two cases:
+   - An `ExpectedValue` passes through as-is (ok or err).
+   - A plain value of type `T` is automatically wrapped in `ok`.
 
 #### Examples
 
@@ -712,7 +822,7 @@ Parameter type enforcement catches type errors early and enables the interpreter
 |---------|------|-----|--------|---------------|
 | Parameter types | Required | Required | Optional (hints only) | Optional (enforced when present) |
 | Coercion | No (explicit conversion) | No | N/A | Yes (integer widening) |
-| Optional params | `Option<T>` | `?T` | `T \| None` | `?T` |
+| Optional params | `Option<T>` | `?T` | `T \| None` | `T?` |
 | Unknown type | Compile error | Compile error | Runtime (if checked) | Compile error |
 
 

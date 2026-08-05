@@ -18,7 +18,7 @@ fn test_optional_param_some -> none:
 fn test_optional_param_none -> none:
     assert_eq(unwrap_or_zero(none), 0)
 
-fn unwrap_or_zero x : ?int -> int:
+fn unwrap_or_zero x : int? -> int:
     x ?? 0
 
 @start

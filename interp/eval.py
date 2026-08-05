@@ -23,11 +23,12 @@ from interp.ast import (
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr,
 )
 from interp.value import (
-    Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue,
+    Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
     FuncValue, BuiltinFunc, ObjectValue, BuiltinBoundMethod, ArrayValue,
     TupleValue, EnumType, EnumValue,
     mk_int, mk_int_wrap, mk_str, mk_bool, none, some, is_none, is_some,
     resolve_width, wrap_int, coerce_to_type, coerce_arg, _TYPE_BITS, FAST_TYPES,
+    _split_optional_type,
 )
 from interp.env import Env
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
@@ -38,14 +39,20 @@ from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
 # ---------------------------------------------------------------------------
 
 def unwrap_optional(value):
-    """Unwrap an optional value for comparison/conversion.
+    """Unwrap an optional or expected value for comparison/conversion.
 
-    If value is SomeValue, returns the inner value.
-    If value is NoneValue, returns None (Python).
-    Otherwise, returns the value itself (for non-optional values).
+    SomeValue → inner value.
+    ExpectedValue with ok → inner value.
+    ExpectedValue with err → raises TypeError with the error description.
+    Everything else → returned as-is.
     """
     if isinstance(value, SomeValue):
         return value.value
+    if isinstance(value, ExpectedValue):
+        if value.is_ok():
+            return value.ok_value
+        raise TypeError(
+            f"unwrap of expected error: {value.err_value.display()}")
     return value
 
 
@@ -69,6 +76,8 @@ def to_bool(value):
         return False
     if isinstance(value, SomeValue):
         return True
+    if isinstance(value, ExpectedValue):
+        return value.is_ok()
     # ObjectValue (DirFD, File, etc.) → always truthy.
     if isinstance(value, ObjectValue):
         return True
@@ -331,25 +340,25 @@ class Evaluator:
         raise TypeError(f"multiplication expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_div(self, left, right):
-        """Integer division (truncates toward zero)."""
+        """Integer division (truncates toward zero).  Returns ExpectedValue."""
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             if ru.value == 0:
-                raise ZeroDivisionError("division by zero")
+                return self._division_error()
             result = int(lu.value / ru.value) if lu.value * ru.value >= 0 else -int(abs(lu.value) / abs(ru.value))
-            return self._mk_int(result, resolve_width(lu.width, ru.width))
+            return ExpectedValue.ok(self._mk_int(result, resolve_width(lu.width, ru.width)))
         raise TypeError(f"division expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_mod(self, left, right):
-        """Remainder (truncation toward zero): a % b = a - trunc(a/b)*b."""
+        """Remainder (truncation toward zero): a % b = a - trunc(a/b)*b.  Returns ExpectedValue."""
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             if ru.value == 0:
-                raise ZeroDivisionError("remainder by zero")
+                return self._division_error()
             quot = int(lu.value / ru.value) if lu.value * ru.value >= 0 else -int(abs(lu.value) / abs(ru.value))
-            return self._mk_int(lu.value - quot * ru.value, resolve_width(lu.width, ru.width))
+            return ExpectedValue.ok(self._mk_int(lu.value - quot * ru.value, resolve_width(lu.width, ru.width)))
         raise TypeError(f"remainder expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_eq(self, left, right):
@@ -571,6 +580,19 @@ class Evaluator:
             return mk_int_wrap(value, width)
         return mk_int(value, width)
 
+    def _division_error(self) -> ExpectedValue:
+        """Create an ExpectedValue.err for division by zero using std.errors."""
+        try:
+            std_obj = self.env.lookup("std")
+            if isinstance(std_obj, ObjectValue):
+                errors_enum = getattr(std_obj.obj, "errors", None)
+                if isinstance(errors_enum, EnumType):
+                    return ExpectedValue.err(
+                        EnumValue(errors_enum, errors_enum.members["division_by_zero"]))
+        except Exception:
+            pass
+        return ExpectedValue.err(mk_str("division by zero"))
+
     # ------------------------------------------------------------------
     # Array element-wise dispatch
     # ------------------------------------------------------------------
@@ -636,6 +658,10 @@ class Evaluator:
         if isinstance(node, BinOp):
             if node.op == "??":
                 left = self.eval_expr(node.left)
+                if isinstance(left, ExpectedValue):
+                    if left.is_ok():
+                        return left.ok_value
+                    return self.eval_expr(node.right)
                 if isinstance(left, SomeValue):
                     return left.value
                 if isinstance(left, NoneValue):
@@ -676,15 +702,25 @@ class Evaluator:
             return some(value)
 
         if isinstance(node, TryUnwrap):
-            if not self._current_ret_type or not self._current_ret_type.startswith("?"):
+            if not self._current_ret_type:
                 raise TypeError(
-                    "? operator requires enclosing function to have optional return type")
+                    "? operator requires enclosing function to have optional or expected return type")
+            _, opt_err = _split_optional_type(self._current_ret_type)
+            if opt_err is None:
+                raise TypeError(
+                    "? operator requires enclosing function to have optional or expected return type")
             val = self.eval_expr(node.expr)
+            if isinstance(val, ExpectedValue):
+                if val.is_ok():
+                    return val.ok_value
+                if opt_err != "":
+                    raise _ReturnSentinel(ExpectedValue.err(val.err_value))
+                raise _ReturnSentinel(none())
             if isinstance(val, SomeValue):
                 return val.value
             if isinstance(val, NoneValue):
                 raise _ReturnSentinel(none())
-            raise TypeError("? operator requires optional value")
+            return val
 
         if isinstance(node, FuncCall):
             args = [self.eval_expr(a) for a in node.args]
@@ -1152,14 +1188,28 @@ class Evaluator:
             self._current_ret_type = old_ret_type
 
     def _wrap_optional_return(self, result: Value, ret_type: str | None) -> Value:
-        """Wrap return value in SomeValue for functions with optional return types."""
-        if not ret_type or not ret_type.startswith("?"):
+        """Wrap return value in SomeValue/ExpectedValue for optional/expected return types."""
+        if not ret_type:
             return result
+        base, opt_err = _split_optional_type(ret_type)
+        if opt_err is None:
+            return result
+        if opt_err != "":
+            if isinstance(result, ExpectedValue):
+                return result
+            if isinstance(result, NoneValue):
+                return result
+            if isinstance(result, IntValue) and base not in ("int", ""):
+                result = mk_int(result.value, base)
+            return ExpectedValue.ok(result)
         if isinstance(result, NoneValue):
             return result
-        base_type = ret_type[1:]
-        if isinstance(result, IntValue) and base_type not in ("int", ""):
-            result = mk_int(result.value, base_type)
+        if isinstance(result, ExpectedValue):
+            return result
+        if isinstance(result, SomeValue):
+            return result
+        if isinstance(result, IntValue) and base not in ("int", ""):
+            result = mk_int(result.value, base)
         return some(result)
 
 

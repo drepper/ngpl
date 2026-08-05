@@ -475,12 +475,14 @@ class StdModule:
             StrValue with the concatenated result (no trailing newline).
         """
         from interp.eval import unwrap_optional
-        from interp.value import IntValue, BoolValue, StrValue, ObjectValue, ArrayValue, EnumValue, mk_str
+        from interp.value import IntValue, BoolValue, StrValue, ObjectValue, ArrayValue, EnumValue, ExpectedValue, mk_str
 
         parts = []
         for arg in args:
-            uv = unwrap_optional(arg)
-            if isinstance(uv, EnumValue):
+            uv = unwrap_optional(arg) if not isinstance(arg, ExpectedValue) else arg
+            if isinstance(uv, ExpectedValue):
+                parts.append(uv.display())
+            elif isinstance(uv, EnumValue):
                 parts.append(uv.display())
             elif isinstance(uv, IntValue):
                 if uv.value.bit_length() > 32 or uv.value < 0:
@@ -575,12 +577,14 @@ class StdModule:
             NoneValue.
         """
         from interp.eval import unwrap_optional
-        from interp.value import IntValue, BoolValue, StrValue, ObjectValue, ArrayValue, EnumValue, mk_str
+        from interp.value import IntValue, BoolValue, StrValue, ObjectValue, ArrayValue, EnumValue, ExpectedValue, mk_str
 
         parts = []
         for arg in args:
-            uv = unwrap_optional(arg)
-            if isinstance(uv, EnumValue):
+            uv = unwrap_optional(arg) if not isinstance(arg, ExpectedValue) else arg
+            if isinstance(uv, ExpectedValue):
+                parts.append(uv.display())
+            elif isinstance(uv, EnumValue):
                 parts.append(uv.display())
             elif isinstance(uv, IntValue):
                 if uv.value.bit_length() > 32 or uv.value < 0:

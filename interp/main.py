@@ -29,7 +29,7 @@ from interp.env import Env
 from interp.ast import FuncDef as ASTFuncDef, EnumDef as ASTEnumDef
 from interp.value import (
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
-    NoneValue, EnumType, EnumValue,
+    NoneValue, ExpectedValue, EnumType, EnumValue,
     coerce_to_type, validate_param_type, validate_type, none, FAST_TYPES,
 )
 from interp.eval import Evaluator, unwrap_optional
@@ -102,8 +102,16 @@ def _builtin_assert_eq(args):
     """assert_eq(expected, actual) -- fail if values differ."""
     if len(args) != 2:
         raise TypeError("assert_eq requires exactly 2 arguments")
-    expected = unwrap_optional(args[0])
-    actual = unwrap_optional(args[1])
+    a0, a1 = args[0], args[1]
+    if isinstance(a0, ExpectedValue) and isinstance(a1, ExpectedValue):
+        if a0.is_ok() and a1.is_ok():
+            return _builtin_assert_eq([a0.ok_value, a1.ok_value])
+        if a0.is_err() and a1.is_err():
+            return _builtin_assert_eq([a0.err_value, a1.err_value])
+        raise AssertionError(
+            f"assert_eq failed:\n  expected: {a0.display()}\n  actual:   {a1.display()}")
+    expected = unwrap_optional(a0)
+    actual = unwrap_optional(a1)
     if isinstance(expected, EnumValue) and isinstance(actual, EnumValue):
         if expected.enum_type is not actual.enum_type or expected.value != actual.value:
             raise AssertionError(
