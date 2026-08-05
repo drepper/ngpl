@@ -2418,6 +2418,74 @@ comptime foreach v := [10, 20, 30]:
 The `comptime foreach` keyword mirrors Zig's `inline for`, which also unrolls iterations at compile time to handle heterogeneous containers.  Unlike C++ fold expressions, the loop body uses ordinary imperative syntax — no special operator syntax is required.
 
 
+### Standard Library: String Formatting
+
+The `std.format` function creates formatted strings using replacement fields in the style of C++ `std::format`.
+
+#### Signature
+
+```
+std.format(allocator, fmt_str, args…)
+```
+
+- **allocator**: an allocator instance (from `std.arena.allocator()` or `std.heap.allocator()`) used to back the returned string's memory.
+- **fmt_str**: a format string containing literal text and `{}` replacement fields.
+- **args**: a parameter pack of values to substitute into the replacement fields, consumed left to right.
+
+#### Replacement Fields
+
+Each `{}` in the format string consumes the next argument from the pack.  An optional format specifier follows a colon inside the braces:
+
+| Specifier | Meaning | Example |
+|-----------|---------|---------|
+| (none) | Default formatting | `std.format(a, "{}", 42)` → `"42"` |
+| `d` | Decimal integer | `std.format(a, "{:d}", 42)` → `"42"` |
+| `x` | Lowercase hexadecimal | `std.format(a, "{:x}", 255)` → `"ff"` |
+| `X` | Uppercase hexadecimal | `std.format(a, "{:X}", 255)` → `"FF"` |
+| `b` | Binary | `std.format(a, "{:b}", 10)` → `"1010"` |
+| `o` | Octal | `std.format(a, "{:o}", 8)` → `"10"` |
+| `c` | Character (from code point) | `std.format(a, "{:c}", 65)` → `"A"` |
+
+Literal braces are escaped by doubling: `{{` produces `{`, `}}` produces `}`.
+
+#### Type Formatting
+
+Each value type has a default representation:
+
+- **Integers**: decimal digits (or the specified base with a format specifier).
+- **Strings**: the string content (no quotes).
+- **Booleans**: `true` or `false`.
+- **Arrays/vectors**: elements enclosed in `[` and `]`, comma-separated.  Nested arrays produce nested brackets: `[[1, 2], [3, 4]]`.
+- **Tuples**: same bracket notation as arrays.
+- **Enums**: the enum member name prefixed by the type name.
+- **None**: `∅`.
+- **Types**: the type name.
+
+```
+var alloc := std.arena.allocator()
+
+std.format(alloc, "{} + {} = {}", 1, 2, 3)       /* "1 + 2 = 3" */
+std.format(alloc, "hex: {:x}", 255)               /* "hex: ff" */
+std.format(alloc, "arr: {}", [10, 20, 30])        /* "arr: [10, 20, 30]" */
+std.format(alloc, "{{{}}}", "x")                  /* "{x}" */
+
+alloc.deinit()
+```
+
+#### Comparison with Other Languages
+
+| Feature | C++ `std::format` | Python `format` | Rust `format!` | This language |
+|---------|-------------------|-----------------|----------------|---------------|
+| Syntax | `"{}"` | `"{}"` | `"{}"` | `"{}"` |
+| Positional args | `"{0}"` | `"{0}"` | `"{0}"` | sequential only |
+| Named args | no | `"{name}"` | named in macro | no |
+| Format spec | `"{:x}"` | `"{:x}"` | `"{:x}"` | `"{:x}"` |
+| Allocator | no | no | no | first argument |
+| Type-safe | compile-time | runtime | compile-time | runtime |
+
+The allocator parameter ensures that the caller controls where the formatted string is allocated, following the language's principle of explicit memory management.  Unlike C++ `std::format` which allocates via `std::allocator`, the allocator is a visible first-class argument.
+
+
 ### Standard Library: Memory Allocators
 
 The standard library provides two allocator subsystems under the `std` module: a global heap allocator and per-instance arena allocators.  Both return allocator objects with an `alloc(size)` method that yields a byte buffer.

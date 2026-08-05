@@ -468,53 +468,113 @@ class StdModule:
     # ------------------------------------------------------------------
 
     def format(self, args):
-        """format(str, ...) — format a string.
+        """format(allocator, fmt_str, ...) — format a string.
 
-        Concatenates all argument values into a single string and returns it.
-        This is the pure formatting function; side-effect operations like
-        printing to stdout are handled by the caller using ``std.get_stdout().fd``
-        with an appropriate write call.
+        Uses C++ std::format-style replacement fields: {} for default
+        formatting, {:spec} for explicit format specifiers.  Supported
+        specifiers: d (decimal), x (hex), X (upper hex), b (binary),
+        o (octal), c (character).
+
+        Arrays and tuples are printed as [elem, elem, ...] with nested
+        dimensions following the same pattern.
 
         Args:
-            args: list of newlang Value objects — each is converted to a string
-                  and concatenated.
+            args[0]: allocator (accepted for API consistency, unused in
+                     the interpreter since strings are Python objects).
+            args[1]: StrValue — the format template.
+            args[2:]: values to substitute into {} placeholders.
 
         Returns:
-            StrValue with the concatenated result (no trailing newline).
+            StrValue with the formatted result.
         """
         from interp.eval import unwrap_optional
-        from interp.value import IntValue, BoolValue, StrValue, ObjectValue, ArrayValue, EnumValue, ExpectedValue, mk_str
+        from interp.value import (IntValue, BoolValue, StrValue, ObjectValue,
+                                  ArrayValue, TupleValue, EnumValue,
+                                  ExpectedValue, NoneValue, TypeValue,
+                                  FuncValue, LambdaValue, mk_str)
+        if len(args) < 2:
+            raise TypeError("std.format(allocator, fmt_str, ...) requires at least 2 arguments")
+        template_val = unwrap_optional(args[1])
+        if not isinstance(template_val, StrValue):
+            raise TypeError(
+                f"std.format: format string must be str, got {type(template_val).__name__}")
+        fmt = template_val.value
+        fmt_args = args[2:]
 
-        parts = []
-        for arg in args:
-            uv = unwrap_optional(arg) if not isinstance(arg, ExpectedValue) else arg
+        def _fmt_value(v, spec: str = "") -> str:
+            uv = unwrap_optional(v)
             if isinstance(uv, ExpectedValue):
-                parts.append(uv.display())
-            elif isinstance(uv, EnumValue):
-                parts.append(uv.display())
-            elif isinstance(uv, IntValue):
-                if uv.value.bit_length() > 32 or uv.value < 0:
-                    parts.append(format(uv.value, "x"))
-                else:
-                    parts.append(str(uv.value))
-            elif isinstance(uv, BoolValue):
-                parts.append("true" if uv.value else "false")
-            elif isinstance(uv, StrValue):
-                parts.append(uv.value)
-            elif isinstance(uv, ObjectValue):
+                if uv.is_ok():
+                    return _fmt_value(uv.ok_value, spec)
+                return _fmt_value(uv.err_value, spec)
+            if isinstance(uv, NoneValue):
+                return "\N{EMPTY SET}"
+            if isinstance(uv, BoolValue):
+                return "true" if uv.value else "false"
+            if isinstance(uv, StrValue):
+                return uv.value
+            if isinstance(uv, EnumValue):
+                return uv.display()
+            if isinstance(uv, TypeValue):
+                return uv.name
+            if isinstance(uv, IntValue):
+                if spec == "x":
+                    return format(uv.value, "x")
+                if spec == "X":
+                    return format(uv.value, "X")
+                if spec == "b":
+                    return format(uv.value, "b")
+                if spec == "o":
+                    return format(uv.value, "o")
+                if spec == "c":
+                    return chr(uv.value)
+                return str(uv.value)
+            if isinstance(uv, TupleValue):
+                inner = ", ".join(_fmt_value(e) for e in uv.elements)
+                return "[" + inner + "]"
+            if isinstance(uv, ObjectValue):
                 obj = uv.obj
                 if isinstance(obj, ArrayValue):
-                    parts.append(f"<byte[{obj.sizeof}]>")
-                elif isinstance(obj, Bytes):
-                    parts.append(f"<bytes {len(obj.data)}>")
-                elif isinstance(obj, int):
-                    parts.append(format(obj, "x") if obj.bit_length() > 32 else str(obj))
-                else:
-                    parts.append(f"<{type(obj).__name__}>")
-            else:
-                parts.append(str(uv))
+                    inner = ", ".join(_fmt_value(e) for e in obj.elements)
+                    return "[" + inner + "]"
+                if isinstance(obj, Bytes):
+                    return "[" + ", ".join(str(b) for b in obj.data) + "]"
+                return f"<{type(obj).__name__}>"
+            if isinstance(uv, (FuncValue, LambdaValue)):
+                name = getattr(uv, "name", "\N{GREEK SMALL LETTER LAMDA}")
+                return f"<fn {name}>"
+            return str(uv)
 
-        return mk_str("".join(parts))
+        result: list[str] = []
+        arg_idx = 0
+        i = 0
+        while i < len(fmt):
+            ch = fmt[i]
+            if ch == "{":
+                if i + 1 < len(fmt) and fmt[i + 1] == "{":
+                    result.append("{")
+                    i += 2
+                    continue
+                end = fmt.index("}", i + 1)
+                field = fmt[i + 1:end]
+                spec = ""
+                if ":" in field:
+                    spec = field.split(":", 1)[1]
+                if arg_idx >= len(fmt_args):
+                    raise TypeError(
+                        f"std.format: not enough arguments (need at least {arg_idx + 1}, "
+                        f"got {len(fmt_args)})")
+                result.append(_fmt_value(fmt_args[arg_idx], spec))
+                arg_idx += 1
+                i = end + 1
+            elif ch == "}" and i + 1 < len(fmt) and fmt[i + 1] == "}":
+                result.append("}")
+                i += 2
+            else:
+                result.append(ch)
+                i += 1
+
+        return mk_str("".join(result))
 
     def get_stdout(self, args):
         """get_stdout() — get a file descriptor for the standard output.
