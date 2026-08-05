@@ -193,7 +193,7 @@ def _builtin_format(args):
         if isinstance(uv, BoolValue):
             return "true" if uv.value else "false"
         if is_none(uv):
-            return "none"
+            return "\N{LATIN SMALL LETTER O WITH STROKE}"
         if isinstance(uv, SomeValue):
             inner = unwrap_optional(uv)
             return f"some({inner.display()})"

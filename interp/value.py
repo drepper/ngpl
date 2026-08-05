@@ -8,7 +8,7 @@ type checking and proper error messages.
 
 BUILTIN_TYPES: set[str] = {
     "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64",
-    "usize", "int", "bool", "none", "byte",
+    "usize", "int", "bool", "ø", "byte",
     "i8fast", "u8fast", "i16fast", "u16fast",
     "i32fast", "u32fast", "i64fast", "u64fast",
 }
@@ -183,7 +183,7 @@ class NoneValue(Value):
         return cls._instance
 
     def display(self):
-        return "none"
+        return "\N{LATIN SMALL LETTER O WITH STROKE}"
 
     def to_python(self):
         return None
@@ -525,10 +525,10 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
                 f"got {type(value).__name__}")
         return value
 
-    if param_type == "none":
+    if param_type == "\N{LATIN SMALL LETTER O WITH STROKE}":
         if not isinstance(value, NoneValue):
             raise TypeError(
-                f"{func_name}: argument '{param_name}' expected none, "
+                f"{func_name}: argument '{param_name}' expected \N{LATIN SMALL LETTER O WITH STROKE}, "
                 f"got {type(value).__name__}")
         return value
 

@@ -2,19 +2,19 @@
 
 /* Basic const definition. */
 @test
-fn test_const_basic -> none:
+fn test_const_basic -> ø:
     const x := 42
     assert_eq(x, 42)
 
 /* Typed const definition. */
 @test
-fn test_const_typed -> none:
+fn test_const_typed -> ø:
     const y : u32 = 100
     assert_eq(y, 100)
 
 /* Const used in expressions. */
 @test
-fn test_const_in_expr -> none:
+fn test_const_in_expr -> ø:
     const a := 10
     const b := 20
     var c := a + b
@@ -22,7 +22,7 @@ fn test_const_in_expr -> none:
 
 /* Const re-binding across loop iterations. */
 @test
-fn test_const_in_loop -> none:
+fn test_const_in_loop -> ø:
     var sum := 0
     foreach i = 1…5:
         const doubled := i * 2
@@ -30,5 +30,5 @@ fn test_const_in_loop -> none:
     assert_eq(sum, 30)
 
 @start
-fn main -> none:
+fn main -> ø:
     std.print("const tests passed")

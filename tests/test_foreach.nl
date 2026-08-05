@@ -2,7 +2,7 @@
 
 /* Simple range iteration. */
 @test
-fn test_foreach_range -> none:
+fn test_foreach_range -> ø:
     var sum := 0
     foreach i = 1…10:
         sum ← sum + i
@@ -10,7 +10,7 @@ fn test_foreach_range -> none:
 
 /* Descending range. */
 @test
-fn test_foreach_desc -> none:
+fn test_foreach_desc -> ø:
     var result := 0
     foreach i = 5…1:
         result ← result * 10 + i
@@ -18,7 +18,7 @@ fn test_foreach_desc -> none:
 
 /* Typed loop variable. */
 @test
-fn test_foreach_typed -> none:
+fn test_foreach_typed -> ø:
     var total : u32 = 0
     foreach k : u32 = 0…3:
         total ← total + k
@@ -26,7 +26,7 @@ fn test_foreach_typed -> none:
 
 /* Two variables, two ranges — wrapping shorter range. */
 @test
-fn test_foreach_wrap -> none:
+fn test_foreach_wrap -> ø:
     var sum_i := 0
     var sum_j := 0
     foreach i, j = 1…6, 10…12:
@@ -39,7 +39,7 @@ fn test_foreach_wrap -> none:
 
 /* Single variable with multiple ranges → tuple. */
 @test
-fn test_foreach_tuple -> none:
+fn test_foreach_tuple -> ø:
     var sum_first := 0
     var sum_second := 0
     foreach pair = 1…3, 10…12:
@@ -50,7 +50,7 @@ fn test_foreach_tuple -> none:
 
 /* Tuple with wrapping: ranges of different lengths. */
 @test
-fn test_foreach_tuple_wrap -> none:
+fn test_foreach_tuple_wrap -> ø:
     var count := 0
     foreach t = 1…2, 10…13:
         count ← count + 1
@@ -59,7 +59,7 @@ fn test_foreach_tuple_wrap -> none:
 
 /* Foreach with brace block. */
 @test
-fn test_foreach_brace -> none:
+fn test_foreach_brace -> ø:
     var sum := 0
     foreach i = 1…5 {
         sum ← sum + i;
@@ -68,7 +68,7 @@ fn test_foreach_brace -> none:
 
 /* Accumulate array elements using foreach. */
 @test
-fn test_foreach_array -> none:
+fn test_foreach_array -> ø:
     var data := [10, 20, 30, 40]
     var total := 0
     foreach idx = 0…3:
@@ -76,5 +76,5 @@ fn test_foreach_array -> none:
     assert_eq(total, 100)
 
 @start
-fn main -> none:
+fn main -> ø:
     std.print("foreach tests passed")
