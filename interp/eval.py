@@ -1363,7 +1363,7 @@ class Evaluator:
                     f"lambda references '{name}' but has no capture list")
 
         return LambdaValue(node.params, node.body, lambda_env,
-                           captures=node.captures)
+                           captures=node.captures, ret_type=node.ret_type)
 
     def _call_lambda(self, lam: LambdaValue, args):
         """Call a lambda value with given arguments."""
@@ -1378,7 +1378,7 @@ class Evaluator:
                 for (pname, _ptype), arg in zip(lam.params, args):
                     new_env.define(pname, arg)
                 return LambdaValue(remaining, lam.body, new_env,
-                                   captures=lam.captures)
+                                   captures=lam.captures, ret_type=lam.ret_type)
             raise TypeError(
                 f"lambda expects {len(lam.params)} arguments, "
                 f"got {len(args)}")
@@ -1390,11 +1390,17 @@ class Evaluator:
             call_env.define(pname, arg)
 
         old_env = self.env
+        old_ret_type = self._current_ret_type
         try:
             self.env = call_env
-            return self.eval_expr(lam.body)
+            self._current_ret_type = lam.ret_type
+            result = self.eval_expr(lam.body)
+            return self._wrap_optional_return(result, lam.ret_type)
+        except _ReturnSentinel as e:
+            return self._wrap_optional_return(e.value, lam.ret_type)
         finally:
             self.env = old_env
+            self._current_ret_type = old_ret_type
 
     def _builtin_generate(self, args):
         """generate(func, range) — apply func to each value in range, return array."""

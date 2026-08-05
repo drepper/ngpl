@@ -656,7 +656,7 @@ class Parser:
         return ExpectStmt(expectations, stmt)
 
     def _parse_lambda(self):
-        """Parse: λ [param1 : type1 [, paramN : typeN]] [|capture1 [, captureN]|] : expr"""
+        """Parse: λ [param1 : type1 [, paramN : typeN]] [|capture1 [, captureN]|] -> ret_type : expr"""
         self._eat("LAMBDA")
         params: list[tuple[str, str]] = []
         while self._check("IDENT"):
@@ -691,9 +691,26 @@ class Parser:
             if not captures:
                 raise ParseError("empty capture list is not allowed", self._cur())
 
+        if not (self._check("OP") and self._cur().value == "->"):
+            raise ParseError("lambda requires a return type (-> type)", self._cur())
+        self._eat("OP", "->")
+        if not self._check("IDENT", "NONE"):
+            raise ParseError("expected return type after '->'", self._cur())
+        ret_tok = self._cur()
+        self.pos += 1
+        ret_type = ret_tok.value
+        if self._check("OP") and self._cur().value == "?":
+            self.pos += 1
+            ret_type += "?"
+            if self._check("IDENT"):
+                ret_type += self._parse_dotted_name()
+        elif self._check("OP") and self._cur().value == "!":
+            self.pos += 1
+            ret_type += "?std.errors"
+
         self._eat("PUNCT", ":")
         body = self._parse_or_expr()
-        return LambdaExpr(params, captures, body)
+        return LambdaExpr(params, captures, ret_type, body)
 
     # ------------------------------------------------------------------
     # Expression parsing (precedence climbing)

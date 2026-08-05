@@ -1103,10 +1103,11 @@ Anonymous functions are introduced with the `λ` (U+03BB, GREEK SMALL LETTER LAM
 #### Syntax
 
 ```
-λ param1 : type1 [, paramN : typeN] [|capture1 [, captureN]|] : body_expr
+λ param1 : type1 [, paramN : typeN] [|capture1 [, captureN]|] -> ret_type : body_expr
 ```
 
 - **Parameters**: zero or more comma-separated `name : type` pairs.  Type annotations are mandatory, using the same syntax as function parameters.
+- **Return type**: mandatory, specified with `->` followed by a type name.  The `?` and `!` suffixes for optional and error types are supported (e.g., `-> int?`, `-> int!`).
 - **Capture list**: optional, enclosed in `|…|`.  Lists the external variables that the lambda body may access.  Must contain at least one name; an empty capture list `||` is a parse error.  Omit the capture list entirely when no captures are needed.
 - **Body**: a single expression after the colon.
 
@@ -1125,9 +1126,9 @@ fn helper x : i32 -> i32:
     x + 100
 
 var offset = 10
-var f = λx : i32 |offset|: helper(x) + offset   // OK: helper is non-replaceable, offset is captured
-var g = λx : i32: helper(x)                     // OK: helper needs no capture
-var h = λx : i32: x + offset                     // ERROR: references 'offset' but has no capture list
+var f = λx : i32 |offset| -> i32: helper(x) + offset   // OK: helper is non-replaceable, offset is captured
+var g = λx : i32 -> i32: helper(x)                     // OK: helper needs no capture
+var h = λx : i32 -> i32: x + offset                     // ERROR: references 'offset' but has no capture list
 ```
 
 #### Calling Lambdas
@@ -1135,14 +1136,14 @@ var h = λx : i32: x + offset                     // ERROR: references 'offset' 
 Lambdas are first-class values.  They can be assigned to variables, passed as arguments, and returned from functions.
 
 ```
-var double = λx : int: x * 2
+var double = λx : int -> int: x * 2
 assert_eq(10, double(5))
 ```
 
 Immediate application uses parentheses around the lambda:
 
 ```
-var result = (λx : int: x + 1)(5)   // result is 6
+var result = (λx : int -> int: x + 1)(5)   // result is 6
 ```
 
 #### Lambdas as Arguments and Return Values
@@ -1152,11 +1153,11 @@ fn apply f, x : i32 -> i32:
     f(x)
 
 fn make_adder n : i32:
-    λx : int |n|: x + n
+    λx : int |n| -> int: x + n
 
 var add3 = make_adder(3)
 assert_eq(8, add3(5))
-assert_eq(15, apply(λx : int: x * 3, 5))
+assert_eq(15, apply(λx : int -> int: x * 3, 5))
 ```
 
 #### Function Currying
@@ -1185,7 +1186,7 @@ assert_eq(6, f2(3))               // 1 + 2 + 3
 Lambdas themselves support partial application:
 
 ```
-var mul = λx : int, y : int: x * y
+var mul = λx : int, y : int -> int: x * y
 var triple = mul(3)
 assert_eq(15, triple(5))
 ```
@@ -1202,10 +1203,10 @@ fn strategy x : i32 -> i32:
     x * 2
 
 // Must capture — strategy could change after the lambda is created
-var f = λx : i32 |strategy|: strategy(x)
+var f = λx : i32 |strategy| -> i32: strategy(x)
 
 // ERROR: strategy is @replaceable and not captured
-var g = λx : i32: strategy(x)
+var g = λx : i32 -> i32: strategy(x)
 ```
 
 This distinction ensures that lambdas with no capture list or an empty capture list are guaranteed to be pure with respect to user-defined state — they depend only on their parameters and immutable bindings.
@@ -1216,14 +1217,14 @@ A lambda value that is neither assigned to a variable nor returned produces a wa
 
 ```
 add(5)                             // WARNING: lambda value is not used
-λx : int: x + 1                   // WARNING: lambda value is not used
+λx : int -> int: x + 1             // WARNING: lambda value is not used
 ```
 
 #### Design Rationale
 
 | Feature | Haskell | Rust | Python | This language |
 |---------|---------|------|--------|---------------|
-| Lambda syntax | `\x -> x+1` | `\|x\| x+1` | `lambda x: x+1` | `λx : int: x+1` |
+| Lambda syntax | `\x -> x+1` | `\|x\| x+1` | `lambda x: x+1` | `λx : int -> int: x+1` |
 | Capture | implicit | explicit (`move`) | implicit | explicit (`\|…\|`) |
 | Currying | automatic | no | no | automatic |
 | Multi-expression body | no (one expr) | yes (block) | no (one expr) | no (one expr) |
@@ -1268,7 +1269,7 @@ generate(func, range)
 #### Basic Usage
 
 ```
-var squares = generate(λx : int: x * x, 1…5)
+var squares = generate(λx : int -> int: x * x, 1…5)
 // squares = [1, 4, 9, 16, 25]
 
 fn double x : i32 -> i32:
@@ -1293,10 +1294,10 @@ var tripled = generate(multiply(3), 1…5)
 #### With Stepped and Descending Ranges
 
 ```
-var evens = generate(λx : int: x, 0…2…10)
+var evens = generate(λx : int -> int: x, 0…2…10)
 // evens = [0, 2, 4, 6, 8, 10]
 
-var desc = generate(λx : int: x * x, 3…1)
+var desc = generate(λx : int -> int: x * x, 3…1)
 // desc = [9, 4, 1]
 ```
 
@@ -1304,7 +1305,7 @@ var desc = generate(λx : int: x * x, 3…1)
 
 ```
 var offset = 100
-var arr = generate(λx : int |offset|: x + offset, 1…3)
+var arr = generate(λx : int |offset| -> int: x + offset, 1…3)
 // arr = [101, 102, 103]
 ```
 
@@ -1313,7 +1314,7 @@ var arr = generate(λx : int |offset|: x + offset, 1…3)
 The mapping function must not return ∅.  This is a runtime error because the result array cannot contain empty optional values:
 
 ```
-generate(λx : int: ∅, 1…5)        // ERROR: function must not return ∅
+generate(λx : int -> ∅: ∅, 1…5)    // ERROR: function must not return ∅
 ```
 
 #### Compile-time Optimization (Future)

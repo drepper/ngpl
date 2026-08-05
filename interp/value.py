@@ -267,14 +267,15 @@ class LambdaValue(Value):
     """
 
     __slots__ = ("params", "body", "env", "captures",
-                 "partial_func", "partial_args")
+                 "ret_type", "partial_func", "partial_args")
 
     def __init__(self, params, body, env, captures=None,
-                 partial_func=None, partial_args=None):
+                 ret_type=None, partial_func=None, partial_args=None):
         self.params = params
         self.body = body
         self.env = env
         self.captures = captures
+        self.ret_type = ret_type
         self.partial_func = partial_func
         self.partial_args = partial_args or []
 

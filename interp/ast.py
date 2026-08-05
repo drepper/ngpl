@@ -247,11 +247,13 @@ class WrapExpr:
 
 
 class LambdaExpr:
-    """Anonymous function: λparam:type, ... |captures|: body_expr."""
+    """Anonymous function: λparam:type, ... |captures| -> ret_type: body_expr."""
 
-    def __init__(self, params: list[tuple[str, str]], captures: list[str] | None, body):
+    def __init__(self, params: list[tuple[str, str]], captures: list[str] | None,
+                 ret_type: str, body):
         self.params = params
         self.captures = captures
+        self.ret_type = ret_type
         self.body = body
 
 
