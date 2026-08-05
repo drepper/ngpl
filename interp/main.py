@@ -26,17 +26,45 @@ from collections import defaultdict
 from interp.lexer import tokenize, process_indentation
 from interp.parser import Parser
 from interp.env import Env
-from interp.ast import FuncDef as ASTFuncDef
+from interp.ast import FuncDef as ASTFuncDef, EnumDef as ASTEnumDef
 from interp.value import (
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
-    NoneValue, coerce_to_type, validate_param_type, validate_type, none, FAST_TYPES,
+    NoneValue, EnumType, EnumValue,
+    coerce_to_type, validate_param_type, validate_type, none, FAST_TYPES,
 )
 from interp.eval import Evaluator, unwrap_optional
+
+
+def _make_std_errors() -> EnumType:
+    """Create the std.errors enum with error codes grouped by category."""
+    members = {
+        # Runtime errors (100-199)
+        "division_by_zero": 100,
+        "index_out_of_range": 101,
+        "stack_overflow": 102,
+        "null_dereference": 103,
+        "integer_overflow": 104,
+        "assertion_failed": 105,
+        # Compile-time errors (200-299)
+        "type_mismatch": 200,
+        "unknown_type": 201,
+        "syntax_error": 202,
+        "undefined_variable": 203,
+        "arity_mismatch": 204,
+        # Library/runtime function errors (300-399)
+        "file_not_found": 300,
+        "permission_denied": 301,
+        "io_error": 302,
+        "allocation_failed": 303,
+        "invalid_argument": 304,
+    }
+    return EnumType("errors", "u16", members, is_flag=False)
 
 
 def setup_std_env(env: Env):
     """Register the std module and assertion builtins in the given environment."""
     from interp.std import std
+    std.errors = _make_std_errors()
     env.define("std", ObjectValue(std))
     env.define("assert", BuiltinFunc("assert", -1, _builtin_assert))
     env.define("assert_eq", BuiltinFunc("assert_eq", 2, _builtin_assert_eq))
@@ -76,7 +104,19 @@ def _builtin_assert_eq(args):
         raise TypeError("assert_eq requires exactly 2 arguments")
     expected = unwrap_optional(args[0])
     actual = unwrap_optional(args[1])
-    if isinstance(expected, IntValue) and isinstance(actual, IntValue):
+    if isinstance(expected, EnumValue) and isinstance(actual, EnumValue):
+        if expected.enum_type is not actual.enum_type or expected.value != actual.value:
+            raise AssertionError(
+                f"assert_eq failed:\n  expected: {expected.display()}\n  actual:   {actual.display()}")
+    elif isinstance(expected, EnumValue) and isinstance(actual, IntValue):
+        if expected.value != actual.value:
+            raise AssertionError(
+                f"assert_eq failed:\n  expected: {expected.display()}\n  actual:   {_format_value(actual)}")
+    elif isinstance(expected, IntValue) and isinstance(actual, EnumValue):
+        if expected.value != actual.value:
+            raise AssertionError(
+                f"assert_eq failed:\n  expected: {_format_value(expected)}\n  actual:   {actual.display()}")
+    elif isinstance(expected, IntValue) and isinstance(actual, IntValue):
         if expected.value != actual.value:
             raise AssertionError(
                 f"assert_eq failed:\n  expected: {_format_value(expected)}\n  actual:   {_format_value(actual)}")
@@ -147,6 +187,31 @@ def main():
             if type_ann is not None:
                 value = coerce_to_type(value, type_ann)
             env.define(name, value)
+
+    for defn in definitions:
+        if isinstance(defn, ASTEnumDef):
+            members: dict[str, int] = {}
+            if defn.is_flag:
+                next_val = 1
+            else:
+                next_val = 0
+            for member_name, explicit_value in defn.members:
+                if explicit_value is not None:
+                    members[member_name] = explicit_value
+                    if defn.is_flag:
+                        next_val = explicit_value << 1
+                    else:
+                        next_val = explicit_value + 1
+                else:
+                    members[member_name] = next_val
+                    if defn.is_flag:
+                        next_val = next_val << 1
+                    else:
+                        next_val += 1
+            if defn.is_flag and 0 not in members.values():
+                members["nil"] = 0
+            et = EnumType(defn.name, defn.underlying_type, members, defn.is_flag)
+            env.define(defn.name, et)
 
     startup_func: FuncValue | None = None
     standalone_tests: list[FuncValue] = []

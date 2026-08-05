@@ -25,7 +25,7 @@ from interp.ast import (
 from interp.value import (
     Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue,
     FuncValue, BuiltinFunc, ObjectValue, BuiltinBoundMethod, ArrayValue,
-    TupleValue,
+    TupleValue, EnumType, EnumValue,
     mk_int, mk_int_wrap, mk_str, mk_bool, none, some, is_none, is_some,
     resolve_width, wrap_int, coerce_to_type, coerce_arg, _TYPE_BITS, FAST_TYPES,
 )
@@ -356,13 +356,22 @@ class Evaluator:
         """Equality comparison."""
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
+        if isinstance(lu, EnumValue) and isinstance(ru, EnumValue):
+            if lu.enum_type is not ru.enum_type:
+                raise TypeError(
+                    f"cannot compare enum '{lu.enum_type.name}' "
+                    f"with enum '{ru.enum_type.name}'")
+            return mk_bool(lu.value == ru.value)
+        if isinstance(lu, EnumValue) and isinstance(ru, IntValue):
+            return mk_bool(lu.value == ru.value)
+        if isinstance(lu, IntValue) and isinstance(ru, EnumValue):
+            return mk_bool(lu.value == ru.value)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_bool(lu.value == ru.value)
         if isinstance(lu, StrValue) and isinstance(ru, StrValue):
             return mk_bool(lu.value == ru.value)
         if isinstance(lu, BoolValue) and isinstance(ru, BoolValue):
             return mk_bool(lu.value == ru.value)
-        # Cross-type: only None == None is true.
         if type(lu) != type(ru):
             return mk_bool(False)
         return mk_bool(False)
@@ -446,25 +455,46 @@ class Evaluator:
         raise TypeError(f"right-shift expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_bitand(self, left, right):
-        """Bitwise AND: int & int."""
+        """Bitwise AND: int & int or flag_enum & flag_enum."""
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
+        if isinstance(lu, EnumValue) and isinstance(ru, EnumValue):
+            if lu.enum_type is not ru.enum_type:
+                raise TypeError(
+                    f"cannot combine enum '{lu.enum_type.name}' with '{ru.enum_type.name}'")
+            if not lu.enum_type.is_flag:
+                raise TypeError(f"bitwise operations require @flag enum, got '{lu.enum_type.name}'")
+            return EnumValue(lu.enum_type, lu.value & ru.value)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_int_wrap(lu.value & ru.value, resolve_width(lu.width, ru.width))
         raise TypeError(f"bitwise-and expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_bitxor(self, left, right):
-        """Bitwise XOR: int ^ int."""
+        """Bitwise XOR: int ^ int or flag_enum ^ flag_enum."""
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
+        if isinstance(lu, EnumValue) and isinstance(ru, EnumValue):
+            if lu.enum_type is not ru.enum_type:
+                raise TypeError(
+                    f"cannot combine enum '{lu.enum_type.name}' with '{ru.enum_type.name}'")
+            if not lu.enum_type.is_flag:
+                raise TypeError(f"bitwise operations require @flag enum, got '{lu.enum_type.name}'")
+            return EnumValue(lu.enum_type, lu.value ^ ru.value)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_int_wrap(lu.value ^ ru.value, resolve_width(lu.width, ru.width))
         raise TypeError(f"bitwise-xor expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_bitor(self, left, right):
-        """Bitwise OR: int | int."""
+        """Bitwise OR: int | int or flag_enum | flag_enum."""
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
+        if isinstance(lu, EnumValue) and isinstance(ru, EnumValue):
+            if lu.enum_type is not ru.enum_type:
+                raise TypeError(
+                    f"cannot combine enum '{lu.enum_type.name}' with '{ru.enum_type.name}'")
+            if not lu.enum_type.is_flag:
+                raise TypeError(f"bitwise operations require @flag enum, got '{lu.enum_type.name}'")
+            return EnumValue(lu.enum_type, lu.value | ru.value)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_int_wrap(lu.value | ru.value, resolve_width(lu.width, ru.width))
         raise TypeError(f"bitwise-or expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
@@ -624,6 +654,14 @@ class Evaluator:
                 raise TypeError(f"negation expected int, got {type(unwrapped).__name__}")
             if node.op == "~":
                 unwrapped = unwrap_optional(operand)
+                if isinstance(unwrapped, EnumValue):
+                    if not unwrapped.enum_type.is_flag:
+                        raise TypeError(
+                            f"bitwise-not requires @flag enum, got '{unwrapped.enum_type.name}'")
+                    all_bits = 0
+                    for v in unwrapped.enum_type.members.values():
+                        all_bits |= v
+                    return EnumValue(unwrapped.enum_type, ~unwrapped.value & all_bits)
                 if isinstance(unwrapped, IntValue):
                     return mk_int_wrap(~unwrapped.value, unwrapped.width)
                 raise TypeError(f"bitwise-not expected int, got {type(unwrapped).__name__}")
@@ -660,16 +698,21 @@ class Evaluator:
         if isinstance(node, GetAttr):
             obj = self.eval_expr(node.obj)
             unwrapped = unwrap_optional(obj)
+            if isinstance(unwrapped, EnumType):
+                if node.attr in unwrapped.members:
+                    return EnumValue(unwrapped, unwrapped.members[node.attr])
+                raise AttributeError(
+                    f"enum '{unwrapped.name}' has no member '{node.attr}'")
             if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
                 if node.attr == "sizeof":
                     return mk_int(unwrapped.obj.sizeof)
             if isinstance(unwrapped, ObjectValue):
                 attr_val = getattr(unwrapped.obj, node.attr, None)
                 if attr_val is not None:
+                    if isinstance(attr_val, EnumType):
+                        return attr_val
                     if callable(attr_val):
-                        # Return a bound method wrapper.
                         return BuiltinBoundMethod(unwrapped.obj, node.attr)
-                    # Convert plain Python values to Value types.
                     if isinstance(attr_val, int):
                         return mk_int(attr_val)
                     if isinstance(attr_val, str):

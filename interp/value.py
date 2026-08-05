@@ -290,6 +290,57 @@ class TupleValue(Value):
         return tuple(e.to_python() for e in self.elements)
 
 
+class EnumType(Value):
+    """Runtime representation of an enum type definition.
+
+    Holds the mapping from member names to integer values and the reverse.
+    For @flag enums, binary logic operations (|, &, ^, ~) combine values.
+    """
+
+    __slots__ = ("name", "underlying_type", "is_flag",
+                 "members", "values_to_names")
+
+    def __init__(self, name: str, underlying_type: str | None,
+                 members: dict[str, int], is_flag: bool = False):
+        self.name = name
+        self.underlying_type = underlying_type or "int"
+        self.is_flag = is_flag
+        self.members = members
+        self.values_to_names: dict[int, str] = {v: k for k, v in members.items()}
+
+    def display(self):
+        return f"<enum {self.name}>"
+
+
+class EnumValue(Value):
+    """A runtime value of an enum type."""
+
+    __slots__ = ("enum_type", "value")
+
+    def __init__(self, enum_type: EnumType, value: int):
+        self.enum_type = enum_type
+        self.value = value
+
+    def display(self) -> str:
+        name = self.enum_type.values_to_names.get(self.value)
+        if name is not None:
+            return f"{self.enum_type.name}.{name}"
+        if self.enum_type.is_flag and self.value != 0:
+            parts = []
+            remaining = self.value
+            for member_name, member_val in sorted(
+                    self.enum_type.members.items(), key=lambda x: x[1], reverse=True):
+                if member_val != 0 and (remaining & member_val) == member_val:
+                    parts.append(f"{self.enum_type.name}.{member_name}")
+                    remaining &= ~member_val
+            if remaining == 0 and parts:
+                return " | ".join(reversed(parts))
+        return f"{self.enum_type.name}({self.value})"
+
+    def to_python(self):
+        return self.value
+
+
 class ArrayValue(Value):
     """A mutable array of runtime Values with dynamic growth.
 

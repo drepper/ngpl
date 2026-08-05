@@ -1136,3 +1136,160 @@ This test verifies both that the warning is produced and that the redefined vari
 | Integrated with test runner | Yes | Separate tool | Yes |
 
 The `@expect` annotation fills a gap that most languages handle with external test harnesses.  By integrating diagnostic-expectation testing into the language's test system, the entire test suite — positive tests (`@test`) and negative tests (`@expect`) — can live in the same source files and run with the same `--test` invocation.  The statement-level form is particularly powerful: it allows testing warnings and non-fatal diagnostics within otherwise-normal test functions, verifying both the diagnostic and the runtime behavior that follows.
+
+
+### Enumeration Types
+
+Enumerations define a named set of integer constants grouped under a single type.  Enum members are not in the global namespace — they must be qualified with the enum's name (e.g., `Color.red`).
+
+#### Syntax
+
+```
+enum Name [: underlying_type]:
+    member1 [= value]
+    member2 [= value]
+    ...
+```
+
+The `enum` keyword introduces the definition.  An optional underlying type (e.g., `u8`, `u16`, `u32`) controls the storage width.  Each member is an identifier optionally followed by `= integer_value`.
+
+#### Auto-Numbering
+
+Members without explicit values are auto-numbered sequentially starting from 0 (or from the value after the previous explicitly-set member):
+
+```
+enum Color:
+    red         /* 0 */
+    green       /* 1 */
+    blue        /* 2 */
+
+enum Level:
+    low         /* 0 */
+    medium      /* 1 */
+    high = 10   /* 10 */
+    critical    /* 11 */
+```
+
+#### Member Access
+
+Enum members are accessed through the enum's name, not as bare identifiers:
+
+```
+var c := Color.red
+var l := Level.high
+```
+
+#### Comparison
+
+Enum values of the same type can be compared with `==` and `!=`.  Comparing values from different enum types is a type error.  Enum values can also be compared with integer literals:
+
+```
+var c := Color.red
+assert_eq(c == Color.red, true)     /* same-type comparison */
+assert_eq(c == 0, true)             /* compare with integer */
+```
+
+```
+/* ERROR: cannot compare enum 'Color' with enum 'Status' */
+var x := Color.red == Status.ok
+```
+
+#### Underlying Type
+
+The optional underlying type controls the integer width used to store enum values:
+
+```
+enum SmallEnum : u8:
+    a
+    b
+    c
+```
+
+When no underlying type is specified, the default is `int` (arbitrary precision).
+
+#### Flag Enums (`@flag`)
+
+The `@flag` attribute changes auto-numbering to powers of two, making the enum suitable for bitwise flag combination:
+
+```
+@flag
+enum Perms:
+    read        /* 1 */
+    write       /* 2 */
+    exec        /* 4 */
+```
+
+If no member has the value 0, a `nil` member is automatically added:
+
+```
+Perms.nil       /* 0 — auto-generated */
+Perms.read      /* 1 */
+Perms.write     /* 2 */
+Perms.exec      /* 4 */
+```
+
+If a member explicitly defines the value 0, no `nil` is generated:
+
+```
+@flag
+enum Mode:
+    off = 0     /* explicit zero — no auto nil */
+    read = 1
+    write = 2
+```
+
+#### Flag Operations
+
+Flag enums support bitwise operations to combine, test, and remove flags:
+
+| Operation | Syntax | Result |
+|-----------|--------|--------|
+| Combine | `a \| b` | union of flags |
+| Intersect | `a & b` | intersection of flags |
+| Toggle | `a ^ b` | symmetric difference |
+| Complement | `~a` | all defined flags except those in `a` |
+
+These operations are only valid on `@flag` enums.  Attempting bitwise operations on a non-flag enum is a type error.  Cross-enum operations (mixing two different enum types) are also type errors.
+
+```
+var rw := Perms.read | Perms.write    /* combine: 3 */
+var r := rw & Perms.read              /* intersect: Perms.read */
+var toggled := rw ^ Perms.write       /* toggle: Perms.read */
+var others := ~rw                     /* complement: Perms.exec */
+
+/* Test membership */
+var has_read := (rw & Perms.read) == Perms.read    /* true */
+var has_exec := (rw & Perms.exec) == Perms.exec    /* false */
+```
+
+The complement operator `~` masks against the union of all defined member values, so `~Perms.read` yields `Perms.write | Perms.exec` rather than a full integer complement.
+
+#### The `std.errors` Enum
+
+A built-in enum `std.errors` provides standardized error codes grouped by category:
+
+| Range | Category | Members |
+|-------|----------|---------|
+| 100-199 | Runtime errors | `division_by_zero` (100), `index_out_of_range` (101), `stack_overflow` (102), `null_dereference` (103), `integer_overflow` (104), `assertion_failed` (105) |
+| 200-299 | Compile-time errors | `type_mismatch` (200), `unknown_type` (201), `syntax_error` (202), `undefined_variable` (203), `arity_mismatch` (204) |
+| 300-399 | Library/runtime errors | `file_not_found` (300), `permission_denied` (301), `io_error` (302), `allocation_failed` (303), `invalid_argument` (304) |
+
+```
+var err := std.errors.division_by_zero
+assert_eq(err == 100, true)
+```
+
+The grouping by integer ranges allows category checks:  runtime errors are in 100-199, compile-time errors in 200-299, library errors in 300-399.
+
+#### Design Rationale
+
+| Feature | C/C++ | Rust | Zig | This language |
+|---------|-------|------|-----|---------------|
+| Scoping | global (C), scoped (`enum class`, C++) | scoped | scoped | scoped (qualified access) |
+| Underlying type | optional (`enum class : u8`) | implicit | `u8`..`u64` | optional (`: u8`) |
+| Flag support | manual | `bitflags!` crate | manual | `@flag` attribute |
+| Auto nil | N/A | N/A | N/A | auto-generated for `@flag` |
+| Bitwise ops on flags | manual | `bitflags!` | manual | built-in (`\|`, `&`, `^`, `~`) |
+| Cross-type comparison | allowed | error | error | error |
+
+The `@flag` attribute eliminates the boilerplate of manually assigning powers of two and defining bitwise operations.  The automatic `nil` member for zero-valued flag sets prevents the common bug of forgetting to define an "empty" state.  Scoped access prevents name collisions between members of different enums.

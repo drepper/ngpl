@@ -53,6 +53,8 @@ KEYWORDS = {
     "foreach": "FOREACH",
     "expect": "EXPECT",
     "wrap": "WRAP",
+    "enum": "ENUM",
+    "flag": "FLAG",
 }
 
 # Double-character operators that must be checked before single ones.

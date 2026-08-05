@@ -241,3 +241,20 @@ class WrapExpr:
 
     def __init__(self, expr):
         self.expr = expr
+
+
+class EnumDef:
+    """Enum type definition at top level.
+
+    name:            enum identifier
+    underlying_type: optional storage type (e.g., "u8", "u32")
+    members:         list of (name, explicit_value_or_None) tuples
+    is_flag:         True if annotated with @flag (powers-of-two auto-values)
+    """
+
+    def __init__(self, name: str, underlying_type: str | None,
+                 members: list[tuple[str, int | None]], is_flag: bool = False):
+        self.name = name
+        self.underlying_type = underlying_type
+        self.members = members
+        self.is_flag = is_flag

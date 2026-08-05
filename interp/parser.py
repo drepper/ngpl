@@ -13,7 +13,7 @@ from interp.ast import (
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
-    RangeExpr, ForEachStmt, ExpectStmt, WrapExpr,
+    RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, EnumDef,
 )
 from interp.lexer import Token, KEYWORDS
 
@@ -133,9 +133,10 @@ class Parser:
         return definitions
 
     def _parse_definition(self):
-        """Parse a single top-level definition (function, const, or variable)."""
+        """Parse a single top-level definition (function, const, enum, or variable)."""
         is_start = False
         is_test = False
+        is_flag = False
         test_refs: list[str] = []
         expect_annotations: list[tuple[str, str]] = []
 
@@ -155,6 +156,10 @@ class Parser:
                             break
                     self._eat("PUNCT", ")")
                 self._try_eat("NEWLINE")
+            elif self._check("FLAG"):
+                self._eat("FLAG")
+                is_flag = True
+                self._try_eat("NEWLINE")
             elif self._check("EXPECT"):
                 self._eat("EXPECT")
                 if not self._check("IDENT"):
@@ -171,6 +176,9 @@ class Parser:
                 self._try_eat("NEWLINE")
             else:
                 break
+
+        if self._check("ENUM"):
+            return self._parse_enum_def(is_flag)
 
         if self._check("FN"):
             return self._parse_function_def(is_start, is_test, test_refs, expect_annotations)
@@ -270,6 +278,60 @@ class Parser:
             body = self._parse_block()
         return FuncDef(name, params, ret_type, body, is_start, is_test,
                        test_refs, expect_annotations)
+
+    def _parse_enum_def(self, is_flag: bool = False):
+        """Parse: enum Name [: underlying_type] : INDENT members DEDENT
+
+        Members are: name [= integer_value], one per line or separated by commas.
+        """
+        self._eat("ENUM")
+        name_tok = self._eat("IDENT")
+        name = name_tok.value
+
+        underlying_type = None
+        if (self._check("PUNCT") and self._cur().value == ":" and
+                self.pos + 1 < len(self.tokens) and
+                self.tokens[self.pos + 1].type == "IDENT" and
+                self.pos + 2 < len(self.tokens) and
+                self.tokens[self.pos + 2].type == "PUNCT" and
+                self.tokens[self.pos + 2].value == ":"):
+            self._eat("PUNCT", ":")
+            underlying_type = self._eat("IDENT").value
+
+        self._eat("PUNCT", ":")
+        while self._try_eat("NEWLINE"):
+            pass
+        self._eat("INDENT")
+
+        members: list[tuple[str, int | None]] = []
+        while True:
+            while self._try_eat("NEWLINE"):
+                pass
+            if self._check("DEDENT", "EOF"):
+                break
+            member_name_tok = self._eat("IDENT")
+            explicit_value = None
+            if self._try_eat("PUNCT", "="):
+                val_tok = self._cur()
+                negate = False
+                if self._check("OP") and val_tok.value == "-":
+                    negate = True
+                    self.pos += 1
+                    val_tok = self._cur()
+                if val_tok.type != "INT":
+                    raise ParseError(
+                        f"expected integer value for enum member '{member_name_tok.value}'",
+                        val_tok)
+                self.pos += 1
+                explicit_value = -val_tok.value if negate else val_tok.value
+            members.append((member_name_tok.value, explicit_value))
+            self._try_eat("PUNCT", ",")
+            self._try_eat("PUNCT", ";")
+            while self._try_eat("NEWLINE"):
+                pass
+
+        self._eat("DEDENT")
+        return EnumDef(name, underlying_type, members, is_flag)
 
     def _skip_to_next_definition(self):
         """Advance past tokens until we reach the next top-level definition.

@@ -475,13 +475,14 @@ class StdModule:
             StrValue with the concatenated result (no trailing newline).
         """
         from interp.eval import unwrap_optional
-        from interp.value import IntValue, BoolValue, StrValue, ObjectValue, ArrayValue, mk_str
+        from interp.value import IntValue, BoolValue, StrValue, ObjectValue, ArrayValue, EnumValue, mk_str
 
         parts = []
         for arg in args:
             uv = unwrap_optional(arg)
-            if isinstance(uv, IntValue):
-                # Large integers (e.g. hashes) formatted as hex; small ones decimal.
+            if isinstance(uv, EnumValue):
+                parts.append(uv.display())
+            elif isinstance(uv, IntValue):
                 if uv.value.bit_length() > 32 or uv.value < 0:
                     parts.append(format(uv.value, "x"))
                 else:
@@ -574,12 +575,14 @@ class StdModule:
             NoneValue.
         """
         from interp.eval import unwrap_optional
-        from interp.value import IntValue, BoolValue, StrValue, ObjectValue, ArrayValue, mk_str
+        from interp.value import IntValue, BoolValue, StrValue, ObjectValue, ArrayValue, EnumValue, mk_str
 
         parts = []
         for arg in args:
             uv = unwrap_optional(arg)
-            if isinstance(uv, IntValue):
+            if isinstance(uv, EnumValue):
+                parts.append(uv.display())
+            elif isinstance(uv, IntValue):
                 if uv.value.bit_length() > 32 or uv.value < 0:
                     parts.append(format(uv.value, "x"))
                 else:
