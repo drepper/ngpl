@@ -1,7 +1,7 @@
 """Entry point for the newlang prototype interpreter.
 
 Usage:
-    python3 -m interp.main <source_file.nl> [--test]
+    python3 -m interp.main <source_file.nl> [--test] [--skip-tests]
 
 The interpreter:
     1. Reads the source file.
@@ -12,7 +12,8 @@ The interpreter:
     6. Locates and executes the @start-marked function.
 
 Flags:
-    --test  Run all tests and exit without executing the startup function.
+    --test        Run all tests and exit without executing the startup function.
+    --skip-tests  Skip all tests during normal execution.
 
 All source files are UTF-8 encoded.
 """
@@ -99,9 +100,10 @@ def main():
     """Run the newlang interpreter on a source file."""
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     test_mode = "--test" in sys.argv
+    skip_tests = "--skip-tests" in sys.argv
 
     if len(args) < 1:
-        print("Usage: python3 -m interp.main <source_file.nl> [--test]", file=sys.stderr)
+        print("Usage: python3 -m interp.main <source_file.nl> [--test] [--skip-tests]", file=sys.stderr)
         sys.exit(1)
 
     source_path = args[0]
@@ -183,21 +185,23 @@ def main():
         print(f"\ntest result: {status}. {passed} passed; {failed} failed", file=sys.stderr)
         sys.exit(0 if failed == 0 else 1)
 
-    # Normal mode: run standalone tests before startup.
-    for test_fv in standalone_tests:
-        ok, msg = _run_test(test_fv, env)
-        if ok:
-            print(f"test {test_fv.name} ... ok", file=sys.stderr)
-        else:
-            print(f"test {test_fv.name} ... FAILED: {msg}", file=sys.stderr)
-            sys.exit(1)
+    # Normal mode: run standalone tests before startup unless skipped.
+    if not skip_tests:
+        for test_fv in standalone_tests:
+            ok, msg = _run_test(test_fv, env)
+            if ok:
+                print(f"test {test_fv.name} ... ok", file=sys.stderr)
+            else:
+                print(f"test {test_fv.name} ... FAILED: {msg}", file=sys.stderr)
+                sys.exit(1)
 
     if startup_func is None:
         print("No @start function found — nothing to execute", file=sys.stderr)
         return
 
+    hooks = {} if skip_tests else dict(referenced_tests)
     try:
-        Evaluator(env, test_hooks=dict(referenced_tests)).eval_stmts(startup_func.body)
+        Evaluator(env, test_hooks=hooks).eval_stmts(startup_func.body)
     except AssertionError as e:
         print(f"Test failure: {e}", file=sys.stderr)
         sys.exit(1)

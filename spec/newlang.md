@@ -586,6 +586,8 @@ Test functions are always run unless explicitly skipped.  Their execution order 
 
 3. **Test mode** (`--test` flag) runs all tests — both standalone and referenced — without executing the `@start` function.  The interpreter reports results and exits with status 0 (all passed) or 1 (any failed).
 
+4. **Skip mode** (`--skip-tests` flag) suppresses all test execution during normal program runs.  Both standalone tests and referenced tests are skipped; only the `@start` function executes.  This is useful for production runs where test overhead is undesirable.  The `--skip-tests` flag has no effect in `--test` mode.
+
 #### Assertion Functions
 
 Two built-in assertion functions are available in all scopes:
