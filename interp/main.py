@@ -85,6 +85,15 @@ def _builtin_assert_eq(args):
     return none()
 
 
+if sys.stderr.isatty():
+    _GREEN = "\033[32m"
+    _RED = "\033[31m"
+    _BOLD = "\033[1m"
+    _RESET = "\033[0m"
+else:
+    _GREEN = _RED = _BOLD = _RESET = ""
+
+
 def _run_test(test_fv: FuncValue, env: Env) -> tuple[bool, str]:
     """Run a single test function, return (passed, error_message)."""
     try:
@@ -174,26 +183,31 @@ def main():
         for test_fv in all_tests:
             ok, msg = _run_test(test_fv, env)
             if ok:
-                print(f"test {test_fv.name} ... ok", file=sys.stderr)
+                print(f"test {test_fv.name} ... {_GREEN}ok{_RESET}", file=sys.stderr)
                 passed += 1
             else:
-                print(f"test {test_fv.name} ... FAILED", file=sys.stderr)
+                print(f"test {test_fv.name} ... {_RED}{_BOLD}FAILED{_RESET}", file=sys.stderr)
                 print(f"  {msg}", file=sys.stderr)
                 failed += 1
 
-        status = "ok" if failed == 0 else "FAILED"
+        if failed == 0:
+            status = f"{_GREEN}ok{_RESET}"
+        else:
+            status = f"{_RED}{_BOLD}FAILED{_RESET}"
         print(f"\ntest result: {status}. {passed} passed; {failed} failed", file=sys.stderr)
         sys.exit(0 if failed == 0 else 1)
 
     # Normal mode: run standalone tests before startup unless skipped.
+    # Only report failures; abort if any test failed.
     if not skip_tests:
+        any_failed = False
         for test_fv in standalone_tests:
             ok, msg = _run_test(test_fv, env)
-            if ok:
-                print(f"test {test_fv.name} ... ok", file=sys.stderr)
-            else:
-                print(f"test {test_fv.name} ... FAILED: {msg}", file=sys.stderr)
-                sys.exit(1)
+            if not ok:
+                print(f"test {test_fv.name} ... {_RED}{_BOLD}FAILED{_RESET}: {msg}", file=sys.stderr)
+                any_failed = True
+        if any_failed:
+            sys.exit(1)
 
     if startup_func is None:
         print("No @start function found — nothing to execute", file=sys.stderr)
@@ -203,7 +217,7 @@ def main():
     try:
         Evaluator(env, test_hooks=hooks).eval_stmts(startup_func.body)
     except AssertionError as e:
-        print(f"Test failure: {e}", file=sys.stderr)
+        print(f"{_RED}{_BOLD}Test failure{_RESET}: {e}", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
         print(f"Runtime error: {e}", file=sys.stderr)

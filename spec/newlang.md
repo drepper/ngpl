@@ -598,13 +598,9 @@ Two built-in assertion functions are available in all scopes:
 
 #### Test Output
 
-In normal mode, test results are printed to stderr as they run:
-```
-test test_sha256_empty ... ok
-test test_sha256_abc ... ok
-```
+In normal mode, only failing tests produce output — passing tests are silent.  All standalone tests run before aborting, so every failure is reported in one pass.  Referenced tests that fail during execution terminate the program immediately.
 
-In `--test` mode, a summary follows:
+In `--test` mode, every test result is printed and a summary follows:
 ```
 running 3 tests
 test test_sha256_empty ... ok

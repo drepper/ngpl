@@ -965,8 +965,6 @@ class Evaluator:
                 if test_fv.name not in self._tests_run:
                     self._tests_run.add(test_fv.name)
                     self._call_user_func(test_fv, [])
-                    import sys
-                    print(f"test {test_fv.name} ... ok", file=sys.stderr)
 
         if len(args) != len(func.params):
             raise TypeError(
