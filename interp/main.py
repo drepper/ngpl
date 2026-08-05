@@ -18,6 +18,7 @@ Flags:
 All source files are UTF-8 encoded.
 """
 
+import re
 import sys
 import os
 from collections import defaultdict
@@ -150,9 +151,14 @@ def main():
     startup_func: FuncValue | None = None
     standalone_tests: list[FuncValue] = []
     referenced_tests: dict[str, list[FuncValue]] = defaultdict(list)
+    expect_funcs: list[ASTFuncDef] = []
 
     for defn in definitions:
         if isinstance(defn, ASTFuncDef):
+            if defn.expect_annotations:
+                expect_funcs.append(defn)
+                continue
+
             for param_name, param_type in defn.params:
                 if param_type is not None:
                     validate_param_type(param_type, defn.name, param_name)
@@ -172,6 +178,62 @@ def main():
                 else:
                     standalone_tests.append(fv)
 
+    # Process @expect-annotated functions: verify expected errors/warnings.
+    expect_passed = 0
+    expect_failed = 0
+    for defn in expect_funcs:
+        errors_produced: list[tuple[str, str]] = []
+
+        parse_err = getattr(defn, "_parse_error", None)
+        if parse_err is not None:
+            errors_produced.append(("error", parse_err))
+
+        if not parse_err:
+            try:
+                for param_name, param_type in defn.params:
+                    if param_type is not None:
+                        validate_param_type(param_type, defn.name, param_name)
+            except (TypeError, ValueError) as e:
+                errors_produced.append(("error", str(e)))
+
+        if not errors_produced:
+            fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type)
+            try:
+                Evaluator(env)._call_user_func(fv, [])
+            except Exception as e:
+                errors_produced.append(("error", str(e)))
+
+        remaining = list(defn.expect_annotations)
+        matched: list[tuple[str, str]] = []
+        for level, msg in errors_produced:
+            for i, (exp_level, exp_pattern) in enumerate(remaining):
+                if level == exp_level and re.search(exp_pattern, msg):
+                    matched.append(remaining.pop(i))
+                    break
+
+        if remaining:
+            expect_failed += 1
+            unmatched_desc = "; ".join(
+                f"@expect {lv} \"{pat}\"" for lv, pat in remaining)
+            if errors_produced:
+                got_desc = "; ".join(f"{lv}: {msg}" for lv, msg in errors_produced)
+                print(f"test {defn.name} ... {_RED}{_BOLD}FAILED{_RESET}",
+                      file=sys.stderr)
+                print(f"  unmatched expectations: {unmatched_desc}", file=sys.stderr)
+                print(f"  actual errors: {got_desc}", file=sys.stderr)
+            else:
+                print(f"test {defn.name} ... {_RED}{_BOLD}FAILED{_RESET}",
+                      file=sys.stderr)
+                print(f"  expected errors not produced: {unmatched_desc}",
+                      file=sys.stderr)
+        else:
+            expect_passed += 1
+            if test_mode:
+                print(f"test {defn.name} ... {_GREEN}ok{_RESET}", file=sys.stderr)
+
+    if expect_failed > 0 and not test_mode:
+        sys.exit(1)
+
     if test_mode:
         all_tests: list[FuncValue] = list(standalone_tests)
         seen: set[str] = {t.name for t in all_tests}
@@ -181,9 +243,10 @@ def main():
                     seen.add(t.name)
                     all_tests.append(t)
 
-        print(f"\nrunning {len(all_tests)} tests", file=sys.stderr)
-        passed = 0
-        failed = 0
+        total_tests = len(all_tests) + expect_passed + expect_failed
+        print(f"\nrunning {total_tests} tests", file=sys.stderr)
+        passed = expect_passed
+        failed = expect_failed
         for test_fv in all_tests:
             ok, msg = _run_test(test_fv, env)
             if ok:

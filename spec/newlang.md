@@ -321,7 +321,7 @@ var x := 99          /* ERROR: cannot redefine const variable 'x' */
 
 The `const` keyword at function scope is distinct from module-level `const` declarations, which define global constants.  Both prevent modification, but module-level constants are visible across the entire compilation unit while function-scope `const` variables follow normal scoping rules.
 
-`foreach` loop variables are implicitly `const` — they do not require the keyword.
+`foreach` loop variables are implicitly `const` for assignment — they cannot be reassigned with `←`.  Redefinition with `var` or `const` is permitted but produces a warning (see [Constant Loop Variables](#constant-loop-variables)).
 
 #### Design Rationale
 
@@ -662,15 +662,22 @@ For dynamic arrays, `foreach` uses the array's `.sizeof` to determine the iterat
 
 #### Constant Loop Variables
 
-Loop variables are **constant** within the body — they cannot be reassigned or redefined:
+Loop variables are **constant** within the body — they cannot be reassigned:
 
 ```
 foreach i = 1…5:
     i ← i + 1          /* ERROR: cannot assign to foreach variable 'i' */
-    var i := 99         /* ERROR: cannot redefine foreach variable 'i' */
 ```
 
-This constraint ensures that the loop's iteration is fully determined by the iterable expressions and cannot be altered by side effects in the body.
+Redefinition with `var` or `const` is permitted but produces a **warning**.  The new variable shadows the loop variable for the remainder of the iteration:
+
+```
+foreach i = 1…3:
+    var i := 99         /* WARNING: redefinition of foreach variable 'i' */
+    /* i is 99 here, not the loop counter */
+```
+
+This distinction exists because shadowing is a common intentional pattern (e.g., transforming a loop variable into a different form), while assignment would silently alter the loop's iteration semantics.  The warning ensures the programmer is aware of the shadowing.
 
 #### Examples
 
@@ -795,3 +802,108 @@ The test system draws from several languages:
 The function-level binding via `@test(func)` is unique to this language.  It ensures that a function's tests run before the function is ever used in production, catching regressions at the earliest possible point.  The `pthread_once` execution model ensures no runtime overhead after the first call.
 
 The `std.bytes(string)` function creates a `Bytes` object from a UTF-8 string literal, enabling test functions to construct known inputs for cryptographic and binary data operations.
+
+### Expected Diagnostic Testing (`@expect`)
+
+The `@expect` annotation allows writing tests that verify the interpreter/compiler produces specific error or warning messages.  This is essential for testing that the language's static and dynamic checks actually reject invalid programs and produce the correct diagnostics.
+
+`@expect` can be applied at two levels: **function-level** (before a function definition) and **statement-level** (before an individual statement inside a function body).
+
+#### Function-Level Syntax
+
+```
+@expect error "regex pattern"
+@expect warning "regex pattern"
+fn function_name() -> none:
+    /* code that should trigger the diagnostic */
+```
+
+Multiple `@expect` annotations can appear before a single function.  The level keyword (`error` or `warning`) specifies what kind of diagnostic is expected, and the string is a regular expression matched against the actual diagnostic message.
+
+#### Statement-Level Syntax
+
+```
+fn test_something() -> none:
+    @expect warning "redefinition of foreach variable"
+    var i := 99
+```
+
+Statement-level `@expect` wraps a single statement.  The evaluator executes the statement, captures any errors and warnings it produces, and matches them against the expectations.  If all expectations are satisfied, execution continues normally.  If any expectation is unmatched, the test fails.
+
+This form is especially useful for testing warnings, since warnings do not terminate execution and the function can verify the behavior that follows the warning.
+
+#### Semantics
+
+**Function-level:**
+
+1. The interpreter attempts to parse and evaluate the annotated function body.
+2. Any error produced during parsing or evaluation is captured rather than terminating the interpreter.
+3. Each captured diagnostic is matched against the `@expect` annotations in order.  An annotation is satisfied when its level matches and its regex pattern matches (via `re.search`) the diagnostic message.
+4. If all `@expect` annotations are satisfied, the function is silently accepted — the test passes.
+5. If any `@expect` annotations remain unmatched, the test fails with a diagnostic showing both the unmatched expectations and the actual diagnostics produced.
+6. If no diagnostic is produced but one was expected, the test fails with "expected diagnostics not produced".
+
+Since the interpreter stops at the first error in a function body, each `@expect error` function typically tests exactly one error condition.
+
+**Statement-level:**
+
+1. The evaluator executes the annotated statement, capturing any raised exceptions as errors and any warnings emitted during execution.
+2. The captured diagnostics are matched against the expectations using the same regex-matching rules as function-level `@expect`.
+3. If all expectations match, execution continues with the next statement.
+4. If any expectation remains unmatched, a `TypeError` is raised (which the enclosing `@test` function will report as a test failure).
+
+#### Error Recovery
+
+When an `@expect`-annotated function has a parse error, the parser recovers by skipping tokens until the next top-level definition.  The parse error message is captured and matched against the expectations.  This allows testing for syntax errors without aborting the entire file.
+
+#### Examples
+
+Function-level `@expect` for errors:
+
+```
+@expect error "cannot assign to const variable 'x'"
+fn error_const_assign() -> none:
+    const x := 42
+    x ← 99
+
+@expect error "unexpected token: FN"
+fn error_nested_fn() -> none:
+    fn inner() -> none:
+        std.print("bad")
+```
+
+Statement-level `@expect` for warnings inside a `@test` function:
+
+```
+@test
+fn warn_foreach_redef() -> none:
+    var total := 0
+    foreach i = 1…3:
+        @expect warning "redefinition of foreach variable 'i'"
+        var i := 99
+        total ← total + i
+    assert_eq(total, 297)
+```
+
+This test verifies both that the warning is produced and that the redefined variable takes effect (each iteration uses 99, so the total is 297).
+
+#### Integration with Test Modes
+
+`@expect` tests are processed in both `--test` and normal mode:
+
+- In `--test` mode, each function-level `@expect` function is reported like a regular test (`ok` / `FAILED`) and included in the test summary counts.  Statement-level `@expect` operates within the enclosing `@test` function.
+- In normal mode, function-level `@expect` tests are verified silently on success.  If any `@expect` test fails, the program terminates with exit code 1 before running the `@start` function.
+- The `--skip-tests` flag does **not** suppress function-level `@expect` verification — these are compile-time checks, not runtime tests.
+
+#### Design Rationale
+
+| Feature | Rust | LLVM FileCheck | This language |
+|---------|------|----------------|---------------|
+| Error testing | `#[should_panic]` | `// expected-error` | `@expect error "pattern"` |
+| Warning testing | No | `// expected-warning` | `@expect warning "pattern"` |
+| Pattern matching | No (message ignored) | Fixed substring | Regex |
+| Parse error testing | No (compile error = test infra error) | Yes | Yes (parser recovers) |
+| Statement granularity | No | Yes (line-based) | Yes (`@expect` on statements) |
+| Integrated with test runner | Yes | Separate tool | Yes |
+
+The `@expect` annotation fills a gap that most languages handle with external test harnesses.  By integrating diagnostic-expectation testing into the language's test system, the entire test suite — positive tests (`@test`) and negative tests (`@expect`) — can live in the same source files and run with the same `--test` invocation.  The statement-level form is particularly powerful: it allows testing warnings and non-fatal diagnostics within otherwise-normal test functions, verifying both the diagnostic and the runtime behavior that follows.

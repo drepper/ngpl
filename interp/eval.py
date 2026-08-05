@@ -13,12 +13,14 @@ Designed as a prototype interpreter: correctness takes priority over performance
 JIT compilation and optimization are future work.
 """
 
+import re
+
 from interp.ast import (
     IntLit, StrLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
-    RangeExpr, ForEachStmt,
+    RangeExpr, ForEachStmt, ExpectStmt,
 )
 from interp.value import (
     Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue,
@@ -264,6 +266,7 @@ class Evaluator:
         self._tests_run: set[str] = set()
         self._current_ret_type: str | None = None
         self._frozen_vars: dict[str, str] = {}
+        self._warnings: list[str] = []
         # Pre-compute builtin function mappings (avoid repeated lookups).
         self._ops = {
             "+": self._op_add,
@@ -695,6 +698,9 @@ class Evaluator:
         Returns:
             The last computed value, or a _ReturnSentinel for return statements.
         """
+        if isinstance(stmt, ExpectStmt):
+            return self._eval_expect(stmt)
+
         # Handle assignment tuple returned by parser: ("assign", name, rhs_ast).
         if isinstance(stmt, tuple) and len(stmt) == 3 and stmt[0] == "assign":
             _, name, rhs_ast = stmt
@@ -747,7 +753,10 @@ class Evaluator:
         if isinstance(stmt, VarDef):
             if stmt.name in self._frozen_vars:
                 kind = self._frozen_vars[stmt.name]
-                if kind == "foreach" or not stmt.is_const:
+                if kind == "foreach":
+                    self._warnings.append(
+                        f"redefinition of foreach variable '{stmt.name}'")
+                elif not stmt.is_const:
                     raise TypeError(
                         f"cannot redefine {kind} variable '{stmt.name}'")
             value = self.eval_expr(stmt.init_expr)
@@ -852,6 +861,41 @@ class Evaluator:
         finally:
             for name in var_names:
                 self._frozen_vars.pop(name, None)
+        return none()
+
+    def _eval_expect(self, node: ExpectStmt):
+        """Evaluate a statement wrapped in @expect annotations.
+
+        Captures errors and warnings produced by the inner statement and
+        matches them against the expected patterns.  Raises TypeError if
+        any expectation remains unmatched.
+        """
+        diagnostics: list[tuple[str, str]] = []
+        saved_warnings = self._warnings
+        self._warnings = []
+        try:
+            self.eval_stmt(node.stmt)
+        except Exception as e:
+            diagnostics.append(("error", str(e)))
+        diagnostics.extend(("warning", w) for w in self._warnings)
+        self._warnings = saved_warnings
+
+        remaining = list(node.expectations)
+        for level, msg in diagnostics:
+            for i, (exp_level, exp_pattern) in enumerate(remaining):
+                if level == exp_level and re.search(exp_pattern, msg):
+                    remaining.pop(i)
+                    break
+
+        if remaining:
+            unmatched = "; ".join(
+                f"@expect {lv} \"{pat}\"" for lv, pat in remaining)
+            if diagnostics:
+                got = "; ".join(f"{lv}: {msg}" for lv, msg in diagnostics)
+                raise TypeError(
+                    f"unmatched expectations: {unmatched} (actual: {got})")
+            raise TypeError(
+                f"expected diagnostics not produced: {unmatched}")
         return none()
 
     # ------------------------------------------------------------------

@@ -13,9 +13,9 @@ from interp.ast import (
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
-    RangeExpr, ForEachStmt,
+    RangeExpr, ForEachStmt, ExpectStmt,
 )
-from interp.lexer import Token
+from interp.lexer import Token, KEYWORDS
 
 
 class ParseError(Exception):
@@ -29,6 +29,9 @@ class ParseError(Exception):
         super().__init__(msg)
 
 
+_TYPE_TO_KEYWORD: dict[str, str] = {v: k for k, v in KEYWORDS.items()}
+
+
 class Parser:
     """Recursive descent parser."""
 
@@ -40,6 +43,47 @@ class Parser:
     # Token access helpers
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _tok_display(tok: Token) -> str:
+        """Format a token for user-facing error messages."""
+        kw = _TYPE_TO_KEYWORD.get(tok.type)
+        if kw is not None:
+            return f"'{kw}'"
+        if tok.type == "IDENT":
+            return f"identifier '{tok.value}'"
+        if tok.type == "INT":
+            return f"integer {tok.value}"
+        if tok.type == "STR":
+            return f"string \"{tok.value}\""
+        if tok.type in ("PUNCT", "OP"):
+            return f"'{tok.value}'"
+        if tok.type == "EOF":
+            return "end of file"
+        if tok.type == "NEWLINE":
+            return "newline"
+        if tok.type == "INDENT":
+            return "indent"
+        if tok.type == "DEDENT":
+            return "dedent"
+        return f"'{tok.value}'"
+
+    @staticmethod
+    def _type_display(type_: str, value: str | None = None) -> str:
+        """Format an expected token type for user-facing error messages."""
+        if value is not None:
+            return f"'{value}'"
+        kw = _TYPE_TO_KEYWORD.get(type_)
+        if kw is not None:
+            return f"'{kw}'"
+        label = {
+            "IDENT": "identifier", "INT": "integer", "STR": "string",
+            "PUNCT": "punctuation", "OP": "operator", "EOF": "end of file",
+            "NEWLINE": "newline",
+        }.get(type_)
+        if label is not None:
+            return label
+        return type_.lower()
+
     def _cur(self):
         """Return the current token without consuming it."""
         if self.pos < len(self.tokens):
@@ -50,9 +94,11 @@ class Parser:
         """Consume and return the current token if it matches; else error."""
         tok = self._cur()
         if tok.type != type_:
-            raise ParseError(f"expected {type_}{' ' + repr(value) if value else ''}, got {tok.type}", tok)
+            raise ParseError(
+                f"expected {self._type_display(type_, value)}, "
+                f"got {self._tok_display(tok)}", tok)
         if value is not None and tok.value != value:
-            raise ParseError(f"expected {value!r}, got {tok.value!r}", tok)
+            raise ParseError(f"expected '{value}', got {self._tok_display(tok)}", tok)
         self.pos += 1
         return tok
 
@@ -91,24 +137,43 @@ class Parser:
         is_start = False
         is_test = False
         test_refs: list[str] = []
-        if self._check("START"):
-            self._eat("START")
-            is_start = True
-            self._try_eat("NEWLINE")
-        elif self._check("TEST"):
-            self._eat("TEST")
-            is_test = True
-            if self._check("PUNCT") and self._cur().value == "(":
-                self._eat("PUNCT", "(")
-                while not (self._check("PUNCT") and self._cur().value == ")"):
-                    test_refs.append(self._eat("IDENT").value)
-                    if not self._try_eat("PUNCT", ","):
-                        break
-                self._eat("PUNCT", ")")
-            self._try_eat("NEWLINE")
+        expect_annotations: list[tuple[str, str]] = []
+
+        while True:
+            if self._check("START"):
+                self._eat("START")
+                is_start = True
+                self._try_eat("NEWLINE")
+            elif self._check("TEST"):
+                self._eat("TEST")
+                is_test = True
+                if self._check("PUNCT") and self._cur().value == "(":
+                    self._eat("PUNCT", "(")
+                    while not (self._check("PUNCT") and self._cur().value == ")"):
+                        test_refs.append(self._eat("IDENT").value)
+                        if not self._try_eat("PUNCT", ","):
+                            break
+                    self._eat("PUNCT", ")")
+                self._try_eat("NEWLINE")
+            elif self._check("EXPECT"):
+                self._eat("EXPECT")
+                if not self._check("IDENT"):
+                    raise ParseError("expected 'error' or 'warning' after @expect", self._cur())
+                level_tok = self._eat("IDENT")
+                if level_tok.value not in ("error", "warning"):
+                    raise ParseError(
+                        f"expected 'error' or 'warning' after @expect, got '{level_tok.value}'",
+                        level_tok)
+                if not self._check("STR"):
+                    raise ParseError("expected string pattern after @expect level", self._cur())
+                pattern_tok = self._eat("STR")
+                expect_annotations.append((level_tok.value, pattern_tok.value))
+                self._try_eat("NEWLINE")
+            else:
+                break
 
         if self._check("FN"):
-            return self._parse_function_def(is_start, is_test, test_refs)
+            return self._parse_function_def(is_start, is_test, test_refs, expect_annotations)
         elif self._check("CONST"):
             self._eat("CONST")
             name_tok = self._eat("IDENT")
@@ -125,10 +190,18 @@ class Parser:
         elif self._check("EOF"):
             return None  # end of file reached cleanly
         else:
-            raise ParseError(f"expected function or variable definition, got {self._cur().type}")
+            raise ParseError(
+                f"expected function or variable definition, "
+                f"got {self._tok_display(self._cur())}")
 
-    def _parse_function_def(self, is_start, is_test=False, test_refs=None):
-        """Parse: fn name(params) -> ret_type? block"""
+    def _parse_function_def(self, is_start, is_test=False, test_refs=None,
+                            expect_annotations: list[tuple[str, str]] | None = None):
+        """Parse: fn name(params) -> ret_type? block
+
+        When @expect annotations are present, parse errors in the body are
+        captured instead of propagated — the FuncDef stores the error message
+        so main.py can match it against expected patterns.
+        """
         self._eat("FN")
         name_tok = self._eat("IDENT")
         name = name_tok.value
@@ -171,8 +244,47 @@ class Parser:
                 self.pos += 1
                 ret_type = ret_tok.value
 
-        body = self._parse_block()
-        return FuncDef(name, params, ret_type, body, is_start, is_test, test_refs)
+        if expect_annotations:
+            try:
+                body = self._parse_block()
+            except ParseError as e:
+                body = []
+                fdef = FuncDef(name, params, ret_type, body, is_start, is_test,
+                               test_refs, expect_annotations)
+                fdef._parse_error = str(e)
+                self._skip_to_next_definition()
+                return fdef
+        else:
+            body = self._parse_block()
+        return FuncDef(name, params, ret_type, body, is_start, is_test,
+                       test_refs, expect_annotations)
+
+    def _skip_to_next_definition(self):
+        """Advance past tokens until we reach the next top-level definition.
+
+        Used for error recovery in @expect-annotated functions.
+        """
+        depth = 0
+        while not self._check("EOF"):
+            tok = self._cur()
+            if tok.type == "INDENT":
+                depth += 1
+                self.pos += 1
+            elif tok.type == "DEDENT":
+                depth -= 1
+                self.pos += 1
+                if depth <= 0:
+                    break
+            elif tok.type == "PUNCT" and tok.value == "{":
+                depth += 1
+                self.pos += 1
+            elif tok.type == "PUNCT" and tok.value == "}":
+                depth -= 1
+                self.pos += 1
+                if depth <= 0:
+                    break
+            else:
+                self.pos += 1
 
     def _parse_var_def(self):
         """Parse: var/const name := expr  |  var/const name : type = expr  |  var name : type[size] = init"""
@@ -267,6 +379,9 @@ class Parser:
 
         if self._check("EOF"):
             return None
+
+        if self._check("EXPECT"):
+            return self._parse_expect_stmt()
 
         if self._check("VAR", "LET", "CONST"):
             return self._parse_var_def()
@@ -415,6 +530,28 @@ class Parser:
             value = self._parse_or_expr()
         self._try_eat("PUNCT", ";")
         return ReturnStmt(value)
+
+    def _parse_expect_stmt(self):
+        """Parse: @expect (error|warning) "pattern" \\n statement"""
+        expectations: list[tuple[str, str]] = []
+        while self._check("EXPECT"):
+            self._eat("EXPECT")
+            if not self._check("IDENT"):
+                raise ParseError("expected 'error' or 'warning' after @expect", self._cur())
+            level_tok = self._eat("IDENT")
+            if level_tok.value not in ("error", "warning"):
+                raise ParseError(
+                    f"expected 'error' or 'warning' after @expect, got '{level_tok.value}'",
+                    level_tok)
+            if not self._check("STR"):
+                raise ParseError("expected string pattern after @expect level", self._cur())
+            pattern_tok = self._eat("STR")
+            expectations.append((level_tok.value, pattern_tok.value))
+            self._try_eat("NEWLINE")
+            while self._try_eat("NEWLINE"):
+                pass
+        stmt = self._parse_statement()
+        return ExpectStmt(expectations, stmt)
 
     # ------------------------------------------------------------------
     # Expression parsing (precedence climbing)
@@ -696,7 +833,7 @@ class Parser:
 
             return node
 
-        raise ParseError(f"unexpected token: {tok.type} {tok.value!r}", tok)
+        raise ParseError(f"unexpected token: {self._tok_display(tok)}", tok)
 
     def _parse_call_args(self):
         """Parse function/method call arguments: ( arg, arg, ... )."""
