@@ -883,8 +883,8 @@ class Evaluator:
         old_env = self.env
         try:
             self.env = call_env
-            self.eval_stmts(func.body)
-            return none()  # implicit return none if no explicit return.
+            result = self.eval_stmts(func.body)
+            return result
         except _ReturnSentinel as e:
             return e.value
         finally:

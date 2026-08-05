@@ -142,3 +142,35 @@ The `%` operator computes the integer remainder with truncation toward zero, mat
 
 The result type follows the same rules as other arithmetic operators: `resolve_width` selects the wider operand's type.  For unsigned types, the result is always non-negative.
 
+
+### Function Return Values
+
+The `return` keyword is used for early returns from a function — exiting before the end of the function body.  For the final expression in a function body, the `return` keyword is optional: the last expression in the body, written without a trailing semicolon, is the function's return value.
+
+This is consistent with expression-oriented languages like Rust, Haskell, and Zig where the last expression in a block is its value.  The rule is:
+
+1. **Explicit return.**  `return expr;` exits the function immediately with the given value.  Required for early returns (e.g., inside an `if` branch before the end of the function body).
+
+2. **Implicit return.**  The last statement in a function body, if it is a bare expression without a trailing semicolon, becomes the function's return value.  No `return` keyword is needed.
+
+3. **Semicolon distinction.**  A trailing semicolon after the last expression discards its value — the function returns `none`.  Omitting the semicolon makes the expression the return value.  This mirrors Rust's semicolon semantics.
+
+#### Examples
+
+```
+fn add(a, b) -> int {
+    a + b
+}
+
+fn abs(x) -> int {
+    if (x < 0) { return -x; }
+    x
+}
+
+fn greet(name) -> none {
+    std.print("hello " + name);
+}
+```
+
+In `add`, the expression `a + b` (no semicolon) is the implicit return value.  In `abs`, the early return uses `return`; the final `x` is an implicit return.  In `greet`, the semicolon after `std.print(...)` discards the result, so the function returns `none`.
+

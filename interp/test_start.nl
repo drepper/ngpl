@@ -42,7 +42,7 @@ fn get_padded_byte(data, pos, data_size, total_size) -> int {
         var byte_idx := pos - len_start;
         return (bit_len » ((7 - byte_idx) * 8)) & 255;
     }
-    return 0;
+    0
 }
 
 fn get_padded_word(data, off, data_size, total_size) -> int {
@@ -51,7 +51,7 @@ fn get_padded_word(data, off, data_size, total_size) -> int {
     var b1 := get_padded_byte(data, off + 1, data_size, total_size);
     var b2 := get_padded_byte(data, off + 2, data_size, total_size);
     var b3 := get_padded_byte(data, off + 3, data_size, total_size);
-    return ((b0 « 24) | (b1 « 16) | (b2 « 8) | b3) & 4294967295;
+    ((b0 « 24) | (b1 « 16) | (b2 « 8) | b3) & 4294967295
 }
 
 /* ---------------------------------------------------------------------------
@@ -60,12 +60,12 @@ fn get_padded_word(data, off, data_size, total_size) -> int {
 
 fn expand_s0(prev) -> int {
     /* σ₀(x) = ROTR(7,x) ⊕ ROTR(18,x) ⊕ SHR(3,x). */
-    return (prev ↻ 7) ^ (prev ↻ 18) ^ (prev » 3);
+    (prev ↻ 7) ^ (prev ↻ 18) ^ (prev » 3)
 }
 
 fn expand_s1(prev) -> int {
     /* σ₁(x) = ROTR(17,x) ⊕ ROTR(19,x) ⊕ SHR(10,x). */
-    return (prev ↻ 17) ^ (prev ↻ 19) ^ (prev » 10);
+    (prev ↻ 17) ^ (prev ↻ 19) ^ (prev » 10)
 }
 
 /* ---------------------------------------------------------------------------
@@ -154,7 +154,7 @@ fn sha256(data) -> int {
         hash ← (hash « 32) | H[k];
         k ← k + 1;
     }
-    return hash;
+    hash
 }
 
 @start
