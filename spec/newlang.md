@@ -180,6 +180,105 @@ fn greet(name) -> none {
 In `add`, the expression `a + b` (no semicolon) is the implicit return value.  In `abs`, the early return uses `return`; the final `x` is an implicit return.  In `greet`, the semicolon after `std.print(...)` discards the result, so the function returns `none`.
 
 
+### Optional Types and the `?` Operator
+
+A function that may fail to produce a value declares an **optional return type** by prefixing the type with `?`.  The optional type `?T` can hold either a value of type `T` (wrapped in `some`) or `none` (absence of a value).
+
+#### Declaration
+
+```
+fn get_padded_byte(data, pos, data_size, total_size) -> ?u8 {
+    if (pos >= total_size) { return none; }
+    if (pos < data_size) { return data.getbyte(pos); }
+    ...
+    0
+}
+```
+
+A function with return type `?u8` auto-wraps non-`none` return values in `some`.  Returning `none` explicitly signals absence.  The caller receives either `some(value)` or `none`.
+
+#### The `?` Postfix Operator
+
+The `?` operator unwraps an optional value or **propagates** `none` to the enclosing function:
+
+```
+fn get_padded_word(data, off, data_size, total_size) -> ?u32 {
+    var b0 : u32 = get_padded_byte(data, off, data_size, total_size)?;
+    ...
+}
+```
+
+Semantics of `expr?`:
+
+1. If `expr` evaluates to `some(v)`, the `?` expression evaluates to `v`.
+2. If `expr` evaluates to `none`, the enclosing function immediately returns `none`.
+3. If the enclosing function does not have an optional return type (`?T`), using `?` is a **compile error**.
+
+This matches Rust's `?` operator.  The compile-time restriction ensures that `none` propagation is always visible in the function signature — a function that cannot fail cannot silently swallow failures from callees.
+
+#### The `??` Nil-Coalescing Operator
+
+The `??` operator provides a default value when an optional is `none`:
+
+```
+var b0 : u32 = get_padded_byte(data, off, data_size, total_size) ?? 0;
+```
+
+Semantics of `expr ?? default`:
+
+1. If `expr` evaluates to `some(v)`, the expression evaluates to `v`.
+2. If `expr` evaluates to `none`, the expression evaluates to `default`.
+3. The right-hand side is evaluated lazily — only when the left is `none`.
+
+Unlike `?` which propagates `none`, `??` recovers from it.  This is the right choice when absence has a known substitute value rather than being an error.
+
+#### Type Widening on Assignment
+
+When the unwrapped value has a narrower unsigned type than the target variable, implicit widening is permitted.  For example, `get_padded_byte` returns `?u8`; after `??` or `?` produces a `u8` value, assigning it to a `u32` variable widens it.  This is safe because every `u8` value is representable as `u32`.
+
+#### Example: Combining `?` and `??`
+
+A function that returns `none` for absent data, a caller that substitutes a default, and an outer function that propagates structural failure:
+
+```
+fn get_padded_byte(...) -> ?u8 {
+    if (pos >= total_size) { return none; }
+    ...
+    none                                         /* zero-padding zone */
+}
+
+fn get_padded_word(...) -> ?u32 {
+    if (off >= total_size) { return none; }       /* fully out of range */
+    var b0 : u32 = get_padded_byte(...) ?? 0;    /* absent bytes → 0 */
+    var b1 : u32 = get_padded_byte(...) ?? 0;
+    var b2 : u32 = get_padded_byte(...) ?? 0;
+    var b3 : u32 = get_padded_byte(...) ?? 0;
+    (b0 « 24) | (b1 « 16) | (b2 « 8) | b3
+}
+
+fn sha256(data) -> ?int {
+    ...
+    W[i] ← get_padded_word(...)?;                /* propagates none */
+    ...
+    hash
+}
+```
+
+`get_padded_word` uses `??` to substitute 0 for absent bytes (zero-padding), while using `?` is unnecessary here — absent individual bytes are expected, not erroneous.  `sha256` uses `?` to propagate `none` from `get_padded_word`, which only returns `none` for entirely out-of-range positions.
+
+#### Design Rationale
+
+| Feature | Rust | Zig | Swift | This language |
+|---------|------|-----|-------|---------------|
+| Optional type | `Option<T>` | `?T` | `T?` | `?T` |
+| Propagation | `?` operator | `orelse` / `catch` | — | `?` operator |
+| Default value | `.unwrap_or(v)` | `orelse` | `??` | `??` operator |
+| Compile-time check | Yes (must return `Result`/`Option`) | Yes | — | Yes (must return `?T`) |
+| Auto-wrapping | No (explicit `Some`) | No | No | Yes (return value auto-wrapped) |
+
+The auto-wrapping of return values simplifies the common case: a function returning `?u8` can write `return 42;` instead of `return some(42);`.  The compiler handles the wrapping.  Only `none` must be written explicitly, since it represents a deliberate absence rather than a normal value.
+
+
 ### Built-in Test System
 
 Unit testing is built into the language, similar to Rust's `#[test]` attribute.  Functions are annotated with `@test` to mark them as test functions.  The annotation accepts an optional list of function names that the test covers.

@@ -17,7 +17,7 @@ from interp.ast import (
     IntLit, StrLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
-    ArrayLit, Subscript, SliceAccess, ArrayAlloc,
+    ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
 )
 from interp.value import (
     Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue,
@@ -260,6 +260,7 @@ class Evaluator:
         self.env = env or Env()
         self._test_hooks = test_hooks or {}
         self._tests_run: set[str] = set()
+        self._current_ret_type: str | None = None
         # Pre-compute builtin function mappings (avoid repeated lookups).
         self._ops = {
             "+": self._op_add,
@@ -539,6 +540,13 @@ class Evaluator:
             return self.env.lookup(node.name)
 
         if isinstance(node, BinOp):
+            if node.op == "??":
+                left = self.eval_expr(node.left)
+                if isinstance(left, SomeValue):
+                    return left.value
+                if isinstance(left, NoneValue):
+                    return self.eval_expr(node.right)
+                return left
             left = self.eval_expr(node.left)
             right = self.eval_expr(node.right)
             return self._apply_binop(self._ops[node.op], left, right)
@@ -561,6 +569,17 @@ class Evaluator:
         if isinstance(node, OptSome):
             value = self.eval_expr(node.value)
             return some(value)
+
+        if isinstance(node, TryUnwrap):
+            if not self._current_ret_type or not self._current_ret_type.startswith("?"):
+                raise TypeError(
+                    "? operator requires enclosing function to have optional return type")
+            val = self.eval_expr(node.expr)
+            if isinstance(val, SomeValue):
+                return val.value
+            if isinstance(val, NoneValue):
+                raise _ReturnSentinel(none())
+            raise TypeError("? operator requires optional value")
 
         if isinstance(node, FuncCall):
             args = [self.eval_expr(a) for a in node.args]
@@ -892,14 +911,28 @@ class Evaluator:
 
         # Execute function body with the call's environment as our context.
         old_env = self.env
+        old_ret_type = self._current_ret_type
         try:
             self.env = call_env
+            self._current_ret_type = func.ret_type
             result = self.eval_stmts(func.body)
-            return result
+            return self._wrap_optional_return(result, func.ret_type)
         except _ReturnSentinel as e:
-            return e.value
+            return self._wrap_optional_return(e.value, func.ret_type)
         finally:
             self.env = old_env
+            self._current_ret_type = old_ret_type
+
+    def _wrap_optional_return(self, result: Value, ret_type: str | None) -> Value:
+        """Wrap return value in SomeValue for functions with optional return types."""
+        if not ret_type or not ret_type.startswith("?"):
+            return result
+        if isinstance(result, NoneValue):
+            return result
+        base_type = ret_type[1:]
+        if isinstance(result, IntValue) and base_type not in ("int", ""):
+            result = mk_int(result.value, base_type)
+        return some(result)
 
 
 class _ReturnSentinel(BaseException):

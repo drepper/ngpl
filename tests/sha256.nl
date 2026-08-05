@@ -33,7 +33,8 @@ const K : u32 = [
  * bit-length suffix.  These helpers overlay the padding on reads.
  * --------------------------------------------------------------------------- */
 
-fn get_padded_byte(data, pos, data_size, total_size) -> int {
+fn get_padded_byte(data, pos, data_size, total_size) -> ?u8 {
+    if (pos >= total_size) { return none; }
     if (pos < data_size) { return data.getbyte(pos); }
     if (pos == data_size) { return 128; }
     var len_start := total_size - 8;
@@ -42,16 +43,17 @@ fn get_padded_byte(data, pos, data_size, total_size) -> int {
         var byte_idx := pos - len_start;
         return (bit_len » ((7 - byte_idx) * 8)) & 255;
     }
-    0
+    none
 }
 
-fn get_padded_word(data, off, data_size, total_size) -> int {
+fn get_padded_word(data, off, data_size, total_size) -> ?u32 {
     if (off + 4 <= data_size) { return data.getword(off); }
-    var b0 := get_padded_byte(data, off, data_size, total_size);
-    var b1 := get_padded_byte(data, off + 1, data_size, total_size);
-    var b2 := get_padded_byte(data, off + 2, data_size, total_size);
-    var b3 := get_padded_byte(data, off + 3, data_size, total_size);
-    ((b0 « 24) | (b1 « 16) | (b2 « 8) | b3) & 4294967295
+    if (off >= total_size) { return none; }
+    var b0 : u32 = get_padded_byte(data, off, data_size, total_size) ?? 0;
+    var b1 : u32 = get_padded_byte(data, off + 1, data_size, total_size) ?? 0;
+    var b2 : u32 = get_padded_byte(data, off + 2, data_size, total_size) ?? 0;
+    var b3 : u32 = get_padded_byte(data, off + 3, data_size, total_size) ?? 0;
+    (b0 « 24) | (b1 « 16) | (b2 « 8) | b3
 }
 
 /* ---------------------------------------------------------------------------
@@ -75,7 +77,7 @@ fn expand_s1(prev) -> int {
  * message schedule W[0..63] and round constants K[t].
  * --------------------------------------------------------------------------- */
 
-fn sha256(data) -> int {
+fn sha256(data) -> ?int {
     var data_size : usize = data.size;
 
     /* Compute padded message length per SHA-256 spec. */
@@ -97,7 +99,7 @@ fn sha256(data) -> int {
         var W : u32[64] = 0;
         var i : u32 = 0;
         while (i < 16) {
-            W[i] ← get_padded_word(data, blk_off + (i * 4), data_size, total_size);
+            W[i] ← get_padded_word(data, blk_off + (i * 4), data_size, total_size)?;
             i ← i + 1;
         }
 

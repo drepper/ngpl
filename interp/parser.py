@@ -9,7 +9,7 @@ from interp.ast import (
     IntLit, StrLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
-    ArrayLit, Subscript, SliceAccess, ArrayAlloc,
+    ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
 )
 from interp.lexer import Token
 
@@ -149,7 +149,11 @@ class Parser:
 
         ret_type = None
         if self._try_eat("OP", "->"):
-            if self._check("IDENT", "NONE", "OPT"):
+            if self._check("OP") and self._cur().value == "?":
+                self.pos += 1
+                type_tok = self._eat("IDENT")
+                ret_type = "?" + type_tok.value
+            elif self._check("IDENT", "NONE", "OPT"):
                 ret_tok = self._cur()
                 self.pos += 1
                 ret_type = ret_tok.value
@@ -346,15 +350,21 @@ class Parser:
             self.pos += 1
 
     def _parse_or_expr(self):
-        """or_expr → and_expr ('or' and_expr)*"""
+        """or_expr → and_expr ('or' and_expr | '??' and_expr)*"""
         left = self._parse_and_expr()
         while True:
             self._skip_nl()
-            if not self._try_eat("OR"):
+            if self._try_eat("OR"):
+                self._skip_nl()
+                right = self._parse_and_expr()
+                left = BinOp("or", left, right)
+            elif self._check("OP") and self._cur().value == "??":
+                self.pos += 1
+                self._skip_nl()
+                right = self._parse_and_expr()
+                left = BinOp("??", left, right)
+            else:
                 break
-            self._skip_nl()
-            right = self._parse_and_expr()
-            left = BinOp("or", left, right)
         return left
 
     def _parse_and_expr(self):
@@ -481,7 +491,11 @@ class Parser:
             self._eat("NOT")
             operand = self._parse_unary()
             return UnaryOp("not", operand)
-        return self._parse_primary()
+        node = self._parse_primary()
+        if self._check("OP") and self._cur().value == "?":
+            self.pos += 1
+            node = TryUnwrap(node)
+        return node
 
     def _parse_primary(self):
         """primary → atom (('.' ident | '[' expr ']')* | '(' args ')')

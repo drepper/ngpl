@@ -179,6 +179,13 @@ class SliceAccess:
         self.end = end
 
 
+class TryUnwrap:
+    """Postfix ? operator: unwrap optional or propagate none."""
+
+    def __init__(self, expr):
+        self.expr = expr
+
+
 class ArrayAlloc:
     """Array allocation: new type[size] or var name : type[size] = init."""
 

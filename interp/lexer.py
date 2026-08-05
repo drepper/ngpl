@@ -51,11 +51,11 @@ KEYWORDS = {
 
 # Double-character operators that must be checked before single ones.
 DOUBLE_OPS = {
-    "==", "!=", "<=", ">=", "->", "<<", ">>",
+    "==", "!=", "<=", ">=", "->", "<<", ">>", "??",
 }
 
 # Single-character operators.
-SINGLE_OPS = set("+-*/%=<>!&|^~.,;:(){}[]←«»↺↻…")
+SINGLE_OPS = set("+-*/%=<>!&|^~.,;:?(){}[]←«»↺↻…")
 
 
 class LexerError(Exception):
@@ -257,7 +257,7 @@ def tokenize(src: str):
             # = is syntactic (variable definition), not an operator.
             if ch == "=" or ch in ",.;:(){}[]…":
                 tokens.append(Token("PUNCT", ch, line, col))
-            elif ch in "+-*/%<>!&|^~←«»↺↻":
+            elif ch in "+-*/%<>!&|^~?←«»↺↻":
                 tokens.append(Token("OP", ch, line, col))
             pos += 1
             col += 1
