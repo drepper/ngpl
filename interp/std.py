@@ -542,6 +542,17 @@ class StdModule:
         h = self._sha256(data)
         return mk_int(h)
 
+    def bytes(self, args):
+        """bytes(str) -- create a Bytes object from a UTF-8 string."""
+        from interp.eval import unwrap_optional
+        from interp.value import StrValue, ObjectValue
+        if len(args) != 1:
+            raise TypeError("bytes(str) takes exactly 1 argument")
+        arg = unwrap_optional(args[0])
+        if not isinstance(arg, StrValue):
+            raise TypeError(f"bytes() expects string, got {type(arg).__name__}")
+        return ObjectValue(Bytes(bytearray(arg.value.encode("utf-8"))))
+
     def print(self, args):
         """print(...) — format arguments and write to stdout.
 

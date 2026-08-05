@@ -45,6 +45,7 @@ KEYWORDS = {
     "not": "NOT",
     "some": "SOME",
     "start": "START",
+    "test": "TEST",
     "const": "CONST",
 }
 

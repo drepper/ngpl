@@ -157,6 +157,34 @@ fn sha256(data) -> int {
     hash
 }
 
+/* ---------------------------------------------------------------------------
+ * Unit tests — FIPS 180-4 test vectors for SHA-256.
+ *
+ * @test(sha256) marks these as tests for the sha256 function: they run
+ * automatically on the first call to sha256.
+ * --------------------------------------------------------------------------- */
+
+@test(sha256)
+fn test_sha256_empty() -> none {
+    var data := std.bytes("");
+    var hash := sha256(data);
+    assert_eq(hash, 0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855);
+}
+
+@test(sha256)
+fn test_sha256_abc() -> none {
+    var data := std.bytes("abc");
+    var hash := sha256(data);
+    assert_eq(hash, 0xba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad);
+}
+
+@test(sha256)
+fn test_sha256_448bit() -> none {
+    var data := std.bytes("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq");
+    var hash := sha256(data);
+    assert_eq(hash, 0x248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1);
+}
+
 @start
 fn main() -> none {
     var dir := std.fs.cwd();

@@ -83,13 +83,26 @@ class Parser:
     def _parse_definition(self):
         """Parse a single top-level definition (function, const, or variable)."""
         is_start = False
+        is_test = False
+        test_refs: list[str] = []
         if self._check("START"):
             self._eat("START")
             is_start = True
             self._try_eat("NEWLINE")
+        elif self._check("TEST"):
+            self._eat("TEST")
+            is_test = True
+            if self._check("PUNCT") and self._cur().value == "(":
+                self._eat("PUNCT", "(")
+                while not (self._check("PUNCT") and self._cur().value == ")"):
+                    test_refs.append(self._eat("IDENT").value)
+                    if not self._try_eat("PUNCT", ","):
+                        break
+                self._eat("PUNCT", ")")
+            self._try_eat("NEWLINE")
 
         if self._check("FN"):
-            return self._parse_function_def(is_start)
+            return self._parse_function_def(is_start, is_test, test_refs)
         elif self._check("CONST"):
             self._eat("CONST")
             name_tok = self._eat("IDENT")
@@ -108,7 +121,7 @@ class Parser:
         else:
             raise ParseError(f"expected function or variable definition, got {self._cur().type}")
 
-    def _parse_function_def(self, is_start):
+    def _parse_function_def(self, is_start, is_test=False, test_refs=None):
         """Parse: fn name(params) -> ret_type? { stmts }"""
         self._eat("FN")
         name_tok = self._eat("IDENT")
@@ -142,7 +155,7 @@ class Parser:
                 ret_type = ret_tok.value
 
         body = self._parse_block()
-        return FuncDef(name, params, ret_type, body, is_start)
+        return FuncDef(name, params, ret_type, body, is_start, is_test, test_refs)
 
     def _parse_var_def(self):
         """Parse: var name := expr  |  var name : type = expr  |  var name : type[size] = init"""

@@ -256,8 +256,10 @@ class Evaluator:
     provides methods to evaluate expressions and statements.
     """
 
-    def __init__(self, env=None):
+    def __init__(self, env=None, test_hooks: dict[str, list] | None = None):
         self.env = env or Env()
+        self._test_hooks = test_hooks or {}
+        self._tests_run: set[str] = set()
         # Pre-compute builtin function mappings (avoid repeated lookups).
         self._ops = {
             "+": self._op_add,
@@ -868,6 +870,15 @@ class Evaluator:
 
     def _call_user_func(self, func: FuncValue, args):
         """Call a user-defined function with proper scoping."""
+        if func.name in self._test_hooks:
+            pending = self._test_hooks.pop(func.name)
+            for test_fv in pending:
+                if test_fv.name not in self._tests_run:
+                    self._tests_run.add(test_fv.name)
+                    self._call_user_func(test_fv, [])
+                    import sys
+                    print(f"test {test_fv.name} ... ok", file=sys.stderr)
+
         if len(args) != len(func.params):
             raise TypeError(
                 f"{func.name} expects {len(func.params)} arguments, got {len(args)}")

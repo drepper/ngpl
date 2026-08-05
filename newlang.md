@@ -155,6 +155,11 @@ This is consistent with expression-oriented languages like Rust, Haskell, and Zi
 
 3. **Semicolon distinction.**  A trailing semicolon after the last expression discards its value — the function returns `none`.  Omitting the semicolon makes the expression the return value.  This mirrors Rust's semicolon semantics.
 
+Eliding the `return` keyword only really comes into its own when functions are small and can be written
+in possibly just a single function.  Requiring the use `return` in an inline-defined anonymous function
+would require a significant amount of the total number of tokens for this construct.
+
+
 #### Examples
 
 ```
@@ -174,3 +179,89 @@ fn greet(name) -> none {
 
 In `add`, the expression `a + b` (no semicolon) is the implicit return value.  In `abs`, the early return uses `return`; the final `x` is an implicit return.  In `greet`, the semicolon after `std.print(...)` discards the result, so the function returns `none`.
 
+
+### Built-in Test System
+
+Unit testing is built into the language, similar to Rust's `#[test]` attribute.  Functions are annotated with `@test` to mark them as test functions.  The annotation accepts an optional list of function names that the test covers.
+
+#### Annotation Syntax
+
+```
+@test
+fn test_something() -> none { ... }
+
+@test(sha256)
+fn test_sha256_abc() -> none { ... }
+
+@test(encrypt, decrypt)
+fn test_round_trip() -> none { ... }
+```
+
+#### Execution Semantics
+
+Test functions are always run unless explicitly skipped.  Their execution order depends on whether they reference specific functions:
+
+1. **Standalone tests** (`@test` without references) run at startup, before the `@start` function.  If any standalone test fails, the program terminates immediately.
+
+2. **Referenced tests** (`@test(func_name)`) run once, automatically, on the first call to any of the referenced functions.  This follows `pthread_once` semantics: the test executes exactly once regardless of how many times the referenced function is called.  If a test references multiple functions, it runs on whichever is called first.
+
+3. **Test mode** (`--test` flag) runs all tests — both standalone and referenced — without executing the `@start` function.  The interpreter reports results and exits with status 0 (all passed) or 1 (any failed).
+
+#### Assertion Functions
+
+Two built-in assertion functions are available in all scopes:
+
+- `assert(condition)` — fails if the condition is `false` or zero.  An optional second argument provides a custom error message: `assert(x > 0, "x must be positive")`.
+
+- `assert_eq(expected, actual)` — fails if the two values differ.  The error message displays both values for easy comparison.  Large integers (such as cryptographic hashes) are displayed in hexadecimal.
+
+#### Test Output
+
+In normal mode, test results are printed to stderr as they run:
+```
+test test_sha256_empty ... ok
+test test_sha256_abc ... ok
+```
+
+In `--test` mode, a summary follows:
+```
+running 3 tests
+test test_sha256_empty ... ok
+test test_sha256_abc ... ok
+test test_sha256_448bit ... ok
+
+test result: ok. 3 passed; 0 failed
+```
+
+#### Example: FIPS 180-4 SHA-256 Test Vectors
+
+```
+@test(sha256)
+fn test_sha256_empty() -> none {
+    var data := std.bytes("");
+    var hash := sha256(data);
+    assert_eq(hash, 0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855);
+}
+
+@test(sha256)
+fn test_sha256_abc() -> none {
+    var data := std.bytes("abc");
+    var hash := sha256(data);
+    assert_eq(hash, 0xba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad);
+}
+```
+
+#### Design Rationale
+
+The test system draws from several languages:
+
+| Feature | Rust | Zig | This language |
+|---------|------|-----|---------------|
+| Annotation | `#[test]` | `test` block | `@test` / `@test(func)` |
+| Runs with program | No (`cargo test` only) | No | Yes (always, unless skipped) |
+| Function-level binding | No | No | Yes (`@test(func)` triggers on first call) |
+| Assertion | `assert!` macro | `std.testing.expect` | `assert` / `assert_eq` builtins |
+
+The function-level binding via `@test(func)` is unique to this language.  It ensures that a function's tests run before the function is ever used in production, catching regressions at the earliest possible point.  The `pthread_once` execution model ensures no runtime overhead after the first call.
+
+The `std.bytes(string)` function creates a `Bytes` object from a UTF-8 string literal, enabling test functions to construct known inputs for cryptographic and binary data operations.

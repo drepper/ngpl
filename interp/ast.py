@@ -96,12 +96,15 @@ class FuncDef:
     is_start:  True if annotated with @start
     """
 
-    def __init__(self, name, params, ret_type, body, is_start=False):
+    def __init__(self, name, params, ret_type, body, is_start=False,
+                 is_test=False, test_refs=None):
         self.name = name
         self.params = params
         self.ret_type = ret_type
         self.body = body
         self.is_start = is_start
+        self.is_test = is_test
+        self.test_refs: list[str] = test_refs or []
 
 
 class VarDef:
