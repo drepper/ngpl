@@ -64,6 +64,12 @@ fn error_nested_fn() -> none:
     fn inner() -> none:
         std.print("bad")
 
+/* --- unknown types -------------------------------------------------------- */
+
+@expect error "unknown type 'i1'"
+fn error_unknown_type_var() -> none:
+    var x : i1 = 0
+
 @start
 fn main() -> none:
     std.print("error tests passed")

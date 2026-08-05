@@ -374,12 +374,17 @@ def is_some(value):
     return isinstance(value, SomeValue)
 
 
-def validate_param_type(param_type: str, func_name: str, param_name: str):
-    """Validate that a parameter type annotation is a known builtin type."""
-    base = param_type.lstrip("?")
+def validate_type(type_name: str) -> bool:
+    """Return True if type_name is a known builtin type (with optional/array modifiers)."""
+    base = type_name.lstrip("?")
     if base.endswith("[]"):
         base = base[:-2]
-    if base not in BUILTIN_TYPES:
+    return base in BUILTIN_TYPES
+
+
+def validate_param_type(param_type: str, func_name: str, param_name: str):
+    """Validate that a parameter type annotation is a known builtin type."""
+    if not validate_type(param_type):
         raise TypeError(
             f"in {func_name}: parameter '{param_name}' has unknown type '{param_type}'")
 
@@ -444,6 +449,8 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
     """
     if target_width is None or target_width == "int":
         return value
+    if not validate_type(target_width):
+        raise TypeError(f"unknown type '{target_width}'")
     if isinstance(value, IntValue):
         if _is_unsigned(target_width):
             return IntValue(wrap_int(value.value, target_width), target_width)

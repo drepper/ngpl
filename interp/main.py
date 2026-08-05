@@ -29,7 +29,7 @@ from interp.env import Env
 from interp.ast import FuncDef as ASTFuncDef
 from interp.value import (
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
-    NoneValue, coerce_to_type, validate_param_type, none, FAST_TYPES,
+    NoneValue, coerce_to_type, validate_param_type, validate_type, none, FAST_TYPES,
 )
 from interp.eval import Evaluator, unwrap_optional
 
@@ -162,6 +162,9 @@ def main():
             for param_name, param_type in defn.params:
                 if param_type is not None:
                     validate_param_type(param_type, defn.name, param_name)
+            if defn.ret_type is not None and not validate_type(defn.ret_type):
+                raise TypeError(
+                    f"in {defn.name}: unknown return type '{defn.ret_type}'")
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type)
             env.define(defn.name, fv)
 
