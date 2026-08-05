@@ -895,12 +895,15 @@ class ArenaAllocator:
         self._offset += size
         return Bytes(buf)
 
-    def deinit(self):
+    def reset(self):
         for region in self._regions:
             region.close()
         self._regions.clear()
         self._offset = 0
         self._capacity = 0
+
+    def deinit(self):
+        self.reset()
         self._alive = False
 
 
