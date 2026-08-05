@@ -10,18 +10,18 @@ enum Color:
     blue
 
 @test
-fn test_enum_member_access -> ø:
+fn test_enum_member_access -> ∅:
     var c := Color.red
     assert_eq(c, Color.red)
 
 @test
-fn test_enum_sequential_values -> ø:
+fn test_enum_sequential_values -> ∅:
     assert_eq(Color.red == 0, true)
     assert_eq(Color.green == 1, true)
     assert_eq(Color.blue == 2, true)
 
 @test
-fn test_enum_equality -> ø:
+fn test_enum_equality -> ∅:
     var a := Color.red
     var b := Color.red
     var c := Color.blue
@@ -38,7 +38,7 @@ enum Status:
     fatal = 30
 
 @test
-fn test_enum_explicit_values -> ø:
+fn test_enum_explicit_values -> ∅:
     assert_eq(Status.ok == 0, true)
     assert_eq(Status.warning == 10, true)
     assert_eq(Status.error == 20, true)
@@ -53,7 +53,7 @@ enum Level:
     critical
 
 @test
-fn test_enum_mixed_values -> ø:
+fn test_enum_mixed_values -> ∅:
     assert_eq(Level.low == 0, true)
     assert_eq(Level.medium == 1, true)
     assert_eq(Level.high == 10, true)
@@ -67,7 +67,7 @@ enum SmallEnum : u8:
     c
 
 @test
-fn test_enum_underlying_type -> ø:
+fn test_enum_underlying_type -> ∅:
     var x := SmallEnum.a
     assert_eq(x == 0, true)
     assert_eq(x == SmallEnum.a, true)
@@ -81,45 +81,45 @@ enum Perms:
     exec
 
 @test
-fn test_flag_auto_values -> ø:
+fn test_flag_auto_values -> ∅:
     assert_eq(Perms.read == 1, true)
     assert_eq(Perms.write == 2, true)
     assert_eq(Perms.exec == 4, true)
 
 @test
-fn test_flag_nil_auto_created -> ø:
+fn test_flag_nil_auto_created -> ∅:
     assert_eq(Perms.nil == 0, true)
 
 @test
-fn test_flag_combine_or -> ø:
+fn test_flag_combine_or -> ∅:
     var rw := Perms.read | Perms.write
     assert_eq(rw == 3, true)
 
 @test
-fn test_flag_combine_all -> ø:
+fn test_flag_combine_all -> ∅:
     var all := Perms.read | Perms.write | Perms.exec
     assert_eq(all == 7, true)
 
 @test
-fn test_flag_and -> ø:
+fn test_flag_and -> ∅:
     var rw := Perms.read | Perms.write
     var r := rw & Perms.read
     assert_eq(r, Perms.read)
 
 @test
-fn test_flag_xor -> ø:
+fn test_flag_xor -> ∅:
     var rw := Perms.read | Perms.write
     var toggled := rw ^ Perms.write
     assert_eq(toggled, Perms.read)
 
 @test
-fn test_flag_not -> ø:
+fn test_flag_not -> ∅:
     var rw := Perms.read | Perms.write
     var notrw := ~rw
     assert_eq(notrw, Perms.exec)
 
 @test
-fn test_flag_and_test_membership -> ø:
+fn test_flag_and_test_membership -> ∅:
     var rw := Perms.read | Perms.write
     var has_read := (rw & Perms.read) == Perms.read
     var has_exec := (rw & Perms.exec) == Perms.exec
@@ -136,7 +136,7 @@ enum Flags:
     d
 
 @test
-fn test_flag_explicit_and_auto -> ø:
+fn test_flag_explicit_and_auto -> ∅:
     assert_eq(Flags.a == 1, true)
     assert_eq(Flags.b == 4, true)
     assert_eq(Flags.c == 8, true)
@@ -151,32 +151,32 @@ enum Mode:
     write = 2
 
 @test
-fn test_flag_explicit_zero_no_nil -> ø:
+fn test_flag_explicit_zero_no_nil -> ∅:
     assert_eq(Mode.off == 0, true)
     assert_eq(Mode.read == 1, true)
 
 /* ---- std.errors enum ----------------------------------------------------- */
 
 @test
-fn test_std_errors_runtime -> ø:
+fn test_std_errors_runtime -> ∅:
     var e := std.errors.division_by_zero
     assert_eq(e == 100, true)
     assert_eq(e, std.errors.division_by_zero)
 
 @test
-fn test_std_errors_compile -> ø:
+fn test_std_errors_compile -> ∅:
     assert_eq(std.errors.type_mismatch == 200, true)
     assert_eq(std.errors.unknown_type == 201, true)
     assert_eq(std.errors.syntax_error == 202, true)
 
 @test
-fn test_std_errors_library -> ø:
+fn test_std_errors_library -> ∅:
     assert_eq(std.errors.file_not_found == 300, true)
     assert_eq(std.errors.permission_denied == 301, true)
     assert_eq(std.errors.io_error == 302, true)
 
 @test
-fn test_std_errors_grouping -> ø:
+fn test_std_errors_grouping -> ∅:
     /* Runtime errors are in 100-199 */
     var div := std.errors.division_by_zero
     assert_eq(div == 100 ∧ 100 <= 199, true)
@@ -190,42 +190,42 @@ fn test_std_errors_grouping -> ø:
 /* ---- invalid operations on non-flag enums -------------------------------- */
 
 @expect error "bitwise operations require @flag enum"
-fn error_bitor_non_flag -> ø:
+fn error_bitor_non_flag -> ∅:
     var a := Color.red
     var b := Color.green
     var c := a | b
 
 @expect error "bitwise operations require @flag enum"
-fn error_bitand_non_flag -> ø:
+fn error_bitand_non_flag -> ∅:
     var a := Color.red
     var b := Color.green
     var c := a & b
 
 @expect error "bitwise operations require @flag enum"
-fn error_bitxor_non_flag -> ø:
+fn error_bitxor_non_flag -> ∅:
     var a := Color.red
     var b := Color.green
     var c := a ^ b
 
 @expect error "bitwise-not requires @flag enum"
-fn error_bitnot_non_flag -> ø:
+fn error_bitnot_non_flag -> ∅:
     var a := Color.red
     var b := ~a
 
 /* ---- cross-enum comparison error ----------------------------------------- */
 
 @expect error "cannot compare enum"
-fn error_cross_enum_compare -> ø:
+fn error_cross_enum_compare -> ∅:
     var a := Color.red
     var b := Status.ok
     var x := a == b
 
 @expect error "cannot combine enum"
-fn error_cross_enum_bitor -> ø:
+fn error_cross_enum_bitor -> ∅:
     var a := Perms.read
     var b := Flags.a
     var c := a | b
 
 @start
-fn main -> ø:
+fn main -> ∅:
     std.print("enum tests passed")

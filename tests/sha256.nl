@@ -34,7 +34,7 @@ const K : u32 = [
  * --------------------------------------------------------------------------- */
 
 fn get_padded_byte data : byte[], pos : usize, total_size : usize -> u8?:
-    if pos >= total_size: return ø
+    if pos >= total_size: return ∅
     if pos < data.sizeof: return data[pos]
     if pos == data.sizeof: return 128
     var len_start := total_size - 8
@@ -42,7 +42,7 @@ fn get_padded_byte data : byte[], pos : usize, total_size : usize -> u8?:
         const bit_len := data.sizeof * 8
         const byte_idx := pos - len_start
         return (bit_len » ((7 - byte_idx) * 8)) & 255
-    ø
+    ∅
 
 fn get_padded_word data : byte[], off : usize, total_size : usize -> u32?:
     if off + 4 <= data.sizeof:
@@ -51,7 +51,7 @@ fn get_padded_word data : byte[], off : usize, total_size : usize -> u32?:
         const b2 : u32 = data[off + 2]
         const b3 : u32 = data[off + 3]
         return (b0 « 24) | (b1 « 16) | (b2 « 8) | b3
-    if off >= total_size: return ø
+    if off >= total_size: return ∅
     const b0 : u32 = get_padded_byte(data, off, total_size) ?? 0
     const b1 : u32 = get_padded_byte(data, off + 1, total_size) ?? 0
     const b2 : u32 = get_padded_byte(data, off + 2, total_size) ?? 0
@@ -144,25 +144,25 @@ fn sha256 data : byte[] -> int?:
  * --------------------------------------------------------------------------- */
 
 @test(sha256)
-fn test_sha256_empty -> ø:
+fn test_sha256_empty -> ∅:
     var data := std.bytes("")
     var hash := sha256(data)
     assert_eq(hash, 0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
 
 @test(sha256)
-fn test_sha256_abc -> ø:
+fn test_sha256_abc -> ∅:
     var data := std.bytes("abc")
     var hash := sha256(data)
     assert_eq(hash, 0xba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad)
 
 @test(sha256)
-fn test_sha256_448bit -> ø:
+fn test_sha256_448bit -> ∅:
     var data := std.bytes("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")
     var hash := sha256(data)
     assert_eq(hash, 0x248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1)
 
 @start
-fn main -> ø:
+fn main -> ∅:
     var dir := std.fs.cwd()
     var file := dir.openFile("CLAUDE.md")
     var data := file.read_file(std.heap.allocator())

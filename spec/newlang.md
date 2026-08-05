@@ -435,7 +435,7 @@ The function name is a single identifier.  Parameters are separated by commas.  
 #### Examples
 
 ```
-fn main -> ø:                              /* no parameters */
+fn main -> ∅:                              /* no parameters */
     std.print("hello")
 
 fn add a : int, b : int -> int:               /* two typed parameters */
@@ -453,10 +453,10 @@ fn sha256 data : byte[] -> int?:              /* dynamic array parameter */
 Functions with no parameters have nothing between the name and `->` or `:`:
 
 ```
-fn main -> ø:
+fn main -> ∅:
     ...
 
-fn test_something -> ø:
+fn test_something -> ∅:
     ...
 ```
 
@@ -474,7 +474,7 @@ fn greet:                                     /* : starts the body */
 And a single-parameter function uses `:` for the type:
 
 ```
-fn greet name : string -> ø:               /* first : is type, second : is body */
+fn greet name : string -> ∅:               /* first : is type, second : is body */
     std.print(name)
 ```
 
@@ -500,7 +500,7 @@ This is consistent with expression-oriented languages like Rust, Haskell, and Zi
 
 2. **Implicit return.**  The last statement in a function body, if it is a bare expression without a trailing semicolon, becomes the function's return value.  No `return` keyword is needed.
 
-3. **Semicolon distinction.**  A trailing semicolon after the last expression discards its value — the function returns `ø`.  Omitting the semicolon makes the expression the return value.  This mirrors Rust's semicolon semantics.
+3. **Semicolon distinction.**  A trailing semicolon after the last expression discards its value — the function returns `∅`.  Omitting the semicolon makes the expression the return value.  This mirrors Rust's semicolon semantics.
 
 Eliding the `return` keyword only really comes into its own when functions are small and can be written
 in possibly just a single function.  Requiring the use `return` in an inline-defined anonymous function
@@ -517,11 +517,11 @@ fn abs x : int -> int:
     if x < 0: return -x
     x
 
-fn greet name -> ø:
+fn greet name -> ∅:
     std.print("hello " + name);
 ```
 
-In `add`, the expression `a + b` (no semicolon) is the implicit return value.  In `abs`, the early return uses `return`; the final `x` is an implicit return.  In `greet`, the semicolon after `std.print(...)` discards the result, so the function returns `ø`.
+In `add`, the expression `a + b` (no semicolon) is the implicit return value.  In `abs`, the early return uses `return`; the final `x` is an implicit return.  In `greet`, the semicolon after `std.print(...)` discards the result, so the function returns `∅`.
 
 The same functions can equivalently be written with braces:
 
@@ -564,23 +564,23 @@ Unlike Rust where immutability is the default (`let` vs `let mut`), this languag
 
 ### Optional Types (`T?`)
 
-A function that may fail to produce a value declares an **optional return type** by appending `?` to the type name.  The optional type `T?` can hold either a value of type `T` (wrapped in `some`) or `ø` (absence of a value).
+A function that may fail to produce a value declares an **optional return type** by appending `?` to the type name.  The optional type `T?` can hold either a value of type `T` (wrapped in `some`) or `∅` (absence of a value).
 
 #### Declaration
 
 ```
 fn get_padded_byte data : byte[], pos : usize, total_size : usize -> u8?:
-    if pos >= total_size: return ø
+    if pos >= total_size: return ∅
     if pos < data.sizeof: return data[pos]
     ...
     0
 ```
 
-A function with return type `u8?` auto-wraps non-`ø` return values in `some`.  Returning `ø` explicitly signals absence.  The caller receives either `some(value)` or `ø`.
+A function with return type `u8?` auto-wraps non-`∅` return values in `some`.  Returning `∅` explicitly signals absence.  The caller receives either `some(value)` or `∅`.
 
 #### The `?` Postfix Operator
 
-The `?` operator unwraps an optional value or **propagates** `ø` to the enclosing function:
+The `?` operator unwraps an optional value or **propagates** `∅` to the enclosing function:
 
 ```
 fn get_padded_word data : byte[], off : usize, total_size : usize -> u32?:
@@ -591,14 +591,14 @@ fn get_padded_word data : byte[], off : usize, total_size : usize -> u32?:
 Semantics of `expr?`:
 
 1. If `expr` evaluates to `some(v)`, the `?` expression evaluates to `v`.
-2. If `expr` evaluates to `ø`, the enclosing function immediately returns `ø`.
+2. If `expr` evaluates to `∅`, the enclosing function immediately returns `∅`.
 3. If the enclosing function does not have an optional or expected return type (`T?` or `T?E`), using `?` is a **compile error**.
 
-This matches Rust's `?` operator.  The compile-time restriction ensures that `ø` propagation is always visible in the function signature — a function that cannot fail cannot silently swallow failures from callees.
+This matches Rust's `?` operator.  The compile-time restriction ensures that `∅` propagation is always visible in the function signature — a function that cannot fail cannot silently swallow failures from callees.
 
 #### The `??` Nil-Coalescing Operator
 
-The `??` operator provides a default value when an optional is `ø`:
+The `??` operator provides a default value when an optional is `∅`:
 
 ```
 var b0 : u32 = get_padded_byte(data, off, total_size) ?? 0
@@ -607,10 +607,10 @@ var b0 : u32 = get_padded_byte(data, off, total_size) ?? 0
 Semantics of `expr ?? default`:
 
 1. If `expr` evaluates to `some(v)`, the expression evaluates to `v`.
-2. If `expr` evaluates to `ø`, the expression evaluates to `default`.
-3. The right-hand side is evaluated lazily — only when the left is `ø`.
+2. If `expr` evaluates to `∅`, the expression evaluates to `default`.
+3. The right-hand side is evaluated lazily — only when the left is `∅`.
 
-Unlike `?` which propagates `ø`, `??` recovers from it.  This is the right choice when absence has a known substitute value rather than being an error.
+Unlike `?` which propagates `∅`, `??` recovers from it.  This is the right choice when absence has a known substitute value rather than being an error.
 
 #### Type Widening on Assignment
 
@@ -627,7 +627,7 @@ The `?` postfix on a type introduces an optional when no error type follows, and
 
 | Syntax | Meaning |
 |--------|---------|
-| `T?` | optional — success (`some(v)`) or absence (`ø`) |
+| `T?` | optional — success (`some(v)`) or absence (`∅`) |
 | `T?E` | expected — success (`ok(v)`) or error (`err(e)` where `e` is of type `E`) |
 | `T!` | abbreviation for `T?std.errors` |
 
@@ -680,13 +680,13 @@ The `?` postfix operator works on both optional and expected values:
 | Input | Behavior |
 |-------|----------|
 | `some(v)` | evaluates to `v` |
-| `ø` | returns `ø` from enclosing function |
+| `∅` | returns `∅` from enclosing function |
 | `ok(v)` | evaluates to `v` |
-| `err(e)` | returns `err(e)` from enclosing function (if return type is `T?E`) or `ø` (if `T?`) |
+| `err(e)` | returns `err(e)` from enclosing function (if return type is `T?E`) or `∅` (if `T?`) |
 
 The enclosing function must declare a compatible return type; using `?` in a function that returns a plain type is a compile error.
 
-When an expected-error is propagated to a function with an optional return type (`T?`), the error is converted to `ø` — the error detail is discarded.  When propagated to a function with an expected return type (`T?E`), the error is preserved.
+When an expected-error is propagated to a function with an optional return type (`T?`), the error is converted to `∅` — the error detail is discarded.  When propagated to a function with an expected return type (`T?E`), the error is preserved.
 
 #### The `??` Operator on Expected Values
 
@@ -700,7 +700,7 @@ var padded := get_padded_byte(data, pos, total_size) ?? 0  /* 0 on absent byte *
 | Input | Behavior |
 |-------|----------|
 | `some(v)` or `ok(v)` | evaluates to `v` |
-| `ø` or `err(e)` | evaluates to the right-hand side |
+| `∅` or `err(e)` | evaluates to the right-hand side |
 
 #### Implicit Unwrapping
 
@@ -718,16 +718,16 @@ This ensures that errors cannot be silently ignored — they must be handled (wi
 
 #### Example: Combining `?` and `??`
 
-A function that returns `ø` for absent data, a caller that substitutes a default, and an outer function that propagates structural failure:
+A function that returns `∅` for absent data, a caller that substitutes a default, and an outer function that propagates structural failure:
 
 ```
 fn get_padded_byte ... -> u8?:
-    if pos >= total_size: return ø
+    if pos >= total_size: return ∅
     ...
-    ø                                         /* zero-padding zone */
+    ∅                                         /* zero-padding zone */
 
 fn get_padded_word ... -> u32?:
-    if off >= total_size: return ø             /* fully out of range */
+    if off >= total_size: return ∅             /* fully out of range */
     var b0 : u32 = get_padded_byte(...) ?? 0     /* absent bytes → 0 */
     var b1 : u32 = get_padded_byte(...) ?? 0
     var b2 : u32 = get_padded_byte(...) ?? 0
@@ -736,12 +736,12 @@ fn get_padded_word ... -> u32?:
 
 fn sha256 data -> int?:
     ...
-    W[i] ← get_padded_word(...)?                 /* propagates ø */
+    W[i] ← get_padded_word(...)?                 /* propagates ∅ */
     ...
     hash
 ```
 
-Expected values and optionals compose naturally: a function returning `T?` can use `?` to propagate errors from callees returning `T?E` — the error is converted to `ø`.  A function returning `T?E` can propagate both expected-errors and optional-nones.
+Expected values and optionals compose naturally: a function returning `T?` can use `?` to propagate errors from callees returning `T?E` — the error is converted to `∅`.  A function returning `T?E` can propagate both expected-errors and optional-nones.
 
 #### Design Rationale
 
@@ -773,7 +773,7 @@ Only built-in types are currently accepted as parameter types:
 | Signed integers | `i8`, `i16`, `i32`, `i64` |
 | Unsigned integers | `u8`, `u16`, `u32`, `u64`, `usize` |
 | Arbitrary-precision | `int` |
-| Other | `bool`, `ø` |
+| Other | `bool`, `∅` |
 | Optional | `?` postfix on any of the above (e.g., `u32?`, `bool?`) |
 | Expected | `?E` postfix where `E` is an error type (e.g., `u32?std.errors`) |
 | Expected (short) | `!` postfix, abbreviation for `?std.errors` (e.g., `u32!`) |
@@ -788,10 +788,10 @@ When an argument is passed to a typed parameter:
 
 2. **`bool`.**  The argument must be a `BoolValue`.  No implicit conversion from integers.
 
-3. **`ø`.**  The argument must be `NoneValue`.
+3. **`∅`.**  The argument must be `NoneValue`.
 
 4. **Optional types (`T?`).**  Three cases:
-   - `ø` passes through as `NoneValue`.
+   - `∅` passes through as `NoneValue`.
    - A `some(v)` value has its inner value coerced to `T`.
    - A plain (non-optional) value of type `T` is automatically wrapped in `some`.
 
@@ -808,11 +808,11 @@ fn get_padded_byte data : byte[], pos : usize, total_size : usize -> ?u8:
 fn expand_s0 prev : u32 -> int:
     (prev ↻ 7) ^ (prev ↻ 18) ^ (prev » 3)
 
-fn maybe_use value : int? -> ø:
+fn maybe_use value : int? -> ∅:
     ...
 ```
 
-In `get_padded_byte`, the `data` parameter is typed as `byte[]` (a dynamic byte array), while the position and size parameters are enforced as `usize`.  In `expand_s0`, the `prev` parameter is coerced to `u32`, ensuring rotation operations use 32-bit semantics.  In `maybe_use`, the parameter accepts either a plain integer (auto-wrapped to `some`) or `ø`.
+In `get_padded_byte`, the `data` parameter is typed as `byte[]` (a dynamic byte array), while the position and size parameters are enforced as `usize`.  In `expand_s0`, the `prev` parameter is coerced to `u32`, ensuring rotation operations use 32-bit semantics.  In `maybe_use`, the parameter accepts either a plain integer (auto-wrapped to `some`) or `∅`.
 
 #### Design Rationale
 
@@ -1104,15 +1104,15 @@ Unit testing is built into the language, similar to Rust's `#[test]` attribute. 
 
 ```
 @test
-fn test_something -> ø:
+fn test_something -> ∅:
     ...
 
 @test(sha256)
-fn test_sha256_abc -> ø:
+fn test_sha256_abc -> ∅:
     ...
 
 @test(encrypt, decrypt)
-fn test_round_trip -> ø:
+fn test_round_trip -> ∅:
     ...
 ```
 
@@ -1154,13 +1154,13 @@ test result: ok. 3 passed; 0 failed
 
 ```
 @test(sha256)
-fn test_sha256_empty -> ø:
+fn test_sha256_empty -> ∅:
     var data := std.bytes("")
     var hash := sha256(data)
     assert_eq(hash, 0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
 
 @test(sha256)
-fn test_sha256_abc -> ø:
+fn test_sha256_abc -> ∅:
     var data := std.bytes("abc")
     var hash := sha256(data)
     assert_eq(hash, 0xba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad)
@@ -1192,7 +1192,7 @@ The `@expect` annotation allows writing tests that verify the interpreter/compil
 ```
 @expect error "regex pattern"
 @expect warning "regex pattern"
-fn function_name -> ø:
+fn function_name -> ∅:
     /* code that should trigger the diagnostic */
 ```
 
@@ -1201,7 +1201,7 @@ Multiple `@expect` annotations can appear before a single function.  The level k
 #### Statement-Level Syntax
 
 ```
-fn test_something -> ø:
+fn test_something -> ∅:
     @expect warning "redefinition of foreach variable"
     var i := 99
 ```
@@ -1240,13 +1240,13 @@ Function-level `@expect` for errors:
 
 ```
 @expect error "cannot assign to const variable 'x'"
-fn error_const_assign -> ø:
+fn error_const_assign -> ∅:
     const x := 42
     x ← 99
 
 @expect error "unexpected token: 'fn'"
-fn error_nested_fn -> ø:
-    fn inner -> ø:
+fn error_nested_fn -> ∅:
+    fn inner -> ∅:
         std.print("bad")
 ```
 
@@ -1254,7 +1254,7 @@ Statement-level `@expect` for warnings inside a `@test` function:
 
 ```
 @test
-fn warn_foreach_redef -> ø:
+fn warn_foreach_redef -> ∅:
     var total := 0
     foreach i = 1…3:
         @expect warning "redefinition of foreach variable 'i'"

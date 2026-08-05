@@ -36,7 +36,7 @@ KEYWORDS = {
     "while": "WHILE",
     "opt": "OPT",
     "is": "IS",
-    "ø": "NONE",
+    "∅": "NONE",
     "true": "TRUE",
     "false": "FALSE",
     "let": "LET",
