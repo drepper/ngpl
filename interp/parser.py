@@ -656,11 +656,24 @@ class Parser:
         return ExpectStmt(expectations, stmt)
 
     def _parse_lambda(self):
-        """Parse: λ [param1 [, paramN]] [|capture1 [, captureN]|] : expr"""
+        """Parse: λ [param1 : type1 [, paramN : typeN]] [|capture1 [, captureN]|] : expr"""
         self._eat("LAMBDA")
-        params: list[str] = []
+        params: list[tuple[str, str]] = []
         while self._check("IDENT"):
-            params.append(self._eat("IDENT").value)
+            saved = self.pos
+            name = self._eat("IDENT").value
+            if not (self._check("PUNCT") and self._cur().value == ":" and
+                    self.pos + 1 < len(self.tokens) and
+                    self.tokens[self.pos + 1].type == "IDENT"):
+                raise ParseError(
+                    f"lambda parameter '{name}' requires a type annotation", self._cur())
+            self._eat("PUNCT", ":")
+            ptype = self._eat("IDENT").value
+            if self._check("PUNCT") and self._cur().value == "[":
+                self.pos += 1
+                self._eat("PUNCT", "]")
+                ptype += "[]"
+            params.append((name, ptype))
             if not self._try_eat("PUNCT", ","):
                 break
 
@@ -675,6 +688,8 @@ class Parser:
             if not (self._check("OP") and self._cur().value == "|"):
                 raise ParseError("expected '|' to close capture list", self._cur())
             self.pos += 1
+            if not captures:
+                raise ParseError("empty capture list is not allowed", self._cur())
 
         self._eat("PUNCT", ":")
         body = self._parse_or_expr()
@@ -844,8 +859,8 @@ class Parser:
         return left
 
     def _parse_add_expr(self):
-        """add_expr → mul_expr (('+' | '-') mul_expr)*"""
-        left = self._parse_mul_expr()
+        """add_expr → concat_expr (('+' | '-') concat_expr)*"""
+        left = self._parse_concat_expr()
         while True:
             self._skip_nl()
             if not (self._check("OP") and self._cur().value in ("+", "-")):
@@ -853,8 +868,21 @@ class Parser:
             op_tok = self._cur()
             self.pos += 1
             self._skip_nl()
-            right = self._parse_mul_expr()
+            right = self._parse_concat_expr()
             left = BinOp(op_tok.value, left, right)
+        return left
+
+    def _parse_concat_expr(self):
+        """concat_expr → mul_expr ('⧺' mul_expr)*"""
+        left = self._parse_mul_expr()
+        while True:
+            self._skip_nl()
+            if not (self._check("OP") and self._cur().value == "\N{DOUBLE PLUS}"):
+                break
+            self.pos += 1
+            self._skip_nl()
+            right = self._parse_mul_expr()
+            left = BinOp("\N{DOUBLE PLUS}", left, right)
         return left
 
     def _parse_mul_expr(self):

@@ -1103,11 +1103,11 @@ Anonymous functions are introduced with the `λ` (U+03BB, GREEK SMALL LETTER LAM
 #### Syntax
 
 ```
-λ param1 [, paramN] [|capture1 [, captureN]|] : body_expr
+λ param1 : type1 [, paramN : typeN] [|capture1 [, captureN]|] : body_expr
 ```
 
-- **Parameters**: zero or more comma-separated names, untyped.
-- **Capture list**: optional, enclosed in `|…|`.  Lists the external variables that the lambda body may access.  An empty capture list `||` means no external variables are captured.
+- **Parameters**: zero or more comma-separated `name : type` pairs.  Type annotations are mandatory, using the same syntax as function parameters.
+- **Capture list**: optional, enclosed in `|…|`.  Lists the external variables that the lambda body may access.  Must contain at least one name; an empty capture list `||` is a parse error.  Omit the capture list entirely when no captures are needed.
 - **Body**: a single expression after the colon.
 
 #### Capture Rules
@@ -1125,10 +1125,9 @@ fn helper x : i32 -> i32:
     x + 100
 
 var offset = 10
-var f = λx |offset|: helper(x) + offset   // OK: helper is non-replaceable, offset is captured
-var g = λx: helper(x)                      // OK: helper needs no capture
-var h = λx: x + offset                     // ERROR: references 'offset' but has no capture list
-var k = λx ||: x + offset                  // ERROR: 'offset' not in the capture list
+var f = λx : i32 |offset|: helper(x) + offset   // OK: helper is non-replaceable, offset is captured
+var g = λx : i32: helper(x)                     // OK: helper needs no capture
+var h = λx : i32: x + offset                     // ERROR: references 'offset' but has no capture list
 ```
 
 #### Calling Lambdas
@@ -1136,14 +1135,14 @@ var k = λx ||: x + offset                  // ERROR: 'offset' not in the captur
 Lambdas are first-class values.  They can be assigned to variables, passed as arguments, and returned from functions.
 
 ```
-var double = λx: x * 2
+var double = λx : int: x * 2
 assert_eq(10, double(5))
 ```
 
 Immediate application uses parentheses around the lambda:
 
 ```
-var result = (λx: x + 1)(5)        // result is 6
+var result = (λx : int: x + 1)(5)   // result is 6
 ```
 
 #### Lambdas as Arguments and Return Values
@@ -1153,11 +1152,11 @@ fn apply f, x : i32 -> i32:
     f(x)
 
 fn make_adder n : i32:
-    λx |n|: x + n
+    λx : int |n|: x + n
 
 var add3 = make_adder(3)
 assert_eq(8, add3(5))
-assert_eq(15, apply(λx: x * 3, 5))
+assert_eq(15, apply(λx : int: x * 3, 5))
 ```
 
 #### Function Currying
@@ -1186,7 +1185,7 @@ assert_eq(6, f2(3))               // 1 + 2 + 3
 Lambdas themselves support partial application:
 
 ```
-var mul = λx, y: x * y
+var mul = λx : int, y : int: x * y
 var triple = mul(3)
 assert_eq(15, triple(5))
 ```
@@ -1203,10 +1202,10 @@ fn strategy x : i32 -> i32:
     x * 2
 
 // Must capture — strategy could change after the lambda is created
-var f = λx |strategy|: strategy(x)
+var f = λx : i32 |strategy|: strategy(x)
 
 // ERROR: strategy is @replaceable and not captured
-var g = λx ||: strategy(x)
+var g = λx : i32: strategy(x)
 ```
 
 This distinction ensures that lambdas with no capture list or an empty capture list are guaranteed to be pure with respect to user-defined state — they depend only on their parameters and immutable bindings.
@@ -1217,14 +1216,14 @@ A lambda value that is neither assigned to a variable nor returned produces a wa
 
 ```
 add(5)                             // WARNING: lambda value is not used
-λx: x + 1                         // WARNING: lambda value is not used
+λx : int: x + 1                   // WARNING: lambda value is not used
 ```
 
 #### Design Rationale
 
 | Feature | Haskell | Rust | Python | This language |
 |---------|---------|------|--------|---------------|
-| Lambda syntax | `\x -> x+1` | `\|x\| x+1` | `lambda x: x+1` | `λx: x+1` |
+| Lambda syntax | `\x -> x+1` | `\|x\| x+1` | `lambda x: x+1` | `λx : int: x+1` |
 | Capture | implicit | explicit (`move`) | implicit | explicit (`\|…\|`) |
 | Currying | automatic | no | no | automatic |
 | Multi-expression body | no (one expr) | yes (block) | no (one expr) | no (one expr) |
@@ -1269,7 +1268,7 @@ generate(func, range)
 #### Basic Usage
 
 ```
-var squares = generate(λx: x * x, 1…5)
+var squares = generate(λx : int: x * x, 1…5)
 // squares = [1, 4, 9, 16, 25]
 
 fn double x : i32 -> i32:
@@ -1294,10 +1293,10 @@ var tripled = generate(multiply(3), 1…5)
 #### With Stepped and Descending Ranges
 
 ```
-var evens = generate(λx: x, 0…2…10)
+var evens = generate(λx : int: x, 0…2…10)
 // evens = [0, 2, 4, 6, 8, 10]
 
-var desc = generate(λx: x * x, 3…1)
+var desc = generate(λx : int: x * x, 3…1)
 // desc = [9, 4, 1]
 ```
 
@@ -1305,7 +1304,7 @@ var desc = generate(λx: x * x, 3…1)
 
 ```
 var offset = 100
-var arr = generate(λx |offset|: x + offset, 1…3)
+var arr = generate(λx : int |offset|: x + offset, 1…3)
 // arr = [101, 102, 103]
 ```
 
@@ -1314,7 +1313,7 @@ var arr = generate(λx |offset|: x + offset, 1…3)
 The mapping function must not return ∅.  This is a runtime error because the result array cannot contain empty optional values:
 
 ```
-generate(λx: ∅, 1…5)              // ERROR: function must not return ∅
+generate(λx : int: ∅, 1…5)        // ERROR: function must not return ∅
 ```
 
 #### Compile-time Optimization (Future)
@@ -1434,6 +1433,60 @@ var W = 64 ⍴ generate(load_word, 0…15)   // extend 16-element result to 64
 The APL tradition uses `⍴` both monadically (query shape) and dyadically (reshape).  This language currently implements only the dyadic form.  The monadic form (returning the shape of an array) may be added in future.
 
 The cycling semantics follow APL: when the data has fewer elements than the result requires, elements are reused from the beginning.  This makes `n ⍴ scalar` a natural way to create filled arrays, and `n ⍴ array` extends arrays without requiring explicit concatenation.
+
+
+### Array Concatenation (`⧺`)
+
+The `⧺` operator (U+29FA, DOUBLE PLUS) concatenates two arrays at the outermost dimension.
+
+#### Syntax
+
+```
+left ⧺ right
+```
+
+Both operands must be arrays.  The result is a new array whose elements are all elements of `left` followed by all elements of `right`.
+
+#### Precedence
+
+`⧺` binds tighter than `+` but looser than `⍴`:
+
+```
+a + b ⧺ c         // a + (b ⧺ c)
+generate(f, r) ⧺ 48 ⍴ [0]   // generate(f, r) ⧺ (48 ⍴ [0])
+```
+
+This allows `⧺` and `⍴` to combine naturally without parentheses for common patterns like building a partially initialized array.
+
+#### Semantics
+
+- Both operands must be arrays; a non-array operand is a type error.
+- The result preserves the element type of the left operand (falling back to the right if the left has no explicit type).
+- Concatenation with an empty array is the identity: `a ⧺ (0 ⍴ [0])` yields `a`.
+- `⧺` is left-associative: `a ⧺ b ⧺ c` is `(a ⧺ b) ⧺ c`.
+- `⧺` is a line-continuation operator: an expression can break after it.
+
+#### Example
+
+```
+// Build message schedule: 16 loaded words followed by 48 zero placeholders.
+var W = generate(load_word, 0…15) ⧺ 48 ⍴ [0]
+```
+
+This is clearer than the equivalent `64 ⍴ generate(load_word, 0…15)` because it does not rely on the cycling semantics of `⍴` to silently repeat data that will be overwritten.
+
+#### Comparison with Other Languages
+
+| Language | Concatenation Syntax |
+|----------|---------------------|
+| APL      | `,` (catenate)      |
+| BQN      | `∾` (join)          |
+| Haskell  | `++`                |
+| Python   | `+` (overloaded)    |
+| Rust     | `.extend()` / `[a, b].concat()` |
+| This language | `⧺`           |
+
+Using a dedicated glyph avoids overloading `+` (which is element-wise addition on arrays) and is visually distinct from arithmetic.
 
 
 ### The `catch` Statement

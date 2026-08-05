@@ -88,7 +88,7 @@ def _collect_refs(node) -> set[str]:
         refs |= _collect_refs(node.expr)
     elif isinstance(node, LambdaExpr):
         inner = _collect_refs(node.body)
-        inner -= set(node.params)
+        inner -= {p[0] for p in node.params}
         if node.captures:
             inner -= set(node.captures)
         refs |= inner
@@ -643,6 +643,25 @@ class Evaluator:
         ru = unwrap_optional(right)
         return mk_bool(not (self._logic_bool(lu) or self._logic_bool(ru)))
 
+    def _op_concat(self, left, right):
+        """Concatenate arrays at the outermost dimension."""
+        lu = unwrap_optional(left)
+        ru = unwrap_optional(right)
+        la = self._as_array(lu)
+        ra = self._as_array(ru)
+        if la is None:
+            raise TypeError(
+                f"\N{DOUBLE PLUS}: left operand must be an array, "
+                f"got {type(lu).__name__}")
+        if ra is None:
+            raise TypeError(
+                f"\N{DOUBLE PLUS}: right operand must be an array, "
+                f"got {type(ru).__name__}")
+        etype = la.element_type or ra.element_type
+        return ObjectValue(
+            ArrayValue(list(la.elements) + list(ra.elements),
+                       element_type=etype))
+
     def _mk_int(self, value: int, width: str) -> IntValue:
         if self._wrapping:
             return mk_int_wrap(value, width)
@@ -737,6 +756,8 @@ class Evaluator:
                 return left
             left = self.eval_expr(node.left)
             right = self.eval_expr(node.right)
+            if node.op == "\N{DOUBLE PLUS}":
+                return self._op_concat(left, right)
             return self._apply_binop(self._ops[node.op], left, right)
 
         if isinstance(node, UnaryOp):
@@ -1309,7 +1330,7 @@ class Evaluator:
     def _eval_lambda_expr(self, node: LambdaExpr):
         """Evaluate a lambda expression: validate captures and build LambdaValue."""
         refs = _collect_refs(node.body)
-        refs -= set(node.params)
+        refs -= {p[0] for p in node.params}
 
         lambda_env = Env()
         capture_set = set(node.captures) if node.captures else set()
@@ -1341,8 +1362,7 @@ class Evaluator:
                 raise TypeError(
                     f"lambda references '{name}' but has no capture list")
 
-        params = [(p, None) for p in node.params]
-        return LambdaValue(params, node.body, lambda_env,
+        return LambdaValue(node.params, node.body, lambda_env,
                            captures=node.captures)
 
     def _call_lambda(self, lam: LambdaValue, args):
