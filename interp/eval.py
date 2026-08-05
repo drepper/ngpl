@@ -20,18 +20,73 @@ from interp.ast import (
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
-    RangeExpr, ForEachStmt, ExpectStmt, WrapExpr,
+    RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr,
 )
 from interp.value import (
     Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
-    FuncValue, BuiltinFunc, ObjectValue, BuiltinBoundMethod, ArrayValue,
-    TupleValue, EnumType, EnumValue,
+    FuncValue, LambdaValue, BuiltinFunc, ObjectValue, BuiltinBoundMethod,
+    ArrayValue, TupleValue, EnumType, EnumValue,
     mk_int, mk_int_wrap, mk_str, mk_bool, none, some, is_none, is_some,
     resolve_width, wrap_int, coerce_to_type, coerce_arg, _TYPE_BITS, FAST_TYPES,
     _split_optional_type,
 )
 from interp.env import Env
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
+
+
+# ---------------------------------------------------------------------------
+# Free-variable collection for lambda validation
+# ---------------------------------------------------------------------------
+
+def _collect_refs(node) -> set[str]:
+    """Collect all variable and function names referenced in an AST expression."""
+    if node is None:
+        return set()
+    refs: set[str] = set()
+    if isinstance(node, VarRef):
+        refs.add(node.name)
+    elif isinstance(node, BinOp):
+        refs |= _collect_refs(node.left)
+        refs |= _collect_refs(node.right)
+    elif isinstance(node, UnaryOp):
+        refs |= _collect_refs(node.operand)
+    elif isinstance(node, FuncCall):
+        refs.add(node.name)
+        for a in node.args:
+            refs |= _collect_refs(a)
+    elif isinstance(node, MethodCall):
+        refs |= _collect_refs(node.obj)
+        for a in node.args:
+            refs |= _collect_refs(a)
+    elif isinstance(node, GetAttr):
+        refs |= _collect_refs(node.obj)
+    elif isinstance(node, OptSome):
+        refs |= _collect_refs(node.value)
+    elif isinstance(node, TryUnwrap):
+        refs |= _collect_refs(node.expr)
+    elif isinstance(node, Subscript):
+        refs |= _collect_refs(node.obj)
+        refs |= _collect_refs(node.index)
+    elif isinstance(node, SliceAccess):
+        refs |= _collect_refs(node.obj)
+        refs |= _collect_refs(node.start)
+        refs |= _collect_refs(node.end)
+    elif isinstance(node, ArrayLit):
+        for e in node.elements:
+            refs |= _collect_refs(e)
+    elif isinstance(node, ArrayAlloc):
+        refs |= _collect_refs(node.size_expr)
+        if node.init_expr:
+            refs |= _collect_refs(node.init_expr)
+    elif isinstance(node, WrapExpr):
+        refs |= _collect_refs(node.expr)
+    elif isinstance(node, LambdaExpr):
+        inner = _collect_refs(node.body)
+        inner -= set(node.params)
+        if node.captures:
+            inner -= set(node.captures)
+        refs |= inner
+    return refs
 
 
 # ---------------------------------------------------------------------------
@@ -793,6 +848,9 @@ class Evaluator:
                     return ObjectValue(ArrayValue(list(elems),
                                                   element_type=unwrapped.obj.element_type))
 
+        if isinstance(node, LambdaExpr):
+            return self._eval_lambda_expr(node)
+
         # Array allocation: new type[size] or var name : type[size] = init.
         if isinstance(node, ArrayAlloc):
             etype = node.element_type
@@ -908,7 +966,11 @@ class Evaluator:
             return none()
 
         if isinstance(stmt, ExprStmt):
-            return self.eval_expr(stmt.expr)
+            result = self.eval_expr(stmt.expr)
+            if isinstance(result, LambdaValue):
+                self._warnings.append(
+                    "lambda value is not used (not assigned or returned)")
+            return result
 
         if isinstance(stmt, IfStmt):
             return self._eval_if(stmt)
@@ -1050,6 +1112,89 @@ class Evaluator:
         return none()
 
     # ------------------------------------------------------------------
+    # Lambda support
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_builtin_value(val: Value) -> bool:
+        """Check if a value is a builtin that doesn't need explicit capture."""
+        if isinstance(val, (BuiltinFunc, EnumType)):
+            return True
+        if isinstance(val, ObjectValue) and not isinstance(val.obj, ArrayValue):
+            return True
+        return False
+
+    def _eval_lambda_expr(self, node: LambdaExpr):
+        """Evaluate a lambda expression: validate captures and build LambdaValue."""
+        refs = _collect_refs(node.body)
+        refs -= set(node.params)
+
+        lambda_env = Env()
+        capture_set = set(node.captures) if node.captures else set()
+
+        if node.captures is not None:
+            for name in node.captures:
+                try:
+                    val = self.env.lookup(name)
+                except KeyError:
+                    raise TypeError(
+                        f"lambda capture '{name}' is not defined")
+                lambda_env.define(name, val)
+
+        for name in refs:
+            if name in capture_set:
+                continue
+            try:
+                val = self.env.lookup(name)
+            except KeyError:
+                raise TypeError(
+                    f"lambda references undefined name '{name}'")
+            if self._is_builtin_value(val):
+                lambda_env.define(name, val)
+            else:
+                if node.captures is not None:
+                    raise TypeError(
+                        f"lambda references '{name}' which is not "
+                        f"in the capture list")
+                raise TypeError(
+                    f"lambda references '{name}' but has no capture list")
+
+        params = [(p, None) for p in node.params]
+        return LambdaValue(params, node.body, lambda_env,
+                           captures=node.captures)
+
+    def _call_lambda(self, lam: LambdaValue, args):
+        """Call a lambda value with given arguments."""
+        if lam.partial_func is not None:
+            all_args = list(lam.partial_args) + list(args)
+            return self._call_user_func(lam.partial_func, all_args)
+
+        if len(args) != len(lam.params):
+            if len(args) < len(lam.params):
+                remaining = lam.params[len(args):]
+                new_env = Env(parent=lam.env)
+                for (pname, _ptype), arg in zip(lam.params, args):
+                    new_env.define(pname, arg)
+                return LambdaValue(remaining, lam.body, new_env,
+                                   captures=lam.captures)
+            raise TypeError(
+                f"lambda expects {len(lam.params)} arguments, "
+                f"got {len(args)}")
+
+        call_env = Env(parent=lam.env)
+        for (pname, ptype), arg in zip(lam.params, args):
+            if ptype is not None:
+                arg = coerce_arg(arg, ptype, "\N{GREEK SMALL LETTER LAMDA}", pname)
+            call_env.define(pname, arg)
+
+        old_env = self.env
+        try:
+            self.env = call_env
+            return self.eval_expr(lam.body)
+        finally:
+            self.env = old_env
+
+    # ------------------------------------------------------------------
     # Function calls
     # ------------------------------------------------------------------
 
@@ -1074,6 +1219,8 @@ class Evaluator:
         import inspect
 
         unwrapped = unwrap_optional(obj)
+        if method_name == "__call__":
+            return self._do_call(unwrapped, args)
         if isinstance(unwrapped, ObjectValue):
             python_obj = unwrapped.obj
             meth = getattr(python_obj, method_name, None)
@@ -1150,9 +1297,11 @@ class Evaluator:
         raise AttributeError(f"no method '{method_name}' on {type(obj).__name__}")
 
     def _do_call(self, func: Value, args):
-        """Dispatch a call to either user-defined or builtin function."""
+        """Dispatch a call to either user-defined, lambda, or builtin function."""
         if isinstance(func, FuncValue):
             return self._call_user_func(func, args)
+        if isinstance(func, LambdaValue):
+            return self._call_lambda(func, args)
         if isinstance(func, BuiltinFunc):
             expected = func.arity
             if expected != -1 and len(args) != expected:
@@ -1172,6 +1321,10 @@ class Evaluator:
                     self._tests_run.add(test_fv.name)
                     self._call_user_func(test_fv, [])
 
+        if len(args) < len(func.params):
+            remaining = func.params[len(args):]
+            return LambdaValue(remaining, func.body, self.env,
+                               partial_func=func, partial_args=list(args))
         if len(args) != len(func.params):
             raise TypeError(
                 f"{func.name} expects {len(func.params)} arguments, got {len(args)}")

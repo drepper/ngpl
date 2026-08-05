@@ -274,10 +274,12 @@ def main():
 
         if not errors_produced:
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type)
+            eval_inst = Evaluator(env)
             try:
-                Evaluator(env)._call_user_func(fv, [])
+                eval_inst._call_user_func(fv, [])
             except Exception as e:
                 errors_produced.append(("error", str(e)))
+            errors_produced.extend(("warning", w) for w in eval_inst._warnings)
 
         remaining = list(defn.expect_annotations)
         matched: list[tuple[str, str]] = []

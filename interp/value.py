@@ -256,6 +256,38 @@ class FuncValue(Value):
         self.ret_type = ret_type
 
 
+class LambdaValue(Value):
+    """An anonymous function with explicit capture list.
+
+    Also used internally to represent curried (partially-applied) functions.
+    When partial_func is set, calling the lambda prepends partial_args to
+    the new arguments and invokes the original function.
+    """
+
+    __slots__ = ("params", "body", "env", "captures",
+                 "partial_func", "partial_args")
+
+    def __init__(self, params, body, env, captures=None,
+                 partial_func=None, partial_args=None):
+        self.params = params
+        self.body = body
+        self.env = env
+        self.captures = captures
+        self.partial_func = partial_func
+        self.partial_args = partial_args or []
+
+    def display(self):
+        if self.partial_func is not None:
+            applied = ", ".join(a.display() for a in self.partial_args)
+            remaining = ", ".join(p[0] for p in self.params)
+            return f"\N{GREEK SMALL LETTER LAMDA}{remaining} (partial {self.partial_func.name}[{applied}])"
+        params = ", ".join(p[0] for p in self.params)
+        if self.captures:
+            caps = ", ".join(self.captures)
+            return f"\N{GREEK SMALL LETTER LAMDA}{params} |{caps}|"
+        return f"\N{GREEK SMALL LETTER LAMDA}{params}"
+
+
 class BuiltinFunc(Value):
     """A built-in function implemented in Python."""
 

@@ -20,6 +20,7 @@ tests=(
     "$testdir"/test_expected.nl
     "$testdir"/test_stepped_range.nl
     "$testdir"/test_types.nl
+    "$testdir"/test_lambda.nl
     "$testdir"/sha256.nl
 )
 

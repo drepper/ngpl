@@ -14,6 +14,7 @@ from interp.ast import (
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, EnumDef,
+    LambdaExpr,
 )
 from interp.lexer import Token, KEYWORDS
 
@@ -649,6 +650,31 @@ class Parser:
         stmt = self._parse_statement()
         return ExpectStmt(expectations, stmt)
 
+    def _parse_lambda(self):
+        """Parse: λ [param1 [, paramN]] [|capture1 [, captureN]|] : expr"""
+        self._eat("LAMBDA")
+        params: list[str] = []
+        while self._check("IDENT"):
+            params.append(self._eat("IDENT").value)
+            if not self._try_eat("PUNCT", ","):
+                break
+
+        captures: list[str] | None = None
+        if self._check("OP") and self._cur().value == "|":
+            self.pos += 1
+            captures = []
+            while self._check("IDENT"):
+                captures.append(self._eat("IDENT").value)
+                if not self._try_eat("PUNCT", ","):
+                    break
+            if not (self._check("OP") and self._cur().value == "|"):
+                raise ParseError("expected '|' to close capture list", self._cur())
+            self.pos += 1
+
+        self._eat("PUNCT", ":")
+        body = self._parse_or_expr()
+        return LambdaExpr(params, captures, body)
+
     # ------------------------------------------------------------------
     # Expression parsing (precedence climbing)
     # ------------------------------------------------------------------
@@ -868,6 +894,10 @@ class Parser:
         """
         tok = self._cur()
 
+        # Lambda expression: λparams |captures|: body
+        if tok.type == "LAMBDA":
+            return self._parse_lambda()
+
         # Literals.
         if tok.type == "INT":
             self.pos += 1
@@ -926,10 +956,13 @@ class Parser:
         # Parenthesized expression.
         if tok.type == "PUNCT" and tok.value == "(":
             self.pos += 1
-            expr = self._parse_or_expr()
+            node = self._parse_or_expr()
             self._skip_nl()
             self._eat("PUNCT", ")")
-            return expr
+            while self._check("PUNCT") and self._cur().value == "(":
+                args = self._parse_call_args()
+                node = MethodCall(node, "__call__", args)
+            return node
 
         # Identifier (possibly function call, possibly followed by dotted chain).
         if tok.type == "IDENT":

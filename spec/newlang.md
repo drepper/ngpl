@@ -1096,6 +1096,120 @@ foreach point = [1,2,3], [10,20,30]:
 The wrapping behavior for shorter ranges is deliberate: it enables patterns like cycling through a palette or repeating a short sequence across a longer one, which are common in array programming languages like APL.  Languages that truncate to the shortest require explicit repetition; wrapping makes the common case trivial.
 
 
+### Anonymous Functions (Lambdas)
+
+Anonymous functions are introduced with the `λ` (U+03BB, GREEK SMALL LETTER LAMDA) keyword.
+
+#### Syntax
+
+```
+λ param1 [, paramN] [|capture1 [, captureN]|] : body_expr
+```
+
+- **Parameters**: zero or more comma-separated names, untyped.
+- **Capture list**: optional, enclosed in `|…|`.  Lists the external variables that the lambda body may access.  An empty capture list `||` means no external variables are captured.
+- **Body**: a single expression after the colon.
+
+#### Capture Rules
+
+The lambda body has a restricted environment:
+
+- **Built-in functions** (e.g., `assert`, `assert_eq`), **enum types**, and **module objects** (e.g., `std`) are always accessible without capture.
+- **User-defined variables and functions** must appear in the capture list to be used in the body.
+- If no capture list is present (no `|…|` at all), the lambda cannot reference any user-defined names from the enclosing scope.
+- If a capture list is present but a referenced name is missing from it, a compile-time error is raised.
+
+```
+var offset = 10
+var f = λx |offset|: x + offset    // OK: offset is captured
+var g = λx: x + offset              // ERROR: references 'offset' but has no capture list
+var h = λx ||: x + offset           // ERROR: 'offset' not in the capture list
+```
+
+#### Calling Lambdas
+
+Lambdas are first-class values.  They can be assigned to variables, passed as arguments, and returned from functions.
+
+```
+var double = λx: x * 2
+assert_eq(10, double(5))
+```
+
+Immediate application uses parentheses around the lambda:
+
+```
+var result = (λx: x + 1)(5)        // result is 6
+```
+
+#### Lambdas as Arguments and Return Values
+
+```
+fn apply f, x : i32 -> i32:
+    f(x)
+
+fn make_adder n : i32:
+    λx |n|: x + n
+
+var add3 = make_adder(3)
+assert_eq(8, add3(5))
+assert_eq(15, apply(λx: x * 3, 5))
+```
+
+#### Function Currying
+
+Calling a function with fewer arguments than its parameter list produces a partially-applied lambda.  The provided arguments are captured automatically.
+
+```
+fn add a : i32, b : i32 -> i32:
+    a + b
+
+var add5 = add(5)                  // returns λb (partial add[5])
+assert_eq(8, add5(3))
+```
+
+Multi-step currying is supported:
+
+```
+fn add3 a : i32, b : i32, c : i32 -> i32:
+    a + b + c
+
+var f1 = add3(1)                   // λb, c
+var f2 = f1(2)                     // λc
+assert_eq(6, f2(3))               // 1 + 2 + 3
+```
+
+Lambdas themselves support partial application:
+
+```
+var mul = λx, y: x * y
+var triple = mul(3)
+assert_eq(15, triple(5))
+```
+
+#### Ignored Lambda Warning
+
+A lambda value that is neither assigned to a variable nor returned produces a warning.  This catches accidental partial applications:
+
+```
+add(5)                             // WARNING: lambda value is not used
+λx: x + 1                         // WARNING: lambda value is not used
+```
+
+#### Design Rationale
+
+| Feature | Haskell | Rust | Python | This language |
+|---------|---------|------|--------|---------------|
+| Lambda syntax | `\x -> x+1` | `\|x\| x+1` | `lambda x: x+1` | `λx: x+1` |
+| Capture | implicit | explicit (`move`) | implicit | explicit (`\|…\|`) |
+| Currying | automatic | no | no | automatic |
+| Multi-expression body | no (one expr) | yes (block) | no (one expr) | no (one expr) |
+| Unused lambda warning | no | yes (unused `Result`) | no | yes |
+
+The explicit capture list follows the principle that a lambda's dependencies should be visible at the definition site.  Unlike Rust's closure inference, this language requires the programmer to declare what is captured — making the lambda self-documenting and preventing accidental capture of mutable state.
+
+Automatic currying follows Haskell's model: every function of N parameters is conceptually a chain of N single-parameter functions.  This makes point-free style and function composition natural.
+
+
 ### Built-in Test System
 
 Unit testing is built into the language, similar to Rust's `#[test]` attribute.  Functions are annotated with `@test` to mark them as test functions.  The annotation accepts an optional list of function names that the test covers.
