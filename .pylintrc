@@ -1,0 +1,2 @@
+[tool.pylint.logging]
+disable = line-too-long, too-many-lines
