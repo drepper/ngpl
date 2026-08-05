@@ -15,6 +15,7 @@ from interp.ast import (
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, EnumDef,
     LambdaExpr, ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
+    StaticAssert, StaticAssertEq,
 )
 from interp.lexer import Token, KEYWORDS
 
@@ -1091,6 +1092,19 @@ class Parser:
                 args = self._parse_call_args()
                 node = MethodCall(node, "__call__", args)
             return node
+
+        # static_assert / static_assert_eq — special forms.
+        if tok.type == "IDENT" and tok.value == "static_assert":
+            self.pos += 1
+            args = self._parse_call_args()
+            return StaticAssert(args)
+
+        if tok.type == "IDENT" and tok.value == "static_assert_eq":
+            self.pos += 1
+            args = self._parse_call_args()
+            if len(args) != 2:
+                raise ParseError("static_assert_eq requires exactly 2 arguments", tok)
+            return StaticAssertEq(args[0], args[1])
 
         # Identifier (possibly function call, possibly followed by dotted chain).
         if tok.type == "IDENT":

@@ -1678,6 +1678,29 @@ Two built-in assertion functions are available in all scopes:
 
 - `assert_eq(expected, actual)` — fails if the two values differ.  The error message displays both values for easy comparison.  Large integers (such as cryptographic hashes) are displayed in hexadecimal.
 
+#### Compile-Time Assertions
+
+Two compile-time assertion functions verify conditions using only constant expressions.  If any argument is not a compile-time constant (i.e., it references a variable), a compilation error is raised immediately:
+
+- `static_assert(condition)` — fails at compile time if the condition is `false` or zero.  An optional second argument provides a custom error message: `static_assert(2 + 2 == 4)`, `static_assert(false, "unreachable")`.
+
+- `static_assert_eq(expected, actual)` — fails at compile time if the two constant values differ: `static_assert_eq(120, 2 * 3 * 4 * 5)`.
+
+Constant expressions include literals, arithmetic/logic operations on literals, unary operators, and array/tuple literals composed of constants.  References to variables — even `const` variables — are not compile-time constants for these purposes; use `assert` or `assert_eq` for those.
+
+```
+static_assert(true)                     /* OK */
+static_assert_eq(10, 3 + 7)            /* OK */
+static_assert_eq("hello", "hello")     /* OK */
+
+var x := 42
+static_assert(x)                       /* ERROR: not a compile-time constant */
+```
+
+| Feature | C/C++ | Rust | Zig | This language |
+|---------|-------|------|-----|---------------|
+| Compile-time assert | `static_assert` | `const_assert!` (nightly) | `comptime` + assert | `static_assert` / `static_assert_eq` |
+
 #### Test Output
 
 In normal mode, only failing tests produce output — passing tests are silent.  All standalone tests run before aborting, so every failure is reported in one pass.  Referenced tests that fail during execution terminate the program immediately.

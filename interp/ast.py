@@ -288,6 +288,27 @@ class CatchStmt:
         self.body = body
 
 
+class StaticAssert:
+    """Compile-time assertion: static_assert(cond) or static_assert(cond, msg).
+
+    All arguments must be compile-time constant expressions.
+    """
+
+    def __init__(self, args: list):
+        self.args = args
+
+
+class StaticAssertEq:
+    """Compile-time equality assertion: static_assert_eq(expected, actual).
+
+    Both arguments must be compile-time constant expressions.
+    """
+
+    def __init__(self, expected, actual):
+        self.expected = expected
+        self.actual = actual
+
+
 class EnumerateExpr:
     """Enumerate expression: @enumerate(container).
 

@@ -12,7 +12,7 @@ checkmark, commit the change, and change back to main.
 [x] add @enumerate(CONTAINER) which creates an iterator that can be used as in
     foreach i,v := @enumerate([5,4,3,2,1]):
 
-[ ] add static_assert, static_assert_eq etc to force the contained tests to be performed at compile time.
+[x] add static_assert, static_assert_eq etc to force the contained tests to be performed at compile time.
     If the expression is not compile-time constant raise a compilation error/crash the interpreter.
     add tests
 

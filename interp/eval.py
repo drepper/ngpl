@@ -22,6 +22,7 @@ from interp.ast import (
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr,
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
+    StaticAssert, StaticAssertEq,
 )
 from interp.value import (
     Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
@@ -143,6 +144,21 @@ def _collect_refs(node) -> set[str]:
         for e in node.elements:
             refs |= _collect_refs(e)
     return refs
+
+
+def _is_const_expr(node) -> bool:
+    """Check whether an AST node is a compile-time constant expression."""
+    if isinstance(node, (IntLit, StrLit, BoolLit, NoneLit)):
+        return True
+    if isinstance(node, BinOp):
+        return _is_const_expr(node.left) and _is_const_expr(node.right)
+    if isinstance(node, UnaryOp):
+        return _is_const_expr(node.operand)
+    if isinstance(node, ArrayLit):
+        return all(_is_const_expr(e) for e in node.elements)
+    if isinstance(node, TupleLit):
+        return all(_is_const_expr(e) for e in node.elements)
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -777,6 +793,53 @@ class Evaluator:
 
         if isinstance(node, VarRef):
             return self.env.lookup(node.name)
+
+        if isinstance(node, StaticAssert):
+            for arg in node.args:
+                if not _is_const_expr(arg):
+                    raise TypeError(
+                        "static_assert requires compile-time constant expressions")
+            if not node.args:
+                raise TypeError("static_assert requires at least 1 argument")
+            cond = self.eval_expr(node.args[0])
+            if isinstance(cond, BoolValue):
+                if not cond.value:
+                    msg = ""
+                    if len(node.args) > 1:
+                        m = self.eval_expr(node.args[1])
+                        msg = f": {m.display()}" if hasattr(m, "display") else ""
+                    raise TypeError(f"static_assert failed{msg}")
+            elif isinstance(cond, IntValue):
+                if cond.value == 0:
+                    raise TypeError("static_assert failed: value is zero")
+            else:
+                raise TypeError("static_assert condition must be bool or int")
+            return none()
+
+        if isinstance(node, StaticAssertEq):
+            if not _is_const_expr(node.expected) or not _is_const_expr(node.actual):
+                raise TypeError(
+                    "static_assert_eq requires compile-time constant expressions")
+            expected = self.eval_expr(node.expected)
+            actual = self.eval_expr(node.actual)
+            eu = unwrap_optional(expected)
+            au = unwrap_optional(actual)
+            if isinstance(eu, IntValue) and isinstance(au, IntValue):
+                if eu.value != au.value:
+                    raise TypeError(
+                        f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
+            elif isinstance(eu, StrValue) and isinstance(au, StrValue):
+                if eu.value != au.value:
+                    raise TypeError(
+                        f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
+            elif isinstance(eu, BoolValue) and isinstance(au, BoolValue):
+                if eu.value != au.value:
+                    raise TypeError(
+                        f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
+            else:
+                raise TypeError(
+                    f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
+            return none()
 
         if isinstance(node, WrapExpr):
             old = self._wrapping
