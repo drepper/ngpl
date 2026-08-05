@@ -57,6 +57,7 @@ KEYWORDS = {
     "flag": "FLAG",
     "replaceable": "REPLACEABLE",
     "catch": "CATCH",
+    "comptime": "COMPTIME",
 }
 
 # Keywords recognized only after the @ prefix.  The @ is part of the

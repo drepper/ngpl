@@ -2342,6 +2342,82 @@ g("Alice", "Bob")          /* names captures "Alice", "Bob" */
 The ellipsis suffix keeps pack declarations compact.  Unlike C++ which requires template parameter packs and fold expressions, pack elements are accessed with ordinary subscript syntax and the `.sizeof` property.
 
 
+### Comptime Foreach
+
+`comptime foreach` extends the regular `foreach` loop to iterate over parameter packs and tuples.  Because pack elements can have different types, the loop variable takes on a different type in each iteration — the body is conceptually unrolled once per element.
+
+#### Syntax
+
+```
+comptime foreach var := pack_or_container:
+    /* body — var has a different type each iteration */
+```
+
+The syntax is identical to `foreach` except for the `comptime` prefix.
+
+#### Iterating Over Parameter Packs
+
+A regular `foreach` cannot iterate over a parameter pack because packs are heterogeneous tuples, not arrays.  `comptime foreach` resolves this:
+
+```
+fn ct_sum args… : int → int:
+    var s : int = 0
+    comptime foreach v := args:
+        s ← s + v
+    s
+
+ct_sum(1, 2, 3, 4)    /* returns 10 */
+```
+
+Each iteration binds `v` to one pack element.  When the pack has a generic type, each element can have a different concrete type:
+
+```
+fn hetero_count args… → int:
+    var ints : int = 0
+    comptime foreach v := args:
+        if @typeof(v) == @typeof(0):
+            ints ← ints + 1
+    ints
+
+hetero_count(1, "a", 2)    /* returns 2 */
+```
+
+#### With @enumerate
+
+`@enumerate` works inside `comptime foreach` to provide `(index, value)` pairs:
+
+```
+fn indexed_sum args… : int → int:
+    var s : int = 0
+    comptime foreach pair := @enumerate(args):
+        var idx := pair[0]
+        var val := pair[1]
+        s ← s + val * (idx + 1)
+    s
+```
+
+#### Regular Containers
+
+`comptime foreach` also works on arrays and ranges, behaving identically to `foreach` in those cases:
+
+```
+var s : int = 0
+comptime foreach v := [10, 20, 30]:
+    s ← s + v
+/* s is 60 */
+```
+
+#### Comparison with Other Languages
+
+| Feature | C++ | Rust | Zig | This language |
+|---------|-----|------|-----|---------------|
+| Pack iteration | fold expressions, `std::apply` | proc macros | `inline for` | `comptime foreach` |
+| Heterogeneous | yes (each expansion differs) | N/A | yes (`inline for`) | yes (type changes per iteration) |
+| Works on arrays | `std::apply` on tuples | `for` | `for` / `inline for` | yes (same as `foreach`) |
+
+The `comptime foreach` keyword mirrors Zig's `inline for`, which also unrolls iterations at compile time to handle heterogeneous containers.  Unlike C++ fold expressions, the loop body uses ordinary imperative syntax — no special operator syntax is required.
+
+
 ### Standard Library: Memory Allocators
 
 The standard library provides two allocator subsystems under the `std` module: a global heap allocator and per-instance arena allocators.  Both return allocator objects with an `alloc(size)` method that yields a byte buffer.

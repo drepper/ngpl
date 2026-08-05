@@ -1,0 +1,98 @@
+/* Tests for comptime foreach over parameter packs. */
+
+/* Sum all pack elements using comptime foreach. */
+fn ct_sum args… : int → int:
+    var s : int = 0
+    comptime foreach v := args:
+        s ← s + v
+    s
+
+/* Count elements via comptime foreach. */
+fn ct_count args… → int:
+    var n : int = 0
+    comptime foreach v := args:
+        n ← n + 1
+    n
+
+/* Apply a function to each pack element. */
+fn apply_each f, args… : int → int:
+    var s : int = 0
+    comptime foreach v := args:
+        s ← s + f(v)
+    s
+
+fn double x : int → int:
+    x * 2
+
+/* ------------------------------------------------------------------ */
+
+@test
+fn test_ct_sum → ∅:
+    assert_eq(ct_sum(1, 2, 3, 4), 10)
+
+@test
+fn test_ct_sum_single → ∅:
+    assert_eq(ct_sum(42), 42)
+
+@test
+fn test_ct_count_empty → ∅:
+    assert_eq(ct_count(), 0)
+
+@test
+fn test_ct_count_several → ∅:
+    assert_eq(ct_count(1, "two", true), 3)
+
+@test
+fn test_ct_apply_each → ∅:
+    assert_eq(apply_each(double, 1, 2, 3), 12)
+
+/* comptime foreach also works on regular arrays. */
+@test
+fn test_ct_foreach_array → ∅:
+    var s : int = 0
+    comptime foreach v := [10, 20, 30]:
+        s ← s + v
+    assert_eq(s, 60)
+
+/* comptime foreach with @enumerate over a pack. */
+fn indexed_sum args… : int → int:
+    var s : int = 0
+    comptime foreach pair := @enumerate(args):
+        var idx := pair[0]
+        var val := pair[1]
+        s ← s + val * (idx + 1)
+    s
+
+@test
+fn test_ct_enumerate → ∅:
+    assert_eq(indexed_sum(10, 20, 30), 10 * 1 + 20 * 2 + 30 * 3)
+
+/* Heterogeneous pack: each iteration sees a different type. */
+fn hetero_count args… → int:
+    var ints : int = 0
+    var strs : int = 0
+    comptime foreach v := args:
+        if @typeof(v) == @typeof(0):
+            ints ← ints + 1
+        if @typeof(v) == @typeof(""):
+            strs ← strs + 1
+    ints * 10 + strs
+
+@test
+fn test_ct_hetero_types → ∅:
+    assert_eq(hetero_count(1, "a", 2, "b", "c"), 20 + 3)
+
+/* Empty pack produces zero iterations. */
+fn ct_empty args… → int:
+    var ran : int = 0
+    comptime foreach v := args:
+        ran ← 1
+    ran
+
+@test
+fn test_ct_empty_no_iterations → ∅:
+    assert_eq(ct_empty(), 0)
+
+@start
+fn main → ∅:
+    std.print("comptime foreach tests passed")

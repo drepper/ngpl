@@ -219,10 +219,11 @@ class ForEachStmt:
     body:      list of statements
     """
 
-    def __init__(self, vars, iterables, body):
+    def __init__(self, vars, iterables, body, is_comptime: bool = False):
         self.vars = vars
         self.iterables = iterables
         self.body = body
+        self.is_comptime = is_comptime
 
 
 class ExpectStmt:

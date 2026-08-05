@@ -511,6 +511,12 @@ class Parser:
         if self._check("WHILE"):
             return self._parse_while_stmt()
 
+        if self._check("COMPTIME"):
+            if (self.pos + 1 < len(self.tokens) and
+                    self.tokens[self.pos + 1].type == "FOREACH"):
+                self._eat("COMPTIME")
+                return self._parse_foreach_stmt(is_comptime=True)
+
         if self._check("FOREACH"):
             return self._parse_foreach_stmt()
 
@@ -607,8 +613,8 @@ class Parser:
         body = self._parse_block()
         return WhileStmt(cond, body)
 
-    def _parse_foreach_stmt(self):
-        """Parse: foreach var1 [: type1] [, var2 [: type2]] := expr1 [, expr2] block
+    def _parse_foreach_stmt(self, is_comptime: bool = False):
+        """Parse: [comptime] foreach var1 [: type1] [, var2 [: type2]] := expr1 [, expr2] block
         When a type annotation is present the = suffices (: already consumed);
         without a type annotation := is required."""
         self._eat("FOREACH")
@@ -646,7 +652,7 @@ class Parser:
             if not self._try_eat("PUNCT", ","):
                 break
         body = self._parse_block()
-        return ForEachStmt(vars_list, iterables, body)
+        return ForEachStmt(vars_list, iterables, body, is_comptime)
 
     def _parse_catch_stmt(self):
         """Parse: catch block"""
@@ -1033,21 +1039,24 @@ class Parser:
             expr = self._parse_or_expr()
             self._skip_nl()
             self._eat("PUNCT", ")")
-            return TypeOfExpr(expr)
+            node = TypeOfExpr(expr)
+            return self._parse_postfix(node)
         if self._check("RESULTOF"):
             self._eat("RESULTOF")
             self._eat("PUNCT", "(")
             name_tok = self._eat("IDENT")
             self._skip_nl()
             self._eat("PUNCT", ")")
-            return ResultOfExpr(name_tok.value)
+            node = ResultOfExpr(name_tok.value)
+            return self._parse_postfix(node)
         if self._check("SIZEOF"):
             self._eat("SIZEOF")
             self._eat("PUNCT", "(")
             expr = self._parse_or_expr()
             self._skip_nl()
             self._eat("PUNCT", ")")
-            return SizeOfExpr(expr)
+            node = SizeOfExpr(expr)
+            return self._parse_postfix(node)
         node = self._parse_primary()
         if self._check("OP") and self._cur().value == "?":
             self.pos += 1
@@ -1205,6 +1214,37 @@ class Parser:
             return node
 
         raise ParseError(f"unexpected token: {self._tok_display(tok)}", tok)
+
+    def _parse_postfix(self, node):
+        """Chain .attr, [idx], and (args) postfix operators onto node."""
+        while True:
+            if self._check("PUNCT") and self._cur().value == ".":
+                self.pos += 1
+                attr_tok = self._eat("IDENT")
+                attr_name = attr_tok.value
+                if self._check("PUNCT") and self._cur().value == "(":
+                    args = self._parse_call_args()
+                    node = MethodCall(node, attr_name, args)
+                else:
+                    node = GetAttr(node, attr_name)
+            elif self._check("PUNCT") and self._cur().value == "[":
+                self.pos += 1
+                idx_expr = self._parse_or_expr()
+                self._skip_nl()
+                self._eat("PUNCT", "]")
+                if isinstance(idx_expr, RangeExpr):
+                    node = SliceAccess(node, idx_expr.start, idx_expr.end)
+                else:
+                    node = Subscript(node, idx_expr)
+            elif self._check("PUNCT") and self._cur().value == "(":
+                args = self._parse_call_args()
+                node = MethodCall(node, "__call__", args)
+            else:
+                break
+        if self._check("OP") and self._cur().value == "?":
+            self.pos += 1
+            node = TryUnwrap(node)
+        return node
 
     def _parse_call_args(self):
         """Parse function/method call arguments: ( arg, arg, ... )."""

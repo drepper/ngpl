@@ -576,6 +576,8 @@ class Evaluator:
             return mk_bool(lu.value == ru.value)
         if isinstance(lu, BoolValue) and isinstance(ru, BoolValue):
             return mk_bool(lu.value == ru.value)
+        if isinstance(lu, TypeValue) and isinstance(ru, TypeValue):
+            return mk_bool(lu.name == ru.name)
         if type(lu) != type(ru):
             return mk_bool(False)
         return mk_bool(False)
@@ -1289,7 +1291,7 @@ class Evaluator:
         sequences: list[list[Value]] = []
         for expr in node.iterables:
             if isinstance(expr, EnumerateExpr):
-                inner = self._resolve_iterable(expr.expr)
+                inner = self._resolve_iterable(expr.expr, node.is_comptime)
                 sequences.append([
                     TupleValue([mk_int(i), v]) for i, v in enumerate(inner)
                 ])
@@ -1315,7 +1317,7 @@ class Evaluator:
                 else:
                     sequences.append([mk_int(i) for i in range(sv, ev - 1, -1)])
             else:
-                sequences.append(self._resolve_iterable(expr))
+                sequences.append(self._resolve_iterable(expr, node.is_comptime))
 
         if not sequences:
             return none()
@@ -1359,13 +1361,15 @@ class Evaluator:
                 self._frozen_vars.pop(name, None)
         return none()
 
-    def _resolve_iterable(self, expr) -> list[Value]:
+    def _resolve_iterable(self, expr, is_comptime: bool = False) -> list[Value]:
         """Resolve an expression to a list of values for foreach iteration."""
         val = unwrap_optional(self.eval_expr(expr))
         if isinstance(val, RangeValue):
             return [mk_int(i) for i in val.to_list()]
         if isinstance(val, ObjectValue) and isinstance(val.obj, ArrayValue):
             return list(val.obj.elements)
+        if is_comptime and isinstance(val, TupleValue):
+            return list(val.elements)
         raise TypeError(
             f"foreach requires range or iterable, got {type(val).__name__}")
 
