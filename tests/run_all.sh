@@ -2,17 +2,19 @@
 # Run all newlang test files and report a summary.
 # Exit with non-zero status if any test file fails.
 
-cd "$(dirname "$0")/.." || exit 1
+topdir=$(cd "$(dirname "$(realpath "$0")")/.." && pwd) || exit 1
+cd "$topdir" || exit 1
+testdir=$topdir/tests
 
 tests=(
-    tests/test_byte.nl
-    tests/test_const.nl
-    tests/test_errors.nl
-    tests/test_fast.nl
-    tests/test_foreach.nl
-    tests/test_layout.nl
-    tests/test_types.nl
-    tests/sha256.nl
+    "$testdir"/test_byte.nl
+    "$testdir"/test_const.nl
+    "$testdir"/test_errors.nl
+    "$testdir"/test_fast.nl
+    "$testdir"/test_foreach.nl
+    "$testdir"/test_layout.nl
+    "$testdir"/test_types.nl
+    "$testdir"/sha256.nl
 )
 
 passed=0
