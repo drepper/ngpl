@@ -1,6 +1,6 @@
 fn sum_bytes data : byte[] -> int:
     var total := 0
-    foreach b = data:
+    foreach b := data:
         total ← total + b
     total
 

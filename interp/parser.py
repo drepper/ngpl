@@ -391,20 +391,26 @@ class Parser:
         name_tok = self._eat("IDENT")
 
         type_annotation = None
-        if self._try_eat("PUNCT", ":"):
-            if self._check("IDENT"):
-                type_annotation = self._eat("IDENT").value
-                if self._check("PUNCT") and self._cur().value == "[":
-                    self.pos += 1
-                    size_expr = self._parse_or_expr()
-                    self._eat("PUNCT", "]")
-                    self._eat("PUNCT", "=")
-                    init_expr = self._parse_or_expr()
-                    self._try_eat("PUNCT", ";")
-                    return VarDef(name_tok.value, type_annotation,
-                                  ArrayAlloc(type_annotation, size_expr, init_expr),
-                                  is_const)
+        has_colon = self._try_eat("PUNCT", ":")
+        if has_colon and self._check("IDENT"):
+            type_annotation = self._eat("IDENT").value
+            if self._check("PUNCT") and self._cur().value == "[":
+                self.pos += 1
+                size_expr = self._parse_or_expr()
+                self._eat("PUNCT", "]")
+                self._eat("PUNCT", "=")
+                init_expr = self._parse_or_expr()
+                self._try_eat("PUNCT", ";")
+                return VarDef(name_tok.value, type_annotation,
+                              ArrayAlloc(type_annotation, size_expr, init_expr),
+                              is_const)
 
+        if not has_colon:
+            if not (self._check("PUNCT") and self._cur().value == ":"):
+                raise ParseError(
+                    f"{keyword} definition requires ':=' or ': type ='",
+                    self._cur())
+            self._eat("PUNCT", ":")
         self._eat("PUNCT", "=")
         init_expr = self._parse_or_expr()
         self._try_eat("PUNCT", ";")
@@ -586,17 +592,22 @@ class Parser:
         return WhileStmt(cond, body)
 
     def _parse_foreach_stmt(self):
-        """Parse: foreach var1 [: type1] [, var2 [: type2]] = expr1 [, expr2] block"""
+        """Parse: foreach var1 [: type1] [, var2 [: type2]] := expr1 [, expr2] block
+        When a type annotation is present the = suffices (: already consumed);
+        without a type annotation := is required."""
         self._eat("FOREACH")
         vars_list: list[tuple[str, str | None]] = []
+        last_has_type = False
         while True:
             name_tok = self._eat("IDENT")
             var_type = None
+            last_has_type = False
             if (self._check("PUNCT") and self._cur().value == ":" and
                     self.pos + 1 < len(self.tokens) and
                     self.tokens[self.pos + 1].type == "IDENT"):
                 self._eat("PUNCT", ":")
                 var_type = self._eat("IDENT").value
+                last_has_type = True
                 if self._check("OP") and self._cur().value == "?":
                     self.pos += 1
                     var_type += "?"
@@ -608,6 +619,10 @@ class Parser:
             vars_list.append((name_tok.value, var_type))
             if not self._try_eat("PUNCT", ","):
                 break
+        if not last_has_type:
+            if not (self._check("PUNCT") and self._cur().value == ":"):
+                raise ParseError("foreach without type annotation requires ':='", self._cur())
+            self._eat("PUNCT", ":")
         self._eat("PUNCT", "=")
         iterables = []
         while True:

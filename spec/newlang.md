@@ -391,7 +391,7 @@ Dynamic arrays support iteration with `foreach`:
 ```
 fn sum_bytes data : byte[] -> int:
     var total := 0
-    foreach b = data:
+    foreach b := data:
         total ← total + b
     total
 ```
@@ -914,20 +914,20 @@ The `foreach` loop iterates over **ranges** and **containers**, binding one or m
 #### Syntax
 
 ```
-foreach var1 [: type1] [, var2 [: type2] ...] = expr1 [, expr2 ...] block
+foreach var1 [: type1] [, var2 [: type2] ...] := expr1 [, expr2 ...] block
 ```
 
-The `=` separates the variable list from the iterable expressions.  The block uses either `:` (layout) or `{ }` (braces), like all other block constructs.
+The `:=` separates the variable list from the iterable expressions, consistent with variable definitions using `var x := expr`.  When a type annotation is present on the last variable, the `:` is consumed by the type syntax, so only `=` follows (e.g., `foreach k : u32 = 0…3:`).  The block uses either `:` (layout) or `{ }` (braces), like all other block constructs.
 
 #### Ranges
 
 A range expression `start…end` (using the `…` character) generates an inclusive sequence of integers:
 
 ```
-foreach i = 1…10:
+foreach i := 1…10:
     std.print(i)            /* prints 1, 2, 3, ..., 10 */
 
-foreach j = 5…1:
+foreach j := 5…1:
     std.print(j)            /* prints 5, 4, 3, 2, 1 */
 ```
 
@@ -938,24 +938,24 @@ The direction is determined by comparing `start` and `end`: ascending if `start 
 A three-part range `start…step…end` iterates from `start` to `end` (inclusive) with the given step size:
 
 ```
-foreach i = 0…2…10:
+foreach i := 0…2…10:
     std.print(i)            /* prints 0, 2, 4, 6, 8, 10 */
 
-foreach j = 1…3…10:
+foreach j := 1…3…10:
     std.print(j)            /* prints 1, 4, 7, 10 */
 ```
 
 The step can be negative for descending iteration:
 
 ```
-foreach k = 10…-3…0:
+foreach k := 10…-3…0:
     std.print(k)            /* prints 10, 7, 4, 1 */
 ```
 
 The step must be a non-zero integer.  The end bound is inclusive: the last value produced is the largest (or smallest, for negative step) value in the sequence that does not exceed the bound.  When the step does not evenly divide the range, the final value may be less than `end`:
 
 ```
-foreach i = 0…3…10:
+foreach i := 0…3…10:
     std.print(i)            /* prints 0, 3, 6, 9 (not 10) */
 ```
 
@@ -985,7 +985,7 @@ foreach k : u32 = 0…255:
 When the number of variables matches the number of expressions, each variable iterates over its corresponding iterable:
 
 ```
-foreach i, j = 1…5, 10…14:
+foreach i, j := 1…5, 10…14:
     /* i takes values 1,2,3,4,5 and j takes values 10,11,12,13,14 */
     ...
 ```
@@ -995,7 +995,7 @@ foreach i, j = 1…5, 10…14:
 The loop runs for as many iterations as the **longest** iterable.  Shorter iterables wrap around from the beginning:
 
 ```
-foreach i, j = 1…6, 10…12:
+foreach i, j := 1…6, 10…12:
     /* i: 1, 2, 3, 4, 5, 6          (6 iterations) */
     /* j: 10, 11, 12, 10, 11, 12    (wraps after 3) */
     ...
@@ -1006,7 +1006,7 @@ foreach i, j = 1…6, 10…12:
 When there is exactly **one** variable but **multiple** iterable expressions, the variable receives a **tuple** containing one element from each iterable at the current position:
 
 ```
-foreach pair = 1…3, 10…12:
+foreach pair := 1…3, 10…12:
     std.print(pair[0])      /* 1, 2, 3 */
     std.print(pair[1])      /* 10, 11, 12 */
 ```
@@ -1020,7 +1020,7 @@ In addition to ranges, `foreach` iterates directly over array elements:
 ```
 var data := [10, 20, 30, 40]
 var total := 0
-foreach val = data:
+foreach val := data:
     total ← total + val
 /* total is 100 */
 ```
@@ -1030,7 +1030,7 @@ This works with any array, including dynamic arrays passed as parameters:
 ```
 fn sum_bytes data : byte[] -> int:
     var total := 0
-    foreach b = data:
+    foreach b := data:
         total ← total + b
     total
 ```
@@ -1042,14 +1042,14 @@ For dynamic arrays, `foreach` uses the array's `.sizeof` to determine the iterat
 Loop variables are **constant** within the body — they cannot be reassigned:
 
 ```
-foreach i = 1…5:
+foreach i := 1…5:
     i ← i + 1          /* ERROR: cannot assign to foreach variable 'i' */
 ```
 
 Redefinition with `var` or `const` is permitted but produces a **warning**.  The new variable shadows the loop variable for the remainder of the iteration:
 
 ```
-foreach i = 1…3:
+foreach i := 1…3:
     var i := 99         /* WARNING: redefinition of foreach variable 'i' */
     /* i is 99 here, not the loop counter */
 ```
@@ -1061,14 +1061,14 @@ This distinction exists because shadowing is a common intentional pattern (e.g.,
 Accumulate a sum:
 ```
 var sum := 0
-foreach i = 1…100:
+foreach i := 1…100:
     sum ← sum + i
 /* sum is 5050 */
 ```
 
 Two-variable loop with wrapping:
 ```
-foreach row, col = 0…2, 0…3:
+foreach row, col := 0…2, 0…3:
     /* row wraps: 0,1,2,0  for 4 iterations (longest range) */
     /* col runs:  0,1,2,3 */
     ...
@@ -1076,7 +1076,7 @@ foreach row, col = 0…2, 0…3:
 
 Tuple destructuring by index:
 ```
-foreach point = [1,2,3], [10,20,30]:
+foreach point := [1,2,3], [10,20,30]:
     var x := point[0]
     var y := point[1]
 ```
@@ -1125,10 +1125,10 @@ The lambda body has a restricted environment:
 fn helper x : i32 -> i32:
     x + 100
 
-var offset = 10
-var f = λx : i32 |offset| -> i32: helper(x) + offset   // OK: helper is non-replaceable, offset is captured
-var g = λx : i32 -> i32: helper(x)                     // OK: helper needs no capture
-var h = λx : i32 -> i32: x + offset                     // ERROR: references 'offset' but has no capture list
+var offset := 10
+var f := λx : i32 |offset| -> i32: helper(x) + offset   // OK: helper is non-replaceable, offset is captured
+var g := λx : i32 -> i32: helper(x)                     // OK: helper needs no capture
+var h := λx : i32 -> i32: x + offset                     // ERROR: references 'offset' but has no capture list
 ```
 
 #### Calling Lambdas
@@ -1136,14 +1136,14 @@ var h = λx : i32 -> i32: x + offset                     // ERROR: references 'o
 Lambdas are first-class values.  They can be assigned to variables, passed as arguments, and returned from functions.
 
 ```
-var double = λx : int -> int: x * 2
+var double := λx : int -> int: x * 2
 assert_eq(10, double(5))
 ```
 
 Immediate application uses parentheses around the lambda:
 
 ```
-var result = (λx : int -> int: x + 1)(5)   // result is 6
+var result := (λx : int -> int: x + 1)(5)   // result is 6
 ```
 
 #### Lambdas as Arguments and Return Values
@@ -1155,7 +1155,7 @@ fn apply f, x : i32 -> i32:
 fn make_adder n : i32:
     λx : int |n| -> int: x + n
 
-var add3 = make_adder(3)
+var add3 := make_adder(3)
 assert_eq(8, add3(5))
 assert_eq(15, apply(λx : int -> int: x * 3, 5))
 ```
@@ -1168,7 +1168,7 @@ Calling a function with fewer arguments than its parameter list produces a parti
 fn add a : i32, b : i32 -> i32:
     a + b
 
-var add5 = add(5)                  // returns λb (partial add[5])
+var add5 := add(5)                  // returns λb (partial add[5])
 assert_eq(8, add5(3))
 ```
 
@@ -1178,16 +1178,16 @@ Multi-step currying is supported:
 fn add3 a : i32, b : i32, c : i32 -> i32:
     a + b + c
 
-var f1 = add3(1)                   // λb, c
-var f2 = f1(2)                     // λc
+var f1 := add3(1)                   // λb, c
+var f2 := f1(2)                     // λc
 assert_eq(6, f2(3))               // 1 + 2 + 3
 ```
 
 Lambdas themselves support partial application:
 
 ```
-var mul = λx : int, y : int -> int: x * y
-var triple = mul(3)
+var mul := λx : int, y : int -> int: x * y
+var triple := mul(3)
 assert_eq(15, triple(5))
 ```
 
@@ -1203,10 +1203,10 @@ fn strategy x : i32 -> i32:
     x * 2
 
 // Must capture — strategy could change after the lambda is created
-var f = λx : i32 |strategy| -> i32: strategy(x)
+var f := λx : i32 |strategy| -> i32: strategy(x)
 
 // ERROR: strategy is @replaceable and not captured
-var g = λx : i32 -> i32: strategy(x)
+var g := λx : i32 -> i32: strategy(x)
 ```
 
 This distinction ensures that lambdas with no capture list or an empty capture list are guaranteed to be pure with respect to user-defined state — they depend only on their parameters and immutable bindings.
@@ -1240,15 +1240,15 @@ Automatic currying follows Haskell's model: every function of N parameters is co
 Range expressions (`start…end` and `start…step…end`) are first-class values.  They can be stored in variables, passed as arguments, and iterated with `foreach`.
 
 ```
-var r = 1…10
-foreach i = r:
+var r := 1…10
+foreach i := r:
     ...
 ```
 
 Ranges bind tighter than comparison but looser than arithmetic:
 
 ```
-var r = 1 + 2 … 10 - 3             // equivalent to (1+2)…(10-3) = 3…7
+var r := 1 + 2 … 10 - 3             // equivalent to (1+2)…(10-3) = 3…7
 ```
 
 
@@ -1269,13 +1269,13 @@ generate(func, range)
 #### Basic Usage
 
 ```
-var squares = generate(λx : int -> int: x * x, 1…5)
+var squares := generate(λx : int -> int: x * x, 1…5)
 // squares = [1, 4, 9, 16, 25]
 
 fn double x : i32 -> i32:
     x * 2
 
-var doubled = generate(double, 1…4)
+var doubled := generate(double, 1…4)
 // doubled = [2, 4, 6, 8]
 ```
 
@@ -1287,25 +1287,25 @@ A curried function can be used as the mapping function:
 fn multiply a : i32, b : i32 -> i32:
     a * b
 
-var tripled = generate(multiply(3), 1…5)
+var tripled := generate(multiply(3), 1…5)
 // tripled = [3, 6, 9, 12, 15]
 ```
 
 #### With Stepped and Descending Ranges
 
 ```
-var evens = generate(λx : int -> int: x, 0…2…10)
+var evens := generate(λx : int -> int: x, 0…2…10)
 // evens = [0, 2, 4, 6, 8, 10]
 
-var desc = generate(λx : int -> int: x * x, 3…1)
+var desc := generate(λx : int -> int: x * x, 3…1)
 // desc = [9, 4, 1]
 ```
 
 #### With Captures
 
 ```
-var offset = 100
-var arr = generate(λx : int |offset| -> int: x + offset, 1…3)
+var offset := 100
+var arr := generate(λx : int |offset| -> int: x + offset, 1…3)
 // arr = [101, 102, 103]
 ```
 
@@ -1353,22 +1353,22 @@ shape ⍴ data
 When the left operand is a single integer, the result is a one-dimensional array:
 
 ```
-var zeros = 64 ⍴ 0               // [0, 0, ..., 0] — 64 elements
-var pattern = 5 ⍴ [1, 2, 3]      // [1, 2, 3, 1, 2] — cycling
-var first3 = 3 ⍴ [10, 20, 30, 40, 50]  // [10, 20, 30] — truncating
+var zeros := 64 ⍴ 0               // [0, 0, ..., 0] — 64 elements
+var pattern := 5 ⍴ [1, 2, 3]      // [1, 2, 3, 1, 2] — cycling
+var first3 := 3 ⍴ [10, 20, 30, 40, 50]  // [10, 20, 30] — truncating
 ```
 
 The dimension can be a variable:
 
 ```
-var n = 100
-var buf = n ⍴ 0
+var n := 100
+var buf := n ⍴ 0
 ```
 
 When the right operand is a range, it is expanded before cycling:
 
 ```
-var a = 5 ⍴ (1…3)                // [1, 2, 3, 1, 2]
+var a := 5 ⍴ (1…3)                // [1, 2, 3, 1, 2]
 ```
 
 #### Matrices and Tensors
@@ -1376,12 +1376,12 @@ var a = 5 ⍴ (1…3)                // [1, 2, 3, 1, 2]
 When the left operand is a tuple, the result is a nested array whose depth matches the number of dimensions:
 
 ```
-var m = (2, 3) ⍴ 0               // 2×3 matrix of zeros
-var filled = (2, 3) ⍴ [1, 2, 3, 4, 5, 6]
+var m := (2, 3) ⍴ 0               // 2×3 matrix of zeros
+var filled := (2, 3) ⍴ [1, 2, 3, 4, 5, 6]
 // filled[0] = [1, 2, 3]
 // filled[1] = [4, 5, 6]
 
-var cycled = (3, 2) ⍴ [1, 2, 3, 4, 5]
+var cycled := (3, 2) ⍴ [1, 2, 3, 4, 5]
 // cycled[0] = [1, 2]
 // cycled[1] = [3, 4]
 // cycled[2] = [5, 1]  — cycling wraps around
@@ -1394,7 +1394,7 @@ Elements fill in row-major order, matching APL/BQN semantics.
 The maximum number of dimensions is controlled by a global limit (`MAX_TENSOR_RANK`, default 8).  This same limit applies to all tensor operations in the language.  Exceeding it is a compile-time or runtime error:
 
 ```
-var too_deep = (1,1,1,1,1,1,1,1,1) ⍴ 0   // error if more than MAX_TENSOR_RANK dims
+var too_deep := (1,1,1,1,1,1,1,1,1) ⍴ 0   // error if more than MAX_TENSOR_RANK dims
 ```
 
 #### Array Bounds Checking
@@ -1402,15 +1402,15 @@ var too_deep = (1,1,1,1,1,1,1,1,1) ⍴ 0   // error if more than MAX_TENSOR_RANK
 Arrays perform strict bounds checking on both reads and writes.  Accessing an index outside `0..length-1` is a runtime error:
 
 ```
-var a = [1, 2, 3]
-var x = a[3]    // error: array index 3 out of range (length 3)
+var a := [1, 2, 3]
+var x := a[3]    // error: array index 3 out of range (length 3)
 a[-1] ← 4      // error: array index -1 out of range (length 3)
 ```
 
 This replaces the earlier behavior where out-of-bounds writes silently extended the array.  To grow an array, use `⍴` to reshape it to the desired size:
 
 ```
-var W = 64 ⍴ generate(load_word, 0…15)   // extend 16-element result to 64
+var W := 64 ⍴ generate(load_word, 0…15)   // extend 16-element result to 64
 ```
 
 #### Operator Precedence
@@ -1471,7 +1471,7 @@ This allows `⧺` and `⍴` to combine naturally without parentheses for common 
 
 ```
 // Build message schedule: 16 loaded words followed by 48 zero placeholders.
-var W = generate(load_word, 0…15) ⧺ 48 ⍴ [0]
+var W := generate(load_word, 0…15) ⧺ 48 ⍴ [0]
 ```
 
 This is clearer than the equivalent `64 ⍴ generate(load_word, 0…15)` because it does not rely on the cycling semantics of `⍴` to silently repeat data that will be overwritten.
@@ -1534,13 +1534,13 @@ The critical design property of `catch` is **syntactic scope**.  Errors from fun
 
 ```
 fn risky -> i32:
-    var a = [1]
+    var a := [1]
     a[99]              // raises IndexError
 
 fn caller -> i32?:
     catch:
         risky()        // error from risky() propagates — NOT caught
-        var a = [1, 2]
+        var a := [1, 2]
         a[5]           // this error WOULD be caught (direct operation)
 ```
 
@@ -1722,7 +1722,7 @@ Statement-level `@expect` for warnings inside a `@test` function:
 @test
 fn warn_foreach_redef -> ∅:
     var total := 0
-    foreach i = 1…3:
+    foreach i := 1…3:
         @expect warning "redefinition of foreach variable 'i'"
         var i := 99
         total ← total + i

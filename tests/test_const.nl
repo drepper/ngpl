@@ -24,7 +24,7 @@ fn test_const_in_expr -> ∅:
 @test
 fn test_const_in_loop -> ∅:
     var sum := 0
-    foreach i = 1…5:
+    foreach i := 1…5:
         const doubled := i * 2
         sum ← sum + doubled
     assert_eq(sum, 30)

@@ -24,7 +24,7 @@ fn error_const_redef -> ∅:
 
 @expect error "cannot assign to foreach variable 'i'"
 fn error_foreach_assign -> ∅:
-    foreach i = 1…3:
+    foreach i := 1…3:
         i ← i + 1
 
 /* foreach variable redefinition is a warning, not an error.
@@ -32,11 +32,26 @@ fn error_foreach_assign -> ∅:
 @test
 fn warn_foreach_redef -> ∅:
     var total := 0
-    foreach i = 1…3:
+    foreach i := 1…3:
         @expect warning "redefinition of foreach variable 'i'"
         var i := 99
         total ← total + i
     assert_eq(total, 297)
+
+/* foreach without type requires := not = */
+@expect error "requires ':='"
+fn error_foreach_bare_eq -> ∅:
+    foreach i = 1…3:
+        std.print(i)
+
+/* var/const without type requires := not = */
+@expect error "requires ':='"
+fn error_var_bare_eq -> ∅:
+    var x = 42
+
+@expect error "requires ':='"
+fn error_const_bare_eq -> ∅:
+    const x = 42
 
 /* --- fast type restrictions ----------------------------------------------- */
 
