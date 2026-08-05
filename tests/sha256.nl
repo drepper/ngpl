@@ -39,8 +39,8 @@ fn get_padded_byte(data : byte[], pos : usize, total_size : usize) -> ?u8:
     if pos == data.sizeof: return 128
     var len_start := total_size - 8
     if pos >= len_start:
-        var bit_len := data.sizeof * 8
-        var byte_idx := pos - len_start
+        const bit_len := data.sizeof * 8
+        const byte_idx := pos - len_start
         return (bit_len » ((7 - byte_idx) * 8)) & 255
     none
 
