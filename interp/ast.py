@@ -193,3 +193,25 @@ class ArrayAlloc:
         self.element_type = element_type  # type string like "i32", "u64"
         self.size_expr = size_expr        # expression AST node for the count
         self.init_expr = init_expr        # optional per-element initializer
+
+
+class RangeExpr:
+    """Range expression: start…end (inclusive on both ends)."""
+
+    def __init__(self, start, end):
+        self.start = start
+        self.end = end
+
+
+class ForEachStmt:
+    """Foreach loop: foreach vars = iterables block.
+
+    vars:      list of (name, type_or_None) tuples
+    iterables: list of expressions (RangeExpr or container)
+    body:      list of statements
+    """
+
+    def __init__(self, vars, iterables, body):
+        self.vars = vars
+        self.iterables = iterables
+        self.body = body

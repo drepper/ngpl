@@ -227,6 +227,26 @@ class BuiltinBoundMethod(Value):
         return meth(*args)
 
 
+class TupleValue(Value):
+    """An immutable tuple of runtime Values, used by foreach with multiple iterables."""
+
+    __slots__ = ("elements",)
+
+    def __init__(self, elements: list["Value"]):
+        self.elements = elements
+
+    def get(self, index: int) -> "Value":
+        if 0 <= index < len(self.elements):
+            return self.elements[index]
+        raise IndexError(f"tuple index {index} out of range (length {len(self.elements)})")
+
+    def display(self):
+        return "(" + ", ".join(e.display() for e in self.elements) + ")"
+
+    def to_python(self):
+        return tuple(e.to_python() for e in self.elements)
+
+
 class ArrayValue(Value):
     """A mutable array of runtime Values with dynamic growth.
 

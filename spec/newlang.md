@@ -419,6 +419,143 @@ This flexibility allows programmers to choose the style that best fits each situ
 The dual-mode approach draws from Haskell's optional layout rule while using Python's `:` syntax for familiarity.  The key advantage over Python is that braces remain available — useful for single-line blocks, machine-generated code, and situations where explicit delimiters reduce ambiguity.  The key advantage over Rust is that the common case of simple, sequential blocks needs no closing delimiter.
 
 
+### Foreach Loop
+
+The `foreach` loop iterates over **ranges** and **containers**, binding one or more loop variables that are constant within the loop body.
+
+#### Syntax
+
+```
+foreach var1 [: type1] [, var2 [: type2] ...] = expr1 [, expr2 ...] block
+```
+
+The `=` separates the variable list from the iterable expressions.  The block uses either `:` (layout) or `{ }` (braces), like all other block constructs.
+
+#### Ranges
+
+A range expression `start…end` (using the `…` character) generates an inclusive sequence of integers:
+
+```
+foreach i = 1…10:
+    std.print(i)            /* prints 1, 2, 3, ..., 10 */
+
+foreach j = 5…1:
+    std.print(j)            /* prints 5, 4, 3, 2, 1 */
+```
+
+The direction is determined by comparing `start` and `end`: ascending if `start ≤ end`, descending otherwise.  The type of the loop variable is **untyped int** — its actual integer width is decided by the context in which it is used, not committed to `int` at the range site.
+
+#### Typed Variables
+
+Loop variables can carry type annotations to coerce range values to a specific width:
+
+```
+foreach k : u32 = 0…255:
+    ...
+```
+
+#### Multiple Variables and Iterables
+
+When the number of variables matches the number of expressions, each variable iterates over its corresponding iterable:
+
+```
+foreach i, j = 1…5, 10…14:
+    /* i takes values 1,2,3,4,5 and j takes values 10,11,12,13,14 */
+    ...
+```
+
+#### Wrapping Shorter Ranges
+
+The loop runs for as many iterations as the **longest** iterable.  Shorter iterables wrap around from the beginning:
+
+```
+foreach i, j = 1…6, 10…12:
+    /* i: 1, 2, 3, 4, 5, 6          (6 iterations) */
+    /* j: 10, 11, 12, 10, 11, 12    (wraps after 3) */
+    ...
+```
+
+#### Single Variable with Multiple Iterables — Tuples
+
+When there is exactly **one** variable but **multiple** iterable expressions, the variable receives a **tuple** containing one element from each iterable at the current position:
+
+```
+foreach pair = 1…3, 10…12:
+    std.print(pair[0])      /* 1, 2, 3 */
+    std.print(pair[1])      /* 10, 11, 12 */
+```
+
+Tuple elements are accessed by integer index (`pair[0]`, `pair[1]`).  In the future, access by unique type name will also be supported when the element types are distinct.  Wrapping rules apply to each iterable independently.
+
+#### Container Iteration
+
+In addition to ranges, `foreach` accepts any iterable container (arrays, vectors, etc.):
+
+```
+var data := [10, 20, 30, 40]
+foreach idx = 0…3:
+    total ← total + data[idx]
+```
+
+Direct iteration over container elements (without index) will be supported as the container type system matures:
+
+```
+/* Future: */
+foreach val = data:
+    total ← total + val
+```
+
+#### Constant Loop Variables
+
+Loop variables are **constant** within the body — they cannot be reassigned or redefined:
+
+```
+foreach i = 1…5:
+    i ← i + 1          /* ERROR: cannot assign to foreach variable 'i' */
+    var i := 99         /* ERROR: cannot redefine foreach variable 'i' */
+```
+
+This constraint ensures that the loop's iteration is fully determined by the iterable expressions and cannot be altered by side effects in the body.
+
+#### Examples
+
+Accumulate a sum:
+```
+var sum := 0
+foreach i = 1…100:
+    sum ← sum + i
+/* sum is 5050 */
+```
+
+Two-variable loop with wrapping:
+```
+foreach row, col = 0…2, 0…3:
+    /* row wraps: 0,1,2,0  for 4 iterations (longest range) */
+    /* col runs:  0,1,2,3 */
+    ...
+```
+
+Tuple destructuring by index:
+```
+foreach point = [1,2,3], [10,20,30]:
+    var x := point[0]
+    var y := point[1]
+```
+
+#### Design Rationale
+
+| Feature | Python | Rust | Zig | This language |
+|---------|--------|------|-----|---------------|
+| Iteration keyword | `for` | `for` | `for` | `foreach` |
+| Range syntax | `range(1, 11)` | `1..=10` | `0..10` | `1…10` (inclusive) |
+| Multiple iterables | `zip(a, b)` | `a.zip(b)` | N/A | built-in with wrapping |
+| Tuple binding | destructuring | destructuring | N/A | single var → tuple |
+| Loop var mutability | mutable | immutable | N/A | immutable |
+| Shorter-range behavior | `zip` truncates | `zip` truncates | N/A | wraps around |
+
+The wrapping behavior for shorter ranges is deliberate: it enables patterns like cycling through a palette or repeating a short sequence across a longer one, which are common in array programming languages like APL.  Languages that truncate to the shortest require explicit repetition; wrapping makes the common case trivial.
+
+
 ### Built-in Test System
 
 Unit testing is built into the language, similar to Rust's `#[test]` attribute.  Functions are annotated with `@test` to mark them as test functions.  The annotation accepts an optional list of function names that the test covers.

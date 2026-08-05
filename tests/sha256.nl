@@ -92,24 +92,19 @@ fn sha256(data) -> ?int:
     while blk_off < total_size:
         /* --- Load W[0..15] from the current block (with padding overlay). --- */
         var W : u32[64] = 0
-        var i : u32 = 0
-        while i < 16:
+        foreach i : u32 = 0…15:
             W[i] ← get_padded_word(data, blk_off + (i * 4), data_size, total_size)?
-            i ← i + 1
 
         /* --- Message-schedule expansion: W[16..63]. --- */
-        var j : u32 = 16
-        while j < 64:
+        foreach j : u32 = 16…63:
             W[j] ← W[j - 16] + expand_s0(W[j - 15]) +
                     W[j - 7] + expand_s1(W[j - 2])
-            j ← j + 1
 
         /* --- Working variables: copy of current hash state. --- */
         var v := H[0…7]
 
         /* --- 64 compression rounds using K[t] and W[t]. --- */
-        var t : u32 = 0
-        while t < 64:
+        foreach t : u32 = 0…63:
             /* Σ₁(e) = ROTR(6,e) ⊕ ROTR(11,e) ⊕ ROTR(25,e). */
             var s1 := (v[4] ↻ 6) ^ (v[4] ↻ 11) ^ (v[4] ↻ 25)
 
@@ -133,8 +128,6 @@ fn sha256(data) -> ?int:
             v[0] ← t1 + t2
             v[4] ← v[4] + t1
 
-            t ← t + 1
-
         /* --- Add compressed chunk to current hash state. --- */
         H ← H + v
 
@@ -142,10 +135,8 @@ fn sha256(data) -> ?int:
 
     /* Pack final hash: H[0]«224 | … | H[7]. */
     var hash := 0
-    var k : u32 = 0
-    while k < 8:
-        hash ← (hash « 32) | H[k]
-        k ← k + 1
+    foreach h = H:
+        hash ← (hash « 32) | h
     hash
 
 /* ---------------------------------------------------------------------------

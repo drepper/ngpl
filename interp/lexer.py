@@ -50,6 +50,7 @@ KEYWORDS = {
     "start": "START",
     "test": "TEST",
     "const": "CONST",
+    "foreach": "FOREACH",
 }
 
 # Double-character operators that must be checked before single ones.

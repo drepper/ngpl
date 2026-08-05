@@ -13,6 +13,7 @@ from interp.ast import (
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
+    RangeExpr, ForEachStmt,
 )
 from interp.lexer import Token
 
@@ -282,6 +283,9 @@ class Parser:
         if self._check("WHILE"):
             return self._parse_while_stmt()
 
+        if self._check("FOREACH"):
+            return self._parse_foreach_stmt()
+
         if self._check("RETURN"):
             return self._parse_return_stmt()
 
@@ -371,6 +375,42 @@ class Parser:
         cond = self._parse_or_expr()
         body = self._parse_block()
         return WhileStmt(cond, body)
+
+    def _parse_foreach_stmt(self):
+        """Parse: foreach var1 [: type1] [, var2 [: type2]] = expr1 [, expr2] block"""
+        self._eat("FOREACH")
+        vars_list: list[tuple[str, str | None]] = []
+        while True:
+            name_tok = self._eat("IDENT")
+            var_type = None
+            if (self._check("PUNCT") and self._cur().value == ":" and
+                    self.pos + 1 < len(self.tokens) and
+                    (self.tokens[self.pos + 1].type == "IDENT" or
+                     (self.tokens[self.pos + 1].type == "OP" and
+                      self.tokens[self.pos + 1].value == "?"))):
+                self._eat("PUNCT", ":")
+                if self._check("OP") and self._cur().value == "?":
+                    self.pos += 1
+                    var_type = "?" + self._eat("IDENT").value
+                else:
+                    var_type = self._eat("IDENT").value
+            vars_list.append((name_tok.value, var_type))
+            if not self._try_eat("PUNCT", ","):
+                break
+        self._eat("PUNCT", "=")
+        iterables = []
+        while True:
+            expr = self._parse_or_expr()
+            if self._check("PUNCT") and self._cur().value == "…":
+                self.pos += 1
+                end = self._parse_or_expr()
+                iterables.append(RangeExpr(expr, end))
+            else:
+                iterables.append(expr)
+            if not self._try_eat("PUNCT", ","):
+                break
+        body = self._parse_block()
+        return ForEachStmt(vars_list, iterables, body)
 
     def _parse_return_stmt(self):
         """Parse: return [expr]"""

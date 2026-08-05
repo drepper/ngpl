@@ -18,10 +18,12 @@ from interp.ast import (
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
+    RangeExpr, ForEachStmt,
 )
 from interp.value import (
     Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue,
     FuncValue, BuiltinFunc, ObjectValue, BuiltinBoundMethod, ArrayValue,
+    TupleValue,
     mk_int, mk_str, mk_bool, none, some, is_none, is_some,
     resolve_width, wrap_int, coerce_to_type, coerce_arg, _TYPE_BITS,
 )
@@ -261,6 +263,7 @@ class Evaluator:
         self._test_hooks = test_hooks or {}
         self._tests_run: set[str] = set()
         self._current_ret_type: str | None = None
+        self._frozen_vars: set[str] = set()
         # Pre-compute builtin function mappings (avoid repeated lookups).
         self._ops = {
             "+": self._op_add,
@@ -617,10 +620,15 @@ class Evaluator:
             elements = [self.eval_expr(e) for e in node.elements]
             return ObjectValue(ArrayValue(elements))
 
-        # Subscript read: arr[idx].
+        # Subscript read: arr[idx] or tuple[idx].
         if isinstance(node, Subscript):
             arr_val = self.eval_expr(node.obj)
             unwrapped = unwrap_optional(arr_val)
+            if isinstance(unwrapped, TupleValue):
+                idx_val = self.eval_expr(node.index)
+                iu = unwrap_optional(idx_val)
+                if isinstance(iu, IntValue):
+                    return unwrapped.get(iu.value)
             if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
                 idx_val = self.eval_expr(node.index)
                 iu = unwrap_optional(idx_val)
@@ -723,11 +731,16 @@ class Evaluator:
                     if isinstance(iu, IntValue):
                         au.obj.set(iu.value, rhs)
             elif isinstance(target_ast, VarRef):
-                # name ← value — shadow in current scope.
+                if target_ast.name in self._frozen_vars:
+                    raise TypeError(
+                        f"cannot assign to foreach variable '{target_ast.name}'")
                 self.env.define(target_ast.name, rhs)
             return none()
 
         if isinstance(stmt, VarDef):
+            if stmt.name in self._frozen_vars:
+                raise TypeError(
+                    f"cannot redefine foreach variable '{stmt.name}'")
             value = self.eval_expr(stmt.init_expr)
             if stmt.type_annotation is not None:
                 value = coerce_to_type(value, stmt.type_annotation)
@@ -742,6 +755,9 @@ class Evaluator:
 
         if isinstance(stmt, WhileStmt):
             return self._eval_while(stmt)
+
+        if isinstance(stmt, ForEachStmt):
+            return self._eval_foreach(stmt)
 
         if isinstance(stmt, ReturnStmt):
             if stmt.value is not None:
@@ -771,6 +787,60 @@ class Evaluator:
         """Evaluate a while loop. Repeatedly check condition and execute body."""
         while to_bool(self.eval_expr(node.cond)):
             self.eval_stmts(node.body)
+        return none()
+
+    def _eval_foreach(self, node: ForEachStmt):
+        """Evaluate a foreach loop over ranges or containers."""
+        sequences: list[list[Value]] = []
+        for expr in node.iterables:
+            if isinstance(expr, RangeExpr):
+                s = unwrap_optional(self.eval_expr(expr.start))
+                e = unwrap_optional(self.eval_expr(expr.end))
+                if not isinstance(s, IntValue) or not isinstance(e, IntValue):
+                    raise TypeError("range bounds must be integers")
+                sv, ev = s.value, e.value
+                if sv <= ev:
+                    sequences.append([mk_int(i) for i in range(sv, ev + 1)])
+                else:
+                    sequences.append([mk_int(i) for i in range(sv, ev - 1, -1)])
+            else:
+                val = unwrap_optional(self.eval_expr(expr))
+                if isinstance(val, ObjectValue) and isinstance(val.obj, ArrayValue):
+                    sequences.append(list(val.obj.elements))
+                else:
+                    raise TypeError(
+                        f"foreach requires range or iterable, got {type(val).__name__}")
+
+        if not sequences:
+            return none()
+
+        max_len = max(len(seq) for seq in sequences)
+        num_vars = len(node.vars)
+        num_iters = len(sequences)
+
+        if num_vars > 1 and num_vars != num_iters:
+            raise TypeError(
+                f"foreach: {num_vars} variables but {num_iters} iterables "
+                f"(must match or use 1 variable)")
+
+        var_names = [v[0] for v in node.vars]
+        for name in var_names:
+            self._frozen_vars.add(name)
+        try:
+            for idx in range(max_len):
+                if num_vars == 1 and num_iters > 1:
+                    elements = [seq[idx % len(seq)] for seq in sequences]
+                    self.env.define(var_names[0], TupleValue(elements))
+                else:
+                    for (var_name, var_type), seq in zip(node.vars, sequences):
+                        val = seq[idx % len(seq)]
+                        if var_type is not None:
+                            val = coerce_to_type(val, var_type)
+                        self.env.define(var_name, val)
+                self.eval_stmts(node.body)
+        finally:
+            for name in var_names:
+                self._frozen_vars.discard(name)
         return none()
 
     # ------------------------------------------------------------------
