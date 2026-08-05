@@ -88,8 +88,7 @@ fn sha256 data : byte[] -> int?:
     ]
 
     /* Process each 64-byte block. */
-    var blk_off : usize = 0
-    while blk_off < total_size:
+    foreach blk_off : usize = 0…64…(total_size - 1):
         /* --- Load W[0..15] from the current block (with padding overlay). --- */
         var W : u32[64] = 0
         foreach i : u32fast = 0…15:
@@ -130,8 +129,6 @@ fn sha256 data : byte[] -> int?:
 
         /* --- Add compressed chunk to current hash state. --- */
         H ← @wrap(H + v)
-
-        blk_off ← blk_off + 64
 
     /* Pack final hash: H[0]«224 | … | H[7]. */
     var hash := 0

@@ -199,11 +199,12 @@ class ArrayAlloc:
 
 
 class RangeExpr:
-    """Range expression: start…end (inclusive on both ends)."""
+    """Range expression: start…end or start…step…end (inclusive on both ends)."""
 
-    def __init__(self, start, end):
+    def __init__(self, start, end, step=None):
         self.start = start
         self.end = end
+        self.step = step
 
 
 class ForEachStmt:

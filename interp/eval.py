@@ -959,7 +959,18 @@ class Evaluator:
                 if not isinstance(s, IntValue) or not isinstance(e, IntValue):
                     raise TypeError("range bounds must be integers")
                 sv, ev = s.value, e.value
-                if sv <= ev:
+                if expr.step is not None:
+                    st = unwrap_optional(self.eval_expr(expr.step))
+                    if not isinstance(st, IntValue):
+                        raise TypeError("range step must be an integer")
+                    stv = st.value
+                    if stv == 0:
+                        raise TypeError("range step must not be zero")
+                    if stv > 0:
+                        sequences.append([mk_int(i) for i in range(sv, ev + 1, stv)])
+                    else:
+                        sequences.append([mk_int(i) for i in range(sv, ev - 1, stv)])
+                elif sv <= ev:
                     sequences.append([mk_int(i) for i in range(sv, ev + 1)])
                 else:
                     sequences.append([mk_int(i) for i in range(sv, ev - 1, -1)])

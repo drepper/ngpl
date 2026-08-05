@@ -933,6 +933,44 @@ foreach j = 5…1:
 
 The direction is determined by comparing `start` and `end`: ascending if `start ≤ end`, descending otherwise.  The type of the loop variable is **untyped int** — its actual integer width is decided by the context in which it is used, not committed to `int` at the range site.
 
+#### Stepped Ranges
+
+A three-part range `start…step…end` iterates from `start` to `end` (inclusive) with the given step size:
+
+```
+foreach i = 0…2…10:
+    std.print(i)            /* prints 0, 2, 4, 6, 8, 10 */
+
+foreach j = 1…3…10:
+    std.print(j)            /* prints 1, 4, 7, 10 */
+```
+
+The step can be negative for descending iteration:
+
+```
+foreach k = 10…-3…0:
+    std.print(k)            /* prints 10, 7, 4, 1 */
+```
+
+The step must be a non-zero integer.  The end bound is inclusive: the last value produced is the largest (or smallest, for negative step) value in the sequence that does not exceed the bound.  When the step does not evenly divide the range, the final value may be less than `end`:
+
+```
+foreach i = 0…3…10:
+    std.print(i)            /* prints 0, 3, 6, 9 (not 10) */
+```
+
+Stepped ranges are particularly useful for block-oriented processing:
+
+```
+foreach blk_off : usize = 0…64…(total_size - 1):
+    /* process 64-byte blocks starting at blk_off */
+```
+
+| Syntax | Semantics |
+|--------|-----------|
+| `a…b` | Inclusive range from `a` to `b`, step 1 (or -1 if `a > b`) |
+| `a…s…b` | Inclusive range from `a` to `b`, step `s` |
+
 #### Typed Variables
 
 Loop variables can carry type annotations to coerce range values to a specific width:
@@ -1049,6 +1087,7 @@ foreach point = [1,2,3], [10,20,30]:
 |---------|--------|------|-----|---------------|
 | Iteration keyword | `for` | `for` | `for` | `foreach` |
 | Range syntax | `range(1, 11)` | `1..=10` | `0..10` | `1…10` (inclusive) |
+| Stepped range | `range(0, 11, 2)` | `(0..=10).step_by(2)` | N/A | `0…2…10` |
 | Multiple iterables | `zip(a, b)` | `a.zip(b)` | N/A | built-in with wrapping |
 | Tuple binding | destructuring | destructuring | N/A | single var → tuple |
 | Loop var mutability | mutable | immutable | N/A | immutable |

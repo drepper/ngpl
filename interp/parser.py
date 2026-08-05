@@ -603,8 +603,13 @@ class Parser:
             expr = self._parse_or_expr()
             if self._check("PUNCT") and self._cur().value == "…":
                 self.pos += 1
-                end = self._parse_or_expr()
-                iterables.append(RangeExpr(expr, end))
+                second = self._parse_or_expr()
+                if self._check("PUNCT") and self._cur().value == "…":
+                    self.pos += 1
+                    end = self._parse_or_expr()
+                    iterables.append(RangeExpr(expr, end, step=second))
+                else:
+                    iterables.append(RangeExpr(expr, second))
             else:
                 iterables.append(expr)
             if not self._try_eat("PUNCT", ","):
