@@ -128,21 +128,22 @@ class FileStream:
             1. Get file size via fstat (syscall).
             2. Allocate 'size' bytes from the allocator.
             3. Read all data into the allocated buffer.
-            4. Return Bytes(buffer) — caller converts to StrValue as needed.
+            4. Return byte[] ArrayValue.
 
         Args:
             allocator: an MmapAllocator instance.
 
         Returns:
-            A Bytes object containing the file's raw content.
+            An ObjectValue wrapping an ArrayValue of byte elements.
         """
+        from interp.value import ObjectValue, ArrayValue, mk_int
+
         fsize = _get_file_size(self._fd)
         buf_result = allocator.alloc(fsize)
 
         if buf_result is None or buf_result.data is None:
             raise MemoryError("allocation failed in read_file")
 
-        # Read all bytes at once (fine for this prototype; files are small).
         pos = 0
         total_read = 0
         while total_read < fsize:
@@ -153,14 +154,14 @@ class FileStream:
                 to_read = remaining
             n = os.read(self._fd, to_read)
             if not n:
-                break  # short read — end of file
+                break
             buf_result.data[pos:pos + len(n)] = n
             pos += len(n)
             total_read += len(n)
 
-        # Truncate buffer to actual data read.
-        buf_result.data = buf_result.data[:total_read]
-        return buf_result
+        raw = bytes(buf_result.data[:total_read])
+        elements = [mk_int(b, "byte") for b in raw]
+        return ObjectValue(ArrayValue(elements, element_type="byte"))
 
     def close(self):
         """Close the file descriptor."""
@@ -474,7 +475,7 @@ class StdModule:
             StrValue with the concatenated result (no trailing newline).
         """
         from interp.eval import unwrap_optional
-        from interp.value import IntValue, BoolValue, StrValue, ObjectValue, mk_str
+        from interp.value import IntValue, BoolValue, StrValue, ObjectValue, ArrayValue, mk_str
 
         parts = []
         for arg in args:
@@ -491,7 +492,9 @@ class StdModule:
                 parts.append(uv.value)
             elif isinstance(uv, ObjectValue):
                 obj = uv.obj
-                if isinstance(obj, Bytes):
+                if isinstance(obj, ArrayValue):
+                    parts.append(f"<byte[{obj.sizeof}]>")
+                elif isinstance(obj, Bytes):
                     parts.append(f"<bytes {len(obj.data)}>")
                 elif isinstance(obj, int):
                     parts.append(format(obj, "x") if obj.bit_length() > 32 else str(obj))
@@ -520,38 +523,43 @@ class StdModule:
         """sha256(data) — compute SHA-256 hash as arbitrary-width integer.
 
         Args:
-            args[0]: Bytes or StrValue object to hash.
+            args[0]: byte[] ArrayValue, Bytes, or StrValue object to hash.
 
         Returns:
             IntValue representing the 256-bit digest.
         """
         from interp.eval import unwrap_optional
-        from interp.value import ObjectValue, StrValue, mk_int
+        from interp.value import ObjectValue, StrValue, IntValue, ArrayValue, mk_int
         if len(args) != 1:
             raise TypeError("sha256(data) takes exactly 1 argument")
         data_arg = unwrap_optional(args[0])
         if isinstance(data_arg, ObjectValue):
-            if isinstance(data_arg.obj, Bytes):
+            if isinstance(data_arg.obj, ArrayValue):
+                data = bytes(e.value & 0xFF for e in data_arg.obj.elements
+                             if isinstance(e, IntValue))
+            elif isinstance(data_arg.obj, Bytes):
                 data = bytes(data_arg.obj.data)
             else:
-                raise TypeError(f"sha256 expects Bytes or StrValue, got {type(data_arg.obj).__name__}")
+                raise TypeError(f"sha256 expects byte[] or StrValue, got {type(data_arg.obj).__name__}")
         elif isinstance(data_arg, StrValue):
             data = data_arg.value.encode("utf-8")
         else:
-            raise TypeError(f"sha256 expects Bytes or StrValue, got {type(data_arg).__name__}")
+            raise TypeError(f"sha256 expects byte[] or StrValue, got {type(data_arg).__name__}")
         h = self._sha256(data)
         return mk_int(h)
 
     def bytes(self, args):
-        """bytes(str) -- create a Bytes object from a UTF-8 string."""
+        """bytes(str) -- create a byte[] array from a UTF-8 string."""
         from interp.eval import unwrap_optional
-        from interp.value import StrValue, ObjectValue
+        from interp.value import StrValue, ObjectValue, ArrayValue, mk_int
         if len(args) != 1:
             raise TypeError("bytes(str) takes exactly 1 argument")
         arg = unwrap_optional(args[0])
         if not isinstance(arg, StrValue):
             raise TypeError(f"bytes() expects string, got {type(arg).__name__}")
-        return ObjectValue(Bytes(bytearray(arg.value.encode("utf-8"))))
+        raw = arg.value.encode("utf-8")
+        elements = [mk_int(b, "byte") for b in raw]
+        return ObjectValue(ArrayValue(elements, element_type="byte"))
 
     def print(self, args):
         """print(...) — format arguments and write to stdout.
@@ -566,7 +574,7 @@ class StdModule:
             NoneValue.
         """
         from interp.eval import unwrap_optional
-        from interp.value import IntValue, BoolValue, StrValue, ObjectValue, mk_str
+        from interp.value import IntValue, BoolValue, StrValue, ObjectValue, ArrayValue, mk_str
 
         parts = []
         for arg in args:
@@ -582,7 +590,9 @@ class StdModule:
                 parts.append(uv.value)
             elif isinstance(uv, ObjectValue):
                 obj = uv.obj
-                if isinstance(obj, int):
+                if isinstance(obj, ArrayValue):
+                    parts.append(f"<byte[{obj.sizeof}]>")
+                elif isinstance(obj, int):
                     parts.append(str(obj))
                 elif isinstance(obj, Bytes):
                     parts.append(f"<bytes {len(obj.data)}>")

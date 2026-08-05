@@ -28,29 +28,34 @@ const K : u32 = [
 /* ---------------------------------------------------------------------------
  * SHA-256 padding helpers.
  *
- * The data object (Bytes) returns 0 for out-of-range reads, but SHA-256
- * padding requires a 0x80 byte after the message and a big-endian 64-bit
- * bit-length suffix.  These helpers overlay the padding on reads.
+ * SHA-256 padding requires a 0x80 byte after the message and a big-endian
+ * 64-bit bit-length suffix.  These helpers overlay the padding on reads
+ * beyond the original data.
  * --------------------------------------------------------------------------- */
 
-fn get_padded_byte(data, pos : usize, data_size : usize, total_size : usize) -> ?u8:
+fn get_padded_byte(data : byte[], pos : usize, total_size : usize) -> ?u8:
     if pos >= total_size: return none
-    if pos < data_size: return data.getbyte(pos)
-    if pos == data_size: return 128
+    if pos < data.sizeof: return data[pos]
+    if pos == data.sizeof: return 128
     var len_start := total_size - 8
     if pos >= len_start:
-        var bit_len := data_size * 8
+        var bit_len := data.sizeof * 8
         var byte_idx := pos - len_start
         return (bit_len » ((7 - byte_idx) * 8)) & 255
     none
 
-fn get_padded_word(data, off : usize, data_size : usize, total_size : usize) -> ?u32:
-    if off + 4 <= data_size: return data.getword(off)
+fn get_padded_word(data : byte[], off : usize, total_size : usize) -> ?u32:
+    if off + 4 <= data.sizeof:
+        var b0 : u32 = data[off]
+        var b1 : u32 = data[off + 1]
+        var b2 : u32 = data[off + 2]
+        var b3 : u32 = data[off + 3]
+        return (b0 « 24) | (b1 « 16) | (b2 « 8) | b3
     if off >= total_size: return none
-    var b0 : u32 = get_padded_byte(data, off, data_size, total_size) ?? 0
-    var b1 : u32 = get_padded_byte(data, off + 1, data_size, total_size) ?? 0
-    var b2 : u32 = get_padded_byte(data, off + 2, data_size, total_size) ?? 0
-    var b3 : u32 = get_padded_byte(data, off + 3, data_size, total_size) ?? 0
+    var b0 : u32 = get_padded_byte(data, off, total_size) ?? 0
+    var b1 : u32 = get_padded_byte(data, off + 1, total_size) ?? 0
+    var b2 : u32 = get_padded_byte(data, off + 2, total_size) ?? 0
+    var b3 : u32 = get_padded_byte(data, off + 3, total_size) ?? 0
     (b0 « 24) | (b1 « 16) | (b2 « 8) | b3
 
 /* ---------------------------------------------------------------------------
@@ -70,16 +75,14 @@ fn expand_s1(prev : u32) -> u32:
  * message schedule W[0..63] and round constants K[t].
  * --------------------------------------------------------------------------- */
 
-fn sha256(data) -> ?int:
-    var data_size : usize = data.size
-
+fn sha256(data : byte[]) -> ?int:
     /* Compute padded message length per SHA-256 spec. */
-    var rem : usize = data_size % 64
+    var rem : usize = data.sizeof % 64
     var pad_len : usize = 55 - rem
     if rem > 55:
         pad_len ← pad_len + 64
 
-    var total_size : usize = data_size + 1 + pad_len + 8
+    var total_size : usize = data.sizeof + 1 + pad_len + 8
 
     /* Initial hash values per FIPS 180-4 Section 5.3.3. */
     var H : u32 = [
@@ -92,11 +95,11 @@ fn sha256(data) -> ?int:
     while blk_off < total_size:
         /* --- Load W[0..15] from the current block (with padding overlay). --- */
         var W : u32[64] = 0
-        foreach i : u32 = 0…15:
-            W[i] ← get_padded_word(data, blk_off + (i * 4), data_size, total_size)?
+        foreach i : u32fast = 0…15:
+            W[i] ← get_padded_word(data, blk_off + (i * 4), total_size)?
 
         /* --- Message-schedule expansion: W[16..63]. --- */
-        foreach j : u32 = 16…63:
+        foreach j : u32fast = 16…63:
             W[j] ← W[j - 16] + expand_s0(W[j - 15]) +
                     W[j - 7] + expand_s1(W[j - 2])
 
@@ -104,7 +107,7 @@ fn sha256(data) -> ?int:
         var v := H[0…7]
 
         /* --- 64 compression rounds using K[t] and W[t]. --- */
-        foreach t : u32 = 0…63:
+        foreach t : u32fast = 0…63:
             /* Σ₁(e) = ROTR(6,e) ⊕ ROTR(11,e) ⊕ ROTR(25,e). */
             var s1 := (v[4] ↻ 6) ^ (v[4] ↻ 11) ^ (v[4] ↻ 25)
 

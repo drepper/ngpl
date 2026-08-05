@@ -25,7 +25,7 @@ from interp.value import (
     FuncValue, BuiltinFunc, ObjectValue, BuiltinBoundMethod, ArrayValue,
     TupleValue,
     mk_int, mk_str, mk_bool, none, some, is_none, is_some,
-    resolve_width, wrap_int, coerce_to_type, coerce_arg, _TYPE_BITS,
+    resolve_width, wrap_int, coerce_to_type, coerce_arg, _TYPE_BITS, FAST_TYPES,
 )
 from interp.env import Env
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
@@ -596,6 +596,9 @@ class Evaluator:
         if isinstance(node, GetAttr):
             obj = self.eval_expr(node.obj)
             unwrapped = unwrap_optional(obj)
+            if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
+                if node.attr == "sizeof":
+                    return mk_int(unwrapped.obj.sizeof)
             if isinstance(unwrapped, ObjectValue):
                 attr_val = getattr(unwrapped.obj, node.attr, None)
                 if attr_val is not None:
@@ -649,11 +652,14 @@ class Evaluator:
 
         # Array allocation: new type[size] or var name : type[size] = init.
         if isinstance(node, ArrayAlloc):
+            etype = node.element_type
+            if etype and etype in FAST_TYPES:
+                raise TypeError(
+                    f"fast type '{etype}' cannot be used as array element type")
             size_val = self.eval_expr(node.size_expr)
             sz = unwrap_optional(size_val)
             if isinstance(sz, IntValue):
                 init_val = self.eval_expr(node.init_expr) if node.init_expr is not None else mk_int(0)
-                etype = node.element_type
                 if etype and isinstance(init_val, IntValue):
                     init_val = mk_int(init_val.value, etype)
                 return ObjectValue(ArrayValue([init_val] * sz.value, element_type=etype))

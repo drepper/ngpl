@@ -28,7 +28,7 @@ from interp.env import Env
 from interp.ast import FuncDef as ASTFuncDef
 from interp.value import (
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
-    NoneValue, coerce_to_type, validate_param_type, none,
+    NoneValue, coerce_to_type, validate_param_type, none, FAST_TYPES,
 )
 from interp.eval import Evaluator, unwrap_optional
 
@@ -138,6 +138,10 @@ def main():
     for defn in definitions:
         if isinstance(defn, tuple) and len(defn) == 4 and defn[0] == "const_assign":
             _, name, type_ann, init_expr = defn
+            if type_ann is not None and type_ann in FAST_TYPES:
+                print(f"Error: fast type '{type_ann}' cannot be used in const definition '{name}'",
+                      file=sys.stderr)
+                sys.exit(1)
             value = evaluator.eval_expr(init_expr)
             if type_ann is not None:
                 value = coerce_to_type(value, type_ann)

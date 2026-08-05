@@ -150,6 +150,10 @@ class Parser:
                 else:
                     type_tok = self._eat("IDENT")
                     param_type = type_tok.value
+                if self._check("PUNCT") and self._cur().value == "[":
+                    self.pos += 1
+                    self._eat("PUNCT", "]")
+                    param_type += "[]"
             params.append((param_name_tok.value, param_type))
             self._try_eat("NEWLINE")
             if not self._try_eat("PUNCT", ","):

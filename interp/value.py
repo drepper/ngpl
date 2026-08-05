@@ -8,23 +8,43 @@ type checking and proper error messages.
 
 BUILTIN_TYPES: set[str] = {
     "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64",
-    "usize", "int", "bool", "none",
+    "usize", "int", "bool", "none", "byte",
+    "i8fast", "u8fast", "i16fast", "u16fast",
+    "i32fast", "u32fast", "i64fast", "u64fast",
 }
 
+# Platform-specific fast type mapping (x86_64: sub-32 → 32, 32/64 → 64).
+_FAST_TYPE_UNDERLYING: dict[str, str] = {
+    "u8fast": "u32", "i8fast": "i32",
+    "u16fast": "u32", "i16fast": "i32",
+    "u32fast": "u64", "i32fast": "i64",
+    "u64fast": "u64", "i64fast": "i64",
+}
+
+FAST_TYPES: frozenset[str] = frozenset(_FAST_TYPE_UNDERLYING)
+
 _TYPE_BITS: dict[str, int] = {
-    "u8": 8, "i8": 8,
+    "u8": 8, "i8": 8, "byte": 8,
     "u16": 16, "i16": 16,
     "u32": 32, "i32": 32,
     "u64": 64, "i64": 64,
     "usize": 64,
+    "u8fast": 32, "i8fast": 32,
+    "u16fast": 32, "i16fast": 32,
+    "u32fast": 64, "i32fast": 64,
+    "u64fast": 64, "i64fast": 64,
 }
 
 _TYPE_MASK: dict[str, int] = {
-    "u8": 0xFF, "i8": 0xFF,
+    "u8": 0xFF, "i8": 0xFF, "byte": 0xFF,
     "u16": 0xFFFF, "i16": 0xFFFF,
     "u32": 0xFFFFFFFF, "i32": 0xFFFFFFFF,
     "u64": 0xFFFFFFFFFFFFFFFF, "i64": 0xFFFFFFFFFFFFFFFF,
     "usize": 0xFFFFFFFFFFFFFFFF,
+    "u8fast": 0xFFFFFFFF, "i8fast": 0xFFFFFFFF,
+    "u16fast": 0xFFFFFFFF, "i16fast": 0xFFFFFFFF,
+    "u32fast": 0xFFFFFFFFFFFFFFFF, "i32fast": 0xFFFFFFFFFFFFFFFF,
+    "u64fast": 0xFFFFFFFFFFFFFFFF, "i64fast": 0xFFFFFFFFFFFFFFFF,
 }
 
 
@@ -267,6 +287,10 @@ class ArrayValue(Value):
             return self.elements[index]
         return mk_int(0, self.element_type or "untyped")
 
+    @property
+    def sizeof(self) -> int:
+        return len(self.elements)
+
     def set(self, index: int, value: Value):
         """Set element at index, coercing to element_type if set."""
         if self.element_type is not None and isinstance(value, IntValue):
@@ -314,6 +338,8 @@ def is_some(value):
 def validate_param_type(param_type: str, func_name: str, param_name: str):
     """Validate that a parameter type annotation is a known builtin type."""
     base = param_type.lstrip("?")
+    if base.endswith("[]"):
+        base = base[:-2]
     if base not in BUILTIN_TYPES:
         raise TypeError(
             f"in {func_name}: parameter '{param_name}' has unknown type '{param_type}'")
@@ -342,6 +368,21 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
                 f"{func_name}: argument '{param_name}' expected none, "
                 f"got {type(value).__name__}")
         return value
+
+    if param_type.endswith("[]"):
+        elem_type = param_type[:-2]
+        unwrapped = value
+        if isinstance(value, SomeValue):
+            unwrapped = value.value
+        if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
+            return unwrapped
+        if isinstance(unwrapped, ObjectValue) and hasattr(unwrapped.obj, "data"):
+            raw = bytes(unwrapped.obj.data)
+            elements = [mk_int(b, elem_type) for b in raw]
+            return ObjectValue(ArrayValue(elements, element_type=elem_type))
+        raise TypeError(
+            f"{func_name}: argument '{param_name}' expected {param_type}, "
+            f"got {type(value).__name__}")
 
     if param_type in _TYPE_BITS or param_type == "int":
         if not isinstance(value, IntValue):

@@ -134,6 +134,124 @@ The `untyped int` approach avoids requiring suffixes on every integer literal (a
 
 This design also enables the arbitrary-precision `int` type to coexist naturally with fixed-width types: a literal `256` in a context expecting `u8` is a compile error, but the same literal in an untyped context simply represents the mathematical integer 256.
 
+### Fast Integer Types
+
+For each fixed-width integer type, a corresponding **fast** variant exists that is at least as wide as the base type but may be wider if the platform can operate on the wider type more efficiently.  The naming convention appends `fast` to the base type name:
+
+| Fast type | Minimum width | x86_64 width | Underlying type |
+|-----------|---------------|--------------|-----------------|
+| `u8fast`  | 8-bit  | 32-bit | `u32` |
+| `i8fast`  | 8-bit  | 32-bit | `i32` |
+| `u16fast` | 16-bit | 32-bit | `u32` |
+| `i16fast` | 16-bit | 32-bit | `i32` |
+| `u32fast` | 32-bit | 64-bit | `u64` |
+| `i32fast` | 32-bit | 64-bit | `i64` |
+| `u64fast` | 64-bit | 64-bit | `u64` |
+| `i64fast` | 64-bit | 64-bit | `i64` |
+
+The primary use case is **loop indices and local counters** where the exact width is unimportant but performance matters.  On some 64-bit platforms, 32-bit operations are fastest (due to shorter instruction encodings and implicit zero-extension); on others, native 64-bit operations are faster.  Fast types let the compiler choose the optimal width for the target.
+
+#### Wrapping Behavior
+
+Fast types wrap at the width of their underlying type, not the minimum width.  For example, `u8fast` on x86_64 wraps at 2³² (not 2⁸):
+
+```
+var x : u8fast = 255
+x ← x + 1
+/* x is 256, not 0 — because u8fast is 32-bit on this platform */
+```
+
+This means code using fast types must not rely on narrow wrapping behavior.  If wrap-at-8-bit semantics are needed, use `u8` explicitly.
+
+#### Restriction: No Fast Types in Data Structures
+
+Fast types **cannot** be used in data structure definitions that are visible outside function scope.  This prevents platform-dependent memory layouts from leaking across compilation boundaries:
+
+- **Array element types**: `var arr : u8fast[64] = 0` is an error
+- **Const definitions**: `const K : u32fast = [...]` is an error
+- **Struct/product type members**: not allowed (when implemented)
+
+Fast types **are** allowed for:
+
+- Local scalar variables: `var i : u32fast = 0`
+- Loop indices: `foreach k : u32fast = 0…63:`
+- Function parameters: `fn f(x : u32fast) -> int:`
+
+#### Design Rationale
+
+This design mirrors C's `uint_fast8_t` family from `<stdint.h>` but with a cleaner naming convention and stricter usage rules.  The C standard allows fast types anywhere, which can lead to surprising behavior when data structures have different sizes on different platforms.  Restricting fast types to local computation prevents this class of portability bugs while preserving the performance benefit for the common case of loop indices.
+
+| Feature | C (`<stdint.h>`) | Rust | Zig | This language |
+|---------|-----------------|------|-----|---------------|
+| Fast types | `uint_fast8_t` etc. | none | none | `u8fast` etc. |
+| Data structure restriction | none | N/A | N/A | enforced |
+| Width guarantee | at least N bits | N/A | N/A | at least N bits |
+| Naming | verbose | N/A | N/A | `Nfast` suffix |
+
+
+### The `byte` Type
+
+The `byte` type is an 8-bit unsigned integer (semantically identical to `u8`) used specifically for raw data and I/O operations.  It occupies the range 0 to 255.
+
+While `byte` and `u8` have the same representation and coercion rules, `byte` signals intent: the value represents raw data rather than a numeric quantity.  Arithmetic on `byte` values follows the same wrapping rules as `u8`.
+
+
+### Dynamic Arrays as Parameters
+
+Function parameters can be annotated with dynamic array types using the `type[]` syntax:
+
+```
+fn process(data : byte[]) -> int:
+    ...
+```
+
+A dynamic array parameter carries its size implicitly.  The size is accessible via the `.sizeof` property:
+
+```
+fn count_bytes(data : byte[]) -> usize:
+    data.sizeof
+```
+
+#### Fixed-size vs. Dynamic Array Parameters
+
+| Syntax | Meaning |
+|--------|---------|
+| `data : byte[64]` | Fixed-size array of 64 bytes — a single value |
+| `data : byte[]` | Dynamic-size array — carries hidden size, queryable via `.sizeof` |
+
+Fixed-size array parameters behave as a single value of known extent.  Dynamic array parameters behave like a fat pointer: the array data and its length travel together.
+
+#### Coercion
+
+When a `Bytes` object (from file I/O or `std.bytes()`) is passed to a `byte[]` parameter, it is automatically coerced to a byte array.  Each byte becomes an element of type `byte`.
+
+#### Iteration
+
+Dynamic arrays support iteration with `foreach`:
+
+```
+fn sum_bytes(data : byte[]) -> int:
+    var total := 0
+    foreach b = data:
+        total ← total + b
+    total
+```
+
+The loop iterates over each element of the array.  The loop variable is constant within the body (as with all `foreach` variables).
+
+#### Design Rationale
+
+| Feature | C | Rust | Zig | Go | This language |
+|---------|---|------|-----|----|---------------|
+| Array + size | separate pointer and length | slice `&[u8]` | `[]const u8` | `[]byte` | `byte[]` with `.sizeof` |
+| Size access | manual tracking | `.len()` | `.len` | `len(s)` | `.sizeof` |
+| Bounds checking | none | runtime panic | optional | runtime panic | planned |
+
+The `.sizeof` property name is chosen to parallel the C/C++ `sizeof` operator while being a property of the array value rather than a compile-time operator.  It returns the number of elements, not the byte size (for `byte[]` these are identical, but for `u32[]` the element count and byte size differ).
+
+The dynamic array type is the natural parameter type for functions that operate on variable-length data: hash functions, encoders, search routines.  The implicit size avoids the error-prone pattern of passing separate data and length parameters.
+
+
 ### Integer Remainder
 
 The `%` operator computes the integer remainder with truncation toward zero, matching C, C++, and Rust semantics:
@@ -489,21 +607,27 @@ Tuple elements are accessed by integer index (`pair[0]`, `pair[1]`).  In the fut
 
 #### Container Iteration
 
-In addition to ranges, `foreach` accepts any iterable container (arrays, vectors, etc.):
+In addition to ranges, `foreach` iterates directly over array elements:
 
 ```
 var data := [10, 20, 30, 40]
-foreach idx = 0…3:
-    total ← total + data[idx]
-```
-
-Direct iteration over container elements (without index) will be supported as the container type system matures:
-
-```
-/* Future: */
+var total := 0
 foreach val = data:
     total ← total + val
+/* total is 100 */
 ```
+
+This works with any array, including dynamic arrays passed as parameters:
+
+```
+fn sum_bytes(data : byte[]) -> int:
+    var total := 0
+    foreach b = data:
+        total ← total + b
+    total
+```
+
+For dynamic arrays, `foreach` uses the array's `.sizeof` to determine the iteration count.
 
 #### Constant Loop Variables
 
