@@ -106,22 +106,22 @@ fn sha256 data : byte[] -> int?:
         /* --- 64 compression rounds using K[t] and W[t]. --- */
         foreach t : u32fast = 0…63:
             /* Σ₁(e) = ROTR(6,e) ⊕ ROTR(11,e) ⊕ ROTR(25,e). */
-            const s1 := (v[4] ↻ 6) ^ (v[4] ↻ 11) ^ (v[4] ↻ 25)
+            const Σ₁ := (v[4] ↻ 6) ^ (v[4] ↻ 11) ^ (v[4] ↻ 25)
 
             /* ch(e,f,g) = (e ∧ f) ⊕ (¬e ∧ g). */
             const ch := (v[4] & v[5]) ^ (~v[4] & v[6])
 
             /* t1 = h + Σ₁ + ch + K[t] + W[t]. */
-            const t1 := @wrap(v[7] + s1 + ch + K[t] + W[t])
+            const t1 := @wrap(v[7] + Σ₁ + ch + K[t] + W[t])
 
             /* Σ₀(a) = ROTR(2,a) ⊕ ROTR(13,a) ⊕ ROTR(22,a). */
-            const s0 := (v[0] ↻ 2) ^ (v[0] ↻ 13) ^ (v[0] ↻ 22)
+            const Σ₀ := (v[0] ↻ 2) ^ (v[0] ↻ 13) ^ (v[0] ↻ 22)
 
             /* maj(a,b,c) = (a ∧ b) ⊕ (a ∧ c) ⊕ (b ∧ c). */
             const maj := (v[0] & v[1]) ^ (v[0] & v[2]) ^ (v[1] & v[2])
 
             /* t2 = Σ₀ + maj. */
-            const t2 := @wrap(s0 + maj)
+            const t2 := @wrap(Σ₀ + maj)
 
             /* Shift working variables right by one position. */
             v[1…7] ← v[0…6]
