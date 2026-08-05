@@ -61,7 +61,7 @@ DOUBLE_OPS = {
 }
 
 # Single-character operators.
-SINGLE_OPS = set("+-*/%=<>!&|^~.,;:?(){}[]←«»↺↻…")
+SINGLE_OPS = set("+-*/%=<>!&|^~.,;:?(){}[]←«»↺↻…∧∨⊕⊼⊽¬")
 
 # Binary operators that signal line continuation when trailing.
 _CONTINUATION_OPS = frozenset({
@@ -70,6 +70,7 @@ _CONTINUATION_OPS = frozenset({
     "<<", ">>", "«", "»", "↺", "↻",
     "==", "!=", "<", ">", "<=", ">=",
     "??", "←",
+    "∧", "∨", "⊕", "⊼", "⊽",
 })
 
 
@@ -292,7 +293,7 @@ def tokenize(src: str):
             # = is syntactic (variable definition), not an operator.
             if ch == "=" or ch in ",.;:(){}[]…":
                 tokens.append(Token("PUNCT", ch, line, col))
-            elif ch in "+-*/%<>!&|^~?←«»↺↻":
+            elif ch in "+-*/%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬":
                 tokens.append(Token("OP", ch, line, col))
             pos += 1
             col += 1

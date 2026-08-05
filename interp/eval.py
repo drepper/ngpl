@@ -293,6 +293,11 @@ class Evaluator:
             "»": self._op_rshift,
             "↺": self._op_rotl,
             "↻": self._op_rotr,
+            "∧": self._op_logic_and,
+            "∨": self._op_logic_or,
+            "⊕": self._op_logic_xor,
+            "⊼": self._op_logic_nand,
+            "⊽": self._op_logic_nor,
         }
 
     # ------------------------------------------------------------------
@@ -492,6 +497,45 @@ class Evaluator:
             return mk_int_wrap(result, w)
         raise TypeError(f"rotate-right expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
+    @staticmethod
+    def _logic_bool(val) -> bool:
+        """Convert a value to logical boolean for binary logic operations.
+
+        Only integers and booleans are accepted; raises TypeError otherwise.
+        """
+        if isinstance(val, BoolValue):
+            return val.value
+        if isinstance(val, IntValue):
+            return val.value != 0
+        raise TypeError(
+            f"logic operations require integer or bool, "
+            f"got {type(val).__name__}")
+
+    def _op_logic_and(self, left, right):
+        lu = unwrap_optional(left)
+        ru = unwrap_optional(right)
+        return mk_bool(self._logic_bool(lu) and self._logic_bool(ru))
+
+    def _op_logic_or(self, left, right):
+        lu = unwrap_optional(left)
+        ru = unwrap_optional(right)
+        return mk_bool(self._logic_bool(lu) or self._logic_bool(ru))
+
+    def _op_logic_xor(self, left, right):
+        lu = unwrap_optional(left)
+        ru = unwrap_optional(right)
+        return mk_bool(self._logic_bool(lu) != self._logic_bool(ru))
+
+    def _op_logic_nand(self, left, right):
+        lu = unwrap_optional(left)
+        ru = unwrap_optional(right)
+        return mk_bool(not (self._logic_bool(lu) and self._logic_bool(ru)))
+
+    def _op_logic_nor(self, left, right):
+        lu = unwrap_optional(left)
+        ru = unwrap_optional(right)
+        return mk_bool(not (self._logic_bool(lu) or self._logic_bool(ru)))
+
     def _mk_int(self, value: int, width: str) -> IntValue:
         if self._wrapping:
             return mk_int_wrap(value, width)
@@ -583,6 +627,9 @@ class Evaluator:
                 if isinstance(unwrapped, IntValue):
                     return mk_int_wrap(~unwrapped.value, unwrapped.width)
                 raise TypeError(f"bitwise-not expected int, got {type(unwrapped).__name__}")
+            if node.op == "¬":
+                unwrapped = unwrap_optional(operand)
+                return mk_bool(not self._logic_bool(unwrapped))
             if node.op == "not":
                 return mk_bool(not to_bool(operand))
 

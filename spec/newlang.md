@@ -250,6 +250,70 @@ var y : u8 = 256         /* y is 0 (unsigned wraps) */
 
 Bitwise operations (`&`, `|`, `^`, `~`, `«`, `»`, `↺`, `↻`) always produce wrapped results regardless of signedness, since they operate on the bit representation and the result is always in range after masking.
 
+
+### Binary Logic Operations
+
+Binary logic operations use Unicode glyphs and operate on logical truth values.  Unlike bitwise operations (which manipulate individual bits), these first reduce each operand to a boolean and then apply the logic function.  The result is always `bool`.
+
+#### Operators
+
+| Glyph | Name | Arity  | Definition |
+|-------|------|--------|------------|
+| `∧`   | AND  | binary | true when both operands are truthy |
+| `∨`   | OR   | binary | true when at least one operand is truthy |
+| `⊕`   | XOR  | binary | true when exactly one operand is truthy |
+| `⊼`   | NAND | binary | true when not both operands are truthy |
+| `⊽`   | NOR  | binary | true when neither operand is truthy |
+| `¬`   | NOT  | unary  | true when the operand is falsy |
+
+#### Operand Conversion
+
+For `bool` operands the value is used directly.  For integer operands (`i8`, `u32`, `int`, etc.) a nonzero test is applied: zero maps to `false`, any nonzero value maps to `true`.  Floating-point operands are not allowed and produce a type error.
+
+```
+var a : i32 = 42
+var b : i32 = 0
+a ∧ b                       /* false — 42 is truthy, 0 is falsy */
+a ∨ b                       /* true  — at least one is truthy */
+¬b                           /* true  — 0 is falsy */
+```
+
+#### Precedence
+
+The logic operators follow standard Boolean algebra precedence, all binding tighter than the short-circuit keywords `and`/`or` and looser than comparison operators:
+
+| Tightest → Loosest | Operators |
+|---------------------|-----------|
+| comparison          | `==`, `!=`, `<`, `>`, `<=`, `>=` |
+| logic AND/NAND      | `∧`, `⊼` |
+| logic XOR           | `⊕` |
+| logic OR/NOR        | `∨`, `⊽` |
+| short-circuit AND   | `and` |
+| short-circuit OR    | `or` |
+
+This means `a == 0 ∧ b != 0` parses as `(a == 0) ∧ (b != 0)`, and `x ∧ y ∨ z` parses as `(x ∧ y) ∨ z`.
+
+#### Element-wise on Arrays
+
+Like arithmetic operators, the logic operators iterate element-wise over arrays and vectors:
+
+```
+var a : i32[3] = 0
+a[0] ← 1; a[1] ← 0; a[2] ← 5
+var b : i32[3] = 0
+b[0] ← 3; b[1] ← 0; b[2] ← 0
+var r := a ∧ b              /* [true, false, false] */
+```
+
+#### Distinction from Other Operators
+
+| Category | Operators | Semantics |
+|----------|-----------|-----------|
+| Bitwise  | `&`, `\|`, `^`, `~` | operate on individual bits, result is an integer of the same type |
+| Logic    | `∧`, `∨`, `⊕`, `⊼`, `⊽`, `¬` | nonzero test then logic function, result is `bool` |
+| Short-circuit | `and`, `or`, `not` | like logic but short-circuit evaluation, result is `bool` |
+
+
 #### Explicit Wrapping with `@wrap`
 
 The `@wrap(expr)` annotation enables modular arithmetic for all operations within its scope, even for signed types that would normally abort on overflow.  This is useful for cryptographic algorithms and other code that intentionally uses wrapping arithmetic on signed types:

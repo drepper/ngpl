@@ -581,15 +581,56 @@ class Parser:
         return left
 
     def _parse_and_expr(self):
-        """and_expr → cmp_expr ('and' cmp_expr)*"""
-        left = self._parse_cmp_expr()
+        """and_expr → logic_or_expr ('and' logic_or_expr)*"""
+        left = self._parse_logic_or_expr()
         while True:
             self._skip_nl()
             if not self._try_eat("AND"):
                 break
             self._skip_nl()
-            right = self._parse_cmp_expr()
+            right = self._parse_logic_or_expr()
             left = BinOp("and", left, right)
+        return left
+
+    def _parse_logic_or_expr(self):
+        """logic_or_expr → logic_xor_expr (('∨' | '⊽') logic_xor_expr)*"""
+        left = self._parse_logic_xor_expr()
+        while True:
+            self._skip_nl()
+            if not (self._check("OP") and self._cur().value in ("∨", "⊽")):
+                break
+            op_tok = self._cur()
+            self.pos += 1
+            self._skip_nl()
+            right = self._parse_logic_xor_expr()
+            left = BinOp(op_tok.value, left, right)
+        return left
+
+    def _parse_logic_xor_expr(self):
+        """logic_xor_expr → logic_and_expr ('⊕' logic_and_expr)*"""
+        left = self._parse_logic_and_expr()
+        while True:
+            self._skip_nl()
+            if not (self._check("OP") and self._cur().value == "⊕"):
+                break
+            self.pos += 1
+            self._skip_nl()
+            right = self._parse_logic_and_expr()
+            left = BinOp("⊕", left, right)
+        return left
+
+    def _parse_logic_and_expr(self):
+        """logic_and_expr → cmp_expr (('∧' | '⊼') cmp_expr)*"""
+        left = self._parse_cmp_expr()
+        while True:
+            self._skip_nl()
+            if not (self._check("OP") and self._cur().value in ("∧", "⊼")):
+                break
+            op_tok = self._cur()
+            self.pos += 1
+            self._skip_nl()
+            right = self._parse_cmp_expr()
+            left = BinOp(op_tok.value, left, right)
         return left
 
     def _parse_cmp_expr(self):
@@ -691,7 +732,7 @@ class Parser:
         return left
 
     def _parse_unary(self):
-        """unary → ('-' | '~' | 'not' | '@wrap') unary | primary"""
+        """unary → ('-' | '~' | '¬' | 'not' | '@wrap') unary | primary"""
         if self._check("OP") and self._cur().value == "-":
             self.pos += 1
             operand = self._parse_unary()
@@ -700,6 +741,10 @@ class Parser:
             self.pos += 1
             operand = self._parse_unary()
             return UnaryOp("~", operand)
+        if self._check("OP") and self._cur().value == "¬":
+            self.pos += 1
+            operand = self._parse_unary()
+            return UnaryOp("¬", operand)
         if self._check("NOT"):
             self._eat("NOT")
             operand = self._parse_unary()
