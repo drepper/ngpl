@@ -89,9 +89,9 @@ fn sha256 data : byte[] -> int?:
 
     /* Process each 64-byte block. */
     foreach blk_off : usize = 0…64…(total_size - 1):
-        /* --- Load W[0..15] from the current block using generate. --- */
+        /* --- Load W[0..63]: first 16 from data, rest filled by expansion. --- */
         var load_word = λi |data, blk_off, total_size|: get_padded_word(data, blk_off + (i * 4), total_size)?
-        var W = generate(load_word, 0…15)
+        var W = 64 ⍴ generate(load_word, 0…15)
 
         /* --- Message-schedule expansion: W[16..63]. --- */
         foreach j : u32fast = 16…63:

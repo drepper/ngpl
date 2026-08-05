@@ -255,6 +255,21 @@ class LambdaExpr:
         self.body = body
 
 
+class ReshapeExpr:
+    """Reshape expression: shape ⍴ data."""
+
+    def __init__(self, shape, data):
+        self.shape = shape
+        self.data = data
+
+
+class TupleLit:
+    """Tuple literal: (expr, expr, ...)."""
+
+    def __init__(self, elements):
+        self.elements = elements
+
+
 class EnumDef:
     """Enum type definition at top level.
 

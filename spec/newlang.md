@@ -1334,6 +1334,108 @@ For higher-rank results (matrices, tensors), `generate` will accept multi-dimens
 `generate` combines mapping and collection into a single operation, emphasizing the functional construction of arrays.  The prohibition on ∅ return values ensures the result array is dense — every element contains a meaningful value.  This matches the array programming tradition (APL, J, BQN) where arrays are always rectangular and fully populated.
 
 
+### The Reshape Operator (`⍴`)
+
+The reshape operator `⍴` (APL rho) creates arrays and tensors by reshaping data to specified dimensions.  The left operand defines the shape; the right operand provides the data, which is cycled if it contains fewer elements than needed.
+
+#### Syntax
+
+```
+shape ⍴ data
+```
+
+- **shape**: an integer (vector result) or a tuple of integers (matrix/tensor result).
+- **data**: a scalar, array, or range whose elements fill the result.
+- **returns**: a new array (or nested array for matrices/tensors) of the specified shape.
+
+#### Vectors
+
+When the left operand is a single integer, the result is a one-dimensional array:
+
+```
+var zeros = 64 ⍴ 0               // [0, 0, ..., 0] — 64 elements
+var pattern = 5 ⍴ [1, 2, 3]      // [1, 2, 3, 1, 2] — cycling
+var first3 = 3 ⍴ [10, 20, 30, 40, 50]  // [10, 20, 30] — truncating
+```
+
+The dimension can be a variable:
+
+```
+var n = 100
+var buf = n ⍴ 0
+```
+
+When the right operand is a range, it is expanded before cycling:
+
+```
+var a = 5 ⍴ (1…3)                // [1, 2, 3, 1, 2]
+```
+
+#### Matrices and Tensors
+
+When the left operand is a tuple, the result is a nested array whose depth matches the number of dimensions:
+
+```
+var m = (2, 3) ⍴ 0               // 2×3 matrix of zeros
+var filled = (2, 3) ⍴ [1, 2, 3, 4, 5, 6]
+// filled[0] = [1, 2, 3]
+// filled[1] = [4, 5, 6]
+
+var cycled = (3, 2) ⍴ [1, 2, 3, 4, 5]
+// cycled[0] = [1, 2]
+// cycled[1] = [3, 4]
+// cycled[2] = [5, 1]  — cycling wraps around
+```
+
+Elements fill in row-major order, matching APL/BQN semantics.
+
+#### Dimension Limit
+
+The maximum number of dimensions is controlled by a global limit (`MAX_TENSOR_RANK`, default 8).  This same limit applies to all tensor operations in the language.  Exceeding it is a compile-time or runtime error:
+
+```
+var too_deep = (1,1,1,1,1,1,1,1,1) ⍴ 0   // error if more than MAX_TENSOR_RANK dims
+```
+
+#### Array Bounds Checking
+
+Arrays perform strict bounds checking on both reads and writes.  Accessing an index outside `0..length-1` is a runtime error:
+
+```
+var a = [1, 2, 3]
+var x = a[3]    // error: array index 3 out of range (length 3)
+a[-1] ← 4      // error: array index -1 out of range (length 3)
+```
+
+This replaces the earlier behavior where out-of-bounds writes silently extended the array.  To grow an array, use `⍴` to reshape it to the desired size:
+
+```
+var W = 64 ⍴ generate(load_word, 0…15)   // extend 16-element result to 64
+```
+
+#### Operator Precedence
+
+`⍴` binds tighter than arithmetic (`+`, `-`, `*`, `/`) but looser than unary operators (`-x`, `~x`).  This means:
+
+```
+3 * 4 ⍴ 0     // 3 * [0, 0, 0, 0] — reshape first, then multiply
+2 + 3 ⍴ 5     // 2 + [5, 5, 5]    — reshape first, then add
+```
+
+#### Design Rationale
+
+| Feature | APL/BQN | Python | Rust | This language |
+|---------|---------|--------|------|---------------|
+| Reshape | `n ⍴ data` | `numpy.reshape` | N/A | `n ⍴ data` |
+| Fill mode | cycle | error on mismatch | N/A | cycle |
+| Bounds check | implicit | `IndexError` | panic | `IndexError` |
+| Syntax | glyph | method | method | glyph |
+
+The APL tradition uses `⍴` both monadically (query shape) and dyadically (reshape).  This language currently implements only the dyadic form.  The monadic form (returning the shape of an array) may be added in future.
+
+The cycling semantics follow APL: when the data has fewer elements than the result requires, elements are reused from the beginning.  This makes `n ⍴ scalar` a natural way to create filled arrays, and `n ⍴ array` extends arrays without requiring explicit concatenation.
+
+
 ### Built-in Test System
 
 Unit testing is built into the language, similar to Rust's `#[test]` attribute.  Functions are annotated with `@test` to mark them as test functions.  The annotation accepts an optional list of function names that the test covers.

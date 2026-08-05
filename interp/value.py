@@ -449,11 +449,14 @@ class RangeValue(Value):
         return self.to_list()
 
 
+MAX_TENSOR_RANK: int = 8
+
+
 class ArrayValue(Value):
-    """A mutable array of runtime Values with dynamic growth.
+    """A mutable array of runtime Values with bounds checking.
 
     Elements can be read via get() and written via set().
-    Setting an index beyond the current length zero-fills the gap.
+    Both raise IndexError for out-of-bounds access.
     If element_type is set, stored values are automatically coerced.
     """
 
@@ -464,21 +467,23 @@ class ArrayValue(Value):
         self.element_type = element_type
 
     def get(self, index: int) -> Value:
-        """Return element at index; returns IntValue(0) if out of range."""
+        """Return element at index; raises IndexError if out of range."""
         if 0 <= index < len(self.elements):
             return self.elements[index]
-        return mk_int(0, self.element_type or "untyped")
+        raise IndexError(
+            f"array index {index} out of range (length {len(self.elements)})")
 
     @property
     def sizeof(self) -> int:
         return len(self.elements)
 
     def set(self, index: int, value: Value):
-        """Set element at index, coercing to element_type if set."""
+        """Set element at index; raises IndexError if out of range."""
         if self.element_type is not None and isinstance(value, IntValue):
             value = mk_int(value.value, self.element_type)
-        while len(self.elements) <= index:
-            self.elements.append(mk_int(0, self.element_type or "untyped"))
+        if index < 0 or index >= len(self.elements):
+            raise IndexError(
+                f"array index {index} out of range (length {len(self.elements)})")
         self.elements[index] = value
 
 

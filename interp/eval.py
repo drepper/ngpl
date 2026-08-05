@@ -21,6 +21,7 @@ from interp.ast import (
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr,
+    ReshapeExpr, TupleLit,
 )
 from interp.value import (
     Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
@@ -28,7 +29,7 @@ from interp.value import (
     ArrayValue, TupleValue, EnumType, EnumValue, RangeValue,
     mk_int, mk_int_wrap, mk_str, mk_bool, none, some, is_none, is_some,
     resolve_width, wrap_int, coerce_to_type, coerce_arg, _TYPE_BITS, FAST_TYPES,
-    _split_optional_type,
+    _split_optional_type, MAX_TENSOR_RANK,
 )
 from interp.env import Env
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
@@ -91,6 +92,12 @@ def _collect_refs(node) -> set[str]:
         if node.captures:
             inner -= set(node.captures)
         refs |= inner
+    elif isinstance(node, ReshapeExpr):
+        refs |= _collect_refs(node.shape)
+        refs |= _collect_refs(node.data)
+    elif isinstance(node, TupleLit):
+        for e in node.elements:
+            refs |= _collect_refs(e)
     return refs
 
 
@@ -869,6 +876,15 @@ class Evaluator:
         if isinstance(node, LambdaExpr):
             return self._eval_lambda_expr(node)
 
+        if isinstance(node, TupleLit):
+            elements = [self.eval_expr(e) for e in node.elements]
+            return TupleValue(elements)
+
+        if isinstance(node, ReshapeExpr):
+            shape = self.eval_expr(node.shape)
+            data = self.eval_expr(node.data)
+            return self._eval_reshape(shape, data)
+
         # Array allocation: new type[size] or var name : type[size] = init.
         if isinstance(node, ArrayAlloc):
             etype = node.element_type
@@ -1130,6 +1146,88 @@ class Evaluator:
             raise TypeError(
                 f"expected diagnostics not produced: {unmatched}")
         return none()
+
+    # ------------------------------------------------------------------
+    # Reshape (⍴) operator
+    # ------------------------------------------------------------------
+
+    def _eval_reshape(self, shape_val: Value, data_val: Value) -> Value:
+        """Evaluate shape ⍴ data — reshape data to the given dimensions."""
+        su = unwrap_optional(shape_val)
+        du = unwrap_optional(data_val)
+
+        if isinstance(su, IntValue):
+            dims = [su.value]
+        elif isinstance(su, TupleValue):
+            dims: list[int] = []
+            for d in su.elements:
+                dv = unwrap_optional(d)
+                if not isinstance(dv, IntValue):
+                    raise TypeError(
+                        "\N{APL FUNCTIONAL SYMBOL RHO}: dimensions must be integers")
+                dims.append(dv.value)
+            if len(dims) > MAX_TENSOR_RANK:
+                raise TypeError(
+                    f"\N{APL FUNCTIONAL SYMBOL RHO}: too many dimensions "
+                    f"({len(dims)}), maximum is {MAX_TENSOR_RANK}")
+        else:
+            raise TypeError(
+                f"\N{APL FUNCTIONAL SYMBOL RHO}: left operand must be integer "
+                f"or tuple, got {type(su).__name__}")
+
+        for d in dims:
+            if d < 0:
+                raise TypeError(
+                    "\N{APL FUNCTIONAL SYMBOL RHO}: dimensions must be non-negative")
+
+        source: list[Value]
+        etype: str | None = None
+        if isinstance(du, IntValue):
+            source = [du]
+        elif isinstance(du, ObjectValue) and isinstance(du.obj, ArrayValue):
+            source = list(du.obj.elements)
+            etype = du.obj.element_type
+            if not source:
+                raise TypeError(
+                    "\N{APL FUNCTIONAL SYMBOL RHO}: cannot reshape empty array")
+        elif isinstance(du, RangeValue):
+            source = [mk_int(i) for i in du.to_list()]
+            if not source:
+                raise TypeError(
+                    "\N{APL FUNCTIONAL SYMBOL RHO}: cannot reshape empty range")
+        else:
+            raise TypeError(
+                f"\N{APL FUNCTIONAL SYMBOL RHO}: cannot reshape "
+                f"{type(du).__name__}")
+
+        total = 1
+        for d in dims:
+            total *= d
+        if total == 0:
+            if len(dims) == 1:
+                return ObjectValue(ArrayValue([], element_type=etype))
+            return ObjectValue(ArrayValue([]))
+
+        return self._build_shaped(dims, source, etype, 0)
+
+    @staticmethod
+    def _build_shaped(dims: list[int], source: list[Value],
+                      etype: str | None, offset: int) -> ObjectValue:
+        """Recursively build a shaped array from cycling source elements."""
+        if len(dims) == 1:
+            n = dims[0]
+            elements = [source[(offset + i) % len(source)] for i in range(n)]
+            return ObjectValue(ArrayValue(elements, element_type=etype))
+        n = dims[0]
+        inner_size = 1
+        for d in dims[1:]:
+            inner_size *= d
+        rows: list[Value] = []
+        for i in range(n):
+            row = Evaluator._build_shaped(
+                dims[1:], source, etype, offset + i * inner_size)
+            rows.append(row)
+        return ObjectValue(ArrayValue(rows))
 
     # ------------------------------------------------------------------
     # Lambda support

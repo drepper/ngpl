@@ -14,7 +14,7 @@ from interp.ast import (
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, EnumDef,
-    LambdaExpr,
+    LambdaExpr, ReshapeExpr, TupleLit,
 )
 from interp.lexer import Token, KEYWORDS
 
@@ -849,8 +849,8 @@ class Parser:
         return left
 
     def _parse_mul_expr(self):
-        """mul_expr → unary (('*' | '/' | '%') unary)*"""
-        left = self._parse_unary()
+        """mul_expr → reshape (('*' | '/' | '%') reshape)*"""
+        left = self._parse_reshape_expr()
         while True:
             self._skip_nl()
             if not (self._check("OP") and self._cur().value in ("*", "/", "%")):
@@ -858,8 +858,18 @@ class Parser:
             op_tok = self._cur()
             self.pos += 1
             self._skip_nl()
-            right = self._parse_unary()
+            right = self._parse_reshape_expr()
             left = BinOp(op_tok.value, left, right)
+        return left
+
+    def _parse_reshape_expr(self):
+        """reshape_expr → unary ('⍴' unary)?"""
+        left = self._parse_unary()
+        if self._check("OP") and self._cur().value == "⍴":
+            self.pos += 1
+            self._skip_nl()
+            right = self._parse_unary()
+            return ReshapeExpr(left, right)
         return left
 
     def _parse_unary(self):
@@ -962,12 +972,23 @@ class Parser:
             self._eat("PUNCT", "]")
             return ArrayAlloc(type_tok.value, size_expr)
 
-        # Parenthesized expression.
+        # Parenthesized expression or tuple literal.
         if tok.type == "PUNCT" and tok.value == "(":
             self.pos += 1
-            node = self._parse_or_expr()
+            first = self._parse_or_expr()
+            if self._check("PUNCT") and self._cur().value == ",":
+                elements = [first]
+                while self._try_eat("PUNCT", ","):
+                    self._skip_nl()
+                    if self._check("PUNCT") and self._cur().value == ")":
+                        break
+                    elements.append(self._parse_or_expr())
+                self._skip_nl()
+                self._eat("PUNCT", ")")
+                return TupleLit(elements)
             self._skip_nl()
             self._eat("PUNCT", ")")
+            node = first
             while self._check("PUNCT") and self._cur().value == "(":
                 args = self._parse_call_args()
                 node = MethodCall(node, "__call__", args)
