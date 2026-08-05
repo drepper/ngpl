@@ -247,7 +247,10 @@ class WrapExpr:
 
 
 class LambdaExpr:
-    """Anonymous function: λparam:type, ... |captures| -> ret_type: body_expr."""
+    """Anonymous function: λparam:type, ... |captures| -> ret_type: body.
+
+    body is either a single expression node or a list of statement nodes.
+    """
 
     def __init__(self, params: list[tuple[str, str]], captures: list[str] | None,
                  ret_type: str, body):

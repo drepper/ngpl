@@ -2,10 +2,11 @@ To Do List
 ==========
 
 Work on all the issues without the checkmark.  Implement them on separate git branches.  Always
-add test cases and adjust the language specification.
+add test cases and adjust the language specification.  Once a to do item is complete add the
+checkmark, commit the change, and change back to main.
 
 
-[ ] allow lambda functions to have bodies of multiple statement.  Indicate using the usual syntax of
+[x] allow lambda functions to have bodies of multiple statement.  Indicate using the usual syntax of
     colon at the end of { } block.
 
 [ ] add @enumerate(CONTAINER) which creates an iterator that can be used as in

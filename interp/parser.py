@@ -724,7 +724,29 @@ class Parser:
             ret_type += "?std.errors"
 
         self._eat("PUNCT", ":")
-        body = self._parse_or_expr()
+        if self._check("PUNCT") and self._cur().value == "{":
+            body = self._parse_brace_block()
+        elif self._check("NEWLINE"):
+            self._try_eat("NEWLINE")
+            while self._try_eat("NEWLINE"):
+                pass
+            if self._check("INDENT"):
+                self._eat("INDENT")
+                stmts: list = []
+                while True:
+                    while self._try_eat("NEWLINE"):
+                        pass
+                    if self._check("DEDENT", "EOF"):
+                        break
+                    stmt = self._parse_statement()
+                    if stmt is not None:
+                        stmts.append(stmt)
+                self._eat("DEDENT")
+                body = stmts
+            else:
+                body = self._parse_or_expr()
+        else:
+            body = self._parse_or_expr()
         return LambdaExpr(params, captures, ret_type, body)
 
     # ------------------------------------------------------------------

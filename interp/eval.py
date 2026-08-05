@@ -39,6 +39,45 @@ from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
 # Free-variable collection for lambda validation
 # ---------------------------------------------------------------------------
 
+def _collect_refs_from_stmts(stmts) -> set[str]:
+    """Collect all variable/function references from a list of statements."""
+    refs: set[str] = set()
+    for stmt in stmts:
+        if isinstance(stmt, VarDef):
+            refs |= _collect_refs(stmt.init_expr)
+        elif isinstance(stmt, ExprStmt):
+            refs |= _collect_refs(stmt.expr)
+        elif isinstance(stmt, ReturnStmt):
+            refs |= _collect_refs(stmt.value)
+        elif isinstance(stmt, IfStmt):
+            refs |= _collect_refs(stmt.cond)
+            refs |= _collect_refs_from_stmts(stmt.cons)
+            alt = stmt.alt
+            while alt is not None:
+                if len(alt) == 3:
+                    refs |= _collect_refs(alt[0])
+                    refs |= _collect_refs_from_stmts(alt[1])
+                    alt = alt[2]
+                else:
+                    if alt[0] is not None:
+                        refs |= _collect_refs(alt[0])
+                    refs |= _collect_refs_from_stmts(alt[1])
+                    break
+        elif isinstance(stmt, WhileStmt):
+            refs |= _collect_refs(stmt.cond)
+            refs |= _collect_refs_from_stmts(stmt.body)
+        elif isinstance(stmt, ForEachStmt):
+            for it in stmt.iterables:
+                refs |= _collect_refs(it)
+            refs |= _collect_refs_from_stmts(stmt.body)
+        elif isinstance(stmt, tuple) and len(stmt) == 3 and stmt[0] == "assign_stmt":
+            refs |= _collect_refs(stmt[1])
+            refs |= _collect_refs(stmt[2])
+        elif isinstance(stmt, CatchStmt):
+            refs |= _collect_refs_from_stmts(stmt.body)
+    return refs
+
+
 def _collect_refs(node) -> set[str]:
     """Collect all variable and function names referenced in an AST expression."""
     if node is None:
@@ -87,7 +126,10 @@ def _collect_refs(node) -> set[str]:
     elif isinstance(node, WrapExpr):
         refs |= _collect_refs(node.expr)
     elif isinstance(node, LambdaExpr):
-        inner = _collect_refs(node.body)
+        if isinstance(node.body, list):
+            inner = _collect_refs_from_stmts(node.body)
+        else:
+            inner = _collect_refs(node.body)
         inner -= {p[0] for p in node.params}
         if node.captures:
             inner -= set(node.captures)
@@ -1394,7 +1436,10 @@ class Evaluator:
         try:
             self.env = call_env
             self._current_ret_type = lam.ret_type
-            result = self.eval_expr(lam.body)
+            if isinstance(lam.body, list):
+                result = self.eval_stmts(lam.body)
+            else:
+                result = self.eval_expr(lam.body)
             return self._wrap_optional_return(result, lam.ret_type)
         except _ReturnSentinel as e:
             return self._wrap_optional_return(e.value, lam.ret_type)

@@ -199,6 +199,62 @@ fn test_lambda_missing_type:
 fn test_lambda_missing_return_type:
   var f := λx : int: x + 1
 
+// Multi-statement lambda with layout block
+@test
+fn test_lambda_multi_stmt_layout → ∅:
+  var f := λx : int → int:
+    var y := x * 2
+    y + 1
+  assert_eq(11, f(5))
+
+// Multi-statement lambda with brace block
+@test
+fn test_lambda_multi_stmt_brace → ∅:
+  var f := λx : int → int: {
+    var y := x + 10;
+    var z := y * 2;
+    z
+  }
+  assert_eq(30, f(5))
+
+// Multi-statement lambda with early return
+@test
+fn test_lambda_multi_stmt_return → ∅:
+  var f := λx : int → int:
+    if x < 0:
+      return 0
+    x * x
+  assert_eq(25, f(5))
+  assert_eq(0, f(-3))
+
+// Multi-statement lambda with capture
+@test
+fn test_lambda_multi_stmt_capture → ∅:
+  var base := 100
+  var f := λx : int |base| → int:
+    var doubled := x * 2
+    base + doubled
+  assert_eq(110, f(5))
+
+// Multi-statement lambda with loop
+@test
+fn test_lambda_multi_stmt_loop → ∅:
+  var f := λn : int → int:
+    var sum := 0
+    foreach i := 1…n:
+      sum ← sum + i
+    sum
+  assert_eq(55, f(10))
+
+// Multi-statement lambda as argument (braces required inside parens)
+@test
+fn test_lambda_multi_stmt_as_arg → ∅:
+  var result := apply(λx : int → int: {
+    var a := x + 1;
+    a * 2
+  }, 4)
+  assert_eq(10, result)
+
 @start
 fn main:
   0

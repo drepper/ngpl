@@ -1117,13 +1117,51 @@ Anonymous functions are introduced with the `λ` (U+03BB, GREEK SMALL LETTER LAM
 #### Syntax
 
 ```
-λ param1 : type1 [, paramN : typeN] [|capture1 [, captureN]|] → ret_type : body_expr
+λ param1 : type1 [, paramN : typeN] [|capture1 [, captureN]|] → ret_type : body
 ```
 
 - **Parameters**: zero or more comma-separated `name : type` pairs.  Type annotations are mandatory, using the same syntax as function parameters.
 - **Return type**: mandatory, specified with `→` (or `->`) followed by a type name.  The `?` and `!` suffixes for optional and error types are supported (e.g., `→ int?`, `→ int!`).
 - **Capture list**: optional, enclosed in `|…|`.  Lists the external variables that the lambda body may access.  Must contain at least one name; an empty capture list `||` is a parse error.  Omit the capture list entirely when no captures are needed.
-- **Body**: a single expression after the colon.
+- **Body**: either a single expression after the colon, or a multi-statement block using the same syntax as function bodies (layout-driven with `:` and indentation, or brace-delimited with `{ … }`).  In a multi-statement body the value of the last expression is the return value; explicit `return` is also supported for early exit.
+
+#### Multi-Statement Lambda Bodies
+
+When a lambda body requires more than one expression, use the usual block syntax:
+
+```
+// Layout-driven (indented block)
+var f := λx : int → int:
+    var y := x * 2
+    y + 1
+
+// Brace-delimited
+var g := λx : int → int: {
+    var y := x + 10;
+    var z := y * 2;
+    z
+}
+```
+
+Early return is supported inside multi-statement lambda bodies:
+
+```
+var clamp := λx : int |lo, hi| → int:
+    if x < lo:
+        return lo
+    if x > hi:
+        return hi
+    x
+```
+
+When passing a multi-statement lambda as a function argument, braces are required because indentation tracking is suppressed inside parentheses:
+
+```
+var result := apply(λx : int → int: {
+    var a := x + 1;
+    a * 2
+}, 4)
+```
 
 #### Capture Rules
 
