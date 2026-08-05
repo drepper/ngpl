@@ -6,6 +6,11 @@ type checking and proper error messages.
 """
 
 
+BUILTIN_TYPES: set[str] = {
+    "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64",
+    "usize", "int", "bool", "none",
+}
+
 _TYPE_BITS: dict[str, int] = {
     "u8": 8, "i8": 8,
     "u16": 16, "i16": 16,
@@ -284,6 +289,49 @@ def is_none(value):
 def is_some(value):
     """Check if a value is wrapped in SomeValue."""
     return isinstance(value, SomeValue)
+
+
+def validate_param_type(param_type: str, func_name: str, param_name: str):
+    """Validate that a parameter type annotation is a known builtin type."""
+    base = param_type.lstrip("?")
+    if base not in BUILTIN_TYPES:
+        raise TypeError(
+            f"in {func_name}: parameter '{param_name}' has unknown type '{param_type}'")
+
+
+def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str) -> "Value":
+    """Coerce a runtime argument to match a declared parameter type."""
+    if param_type.startswith("?"):
+        inner = param_type[1:]
+        if isinstance(value, NoneValue):
+            return value
+        if isinstance(value, SomeValue):
+            return SomeValue(coerce_arg(value.value, inner, func_name, param_name))
+        return SomeValue(coerce_arg(value, inner, func_name, param_name))
+
+    if param_type == "bool":
+        if not isinstance(value, BoolValue):
+            raise TypeError(
+                f"{func_name}: argument '{param_name}' expected bool, "
+                f"got {type(value).__name__}")
+        return value
+
+    if param_type == "none":
+        if not isinstance(value, NoneValue):
+            raise TypeError(
+                f"{func_name}: argument '{param_name}' expected none, "
+                f"got {type(value).__name__}")
+        return value
+
+    if param_type in _TYPE_BITS or param_type == "int":
+        if not isinstance(value, IntValue):
+            raise TypeError(
+                f"{func_name}: argument '{param_name}' expected {param_type}, "
+                f"got {type(value).__name__}")
+        return coerce_to_type(value, param_type)
+
+    raise TypeError(
+        f"{func_name}: argument '{param_name}' has unknown type '{param_type}'")
 
 
 def coerce_to_type(value: Value, target_width: str) -> Value:

@@ -138,8 +138,13 @@ class Parser:
             param_name_tok = self._eat("IDENT")
             param_type = None
             if self._try_eat("PUNCT", ":"):
-                type_tok = self._eat("IDENT")
-                param_type = type_tok.value
+                if self._check("OP") and self._cur().value == "?":
+                    self.pos += 1
+                    type_tok = self._eat("IDENT")
+                    param_type = "?" + type_tok.value
+                else:
+                    type_tok = self._eat("IDENT")
+                    param_type = type_tok.value
             params.append((param_name_tok.value, param_type))
             # Skip a single newline after comma (multi-line parameter lists).
             self._try_eat("NEWLINE")

@@ -163,11 +163,11 @@ would require a significant amount of the total number of tokens for this constr
 #### Examples
 
 ```
-fn add(a, b) -> int {
+fn add(a : int, b : int) -> int {
     a + b
 }
 
-fn abs(x) -> int {
+fn abs(x : int) -> int {
     if (x < 0) { return -x; }
     x
 }
@@ -277,6 +277,69 @@ fn sha256(data) -> ?int {
 | Auto-wrapping | No (explicit `Some`) | No | No | Yes (return value auto-wrapped) |
 
 The auto-wrapping of return values simplifies the common case: a function returning `?u8` can write `return 42;` instead of `return some(42);`.  The compiler handles the wrapping.  Only `none` must be written explicitly, since it represents a deliberate absence rather than a normal value.
+
+
+### Function Parameter Types
+
+Function parameters can be annotated with a type using the `name : type` syntax.  When a type annotation is present, the interpreter enforces type compatibility at each call site: arguments are coerced to the declared type, and a type mismatch is a runtime error.  Parameters without type annotations accept any value.
+
+#### Valid Parameter Types
+
+Only built-in types are currently accepted as parameter types:
+
+| Category | Types |
+|----------|-------|
+| Signed integers | `i8`, `i16`, `i32`, `i64` |
+| Unsigned integers | `u8`, `u16`, `u32`, `u64`, `usize` |
+| Arbitrary-precision | `int` |
+| Other | `bool`, `none` |
+| Optional | `?` prefix on any of the above (e.g., `?u32`, `?bool`) |
+
+Using an unknown type name is a compile error (caught when the function definition is processed, before any call).
+
+#### Type Coercion Rules
+
+When an argument is passed to a typed parameter:
+
+1. **Integer types.**  The argument must be an `IntValue`.  It is coerced to the target width using the same wrapping rules as variable definitions — unsigned types mask, signed types sign-extend.  An `int` (arbitrary-precision) argument passed to a `u32` parameter is wrapped to 32 bits.
+
+2. **`bool`.**  The argument must be a `BoolValue`.  No implicit conversion from integers.
+
+3. **`none`.**  The argument must be `NoneValue`.
+
+4. **Optional types (`?T`).**  Three cases:
+   - `none` passes through as `NoneValue`.
+   - A `some(v)` value has its inner value coerced to `T`.
+   - A plain (non-optional) value of type `T` is automatically wrapped in `some`.
+
+#### Examples
+
+```
+fn get_padded_byte(data, pos : usize, data_size : usize, total_size : usize) -> ?u8 {
+    ...
+}
+
+fn expand_s0(prev : u32) -> int {
+    (prev ↻ 7) ^ (prev ↻ 18) ^ (prev » 3)
+}
+
+fn maybe_use(value : ?int) -> none {
+    ...
+}
+```
+
+In `get_padded_byte`, the `data` parameter is untyped (accepts any value, such as a `Bytes` object), while the position and size parameters are enforced as `usize`.  In `expand_s0`, the `prev` parameter is coerced to `u32`, ensuring rotation operations use 32-bit semantics.  In `maybe_use`, the parameter accepts either a plain integer (auto-wrapped to `some`) or `none`.
+
+#### Design Rationale
+
+Parameter type enforcement catches type errors early and enables the interpreter to coerce values to the correct width automatically.  Leaving the type annotation optional preserves the scripting-mode flexibility: untyped parameters accept any value, which is useful for generic functions and for parameters whose types are not yet part of the built-in set (such as user-defined structs or standard library objects like `Bytes`).
+
+| Feature | Rust | Zig | Python | This language |
+|---------|------|-----|--------|---------------|
+| Parameter types | Required | Required | Optional (hints only) | Optional (enforced when present) |
+| Coercion | No (explicit conversion) | No | N/A | Yes (integer widening) |
+| Optional params | `Option<T>` | `?T` | `T \| None` | `?T` |
+| Unknown type | Compile error | Compile error | Runtime (if checked) | Compile error |
 
 
 ### Built-in Test System

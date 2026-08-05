@@ -33,7 +33,7 @@ const K : u32 = [
  * bit-length suffix.  These helpers overlay the padding on reads.
  * --------------------------------------------------------------------------- */
 
-fn get_padded_byte(data, pos, data_size, total_size) -> ?u8 {
+fn get_padded_byte(data, pos : usize, data_size : usize, total_size : usize) -> ?u8 {
     if (pos >= total_size) { return none; }
     if (pos < data_size) { return data.getbyte(pos); }
     if (pos == data_size) { return 128; }
@@ -46,7 +46,7 @@ fn get_padded_byte(data, pos, data_size, total_size) -> ?u8 {
     none
 }
 
-fn get_padded_word(data, off, data_size, total_size) -> ?u32 {
+fn get_padded_word(data, off : usize, data_size : usize, total_size : usize) -> ?u32 {
     if (off + 4 <= data_size) { return data.getword(off); }
     if (off >= total_size) { return none; }
     var b0 : u32 = get_padded_byte(data, off, data_size, total_size) ?? 0;
@@ -60,12 +60,12 @@ fn get_padded_word(data, off, data_size, total_size) -> ?u32 {
  * SHA-256 sigma helpers for message-schedule expansion.
  * --------------------------------------------------------------------------- */
 
-fn expand_s0(prev) -> int {
+fn expand_s0(prev : u32) -> int {
     /* σ₀(x) = ROTR(7,x) ⊕ ROTR(18,x) ⊕ SHR(3,x). */
     (prev ↻ 7) ^ (prev ↻ 18) ^ (prev » 3)
 }
 
-fn expand_s1(prev) -> int {
+fn expand_s1(prev : u32) -> int {
     /* σ₁(x) = ROTR(17,x) ⊕ ROTR(19,x) ⊕ SHR(10,x). */
     (prev ↻ 17) ^ (prev ↻ 19) ^ (prev » 10)
 }

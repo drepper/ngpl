@@ -27,7 +27,7 @@ from interp.env import Env
 from interp.ast import FuncDef as ASTFuncDef
 from interp.value import (
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
-    NoneValue, coerce_to_type, none,
+    NoneValue, coerce_to_type, validate_param_type, none,
 )
 from interp.eval import Evaluator, unwrap_optional
 
@@ -138,6 +138,9 @@ def main():
 
     for defn in definitions:
         if isinstance(defn, ASTFuncDef):
+            for param_name, param_type in defn.params:
+                if param_type is not None:
+                    validate_param_type(param_type, defn.name, param_name)
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type)
             env.define(defn.name, fv)
 

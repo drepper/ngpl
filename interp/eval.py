@@ -23,7 +23,7 @@ from interp.value import (
     Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue,
     FuncValue, BuiltinFunc, ObjectValue, BuiltinBoundMethod, ArrayValue,
     mk_int, mk_str, mk_bool, none, some, is_none, is_some,
-    resolve_width, wrap_int, coerce_to_type, _TYPE_BITS,
+    resolve_width, wrap_int, coerce_to_type, coerce_arg, _TYPE_BITS,
 )
 from interp.env import Env
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
@@ -905,8 +905,9 @@ class Evaluator:
         # Create new environment frame for this call.
         call_env = self.env.copy_for_call()
 
-        # Bind parameters to argument values.
-        for (param_name, _), arg_value in zip(func.params, args):
+        for (param_name, param_type), arg_value in zip(func.params, args):
+            if param_type is not None:
+                arg_value = coerce_arg(arg_value, param_type, func.name, param_name)
             call_env.define(param_name, arg_value)
 
         # Execute function body with the call's environment as our context.
