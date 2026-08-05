@@ -62,10 +62,10 @@ fn get_padded_word data : byte[], off : usize, total_size : usize -> u32?:
  * SHA-256 sigma helpers for message-schedule expansion.
  * --------------------------------------------------------------------------- */
 
-fn expand_s0 prev : u32 -> u32:
+fn expand_Σ₀ prev : u32 -> u32:
     (prev ↻ 7) ^ (prev ↻ 18) ^ (prev » 3)
 
-fn expand_s1 prev : u32 -> u32:
+fn expand_Σ₁ prev : u32 -> u32:
     (prev ↻ 17) ^ (prev ↻ 19) ^ (prev » 10)
 
 /* ---------------------------------------------------------------------------
@@ -97,8 +97,8 @@ fn sha256 data : byte[] -> int?:
 
         /* --- Message-schedule expansion: W[16..63]. --- */
         foreach j : u32fast = 16…63:
-            W[j] ← @wrap(W[j - 16] + expand_s0(W[j - 15]) +
-                         W[j - 7] + expand_s1(W[j - 2]))
+            W[j] ← @wrap(W[j - 16] + expand_Σ₀(W[j - 15]) +
+                         W[j - 7] + expand_Σ₁(W[j - 2]))
 
         /* --- Working variables: copy of current hash state. --- */
         var v := H[0…7]
