@@ -77,12 +77,9 @@ fn expand_s1(prev : u32) -> u32:
 
 fn sha256(data : byte[]) -> ?int:
     /* Compute padded message length per SHA-256 spec. */
-    var rem : usize = data.sizeof % 64
-    var pad_len : usize = 55 - rem
-    if rem > 55:
-        pad_len ← pad_len + 64
-
-    var total_size : usize = data.sizeof + 1 + pad_len + 8
+    const rem : usize = data.sizeof % 64
+    const pad_len : usize = (119 - rem) % 64
+    const total_size : usize = data.sizeof + 1 + pad_len + 8
 
     /* Initial hash values per FIPS 180-4 Section 5.3.3. */
     var H : u32 = [
@@ -109,22 +106,22 @@ fn sha256(data : byte[]) -> ?int:
         /* --- 64 compression rounds using K[t] and W[t]. --- */
         foreach t : u32fast = 0…63:
             /* Σ₁(e) = ROTR(6,e) ⊕ ROTR(11,e) ⊕ ROTR(25,e). */
-            var s1 := (v[4] ↻ 6) ^ (v[4] ↻ 11) ^ (v[4] ↻ 25)
+            const s1 := (v[4] ↻ 6) ^ (v[4] ↻ 11) ^ (v[4] ↻ 25)
 
             /* ch(e,f,g) = (e ∧ f) ⊕ (¬e ∧ g). */
-            var ch := (v[4] & v[5]) ^ (~v[4] & v[6])
+            const ch := (v[4] & v[5]) ^ (~v[4] & v[6])
 
             /* t1 = h + Σ₁ + ch + K[t] + W[t]. */
-            var t1 := v[7] + s1 + ch + K[t] + W[t]
+            const t1 := v[7] + s1 + ch + K[t] + W[t]
 
             /* Σ₀(a) = ROTR(2,a) ⊕ ROTR(13,a) ⊕ ROTR(22,a). */
-            var s0 := (v[0] ↻ 2) ^ (v[0] ↻ 13) ^ (v[0] ↻ 22)
+            const s0 := (v[0] ↻ 2) ^ (v[0] ↻ 13) ^ (v[0] ↻ 22)
 
             /* maj(a,b,c) = (a ∧ b) ⊕ (a ∧ c) ⊕ (b ∧ c). */
-            var maj := (v[0] & v[1]) ^ (v[0] & v[2]) ^ (v[1] & v[2])
+            const maj := (v[0] & v[1]) ^ (v[0] & v[2]) ^ (v[1] & v[2])
 
             /* t2 = Σ₀ + maj. */
-            var t2 := s0 + maj
+            const t2 := s0 + maj
 
             /* Shift working variables right by one position. */
             v[1…7] ← v[0…6]

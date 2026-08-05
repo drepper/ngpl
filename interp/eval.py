@@ -263,7 +263,7 @@ class Evaluator:
         self._test_hooks = test_hooks or {}
         self._tests_run: set[str] = set()
         self._current_ret_type: str | None = None
-        self._frozen_vars: set[str] = set()
+        self._frozen_vars: dict[str, str] = {}
         # Pre-compute builtin function mappings (avoid repeated lookups).
         self._ops = {
             "+": self._op_add,
@@ -738,21 +738,24 @@ class Evaluator:
                         au.obj.set(iu.value, rhs)
             elif isinstance(target_ast, VarRef):
                 if target_ast.name in self._frozen_vars:
+                    kind = self._frozen_vars[target_ast.name]
                     raise TypeError(
-                        f"cannot assign to const variable '{target_ast.name}'")
+                        f"cannot assign to {kind} variable '{target_ast.name}'")
                 self.env.define(target_ast.name, rhs)
             return none()
 
         if isinstance(stmt, VarDef):
             if stmt.name in self._frozen_vars:
-                raise TypeError(
-                    f"cannot redefine const variable '{stmt.name}'")
+                kind = self._frozen_vars[stmt.name]
+                if kind == "foreach" or not stmt.is_const:
+                    raise TypeError(
+                        f"cannot redefine {kind} variable '{stmt.name}'")
             value = self.eval_expr(stmt.init_expr)
             if stmt.type_annotation is not None:
                 value = coerce_to_type(value, stmt.type_annotation)
             self.env.define(stmt.name, value)
             if stmt.is_const:
-                self._frozen_vars.add(stmt.name)
+                self._frozen_vars[stmt.name] = "const"
             return none()
 
         if isinstance(stmt, ExprStmt):
@@ -833,7 +836,7 @@ class Evaluator:
 
         var_names = [v[0] for v in node.vars]
         for name in var_names:
-            self._frozen_vars.add(name)
+            self._frozen_vars[name] = "foreach"
         try:
             for idx in range(max_len):
                 if num_vars == 1 and num_iters > 1:
@@ -848,7 +851,7 @@ class Evaluator:
                 self.eval_stmts(node.body)
         finally:
             for name in var_names:
-                self._frozen_vars.discard(name)
+                self._frozen_vars.pop(name, None)
         return none()
 
     # ------------------------------------------------------------------
