@@ -56,6 +56,7 @@ KEYWORDS = {
     "enum": "ENUM",
     "flag": "FLAG",
     "replaceable": "REPLACEABLE",
+    "catch": "CATCH",
 }
 
 # Double-character operators that must be checked before single ones.

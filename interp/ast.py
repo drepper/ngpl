@@ -270,6 +270,19 @@ class TupleLit:
         self.elements = elements
 
 
+class CatchStmt:
+    """Catch statement for scoped error handling.
+
+    Errors from direct operations inside the block are caught and
+    converted to return values based on the enclosing function's
+    return type (optional or expected).  Errors from called functions
+    propagate normally (syntactic scope only).
+    """
+
+    def __init__(self, body):
+        self.body = body
+
+
 class EnumDef:
     """Enum type definition at top level.
 

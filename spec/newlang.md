@@ -1436,6 +1436,78 @@ The APL tradition uses `⍴` both monadically (query shape) and dyadically (resh
 The cycling semantics follow APL: when the data has fewer elements than the result requires, elements are reused from the beginning.  This makes `n ⍴ scalar` a natural way to create filled arrays, and `n ⍴ array` extends arrays without requiring explicit concatenation.
 
 
+### The `catch` Statement
+
+The `catch` statement provides scoped error handling at the syntactic level.  Unlike exception systems in C++ or Java, `catch` blocks do **not** intercept errors from called functions.  Only errors that originate from operations directly written inside the `catch` block are caught.
+
+#### Syntax
+
+```
+fn safe_access arr : i32[], idx : i32 -> i32?:
+    catch:
+        arr[idx]
+```
+
+The `catch` keyword is followed by a block (using `:` with indentation or `{ }`), following the same rules as `if`, `while`, and `foreach`.  The enclosing function must have an optional (`T?`) or expected (`T!`, i.e., `T?std.errors`) return type.
+
+#### Semantics
+
+When an operation inside the `catch` block raises a runtime error (such as an out-of-bounds array access, integer overflow, or type error):
+
+1. The error does **not** terminate the program.
+2. The error is converted to the appropriate return value:
+   - For **optional** return types (`T?`): the function returns `∅`.
+   - For **expected** return types (`T!`): the function returns `err(e)` where `e` is the corresponding `std.errors` enum value.
+3. Execution resumes at the function's caller.
+
+If no error occurs, the block's result value is used normally as the function's return value (wrapped in `some()` or `ok()` as appropriate).
+
+#### Error Mapping
+
+Runtime errors are mapped to `std.errors` enum values:
+
+| Python Exception  | `std.errors` Value    |
+|-------------------|-----------------------|
+| `IndexError`      | `index_out_of_range`  |
+| `OverflowError`   | `integer_overflow`    |
+| `TypeError`       | `type_mismatch`       |
+
+If no matching enum value is found, a string description of the error is used as the error value.
+
+#### Syntactic Scope Only
+
+The critical design property of `catch` is **syntactic scope**.  Errors from function calls inside the `catch` block are **not** caught:
+
+```
+fn risky -> i32:
+    var a = [1]
+    a[99]              // raises IndexError
+
+fn caller -> i32?:
+    catch:
+        risky()        // error from risky() propagates — NOT caught
+        var a = [1, 2]
+        a[5]           // this error WOULD be caught (direct operation)
+```
+
+This means:
+- `a[5]` inside the `catch` block is a direct operation.  Its `IndexError` is caught and converted to `∅`.
+- `risky()` is a function call.  Errors from inside `risky` propagate normally, as if the `catch` block were not present.
+
+This design avoids the problems of stack-unwinding exception systems: reasoning about control flow remains local, and functions cannot silently swallow errors from their callees.
+
+#### Comparison with Other Languages
+
+| Feature | C++ `try/catch` | Rust `?` | Zig `catch` | This language |
+|---------|-----------------|----------|-------------|---------------|
+| Scope | Stack-unwinding | Expression-level | Expression-level | Syntactic block |
+| Cross-call | Catches all | Propagates | Propagates | Does not catch |
+| Error type | Exception classes | `Result<T,E>` | `anyerror` | `std.errors` enum |
+| Syntax | Block with type | Postfix operator | Binary operator | Block statement |
+
+The `catch` statement is complementary to the `?` postfix operator: `?` propagates errors from expected values, while `catch` converts direct runtime errors into return values.
+
+
 ### Built-in Test System
 
 Unit testing is built into the language, similar to Rust's `#[test]` attribute.  Functions are annotated with `@test` to mark them as test functions.  The annotation accepts an optional list of function names that the test covers.

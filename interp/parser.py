@@ -14,7 +14,7 @@ from interp.ast import (
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, EnumDef,
-    LambdaExpr, ReshapeExpr, TupleLit,
+    LambdaExpr, ReshapeExpr, TupleLit, CatchStmt,
 )
 from interp.lexer import Token, KEYWORDS
 
@@ -492,6 +492,9 @@ class Parser:
         if self._check("FOREACH"):
             return self._parse_foreach_stmt()
 
+        if self._check("CATCH"):
+            return self._parse_catch_stmt()
+
         if self._check("RETURN"):
             return self._parse_return_stmt()
 
@@ -613,6 +616,12 @@ class Parser:
                 break
         body = self._parse_block()
         return ForEachStmt(vars_list, iterables, body)
+
+    def _parse_catch_stmt(self):
+        """Parse: catch block"""
+        self._eat("CATCH")
+        body = self._parse_block()
+        return CatchStmt(body)
 
     def _parse_return_stmt(self):
         """Parse: return [expr]"""

@@ -21,7 +21,7 @@ from interp.ast import (
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr,
-    ReshapeExpr, TupleLit,
+    ReshapeExpr, TupleLit, CatchStmt,
 )
 from interp.value import (
     Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
@@ -344,6 +344,7 @@ class Evaluator:
         self._frozen_vars: dict[str, str] = {}
         self._warnings: list[str] = []
         self._wrapping: bool = False
+        self._catch_depth: int = 0
         # Pre-compute builtin function mappings (avoid repeated lookups).
         self._ops = {
             "+": self._op_add,
@@ -1015,6 +1016,9 @@ class Evaluator:
         if isinstance(stmt, ForEachStmt):
             return self._eval_foreach(stmt)
 
+        if isinstance(stmt, CatchStmt):
+            return self._eval_catch(stmt)
+
         if isinstance(stmt, ReturnStmt):
             if stmt.value is not None:
                 value = self.eval_expr(stmt.value)
@@ -1146,6 +1150,60 @@ class Evaluator:
             raise TypeError(
                 f"expected diagnostics not produced: {unmatched}")
         return none()
+
+    # ------------------------------------------------------------------
+    # Catch statement (scoped error handling)
+    # ------------------------------------------------------------------
+
+    def _eval_catch(self, node: CatchStmt):
+        """Evaluate a catch block: catch errors from direct operations.
+
+        Errors from function calls are wrapped in _PropagatedError by
+        _do_call and pass through uncaught (syntactic scope only).
+        """
+        if not self._current_ret_type:
+            raise TypeError(
+                "catch requires enclosing function to have optional or expected return type")
+        _, opt_err = _split_optional_type(self._current_ret_type)
+        if opt_err is None:
+            raise TypeError(
+                "catch requires enclosing function to have optional or expected return type")
+
+        self._catch_depth += 1
+        try:
+            return self.eval_stmts(node.body)
+        except _ReturnSentinel:
+            raise
+        except _PropagatedError:
+            raise
+        except Exception as e:
+            raise _ReturnSentinel(self._error_to_return(e))
+        finally:
+            self._catch_depth -= 1
+
+    def _error_to_return(self, error: Exception) -> Value:
+        """Convert a caught runtime error to the appropriate return value."""
+        _, opt_err = _split_optional_type(self._current_ret_type)
+        if opt_err is not None and opt_err != "":
+            return ExpectedValue.err(self._map_error_to_enum(error))
+        return none()
+
+    def _map_error_to_enum(self, error: Exception) -> Value:
+        """Map a Python exception to a std.errors enum value."""
+        try:
+            std_val = self.env.lookup("std")
+            if isinstance(std_val, ObjectValue):
+                errors_enum = getattr(std_val.obj, "errors", None)
+                if isinstance(errors_enum, EnumType):
+                    if isinstance(error, IndexError):
+                        return EnumValue(errors_enum, errors_enum.members["index_out_of_range"])
+                    if isinstance(error, OverflowError):
+                        return EnumValue(errors_enum, errors_enum.members["integer_overflow"])
+                    if isinstance(error, TypeError):
+                        return EnumValue(errors_enum, errors_enum.members["type_mismatch"])
+        except Exception:
+            pass
+        return mk_str(str(error))
 
     # ------------------------------------------------------------------
     # Reshape (⍴) operator
@@ -1443,22 +1501,34 @@ class Evaluator:
         raise AttributeError(f"no method '{method_name}' on {type(obj).__name__}")
 
     def _do_call(self, func: Value, args):
-        """Dispatch a call to either user-defined, lambda, or builtin function."""
-        if isinstance(func, FuncValue):
-            return self._call_user_func(func, args)
-        if isinstance(func, LambdaValue):
-            return self._call_lambda(func, args)
-        if isinstance(func, BuiltinFunc):
-            if func.name == "generate":
-                return self._builtin_generate(args)
-            expected = func.arity
-            if expected != -1 and len(args) != expected:
-                raise TypeError(
-                    f"{func.name} expects {expected} arguments, got {len(args)}")
-            return func.func(args)
-        if isinstance(func, BuiltinBoundMethod):
-            return func(*args)
-        raise TypeError(f"cannot call {type(func).__name__}")
+        """Dispatch a call to either user-defined, lambda, or builtin function.
+
+        When inside a catch scope (_catch_depth > 0), exceptions from the
+        called function are wrapped in _PropagatedError so that the catch
+        block can distinguish them from direct-operation errors.
+        """
+        try:
+            if isinstance(func, FuncValue):
+                return self._call_user_func(func, args)
+            if isinstance(func, LambdaValue):
+                return self._call_lambda(func, args)
+            if isinstance(func, BuiltinFunc):
+                if func.name == "generate":
+                    return self._builtin_generate(args)
+                expected = func.arity
+                if expected != -1 and len(args) != expected:
+                    raise TypeError(
+                        f"{func.name} expects {expected} arguments, got {len(args)}")
+                return func.func(args)
+            if isinstance(func, BuiltinBoundMethod):
+                return func(*args)
+            raise TypeError(f"cannot call {type(func).__name__}")
+        except (_ReturnSentinel, _PropagatedError):
+            raise
+        except Exception as e:
+            if self._catch_depth > 0:
+                raise _PropagatedError(e) from e
+            raise
 
     def _call_user_func(self, func: FuncValue, args):
         """Call a user-defined function with proper scoping."""
@@ -1496,6 +1566,8 @@ class Evaluator:
             return self._wrap_optional_return(result, func.ret_type)
         except _ReturnSentinel as e:
             return self._wrap_optional_return(e.value, func.ret_type)
+        except _PropagatedError as pe:
+            raise pe.original from pe
         finally:
             self.env = old_env
             self._current_ret_type = old_ret_type
@@ -1535,3 +1607,17 @@ class _ReturnSentinel(BaseException):
 
     def __init__(self, value: Value):
         self.value = value
+
+
+class _PropagatedError(Exception):
+    """Wraps an exception from a function call inside a catch scope.
+
+    When a catch block is active, errors from called functions are
+    wrapped in this type so that _eval_catch can distinguish them
+    from direct-operation errors and let them propagate uncaught.
+    Unwrapped at function boundaries by _call_user_func.
+    """
+
+    def __init__(self, original: Exception):
+        self.original = original
+        super().__init__(str(original))
