@@ -175,7 +175,7 @@ Fast types **are** allowed for:
 
 - Local scalar variables: `var i : u32fast = 0`
 - Loop indices: `foreach k : u32fast = 0…63:`
-- Function parameters: `fn f x : u32fast -> int:`
+- Function parameters: `fn f x : u32fast → int:`
 
 #### Design Rationale
 
@@ -360,14 +360,14 @@ The split between unsigned (wraps) and signed (aborts) reflects a fundamental se
 Function parameters can be annotated with dynamic array types using the `type[]` syntax:
 
 ```
-fn process data : byte[] -> int:
+fn process data : byte[] → int:
     ...
 ```
 
 A dynamic array parameter carries its size implicitly.  The size is accessible via the `.sizeof` property:
 
 ```
-fn count_bytes data : byte[] -> usize:
+fn count_bytes data : byte[] → usize:
     data.sizeof
 ```
 
@@ -389,7 +389,7 @@ When a `Bytes` object (from file I/O or `std.bytes()`) is passed to a `byte[]` p
 Dynamic arrays support iteration with `foreach`:
 
 ```
-fn sum_bytes data : byte[] -> int:
+fn sum_bytes data : byte[] → int:
     var total := 0
     foreach b := data:
         total ← total + b
@@ -422,41 +422,41 @@ The result type follows the same rules as other arithmetic operators: `resolve_w
 
 ### Function Definition Syntax
 
-Function definitions use the `fn` keyword followed by the function name, an optional parameter list, an optional return type, and a block body.  The parameter list is **not** enclosed in parentheses — it is terminated by `->` (introducing the return type) or `:` / `{` (introducing the body directly).
+Function definitions use the `fn` keyword followed by the function name, an optional parameter list, an optional return type, and a block body.  The parameter list is **not** enclosed in parentheses — it is terminated by `→` (introducing the return type) or `:` / `{` (introducing the body directly).  The ASCII form `->` is accepted as an alternative to `→`.
 
 #### Grammar
 
 ```
-fn name [param1 [: type1] [, param2 [: type2] ...]] [-> return_type] block
+fn name [param1 [: type1] [, param2 [: type2] ...]] [→ return_type] block
 ```
 
-The function name is a single identifier.  Parameters are separated by commas.  Each parameter is an identifier optionally followed by `: type`.  The return type is introduced by `->`.  The block is either a layout block (`:`) or a brace block (`{`).
+The function name is a single identifier.  Parameters are separated by commas.  Each parameter is an identifier optionally followed by `: type`.  The return type is introduced by `→` (or the ASCII equivalent `->`).  The block is either a layout block (`:`) or a brace block (`{`).
 
 #### Examples
 
 ```
-fn main -> ∅:                              /* no parameters */
+fn main → ∅:                              /* no parameters */
     std.print("hello")
 
-fn add a : int, b : int -> int:               /* two typed parameters */
+fn add a : int, b : int → int:               /* two typed parameters */
     a + b
 
-fn identity x -> int:                          /* untyped parameter */
+fn identity x → int:                          /* untyped parameter */
     x
 
-fn sha256 data : byte[] -> int?:              /* dynamic array parameter */
+fn sha256 data : byte[] → int?:              /* dynamic array parameter */
     ...
 ```
 
 #### No-Parameter Functions
 
-Functions with no parameters have nothing between the name and `->` or `:`:
+Functions with no parameters have nothing between the name and `→` or `:`:
 
 ```
-fn main -> ∅:
+fn main → ∅:
     ...
 
-fn test_something -> ∅:
+fn test_something → ∅:
     ...
 ```
 
@@ -474,20 +474,34 @@ fn greet:                                     /* : starts the body */
 And a single-parameter function uses `:` for the type:
 
 ```
-fn greet name : string -> ∅:               /* first : is type, second : is body */
+fn greet name : string → ∅:               /* first : is type, second : is body */
     std.print(name)
 ```
 
 #### Design Rationale
 
-Removing parentheses from the parameter list reduces syntactic noise, especially for functions with few parameters.  The `->` and `:` tokens provide unambiguous termination of the parameter list without requiring delimiters.  This is similar to Haskell's function definition syntax, where parameters are separated by spaces with no enclosing delimiters.
+Removing parentheses from the parameter list reduces syntactic noise, especially for functions with few parameters.  The `→` and `:` tokens provide unambiguous termination of the parameter list without requiring delimiters.  This is similar to Haskell's function definition syntax, where parameters are separated by spaces with no enclosing delimiters.
 
 | Feature | C/C++ | Rust | Haskell | Python | Zig | This language |
 |---------|-------|------|---------|--------|-----|---------------|
 | Parameter delimiters | `(...)` | `(...)` | none | `(...)` | `(...)` | none |
 | Parameter separator | `,` | `,` | space | `,` | `,` | `,` |
-| Return type | trailing or leading | `-> T` | `:: T` | `-> T` | `T` | `-> T` |
+| Return type | trailing or leading | `-> T` | `:: T` | `-> T` | `T` | `→ T` |
 | Terminator | `{` | `{` | `=` | `:` | `{` | `:` or `{` |
+
+
+### Unicode and ASCII Arrow Equivalences
+
+The language uses Unicode arrows as the canonical forms for two syntactic roles:
+
+| Unicode | ASCII | Usage |
+|---------|-------|-------|
+| `→` (U+2192) | `->` | return type annotation |
+| `←` (U+2190) | `<-` | assignment |
+
+Both forms are always accepted.  The lexer normalizes the ASCII forms to their Unicode equivalents, so `fn f x : i32 -> i32:` and `fn f x : i32 → i32:` are identical to the parser.  Similarly, `x <- 5` and `x ← 5` produce the same token.
+
+The Unicode forms are preferred in source code for visual clarity and consistency with the other Unicode operators (`«`, `»`, `↺`, `↻`, `∧`, `∨`, `⊕`, `⍴`, `⧺`).  The ASCII forms exist to support environments where entering Unicode characters is inconvenient.
 
 
 ### Function Return Values
@@ -510,14 +524,14 @@ would require a significant amount of the total number of tokens for this constr
 #### Examples
 
 ```
-fn add a : int, b : int -> int:
+fn add a : int, b : int → int:
     a + b
 
-fn abs x : int -> int:
+fn abs x : int → int:
     if x < 0: return -x
     x
 
-fn greet name -> ∅:
+fn greet name → ∅:
     std.print("hello " + name);
 ```
 
@@ -526,8 +540,8 @@ In `add`, the expression `a + b` (no semicolon) is the implicit return value.  I
 The same functions can equivalently be written with braces:
 
 ```
-fn add a : int, b : int -> int { a + b }
-fn abs x : int -> int { if x < 0 { return -x; } x }
+fn add a : int, b : int → int { a + b }
+fn abs x : int → int { if x < 0 { return -x; } x }
 ```
 
 
@@ -569,7 +583,7 @@ A function that may fail to produce a value declares an **optional return type**
 #### Declaration
 
 ```
-fn get_padded_byte data : byte[], pos : usize, total_size : usize -> u8?:
+fn get_padded_byte data : byte[], pos : usize, total_size : usize → u8?:
     if pos >= total_size: return ∅
     if pos < data.sizeof: return data[pos]
     ...
@@ -583,7 +597,7 @@ A function with return type `u8?` auto-wraps non-`∅` return values in `some`. 
 The `?` operator unwraps an optional value or **propagates** `∅` to the enclosing function:
 
 ```
-fn get_padded_word data : byte[], off : usize, total_size : usize -> u32?:
+fn get_padded_word data : byte[], off : usize, total_size : usize → u32?:
     var b0 : u32 = get_padded_byte(data, off, total_size)?
     ...
 ```
@@ -632,14 +646,14 @@ The `?` postfix on a type introduces an optional when no error type follows, and
 | `T!` | abbreviation for `T?std.errors` |
 
 ```
-fn safe_div a : int, b : int -> int?std.errors:
+fn safe_div a : int, b : int → int?std.errors:
     (a / b)?
 ```
 
 Since `std.errors` is the most common error type, the abbreviation `T!` is provided:
 
 ```
-fn safe_div a : int, b : int -> int!:
+fn safe_div a : int, b : int → int!:
     (a / b)?
 ```
 
@@ -668,7 +682,7 @@ This means division by zero is a **recoverable error** rather than an immediate 
 var result := (10 / 0) ?? -1         /* result is -1 */
 
 /* Propagation with ? (requires T?E or T? return type) */
-fn compute x : int -> int?std.errors:
+fn compute x : int → int?std.errors:
     var q := (x / 2)?                /* propagates error if x/2 fails */
     q + 10
 ```
@@ -721,12 +735,12 @@ This ensures that errors cannot be silently ignored — they must be handled (wi
 A function that returns `∅` for absent data, a caller that substitutes a default, and an outer function that propagates structural failure:
 
 ```
-fn get_padded_byte ... -> u8?:
+fn get_padded_byte ... → u8?:
     if pos >= total_size: return ∅
     ...
     ∅                                         /* zero-padding zone */
 
-fn get_padded_word ... -> u32?:
+fn get_padded_word ... → u32?:
     if off >= total_size: return ∅             /* fully out of range */
     var b0 : u32 = get_padded_byte(...) ?? 0     /* absent bytes → 0 */
     var b1 : u32 = get_padded_byte(...) ?? 0
@@ -734,7 +748,7 @@ fn get_padded_word ... -> u32?:
     var b3 : u32 = get_padded_byte(...) ?? 0
     (b0 « 24) | (b1 « 16) | (b2 « 8) | b3
 
-fn sha256 data -> int?:
+fn sha256 data → int?:
     ...
     W[i] ← get_padded_word(...)?                 /* propagates ∅ */
     ...
@@ -802,13 +816,13 @@ When an argument is passed to a typed parameter:
 #### Examples
 
 ```
-fn get_padded_byte data : byte[], pos : usize, total_size : usize -> ?u8:
+fn get_padded_byte data : byte[], pos : usize, total_size : usize → ?u8:
     ...
 
-fn expand_s0 prev : u32 -> int:
+fn expand_s0 prev : u32 → int:
     (prev ↻ 7) ^ (prev ↻ 18) ^ (prev » 3)
 
-fn maybe_use value : int? -> ∅:
+fn maybe_use value : int? → ∅:
     ...
 ```
 
@@ -835,7 +849,7 @@ Blocks of statements — function bodies, if/elif/else branches, while loop bodi
 The traditional approach uses `{` and `}` to delimit blocks:
 
 ```
-fn abs x : int -> int {
+fn abs x : int → int {
     if x < 0 { return -x; }
     x
 }
@@ -848,7 +862,7 @@ Braces enclose zero or more statements.  Statements are separated by newlines or
 A colon `:` at the end of a construct header introduces a layout-driven block, where indentation determines the block's extent:
 
 ```
-fn abs x : int -> int:
+fn abs x : int → int:
     if x < 0: return -x
     x
 ```
@@ -879,13 +893,13 @@ The rules are:
 Brace and layout blocks can be mixed freely.  A function body can use `:` while an inner `if` uses `{ }`, or vice versa:
 
 ```
-fn mixed x : int -> int:
+fn mixed x : int → int:
     if x > 10 {
         return x - 10;
     }
     x
 
-fn mixed2 x : int -> int {
+fn mixed2 x : int → int {
     if x > 10:
         return x - 10
     x
@@ -1028,7 +1042,7 @@ foreach val := data:
 This works with any array, including dynamic arrays passed as parameters:
 
 ```
-fn sum_bytes data : byte[] -> int:
+fn sum_bytes data : byte[] → int:
     var total := 0
     foreach b := data:
         total ← total + b
@@ -1103,11 +1117,11 @@ Anonymous functions are introduced with the `λ` (U+03BB, GREEK SMALL LETTER LAM
 #### Syntax
 
 ```
-λ param1 : type1 [, paramN : typeN] [|capture1 [, captureN]|] -> ret_type : body_expr
+λ param1 : type1 [, paramN : typeN] [|capture1 [, captureN]|] → ret_type : body_expr
 ```
 
 - **Parameters**: zero or more comma-separated `name : type` pairs.  Type annotations are mandatory, using the same syntax as function parameters.
-- **Return type**: mandatory, specified with `->` followed by a type name.  The `?` and `!` suffixes for optional and error types are supported (e.g., `-> int?`, `-> int!`).
+- **Return type**: mandatory, specified with `→` (or `->`) followed by a type name.  The `?` and `!` suffixes for optional and error types are supported (e.g., `→ int?`, `→ int!`).
 - **Capture list**: optional, enclosed in `|…|`.  Lists the external variables that the lambda body may access.  Must contain at least one name; an empty capture list `||` is a parse error.  Omit the capture list entirely when no captures are needed.
 - **Body**: a single expression after the colon.
 
@@ -1122,13 +1136,13 @@ The lambda body has a restricted environment:
 - If a capture list is present but a referenced name is missing from it, a compile-time error is raised.
 
 ```
-fn helper x : i32 -> i32:
+fn helper x : i32 → i32:
     x + 100
 
 var offset := 10
-var f := λx : i32 |offset| -> i32: helper(x) + offset   // OK: helper is non-replaceable, offset is captured
-var g := λx : i32 -> i32: helper(x)                     // OK: helper needs no capture
-var h := λx : i32 -> i32: x + offset                     // ERROR: references 'offset' but has no capture list
+var f := λx : i32 |offset| → i32: helper(x) + offset   // OK: helper is non-replaceable, offset is captured
+var g := λx : i32 → i32: helper(x)                     // OK: helper needs no capture
+var h := λx : i32 → i32: x + offset                     // ERROR: references 'offset' but has no capture list
 ```
 
 #### Calling Lambdas
@@ -1136,28 +1150,28 @@ var h := λx : i32 -> i32: x + offset                     // ERROR: references '
 Lambdas are first-class values.  They can be assigned to variables, passed as arguments, and returned from functions.
 
 ```
-var double := λx : int -> int: x * 2
+var double := λx : int → int: x * 2
 assert_eq(10, double(5))
 ```
 
 Immediate application uses parentheses around the lambda:
 
 ```
-var result := (λx : int -> int: x + 1)(5)   // result is 6
+var result := (λx : int → int: x + 1)(5)   // result is 6
 ```
 
 #### Lambdas as Arguments and Return Values
 
 ```
-fn apply f, x : i32 -> i32:
+fn apply f, x : i32 → i32:
     f(x)
 
 fn make_adder n : i32:
-    λx : int |n| -> int: x + n
+    λx : int |n| → int: x + n
 
 var add3 := make_adder(3)
 assert_eq(8, add3(5))
-assert_eq(15, apply(λx : int -> int: x * 3, 5))
+assert_eq(15, apply(λx : int → int: x * 3, 5))
 ```
 
 #### Function Currying
@@ -1165,7 +1179,7 @@ assert_eq(15, apply(λx : int -> int: x * 3, 5))
 Calling a function with fewer arguments than its parameter list produces a partially-applied lambda.  The provided arguments are captured automatically.
 
 ```
-fn add a : i32, b : i32 -> i32:
+fn add a : i32, b : i32 → i32:
     a + b
 
 var add5 := add(5)                  // returns λb (partial add[5])
@@ -1175,7 +1189,7 @@ assert_eq(8, add5(3))
 Multi-step currying is supported:
 
 ```
-fn add3 a : i32, b : i32, c : i32 -> i32:
+fn add3 a : i32, b : i32, c : i32 → i32:
     a + b + c
 
 var f1 := add3(1)                   // λb, c
@@ -1186,7 +1200,7 @@ assert_eq(6, f2(3))               // 1 + 2 + 3
 Lambdas themselves support partial application:
 
 ```
-var mul := λx : int, y : int -> int: x * y
+var mul := λx : int, y : int → int: x * y
 var triple := mul(3)
 assert_eq(15, triple(5))
 ```
@@ -1199,14 +1213,14 @@ A function marked `@replaceable` can have its implementation swapped at runtime 
 
 ```
 @replaceable
-fn strategy x : i32 -> i32:
+fn strategy x : i32 → i32:
     x * 2
 
 // Must capture — strategy could change after the lambda is created
-var f := λx : i32 |strategy| -> i32: strategy(x)
+var f := λx : i32 |strategy| → i32: strategy(x)
 
 // ERROR: strategy is @replaceable and not captured
-var g := λx : i32 -> i32: strategy(x)
+var g := λx : i32 → i32: strategy(x)
 ```
 
 This distinction ensures that lambdas with no capture list or an empty capture list are guaranteed to be pure with respect to user-defined state — they depend only on their parameters and immutable bindings.
@@ -1217,14 +1231,14 @@ A lambda value that is neither assigned to a variable nor returned produces a wa
 
 ```
 add(5)                             // WARNING: lambda value is not used
-λx : int -> int: x + 1             // WARNING: lambda value is not used
+λx : int → int: x + 1             // WARNING: lambda value is not used
 ```
 
 #### Design Rationale
 
 | Feature | Haskell | Rust | Python | This language |
 |---------|---------|------|--------|---------------|
-| Lambda syntax | `\x -> x+1` | `\|x\| x+1` | `lambda x: x+1` | `λx : int -> int: x+1` |
+| Lambda syntax | `\x -> x+1` | `\|x\| x+1` | `lambda x: x+1` | `λx : int → int: x+1` |
 | Capture | implicit | explicit (`move`) | implicit | explicit (`\|…\|`) |
 | Currying | automatic | no | no | automatic |
 | Multi-expression body | no (one expr) | yes (block) | no (one expr) | no (one expr) |
@@ -1269,10 +1283,10 @@ generate(func, range)
 #### Basic Usage
 
 ```
-var squares := generate(λx : int -> int: x * x, 1…5)
+var squares := generate(λx : int → int: x * x, 1…5)
 // squares = [1, 4, 9, 16, 25]
 
-fn double x : i32 -> i32:
+fn double x : i32 → i32:
     x * 2
 
 var doubled := generate(double, 1…4)
@@ -1284,7 +1298,7 @@ var doubled := generate(double, 1…4)
 A curried function can be used as the mapping function:
 
 ```
-fn multiply a : i32, b : i32 -> i32:
+fn multiply a : i32, b : i32 → i32:
     a * b
 
 var tripled := generate(multiply(3), 1…5)
@@ -1294,10 +1308,10 @@ var tripled := generate(multiply(3), 1…5)
 #### With Stepped and Descending Ranges
 
 ```
-var evens := generate(λx : int -> int: x, 0…2…10)
+var evens := generate(λx : int → int: x, 0…2…10)
 // evens = [0, 2, 4, 6, 8, 10]
 
-var desc := generate(λx : int -> int: x * x, 3…1)
+var desc := generate(λx : int → int: x * x, 3…1)
 // desc = [9, 4, 1]
 ```
 
@@ -1305,7 +1319,7 @@ var desc := generate(λx : int -> int: x * x, 3…1)
 
 ```
 var offset := 100
-var arr := generate(λx : int |offset| -> int: x + offset, 1…3)
+var arr := generate(λx : int |offset| → int: x + offset, 1…3)
 // arr = [101, 102, 103]
 ```
 
@@ -1314,7 +1328,7 @@ var arr := generate(λx : int |offset| -> int: x + offset, 1…3)
 The mapping function must not return ∅.  This is a runtime error because the result array cannot contain empty optional values:
 
 ```
-generate(λx : int -> ∅: ∅, 1…5)    // ERROR: function must not return ∅
+generate(λx : int → ∅: ∅, 1…5)    // ERROR: function must not return ∅
 ```
 
 #### Compile-time Optimization (Future)
@@ -1497,7 +1511,7 @@ The `catch` statement provides scoped error handling at the syntactic level.  Un
 #### Syntax
 
 ```
-fn safe_access arr : i32[], idx : i32 -> i32?:
+fn safe_access arr : i32[], idx : i32 → i32?:
     catch:
         arr[idx]
 ```
@@ -1533,11 +1547,11 @@ If no matching enum value is found, a string description of the error is used as
 The critical design property of `catch` is **syntactic scope**.  Errors from function calls inside the `catch` block are **not** caught:
 
 ```
-fn risky -> i32:
+fn risky → i32:
     var a := [1]
     a[99]              // raises IndexError
 
-fn caller -> i32?:
+fn caller → i32?:
     catch:
         risky()        // error from risky() propagates — NOT caught
         var a := [1, 2]
@@ -1570,15 +1584,15 @@ Unit testing is built into the language, similar to Rust's `#[test]` attribute. 
 
 ```
 @test
-fn test_something -> ∅:
+fn test_something → ∅:
     ...
 
 @test(sha256)
-fn test_sha256_abc -> ∅:
+fn test_sha256_abc → ∅:
     ...
 
 @test(encrypt, decrypt)
-fn test_round_trip -> ∅:
+fn test_round_trip → ∅:
     ...
 ```
 
@@ -1620,13 +1634,13 @@ test result: ok. 3 passed; 0 failed
 
 ```
 @test(sha256)
-fn test_sha256_empty -> ∅:
+fn test_sha256_empty → ∅:
     var data := std.bytes("")
     var hash := sha256(data)
     assert_eq(hash, 0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
 
 @test(sha256)
-fn test_sha256_abc -> ∅:
+fn test_sha256_abc → ∅:
     var data := std.bytes("abc")
     var hash := sha256(data)
     assert_eq(hash, 0xba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad)
@@ -1658,7 +1672,7 @@ The `@expect` annotation allows writing tests that verify the interpreter/compil
 ```
 @expect error "regex pattern"
 @expect warning "regex pattern"
-fn function_name -> ∅:
+fn function_name → ∅:
     /* code that should trigger the diagnostic */
 ```
 
@@ -1667,7 +1681,7 @@ Multiple `@expect` annotations can appear before a single function.  The level k
 #### Statement-Level Syntax
 
 ```
-fn test_something -> ∅:
+fn test_something → ∅:
     @expect warning "redefinition of foreach variable"
     var i := 99
 ```
@@ -1706,13 +1720,13 @@ Function-level `@expect` for errors:
 
 ```
 @expect error "cannot assign to const variable 'x'"
-fn error_const_assign -> ∅:
+fn error_const_assign → ∅:
     const x := 42
     x ← 99
 
 @expect error "unexpected token: 'fn'"
-fn error_nested_fn -> ∅:
-    fn inner -> ∅:
+fn error_nested_fn → ∅:
+    fn inner → ∅:
         std.print("bad")
 ```
 
@@ -1720,7 +1734,7 @@ Statement-level `@expect` for warnings inside a `@test` function:
 
 ```
 @test
-fn warn_foreach_redef -> ∅:
+fn warn_foreach_redef → ∅:
     var total := 0
     foreach i := 1…3:
         @expect warning "redefinition of foreach variable 'i'"

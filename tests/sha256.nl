@@ -33,7 +33,7 @@ const K : u32 = [
  * beyond the original data.
  * --------------------------------------------------------------------------- */
 
-fn get_padded_byte data : byte[], pos : usize, total_size : usize -> u8?:
+fn get_padded_byte data : byte[], pos : usize, total_size : usize → u8?:
     if pos >= total_size: return ∅
     if pos < data.sizeof: return data[pos]
     if pos == data.sizeof: return 128
@@ -44,7 +44,7 @@ fn get_padded_byte data : byte[], pos : usize, total_size : usize -> u8?:
         return (bit_len » ((7 - byte_idx) * 8)) & 255
     ∅
 
-fn get_padded_word data : byte[], off : usize, total_size : usize -> u32?:
+fn get_padded_word data : byte[], off : usize, total_size : usize → u32?:
     if off + 4 <= data.sizeof:
         const b0 : u32 = data[off]
         const b1 : u32 = data[off + 1]
@@ -62,10 +62,10 @@ fn get_padded_word data : byte[], off : usize, total_size : usize -> u32?:
  * SHA-256 sigma helpers for message-schedule expansion.
  * --------------------------------------------------------------------------- */
 
-fn expand_Σ₀ prev : u32 -> u32:
+fn expand_Σ₀ prev : u32 → u32:
     (prev ↻ 7) ^ (prev ↻ 18) ^ (prev » 3)
 
-fn expand_Σ₁ prev : u32 -> u32:
+fn expand_Σ₁ prev : u32 → u32:
     (prev ↻ 17) ^ (prev ↻ 19) ^ (prev » 10)
 
 /* ---------------------------------------------------------------------------
@@ -75,7 +75,7 @@ fn expand_Σ₁ prev : u32 -> u32:
  * message schedule W[0..63] and round constants K[t].
  * --------------------------------------------------------------------------- */
 
-fn sha256 data : byte[] -> int?:
+fn sha256 data : byte[] → int?:
     /* Compute padded message length per SHA-256 spec. */
     const rem : usize = data.sizeof % 64
     const pad_len : usize = (119 - rem) % 64
@@ -90,7 +90,7 @@ fn sha256 data : byte[] -> int?:
     /* Process each 64-byte block. */
     foreach blk_off : usize = 0…64…(total_size - 1):
         /* --- Load W[0..63]: first 16 from data, rest filled by expansion. --- */
-        var load_word := λi : usize |data, blk_off, total_size| -> u32: get_padded_word(data, blk_off + (i * 4), total_size) ?? 0
+        var load_word := λi : usize |data, blk_off, total_size| → u32: get_padded_word(data, blk_off + (i * 4), total_size) ?? 0
         var W := generate(load_word, 0…15) ⧺ 48 ⍴ [0]
 
         /* --- Message-schedule expansion: W[16..63]. --- */
@@ -143,25 +143,25 @@ fn sha256 data : byte[] -> int?:
  * --------------------------------------------------------------------------- */
 
 @test(sha256)
-fn test_sha256_empty -> ∅:
+fn test_sha256_empty → ∅:
     var data := std.bytes("")
     var hash := sha256(data)
     assert_eq(hash, 0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
 
 @test(sha256)
-fn test_sha256_abc -> ∅:
+fn test_sha256_abc → ∅:
     var data := std.bytes("abc")
     var hash := sha256(data)
     assert_eq(hash, 0xba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad)
 
 @test(sha256)
-fn test_sha256_448bit -> ∅:
+fn test_sha256_448bit → ∅:
     var data := std.bytes("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")
     var hash := sha256(data)
     assert_eq(hash, 0x248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1)
 
 @start
-fn main -> ∅:
+fn main → ∅:
     var dir := std.fs.cwd()
     var file := dir.openFile("CLAUDE.md")
     var data := file.read_file(std.heap.allocator())

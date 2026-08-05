@@ -61,11 +61,17 @@ KEYWORDS = {
 
 # Double-character operators that must be checked before single ones.
 DOUBLE_OPS = {
-    "==", "!=", "<=", ">=", "->", "<<", ">>", "??",
+    "==", "!=", "<=", ">=", "->", "<-", "<<", ">>", "??",
 }
 
+# Multi-character ASCII operators normalized to their Unicode equivalents.
+_NORMALIZE_OPS = {
+    "<-": "\N{LEFTWARDS ARROW}",
+}
+
+
 # Single-character operators.
-SINGLE_OPS = set("+-*/%=<>!&|^~.,;:?(){}[]←«»↺↻…∧∨⊕⊼⊽¬λ⍴⧺")
+SINGLE_OPS = set("+-*/%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ⍴⧺")
 
 # Binary operators that signal line continuation when trailing.
 _CONTINUATION_OPS = frozenset({
@@ -289,7 +295,7 @@ def tokenize(src: str):
         # Double-character operators (check before single-char ones).
         two = src[pos:pos + 2]
         if two in DOUBLE_OPS:
-            tokens.append(Token("OP", two, line, col))
+            tokens.append(Token("OP", _NORMALIZE_OPS.get(two, two), line, col))
             pos += 2
             col += 2
             continue
@@ -301,6 +307,8 @@ def tokenize(src: str):
                 tokens.append(Token("LAMBDA", ch, line, col))
             elif ch == "=" or ch in ",.;:(){}[]…":
                 tokens.append(Token("PUNCT", ch, line, col))
+            elif ch == "\N{RIGHTWARDS ARROW}":
+                tokens.append(Token("OP", "->", line, col))
             elif ch in "+-*/%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺":
                 tokens.append(Token("OP", ch, line, col))
             pos += 1
@@ -311,7 +319,7 @@ def tokenize(src: str):
         if ch.isalpha() or ch == "_" or ord(ch) > 127:
             name_start = pos
             pos += 1  # Always advance past the first character to avoid infinite loop on non-alnum Unicode chars.
-            while pos < length and (src[pos].isalnum() or src[pos] in "_'→"):
+            while pos < length and (src[pos].isalnum() or src[pos] in "_'"):
                 pos += 1
             name = src[name_start:pos]
             token_type = KEYWORDS.get(name, "IDENT")

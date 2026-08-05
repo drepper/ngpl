@@ -62,7 +62,7 @@ fn test_reshape_empty:
 
 @test
 fn test_reshape_with_generate:
-    var src := generate(λx : int -> int: x * 10, 0…3)
+    var src := generate(λx : int → int: x * 10, 0…3)
     var a := 8 ⍴ src
     assert_eq(a.sizeof, 8)
     assert_eq(a[0], 0)
