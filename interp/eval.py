@@ -1373,8 +1373,9 @@ class Evaluator:
             raise TypeError(
                 f"{func.name} expects {len(func.params)} arguments, got {len(args)}")
 
-        # Create new environment frame for this call.
-        call_env = self.env.copy_for_call()
+        # Use the function's definition-time env so it can see all names
+        # that were visible when it was defined (correct closure semantics).
+        call_env = func.env.copy_for_call()
 
         for (param_name, param_type), arg_value in zip(func.params, args):
             if param_type is not None:
