@@ -26,6 +26,7 @@ tests=(
     "$testdir"/test_catch.nl
     "$testdir"/test_concat.nl
     "$testdir"/test_arrows.nl
+    "$testdir"/test_enumerate.nl
     "$testdir"/sha256.nl
 )
 

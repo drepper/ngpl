@@ -9,7 +9,7 @@ checkmark, commit the change, and change back to main.
 [x] allow lambda functions to have bodies of multiple statement.  Indicate using the usual syntax of
     colon at the end of { } block.
 
-[ ] add @enumerate(CONTAINER) which creates an iterator that can be used as in
+[x] add @enumerate(CONTAINER) which creates an iterator that can be used as in
     foreach i,v := @enumerate([5,4,3,2,1]):
 
 [ ] add static_assert, static_assert_eq etc to force the contained tests to be performed at compile time.

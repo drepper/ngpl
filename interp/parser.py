@@ -14,7 +14,7 @@ from interp.ast import (
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, EnumDef,
-    LambdaExpr, ReshapeExpr, TupleLit, CatchStmt,
+    LambdaExpr, ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
 )
 from interp.lexer import Token, KEYWORDS
 
@@ -988,6 +988,13 @@ class Parser:
             self._skip_nl()
             self._eat("PUNCT", ")")
             return WrapExpr(expr)
+        if self._check("ENUMERATE"):
+            self._eat("ENUMERATE")
+            self._eat("PUNCT", "(")
+            expr = self._parse_or_expr()
+            self._skip_nl()
+            self._eat("PUNCT", ")")
+            return EnumerateExpr(expr)
         node = self._parse_primary()
         if self._check("OP") and self._cur().value == "?":
             self.pos += 1

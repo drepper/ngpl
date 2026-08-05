@@ -21,7 +21,7 @@ from interp.ast import (
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr,
-    ReshapeExpr, TupleLit, CatchStmt,
+    ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
 )
 from interp.value import (
     Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
@@ -137,6 +137,8 @@ def _collect_refs(node) -> set[str]:
     elif isinstance(node, ReshapeExpr):
         refs |= _collect_refs(node.shape)
         refs |= _collect_refs(node.data)
+    elif isinstance(node, EnumerateExpr):
+        refs |= _collect_refs(node.expr)
     elif isinstance(node, TupleLit):
         for e in node.elements:
             refs |= _collect_refs(e)
@@ -937,6 +939,9 @@ class Evaluator:
                 step = st.value
             return RangeValue(s.value, e.value, step)
 
+        if isinstance(node, EnumerateExpr):
+            raise TypeError("@enumerate can only be used inside foreach")
+
         if isinstance(node, LambdaExpr):
             return self._eval_lambda_expr(node)
 
@@ -1116,7 +1121,12 @@ class Evaluator:
         """Evaluate a foreach loop over ranges or containers."""
         sequences: list[list[Value]] = []
         for expr in node.iterables:
-            if isinstance(expr, RangeExpr):
+            if isinstance(expr, EnumerateExpr):
+                inner = self._resolve_iterable(expr.expr)
+                sequences.append([
+                    TupleValue([mk_int(i), v]) for i, v in enumerate(inner)
+                ])
+            elif isinstance(expr, RangeExpr):
                 s = unwrap_optional(self.eval_expr(expr.start))
                 e = unwrap_optional(self.eval_expr(expr.end))
                 if not isinstance(s, IntValue) or not isinstance(e, IntValue):
@@ -1138,14 +1148,7 @@ class Evaluator:
                 else:
                     sequences.append([mk_int(i) for i in range(sv, ev - 1, -1)])
             else:
-                val = unwrap_optional(self.eval_expr(expr))
-                if isinstance(val, RangeValue):
-                    sequences.append([mk_int(i) for i in val.to_list()])
-                elif isinstance(val, ObjectValue) and isinstance(val.obj, ArrayValue):
-                    sequences.append(list(val.obj.elements))
-                else:
-                    raise TypeError(
-                        f"foreach requires range or iterable, got {type(val).__name__}")
+                sequences.append(self._resolve_iterable(expr))
 
         if not sequences:
             return none()
@@ -1154,7 +1157,8 @@ class Evaluator:
         num_vars = len(node.vars)
         num_iters = len(sequences)
 
-        if num_vars > 1 and num_vars != num_iters:
+        destructure = num_vars > 1 and num_iters == 1
+        if num_vars > 1 and num_vars != num_iters and not destructure:
             raise TypeError(
                 f"foreach: {num_vars} variables but {num_iters} iterables "
                 f"(must match or use 1 variable)")
@@ -1167,6 +1171,15 @@ class Evaluator:
                 if num_vars == 1 and num_iters > 1:
                     elements = [seq[idx % len(seq)] for seq in sequences]
                     self.env.define(var_names[0], TupleValue(elements))
+                elif destructure:
+                    val = sequences[0][idx % len(sequences[0])]
+                    if not isinstance(val, TupleValue) or len(val.elements) != num_vars:
+                        raise TypeError(
+                            f"foreach destructuring expects {num_vars}-element tuples")
+                    for (var_name, var_type), elem in zip(node.vars, val.elements):
+                        if var_type is not None:
+                            elem = coerce_to_type(elem, var_type)
+                        self.env.define(var_name, elem)
                 else:
                     for (var_name, var_type), seq in zip(node.vars, sequences):
                         val = seq[idx % len(seq)]
@@ -1178,6 +1191,16 @@ class Evaluator:
             for name in var_names:
                 self._frozen_vars.pop(name, None)
         return none()
+
+    def _resolve_iterable(self, expr) -> list[Value]:
+        """Resolve an expression to a list of values for foreach iteration."""
+        val = unwrap_optional(self.eval_expr(expr))
+        if isinstance(val, RangeValue):
+            return [mk_int(i) for i in val.to_list()]
+        if isinstance(val, ObjectValue) and isinstance(val.obj, ArrayValue):
+            return list(val.obj.elements)
+        raise TypeError(
+            f"foreach requires range or iterable, got {type(val).__name__}")
 
     def _eval_expect(self, node: ExpectStmt):
         """Evaluate a statement wrapped in @expect annotations.

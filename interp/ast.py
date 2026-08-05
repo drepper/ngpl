@@ -288,6 +288,16 @@ class CatchStmt:
         self.body = body
 
 
+class EnumerateExpr:
+    """Enumerate expression: @enumerate(container).
+
+    Wraps an iterable so that foreach yields (index, value) tuples.
+    """
+
+    def __init__(self, expr):
+        self.expr = expr
+
+
 class EnumDef:
     """Enum type definition at top level.
 

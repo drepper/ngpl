@@ -1110,6 +1110,30 @@ foreach point := [1,2,3], [10,20,30]:
 The wrapping behavior for shorter ranges is deliberate: it enables patterns like cycling through a palette or repeating a short sequence across a longer one, which are common in array programming languages like APL.  Languages that truncate to the shortest require explicit repetition; wrapping makes the common case trivial.
 
 
+#### Enumerate
+
+The `@enumerate(container)` built-in wraps an iterable so that `foreach` yields `(index, value)` tuples, with the index starting at 0:
+
+```
+foreach pair := @enumerate([10, 20, 30]):
+    std.print(pair[0], pair[1])      /* 0 10, 1 20, 2 30 */
+```
+
+With two loop variables, the tuple is destructured automatically:
+
+```
+foreach i, v := @enumerate([10, 20, 30]):
+    std.print(i, v)                  /* 0 10, 1 20, 2 30 */
+```
+
+`@enumerate` works with arrays, ranges, and any other iterable.  Using `@enumerate` outside a `foreach` context is an error.
+
+| Feature | Python | Rust | Zig | This language |
+|---------|--------|------|-----|---------------|
+| Enumerate | `enumerate(x)` | `x.iter().enumerate()` | N/A | `@enumerate(x)` |
+| Destructuring | `for i, v in enumerate(x)` | `for (i, v) in x.enumerate()` | N/A | `foreach i, v := @enumerate(x)` |
+
+
 ### Anonymous Functions (Lambdas)
 
 Anonymous functions are introduced with the `λ` (U+03BB, GREEK SMALL LETTER LAMDA) keyword.

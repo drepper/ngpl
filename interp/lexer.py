@@ -57,6 +57,7 @@ KEYWORDS = {
     "flag": "FLAG",
     "replaceable": "REPLACEABLE",
     "catch": "CATCH",
+    "enumerate": "ENUMERATE",
 }
 
 # Double-character operators that must be checked before single ones.
