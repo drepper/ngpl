@@ -102,7 +102,7 @@ fn test_curry_with_fold → ∅:
     var add5 := add(5)
     var arr := generate(add5, 0…4)
     /* arr = [5, 6, 7, 8, 9] */
-    var total := ⌿(add, arr, 0)
+    var total := add ⌿ arr
     assert_eq(total, 35)
 
 /* --- Error cases --- */

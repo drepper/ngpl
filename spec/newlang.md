@@ -1568,7 +1568,7 @@ Using a dedicated glyph avoids overloading `+` (which is element-wise addition o
 
 ### Fold Operators (`⌿` and `⍀`)
 
-The fold operators reduce a container to a single value by repeatedly applying a binary function.  Two variants are provided:
+The fold operators are binary operators that reduce a container to a single value by repeatedly applying a function.  Two variants are provided:
 
 - **Left fold** `⌿` (U+233F, APL FUNCTIONAL SYMBOL SLASH BAR): processes elements left-to-right.
 - **Right fold** `⍀` (U+2340, APL FUNCTIONAL SYMBOL BACKSLASH BAR): processes elements right-to-left.
@@ -1576,65 +1576,97 @@ The fold operators reduce a container to a single value by repeatedly applying a
 #### Syntax
 
 ```
-⌿(func, container, init)
-⍀(func, container, init)
+func ⌿ container
+func ⌿ (container, init)
+func ⍀ container
+func ⍀ (container, init)
 ```
 
-- **func**: a binary function (named function, lambda, or any callable).
-- **container**: an array or range to fold over.
-- **init**: the initial accumulator value.
+- **func** (left operand): a binary function (named function, lambda, or any callable).
+- **container** (right operand): an array or range to fold over.
+- When the right operand is a 2-tuple literal `(container, init)`, the second element provides the initial accumulator value.
+- When the right operand is not a 2-tuple literal, no initial value is provided: the leftmost element (for `⌿`) or rightmost element (for `⍀`) of the container is used as the initial accumulator.  In this case the container must not be empty.
+
+#### Precedence
+
+`⌿` and `⍀` bind at the same level as `⍴` (tighter than arithmetic, looser than unary).  The right operand is parsed at range-expression level, so `f ⌿ 1…5` works without parentheses.  Both are line-continuation operators.
 
 #### Semantics
 
-Left fold applies the function with the accumulator as the first argument and the current element as the second, processing elements from first to last:
+**With initial value** (2-tuple right operand):
+
+Left fold processes all elements, starting from the initial value:
 
 ```
-⌿(f, [a, b, c], init) = f(f(f(init, a), b), c)
+f ⌿ ([a, b, c], init) = f(f(f(init, a), b), c)
 ```
 
-Right fold applies the function with the current element as the first argument and the accumulator as the second, processing elements from last to first:
+Right fold processes all elements in reverse, starting from the initial value:
 
 ```
-⍀(f, [a, b, c], init) = f(a, f(b, f(c, init)))
+f ⍀ ([a, b, c], init) = f(a, f(b, f(c, init)))
 ```
 
 When the container is empty, both folds return the initial value unchanged.
 
-#### Examples
+**Without initial value** (bare container):
 
-Summation using left fold:
+Left fold uses the first element as the accumulator and folds over the remaining elements:
 
 ```
-var total := ⌿(λa : int, b : int → int: a + b, [1, 2, 3, 4, 5], 0)
+f ⌿ [a, b, c] = f(f(a, b), c)
+```
+
+Right fold uses the last element as the accumulator and folds over the remaining elements in reverse:
+
+```
+f ⍀ [a, b, c] = f(a, f(b, c))
+```
+
+Folding an empty container without an initial value is a runtime error.  A single-element container returns that element unchanged.
+
+#### Examples
+
+Summation without initial value:
+
+```
+var total := (λa : int, b : int → int: a + b) ⌿ [1, 2, 3, 4, 5]
 // total = 15
 ```
 
-Bit packing (used in SHA-256 to assemble the final hash from eight 32-bit words):
+Summation with explicit initial value:
 
 ```
-var hash := ⌿(λacc : int, h : int → int: (acc « 32) | h, H, 0)
+var total := (λa : int, b : int → int: a + b) ⌿ ([1, 2, 3, 4, 5], 100)
+// total = 115
 ```
 
-String concatenation:
+Bit packing (used in SHA-256 to assemble the final hash from eight 32-bit words).  The initial value 0 is needed because the first hash word must be shifted into position:
 
 ```
-var joined := ⌿(λacc : str, s : str → str: acc + s, ["a", "b", "c"], "")
+var hash := (λacc : int, h : int → int: (acc « 32) | h) ⌿ (H, 0)
+```
+
+String concatenation without initial value:
+
+```
+var joined := (λacc : str, s : str → str: acc + s) ⌿ ["a", "b", "c"]
 // joined = "abc"
 ```
 
 Folding over a range:
 
 ```
-var sum := ⌿(λa : int, b : int → int: a + b, 1…100, 0)
+var sum := (λa : int, b : int → int: a + b) ⌿ 1…100
 ```
 
-Named functions work as well:
+Named functions as the left operand:
 
 ```
 fn add x : int, y : int → int:
     x + y
 
-var total := ⌿(add, [10, 20, 30], 0)   // 60
+var total := add ⌿ [10, 20, 30]   // 60
 ```
 
 Currying and fold combine naturally.  A curried function produces the mapping, and fold reduces the result:
@@ -1645,19 +1677,21 @@ fn multiply a : int, b : int → int:
 
 var triple := multiply(3)
 var tripled := generate(triple, 1…5)   // [3, 6, 9, 12, 15]
-var total := ⌿(add, tripled, 0)        // 45
+var total := add ⌿ tripled             // 45
 ```
 
 #### Design Rationale
 
 | Feature | APL/BQN | Haskell | Rust | Python | This language |
 |---------|---------|---------|------|--------|---------------|
-| Left fold | `/` (reduce) | `foldl` | `.fold()` | `functools.reduce` | `⌿` |
-| Right fold | N/A | `foldr` | `.rfold()` | N/A | `⍀` |
-| Init value | optional | required | required | optional | required |
-| Syntax | operator | function | method | function | glyph |
+| Left fold | `/` (reduce) | `foldl`/`foldl1` | `.fold()` | `functools.reduce` | `f ⌿ x` |
+| Right fold | N/A | `foldr`/`foldr1` | `.rfold()` | N/A | `f ⍀ x` |
+| Init value | optional | required/optional | required | optional | optional |
+| Syntax | operator modifier | function | method | function | binary operator |
 
-The glyph choice follows the APL tradition of using `/` and `\` with bar modifiers.  APL's `/` (reduce) is a left fold; the bar modifier distinguishes the two directions visually.  Requiring an explicit initial value (unlike APL's optional identity element) avoids the need for default values per type and prevents errors on empty containers.
+The glyph choice follows the APL tradition of using `/` and `\` with bar modifiers.  Using binary operator syntax (`func ⌿ container`) rather than function-call syntax aligns fold with other array operators in the language (`⍴`, `⧺`) and reads naturally: the function is on the left, the data on the right.
+
+The initial value is optional.  When omitted, the first or last element of the container serves as the accumulator, matching the behavior of APL's reduce and Haskell's `foldl1`/`foldr1`.  When an initial value is needed (e.g., when the accumulator type differs from the element type, or when the container may be empty), a 2-tuple literal `(container, init)` on the right side provides it.  This avoids a separate operator or function for the two cases.
 
 Both folds accept arrays and ranges as containers.  Using a non-iterable value (such as a scalar integer) is a type error.
 

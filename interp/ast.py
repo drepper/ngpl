@@ -340,15 +340,15 @@ class EnumerateExpr:
 
 
 class FoldExpr:
-    """Fold expression: ⌿(func, container, init) or ⍀(func, container, init).
+    """Fold expression: func ⌿ container or func ⌿ (container, init).
 
     direction: "left" or "right"
-    func: expression evaluating to a callable
+    func: left operand, expression evaluating to a callable
     container: expression evaluating to an iterable
-    init: expression for the initial accumulator value
+    init: optional initial accumulator value (None when omitted)
     """
 
-    def __init__(self, direction: str, func, container, init):
+    def __init__(self, direction: str, func, container, init=None):
         self.direction = direction
         self.func = func
         self.container = container

@@ -955,13 +955,29 @@ class Parser:
         return left
 
     def _parse_reshape_expr(self):
-        """reshape_expr → unary ('⍴' unary)?"""
+        """reshape_expr → unary (('⍴' | '⌿' | '⍀') …)?
+
+        ⍴ takes a unary right operand.
+        ⌿/⍀ take a range-level right operand so that ``f ⌿ 1…5`` works.
+        When the right operand of ⌿/⍀ is a 2-tuple literal, the second
+        element is the initial accumulator value.
+        """
         left = self._parse_unary()
-        if self._check("OP") and self._cur().value == "⍴":
+        if self._check("OP") and self._cur().value == "\N{APL FUNCTIONAL SYMBOL RHO}":
             self.pos += 1
             self._skip_nl()
             right = self._parse_unary()
             return ReshapeExpr(left, right)
+        if self._check("OP") and self._cur().value in (
+                "\N{APL FUNCTIONAL SYMBOL SLASH BAR}",
+                "\N{APL FUNCTIONAL SYMBOL BACKSLASH BAR}"):
+            direction = "left" if self._cur().value == "\N{APL FUNCTIONAL SYMBOL SLASH BAR}" else "right"
+            self.pos += 1
+            self._skip_nl()
+            right = self._parse_range_expr()
+            if isinstance(right, TupleLit) and len(right.elements) == 2:
+                return FoldExpr(direction, left, right.elements[0], right.elements[1])
+            return FoldExpr(direction, left, right)
         return left
 
     def _parse_unary(self):
@@ -1010,23 +1026,6 @@ class Parser:
             self._skip_nl()
             self._eat("PUNCT", ")")
             return ResultOfExpr(name_tok.value)
-        if self._check("OP") and self._cur().value in ("\N{APL FUNCTIONAL SYMBOL SLASH BAR}",
-                                                        "\N{APL FUNCTIONAL SYMBOL BACKSLASH BAR}"):
-            direction = "left" if self._cur().value == "\N{APL FUNCTIONAL SYMBOL SLASH BAR}" else "right"
-            self.pos += 1
-            self._eat("PUNCT", "(")
-            func = self._parse_or_expr()
-            self._skip_nl()
-            self._eat("PUNCT", ",")
-            self._skip_nl()
-            container = self._parse_or_expr()
-            self._skip_nl()
-            self._eat("PUNCT", ",")
-            self._skip_nl()
-            init = self._parse_or_expr()
-            self._skip_nl()
-            self._eat("PUNCT", ")")
-            return FoldExpr(direction, func, container, init)
         node = self._parse_primary()
         if self._check("OP") and self._cur().value == "?":
             self.pos += 1

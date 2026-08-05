@@ -86,6 +86,8 @@ _CONTINUATION_OPS = frozenset({
     "∧", "∨", "⊕", "⊼", "⊽",
     "⍴",
     "⧺",
+    "\N{APL FUNCTIONAL SYMBOL SLASH BAR}",
+    "\N{APL FUNCTIONAL SYMBOL BACKSLASH BAR}",
 })
 
 

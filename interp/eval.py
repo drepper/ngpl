@@ -1476,7 +1476,6 @@ class Evaluator:
         """Evaluate a fold expression: left fold ⌿ or right fold ⍀."""
         func = self.eval_expr(node.func)
         container_val = self.eval_expr(node.container)
-        acc = self.eval_expr(node.init)
 
         cu = unwrap_optional(container_val)
         if isinstance(cu, RangeValue):
@@ -1486,6 +1485,18 @@ class Evaluator:
         else:
             raise TypeError(
                 f"fold requires array or range, got {type(cu).__name__}")
+
+        if node.init is not None:
+            acc = self.eval_expr(node.init)
+        else:
+            if not elements:
+                raise TypeError("fold on empty container requires an initial value")
+            if node.direction == "left":
+                acc = elements[0]
+                elements = elements[1:]
+            else:
+                acc = elements[-1]
+                elements = elements[:-1]
 
         if node.direction == "left":
             for elem in elements:
