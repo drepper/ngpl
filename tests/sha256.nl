@@ -97,8 +97,8 @@ fn sha256(data : byte[]) -> ?int:
 
         /* --- Message-schedule expansion: W[16..63]. --- */
         foreach j : u32fast = 16…63:
-            W[j] ← W[j - 16] + expand_s0(W[j - 15]) +
-                    W[j - 7] + expand_s1(W[j - 2])
+            W[j] ← @wrap(W[j - 16] + expand_s0(W[j - 15]) +
+                         W[j - 7] + expand_s1(W[j - 2]))
 
         /* --- Working variables: copy of current hash state. --- */
         var v := H[0…7]
@@ -112,7 +112,7 @@ fn sha256(data : byte[]) -> ?int:
             const ch := (v[4] & v[5]) ^ (~v[4] & v[6])
 
             /* t1 = h + Σ₁ + ch + K[t] + W[t]. */
-            const t1 := v[7] + s1 + ch + K[t] + W[t]
+            const t1 := @wrap(v[7] + s1 + ch + K[t] + W[t])
 
             /* Σ₀(a) = ROTR(2,a) ⊕ ROTR(13,a) ⊕ ROTR(22,a). */
             const s0 := (v[0] ↻ 2) ^ (v[0] ↻ 13) ^ (v[0] ↻ 22)
@@ -121,15 +121,15 @@ fn sha256(data : byte[]) -> ?int:
             const maj := (v[0] & v[1]) ^ (v[0] & v[2]) ^ (v[1] & v[2])
 
             /* t2 = Σ₀ + maj. */
-            const t2 := s0 + maj
+            const t2 := @wrap(s0 + maj)
 
             /* Shift working variables right by one position. */
             v[1…7] ← v[0…6]
-            v[0] ← t1 + t2
-            v[4] ← v[4] + t1
+            v[0] ← @wrap(t1 + t2)
+            v[4] ← @wrap(v[4] + t1)
 
         /* --- Add compressed chunk to current hash state. --- */
-        H ← H + v
+        H ← @wrap(H + v)
 
         blk_off ← blk_off + 64
 

@@ -13,7 +13,7 @@ from interp.ast import (
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
-    RangeExpr, ForEachStmt, ExpectStmt,
+    RangeExpr, ForEachStmt, ExpectStmt, WrapExpr,
 )
 from interp.lexer import Token, KEYWORDS
 
@@ -691,7 +691,7 @@ class Parser:
         return left
 
     def _parse_unary(self):
-        """unary → ('-' | '~' | 'not') unary | primary"""
+        """unary → ('-' | '~' | 'not' | '@wrap') unary | primary"""
         if self._check("OP") and self._cur().value == "-":
             self.pos += 1
             operand = self._parse_unary()
@@ -704,6 +704,13 @@ class Parser:
             self._eat("NOT")
             operand = self._parse_unary()
             return UnaryOp("not", operand)
+        if self._check("WRAP"):
+            self._eat("WRAP")
+            self._eat("PUNCT", "(")
+            expr = self._parse_or_expr()
+            self._skip_nl()
+            self._eat("PUNCT", ")")
+            return WrapExpr(expr)
         node = self._parse_primary()
         if self._check("OP") and self._cur().value == "?":
             self.pos += 1

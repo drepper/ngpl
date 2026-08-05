@@ -196,6 +196,101 @@ The `byte` type is an 8-bit unsigned integer (semantically identical to `u8`) us
 While `byte` and `u8` have the same representation and coercion rules, `byte` signals intent: the value represents raw data rather than a numeric quantity.  Arithmetic on `byte` values follows the same wrapping rules as `u8`.
 
 
+### Integer Overflow Semantics
+
+Integer overflow behavior depends on whether the type is **signed** or **unsigned**:
+
+#### Unsigned Types: Modular Arithmetic
+
+Unsigned types (`u8`, `u16`, `u32`, `u64`, `usize`, `byte`, and all unsigned fast variants) use **modular arithmetic**.  Operations that exceed the type's range silently wrap:
+
+```
+var x : u8 = 255
+var y : u8 = 1
+var z := x + y          /* z is 0 (wrapped modulo 256) */
+
+var a : u32 = 4294967295
+var b : u32 = 1
+var c := a + b           /* c is 0 (wrapped modulo 2³²) */
+
+var d : u8 = -1          /* d is 255 (modular representation) */
+```
+
+This matches C's unsigned semantics and Rust's `Wrapping<T>`.  Algorithms like SHA-256 depend on this behavior.
+
+#### Signed Types: Overflow Aborts
+
+Signed types (`i8`, `i16`, `i32`, `i64`, and all signed fast variants) **abort on overflow**.  Any arithmetic operation that produces a result outside the type's range raises an `OverflowError`:
+
+```
+var x : i8 = 127
+var y : i8 = 1
+var z := x + y           /* ERROR: integer overflow */
+
+var a : i32 = -2147483648
+var b := -a              /* ERROR: integer overflow (negation) */
+```
+
+This is the default strict mode behavior, as mandated by the language design: "in strict mode arithmetic overflow/underflow must be reported or lead to termination."
+
+#### Untyped `int`: Arbitrary Precision
+
+The untyped `int` type has arbitrary precision — overflow is impossible.  When a typed and untyped integer are combined, the result is `int` (arbitrary precision), so overflow cannot occur in mixed expressions.
+
+#### Coercion Overflow
+
+Assigning an untyped integer literal to a signed typed variable checks that the value fits:
+
+```
+var x : i8 = 128         /* ERROR: 128 does not fit in i8 (range -128..127) */
+var y : u8 = 256         /* y is 0 (unsigned wraps) */
+```
+
+#### Bitwise Operations
+
+Bitwise operations (`&`, `|`, `^`, `~`, `«`, `»`, `↺`, `↻`) always produce wrapped results regardless of signedness, since they operate on the bit representation and the result is always in range after masking.
+
+#### Explicit Wrapping with `@wrap`
+
+The `@wrap(expr)` annotation enables modular arithmetic for all operations within its scope, even for signed types that would normally abort on overflow.  This is useful for cryptographic algorithms and other code that intentionally uses wrapping arithmetic on signed types:
+
+```
+var x : i8 = 127
+var y : i8 = 1
+var z := @wrap(x + y)      /* z is -128 (wraps instead of aborting) */
+
+var a : i32 = -2147483648
+var b := @wrap(-a)          /* b is -2147483648 (wraps instead of aborting) */
+```
+
+`@wrap` applies to the entire expression within the parentheses, including nested sub-expressions and function arguments.  Operations outside the `@wrap` scope retain their normal overflow behavior:
+
+```
+var x : i8 = 127
+var y : i8 = 1
+var safe := @wrap(x - y)    /* wrapping subtraction */
+var z := x + y               /* ERROR: still aborts outside @wrap */
+```
+
+For unsigned types, `@wrap` is a no-op since they already use modular arithmetic, but it serves as documentation of intent:
+
+```
+/* SHA-256 compression round — u32 additions intentionally wrap. */
+const t1 := @wrap(v[7] + s1 + ch + K[t] + W[t])
+```
+
+#### Design Rationale
+
+| Feature | C | Rust | Zig | This language |
+|---------|---|------|-----|---------------|
+| Signed overflow | UB | panic (debug) / wrap (release) | UB / `@addWithOverflow` | abort |
+| Unsigned overflow | wraps | wraps | wraps | wraps |
+| Compile-time check | sometimes | yes | yes | yes |
+| Arbitrary precision fallback | no | no | `comptime_int` | `int` type |
+
+The split between unsigned (wraps) and signed (aborts) reflects a fundamental semantic difference: unsigned types represent bit patterns and modular counters, while signed types represent mathematical integers where overflow is a logic error.  This avoids the undefined behavior of C while being less surprising than Rust's debug/release split.
+
+
 ### Dynamic Arrays as Parameters
 
 Function parameters can be annotated with dynamic array types using the `type[]` syntax:
@@ -449,7 +544,7 @@ Using an unknown type name is a compile error (caught when the function definiti
 
 When an argument is passed to a typed parameter:
 
-1. **Integer types.**  The argument must be an `IntValue`.  It is coerced to the target width using the same wrapping rules as variable definitions — unsigned types mask, signed types sign-extend.  An `int` (arbitrary-precision) argument passed to a `u32` parameter is wrapped to 32 bits.
+1. **Integer types.**  The argument must be an `IntValue`.  It is coerced to the target width following the integer overflow semantics: unsigned types wrap (modular arithmetic), signed types check and abort on overflow.  An `int` (arbitrary-precision) argument passed to a `u32` parameter is wrapped to 32 bits; the same value passed to an `i32` parameter must fit in the signed range or an `OverflowError` is raised.
 
 2. **`bool`.**  The argument must be a `BoolValue`.  No implicit conversion from integers.
 

@@ -230,3 +230,14 @@ class ExpectStmt:
     def __init__(self, expectations: list[tuple[str, str]], stmt):
         self.expectations = expectations
         self.stmt = stmt
+
+
+class WrapExpr:
+    """Expression annotated with @wrap for wrapping arithmetic.
+
+    All arithmetic operations within the wrapped expression use modular
+    semantics regardless of signedness.
+    """
+
+    def __init__(self, expr):
+        self.expr = expr

@@ -65,6 +65,16 @@ def resolve_width(w1: str, w2: str) -> str:
     return w1 if b1 >= b2 else w2
 
 
+def _int_range(width: str) -> tuple[int, int] | None:
+    """Return (min, max) inclusive for a typed integer, or None for 'int'."""
+    bits = _TYPE_BITS.get(width)
+    if bits is None:
+        return None
+    if width.startswith("i"):
+        return -(1 << (bits - 1)), (1 << (bits - 1)) - 1
+    return 0, (1 << bits) - 1
+
+
 def wrap_int(value: int, width: str) -> int:
     """Wrap an integer value to the range of the given type.
 
@@ -81,6 +91,19 @@ def wrap_int(value: int, width: str) -> int:
         if result >= (1 << (bits - 1)):
             result -= (1 << bits)
     return result
+
+
+def check_int(value: int, width: str) -> int:
+    """Check that an integer fits the given type; raise OverflowError if not."""
+    r = _int_range(width)
+    if r is None:
+        return value
+    lo, hi = r
+    if value < lo or value > hi:
+        raise OverflowError(
+            f"integer overflow: {value} does not fit in {width} "
+            f"(range {lo}..{hi})")
+    return value
 
 
 class Value:
@@ -300,8 +323,24 @@ class ArrayValue(Value):
         self.elements[index] = value
 
 
+def _is_unsigned(width: str) -> bool:
+    """Return True if width names an unsigned integer type."""
+    return width.startswith("u") or width in ("byte", "usize")
+
+
 def mk_int(value: int, width: str = "int") -> IntValue:
-    """Create an IntValue, wrapping to the type's range if typed."""
+    """Create an IntValue with overflow semantics per type.
+
+    Unsigned types wrap silently (modular arithmetic).
+    Signed types and untyped 'int' raise OverflowError on overflow.
+    """
+    if _is_unsigned(width):
+        return IntValue(wrap_int(value, width), width)
+    return IntValue(check_int(value, width), width)
+
+
+def mk_int_wrap(value: int, width: str = "int") -> IntValue:
+    """Create an IntValue, wrapping to the type's range (for bitwise ops)."""
     return IntValue(wrap_int(value, width), width)
 
 
@@ -398,14 +437,18 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
 def coerce_to_type(value: Value, target_width: str) -> Value:
     """Coerce a value to a target integer type.
 
-    For scalar IntValue, wraps to the target width.
+    For scalar IntValue, checks that the value fits the target type.
     For ObjectValue(ArrayValue), coerces each element and sets element_type.
     Returns the value unchanged if no coercion is needed.
+    Raises OverflowError if the value does not fit.
     """
     if target_width is None or target_width == "int":
         return value
     if isinstance(value, IntValue):
-        return mk_int(value.value, target_width)
+        if _is_unsigned(target_width):
+            return IntValue(wrap_int(value.value, target_width), target_width)
+        check_int(value.value, target_width)
+        return IntValue(value.value, target_width)
     if isinstance(value, ObjectValue) and isinstance(value.obj, ArrayValue):
         coerced = [coerce_to_type(e, target_width) for e in value.obj.elements]
         return ObjectValue(ArrayValue(coerced, element_type=target_width))

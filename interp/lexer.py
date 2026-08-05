@@ -52,6 +52,7 @@ KEYWORDS = {
     "const": "CONST",
     "foreach": "FOREACH",
     "expect": "EXPECT",
+    "wrap": "WRAP",
 }
 
 # Double-character operators that must be checked before single ones.
