@@ -25,7 +25,7 @@ from interp.ast import (
 from interp.value import (
     Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
     FuncValue, LambdaValue, BuiltinFunc, ObjectValue, BuiltinBoundMethod,
-    ArrayValue, TupleValue, EnumType, EnumValue,
+    ArrayValue, TupleValue, EnumType, EnumValue, RangeValue,
     mk_int, mk_int_wrap, mk_str, mk_bool, none, some, is_none, is_some,
     resolve_width, wrap_int, coerce_to_type, coerce_arg, _TYPE_BITS, FAST_TYPES,
     _split_optional_type,
@@ -78,6 +78,11 @@ def _collect_refs(node) -> set[str]:
         refs |= _collect_refs(node.size_expr)
         if node.init_expr:
             refs |= _collect_refs(node.init_expr)
+    elif isinstance(node, RangeExpr):
+        refs |= _collect_refs(node.start)
+        refs |= _collect_refs(node.end)
+        if node.step is not None:
+            refs |= _collect_refs(node.step)
     elif isinstance(node, WrapExpr):
         refs |= _collect_refs(node.expr)
     elif isinstance(node, LambdaExpr):
@@ -848,6 +853,19 @@ class Evaluator:
                     return ObjectValue(ArrayValue(list(elems),
                                                   element_type=unwrapped.obj.element_type))
 
+        if isinstance(node, RangeExpr):
+            s = unwrap_optional(self.eval_expr(node.start))
+            e = unwrap_optional(self.eval_expr(node.end))
+            if not isinstance(s, IntValue) or not isinstance(e, IntValue):
+                raise TypeError("range bounds must be integers")
+            step = None
+            if node.step is not None:
+                st = unwrap_optional(self.eval_expr(node.step))
+                if not isinstance(st, IntValue):
+                    raise TypeError("range step must be an integer")
+                step = st.value
+            return RangeValue(s.value, e.value, step)
+
         if isinstance(node, LambdaExpr):
             return self._eval_lambda_expr(node)
 
@@ -1038,7 +1056,9 @@ class Evaluator:
                     sequences.append([mk_int(i) for i in range(sv, ev - 1, -1)])
             else:
                 val = unwrap_optional(self.eval_expr(expr))
-                if isinstance(val, ObjectValue) and isinstance(val.obj, ArrayValue):
+                if isinstance(val, RangeValue):
+                    sequences.append([mk_int(i) for i in val.to_list()])
+                elif isinstance(val, ObjectValue) and isinstance(val.obj, ArrayValue):
                     sequences.append(list(val.obj.elements))
                 else:
                     raise TypeError(
@@ -1194,6 +1214,28 @@ class Evaluator:
         finally:
             self.env = old_env
 
+    def _builtin_generate(self, args):
+        """generate(func, range) — apply func to each value in range, return array."""
+        if len(args) != 2:
+            raise TypeError("generate(func, range) takes exactly 2 arguments")
+        func, range_val = args
+        if not isinstance(func, (FuncValue, LambdaValue, BuiltinFunc)):
+            raise TypeError(
+                f"generate: first argument must be a function, "
+                f"got {type(func).__name__}")
+        if not isinstance(range_val, RangeValue):
+            raise TypeError(
+                f"generate: second argument must be a range, "
+                f"got {type(range_val).__name__}")
+        elements: list[Value] = []
+        for i in range_val.to_list():
+            result = self._do_call(func, [mk_int(i)])
+            if is_none(result):
+                raise TypeError(
+                    "generate: function must not return \N{EMPTY SET}")
+            elements.append(result)
+        return ObjectValue(ArrayValue(elements))
+
     # ------------------------------------------------------------------
     # Function calls
     # ------------------------------------------------------------------
@@ -1303,6 +1345,8 @@ class Evaluator:
         if isinstance(func, LambdaValue):
             return self._call_lambda(func, args)
         if isinstance(func, BuiltinFunc):
+            if func.name == "generate":
+                return self._builtin_generate(args)
             expected = func.arity
             if expected != -1 and len(args) != expected:
                 raise TypeError(

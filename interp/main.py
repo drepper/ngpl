@@ -68,6 +68,7 @@ def setup_std_env(env: Env):
     env.define("std", ObjectValue(std))
     env.define("assert", BuiltinFunc("assert", -1, _builtin_assert))
     env.define("assert_eq", BuiltinFunc("assert_eq", 2, _builtin_assert_eq))
+    env.define("generate", BuiltinFunc("generate", 2, None))
 
 
 def _builtin_assert(args):

@@ -1210,6 +1210,105 @@ The explicit capture list follows the principle that a lambda's dependencies sho
 Automatic currying follows Haskell's model: every function of N parameters is conceptually a chain of N single-parameter functions.  This makes point-free style and function composition natural.
 
 
+### Ranges as Values
+
+Range expressions (`start…end` and `start…step…end`) are first-class values.  They can be stored in variables, passed as arguments, and iterated with `foreach`.
+
+```
+var r = 1…10
+foreach i = r:
+    ...
+```
+
+Ranges bind tighter than comparison but looser than arithmetic:
+
+```
+var r = 1 + 2 … 10 - 3             // equivalent to (1+2)…(10-3) = 3…7
+```
+
+
+### The `generate` Function
+
+`generate` applies a function to each value in a range, collecting the results into an array.  It is the primary way to construct arrays from a mapping function.
+
+#### Syntax
+
+```
+generate(func, range)
+```
+
+- **func**: any callable — a named function, a lambda, or a curried (partially-applied) function.
+- **range**: a range value (`start…end` or `start…step…end`).
+- **returns**: an array whose size equals the number of elements in the range.
+
+#### Basic Usage
+
+```
+var squares = generate(λx: x * x, 1…5)
+// squares = [1, 4, 9, 16, 25]
+
+fn double x : i32 -> i32:
+    x * 2
+
+var doubled = generate(double, 1…4)
+// doubled = [2, 4, 6, 8]
+```
+
+#### With Currying
+
+A curried function can be used as the mapping function:
+
+```
+fn multiply a : i32, b : i32 -> i32:
+    a * b
+
+var tripled = generate(multiply(3), 1…5)
+// tripled = [3, 6, 9, 12, 15]
+```
+
+#### With Stepped and Descending Ranges
+
+```
+var evens = generate(λx: x, 0…2…10)
+// evens = [0, 2, 4, 6, 8, 10]
+
+var desc = generate(λx: x * x, 3…1)
+// desc = [9, 4, 1]
+```
+
+#### With Captures
+
+```
+var offset = 100
+var arr = generate(λx |offset|: x + offset, 1…3)
+// arr = [101, 102, 103]
+```
+
+#### Returning ∅ is Invalid
+
+The mapping function must not return ∅.  This is a runtime error because the result array cannot contain empty optional values:
+
+```
+generate(λx: ∅, 1…5)              // ERROR: function must not return ∅
+```
+
+#### Compile-time Optimization (Future)
+
+When the range bounds are compile-time constants, the compiler can determine the array size statically and allocate a fixed-size array.  When the bounds are runtime values, the result is a dynamically-sized array.  In the prototype interpreter, all arrays are dynamically sized.
+
+For higher-rank results (matrices, tensors), `generate` will accept multi-dimensional ranges and return objects of matching rank.  This is planned for future implementation.
+
+#### Design Rationale
+
+| Feature | Haskell | Python | Rust | APL | This language |
+|---------|---------|--------|------|-----|---------------|
+| Map+collect | `map f [1..n]` | `[f(x) for x in range(1,n+1)]` | `(1..=n).map(f).collect()` | `f⍳n` | `generate(f, 1…n)` |
+| Result type | list | list | `Vec<T>` | array | array |
+| None/null in result | allowed | allowed | `Option` in vec | N/A | error |
+
+`generate` combines mapping and collection into a single operation, emphasizing the functional construction of arrays.  The prohibition on ∅ return values ensures the result array is dense — every element contains a meaningful value.  This matches the array programming tradition (APL, J, BQN) where arrays are always rectangular and fully populated.
+
+
 ### Built-in Test System
 
 Unit testing is built into the language, similar to Rust's `#[test]` attribute.  Functions are annotated with `@test` to mark them as test functions.  The annotation accepts an optional list of function names that the test covers.

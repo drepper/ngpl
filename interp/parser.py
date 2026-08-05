@@ -601,18 +601,7 @@ class Parser:
         self._eat("PUNCT", "=")
         iterables = []
         while True:
-            expr = self._parse_or_expr()
-            if self._check("PUNCT") and self._cur().value == "…":
-                self.pos += 1
-                second = self._parse_or_expr()
-                if self._check("PUNCT") and self._cur().value == "…":
-                    self.pos += 1
-                    end = self._parse_or_expr()
-                    iterables.append(RangeExpr(expr, end, step=second))
-                else:
-                    iterables.append(RangeExpr(expr, second))
-            else:
-                iterables.append(expr)
+            iterables.append(self._parse_or_expr())
             if not self._try_eat("PUNCT", ","):
                 break
         body = self._parse_block()
@@ -756,8 +745,8 @@ class Parser:
         return left
 
     def _parse_cmp_expr(self):
-        """cmp_expr → shift_expr (('==' | '!=' | '<' | '>' | '<=' | '>=') shift_expr)*"""
-        left = self._parse_shift_expr()
+        """cmp_expr → range_expr (('==' | '!=' | '<' | '>' | '<=' | '>=') range_expr)*"""
+        left = self._parse_range_expr()
         while True:
             self._skip_nl()
             if not (self._check("OP") and self._cur().value in ("==", "!=", "<", ">", "<=", ">=")):
@@ -765,8 +754,21 @@ class Parser:
             op_tok = self._cur()
             self.pos += 1
             self._skip_nl()
-            right = self._parse_shift_expr()
+            right = self._parse_range_expr()
             left = BinOp(op_tok.value, left, right)
+        return left
+
+    def _parse_range_expr(self):
+        """range_expr → shift_expr ('…' shift_expr ('…' shift_expr)?)?"""
+        left = self._parse_shift_expr()
+        if self._check("PUNCT") and self._cur().value == "…":
+            self.pos += 1
+            second = self._parse_shift_expr()
+            if self._check("PUNCT") and self._cur().value == "…":
+                self.pos += 1
+                end = self._parse_shift_expr()
+                return RangeExpr(left, end, step=second)
+            return RangeExpr(left, second)
         return left
 
     def _parse_shift_expr(self):
@@ -992,17 +994,13 @@ class Parser:
                         node = GetAttr(node, attr_name)
                 elif self._check("PUNCT") and self._cur().value == "[":
                     self.pos += 1
-                    start_expr = self._parse_or_expr()
-                    if self._check("PUNCT") and self._cur().value == "…":
-                        self.pos += 1
-                        end_expr = self._parse_or_expr()
-                        self._skip_nl()
-                        self._eat("PUNCT", "]")
-                        node = SliceAccess(node, start_expr, end_expr)
+                    idx_expr = self._parse_or_expr()
+                    self._skip_nl()
+                    self._eat("PUNCT", "]")
+                    if isinstance(idx_expr, RangeExpr):
+                        node = SliceAccess(node, idx_expr.start, idx_expr.end)
                     else:
-                        self._skip_nl()
-                        self._eat("PUNCT", "]")
-                        node = Subscript(node, start_expr)
+                        node = Subscript(node, idx_expr)
                 elif self._check("PUNCT") and self._cur().value == "(":
                     args = self._parse_call_args()
                     if isinstance(node, VarRef):

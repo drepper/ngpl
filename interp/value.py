@@ -412,6 +412,41 @@ class EnumValue(Value):
         return self.value
 
 
+class RangeValue(Value):
+    """A range value representing start…end or start…step…end (inclusive)."""
+
+    __slots__ = ("start", "end", "step")
+
+    def __init__(self, start: int, end: int, step: int | None = None):
+        self.start = start
+        self.end = end
+        self.step = step
+
+    def to_list(self) -> list[int]:
+        """Expand the range to a list of integers."""
+        if self.step is not None:
+            if self.step == 0:
+                raise TypeError("range step must not be zero")
+            if self.step > 0:
+                return list(range(self.start, self.end + 1, self.step))
+            return list(range(self.start, self.end - 1, self.step))
+        if self.start <= self.end:
+            return list(range(self.start, self.end + 1))
+        return list(range(self.start, self.end - 1, -1))
+
+    @property
+    def size(self) -> int:
+        return len(self.to_list())
+
+    def display(self):
+        if self.step is not None:
+            return f"{self.start}\N{HORIZONTAL ELLIPSIS}{self.step}\N{HORIZONTAL ELLIPSIS}{self.end}"
+        return f"{self.start}\N{HORIZONTAL ELLIPSIS}{self.end}"
+
+    def to_python(self):
+        return self.to_list()
+
+
 class ArrayValue(Value):
     """A mutable array of runtime Values with dynamic growth.
 
