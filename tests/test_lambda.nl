@@ -173,6 +173,20 @@ fn test_lambda_question_scoping:
   assert_eq(5, f(10, 2) ?? 0)
   assert_eq(0, f(10, 0) ?? 0)
 
+// Expected return type wraps result in ExpectedValue.ok
+@test
+fn test_lambda_expected_return:
+  var f = λa : int, b : int -> int!: (a / b)?
+  var r = f(10, 2)
+  assert_eq(5, r ?? -1)
+
+// Expected return type: division by zero yields error
+@test
+fn test_lambda_expected_return_err:
+  var f = λa : int, b : int -> int!: (a / b)?
+  var r = f(10, 0)
+  assert_eq(-1, r ?? -1)
+
 // Missing type annotation causes error
 @test
 @expect error "requires a type"
