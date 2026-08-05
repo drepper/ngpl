@@ -148,6 +148,31 @@ fn test_lambda_replaceable_uncaptured:
 fn test_lambda_empty_capture_list:
   var f = λx : int || -> int: x * 2
 
+// Optional return type wraps result in Some
+@test
+fn test_lambda_optional_return:
+  var f = λx : int -> int?: x + 1
+  var r = f(5)
+  assert_eq(6, r ?? 0)
+
+// Optional return type: body returning ∅ stays ∅
+@test
+fn test_lambda_optional_return_none:
+  var f = λx : int -> int?: ∅
+  var r = f(0)
+  assert_eq(42, r ?? 42)
+
+// ? inside lambda returns from lambda, not enclosing function
+fn safe_div a : i32, b : i32 -> i32?:
+  if b == 0: return ∅
+  a / b
+
+@test
+fn test_lambda_question_scoping:
+  var f = λa : int, b : int |safe_div| -> int?: safe_div(a, b)?
+  assert_eq(5, f(10, 2) ?? 0)
+  assert_eq(0, f(10, 0) ?? 0)
+
 // Missing type annotation causes error
 @test
 @expect error "requires a type"
