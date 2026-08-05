@@ -1,23 +1,6 @@
-"""Entry point for the newlang prototype interpreter.
+"""Entry point for the newlang prototype interpreter."""
 
-Usage:
-    python3 -m interp.main <source_file.nl> [--test] [--skip-tests]
-
-The interpreter:
-    1. Reads the source file.
-    2. Tokenizes it (lexer).
-    3. Parses it into an AST (parser).
-    4. Sets up the initial environment with std module bindings.
-    5. Runs tests (standalone before startup, referenced on first call).
-    6. Locates and executes the @start-marked function.
-
-Flags:
-    --test        Run all tests and exit without executing the startup function.
-    --skip-tests  Skip all tests during normal execution.
-
-All source files are UTF-8 encoded.
-"""
-
+import argparse
 import re
 import sys
 import os
@@ -155,17 +138,26 @@ def _run_test(test_fv: FuncValue, env: Env) -> tuple[bool, str]:
         return False, str(e)
 
 
+def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the interpreter."""
+    parser = argparse.ArgumentParser(
+        prog="newlang",
+        description="Prototype interpreter for the newlang programming language.",
+    )
+    parser.add_argument("source", help="source file to interpret")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--test", action="store_true",
+                       help="run all tests and exit without executing the startup function")
+    group.add_argument("--skip-tests", action="store_true",
+                       help="skip all tests during normal execution")
+    return parser.parse_args()
+
+
 def main():
     """Run the newlang interpreter on a source file."""
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    test_mode = "--test" in sys.argv
-    skip_tests = "--skip-tests" in sys.argv
+    args = _parse_args()
 
-    if len(args) < 1:
-        print("Usage: python3 -m interp.main <source_file.nl> [--test] [--skip-tests]", file=sys.stderr)
-        sys.exit(1)
-
-    source_path = args[0]
+    source_path = args.source
     if not os.path.isfile(source_path):
         print(f"Error: file not found: {source_path}", file=sys.stderr)
         sys.exit(1)
@@ -309,13 +301,13 @@ def main():
                       file=sys.stderr)
         else:
             expect_passed += 1
-            if test_mode:
+            if args.test:
                 print(f"test {defn.name} ... {_GREEN}ok{_RESET}", file=sys.stderr)
 
-    if expect_failed > 0 and not test_mode:
+    if expect_failed > 0 and not args.test:
         sys.exit(1)
 
-    if test_mode:
+    if args.test:
         all_tests: list[FuncValue] = list(standalone_tests)
         seen: set[str] = {t.name for t in all_tests}
         for tests in referenced_tests.values():
@@ -347,7 +339,7 @@ def main():
 
     # Normal mode: run standalone tests before startup unless skipped.
     # Only report failures; abort if any test failed.
-    if not skip_tests:
+    if not args.skip_tests:
         any_failed = False
         for test_fv in standalone_tests:
             ok, msg = _run_test(test_fv, env)
@@ -361,7 +353,7 @@ def main():
         print("No @start function found — nothing to execute", file=sys.stderr)
         return
 
-    hooks = {} if skip_tests else dict(referenced_tests)
+    hooks = {} if args.skip_tests else dict(referenced_tests)
     try:
         Evaluator(env, test_hooks=hooks).eval_stmts(startup_func.body)
     except AssertionError as e:
