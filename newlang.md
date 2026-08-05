@@ -94,7 +94,10 @@ The language provides fixed-width integer types with explicit signedness and bit
 | `i32` | 32-bit | -2³¹ to 2³¹-1 |
 | `u32` | 32-bit | 0 to 2³²-1 |
 | `i64` | 64-bit | -2⁶³ to 2⁶³-1 |
-| `u64` | 64-bit | 0 to 2⁶⁴-1 |
+| `u64`   | 64-bit | 0 to 2⁶⁴-1 |
+| `usize` | platform | 0 to 2^N-1 (N = pointer width) |
+
+`usize` is an unsigned integer type whose width matches the platform's pointer size, equivalent to `size_t` in C/C++.  On a 64-bit platform it is 64 bits wide.  It is the natural type for array indices, byte offsets, and object sizes.
 
 Additionally, `int` denotes an arbitrary-precision integer with no fixed width.  This type can represent any integer value regardless of magnitude.
 
@@ -118,7 +121,8 @@ This concept is similar to Go's untyped constants and Odin's untyped integers.  
 
 ```
 const K : u32 = [1116352408, 1899447441, ...];   /* array of u32, literals coerced */
-var blk_off : u64 = 0;                            /* u64 variable, 0 coerced from untyped int */
+var blk_off : usize = 0;                           /* usize variable for byte offsets */
+var rem : usize = data_size % 64;                  /* remainder operator, result coerced to usize */
 var i : u32 = 0;                                   /* u32 loop counter */
 var hash := 0;                                     /* int (arbitrary-precision), inferred from untyped int */
 var W : i32[64] = 0;                               /* array of 64 i32 elements, each initialized to 0 */
@@ -129,4 +133,12 @@ var W : i32[64] = 0;                               /* array of 64 i32 elements, 
 The `untyped int` approach avoids requiring suffixes on every integer literal (as in Rust's `42u32` or C++'s `42UL`) while still permitting precise type control through variable declarations.  It keeps the common case — writing plain numbers — clean and readable, while the type system ensures that values fit their containers at compile time.
 
 This design also enables the arbitrary-precision `int` type to coexist naturally with fixed-width types: a literal `256` in a context expecting `u8` is a compile error, but the same literal in an untyped context simply represents the mathematical integer 256.
+
+### Integer Remainder
+
+The `%` operator computes the integer remainder with truncation toward zero, matching C, C++, and Rust semantics:
+
+    a % b = a - trunc(a / b) * b
+
+The result type follows the same rules as other arithmetic operators: `resolve_width` selects the wider operand's type.  For unsigned types, the result is always non-negative.
 

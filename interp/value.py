@@ -11,6 +11,7 @@ _TYPE_BITS: dict[str, int] = {
     "u16": 16, "i16": 16,
     "u32": 32, "i32": 32,
     "u64": 64, "i64": 64,
+    "usize": 64,
 }
 
 _TYPE_MASK: dict[str, int] = {
@@ -18,6 +19,7 @@ _TYPE_MASK: dict[str, int] = {
     "u16": 0xFFFF, "i16": 0xFFFF,
     "u32": 0xFFFFFFFF, "i32": 0xFFFFFFFF,
     "u64": 0xFFFFFFFFFFFFFFFF, "i64": 0xFFFFFFFFFFFFFFFF,
+    "usize": 0xFFFFFFFFFFFFFFFF,
 }
 
 

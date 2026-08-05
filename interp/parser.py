@@ -441,11 +441,11 @@ class Parser:
         return left
 
     def _parse_mul_expr(self):
-        """mul_expr → unary (('*' | '/') unary)*"""
+        """mul_expr → unary (('*' | '/' | '%') unary)*"""
         left = self._parse_unary()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value in ("*", "/")):
+            if not (self._check("OP") and self._cur().value in ("*", "/", "%")):
                 break
             op_tok = self._cur()
             self.pos += 1

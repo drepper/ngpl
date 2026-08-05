@@ -26,16 +26,6 @@ const K : u32 = [
 ];
 
 /* ---------------------------------------------------------------------------
- * Helper: compute data_size mod 64.
- * --------------------------------------------------------------------------- */
-
-fn data_rem_64(data_size) -> int {
-    var rem := data_size;
-    while (rem >= 64) { rem ← rem - 64; }
-    return rem;
-}
-
-/* ---------------------------------------------------------------------------
  * SHA-256 padding helpers.
  *
  * The data object (Bytes) returns 0 for out-of-range reads, but SHA-256
@@ -86,13 +76,13 @@ fn expand_s1(prev) -> int {
  * --------------------------------------------------------------------------- */
 
 fn sha256(data) -> int {
-    var data_size := data.size;
+    var data_size : usize = data.size;
 
     /* Compute padded message length per SHA-256 spec. */
-    var rem := data_rem_64(data_size);
-    var pad_len := 55 - rem;
-    if (pad_len < 0) { pad_len ← pad_len + 64; }
-    var total_size := data_size + 1 + pad_len + 8;
+    var rem : usize = data_size % 64;
+    var pad_len : usize = 55 - rem;
+    if (rem > 55) { pad_len ← pad_len + 64; }
+    var total_size : usize = data_size + 1 + pad_len + 8;
 
     /* Initial hash values per FIPS 180-4 Section 5.3.3. */
     var H : u32 = [
@@ -101,7 +91,7 @@ fn sha256(data) -> int {
     ];
 
     /* Process each 64-byte block. */
-    var blk_off : u64 = 0;
+    var blk_off : usize = 0;
     while (blk_off < total_size) {
         /* --- Load W[0..15] from the current block (with padding overlay). --- */
         var W : u32[64] = 0;

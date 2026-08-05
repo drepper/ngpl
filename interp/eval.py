@@ -264,6 +264,7 @@ class Evaluator:
             "-": self._op_sub,
             "*": self._op_mul,
             "/": self._op_div,
+            "%": self._op_mod,
             "==": self._op_eq,
             "!=": self._op_neq,
             "<": self._op_lt,
@@ -324,6 +325,17 @@ class Evaluator:
             result = int(lu.value / ru.value) if lu.value * ru.value >= 0 else -int(abs(lu.value) / abs(ru.value))
             return mk_int(result, resolve_width(lu.width, ru.width))
         raise TypeError(f"division expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
+
+    def _op_mod(self, left, right):
+        """Remainder (truncation toward zero): a % b = a - trunc(a/b)*b."""
+        lu = unwrap_optional(left)
+        ru = unwrap_optional(right)
+        if isinstance(lu, IntValue) and isinstance(ru, IntValue):
+            if ru.value == 0:
+                raise ZeroDivisionError("remainder by zero")
+            quot = int(lu.value / ru.value) if lu.value * ru.value >= 0 else -int(abs(lu.value) / abs(ru.value))
+            return mk_int(lu.value - quot * ru.value, resolve_width(lu.width, ru.width))
+        raise TypeError(f"remainder expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_eq(self, left, right):
         """Equality comparison."""
