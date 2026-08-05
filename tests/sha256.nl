@@ -60,12 +60,12 @@ fn get_padded_word(data, off : usize, data_size : usize, total_size : usize) -> 
  * SHA-256 sigma helpers for message-schedule expansion.
  * --------------------------------------------------------------------------- */
 
-fn expand_s0(prev : u32) -> int {
+fn expand_s0(prev : u32) -> u32 {
     /* σ₀(x) = ROTR(7,x) ⊕ ROTR(18,x) ⊕ SHR(3,x). */
     (prev ↻ 7) ^ (prev ↻ 18) ^ (prev » 3)
 }
 
-fn expand_s1(prev : u32) -> int {
+fn expand_s1(prev : u32) -> u32 {
     /* σ₁(x) = ROTR(17,x) ⊕ ROTR(19,x) ⊕ SHR(10,x). */
     (prev ↻ 17) ^ (prev ↻ 19) ^ (prev » 10)
 }
