@@ -6,6 +6,56 @@ type checking and proper error messages.
 """
 
 
+_TYPE_BITS: dict[str, int] = {
+    "u8": 8, "i8": 8,
+    "u16": 16, "i16": 16,
+    "u32": 32, "i32": 32,
+    "u64": 64, "i64": 64,
+}
+
+_TYPE_MASK: dict[str, int] = {
+    "u8": 0xFF, "i8": 0xFF,
+    "u16": 0xFFFF, "i16": 0xFFFF,
+    "u32": 0xFFFFFFFF, "i32": 0xFFFFFFFF,
+    "u64": 0xFFFFFFFFFFFFFFFF, "i64": 0xFFFFFFFFFFFFFFFF,
+}
+
+
+def resolve_width(w1: str, w2: str) -> str:
+    """Determine the result type when combining two integer types.
+
+    Rules (wider wins):
+    - same + same → same
+    - int + fixed → int (arbitrary precision is wider than any fixed type)
+    - fixed + fixed (different) → wider fixed type
+    """
+    if w1 == w2:
+        return w1
+    if w1 == "int" or w2 == "int":
+        return "int"
+    b1 = _TYPE_BITS.get(w1, 0)
+    b2 = _TYPE_BITS.get(w2, 0)
+    return w1 if b1 >= b2 else w2
+
+
+def wrap_int(value: int, width: str) -> int:
+    """Wrap an integer value to the range of the given type.
+
+    Unsigned types mask to [0, 2^N-1].
+    Signed types mask then sign-extend to [-2^(N-1), 2^(N-1)-1].
+    "int" passes through unchanged (arbitrary precision).
+    """
+    mask = _TYPE_MASK.get(width)
+    if mask is None:
+        return value
+    result = value & mask
+    if width.startswith("i"):
+        bits = _TYPE_BITS[width]
+        if result >= (1 << (bits - 1)):
+            result -= (1 << bits)
+    return result
+
+
 class Value:
     """Base class for all runtime values."""
 
@@ -29,9 +79,9 @@ class IntValue(Value):
 
     __slots__ = ("value", "width")
 
-    def __init__(self, value: int, width: str = "i64"):
-        self.value = value  # Python int (unbounded, but clamped to width in strict mode)
-        self.width = width  # type string like "i32", "u64"
+    def __init__(self, value: int, width: str = "int"):
+        self.value = value
+        self.width = width
 
     def display(self):
         return str(self.value)
@@ -175,29 +225,33 @@ class ArrayValue(Value):
 
     Elements can be read via get() and written via set().
     Setting an index beyond the current length zero-fills the gap.
+    If element_type is set, stored values are automatically coerced.
     """
 
-    __slots__ = ("elements",)
+    __slots__ = ("elements", "element_type")
 
-    def __init__(self, elements=None):
+    def __init__(self, elements=None, element_type: str | None = None):
         self.elements = list(elements) if elements else []
+        self.element_type = element_type
 
     def get(self, index: int) -> Value:
         """Return element at index; returns IntValue(0) if out of range."""
         if 0 <= index < len(self.elements):
             return self.elements[index]
-        return mk_int(0)
+        return mk_int(0, self.element_type or "untyped")
 
     def set(self, index: int, value: Value):
-        """Set element at index. Grows the array with zero-fill as needed."""
+        """Set element at index, coercing to element_type if set."""
+        if self.element_type is not None and isinstance(value, IntValue):
+            value = mk_int(value.value, self.element_type)
         while len(self.elements) <= index:
-            self.elements.append(mk_int(0))
+            self.elements.append(mk_int(0, self.element_type or "untyped"))
         self.elements[index] = value
 
 
-def mk_int(value, width="i64"):
-    """Create an IntValue."""
-    return IntValue(value, width)
+def mk_int(value: int, width: str = "int") -> IntValue:
+    """Create an IntValue, wrapping to the type's range if typed."""
+    return IntValue(wrap_int(value, width), width)
 
 
 def mk_str(value):
@@ -228,3 +282,20 @@ def is_none(value):
 def is_some(value):
     """Check if a value is wrapped in SomeValue."""
     return isinstance(value, SomeValue)
+
+
+def coerce_to_type(value: Value, target_width: str) -> Value:
+    """Coerce a value to a target integer type.
+
+    For scalar IntValue, wraps to the target width.
+    For ObjectValue(ArrayValue), coerces each element and sets element_type.
+    Returns the value unchanged if no coercion is needed.
+    """
+    if target_width is None or target_width == "int":
+        return value
+    if isinstance(value, IntValue):
+        return mk_int(value.value, target_width)
+    if isinstance(value, ObjectValue) and isinstance(value.obj, ArrayValue):
+        coerced = [coerce_to_type(e, target_width) for e in value.obj.elements]
+        return ObjectValue(ArrayValue(coerced, element_type=target_width))
+    return value

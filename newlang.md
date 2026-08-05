@@ -77,3 +77,56 @@ This document is organized into chapters, each covering a distinct aspect of the
 
 Each chapter contains design questions, experiments with concrete examples, results, and final decisions. The reference sections within each chapter serve as the normative specification for that aspect of the language.
 
+
+Chapter 3: Type System — Integer Types and Untyped Constants
+------------------------------------------------------------
+
+### Integer Types
+
+The language provides fixed-width integer types with explicit signedness and bit count.  The naming convention uses a single letter (`i` for signed, `u` for unsigned) followed by the bit width:
+
+| Type  | Width  | Range |
+|-------|--------|-------|
+| `i8`  | 8-bit  | -128 to 127 |
+| `u8`  | 8-bit  | 0 to 255 |
+| `i16` | 16-bit | -32768 to 32767 |
+| `u16` | 16-bit | 0 to 65535 |
+| `i32` | 32-bit | -2³¹ to 2³¹-1 |
+| `u32` | 32-bit | 0 to 2³²-1 |
+| `i64` | 64-bit | -2⁶³ to 2⁶³-1 |
+| `u64` | 64-bit | 0 to 2⁶⁴-1 |
+
+Additionally, `int` denotes an arbitrary-precision integer with no fixed width.  This type can represent any integer value regardless of magnitude.
+
+### Untyped Integer Constants
+
+Integer literals in source code are of type **`untyped int`**.  An untyped integer is not yet committed to any specific integer type — it is a compile-time value that can be implicitly coerced to any integer type whose range can represent the value.
+
+This concept is similar to Go's untyped constants and Odin's untyped integers.  The key properties are:
+
+1. **Implicit coercion.**  An `untyped int` value can appear wherever a typed integer is expected.  The coercion is valid if the value fits in the target type's range.  For example, the literal `42` can be used as `u8`, `i32`, `u64`, or any other integer type.
+
+2. **Compile-time range check.**  If a literal value does not fit in the target type, this is a compile-time error.  For example, `300` cannot be coerced to `u8` (max 255).
+
+3. **Arithmetic on untyped integers.**  When two `untyped int` values are combined with an arithmetic operator, the result is also `untyped int` with arbitrary precision — no overflow occurs.  This allows compile-time constant expressions to compute exact results regardless of magnitude.
+
+4. **Type inference with `var name := expr`.**  When a variable is defined with `:=` (no explicit type) and the initializer is an `untyped int`, the variable's type is `int` (arbitrary-precision).  To get a fixed-width type, use the explicit form: `var name : u32 = expr`.
+
+5. **Array initialization.**  In `var name : u32[64] = 0`, the `0` is an `untyped int` that coerces to the array's element type `u32`.
+
+### Examples
+
+```
+const K : u32 = [1116352408, 1899447441, ...];   /* array of u32, literals coerced */
+var blk_off : u64 = 0;                            /* u64 variable, 0 coerced from untyped int */
+var i : u32 = 0;                                   /* u32 loop counter */
+var hash := 0;                                     /* int (arbitrary-precision), inferred from untyped int */
+var W : i32[64] = 0;                               /* array of 64 i32 elements, each initialized to 0 */
+```
+
+### Design Rationale
+
+The `untyped int` approach avoids requiring suffixes on every integer literal (as in Rust's `42u32` or C++'s `42UL`) while still permitting precise type control through variable declarations.  It keeps the common case — writing plain numbers — clean and readable, while the type system ensures that values fit their containers at compile time.
+
+This design also enables the arbitrary-precision `int` type to coexist naturally with fixed-width types: a literal `256` in a context expecting `u8` is a compile error, but the same literal in an untyped context simply represents the mathematical integer 256.
+

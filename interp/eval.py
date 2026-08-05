@@ -23,6 +23,7 @@ from interp.value import (
     Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue,
     FuncValue, BuiltinFunc, ObjectValue, BuiltinBoundMethod, ArrayValue,
     mk_int, mk_str, mk_bool, none, some, is_none, is_some,
+    resolve_width, wrap_int, coerce_to_type, _TYPE_BITS,
 )
 from interp.env import Env
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
@@ -292,7 +293,7 @@ class Evaluator:
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-            return mk_int(lu.value + ru.value, max(lu.width, ru.width))
+            return mk_int(lu.value + ru.value, resolve_width(lu.width, ru.width))
         if isinstance(lu, StrValue) and isinstance(ru, StrValue):
             return mk_str(lu.value + ru.value)
         raise TypeError(f"addition expected int+int or str+str, got {type(lu).__name__}+{type(ru).__name__}")
@@ -302,7 +303,7 @@ class Evaluator:
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-            return mk_int(lu.value - ru.value, max(lu.width, ru.width))
+            return mk_int(lu.value - ru.value, resolve_width(lu.width, ru.width))
         raise TypeError(f"subtraction expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_mul(self, left, right):
@@ -310,7 +311,7 @@ class Evaluator:
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-            return mk_int(lu.value * ru.value, max(lu.width, ru.width))
+            return mk_int(lu.value * ru.value, resolve_width(lu.width, ru.width))
         raise TypeError(f"multiplication expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_div(self, left, right):
@@ -321,7 +322,7 @@ class Evaluator:
             if ru.value == 0:
                 raise ZeroDivisionError("division by zero")
             result = int(lu.value / ru.value) if lu.value * ru.value >= 0 else -int(abs(lu.value) / abs(ru.value))
-            return mk_int(result, max(lu.width, ru.width))
+            return mk_int(result, resolve_width(lu.width, ru.width))
         raise TypeError(f"division expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_eq(self, left, right):
@@ -395,24 +396,26 @@ class Evaluator:
         return mk_bool(to_bool(ru))
 
     def _op_lshift(self, left, right):
-        """Left shift: int << int"""
+        """Left shift: int << int."""
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-            return mk_int(lu.value << ru.value, max(lu.width, ru.width))
+            return mk_int(lu.value << ru.value, resolve_width(lu.width, ru.width))
         raise TypeError(f"left-shift expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_rshift(self, left, right):
-        """Right shift: int >> int.
+        """Logical right shift: int >> int.
 
-        Masks result to 32 bits since all SHA-256 operations use 32-bit words.
-        Python's >> sign-extends on negative numbers; masking ensures logical shift.
+        For typed unsigned integers, the value is already non-negative so
+        Python's >> produces the correct logical shift.  mk_int wraps the
+        result to the type's range.
         """
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-            result = (lu.value >> ru.value) & 0xffffffff
-            return mk_int(result, max(lu.width, ru.width))
+            w = resolve_width(lu.width, ru.width)
+            val = wrap_int(lu.value, lu.width)
+            return mk_int(val >> ru.value, w)
         raise TypeError(f"right-shift expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_bitand(self, left, right):
@@ -420,7 +423,7 @@ class Evaluator:
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-            return mk_int((lu.value & ru.value), max(lu.width, ru.width))
+            return mk_int(lu.value & ru.value, resolve_width(lu.width, ru.width))
         raise TypeError(f"bitwise-and expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_bitxor(self, left, right):
@@ -428,7 +431,7 @@ class Evaluator:
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-            return mk_int((lu.value ^ ru.value), max(lu.width, ru.width))
+            return mk_int(lu.value ^ ru.value, resolve_width(lu.width, ru.width))
         raise TypeError(f"bitwise-xor expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_bitor(self, left, right):
@@ -436,29 +439,35 @@ class Evaluator:
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-            return mk_int((lu.value | ru.value), max(lu.width, ru.width))
+            return mk_int(lu.value | ru.value, resolve_width(lu.width, ru.width))
         raise TypeError(f"bitwise-or expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_rotl(self, left, right):
-        """32-bit rotate left: int ↺ int."""
+        """Rotate left within the operand's bit width (default 32)."""
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-            n = ru.value & 31
-            val = lu.value & 0xffffffff
-            result = ((val << n) | (val >> (32 - n))) & 0xffffffff
-            return mk_int(result, max(lu.width, ru.width))
+            w = resolve_width(lu.width, ru.width)
+            bits = _TYPE_BITS.get(w, 32)
+            mask = (1 << bits) - 1
+            n = ru.value & (bits - 1)
+            val = lu.value & mask
+            result = ((val << n) | (val >> (bits - n))) & mask
+            return mk_int(result, w)
         raise TypeError(f"rotate-left expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_rotr(self, left, right):
-        """32-bit rotate right: int ↻ int."""
+        """Rotate right within the operand's bit width (default 32)."""
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-            n = ru.value & 31
-            val = lu.value & 0xffffffff
-            result = ((val >> n) | (val << (32 - n))) & 0xffffffff
-            return mk_int(result, max(lu.width, ru.width))
+            w = resolve_width(lu.width, ru.width)
+            bits = _TYPE_BITS.get(w, 32)
+            mask = (1 << bits) - 1
+            n = ru.value & (bits - 1)
+            val = lu.value & mask
+            result = ((val >> n) | (val << (bits - n))) & mask
+            return mk_int(result, w)
         raise TypeError(f"rotate-right expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     # ------------------------------------------------------------------
@@ -476,11 +485,15 @@ class Evaluator:
         la = self._as_array(left)
         ra = self._as_array(right)
         if la is not None and ra is not None:
-            return ObjectValue(ArrayValue([op_fn(l, r) for l, r in zip(la.elements, ra.elements)]))
+            etype = la.element_type or ra.element_type
+            return ObjectValue(ArrayValue([op_fn(l, r) for l, r in zip(la.elements, ra.elements)],
+                                          element_type=etype))
         if la is not None:
-            return ObjectValue(ArrayValue([op_fn(l, right) for l in la.elements]))
+            return ObjectValue(ArrayValue([op_fn(l, right) for l in la.elements],
+                                          element_type=la.element_type))
         if ra is not None:
-            return ObjectValue(ArrayValue([op_fn(left, r) for r in ra.elements]))
+            return ObjectValue(ArrayValue([op_fn(left, r) for r in ra.elements],
+                                          element_type=ra.element_type))
         return op_fn(left, right)
 
     # ------------------------------------------------------------------
@@ -524,11 +537,9 @@ class Evaluator:
                     return mk_int(-unwrapped.value, unwrapped.width)
                 raise TypeError(f"negation expected int, got {type(unwrapped).__name__}")
             if node.op == "~":
-                # Bitwise NOT: invert all bits within 32-bit range for SHA-256.
-                # Python's ~ produces infinite sign-extended results, so mask to 32 bits.
                 unwrapped = unwrap_optional(operand)
                 if isinstance(unwrapped, IntValue):
-                    return mk_int((~unwrapped.value) & 0xffffffff, unwrapped.width)
+                    return mk_int(~unwrapped.value, unwrapped.width)
                 raise TypeError(f"bitwise-not expected int, got {type(unwrapped).__name__}")
             if node.op == "not":
                 return mk_bool(not to_bool(operand))
@@ -592,7 +603,8 @@ class Evaluator:
                 e = unwrap_optional(self.eval_expr(node.end))
                 if isinstance(s, IntValue) and isinstance(e, IntValue):
                     elems = unwrapped.obj.elements[s.value:e.value + 1]
-                    return ObjectValue(ArrayValue(list(elems)))
+                    return ObjectValue(ArrayValue(list(elems),
+                                                  element_type=unwrapped.obj.element_type))
 
         # Array allocation: new type[size] or var name : type[size] = init.
         if isinstance(node, ArrayAlloc):
@@ -600,7 +612,10 @@ class Evaluator:
             sz = unwrap_optional(size_val)
             if isinstance(sz, IntValue):
                 init_val = self.eval_expr(node.init_expr) if node.init_expr is not None else mk_int(0)
-                return ObjectValue(ArrayValue([init_val] * sz.value))
+                etype = node.element_type
+                if etype and isinstance(init_val, IntValue):
+                    init_val = mk_int(init_val.value, etype)
+                return ObjectValue(ArrayValue([init_val] * sz.value, element_type=etype))
 
         raise TypeError(f"unexpected expression: {type(node).__name__}")
 
@@ -640,6 +655,15 @@ class Evaluator:
             self.env.define(name, value)
             return none()
 
+        # Handle const definition: ("const_assign", name, type_ann, init_expr).
+        if isinstance(stmt, tuple) and len(stmt) == 4 and stmt[0] == "const_assign":
+            _, name, type_ann, init_expr = stmt
+            value = self.eval_expr(init_expr)
+            if type_ann is not None:
+                value = coerce_to_type(value, type_ann)
+            self.env.define(name, value)
+            return none()
+
         # Handle generalized assignment: ("assign_stmt", lhs_expr_ast, rhs_ast).
         # LHS can be a VarRef (variable shadowing) or Subscript (array mutation).
         if isinstance(stmt, tuple) and len(stmt) == 3 and stmt[0] == "assign_stmt":
@@ -672,6 +696,8 @@ class Evaluator:
 
         if isinstance(stmt, VarDef):
             value = self.eval_expr(stmt.init_expr)
+            if stmt.type_annotation is not None:
+                value = coerce_to_type(value, stmt.type_annotation)
             self.env.define(stmt.name, value)
             return none()
 

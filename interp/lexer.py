@@ -159,9 +159,8 @@ def _read_int(src, pos, line, col):
     except ValueError:
         raise LexerError(f"invalid integer literal: {value_str}", line, col)
 
-    # Default width is i64.
     if not width:
-        width = "i64"
+        width = "int"
 
     return Token("INT", value, line, col), pos
 

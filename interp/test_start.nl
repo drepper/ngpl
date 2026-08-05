@@ -6,7 +6,7 @@
  * Each value fits in a signed 64-bit integer for the interpreter.
  * --------------------------------------------------------------------------- */
 
-const K = [
+const K : u32 = [
     1116352408, 1899447441, 3049323471, 3921009573,
      961987163, 1508970993, 2453635748, 2870763221,
     3624381080,  310598401,  607225278, 1426881987,
@@ -70,12 +70,12 @@ fn get_padded_word(data, off, data_size, total_size) -> int {
 
 fn expand_s0(prev) -> int {
     /* σ₀(x) = ROTR(7,x) ⊕ ROTR(18,x) ⊕ SHR(3,x). */
-    return ((prev ↻ 7) ^ (prev ↻ 18) ^ (prev » 3)) & 4294967295;
+    return (prev ↻ 7) ^ (prev ↻ 18) ^ (prev » 3);
 }
 
 fn expand_s1(prev) -> int {
     /* σ₁(x) = ROTR(17,x) ⊕ ROTR(19,x) ⊕ SHR(10,x). */
-    return ((prev ↻ 17) ^ (prev ↻ 19) ^ (prev » 10)) & 4294967295;
+    return (prev ↻ 17) ^ (prev ↻ 19) ^ (prev » 10);
 }
 
 /* ---------------------------------------------------------------------------
@@ -95,27 +95,27 @@ fn sha256(data) -> int {
     var total_size := data_size + 1 + pad_len + 8;
 
     /* Initial hash values per FIPS 180-4 Section 5.3.3. */
-    var H := [
+    var H : u32 = [
         1779033703, 3144134277, 1013904242, 2773480762,
         1359893119, 2600822924, 528734635,  1541459225,
     ];
 
     /* Process each 64-byte block. */
-    var blk_off := 0;
+    var blk_off : u64 = 0;
     while (blk_off < total_size) {
         /* --- Load W[0..15] from the current block (with padding overlay). --- */
-        var W : i32[64] = 0;
-        var i := 0;
+        var W : u32[64] = 0;
+        var i : u32 = 0;
         while (i < 16) {
             W[i] ← get_padded_word(data, blk_off + (i * 4), data_size, total_size);
             i ← i + 1;
         }
 
         /* --- Message-schedule expansion: W[16..63]. --- */
-        var j := 16;
+        var j : u32 = 16;
         while (j < 64) {
-            W[j] ← (W[j - 16] + expand_s0(W[j - 15]) +
-                     W[j - 7] + expand_s1(W[j - 2])) & 4294967295;
+            W[j] ← W[j - 16] + expand_s0(W[j - 15]) +
+                    W[j - 7] + expand_s1(W[j - 2]);
             j ← j + 1;
         }
 
@@ -123,45 +123,45 @@ fn sha256(data) -> int {
         var v := H[0…7];
 
         /* --- 64 compression rounds using K[t] and W[t]. --- */
-        var t := 0;
+        var t : u32 = 0;
         while (t < 64) {
             /* Σ₁(e) = ROTR(6,e) ⊕ ROTR(11,e) ⊕ ROTR(25,e). */
-            var s1 := ((v[4] ↻ 6) ^ (v[4] ↻ 11) ^ (v[4] ↻ 25)) & 4294967295;
+            var s1 := (v[4] ↻ 6) ^ (v[4] ↻ 11) ^ (v[4] ↻ 25);
 
             /* ch(e,f,g) = (e ∧ f) ⊕ (¬e ∧ g). */
             var ch := (v[4] & v[5]) ^ (~v[4] & v[6]);
 
             /* t1 = h + Σ₁ + ch + K[t] + W[t]. */
-            var t1 := (v[7] + s1 + ch + K[t] + W[t]) & 4294967295;
+            var t1 := v[7] + s1 + ch + K[t] + W[t];
 
             /* Σ₀(a) = ROTR(2,a) ⊕ ROTR(13,a) ⊕ ROTR(22,a). */
-            var s0 := ((v[0] ↻ 2) ^ (v[0] ↻ 13) ^ (v[0] ↻ 22)) & 4294967295;
+            var s0 := (v[0] ↻ 2) ^ (v[0] ↻ 13) ^ (v[0] ↻ 22);
 
             /* maj(a,b,c) = (a ∧ b) ⊕ (a ∧ c) ⊕ (b ∧ c). */
             var maj := (v[0] & v[1]) ^ (v[0] & v[2]) ^ (v[1] & v[2]);
 
             /* t2 = Σ₀ + maj. */
-            var t2 := (s0 + maj) & 4294967295;
+            var t2 := s0 + maj;
 
             /* Shift working variables right by one position. */
             v[1…7] ← v[0…6];
-            v[0] ← (t1 + t2) & 4294967295;
-            v[4] ← (v[4] + t1) & 4294967295;
+            v[0] ← t1 + t2;
+            v[4] ← v[4] + t1;
 
             t ← t + 1;
         }
 
         /* --- Add compressed chunk to current hash state. --- */
-        H ← (H + v) & 4294967295;
+        H ← H + v;
 
         blk_off ← blk_off + 64;
     }
 
     /* Pack final hash: H[0]«224 | … | H[7]. */
     var hash := 0;
-    var k := 0;
+    var k : u32 = 0;
     while (k < 8) {
-        hash ← hash | (H[k] « ((7 - k) * 32));
+        hash ← (hash « 32) | H[k];
         k ← k + 1;
     }
     return hash;

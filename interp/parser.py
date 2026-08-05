@@ -91,14 +91,16 @@ class Parser:
         if self._check("FN"):
             return self._parse_function_def(is_start)
         elif self._check("CONST"):
-            # Top-level const: parse as a statement-like definition.
             self._eat("CONST")
             name_tok = self._eat("IDENT")
+            type_ann = None
+            if self._try_eat("PUNCT", ":"):
+                if self._check("IDENT"):
+                    type_ann = self._eat("IDENT").value
             self._eat("PUNCT", "=")
             init_expr = self._parse_or_expr()
-            # Top-level consts don't need semicolons; skip if present.
             self._try_eat("PUNCT", ";")
-            return ("const_assign", name_tok.value, init_expr)
+            return ("const_assign", name_tok.value, type_ann, init_expr)
         elif self._check("VAR", "LET"):
             return self._parse_var_def()
         elif self._check("EOF"):
@@ -204,10 +206,14 @@ class Parser:
         if self._check("CONST"):
             self._eat("CONST")
             name_tok = self._eat("IDENT")
+            type_ann = None
+            if self._try_eat("PUNCT", ":"):
+                if self._check("IDENT"):
+                    type_ann = self._eat("IDENT").value
             self._eat("PUNCT", "=")
             init_expr = self._parse_or_expr()
             self._try_eat("PUNCT", ";")
-            return ("const_assign", name_tok.value, init_expr)
+            return ("const_assign", name_tok.value, type_ann, init_expr)
 
         if self._check("IF"):
             return self._parse_if_stmt()

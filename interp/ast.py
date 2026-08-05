@@ -8,9 +8,9 @@ a tree of these nodes; the evaluator walks the tree to produce results.
 class IntLit:
     """Integer literal with an optional bit-width suffix."""
 
-    def __init__(self, value: int, width: str = "i64"):
+    def __init__(self, value: int, width: str = "int"):
         self.value = value
-        self.width = width  # e.g. "i8", "u32", "i64"
+        self.width = width
 
 
 class StrLit:

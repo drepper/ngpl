@@ -22,6 +22,7 @@ from interp.env import Env
 from interp.ast import FuncDef as ASTFuncDef
 from interp.value import (
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
+    coerce_to_type,
 )
 from interp.eval import Evaluator
 
@@ -69,10 +70,12 @@ def main():
     # Evaluate and register top-level const definitions (static arrays).
     evaluator = Evaluator(env)
     for defn in definitions:
-        if isinstance(defn, tuple) and len(defn) == 3 and defn[0] == "const_assign":
-            _, name, init_expr = defn
-            arr_value = evaluator.eval_expr(init_expr)
-            env.define(name, arr_value)
+        if isinstance(defn, tuple) and len(defn) == 4 and defn[0] == "const_assign":
+            _, name, type_ann, init_expr = defn
+            value = evaluator.eval_expr(init_expr)
+            if type_ann is not None:
+                value = coerce_to_type(value, type_ann)
+            env.define(name, value)
 
     # Register all function definitions in the global environment.
     for defn in definitions:
