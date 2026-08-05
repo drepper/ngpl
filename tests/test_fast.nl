@@ -1,23 +1,23 @@
 @test
-fn test_fast_local() -> none:
+fn test_fast_local -> none:
     var i : u32fast = 0
     foreach k : u32fast = 0…9:
         i ← i + k
     assert_eq(i, 45)
 
 @test
-fn test_fast_wrapping() -> none:
+fn test_fast_wrapping -> none:
     /* u8fast is 32-bit on x86_64, so 255 + 1 = 256, not 0. */
     var x : u8fast = 255
     x ← x + 1
     assert_eq(x, 256)
 
 @test
-fn test_fast_signed() -> none:
+fn test_fast_signed -> none:
     var x : i8fast = -1
     /* i8fast is 32-bit signed, so -1 stays -1 (no 8-bit wrapping). */
     assert_eq(x, -1)
 
 @start
-fn main() -> none:
+fn main -> none:
     std.print("fast type tests passed")

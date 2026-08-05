@@ -196,7 +196,12 @@ class Parser:
 
     def _parse_function_def(self, is_start, is_test=False, test_refs=None,
                             expect_annotations: list[tuple[str, str]] | None = None):
-        """Parse: fn name(params) -> ret_type? block
+        """Parse: fn name [params] (-> ret_type)? block
+
+        The parameter list has no delimiters; it is terminated by -> (return
+        type) or : (body start).  A colon after a parameter name is
+        distinguished from the body-start colon by looking ahead: if the
+        token after : is an identifier or ?, it begins a type annotation.
 
         When @expect annotations are present, parse errors in the body are
         captured instead of propagated — the FuncDef stores the error message
@@ -206,16 +211,24 @@ class Parser:
         name_tok = self._eat("IDENT")
         name = name_tok.value
 
-        self._eat("PUNCT", "(")
         params = []
         while True:
             while self._try_eat("NEWLINE"):
                 pass
-            if self._check("PUNCT") and self._cur().value == ")":
+            if self._check("OP") and self._cur().value == "->":
+                break
+            if self._check("PUNCT") and self._cur().value == ":":
+                break
+            if not self._check("IDENT"):
                 break
             param_name_tok = self._eat("IDENT")
             param_type = None
-            if self._try_eat("PUNCT", ":"):
+            if (self._check("PUNCT") and self._cur().value == ":" and
+                    self.pos + 1 < len(self.tokens) and
+                    (self.tokens[self.pos + 1].type == "IDENT" or
+                     (self.tokens[self.pos + 1].type == "OP" and
+                      self.tokens[self.pos + 1].value == "?"))):
+                self._eat("PUNCT", ":")
                 if self._check("OP") and self._cur().value == "?":
                     self.pos += 1
                     type_tok = self._eat("IDENT")
@@ -231,7 +244,6 @@ class Parser:
             self._try_eat("NEWLINE")
             if not self._try_eat("PUNCT", ","):
                 break
-        self._eat("PUNCT", ")")
 
         ret_type = None
         if self._try_eat("OP", "->"):
