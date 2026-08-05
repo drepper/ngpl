@@ -246,16 +246,19 @@ class ExpectedValue(Value):
 class FuncValue(Value):
     """A user-defined function (closure over an environment)."""
 
-    __slots__ = ("name", "params", "body", "env", "ret_type", "is_replaceable")
+    __slots__ = ("name", "params", "body", "env", "ret_type", "is_replaceable",
+                 "pack_param")
 
     def __init__(self, name, params, body, env, ret_type=None,
-                 is_replaceable: bool = False):
+                 is_replaceable: bool = False,
+                 pack_param: tuple[str, str | None] | None = None):
         self.name = name
         self.params = params
         self.body = body
         self.env = env
         self.ret_type = ret_type
         self.is_replaceable = is_replaceable
+        self.pack_param = pack_param
 
 
 class LambdaValue(Value):
@@ -574,8 +577,44 @@ def _split_optional_type(type_name: str) -> tuple[str, str | None]:
     return type_name[:qpos], type_name[qpos + 1:]
 
 
+def is_generic_type(type_str: str) -> bool:
+    """Return True if type_str contains a generic type parameter (name ending with ')."""
+    base = type_str
+    qpos = base.find("?")
+    if qpos >= 0:
+        base = base[:qpos]
+    if base.endswith("[]"):
+        base = base[:-2]
+    return base.endswith("\N{APOSTROPHE}") and len(base) > 1
+
+
+def runtime_type_of(value: "Value") -> str:
+    """Get the runtime type name of a value for generic type resolution."""
+    if isinstance(value, SomeValue):
+        return runtime_type_of(value.value)
+    if isinstance(value, IntValue):
+        return value.width
+    if isinstance(value, StrValue):
+        return "str"
+    if isinstance(value, BoolValue):
+        return "bool"
+    if isinstance(value, NoneValue):
+        return "\N{EMPTY SET}"
+    if isinstance(value, ObjectValue):
+        if isinstance(value.obj, ArrayValue):
+            et = value.obj.element_type or "int"
+            return et + "[]"
+    if isinstance(value, EnumValue):
+        return value.enum_type.name
+    if isinstance(value, TypeValue):
+        return "type"
+    return "int"
+
+
 def validate_type(type_name: str) -> bool:
     """Return True if type_name is a known builtin type (with optional/expected/array modifiers)."""
+    if is_generic_type(type_name):
+        return True
     base, opt_err = _split_optional_type(type_name)
     if base.endswith("[]"):
         base = base[:-2]
@@ -653,6 +692,9 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
                 f"{func_name}: argument '{param_name}' expected {param_type}, "
                 f"got {type(value).__name__}")
         return coerce_to_type(value, param_type)
+
+    if is_generic_type(param_type):
+        return value
 
     raise TypeError(
         f"{func_name}: argument '{param_name}' has unknown type '{param_type}'")

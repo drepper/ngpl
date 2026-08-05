@@ -228,11 +228,15 @@ def main():
             for param_name, param_type in defn.params:
                 if param_type is not None:
                     validate_param_type(param_type, defn.name, param_name)
+            if defn.pack_param is not None:
+                pp_name, pp_type = defn.pack_param
+                if pp_type is not None:
+                    validate_param_type(pp_type, defn.name, pp_name)
             if defn.ret_type is not None and not validate_type(defn.ret_type):
                 raise TypeError(
                     f"in {defn.name}: unknown return type '{defn.ret_type}'")
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,
-                          defn.is_replaceable)
+                          defn.is_replaceable, defn.pack_param)
             env.define(defn.name, fv)
 
             if defn.is_start:
@@ -268,7 +272,7 @@ def main():
 
         if not errors_produced:
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,
-                          defn.is_replaceable)
+                          defn.is_replaceable, defn.pack_param)
             eval_inst = Evaluator(env)
             try:
                 eval_inst._call_user_func(fv, [])

@@ -233,6 +233,7 @@ class Parser:
         name = name_tok.value
 
         params = []
+        pack_param: tuple[str, str | None] | None = None
         while True:
             while self._try_eat("NEWLINE"):
                 pass
@@ -243,6 +244,7 @@ class Parser:
             if not self._check("IDENT"):
                 break
             param_name_tok = self._eat("IDENT")
+            is_pack = self._try_eat("PUNCT", "\N{HORIZONTAL ELLIPSIS}")
             param_type = None
             if (self._check("PUNCT") and self._cur().value == ":" and
                     self.pos + 1 < len(self.tokens) and
@@ -262,6 +264,9 @@ class Parser:
                 elif self._check("OP") and self._cur().value == "!":
                     self.pos += 1
                     param_type += "?std.errors"
+            if is_pack:
+                pack_param = (param_name_tok.value, param_type)
+                break
             params.append((param_name_tok.value, param_type))
             self._try_eat("NEWLINE")
             if not self._try_eat("PUNCT", ","):
@@ -288,14 +293,16 @@ class Parser:
             except ParseError as e:
                 body = []
                 fdef = FuncDef(name, params, ret_type, body, is_start, is_test,
-                               test_refs, expect_annotations, is_replaceable)
+                               test_refs, expect_annotations, is_replaceable,
+                               pack_param)
                 fdef._parse_error = str(e)
                 self._skip_to_next_definition()
                 return fdef
         else:
             body = self._parse_block()
         return FuncDef(name, params, ret_type, body, is_start, is_test,
-                       test_refs, expect_annotations, is_replaceable)
+                       test_refs, expect_annotations, is_replaceable,
+                       pack_param)
 
     def _parse_dotted_name(self) -> str:
         """Parse a possibly dotted name like 'std.errors'."""

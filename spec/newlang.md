@@ -2167,6 +2167,160 @@ The grouping by integer ranges allows category checks:  runtime errors are in 10
 The `@flag` attribute eliminates the boilerplate of manually assigning powers of two and defining bitwise operations.  The automatic `nil` member for zero-valued flag sets prevents the common bug of forgetting to define an "empty" state.  Scoped access prevents name collisions between members of different enums.
 
 
+### Generic Functions
+
+Generic functions allow a single function definition to operate on multiple types.  A generic type parameter is any identifier immediately followed by an apostrophe (`'`), such as `T'`, `Elem'`, or `A'`.  The same generic name can appear in multiple parameters and in the return type.
+
+#### Syntax
+
+```
+fn identity x : T' → T':
+    x
+
+fn add_g a : T', b : T' → T':
+    a + b
+
+fn pick_first a : T', b : U' → T':
+    a
+```
+
+A function is generic when at least one parameter type or the return type contains a generic type parameter.  Generic type parameters are not declared separately — they are recognized by the trailing apostrophe in the type position.
+
+#### Type Resolution
+
+When a generic function is called, the interpreter resolves each generic type parameter from the actual arguments:
+
+1. For each parameter with a generic type, the concrete type is determined from the runtime type of the corresponding argument.
+2. If the same generic name appears in multiple parameters, all corresponding arguments must have the same type.  A mismatch raises a type error.
+3. Once all generic parameters are resolved, the concrete types are substituted into all parameter types and the return type before coercion and execution proceed.
+
+```
+identity(42)         /* T' resolves to int */
+identity(true)       /* T' resolves to bool */
+
+var x : i32 = 7
+identity(x)          /* T' resolves to i32 */
+
+add_g(10, 20)        /* T' resolves to int, returns int */
+
+var a : i32 = 1
+var b : u32 = 2
+add_g(a, b)          /* error: T' is i32 from 'a' but u32 from 'b' */
+```
+
+#### Return Type
+
+If the return type uses a generic name that also appears in a parameter, the return type is determined by the parameter resolution.  If the return type uses a generic name that does not appear in any parameter, the first return statement determines the type.
+
+#### Generic Arrays
+
+Generic types compose with array and optional suffixes:
+
+```
+fn first_elem arr : T'[] → T':
+    arr[0]
+```
+
+Here `T'[]` matches an array argument; `T'` resolves to the element type.
+
+#### Currying
+
+Generic functions support currying.  Partial application fixes some arguments and their types; the remaining generic parameters are resolved when the curried function is called:
+
+```
+var add10 := add_g(10)    /* partial: T' not yet resolved */
+add10(20)                 /* T' resolves to int, returns 30 */
+```
+
+#### Comparison with Other Languages
+
+| Feature | Haskell | Rust | C++ | Zig | This language |
+|---------|---------|------|-----|-----|---------------|
+| Syntax | `a` (lowercase) | `<T>` | `template<typename T>` | `anytype` | `T'` (apostrophe suffix) |
+| Declaration | implicit | explicit `<T>` block | explicit `template` | implicit | implicit (recognized by `'`) |
+| Constraints | type classes | trait bounds | concepts (C++20) | comptime checks | resolved at call site |
+| Monomorphization | no (dictionary passing) | yes | yes | yes | no (dynamic dispatch) |
+
+The apostrophe-suffix convention keeps generic types visually distinct from concrete types without requiring a separate declaration block.  Unlike Rust's `<T>` or C++'s `template<typename T>`, no angle brackets or separate generic parameter list is needed — the generic is declared implicitly by its first use in the parameter list.
+
+
+### Parameter Packs
+
+Parameter packs allow functions to accept a variable number of arguments.  The last parameter of a function can be declared as a pack by appending the ellipsis `…` to the parameter name.  At the call site, all arguments beyond the regular parameters are captured into the pack.
+
+#### Syntax
+
+A pack parameter is declared by suffixing `…` to the parameter name.  An optional type annotation constrains all captured elements:
+
+```
+fn sum_all acc : int, rest… : int → int:
+    var i : int = 0
+    var s := acc
+    while i < rest.sizeof:
+        s ← s + rest[i]
+        i ← i + 1
+    s
+
+fn count_args args… → int:
+    args.sizeof
+```
+
+When no type is given, the pack accepts arguments of any type.  When a concrete type is given, each captured argument is coerced to that type.
+
+#### Pack Access
+
+Inside the function body, the pack parameter behaves as a tuple:
+
+- **Indexing**: `pack[i]` retrieves element `i` (zero-based).
+- **Size**: `pack.sizeof` returns the number of captured elements (an `int`).
+- **Type**: `@typeof(pack[i])` returns the type of the i-th element.
+
+#### Generic Packs
+
+A pack parameter can use a generic type.  In this case, each captured element retains its own type and no coercion is performed:
+
+```
+fn first_of args… : T':
+    args[0]
+
+first_of(42, "hello")    /* args[0] is int, args[1] is str */
+```
+
+When the pack type is generic, the generic is not resolved globally from pack elements — each element keeps its concrete type.  This differs from regular generic parameters where all positions sharing the same generic name must agree.
+
+#### Empty Packs
+
+A pack can capture zero arguments:
+
+```
+count_args()    /* returns 0 */
+```
+
+#### Currying
+
+Currying applies to the regular (non-pack) parameters.  When a function with a pack receives fewer arguments than the number of regular parameters, it curries normally.  Once all regular parameters are supplied, additional arguments fill the pack:
+
+```
+fn greet prefix : str, names… : str → str:
+    prefix
+
+var g := greet("Hello")    /* curries prefix */
+g("Alice", "Bob")          /* names captures "Alice", "Bob" */
+```
+
+#### Comparison with Other Languages
+
+| Feature | C++ | Rust | Zig | Python | This language |
+|---------|-----|------|-----|--------|---------------|
+| Syntax | `Args...` | none (macros) | `anytype` + comptime | `*args` | `name…` |
+| Type constraint | `template<typename... Args>` | N/A | comptime checks | none | `: type` annotation |
+| Access | fold expressions, `std::get<I>` | N/A | comptime for | `args[i]` | `name[i]` |
+| Size | `sizeof...(Args)` | N/A | `args.len` | `len(args)` | `name.sizeof` |
+| Heterogeneous | yes (each can differ) | N/A | yes | yes (untyped) | yes (with generic type) |
+
+The ellipsis suffix keeps pack declarations compact.  Unlike C++ which requires template parameter packs and fold expressions, pack elements are accessed with ordinary subscript syntax and the `.sizeof` property.
+
+
 ### Standard Library: Memory Allocators
 
 The standard library provides two allocator subsystems under the `std` module: a global heap allocator and per-instance arena allocators.  Both return allocator objects with an `alloc(size)` method that yields a byte buffer.
@@ -2196,7 +2350,8 @@ alloc.deinit()
 | Method | Description |
 |--------|-------------|
 | `alloc(size)` | Allocate `size` bytes from the arena; returns a byte buffer |
-| `deinit()` | Release all memory owned by this arena; further `alloc` calls raise an error |
+| `reset()` | Release all memory owned by this arena; the allocator remains usable for new allocations |
+| `deinit()` | Release all memory and permanently disable the arena; further `alloc` calls raise an error |
 
 Arenas are useful when a group of allocations share a common lifetime (e.g., processing a single request or computing a hash).  The pattern is: create an arena, perform all allocations from it, then `deinit()` when the work is complete.
 

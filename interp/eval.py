@@ -31,6 +31,7 @@ from interp.value import (
     mk_int, mk_int_wrap, mk_str, mk_bool, none, some, is_none, is_some,
     resolve_width, wrap_int, coerce_to_type, coerce_arg, _TYPE_BITS, FAST_TYPES,
     _split_optional_type, MAX_TENSOR_RANK,
+    is_generic_type, runtime_type_of,
 )
 from interp.env import Env
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
@@ -392,6 +393,60 @@ def os_write(fd, data: bytes):
         return os.write(fd, data)
     except OSError as e:
         raise OSError(f"write(fd={fd}): {e}")
+
+
+# ---------------------------------------------------------------------------
+# Generic type resolution helpers
+# ---------------------------------------------------------------------------
+
+
+def _extract_generic_name(type_str: str) -> str | None:
+    """Extract the generic type variable name from a type string.
+
+    Strips optional (?) and array ([]) suffixes to find the base name.
+    Returns the generic name (e.g., "T\N{APOSTROPHE}") or None if not generic.
+    """
+    base = type_str
+    qpos = base.find("?")
+    if qpos >= 0:
+        base = base[:qpos]
+    if base.endswith("[]"):
+        base = base[:-2]
+    if base.endswith("\N{APOSTROPHE}") and len(base) > 1:
+        return base
+    return None
+
+
+def _resolve_concrete_for_generic(param_type: str, arg: Value) -> str:
+    """Determine the concrete type a generic parameter binds to from an argument.
+
+    For T\N{APOSTROPHE}[] parameters, extracts the element type from array arguments.
+    For plain T\N{APOSTROPHE} parameters, returns the runtime type of the argument.
+    """
+    base = param_type
+    qpos = base.find("?")
+    if qpos >= 0:
+        base = base[:qpos]
+
+    actual = arg
+    if isinstance(actual, SomeValue):
+        actual = actual.value
+
+    if base.endswith("[]"):
+        generic_base = base[:-2]
+        if generic_base.endswith("\N{APOSTROPHE}"):
+            if isinstance(actual, ObjectValue) and isinstance(actual.obj, ArrayValue):
+                return actual.obj.element_type or "int"
+
+    return runtime_type_of(actual)
+
+
+def _substitute_generics(type_str: str, generic_map: dict[str, str]) -> str:
+    """Replace generic type names in a type string with their concrete bindings."""
+    result = type_str
+    for generic, concrete in generic_map.items():
+        result = result.replace(generic, concrete)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -949,6 +1004,9 @@ class Evaluator:
                     return EnumValue(unwrapped, unwrapped.members[node.attr])
                 raise AttributeError(
                     f"enum '{unwrapped.name}' has no member '{node.attr}'")
+            if isinstance(unwrapped, TupleValue):
+                if node.attr == "sizeof":
+                    return mk_int(len(unwrapped.elements))
             if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
                 if node.attr == "sizeof":
                     return mk_int(unwrapped.obj.sizeof)
@@ -1802,33 +1860,84 @@ class Evaluator:
                     self._tests_run.add(test_fv.name)
                     self._call_user_func(test_fv, [])
 
-        if len(args) < len(func.params):
+        n_regular = len(func.params)
+        has_pack = func.pack_param is not None
+
+        if len(args) < n_regular:
             remaining = func.params[len(args):]
             return LambdaValue(remaining, func.body, self.env,
                                partial_func=func, partial_args=list(args))
-        if len(args) != len(func.params):
+        if not has_pack and len(args) != n_regular:
             raise TypeError(
-                f"{func.name} expects {len(func.params)} arguments, got {len(args)}")
+                f"{func.name} expects {n_regular} arguments, got {len(args)}")
 
-        # Use the function's definition-time env so it can see all names
-        # that were visible when it was defined (correct closure semantics).
+        regular_args = args[:n_regular]
+        pack_args = args[n_regular:] if has_pack else []
+
+        resolved_params = func.params
+        resolved_ret_type = func.ret_type
+        resolved_pack_type = func.pack_param[1] if has_pack else None
+
+        all_typed_params = list(func.params)
+        if has_pack and func.pack_param[1] is not None:
+            all_typed_params.append(func.pack_param)
+
+        has_generics = any(
+            pt is not None and is_generic_type(pt) for _, pt in all_typed_params
+        ) or (func.ret_type is not None and is_generic_type(func.ret_type))
+
+        if has_generics:
+            generic_map: dict[str, str] = {}
+            for (pname, ptype), arg in zip(func.params, regular_args):
+                if ptype is None:
+                    continue
+                gname = _extract_generic_name(ptype)
+                if gname is None:
+                    continue
+                concrete = _resolve_concrete_for_generic(ptype, arg)
+                if gname in generic_map:
+                    if generic_map[gname] != concrete:
+                        raise TypeError(
+                            f"{func.name}: generic type {gname} resolved to "
+                            f"'{generic_map[gname]}' but argument '{pname}' "
+                            f"has type '{concrete}'")
+                else:
+                    generic_map[gname] = concrete
+
+            resolved_params = [
+                (n, _substitute_generics(t, generic_map) if t else t)
+                for n, t in func.params
+            ]
+            if func.ret_type is not None:
+                resolved_ret_type = _substitute_generics(func.ret_type, generic_map)
+            if resolved_pack_type is not None:
+                resolved_pack_type = _substitute_generics(resolved_pack_type, generic_map)
+
         call_env = func.env.copy_for_call()
-
-        for (param_name, param_type), arg_value in zip(func.params, args):
+        for (param_name, param_type), arg_value in zip(resolved_params, regular_args):
             if param_type is not None:
                 arg_value = coerce_arg(arg_value, param_type, func.name, param_name)
             call_env.define(param_name, arg_value)
 
-        # Execute function body with the call's environment as our context.
+        if has_pack:
+            pack_name = func.pack_param[0]
+            pack_elements = []
+            for i, parg in enumerate(pack_args):
+                if resolved_pack_type is not None and not is_generic_type(resolved_pack_type):
+                    parg = coerce_arg(parg, resolved_pack_type, func.name,
+                                      f"{pack_name}[{i}]")
+                pack_elements.append(parg)
+            call_env.define(pack_name, TupleValue(pack_elements))
+
         old_env = self.env
         old_ret_type = self._current_ret_type
         try:
             self.env = call_env
-            self._current_ret_type = func.ret_type
+            self._current_ret_type = resolved_ret_type
             result = self.eval_stmts(func.body)
-            return self._wrap_optional_return(result, func.ret_type)
+            return self._wrap_optional_return(result, resolved_ret_type)
         except _ReturnSentinel as e:
-            return self._wrap_optional_return(e.value, func.ret_type)
+            return self._wrap_optional_return(e.value, resolved_ret_type)
         except _PropagatedError as pe:
             raise pe.original from pe
         finally:
