@@ -57,9 +57,15 @@ KEYWORDS = {
     "flag": "FLAG",
     "replaceable": "REPLACEABLE",
     "catch": "CATCH",
+}
+
+# Keywords recognized only after the @ prefix.  The @ is part of the
+# token — no whitespace may separate it from the name.
+AT_KEYWORDS: dict[str, str] = {
     "enumerate": "ENUMERATE",
     "typeof": "TYPEOF",
     "resultof": "RESULTOF",
+    "sizeof": "SIZEOF",
 }
 
 # Double-character operators that must be checked before single ones.
@@ -281,7 +287,7 @@ def tokenize(src: str):
             while pos < length and (src[pos].isalpha() or src[pos] in "_'"):
                 pos += 1
             kw = src[name_start:pos]
-            token_type = KEYWORDS.get(kw, "IDENT")
+            token_type = AT_KEYWORDS.get(kw) or KEYWORDS.get(kw, "IDENT")
             tokens.append(Token(token_type, kw, line, col))
             continue
 

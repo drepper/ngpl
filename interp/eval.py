@@ -22,7 +22,7 @@ from interp.ast import (
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr,
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
-    StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, FoldExpr,
+    StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
 )
 from interp.value import (
     Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
@@ -143,6 +143,8 @@ def _collect_refs(node) -> set[str]:
         refs |= _collect_refs(node.expr)
     elif isinstance(node, TypeOfExpr):
         refs |= _collect_refs(node.expr)
+    elif isinstance(node, SizeOfExpr):
+        refs |= _collect_refs(node.expr)
     elif isinstance(node, ResultOfExpr):
         refs.add(node.name)
     elif isinstance(node, TupleLit):
@@ -167,7 +169,7 @@ def _is_const_expr(node) -> bool:
         return all(_is_const_expr(e) for e in node.elements)
     if isinstance(node, TupleLit):
         return all(_is_const_expr(e) for e in node.elements)
-    if isinstance(node, (TypeOfExpr, ResultOfExpr)):
+    if isinstance(node, (TypeOfExpr, ResultOfExpr, SizeOfExpr)):
         return True
     return False
 
@@ -1080,6 +1082,18 @@ class Evaluator:
         if isinstance(node, TypeOfExpr):
             val = self.eval_expr(node.expr)
             return TypeValue(self._value_type_name(val))
+
+        if isinstance(node, SizeOfExpr):
+            val = self.eval_expr(node.expr)
+            unwrapped = unwrap_optional(val)
+            if isinstance(unwrapped, TupleValue):
+                return mk_int(len(unwrapped.elements))
+            if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
+                return mk_int(unwrapped.obj.sizeof)
+            if isinstance(unwrapped, StrValue):
+                return mk_int(len(unwrapped.value))
+            raise TypeError(
+                f"@sizeof: expected array, tuple, or string, got {type(unwrapped).__name__}")
 
         if isinstance(node, ResultOfExpr):
             try:

@@ -146,6 +146,57 @@ fn test_prepend_and_sum → ∅:
 fn test_prepend_and_sum_rejects_bad_pack → ∅:
     prepend_and_sum(100, "bad")
 
+/* --- @sizeof tests ------------------------------------------------ */
+
+/* @sizeof on packs. */
+fn sizeof_pack args… → int:
+    @sizeof(args)
+
+@test
+fn test_sizeof_pack_empty → ∅:
+    assert_eq(sizeof_pack(), 0)
+
+@test
+fn test_sizeof_pack_several → ∅:
+    assert_eq(sizeof_pack(1, 2, 3), 3)
+
+/* @sizeof on arrays. */
+@test
+fn test_sizeof_array → ∅:
+    var arr := [10, 20, 30, 40]
+    assert_eq(@sizeof(arr), 4)
+
+/* @sizeof on strings. */
+@test
+fn test_sizeof_string → ∅:
+    assert_eq(@sizeof("hello"), 5)
+    assert_eq(@sizeof(""), 0)
+
+/* @sizeof matches .sizeof on arrays and packs. */
+@test
+fn test_sizeof_matches_dot_sizeof → ∅:
+    var arr := [1, 2, 3]
+    assert_eq(@sizeof(arr), arr.sizeof)
+
+fn sizeof_both args… : int → int:
+    assert_eq(@sizeof(args), args.sizeof)
+    @sizeof(args)
+
+@test
+fn test_sizeof_pack_matches_dot → ∅:
+    assert_eq(sizeof_both(5, 6), 2)
+
+/* @sizeof rejects non-containers. */
+@test
+@expect error "@sizeof.*expected"
+fn test_sizeof_rejects_int → ∅:
+    @sizeof(42)
+
+@test
+@expect error "@sizeof.*expected"
+fn test_sizeof_rejects_bool → ∅:
+    @sizeof(true)
+
 @start
 fn main → ∅:
     std.print("parameter pack tests passed")

@@ -310,6 +310,16 @@ class ResultOfExpr:
         self.name = name
 
 
+class SizeOfExpr:
+    """Size-of expression: @sizeof(expr).
+
+    Returns the number of elements in a container or tuple.
+    """
+
+    def __init__(self, expr):
+        self.expr = expr
+
+
 class StaticAssert:
     """Compile-time assertion: static_assert(cond) or static_assert(cond, msg).
 

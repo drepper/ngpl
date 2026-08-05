@@ -1833,13 +1833,33 @@ static_assert(x)                       /* ERROR: not a compile-time constant */
 
 #### Type Introspection
 
-Two built-in functions return reified type values that can be compared for equality:
+Built-in introspection functions use the `@` prefix and return values that can be compared for equality:
 
 - `@typeof(expr)` — evaluates the expression and returns a `type` value representing its runtime type.  The type name reflects the concrete type: `int`, `i32`, `u8`, `str`, `bool`, `\N{EMPTY SET}`, `array`, `tuple`, `fn`, `\N{GREEK SMALL LETTER LAMDA}`, or an enum name.
 
 - `@resultof(func)` — looks up a named function and returns a `type` value for its declared return type.
 
-Type values can be compared with `==` and used with `assert_eq` and `static_assert_eq`:
+- `@sizeof(expr)` — returns the number of elements in a container as an `int`.  Works on arrays, tuples (including parameter packs), and strings.  This is the free-function equivalent of the `.sizeof` member — `@sizeof(x)` and `x.sizeof` always return the same value.  Passing a non-container (e.g., an integer or boolean) is an error.
+
+```
+var arr := [10, 20, 30]
+assert_eq(@sizeof(arr), 3)
+assert_eq(@sizeof(arr), arr.sizeof)   /* always equal */
+assert_eq(@sizeof("hello"), 5)
+assert_eq(@sizeof(""), 0)
+```
+
+`@sizeof` is particularly useful for parameter packs, where it provides a consistent way to query the element count alongside `@typeof` for element types:
+
+```
+fn process args… : T':
+    var i : int = 0
+    while i < @sizeof(args):
+        std.print(@typeof(args[i]))
+        i ← i + 1
+```
+
+Type and result-of values can be compared with `==` and used with `assert_eq` and `static_assert_eq`:
 
 ```
 var x : i32 = 10
@@ -1857,6 +1877,7 @@ static_assert_eq(@typeof("a"), @typeof("b"))   /* both are str */
 |---------|-----|------|-----|---------------|
 | Type-of expression | `decltype(expr)` | — | `@TypeOf` | `@typeof(expr)` |
 | Return type query | `decltype(f())` | — | `@typeInfo` | `@resultof(func)` |
+| Size query | `std::size(c)` | `c.len()` | `x.len` | `@sizeof(expr)` |
 | Type equality | `std::is_same_v` | `TypeId` | `==` | `==` |
 
 #### Test Output
