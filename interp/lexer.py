@@ -3,6 +3,9 @@
 Scans source text (UTF-8) and produces a stream of typed tokens.
 Handles identifiers, keywords, integer/string literals, operators,
 and punctuation. Skips comments and whitespace.
+
+After tokenization, `process_indentation` inserts INDENT/DEDENT tokens
+based on indentation changes, enabling layout-driven scoping.
 """
 
 import re
@@ -56,6 +59,15 @@ DOUBLE_OPS = {
 
 # Single-character operators.
 SINGLE_OPS = set("+-*/%=<>!&|^~.,;:?(){}[]←«»↺↻…")
+
+# Binary operators that signal line continuation when trailing.
+_CONTINUATION_OPS = frozenset({
+    "+", "-", "*", "/", "%",
+    "|", "&", "^",
+    "<<", ">>", "«", "»", "↺", "↻",
+    "==", "!=", "<", ">", "<=", ">=",
+    "??", "←",
+})
 
 
 class LexerError(Exception):
@@ -169,6 +181,10 @@ def _read_int(src, pos, line, col):
 def tokenize(src: str):
     """Tokenize source code string into a list of tokens.
 
+    NEWLINE tokens carry the indentation level of the following line
+    as their value (int).  Indentation must use either all spaces or
+    all tabs throughout the file; mixing is a lexer error.
+
     Args:
         src: UTF-8 source code string.
 
@@ -178,34 +194,50 @@ def tokenize(src: str):
     Raises:
         LexerError: on lexical analysis errors.
     """
-    tokens = []
+    tokens: list[Token] = []
     pos = 0
     length = len(src)
     line = 1
     col = 0
+    indent_char: str | None = None
 
     while pos < length:
         ch = src[pos]
 
-        # Whitespace.
+        # Whitespace (not newline).
         if ch in " \t\r":
             pos += 1
             col += 1
             continue
+
+        # Newline — also measures the indentation of the following line.
         if ch == "\n":
             line += 1
-            col = 0
             pos += 1
-            tokens.append(Token("NEWLINE", "", line, col))
+            indent = 0
+            while pos < length and src[pos] in " \t":
+                ic = src[pos]
+                if indent_char is None:
+                    indent_char = ic
+                elif ic != indent_char:
+                    exp = "tabs" if indent_char == "\t" else "spaces"
+                    got = "tab" if ic == "\t" else "space"
+                    raise LexerError(
+                        f"mixed indentation: expected {exp}, got {got}",
+                        line, indent)
+                indent += 1
+                pos += 1
+            col = indent
+            tokens.append(Token("NEWLINE", indent, line, 0))
             continue
 
-        # Line comment.
+        # Line comment — stop before the newline so the \n handler runs.
         if ch == "/" and pos + 1 < length and src[pos + 1] == "/":
             end = src.find("\n", pos)
             if end == -1:
                 pos = length
             else:
-                pos = end + 1
+                pos = end
             continue
 
         # Block comment — count newlines to keep line counter accurate.
@@ -282,10 +314,105 @@ def tokenize(src: str):
     return tokens
 
 
-def strip_newlines(tokens):
-    """Remove NEWLINE tokens for use in parsing (newlines are structural).
+def process_indentation(tokens: list[Token]) -> list[Token]:
+    """Insert INDENT and DEDENT tokens based on indentation changes.
 
-    The parser itself handles newlines as statement terminators; this helper
-    is used after initial tokenization when a simpler token stream is needed.
+    Indentation processing is suppressed inside () and [] nesting.
+    A line ending with a binary operator is treated as a continuation;
+    no INDENT/DEDENT is emitted for the following line.
     """
-    return [t for t in tokens if t.type != "NEWLINE"]
+    result: list[Token] = []
+    indent_stack = [0]
+    nesting = 0
+    i = 0
+
+    while i < len(tokens):
+        tok = tokens[i]
+
+        if tok.type == "PUNCT" and tok.value in ("(", "["):
+            nesting += 1
+            result.append(tok)
+            i += 1
+            continue
+
+        if tok.type == "PUNCT" and tok.value in (")", "]"):
+            if nesting > 0:
+                nesting -= 1
+            result.append(tok)
+            i += 1
+            continue
+
+        if tok.type != "NEWLINE":
+            result.append(tok)
+            i += 1
+            continue
+
+        # --- NEWLINE token ---
+        result.append(tok)
+
+        if nesting > 0:
+            i += 1
+            continue
+
+        # Trailing binary operator ⇒ line continuation.
+        prev = None
+        for k in range(len(result) - 2, -1, -1):
+            if result[k].type not in ("NEWLINE", "INDENT", "DEDENT"):
+                prev = result[k]
+                break
+        if prev and (
+            (prev.type == "OP" and prev.value in _CONTINUATION_OPS)
+            or prev.type in ("AND", "OR")
+            or (prev.type == "PUNCT" and prev.value == "=")
+        ):
+            i += 1
+            continue
+
+        # Collect consecutive NEWLINEs (blank lines).
+        j = i + 1
+        while j < len(tokens) and tokens[j].type == "NEWLINE":
+            result.append(tokens[j])
+            j += 1
+
+        # Effective indent = indent of the last NEWLINE before content.
+        if j > i + 1:
+            indent = tokens[j - 1].value
+        else:
+            indent = tok.value
+        if not isinstance(indent, int):
+            indent = 0
+
+        # End of file: close all open indent levels.
+        if j >= len(tokens) or tokens[j].type == "EOF":
+            while len(indent_stack) > 1:
+                indent_stack.pop()
+                result.append(Token("DEDENT", "", tok.line, 0))
+            i = j
+            continue
+
+        # Emit INDENT or DEDENT tokens.
+        if indent > indent_stack[-1]:
+            indent_stack.append(indent)
+            result.append(Token("INDENT", "", tok.line, 0))
+        else:
+            while indent < indent_stack[-1]:
+                indent_stack.pop()
+                result.append(Token("DEDENT", "", tok.line, 0))
+            if indent > indent_stack[-1]:
+                indent_stack.append(indent)
+                result.append(Token("INDENT", "", tok.line, 0))
+
+        i = j
+        continue
+
+    # Close remaining indent levels at end of input.
+    while len(indent_stack) > 1:
+        indent_stack.pop()
+        result.append(Token("DEDENT", "", 0, 0))
+
+    return result
+
+
+def strip_newlines(tokens):
+    """Remove NEWLINE/INDENT/DEDENT tokens when a flat stream is needed."""
+    return [t for t in tokens if t.type not in ("NEWLINE", "INDENT", "DEDENT")]

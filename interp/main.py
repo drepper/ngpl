@@ -21,7 +21,7 @@ import sys
 import os
 from collections import defaultdict
 
-from interp.lexer import tokenize
+from interp.lexer import tokenize, process_indentation
 from interp.parser import Parser
 from interp.env import Env
 from interp.ast import FuncDef as ASTFuncDef
@@ -112,7 +112,7 @@ def main():
     with open(source_path, "r", encoding="utf-8") as f:
         source = f.read()
 
-    tokens = tokenize(source)
+    tokens = process_indentation(tokenize(source))
     parser = Parser(tokens)
     definitions = parser.parse()
 

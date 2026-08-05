@@ -3,6 +3,9 @@
 Builds an Abstract Syntax Tree (AST) from a token stream produced by the lexer.
 Supports function definitions, variable definitions, if/while/control flow,
 expressions with operator precedence, and function/method calls.
+
+Blocks can use brace-delimited { ... } or layout-driven scoping with : and
+indentation (INDENT/DEDENT tokens).
 """
 
 from interp.ast import (
@@ -72,9 +75,11 @@ class Parser:
         """Parse the full token stream into a list of top-level definitions."""
         definitions = []
         while not self._check("EOF"):
-            # Skip all consecutive newlines (including multiple blank lines).
             while self._try_eat("NEWLINE"):
                 pass
+            # Skip stray INDENT/DEDENT at top level.
+            while self._check("INDENT", "DEDENT"):
+                self.pos += 1
             definition = self._parse_definition()
             if definition is not None:
                 definitions.append(definition)
@@ -122,7 +127,7 @@ class Parser:
             raise ParseError(f"expected function or variable definition, got {self._cur().type}")
 
     def _parse_function_def(self, is_start, is_test=False, test_refs=None):
-        """Parse: fn name(params) -> ret_type? { stmts }"""
+        """Parse: fn name(params) -> ret_type? block"""
         self._eat("FN")
         name_tok = self._eat("IDENT")
         name = name_tok.value
@@ -130,7 +135,6 @@ class Parser:
         self._eat("PUNCT", "(")
         params = []
         while True:
-            # Skip any leading newlines before each parameter (for multi-line lists).
             while self._try_eat("NEWLINE"):
                 pass
             if self._check("PUNCT") and self._cur().value == ")":
@@ -146,7 +150,6 @@ class Parser:
                     type_tok = self._eat("IDENT")
                     param_type = type_tok.value
             params.append((param_name_tok.value, param_type))
-            # Skip a single newline after comma (multi-line parameter lists).
             self._try_eat("NEWLINE")
             if not self._try_eat("PUNCT", ","):
                 break
@@ -192,21 +195,58 @@ class Parser:
 
         return VarDef(name_tok.value, type_annotation, init_expr)
 
+    # ------------------------------------------------------------------
+    # Block parsing (brace-delimited or layout-driven)
+    # ------------------------------------------------------------------
+
     def _parse_block(self):
-        """Parse a brace-delimited block: { stmts }."""
+        """Parse a block, dispatching to brace or layout style."""
+        if self._check("PUNCT") and self._cur().value == "{":
+            return self._parse_brace_block()
+        if self._check("PUNCT") and self._cur().value == ":":
+            return self._parse_layout_block()
+        raise ParseError("expected '{' or ':' to begin block", self._cur())
+
+    def _parse_brace_block(self):
+        """Parse a brace-delimited block: { stmts }.
+
+        INDENT/DEDENT tokens are skipped as noise inside braces.
+        """
         self._eat("PUNCT", "{")
         stmts = []
         while True:
-            # Skip any trailing newlines before checking for closing brace.
-            while not self._check("EOF") and self._cur().type == "NEWLINE":
+            while not self._check("EOF") and self._cur().type in ("NEWLINE", "INDENT", "DEDENT"):
                 self.pos += 1
-            if (self._check("EOF") or
-                    (self._cur().type == "PUNCT" and self._cur().value == "}")):
+            if self._check("EOF") or (self._cur().type == "PUNCT" and self._cur().value == "}"):
                 break
             stmt = self._parse_statement()
             if stmt is not None:
                 stmts.append(stmt)
         self._eat("PUNCT", "}")
+        return stmts
+
+    def _parse_layout_block(self):
+        """Parse a layout-driven block: : INDENT stmts DEDENT.
+
+        A single statement on the same line as the colon is also accepted.
+        """
+        self._eat("PUNCT", ":")
+        while self._try_eat("NEWLINE"):
+            pass
+        if not self._check("INDENT"):
+            stmt = self._parse_statement()
+            return [stmt] if stmt else []
+        self._eat("INDENT")
+        stmts = []
+        while True:
+            while self._try_eat("NEWLINE"):
+                pass
+            if self._check("DEDENT", "EOF"):
+                break
+            stmt = self._parse_statement()
+            if stmt is not None:
+                stmts.append(stmt)
+        self._eat("DEDENT")
         return stmts
 
     # ------------------------------------------------------------------
@@ -215,7 +255,6 @@ class Parser:
 
     def _parse_statement(self):
         """Parse a single statement."""
-        # Skip leading newlines (e.g. blank lines between statements).
         while self._try_eat("NEWLINE"):
             pass
 
@@ -247,15 +286,13 @@ class Parser:
             return self._parse_return_stmt()
 
         # General assignment: LHS ← RHS  |  LHS = RHS.
-        # LHS can be an identifier or subscript chain (arr[i]).
-        # Peek ahead past brackets/newlines to find a top-level ← or = on this line.
         if self._check("IDENT") or (self._check("PUNCT") and self._cur().value == "("):
             saved_pos = self.pos
             bracket_depth = 0
-            found_assign_op = None  # "←" or "="
+            found_assign_op = None
             while saved_pos < len(self.tokens):
                 t = self.tokens[saved_pos]
-                if t.type == "NEWLINE" or t.type == ";":
+                if t.type in ("NEWLINE", "INDENT", "DEDENT") or (t.type == "PUNCT" and t.value == ";"):
                     break
                 if t.type == "PUNCT":
                     if t.value == "[": bracket_depth += 1
@@ -265,19 +302,17 @@ class Parser:
                     break
                 saved_pos += 1
 
-            # Also check for ASCII '=' at top level (not inside brackets).
             if not found_assign_op:
                 bp2 = self.pos
                 bd2 = 0
                 while bp2 < len(self.tokens):
                     t2 = self.tokens[bp2]
-                    if t2.type == "NEWLINE" or t2.type == ";":
+                    if t2.type in ("NEWLINE", "INDENT", "DEDENT") or (t2.type == "PUNCT" and t2.value == ";"):
                         break
                     if t2.type == "PUNCT":
                         if t2.value == "[": bd2 += 1
                         elif t2.value == "]": bd2 -= 1
                     if t2.type == "PUNCT" and t2.value == "=" and bd2 == 0:
-                        # Make sure it's not part of a comparison (==).
                         if bp2 + 1 < len(self.tokens) and \
                            self.tokens[bp2 + 1].type == "PUNCT" and \
                            self.tokens[bp2 + 1].value == "=":
@@ -302,13 +337,14 @@ class Parser:
         return ExprStmt(expr)
 
     def _parse_if_stmt(self):
-        """Parse: if expr { stmts } (elif expr { stmts })* (else { stmts })?"""
+        """Parse: if expr block (elif expr block)* (else block)?"""
         self._eat("IF")
         cond = self._parse_or_expr()
         cons_body = self._parse_block()
 
         alt = None
         while True:
+            self._skip_nl()
             if self._check("ELIF"):
                 self._eat("ELIF")
                 elif_cond = self._parse_or_expr()
@@ -330,7 +366,7 @@ class Parser:
         return IfStmt(cond, cons_body, alt)
 
     def _parse_while_stmt(self):
-        """Parse: while expr { stmts }"""
+        """Parse: while expr block"""
         self._eat("WHILE")
         cond = self._parse_or_expr()
         body = self._parse_block()
@@ -340,7 +376,8 @@ class Parser:
         """Parse: return [expr]"""
         self._eat("RETURN")
         value = None
-        if not self._check("EOF") and not (self._cur().type == "PUNCT" and self._cur().value == "}") and not self._cur().type == "NEWLINE":
+        if not self._check("EOF", "NEWLINE", "DEDENT") and \
+           not (self._cur().type == "PUNCT" and self._cur().value == "}"):
             value = self._parse_or_expr()
         self._try_eat("PUNCT", ";")
         return ReturnStmt(value)
@@ -619,7 +656,6 @@ class Parser:
                     if isinstance(node, VarRef):
                         node = FuncCall(node.name, args)
                     else:
-                        # Method call on any previous expression.
                         node = MethodCall(node, "__call__", args)
                 else:
                     break
@@ -633,14 +669,12 @@ class Parser:
         self._eat("PUNCT", "(")
         args = []
         while True:
-            # Skip leading newlines (multi-line argument lists).
             while self._try_eat("NEWLINE"):
                 pass
             if self._check("PUNCT") and self._cur().value == ")":
                 break
             arg = self._parse_or_expr()
             args.append(arg)
-            # Skip newlines after comma.
             while self._try_eat("NEWLINE"):
                 pass
             if not self._try_eat("PUNCT", ","):

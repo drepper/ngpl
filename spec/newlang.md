@@ -163,21 +163,25 @@ would require a significant amount of the total number of tokens for this constr
 #### Examples
 
 ```
-fn add(a : int, b : int) -> int {
+fn add(a : int, b : int) -> int:
     a + b
-}
 
-fn abs(x : int) -> int {
-    if x < 0 { return -x; }
+fn abs(x : int) -> int:
+    if x < 0: return -x
     x
-}
 
-fn greet(name) -> none {
+fn greet(name) -> none:
     std.print("hello " + name);
-}
 ```
 
 In `add`, the expression `a + b` (no semicolon) is the implicit return value.  In `abs`, the early return uses `return`; the final `x` is an implicit return.  In `greet`, the semicolon after `std.print(...)` discards the result, so the function returns `none`.
+
+The same functions can equivalently be written with braces:
+
+```
+fn add(a : int, b : int) -> int { a + b }
+fn abs(x : int) -> int { if x < 0 { return -x; } x }
+```
 
 
 ### Optional Types and the `?` Operator
@@ -187,12 +191,11 @@ A function that may fail to produce a value declares an **optional return type**
 #### Declaration
 
 ```
-fn get_padded_byte(data, pos : usize, data_size : usize, total_size : usize) -> ?u8 {
-    if pos >= total_size { return none; }
-    if pos < data_size { return data.getbyte(pos); }
+fn get_padded_byte(data, pos : usize, data_size : usize, total_size : usize) -> ?u8:
+    if pos >= total_size: return none
+    if pos < data_size: return data.getbyte(pos)
     ...
     0
-}
 ```
 
 A function with return type `?u8` auto-wraps non-`none` return values in `some`.  Returning `none` explicitly signals absence.  The caller receives either `some(value)` or `none`.
@@ -202,10 +205,9 @@ A function with return type `?u8` auto-wraps non-`none` return values in `some`.
 The `?` operator unwraps an optional value or **propagates** `none` to the enclosing function:
 
 ```
-fn get_padded_word(data, off : usize, data_size : usize, total_size : usize) -> ?u32 {
-    var b0 : u32 = get_padded_byte(data, off, data_size, total_size)?;
+fn get_padded_word(data, off : usize, data_size : usize, total_size : usize) -> ?u32:
+    var b0 : u32 = get_padded_byte(data, off, data_size, total_size)?
     ...
-}
 ```
 
 Semantics of `expr?`:
@@ -241,27 +243,24 @@ When the unwrapped value has a narrower unsigned type than the target variable, 
 A function that returns `none` for absent data, a caller that substitutes a default, and an outer function that propagates structural failure:
 
 ```
-fn get_padded_byte(...) -> ?u8 {
-    if pos >= total_size { return none; }
+fn get_padded_byte(...) -> ?u8:
+    if pos >= total_size: return none
     ...
     none                                         /* zero-padding zone */
-}
 
-fn get_padded_word(...) -> ?u32 {
-    if off >= total_size { return none; }         /* fully out of range */
-    var b0 : u32 = get_padded_byte(...) ?? 0;    /* absent bytes → 0 */
-    var b1 : u32 = get_padded_byte(...) ?? 0;
-    var b2 : u32 = get_padded_byte(...) ?? 0;
-    var b3 : u32 = get_padded_byte(...) ?? 0;
+fn get_padded_word(...) -> ?u32:
+    if off >= total_size: return none             /* fully out of range */
+    var b0 : u32 = get_padded_byte(...) ?? 0     /* absent bytes → 0 */
+    var b1 : u32 = get_padded_byte(...) ?? 0
+    var b2 : u32 = get_padded_byte(...) ?? 0
+    var b3 : u32 = get_padded_byte(...) ?? 0
     (b0 « 24) | (b1 « 16) | (b2 « 8) | b3
-}
 
-fn sha256(data) -> ?int {
+fn sha256(data) -> ?int:
     ...
-    W[i] ← get_padded_word(...)?;                /* propagates none */
+    W[i] ← get_padded_word(...)?                 /* propagates none */
     ...
     hash
-}
 ```
 
 `get_padded_word` uses `??` to substitute 0 for absent bytes (zero-padding), while using `?` is unnecessary here — absent individual bytes are expected, not erroneous.  `sha256` uses `?` to propagate `none` from `get_padded_word`, which only returns `none` for entirely out-of-range positions.
@@ -315,17 +314,14 @@ When an argument is passed to a typed parameter:
 #### Examples
 
 ```
-fn get_padded_byte(data, pos : usize, data_size : usize, total_size : usize) -> ?u8 {
+fn get_padded_byte(data, pos : usize, data_size : usize, total_size : usize) -> ?u8:
     ...
-}
 
-fn expand_s0(prev : u32) -> int {
+fn expand_s0(prev : u32) -> int:
     (prev ↻ 7) ^ (prev ↻ 18) ^ (prev » 3)
-}
 
-fn maybe_use(value : ?int) -> none {
+fn maybe_use(value : ?int) -> none:
     ...
-}
 ```
 
 In `get_padded_byte`, the `data` parameter is untyped (accepts any value, such as a `Bytes` object), while the position and size parameters are enforced as `usize`.  In `expand_s0`, the `prev` parameter is coerced to `u32`, ensuring rotation operations use 32-bit semantics.  In `maybe_use`, the parameter accepts either a plain integer (auto-wrapped to `some`) or `none`.
@@ -342,6 +338,87 @@ Parameter type enforcement catches type errors early and enables the interpreter
 | Unknown type | Compile error | Compile error | Runtime (if checked) | Compile error |
 
 
+### Block Scoping: Braces and Layout
+
+Blocks of statements — function bodies, if/elif/else branches, while loop bodies — can be delimited in two ways.  Both styles are fully interchangeable and can be freely mixed within a single source file or even within a single function.
+
+#### Brace-Delimited Blocks
+
+The traditional approach uses `{` and `}` to delimit blocks:
+
+```
+fn abs(x : int) -> int {
+    if x < 0 { return -x; }
+    x
+}
+```
+
+Braces enclose zero or more statements.  Statements are separated by newlines or semicolons.  Indentation inside braces is not significant — it is conventional but not enforced by the parser.
+
+#### Layout-Driven Blocks
+
+A colon `:` at the end of a construct header introduces a layout-driven block, where indentation determines the block's extent:
+
+```
+fn abs(x : int) -> int:
+    if x < 0: return -x
+    x
+```
+
+The rules are:
+
+1. **Block introduction.**  A `:` after a function signature, `if`/`elif`/`else`, or `while` opens a layout block.
+
+2. **Indentation.**  The first indented line after `:` establishes the block's indent level.  All subsequent lines at that level (or deeper) are part of the block.  A line at a shallower level ends the block.
+
+3. **Uniform indentation character.**  Within a file, indentation must use either all spaces or all tabs — mixing is a lexer error.  This matches Python 3's rule.
+
+4. **Single-line form.**  A statement on the same line as `:` is a single-statement block:
+   ```
+   if x < 0: return -x
+   ```
+
+5. **Line continuation.**  A trailing binary operator (`+`, `-`, `*`, `/`, `%`, `|`, `&`, `^`, `<<`, `>>`, `«`, `»`, `↺`, `↻`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `??`, `←`, `and`, `or`) or a trailing `=` (in variable definitions) signals that the expression continues on the next line.  The indentation of the continuation line does not create a new block:
+   ```
+   W[j] ← W[j - 16] + expand_s0(W[j - 15]) +
+           W[j - 7] + expand_s1(W[j - 2])
+   ```
+
+6. **Nesting suppression.**  Inside parentheses `()` and brackets `[]`, indentation changes are ignored — no block boundaries are introduced.  This allows multi-line function arguments and array literals to be freely indented.
+
+#### Mixed Mode
+
+Brace and layout blocks can be mixed freely.  A function body can use `:` while an inner `if` uses `{ }`, or vice versa:
+
+```
+fn mixed(x : int) -> int:
+    if x > 10 {
+        return x - 10;
+    }
+    x
+
+fn mixed2(x : int) -> int {
+    if x > 10:
+        return x - 10
+    x
+}
+```
+
+This flexibility allows programmers to choose the style that best fits each situation — layout for clean, short blocks; braces for complex nesting or when explicit delimiters improve readability.
+
+#### Design Rationale
+
+| Feature | Python | Haskell | Rust | This language |
+|---------|--------|---------|------|---------------|
+| Layout blocks | Required (no braces) | Optional (`where`, `let`, `do`) | No | Optional |
+| Brace blocks | No | Optional | Required | Optional |
+| Mixed mode | No | Yes | No | Yes |
+| Indent char | Spaces only (tabs allowed but not mixed) | Spaces only | N/A | Spaces or tabs (not mixed) |
+| Block start | `:` | layout keywords | `{` | `:` or `{` |
+
+The dual-mode approach draws from Haskell's optional layout rule while using Python's `:` syntax for familiarity.  The key advantage over Python is that braces remain available — useful for single-line blocks, machine-generated code, and situations where explicit delimiters reduce ambiguity.  The key advantage over Rust is that the common case of simple, sequential blocks needs no closing delimiter.
+
+
 ### Built-in Test System
 
 Unit testing is built into the language, similar to Rust's `#[test]` attribute.  Functions are annotated with `@test` to mark them as test functions.  The annotation accepts an optional list of function names that the test covers.
@@ -350,13 +427,16 @@ Unit testing is built into the language, similar to Rust's `#[test]` attribute. 
 
 ```
 @test
-fn test_something() -> none { ... }
+fn test_something() -> none:
+    ...
 
 @test(sha256)
-fn test_sha256_abc() -> none { ... }
+fn test_sha256_abc() -> none:
+    ...
 
 @test(encrypt, decrypt)
-fn test_round_trip() -> none { ... }
+fn test_round_trip() -> none:
+    ...
 ```
 
 #### Execution Semantics
@@ -399,18 +479,16 @@ test result: ok. 3 passed; 0 failed
 
 ```
 @test(sha256)
-fn test_sha256_empty() -> none {
-    var data := std.bytes("");
-    var hash := sha256(data);
-    assert_eq(hash, 0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855);
-}
+fn test_sha256_empty() -> none:
+    var data := std.bytes("")
+    var hash := sha256(data)
+    assert_eq(hash, 0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
 
 @test(sha256)
-fn test_sha256_abc() -> none {
-    var data := std.bytes("abc");
-    var hash := sha256(data);
-    assert_eq(hash, 0xba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad);
-}
+fn test_sha256_abc() -> none:
+    var data := std.bytes("abc")
+    var hash := sha256(data)
+    assert_eq(hash, 0xba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad)
 ```
 
 #### Design Rationale
