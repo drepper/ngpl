@@ -21,16 +21,16 @@ fn test_left_fold_with_init → ∅:
 /* Right fold: difference (right-associative) without init. */
 @test
 fn test_right_fold_subtract → ∅:
-    /* ⍀ [1,2,3] = f(1, f(2, 3)) = 1 - (2 - 3) = 1 - (-1) = 2 */
+    /* ⍀ [1,2,3] = f(1, f(2, 3)) = 1 - (2 - 3) = 1 - (⁻1) = 2 */
     var result := (λa : int, b : int → int: a - b) ⍀ [1, 2, 3]
     assert_eq(result, 2)
 
 /* Right fold: with init (non-trivial init that differs from no-init). */
 @test
 fn test_right_fold_with_init → ∅:
-    /* f(1, f(2, f(3, 5))) = 1 - (2 - (3 - 5)) = 1 - (2 - (-2)) = 1 - 4 = -3 */
+    /* f(1, f(2, f(3, 5))) = 1 - (2 - (3 - 5)) = 1 - (2 - (⁻2)) = 1 - 4 = ⁻3 */
     var result := (λa : int, b : int → int: a - b) ⍀ ([1, 2, 3], 5)
-    assert_eq(result, -3)
+    assert_eq(result, ⁻3)
 
 /* Left fold: string concatenation without init. */
 @test

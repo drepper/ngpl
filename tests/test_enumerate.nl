@@ -31,8 +31,8 @@ fn test_enumerate_empty → ∅:
 /* Enumerate over a single-element array. */
 @test
 fn test_enumerate_single → ∅:
-    var idx := -1
-    var val := -1
+    var idx := ⁻1
+    var val := ⁻1
     foreach i, v := @enumerate([42]):
         idx ← i
         val ← v

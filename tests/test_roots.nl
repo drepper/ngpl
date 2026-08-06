@@ -7,7 +7,7 @@ fn assert_true cond:bool, msg:str:
 fn approx_eq a:f64, b:f64, msg:str:
   var diff := a - b
   if diff < 0.0:
-    diff ← -diff
+    diff ← ⁻diff
   if diff > 0.0001:
     std.print("FAIL: ", msg, " (got ", a, " expected ", b, ")")
 
@@ -108,8 +108,8 @@ fn test_fourth_root_unit:
 
 fn test_neg_sqrt:
   var x := 9.0
-  var r := -√x
-  approx_eq(r, -3.0, "-√9.0")
+  var r := ⁻√x
+  approx_eq(r, ⁻3.0, "⁻√9.0")
 
 @start
 fn main:

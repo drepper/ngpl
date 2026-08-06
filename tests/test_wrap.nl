@@ -12,11 +12,11 @@ fn test_wrap_i8_add → ∅:
     var x : i8 = 127
     var y : i8 = 1
     var z := @wrap(x + y)
-    assert_eq(z, -128)
+    assert_eq(z, ⁻128)
 
 @test
 fn test_wrap_i8_sub → ∅:
-    var x : i8 = -128
+    var x : i8 = ⁻128
     var y : i8 = 1
     var z := @wrap(x - y)
     assert_eq(z, 127)
@@ -33,13 +33,13 @@ fn test_wrap_i32_add → ∅:
     var x : i32 = 2147483647
     var y : i32 = 1
     var z := @wrap(x + y)
-    assert_eq(z, -2147483648)
+    assert_eq(z, ⁻2147483648)
 
 @test
 fn test_wrap_i32_negate → ∅:
-    var x : i32 = -2147483648
-    var z := @wrap(-x)
-    assert_eq(z, -2147483648)
+    var x : i32 = ⁻2147483648
+    var z := @wrap(⁻x)
+    assert_eq(z, ⁻2147483648)
 
 /* ---- @wrap on unsigned types: still wraps as expected -------------------- */
 

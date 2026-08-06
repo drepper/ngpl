@@ -136,20 +136,20 @@ fn test_array_oob_read:
 @expect error "out of range"
 fn test_array_negative_write:
     var a := [1, 2, 3]
-    a[-1] ← 4
+    a[⁻1] ← 4
 
 @test
 @expect error "out of range"
 fn test_array_negative_read:
     var a := [1, 2, 3]
-    var x := a[-1]
+    var x := a[⁻1]
 
 // --- ⍴ error conditions ---
 
 @test
 @expect error "non-negative"
 fn test_reshape_negative_dim:
-    var a := -1 ⍴ 0
+    var a := ⁻1 ⍴ 0
 
 @test
 @expect error "cannot reshape empty"

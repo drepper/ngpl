@@ -42,8 +42,8 @@ fn test_float_arithmetic:
   assert_true(rem == 1.0, "7.0 % 3.0 should be 1.0")
 
   // Negation
-  static_assert(-3.0 == -3.0)
-  static_assert(-3.0 + 3.0 == 0.0)
+  static_assert(⁻3.0 == ⁻3.0)
+  static_assert(⁻3.0 + 3.0 == 0.0)
 
 fn test_mixed_int_float:
   // Int + float promotes to float

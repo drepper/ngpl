@@ -157,7 +157,7 @@ fn test_unit_comparison_different:
 
 fn test_negation:
   var a ¤meter := 5
-  var b := -a
+  var b := ⁻a
   std.print(b)
 
 // --- Byte units ---

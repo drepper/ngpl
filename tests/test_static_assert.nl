@@ -38,7 +38,7 @@ fn test_static_assert_eq_bool → ∅:
 /* static_assert with negation. */
 @test
 fn test_static_assert_negation → ∅:
-    static_assert(-(- 1))
+    static_assert(⁻(⁻ 1))
 
 /* static_assert_eq with arithmetic. */
 @test

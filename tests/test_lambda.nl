@@ -178,14 +178,14 @@ fn test_lambda_question_scoping:
 fn test_lambda_expected_return:
   var f := λa : int, b : int → int!: (a / b)?
   var r := f(10, 2)
-  assert_eq(5, r ?? -1)
+  assert_eq(5, r ?? ⁻1)
 
 // Expected return type: division by zero yields error
 @test
 fn test_lambda_expected_return_err:
   var f := λa : int, b : int → int!: (a / b)?
   var r := f(10, 0)
-  assert_eq(-1, r ?? -1)
+  assert_eq(⁻1, r ?? ⁻1)
 
 // Missing type annotation causes error
 @test
@@ -225,7 +225,7 @@ fn test_lambda_multi_stmt_return → ∅:
       return 0
     x * x
   assert_eq(25, f(5))
-  assert_eq(0, f(-3))
+  assert_eq(0, f(⁻3))
 
 // Multi-statement lambda with capture
 @test

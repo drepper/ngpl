@@ -17,7 +17,7 @@ fn test_step_even → ∅:
 @test
 fn test_step_descending → ∅:
     var sum := 0
-    foreach i :=10…-2…0:
+    foreach i :=10…⁻2…0:
         sum ← sum + i
     assert_eq(sum, 30) /* 10 + 8 + 6 + 4 + 2 + 0 */
 

@@ -30,7 +30,7 @@ fn test_catch_oob_optional:
 @test
 fn test_catch_success_optional:
     var result := safe_get([1, 2, 3], 1)
-    var val := result ?? -1
+    var val := result ?? ⁻1
     assert_eq(val, 2)
 
 // --- Direct error caught returns err for expected ---
@@ -38,15 +38,15 @@ fn test_catch_success_optional:
 @test
 fn test_catch_oob_expected:
     var result := safe_get_result([1, 2, 3], 10)
-    var val := result ?? -1
-    assert_eq(val, -1)
+    var val := result ?? ⁻1
+    assert_eq(val, ⁻1)
 
 // --- Expected success returns ok value ---
 
 @test
 fn test_catch_expected_success:
     var result := safe_get_result([1, 2, 3], 1)
-    var val := result ?? -1
+    var val := result ?? ⁻1
     assert_eq(val, 2)
 
 // --- Error from function call is NOT caught (syntactic scope) ---
@@ -75,7 +75,7 @@ fn multi_stmt arr : i32[], idx : i32 → i32?:
 @test
 fn test_catch_multi_stmt_success:
     var result := multi_stmt([10, 20, 30], 1)
-    var val := result ?? -1
+    var val := result ?? ⁻1
     assert_eq(val, 21)
 
 @test
@@ -87,7 +87,7 @@ fn test_catch_multi_stmt_fail:
 
 @test
 fn test_catch_negative_index:
-    var result := safe_get([1, 2, 3], -1)
+    var result := safe_get([1, 2, 3], ⁻1)
     assert_eq(result, ∅)
 
 // --- Catch with code after the block ---
@@ -99,7 +99,7 @@ fn catch_then_continue arr : i32[], idx : i32 → i32?:
 @test
 fn test_catch_returns_value_on_success:
     var result := catch_then_continue([5, 6, 7], 0)
-    var val := result ?? -1
+    var val := result ?? ⁻1
     assert_eq(val, 5)
 
 @start

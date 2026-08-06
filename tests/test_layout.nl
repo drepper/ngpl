@@ -1,11 +1,11 @@
 /* Test layout-driven scoping, mixed mode, and edge cases. */
 
 fn abs_layout x : int → int:
-    if x < 0: return -x
+    if x < 0: return ⁻x
     x
 
 fn abs_brace x : int → int {
-    if x < 0 { return -x; }
+    if x < 0 { return ⁻x; }
     x
 }
 
@@ -30,9 +30,9 @@ fn mixed_test2 x : int → int {
 @test
 fn test_abs → ∅:
     assert_eq(abs_layout(5), 5)
-    assert_eq(abs_layout(-3), 3)
+    assert_eq(abs_layout(⁻3), 3)
     assert_eq(abs_brace(5), 5)
-    assert_eq(abs_brace(-3), 3)
+    assert_eq(abs_brace(⁻3), 3)
 
 @test
 fn test_fib → ∅:

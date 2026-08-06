@@ -12,7 +12,7 @@ fn error_i8_too_large → ∅:
 
 @expect error "integer overflow.*does not fit in i8"
 fn error_i8_too_small → ∅:
-    var x : i8 = -129
+    var x : i8 = ⁻129
 
 @expect error "integer overflow.*does not fit in i16"
 fn error_i16_too_large → ∅:
@@ -35,7 +35,7 @@ fn test_u8_wraps_on_assign → ∅:
 
 @test
 fn test_u8_wraps_negative → ∅:
-    var x : u8 = -1
+    var x : u8 = ⁻1
     assert_eq(x, 255)
 
 @test
@@ -53,7 +53,7 @@ fn error_i8_add_overflow → ∅:
 
 @expect error "integer overflow"
 fn error_i8_sub_underflow → ∅:
-    var x : i8 = -128
+    var x : i8 = ⁻128
     var y : i8 = 1
     var z := x - y
 
@@ -71,8 +71,8 @@ fn error_i32_add_overflow → ∅:
 
 @expect error "integer overflow"
 fn error_i32_negate_min → ∅:
-    var x : i32 = -2147483648
-    var z := -x
+    var x : i32 = ⁻2147483648
+    var z := ⁻x
 
 /* ---- dynamic: unsigned arithmetic wraps ---------------------------------- */
 
@@ -113,8 +113,8 @@ fn test_i8_max → ∅:
 
 @test
 fn test_i8_min → ∅:
-    var x : i8 = -128
-    assert_eq(x, -128)
+    var x : i8 = ⁻128
+    assert_eq(x, ⁻128)
 
 @test
 fn test_i32_max → ∅:
@@ -123,8 +123,8 @@ fn test_i32_max → ∅:
 
 @test
 fn test_i32_min → ∅:
-    var x : i32 = -2147483648
-    assert_eq(x, -2147483648)
+    var x : i32 = ⁻2147483648
+    assert_eq(x, ⁻2147483648)
 
 /* ---- bitwise ops always wrap (not overflow) ------------------------------ */
 
@@ -132,7 +132,7 @@ fn test_i32_min → ∅:
 fn test_bitwise_not_i8 → ∅:
     var x : i8 = 0
     var y := ~x
-    assert_eq(y, -1)
+    assert_eq(y, ⁻1)
 
 @test
 fn test_shift_left_wraps → ∅:

@@ -11,7 +11,7 @@ fn assert_eq_int a:i64, b:i64, msg:str:
 fn approx_eq a:f64, b:f64, msg:str:
   var diff := a - b
   if diff < 0.0:
-    diff ← -diff
+    diff ← ⁻diff
   if diff > 0.0001:
     std.print("FAIL: ", msg, " (got ", a, " expected ", b, ")")
 
@@ -37,7 +37,7 @@ fn test_int_pow_large:
 
 fn test_int_pow_negative_exp:
   @expect error "non-negative"
-  var r := 2 ↑ -1
+  var r := 2 ↑ ⁻1
 
 // --- Float exponentiation ---
 
@@ -47,8 +47,8 @@ fn test_float_pow_basic:
   approx_eq(27.0 ↑ (1.0 / 3.0), 3.0, "27.0↑(1/3)")
 
 fn test_float_pow_negative_exp:
-  approx_eq(2.0 ↑ -1.0, 0.5, "2.0↑-1.0")
-  approx_eq(4.0 ↑ -0.5, 0.5, "4.0↑-0.5")
+  approx_eq(2.0 ↑ ⁻1.0, 0.5, "2.0↑⁻1.0")
+  approx_eq(4.0 ↑ ⁻0.5, 0.5, "4.0↑⁻0.5")
 
 fn test_float_pow_zero:
   approx_eq(5.0 ↑ 0.0, 1.0, "5.0↑0.0")
@@ -72,8 +72,8 @@ fn test_precedence_mul:
   assert_eq_int(2 * 3 ↑ 2, 18, "2*3↑2")
 
 fn test_precedence_neg:
-  // -2 ↑ 2 = -(2↑2) = -4 (unary minus binds looser)
-  assert_eq_int(-2 ↑ 2, -4, "-2↑2")
+  // ⁻2 ↑ 2 = ⁻(2↑2) = ⁻4 (negation binds looser)
+  assert_eq_int(⁻2 ↑ 2, ⁻4, "⁻2↑2")
 
 // --- Overflow detected ---
 
