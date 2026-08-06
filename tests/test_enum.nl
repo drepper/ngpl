@@ -16,18 +16,18 @@ fn test_enum_member_access → ∅:
 
 @test
 fn test_enum_sequential_values → ∅:
-    assert_eq(Color.red == 0, true)
-    assert_eq(Color.green == 1, true)
-    assert_eq(Color.blue == 2, true)
+    assert(Color.red == 0)
+    assert(Color.green == 1)
+    assert(Color.blue == 2)
 
 @test
 fn test_enum_equality → ∅:
     var a := Color.red
     var b := Color.red
     var c := Color.blue
-    assert_eq(a == b, true)
-    assert_eq(a == c, false)
-    assert_eq(a != c, true)
+    assert(a == b)
+    assert(not (a == c))
+    assert(a != c)
 
 /* ---- enum with explicit values ------------------------------------------- */
 
@@ -39,10 +39,10 @@ enum Status:
 
 @test
 fn test_enum_explicit_values → ∅:
-    assert_eq(Status.ok == 0, true)
-    assert_eq(Status.warning == 10, true)
-    assert_eq(Status.error == 20, true)
-    assert_eq(Status.fatal == 30, true)
+    assert(Status.ok == 0)
+    assert(Status.warning == 10)
+    assert(Status.error == 20)
+    assert(Status.fatal == 30)
 
 /* ---- enum with mixed auto and explicit ----------------------------------- */
 
@@ -54,10 +54,10 @@ enum Level:
 
 @test
 fn test_enum_mixed_values → ∅:
-    assert_eq(Level.low == 0, true)
-    assert_eq(Level.medium == 1, true)
-    assert_eq(Level.high == 10, true)
-    assert_eq(Level.critical == 11, true)
+    assert(Level.low == 0)
+    assert(Level.medium == 1)
+    assert(Level.high == 10)
+    assert(Level.critical == 11)
 
 /* ---- enum with underlying type ------------------------------------------- */
 
@@ -69,8 +69,8 @@ enum SmallEnum : u8:
 @test
 fn test_enum_underlying_type → ∅:
     var x := SmallEnum.a
-    assert_eq(x == 0, true)
-    assert_eq(x == SmallEnum.a, true)
+    assert(x == 0)
+    assert(x == SmallEnum.a)
 
 /* ---- @flag enum: powers of two ------------------------------------------- */
 
@@ -82,23 +82,23 @@ enum Perms:
 
 @test
 fn test_flag_auto_values → ∅:
-    assert_eq(Perms.read == 1, true)
-    assert_eq(Perms.write == 2, true)
-    assert_eq(Perms.exec == 4, true)
+    assert(Perms.read == 1)
+    assert(Perms.write == 2)
+    assert(Perms.exec == 4)
 
 @test
 fn test_flag_nil_auto_created → ∅:
-    assert_eq(Perms.nil == 0, true)
+    assert(Perms.nil == 0)
 
 @test
 fn test_flag_combine_or → ∅:
     var rw := Perms.read | Perms.write
-    assert_eq(rw == 3, true)
+    assert(rw == 3)
 
 @test
 fn test_flag_combine_all → ∅:
     var all := Perms.read | Perms.write | Perms.exec
-    assert_eq(all == 7, true)
+    assert(all == 7)
 
 @test
 fn test_flag_and → ∅:
@@ -123,8 +123,8 @@ fn test_flag_and_test_membership → ∅:
     var rw := Perms.read | Perms.write
     var has_read := (rw & Perms.read) == Perms.read
     var has_exec := (rw & Perms.exec) == Perms.exec
-    assert_eq(has_read, true)
-    assert_eq(has_exec, false)
+    assert(has_read)
+    assert(not has_exec)
 
 /* ---- @flag enum with explicit values ------------------------------------- */
 
@@ -137,10 +137,10 @@ enum Flags:
 
 @test
 fn test_flag_explicit_and_auto → ∅:
-    assert_eq(Flags.a == 1, true)
-    assert_eq(Flags.b == 4, true)
-    assert_eq(Flags.c == 8, true)
-    assert_eq(Flags.d == 16, true)
+    assert(Flags.a == 1)
+    assert(Flags.b == 4)
+    assert(Flags.c == 8)
+    assert(Flags.d == 16)
 
 /* ---- @flag enum with explicit zero (no auto nil) ------------------------- */
 
@@ -152,40 +152,40 @@ enum Mode:
 
 @test
 fn test_flag_explicit_zero_no_nil → ∅:
-    assert_eq(Mode.off == 0, true)
-    assert_eq(Mode.read == 1, true)
+    assert(Mode.off == 0)
+    assert(Mode.read == 1)
 
 /* ---- std.errors enum ----------------------------------------------------- */
 
 @test
 fn test_std_errors_runtime → ∅:
     var e := std.errors.division_by_zero
-    assert_eq(e == 100, true)
+    assert(e == 100)
     assert_eq(e, std.errors.division_by_zero)
 
 @test
 fn test_std_errors_compile → ∅:
-    assert_eq(std.errors.type_mismatch == 200, true)
-    assert_eq(std.errors.unknown_type == 201, true)
-    assert_eq(std.errors.syntax_error == 202, true)
+    assert(std.errors.type_mismatch == 200)
+    assert(std.errors.unknown_type == 201)
+    assert(std.errors.syntax_error == 202)
 
 @test
 fn test_std_errors_library → ∅:
-    assert_eq(std.errors.file_not_found == 300, true)
-    assert_eq(std.errors.permission_denied == 301, true)
-    assert_eq(std.errors.io_error == 302, true)
+    assert(std.errors.file_not_found == 300)
+    assert(std.errors.permission_denied == 301)
+    assert(std.errors.io_error == 302)
 
 @test
 fn test_std_errors_grouping → ∅:
     /* Runtime errors are in 100-199 */
     var div := std.errors.division_by_zero
-    assert_eq(div == 100 ∧ 100 <= 199, true)
+    assert(div == 100 ∧ 100 <= 199)
     /* Compile errors are in 200-299 */
     var typ := std.errors.type_mismatch
-    assert_eq(typ == 200 ∧ 200 <= 299, true)
+    assert(typ == 200 ∧ 200 <= 299)
     /* Library errors are in 300-399 */
     var fnf := std.errors.file_not_found
-    assert_eq(fnf == 300 ∧ 300 <= 399, true)
+    assert(fnf == 300 ∧ 300 <= 399)
 
 /* ---- invalid operations on non-flag enums -------------------------------- */
 

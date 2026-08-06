@@ -27,8 +27,8 @@ fn test_identity_int → ∅:
 
 @test
 fn test_identity_bool → ∅:
-    assert_eq(identity(true), true)
-    assert_eq(identity(false), false)
+    assert(identity(true))
+    assert(not identity(false))
 
 @test
 fn test_identity_string → ∅:
@@ -54,12 +54,12 @@ fn test_add_typed → ∅:
 fn test_different_generics → ∅:
     assert_eq(pick_first(42, "hello"), 42)
     assert_eq(pick_first("world", 99), "world")
-    assert_eq(pick_second(1, true), true)
+    assert(pick_second(1, true))
 
 @test
 fn test_generic_with_concrete_return → ∅:
-    assert_eq(to_bool(1), true)
-    assert_eq(to_bool(0), false)
+    assert(to_bool(1))
+    assert(not to_bool(0))
 
 @test
 fn test_generic_type_mismatch → ∅:
