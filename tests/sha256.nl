@@ -77,9 +77,10 @@ fn expand_Σ₁ prev : u32 → u32:
 
 fn sha256 data : byte[] → int?:
     /* Compute padded message length per SHA-256 spec. */
-    const rem : usize = data.sizeof % 64
-    const pad_len : usize = (119 - rem) % 64
-    const total_size : usize = data.sizeof + 1 + pad_len + 8
+    const rem := data.sizeof % 64
+    const pad_len := (119 - rem) % 64
+    const total_size := data.sizeof + 1 + pad_len + 8
+    static_assert_eq(@unitof(total_size), ¤byte)
 
     /* Initial hash values per FIPS 180-4 Section 5.3.3. */
     var H : u32 = [
@@ -88,7 +89,8 @@ fn sha256 data : byte[] → int?:
     ]
 
     /* Process each 64-byte block. */
-    foreach blk_off : usize = 0…64…(total_size - 1):
+    foreach blk_off := 0…64…(total_size - 1):
+        static_assert_eq(@unitof(blk_off), ¤byte)
         /* --- Load W[0..63]: first 16 from data, rest filled by expansion. --- */
         var load_word := λi : usize |data, blk_off, total_size| → u32: get_padded_word(data, blk_off + (i * 4), total_size) ?? 0
         var W := generate(load_word, 0…15) ⧺ 48 ⍴ [0]

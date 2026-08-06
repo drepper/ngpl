@@ -2074,11 +2074,32 @@ static_assert_eq(@typeof(42), @typeof(1 + 2))  /* both are int */
 static_assert_eq(@typeof("a"), @typeof("b"))   /* both are str */
 ```
 
+- `@unitof(expr)` — returns the unit attached to a value as a `UnitOfValue`.  If the value has no unit (dimensionless), returns a dimensionless unit value.  Supports equality (`==`) and inequality (`!=`) comparison with other `@unitof` results and with standalone unit references (`¤meter`, `¤byte`, etc.).  Can be used with `static_assert_eq` for compile-time unit verification.
+
+  A standalone unit reference `¤unit` (without a preceding expression) produces a `UnitOfValue` for comparison purposes:
+
+```
+var d ¤meter := 100
+var t ¤second := 10
+var speed := d / t
+
+assert_true(@unitof(d) == ¤meter)             /* true */
+assert_true(@unitof(speed) == ¤meter/second)  /* derived unit */
+assert_true(@unitof(42) != ¤meter)            /* dimensionless */
+
+static_assert_eq(@unitof(d), ¤meter)          /* compile-time check */
+
+/* Unit propagation through sizeof and ranges */
+var data: u8[4] = [0, 0, 0, 0]
+static_assert_eq(@unitof(data.sizeof), ¤byte) /* byte[] sizeof has unit byte */
+```
+
 | Feature | C++ | Rust | Zig | This language |
 |---------|-----|------|-----|---------------|
 | Type-of expression | `decltype(expr)` | — | `@TypeOf` | `@typeof(expr)` |
 | Return type query | `decltype(f())` | — | `@typeInfo` | `@resultof(func)` |
 | Size query | `std::size(c)` | `c.len()` | `x.len` | `@sizeof(expr)` |
+| Unit query | — | — | — | `@unitof(expr)` |
 | Type equality | `std::is_same_v` | `TypeId` | `==` | `==` |
 
 #### Test Output
@@ -2853,6 +2874,19 @@ var a ¤meter := 5
 var b := a              // b inherits unit m
 var c := b + a          // 10 m (works because b has unit m)
 ```
+
+#### Unit Propagation through Ranges
+
+When a `foreach` range has one or more unit-bearing bounds, the unit is propagated to the loop variable:
+
+```
+var total ¤byte := 128
+foreach off := 0…64…(total - 1):
+    // off has unit byte, inherited from the range bound
+    static_assert_eq(@unitof(off), ¤byte)
+```
+
+This allows sizeof results and other unit-bearing values to flow naturally through loop constructs without losing dimensional information.
 
 #### Display
 

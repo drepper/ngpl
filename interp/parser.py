@@ -17,6 +17,7 @@ from interp.ast import (
     LambdaExpr, ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
     UnitExpr, UnitDef, UnitName, UnitBinOp, UnitSqrt, UnitLit,
+    UnitOfExpr, UnitRefExpr,
 )
 from interp.lexer import Token, KEYWORDS
 
@@ -1171,6 +1172,18 @@ class Parser:
             self._eat("PUNCT", ")")
             node = SizeOfExpr(expr)
             return self._parse_postfix(node)
+        if self._check("UNITOF"):
+            self._eat("UNITOF")
+            self._eat("PUNCT", "(")
+            expr = self._parse_or_expr()
+            self._skip_nl()
+            self._eat("PUNCT", ")")
+            node = UnitOfExpr(expr)
+            return self._parse_postfix(node)
+        if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+            self.pos += 1
+            unit_spec = self._parse_unit_spec()
+            return UnitRefExpr(unit_spec)
         node = self._parse_primary()
         if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
             self.pos += 1

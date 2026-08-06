@@ -582,6 +582,26 @@ class TypeValue(Value):
         return self.name
 
 
+class UnitOfValue(Value):
+    """A reified unit, produced by @unitof and standalone ¤unit references.
+
+    Supports equality comparison so it can be used with static_assert_eq.
+    """
+
+    __slots__ = ("unit",)
+
+    def __init__(self, unit):
+        self.unit = unit
+
+    def display(self):
+        if self.unit is None:
+            return "dimensionless"
+        return self.unit.display_name
+
+    def to_python(self):
+        return self.display()
+
+
 def _is_unsigned(width: str) -> bool:
     """Return True if width names an unsigned integer type."""
     return width.startswith("u") or width in ("byte", "usize")

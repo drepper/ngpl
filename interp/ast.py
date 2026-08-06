@@ -331,6 +331,27 @@ class SizeOfExpr:
         self.expr = expr
 
 
+class UnitOfExpr:
+    """Unit-of expression: @unitof(expr).
+
+    Returns a UnitOfValue representing the unit attached to the expression,
+    or a dimensionless unit if the value has no unit.
+    """
+
+    def __init__(self, expr):
+        self.expr = expr
+
+
+class UnitRefExpr:
+    """Standalone unit reference: ¤meter, ¤second, etc.
+
+    Produces a UnitOfValue for comparison with @unitof results.
+    """
+
+    def __init__(self, unit_spec):
+        self.unit_spec = unit_spec
+
+
 class StaticAssert:
     """Compile-time assertion: static_assert(cond) or static_assert(cond, msg).
 

@@ -68,6 +68,7 @@ AT_KEYWORDS: dict[str, str] = {
     "typeof": "TYPEOF",
     "resultof": "RESULTOF",
     "sizeof": "SIZEOF",
+    "unitof": "UNITOF",
 }
 
 # Double-character operators that must be checked before single ones.

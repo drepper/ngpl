@@ -23,12 +23,12 @@ from interp.ast import (
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr,
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
-    UnitExpr,
+    UnitExpr, UnitOfExpr, UnitRefExpr,
 )
 from interp.value import (
     Value, IntValue, FloatValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
     FuncValue, LambdaValue, BuiltinFunc, ObjectValue, BuiltinBoundMethod,
-    ArrayValue, TupleValue, EnumType, EnumValue, RangeValue, TypeValue,
+    ArrayValue, TupleValue, EnumType, EnumValue, RangeValue, TypeValue, UnitOfValue,
     mk_int, mk_int_wrap, mk_str, mk_bool, mk_float, none, some, is_none, is_some,
     resolve_width, resolve_float_width, wrap_int, coerce_to_type, coerce_arg,
     _TYPE_BITS, FLOAT_TYPES, FAST_TYPES,
@@ -172,6 +172,8 @@ def _collect_refs(node) -> set[str]:
         refs |= _collect_refs(node.init)
     elif isinstance(node, UnitExpr):
         refs |= _collect_refs(node.expr)
+    elif isinstance(node, UnitOfExpr):
+        refs |= _collect_refs(node.expr)
     return refs
 
 
@@ -187,7 +189,7 @@ def _is_const_expr(node) -> bool:
         return all(_is_const_expr(e) for e in node.elements)
     if isinstance(node, TupleLit):
         return all(_is_const_expr(e) for e in node.elements)
-    if isinstance(node, (TypeOfExpr, ResultOfExpr, SizeOfExpr)):
+    if isinstance(node, (TypeOfExpr, ResultOfExpr, SizeOfExpr, UnitOfExpr, UnitRefExpr)):
         return True
     if isinstance(node, UnitExpr):
         return _is_const_expr(node.expr)
@@ -645,6 +647,13 @@ class Evaluator:
             return mk_bool(lu.value == ru.value)
         if isinstance(lu, TypeValue) and isinstance(ru, TypeValue):
             return mk_bool(lu.name == ru.name)
+        if isinstance(lu, UnitOfValue) and isinstance(ru, UnitOfValue):
+            if lu.unit is None and ru.unit is None:
+                return mk_bool(True)
+            if lu.unit is None or ru.unit is None:
+                return mk_bool(False)
+            return mk_bool(lu.unit.same_dimension(ru.unit)
+                           and lu.unit.factor == ru.unit.factor)
         if type(lu) != type(ru):
             return mk_bool(False)
         return mk_bool(False)
@@ -1110,7 +1119,7 @@ class Evaluator:
 
     def _sizeof_result(self, count: int, element_type: str | None = None):
         from interp.units import BUILTIN_UNITS
-        if element_type == "u8":
+        if element_type in ("u8", "byte"):
             return UnitValue(mk_int(count), BUILTIN_UNITS["byte"])
         return UnitValue(mk_int(count), BUILTIN_UNITS["ptrdiff"])
 
@@ -1189,6 +1198,11 @@ class Evaluator:
                         f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
             elif isinstance(eu, TypeValue) and isinstance(au, TypeValue):
                 if eu.name != au.name:
+                    raise TypeError(
+                        f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
+            elif isinstance(eu, UnitOfValue) and isinstance(au, UnitOfValue):
+                eq = self._op_eq(expected, actual)
+                if not eq.value:
                     raise TypeError(
                         f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
             else:
@@ -1482,6 +1496,18 @@ class Evaluator:
                 return TypeValue("builtin")
             raise TypeError(f"@resultof: '{node.name}' is not a function")
 
+        if isinstance(node, UnitOfExpr):
+            val = self.eval_expr(node.expr)
+            unwrapped = unwrap_optional(val)
+            if isinstance(unwrapped, UnitValue):
+                return UnitOfValue(unwrapped.unit)
+            return UnitOfValue(None)
+
+        if isinstance(node, UnitRefExpr):
+            from interp.units import eval_unit_formula
+            unit = eval_unit_formula(node.unit_spec)
+            return UnitOfValue(unit)
+
         if isinstance(node, LambdaExpr):
             return self._eval_lambda_expr(node)
 
@@ -1694,16 +1720,24 @@ class Evaluator:
             elif isinstance(expr, RangeExpr):
                 s = unwrap_optional(self.eval_expr(expr.start))
                 e = unwrap_optional(self.eval_expr(expr.end))
+                range_unit = None
                 if isinstance(s, UnitValue):
+                    range_unit = s.unit
                     s = s.inner
                 if isinstance(e, UnitValue):
+                    if range_unit is None:
+                        range_unit = e.unit
                     e = e.inner
                 if not isinstance(s, IntValue) or not isinstance(e, IntValue):
                     raise TypeError("range bounds must be integers")
                 sv, ev = s.value, e.value
+                mk_val = (lambda i: UnitValue(mk_int(i), range_unit)) if range_unit is not None else mk_int
                 if expr.step is not None:
                     st = unwrap_optional(self.eval_expr(expr.step))
                     if isinstance(st, UnitValue):
+                        if range_unit is None:
+                            range_unit = st.unit
+                            mk_val = lambda i: UnitValue(mk_int(i), range_unit)
                         st = st.inner
                     if not isinstance(st, IntValue):
                         raise TypeError("range step must be an integer")
@@ -1711,13 +1745,13 @@ class Evaluator:
                     if stv == 0:
                         raise TypeError("range step must not be zero")
                     if stv > 0:
-                        sequences.append([mk_int(i) for i in range(sv, ev + 1, stv)])
+                        sequences.append([mk_val(i) for i in range(sv, ev + 1, stv)])
                     else:
-                        sequences.append([mk_int(i) for i in range(sv, ev - 1, stv)])
+                        sequences.append([mk_val(i) for i in range(sv, ev - 1, stv)])
                 elif sv <= ev:
-                    sequences.append([mk_int(i) for i in range(sv, ev + 1)])
+                    sequences.append([mk_val(i) for i in range(sv, ev + 1)])
                 else:
-                    sequences.append([mk_int(i) for i in range(sv, ev - 1, -1)])
+                    sequences.append([mk_val(i) for i in range(sv, ev - 1, -1)])
             else:
                 sequences.append(self._resolve_iterable(expr, node.is_comptime))
 
