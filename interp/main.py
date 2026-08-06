@@ -80,7 +80,27 @@ def _format_value(v) -> str:
         if v.value.bit_length() > 32 or v.value < 0:
             return format(v.value, "x")
         return str(v.value)
+    if isinstance(v, ObjectValue) and isinstance(v.obj, ArrayValue):
+        arr = v.obj
+        elems = ", ".join(_format_value(arr.get(i)) for i in range(arr.sizeof))
+        return f"[{elems}]"
     return v.display()
+
+
+def _values_equal(a, b) -> bool:
+    """Deep equality check for assertion comparisons."""
+    a, b = unwrap_optional(a), unwrap_optional(b)
+    if isinstance(a, IntValue) and isinstance(b, IntValue):
+        return a.value == b.value
+    if (isinstance(a, ObjectValue) and isinstance(a.obj, ArrayValue)
+            and isinstance(b, ObjectValue) and isinstance(b.obj, ArrayValue)):
+        aa, ba = a.obj, b.obj
+        return (aa.sizeof == ba.sizeof
+                and all(_values_equal(aa.get(i), ba.get(i)) for i in range(aa.sizeof)))
+    try:
+        return a.to_python() == b.to_python()
+    except Exception:
+        return False
 
 
 def _builtin_assert_eq(args):
@@ -116,11 +136,10 @@ def _builtin_assert_eq(args):
     elif (isinstance(expected, ObjectValue) and isinstance(expected.obj, ArrayValue)
           and isinstance(actual, ObjectValue) and isinstance(actual.obj, ArrayValue)):
         ea, aa = expected.obj, actual.obj
-        if ea.sizeof != aa.sizeof:
+        if ea.sizeof != aa.sizeof or any(
+                not _values_equal(ea.get(i), aa.get(i)) for i in range(ea.sizeof)):
             raise AssertionError(
-                f"assert_eq failed: array lengths differ ({ea.sizeof} vs {aa.sizeof})")
-        for i in range(ea.sizeof):
-            _builtin_assert_eq([ea.get(i), aa.get(i)])
+                f"assert_eq failed:\n  expected: {_format_value(expected)}\n  actual:   {_format_value(actual)}")
     elif expected.to_python() != actual.to_python():
         raise AssertionError(
             f"assert_eq failed:\n  expected: {_format_value(expected)}\n  actual:   {_format_value(actual)}")
