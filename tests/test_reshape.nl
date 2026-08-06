@@ -97,26 +97,26 @@ fn test_reshape_matrix:
     var a := (2, 3) ⍴ 0
     assert_eq(a.sizeof, 2)
     assert_eq(a[0].sizeof, 3)
-    assert_eq(a[0][0], 0)
-    assert_eq(a[1][2], 0)
+    assert_eq(a[0, 0], 0)
+    assert_eq(a[1, 2], 0)
 
 @test
 fn test_reshape_matrix_data:
     var a := (2, 3) ⍴ [1, 2, 3, 4, 5, 6]
-    assert_eq(a[0][0], 1)
-    assert_eq(a[0][2], 3)
-    assert_eq(a[1][0], 4)
-    assert_eq(a[1][2], 6)
+    assert_eq(a[0, 0], 1)
+    assert_eq(a[0, 2], 3)
+    assert_eq(a[1, 0], 4)
+    assert_eq(a[1, 2], 6)
 
 @test
 fn test_reshape_matrix_cycle:
     var a := (2, 3) ⍴ [1, 2]
-    assert_eq(a[0][0], 1)
-    assert_eq(a[0][1], 2)
-    assert_eq(a[0][2], 1)
-    assert_eq(a[1][0], 2)
-    assert_eq(a[1][1], 1)
-    assert_eq(a[1][2], 2)
+    assert_eq(a[0, 0], 1)
+    assert_eq(a[0, 1], 2)
+    assert_eq(a[0, 2], 1)
+    assert_eq(a[1, 0], 2)
+    assert_eq(a[1, 1], 1)
+    assert_eq(a[1, 2], 2)
 
 // --- Array bounds checking ---
 

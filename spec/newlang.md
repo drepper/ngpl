@@ -1688,6 +1688,29 @@ This replaces the earlier behavior where out-of-bounds writes silently extended 
 var W := 64 ⍴ generate(load_word, 0…15)   // extend 16-element result to 64
 ```
 
+#### Multi-Dimensional Subscript
+
+Nested arrays (matrices, 3D arrays, etc.) can be indexed with comma-separated indices inside a single pair of brackets instead of chaining multiple bracket pairs:
+
+```
+var m := (2, 3) ⍴ [1, 2, 3, 4, 5, 6]
+var x := m[1, 2]           // 6 — equivalent to m[1][2]
+
+m[0, 1] ← 42              // write access
+```
+
+This extends to higher dimensions:
+
+```
+var a := (2, 3, 4) ⍴ (1…24)
+var y := a[1, 2, 3]        // 24 — equivalent to a[1][2][3]
+a[1, 0, 1] ← 55            // write access
+```
+
+Each index is validated against the array at that nesting level.  Out-of-bounds access at any dimension is a runtime error.  Attempting multi-dimensional subscript on a non-nested value (e.g., `flat_array[0, 0]`) is a type error.
+
+The chained bracket syntax (`m[i][j]`) remains valid and is equivalent — multi-dimensional subscript is syntactic convenience, not a separate operation.
+
 #### Index Unit Requirements
 
 Array indices follow a tiered rule based on the integer's type status:

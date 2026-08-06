@@ -1375,12 +1375,16 @@ class Parser:
                     bracket_tok = self._cur()
                     self.pos += 1
                     idx_expr = self._parse_or_expr()
+                    indices = [idx_expr]
+                    while self._check("PUNCT") and self._cur().value == ",":
+                        self.pos += 1
+                        indices.append(self._parse_or_expr())
                     self._skip_nl()
                     self._eat("PUNCT", "]")
-                    if isinstance(idx_expr, RangeExpr):
+                    if len(indices) == 1 and isinstance(idx_expr, RangeExpr):
                         node = self._set_pos(SliceAccess(node, idx_expr.start, idx_expr.end), bracket_tok)
                     else:
-                        node = self._set_pos(Subscript(node, idx_expr), bracket_tok)
+                        node = self._set_pos(Subscript(node, indices), bracket_tok)
                 elif self._check("PUNCT") and self._cur().value == "(":
                     call_tok = self._cur()
                     args = self._parse_call_args()
@@ -1410,12 +1414,16 @@ class Parser:
             elif self._check("PUNCT") and self._cur().value == "[":
                 self.pos += 1
                 idx_expr = self._parse_or_expr()
+                indices = [idx_expr]
+                while self._check("PUNCT") and self._cur().value == ",":
+                    self.pos += 1
+                    indices.append(self._parse_or_expr())
                 self._skip_nl()
                 self._eat("PUNCT", "]")
-                if isinstance(idx_expr, RangeExpr):
+                if len(indices) == 1 and isinstance(idx_expr, RangeExpr):
                     node = SliceAccess(node, idx_expr.start, idx_expr.end)
                 else:
-                    node = Subscript(node, idx_expr)
+                    node = Subscript(node, indices)
             elif self._check("PUNCT") and self._cur().value == "(":
                 args = self._parse_call_args()
                 node = MethodCall(node, "__call__", args)

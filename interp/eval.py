@@ -124,7 +124,8 @@ def _collect_refs(node) -> set[str]:
         refs |= _collect_refs(node.expr)
     elif isinstance(node, Subscript):
         refs |= _collect_refs(node.obj)
-        refs |= _collect_refs(node.index)
+        for idx in node.indices:
+            refs |= _collect_refs(idx)
     elif isinstance(node, SliceAccess):
         refs |= _collect_refs(node.obj)
         refs |= _collect_refs(node.start)
@@ -1485,22 +1486,26 @@ class Evaluator:
             elements = [self.eval_expr(e) for e in node.elements]
             return ObjectValue(ArrayValue(elements))
 
-        # Subscript read: arr[idx] or tuple[idx].
+        # Subscript read: arr[i] or arr[i, j, ...] or tuple[i].
         if isinstance(node, Subscript):
-            arr_val = self.eval_expr(node.obj)
-            unwrapped = unwrap_optional(arr_val)
-            if isinstance(unwrapped, TupleValue):
-                idx_val = self.eval_expr(node.index)
+            val = self.eval_expr(node.obj)
+            for idx_node in node.indices:
+                unwrapped = unwrap_optional(val)
+                idx_val = self.eval_expr(idx_node)
                 iu = unwrap_optional(idx_val)
-                if isinstance(iu, UnitValue):
-                    iu = iu.inner
-                if isinstance(iu, IntValue):
-                    return unwrapped.get(iu.value)
-            if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
-                idx_val = self.eval_expr(node.index)
-                iu = unwrap_optional(idx_val)
-                iu = self._check_index_unit(iu, unwrapped.obj)
-                return unwrapped.obj.get(iu.value)
+                if isinstance(unwrapped, TupleValue):
+                    if isinstance(iu, UnitValue):
+                        iu = iu.inner
+                    if isinstance(iu, IntValue):
+                        val = unwrapped.get(iu.value)
+                    else:
+                        raise TypeError("tuple index must be an integer")
+                elif isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
+                    iu = self._check_index_unit(iu, unwrapped.obj)
+                    val = unwrapped.obj.get(iu.value)
+                else:
+                    raise TypeError("multi-dimensional subscript requires nested arrays or tuples")
+            return val
 
         # Slice read: arr[start…end] (inclusive).
         if isinstance(node, SliceAccess):
@@ -1680,14 +1685,24 @@ class Evaluator:
                         for i, val in enumerate(rhs_arr.elements):
                             au.obj.set(s.value + i, val)
             elif isinstance(target_ast, Subscript):
-                # arr[i] ← value — mutate array element.
-                arr_val = self.eval_expr(target_ast.obj)
-                au = unwrap_optional(arr_val)
-                if isinstance(au, ObjectValue) and isinstance(au.obj, ArrayValue):
-                    idx_val = self.eval_expr(target_ast.index)
+                # arr[i] or arr[i, j, ...] ← value — mutate (nested) array element.
+                val = self.eval_expr(target_ast.obj)
+                for idx_node in target_ast.indices[:-1]:
+                    unwrapped = unwrap_optional(val)
+                    idx_val = self.eval_expr(idx_node)
                     iu = unwrap_optional(idx_val)
-                    iu = self._check_index_unit(iu, au.obj)
-                    au.obj.set(iu.value, rhs)
+                    if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
+                        iu = self._check_index_unit(iu, unwrapped.obj)
+                        val = unwrapped.obj.get(iu.value)
+                    else:
+                        raise TypeError("multi-dimensional subscript requires nested arrays")
+                last_idx_node = target_ast.indices[-1]
+                unwrapped = unwrap_optional(val)
+                if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
+                    idx_val = self.eval_expr(last_idx_node)
+                    iu = unwrap_optional(idx_val)
+                    iu = self._check_index_unit(iu, unwrapped.obj)
+                    unwrapped.obj.set(iu.value, rhs)
             elif isinstance(target_ast, VarRef):
                 if target_ast.name in self._frozen_vars:
                     kind = self._frozen_vars[target_ast.name]

@@ -191,11 +191,11 @@ class ArrayLit:
 
 
 class Subscript:
-    """Subscript access: obj[index_expr]."""
+    """Subscript access: obj[i] or multi-dimensional obj[i, j, ...]."""
 
-    def __init__(self, obj, index):
-        self.obj = obj       # any expression node (VarRef, GetAttr, Subscript)
-        self.index = index   # an expression AST node for the index
+    def __init__(self, obj, indices: list):
+        self.obj = obj
+        self.indices = indices
 
 
 class SliceAccess:
