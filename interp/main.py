@@ -417,7 +417,7 @@ def main():
     hooks = {} if args.skip_tests else dict(referenced_tests)
     evaluator = Evaluator(env, test_hooks=hooks)
     try:
-        evaluator.eval_stmts(startup_func.body)
+        result = evaluator._call_user_func(startup_func, [])
     except AssertionError as e:
         _show_error(e, source, source_path, evaluator,
                     show_backtrace=args.interpreter_backtrace)
@@ -426,6 +426,34 @@ def main():
         _show_error(e, source, source_path, evaluator,
                     show_backtrace=args.interpreter_backtrace)
         sys.exit(1)
+
+    exit_code = _start_exit_code(result, startup_func, source, source_path)
+    sys.exit(exit_code)
+
+
+def _start_exit_code(result: object, func: FuncValue,
+                     source: str, source_path: str) -> int:
+    """Derive a process exit code from the @start function's return value."""
+    ret = func.ret_type
+    if ret is None or ret == "\N{EMPTY SET}":
+        return 0
+    if ret in ("u8", "i8"):
+        val = unwrap_optional(result)
+        if isinstance(val, IntValue):
+            if ret == "i8":
+                v = val.value
+                if v < -128 or v > 127:
+                    v = v & 0xff
+                    if v >= 128:
+                        v -= 256
+                return v & 0xff
+            return val.value & 0xff
+        return 0
+    print(f"warning: @start function '{func.name}' has return type "
+          f"'{ret}' which is not u8, i8, or \N{EMPTY SET}; "
+          f"using exit code 0",
+          file=sys.stderr)
+    return 0
 
 
 if __name__ == "__main__":

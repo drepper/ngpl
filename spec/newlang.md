@@ -2104,6 +2104,29 @@ fn test_round_trip → ∅:
     ...
 ```
 
+#### Startup Function and Exit Code
+
+Exactly one function may be annotated with `@start` to designate it as the program entry point.  The return type of the `@start` function determines the process exit code:
+
+- **`→ ∅`** (or no return type annotation): the process exits with code 0.
+- **`→ u8`**: the return value is used directly as the exit code (0–255).
+- **`→ i8`**: the return value is mapped to unsigned (e.g., −1 becomes 255) and used as the exit code.
+- **Any other return type**: a warning is issued and the process exits with code 0.
+
+```
+@start
+fn main → u8:
+    if some_check_failed():
+        return 1
+    0                           // success
+```
+
+| Feature | C/C++ | Rust | Zig | Go | This language |
+|---------|-------|------|-----|----|---------------|
+| Entry point | `main` | `main` | `pub fn main` | `func main` | `@start fn name` |
+| Exit code type | `int` | `()` / `ExitCode` | `u8` / `void` | implicit 0 | `u8` / `i8` / `∅` |
+| Default exit | 0 | 0 | 0 | 0 | 0 |
+
 #### Execution Semantics
 
 Test functions are always run unless explicitly skipped.  Their execution order depends on whether they reference specific functions:
