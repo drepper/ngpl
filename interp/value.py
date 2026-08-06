@@ -8,9 +8,10 @@ type checking and proper error messages.
 
 BUILTIN_TYPES: set[str] = {
     "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64",
-    "usize", "int", "bool", "∅", "byte",
+    "usize", "int", "bool", "∅", "byte", "str",
     "i8fast", "u8fast", "i16fast", "u16fast",
     "i32fast", "u32fast", "i64fast", "u64fast",
+    "f16", "f32", "f64", "bfloat", "float",
 }
 
 # Platform-specific fast type mapping (x86_64: sub-32 → 32, 32/64 → 64).
@@ -138,6 +139,62 @@ class IntValue(Value):
 
     def to_python(self):
         return self.value
+
+
+FLOAT_TYPES: frozenset[str] = frozenset({"f16", "f32", "f64", "bfloat", "float"})
+
+_FLOAT_STRUCT_FMT: dict[str, str] = {
+    "f16": "e",
+    "f32": "f",
+    "f64": "d",
+    "bfloat": "e",
+}
+
+
+def _float_precision_bits(width: str) -> int:
+    return {"f16": 16, "bfloat": 16, "f32": 32, "f64": 64, "float": 64}[width]
+
+
+def resolve_float_width(w1: str, w2: str) -> str:
+    if w1 == w2:
+        return w1
+    if w1 == "float" or w2 == "float":
+        return "float"
+    b1 = _float_precision_bits(w1)
+    b2 = _float_precision_bits(w2)
+    return w1 if b1 >= b2 else w2
+
+
+def _clamp_float(value: float, width: str) -> float:
+    import struct
+    fmt = _FLOAT_STRUCT_FMT.get(width)
+    if fmt is None:
+        return float(value)
+    if width == "bfloat":
+        as_f32 = struct.pack("f", value)
+        truncated = b"\x00\x00" + as_f32[2:]
+        return struct.unpack("f", truncated)[0]
+    return struct.unpack(fmt, struct.pack(fmt, value))[0]
+
+
+class FloatValue(Value):
+    """Floating-point value with a width annotation (f16, f32, f64, bfloat, float)."""
+
+    __slots__ = ("value", "width")
+
+    def __init__(self, value: float, width: str = "float"):
+        self.value = value
+        self.width = width
+
+    def display(self):
+        return repr(self.value)
+
+    def to_python(self):
+        return self.value
+
+
+def mk_float(value: float, width: str = "float") -> "FloatValue":
+    return FloatValue(_clamp_float(value, width), width)
 
 
 class StrValue(Value):
@@ -594,6 +651,8 @@ def runtime_type_of(value: "Value") -> str:
         return runtime_type_of(value.value)
     if isinstance(value, IntValue):
         return value.width
+    if isinstance(value, FloatValue):
+        return value.width
     if isinstance(value, StrValue):
         return "str"
     if isinstance(value, BoolValue):
@@ -687,11 +746,24 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
             f"got {type(value).__name__}")
 
     if param_type in _TYPE_BITS or param_type == "int":
+        if isinstance(value, FloatValue):
+            raise TypeError(
+                f"{func_name}: argument '{param_name}' expected {param_type}, "
+                f"got {type(value).__name__}")
         if not isinstance(value, IntValue):
             raise TypeError(
                 f"{func_name}: argument '{param_name}' expected {param_type}, "
                 f"got {type(value).__name__}")
         return coerce_to_type(value, param_type)
+
+    if param_type in FLOAT_TYPES:
+        if isinstance(value, IntValue):
+            return mk_float(float(value.value), param_type)
+        if isinstance(value, FloatValue):
+            return mk_float(value.value, param_type)
+        raise TypeError(
+            f"{func_name}: argument '{param_name}' expected {param_type}, "
+            f"got {type(value).__name__}")
 
     if is_generic_type(param_type):
         return value

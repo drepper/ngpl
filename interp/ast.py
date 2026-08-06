@@ -13,6 +13,14 @@ class IntLit:
         self.width = width
 
 
+class FloatLit:
+    """Floating-point literal with an optional width suffix."""
+
+    def __init__(self, value: float, width: str = "float"):
+        self.value = value
+        self.width = width
+
+
 class StrLit:
     """String literal with escape processing."""
 

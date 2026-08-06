@@ -16,7 +16,7 @@ JIT compilation and optimization are future work.
 import re
 
 from interp.ast import (
-    IntLit, StrLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
+    IntLit, FloatLit, StrLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
@@ -25,11 +25,12 @@ from interp.ast import (
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
 )
 from interp.value import (
-    Value, IntValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
+    Value, IntValue, FloatValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
     FuncValue, LambdaValue, BuiltinFunc, ObjectValue, BuiltinBoundMethod,
     ArrayValue, TupleValue, EnumType, EnumValue, RangeValue, TypeValue,
-    mk_int, mk_int_wrap, mk_str, mk_bool, none, some, is_none, is_some,
-    resolve_width, wrap_int, coerce_to_type, coerce_arg, _TYPE_BITS, FAST_TYPES,
+    mk_int, mk_int_wrap, mk_str, mk_bool, mk_float, none, some, is_none, is_some,
+    resolve_width, resolve_float_width, wrap_int, coerce_to_type, coerce_arg,
+    _TYPE_BITS, FLOAT_TYPES, FAST_TYPES,
     _split_optional_type, MAX_TENSOR_RANK,
     is_generic_type, runtime_type_of,
 )
@@ -159,7 +160,7 @@ def _collect_refs(node) -> set[str]:
 
 def _is_const_expr(node) -> bool:
     """Check whether an AST node is a compile-time constant expression."""
-    if isinstance(node, (IntLit, StrLit, BoolLit, NoneLit)):
+    if isinstance(node, (IntLit, FloatLit, StrLit, BoolLit, NoneLit)):
         return True
     if isinstance(node, BinOp):
         return _is_const_expr(node.left) and _is_const_expr(node.right)
@@ -210,6 +211,8 @@ def to_bool(value):
         return value.value
     if isinstance(value, IntValue):
         return value.value != 0
+    if isinstance(value, FloatValue):
+        return value.value != 0.0
     if isinstance(value, StrValue):
         return len(value.value) > 0
     if isinstance(value, NoneValue):
@@ -509,11 +512,14 @@ class Evaluator:
     # ------------------------------------------------------------------
 
     def _op_add(self, left, right):
-        """Addition: integers and strings (concatenation)."""
+        """Addition: integers, floats, and strings (concatenation)."""
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return self._mk_int(lu.value + ru.value, resolve_width(lu.width, ru.width))
+        lf, rf, fw = self._promote_to_float(lu, ru)
+        if lf is not None:
+            return mk_float(lf + rf, fw)
         if isinstance(lu, StrValue) and isinstance(ru, StrValue):
             return mk_str(lu.value + ru.value)
         raise TypeError(f"addition expected int+int or str+str, got {type(lu).__name__}+{type(ru).__name__}")
@@ -524,6 +530,9 @@ class Evaluator:
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return self._mk_int(lu.value - ru.value, resolve_width(lu.width, ru.width))
+        lf, rf, fw = self._promote_to_float(lu, ru)
+        if lf is not None:
+            return mk_float(lf - rf, fw)
         raise TypeError(f"subtraction expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_mul(self, left, right):
@@ -532,10 +541,13 @@ class Evaluator:
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return self._mk_int(lu.value * ru.value, resolve_width(lu.width, ru.width))
+        lf, rf, fw = self._promote_to_float(lu, ru)
+        if lf is not None:
+            return mk_float(lf * rf, fw)
         raise TypeError(f"multiplication expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_div(self, left, right):
-        """Integer division (truncates toward zero).  Returns ExpectedValue."""
+        """Division: integer (truncates toward zero, returns ExpectedValue) or float."""
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
@@ -543,6 +555,11 @@ class Evaluator:
                 return self._division_error()
             result = int(lu.value / ru.value) if lu.value * ru.value >= 0 else -int(abs(lu.value) / abs(ru.value))
             return ExpectedValue.ok(self._mk_int(result, resolve_width(lu.width, ru.width)))
+        lf, rf, fw = self._promote_to_float(lu, ru)
+        if lf is not None:
+            if rf == 0.0:
+                return self._division_error()
+            return mk_float(lf / rf, fw)
         raise TypeError(f"division expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_mod(self, left, right):
@@ -554,6 +571,12 @@ class Evaluator:
                 return self._division_error()
             quot = int(lu.value / ru.value) if lu.value * ru.value >= 0 else -int(abs(lu.value) / abs(ru.value))
             return ExpectedValue.ok(self._mk_int(lu.value - quot * ru.value, resolve_width(lu.width, ru.width)))
+        lf, rf, fw = self._promote_to_float(lu, ru)
+        if lf is not None:
+            import math
+            if rf == 0.0:
+                return self._division_error()
+            return mk_float(math.fmod(lf, rf), fw)
         raise TypeError(f"remainder expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_eq(self, left, right):
@@ -572,6 +595,12 @@ class Evaluator:
             return mk_bool(lu.value == ru.value)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_bool(lu.value == ru.value)
+        if isinstance(lu, FloatValue) and isinstance(ru, FloatValue):
+            return mk_bool(lu.value == ru.value)
+        if isinstance(lu, (IntValue, FloatValue)) and isinstance(ru, (IntValue, FloatValue)):
+            lv = lu.value if isinstance(lu, FloatValue) else float(lu.value)
+            rv = ru.value if isinstance(ru, FloatValue) else float(ru.value)
+            return mk_bool(lv == rv)
         if isinstance(lu, StrValue) and isinstance(ru, StrValue):
             return mk_bool(lu.value == ru.value)
         if isinstance(lu, BoolValue) and isinstance(ru, BoolValue):
@@ -595,7 +624,10 @@ class Evaluator:
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_bool(lu.value < ru.value)
-        raise TypeError(f"less-than expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
+        lf, rf, _ = self._promote_to_float(lu, ru)
+        if lf is not None:
+            return mk_bool(lf < rf)
+        raise TypeError(f"less-than expected numeric types, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_gt(self, left, right):
         """Greater-than comparison."""
@@ -603,7 +635,10 @@ class Evaluator:
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_bool(lu.value > ru.value)
-        raise TypeError(f"greater-than expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
+        lf, rf, _ = self._promote_to_float(lu, ru)
+        if lf is not None:
+            return mk_bool(lf > rf)
+        raise TypeError(f"greater-than expected numeric types, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_lte(self, left, right):
         """Less-than-or-equal comparison."""
@@ -611,7 +646,10 @@ class Evaluator:
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_bool(lu.value <= ru.value)
-        raise TypeError(f"less-equal expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
+        lf, rf, _ = self._promote_to_float(lu, ru)
+        if lf is not None:
+            return mk_bool(lf <= rf)
+        raise TypeError(f"less-equal expected numeric types, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_gte(self, left, right):
         """Greater-than-or-equal comparison."""
@@ -619,7 +657,10 @@ class Evaluator:
         ru = unwrap_optional(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_bool(lu.value >= ru.value)
-        raise TypeError(f"greater-equal expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
+        lf, rf, _ = self._promote_to_float(lu, ru)
+        if lf is not None:
+            return mk_bool(lf >= rf)
+        raise TypeError(f"greater-equal expected numeric types, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_and(self, left, right):
         """Short-circuit boolean and."""
@@ -809,6 +850,21 @@ class Evaluator:
             pass
         return ExpectedValue.err(mk_str("division by zero"))
 
+    @staticmethod
+    def _promote_to_float(lu, ru) -> tuple[float | None, float, str]:
+        """Try to promote two operands to float for mixed arithmetic.
+
+        Returns (left_float, right_float, width) on success,
+        or (None, 0.0, "") if neither operand is a float.
+        """
+        if isinstance(lu, FloatValue) and isinstance(ru, FloatValue):
+            return lu.value, ru.value, resolve_float_width(lu.width, ru.width)
+        if isinstance(lu, FloatValue) and isinstance(ru, IntValue):
+            return lu.value, float(ru.value), lu.width
+        if isinstance(lu, IntValue) and isinstance(ru, FloatValue):
+            return float(lu.value), ru.value, ru.width
+        return None, 0.0, ""
+
     # ------------------------------------------------------------------
     # Array element-wise dispatch
     # ------------------------------------------------------------------
@@ -850,6 +906,9 @@ class Evaluator:
         """
         if isinstance(node, IntLit):
             return mk_int(node.value, node.width)
+
+        if isinstance(node, FloatLit):
+            return mk_float(node.value, node.width)
 
         if isinstance(node, StrLit):
             return mk_str(node.text)
@@ -946,7 +1005,9 @@ class Evaluator:
                 unwrapped = unwrap_optional(operand)
                 if isinstance(unwrapped, IntValue):
                     return self._mk_int(-unwrapped.value, unwrapped.width)
-                raise TypeError(f"negation expected int, got {type(unwrapped).__name__}")
+                if isinstance(unwrapped, FloatValue):
+                    return mk_float(-unwrapped.value, unwrapped.width)
+                raise TypeError(f"negation expected numeric type, got {type(unwrapped).__name__}")
             if node.op == "~":
                 unwrapped = unwrap_optional(operand)
                 if isinstance(unwrapped, EnumValue):
@@ -1606,6 +1667,8 @@ class Evaluator:
         """Return the type name string for a runtime value."""
         u = unwrap_optional(val)
         if isinstance(u, IntValue):
+            return u.width
+        if isinstance(u, FloatValue):
             return u.width
         if isinstance(u, StrValue):
             return "str"

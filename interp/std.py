@@ -488,7 +488,7 @@ class StdModule:
             StrValue with the formatted result.
         """
         from interp.eval import unwrap_optional
-        from interp.value import (IntValue, BoolValue, StrValue, ObjectValue,
+        from interp.value import (IntValue, FloatValue, BoolValue, StrValue, ObjectValue,
                                   ArrayValue, TupleValue, EnumValue,
                                   ExpectedValue, NoneValue, TypeValue,
                                   FuncValue, LambdaValue, mk_str)
@@ -529,6 +529,10 @@ class StdModule:
                 if spec == "c":
                     return chr(uv.value)
                 return str(uv.value)
+            if isinstance(uv, FloatValue):
+                if spec:
+                    return format(uv.value, spec)
+                return repr(uv.value)
             if isinstance(uv, TupleValue):
                 inner = ", ".join(_fmt_value(e) for e in uv.elements)
                 return "[" + inner + "]"
@@ -645,7 +649,7 @@ class StdModule:
             NoneValue.
         """
         from interp.eval import unwrap_optional
-        from interp.value import IntValue, BoolValue, StrValue, ObjectValue, ArrayValue, EnumValue, ExpectedValue, mk_str
+        from interp.value import IntValue, FloatValue, BoolValue, StrValue, ObjectValue, ArrayValue, EnumValue, ExpectedValue, mk_str
 
         parts = []
         for arg in args:
@@ -659,6 +663,8 @@ class StdModule:
                     parts.append(format(uv.value, "x"))
                 else:
                     parts.append(str(uv.value))
+            elif isinstance(uv, FloatValue):
+                parts.append(repr(uv.value))
             elif isinstance(uv, BoolValue):
                 parts.append("true" if uv.value else "false")
             elif isinstance(uv, StrValue):

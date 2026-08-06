@@ -251,6 +251,127 @@ var y : u8 = 256         /* y is 0 (unsigned wraps) */
 Bitwise operations (`&`, `|`, `^`, `~`, `«`, `»`, `↺`, `↻`) always produce wrapped results regardless of signedness, since they operate on the bit representation and the result is always in range after masking.
 
 
+### Floating-Point Types
+
+The language provides IEEE 754 floating-point types at several precisions, plus an untyped `float` for general-purpose computation:
+
+| Type    | Width  | Standard       | Significand | Exponent |
+|---------|--------|----------------|-------------|----------|
+| `f16`   | 16-bit | IEEE 754 half  | 11 bits     | 5 bits   |
+| `bfloat` | 16-bit | Brain float    | 8 bits      | 8 bits   |
+| `f32`   | 32-bit | IEEE 754 single | 24 bits    | 8 bits   |
+| `f64`   | 64-bit | IEEE 754 double | 53 bits    | 11 bits  |
+| `float` | 64-bit | (default)      | 53 bits     | 11 bits  |
+
+`float` is the default floating-point type, equivalent to `f64` in precision.  It is the type inferred when a floating-point literal has no explicit width suffix.
+
+`bfloat` (Brain Floating Point) uses the same exponent range as `f32` but truncates the significand to 8 bits, making it suitable for machine learning workloads where dynamic range matters more than precision.
+
+#### Floating-Point Literals
+
+Floating-point literals use decimal notation with a mandatory decimal point or exponent:
+
+```
+3.14                    // float (untyped, default precision)
+1.0f32                  // f32 — explicit width suffix
+2.5f64                  // f64
+42f16                   // f16 — integer value with float suffix
+1e3                     // float — exponent notation (= 1000.0)
+1.5e-3                  // float — negative exponent (= 0.0015)
+2.5e2                   // float — (= 250.0)
+```
+
+Hexadecimal floating-point literals use `0x` prefix with `p`/`P` exponent (base-2):
+
+```
+0x1.8p1                 // 1.5 × 2¹ = 3.0
+0x1p0                   // 1.0
+0x1p-1                  // 0.5
+0x1.921fb6p1f32         // π as f32
+```
+
+A number literal is interpreted as floating-point when any of the following are true:
+1. It contains a decimal point followed by digits (e.g., `3.14`)
+2. It contains an exponent (`e`/`E` for decimal, `p`/`P` for hex)
+3. It has a float type suffix (`f16`, `f32`, `f64`, `bfloat`)
+
+#### Arithmetic on Floating-Point Values
+
+All standard arithmetic operators (`+`, `-`, `*`, `/`, `%`) work on floating-point values.  When both operands are floats, the result uses the wider of the two types.  The width promotion order is: `f16`/`bfloat` < `f32` < `f64`/`float`.
+
+```
+var a := 3.0 + 2.0      // 5.0 (float)
+var b := 1.5f32 * 2.0   // 3.0 (float — f32 promoted to float)
+var c := 10.0 / 4.0     // 2.5 (float)
+var d := 7.0 % 3.0      // 1.0 (float, uses fmod semantics)
+var e := -3.14           // -3.14 (negation)
+```
+
+Division by zero on floats produces an error (same as integer division by zero), not IEEE 754 infinity.
+
+#### Mixed Integer-Float Arithmetic
+
+When an integer and a float are combined in an arithmetic expression, the integer is promoted to the float type:
+
+```
+var a := 2 + 3.0        // 5.0 — int promoted to float
+var b := 3 * 2.5f32     // 7.5 — int promoted to f32
+var c := 10.0 / 4       // 2.5 — int 4 promoted to float
+```
+
+This promotion is implicit and always safe (integers have exact float representations up to the significand width).
+
+#### Float Comparisons
+
+All comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) work on floats and mixed int-float pairs.  Integers are promoted to float before comparison:
+
+```
+static_assert(1.0 < 2.0)
+static_assert(1.0 == 1)        // int promoted to float
+static_assert(2 > 1.5)         // int promoted to float
+```
+
+#### Float Parameter Coercion
+
+Function parameters with float type annotations accept both integer and float arguments.  Integers are converted to the target float type; floats are clamped to the target precision:
+
+```
+fn add x:f64, y:f64 -> f64:
+  x + y
+add(3, 4)               // both ints promoted to f64, result 7.0
+add(3.14, 2)             // 3.14 is float→f64, 2 is int→f64
+```
+
+Passing a float to an integer parameter is a type error:
+
+```
+fn square x:i32 -> i32:
+  x * x
+@expect error "expected i32"
+square(3.14)             // ERROR: float cannot coerce to integer
+```
+
+#### Precision Clamping
+
+When a value is stored in a fixed-width float type, it is rounded to that type's precision using IEEE 754 round-to-nearest semantics.  The `bfloat` type truncates the lower 16 bits of the `f32` representation:
+
+```
+var x : f32 = 3.14      // stored as approximately 3.140000104904175
+var y : f16 = 1.0       // exact in f16
+```
+
+#### Truthiness
+
+Float values are truthy when nonzero and falsy when exactly `0.0`:
+
+```
+if 1.5:
+  // executes — nonzero float is truthy
+if 0.0:
+  // does not execute — zero float is falsy
+```
+
+
 ### Binary Logic Operations
 
 Binary logic operations use Unicode glyphs and operate on logical truth values.  Unlike bitwise operations (which manipulate individual bits), these first reduce each operand to a boolean and then apply the logic function.  The result is always `bool`.

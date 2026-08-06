@@ -9,7 +9,7 @@ indentation (INDENT/DEDENT tokens).
 """
 
 from interp.ast import (
-    IntLit, StrLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
+    IntLit, FloatLit, StrLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
@@ -1081,6 +1081,11 @@ class Parser:
         if tok.type == "INT":
             self.pos += 1
             return IntLit(tok.value)
+
+        if tok.type == "FLOAT":
+            self.pos += 1
+            value, width = tok.value
+            return FloatLit(value, width)
 
         if tok.type == "STR":
             self.pos += 1

@@ -155,18 +155,18 @@ def _read_string(src, pos, start_line, start_col):
     raise LexerError("unterminated string literal", start_line, start_col)
 
 
-def _read_int(src, pos, line, col):
-    """Read an integer literal with optional type suffix.
+def _read_number(src, pos, line, col):
+    """Read a numeric literal (integer or float) with optional type suffix.
 
-    Supports decimal (default), binary (0b prefix), and hexadecimal (0x prefix).
-    Type suffixes: u8, i16, u32, i64, u64, etc.
+    Integers: decimal, binary (0b), hexadecimal (0x).
+    Floats: decimal with '.' or exponent (e/E), hex with '.' or exponent (p/P).
+    Type suffixes: u8, i16, f32, f64, bfloat, etc.
 
     Returns (Token, next_pos).
     """
-    start = pos
     value_str = ""
+    is_float = False
 
-    # Detect base from prefix.
     if pos + 1 < len(src) and src[pos] == "0" and src[pos + 1] in ("b", "B"):
         base = 2
         value_str += src[pos:pos + 2]
@@ -178,17 +178,57 @@ def _read_int(src, pos, line, col):
     else:
         base = 10
 
-    # Read digits.
     while pos < len(src) and (src[pos].isdigit() or (base == 16 and src[pos] in "abcdefABCDEF")):
         value_str += src[pos]
         pos += 1
 
-    # Try to read type suffix.
+    if base != 2 and pos < len(src) and src[pos] == ".":
+        next_pos = pos + 1
+        if next_pos < len(src) and (src[next_pos].isdigit() or (base == 16 and src[next_pos] in "abcdefABCDEF")):
+            is_float = True
+            value_str += "."
+            pos = next_pos
+            while pos < len(src) and (src[pos].isdigit() or (base == 16 and src[pos] in "abcdefABCDEF")):
+                value_str += src[pos]
+                pos += 1
+
+    if base == 16 and pos < len(src) and src[pos] in "pP":
+        is_float = True
+        value_str += src[pos]
+        pos += 1
+        if pos < len(src) and src[pos] in "+-":
+            value_str += src[pos]
+            pos += 1
+        while pos < len(src) and src[pos].isdigit():
+            value_str += src[pos]
+            pos += 1
+    elif base == 10 and pos < len(src) and src[pos] in "eE":
+        is_float = True
+        value_str += src[pos]
+        pos += 1
+        if pos < len(src) and src[pos] in "+-":
+            value_str += src[pos]
+            pos += 1
+        while pos < len(src) and src[pos].isdigit():
+            value_str += src[pos]
+            pos += 1
+
     width = ""
-    width_start = pos
-    while pos < len(src) and (src[pos].isalpha() or src[pos] == "_"):
+    while pos < len(src) and (src[pos].isalnum() or src[pos] == "_"):
         width += src[pos]
         pos += 1
+
+    if is_float or width in ("f16", "f32", "f64", "bfloat"):
+        try:
+            if base == 16:
+                value = float.fromhex(value_str)
+            else:
+                value = float(value_str)
+        except ValueError:
+            raise LexerError(f"invalid float literal: {value_str}", line, col)
+        if not width:
+            width = "float"
+        return Token("FLOAT", (value, width), line, col), pos
 
     try:
         if base == 2:
@@ -298,9 +338,9 @@ def tokenize(src: str):
             tokens.append(token)
             continue
 
-        # Integer literal.
+        # Numeric literal (integer or float).
         if ch.isdigit():
-            token, pos = _read_int(src, pos, line, col)
+            token, pos = _read_number(src, pos, line, col)
             tokens.append(token)
             continue
 
