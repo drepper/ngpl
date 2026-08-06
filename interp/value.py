@@ -197,6 +197,22 @@ def mk_float(value: float, width: str = "float") -> "FloatValue":
     return FloatValue(_clamp_float(value, width), width)
 
 
+class UnitValue(Value):
+    """Numeric value with an attached physical unit."""
+
+    __slots__ = ("inner", "unit")
+
+    def __init__(self, inner: Value, unit):
+        self.inner = inner
+        self.unit = unit
+
+    def display(self):
+        return f"{self.inner.display()} {self.unit.display_name}"
+
+    def to_python(self):
+        return self.inner.to_python()
+
+
 class StrValue(Value):
     """String value (UTF-8)."""
 
@@ -647,6 +663,8 @@ def is_generic_type(type_str: str) -> bool:
 
 def runtime_type_of(value: "Value") -> str:
     """Get the runtime type name of a value for generic type resolution."""
+    if isinstance(value, UnitValue):
+        return runtime_type_of(value.inner)
     if isinstance(value, SomeValue):
         return runtime_type_of(value.value)
     if isinstance(value, IntValue):
@@ -693,6 +711,8 @@ def validate_param_type(param_type: str, func_name: str, param_name: str):
 
 def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str) -> "Value":
     """Coerce a runtime argument to match a declared parameter type."""
+    if isinstance(value, UnitValue):
+        value = value.inner
     base, opt_err = _split_optional_type(param_type)
     if opt_err is not None and opt_err == "":
         if isinstance(value, NoneValue):

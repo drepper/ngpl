@@ -124,11 +124,13 @@ class FuncDef:
 class VarDef:
     """Variable definition with initializer."""
 
-    def __init__(self, name, type_annotation, init_expr, is_const: bool = False):
+    def __init__(self, name, type_annotation, init_expr, is_const: bool = False,
+                 unit_spec=None):
         self.name = name
         self.type_annotation = type_annotation  # type string or None
         self.init_expr = init_expr
         self.is_const = is_const
+        self.unit_spec = unit_spec
 
 
 class ExprStmt:
@@ -391,3 +393,54 @@ class EnumDef:
         self.underlying_type = underlying_type
         self.members = members
         self.is_flag = is_flag
+
+
+# ---------------------------------------------------------------------------
+# Unit system AST nodes
+# ---------------------------------------------------------------------------
+
+class UnitExpr:
+    """Expression with a unit annotation: expr ¤ unit_spec."""
+
+    def __init__(self, expr, unit_spec):
+        self.expr = expr
+        self.unit_spec = unit_spec
+
+
+class UnitDef:
+    """Top-level unit definition: unit name = formula."""
+
+    def __init__(self, name: str, formula):
+        self.name = name
+        self.formula = formula
+
+
+class UnitName:
+    """Reference to a unit by name (builtin identifier or string)."""
+
+    def __init__(self, name: str, is_string: bool = False):
+        self.name = name
+        self.is_string = is_string
+
+
+class UnitBinOp:
+    """Binary operation on units: * or /."""
+
+    def __init__(self, op: str, left, right):
+        self.op = op
+        self.left = left
+        self.right = right
+
+
+class UnitSqrt:
+    """Square root of a unit."""
+
+    def __init__(self, operand):
+        self.operand = operand
+
+
+class UnitLit:
+    """Numeric literal in a unit formula (conversion factor)."""
+
+    def __init__(self, value: int):
+        self.value = value

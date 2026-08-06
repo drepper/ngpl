@@ -58,6 +58,7 @@ KEYWORDS = {
     "replaceable": "REPLACEABLE",
     "catch": "CATCH",
     "comptime": "COMPTIME",
+    "unit": "UNIT",
 }
 
 # Keywords recognized only after the @ prefix.  The @ is part of the
@@ -81,7 +82,7 @@ _NORMALIZE_OPS = {
 
 
 # Single-character operators.
-SINGLE_OPS = set("+-*/%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ⍴⧺⌿⍀")
+SINGLE_OPS = set("+-*/%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ⍴⧺⌿⍀¤√")
 
 # Binary operators that signal line continuation when trailing.
 _CONTINUATION_OPS = frozenset({
@@ -361,7 +362,7 @@ def tokenize(src: str):
                 tokens.append(Token("PUNCT", ch, line, col))
             elif ch == "\N{RIGHTWARDS ARROW}":
                 tokens.append(Token("OP", "->", line, col))
-            elif ch in "+-*/%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀":
+            elif ch in "+-*/%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√":
                 tokens.append(Token("OP", ch, line, col))
             pos += 1
             col += 1

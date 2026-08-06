@@ -9,7 +9,7 @@ from collections import defaultdict
 from interp.lexer import tokenize, process_indentation
 from interp.parser import Parser
 from interp.env import Env
-from interp.ast import FuncDef as ASTFuncDef, EnumDef as ASTEnumDef
+from interp.ast import FuncDef as ASTFuncDef, EnumDef as ASTEnumDef, UnitDef as ASTUnitDef
 from interp.value import (
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
     NoneValue, ExpectedValue, EnumType, EnumValue,
@@ -188,6 +188,17 @@ def main():
             if type_ann is not None:
                 value = coerce_to_type(value, type_ann)
             env.define(name, value)
+
+    for defn in definitions:
+        if isinstance(defn, ASTUnitDef):
+            from interp.units import eval_unit_formula, register_user_unit, Unit
+            from fractions import Fraction
+            if defn.formula is not None:
+                unit = eval_unit_formula(defn.formula)
+                unit = Unit(unit.components, unit.factor, defn.name)
+            else:
+                unit = Unit({defn.name: 1}, Fraction(1), defn.name)
+            register_user_unit(defn.name, unit)
 
     for defn in definitions:
         if isinstance(defn, ASTEnumDef):

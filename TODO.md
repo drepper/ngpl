@@ -59,7 +59,7 @@ Type System
 [ ] ratio type (arbitrary-precision numerator/denominator).  Automatic decay to float when mixed
     with floating-point values.  Untyped ratio preserved at compile time.
 
-[ ] unit system: attach units (meters, seconds, bytes, count, …) to numeric types.  Enforce
+[x] unit system: attach units (meters, seconds, bytes, count, …) to numeric types.  Enforce
     dimensional consistency: addition requires same unit, multiplication/division derive units.
     Design derived units and attribute-based annotations (e.g., radius vs diameter).
 
@@ -273,3 +273,13 @@ Syntax Decisions Still Open
 
 [ ] macro invocation syntax: distinguish from function calls (Rust #[...] style, name
     annotation, or different parameter delimiters).
+
+System Environment
+------------------
+
+[ ] provide access to the command line parameters of the program through some
+
+[ ] provide read access to the environment of the process
+
+[ ] provide access to CPU affinity mask and derived from this number of CPUs to use.
+    Also provide access to total number of CPUs, total memory.

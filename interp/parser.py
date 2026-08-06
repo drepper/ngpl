@@ -16,6 +16,7 @@ from interp.ast import (
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, EnumDef,
     LambdaExpr, ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
+    UnitExpr, UnitDef, UnitName, UnitBinOp, UnitSqrt, UnitLit,
 )
 from interp.lexer import Token, KEYWORDS
 
@@ -186,6 +187,9 @@ class Parser:
 
         if self._check("ENUM"):
             return self._parse_enum_def(is_flag)
+
+        if self._check("UNIT"):
+            return self._parse_unit_def()
 
         if self._check("FN"):
             return self._parse_function_def(is_start, is_test, test_refs, expect_annotations,
@@ -396,11 +400,16 @@ class Parser:
                 self.pos += 1
 
     def _parse_var_def(self):
-        """Parse: var/const name := expr  |  var/const name : type = expr  |  var name : type[size] = init"""
+        """Parse: var/const name [¤unit] := expr  |  var/const name [¤unit] : type = expr  |  var name : type[size] = init"""
         keyword = self._cur().value
         is_const = keyword == "const"
         self._eat(keyword.upper())
         name_tok = self._eat("IDENT")
+
+        unit_spec = None
+        if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+            self.pos += 1
+            unit_spec = self._parse_unit_spec()
 
         type_annotation = None
         has_colon = self._try_eat("PUNCT", ":")
@@ -419,7 +428,7 @@ class Parser:
                     self._try_eat("PUNCT", ";")
                     return VarDef(name_tok.value, type_annotation,
                                   ArrayAlloc(type_annotation, size_expr, init_expr),
-                              is_const)
+                              is_const, unit_spec=unit_spec)
 
         if not has_colon:
             if not (self._check("PUNCT") and self._cur().value == ":"):
@@ -431,7 +440,80 @@ class Parser:
         init_expr = self._parse_or_expr()
         self._try_eat("PUNCT", ";")
 
-        return VarDef(name_tok.value, type_annotation, init_expr, is_const)
+        return VarDef(name_tok.value, type_annotation, init_expr, is_const,
+                      unit_spec=unit_spec)
+
+    # ------------------------------------------------------------------
+    # Unit definition and spec parsing
+    # ------------------------------------------------------------------
+
+    def _parse_unit_def(self):
+        """Parse: unit name [= formula]"""
+        self._eat("UNIT")
+        name_tok = self._eat("IDENT")
+        formula = None
+        if self._try_eat("PUNCT", "="):
+            formula = self._parse_unit_formula()
+        self._try_eat("PUNCT", ";")
+        return UnitDef(name_tok.value, formula)
+
+    def _parse_unit_spec(self):
+        """Parse a unit specification after ¤ (no numeric literals)."""
+        left = self._parse_unit_atom()
+        while self._check("OP") and self._cur().value in ("*", "/"):
+            next_pos = self.pos + 1
+            if next_pos >= len(self.tokens):
+                break
+            nxt = self.tokens[next_pos]
+            if nxt.type not in ("IDENT", "STR") and \
+               not (nxt.type == "OP" and nxt.value == "\N{SQUARE ROOT}"):
+                break
+            op = self._cur().value
+            self.pos += 1
+            right = self._parse_unit_atom()
+            left = UnitBinOp(op, left, right)
+        return left
+
+    def _parse_unit_atom(self):
+        """Parse a single unit atom: ident, string, or √unit."""
+        if self._check("OP") and self._cur().value == "\N{SQUARE ROOT}":
+            self.pos += 1
+            operand = self._parse_unit_atom()
+            return UnitSqrt(operand)
+        if self._check("IDENT"):
+            name = self._eat("IDENT").value
+            return UnitName(name, is_string=False)
+        if self._check("STR"):
+            name = self._eat("STR").value
+            return UnitName(name, is_string=True)
+        raise ParseError("expected unit name", self._cur())
+
+    def _parse_unit_formula(self):
+        """Parse a unit formula in a unit definition (allows numeric factors)."""
+        left = self._parse_unit_def_atom()
+        while self._check("OP") and self._cur().value in ("*", "/"):
+            op = self._cur().value
+            self.pos += 1
+            right = self._parse_unit_def_atom()
+            left = UnitBinOp(op, left, right)
+        return left
+
+    def _parse_unit_def_atom(self):
+        """Parse a unit definition atom: ident, string, integer, or √unit."""
+        if self._check("OP") and self._cur().value == "\N{SQUARE ROOT}":
+            self.pos += 1
+            operand = self._parse_unit_def_atom()
+            return UnitSqrt(operand)
+        if self._check("INT"):
+            val = self._eat("INT").value
+            return UnitLit(val)
+        if self._check("IDENT"):
+            name = self._eat("IDENT").value
+            return UnitName(name, is_string=False)
+        if self._check("STR"):
+            name = self._eat("STR").value
+            return UnitName(name, is_string=True)
+        raise ParseError("expected unit name or number", self._cur())
 
     # ------------------------------------------------------------------
     # Block parsing (brace-delimited or layout-driven)
@@ -1058,6 +1140,10 @@ class Parser:
             node = SizeOfExpr(expr)
             return self._parse_postfix(node)
         node = self._parse_primary()
+        if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+            self.pos += 1
+            unit_spec = self._parse_unit_spec()
+            node = UnitExpr(node, unit_spec)
         if self._check("OP") and self._cur().value == "?":
             self.pos += 1
             node = TryUnwrap(node)

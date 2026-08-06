@@ -23,6 +23,7 @@ from interp.ast import (
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr,
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
+    UnitExpr,
 )
 from interp.value import (
     Value, IntValue, FloatValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
@@ -33,6 +34,7 @@ from interp.value import (
     _TYPE_BITS, FLOAT_TYPES, FAST_TYPES,
     _split_optional_type, MAX_TENSOR_RANK,
     is_generic_type, runtime_type_of,
+    UnitValue,
 )
 from interp.env import Env
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
@@ -155,6 +157,8 @@ def _collect_refs(node) -> set[str]:
         refs |= _collect_refs(node.func)
         refs |= _collect_refs(node.container)
         refs |= _collect_refs(node.init)
+    elif isinstance(node, UnitExpr):
+        refs |= _collect_refs(node.expr)
     return refs
 
 
@@ -172,6 +176,8 @@ def _is_const_expr(node) -> bool:
         return all(_is_const_expr(e) for e in node.elements)
     if isinstance(node, (TypeOfExpr, ResultOfExpr, SizeOfExpr)):
         return True
+    if isinstance(node, UnitExpr):
+        return _is_const_expr(node.expr)
     return False
 
 
@@ -198,15 +204,9 @@ def unwrap_optional(value):
 
 
 def to_bool(value):
-    """Convert a runtime Value to Python bool for control flow.
-
-    Rules:
-    - BoolValue → direct boolean
-    - IntValue → truthy if non-zero
-    - StrValue → truthy if non-empty
-    - NoneValue → False
-    - SomeValue → True (always, since it contains something)
-    """
+    """Convert a runtime Value to Python bool for control flow."""
+    if isinstance(value, UnitValue):
+        return to_bool(value.inner)
     if isinstance(value, BoolValue):
         return value.value
     if isinstance(value, IntValue):
@@ -892,6 +892,137 @@ class Evaluator:
         return op_fn(left, right)
 
     # ------------------------------------------------------------------
+    # Unit-aware arithmetic
+    # ------------------------------------------------------------------
+
+    def _unit_binop(self, op: str, lu, ru):
+        """Handle binary operations when one or both operands have units."""
+        from fractions import Fraction
+        l_is_unit = isinstance(lu, UnitValue)
+        r_is_unit = isinstance(ru, UnitValue)
+        l_inner = lu.inner if l_is_unit else lu
+        r_inner = ru.inner if r_is_unit else ru
+        l_unit = lu.unit if l_is_unit else None
+        r_unit = ru.unit if r_is_unit else None
+
+        if op in ("+", "-"):
+            if not l_is_unit or not r_is_unit:
+                raise TypeError(
+                    f"cannot {'+' if op == '+' else '-'} dimensioned "
+                    f"and dimensionless values")
+            if not l_unit.same_dimension(r_unit):
+                raise TypeError(
+                    f"incompatible units for {op}: "
+                    f"{l_unit.display_name} and {r_unit.display_name}")
+            if l_unit == r_unit:
+                op_fn = self._ops[op]
+                return UnitValue(op_fn(l_inner, r_inner), l_unit)
+            l_base = self._to_base_value(l_inner, l_unit)
+            r_base = self._to_base_value(r_inner, r_unit)
+            op_fn = self._ops[op]
+            return UnitValue(op_fn(l_base, r_base), l_unit.base_form())
+
+        if op == "*":
+            result = self._ops["*"](l_inner, r_inner)
+            if l_is_unit and r_is_unit:
+                result_unit = l_unit * r_unit
+                if result_unit.is_dimensionless():
+                    return result
+                return UnitValue(result, result_unit)
+            return UnitValue(result, l_unit if l_is_unit else r_unit)
+
+        if op == "/":
+            result = self._ops["/"](l_inner, r_inner)
+            if isinstance(result, ExpectedValue):
+                if not result.is_ok():
+                    return result
+                result = result.ok_value
+            if l_is_unit and r_is_unit:
+                result_unit = l_unit / r_unit
+                if result_unit.is_dimensionless():
+                    return result
+                return UnitValue(result, result_unit)
+            runit = l_unit if l_is_unit else r_unit
+            if not l_is_unit:
+                from interp.units import Unit
+                runit = Unit({}, Fraction(1), "1") / r_unit
+            return UnitValue(result, runit)
+
+        if op == "%":
+            if not l_is_unit or not r_is_unit:
+                raise TypeError("cannot compute remainder with mixed dimensioned/dimensionless values")
+            if not l_unit.same_dimension(r_unit):
+                raise TypeError(
+                    f"incompatible units for %: "
+                    f"{l_unit.display_name} and {r_unit.display_name}")
+            if l_unit == r_unit:
+                result = self._ops["%"](l_inner, r_inner)
+                result_unit = l_unit
+            else:
+                l_base = self._to_base_value(l_inner, l_unit)
+                r_base = self._to_base_value(r_inner, r_unit)
+                result = self._ops["%"](l_base, r_base)
+                result_unit = l_unit.base_form()
+            if isinstance(result, ExpectedValue):
+                if not result.is_ok():
+                    return result
+                result = result.ok_value
+            return UnitValue(result, result_unit)
+
+        if op in ("==", "!=", "<", ">", "<=", ">="):
+            if not l_is_unit or not r_is_unit:
+                raise TypeError(
+                    f"cannot compare dimensioned and dimensionless values")
+            if not l_unit.same_dimension(r_unit):
+                raise TypeError(
+                    f"incompatible units for comparison: "
+                    f"{l_unit.display_name} and {r_unit.display_name}")
+            if l_unit == r_unit:
+                return self._ops[op](l_inner, r_inner)
+            l_base = self._to_base_value(l_inner, l_unit)
+            r_base = self._to_base_value(r_inner, r_unit)
+            return self._ops[op](l_base, r_base)
+
+        raise TypeError(f"operator '{op}' not supported with units")
+
+    def _to_base_value(self, inner, unit):
+        """Convert a numeric value from its unit scale to base (factor=1)."""
+        from fractions import Fraction
+        if isinstance(inner, IntValue):
+            result = Fraction(inner.value) * unit.factor
+            if result.denominator == 1:
+                return self._mk_int(int(result), inner.width)
+            return mk_float(float(result))
+        if isinstance(inner, FloatValue):
+            return mk_float(float(Fraction(inner.value) * unit.factor), inner.width)
+        return inner
+
+    def _convert_unit_value(self, value: UnitValue, target_unit) -> UnitValue:
+        """Convert a UnitValue to a target unit, checking lossless for integers."""
+        from fractions import Fraction
+        if not value.unit.same_dimension(target_unit):
+            raise TypeError(
+                f"incompatible units: {value.unit.display_name} "
+                f"and {target_unit.display_name}")
+        ratio = value.unit.factor / target_unit.factor
+        inner = value.inner
+        if isinstance(inner, IntValue):
+            result = Fraction(inner.value) * ratio
+            if result.denominator != 1:
+                raise TypeError(
+                    f"cannot convert {inner.value} "
+                    f"{value.unit.display_name} to "
+                    f"{target_unit.display_name} without loss "
+                    f"(result is {float(result)})")
+            return UnitValue(self._mk_int(int(result), inner.width), target_unit)
+        if isinstance(inner, FloatValue):
+            return UnitValue(
+                mk_float(float(Fraction(inner.value) * ratio), inner.width),
+                target_unit)
+        raise TypeError(
+            f"cannot convert {type(inner).__name__} with units")
+
+    # ------------------------------------------------------------------
     # Expression evaluation
     # ------------------------------------------------------------------
 
@@ -997,12 +1128,30 @@ class Evaluator:
             right = self.eval_expr(node.right)
             if node.op == "\N{DOUBLE PLUS}":
                 return self._op_concat(left, right)
+            lu = unwrap_optional(left)
+            ru = unwrap_optional(right)
+            if isinstance(lu, UnitValue) or isinstance(ru, UnitValue):
+                return self._unit_binop(node.op, lu, ru)
             return self._apply_binop(self._ops[node.op], left, right)
+
+        if isinstance(node, UnitExpr):
+            value = self.eval_expr(node.expr)
+            from interp.units import eval_unit_formula
+            unit = eval_unit_formula(node.unit_spec)
+            if isinstance(value, UnitValue):
+                return UnitValue(value.inner, unit)
+            return UnitValue(value, unit)
 
         if isinstance(node, UnaryOp):
             operand = self.eval_expr(node.operand)
             if node.op == "-":
                 unwrapped = unwrap_optional(operand)
+                if isinstance(unwrapped, UnitValue):
+                    inner = unwrapped.inner
+                    if isinstance(inner, IntValue):
+                        return UnitValue(self._mk_int(-inner.value, inner.width), unwrapped.unit)
+                    if isinstance(inner, FloatValue):
+                        return UnitValue(mk_float(-inner.value, inner.width), unwrapped.unit)
                 if isinstance(unwrapped, IntValue):
                     return self._mk_int(-unwrapped.value, unwrapped.width)
                 if isinstance(unwrapped, FloatValue):
@@ -1278,6 +1427,15 @@ class Evaluator:
                     kind = self._frozen_vars[target_ast.name]
                     raise TypeError(
                         f"cannot assign to {kind} variable '{target_ast.name}'")
+                current = self.env.lookup(target_ast.name)
+                if isinstance(current, UnitValue):
+                    if isinstance(rhs, UnitValue):
+                        rhs = self._convert_unit_value(rhs, current.unit)
+                    else:
+                        raise TypeError(
+                            f"cannot assign dimensionless value to "
+                            f"'{target_ast.name}' which has unit "
+                            f"{current.unit.display_name}")
                 self.env.define(target_ast.name, rhs)
             return none()
 
@@ -1293,6 +1451,13 @@ class Evaluator:
             value = self.eval_expr(stmt.init_expr)
             if stmt.type_annotation is not None:
                 value = coerce_to_type(value, stmt.type_annotation)
+            if stmt.unit_spec is not None:
+                from interp.units import eval_unit_formula
+                unit = eval_unit_formula(stmt.unit_spec)
+                if isinstance(value, UnitValue):
+                    value = self._convert_unit_value(value, unit)
+                else:
+                    value = UnitValue(value, unit)
             self.env.define(stmt.name, value)
             if stmt.is_const:
                 self._frozen_vars[stmt.name] = "const"
@@ -1666,6 +1831,8 @@ class Evaluator:
     def _value_type_name(val: Value) -> str:
         """Return the type name string for a runtime value."""
         u = unwrap_optional(val)
+        if isinstance(u, UnitValue):
+            return Evaluator._value_type_name(u.inner)
         if isinstance(u, IntValue):
             return u.width
         if isinstance(u, FloatValue):

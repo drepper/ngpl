@@ -2651,3 +2651,139 @@ Arenas are useful when a group of allocations share a common lifetime (e.g., pro
 | Use case | long-lived program state | scoped, bounded-lifetime work |
 
 Both allocators accept the same interface (`alloc(size)`) and can be passed interchangeably to functions like `file.read_file(allocator)`.
+
+
+### Unit System
+
+The language supports attaching physical units to numeric values.  Units enable compile-time and runtime dimensional analysis: addition requires matching dimensions, multiplication and division derive new dimensions, and assignment to a variable with a declared unit checks that the conversion is lossless for integers.
+
+#### Syntax
+
+A unit annotation uses `¤` followed by a unit name:
+
+```
+var distance ¤meter := 100
+var elapsed  ¤second := 10
+var speed    ¤meter/second := distance / elapsed
+```
+
+The `¤` (U+00A4, CURRENCY SIGN) can appear in two positions:
+
+1. **Variable definitions**: between the name and the colon/`:=`, declaring the variable's unit.
+2. **Expressions** (postfix): after a primary expression, annotating the value with a unit.
+
+Whitespace around `¤` is flexible: it can appear immediately after the preceding token (`x¤meter`, `42¤kilogram`) or separated by spaces (`x ¤ meter`).  This is a consequence of normal tokenization — `¤` is a single-character operator.
+
+```
+var d ¤kilometer := 5     // variable with unit kilometer
+d ← 3000¤meter           // expression with unit meter, converted to kilometer
+```
+
+#### Unit Names
+
+Builtin units use identifier syntax with full names: `meter`, `second`, `kilogram`, `kilometer`, `millisecond`, `byte`, etc.  User-defined units are referenced with string syntax: `¤"speed"`, `¤"widgets"`.
+
+Compound unit specifications combine names with `*` (multiplication), `/` (division), and `√` (square root):
+
+```
+var velocity ¤meter/second := 10
+var area     ¤meter*meter := 25
+```
+
+In expression context, `*` and `/` after `¤` are consumed as unit operators only when followed by another unit name, not by a number.  This avoids ambiguity with arithmetic operators:
+
+```
+var a ¤meter := 5
+var b := a * 3            // 15 m (scalar multiplication, not unit formula)
+```
+
+#### Unit Definitions
+
+New units are introduced with the `unit` keyword.  A base unit has no formula; a derived unit specifies the conversion in terms of existing units using integer ratios for exact representation:
+
+```
+unit mph = 1609344 / 3600000 * meter / second
+unit widgets
+```
+
+User-defined units are referenced via strings (`¤"mph"`, `¤"widgets"`); the identifier form is reserved for builtin units.
+
+#### Builtin Units
+
+The interpreter provides the following builtin units:
+
+**SI base**: `meter` (displayed as m), `second` (s), `kilogram` (kg), `ampere` (A), `kelvin` (K), `mole` (mol), `candela` (cd).
+
+**SI derived (length)**: `kilometer` (km), `centimeter` (cm), `millimeter` (mm), `micrometer` (μm), `nanometer` (nm).
+
+**SI derived (time)**: `millisecond` (ms), `microsecond` (μs), `nanosecond` (ns), `minute` (min), `hour` (h).
+
+**SI derived (mass)**: `gram` (g), `milligram` (mg).
+
+**SI derived (combined)**: `newton` (N), `pascal` (Pa), `joule` (J), `watt` (W), `hertz` (Hz), `volt` (V), `coulomb` (C).
+
+**Byte units**: `byte` (displayed as B), `kilobyte` (kB), `kibibyte` (KiB), `megabyte` (MB), `mebibyte` (MiB), `gigabyte` (GB), `gibibyte` (GiB), `terabyte` (TB), `tebibyte` (TiB).
+
+**Abstract**: `count`, `distance`.
+
+#### Dimensional Analysis Rules
+
+- **Addition/subtraction**: both operands must have units with the same dimensions.  If the units differ (e.g., `km` and `m`), both are converted to their base form (factor = 1) before the operation.  If the units are identical, no conversion occurs.
+
+- **Multiplication**: dimensions combine by adding exponents.  `meter * second` produces a unit with components `{meter: 1, second: 1}`.  Scalar multiplication (`5 * 3¤meter`) preserves the unit.
+
+- **Division**: dimensions combine by subtracting exponents.  `meter / second` produces `{meter: 1, second: -1}`.  Division of identical units produces a dimensionless result (plain numeric value).
+
+- **Comparison**: both operands must have the same dimensions.  Values are converted to base form before comparison.
+
+- **Modulus**: same rules as addition (same dimensions required).
+
+- **Dimensioned + dimensionless**: always an error.  The programmer must annotate literals with units if they participate in unit-aware arithmetic.
+
+#### Lossless Conversion
+
+When assigning a value to a variable with a declared unit, the value must be convertible without loss.  For integer values, this means the converted result must be an exact integer:
+
+```
+var t ¤second := 0
+t ← 2000¤millisecond   // 2000 ms = 2 s (exact, allowed)
+t ← 500¤millisecond    // 500 ms = 0.5 s (not integer, rejected)
+```
+
+Floating-point values convert without this restriction.
+
+Conversion uses exact rational arithmetic (Python `fractions.Fraction`) internally, so precision is limited only by integer size, not by floating-point rounding.
+
+#### Unit Inference
+
+When a variable is defined with initialization but without an explicit unit, the unit is derived from the initialization value:
+
+```
+var a ¤meter := 5
+var b := a              // b inherits unit m
+var c := b + a          // 10 m (works because b has unit m)
+```
+
+#### Display
+
+When formatting or printing a value with a unit, the unit's display name is appended after a space:
+
+```
+std.print(42¤meter)     // prints: 42 m
+std.print(1024¤kibibyte) // prints: 1024 KiB
+```
+
+The builtin units use conventional abbreviations: `B` for byte, `m` for meter, `s` for second, etc.
+
+#### Comparison with Other Languages
+
+| Feature | Rust | C++ (proposed) | F# | This language |
+|---------|------|----------------|-----|---------------|
+| Units | third-party crate (`uom`) | no standard | units of measure | built-in |
+| Syntax | type system | N/A | `[<Measure>]` attribute | `¤` annotation |
+| Conversion | explicit | N/A | automatic | automatic with lossless check |
+| Dimensional analysis | compile-time | N/A | compile-time | runtime |
+| User-defined | via type aliases | N/A | custom measures | `unit` keyword |
+| Lossless check | no | N/A | no | yes (integers) |
+
+The `¤` syntax keeps unit annotations visually distinct from type annotations (which use `:`) and avoids ambiguity with function call or subscript delimiters.  The lossless conversion check for integers prevents silent truncation when converting between units of different scale.

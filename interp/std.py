@@ -491,7 +491,7 @@ class StdModule:
         from interp.value import (IntValue, FloatValue, BoolValue, StrValue, ObjectValue,
                                   ArrayValue, TupleValue, EnumValue,
                                   ExpectedValue, NoneValue, TypeValue,
-                                  FuncValue, LambdaValue, mk_str)
+                                  FuncValue, LambdaValue, UnitValue, mk_str)
         if len(args) < 2:
             raise TypeError("std.format(allocator, fmt_str, ...) requires at least 2 arguments")
         template_val = unwrap_optional(args[1])
@@ -503,6 +503,8 @@ class StdModule:
 
         def _fmt_value(v, spec: str = "") -> str:
             uv = unwrap_optional(v)
+            if isinstance(uv, UnitValue):
+                return _fmt_value(uv.inner, spec) + " " + uv.unit.display_name
             if isinstance(uv, ExpectedValue):
                 if uv.is_ok():
                     return _fmt_value(uv.ok_value, spec)
@@ -649,12 +651,14 @@ class StdModule:
             NoneValue.
         """
         from interp.eval import unwrap_optional
-        from interp.value import IntValue, FloatValue, BoolValue, StrValue, ObjectValue, ArrayValue, EnumValue, ExpectedValue, mk_str
+        from interp.value import IntValue, FloatValue, BoolValue, StrValue, ObjectValue, ArrayValue, EnumValue, ExpectedValue, UnitValue, mk_str
 
         parts = []
         for arg in args:
             uv = unwrap_optional(arg) if not isinstance(arg, ExpectedValue) else arg
-            if isinstance(uv, ExpectedValue):
+            if isinstance(uv, UnitValue):
+                parts.append(uv.display())
+            elif isinstance(uv, ExpectedValue):
                 parts.append(uv.display())
             elif isinstance(uv, EnumValue):
                 parts.append(uv.display())
