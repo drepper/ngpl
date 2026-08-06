@@ -70,6 +70,9 @@ Type System
 
 [ ] type aliases and user-defined cast functions (comptime, invoked in preference to builtins).
 
+[x] add binary power operator ↑.  for integers on the left only allow integers on the right.  Ensure
+    overflow and underflow are detected.
+
 
 Data Structures
 ---------------

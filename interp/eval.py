@@ -518,6 +518,7 @@ class Evaluator:
             "⊕": self._op_logic_xor,
             "⊼": self._op_logic_nand,
             "⊽": self._op_logic_nor,
+            "\N{UPWARDS ARROW}": self._op_pow,
         }
 
     # ------------------------------------------------------------------
@@ -591,6 +592,23 @@ class Evaluator:
                 return self._division_error()
             return mk_float(math.fmod(lf, rf), fw)
         raise TypeError(f"remainder expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
+
+    def _op_pow(self, left, right):
+        """Exponentiation: int↑int or float↑float/int.  Integer exponent must be non-negative."""
+        lu = unwrap_optional(left)
+        ru = unwrap_optional(right)
+        if isinstance(lu, IntValue) and isinstance(ru, IntValue):
+            if not isinstance(ru, IntValue):
+                raise TypeError("integer base requires integer exponent")
+            if ru.value < 0:
+                raise TypeError("integer exponentiation requires non-negative exponent")
+            return self._mk_int(lu.value ** ru.value, lu.width)
+        lf, rf, fw = self._promote_to_float(lu, ru)
+        if lf is not None:
+            return mk_float(lf ** rf, fw)
+        raise TypeError(
+            f"exponentiation expected numeric operands, "
+            f"got {type(lu).__name__} and {type(ru).__name__}")
 
     def _op_eq(self, left, right):
         """Equality comparison."""
@@ -981,6 +999,28 @@ class Evaluator:
                     return result
                 result = result.ok_value
             return UnitValue(result, result_unit)
+
+        if op == "\N{UPWARDS ARROW}":
+            if r_is_unit:
+                raise TypeError("exponent cannot have a unit")
+            if not l_is_unit:
+                return self._ops[op](l_inner, r_inner)
+            if not isinstance(r_inner, IntValue):
+                raise TypeError(
+                    "exponent for unit-bearing base must be an integer")
+            exp = r_inner.value
+            result = self._ops[op](l_inner, r_inner)
+            from interp.units import Unit
+            new_components = {k: v * exp for k, v in l_unit.components.items()}
+            new_factor = l_unit.factor ** exp
+            from interp.units import _display_from_components
+            new_unit = Unit(
+                new_components, new_factor,
+                _display_from_components(
+                    {k: v for k, v in new_components.items() if v != 0}))
+            if new_unit.is_dimensionless():
+                return result
+            return UnitValue(result, new_unit)
 
         if op in ("==", "!=", "<", ">", "<=", ">="):
             if not l_is_unit or not r_is_unit:

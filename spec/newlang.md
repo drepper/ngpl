@@ -398,6 +398,46 @@ var d ¤meter := 9.0
 var r := √d             // ERROR: √(m¹) has odd exponent
 ```
 
+#### Power Operator
+
+The binary operator `↑` (U+2191, UPWARDS ARROW) computes exponentiation.  It is right-associative and binds tighter than multiplication but looser than unary operators (except negation, which binds looser than `↑`):
+
+```
+var a := 2 ↑ 10         // 1024 (integer)
+var b := 3 ↑ 4          // 81
+var c := 2.0 ↑ 0.5      // √2 ≈ 1.4142
+var d := 4.0 ↑ -0.5     // 1/√4 = 0.5
+```
+
+**Integer rules**: both operands must be integers.  The exponent must be non-negative (negative integer exponents are a type error since the result would be fractional).  Overflow is detected and reported:
+
+```
+var x: i8 = 2
+@expect error "overflow"
+var r := x ↑ 8          // 256 overflows i8
+```
+
+**Float rules**: either or both operands may be float.  An integer operand is promoted to float.  Negative exponents are allowed:
+
+```
+var r := 2.0 ↑ -1.0     // 0.5
+```
+
+**Precedence and associativity**:
+
+- Right-associative: `2 ↑ 3 ↑ 2` = `2 ↑ (3 ↑ 2)` = `2 ↑ 9` = 512
+- Binds tighter than `*`: `2 * 3 ↑ 2` = `2 * 9` = 18
+- Unary minus binds looser: `-2 ↑ 2` = `-(2 ↑ 2)` = -4
+
+**With units**: a unit-bearing base raised to an integer exponent scales the unit dimensions accordingly.  The exponent itself cannot carry a unit:
+
+```
+var d ¤meter := 3.0
+var area := d ↑ 2       // 9.0 m^2
+var vol  := d ↑ 3       // 27.0 m^3
+var r    := d ↑ 0       // 1.0 (dimensionless — m^0)
+```
+
 #### Truthiness
 
 Float values are truthy when nonzero and falsy when exactly `0.0`:

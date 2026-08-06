@@ -1058,18 +1058,18 @@ class Parser:
         return left
 
     def _parse_reshape_expr(self):
-        """reshape_expr → unary (('⍴' | '⌿' | '⍀') …)?
+        """reshape_expr → negation (('⍴' | '⌿' | '⍀') …)?
 
-        ⍴ takes a unary right operand.
+        ⍴ takes a negation right operand.
         ⌿/⍀ take a range-level right operand so that ``f ⌿ 1…5`` works.
         When the right operand of ⌿/⍀ is a 2-tuple literal, the second
         element is the initial accumulator value.
         """
-        left = self._parse_unary()
+        left = self._parse_negation()
         if self._check("OP") and self._cur().value == "\N{APL FUNCTIONAL SYMBOL RHO}":
             self.pos += 1
             self._skip_nl()
-            right = self._parse_unary()
+            right = self._parse_negation()
             return ReshapeExpr(left, right)
         if self._check("OP") and self._cur().value in (
                 "\N{APL FUNCTIONAL SYMBOL SLASH BAR}",
@@ -1083,12 +1083,32 @@ class Parser:
             return FoldExpr(direction, left, right)
         return left
 
-    def _parse_unary(self):
-        """unary → ('-' | '~' | '¬' | 'not' | '√' | '∛' | '∜' | '@wrap') unary | primary"""
+    def _parse_negation(self):
+        """negation → '-' negation | power_expr
+
+        Unary minus binds looser than ↑: -2↑2 = -(2↑2) = -4.
+        """
         if self._check("OP") and self._cur().value == "-":
             self.pos += 1
-            operand = self._parse_unary()
+            operand = self._parse_negation()
             return UnaryOp("-", operand)
+        return self._parse_power_expr()
+
+    def _parse_power_expr(self):
+        """power_expr → unary ('↑' negation)?  (right-associative)
+
+        Right operand goes through negation to allow 2↑-3.
+        """
+        left = self._parse_unary()
+        if self._check("OP") and self._cur().value == "\N{UPWARDS ARROW}":
+            self.pos += 1
+            self._skip_nl()
+            right = self._parse_negation()
+            return BinOp("\N{UPWARDS ARROW}", left, right)
+        return left
+
+    def _parse_unary(self):
+        """unary → ('~' | '¬' | 'not' | '√' | '∛' | '∜' | '@wrap') unary | primary"""
         if self._check("OP") and self._cur().value == "~":
             self.pos += 1
             operand = self._parse_unary()
