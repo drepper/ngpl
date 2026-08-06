@@ -60,6 +60,7 @@ KEYWORDS = {
     "catch": "CATCH",
     "comptime": "COMPTIME",
     "unit": "UNIT",
+    "impure": "IMPURE",
 }
 
 # Keywords recognized only after the @ prefix.  The @ is part of the

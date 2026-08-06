@@ -16,6 +16,7 @@ class Env:
 
     def __init__(self, parent=None):
         self._frames = [{}]  # stack of dicts: name → Value
+        self._mutable_globals: set[str] = set()
         if parent is not None:
             self._parent = parent
         else:
@@ -66,6 +67,28 @@ class Env:
     def has_local(self, name: str) -> bool:
         """Check if the name is defined in the current (innermost) frame."""
         return name in self._frames[-1]
+
+    def is_mutable_global(self, name: str) -> bool:
+        """Return True if *name* is a mutable global variable."""
+        if name in self._mutable_globals:
+            return True
+        if self._parent is not None:
+            return self._parent.is_mutable_global(name)
+        return False
+
+    def assign(self, name: str, value: Value) -> bool:
+        """Assign to the frame where *name* already exists.
+
+        Returns True if the variable was found and updated, False if not
+        found in any frame (caller should fall back to define).
+        """
+        for frame in reversed(self._frames):
+            if name in frame:
+                frame[name] = value
+                return True
+        if self._parent is not None:
+            return self._parent.assign(name, value)
+        return False
 
     # ------------------------------------------------------------------
     # Copy for function calls

@@ -162,6 +162,7 @@ class Parser:
         is_test = False
         is_flag = False
         is_replaceable = False
+        is_impure = False
         test_refs: list[str] = []
         expect_annotations: list[tuple[str, str]] = []
 
@@ -189,6 +190,10 @@ class Parser:
                 self._eat("FLAG")
                 is_flag = True
                 self._try_eat("NEWLINE")
+            elif self._check("IMPURE"):
+                self._eat("IMPURE")
+                is_impure = True
+                self._try_eat("NEWLINE")
             elif self._check("EXPECT"):
                 self._eat("EXPECT")
                 if not self._check("IDENT"):
@@ -214,7 +219,7 @@ class Parser:
 
         if self._check("FN"):
             return self._parse_function_def(is_start, is_test, test_refs, expect_annotations,
-                                            is_replaceable)
+                                            is_replaceable, is_impure)
         elif self._check("CONST"):
             self._eat("CONST")
             name_tok = self._eat("IDENT")
@@ -242,7 +247,8 @@ class Parser:
 
     def _parse_function_def(self, is_start, is_test=False, test_refs=None,
                             expect_annotations: list[tuple[str, str]] | None = None,
-                            is_replaceable: bool = False):
+                            is_replaceable: bool = False,
+                            is_impure: bool = False):
         """Parse: fn name '(' [params] ')' ('->' ret_type)? block
 
         The parameter list is enclosed in parentheses.  An empty parameter
@@ -325,7 +331,7 @@ class Parser:
                 body = []
                 fdef = FuncDef(name, params, ret_type, body, is_start, is_test,
                                test_refs, expect_annotations, is_replaceable,
-                               pack_param, param_units)
+                               pack_param, param_units, is_impure)
                 fdef._parse_error = str(e)
                 self._skip_to_next_definition()
                 return fdef
@@ -333,7 +339,7 @@ class Parser:
             body = self._parse_block()
         return FuncDef(name, params, ret_type, body, is_start, is_test,
                        test_refs, expect_annotations, is_replaceable,
-                       pack_param, param_units)
+                       pack_param, param_units, is_impure)
 
     def _parse_dotted_name(self) -> str:
         """Parse a possibly dotted name like 'std.errors'."""

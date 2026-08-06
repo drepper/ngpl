@@ -621,72 +621,123 @@ The result type follows the same rules as other arithmetic operators: `resolve_w
 
 ### Function Definition Syntax
 
-Function definitions use the `fn` keyword followed by the function name, an optional parameter list, an optional return type, and a block body.  The parameter list is **not** enclosed in parentheses — it is terminated by `→` (introducing the return type) or `:` / `{` (introducing the body directly).  The ASCII form `->` is accepted as an alternative to `→`.
+Function definitions use the `fn` keyword followed by the function name, a parenthesized parameter list, an optional return type, and a block body.  An empty parameter list is written as `()`.  The ASCII form `->` is accepted as an alternative to `→`.
 
 #### Grammar
 
 ```
-fn name [param1 [: type1] [, param2 [: type2] ...]] [→ return_type] block
+fn name '(' [param1 [: type1] [, param2 [: type2] ...]] ')' [→ return_type] block
 ```
 
-The function name is a single identifier.  Parameters are separated by commas.  Each parameter is an identifier optionally followed by `: type`.  The return type is introduced by `→` (or the ASCII equivalent `->`).  The block is either a layout block (`:`) or a brace block (`{`).
+The function name is a single identifier.  Parameters are enclosed in parentheses and separated by commas.  Each parameter is an identifier optionally followed by `: type`.  The return type is introduced by `→` (or the ASCII equivalent `->`).  The block is either a layout block (`:`) or a brace block (`{`).
 
 #### Examples
 
 ```
-fn main → ∅:                              /* no parameters */
+fn main() → ∅:                               /* no parameters */
     std.print("hello")
 
-fn add a : int, b : int → int:               /* two typed parameters */
+fn add(a : int, b : int) → int:              /* two typed parameters */
     a + b
 
-fn identity x → int:                          /* untyped parameter */
+fn identity(x) → int:                        /* untyped parameter */
     x
 
-fn sha256 data : byte[] → int?:              /* dynamic array parameter */
+fn sha256(data : byte[]) → int?:             /* dynamic array parameter */
     ...
 ```
 
 #### No-Parameter Functions
 
-Functions with no parameters have nothing between the name and `→` or `:`:
+Functions with no parameters use an empty parameter list `()`:
 
 ```
-fn main → ∅:
+fn main() → ∅:
     ...
 
-fn test_something → ∅:
+fn test_something():
     ...
 ```
 
 #### Disambiguation
 
-The `:` character serves double duty: it introduces a type annotation after a parameter name, and it introduces a layout block.  The parser disambiguates by looking ahead: if `:` is followed by an identifier (a type name), it is a type annotation.  Otherwise, it starts the function body.  Optional (`T?`) and expected (`T?E`) postfixes are parsed after the base type identifier.
-
-This means a no-parameter function with no return type uses `:` directly:
-
-```
-fn greet:                                     /* : starts the body */
-    std.print("hello")
-```
-
-And a single-parameter function uses `:` for the type:
-
-```
-fn greet name : string → ∅:               /* first : is type, second : is body */
-    std.print(name)
-```
+Inside the parameter list, `:` always introduces a type annotation because the parameter list is explicitly delimited by `)`.  Outside the parameter list, `:` introduces a layout block and `{` introduces a brace block.  Optional (`T?`) and expected (`T?E`) postfixes are parsed after the base type identifier.
 
 #### Design Rationale
 
-Removing parentheses from the parameter list reduces syntactic noise, especially for functions with few parameters.  The `→` and `:` tokens provide unambiguous termination of the parameter list without requiring delimiters.  This is similar to Haskell's function definition syntax, where parameters are separated by spaces with no enclosing delimiters.
+The parenthesized parameter list makes the function signature unambiguously context-free — the parser always knows where parameters end, regardless of type annotations.  This is consistent with most contemporary languages.
 
 | Feature | C/C++ | Rust | Haskell | Python | Zig | This language |
 |---------|-------|------|---------|--------|-----|---------------|
-| Parameter delimiters | `(...)` | `(...)` | none | `(...)` | `(...)` | none |
+| Parameter delimiters | `(...)` | `(...)` | none | `(...)` | `(...)` | `(...)` |
 | Parameter separator | `,` | `,` | space | `,` | `,` | `,` |
 | Return type | trailing or leading | `-> T` | `:: T` | `-> T` | `T` | `→ T` |
 | Terminator | `{` | `{` | `=` | `:` | `{` | `:` or `{` |
+
+
+### Function Purity
+
+Functions are **pure by default**: they may only depend on their parameters and locally defined variables.  A pure function cannot read or write mutable global variables.  Accessing constants, calling other functions (pure or impure), and using locally defined variables are all permitted.
+
+The `@impure` annotation lifts the restriction.  An impure function may read and write mutable global variables freely.
+
+#### What is a mutable global?
+
+A top-level binding introduced with `var` is a mutable global.  Bindings introduced with `const`, `fn`, or `enum` are immutable and visible to all functions regardless of purity.
+
+#### Rules
+
+1. A pure function **cannot read** a mutable global variable.
+2. A pure function **cannot write** to any non-local variable (mutable global or otherwise).
+3. A pure function **can** read constants and call any function (pure or impure).
+4. An `@impure` function has no restrictions on global access.
+
+#### Examples
+
+```
+var counter := 0
+const LIMIT := 100
+
+fn pure_ok(x : int) → int:           /* pure — uses only parameter */
+    x * 2
+
+fn reads_const() → int:              /* pure — constants are not mutable globals */
+    LIMIT
+
+@impure
+fn bump() → ∅:                       /* impure — reads and writes counter */
+    counter ← counter + 1
+```
+
+Violating purity is a runtime error:
+
+```
+fn bad_read() → int:                  /* ERROR: pure function cannot read mutable global */
+    counter
+
+fn bad_write() → ∅:                   /* ERROR: pure function cannot assign to non-local */
+    counter ← 1
+```
+
+#### Calling impure functions from pure functions
+
+A pure function may call an impure function.  The impure callee is responsible for the side effect; the call itself does not make the caller impure.  This keeps the annotation burden low — only functions that directly access mutable state need `@impure`.
+
+#### Comparison with other languages
+
+| Language | Default | Opt-in impurity | Enforcement |
+|----------|---------|-----------------|-------------|
+| Haskell | pure | `IO` monad | type system |
+| Rust | pure (by convention) | `unsafe` (different scope) | — |
+| D | `pure` attribute | default is impure | compiler |
+| Zig | — | — | no purity system |
+| This language | pure | `@impure` annotation | runtime |
+
+Haskell enforces purity through the type system — impure computations have a different type (`IO a`).  D inverts the default: functions are impure unless annotated `pure`.  This language follows Haskell's philosophy (pure by default) but uses a simpler annotation mechanism (`@impure`) rather than a monadic type.
+
+#### Design Rationale
+
+Purity by default encourages a functional style and makes functions easier to reason about, test, and parallelize.  The `@impure` annotation makes side effects visible at the definition site rather than requiring the reader to trace through the function body.  Runtime enforcement (rather than compile-time) is appropriate for the interpreter; the compiler will move this check to compile-time where possible.
 
 
 ### Unicode and ASCII Arrow Equivalences

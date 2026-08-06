@@ -498,6 +498,7 @@ class Evaluator:
         self._warnings: list[str] = []
         self._wrapping: bool = False
         self._catch_depth: int = 0
+        self._pure_func_name: str | None = None
         self._last_pos: tuple[int, int, int | None] | None = None
         # Pre-compute builtin function mappings (avoid repeated lookups).
         self._ops = {
@@ -1281,6 +1282,12 @@ class Evaluator:
             return none()
 
         if isinstance(node, VarRef):
+            if (self._pure_func_name is not None
+                    and not self.env.has_local(node.name)
+                    and self.env.is_mutable_global(node.name)):
+                raise TypeError(
+                    f"pure function '{self._pure_func_name}' cannot "
+                    f"read mutable global variable '{node.name}'")
             return self.env.lookup(node.name)
 
         if isinstance(node, StaticAssert):
@@ -1783,6 +1790,11 @@ class Evaluator:
                     kind = self._frozen_vars[target_ast.name]
                     raise TypeError(
                         f"cannot assign to {kind} variable '{target_ast.name}'")
+                if (self._pure_func_name is not None
+                        and not self.env.has_local(target_ast.name)):
+                    raise TypeError(
+                        f"pure function '{self._pure_func_name}' cannot "
+                        f"assign to non-local variable '{target_ast.name}'")
                 current = self.env.lookup(target_ast.name)
                 if isinstance(current, UnitValue):
                     if isinstance(rhs, UnitValue):
@@ -1792,7 +1804,10 @@ class Evaluator:
                             f"cannot assign dimensionless value to "
                             f"'{target_ast.name}' which has unit "
                             f"{current.unit.display_name}")
-                self.env.define(target_ast.name, rhs)
+                if not self.env.has_local(target_ast.name):
+                    self.env.assign(target_ast.name, rhs)
+                else:
+                    self.env.define(target_ast.name, rhs)
             return none()
 
         if isinstance(stmt, VarDef):
@@ -2597,9 +2612,11 @@ class Evaluator:
 
         old_env = self.env
         old_ret_type = self._current_ret_type
+        old_pure = self._pure_func_name
         try:
             self.env = call_env
             self._current_ret_type = resolved_ret_type
+            self._pure_func_name = None if func.is_impure else func.name
             result = self.eval_stmts(func.body)
             self._check_return_type(result, resolved_ret_type, func.name)
             return self._wrap_optional_return(result, resolved_ret_type)
@@ -2611,6 +2628,7 @@ class Evaluator:
         finally:
             self.env = old_env
             self._current_ret_type = old_ret_type
+            self._pure_func_name = old_pure
 
     def _check_return_type(self, result: Value, ret_type: str | None, func_name: str) -> Value:
         """Verify the return value matches the declared return type."""

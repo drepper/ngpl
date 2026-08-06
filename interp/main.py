@@ -9,7 +9,10 @@ from collections import defaultdict
 from interp.lexer import tokenize, process_indentation
 from interp.parser import Parser
 from interp.env import Env
-from interp.ast import FuncDef as ASTFuncDef, EnumDef as ASTEnumDef, UnitDef as ASTUnitDef
+from interp.ast import (
+    FuncDef as ASTFuncDef, EnumDef as ASTEnumDef, UnitDef as ASTUnitDef,
+    VarDef as ASTVarDef,
+)
 from interp.value import (
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
     NoneValue, ExpectedValue, EnumType, EnumValue,
@@ -264,6 +267,13 @@ def main():
             if type_ann is not None:
                 value = coerce_to_type(value, type_ann)
             env.define(name, value)
+        elif isinstance(defn, ASTVarDef):
+            value = evaluator.eval_expr(defn.init_expr)
+            if defn.type_annotation is not None:
+                value = coerce_to_type(value, defn.type_annotation)
+            env.define(defn.name, value)
+            if not defn.is_const:
+                env._mutable_globals.add(defn.name)
 
     for defn in definitions:
         if isinstance(defn, ASTUnitDef):
@@ -323,7 +333,8 @@ def main():
                 raise TypeError(
                     f"in {defn.name}: unknown return type '{defn.ret_type}'")
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,
-                          defn.is_replaceable, defn.pack_param, defn.param_units)
+                          defn.is_replaceable, defn.pack_param, defn.param_units,
+                          defn.is_impure)
             env.define(defn.name, fv)
 
             if args.start is None and defn.is_start:
@@ -374,7 +385,8 @@ def main():
 
         if not errors_produced:
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,
-                          defn.is_replaceable, defn.pack_param, defn.param_units)
+                          defn.is_replaceable, defn.pack_param, defn.param_units,
+                          defn.is_impure)
             eval_inst = Evaluator(env)
             try:
                 eval_inst._call_user_func(fv, [])

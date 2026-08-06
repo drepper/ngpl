@@ -118,7 +118,8 @@ class FuncDef:
                  expect_annotations: list[tuple[str, str]] | None = None,
                  is_replaceable: bool = False,
                  pack_param: tuple[str, str | None] | None = None,
-                 param_units: dict[str, object] | None = None):
+                 param_units: dict[str, object] | None = None,
+                 is_impure: bool = False):
         self.name = name
         self.params = params
         self.ret_type = ret_type
@@ -130,6 +131,7 @@ class FuncDef:
         self.is_replaceable = is_replaceable
         self.pack_param = pack_param
         self.param_units: dict[str, object] = param_units or {}
+        self.is_impure = is_impure
 
 
 class VarDef:
