@@ -2,7 +2,7 @@
 
 /* Basic enumerate over an array. */
 @test
-fn test_enumerate_basic → ∅:
+fn test_enumerate_basic() → ∅:
     var indices := 0
     var values := 0
     foreach pair := @enumerate([10, 20, 30]):
@@ -13,7 +13,7 @@ fn test_enumerate_basic → ∅:
 
 /* Enumerate with two variables (index, value destructured). */
 @test
-fn test_enumerate_two_vars → ∅:
+fn test_enumerate_two_vars() → ∅:
     var sum := 0
     foreach i, v := @enumerate([5, 4, 3, 2, 1]):
         sum ← sum + i * v
@@ -22,7 +22,7 @@ fn test_enumerate_two_vars → ∅:
 
 /* Enumerate over an empty array. */
 @test
-fn test_enumerate_empty → ∅:
+fn test_enumerate_empty() → ∅:
     var count := 0
     foreach pair := @enumerate([]):
         count ← count + 1
@@ -30,7 +30,7 @@ fn test_enumerate_empty → ∅:
 
 /* Enumerate over a single-element array. */
 @test
-fn test_enumerate_single → ∅:
+fn test_enumerate_single() → ∅:
     var idx := ⁻1
     var val := ⁻1
     foreach i, v := @enumerate([42]):
@@ -41,7 +41,7 @@ fn test_enumerate_single → ∅:
 
 /* Enumerate with range value. */
 @test
-fn test_enumerate_range → ∅:
+fn test_enumerate_range() → ∅:
     var sum_idx := 0
     var sum_val := 0
     foreach pair := @enumerate(10…14):
@@ -51,11 +51,11 @@ fn test_enumerate_range → ∅:
     assert_eq(sum_val, 60)   /* 10+11+12+13+14 */
 
 /* Enumerate used with generate. */
-fn square x : int → int:
+fn square(x : int) → int:
     x * x
 
 @test
-fn test_enumerate_generated → ∅:
+fn test_enumerate_generated() → ∅:
     var arr := generate(square, 1…4)
     var total := 0
     foreach i, v := @enumerate(arr):
@@ -67,9 +67,9 @@ fn test_enumerate_generated → ∅:
 /* Error: @enumerate outside foreach. */
 @test
 @expect error "@enumerate can only be used inside foreach"
-fn test_enumerate_outside_foreach → ∅:
+fn test_enumerate_outside_foreach() → ∅:
     var x := @enumerate([1, 2, 3])
 
 @start
-fn main → ∅:
+fn main() → ∅:
     std.print("enumerate tests passed")

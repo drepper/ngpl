@@ -3,7 +3,7 @@
 /* ---- 2D read access ----------------------------------------------------- */
 
 @test
-fn test_2d_read → ∅:
+fn test_2d_read() → ∅:
     var m := (3, 4) ⍴ (1…12)
     assert_eq(m[0, 0], 1)
     assert_eq(m[0, 3], 4)
@@ -11,7 +11,7 @@ fn test_2d_read → ∅:
     assert_eq(m[2, 3], 12)
 
 @test
-fn test_2d_read_variable_index → ∅:
+fn test_2d_read_variable_index() → ∅:
     var m := (2, 3) ⍴ [10, 20, 30, 40, 50, 60]
     var r := 1
     var c := 2
@@ -20,7 +20,7 @@ fn test_2d_read_variable_index → ∅:
 /* ---- 2D write access ---------------------------------------------------- */
 
 @test
-fn test_2d_write → ∅:
+fn test_2d_write() → ∅:
     var m := (2, 3) ⍴ 0
     m[0, 1] ← 42
     m[1, 2] ← 99
@@ -29,7 +29,7 @@ fn test_2d_write → ∅:
     assert_eq(m[0, 0], 0)
 
 @test
-fn test_2d_write_variable_index → ∅:
+fn test_2d_write_variable_index() → ∅:
     var m := (2, 2) ⍴ 0
     var r := 1
     var c := 0
@@ -39,7 +39,7 @@ fn test_2d_write_variable_index → ∅:
 /* ---- 3D access ---------------------------------------------------------- */
 
 @test
-fn test_3d_read → ∅:
+fn test_3d_read() → ∅:
     var a := (2, 3, 4) ⍴ (1…24)
     assert_eq(a[0, 0, 0], 1)
     assert_eq(a[0, 0, 3], 4)
@@ -48,7 +48,7 @@ fn test_3d_read → ∅:
     assert_eq(a[1, 2, 3], 24)
 
 @test
-fn test_3d_write → ∅:
+fn test_3d_write() → ∅:
     var a := (2, 2, 2) ⍴ 0
     a[1, 0, 1] ← 55
     assert_eq(a[1, 0, 1], 55)
@@ -57,7 +57,7 @@ fn test_3d_write → ∅:
 /* ---- mixed: single subscript on outer, multi on inner ------------------- */
 
 @test
-fn test_single_then_multi → ∅:
+fn test_single_then_multi() → ∅:
     var a := (2, 3, 4) ⍴ (1…24)
     var row := a[1]
     assert_eq(row[0, 0], 13)
@@ -66,7 +66,7 @@ fn test_single_then_multi → ∅:
 /* ---- equivalence: arr[i, j] == arr[i][j] ------------------------------- */
 
 @test
-fn test_equiv_chained → ∅:
+fn test_equiv_chained() → ∅:
     var m := (3, 3) ⍴ (1…9)
     foreach r := 0…2:
         foreach c := 0…2:
@@ -76,19 +76,19 @@ fn test_equiv_chained → ∅:
 
 @test
 @expect error "out of range"
-fn test_2d_oob_row → ∅:
+fn test_2d_oob_row() → ∅:
     var m := (2, 3) ⍴ 0
     var x := m[2, 0]
 
 @test
 @expect error "out of range"
-fn test_2d_oob_col → ∅:
+fn test_2d_oob_col() → ∅:
     var m := (2, 3) ⍴ 0
     var x := m[0, 3]
 
 @test
 @expect error "out of range"
-fn test_2d_write_oob → ∅:
+fn test_2d_write_oob() → ∅:
     var m := (2, 3) ⍴ 0
     m[0, 3] ← 1
 
@@ -96,10 +96,10 @@ fn test_2d_write_oob → ∅:
 
 @test
 @expect error "requires nested arrays"
-fn test_flat_multi_subscript → ∅:
+fn test_flat_multi_subscript() → ∅:
     var a := [1, 2, 3]
     var x := a[0, 0]
 
 @start
-fn main → ∅:
+fn main() → ∅:
     std.print("multidim tests passed")

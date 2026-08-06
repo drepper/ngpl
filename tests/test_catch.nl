@@ -2,33 +2,33 @@
 
 // --- Helper functions ---
 
-fn safe_get arr : i32[], idx ¤ptrdiff : i32 → i32?:
+fn safe_get(arr : i32[], idx ¤ptrdiff : i32) → i32?:
     catch:
         arr[idx]
 
-fn safe_get_result arr : i32[], idx ¤ptrdiff : i32 → i32!:
+fn safe_get_result(arr : i32[], idx ¤ptrdiff : i32) → i32!:
     catch:
         arr[idx]
 
-fn always_fails → i32:
+fn always_fails() → i32:
     var a := [1]
     a[99]
 
-fn try_call_fail → i32?:
+fn try_call_fail() → i32?:
     catch:
         always_fails()
 
 // --- Direct error caught returns none for optional ---
 
 @test
-fn test_catch_oob_optional:
+fn test_catch_oob_optional():
     var result := safe_get([1, 2, 3], 10)
     assert_eq(result, ∅)
 
 // --- No error returns value wrapped in some ---
 
 @test
-fn test_catch_success_optional:
+fn test_catch_success_optional():
     var result := safe_get([1, 2, 3], 1)
     var val := result ?? ⁻1
     assert_eq(val, 2)
@@ -36,7 +36,7 @@ fn test_catch_success_optional:
 // --- Direct error caught returns err for expected ---
 
 @test
-fn test_catch_oob_expected:
+fn test_catch_oob_expected():
     var result := safe_get_result([1, 2, 3], 10)
     var val := result ?? ⁻1
     assert_eq(val, ⁻1)
@@ -44,7 +44,7 @@ fn test_catch_oob_expected:
 // --- Expected success returns ok value ---
 
 @test
-fn test_catch_expected_success:
+fn test_catch_expected_success():
     var result := safe_get_result([1, 2, 3], 1)
     var val := result ?? ⁻1
     assert_eq(val, 2)
@@ -53,55 +53,55 @@ fn test_catch_expected_success:
 
 @test
 @expect error "out of range"
-fn test_catch_no_cross_call:
+fn test_catch_no_cross_call():
     try_call_fail()
 
 // --- Catch requires optional or expected return type ---
 
 @test
 @expect error "optional or expected"
-fn test_catch_requires_optional:
+fn test_catch_requires_optional():
     catch:
         42
 
 // --- Multiple statements in catch ---
 
-fn multi_stmt arr : i32[], idx ¤ptrdiff : i32 → i32?:
+fn multi_stmt(arr : i32[], idx ¤ptrdiff : i32) → i32?:
     catch:
         var x := arr[idx]
         var y := x + 1
         y
 
 @test
-fn test_catch_multi_stmt_success:
+fn test_catch_multi_stmt_success():
     var result := multi_stmt([10, 20, 30], 1)
     var val := result ?? ⁻1
     assert_eq(val, 21)
 
 @test
-fn test_catch_multi_stmt_fail:
+fn test_catch_multi_stmt_fail():
     var result := multi_stmt([10, 20, 30], 5)
     assert_eq(result, ∅)
 
 // --- Negative index caught ---
 
 @test
-fn test_catch_negative_index:
+fn test_catch_negative_index():
     var result := safe_get([1, 2, 3], ⁻1)
     assert_eq(result, ∅)
 
 // --- Catch with code after the block ---
 
-fn catch_then_continue arr : i32[], idx ¤ptrdiff : i32 → i32?:
+fn catch_then_continue(arr : i32[], idx ¤ptrdiff : i32) → i32?:
     catch:
         arr[idx]
 
 @test
-fn test_catch_returns_value_on_success:
+fn test_catch_returns_value_on_success():
     var result := catch_then_continue([5, 6, 7], 0)
     var val := result ?? ⁻1
     assert_eq(val, 5)
 
 @start
-fn main:
+fn main():
     0

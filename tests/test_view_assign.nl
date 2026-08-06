@@ -1,14 +1,14 @@
 // test_view_assign.nl -- reshape-as-view with multi-dimensional slice assignment
 
 @test
-fn test_reshape_view_write → ∅:
+fn test_reshape_view_write() → ∅:
   var a: i32[] = 16 ⍴ 0
   ((4, 4) ⍴ a)[1…2,1…2] = (2, 2) ⍴ 1
   var exp: i32[16] = [0,0,0,0,0,1,1,0,0,1,1,0,0,0,0,0]
   assert_eq(a, exp)
 
 @test
-fn test_reshape_view_read → ∅:
+fn test_reshape_view_read() → ∅:
   var a: i32[] = 1…16
   var m := (4, 4) ⍴ a
   assert_eq(m[0, 0], 1)
@@ -16,12 +16,12 @@ fn test_reshape_view_read → ∅:
   assert_eq(m[3, 3], 16)
 
 @test
-fn test_reshape_view_propagates → ∅:
+fn test_reshape_view_propagates() → ∅:
   var a: i32[] = 4 ⍴ 0
   var m := (2, 2) ⍴ a
   m[0, 1] = 42
   assert_eq(a[1], 42)
 
 @start
-fn main → ∅:
+fn main() → ∅:
   std.print("view assign tests passed")

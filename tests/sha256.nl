@@ -33,7 +33,7 @@ const K : u32 = [
  * beyond the original data.
  * --------------------------------------------------------------------------- */
 
-fn get_padded_byte data : byte[], off ¤byte : usize, total_size ¤byte : usize → u8?:
+fn get_padded_byte(data : byte[], off ¤byte : usize, total_size ¤byte : usize) → u8?:
     if off >= total_size: return ∅
     if off < data.sizeof: return data[off]
     if off == data.sizeof: return 128
@@ -44,7 +44,7 @@ fn get_padded_byte data : byte[], off ¤byte : usize, total_size ¤byte : usize 
         return (bit_len » ((7 - byte_idx) * 8)) & 255
     ∅
 
-fn get_padded_word data : byte[], off ¤byte : usize, total_size ¤byte : usize → u32?:
+fn get_padded_word(data : byte[], off ¤byte : usize, total_size ¤byte : usize) → u32?:
     if off + 4 <= data.sizeof:
         const b0 : u32 = data[off]
         const b1 : u32 = data[off + 1]
@@ -62,10 +62,10 @@ fn get_padded_word data : byte[], off ¤byte : usize, total_size ¤byte : usize 
  * SHA-256 sigma helpers for message-schedule expansion.
  * --------------------------------------------------------------------------- */
 
-fn expand_Σ₀ prev : u32 → u32:
+fn expand_Σ₀(prev : u32) → u32:
     (prev ↻ 7) ^ (prev ↻ 18) ^ (prev » 3)
 
-fn expand_Σ₁ prev : u32 → u32:
+fn expand_Σ₁(prev : u32) → u32:
     (prev ↻ 17) ^ (prev ↻ 19) ^ (prev » 10)
 
 /* ---------------------------------------------------------------------------
@@ -75,7 +75,7 @@ fn expand_Σ₁ prev : u32 → u32:
  * message schedule W[0..63] and round constants K[t].
  * --------------------------------------------------------------------------- */
 
-fn sha256 data : byte[] → int?:
+fn sha256(data : byte[]) → int?:
     /* Compute padded message length per SHA-256 spec. */
     const rem := data.sizeof % 64
     const pad_len := (119 - rem) % 64
@@ -142,25 +142,25 @@ fn sha256 data : byte[] → int?:
  * --------------------------------------------------------------------------- */
 
 @test(sha256)
-fn test_sha256_empty → ∅:
+fn test_sha256_empty() → ∅:
     var data := std.bytes("")
     var hash := sha256(data)
     assert_eq(hash, 0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
 
 @test(sha256)
-fn test_sha256_abc → ∅:
+fn test_sha256_abc() → ∅:
     var data := std.bytes("abc")
     var hash := sha256(data)
     assert_eq(hash, 0xba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad)
 
 @test(sha256)
-fn test_sha256_448bit → ∅:
+fn test_sha256_448bit() → ∅:
     var data := std.bytes("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")
     var hash := sha256(data)
     assert_eq(hash, 0x248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1)
 
 @start
-fn main → ∅:
+fn main() → ∅:
     var alloc := std.arena.allocator()
     var dir := std.fs.cwd()
     var file := dir.openFile("CLAUDE.md")

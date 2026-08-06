@@ -2,7 +2,7 @@
 
 // Basic: generate with lambda over a range
 @test
-fn test_generate_basic:
+fn test_generate_basic():
   var arr := generate(λx : int → int: x * 2, 1…5)
   assert_eq(5, arr.sizeof)
   assert_eq(2, arr[0])
@@ -12,11 +12,11 @@ fn test_generate_basic:
   assert_eq(10, arr[4])
 
 // Generate with a named function
-fn square x: i32 → i32:
+fn square(x: i32) → i32:
   x * x
 
 @test
-fn test_generate_named_func:
+fn test_generate_named_func():
   var arr := generate(square, 1…4)
   assert_eq(4, arr.sizeof)
   assert_eq(1, arr[0])
@@ -25,11 +25,11 @@ fn test_generate_named_func:
   assert_eq(16, arr[3])
 
 // Generate with a curried function
-fn multiply a: i32, b: i32 → i32:
+fn multiply(a: i32, b: i32) → i32:
   a * b
 
 @test
-fn test_generate_curried:
+fn test_generate_curried():
   var arr := generate(multiply(3), 1…5)
   assert_eq(5, arr.sizeof)
   assert_eq(3, arr[0])
@@ -40,7 +40,7 @@ fn test_generate_curried:
 
 // Generate with a stepped range
 @test
-fn test_generate_stepped:
+fn test_generate_stepped():
   var arr := generate(λx : int → int: x, 0…2…10)
   assert_eq(6, arr.sizeof)
   assert_eq(0, arr[0])
@@ -52,7 +52,7 @@ fn test_generate_stepped:
 
 // Generate with descending range
 @test
-fn test_generate_descending:
+fn test_generate_descending():
   var arr := generate(λx : int → int: x * x, 3…1)
   assert_eq(3, arr.sizeof)
   assert_eq(9, arr[0])
@@ -61,7 +61,7 @@ fn test_generate_descending:
 
 // Generate with capture in lambda
 @test
-fn test_generate_capture:
+fn test_generate_capture():
   var offset := 100
   var arr := generate(λx : int |offset| → int: x + offset, 1…3)
   assert_eq(3, arr.sizeof)
@@ -71,14 +71,14 @@ fn test_generate_capture:
 
 // Generate with single-element range
 @test
-fn test_generate_single:
+fn test_generate_single():
   var arr := generate(λx : int → int: x, 5…5)
   assert_eq(1, arr.sizeof)
   assert_eq(5, arr[0])
 
 // Generate result can be iterated with foreach
 @test
-fn test_generate_foreach:
+fn test_generate_foreach():
   var arr := generate(λx : int → int: x * 10, 1…3)
   var sum := 0
   foreach v := arr:
@@ -87,7 +87,7 @@ fn test_generate_foreach:
 
 // Generate result can be subscripted and sliced
 @test
-fn test_generate_slice:
+fn test_generate_slice():
   var arr := generate(λx : int → int: x, 1…10)
   var sub := arr[2…4]
   assert_eq(3, sub.sizeof)
@@ -98,18 +98,18 @@ fn test_generate_slice:
 // Error: function returns ∅
 @test
 @expect error "must not return"
-fn test_generate_none_error:
+fn test_generate_none_error():
   generate(λx : int → ∅: ∅, 1…3)
 
 // Error: second argument not a range
 @test
 @expect error "must be a range"
-fn test_generate_not_range:
+fn test_generate_not_range():
   generate(λx : int → int: x, 42)
 
 // Range as first-class value
 @test
-fn test_range_value:
+fn test_range_value():
   var r := 1…5
   var arr := generate(λx : int → int: x + 1, r)
   assert_eq(5, arr.sizeof)
@@ -118,7 +118,7 @@ fn test_range_value:
 
 // Range in foreach via variable
 @test
-fn test_range_foreach:
+fn test_range_foreach():
   var r := 1…4
   var sum := 0
   foreach i := r:
@@ -126,5 +126,5 @@ fn test_range_foreach:
   assert_eq(10, sum)
 
 @start
-fn main:
+fn main():
   0

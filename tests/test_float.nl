@@ -1,11 +1,11 @@
 // Floating-point type tests: f16, f32, f64, bfloat, float
 // Tests literals, arithmetic, comparisons, type coercion, and formatting.
 
-fn assert_true cond:bool, msg:str:
+fn assert_true(cond:bool, msg:str):
   if not cond:
     std.print(msg)
 
-fn test_float_literals:
+fn test_float_literals():
   // Untyped float literal (inferred as "float")
   static_assert(3.14 > 3.0)
   static_assert(3.14 < 4.0)
@@ -23,7 +23,7 @@ fn test_float_literals:
   // Integer with float suffix becomes float
   static_assert(42f32 == 42.0f32)
 
-fn test_float_arithmetic:
+fn test_float_arithmetic():
   // Addition
   static_assert(3.0 + 2.0 == 5.0)
 
@@ -45,7 +45,7 @@ fn test_float_arithmetic:
   static_assert(⁻3.0 == ⁻3.0)
   static_assert(⁻3.0 + 3.0 == 0.0)
 
-fn test_mixed_int_float_rejected:
+fn test_mixed_int_float_rejected():
   @expect error "matching types"
   var a := 2 + 3.0
 
@@ -58,7 +58,7 @@ fn test_mixed_int_float_rejected:
   @expect error "matching types"
   var d := 10.0 / 4
 
-fn test_float_comparisons:
+fn test_float_comparisons():
   static_assert(1.0 < 2.0)
   static_assert(2.0 > 1.0)
   static_assert(1.0 <= 1.0)
@@ -73,7 +73,7 @@ fn test_float_comparisons:
   static_assert(2 > 1.5)
   static_assert(1.5 < 2)
 
-fn test_typed_float_widths:
+fn test_typed_float_widths():
   // All should be equal in value
   static_assert(1.5f16 == 1.5f32)
   static_assert(1.5f32 == 1.5f64)
@@ -84,13 +84,13 @@ fn test_typed_float_widths:
   static_assert_eq(@typeof(1.0f64), @typeof(0.0f64))
   static_assert_eq(@typeof(1.0), @typeof(0.0))
 
-fn add_floats x:f64, y:f64 -> f64:
+fn add_floats(x:f64, y:f64) -> f64:
   x + y
 
-fn as_f32 x:f32 -> f32:
+fn as_f32(x:f32) -> f32:
   x
 
-fn test_float_coercion_in_functions:
+fn test_float_coercion_in_functions():
   // Test int-to-float parameter coercion
   var r := add_floats(3, 4)
   assert_true(r == 7.0, "add_floats(3, 4) should be 7.0")
@@ -101,7 +101,7 @@ fn test_float_coercion_in_functions:
   assert_true(s > 3.13, "as_f32(3.14) should be > 3.13")
   assert_true(s < 3.15, "as_f32(3.14) should be < 3.15")
 
-fn test_float_in_conditionals:
+fn test_float_in_conditionals():
   var x := 0.0
   if x:
     assert_true(false, "0.0 should be falsy")
@@ -109,7 +109,7 @@ fn test_float_in_conditionals:
   if not y:
     assert_true(false, "1.5 should be truthy")
 
-fn test_float_format:
+fn test_float_format():
   var alloc := std.heap.allocator()
   var s := std.format(alloc, "value: {}", 3.14)
   assert_true(s == "value: 3.14", "format float failed")
@@ -122,7 +122,7 @@ fn test_float_format:
   var s3 := std.format(alloc, "{:.2e}", 1500.0)
   assert_true(s3 == "1.50e+03", "format .2e failed")
 
-fn test_hex_float_literal:
+fn test_hex_float_literal():
   // Hex float: 0x1.8p1 = 1.5 * 2^1 = 3.0
   var a := 0x1.8p1
   assert_true(a == 3.0, "0x1.8p1 should be 3.0")
@@ -135,16 +135,16 @@ fn test_hex_float_literal:
   var c := 0x1p-1
   assert_true(c == 0.5, "0x1p-1 should be 0.5")
 
-fn reject_float x:i32 -> i32:
+fn reject_float(x:i32) -> i32:
   x
 
-fn test_float_type_rejection:
+fn test_float_type_rejection():
   // Float should not be accepted where int is expected
   @expect error "expected i32"
   reject_float(3.14)
 
 @start
-fn main:
+fn main():
   test_float_literals()
   test_float_arithmetic()
   test_mixed_int_float_rejected()

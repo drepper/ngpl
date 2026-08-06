@@ -1,7 +1,7 @@
 /* Tests for std.arena allocator. */
 
 @test
-fn test_arena_alloc_and_deinit → ∅:
+fn test_arena_alloc_and_deinit() → ∅:
     var alloc := std.arena.allocator()
     var dir := std.fs.cwd()
     var file := dir.openFile("CLAUDE.md")
@@ -10,7 +10,7 @@ fn test_arena_alloc_and_deinit → ∅:
     alloc.deinit()
 
 @test
-fn test_arena_independent → ∅:
+fn test_arena_independent() → ∅:
     var a1 := std.arena.allocator()
     var a2 := std.arena.allocator()
     var dir := std.fs.cwd()
@@ -23,7 +23,7 @@ fn test_arena_independent → ∅:
     a2.deinit()
 
 @test
-fn test_arena_reset → ∅:
+fn test_arena_reset() → ∅:
     var alloc := std.arena.allocator()
     var dir := std.fs.cwd()
     var f1 := dir.openFile("CLAUDE.md")
@@ -36,5 +36,5 @@ fn test_arena_reset → ∅:
     alloc.deinit()
 
 @start
-fn main → ∅:
+fn main() → ∅:
     std.print("arena tests passed")

@@ -1,23 +1,23 @@
 // Tests for sizeof returning unit-bearing values and dimensionless arithmetic.
 
-fn assert_eq_int a:i64, b:i64, msg:str:
+fn assert_eq_int(a:i64, b:i64, msg:str):
   if a != b:
     std.print("FAIL: ", msg, " (got ", a, " expected ", b, ")")
 
-fn assert_true cond:bool, msg:str:
+fn assert_true(cond:bool, msg:str):
   if not cond:
     std.print("FAIL: ", msg)
 
 // --- sizeof returns ptrdiff unit ---
 
 @test
-fn test_sizeof_array_ptrdiff:
+fn test_sizeof_array_ptrdiff():
   var arr := [10, 20, 30]
   var sz := arr.sizeof
   assert_eq_int(sz, 3, "array sizeof is 3")
 
 @test
-fn test_sizeof_string_ptrdiff:
+fn test_sizeof_string_ptrdiff():
   var s := "hello"
   var sz := s.sizeof
   assert_eq_int(sz, 5, "string sizeof is 5")
@@ -25,7 +25,7 @@ fn test_sizeof_string_ptrdiff:
 // --- sizeof byte[] returns byte unit ---
 
 @test
-fn test_sizeof_byte_array:
+fn test_sizeof_byte_array():
   var buf: u8[4] = [1, 2, 3, 4]
   var sz := buf.sizeof
   assert_eq_int(sz, 4, "byte array sizeof is 4")
@@ -33,13 +33,13 @@ fn test_sizeof_byte_array:
 // --- dimensionless + unit-bearing: addition ---
 
 @test
-fn test_add_unit_plus_dimensionless:
+fn test_add_unit_plus_dimensionless():
   var a ¤meter := 10
   var b := a + 3
   assert_eq_int(b, 13, "10m + 3")
 
 @test
-fn test_add_dimensionless_plus_unit:
+fn test_add_dimensionless_plus_unit():
   var a ¤meter := 10
   var b := 5 + a
   assert_eq_int(b, 15, "5 + 10m")
@@ -47,13 +47,13 @@ fn test_add_dimensionless_plus_unit:
 // --- dimensionless + unit-bearing: subtraction ---
 
 @test
-fn test_sub_unit_minus_dimensionless:
+fn test_sub_unit_minus_dimensionless():
   var a ¤meter := 10
   var b := a - 3
   assert_eq_int(b, 7, "10m - 3")
 
 @test
-fn test_sub_dimensionless_minus_unit:
+fn test_sub_dimensionless_minus_unit():
   var a ¤meter := 10
   var b := 20 - a
   assert_eq_int(b, 10, "20 - 10m")
@@ -61,13 +61,13 @@ fn test_sub_dimensionless_minus_unit:
 // --- dimensionless * unit-bearing: multiplication preserves unit ---
 
 @test
-fn test_mul_unit_times_dimensionless:
+fn test_mul_unit_times_dimensionless():
   var a ¤meter := 5
   var b := a * 3
   assert_eq_int(b, 15, "5m * 3 = 15m")
 
 @test
-fn test_mul_dimensionless_times_unit:
+fn test_mul_dimensionless_times_unit():
   var a ¤meter := 5
   var b := 3 * a
   assert_eq_int(b, 15, "3 * 5m = 15m")
@@ -75,7 +75,7 @@ fn test_mul_dimensionless_times_unit:
 // --- dimensionless / unit-bearing ---
 
 @test
-fn test_div_unit_by_dimensionless:
+fn test_div_unit_by_dimensionless():
   var a ¤meter := 12
   var b := a / 3
   assert_eq_int(b, 4, "12m / 3 = 4m")
@@ -83,13 +83,13 @@ fn test_div_unit_by_dimensionless:
 // --- dimensionless % unit-bearing ---
 
 @test
-fn test_mod_unit_by_dimensionless:
+fn test_mod_unit_by_dimensionless():
   var a ¤meter := 10
   var b := a % 3
   assert_eq_int(b, 1, "10m % 3 = 1m")
 
 @test
-fn test_mod_dimensionless_by_unit:
+fn test_mod_dimensionless_by_unit():
   var a ¤meter := 3
   var b := 10 % a
   assert_eq_int(b, 1, "10 % 3m = 1m")
@@ -97,7 +97,7 @@ fn test_mod_dimensionless_by_unit:
 // --- comparison with dimensionless ---
 
 @test
-fn test_cmp_unit_with_dimensionless:
+fn test_cmp_unit_with_dimensionless():
   var a ¤meter := 5
   assert_true(a > 3, "5m > 3")
   assert_true(2 < a, "2 < 5m")
@@ -106,7 +106,7 @@ fn test_cmp_unit_with_dimensionless:
 // --- sizeof result used in arithmetic ---
 
 @test
-fn test_sizeof_in_arithmetic:
+fn test_sizeof_in_arithmetic():
   var arr := [10, 20, 30, 40, 50]
   var sz := arr.sizeof
   var doubled := sz * 2
@@ -117,13 +117,13 @@ fn test_sizeof_in_arithmetic:
 // --- @sizeof with ptrdiff ---
 
 @test
-fn test_at_sizeof_ptrdiff:
+fn test_at_sizeof_ptrdiff():
   var arr := [1, 2, 3]
   var sz := @sizeof(arr)
   assert_eq_int(sz, 3, "@sizeof arr is 3")
 
 @start
-fn main:
+fn main():
   test_sizeof_array_ptrdiff()
   test_sizeof_string_ptrdiff()
   test_sizeof_byte_array()

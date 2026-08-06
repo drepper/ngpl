@@ -243,12 +243,10 @@ class Parser:
     def _parse_function_def(self, is_start, is_test=False, test_refs=None,
                             expect_annotations: list[tuple[str, str]] | None = None,
                             is_replaceable: bool = False):
-        """Parse: fn name [params] (-> ret_type)? block
+        """Parse: fn name '(' [params] ')' ('->' ret_type)? block
 
-        The parameter list has no delimiters; it is terminated by -> (return
-        type) or : (body start).  A colon after a parameter name is
-        distinguished from the body-start colon by looking ahead: if the
-        token after : is an identifier or ?, it begins a type annotation.
+        The parameter list is enclosed in parentheses.  An empty parameter
+        list is written as ``()``.
 
         When @expect annotations are present, parse errors in the body are
         captured instead of propagated — the FuncDef stores the error message
@@ -261,12 +259,11 @@ class Parser:
         params = []
         param_units: dict[str, object] = {}
         pack_param: tuple[str, str | None] | None = None
-        while True:
+        self._eat("PUNCT", "(")
+        while not (self._check("PUNCT") and self._cur().value == ")"):
             while self._try_eat("NEWLINE"):
                 pass
-            if self._check("OP") and self._cur().value == "->":
-                break
-            if self._check("PUNCT") and self._cur().value == ":":
+            if self._check("PUNCT") and self._cur().value == ")":
                 break
             if not self._check("IDENT"):
                 break
@@ -304,6 +301,7 @@ class Parser:
             self._try_eat("NEWLINE")
             if not self._try_eat("PUNCT", ","):
                 break
+        self._eat("PUNCT", ")")
 
         ret_type = None
         if self._try_eat("OP", "->"):

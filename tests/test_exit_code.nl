@@ -4,41 +4,41 @@
 // In test mode the return value is ignored by the test runner,
 // but the function must parse and evaluate correctly.
 
-fn compute_exit → u8:
+fn compute_exit() → u8:
     42
 
 @test
-fn test_u8_return → ∅:
+fn test_u8_return() → ∅:
     assert_eq(compute_exit(), 42)
 
-fn compute_i8_exit → i8:
+fn compute_i8_exit() → i8:
     ⁻1
 
 @test
-fn test_i8_return → ∅:
+fn test_i8_return() → ∅:
     assert_eq(compute_i8_exit(), ⁻1)
 
-fn compute_zero → u8:
+fn compute_zero() → u8:
     0
 
 @test
-fn test_zero_return → ∅:
+fn test_zero_return() → ∅:
     assert_eq(compute_zero(), 0)
 
-fn compute_max → u8:
+fn compute_max() → u8:
     255
 
 @test
-fn test_max_u8 → ∅:
+fn test_max_u8() → ∅:
     assert_eq(compute_max(), 255)
 
-fn compute_i8_min → i8:
+fn compute_i8_min() → i8:
     ⁻128
 
 @test
-fn test_i8_min → ∅:
+fn test_i8_min() → ∅:
     assert_eq(compute_i8_min(), ⁻128)
 
 @start
-fn main → u8:
+fn main() → u8:
     0
