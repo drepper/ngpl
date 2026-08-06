@@ -1,5 +1,5 @@
 @start
-fn main → ∅:
+fn main() → ∅:
     var a : i32 = 1
     var b : i32 = 2
     var c : i32 = 3

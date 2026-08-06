@@ -1,3 +1,3 @@
 @start
-fn main → ∅:
+fn main() → ∅:
     assert(false)

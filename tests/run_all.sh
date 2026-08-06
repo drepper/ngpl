@@ -36,6 +36,19 @@ tests=(
     "$testdir"/test_type_strict.nl
     "$testdir"/test_index_units.nl
     "$testdir"/sha256.nl
+    "$testdir"/test_arena.nl
+    "$testdir"/test_comptime_foreach.nl
+    "$testdir"/test_exit_code.nl
+    "$testdir"/test_float.nl
+    "$testdir"/test_format.nl
+    "$testdir"/test_generic.nl
+    "$testdir"/test_multidim.nl
+    "$testdir"/test_pack.nl
+    "$testdir"/test_power.nl
+    "$testdir"/test_purity.nl
+    "$testdir"/test_roots.nl
+    "$testdir"/test_units.nl
+    "$testdir"/test_view_assign.nl
 )
 
 passed=0
