@@ -207,6 +207,18 @@ class SliceAccess:
         self.end = end
 
 
+class MultiSlice:
+    """Multi-dimensional slice: obj[spec, spec, ...].
+
+    Each spec is either ("index", expr) for point access or
+    ("range", start, end) for a slice along that dimension.
+    """
+
+    def __init__(self, obj, specs: list):
+        self.obj = obj
+        self.specs = specs
+
+
 class TryUnwrap:
     """Postfix ? operator: unwrap optional or propagate none."""
 

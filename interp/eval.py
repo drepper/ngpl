@@ -19,7 +19,7 @@ from interp.ast import (
     IntLit, FloatLit, StrLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
-    ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
+    ArrayLit, Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr,
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
@@ -1192,6 +1192,62 @@ class Evaluator:
                 f"got typed integer {iu.width} without unit")
         raise TypeError("array index must be an integer")
 
+    def _eval_multi_slice_read(self, val: Value, specs: list) -> Value:
+        """Read a multi-dimensional slice from a nested array."""
+        unwrapped = unwrap_optional(val)
+        if not isinstance(unwrapped, ObjectValue) or not isinstance(unwrapped.obj, ArrayValue):
+            raise TypeError("multi-dimensional slice requires a nested array")
+        arr = unwrapped.obj
+        kind, *rest = specs[0]
+        remaining = specs[1:]
+        if kind == "range":
+            s_raw = unwrap_optional(self.eval_expr(rest[0]))
+            e_raw = unwrap_optional(self.eval_expr(rest[1]))
+            s = self._check_index_unit(s_raw, arr)
+            e = self._check_index_unit(e_raw, arr)
+            selected = [arr.get(i) for i in range(s.value, e.value + 1)]
+        else:
+            idx_raw = unwrap_optional(self.eval_expr(rest[0]))
+            idx = self._check_index_unit(idx_raw, arr)
+            if remaining:
+                return self._eval_multi_slice_read(arr.get(idx.value), remaining)
+            return arr.get(idx.value)
+        if remaining:
+            result = [self._eval_multi_slice_read(elem, remaining) for elem in selected]
+            return ObjectValue(ArrayValue(result))
+        return ObjectValue(ArrayValue(selected, element_type=arr.element_type))
+
+    def _eval_multi_slice_write(self, val: Value, specs: list, rhs: Value) -> None:
+        """Write to a multi-dimensional slice of a nested array."""
+        unwrapped = unwrap_optional(val)
+        if not isinstance(unwrapped, ObjectValue) or not isinstance(unwrapped.obj, ArrayValue):
+            raise TypeError("multi-dimensional slice requires a nested array")
+        arr = unwrapped.obj
+        kind, *rest = specs[0]
+        remaining = specs[1:]
+        if kind == "range":
+            s_raw = unwrap_optional(self.eval_expr(rest[0]))
+            e_raw = unwrap_optional(self.eval_expr(rest[1]))
+            s = self._check_index_unit(s_raw, arr)
+            e = self._check_index_unit(e_raw, arr)
+            rhs_u = unwrap_optional(rhs)
+            if not isinstance(rhs_u, ObjectValue) or not isinstance(rhs_u.obj, ArrayValue):
+                raise TypeError("slice assignment requires an array on the right-hand side")
+            rhs_arr = rhs_u.obj
+            for i_out, i_arr in enumerate(range(s.value, e.value + 1)):
+                rhs_elem = rhs_arr.get(i_out)
+                if remaining:
+                    self._eval_multi_slice_write(arr.get(i_arr), remaining, rhs_elem)
+                else:
+                    arr.set(i_arr, rhs_elem)
+        else:
+            idx_raw = unwrap_optional(self.eval_expr(rest[0]))
+            idx = self._check_index_unit(idx_raw, arr)
+            if remaining:
+                self._eval_multi_slice_write(arr.get(idx.value), remaining, rhs)
+            else:
+                arr.set(idx.value, rhs)
+
     # ------------------------------------------------------------------
     # Expression evaluation
     # ------------------------------------------------------------------
@@ -1516,9 +1572,15 @@ class Evaluator:
                 e = unwrap_optional(self.eval_expr(node.end))
                 s = self._check_index_unit(s, unwrapped.obj)
                 e = self._check_index_unit(e, unwrapped.obj)
-                elems = unwrapped.obj.elements[s.value:e.value + 1]
+                arr = unwrapped.obj
+                elems = [arr.get(i) for i in range(s.value, e.value + 1)]
                 return ObjectValue(ArrayValue(list(elems),
-                                              element_type=unwrapped.obj.element_type))
+                                              element_type=arr.element_type))
+
+        # Multi-dimensional slice: arr[range, range, ...].
+        if isinstance(node, MultiSlice):
+            arr_val = self.eval_expr(node.obj)
+            return self._eval_multi_slice_read(arr_val, node.specs)
 
         if isinstance(node, RangeExpr):
             s = unwrap_optional(self.eval_expr(node.start))
@@ -1608,6 +1670,15 @@ class Evaluator:
             sz = unwrap_optional(size_val)
             if isinstance(sz, IntValue):
                 init_val = self.eval_expr(node.init_expr) if node.init_expr is not None else mk_int(0)
+                if isinstance(init_val, ObjectValue) and isinstance(init_val.obj, ArrayValue):
+                    arr = init_val.obj
+                    if arr.sizeof != sz.value:
+                        raise TypeError(
+                            f"array size mismatch: declared {sz.value}, got {arr.sizeof}")
+                    if etype:
+                        coerced = [coerce_to_type(arr.get(i), etype) for i in range(arr.sizeof)]
+                        return ObjectValue(ArrayValue(coerced, element_type=etype))
+                    return init_val
                 if etype and isinstance(init_val, IntValue):
                     init_val = mk_int(init_val.value, etype)
                 return ObjectValue(ArrayValue([init_val] * sz.value, element_type=etype))
@@ -1671,7 +1742,11 @@ class Evaluator:
         if isinstance(stmt, tuple) and len(stmt) == 3 and stmt[0] == "assign_stmt":
             _, target_ast, rhs_ast = stmt
             rhs = self.eval_expr(rhs_ast)
-            if isinstance(target_ast, SliceAccess):
+            if isinstance(target_ast, MultiSlice):
+                # arr[range, range, ...] ← matrix — multi-dim slice write.
+                arr_val = self.eval_expr(target_ast.obj)
+                self._eval_multi_slice_write(arr_val, target_ast.specs, rhs)
+            elif isinstance(target_ast, SliceAccess):
                 # arr[s…e] ← rhs_array — copy elements into slice.
                 arr_val = self.eval_expr(target_ast.obj)
                 au = unwrap_optional(arr_val)
@@ -1682,8 +1757,8 @@ class Evaluator:
                     e = self._check_index_unit(e, au.obj)
                     rhs_arr = self._as_array(rhs)
                     if rhs_arr is not None:
-                        for i, val in enumerate(rhs_arr.elements):
-                            au.obj.set(s.value + i, val)
+                        for i in range(rhs_arr.sizeof):
+                            au.obj.set(s.value + i, rhs_arr.get(i))
             elif isinstance(target_ast, Subscript):
                 # arr[i] or arr[i, j, ...] ← value — mutate (nested) array element.
                 val = self.eval_expr(target_ast.obj)
@@ -2017,12 +2092,19 @@ class Evaluator:
                     "\N{APL FUNCTIONAL SYMBOL RHO}: dimensions must be non-negative")
 
         source: list[Value]
+        backing: list[Value] | None = None
         etype: str | None = None
         if isinstance(du, IntValue):
             source = [du]
         elif isinstance(du, ObjectValue) and isinstance(du.obj, ArrayValue):
-            source = list(du.obj.elements)
-            etype = du.obj.element_type
+            arr = du.obj
+            etype = arr.element_type
+            if arr._backing is not None:
+                backing = arr._backing
+                source = backing[arr._offset:arr._offset + arr._length]
+            else:
+                backing = arr.elements
+                source = backing
             if not source:
                 raise TypeError(
                     "\N{APL FUNCTIONAL SYMBOL RHO}: cannot reshape empty array")
@@ -2044,6 +2126,8 @@ class Evaluator:
                 return ObjectValue(ArrayValue([], element_type=etype))
             return ObjectValue(ArrayValue([]))
 
+        if backing is not None and total <= len(source) and len(dims) > 1:
+            return self._build_view(dims, backing, etype, 0)
         return self._build_shaped(dims, source, etype, 0)
 
     @staticmethod
@@ -2062,6 +2146,25 @@ class Evaluator:
         for i in range(n):
             row = Evaluator._build_shaped(
                 dims[1:], source, etype, offset + i * inner_size)
+            rows.append(row)
+        return ObjectValue(ArrayValue(rows))
+
+    @staticmethod
+    def _build_view(dims: list[int], backing: list[Value],
+                    etype: str | None, offset: int) -> ObjectValue:
+        """Build a shaped view sharing the backing list."""
+        if len(dims) == 1:
+            return ObjectValue(ArrayValue(
+                backing=backing, offset=offset, length=dims[0],
+                element_type=etype))
+        n = dims[0]
+        inner_size = 1
+        for d in dims[1:]:
+            inner_size *= d
+        rows: list[Value] = []
+        for i in range(n):
+            row = Evaluator._build_view(
+                dims[1:], backing, etype, offset + i * inner_size)
             rows.append(row)
         return ObjectValue(ArrayValue(rows))
 

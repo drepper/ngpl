@@ -113,6 +113,14 @@ def _builtin_assert_eq(args):
         if expected.value != actual.value:
             raise AssertionError(
                 f"assert_eq failed:\n  expected: {_format_value(expected)}\n  actual:   {_format_value(actual)}")
+    elif (isinstance(expected, ObjectValue) and isinstance(expected.obj, ArrayValue)
+          and isinstance(actual, ObjectValue) and isinstance(actual.obj, ArrayValue)):
+        ea, aa = expected.obj, actual.obj
+        if ea.sizeof != aa.sizeof:
+            raise AssertionError(
+                f"assert_eq failed: array lengths differ ({ea.sizeof} vs {aa.sizeof})")
+        for i in range(ea.sizeof):
+            _builtin_assert_eq([ea.get(i), aa.get(i)])
     elif expected.to_python() != actual.to_python():
         raise AssertionError(
             f"assert_eq failed:\n  expected: {_format_value(expected)}\n  actual:   {_format_value(actual)}")

@@ -12,7 +12,7 @@ from interp.ast import (
     IntLit, FloatLit, StrLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
-    ArrayLit, Subscript, SliceAccess, ArrayAlloc, TryUnwrap,
+    ArrayLit, Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, EnumDef,
     LambdaExpr, ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
@@ -1325,11 +1325,7 @@ class Parser:
                 return TupleLit(elements)
             self._skip_nl()
             self._eat("PUNCT", ")")
-            node = first
-            while self._check("PUNCT") and self._cur().value == "(":
-                args = self._parse_call_args()
-                node = MethodCall(node, "__call__", args)
-            return node
+            return self._parse_postfix(first)
 
         # static_assert / static_assert_eq — special forms.
         if tok.type == "IDENT" and tok.value == "static_assert":
@@ -1374,17 +1370,7 @@ class Parser:
                 elif self._check("PUNCT") and self._cur().value == "[":
                     bracket_tok = self._cur()
                     self.pos += 1
-                    idx_expr = self._parse_or_expr()
-                    indices = [idx_expr]
-                    while self._check("PUNCT") and self._cur().value == ",":
-                        self.pos += 1
-                        indices.append(self._parse_or_expr())
-                    self._skip_nl()
-                    self._eat("PUNCT", "]")
-                    if len(indices) == 1 and isinstance(idx_expr, RangeExpr):
-                        node = self._set_pos(SliceAccess(node, idx_expr.start, idx_expr.end), bracket_tok)
-                    else:
-                        node = self._set_pos(Subscript(node, indices), bracket_tok)
+                    node = self._set_pos(self._parse_bracket_access(node), bracket_tok)
                 elif self._check("PUNCT") and self._cur().value == "(":
                     call_tok = self._cur()
                     args = self._parse_call_args()
@@ -1398,6 +1384,30 @@ class Parser:
             return node
 
         raise ParseError(f"unexpected token: {self._tok_display(tok)}", tok)
+
+    def _parse_bracket_access(self, node, bracket_tok=None):
+        """Parse [expr, ...] after node — returns Subscript, SliceAccess, or MultiSlice."""
+        idx_expr = self._parse_or_expr()
+        indices = [idx_expr]
+        while self._check("PUNCT") and self._cur().value == ",":
+            self.pos += 1
+            indices.append(self._parse_or_expr())
+        self._skip_nl()
+        self._eat("PUNCT", "]")
+        has_range = any(isinstance(e, RangeExpr) for e in indices)
+        if len(indices) == 1 and not has_range:
+            return Subscript(node, indices)
+        if len(indices) == 1 and has_range:
+            return SliceAccess(node, idx_expr.start, idx_expr.end)
+        if has_range:
+            specs = []
+            for e in indices:
+                if isinstance(e, RangeExpr):
+                    specs.append(("range", e.start, e.end))
+                else:
+                    specs.append(("index", e))
+            return MultiSlice(node, specs)
+        return Subscript(node, indices)
 
     def _parse_postfix(self, node):
         """Chain .attr, [idx], and (args) postfix operators onto node."""
@@ -1413,17 +1423,7 @@ class Parser:
                     node = GetAttr(node, attr_name)
             elif self._check("PUNCT") and self._cur().value == "[":
                 self.pos += 1
-                idx_expr = self._parse_or_expr()
-                indices = [idx_expr]
-                while self._check("PUNCT") and self._cur().value == ",":
-                    self.pos += 1
-                    indices.append(self._parse_or_expr())
-                self._skip_nl()
-                self._eat("PUNCT", "]")
-                if len(indices) == 1 and isinstance(idx_expr, RangeExpr):
-                    node = SliceAccess(node, idx_expr.start, idx_expr.end)
-                else:
-                    node = Subscript(node, indices)
+                node = self._parse_bracket_access(node)
             elif self._check("PUNCT") and self._cur().value == "(":
                 args = self._parse_call_args()
                 node = MethodCall(node, "__call__", args)

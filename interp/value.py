@@ -537,33 +537,56 @@ class ArrayValue(Value):
     Elements can be read via get() and written via set().
     Both raise IndexError for out-of-bounds access.
     If element_type is set, stored values are automatically coerced.
+
+    When _backing is set, the array is a view into a shared list
+    at the given offset/length.  Reads and writes go through the backing.
     """
 
-    __slots__ = ("elements", "element_type")
+    __slots__ = ("elements", "element_type", "_backing", "_offset", "_length")
 
-    def __init__(self, elements=None, element_type: str | None = None):
-        self.elements = list(elements) if elements else []
+    def __init__(self, elements=None, element_type: str | None = None,
+                 *, backing: list | None = None, offset: int = 0,
+                 length: int | None = None):
+        if backing is not None:
+            self._backing = backing
+            self._offset = offset
+            self._length = length if length is not None else len(backing) - offset
+            self.elements = None
+        else:
+            self._backing = None
+            self._offset = 0
+            self._length = 0
+            self.elements = list(elements) if elements else []
         self.element_type = element_type
 
     def get(self, index: int) -> Value:
         """Return element at index; raises IndexError if out of range."""
-        if 0 <= index < len(self.elements):
+        n = self.sizeof
+        if 0 <= index < n:
+            if self._backing is not None:
+                return self._backing[self._offset + index]
             return self.elements[index]
         raise IndexError(
-            f"array index {index} out of range (length {len(self.elements)})")
+            f"array index {index} out of range (length {n})")
 
     @property
     def sizeof(self) -> int:
+        if self._backing is not None:
+            return self._length
         return len(self.elements)
 
     def set(self, index: int, value: Value):
         """Set element at index; raises IndexError if out of range."""
         if self.element_type is not None and isinstance(value, IntValue):
             value = mk_int(value.value, self.element_type)
-        if index < 0 or index >= len(self.elements):
+        n = self.sizeof
+        if index < 0 or index >= n:
             raise IndexError(
-                f"array index {index} out of range (length {len(self.elements)})")
-        self.elements[index] = value
+                f"array index {index} out of range (length {n})")
+        if self._backing is not None:
+            self._backing[self._offset + index] = value
+        else:
+            self.elements[index] = value
 
 
 class TypeValue(Value):
@@ -834,6 +857,7 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
         check_int(value.value, target_width)
         return IntValue(value.value, target_width)
     if isinstance(value, ObjectValue) and isinstance(value.obj, ArrayValue):
-        coerced = [coerce_to_type(e, target_width) for e in value.obj.elements]
+        arr = value.obj
+        coerced = [coerce_to_type(arr.get(i), target_width) for i in range(arr.sizeof)]
         return ObjectValue(ArrayValue(coerced, element_type=target_width))
     return value
