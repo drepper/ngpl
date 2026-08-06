@@ -1,4 +1,4 @@
-error: addition expected int+int or str+str, got IntValue+StrValue
+error: addition expected int+int, float+float, or str+str, got IntValue+StrValue
   --> tests/output/err_deep_column.nl:6:19
     |
   6 |     var result := a + b + c + "bad"

@@ -541,12 +541,12 @@ class Evaluator:
         ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return self._mk_int(lu.value + ru.value, resolve_width(lu.width, ru.width))
-        lf, rf, fw = self._promote_to_float(lu, ru)
-        if lf is not None:
-            return mk_float(lf + rf, fw)
+        ff = self._require_matching_numeric(lu, ru, "addition")
+        if ff is not None:
+            return mk_float(ff[0] + ff[1], ff[2])
         if isinstance(lu, StrValue) and isinstance(ru, StrValue):
             return mk_str(lu.value + ru.value)
-        raise TypeError(f"addition expected int+int or str+str, got {type(lu).__name__}+{type(ru).__name__}")
+        raise TypeError(f"addition expected int+int, float+float, or str+str, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_sub(self, left, right):
         """Subtraction."""
@@ -554,10 +554,10 @@ class Evaluator:
         ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return self._mk_int(lu.value - ru.value, resolve_width(lu.width, ru.width))
-        lf, rf, fw = self._promote_to_float(lu, ru)
-        if lf is not None:
-            return mk_float(lf - rf, fw)
-        raise TypeError(f"subtraction expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
+        ff = self._require_matching_numeric(lu, ru, "subtraction")
+        if ff is not None:
+            return mk_float(ff[0] - ff[1], ff[2])
+        raise TypeError(f"subtraction expected int+int or float+float, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_mul(self, left, right):
         """Multiplication."""
@@ -565,10 +565,10 @@ class Evaluator:
         ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return self._mk_int(lu.value * ru.value, resolve_width(lu.width, ru.width))
-        lf, rf, fw = self._promote_to_float(lu, ru)
-        if lf is not None:
-            return mk_float(lf * rf, fw)
-        raise TypeError(f"multiplication expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
+        ff = self._require_matching_numeric(lu, ru, "multiplication")
+        if ff is not None:
+            return mk_float(ff[0] * ff[1], ff[2])
+        raise TypeError(f"multiplication expected int+int or float+float, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_div(self, left, right):
         """Division: integer (truncates toward zero, returns ExpectedValue) or float."""
@@ -579,12 +579,12 @@ class Evaluator:
                 return self._division_error()
             result = int(lu.value / ru.value) if lu.value * ru.value >= 0 else -int(abs(lu.value) / abs(ru.value))
             return ExpectedValue.ok(self._mk_int(result, resolve_width(lu.width, ru.width)))
-        lf, rf, fw = self._promote_to_float(lu, ru)
-        if lf is not None:
-            if rf == 0.0:
+        ff = self._require_matching_numeric(lu, ru, "division")
+        if ff is not None:
+            if ff[1] == 0.0:
                 return self._division_error()
-            return mk_float(lf / rf, fw)
-        raise TypeError(f"division expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
+            return mk_float(ff[0] / ff[1], ff[2])
+        raise TypeError(f"division expected int+int or float+float, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_mod(self, left, right):
         """Remainder (truncation toward zero): a % b = a - trunc(a/b)*b.  Returns ExpectedValue."""
@@ -595,27 +595,29 @@ class Evaluator:
                 return self._division_error()
             quot = int(lu.value / ru.value) if lu.value * ru.value >= 0 else -int(abs(lu.value) / abs(ru.value))
             return ExpectedValue.ok(self._mk_int(lu.value - quot * ru.value, resolve_width(lu.width, ru.width)))
-        lf, rf, fw = self._promote_to_float(lu, ru)
-        if lf is not None:
+        ff = self._require_matching_numeric(lu, ru, "remainder")
+        if ff is not None:
             import math
-            if rf == 0.0:
+            if ff[1] == 0.0:
                 return self._division_error()
-            return mk_float(math.fmod(lf, rf), fw)
-        raise TypeError(f"remainder expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
+            return mk_float(math.fmod(ff[0], ff[1]), ff[2])
+        raise TypeError(f"remainder expected int+int or float+float, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_pow(self, left, right):
-        """Exponentiation: int↑int or float↑float/int.  Integer exponent must be non-negative."""
+        """Exponentiation: int↑int, float↑float, or float↑int."""
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-            if not isinstance(ru, IntValue):
-                raise TypeError("integer base requires integer exponent")
             if ru.value < 0:
                 raise TypeError("integer exponentiation requires non-negative exponent")
             return self._mk_int(lu.value ** ru.value, lu.width)
-        lf, rf, fw = self._promote_to_float(lu, ru)
-        if lf is not None:
-            return mk_float(lf ** rf, fw)
+        if isinstance(lu, FloatValue) and isinstance(ru, FloatValue):
+            return mk_float(lu.value ** ru.value, resolve_float_width(lu.width, ru.width))
+        if isinstance(lu, FloatValue) and isinstance(ru, IntValue):
+            return mk_float(lu.value ** ru.value, lu.width)
+        if isinstance(lu, IntValue) and isinstance(ru, FloatValue):
+            raise TypeError(
+                f"exponentiation requires matching types, got {lu.width} and {ru.width}")
         raise TypeError(
             f"exponentiation expected numeric operands, "
             f"got {type(lu).__name__} and {type(ru).__name__}")
@@ -900,10 +902,12 @@ class Evaluator:
 
     @staticmethod
     def _promote_to_float(lu, ru) -> tuple[float | None, float, str]:
-        """Try to promote two operands to float for mixed arithmetic.
+        """Try to promote two operands to float for comparison.
 
         Returns (left_float, right_float, width) on success,
         or (None, 0.0, "") if neither operand is a float.
+
+        Allows mixed int/float promotion for comparisons only.
         """
         if isinstance(lu, FloatValue) and isinstance(ru, FloatValue):
             return lu.value, ru.value, resolve_float_width(lu.width, ru.width)
@@ -912,6 +916,24 @@ class Evaluator:
         if isinstance(lu, IntValue) and isinstance(ru, FloatValue):
             return float(lu.value), ru.value, ru.width
         return None, 0.0, ""
+
+    @staticmethod
+    def _require_matching_numeric(lu, ru, op_name: str) -> tuple[float, float, str] | None:
+        """Require both operands to be the same numeric category for arithmetic.
+
+        Returns (left_float, right_float, width) when both are float.
+        Returns None when both are int (caller handles int+int directly).
+        Raises TypeError on mixed int+float.
+        """
+        if isinstance(lu, FloatValue) and isinstance(ru, FloatValue):
+            return lu.value, ru.value, resolve_float_width(lu.width, ru.width)
+        if isinstance(lu, IntValue) and isinstance(ru, FloatValue):
+            raise TypeError(
+                f"{op_name} requires matching types, got {lu.width} and {ru.width}")
+        if isinstance(lu, FloatValue) and isinstance(ru, IntValue):
+            raise TypeError(
+                f"{op_name} requires matching types, got {lu.width} and {ru.width}")
+        return None
 
     # ------------------------------------------------------------------
     # Array element-wise dispatch
@@ -2160,8 +2182,10 @@ class Evaluator:
                 result = self.eval_stmts(lam.body)
             else:
                 result = self.eval_expr(lam.body)
+            self._check_return_type(result, lam.ret_type, "\N{GREEK SMALL LETTER LAMDA}")
             return self._wrap_optional_return(result, lam.ret_type)
         except _ReturnSentinel as e:
+            self._check_return_type(e.value, lam.ret_type, "\N{GREEK SMALL LETTER LAMDA}")
             return self._wrap_optional_return(e.value, lam.ret_type)
         finally:
             self.env = old_env
@@ -2405,14 +2429,58 @@ class Evaluator:
             self.env = call_env
             self._current_ret_type = resolved_ret_type
             result = self.eval_stmts(func.body)
+            self._check_return_type(result, resolved_ret_type, func.name)
             return self._wrap_optional_return(result, resolved_ret_type)
         except _ReturnSentinel as e:
+            self._check_return_type(e.value, resolved_ret_type, func.name)
             return self._wrap_optional_return(e.value, resolved_ret_type)
         except _PropagatedError as pe:
             raise pe.original from pe
         finally:
             self.env = old_env
             self._current_ret_type = old_ret_type
+
+    def _check_return_type(self, result: Value, ret_type: str | None, func_name: str) -> Value:
+        """Verify the return value matches the declared return type."""
+        if ret_type is None or ret_type == "\N{EMPTY SET}":
+            return result
+        base, opt_err = _split_optional_type(ret_type)
+        check = base if opt_err is not None else ret_type
+        if not check or check == "\N{EMPTY SET}":
+            return result
+        inner = result
+        if isinstance(inner, SomeValue):
+            inner = inner.value
+        elif isinstance(inner, ExpectedValue):
+            if inner.is_ok():
+                inner = inner.ok_value
+            else:
+                return result
+        elif isinstance(inner, NoneValue):
+            return result
+        if check in _TYPE_BITS or check == "int":
+            if isinstance(inner, FloatValue):
+                raise TypeError(
+                    f"{func_name}: return type is {ret_type} "
+                    f"but body evaluates to {inner.width}")
+            if isinstance(inner, IntValue):
+                return coerce_to_type(inner, check) if opt_err is None else result
+        elif check in FLOAT_TYPES:
+            if isinstance(inner, IntValue):
+                raise TypeError(
+                    f"{func_name}: return type is {ret_type} "
+                    f"but body evaluates to {inner.width}")
+        elif check == "str":
+            if not isinstance(inner, StrValue):
+                raise TypeError(
+                    f"{func_name}: return type is {ret_type} "
+                    f"but body evaluates to {self._value_type_name(inner)}")
+        elif check == "bool":
+            if not isinstance(inner, BoolValue):
+                raise TypeError(
+                    f"{func_name}: return type is {ret_type} "
+                    f"but body evaluates to {self._value_type_name(inner)}")
+        return result
 
     def _wrap_optional_return(self, result: Value, ret_type: str | None) -> Value:
         """Wrap return value in SomeValue/ExpectedValue for optional/expected return types."""

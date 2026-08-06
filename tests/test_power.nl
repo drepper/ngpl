@@ -53,11 +53,14 @@ fn test_float_pow_negative_exp:
 fn test_float_pow_zero:
   approx_eq(5.0 ↑ 0.0, 1.0, "5.0↑0.0")
 
-// --- Mixed int base, float exponent ---
+// --- Mixed int base, float exponent is rejected ---
 
-fn test_mixed_pow:
-  approx_eq(4 ↑ 0.5, 2.0, "4↑0.5")
-  approx_eq(8 ↑ (1.0 / 3.0), 2.0, "8↑(1/3)")
+fn test_mixed_pow_rejected:
+  @expect error "matching types"
+  var a := 4 ↑ 0.5
+
+  @expect error "matching types"
+  var b := 8 ↑ (1.0 / 3.0)
 
 // --- Right associativity ---
 
@@ -119,7 +122,7 @@ fn main:
   test_float_pow_basic()
   test_float_pow_negative_exp()
   test_float_pow_zero()
-  test_mixed_pow()
+  test_mixed_pow_rejected()
   test_right_assoc()
   test_precedence_mul()
   test_precedence_neg()

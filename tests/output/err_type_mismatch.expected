@@ -1,4 +1,4 @@
-error: addition expected int+int or str+str, got IntValue+StrValue
+error: addition expected int+int, float+float, or str+str, got IntValue+StrValue
   --> tests/output/err_type_mismatch.nl:4:5
     |
   4 |     x + "hello"

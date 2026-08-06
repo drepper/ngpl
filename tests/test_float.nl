@@ -45,19 +45,18 @@ fn test_float_arithmetic:
   static_assert(⁻3.0 == ⁻3.0)
   static_assert(⁻3.0 + 3.0 == 0.0)
 
-fn test_mixed_int_float:
-  // Int + float promotes to float
-  static_assert(2 + 3.0 == 5.0)
+fn test_mixed_int_float_rejected:
+  @expect error "matching types"
+  var a := 2 + 3.0
 
-  // Float + int promotes to float
-  static_assert(3.0 + 2 == 5.0)
+  @expect error "matching types"
+  var b := 3.0 + 2
 
-  // Int * float
-  static_assert(3 * 2.5 == 7.5)
+  @expect error "matching types"
+  var c := 3 * 2.5
 
-  // Float / int
+  @expect error "matching types"
   var d := 10.0 / 4
-  assert_true(d == 2.5, "10.0 / 4 should be 2.5")
 
 fn test_float_comparisons:
   static_assert(1.0 < 2.0)
@@ -148,7 +147,7 @@ fn test_float_type_rejection:
 fn main:
   test_float_literals()
   test_float_arithmetic()
-  test_mixed_int_float()
+  test_mixed_int_float_rejected()
   test_float_comparisons()
   test_typed_float_widths()
   test_float_coercion_in_functions()
