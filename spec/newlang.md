@@ -2106,7 +2106,7 @@ fn test_round_trip → ∅:
 
 #### Startup Function and Exit Code
 
-Exactly one function may be annotated with `@start` to designate it as the program entry point.  The return type of the `@start` function determines the process exit code:
+Exactly one function may be annotated with `@start` to designate it as the program entry point.  Alternatively, the `--start NAME` command-line flag selects a function by name, overriding any `@start` annotation in the source.  The named function must exist and take no parameters.  The return type of the startup function determines the process exit code:
 
 - **`→ ∅`** (or no return type annotation): the process exits with code 0.
 - **`→ u8`**: the return value is used directly as the exit code (0–255).

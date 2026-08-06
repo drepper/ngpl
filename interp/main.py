@@ -151,6 +151,9 @@ def _parse_args() -> argparse.Namespace:
                        help="run all tests and exit without executing the startup function")
     group.add_argument("--skip-tests", action="store_true",
                        help="skip all tests during normal execution")
+    parser.add_argument("--start", metavar="NAME",
+                       help="use the named function as the startup function, "
+                            "ignoring any @start annotations")
     parser.add_argument("--interpreter-backtrace", action="store_true",
                        help="show the Python interpreter backtrace on errors")
     return parser.parse_args()
@@ -296,7 +299,7 @@ def main():
                           defn.is_replaceable, defn.pack_param, defn.param_units)
             env.define(defn.name, fv)
 
-            if defn.is_start:
+            if args.start is None and defn.is_start:
                 if startup_func is not None:
                     print("Error: multiple @start functions defined", file=sys.stderr)
                     sys.exit(1)
@@ -308,6 +311,21 @@ def main():
                         referenced_tests[ref].append(fv)
                 else:
                     standalone_tests.append(fv)
+
+    if args.start is not None:
+        try:
+            val = env.lookup(args.start)
+        except KeyError:
+            val = None
+        if not isinstance(val, FuncValue):
+            print(f"Error: --start function '{args.start}' not found",
+                  file=sys.stderr)
+            sys.exit(1)
+        if val.params:
+            print(f"Error: --start function '{args.start}' must take "
+                  f"no parameters", file=sys.stderr)
+            sys.exit(1)
+        startup_func = val
 
     # Process @expect-annotated functions: verify expected errors/warnings.
     expect_passed = 0
