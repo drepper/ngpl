@@ -2,7 +2,16 @@
 
 Each class represents one construct in the source language. The parser builds
 a tree of these nodes; the evaluator walks the tree to produce results.
+
+Every node may carry an optional `pos` attribute set by the parser,
+a tuple of (line, col, end_col) pointing back to the source token(s).
 """
+
+
+def set_pos(node, line: int, col: int, end_col: int | None = None):
+    """Attach source position to an AST node and return it."""
+    node.pos = (line, col, end_col)
+    return node
 
 
 class IntLit:
@@ -58,10 +67,10 @@ class BinOp:
 
 
 class UnaryOp:
-    """Unary operator: - (negation), not, opt.is_none."""
+    """Unary operator: ⁻ (negation), not, opt.is_none."""
 
     def __init__(self, op: str, operand):
-        self.op = op  # "-", "not", "is_none"
+        self.op = op  # "⁻", "not", "is_none"
         self.operand = operand
 
 

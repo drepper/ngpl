@@ -31,6 +31,8 @@ tests=(
     "$testdir"/test_typeof.nl
     "$testdir"/test_fold.nl
     "$testdir"/test_curry.nl
+    "$testdir"/test_sizeof_units.nl
+    "$testdir"/test_unitof.nl
     "$testdir"/sha256.nl
 )
 
@@ -55,5 +57,13 @@ if ((failed > 0)); then
     for f in "${failures[@]}"; do
         echo "  $f"
     done
+    exit 1
+fi
+
+# Run output-capture tests.
+echo
+if python "$testdir"/run_output_tests.py 2>&1; then
+    :
+else
     exit 1
 fi

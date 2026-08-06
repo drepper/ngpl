@@ -1,0 +1,6 @@
+error: unexpected token: 'if'
+  --> tests/output/err_parse_unexpected_kw.nl:3:19
+    |
+  3 |     var x : i32 = if
+    |                   ^^
+    |

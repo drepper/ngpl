@@ -497,6 +497,7 @@ class Evaluator:
         self._warnings: list[str] = []
         self._wrapping: bool = False
         self._catch_depth: int = 0
+        self._last_pos: tuple[int, int, int | None] | None = None
         # Pre-compute builtin function mappings (avoid repeated lookups).
         self._ops = {
             "+": self._op_add,
@@ -1136,6 +1137,10 @@ class Evaluator:
         Returns:
             A Value instance.
         """
+        pos = getattr(node, "pos", None)
+        if pos is not None:
+            self._last_pos = pos
+
         if isinstance(node, IntLit):
             return mk_int(node.value, node.width)
 
@@ -1219,6 +1224,7 @@ class Evaluator:
                 self._wrapping = old
 
         if isinstance(node, BinOp):
+            binop_pos = pos
             if node.op == "??":
                 left = self.eval_expr(node.left)
                 if isinstance(left, ExpectedValue):
@@ -1232,6 +1238,8 @@ class Evaluator:
                 return left
             left = self.eval_expr(node.left)
             right = self.eval_expr(node.right)
+            if binop_pos is not None:
+                self._last_pos = binop_pos
             if node.op == "\N{DOUBLE PLUS}":
                 return self._op_concat(left, right)
             lu = unwrap_optional(left)
@@ -1250,7 +1258,7 @@ class Evaluator:
 
         if isinstance(node, UnaryOp):
             operand = self.eval_expr(node.operand)
-            if node.op == "-":
+            if node.op == "⁻":
                 unwrapped = unwrap_optional(operand)
                 if isinstance(unwrapped, UnitValue):
                     inner = unwrapped.inner
@@ -1568,6 +1576,10 @@ class Evaluator:
         Returns:
             The last computed value, or a _ReturnSentinel for return statements.
         """
+        pos = getattr(stmt, "pos", None)
+        if pos is not None:
+            self._last_pos = pos
+
         if isinstance(stmt, ExpectStmt):
             return self._eval_expect(stmt)
 

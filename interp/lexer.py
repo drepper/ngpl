@@ -14,13 +14,14 @@ import re
 class Token:
     """A single lexical token."""
 
-    __slots__ = ("type", "value", "line", "col")
+    __slots__ = ("type", "value", "line", "col", "end_col")
 
-    def __init__(self, type_, value, line, col):
+    def __init__(self, type_, value, line, col, end_col: int | None = None):
         self.type = type_
         self.value = value
         self.line = line
         self.col = col
+        self.end_col = end_col if end_col is not None else col + 1
 
     def __repr__(self):
         return f"Token({self.type}, {self.value!r}, @{self.line}:{self.col})"
@@ -83,7 +84,7 @@ _NORMALIZE_OPS = {
 
 
 # Single-character operators.
-SINGLE_OPS = set("+-*/%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ⍴⧺⌿⍀¤√∛∜↑")
+SINGLE_OPS = set("+-*/%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ⍴⧺⌿⍀¤√∛∜↑⁻")
 
 # Binary operators that signal line continuation when trailing.
 _CONTINUATION_OPS = frozenset({
@@ -109,25 +110,24 @@ class LexerError(Exception):
         super().__init__(f"Line {line}, col {col}: {message}")
 
 
-def _read_string(src, pos, start_line, start_col):
+def _read_string(src, pos, start_line, start_col, line_start):
     """Read a double-quoted string literal starting after the opening quote.
 
     Returns (Token, next_pos).
     """
     text_chars = []
     line = start_line
-    col = start_col + 1  # past the opening "
+    cur_line_start = line_start
     end_pos = pos
 
     while end_pos < len(src):
         ch = src[end_pos]
         if ch == "\n":
             line += 1
-            col = 0
+            cur_line_start = end_pos + 1
         elif ch == "\\" and end_pos + 1 < len(src):
             esc = src[end_pos + 1]
             end_pos += 2
-            col += 2
             if esc == "n":
                 text_chars.append("\n")
             elif esc == "t":
@@ -137,22 +137,19 @@ def _read_string(src, pos, start_line, start_col):
             elif esc == '"':
                 text_chars.append('"')
             elif esc == "u" and src[end_pos:end_pos + 1] == "{":
-                # \u{NNNN} Unicode code point
                 hex_end = src.index("}", end_pos + 1)
                 hex_str = src[end_pos + 1:hex_end]
                 text_chars.append(chr(int(hex_str, 16)))
                 end_pos = hex_end + 1
-                col += hex_end - end_pos + 2
             else:
-                raise LexerError(f"unknown escape '\\{esc}'", line, col)
+                raise LexerError(f"unknown escape '\\{esc}'", line, end_pos - cur_line_start)
         elif ch == '"':
-            # Closing quote found
             text = "".join(text_chars)
-            return Token("STR", text, start_line, start_col), end_pos + 1
+            end_col = end_pos + 1 - cur_line_start
+            return Token("STR", text, start_line, start_col, end_col), end_pos + 1
         else:
             text_chars.append(ch)
             end_pos += 1
-            col += 1
 
     raise LexerError("unterminated string literal", start_line, start_col)
 
@@ -166,6 +163,7 @@ def _read_number(src, pos, line, col):
 
     Returns (Token, next_pos).
     """
+    start_pos = pos
     value_str = ""
     is_float = False
 
@@ -220,6 +218,8 @@ def _read_number(src, pos, line, col):
         width += src[pos]
         pos += 1
 
+    end_col = col + (pos - start_pos)
+
     if is_float or width in ("f16", "f32", "f64", "bfloat"):
         try:
             if base == 16:
@@ -230,7 +230,7 @@ def _read_number(src, pos, line, col):
             raise LexerError(f"invalid float literal: {value_str}", line, col)
         if not width:
             width = "float"
-        return Token("FLOAT", (value, width), line, col), pos
+        return Token("FLOAT", (value, width), line, col, end_col), pos
 
     try:
         if base == 2:
@@ -245,7 +245,7 @@ def _read_number(src, pos, line, col):
     if not width:
         width = "int"
 
-    return Token("INT", value, line, col), pos
+    return Token("INT", value, line, col, end_col), pos
 
 
 def tokenize(src: str):
@@ -268,22 +268,23 @@ def tokenize(src: str):
     pos = 0
     length = len(src)
     line = 1
-    col = 0
+    line_start = 0
     indent_char: str | None = None
 
     while pos < length:
         ch = src[pos]
+        col = pos - line_start
 
         # Whitespace (not newline).
         if ch in " \t\r":
             pos += 1
-            col += 1
             continue
 
         # Newline — also measures the indentation of the following line.
         if ch == "\n":
             line += 1
             pos += 1
+            line_start = pos
             indent = 0
             while pos < length and src[pos] in " \t":
                 ic = src[pos]
@@ -297,7 +298,6 @@ def tokenize(src: str):
                         line, indent)
                 indent += 1
                 pos += 1
-            col = indent
             tokens.append(Token("NEWLINE", indent, line, 0))
             continue
 
@@ -315,28 +315,29 @@ def tokenize(src: str):
             end = src.find("*/", pos + 2)
             if end == -1:
                 raise LexerError("unterminated block comment", line, col)
-            # Count newlines inside the block comment.
             comment_text = src[pos:end + 2]
-            line += comment_text.count("\n")
-            col = len(comment_text) - comment_text.rfind("\n") - 1
+            nl_count = comment_text.count("\n")
+            if nl_count > 0:
+                line += nl_count
+                line_start = pos + comment_text.rfind("\n") + 1
             pos = end + 2
             continue
 
         # @ attribute.
         if ch == "@":
+            at_col = col
             pos += 1
-            col += 1
             name_start = pos
             while pos < length and (src[pos].isalpha() or src[pos] in "_'"):
                 pos += 1
             kw = src[name_start:pos]
             token_type = AT_KEYWORDS.get(kw) or KEYWORDS.get(kw, "IDENT")
-            tokens.append(Token(token_type, kw, line, col))
+            tokens.append(Token(token_type, kw, line, at_col, pos - line_start))
             continue
 
         # String literal.
         if ch == '"':
-            token, pos = _read_string(src, pos + 1, line, col)
+            token, pos = _read_string(src, pos + 1, line, col, line_start)
             tokens.append(token)
             continue
 
@@ -349,42 +350,38 @@ def tokenize(src: str):
         # Double-character operators (check before single-char ones).
         two = src[pos:pos + 2]
         if two in DOUBLE_OPS:
-            tokens.append(Token("OP", _NORMALIZE_OPS.get(two, two), line, col))
+            tokens.append(Token("OP", _NORMALIZE_OPS.get(two, two), line, col, col + 2))
             pos += 2
-            col += 2
             continue
 
         # Single-character operators and punctuation.
         if ch in SINGLE_OPS:
-            # = is syntactic (variable definition), not an operator.
             if ch == "λ":
                 tokens.append(Token("LAMBDA", ch, line, col))
             elif ch == "=" or ch in ",.;:(){}[]…":
                 tokens.append(Token("PUNCT", ch, line, col))
             elif ch == "\N{RIGHTWARDS ARROW}":
                 tokens.append(Token("OP", "->", line, col))
-            elif ch in "+-*/%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑":
+            elif ch in "+-*/%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻":
                 tokens.append(Token("OP", ch, line, col))
             pos += 1
-            col += 1
             continue
 
         # Identifier or keyword.
         if ch.isalpha() or ch == "_" or ord(ch) > 127:
             name_start = pos
-            pos += 1  # Always advance past the first character to avoid infinite loop on non-alnum Unicode chars.
+            pos += 1
             while pos < length and (src[pos].isalnum() or src[pos] in "_'"):
                 pos += 1
             name = src[name_start:pos]
             token_type = KEYWORDS.get(name, "IDENT")
-            tokens.append(Token(token_type, name, line, col))
-            col = pos - name_start
+            tokens.append(Token(token_type, name, line, col, pos - line_start))
             continue
 
         raise LexerError(f"unexpected character: {ch!r}", line, col)
 
     # Send a sentinel at end to mark conclusion.
-    tokens.append(Token("EOF", None, line, col))
+    tokens.append(Token("EOF", None, line, pos - line_start))
     return tokens
 
 

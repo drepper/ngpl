@@ -1,0 +1,6 @@
+error: assertion failed
+  --> tests/output/err_assert.nl:3:12
+    |
+  3 |     assert(false)
+    |            ^^^^^
+    |

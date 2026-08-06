@@ -16,6 +16,7 @@ from interp.value import (
     coerce_to_type, validate_param_type, validate_type, none, FAST_TYPES,
 )
 from interp.eval import Evaluator, unwrap_optional
+from interp.errors import format_diagnostic, extract_position, strip_position_prefix
 
 
 def _make_std_errors() -> EnumType:
@@ -150,7 +151,41 @@ def _parse_args() -> argparse.Namespace:
                        help="run all tests and exit without executing the startup function")
     group.add_argument("--skip-tests", action="store_true",
                        help="skip all tests during normal execution")
+    parser.add_argument("--interpreter-backtrace", action="store_true",
+                       help="show the Python interpreter backtrace on errors")
     return parser.parse_args()
+
+
+def _show_error(exc: BaseException, source: str, source_path: str,
+                evaluator: Evaluator | None = None, *,
+                show_backtrace: bool = False) -> None:
+    """Display a formatted error diagnostic for a newlang exception."""
+    if show_backtrace:
+        import traceback
+        traceback.print_exc()
+        return
+
+    pos = extract_position(exc)
+    if pos is None and evaluator is not None:
+        pos = evaluator._last_pos
+
+    msg = strip_position_prefix(str(exc))
+    level = "error"
+    if isinstance(exc, AssertionError):
+        level = "error"
+        msg = f"assertion failed: {msg}" if "assertion" not in msg.lower() else msg
+
+    if pos is not None:
+        line, col, end_col = pos
+        diag = format_diagnostic(source, source_path, line, col, msg,
+                                 end_col=end_col, level=level)
+        print(diag, file=sys.stderr)
+    else:
+        if sys.stderr.isatty():
+            print(f"\033[31m\033[1merror\033[0m\033[1m: {msg}\033[0m",
+                  file=sys.stderr)
+        else:
+            print(f"error: {msg}", file=sys.stderr)
 
 
 def main():
@@ -165,9 +200,20 @@ def main():
     with open(source_path, "r", encoding="utf-8") as f:
         source = f.read()
 
-    tokens = process_indentation(tokenize(source))
-    parser = Parser(tokens)
-    definitions = parser.parse()
+    try:
+        tokens = process_indentation(tokenize(source))
+    except Exception as e:
+        _show_error(e, source, source_path,
+                    show_backtrace=args.interpreter_backtrace)
+        sys.exit(1)
+
+    try:
+        parser = Parser(tokens)
+        definitions = parser.parse()
+    except Exception as e:
+        _show_error(e, source, source_path,
+                    show_backtrace=args.interpreter_backtrace)
+        sys.exit(1)
 
     if not definitions:
         print("Warning: no definitions found in source file", file=sys.stderr)
@@ -369,13 +415,16 @@ def main():
         return
 
     hooks = {} if args.skip_tests else dict(referenced_tests)
+    evaluator = Evaluator(env, test_hooks=hooks)
     try:
-        Evaluator(env, test_hooks=hooks).eval_stmts(startup_func.body)
+        evaluator.eval_stmts(startup_func.body)
     except AssertionError as e:
-        print(f"{_RED}{_BOLD}Test failure{_RESET}: {e}", file=sys.stderr)
+        _show_error(e, source, source_path, evaluator,
+                    show_backtrace=args.interpreter_backtrace)
         sys.exit(1)
     except Exception as e:
-        print(f"Runtime error: {e}", file=sys.stderr)
+        _show_error(e, source, source_path, evaluator,
+                    show_backtrace=args.interpreter_backtrace)
         sys.exit(1)
 
 

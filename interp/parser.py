@@ -18,6 +18,7 @@ from interp.ast import (
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
     UnitExpr, UnitDef, UnitName, UnitBinOp, UnitSqrt, UnitLit,
     UnitOfExpr, UnitRefExpr,
+    set_pos,
 )
 from interp.lexer import Token, KEYWORDS
 
@@ -26,9 +27,16 @@ class ParseError(Exception):
     """Raised when the parser encounters invalid input."""
 
     def __init__(self, message, token=None):
+        self.raw_message = message
         if token:
+            self.line = token.line
+            self.col = token.col
+            self.end_col = token.end_col
             msg = f"Line {token.line}, col {token.col}: {message}"
         else:
+            self.line = 0
+            self.col = 0
+            self.end_col = None
             msg = message
         super().__init__(msg)
 
@@ -42,6 +50,18 @@ class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
         self.pos = 0
+
+    def _set_pos(self, node, tok):
+        """Attach source position from a token to an AST node."""
+        return set_pos(node, tok.line, tok.col, tok.end_col)
+
+    def _set_binop_pos(self, node, left, right, op_tok):
+        """Attach position spanning from left operand through right operand."""
+        left_pos = getattr(left, "pos", None)
+        right_pos = getattr(right, "pos", None)
+        if left_pos is not None and right_pos is not None and left_pos[0] == right_pos[0]:
+            return set_pos(node, left_pos[0], left_pos[1], right_pos[2])
+        return self._set_pos(node, op_tok)
 
     # ------------------------------------------------------------------
     # Token access helpers
@@ -217,7 +237,8 @@ class Parser:
         else:
             raise ParseError(
                 f"expected function or variable definition, "
-                f"got {self._tok_display(self._cur())}")
+                f"got {self._tok_display(self._cur())}",
+                self._cur())
 
     def _parse_function_def(self, is_start, is_test=False, test_refs=None,
                             expect_annotations: list[tuple[str, str]] | None = None,
@@ -354,7 +375,7 @@ class Parser:
             if self._try_eat("PUNCT", "="):
                 val_tok = self._cur()
                 negate = False
-                if self._check("OP") and val_tok.value == "-":
+                if self._check("OP") and val_tok.value == "⁻":
                     negate = True
                     self.pos += 1
                     val_tok = self._cur()
@@ -402,7 +423,8 @@ class Parser:
 
     def _parse_var_def(self):
         """Parse: var/const name [¤unit] := expr  |  var/const name [¤unit] : type = expr  |  var name : type[size] = init"""
-        keyword = self._cur().value
+        kw_tok = self._cur()
+        keyword = kw_tok.value
         is_const = keyword == "const"
         self._eat(keyword.upper())
         name_tok = self._eat("IDENT")
@@ -427,9 +449,9 @@ class Parser:
                     self._eat("PUNCT", "=")
                     init_expr = self._parse_or_expr()
                     self._try_eat("PUNCT", ";")
-                    return VarDef(name_tok.value, type_annotation,
+                    return self._set_pos(VarDef(name_tok.value, type_annotation,
                                   ArrayAlloc(type_annotation, size_expr, init_expr),
-                              is_const, unit_spec=unit_spec)
+                              is_const, unit_spec=unit_spec), kw_tok)
 
         if not has_colon:
             if not (self._check("PUNCT") and self._cur().value == ":"):
@@ -441,8 +463,8 @@ class Parser:
         init_expr = self._parse_or_expr()
         self._try_eat("PUNCT", ";")
 
-        return VarDef(name_tok.value, type_annotation, init_expr, is_const,
-                      unit_spec=unit_spec)
+        return self._set_pos(VarDef(name_tok.value, type_annotation, init_expr, is_const,
+                      unit_spec=unit_spec), kw_tok)
 
     # ------------------------------------------------------------------
     # Unit definition and spec parsing
@@ -868,15 +890,16 @@ class Parser:
         left = self._parse_and_expr()
         while True:
             self._skip_nl()
+            or_tok = self._cur()
             if self._try_eat("OR"):
                 self._skip_nl()
                 right = self._parse_and_expr()
-                left = BinOp("or", left, right)
+                left = self._set_binop_pos(BinOp("or", left, right), left, right, or_tok)
             elif self._check("OP") and self._cur().value == "??":
                 self.pos += 1
                 self._skip_nl()
                 right = self._parse_and_expr()
-                left = BinOp("??", left, right)
+                left = self._set_binop_pos(BinOp("??", left, right), left, right, or_tok)
             else:
                 break
         return left
@@ -886,11 +909,12 @@ class Parser:
         left = self._parse_logic_or_expr()
         while True:
             self._skip_nl()
+            and_tok = self._cur()
             if not self._try_eat("AND"):
                 break
             self._skip_nl()
             right = self._parse_logic_or_expr()
-            left = BinOp("and", left, right)
+            left = self._set_binop_pos(BinOp("and", left, right), left, right, and_tok)
         return left
 
     def _parse_logic_or_expr(self):
@@ -904,7 +928,7 @@ class Parser:
             self.pos += 1
             self._skip_nl()
             right = self._parse_logic_xor_expr()
-            left = BinOp(op_tok.value, left, right)
+            left = self._set_binop_pos(BinOp(op_tok.value, left, right), left, right, op_tok)
         return left
 
     def _parse_logic_xor_expr(self):
@@ -914,10 +938,11 @@ class Parser:
             self._skip_nl()
             if not (self._check("OP") and self._cur().value == "⊕"):
                 break
+            xor_tok = self._cur()
             self.pos += 1
             self._skip_nl()
             right = self._parse_logic_and_expr()
-            left = BinOp("⊕", left, right)
+            left = self._set_binop_pos(BinOp("⊕", left, right), left, right, xor_tok)
         return left
 
     def _parse_logic_and_expr(self):
@@ -931,7 +956,7 @@ class Parser:
             self.pos += 1
             self._skip_nl()
             right = self._parse_cmp_expr()
-            left = BinOp(op_tok.value, left, right)
+            left = self._set_binop_pos(BinOp(op_tok.value, left, right), left, right, op_tok)
         return left
 
     def _parse_cmp_expr(self):
@@ -945,7 +970,7 @@ class Parser:
             self.pos += 1
             self._skip_nl()
             right = self._parse_range_expr()
-            left = BinOp(op_tok.value, left, right)
+            left = self._set_binop_pos(BinOp(op_tok.value, left, right), left, right, op_tok)
         return left
 
     def _parse_range_expr(self):
@@ -972,7 +997,7 @@ class Parser:
             self.pos += 1
             self._skip_nl()
             right = self._parse_bitwise_or()
-            left = BinOp(op_tok.value, left, right)
+            left = self._set_binop_pos(BinOp(op_tok.value, left, right), left, right, op_tok)
         return left
 
     def _parse_bitwise_or(self):
@@ -986,7 +1011,7 @@ class Parser:
             self.pos += 1
             self._skip_nl()
             right = self._parse_bitwise_xor()
-            left = BinOp("|", left, right)
+            left = self._set_binop_pos(BinOp("|", left, right), left, right, op_tok)
         return left
 
     def _parse_bitwise_xor(self):
@@ -1000,7 +1025,7 @@ class Parser:
             self.pos += 1
             self._skip_nl()
             right = self._parse_bitwise_and()
-            left = BinOp("^", left, right)
+            left = self._set_binop_pos(BinOp("^", left, right), left, right, op_tok)
         return left
 
     def _parse_bitwise_and(self):
@@ -1014,7 +1039,7 @@ class Parser:
             self.pos += 1
             self._skip_nl()
             right = self._parse_add_expr()
-            left = BinOp("&", left, right)
+            left = self._set_binop_pos(BinOp("&", left, right), left, right, op_tok)
         return left
 
     def _parse_add_expr(self):
@@ -1028,7 +1053,7 @@ class Parser:
             self.pos += 1
             self._skip_nl()
             right = self._parse_concat_expr()
-            left = BinOp(op_tok.value, left, right)
+            left = self._set_binop_pos(BinOp(op_tok.value, left, right), left, right, op_tok)
         return left
 
     def _parse_concat_expr(self):
@@ -1038,10 +1063,11 @@ class Parser:
             self._skip_nl()
             if not (self._check("OP") and self._cur().value == "\N{DOUBLE PLUS}"):
                 break
+            concat_tok = self._cur()
             self.pos += 1
             self._skip_nl()
             right = self._parse_mul_expr()
-            left = BinOp("\N{DOUBLE PLUS}", left, right)
+            left = self._set_binop_pos(BinOp("\N{DOUBLE PLUS}", left, right), left, right, concat_tok)
         return left
 
     def _parse_mul_expr(self):
@@ -1055,7 +1081,7 @@ class Parser:
             self.pos += 1
             self._skip_nl()
             right = self._parse_reshape_expr()
-            left = BinOp(op_tok.value, left, right)
+            left = self._set_binop_pos(BinOp(op_tok.value, left, right), left, right, op_tok)
         return left
 
     def _parse_reshape_expr(self):
@@ -1085,55 +1111,63 @@ class Parser:
         return left
 
     def _parse_negation(self):
-        """negation → '-' negation | power_expr
+        """negation → '⁻' negation | power_expr
 
-        Unary minus binds looser than ↑: -2↑2 = -(2↑2) = -4.
+        Unary negation binds looser than ↑: ⁻2↑2 = ⁻(2↑2) = ⁻4.
         """
-        if self._check("OP") and self._cur().value == "-":
+        if self._check("OP") and self._cur().value == "⁻":
+            neg_tok = self._cur()
             self.pos += 1
             operand = self._parse_negation()
-            return UnaryOp("-", operand)
+            return self._set_pos(UnaryOp("⁻", operand), neg_tok)
         return self._parse_power_expr()
 
     def _parse_power_expr(self):
         """power_expr → unary ('↑' negation)?  (right-associative)
 
-        Right operand goes through negation to allow 2↑-3.
+        Right operand goes through negation to allow 2↑⁻3.
         """
         left = self._parse_unary()
         if self._check("OP") and self._cur().value == "\N{UPWARDS ARROW}":
+            pow_tok = self._cur()
             self.pos += 1
             self._skip_nl()
             right = self._parse_negation()
-            return BinOp("\N{UPWARDS ARROW}", left, right)
+            return self._set_binop_pos(BinOp("\N{UPWARDS ARROW}", left, right), left, right, pow_tok)
         return left
 
     def _parse_unary(self):
         """unary → ('~' | '¬' | 'not' | '√' | '∛' | '∜' | '@wrap') unary | primary"""
         if self._check("OP") and self._cur().value == "~":
+            op_tok = self._cur()
             self.pos += 1
             operand = self._parse_unary()
-            return UnaryOp("~", operand)
+            return self._set_pos(UnaryOp("~", operand), op_tok)
         if self._check("OP") and self._cur().value == "\N{SQUARE ROOT}":
+            op_tok = self._cur()
             self.pos += 1
             operand = self._parse_unary()
-            return UnaryOp("\N{SQUARE ROOT}", operand)
+            return self._set_pos(UnaryOp("\N{SQUARE ROOT}", operand), op_tok)
         if self._check("OP") and self._cur().value == "\N{CUBE ROOT}":
+            op_tok = self._cur()
             self.pos += 1
             operand = self._parse_unary()
-            return UnaryOp("\N{CUBE ROOT}", operand)
+            return self._set_pos(UnaryOp("\N{CUBE ROOT}", operand), op_tok)
         if self._check("OP") and self._cur().value == "\N{FOURTH ROOT}":
+            op_tok = self._cur()
             self.pos += 1
             operand = self._parse_unary()
-            return UnaryOp("\N{FOURTH ROOT}", operand)
+            return self._set_pos(UnaryOp("\N{FOURTH ROOT}", operand), op_tok)
         if self._check("OP") and self._cur().value == "¬":
+            op_tok = self._cur()
             self.pos += 1
             operand = self._parse_unary()
-            return UnaryOp("¬", operand)
+            return self._set_pos(UnaryOp("¬", operand), op_tok)
         if self._check("NOT"):
+            op_tok = self._cur()
             self._eat("NOT")
             operand = self._parse_unary()
-            return UnaryOp("not", operand)
+            return self._set_pos(UnaryOp("not", operand), op_tok)
         if self._check("WRAP"):
             self._eat("WRAP")
             self._eat("PUNCT", "(")
@@ -1211,28 +1245,28 @@ class Parser:
         # Literals.
         if tok.type == "INT":
             self.pos += 1
-            return IntLit(tok.value)
+            return self._set_pos(IntLit(tok.value), tok)
 
         if tok.type == "FLOAT":
             self.pos += 1
             value, width = tok.value
-            return FloatLit(value, width)
+            return self._set_pos(FloatLit(value, width), tok)
 
         if tok.type == "STR":
             self.pos += 1
-            return StrLit(tok.value)
+            return self._set_pos(StrLit(tok.value), tok)
 
         if tok.type == "NONE":
             self.pos += 1
-            return NoneLit()
+            return self._set_pos(NoneLit(), tok)
 
         if tok.type == "TRUE":
             self.pos += 1
-            return BoolLit(True)
+            return self._set_pos(BoolLit(True), tok)
 
         if tok.type == "FALSE":
             self.pos += 1
-            return BoolLit(False)
+            return self._set_pos(BoolLit(False), tok)
 
         # Optional some(...) constructor.
         if tok.type == "SOME":
@@ -1311,9 +1345,9 @@ class Parser:
             # Check for function call: name(...)
             if (self._cur().type == "PUNCT" and self._cur().value == "("):
                 args = self._parse_call_args()
-                node = FuncCall(name, args)
+                node = self._set_pos(FuncCall(name, args), tok)
             else:
-                node = VarRef(name)
+                node = self._set_pos(VarRef(name), tok)
 
             # Chain attribute/method/subscript accesses in order:
             #   .ident → GetAttr
@@ -1321,29 +1355,32 @@ class Parser:
             #   (args) → MethodCall (on previous node)
             while True:
                 if self._check("PUNCT") and self._cur().value == ".":
+                    dot_tok = self._cur()
                     self.pos += 1
                     attr_tok = self._eat("IDENT")
                     attr_name = attr_tok.value
                     if self._check("PUNCT") and self._cur().value == "(":
                         args = self._parse_call_args()
-                        node = MethodCall(node, attr_name, args)
+                        node = self._set_pos(MethodCall(node, attr_name, args), dot_tok)
                     else:
-                        node = GetAttr(node, attr_name)
+                        node = self._set_pos(GetAttr(node, attr_name), dot_tok)
                 elif self._check("PUNCT") and self._cur().value == "[":
+                    bracket_tok = self._cur()
                     self.pos += 1
                     idx_expr = self._parse_or_expr()
                     self._skip_nl()
                     self._eat("PUNCT", "]")
                     if isinstance(idx_expr, RangeExpr):
-                        node = SliceAccess(node, idx_expr.start, idx_expr.end)
+                        node = self._set_pos(SliceAccess(node, idx_expr.start, idx_expr.end), bracket_tok)
                     else:
-                        node = Subscript(node, idx_expr)
+                        node = self._set_pos(Subscript(node, idx_expr), bracket_tok)
                 elif self._check("PUNCT") and self._cur().value == "(":
+                    call_tok = self._cur()
                     args = self._parse_call_args()
                     if isinstance(node, VarRef):
-                        node = FuncCall(node.name, args)
+                        node = self._set_pos(FuncCall(node.name, args), tok)
                     else:
-                        node = MethodCall(node, "__call__", args)
+                        node = self._set_pos(MethodCall(node, "__call__", args), call_tok)
                 else:
                     break
 

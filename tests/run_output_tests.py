@@ -1,0 +1,101 @@
+"""Output-capture test runner for the newlang interpreter.
+
+Runs .nl test programs and compares their stderr/stdout against
+corresponding .expected files.  Each test is a pair:
+
+    tests/output/test_name.nl       -- the source program
+    tests/output/test_name.expected -- expected stderr output
+
+The test runner strips ANSI escape sequences before comparison
+so tests work regardless of terminal settings.
+
+Exit code is 0 if all tests pass, 1 otherwise.
+"""
+
+import os
+import re
+import subprocess
+import sys
+
+
+_ANSI_RE = re.compile(r"\033\[[0-9;]*m")
+
+
+def strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
+
+
+def run_test(nl_path: str, expected_path: str) -> tuple[bool, str]:
+    """Run a single output test, return (passed, detail_message)."""
+    top_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    rel_path = os.path.relpath(nl_path, top_dir)
+    result = subprocess.run(
+        [sys.executable, "-m", "interp.main", rel_path],
+        capture_output=True,
+        text=True,
+        cwd=top_dir,
+    )
+
+    actual = strip_ansi(result.stderr + result.stdout).rstrip("\n")
+
+    with open(expected_path, "r", encoding="utf-8") as f:
+        expected = f.read().rstrip("\n")
+
+    if actual == expected:
+        return True, ""
+
+    lines_actual = actual.splitlines()
+    lines_expected = expected.splitlines()
+    diffs: list[str] = []
+    max_lines = max(len(lines_actual), len(lines_expected))
+    for i in range(max_lines):
+        a = lines_actual[i] if i < len(lines_actual) else "<missing>"
+        e = lines_expected[i] if i < len(lines_expected) else "<missing>"
+        if a != e:
+            diffs.append(f"  line {i + 1}:")
+            diffs.append(f"    expected: {e!r}")
+            diffs.append(f"    actual:   {a!r}")
+    return False, "\n".join(diffs)
+
+
+def main():
+    test_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
+    if not os.path.isdir(test_dir):
+        print(f"No output test directory: {test_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    tests: list[tuple[str, str]] = []
+    for name in sorted(os.listdir(test_dir)):
+        if name.endswith(".nl"):
+            base = name[:-3]
+            expected = os.path.join(test_dir, base + ".expected")
+            if os.path.isfile(expected):
+                tests.append((os.path.join(test_dir, name), expected))
+
+    if not tests:
+        print("No output tests found", file=sys.stderr)
+        sys.exit(1)
+
+    passed = 0
+    failed = 0
+    print(f"\nrunning {len(tests)} output tests", file=sys.stderr)
+
+    for nl_path, expected_path in tests:
+        name = os.path.basename(nl_path)[:-3]
+        ok, detail = run_test(nl_path, expected_path)
+        if ok:
+            print(f"test {name} ... ok", file=sys.stderr)
+            passed += 1
+        else:
+            print(f"test {name} ... FAILED", file=sys.stderr)
+            print(detail, file=sys.stderr)
+            failed += 1
+
+    status = "ok" if failed == 0 else "FAILED"
+    print(f"\ntest result: {status}. {passed} passed; {failed} failed\n",
+          file=sys.stderr)
+    sys.exit(0 if failed == 0 else 1)
+
+
+if __name__ == "__main__":
+    main()
