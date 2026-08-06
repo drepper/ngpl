@@ -92,7 +92,7 @@ fn sha256 data : byte[] → int?:
     foreach blk_off := 0…64…(total_size - 1):
         static_assert_eq(@unitof(blk_off), ¤byte)
         /* --- Load W[0..63]: first 16 from data, rest filled by expansion. --- */
-        var load_word := λi : usize |data, blk_off, total_size| → u32: get_padded_word(data, blk_off + (i * 4), total_size) ?? 0
+        var load_word := λi : usize |data, blk_off, total_size| → u32: get_padded_word(data, blk_off + i * 4 ¤byte, total_size) ?? 0
         var W := generate(load_word, 0…15) ⧺ 48 ⍴ [0]
 
         /* --- Message-schedule expansion: W[16..63]. --- */

@@ -206,6 +206,90 @@ fn test_reject_meter_for_general → ∅:
     var arr := [1, 2, 3]
     var x := arr[0 ¤meter]
 
+/* ---- arithmetic unit enforcement ---------------------------------------- */
+
+// addition: typed int + unit → error
+@test
+@expect error "cannot .+ typed integer"
+fn test_arith_typed_plus_unit → ∅:
+    var a : i32 = 5
+    var b ¤ptrdiff : i32 = 3
+    var x := a + b
+
+// addition: unit + typed int → error
+@test
+@expect error "cannot .+ unit .+ with typed integer"
+fn test_arith_unit_plus_typed → ∅:
+    var a ¤ptrdiff : i32 = 3
+    var b : i32 = 5
+    var x := a + b
+
+// subtraction: unit - typed int → error
+@test
+@expect error "cannot - unit .+ with typed integer"
+fn test_arith_unit_minus_typed → ∅:
+    var a ¤ptrdiff : i32 = 3
+    var b : i32 = 1
+    var x := a - b
+
+// addition: unit + untyped const → ok
+@test
+fn test_arith_unit_plus_const → ∅:
+    var a ¤ptrdiff : i32 = 3
+    var x := a + 2
+    assert_eq(x, 5 ¤ptrdiff)
+
+// subtraction: unit - untyped const → ok
+@test
+fn test_arith_unit_minus_const → ∅:
+    var a ¤ptrdiff : i32 = 5
+    var x := a - 1
+    assert_eq(x, 4 ¤ptrdiff)
+
+// multiplication: unit × typed int → ok (scalar)
+@test
+fn test_arith_unit_times_typed → ∅:
+    var a ¤byte : i32 = 3
+    var b : i32 = 4
+    var x := a * b
+    assert_eq(x, 12 ¤byte)
+
+// multiplication: typed int × unit → ok (scalar)
+@test
+fn test_arith_typed_times_unit → ∅:
+    var a : i32 = 4
+    var b ¤byte : i32 = 3
+    var x := a * b
+    assert_eq(x, 12 ¤byte)
+
+// comparison: unit == typed int → error
+@test
+@expect error "cannot compare unit .+ with typed integer"
+fn test_cmp_unit_eq_typed → ∅:
+    var a ¤ptrdiff : i32 = 3
+    var b : i32 = 3
+    var x := a == b
+
+// comparison: typed int < unit → error
+@test
+@expect error "cannot compare typed integer .+ without unit with unit"
+fn test_cmp_typed_lt_unit → ∅:
+    var a : i32 = 1
+    var b ¤ptrdiff : i32 = 3
+    var x := a < b
+
+// comparison: unit == untyped const → ok
+@test
+fn test_cmp_unit_eq_const → ∅:
+    var a ¤ptrdiff : i32 = 3
+    assert_eq(a == 3, true)
+
+// comparison: unit < untyped const → ok
+@test
+fn test_cmp_unit_lt_const → ∅:
+    var a ¤ptrdiff : i32 = 1
+    assert_eq(a < 5, true)
+
 /* ---- tuple indexing unchanged (no unit needed) -------------------------- */
 
 @test

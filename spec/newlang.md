@@ -1752,6 +1752,36 @@ Tuple indexing is not affected — tuples accept bare integer indices without un
 
 **Rationale.**  The unit requirement catches a category of bugs that arise when byte offsets are used where element indices are expected (or vice versa).  Untyped integer constants are exempt because they appear overwhelmingly as literal subscripts (`arr[0]`, `arr[2]`) where the intent is unambiguous and requiring annotation would add noise without safety benefit.  Typed integers, by contrast, often originate from computations or parameters where the domain (byte offset vs. element index) is not obvious from context — the unit must be attached at the point of declaration (`var idx ¤ptrdiff := n` or `param ¤byte : type`), not at the subscript site.
 
+#### Arithmetic Unit Enforcement
+
+When one operand of a binary operation carries a unit and the other does not, the rules depend on the operation and the non-unit operand's type status:
+
+**Additive operations** (`+`, `-`) and **comparisons** (`==`, `!=`, `<`, `>`, `<=`, `>=`):
+- **Untyped integer constants** are accepted — the result inherits the unit of the unit-bearing operand (for `+`/`-`) or produces a boolean (for comparisons).
+- **Typed integers** without a unit are rejected.  The programmer must attach the matching unit at the declaration site.
+
+```
+var a ¤ptrdiff : i32 = 5
+var b : i32 = 3
+
+var x := a + 2         // OK — untyped constant, result is 7 ¤ptrdiff
+var y := a + b         // error: cannot + unit ptrdiff with typed integer i32
+var z := a == 5        // OK — untyped constant comparison
+var w := a < b         // error: cannot compare unit ptrdiff with typed integer i32
+```
+
+**Multiplicative operations** (`*`, `/`, `%`) allow mixing freely — a typed integer without unit acts as a dimensionless scalar:
+
+```
+var a ¤byte : i32 = 4
+var b : i32 = 3
+
+var x := a * b         // OK — result is 12 ¤byte (scalar multiplication)
+var y := b * a         // OK — result is 12 ¤byte
+```
+
+**Rationale.**  Addition and comparison only make physical sense between quantities of the same dimension.  A typed integer without a unit is ambiguous — it might be a byte offset, an element count, or something else entirely.  Multiplication by a scalar, on the other hand, is always dimensionally valid (scaling).  Untyped constants are exempt because their use as small literal adjustments (`offset + 1`, `count - 1`) is unambiguous and pervasive.
+
 #### Operator Precedence
 
 `⍴` binds tighter than arithmetic (`+`, `-`, `*`, `/`) but looser than unary operators (`-x`, `~x`).  This means:

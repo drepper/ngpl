@@ -980,9 +980,17 @@ class Evaluator:
 
         if op in ("+", "-"):
             if l_is_unit and not r_is_unit:
+                if isinstance(r_inner, IntValue) and r_inner.width != "int":
+                    raise TypeError(
+                        f"cannot {op} unit {l_unit.display_name} with "
+                        f"typed integer {r_inner.width} without unit")
                 op_fn = self._ops[op]
                 return UnitValue(op_fn(l_inner, r_inner), l_unit)
             if r_is_unit and not l_is_unit:
+                if isinstance(l_inner, IntValue) and l_inner.width != "int":
+                    raise TypeError(
+                        f"cannot {op} typed integer {l_inner.width} "
+                        f"without unit with unit {r_unit.display_name}")
                 op_fn = self._ops[op]
                 return UnitValue(op_fn(l_inner, r_inner), r_unit)
             if not l_unit.same_dimension(r_unit):
@@ -1080,8 +1088,16 @@ class Evaluator:
 
         if op in ("==", "!=", "<", ">", "<=", ">="):
             if l_is_unit and not r_is_unit:
+                if isinstance(r_inner, IntValue) and r_inner.width != "int":
+                    raise TypeError(
+                        f"cannot compare unit {l_unit.display_name} with "
+                        f"typed integer {r_inner.width} without unit")
                 return self._ops[op](l_inner, r_inner)
             if r_is_unit and not l_is_unit:
+                if isinstance(l_inner, IntValue) and l_inner.width != "int":
+                    raise TypeError(
+                        f"cannot compare typed integer {l_inner.width} "
+                        f"without unit with unit {r_unit.display_name}")
                 return self._ops[op](l_inner, r_inner)
             if not l_unit.same_dimension(r_unit):
                 raise TypeError(
@@ -2442,7 +2458,7 @@ class Evaluator:
                 else:
                     arg_value = UnitValue(arg_value, unit)
             if param_type is not None:
-                if isinstance(arg_value, UnitValue):
+                if isinstance(arg_value, UnitValue) and param_name in func.param_units:
                     inner = coerce_arg(arg_value.inner, param_type,
                                        func.name, param_name)
                     arg_value = UnitValue(inner, arg_value.unit)
