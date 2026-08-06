@@ -208,6 +208,9 @@ Floating-Point
 
 [ ] associativity exploitation: opt-in reordering for non-bit-accurate computation.
 
+[x] add the root functions using unary √, ∛, ∜.  only allowed for floating-point values.  Allowed
+    in specification for units.
+
 
 String and I/O
 --------------

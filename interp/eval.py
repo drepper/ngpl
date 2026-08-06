@@ -40,6 +40,19 @@ from interp.env import Env
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
 
 
+def _nth_root_exact(n: int, degree: int) -> int | None:
+    if n < 0:
+        return None
+    if n == 0:
+        return 0
+    import math
+    r = round(n ** (1.0 / degree))
+    for candidate in (r - 1, r, r + 1):
+        if candidate >= 0 and candidate ** degree == n:
+            return candidate
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Free-variable collection for lambda validation
 # ---------------------------------------------------------------------------
@@ -1175,6 +1188,52 @@ class Evaluator:
                 return mk_bool(not self._logic_bool(unwrapped))
             if node.op == "not":
                 return mk_bool(not to_bool(operand))
+            if node.op in ("\N{SQUARE ROOT}", "\N{CUBE ROOT}", "\N{FOURTH ROOT}"):
+                import math
+                degree = {"\N{SQUARE ROOT}": 2, "\N{CUBE ROOT}": 3, "\N{FOURTH ROOT}": 4}[node.op]
+                unwrapped = unwrap_optional(operand)
+                if isinstance(unwrapped, UnitValue):
+                    inner = unwrapped.inner
+                    if not isinstance(inner, FloatValue):
+                        raise TypeError(
+                            f"{node.op} requires floating-point operand, "
+                            f"got {type(inner).__name__}")
+                    result_val = inner.value ** (1.0 / degree)
+                    result_float = mk_float(result_val, inner.width)
+                    unit = unwrapped.unit
+                    for k, v in unit.components.items():
+                        if v != 0 and v % degree != 0:
+                            raise TypeError(
+                                f"cannot take {node.op} of unit "
+                                f"{unit.display_name}: dimension '{k}' "
+                                f"has exponent {v} not divisible by {degree}")
+                    from fractions import Fraction
+                    from interp.units import Unit
+                    new_components = {k: v // degree
+                                     for k, v in unit.components.items()}
+                    num_root = _nth_root_exact(unit.factor.numerator, degree)
+                    den_root = _nth_root_exact(unit.factor.denominator, degree)
+                    if num_root is None or den_root is None:
+                        raise TypeError(
+                            f"cannot take {node.op} of unit "
+                            f"{unit.display_name}: factor {unit.factor} "
+                            f"is not a perfect {degree}-th power")
+                    new_factor = Fraction(num_root, den_root)
+                    from interp.units import _display_from_components
+                    new_unit = Unit(
+                        new_components, new_factor,
+                        _display_from_components(
+                            {k: v for k, v in new_components.items()
+                             if v != 0}))
+                    if new_unit.is_dimensionless():
+                        return result_float
+                    return UnitValue(result_float, new_unit)
+                if isinstance(unwrapped, FloatValue):
+                    result_val = unwrapped.value ** (1.0 / degree)
+                    return mk_float(result_val, unwrapped.width)
+                raise TypeError(
+                    f"{node.op} requires floating-point operand, "
+                    f"got {type(unwrapped).__name__}")
 
         if isinstance(node, OptSome):
             value = self.eval_expr(node.value)

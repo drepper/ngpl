@@ -360,6 +360,44 @@ var x : f32 = 3.14      // stored as approximately 3.140000104904175
 var y : f16 = 1.0       // exact in f16
 ```
 
+#### Root Operators
+
+Three unary prefix operators compute roots of floating-point values:
+
+| Glyph | Name | Operation |
+|-------|------|-----------|
+| `√` (U+221A) | square root | x^(1/2) |
+| `∛` (U+221B) | cube root | x^(1/3) |
+| `∜` (U+221C) | fourth root | x^(1/4) |
+
+Root operators are only allowed on floating-point values.  Applying them to integers is a type error:
+
+```
+var a := √9.0           // 3.0
+var b := ∛27.0          // 3.0
+var c := ∜16.0          // 2.0
+var d := -√25.0         // -5.0 (negation binds looser than √)
+var e := √√256.0        // 4.0 (chained: fourth root)
+
+var x := 9
+@expect error "floating-point"
+var r := √x             // ERROR: integer operand
+```
+
+When applied to a value with a unit, the root is also taken of the unit's dimensions.  Each dimension exponent must be divisible by the root degree, and the unit's conversion factor must be a perfect power:
+
+```
+var area ¤meter*meter := 36.0
+var side := √area       // 6.0 m (√(m²) = m)
+
+var vol ¤meter*meter*meter := 125.0
+var edge := ∛vol        // 5.0 m (∛(m³) = m)
+
+var d ¤meter := 9.0
+@expect error "exponent"
+var r := √d             // ERROR: √(m¹) has odd exponent
+```
+
 #### Truthiness
 
 Float values are truthy when nonzero and falsy when exactly `0.0`:

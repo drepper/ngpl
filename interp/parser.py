@@ -1084,7 +1084,7 @@ class Parser:
         return left
 
     def _parse_unary(self):
-        """unary → ('-' | '~' | '¬' | 'not' | '@wrap') unary | primary"""
+        """unary → ('-' | '~' | '¬' | 'not' | '√' | '∛' | '∜' | '@wrap') unary | primary"""
         if self._check("OP") and self._cur().value == "-":
             self.pos += 1
             operand = self._parse_unary()
@@ -1093,6 +1093,18 @@ class Parser:
             self.pos += 1
             operand = self._parse_unary()
             return UnaryOp("~", operand)
+        if self._check("OP") and self._cur().value == "\N{SQUARE ROOT}":
+            self.pos += 1
+            operand = self._parse_unary()
+            return UnaryOp("\N{SQUARE ROOT}", operand)
+        if self._check("OP") and self._cur().value == "\N{CUBE ROOT}":
+            self.pos += 1
+            operand = self._parse_unary()
+            return UnaryOp("\N{CUBE ROOT}", operand)
+        if self._check("OP") and self._cur().value == "\N{FOURTH ROOT}":
+            self.pos += 1
+            operand = self._parse_unary()
+            return UnaryOp("\N{FOURTH ROOT}", operand)
         if self._check("OP") and self._cur().value == "¬":
             self.pos += 1
             operand = self._parse_unary()
