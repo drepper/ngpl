@@ -117,12 +117,15 @@ fn test_dimensionless_assign:
   @expect error "dimensionless"
   a ← 3
 
-// --- Dimensioned + dimensionless rejection ---
+// --- Dimensioned + dimensionless arithmetic ---
 
 fn test_add_dimensioned_dimensionless:
   var a ¤meter := 5
-  @expect error "dimensionless"
   var b := a + 3
+  // 3 adopts unit meter, result is 8 m
+  assert_eq_int(b, 8, "5m + 3")
+  var c := 2 + a
+  assert_eq_int(c, 7, "2 + 5m")
 
 // --- Addition of compatible but different units ---
 

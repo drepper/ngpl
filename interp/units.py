@@ -185,6 +185,7 @@ _reg("tebibyte", {"byte": 1}, Fraction(1_099_511_627_776), "TiB")
 # Abstract units
 _reg("count", {"count": 1}, Fraction(1), "count")
 _reg("distance", {"distance": 1}, Fraction(1), "distance")
+_reg("ptrdiff", {"ptrdiff": 1}, Fraction(1), "ptrdiff")
 
 
 # ---------------------------------------------------------------------------

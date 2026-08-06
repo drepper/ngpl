@@ -605,7 +605,7 @@ The loop iterates over each element of the array.  The loop variable is constant
 | Size access | manual tracking | `.len()` | `.len` | `len(s)` | `.sizeof` |
 | Bounds checking | none | runtime panic | optional | runtime panic | planned |
 
-The `.sizeof` property name is chosen to parallel the C/C++ `sizeof` operator while being a property of the array value rather than a compile-time operator.  It returns the number of elements, not the byte size (for `byte[]` these are identical, but for `u32[]` the element count and byte size differ).
+The `.sizeof` property name is chosen to parallel the C/C++ `sizeof` operator while being a property of the array value rather than a compile-time operator.  It returns the number of elements, not the byte size (for `byte[]` these are identical, but for `u32[]` the element count and byte size differ).  The result carries unit `ptrdiff` for general arrays and unit `byte` for `u8[]` arrays.
 
 The dynamic array type is the natural parameter type for functions that operate on variable-length data: hash functions, encoders, search routines.  The implicit size avoids the error-prone pattern of passing separate data and length parameters.
 
@@ -2038,14 +2038,16 @@ Built-in introspection functions use the `@` prefix and return values that can b
 
 - `@resultof(func)` — looks up a named function and returns a `type` value for its declared return type.
 
-- `@sizeof(expr)` — returns the number of elements in a container as an `int`.  Works on arrays, tuples (including parameter packs), and strings.  This is the free-function equivalent of the `.sizeof` member — `@sizeof(x)` and `x.sizeof` always return the same value.  Passing a non-container (e.g., an integer or boolean) is an error.
+- `@sizeof(expr)` — returns the number of elements in a container.  Works on arrays, tuples (including parameter packs), and strings.  This is the free-function equivalent of the `.sizeof` member — `@sizeof(x)` and `x.sizeof` always return the same value.  Passing a non-container (e.g., an integer or boolean) is an error.
+
+  The result carries a unit: for `u8[]` (byte arrays) the unit is `byte`; for all other containers the unit is `ptrdiff`.  Because dimensionless arithmetic is allowed with unit-bearing values, the sizeof result can be used directly in index computations, loop bounds, and arithmetic without explicit unit stripping.
 
 ```
 var arr := [10, 20, 30]
-assert_eq(@sizeof(arr), 3)
-assert_eq(@sizeof(arr), arr.sizeof)   /* always equal */
-assert_eq(@sizeof("hello"), 5)
-assert_eq(@sizeof(""), 0)
+var sz := arr.sizeof          // 3 ptrdiff
+var last := sz - 1            // 2 ptrdiff (dimensionless 1 adopts unit)
+var buf: u8[4] = [0, 0, 0, 0]
+var bytes := buf.sizeof       // 4 byte
 ```
 
 `@sizeof` is particularly useful for parameter packs, where it provides a consistent way to query the element count alongside `@typeof` for element types:
@@ -2802,7 +2804,7 @@ The interpreter provides the following builtin units:
 
 **Byte units**: `byte` (displayed as B), `kilobyte` (kB), `kibibyte` (KiB), `megabyte` (MB), `mebibyte` (MiB), `gigabyte` (GB), `gibibyte` (GiB), `terabyte` (TB), `tebibyte` (TiB).
 
-**Abstract**: `count`, `distance`.
+**Abstract**: `count`, `distance`, `ptrdiff`.
 
 #### Dimensional Analysis Rules
 
@@ -2812,11 +2814,21 @@ The interpreter provides the following builtin units:
 
 - **Division**: dimensions combine by subtracting exponents.  `meter / second` produces `{meter: 1, second: -1}`.  Division of identical units produces a dimensionless result (plain numeric value).
 
-- **Comparison**: both operands must have the same dimensions.  Values are converted to base form before comparison.
+- **Comparison**: both operands must have the same dimensions.  Values are converted to base form before comparison.  One dimensionless operand is permitted (compared directly without unit checking).
 
-- **Modulus**: same rules as addition (same dimensions required).
+- **Modulus**: same rules as addition (same dimensions required).  One dimensionless operand is permitted (result inherits the unit from the unit-bearing operand).
 
-- **Dimensioned + dimensionless**: always an error.  The programmer must annotate literals with units if they participate in unit-aware arithmetic.
+- **Dimensioned + dimensionless arithmetic**: when one operand carries a unit and the other is a plain (dimensionless) numeric value, the dimensionless value is treated as having a compatible, invisible unit.  This applies to addition, subtraction, multiplication, division, modulus, and comparisons.  For addition and subtraction the result inherits the unit.  For multiplication and division, scalar-times-unit and unit-times-scalar both preserve the unit; division of a dimensionless value by a unit-bearing value produces an inverse unit.  Modulus follows the same rule as addition (result inherits the unit).
+
+  ```
+  var a ¤meter := 10
+  var b := a + 3       // 13 m
+  var c := 2 * a       // 20 m
+  var d := a / 5       // 2 m
+  var e := a % 3       // 1 m
+  ```
+
+  **Note**: assigning a plain dimensionless value to a variable with a declared unit is still an error.  The relaxation applies only to arithmetic operations, not to assignment or initialization.
 
 #### Lossless Conversion
 

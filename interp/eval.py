@@ -216,6 +216,13 @@ def unwrap_optional(value):
     return value
 
 
+def _unwrap_operand(value):
+    v = unwrap_optional(value)
+    if isinstance(v, UnitValue):
+        return v.inner
+    return v
+
+
 def to_bool(value):
     """Convert a runtime Value to Python bool for control flow."""
     if isinstance(value, UnitValue):
@@ -527,8 +534,8 @@ class Evaluator:
 
     def _op_add(self, left, right):
         """Addition: integers, floats, and strings (concatenation)."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return self._mk_int(lu.value + ru.value, resolve_width(lu.width, ru.width))
         lf, rf, fw = self._promote_to_float(lu, ru)
@@ -540,8 +547,8 @@ class Evaluator:
 
     def _op_sub(self, left, right):
         """Subtraction."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return self._mk_int(lu.value - ru.value, resolve_width(lu.width, ru.width))
         lf, rf, fw = self._promote_to_float(lu, ru)
@@ -551,8 +558,8 @@ class Evaluator:
 
     def _op_mul(self, left, right):
         """Multiplication."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return self._mk_int(lu.value * ru.value, resolve_width(lu.width, ru.width))
         lf, rf, fw = self._promote_to_float(lu, ru)
@@ -562,8 +569,8 @@ class Evaluator:
 
     def _op_div(self, left, right):
         """Division: integer (truncates toward zero, returns ExpectedValue) or float."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             if ru.value == 0:
                 return self._division_error()
@@ -578,8 +585,8 @@ class Evaluator:
 
     def _op_mod(self, left, right):
         """Remainder (truncation toward zero): a % b = a - trunc(a/b)*b.  Returns ExpectedValue."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             if ru.value == 0:
                 return self._division_error()
@@ -595,8 +602,8 @@ class Evaluator:
 
     def _op_pow(self, left, right):
         """Exponentiation: int↑int or float↑float/int.  Integer exponent must be non-negative."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             if not isinstance(ru, IntValue):
                 raise TypeError("integer base requires integer exponent")
@@ -612,8 +619,8 @@ class Evaluator:
 
     def _op_eq(self, left, right):
         """Equality comparison."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         if isinstance(lu, EnumValue) and isinstance(ru, EnumValue):
             if lu.enum_type is not ru.enum_type:
                 raise TypeError(
@@ -644,15 +651,15 @@ class Evaluator:
 
     def _op_neq(self, left, right):
         """Inequality comparison."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         eq = self._op_eq(left, right)
         return mk_bool(not eq.value)
 
     def _op_lt(self, left, right):
         """Less-than comparison."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_bool(lu.value < ru.value)
         lf, rf, _ = self._promote_to_float(lu, ru)
@@ -662,8 +669,8 @@ class Evaluator:
 
     def _op_gt(self, left, right):
         """Greater-than comparison."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_bool(lu.value > ru.value)
         lf, rf, _ = self._promote_to_float(lu, ru)
@@ -673,8 +680,8 @@ class Evaluator:
 
     def _op_lte(self, left, right):
         """Less-than-or-equal comparison."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_bool(lu.value <= ru.value)
         lf, rf, _ = self._promote_to_float(lu, ru)
@@ -684,8 +691,8 @@ class Evaluator:
 
     def _op_gte(self, left, right):
         """Greater-than-or-equal comparison."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_bool(lu.value >= ru.value)
         lf, rf, _ = self._promote_to_float(lu, ru)
@@ -695,24 +702,24 @@ class Evaluator:
 
     def _op_and(self, left, right):
         """Short-circuit boolean and."""
-        lu = unwrap_optional(left)
+        lu = _unwrap_operand(left)
         if not to_bool(lu):
             return mk_bool(False)
-        ru = unwrap_optional(right)
+        ru = _unwrap_operand(right)
         return mk_bool(to_bool(ru))
 
     def _op_or(self, left, right):
         """Short-circuit boolean or."""
-        lu = unwrap_optional(left)
+        lu = _unwrap_operand(left)
         if to_bool(lu):
             return mk_bool(True)
-        ru = unwrap_optional(right)
+        ru = _unwrap_operand(right)
         return mk_bool(to_bool(ru))
 
     def _op_lshift(self, left, right):
         """Left shift: int << int."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_int_wrap(lu.value << ru.value, resolve_width(lu.width, ru.width))
         raise TypeError(f"left-shift expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
@@ -724,8 +731,8 @@ class Evaluator:
         Python's >> produces the correct logical shift.  mk_int wraps the
         result to the type's range.
         """
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             w = resolve_width(lu.width, ru.width)
             val = wrap_int(lu.value, lu.width)
@@ -734,8 +741,8 @@ class Evaluator:
 
     def _op_bitand(self, left, right):
         """Bitwise AND: int & int or flag_enum & flag_enum."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         if isinstance(lu, EnumValue) and isinstance(ru, EnumValue):
             if lu.enum_type is not ru.enum_type:
                 raise TypeError(
@@ -749,8 +756,8 @@ class Evaluator:
 
     def _op_bitxor(self, left, right):
         """Bitwise XOR: int ^ int or flag_enum ^ flag_enum."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         if isinstance(lu, EnumValue) and isinstance(ru, EnumValue):
             if lu.enum_type is not ru.enum_type:
                 raise TypeError(
@@ -764,8 +771,8 @@ class Evaluator:
 
     def _op_bitor(self, left, right):
         """Bitwise OR: int | int or flag_enum | flag_enum."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         if isinstance(lu, EnumValue) and isinstance(ru, EnumValue):
             if lu.enum_type is not ru.enum_type:
                 raise TypeError(
@@ -779,8 +786,8 @@ class Evaluator:
 
     def _op_rotl(self, left, right):
         """Rotate left within the operand's bit width (default 32)."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             w = resolve_width(lu.width, ru.width)
             bits = _TYPE_BITS.get(w, 32)
@@ -793,8 +800,8 @@ class Evaluator:
 
     def _op_rotr(self, left, right):
         """Rotate right within the operand's bit width (default 32)."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             w = resolve_width(lu.width, ru.width)
             bits = _TYPE_BITS.get(w, 32)
@@ -820,34 +827,34 @@ class Evaluator:
             f"got {type(val).__name__}")
 
     def _op_logic_and(self, left, right):
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         return mk_bool(self._logic_bool(lu) and self._logic_bool(ru))
 
     def _op_logic_or(self, left, right):
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         return mk_bool(self._logic_bool(lu) or self._logic_bool(ru))
 
     def _op_logic_xor(self, left, right):
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         return mk_bool(self._logic_bool(lu) != self._logic_bool(ru))
 
     def _op_logic_nand(self, left, right):
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         return mk_bool(not (self._logic_bool(lu) and self._logic_bool(ru)))
 
     def _op_logic_nor(self, left, right):
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         return mk_bool(not (self._logic_bool(lu) or self._logic_bool(ru)))
 
     def _op_concat(self, left, right):
         """Concatenate arrays at the outermost dimension."""
-        lu = unwrap_optional(left)
-        ru = unwrap_optional(right)
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
         la = self._as_array(lu)
         ra = self._as_array(ru)
         if la is None:
@@ -912,14 +919,17 @@ class Evaluator:
         ra = self._as_array(right)
         if la is not None and ra is not None:
             etype = la.element_type or ra.element_type
-            return ObjectValue(ArrayValue([op_fn(l, r) for l, r in zip(la.elements, ra.elements)],
-                                          element_type=etype))
+            return ObjectValue(ArrayValue(
+                [op_fn(l, r) for l, r in zip(la.elements, ra.elements)],
+                element_type=etype))
         if la is not None:
-            return ObjectValue(ArrayValue([op_fn(l, right) for l in la.elements],
-                                          element_type=la.element_type))
+            return ObjectValue(ArrayValue(
+                [op_fn(l, right) for l in la.elements],
+                element_type=la.element_type))
         if ra is not None:
-            return ObjectValue(ArrayValue([op_fn(left, r) for r in ra.elements],
-                                          element_type=ra.element_type))
+            return ObjectValue(ArrayValue(
+                [op_fn(left, r) for r in ra.elements],
+                element_type=ra.element_type))
         return op_fn(left, right)
 
     # ------------------------------------------------------------------
@@ -937,10 +947,12 @@ class Evaluator:
         r_unit = ru.unit if r_is_unit else None
 
         if op in ("+", "-"):
-            if not l_is_unit or not r_is_unit:
-                raise TypeError(
-                    f"cannot {'+' if op == '+' else '-'} dimensioned "
-                    f"and dimensionless values")
+            if l_is_unit and not r_is_unit:
+                op_fn = self._ops[op]
+                return UnitValue(op_fn(l_inner, r_inner), l_unit)
+            if r_is_unit and not l_is_unit:
+                op_fn = self._ops[op]
+                return UnitValue(op_fn(l_inner, r_inner), r_unit)
             if not l_unit.same_dimension(r_unit):
                 raise TypeError(
                     f"incompatible units for {op}: "
@@ -980,8 +992,20 @@ class Evaluator:
             return UnitValue(result, runit)
 
         if op == "%":
-            if not l_is_unit or not r_is_unit:
-                raise TypeError("cannot compute remainder with mixed dimensioned/dimensionless values")
+            if l_is_unit and not r_is_unit:
+                result = self._ops["%"](l_inner, r_inner)
+                if isinstance(result, ExpectedValue):
+                    if not result.is_ok():
+                        return result
+                    result = result.ok_value
+                return UnitValue(result, l_unit)
+            if r_is_unit and not l_is_unit:
+                result = self._ops["%"](l_inner, r_inner)
+                if isinstance(result, ExpectedValue):
+                    if not result.is_ok():
+                        return result
+                    result = result.ok_value
+                return UnitValue(result, r_unit)
             if not l_unit.same_dimension(r_unit):
                 raise TypeError(
                     f"incompatible units for %: "
@@ -1023,9 +1047,10 @@ class Evaluator:
             return UnitValue(result, new_unit)
 
         if op in ("==", "!=", "<", ">", "<=", ">="):
-            if not l_is_unit or not r_is_unit:
-                raise TypeError(
-                    f"cannot compare dimensioned and dimensionless values")
+            if l_is_unit and not r_is_unit:
+                return self._ops[op](l_inner, r_inner)
+            if r_is_unit and not l_is_unit:
+                return self._ops[op](l_inner, r_inner)
             if not l_unit.same_dimension(r_unit):
                 raise TypeError(
                     f"incompatible units for comparison: "
@@ -1035,6 +1060,14 @@ class Evaluator:
             l_base = self._to_base_value(l_inner, l_unit)
             r_base = self._to_base_value(r_inner, r_unit)
             return self._ops[op](l_base, r_base)
+
+        if op in ("<<", ">>", "«", "»", "↺", "↻",
+                  "&", "|", "^", "∧", "∨", "⊕", "⊼", "⊽"):
+            result = self._ops[op](l_inner, r_inner)
+            unit = l_unit if l_is_unit else r_unit
+            if unit is not None:
+                return UnitValue(result, unit)
+            return result
 
         raise TypeError(f"operator '{op}' not supported with units")
 
@@ -1074,6 +1107,12 @@ class Evaluator:
                 target_unit)
         raise TypeError(
             f"cannot convert {type(inner).__name__} with units")
+
+    def _sizeof_result(self, count: int, element_type: str | None = None):
+        from interp.units import BUILTIN_UNITS
+        if element_type == "u8":
+            return UnitValue(mk_int(count), BUILTIN_UNITS["byte"])
+        return UnitValue(mk_int(count), BUILTIN_UNITS["ptrdiff"])
 
     # ------------------------------------------------------------------
     # Expression evaluation
@@ -1212,6 +1251,11 @@ class Evaluator:
                 raise TypeError(f"negation expected numeric type, got {type(unwrapped).__name__}")
             if node.op == "~":
                 unwrapped = unwrap_optional(operand)
+                if isinstance(unwrapped, UnitValue):
+                    inner = unwrapped.inner
+                    if isinstance(inner, IntValue):
+                        return UnitValue(mk_int_wrap(~inner.value, inner.width), unwrapped.unit)
+                    raise TypeError(f"bitwise-not expected int, got {type(inner).__name__}")
                 if isinstance(unwrapped, EnumValue):
                     if not unwrapped.enum_type.is_flag:
                         raise TypeError(
@@ -1319,10 +1363,15 @@ class Evaluator:
                     f"enum '{unwrapped.name}' has no member '{node.attr}'")
             if isinstance(unwrapped, TupleValue):
                 if node.attr == "sizeof":
-                    return mk_int(len(unwrapped.elements))
+                    return self._sizeof_result(len(unwrapped.elements))
+            if isinstance(unwrapped, StrValue):
+                if node.attr == "sizeof":
+                    return self._sizeof_result(len(unwrapped.value))
             if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
                 if node.attr == "sizeof":
-                    return mk_int(unwrapped.obj.sizeof)
+                    return self._sizeof_result(
+                        unwrapped.obj.sizeof,
+                        unwrapped.obj.element_type)
             if isinstance(unwrapped, ObjectValue):
                 attr_val = getattr(unwrapped.obj, node.attr, None)
                 if attr_val is not None:
@@ -1354,11 +1403,15 @@ class Evaluator:
             if isinstance(unwrapped, TupleValue):
                 idx_val = self.eval_expr(node.index)
                 iu = unwrap_optional(idx_val)
+                if isinstance(iu, UnitValue):
+                    iu = iu.inner
                 if isinstance(iu, IntValue):
                     return unwrapped.get(iu.value)
             if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
                 idx_val = self.eval_expr(node.index)
                 iu = unwrap_optional(idx_val)
+                if isinstance(iu, UnitValue):
+                    iu = iu.inner
                 if isinstance(iu, IntValue):
                     return unwrapped.obj.get(iu.value)
 
@@ -1369,6 +1422,10 @@ class Evaluator:
             if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
                 s = unwrap_optional(self.eval_expr(node.start))
                 e = unwrap_optional(self.eval_expr(node.end))
+                if isinstance(s, UnitValue):
+                    s = s.inner
+                if isinstance(e, UnitValue):
+                    e = e.inner
                 if isinstance(s, IntValue) and isinstance(e, IntValue):
                     elems = unwrapped.obj.elements[s.value:e.value + 1]
                     return ObjectValue(ArrayValue(list(elems),
@@ -1377,11 +1434,17 @@ class Evaluator:
         if isinstance(node, RangeExpr):
             s = unwrap_optional(self.eval_expr(node.start))
             e = unwrap_optional(self.eval_expr(node.end))
+            if isinstance(s, UnitValue):
+                s = s.inner
+            if isinstance(e, UnitValue):
+                e = e.inner
             if not isinstance(s, IntValue) or not isinstance(e, IntValue):
                 raise TypeError("range bounds must be integers")
             step = None
             if node.step is not None:
                 st = unwrap_optional(self.eval_expr(node.step))
+                if isinstance(st, UnitValue):
+                    st = st.inner
                 if not isinstance(st, IntValue):
                     raise TypeError("range step must be an integer")
                 step = st.value
@@ -1398,11 +1461,13 @@ class Evaluator:
             val = self.eval_expr(node.expr)
             unwrapped = unwrap_optional(val)
             if isinstance(unwrapped, TupleValue):
-                return mk_int(len(unwrapped.elements))
+                return self._sizeof_result(len(unwrapped.elements))
             if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
-                return mk_int(unwrapped.obj.sizeof)
+                return self._sizeof_result(
+                    unwrapped.obj.sizeof,
+                    unwrapped.obj.element_type)
             if isinstance(unwrapped, StrValue):
-                return mk_int(len(unwrapped.value))
+                return self._sizeof_result(len(unwrapped.value))
             raise TypeError(
                 f"@sizeof: expected array, tuple, or string, got {type(unwrapped).__name__}")
 
@@ -1508,6 +1573,10 @@ class Evaluator:
                 if isinstance(au, ObjectValue) and isinstance(au.obj, ArrayValue):
                     s = unwrap_optional(self.eval_expr(target_ast.start))
                     e = unwrap_optional(self.eval_expr(target_ast.end))
+                    if isinstance(s, UnitValue):
+                        s = s.inner
+                    if isinstance(e, UnitValue):
+                        e = e.inner
                     rhs_arr = self._as_array(rhs)
                     if isinstance(s, IntValue) and isinstance(e, IntValue) and rhs_arr is not None:
                         for i, val in enumerate(rhs_arr.elements):
@@ -1519,6 +1588,8 @@ class Evaluator:
                 if isinstance(au, ObjectValue) and isinstance(au.obj, ArrayValue):
                     idx_val = self.eval_expr(target_ast.index)
                     iu = unwrap_optional(idx_val)
+                    if isinstance(iu, UnitValue):
+                        iu = iu.inner
                     if isinstance(iu, IntValue):
                         au.obj.set(iu.value, rhs)
             elif isinstance(target_ast, VarRef):
@@ -1623,11 +1694,17 @@ class Evaluator:
             elif isinstance(expr, RangeExpr):
                 s = unwrap_optional(self.eval_expr(expr.start))
                 e = unwrap_optional(self.eval_expr(expr.end))
+                if isinstance(s, UnitValue):
+                    s = s.inner
+                if isinstance(e, UnitValue):
+                    e = e.inner
                 if not isinstance(s, IntValue) or not isinstance(e, IntValue):
                     raise TypeError("range bounds must be integers")
                 sv, ev = s.value, e.value
                 if expr.step is not None:
                     st = unwrap_optional(self.eval_expr(expr.step))
+                    if isinstance(st, UnitValue):
+                        st = st.inner
                     if not isinstance(st, IntValue):
                         raise TypeError("range step must be an integer")
                     stv = st.value

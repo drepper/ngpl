@@ -804,6 +804,8 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
         return value
     if not validate_type(target_width):
         raise TypeError(f"unknown type '{target_width}'")
+    if isinstance(value, UnitValue):
+        value = value.inner
     if isinstance(value, IntValue):
         if _is_unsigned(target_width):
             return IntValue(wrap_int(value.value, target_width), target_width)
