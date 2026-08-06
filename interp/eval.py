@@ -1146,6 +1146,35 @@ class Evaluator:
             return UnitValue(mk_int(count), BUILTIN_UNITS["byte"])
         return UnitValue(mk_int(count), BUILTIN_UNITS["ptrdiff"])
 
+    @staticmethod
+    def _check_index_unit(iu: Value, arr: ArrayValue) -> IntValue:
+        """Validate that an array index is an integer with a compatible unit.
+
+        Untyped integer constants (width "int") are always accepted.
+        Unit-bearing indices must match the array kind: byte for
+        u8[]/byte[], ptrdiff for everything else.  Typed integers
+        without a unit (e.g. i32, u64) are rejected — they must
+        carry the correct unit annotation.
+        """
+        from interp.units import BUILTIN_UNITS
+        is_byte_array = arr.element_type in ("u8", "byte")
+        required = BUILTIN_UNITS["byte"] if is_byte_array else BUILTIN_UNITS["ptrdiff"]
+        if isinstance(iu, UnitValue):
+            if not iu.unit.same_dimension(required):
+                raise TypeError(
+                    f"array index requires unit {required.display_name}, "
+                    f"got {iu.unit.display_name}")
+            if not isinstance(iu.inner, IntValue):
+                raise TypeError("array index must be an integer")
+            return iu.inner
+        if isinstance(iu, IntValue):
+            if iu.width == "int":
+                return iu
+            raise TypeError(
+                f"array index requires unit {required.display_name}, "
+                f"got typed integer {iu.width} without unit")
+        raise TypeError("array index must be an integer")
+
     # ------------------------------------------------------------------
     # Expression evaluation
     # ------------------------------------------------------------------
@@ -1454,10 +1483,8 @@ class Evaluator:
             if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
                 idx_val = self.eval_expr(node.index)
                 iu = unwrap_optional(idx_val)
-                if isinstance(iu, UnitValue):
-                    iu = iu.inner
-                if isinstance(iu, IntValue):
-                    return unwrapped.obj.get(iu.value)
+                iu = self._check_index_unit(iu, unwrapped.obj)
+                return unwrapped.obj.get(iu.value)
 
         # Slice read: arr[start…end] (inclusive).
         if isinstance(node, SliceAccess):
@@ -1466,14 +1493,11 @@ class Evaluator:
             if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
                 s = unwrap_optional(self.eval_expr(node.start))
                 e = unwrap_optional(self.eval_expr(node.end))
-                if isinstance(s, UnitValue):
-                    s = s.inner
-                if isinstance(e, UnitValue):
-                    e = e.inner
-                if isinstance(s, IntValue) and isinstance(e, IntValue):
-                    elems = unwrapped.obj.elements[s.value:e.value + 1]
-                    return ObjectValue(ArrayValue(list(elems),
-                                                  element_type=unwrapped.obj.element_type))
+                s = self._check_index_unit(s, unwrapped.obj)
+                e = self._check_index_unit(e, unwrapped.obj)
+                elems = unwrapped.obj.elements[s.value:e.value + 1]
+                return ObjectValue(ArrayValue(list(elems),
+                                              element_type=unwrapped.obj.element_type))
 
         if isinstance(node, RangeExpr):
             s = unwrap_optional(self.eval_expr(node.start))
@@ -1633,12 +1657,10 @@ class Evaluator:
                 if isinstance(au, ObjectValue) and isinstance(au.obj, ArrayValue):
                     s = unwrap_optional(self.eval_expr(target_ast.start))
                     e = unwrap_optional(self.eval_expr(target_ast.end))
-                    if isinstance(s, UnitValue):
-                        s = s.inner
-                    if isinstance(e, UnitValue):
-                        e = e.inner
+                    s = self._check_index_unit(s, au.obj)
+                    e = self._check_index_unit(e, au.obj)
                     rhs_arr = self._as_array(rhs)
-                    if isinstance(s, IntValue) and isinstance(e, IntValue) and rhs_arr is not None:
+                    if rhs_arr is not None:
                         for i, val in enumerate(rhs_arr.elements):
                             au.obj.set(s.value + i, val)
             elif isinstance(target_ast, Subscript):
@@ -1648,10 +1670,8 @@ class Evaluator:
                 if isinstance(au, ObjectValue) and isinstance(au.obj, ArrayValue):
                     idx_val = self.eval_expr(target_ast.index)
                     iu = unwrap_optional(idx_val)
-                    if isinstance(iu, UnitValue):
-                        iu = iu.inner
-                    if isinstance(iu, IntValue):
-                        au.obj.set(iu.value, rhs)
+                    iu = self._check_index_unit(iu, au.obj)
+                    au.obj.set(iu.value, rhs)
             elif isinstance(target_ast, VarRef):
                 if target_ast.name in self._frozen_vars:
                     kind = self._frozen_vars[target_ast.name]
@@ -2409,8 +2429,26 @@ class Evaluator:
 
         call_env = func.env.copy_for_call()
         for (param_name, param_type), arg_value in zip(resolved_params, regular_args):
+            if param_name in func.param_units:
+                from interp.units import eval_unit_formula
+                unit = eval_unit_formula(func.param_units[param_name])
+                if isinstance(arg_value, UnitValue):
+                    arg_value = self._convert_unit_value(arg_value, unit)
+                elif isinstance(arg_value, IntValue) and arg_value.width != "int":
+                    raise TypeError(
+                        f"{func.name}: parameter '{param_name}' requires unit "
+                        f"{unit.display_name}, got typed integer "
+                        f"{arg_value.width} without unit")
+                else:
+                    arg_value = UnitValue(arg_value, unit)
             if param_type is not None:
-                arg_value = coerce_arg(arg_value, param_type, func.name, param_name)
+                if isinstance(arg_value, UnitValue):
+                    inner = coerce_arg(arg_value.inner, param_type,
+                                       func.name, param_name)
+                    arg_value = UnitValue(inner, arg_value.unit)
+                else:
+                    arg_value = coerce_arg(arg_value, param_type,
+                                           func.name, param_name)
             call_env.define(param_name, arg_value)
 
         if has_pack:

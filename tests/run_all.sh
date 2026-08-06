@@ -34,6 +34,7 @@ tests=(
     "$testdir"/test_sizeof_units.nl
     "$testdir"/test_unitof.nl
     "$testdir"/test_type_strict.nl
+    "$testdir"/test_index_units.nl
     "$testdir"/sha256.nl
 )
 

@@ -73,6 +73,9 @@ Type System
 [x] add binary power operator ↑.  for integers on the left only allow integers on the right.  Ensure
     overflow and underflow are detected.
 
+[ ] to index multi-dimensional objects (matrices etc) support using multiple comma-separated
+    expressions within the square brackets instead of using multiple subsequent square brackets
+
 
 Data Structures
 ---------------

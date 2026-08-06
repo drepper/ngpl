@@ -782,9 +782,9 @@ A function that may fail to produce a value declares an **optional return type**
 #### Declaration
 
 ```
-fn get_padded_byte data : byte[], pos : usize, total_size : usize → u8?:
-    if pos >= total_size: return ∅
-    if pos < data.sizeof: return data[pos]
+fn get_padded_byte data : byte[], off ¤byte : usize, total_size ¤byte : usize → u8?:
+    if off >= total_size: return ∅
+    if off < data.sizeof: return data[off]
     ...
     0
 ```
@@ -949,7 +949,7 @@ fn get_padded_word ... → u32?:
 
 fn sha256 data → int?:
     ...
-    W[i] ← get_padded_word(...)?                 /* propagates ∅ */
+    W[i] ← get_padded_word(...)?                   /* propagates ∅ */
     ...
     hash
 ```
@@ -1678,8 +1678,8 @@ Arrays perform strict bounds checking on both reads and writes.  Accessing an in
 
 ```
 var a := [1, 2, 3]
-var x := a[3]    // error: array index 3 out of range (length 3)
-a[-1] ← 4      // error: array index -1 out of range (length 3)
+var x := a[3]             // error: array index 3 out of range (length 3)
+a[⁻1] ← 4                // error: array index -1 out of range (length 3)
 ```
 
 This replaces the earlier behavior where out-of-bounds writes silently extended the array.  To grow an array, use `⍴` to reshape it to the desired size:
@@ -1687,6 +1687,70 @@ This replaces the earlier behavior where out-of-bounds writes silently extended 
 ```
 var W := 64 ⍴ generate(load_word, 0…15)   // extend 16-element result to 64
 ```
+
+#### Index Unit Requirements
+
+Array indices follow a tiered rule based on the integer's type status:
+
+1. **Untyped integer constants** (literals like `0`, `42`, expressions that remain uncoerced) are accepted as indices for any array without unit annotation.
+2. **Typed integers** (`i32`, `u32`, `u32fast`, `usize`, etc.) must carry a unit matching the array kind:
+   - **`byte[]` / `u8[]` arrays** require unit **`byte`** (`B`).
+   - **All other arrays** require unit **`ptrdiff`**.
+3. **Wrong units** are always rejected regardless of whether the integer is typed or untyped.
+
+```
+var arr := [10, 20, 30]
+var x := arr[0]                // OK — untyped integer constant
+
+var idx : i32 = 1
+var z := arr[idx]              // error: typed integer without unit
+var idx2 ¤ptrdiff : i32 = 1
+var w := arr[idx2]             // OK — variable carries ptrdiff unit
+
+var buf : u8[4] = 0
+var b := buf[0]                // OK — untyped integer constant
+```
+
+Units are attached at the point of declaration — variable definitions, or function parameters:
+
+```
+fn safe_get arr : i32[], idx ¤ptrdiff : i32 → i32?:
+    catch:
+        arr[idx]             // OK — idx carries ptrdiff from declaration
+
+fn read_byte data : byte[], off ¤byte : usize → u8:
+    data[off]                // OK — off carries byte from declaration
+```
+
+The `.sizeof` property returns the appropriate unit automatically (`ptrdiff` for general arrays, `byte` for byte arrays), so loop bounds derived from `.sizeof` produce correctly-typed indices:
+
+```
+var arr := [1, 2, 3, 4]
+var total := 0
+foreach i := 0…arr.sizeof - 1:       // i carries ptrdiff unit
+    total ← total + arr[i]           // OK — i already has ptrdiff
+```
+
+When a loop variable is explicitly typed, a unit-carrying copy is needed for indexing:
+
+```
+foreach j : u32fast = 16…63:
+    var ji ¤ptrdiff := j
+    W[ji] ← W[ji - 16] + expand(W[ji - 2])
+```
+
+Alternatively, omitting the type annotation keeps the loop variable untyped, which needs no unit:
+
+```
+foreach j := 16…63:
+    W[j] ← W[j - 16] + expand(W[j - 2])
+```
+
+Slice access (`arr[start…end]`) follows the same rule: both bounds must carry the correct unit when typed, or be untyped constants.
+
+Tuple indexing is not affected — tuples accept bare integer indices without unit annotation (`pair[0]`, `pair[1]`).
+
+**Rationale.**  The unit requirement catches a category of bugs that arise when byte offsets are used where element indices are expected (or vice versa).  Untyped integer constants are exempt because they appear overwhelmingly as literal subscripts (`arr[0]`, `arr[2]`) where the intent is unambiguous and requiring annotation would add noise without safety benefit.  Typed integers, by contrast, often originate from computations or parameters where the domain (byte offset vs. element index) is not obvious from context — the unit must be attached at the point of declaration (`var idx ¤ptrdiff := n` or `param ¤byte : type`), not at the subscript site.
 
 #### Operator Precedence
 
@@ -1902,7 +1966,7 @@ The `catch` statement provides scoped error handling at the syntactic level.  Un
 #### Syntax
 
 ```
-fn safe_access arr : i32[], idx : i32 → i32?:
+fn safe_access arr : i32[], idx ¤ptrdiff : i32 → i32?:
     catch:
         arr[idx]
 ```

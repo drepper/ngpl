@@ -2,11 +2,11 @@
 
 // --- Helper functions ---
 
-fn safe_get arr : i32[], idx : i32 → i32?:
+fn safe_get arr : i32[], idx ¤ptrdiff : i32 → i32?:
     catch:
         arr[idx]
 
-fn safe_get_result arr : i32[], idx : i32 → i32!:
+fn safe_get_result arr : i32[], idx ¤ptrdiff : i32 → i32!:
     catch:
         arr[idx]
 
@@ -66,7 +66,7 @@ fn test_catch_requires_optional:
 
 // --- Multiple statements in catch ---
 
-fn multi_stmt arr : i32[], idx : i32 → i32?:
+fn multi_stmt arr : i32[], idx ¤ptrdiff : i32 → i32?:
     catch:
         var x := arr[idx]
         var y := x + 1
@@ -92,7 +92,7 @@ fn test_catch_negative_index:
 
 // --- Catch with code after the block ---
 
-fn catch_then_continue arr : i32[], idx : i32 → i32?:
+fn catch_then_continue arr : i32[], idx ¤ptrdiff : i32 → i32?:
     catch:
         arr[idx]
 

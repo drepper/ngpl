@@ -33,18 +33,18 @@ const K : u32 = [
  * beyond the original data.
  * --------------------------------------------------------------------------- */
 
-fn get_padded_byte data : byte[], pos : usize, total_size : usize → u8?:
-    if pos >= total_size: return ∅
-    if pos < data.sizeof: return data[pos]
-    if pos == data.sizeof: return 128
+fn get_padded_byte data : byte[], off ¤byte : usize, total_size ¤byte : usize → u8?:
+    if off >= total_size: return ∅
+    if off < data.sizeof: return data[off]
+    if off == data.sizeof: return 128
     var len_start := total_size - 8
-    if pos >= len_start:
+    if off >= len_start:
         const bit_len := data.sizeof * 8
-        const byte_idx := pos - len_start
+        const byte_idx := off - len_start
         return (bit_len » ((7 - byte_idx) * 8)) & 255
     ∅
 
-fn get_padded_word data : byte[], off : usize, total_size : usize → u32?:
+fn get_padded_word data : byte[], off ¤byte : usize, total_size ¤byte : usize → u32?:
     if off + 4 <= data.sizeof:
         const b0 : u32 = data[off]
         const b1 : u32 = data[off + 1]
@@ -96,7 +96,7 @@ fn sha256 data : byte[] → int?:
         var W := generate(load_word, 0…15) ⧺ 48 ⍴ [0]
 
         /* --- Message-schedule expansion: W[16..63]. --- */
-        foreach j : u32fast = 16…63:
+        foreach j := 16…63:
             W[j] ← @wrap(W[j - 16] + expand_Σ₀(W[j - 15]) +
                          W[j - 7] + expand_Σ₁(W[j - 2]))
 
@@ -104,7 +104,7 @@ fn sha256 data : byte[] → int?:
         var v := H[0…7]
 
         /* --- 64 compression rounds using K[t] and W[t]. --- */
-        foreach t : u32fast = 0…63:
+        foreach t := 0…63:
             /* Σ₁(e) = ROTR(6,e) ⊕ ROTR(11,e) ⊕ ROTR(25,e). */
             const Σ₁ := (v[4] ↻ 6) ^ (v[4] ↻ 11) ^ (v[4] ↻ 25)
 
