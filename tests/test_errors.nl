@@ -106,6 +106,16 @@ fn error_val_with_ampersand() → ∅:
     let a : mut i32[] = [1, 2, 3]
     takes_val(&a)
 
+/* --- immutable parameter errors -------------------------------------------- */
+
+fn try_assign_param(x : i32) → ∅:
+    x ← 99
+
+@test
+fn error_param_immutable() → ∅:
+    @expect error "cannot assign to let variable 'x'"
+    try_assign_param(42)
+
 @start
 fn main() → ∅:
     std.print("error tests passed")

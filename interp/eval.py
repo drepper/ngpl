@@ -2640,6 +2640,10 @@ class Evaluator:
         old_env = self.env
         old_ret_type = self._current_ret_type
         old_pure = self._pure_func_name
+        old_frozen = self._frozen_vars.copy()
+        for param_name, _ in func.params:
+            if param_name not in func.param_muts and param_name not in func.param_refs:
+                self._frozen_vars[param_name] = "let"
         try:
             self.env = call_env
             self._current_ret_type = resolved_ret_type
@@ -2656,6 +2660,7 @@ class Evaluator:
             self.env = old_env
             self._current_ret_type = old_ret_type
             self._pure_func_name = old_pure
+            self._frozen_vars = old_frozen
 
     def _check_return_type(self, result: Value, ret_type: str | None, func_name: str) -> Value:
         """Verify the return value matches the declared return type."""

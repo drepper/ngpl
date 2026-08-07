@@ -1118,6 +1118,34 @@ Parameter type enforcement catches type errors early and enables the interpreter
 | Unknown type | Compile error | Compile error | Runtime (if checked) | Compile error |
 
 
+### Parameter Mutability
+
+Function parameters are **immutable by default**, just like `let` bindings.  Attempting to reassign a parameter inside the function body is an error:
+
+```
+fn broken(x : i32) → i32:
+    x ← x + 1        // error: cannot assign to let variable 'x'
+    x
+```
+
+To make a parameter mutable, use the `mut` type qualifier in the same position as for variable definitions:
+
+```
+fn increment(x : mut i32) → i32:
+    x ← x + 1
+    x
+```
+
+Parameters without a type annotation are also immutable — there is no way to mark an untyped parameter as mutable (add a type annotation if mutation is needed).
+
+This follows Rust's convention where `fn foo(x: i32)` produces an immutable binding and `fn foo(mut x: i32)` produces a mutable one.  The design encourages writing functions that do not modify their inputs, making control flow easier to follow.
+
+| Feature | Rust | Zig | C++ | Python | NGPL |
+|---------|------|-----|-----|--------|------|
+| Params mutable by default | No | Yes | Yes | Yes (rebinding) | No |
+| Mutable param syntax | `mut x: T` | N/A | N/A | N/A | `x : mut T` |
+
+
 ### Call-by-Value and Call-by-Reference
 
 By default, function parameters are passed **by value**.  For mutable compound values such as arrays, the interpreter creates a deep copy of the argument so that modifications inside the function do not affect the caller.  Scalar values (integers, floats, booleans, strings) are immutable and naturally passed by value without copying.

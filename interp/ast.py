@@ -127,10 +127,12 @@ class FuncDef:
                  pack_param: tuple[str, str | None] | None = None,
                  param_units: dict[str, object] | None = None,
                  is_impure: bool = False,
-                 param_refs: set[str] | None = None):
+                 param_refs: set[str] | None = None,
+                 param_muts: set[str] | None = None):
         self.name = name
         self.params = params
         self.param_refs: set[str] = param_refs or set()
+        self.param_muts: set[str] = param_muts or set()
         self.ret_type = ret_type
         self.body = body
         self.is_start = is_start

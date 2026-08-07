@@ -320,14 +320,16 @@ class FuncValue(Value):
     """A user-defined function (closure over an environment)."""
 
     __slots__ = ("name", "params", "body", "env", "ret_type", "is_replaceable",
-                 "pack_param", "param_units", "is_impure", "param_refs")
+                 "pack_param", "param_units", "is_impure", "param_refs",
+                 "param_muts")
 
     def __init__(self, name, params, body, env, ret_type=None,
                  is_replaceable: bool = False,
                  pack_param: tuple[str, str | None] | None = None,
                  param_units: dict[str, object] | None = None,
                  is_impure: bool = False,
-                 param_refs: set[str] | None = None):
+                 param_refs: set[str] | None = None,
+                 param_muts: set[str] | None = None):
         self.name = name
         self.params = params
         self.body = body
@@ -338,6 +340,7 @@ class FuncValue(Value):
         self.param_units: dict[str, object] = param_units or {}
         self.is_impure = is_impure
         self.param_refs: set[str] = param_refs or set()
+        self.param_muts: set[str] = param_muts or set()
 
 
 class LambdaValue(Value):

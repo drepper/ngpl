@@ -29,6 +29,33 @@ fn test_let_in_loop() → ∅:
         sum ← sum + doubled
     assert_eq(sum, 30)
 
+/* Mutable parameter can be reassigned. */
+fn increment(x : mut i32) → i32:
+    x ← x + 1
+    x
+
+@test
+fn test_mut_param() → ∅:
+    assert_eq(increment(10), 11)
+
+/* Immutable parameter cannot be reassigned but value is independent. */
+fn double_val(x : i32) → i32:
+    x * 2
+
+@test
+fn test_immutable_param() → ∅:
+    let v := 5
+    assert_eq(double_val(v), 10)
+    assert_eq(v, 5)
+
+/* Untyped parameter is also immutable. */
+fn identity(x) → i32:
+    x
+
+@test
+fn test_untyped_param_immutable() → ∅:
+    assert_eq(identity(7), 7)
+
 @start
 fn main() → ∅:
     std.print("let tests passed")

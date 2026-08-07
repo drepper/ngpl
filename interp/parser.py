@@ -250,6 +250,7 @@ class Parser:
         params = []
         param_units: dict[str, object] = {}
         param_refs: set[str] = set()
+        param_muts: set[str] = set()
         pack_param: tuple[str, str | None] | None = None
         self._eat("PUNCT", "(")
         while not (self._check("PUNCT") and self._cur().value == ")"):
@@ -267,6 +268,7 @@ class Parser:
                 param_unit = self._parse_unit_spec()
             param_type = None
             is_ref = False
+            is_mut = False
             if self._check("PUNCT") and self._cur().value == ":":
                 next_idx = self.pos + 1
                 next_is_type = (next_idx < len(self.tokens) and
@@ -274,11 +276,15 @@ class Parser:
                 next_is_ref = (next_idx < len(self.tokens) and
                                self.tokens[next_idx].type == "OP" and
                                self.tokens[next_idx].value == "&")
-                if next_is_type or next_is_ref:
+                next_is_mut = (next_idx < len(self.tokens) and
+                               self.tokens[next_idx].type == "MUT")
+                if next_is_type or next_is_ref or next_is_mut:
                     self._eat("PUNCT", ":")
                     if self._check("OP") and self._cur().value == "&":
                         self.pos += 1
                         is_ref = True
+                    if self._try_eat("MUT"):
+                        is_mut = True
                     type_tok = self._eat("IDENT")
                     param_type = type_tok.value
                 if self._check("PUNCT") and self._cur().value == "[":
@@ -299,6 +305,8 @@ class Parser:
             params.append((param_name_tok.value, param_type))
             if is_ref:
                 param_refs.add(param_name_tok.value)
+            if is_mut:
+                param_muts.add(param_name_tok.value)
             if param_unit is not None:
                 param_units[param_name_tok.value] = param_unit
             self._try_eat("NEWLINE")
@@ -329,7 +337,8 @@ class Parser:
                 fdef = FuncDef(name, params, ret_type, body, is_start, is_test,
                                test_refs, expect_annotations, is_replaceable,
                                pack_param, param_units, is_impure,
-                               param_refs=param_refs)
+                               param_refs=param_refs,
+                               param_muts=param_muts)
                 fdef._parse_error = str(e)
                 self._skip_to_next_definition()
                 return fdef
@@ -338,7 +347,8 @@ class Parser:
         return FuncDef(name, params, ret_type, body, is_start, is_test,
                        test_refs, expect_annotations, is_replaceable,
                        pack_param, param_units, is_impure,
-                       param_refs=param_refs)
+                       param_refs=param_refs,
+                       param_muts=param_muts)
 
     def _parse_dotted_name(self) -> str:
         """Parse a possibly dotted name like 'std.errors'."""
