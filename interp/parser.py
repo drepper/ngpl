@@ -13,7 +13,7 @@ from interp.ast import (
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
-    RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, EnumDef,
+    RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, TypeDef, EnumDef,
     LambdaExpr, ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
     UnitExpr, UnitDef, UnitName, UnitBinOp, UnitSqrt, UnitLit,
@@ -216,6 +216,9 @@ class Parser:
 
         if self._check("UNIT"):
             return self._parse_unit_def()
+
+        if self._check("TYPE"):
+            return self._parse_type_def()
 
         if self._check("FN"):
             return self._parse_function_def(is_start, is_test, test_refs, expect_annotations,
@@ -500,6 +503,37 @@ class Parser:
     # ------------------------------------------------------------------
     # Unit definition and spec parsing
     # ------------------------------------------------------------------
+
+    def _parse_type_def(self):
+        """Parse: type NAME = TARGET_TYPE"""
+        kw_tok = self._cur()
+        self._eat("TYPE")
+        name_tok = self._eat("IDENT")
+        self._eat("PUNCT", "=")
+        type_tok = self._eat("IDENT")
+        target = type_tok.value
+        if self._check("PUNCT") and self._cur().value == "[":
+            self.pos += 1
+            if self._check("PUNCT") and self._cur().value == "]":
+                self.pos += 1
+                target += "[]"
+            elif self._check("INT"):
+                size_tok = self._eat("INT")
+                self._eat("PUNCT", "]")
+                target += f"[{size_tok.value}]"
+            else:
+                self._eat("PUNCT", "]")
+                target += "[]"
+        if self._check("OP") and self._cur().value == "?":
+            self.pos += 1
+            target += "?"
+            if self._check("IDENT"):
+                target += self._parse_dotted_name()
+        elif self._check("OP") and self._cur().value == "!":
+            self.pos += 1
+            target += "?std.errors"
+        self._try_eat("PUNCT", ";")
+        return self._set_pos(TypeDef(name_tok.value, target), kw_tok)
 
     def _parse_unit_def(self):
         """Parse: unit name [= formula]"""

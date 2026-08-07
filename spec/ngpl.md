@@ -2593,6 +2593,53 @@ This test verifies both that the warning is produced and that the redefined vari
 The `@expect` annotation fills a gap that most languages handle with external test harnesses.  By integrating diagnostic-expectation testing into the language's test system, the entire test suite — positive tests (`@test`) and negative tests (`@expect`) — can live in the same source files and run with the same `--test` invocation.  The statement-level form is particularly powerful: it allows testing warnings and non-fatal diagnostics within otherwise-normal test functions, verifying both the diagnostic and the runtime behavior that follows.
 
 
+### Type Aliases
+
+A type alias introduces a new name for an existing type.  The syntax mirrors variable and unit definitions:
+
+```
+type Index = i32
+type Vec3 = f64[3]
+type Row = i32[]
+```
+
+The alias can be used wherever a type name is accepted — variable definitions, function parameters, return types, and array element types:
+
+```
+type Offset = i32
+
+fn advance(pos : Offset, delta : Offset) → Offset:
+    pos + delta
+
+let start : Offset = 0
+```
+
+#### Alias Chains
+
+Aliases can refer to other aliases.  Resolution is transitive:
+
+```
+type Index = i32
+type Offset = Index     // resolves to i32
+```
+
+Circular alias chains are detected and do not loop.
+
+#### Interaction with Coercion
+
+Type aliases are transparent to coercion.  A value of type `i32` is accepted where `Index` is expected and vice versa — the alias does not introduce a distinct type, only a name.
+
+#### Design Rationale
+
+Type aliases improve readability by attaching domain meaning to primitive types.  The syntax `type NAME = TYPE` is consistent with other top-level definitions (`unit NAME = formula`, `let NAME := expr`).
+
+| Feature | Rust | C++ | Zig | NGPL |
+|---------|------|-----|-----|------|
+| Syntax | `type X = T` | `using X = T` | `const X = T` | `type X = T` |
+| Distinct type | No (`type`), Yes (`struct`) | No | No | No |
+| Transitive | Yes | Yes | Yes | Yes |
+
+
 ### Enumeration Types
 
 Enumerations define a named set of integer constants grouped under a single type.  Enum members are not in the global namespace — they must be qualified with the enum's name (e.g., `Color.red`).

@@ -435,6 +435,15 @@ class FoldExpr:
         self.init = init
 
 
+class TypeDef:
+    """Type alias definition at top level: type NAME = TARGET [DESCRIPTION]."""
+
+    def __init__(self, name: str, target: str, description: str | None = None):
+        self.name = name
+        self.target = target
+        self.description = description
+
+
 class EnumDef:
     """Enum type definition at top level.
 

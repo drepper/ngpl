@@ -58,6 +58,7 @@ KEYWORDS = {
     "replaceable": "REPLACEABLE",
     "catch": "CATCH",
     "comptime": "COMPTIME",
+    "type": "TYPE",
     "unit": "UNIT",
     "impure": "IMPURE",
 }

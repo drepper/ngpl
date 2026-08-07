@@ -775,6 +775,23 @@ def runtime_type_of(value: "Value") -> str:
     return "int"
 
 
+_TYPE_ALIASES: dict[str, str] = {}
+
+
+def register_type_alias(name: str, target: str):
+    """Register a user-defined type alias."""
+    _TYPE_ALIASES[name] = target
+
+
+def resolve_type_alias(type_name: str) -> str:
+    """Resolve type aliases transitively, returning the underlying type."""
+    seen: set[str] = set()
+    while type_name in _TYPE_ALIASES and type_name not in seen:
+        seen.add(type_name)
+        type_name = _TYPE_ALIASES[type_name]
+    return type_name
+
+
 def _parse_array_type(type_name: str) -> tuple[str, int | None] | None:
     """Parse an array type string, returning (element_type, size_or_None) or None."""
     import re
@@ -786,12 +803,14 @@ def _parse_array_type(type_name: str) -> tuple[str, int | None] | None:
 
 def validate_type(type_name: str) -> bool:
     """Return True if type_name is a known builtin type (with optional/expected/array modifiers)."""
+    type_name = resolve_type_alias(type_name)
     if is_generic_type(type_name):
         return True
     base, opt_err = _split_optional_type(type_name)
     arr = _parse_array_type(base)
     if arr is not None:
         base = arr[0]
+    base = resolve_type_alias(base)
     if base not in BUILTIN_TYPES:
         return False
     return True
@@ -806,6 +825,7 @@ def validate_param_type(param_type: str, func_name: str, param_name: str):
 
 def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str) -> "Value":
     """Coerce a runtime argument to match a declared parameter type."""
+    param_type = resolve_type_alias(param_type)
     if isinstance(value, UnitValue):
         value = value.inner
     base, opt_err = _split_optional_type(param_type)
@@ -901,6 +921,7 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
     Returns the value unchanged if no coercion is needed.
     Raises OverflowError if the value does not fit.
     """
+    target_width = resolve_type_alias(target_width)
     if target_width is None or target_width == "int":
         return value
     if not validate_type(target_width):

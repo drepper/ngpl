@@ -11,12 +11,13 @@ from interp.parser import Parser
 from interp.env import Env
 from interp.ast import (
     FuncDef as ASTFuncDef, EnumDef as ASTEnumDef, UnitDef as ASTUnitDef,
-    VarDef as ASTVarDef,
+    VarDef as ASTVarDef, TypeDef as ASTTypeDef,
 )
 from interp.value import (
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
     NoneValue, ExpectedValue, EnumType, EnumValue,
     coerce_to_type, validate_param_type, validate_type, none, FAST_TYPES,
+    register_type_alias,
 )
 from interp.eval import Evaluator, unwrap_optional
 from interp.errors import format_diagnostic, extract_position, strip_position_prefix
@@ -254,6 +255,14 @@ def main():
 
     env = Env()
     setup_std_env(env)
+
+    for defn in definitions:
+        if isinstance(defn, ASTTypeDef):
+            if not validate_type(defn.target):
+                print(f"Error: type alias '{defn.name}' refers to unknown type "
+                      f"'{defn.target}'", file=sys.stderr)
+                sys.exit(1)
+            register_type_alias(defn.name, defn.target)
 
     evaluator = Evaluator(env)
     for defn in definitions:
