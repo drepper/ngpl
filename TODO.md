@@ -263,6 +263,11 @@ Runtime
 [ ] object file format: possibly custom format supporting partial recompilation.
     Dynamic linking support for system libraries (e.g., Vulkan shared objects).
 
+[ ] do not use camelcase for identifiers.  Change all functions in the std module to use underscores.
+
+[ ] add name member function (no parameters) for directory object which returns the absolute path of the
+    directory.
+
 
 Syntax Decisions Still Open
 ----------------------------
@@ -286,9 +291,14 @@ Syntax Decisions Still Open
 System Environment
 ------------------
 
-[ ] provide access to the command line parameters of the program through some
+[x] provide access to the command line parameters of the program through a std.args submodule
+    with program(), count(), get(i), and all().  The program name is kept out of the parameter
+    list.  The interpreter passes everything after a -- separator to the program.
 
-[ ] provide read access to the environment of the process
+[x] provide read access to the environment of the process through std.env with get() returning
+    an optional (so an empty value stays distinct from an unset one), has(), count(), names().
 
-[ ] provide access to CPU affinity mask and derived from this number of CPUs to use.
-    Also provide access to total number of CPUs, total memory.
+[x] provide access to CPU affinity mask and derived from this number of CPUs to use.
+    Also provide access to total number of CPUs, total memory.  Implemented as std.sys with
+    affinity(), affinity_cpus(), usable_cpus(), online_cpus(), total_cpus(), page_size(),
+    and total_memory().

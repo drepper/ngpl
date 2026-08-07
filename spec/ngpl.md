@@ -3130,6 +3130,112 @@ Arenas are useful when a group of allocations share a common lifetime (e.g., pro
 Both allocators accept the same interface (`alloc(size)`) and can be passed interchangeably to functions like `file.read_file(allocator)`.
 
 
+### Standard Library: System Environment
+
+Three submodules of `std` expose the context the operating system hands to a running program: `std.args` for the command line, `std.env` for the environment, and `std.sys` for the CPU and memory properties of the machine.  All three are read-only.  A program cannot rewrite its own command line or environment from the language; doing so is a property of the process that the runtime, not the program, is responsible for.
+
+#### Command Line Parameters (`std.args`)
+
+```
+@start
+fn main() → ∅:
+    std.print("running as ", std.args.program())
+    foreach arg := std.args.all():
+        std.print("parameter: ", arg)
+```
+
+| Method | Result | Description |
+|--------|--------|-------------|
+| `program()` | `str` | The name the program was invoked as |
+| `count()` | `int¤count` | Number of parameters, excluding the program name |
+| `get(i)` | `str` | Parameter at zero-based index `i` |
+| `all()` | `str[]` | All parameters, excluding the program name |
+
+The program name is deliberately *not* the first element of `all()`.  Treating it as parameter zero is a C convention that forces every caller to remember an off-by-one adjustment; here `count()` and `all().sizeof` are the number of things the user actually typed after the program name.
+
+`get(i)` raises an error when `i` is not less than `count()`.  It does not return an empty string or `∅` for an out-of-range index, because a missing parameter is a mistake in the program's own logic rather than a condition it should silently absorb.  Programs that do not know whether a parameter is present should compare against `count()` first, or iterate `all()`.
+
+An empty parameter is preserved as an empty string and is distinct from an absent one.
+
+When running under the interpreter, everything after a `--` separator on the interpreter's command line becomes the program's parameters:
+
+```
+$ python -m interp program.nl -- alpha "beta gamma" delta
+```
+
+The separator may be omitted when no parameter could be mistaken for an interpreter option.  A compiled program takes its command line directly from the initial process stack, and the `--` separator does not apply.
+
+#### Process Environment (`std.env`)
+
+```
+let home : mut = std.env.get("HOME") ?? "/"
+foreach name := std.env.names():
+    std.print(name, " = ", std.env.get(name) ?? "")
+```
+
+| Method | Result | Description |
+|--------|--------|-------------|
+| `get(name)` | `str?` | Value of the variable, or `∅` when it is not set |
+| `has(name)` | `bool` | Whether the variable is present |
+| `count()` | `int¤count` | Number of variables in the environment |
+| `names()` | `str[]` | Names of all variables |
+
+`get` returns an optional rather than an empty string for an unset variable, because an environment variable set to the empty string is a meaningful and distinct state: `FOO=` is present with an empty value, while an unset `FOO` is absent.  Collapsing the two — as `getenv` in C does not, but as many convenience wrappers do — loses information that shell scripts routinely depend on.  The `??` operator supplies a default in the common case:
+
+```
+let verbose : mut = std.env.get("VERBOSE") ?? "0"
+```
+
+The environment is read on each call rather than snapshotted at startup, so a variable changed by a lower layer of the runtime is observed by the next call.
+
+The operating system does not guarantee that environment variables are valid UTF-8, but the language requires that every `str` is.  Byte sequences that are not valid UTF-8 are therefore replaced with U+FFFD (REPLACEMENT CHARACTER) rather than raising an error, so that one malformed variable cannot make `names()` fail for the whole environment.
+
+#### System Properties (`std.sys`)
+
+```
+let workers : mut = std.sys.usable_cpus()
+std.print("using ", workers, " of ", std.sys.total_cpus())
+```
+
+| Method | Result | Description |
+|--------|--------|-------------|
+| `affinity()` | `int` | CPU affinity mask; bit *n* is set when CPU *n* is usable |
+| `affinity_cpus()` | `int[]` | Ids of the CPUs in the affinity mask, ascending |
+| `usable_cpus()` | `int¤count` | Number of CPUs this program may run on |
+| `online_cpus()` | `int¤count` | Number of CPUs currently online |
+| `total_cpus()` | `int¤count` | Number of CPUs the system is configured with |
+| `page_size()` | `int¤byte` | Size of a memory page |
+| `total_memory()` | `int¤byte` | Total physical memory installed |
+
+`usable_cpus()` is the value a program should use to size a worker pool.  It is the population count of the affinity mask, so it respects `taskset`, cpusets, and container CPU restrictions.  `total_cpus()` and `online_cpus()` describe the machine, not the program's share of it: a program that sizes its gang concurrency by `total_cpus()` will oversubscribe whenever it runs under any CPU restriction.  The three are ordered:
+
+```
+std.sys.usable_cpus() <= std.sys.online_cpus() <= std.sys.total_cpus()
+```
+
+The affinity mask is an ordinary integer of arbitrary width, not a fixed 64-bit word, so it remains correct on systems with more than 64 CPUs.  `affinity_cpus()` converts the mask to the list of set CPU ids for programs that need to pin work to specific CPUs rather than merely count them.
+
+Memory and page sizes carry the `byte` unit, so they combine correctly with `sizeof` results and other byte-valued quantities without further annotation:
+
+```
+let pages : mut = std.sys.total_memory() / std.sys.page_size()
+```
+
+#### Comparison with Other Languages
+
+| Feature | C | Rust | Zig | Python | NGPL |
+|---------|---|------|-----|--------|---------------|
+| Command line | `argc`/`argv` params | `std::env::args()` | `std.process.args()` | `sys.argv` | `std.args` |
+| Program name in list | yes (`argv[0]`) | yes (first item) | yes (first item) | yes (`argv[0]`) | no, separate `program()` |
+| Unset variable | `NULL` | `Err`/`None` | error | `KeyError`/`None` | `∅` |
+| Empty vs unset | distinct | distinct | distinct | distinct | distinct |
+| Usable CPU count | `sched_getaffinity` | `available_parallelism()` | `getCpuCount()` | `len(sched_getaffinity(0))` | `std.sys.usable_cpus()` |
+| Affinity mask exposed | yes (`cpu_set_t`) | no | no | as a set | yes, as an integer |
+| Byte quantities typed | no | no | no | no | `¤byte` unit |
+
+The design follows Rust and Zig in reporting an unset variable as an absence rather than a null pointer, and departs from all four in keeping the program name out of the parameter list and in attaching units to the byte- and count-valued results.
+
+
 ### Unit System
 
 The language supports attaching physical units to numeric values.  Units enable compile-time and runtime dimensional analysis: addition requires matching dimensions, multiplication and division derive new dimensions, and assignment to a variable with a declared unit checks that the conversion is lossless for integers.

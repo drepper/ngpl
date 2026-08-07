@@ -6,6 +6,13 @@ corresponding .expected files.  Each test is a pair:
     tests/output/test_name.nl       -- the source program
     tests/output/test_name.expected -- expected stderr output
 
+Two optional files control how the program is invoked:
+
+    tests/output/test_name.args     -- one program argument per line,
+                                       passed after the -- separator
+    tests/output/test_name.env      -- one NAME=VALUE per line, added to
+                                       the environment of the child
+
 The test runner strips ANSI escape sequences before comparison
 so tests work regardless of terminal settings.
 
@@ -25,15 +32,48 @@ def strip_ansi(text: str) -> str:
     return _ANSI_RE.sub("", text)
 
 
+def _read_lines(path: str) -> list[str]:
+    """Read a sidecar file as a list of lines, or [] when it does not exist.
+
+    The final newline is not treated as introducing an empty last entry,
+    but interior blank lines are preserved so that an empty argument or
+    an empty variable value can be expressed.
+    """
+    if not os.path.isfile(path):
+        return []
+    with open(path, "r", encoding="utf-8") as f:
+        text = f.read()
+    if text.endswith("\n"):
+        text = text[:-1]
+    if not text:
+        return []
+    return text.split("\n")
+
+
 def run_test(nl_path: str, expected_path: str) -> tuple[bool, str]:
     """Run a single output test, return (passed, detail_message)."""
     top_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     rel_path = os.path.relpath(nl_path, top_dir)
+    base = nl_path[:-3]
+
+    cmd = [sys.executable, "-m", "interp", rel_path]
+    prog_args = _read_lines(base + ".args")
+    if prog_args:
+        cmd.append("--")
+        cmd.extend(prog_args)
+
+    child_env = dict(os.environ)
+    for entry in _read_lines(base + ".env"):
+        name, sep, value = entry.partition("=")
+        if sep:
+            child_env[name] = value
+
     result = subprocess.run(
-        [sys.executable, "-m", "interp", rel_path],
+        cmd,
         capture_output=True,
         text=True,
         cwd=top_dir,
+        env=child_env,
     )
 
     actual = strip_ansi(result.stderr + result.stdout).rstrip("\n")

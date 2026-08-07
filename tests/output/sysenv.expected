@@ -1,0 +1,12 @@
+count: 4 count
+arg: [alpha]
+arg: [beta gamma]
+arg: []
+arg: [delta]
+first: alpha
+set: hello
+has set: true
+empty: []
+has empty: true
+absent: <absent>
+has absent: false

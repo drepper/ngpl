@@ -51,10 +51,15 @@ def _make_std_errors() -> EnumType:
     return EnumType("errors", "u16", members, is_flag=False)
 
 
-def setup_std_env(env: Env):
-    """Register the std module and assertion builtins in the given environment."""
+def setup_std_env(env: Env, program: str = "", program_args: list[str] | None = None):
+    """Register the std module and assertion builtins in the given environment.
+
+    The program name and its arguments are handed to std.args so that the
+    interpreted program can read its own command line.
+    """
     from interp.std import std
     std.errors = _make_std_errors()
+    std.args.set_command_line(program, program_args or [])
     env.define("std", ObjectValue(std))
     env.define("assert", BuiltinFunc("assert", -1, _builtin_assert))
     env.define("assert_eq", BuiltinFunc("assert_eq", 2, _builtin_assert_eq))
@@ -189,7 +194,22 @@ def _parse_args() -> argparse.Namespace:
                             "ignoring any @start annotations")
     parser.add_argument("--interpreter-backtrace", action="store_true",
                        help="show the Python interpreter backtrace on errors")
+    parser.add_argument("program_args", nargs=argparse.REMAINDER,
+                       help="arguments passed to the interpreted program; "
+                            "separate them from the interpreter's own options "
+                            "with --")
     return parser.parse_args()
+
+
+def _program_args(raw: list[str]) -> list[str]:
+    """Strip the optional `--` separator from the interpreted program's args.
+
+    argparse.REMAINDER keeps the separator when one is present, but the
+    program should see only what follows it.
+    """
+    if raw and raw[0] == "--":
+        return raw[1:]
+    return raw
 
 
 def _show_error(exc: BaseException, source: str, source_path: str,
@@ -441,7 +461,7 @@ def main():
         return
 
     env = Env()
-    setup_std_env(env)
+    setup_std_env(env, source_path, _program_args(args.program_args))
 
     for defn in definitions:
         if isinstance(defn, ASTTypeDef):

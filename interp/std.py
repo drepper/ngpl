@@ -7,6 +7,9 @@ expose sufficient low-level control.
 The std object exposes:
     fs.cwd()          → DirFD wrapper (opens current dir with O_DIRECTORY)
     heap              → Allocator management (mmap-backed)
+    args              → Command line parameters of the running program
+    env               → Read access to the process environment
+    sys               → CPU affinity, CPU counts, and memory sizes
     sha256(data)      → SHA-256 hash as IntValue (arbitrary-width int)
     format(str, file?, fd?) → Format a string, optionally write to a file descriptor
     get_stdout()      → StdoutFile object wrapping stdout fd
@@ -33,6 +36,13 @@ O_RDONLY = 0
 O_DIRECTORY = 0o200000  # must be a directory
 S_IRUSR = 0o400       # user read
 S_IWUSR = 0o200       # user write
+EINVAL = 22           # invalid argument
+
+# sysconf(3) selectors (glibc bits/confname.h)
+_SC_PAGESIZE = 30
+_SC_NPROCESSORS_CONF = 83
+_SC_NPROCESSORS_ONLN = 84
+_SC_PHYS_PAGES = 85
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +60,84 @@ _getdents64.restype = ctypes.c_long
 _close = libc.close
 _close.argtypes = [ctypes.c_int]
 _close.restype = ctypes.c_int
+
+_sysconf = libc.sysconf
+_sysconf.argtypes = [ctypes.c_int]
+_sysconf.restype = ctypes.c_long
+
+_getenv = libc.getenv
+_getenv.argtypes = [ctypes.c_char_p]
+_getenv.restype = ctypes.c_char_p
+
+_sched_getaffinity = libc.sched_getaffinity
+_sched_getaffinity.argtypes = [ctypes.c_int, ctypes.c_size_t, ctypes.c_void_p]
+_sched_getaffinity.restype = ctypes.c_int
+
+
+def _decode(raw: bytes) -> str:
+    """Decode a NUL-terminated C string from the environment as UTF-8.
+
+    The language mandates UTF-8 throughout, but the process environment
+    is supplied by the operating system and carries no such guarantee.
+    Invalid byte sequences are replaced with U+FFFD rather than raising,
+    so a single malformed variable cannot make the environment
+    unreadable as a whole.
+    """
+    return raw.decode("utf-8", errors="replace")
+
+
+def _environ_entries() -> list[str]:
+    """Read the process environment directly from the libc environ array.
+
+    Returns:
+        The raw "NAME=VALUE" entries, in the order the kernel supplied
+        them on the initial stack.
+    """
+    entries: list[str] = []
+    block = ctypes.POINTER(ctypes.c_char_p).in_dll(libc, "environ")
+    if not block:
+        return entries
+    i = 0
+    while block[i] is not None:
+        entries.append(_decode(block[i]))
+        i += 1
+    return entries
+
+
+def _affinity_mask() -> int:
+    """Read the calling thread's CPU affinity mask via sched_getaffinity.
+
+    The mask size is not known in advance, so the buffer starts at 128
+    bytes (1024 CPUs) and doubles on EINVAL, which is how the kernel
+    reports that the supplied cpu_set_t was too small.
+
+    Returns:
+        The affinity mask as a non-negative integer whose bit *n* is set
+        when CPU *n* is available to this thread.
+    """
+    size = 128
+    while size <= 1 << 20:
+        buf = ctypes.create_string_buffer(size)
+        if _sched_getaffinity(0, size, buf) == 0:
+            return int.from_bytes(buf.raw, "little")
+        errno = ctypes.get_errno()
+        if errno != EINVAL:
+            raise OSError(
+                f"sched_getaffinity: {os.strerror(errno)} (errno={errno})")
+        size *= 2
+    raise OSError("sched_getaffinity: affinity mask exceeds 8388608 CPUs")
+
+
+def _checked_sysconf(name: int, what: str) -> int:
+    """Query sysconf and reject the -1 "unsupported or unlimited" answer."""
+    ctypes.set_errno(0)
+    value = _sysconf(name)
+    if value < 0:
+        errno = ctypes.get_errno()
+        if errno != 0:
+            raise OSError(f"sysconf({what}): {os.strerror(errno)} (errno={errno})")
+        raise OSError(f"sysconf({what}): value is indeterminate on this system")
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -432,7 +520,10 @@ class StdModule:
         self._fs = None  # lazy-initialized fs object
         self._heap = None  # lazy-initialized heap submodule
         self._arena = None  # lazy-initialized arena submodule
+        self._env = None  # lazy-initialized env submodule
+        self._sys = None  # lazy-initialized sys submodule
         self._stdout_file = StdoutFile()
+        self.args = ArgsModule()
 
     @property
     def fs(self):
@@ -454,6 +545,20 @@ class StdModule:
         if self._arena is None:
             self._arena = _ArenaModuleStd()
         return self._arena
+
+    @property
+    def env(self):
+        """Lazy-access to the process environment submodule."""
+        if self._env is None:
+            self._env = EnvModule()
+        return self._env
+
+    @property
+    def sys(self):
+        """Lazy-access to the system CPU/memory information submodule."""
+        if self._sys is None:
+            self._sys = SysModule()
+        return self._sys
 
     def get_allocator(self):
         """Get a reference to the global allocator.
@@ -651,7 +756,9 @@ class StdModule:
             NoneValue.
         """
         from interp.eval import unwrap_optional
-        from interp.value import IntValue, FloatValue, BoolValue, StrValue, ObjectValue, ArrayValue, EnumValue, ExpectedValue, UnitValue, mk_str
+        from interp.value import (IntValue, FloatValue, BoolValue, StrValue, ObjectValue,
+                                  ArrayValue, EnumValue, ExpectedValue, NoneValue,
+                                  UnitValue, mk_str)
 
         parts = []
         for arg in args:
@@ -676,13 +783,15 @@ class StdModule:
             elif isinstance(uv, ObjectValue):
                 obj = uv.obj
                 if isinstance(obj, ArrayValue):
-                    parts.append(f"<byte[{obj.sizeof}]>")
+                    parts.append(f"<{obj.element_type or 'byte'}[{obj.sizeof}]>")
                 elif isinstance(obj, int):
                     parts.append(str(obj))
                 elif isinstance(obj, Bytes):
                     parts.append(f"<bytes {len(obj.data)}>")
                 else:
                     parts.append(f"<{type(obj).__name__}>")
+            elif isinstance(uv, NoneValue):
+                parts.append(uv.display())
             else:
                 parts.append(str(uv))
 
@@ -994,6 +1103,182 @@ class _ArenaModuleStd:
     def allocator(self):
         """Create and return a new arena allocator."""
         return ArenaAllocator()
+
+
+def _count(n: int):
+    """Wrap a plain integer as a value carrying the abstract `count` unit."""
+    from interp.units import BUILTIN_UNITS
+    from interp.value import UnitValue, mk_int
+    return UnitValue(mk_int(n), BUILTIN_UNITS["count"])
+
+
+def _bytes_of(n: int):
+    """Wrap a plain integer as a value carrying the `byte` unit."""
+    from interp.units import BUILTIN_UNITS
+    from interp.value import UnitValue, mk_int
+    return UnitValue(mk_int(n), BUILTIN_UNITS["byte"])
+
+
+def _str_array(items):
+    """Build a `str[]` array value from an iterable of Python strings."""
+    from interp.value import ArrayValue, ObjectValue, mk_str
+    return ObjectValue(ArrayValue([mk_str(s) for s in items], element_type="str"))
+
+
+def _int_array(items):
+    """Build an `int[]` array value from an iterable of Python integers."""
+    from interp.value import ArrayValue, ObjectValue, mk_int
+    return ObjectValue(ArrayValue([mk_int(i) for i in items], element_type="int"))
+
+
+def _as_index(value, what: str) -> int:
+    """Coerce a language-level index argument to a Python integer.
+
+    Accepts a bare Python int (already unwrapped by the method-call
+    machinery) as well as IntValue and unit-bearing integers, so that a
+    loop variable carrying `count` or `ptrdiff` can be used directly.
+    """
+    from interp.value import IntValue, UnitValue
+    if isinstance(value, UnitValue):
+        value = value.inner
+    if isinstance(value, IntValue):
+        return value.value
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    raise TypeError(f"{what}: index must be an integer")
+
+
+def _as_name(value, what: str) -> str:
+    """Coerce a language-level string argument to a Python string."""
+    from interp.value import StrValue
+    if isinstance(value, StrValue):
+        return value.value
+    if isinstance(value, str):
+        return value
+    raise TypeError(f"{what}: name must be a str")
+
+
+class ArgsModule:
+    """The args submodule providing the program's command line parameters.
+
+    The interpreter fills this in at startup: `program` is the source
+    file being run and `params` are the arguments that follow the `--`
+    separator on the interpreter command line.  A compiled program will
+    instead take both directly from the initial process stack.
+    """
+
+    __slots__ = ("_program", "_params")
+
+    def __init__(self):
+        self._program = ""
+        self._params: list[str] = []
+
+    def set_command_line(self, program: str, params: list[str]):
+        """Install the program name and parameter list (interpreter startup)."""
+        self._program = program
+        self._params = list(params)
+
+    def program(self):
+        """The name the program was invoked as."""
+        from interp.value import mk_str
+        return mk_str(self._program)
+
+    def count(self):
+        """The number of parameters, excluding the program name."""
+        return _count(len(self._params))
+
+    def get(self, index):
+        """Return the parameter at the given zero-based index."""
+        i = _as_index(index, "std.args.get")
+        if not 0 <= i < len(self._params):
+            raise IndexError(
+                f"std.args.get: index {i} out of range "
+                f"(count {len(self._params)})")
+        from interp.value import mk_str
+        return mk_str(self._params[i])
+
+    def all(self):
+        """Return all parameters as a `str[]`, excluding the program name."""
+        return _str_array(self._params)
+
+
+class EnvModule:
+    """The env submodule providing read access to the process environment.
+
+    Values are read from the libc `environ` array on every call rather
+    than cached, so a variable changed by a lower layer is observed.
+    The environment is read-only from the language: there is no setter.
+    """
+
+    def get(self, name):
+        """Look up a variable; returns the value or ∅ when it is unset."""
+        from interp.value import mk_str, none
+        key = _as_name(name, "std.env.get")
+        raw = _getenv(key.encode("utf-8"))
+        if raw is None:
+            return none()
+        return mk_str(_decode(raw))
+
+    def has(self, name):
+        """Report whether a variable is present in the environment."""
+        from interp.value import mk_bool
+        key = _as_name(name, "std.env.has")
+        return mk_bool(_getenv(key.encode("utf-8")) is not None)
+
+    def count(self):
+        """The number of variables in the environment."""
+        return _count(len(_environ_entries()))
+
+    def names(self):
+        """Return the names of all environment variables as a `str[]`."""
+        return _str_array(e.partition("=")[0] for e in _environ_entries())
+
+
+class SysModule:
+    """The sys submodule exposing CPU and memory properties of the system.
+
+    The affinity mask is the authoritative answer to "how many CPUs may
+    this program use": it accounts for cpusets and taskset restrictions
+    that the raw CPU count does not.
+    """
+
+    def affinity(self):
+        """The CPU affinity mask, with bit *n* set when CPU *n* is usable."""
+        from interp.value import mk_int
+        return mk_int(_affinity_mask())
+
+    def affinity_cpus(self):
+        """The ids of the CPUs in the affinity mask, ascending, as `int[]`."""
+        mask = _affinity_mask()
+        cpus = []
+        cpu = 0
+        while mask:
+            if mask & 1:
+                cpus.append(cpu)
+            mask >>= 1
+            cpu += 1
+        return _int_array(cpus)
+
+    def usable_cpus(self):
+        """The number of CPUs this program may run on (popcount of the mask)."""
+        return _count(_affinity_mask().bit_count())
+
+    def total_cpus(self):
+        """The number of CPUs configured on the system, usable or not."""
+        return _count(_checked_sysconf(_SC_NPROCESSORS_CONF, "_SC_NPROCESSORS_CONF"))
+
+    def online_cpus(self):
+        """The number of CPUs currently online."""
+        return _count(_checked_sysconf(_SC_NPROCESSORS_ONLN, "_SC_NPROCESSORS_ONLN"))
+
+    def page_size(self):
+        """The size of a memory page."""
+        return _bytes_of(_checked_sysconf(_SC_PAGESIZE, "_SC_PAGESIZE"))
+
+    def total_memory(self):
+        """The total amount of physical memory installed in the system."""
+        pages = _checked_sysconf(_SC_PHYS_PAGES, "_SC_PHYS_PAGES")
+        return _bytes_of(pages * _checked_sysconf(_SC_PAGESIZE, "_SC_PAGESIZE"))
 
 
 class FsModule:

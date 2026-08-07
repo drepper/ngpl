@@ -55,6 +55,7 @@ all_tests=(
     "$testdir"/test_type_alias.nl
     "$testdir"/test_struct.nl
     "$testdir"/test_move.nl
+    "$testdir"/test_sysenv.nl
 )
 
 # Filter tests if command-line patterns are given.
