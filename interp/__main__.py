@@ -2,6 +2,7 @@
 
 import argparse
 import re
+import signal
 import sys
 import os
 from collections import defaultdict
@@ -23,7 +24,9 @@ from interp.value import (
 )
 from interp.eval import Evaluator, unwrap_optional
 from interp.layout import LayoutError, struct_layout, struct_lookup
-from interp.errors import format_diagnostic, extract_position, strip_position_prefix
+from interp.errors import (format_diagnostic, extract_position,
+                           strip_position_prefix, format_backtrace,
+                           ProgramExit, ProgramAbort)
 
 
 def _make_std_errors() -> EnumType:
@@ -248,6 +251,39 @@ def _show_error(exc: BaseException, source: str, source_path: str,
                   file=sys.stderr)
         else:
             print(f"error: {msg}", file=sys.stderr)
+
+    trace = format_backtrace(exc, source_path)
+    if trace is not None:
+        print(trace, file=sys.stderr)
+
+
+def _report_abort(exc: ProgramAbort, source_path: str,
+                  show_backtrace: bool) -> None:
+    """Announce an abort, show where it came from, then deliver the signal.
+
+    The backtrace is printed before the signal is raised, because once
+    the signal is delivered the process is gone and nothing else runs.
+    """
+    from interp.std import deliver_abort
+
+    if show_backtrace:
+        import traceback
+        traceback.print_exc()
+
+    name = signal.Signals(exc.signal_number).name
+    if sys.stderr.isatty():
+        print(f"{_RED}{_BOLD}aborted{_RESET}{_BOLD}: {name}{_RESET}",
+              file=sys.stderr)
+    else:
+        print(f"aborted: {name}", file=sys.stderr)
+
+    # An abort prints no caret diagnostic, so even a one-frame stack is
+    # the only thing telling the user where it came from.
+    trace = format_backtrace(exc, source_path, min_frames=1)
+    if trace is not None:
+        print(trace, file=sys.stderr)
+
+    deliver_abort(exc.signal_number)
 
 
 def _expr_var_refs(expr) -> set[str]:
@@ -813,6 +849,11 @@ def main():
     evaluator = Evaluator(env, test_hooks=hooks)
     try:
         result = evaluator._call_user_func(startup_func, [])
+    except ProgramExit as e:
+        # A deliberate exit, so no diagnostic and no backtrace.
+        sys.exit(e.code)
+    except ProgramAbort as e:
+        _report_abort(e, source_path, args.interpreter_backtrace)
     except AssertionError as e:
         _show_error(e, source, source_path, evaluator,
                     show_backtrace=args.interpreter_backtrace)

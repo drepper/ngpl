@@ -3670,3 +3670,119 @@ This makes the REPL usable as a filter and gives the interpreter's own test suit
 The closest model is Python's, and the empty-line rule is taken from it directly.  The significant departure is that statements and definitions are separated in files but united in the REPL: a file keeps the property that all code is inside a named, reviewable unit, while the REPL — where the unit of work is the entry, not the file — does not need it.
 
 Entering the REPL automatically when a file defines no startup function has no counterpart in these languages, and follows from the interpreter's role in a fast edit-evaluate-check loop: a library that cannot be run should still be explorable without a wrapper program.
+
+
+Chapter 14: The Runtime — Termination and Backtraces
+-----------------------------------------------------
+
+### Terminating the Program
+
+Two standard library functions end a program before its startup function returns.  They differ in what the parent process is told: `exit` reports a status the program chose, `abort` reports that the program died.
+
+#### `std.exit(code)`
+
+```
+fn quit_early() → ∅:
+    std.print("quitting")
+    std.exit(42)
+    std.print("unreachable")
+```
+
+`exit` terminates immediately with the given status.  Nothing after the call runs, and the startup function's own return value is not consulted — the two are alternative ways of choosing a status, and an explicit `exit` wins because it happened.
+
+The argument must be in the range 0…255.  A POSIX exit status is a single byte, so a program exiting with 300 would be reported as having exited with 44; that silent truncation is rejected rather than performed:
+
+```
+std.exit(300)
+error: std.exit: exit code 300 is outside the range 0…255 that a process
+can report
+```
+
+This follows the language's general stance on overflow: a value that will not fit is an error, not a wrap.  It differs from C's `exit`, which accepts any `int` and truncates, and from Rust's `process::exit`, which does the same.
+
+`exit` produces no diagnostic and no backtrace.  It is a deliberate act, not a failure.
+
+#### `std.abort(signal)`
+
+```
+fn give_up() → ∅:
+    std.abort()
+```
+
+`abort` terminates by raising a signal on the process, with that signal's handler reset to the default first, so the process really is killed by it and the parent sees the termination signal in its wait status rather than an ordinary exit.  A shell reports this as 128 plus the signal number: 134 for the default `SIGABRT`.
+
+The signal argument is optional.  A missing, zero, or unrecognized signal number falls back to `SIGABRT`:
+
+```
+std.abort()        // SIGABRT — status 134
+std.abort(15)      // SIGTERM — status 143
+std.abort(999)     // not a signal, so SIGABRT — status 134
+```
+
+The fallback is deliberate rather than an oversight.  `abort` is called when a program has already concluded it cannot continue; refusing to terminate because the requested signal number was wrong would replace a controlled stop with an uncontrolled one, which is the worse outcome.  A wrong signal number is still a bug, but it is not a bug worth keeping a broken program alive over.
+
+Unlike `exit`, `abort` reports where it was called from, since a program that aborts is one whose state needs explaining:
+
+```
+before abort
+aborted: SIGABRT
+backtrace (innermost call first):
+  #0 give_up at program.nl:5:4
+  #1 main at program.nl:10:4
+```
+
+### Backtraces
+
+When a program ends abnormally the interpreter prints the chain of calls that led there, innermost first:
+
+```
+error: array index 9 out of range (length 2)
+  --> program.nl:6:12
+    |
+  6 |     values[n]
+    |            ^
+    |
+backtrace (innermost call first):
+  #0 innermost at program.nl:6:11
+  #1 middle at program.nl:9:14
+  #2 outer at program.nl:12:11
+  #3 main at program.nl:17:20
+```
+
+Each frame reports where execution had reached in that function, not merely where the function was entered, so the chain reads as a sequence of call sites.
+
+Only the program's own functions appear.  The interpreter's internals are a separate matter, shown by `--interpreter-backtrace`, which is a tool for working on the interpreter rather than on a program written in the language.  The two are deliberately kept apart: a programmer debugging their own code is not helped by the evaluator's Python frames.
+
+A backtrace is printed only when there is more than one frame.  For an error directly inside the startup function the diagnostic's caret has already pointed at the failing line, and a one-line backtrace repeating it would be noise.  `abort` is the exception, because it prints no caret diagnostic of its own; there a single frame is the only thing saying where the abort came from.
+
+The recorded stack travels with the failure rather than being read from the interpreter afterwards, so a stack can never be reported against the wrong error — an error caught and recovered from leaves nothing behind to confuse a later, unrelated failure.
+
+### Reading the Call Stack (`std.callstack`)
+
+A program can inspect its own call stack at any point, not only when failing:
+
+```
+fn log_caller() → ∅:
+    foreach frame := std.callstack():
+        std.print(frame[0], " at line ", frame[1], " column ", frame[2])
+```
+
+`std.callstack()` returns an array of `(name, line, column)` tuples, innermost first.  Entry 0 is the function that called `callstack`, not `callstack` itself, so a function can name itself with `std.callstack()[0][0]` without accounting for the call it just made.
+
+The stack describes only the interpreted program, matching what a backtrace would show.  It is a snapshot: the array does not change as the program continues, so it can be stored and examined later.
+
+### Comparison with Other Languages
+
+| Feature | C | Rust | Zig | Go | NGPL |
+|---------|---|------|-----|-----|---------------|
+| Exit with status | `exit(n)` | `process::exit(n)` | `std.process.exit(n)` | `os.Exit(n)` | `std.exit(n)` |
+| Out-of-range status | truncated | truncated | `u8` required | truncated | error |
+| Abort | `abort()` (SIGABRT only) | `process::abort()` | `@panic` | `panic` | `std.abort(signal)` |
+| Choice of signal | via `raise` | no | no | no | yes |
+| Backtrace on failure | no | opt in (`RUST_BACKTRACE`) | yes | yes | yes |
+| Program-only frames | n/a | mixed with runtime | mixed with runtime | yes | yes |
+| Read the stack at runtime | `backtrace(3)`, glibc | `Backtrace::capture` | `std.debug` | `runtime.Callers` | `std.callstack()` |
+
+Zig requires a `u8` for the exit status, which reaches the same end as rejecting out-of-range values here, one step earlier — through the type rather than a check.  Adopting that would mean `std.exit` could not accept an untyped integer constant without an annotation, which is why the check is at the call instead.
+
+Letting `abort` choose its signal has no counterpart in these languages, where abort means SIGABRT and nothing else.  It costs nothing to allow, and a program that wants to look to its parent as though it were terminated by SIGTERM has no other way to say so.

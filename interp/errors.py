@@ -8,6 +8,84 @@ gcc/clang/rustc.
 import sys
 
 
+class ProgramExit(BaseException):
+    """Raised by std.exit to terminate the interpreted program.
+
+    Derived from BaseException rather than Exception so that a `catch`
+    statement, an @expect-annotated function, or any other broad
+    ``except Exception`` in the evaluator does not swallow a request to
+    terminate.  This is the same reason Python's SystemExit sits outside
+    the Exception hierarchy.
+    """
+
+    def __init__(self, code: int):
+        self.code = code
+        super().__init__(f"exit({code})")
+
+
+class ProgramAbort(BaseException):
+    """Raised by std.abort to terminate the program with a signal.
+
+    Carries the signal number rather than raising it at once so that the
+    interpreter can print a backtrace before the process dies.
+    """
+
+    def __init__(self, signal_number: int):
+        self.signal_number = signal_number
+        super().__init__(f"abort(signal {signal_number})")
+
+
+def attach_backtrace(exc: BaseException, call_stack: list) -> None:
+    """Record the interpreted program's call stack on an exception.
+
+    Called at the innermost frame that sees the exception, so the stack
+    is captured before it unwinds.  A later frame finds the attribute
+    already set and leaves it alone.  Attaching it to the exception
+    rather than keeping it on the evaluator means a stack can never be
+    reported against the wrong failure.
+    """
+    if getattr(exc, "_ngpl_backtrace", None) is not None:
+        return
+    try:
+        exc._ngpl_backtrace = [list(frame) for frame in call_stack]
+    except AttributeError:
+        pass  # a few builtin exception types reject attribute assignment
+
+
+def format_backtrace(exc: BaseException, source_path: str, *,
+                     min_frames: int = 2) -> str | None:
+    """Render the call stack recorded on an exception, innermost first.
+
+    Only the interpreted program's functions appear.  The interpreter's
+    own Python frames are a separate thing, shown by
+    --interpreter-backtrace.
+
+    Args:
+        exc: the exception carrying the recorded stack.
+        source_path: the file the program was loaded from.
+        min_frames: the shortest stack worth printing.  The default of
+            two suppresses the single-frame case, where the backtrace
+            would only repeat the location the diagnostic's caret has
+            already pointed at.  Callers with no diagnostic of their own
+            to show pass one.
+
+    Returns:
+        The formatted backtrace, or None when there is nothing useful to
+        show.
+    """
+    frames = getattr(exc, "_ngpl_backtrace", None)
+    if not frames or len(frames) < min_frames:
+        return None
+    c = _Colors(_is_tty())
+    lines = [f"{c.bold}backtrace{c.reset} (innermost call first):"]
+    for depth, frame in enumerate(reversed(frames)):
+        name, pos, label = frame[0], frame[1], frame[2]
+        origin = label if label is not None else source_path
+        where = origin if pos is None else f"{origin}:{pos[0]}:{pos[1]}"
+        lines.append(f"  #{depth} {c.bold}{name}{c.reset} at {where}")
+    return "\n".join(lines)
+
+
 def _is_tty() -> bool:
     return hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
 

@@ -1,0 +1,11 @@
+fn inner() → int:
+    let values := [1]
+    values[5]
+
+fn outer() → int:
+    inner()
+
+outer()
+"the session survives an error"
+std.exit(9)
+"unreachable"

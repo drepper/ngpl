@@ -5,10 +5,14 @@ Each test is a pair of files:
     tests/repl/test_name.repl     -- lines fed to the REPL on stdin
     tests/repl/test_name.expected -- expected stdout + stderr
 
-An optional third file selects what the REPL starts from:
+Two optional files select what the REPL starts from and what status it
+must end with:
 
     tests/repl/test_name.argv     -- interpreter arguments, one per line
                                      (e.g. a source file to preload, --repl)
+    tests/repl/test_name.status   -- the expected exit status.  A session
+                                     killed by signal N is reported as
+                                     128+N, as a shell reports it.
 
 With no .argv file the interpreter is run with no arguments at all, which
 is the "no source file" entry into the REPL.
@@ -72,6 +76,19 @@ def run_test(repl_path: str, expected_path: str) -> tuple[bool, str]:
 
     with open(expected_path, "r", encoding="utf-8") as f:
         expected = f.read().rstrip("\n")
+
+    status_lines = _read_lines(base + ".status")
+    if status_lines:
+        # subprocess reports death by signal N as -N; a shell reports the
+        # same thing as 128+N, which is what a test file states.
+        actual_status = result.returncode
+        if actual_status < 0:
+            actual_status = 128 - actual_status
+        expected_status = int(status_lines[0])
+        if actual_status != expected_status:
+            return False, (f"  exit status:\n"
+                           f"    expected: {expected_status}\n"
+                           f"    actual:   {actual_status}")
 
     if actual == expected:
         return True, ""

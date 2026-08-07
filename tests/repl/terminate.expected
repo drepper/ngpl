@@ -1,0 +1,5 @@
+error: array index 5 out of range (length 1)
+backtrace (innermost call first):
+  #0 inner at <repl:1>:3:11
+  #1 outer at <repl:2>:2:4
+"the session survives an error"

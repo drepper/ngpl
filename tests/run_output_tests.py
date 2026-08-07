@@ -6,12 +6,17 @@ corresponding .expected files.  Each test is a pair:
     tests/output/test_name.nl       -- the source program
     tests/output/test_name.expected -- expected stderr output
 
-Two optional files control how the program is invoked:
+Three optional files control how the program is invoked and checked:
 
     tests/output/test_name.args     -- one program argument per line,
                                        passed after the -- separator
     tests/output/test_name.env      -- one NAME=VALUE per line, added to
                                        the environment of the child
+    tests/output/test_name.status   -- the expected exit status.  A
+                                       process killed by signal N is
+                                       reported as 128+N, as a shell
+                                       reports it.  Without this file the
+                                       exit status is not checked.
 
 The test runner strips ANSI escape sequences before comparison
 so tests work regardless of terminal settings.
@@ -30,6 +35,12 @@ _ANSI_RE = re.compile(r"\033\[[0-9;]*m")
 
 def strip_ansi(text: str) -> str:
     return _ANSI_RE.sub("", text)
+
+
+def _no_core_dumps():
+    """Stop a deliberately aborted test from leaving a core file behind."""
+    import resource
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 
 
 def _read_lines(path: str) -> list[str]:
@@ -68,18 +79,36 @@ def run_test(nl_path: str, expected_path: str) -> tuple[bool, str]:
         if sep:
             child_env[name] = value
 
+    # A program's own output and the interpreter's diagnostics go to
+    # different streams but interleave in a way the test cares about, so
+    # merge them in the child rather than concatenating two captures.
     result = subprocess.run(
         cmd,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
         cwd=top_dir,
         env=child_env,
+        preexec_fn=_no_core_dumps,
     )
 
-    actual = strip_ansi(result.stderr + result.stdout).rstrip("\n")
+    actual = strip_ansi(result.stdout).rstrip("\n")
 
     with open(expected_path, "r", encoding="utf-8") as f:
         expected = f.read().rstrip("\n")
+
+    status_lines = _read_lines(base + ".status")
+    if status_lines:
+        # subprocess reports death by signal N as -N; a shell reports the
+        # same thing as 128+N, which is what a test file states.
+        actual_status = result.returncode
+        if actual_status < 0:
+            actual_status = 128 - actual_status
+        expected_status = int(status_lines[0])
+        if actual_status != expected_status:
+            return False, (f"  exit status:\n"
+                           f"    expected: {expected_status}\n"
+                           f"    actual:   {actual_status}")
 
     if actual == expected:
         return True, ""

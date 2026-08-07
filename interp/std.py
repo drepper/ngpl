@@ -128,6 +128,45 @@ def _affinity_mask() -> int:
     raise OSError("sched_getaffinity: affinity mask exceeds 8388608 CPUs")
 
 
+def resolve_abort_signal(signal_number: int) -> int:
+    """Pick the signal std.abort will raise.
+
+    Args:
+        signal_number: the requested signal, or 0 for none.
+
+    Returns:
+        The requested signal when it is one the system defines, and
+        SIGABRT otherwise.
+    """
+    import signal as _signal
+
+    if signal_number and signal_number in {s.value for s in _signal.valid_signals()
+                                           if hasattr(s, "value")}:
+        return signal_number
+    return _signal.SIGABRT
+
+
+def deliver_abort(signal_number: int):
+    """Terminate the current process with the given signal.
+
+    The handler is reset to the default first so that the process really
+    is killed by the signal and the parent sees it in the wait status,
+    rather than the signal being caught and ignored.
+    """
+    import signal as _signal
+
+    try:
+        _signal.signal(signal_number, _signal.SIG_DFL)
+    except (OSError, ValueError):
+        pass  # SIGKILL and SIGSTOP cannot be reset, and need no reset
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os.kill(os.getpid(), signal_number)
+    # A signal whose default action is to stop rather than terminate
+    # returns here once the process is continued; leave in its stead.
+    os._exit(128 + signal_number)
+
+
 def _checked_sysconf(name: int, what: str) -> int:
     """Query sysconf and reject the -1 "unsupported or unlimited" answer."""
     ctypes.set_errno(0)
@@ -559,6 +598,73 @@ class StdModule:
         if self._sys is None:
             self._sys = SysModule()
         return self._sys
+
+    # ------------------------------------------------------------------
+    # Process termination
+    # ------------------------------------------------------------------
+
+    def exit(self, code=0):
+        """exit(code) — terminate the program with the given exit code.
+
+        A POSIX exit status is a single byte, so a code outside 0…255 is
+        rejected rather than silently truncated: a program asking to exit
+        with 300 and being reported as having exited with 44 is a bug the
+        language should catch, not propagate.
+
+        Args:
+            code: the exit status, 0…255.  Defaults to 0.
+
+        Raises:
+            ProgramExit: always; the interpreter turns it into the
+                process exit status.
+        """
+        from interp.errors import ProgramExit
+        from interp.value import IntValue, UnitValue
+
+        if isinstance(code, UnitValue):
+            code = code.inner
+        if isinstance(code, IntValue):
+            code = code.value
+        if isinstance(code, bool) or not isinstance(code, int):
+            raise TypeError("std.exit: exit code must be an integer")
+        if not 0 <= code <= 255:
+            raise TypeError(
+                f"std.exit: exit code {code} is outside the range 0\N{HORIZONTAL ELLIPSIS}255 "
+                f"that a process can report")
+        raise ProgramExit(code)
+
+    def abort(self, signal_number=None):
+        """abort(signal) — terminate the program by raising a signal.
+
+        The signal is delivered to the process with its handler reset to
+        the default, so the program really does die by it and the parent
+        sees the termination signal in its wait status.
+
+        A missing, zero, or invalid signal number falls back to SIGABRT.
+        That fallback is deliberate: abort is called when a program has
+        already decided it cannot continue, and refusing to terminate
+        because the requested signal was wrong would be the worse
+        failure.
+
+        Args:
+            signal_number: the signal to raise, or None for SIGABRT.
+
+        Raises:
+            ProgramAbort: always; the interpreter delivers the signal
+                after reporting where the abort came from.
+        """
+        from interp.errors import ProgramAbort
+        from interp.value import IntValue, NoneValue, UnitValue
+
+        if isinstance(signal_number, UnitValue):
+            signal_number = signal_number.inner
+        if isinstance(signal_number, IntValue):
+            signal_number = signal_number.value
+        if isinstance(signal_number, NoneValue) or signal_number is None:
+            signal_number = 0
+        if isinstance(signal_number, bool) or not isinstance(signal_number, int):
+            raise TypeError("std.abort: signal must be an integer")
+        raise ProgramAbort(resolve_abort_signal(signal_number))
 
     def get_allocator(self):
         """Get a reference to the global allocator.

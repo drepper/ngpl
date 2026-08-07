@@ -1,0 +1,10 @@
+// std.abort with no argument raises SIGABRT.  The process dies by the
+// signal, so the shell reports 128+6 = 134.
+
+fn give_up() → ∅:
+    std.abort()
+
+@start
+fn main() → ∅:
+    std.print("before abort")
+    give_up()

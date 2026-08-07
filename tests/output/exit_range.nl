@@ -1,0 +1,6 @@
+// A process exit status is a single byte, so a code outside 0…255 is
+// reported rather than silently truncated to 44.
+
+@start
+fn main() → ∅:
+    std.exit(300)

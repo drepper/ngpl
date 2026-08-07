@@ -1,0 +1,5 @@
+before abort
+aborted: SIGABRT
+backtrace (innermost call first):
+  #0 give_up at tests/output/abort_default.nl:5:4
+  #1 main at tests/output/abort_default.nl:10:4

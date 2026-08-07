@@ -19,7 +19,9 @@ complete.  Two rules decide when that is:
 import sys
 
 from interp.env import Env
-from interp.errors import extract_position, format_diagnostic, strip_position_prefix
+from interp.errors import (extract_position, format_backtrace,
+                           format_diagnostic, strip_position_prefix,
+                           ProgramAbort, ProgramExit)
 from interp.eval import Evaluator
 from interp.lexer import process_indentation, tokenize
 from interp.parser import ParseError, Parser
@@ -161,7 +163,12 @@ class Repl:
 
             buffer = []
             if src.strip():
-                self._run_entry(src)
+                try:
+                    self._run_entry(src)
+                except ProgramExit as e:
+                    return e.code
+                except ProgramAbort as e:
+                    self._abort(e)
 
     @staticmethod
     def _setup_line_editing():
@@ -186,7 +193,8 @@ class Repl:
                 self._eval_item(item)
         except KeyboardInterrupt:
             print("\nKeyboardInterrupt", file=sys.stderr)
-        except SystemExit:
+        except (SystemExit, ProgramExit, ProgramAbort):
+            # Terminating the program terminates the session with it.
             raise
         except Exception as e:
             self._show_error(e, src, name)
@@ -198,6 +206,7 @@ class Repl:
         if isinstance(item, _DEFINITION_NODES):
             program = install_definitions([item], self.env, self.evaluator,
                                           honor_start=False)
+            self._label_definition(item)
             self._report_definition(item, program)
             return
 
@@ -209,6 +218,27 @@ class Repl:
                 # std.print writes to fd 1 directly, so results must be
                 # flushed to keep them in order with a program's output.
                 print(result.display(), flush=True)
+
+    def _label_definition(self, item):
+        """Record which entry defined a function, for later backtraces.
+
+        Line numbers in the REPL are relative to the entry the code was
+        typed in, so a frame that named the current entry would point at
+        the wrong text.
+        """
+        from interp.value import FuncValue, StructType
+
+        label = f"<repl:{self._entry}>"
+        if isinstance(item, ASTFuncDef):
+            defined = self.env.lookup(item.name)
+            if isinstance(defined, FuncValue):
+                defined.source_label = label
+        elif isinstance(item, ASTImplBlock):
+            struct = self.env.lookup(item.struct_name)
+            if isinstance(struct, StructType):
+                for method in struct.methods.values():
+                    if method.source_label is None:
+                        method.source_label = label
 
     def _report_definition(self, item, program):
         """Acknowledge a definition and run any test it introduced."""
@@ -227,6 +257,18 @@ class Repl:
                 print(f"test {test_fv.name} ... FAILED", file=sys.stderr)
                 print(f"  {msg}", file=sys.stderr)
 
+    def _abort(self, exc: ProgramAbort):
+        """Report an abort raised from the session, then deliver the signal."""
+        import signal as _signal
+        from interp.std import deliver_abort
+
+        print(f"aborted: {_signal.Signals(exc.signal_number).name}",
+              file=sys.stderr)
+        trace = format_backtrace(exc, "<repl>", min_frames=1)
+        if trace is not None:
+            print(trace, file=sys.stderr)
+        deliver_abort(exc.signal_number)
+
     def _show_error(self, exc: BaseException, src: str, name: str):
         """Print a diagnostic for an error raised while handling an entry."""
         pos = extract_position(exc)
@@ -242,5 +284,11 @@ class Repl:
                 print(format_diagnostic(src, name, line, col, msg,
                                         end_col=end_col, level="error"),
                       file=sys.stderr)
-                return
-        print(f"error: {msg}", file=sys.stderr)
+            else:
+                print(f"error: {msg}", file=sys.stderr)
+        else:
+            print(f"error: {msg}", file=sys.stderr)
+
+        trace = format_backtrace(exc, name)
+        if trace is not None:
+            print(trace, file=sys.stderr)

@@ -40,6 +40,7 @@ from interp.value import (
 )
 from interp.env import Env
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
+from interp.errors import attach_backtrace
 
 
 def _nth_root_exact(n: int, degree: int) -> int | None:
@@ -521,6 +522,11 @@ class Evaluator:
         self._generic_map: dict[str, str] = {}
         self._comptime_vars: set[str] = set()
         self._last_pos: tuple[int, int, int | None] | None = None
+        # One entry per active call to a user-defined function, outermost
+        # first.  Each is a mutable [name, position] pair whose position
+        # tracks the statement currently executing in that frame, so an
+        # unwound stack still says where each caller had got to.
+        self._call_stack: list[list] = []
         # Pre-compute builtin function mappings (avoid repeated lookups).
         self._ops = {
             "+": self._op_add,
@@ -1179,6 +1185,22 @@ class Evaluator:
         raise TypeError(
             f"cannot convert {type(inner).__name__} with units")
 
+    def _callstack_value(self, args):
+        """Return the interpreted program's call stack, innermost first.
+
+        Each entry is a (name, line, column) tuple.  The frame for the
+        call to callstack itself is left out, so entry 0 is always the
+        function that asked.
+        """
+        if args:
+            raise TypeError("std.callstack takes no arguments")
+        frames = []
+        for frame in reversed(self._call_stack):
+            name, pos = frame[0], frame[1]
+            line, col = (pos[0], pos[1]) if pos is not None else (0, 0)
+            frames.append(TupleValue([mk_str(name), mk_int(line), mk_int(col)]))
+        return ObjectValue(ArrayValue(frames))
+
     def _struct_offsetof(self, struct_type, args):
         """Return the byte offset of a named field within a @repr(C) struct."""
         from interp.layout import LayoutError, struct_layout, struct_lookup
@@ -1323,6 +1345,8 @@ class Evaluator:
         pos = getattr(node, "pos", None)
         if pos is not None:
             self._last_pos = pos
+            if self._call_stack:
+                self._call_stack[-1][1] = pos
 
         if isinstance(node, IntLit):
             return mk_int(node.value, node.width)
@@ -1439,6 +1463,8 @@ class Evaluator:
             right = self.eval_expr(node.right)
             if binop_pos is not None:
                 self._last_pos = binop_pos
+                if self._call_stack:
+                    self._call_stack[-1][1] = binop_pos
             if node.op == "\N{DOUBLE PLUS}":
                 return self._op_concat(left, right)
             lu = unwrap_optional(left)
@@ -1857,6 +1883,8 @@ class Evaluator:
         pos = getattr(stmt, "pos", None)
         if pos is not None:
             self._last_pos = pos
+            if self._call_stack:
+                self._call_stack[-1][1] = pos
 
         if isinstance(stmt, ExpectStmt):
             return self._eval_expect(stmt)
@@ -2632,6 +2660,11 @@ class Evaluator:
         unwrapped = unwrap_optional(obj)
         if method_name == "__call__":
             return self._do_call(unwrapped, args)
+        # callstack reads evaluator state, which a plain method on the
+        # std object has no way to reach.
+        if (method_name == "callstack" and isinstance(unwrapped, ObjectValue)
+                and unwrapped.obj is std):
+            return self._callstack_value(args)
         if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, StructInstance):
             inst = unwrapped.obj
             method = inst.struct_type.methods.get(method_name)
@@ -2872,6 +2905,7 @@ class Evaluator:
         for param_name, _ in func.params:
             if param_name not in func.param_muts and param_name not in func.param_refs:
                 self._frozen_vars[param_name] = "let"
+        self._call_stack.append([func.name, self._last_pos, func.source_label])
         try:
             self.env = call_env
             self._current_ret_type = resolved_ret_type
@@ -2888,7 +2922,14 @@ class Evaluator:
             return self._wrap_optional_return(e.value, resolved_ret_type)
         except _PropagatedError as pe:
             raise pe.original from pe
+        except BaseException as e:
+            # Attach the stack to the exception itself, at the innermost
+            # frame that sees it, so it survives the unwinding below and
+            # cannot be confused with a later, unrelated failure.
+            attach_backtrace(e, self._call_stack)
+            raise
         finally:
+            self._call_stack.pop()
             self.env = old_env
             self._current_ret_type = old_ret_type
             self._pure_func_name = old_pure

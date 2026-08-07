@@ -329,7 +329,7 @@ class FuncValue(Value):
 
     __slots__ = ("name", "params", "body", "env", "ret_type", "is_replaceable",
                  "pack_param", "param_units", "is_impure", "param_refs",
-                 "param_muts")
+                 "param_muts", "source_label")
 
     def __init__(self, name, params, body, env, ret_type=None,
                  is_replaceable: bool = False,
@@ -349,6 +349,10 @@ class FuncValue(Value):
         self.is_impure = is_impure
         self.param_refs: set[str] = param_refs or set()
         self.param_muts: set[str] = param_muts or set()
+        # Where the body was written.  None means the file the program
+        # was loaded from; the REPL sets it to the entry that defined the
+        # function, since each entry has its own line numbering.
+        self.source_label: str | None = None
 
 
 class LambdaValue(Value):

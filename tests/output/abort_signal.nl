@@ -1,0 +1,5 @@
+// An explicit signal is used as given: SIGTERM is 15, so 128+15 = 143.
+
+@start
+fn main() → ∅:
+    std.abort(15)

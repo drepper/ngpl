@@ -275,14 +275,19 @@ Runtime
 [ ] add name member function (no parameters) for directory object which returns the absolute path of
     the directory.
 
-[ ] exit function to terminate the process with the exit code given as argument
+[x] exit function to terminate the process with the exit code given as argument.  std.exit(code)
+    takes 0…255 and rejects anything outside it rather than truncating; it wins over the @start
+    function's return value and produces no diagnostic or backtrace.
 
-[ ] abort function to terminate the process with the signal given as argument (if no signal is
-    given or it is zero or invalid), use SIGABRT.
+[x] abort function to terminate the process with the signal given as argument (if no signal is
+    given or it is zero or invalid, use SIGABRT).  std.abort(signal) resets the handler to the
+    default first so the parent sees the termination signal, and prints a backtrace before dying.
 
-[ ] add backtrace support.  when the program exits abnormally show the call stack of functions of
+[x] add backtrace support.  when the program exits abnormally show the call stack of functions of
     the program (not the interpreter).  Add also API in the std module to access the callstack
-    at any time.
+    at any time.  Frames carry the position execution had reached, the stack travels with the
+    failure so it cannot be reported against the wrong error, and std.callstack() returns
+    (name, line, column) tuples innermost first.
 
 
 Syntax Decisions Still Open

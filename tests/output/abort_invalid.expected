@@ -1,0 +1,3 @@
+aborted: SIGABRT
+backtrace (innermost call first):
+  #0 main at tests/output/abort_invalid.nl:7:14

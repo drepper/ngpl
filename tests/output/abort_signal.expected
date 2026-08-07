@@ -1,0 +1,3 @@
+aborted: SIGTERM
+backtrace (innermost call first):
+  #0 main at tests/output/abort_signal.nl:5:14
