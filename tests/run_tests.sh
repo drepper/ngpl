@@ -1,12 +1,14 @@
 #!/bin/bash
-# Run all NGPL test files and report a summary.
-# Exit with non-zero status if any test file fails.
+# Run NGPL test files and report a summary.
+# With no arguments, runs all tests.  With arguments, runs only tests
+# whose filename contains any of the given patterns.
+# Exit with non-zero status if any test fails.
 
 topdir=$(cd "$(dirname "$(realpath "$0")")/.." && pwd) || exit 1
 cd "$topdir" || exit 1
 testdir=$topdir/tests
 
-tests=(
+all_tests=(
     "$testdir"/test_byte.nl
     "$testdir"/test_const.nl
     "$testdir"/test_errors.nl
@@ -51,6 +53,26 @@ tests=(
     "$testdir"/test_view_assign.nl
 )
 
+# Filter tests if command-line patterns are given.
+if (($# > 0)); then
+    tests=()
+    for t in "${all_tests[@]}"; do
+        name=$(basename "$t")
+        for pat in "$@"; do
+            if [[ $name == *"$pat"* ]]; then
+                tests+=("$t")
+                break
+            fi
+        done
+    done
+    if ((${#tests[@]} == 0)); then
+        echo "No tests matched: $*"
+        exit 1
+    fi
+else
+    tests=("${all_tests[@]}")
+fi
+
 passed=0
 failed=0
 failures=()
@@ -75,10 +97,12 @@ if ((failed > 0)); then
     exit 1
 fi
 
-# Run output-capture tests.
-echo
-if python "$testdir"/run_output_tests.py 2>&1; then
-    :
-else
-    exit 1
+# Run output-capture tests only when running all tests.
+if (($# == 0)); then
+    echo
+    if python "$testdir"/run_output_tests.py 2>&1; then
+        :
+    else
+        exit 1
+    fi
 fi
