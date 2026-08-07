@@ -88,6 +88,24 @@ fn error_nested_fn() → ∅:
 fn error_unknown_type_var() → ∅:
     let x : mut i1 = 0
 
+/* --- call-by-reference errors ---------------------------------------------- */
+
+fn takes_ref(x : &i32[]) → ∅:
+    x[0] = 1
+
+@expect error "is by-reference.*caller must pass"
+fn error_ref_missing_ampersand() → ∅:
+    let a : mut i32[] = [1, 2, 3]
+    takes_ref(a)
+
+fn takes_val(x : i32[]) → ∅:
+    x[0] = 1
+
+@expect error "is by-value.*must not pass a reference"
+fn error_val_with_ampersand() → ∅:
+    let a : mut i32[] = [1, 2, 3]
+    takes_val(&a)
+
 @start
 fn main() → ∅:
     std.print("error tests passed")

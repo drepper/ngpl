@@ -23,7 +23,7 @@ from interp.ast import (
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr,
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
-    UnitExpr, UnitOfExpr, UnitRefExpr,
+    UnitExpr, UnitOfExpr, UnitRefExpr, RefExpr,
 )
 from interp.value import (
     Value, IntValue, FloatValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
@@ -34,7 +34,7 @@ from interp.value import (
     _TYPE_BITS, FLOAT_TYPES, FAST_TYPES,
     _split_optional_type, MAX_TENSOR_RANK,
     is_generic_type, runtime_type_of,
-    UnitValue,
+    UnitValue, RefValue, deep_copy_value,
 )
 from interp.env import Env
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
@@ -1288,7 +1288,14 @@ class Evaluator:
                 raise TypeError(
                     f"pure function '{self._pure_func_name}' cannot "
                     f"read mutable global variable '{node.name}'")
-            return self.env.lookup(node.name)
+            val = self.env.lookup(node.name)
+            if isinstance(val, RefValue):
+                return val.get()
+            return val
+
+        if isinstance(node, RefExpr):
+            self.env.lookup(node.name)
+            return RefValue(self.env, node.name)
 
         if isinstance(node, StaticAssert):
             for arg in node.args:
@@ -1800,6 +1807,9 @@ class Evaluator:
                         f"pure function '{self._pure_func_name}' cannot "
                         f"assign to non-local variable '{target_ast.name}'")
                 current = self.env.lookup(target_ast.name)
+                if isinstance(current, RefValue):
+                    current.set(rhs)
+                    return none()
                 if isinstance(current, UnitValue):
                     if isinstance(rhs, UnitValue):
                         rhs = self._convert_unit_value(rhs, current.unit)
@@ -2582,6 +2592,19 @@ class Evaluator:
 
         call_env = func.env.copy_for_call()
         for (param_name, param_type), arg_value in zip(resolved_params, regular_args):
+            is_ref_param = param_name in func.param_refs
+            if is_ref_param:
+                if not isinstance(arg_value, RefValue):
+                    raise TypeError(
+                        f"{func.name}: parameter '{param_name}' is by-reference, "
+                        f"caller must pass &{param_name}")
+                call_env.define(param_name, arg_value)
+                continue
+            if isinstance(arg_value, RefValue):
+                raise TypeError(
+                    f"{func.name}: parameter '{param_name}' is by-value, "
+                    f"caller must not pass a reference")
+            arg_value = deep_copy_value(arg_value)
             if param_name in func.param_units:
                 from interp.units import eval_unit_formula
                 unit = eval_unit_formula(func.param_units[param_name])

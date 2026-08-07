@@ -1118,6 +1118,71 @@ Parameter type enforcement catches type errors early and enables the interpreter
 | Unknown type | Compile error | Compile error | Runtime (if checked) | Compile error |
 
 
+### Call-by-Value and Call-by-Reference
+
+By default, function parameters are passed **by value**.  For mutable compound values such as arrays, the interpreter creates a deep copy of the argument so that modifications inside the function do not affect the caller.  Scalar values (integers, floats, booleans, strings) are immutable and naturally passed by value without copying.
+
+To pass a parameter **by reference**, prefix the type annotation with `&`:
+
+```
+fn fill_zeros(arr : &i32[]) → ∅:
+    foreach i := 0…(arr.sizeof - 1):
+        arr[i] = 0
+```
+
+At the call site, the argument must also be prefixed with `&` to make the reference explicit:
+
+```
+let data : mut i32[] = [1, 2, 3]
+fill_zeros(&data)
+// data is now [0, 0, 0]
+```
+
+#### Semantics
+
+- **By-value parameters** receive a deep copy of mutable data.  Changes to the parameter inside the function are local to that invocation and are not visible to the caller.
+- **By-reference parameters** receive a reference to the caller's binding.  Assignments to the parameter (including element mutation and reshape-as-view operations) are visible to the caller after the function returns.
+- Passing a non-reference argument to a `&`-parameter is a type error: *"parameter 'x' is by-reference, caller must pass &x"*.
+- Passing a `&`-argument to a by-value parameter is a type error: *"parameter 'x' is by-value, caller must not pass a reference"*.
+
+#### Interaction with Reshape Views
+
+When a by-reference array parameter is reshaped inside a function using `⍴`, the resulting view shares the caller's backing storage.  Modifications through the reshaped view propagate to the caller's array:
+
+```
+fn reshape_and_set(arr : &i32[]) → ∅:
+    let m : mut = (2, 2) ⍴ arr
+    m[0, 1] = 42
+
+let a : mut i32[] = 4 ⍴ 0
+reshape_and_set(&a)
+// a[1] is now 42
+```
+
+With a by-value parameter, the deep copy ensures the caller's array is unaffected:
+
+```
+fn reshape_and_set_val(arr : i32[]) → ∅:
+    let m : mut = (2, 2) ⍴ arr
+    m[0, 1] = 99
+
+let a : mut i32[] = 4 ⍴ 0
+reshape_and_set_val(a)
+// a[1] is still 0
+```
+
+#### Design Rationale
+
+The `&` syntax follows Rust's convention of explicit reference passing.  Requiring `&` at both the declaration and the call site ensures that side effects through parameters are always visible to the reader — a function call without `&` arguments can never mutate the caller's state (assuming purity constraints are met).  This is consistent with NGPL's design goal of making the programmer's intent explicit.
+
+| Feature | Rust | Zig | C++ | NGPL |
+|---------|------|-----|-----|------|
+| Default passing | By value (move) | By value / by pointer | By value | By value (deep copy) |
+| Reference syntax | `&` / `&mut` | `*T` pointer | `T&` / `const T&` | `&T` |
+| Call-site marker | Automatic (borrow) | `&var` | None | `&var` |
+| Mutable ref | Requires `&mut` | `*T` | `T&` | `&T` (always mutable) |
+
+
 ### Block Scoping: Braces and Layout
 
 Blocks of statements — function bodies, if/elif/else branches, while loop bodies — can be delimited in two ways.  Both styles are fully interchangeable and can be freely mixed within a single source file or even within a single function.

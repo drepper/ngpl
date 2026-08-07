@@ -57,6 +57,13 @@ class VarRef:
         self.name = name
 
 
+class RefExpr:
+    """Reference expression: &name at a call site."""
+
+    def __init__(self, name: str):
+        self.name = name
+
+
 class BinOp:
     """Binary operator: + - * / == != < > <= >= and or."""
 
@@ -119,9 +126,11 @@ class FuncDef:
                  is_replaceable: bool = False,
                  pack_param: tuple[str, str | None] | None = None,
                  param_units: dict[str, object] | None = None,
-                 is_impure: bool = False):
+                 is_impure: bool = False,
+                 param_refs: set[str] | None = None):
         self.name = name
         self.params = params
+        self.param_refs: set[str] = param_refs or set()
         self.ret_type = ret_type
         self.body = body
         self.is_start = is_start

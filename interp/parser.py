@@ -9,7 +9,7 @@ indentation (INDENT/DEDENT tokens).
 """
 
 from interp.ast import (
-    IntLit, FloatLit, StrLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
+    IntLit, FloatLit, StrLit, BoolLit, NoneLit, VarRef, RefExpr, BinOp, UnaryOp,
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
@@ -249,6 +249,7 @@ class Parser:
 
         params = []
         param_units: dict[str, object] = {}
+        param_refs: set[str] = set()
         pack_param: tuple[str, str | None] | None = None
         self._eat("PUNCT", "(")
         while not (self._check("PUNCT") and self._cur().value == ")"):
@@ -265,12 +266,21 @@ class Parser:
                 self.pos += 1
                 param_unit = self._parse_unit_spec()
             param_type = None
-            if (self._check("PUNCT") and self._cur().value == ":" and
-                    self.pos + 1 < len(self.tokens) and
-                    self.tokens[self.pos + 1].type == "IDENT"):
-                self._eat("PUNCT", ":")
-                type_tok = self._eat("IDENT")
-                param_type = type_tok.value
+            is_ref = False
+            if self._check("PUNCT") and self._cur().value == ":":
+                next_idx = self.pos + 1
+                next_is_type = (next_idx < len(self.tokens) and
+                                self.tokens[next_idx].type == "IDENT")
+                next_is_ref = (next_idx < len(self.tokens) and
+                               self.tokens[next_idx].type == "OP" and
+                               self.tokens[next_idx].value == "&")
+                if next_is_type or next_is_ref:
+                    self._eat("PUNCT", ":")
+                    if self._check("OP") and self._cur().value == "&":
+                        self.pos += 1
+                        is_ref = True
+                    type_tok = self._eat("IDENT")
+                    param_type = type_tok.value
                 if self._check("PUNCT") and self._cur().value == "[":
                     self.pos += 1
                     self._eat("PUNCT", "]")
@@ -287,6 +297,8 @@ class Parser:
                 pack_param = (param_name_tok.value, param_type)
                 break
             params.append((param_name_tok.value, param_type))
+            if is_ref:
+                param_refs.add(param_name_tok.value)
             if param_unit is not None:
                 param_units[param_name_tok.value] = param_unit
             self._try_eat("NEWLINE")
@@ -316,7 +328,8 @@ class Parser:
                 body = []
                 fdef = FuncDef(name, params, ret_type, body, is_start, is_test,
                                test_refs, expect_annotations, is_replaceable,
-                               pack_param, param_units, is_impure)
+                               pack_param, param_units, is_impure,
+                               param_refs=param_refs)
                 fdef._parse_error = str(e)
                 self._skip_to_next_definition()
                 return fdef
@@ -324,7 +337,8 @@ class Parser:
             body = self._parse_block()
         return FuncDef(name, params, ret_type, body, is_start, is_test,
                        test_refs, expect_annotations, is_replaceable,
-                       pack_param, param_units, is_impure)
+                       pack_param, param_units, is_impure,
+                       param_refs=param_refs)
 
     def _parse_dotted_name(self) -> str:
         """Parse a possibly dotted name like 'std.errors'."""
@@ -1435,7 +1449,15 @@ class Parser:
                 pass
             if self._check("PUNCT") and self._cur().value == ")":
                 break
-            arg = self._parse_or_expr()
+            if (self._check("OP") and self._cur().value == "&"
+                    and self.pos + 1 < len(self.tokens)
+                    and self.tokens[self.pos + 1].type == "IDENT"):
+                ref_tok = self._cur()
+                self.pos += 1
+                name_tok = self._eat("IDENT")
+                arg = self._set_pos(RefExpr(name_tok.value), ref_tok)
+            else:
+                arg = self._parse_or_expr()
             args.append(arg)
             while self._try_eat("NEWLINE"):
                 pass

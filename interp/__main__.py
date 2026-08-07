@@ -330,7 +330,7 @@ def main():
                     f"in {defn.name}: unknown return type '{defn.ret_type}'")
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,
                           defn.is_replaceable, defn.pack_param, defn.param_units,
-                          defn.is_impure)
+                          defn.is_impure, param_refs=defn.param_refs)
             env.define(defn.name, fv)
 
             if args.start is None and defn.is_start:
@@ -382,7 +382,7 @@ def main():
         if not errors_produced:
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,
                           defn.is_replaceable, defn.pack_param, defn.param_units,
-                          defn.is_impure)
+                          defn.is_impure, param_refs=defn.param_refs)
             eval_inst = Evaluator(env)
             try:
                 eval_inst._call_user_func(fv, [])

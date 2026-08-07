@@ -320,13 +320,14 @@ class FuncValue(Value):
     """A user-defined function (closure over an environment)."""
 
     __slots__ = ("name", "params", "body", "env", "ret_type", "is_replaceable",
-                 "pack_param", "param_units", "is_impure")
+                 "pack_param", "param_units", "is_impure", "param_refs")
 
     def __init__(self, name, params, body, env, ret_type=None,
                  is_replaceable: bool = False,
                  pack_param: tuple[str, str | None] | None = None,
                  param_units: dict[str, object] | None = None,
-                 is_impure: bool = False):
+                 is_impure: bool = False,
+                 param_refs: set[str] | None = None):
         self.name = name
         self.params = params
         self.body = body
@@ -336,6 +337,7 @@ class FuncValue(Value):
         self.pack_param = pack_param
         self.param_units: dict[str, object] = param_units or {}
         self.is_impure = is_impure
+        self.param_refs: set[str] = param_refs or set()
 
 
 class LambdaValue(Value):
@@ -589,6 +591,41 @@ class ArrayValue(Value):
             self._backing[self._offset + index] = value
         else:
             self.elements[index] = value
+
+
+class RefValue(Value):
+    """A mutable reference to a binding in a specific environment frame.
+
+    When passed to a function parameter declared with &type, modifications
+    to the parameter inside the function are visible to the caller.
+    """
+
+    __slots__ = ("env", "name")
+
+    def __init__(self, env, name: str):
+        self.env = env
+        self.name = name
+
+    def get(self) -> "Value":
+        return self.env.lookup(self.name)
+
+    def set(self, value: "Value"):
+        self.env.assign(self.name, value)
+
+    def display(self):
+        return f"&{self.name}"
+
+
+def deep_copy_value(v: Value) -> Value:
+    """Create a deep copy of a value, duplicating arrays."""
+    if isinstance(v, ObjectValue) and isinstance(v.obj, ArrayValue):
+        arr = v.obj
+        if arr._backing is not None:
+            elems = [arr.get(i) for i in range(arr.sizeof)]
+        else:
+            elems = list(arr.elements)
+        return ObjectValue(ArrayValue(elems, arr.element_type))
+    return v
 
 
 class TypeValue(Value):
