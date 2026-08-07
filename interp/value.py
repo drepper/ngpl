@@ -6,6 +6,11 @@ type checking and proper error messages.
 """
 
 
+# The discard target.  Assigning to it evaluates the right-hand side and
+# throws the result away; it names no storage, so it never needs to be
+# declared and can never be read back.
+DISCARD_NAME = "_"
+
 BUILTIN_TYPES: set[str] = {
     "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64",
     "usize", "int", "bool", "∅", "byte", "str",

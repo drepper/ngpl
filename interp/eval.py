@@ -36,7 +36,7 @@ from interp.value import (
     _TYPE_BITS, FLOAT_TYPES, FAST_TYPES,
     _split_optional_type, MAX_TENSOR_RANK,
     is_generic_type, runtime_type_of,
-    UnitValue, RefValue, deep_copy_value, register_type_alias,
+    UnitValue, RefValue, deep_copy_value, register_type_alias, DISCARD_NAME,
 )
 from interp.env import Env
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
@@ -1364,6 +1364,9 @@ class Evaluator:
             return none()
 
         if isinstance(node, VarRef):
+            if node.name == DISCARD_NAME:
+                raise TypeError(
+                    "'_' discards the value assigned to it and cannot be read")
             if self._frozen_vars.get(node.name) == "moved":
                 raise TypeError(
                     f"use of moved value '{node.name}'")
@@ -1981,6 +1984,11 @@ class Evaluator:
                 else:
                     raise TypeError("field assignment requires a struct instance")
             elif isinstance(target_ast, VarRef):
+                if target_ast.name == DISCARD_NAME:
+                    # The right-hand side has already been evaluated for
+                    # its effects; the result is simply dropped.  No type
+                    # check applies, since there is nothing to store into.
+                    return none()
                 if target_ast.name in self._frozen_vars:
                     kind = self._frozen_vars[target_ast.name]
                     if kind == "moved":
@@ -2017,6 +2025,11 @@ class Evaluator:
             return none()
 
         if isinstance(stmt, VarDef):
+            if stmt.name == DISCARD_NAME:
+                # `let _ := expr` discards too, so that a value can be
+                # thrown away without inventing a name for it.
+                self.eval_expr(stmt.init_expr)
+                return none()
             if stmt.name in self._frozen_vars:
                 kind = self._frozen_vars[stmt.name]
                 if kind == "foreach":

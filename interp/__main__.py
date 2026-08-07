@@ -20,7 +20,7 @@ from interp.value import (
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
     NoneValue, ExpectedValue, EnumType, EnumValue, StructType,
     coerce_to_type, validate_param_type, validate_type, none, FAST_TYPES,
-    register_type_alias, register_user_type,
+    register_type_alias, register_user_type, DISCARD_NAME,
 )
 from interp.eval import Evaluator, unwrap_optional
 from interp.layout import LayoutError, struct_layout, struct_lookup
@@ -522,6 +522,10 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
 
     for defn in definitions:
         if isinstance(defn, ASTVarDef):
+            if defn.name == DISCARD_NAME:
+                # Evaluated for its effects, then dropped; nothing is bound.
+                evaluator.eval_expr(defn.init_expr)
+                continue
             if defn.is_const and defn.type_annotation is not None and defn.type_annotation in FAST_TYPES:
                 raise DefinitionError(
                     f"fast type '{defn.type_annotation}' cannot be used in "

@@ -1,0 +1,7 @@
+error: '_' discards the value assigned to it and cannot be read
+  --> <repl:4>:1:1
+    |
+  1 | _
+    | ^
+    |
+"session survives"

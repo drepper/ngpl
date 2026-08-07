@@ -1,0 +1,148 @@
+// Tests for `_`, the discard target.
+//
+// `_` names no storage.  It never has to be declared, anything may be
+// assigned to it, and it can never be read back.
+
+// A global discard runs its initializer and binds nothing.
+let _ := 1 + 1
+
+// ---------------------------------------------------------------------
+// Assigning to _ discards
+// ---------------------------------------------------------------------
+
+fn counted(n : int) → int:
+    n * 2
+
+// The right-hand side still runs; only its value is dropped.
+@test
+fn test_side_effect_still_happens() → ∅:
+    let total : mut = 0
+    foreach i := 1…3:
+        total ← total + i
+        _ ← counted(i)
+    assert_eq(total, 6)
+
+// _ needs no declaration before it is assigned to.
+@test
+fn test_no_declaration_needed() → ∅:
+    _ ← counted(21)
+
+// Assigning twice is fine: there is no binding to redefine.
+@test
+fn test_repeated_assignment() → ∅:
+    _ ← 1
+    _ ← 2
+    _ ← 3
+
+// ---------------------------------------------------------------------
+// Every type may be discarded
+// ---------------------------------------------------------------------
+
+struct Point:
+    x : i32
+    y : i32
+
+enum Color:
+    red
+    green
+
+@test
+fn test_all_types_discardable() → ∅:
+    _ ← 42
+    _ ← 3.5
+    _ ← true
+    _ ← "a string"
+    _ ← [1, 2, 3]
+    _ ← (1, "two")
+    _ ← ∅
+    _ ← 1…4
+    _ ← Point { x: 1, y: 2 }
+    _ ← Color.green
+    _ ← counted
+    _ ← 8¤byte
+
+// The `let` form discards too, and imposes no type of its own.
+@test
+fn test_let_form_discards() → ∅:
+    let _ := "a string"
+    let _ := [1, 2, 3]
+    let _ := counted(3)
+
+// ---------------------------------------------------------------------
+// _ as a binding position elsewhere
+// ---------------------------------------------------------------------
+
+// A loop that only needs to run a number of times.
+@test
+fn test_foreach_discard() → ∅:
+    let ticks : mut = 0
+    foreach _ := 1…4:
+        ticks ← ticks + 1
+    assert_eq(ticks, 4)
+
+// Only one of the two loop variables is wanted.
+@test
+fn test_foreach_pair_discard() → ∅:
+    let total : mut = 0
+    foreach i, _ := enumerate([10, 20, 30]):
+        total ← total + i
+    assert_eq(total, 3)
+
+// A parameter the function does not use.
+fn second(_ : int, keep : int) → int:
+    keep
+
+@test
+fn test_unused_parameter() → ∅:
+    assert_eq(second(99, 5), 5)
+
+// ---------------------------------------------------------------------
+// Reading _ is not allowed
+// ---------------------------------------------------------------------
+
+@expect error "cannot be read"
+fn error_read_after_assignment() → ∅:
+    _ ← 5
+    let n : mut = _
+
+@expect error "cannot be read"
+fn error_read_without_assignment() → ∅:
+    let n : mut = _
+
+@expect error "cannot be read"
+fn error_read_in_expression() → ∅:
+    _ ← 5
+    let n : mut = _ + 1
+
+@expect error "cannot be read"
+fn error_read_as_argument() → ∅:
+    _ ← 5
+    std.print(_)
+
+@expect error "cannot be read"
+fn error_read_as_condition() → ∅:
+    _ ← true
+    if _:
+        std.print("unreachable")
+
+@expect error "cannot be read"
+fn error_discard_of_itself() → ∅:
+    _ ← _
+
+// Not even a loop variable named _ can be read inside its own body.
+@expect error "cannot be read"
+fn error_read_foreach_variable() → ∅:
+    foreach _ := 1…3:
+        std.print(_)
+
+// Nor an unused parameter.
+@expect error "cannot be read"
+fn error_read_unused_parameter() → ∅:
+    let n : mut = reads_its_ignored_parameter(1)
+
+fn reads_its_ignored_parameter(_ : int) → int:
+    _
+
+@start
+fn main() → ∅:
+    std.print("discard tests passed")

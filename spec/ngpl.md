@@ -882,6 +882,106 @@ In C++, `const` creates a variable that happens to be immutable — it still has
 Like Rust, NGPL defaults to immutability — `let` creates an immutable binding, and `mut` must be explicitly requested in the type.  This encourages a functional style where most bindings are never reassigned, and makes mutable state visible at the definition site.
 
 
+### The Discard Target (`_`)
+
+`_` is not a variable.  It is a place to put a value that is not wanted, and it names no storage:
+
+```
+_ ← compute_and_log()
+```
+
+It follows from that single fact that `_` never has to be declared, that anything at all may be assigned to it, and that it can never be read back.
+
+#### No Declaration
+
+There is nothing to declare.  `_` may be assigned to at any point, repeatedly, without a preceding `let`:
+
+```
+_ ← 1
+_ ← 2
+```
+
+Nor is there a binding to redefine, so a second assignment is not a redefinition and raises none of the diagnostics that reassigning a `let` variable would.
+
+#### Any Type
+
+An assignment to a variable checks that the value fits the variable's type.  `_` has no type, because it has no storage, so no such check applies:
+
+```
+_ ← 42
+_ ← "a string"
+_ ← [1, 2, 3]
+_ ← Point { x: 1, y: 2 }
+_ ← ∅
+```
+
+The `let` form works too, and likewise imposes nothing:
+
+```
+let _ := read_config()
+```
+
+#### Reading Is an Error
+
+```
+_ ← 5
+let n : mut = _
+
+error: '_' discards the value assigned to it and cannot be read
+```
+
+This is what makes `_` worth having rather than a convention.  A name that can be written and read is a variable, and a variable called `_` is a variable with an uninformative name — the reader of `total ← _ + 1` has to search backwards to find out what `_` held.  Because reading is rejected, `_` in the source always means the same thing wherever it appears: a value being thrown away.  Nothing has to be traced.
+
+The rule applies to every read, not only to a read after an assignment: as an operand, as an argument, as a condition, and to `_ ← _`, which is rejected for its right-hand side.
+
+#### Other Binding Positions
+
+`_` may stand wherever a name is bound, and means the same thing: the value is not wanted.  A loop that only needs to run a certain number of times, or that wants one of two loop variables:
+
+```
+foreach _ := 1…4:
+    tick()
+
+foreach i, _ := enumerate(values):
+    std.print(i)
+```
+
+And a parameter a function does not use, which documents the fact in the signature rather than leaving a reader to check the body:
+
+```
+fn second(_ : int, keep : int) → int:
+    keep
+```
+
+In each case the value is still produced — the loop still iterates, the argument is still evaluated and passed — and reading `_` inside the body remains an error.
+
+#### Relation to Expression Statements
+
+A bare expression statement already discards its value:
+
+```
+compute_and_log()
+_ ← compute_and_log()
+```
+
+The two do the same thing, and the first is shorter.  The second says that discarding was intended.  Which to prefer is a matter of what the call looks like: for a function called only for its effect the bare form reads better, while for one that plainly returns something worth having, `_ ←` records that the result was considered and rejected rather than forgotten.
+
+#### Comparison with Other Languages
+
+| Feature | Go | Rust | Python | Zig | NGPL |
+|---------|-----|------|--------|-----|---------------|
+| Discard name | `_` | `_` | `_` (by convention) | `_` | `_` |
+| Needs declaring | no | no | yes, it is a variable | no | no |
+| Reading it | compile error | compile error | allowed | compile error | error |
+| In loop bindings | yes | yes | by convention | yes | yes |
+| As a parameter | yes | yes | by convention | yes | yes |
+| Unused value must be discarded | yes, for variables | warning only | no | yes, error | no |
+
+Go, Rust, and Zig all reject reading `_`, and this follows them.  Python is the outlier: there `_` is an ordinary variable that convention alone marks as unwanted, so `print(_)` is perfectly legal and the reader gains nothing from the name.
+
+Zig goes further and makes discarding *mandatory* — an unused value is a compile error, and `_ = x;` is how a program says it meant it.  That is a defensible position and is not taken here: a bare expression statement remains a complete statement, and `_ ←` is available for when the intent is worth stating rather than required in order to compile.
+
+
 ### Optional Types (`T?`)
 
 A function that may fail to produce a value declares an **optional return type** by appending `?` to the type name.  The optional type `T?` can hold either a value of type `T` (wrapped in `some`) or `∅` (absence of a value).
