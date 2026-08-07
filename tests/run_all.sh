@@ -56,7 +56,7 @@ failed=0
 failures=()
 
 for t in "${tests[@]}"; do
-    if python -m interp.main --test "$t" 2>&1; then
+    if python -m interp --test "$t" 2>&1; then
         ((passed++))
     else
         ((failed++))

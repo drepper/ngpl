@@ -30,7 +30,7 @@ def run_test(nl_path: str, expected_path: str) -> tuple[bool, str]:
     top_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     rel_path = os.path.relpath(nl_path, top_dir)
     result = subprocess.run(
-        [sys.executable, "-m", "interp.main", rel_path],
+        [sys.executable, "-m", "interp", rel_path],
         capture_output=True,
         text=True,
         cwd=top_dir,
