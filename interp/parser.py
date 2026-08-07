@@ -289,8 +289,16 @@ class Parser:
                     param_type = type_tok.value
                 if self._check("PUNCT") and self._cur().value == "[":
                     self.pos += 1
-                    self._eat("PUNCT", "]")
-                    param_type += "[]"
+                    if self._check("PUNCT") and self._cur().value == "]":
+                        self.pos += 1
+                        param_type += "[]"
+                    elif self._check("INT"):
+                        size_tok = self._eat("INT")
+                        self._eat("PUNCT", "]")
+                        param_type += f"[{size_tok.value}]"
+                    else:
+                        self._eat("PUNCT", "]")
+                        param_type += "[]"
                 if self._check("OP") and self._cur().value == "?":
                     self.pos += 1
                     param_type += "?"

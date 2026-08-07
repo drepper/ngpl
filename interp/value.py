@@ -775,17 +775,25 @@ def runtime_type_of(value: "Value") -> str:
     return "int"
 
 
+def _parse_array_type(type_name: str) -> tuple[str, int | None] | None:
+    """Parse an array type string, returning (element_type, size_or_None) or None."""
+    import re
+    m = re.fullmatch(r"(\w+)\[(\d+)?\]", type_name)
+    if m is None:
+        return None
+    return m.group(1), int(m.group(2)) if m.group(2) else None
+
+
 def validate_type(type_name: str) -> bool:
     """Return True if type_name is a known builtin type (with optional/expected/array modifiers)."""
     if is_generic_type(type_name):
         return True
     base, opt_err = _split_optional_type(type_name)
-    if base.endswith("[]"):
-        base = base[:-2]
-    if not base in BUILTIN_TYPES:
+    arr = _parse_array_type(base)
+    if arr is not None:
+        base = arr[0]
+    if base not in BUILTIN_TYPES:
         return False
-    if opt_err is not None and opt_err != "":
-        return True
     return True
 
 
@@ -837,12 +845,18 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
                 f"got {type(value).__name__}")
         return value
 
-    if param_type.endswith("[]"):
-        elem_type = param_type[:-2]
+    arr_info = _parse_array_type(param_type)
+    if arr_info is not None:
+        elem_type, expected_size = arr_info
         unwrapped = value
         if isinstance(value, SomeValue):
             unwrapped = value.value
         if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
+            if expected_size is not None and unwrapped.obj.sizeof != expected_size:
+                raise TypeError(
+                    f"{func_name}: argument '{param_name}' expected "
+                    f"{param_type} (length {expected_size}), "
+                    f"got array of length {unwrapped.obj.sizeof}")
             return unwrapped
         if isinstance(unwrapped, ObjectValue) and hasattr(unwrapped.obj, "data"):
             raw = bytes(unwrapped.obj.data)

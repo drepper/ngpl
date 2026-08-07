@@ -68,6 +68,36 @@ fn test_element_val_no_modify() → ∅:
   set_element_val(a, 1, 77)
   assert_eq(a[1], 20)
 
+// --- dynamic param accepts fixed-size array --------------------------------
+
+fn sum_dynamic(arr : i32[]) → i32:
+  let total : mut = 0
+  foreach i := 0…(arr.sizeof - 1):
+    total ← total + arr[i]
+  total
+
+@test
+fn test_dynamic_accepts_fixed() → ∅:
+  let a : mut i32[3] = [10, 20, 30]
+  assert_eq(sum_dynamic(a), 60)
+
+// --- fixed-size param accepts dynamic array of exact size ------------------
+
+fn sum_fixed(arr : i32[3]) → i32:
+  arr[0] + arr[1] + arr[2]
+
+@test
+fn test_fixed_accepts_dynamic_exact() → ∅:
+  let a : mut i32[] = [10, 20, 30]
+  assert_eq(sum_fixed(a), 60)
+
+// --- fixed-size param also accepts fixed-size of same length ---------------
+
+@test
+fn test_fixed_accepts_fixed_same() → ∅:
+  let a : mut i32[3] = [10, 20, 30]
+  assert_eq(sum_fixed(a), 60)
+
 @start
 fn main() → ∅:
   std.print("view assign tests passed")

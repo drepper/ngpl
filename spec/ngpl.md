@@ -579,6 +579,34 @@ fn count_bytes data : byte[] → usize:
 
 Fixed-size array parameters behave as a single value of known extent.  Dynamic array parameters behave like a fat pointer: the array data and its length travel together.
 
+#### Array Size Compatibility
+
+A dynamic array parameter (`type[]`) accepts any array of the correct element type, regardless of its size — both fixed-size and dynamic arrays can be passed:
+
+```
+fn sum(arr : i32[]) → i32:
+    let total : mut = 0
+    foreach i := 0…(arr.sizeof - 1):
+        total ← total + arr[i]
+    total
+
+let fixed : mut i32[3] = [10, 20, 30]
+sum(fixed)      // OK: fixed-size array accepted by dynamic param
+```
+
+A fixed-size array parameter (`type[N]`) accepts only arrays whose length is exactly `N` — the check is performed at runtime:
+
+```
+fn triple(arr : i32[3]) → i32:
+    arr[0] + arr[1] + arr[2]
+
+let dynamic : mut i32[] = [10, 20, 30]
+triple(dynamic)     // OK: length matches exactly
+
+let four : mut i32[] = [1, 2, 3, 4]
+triple(four)        // error: expected i32[3] (length 3), got array of length 4
+```
+
 #### Coercion
 
 When a `Bytes` object (from file I/O or `std.bytes()`) is passed to a `byte[]` parameter, it is automatically coerced to a byte array.  Each byte becomes an element of type `byte`.
