@@ -1,10 +1,10 @@
-/* SHA-256 implemented entirely in NGPL using bitwise operators. */
-/* No std helpers — all logic is pure NGPL with arrays. */
+// SHA-256 implemented entirely in NGPL using bitwise operators.
+// No std helpers — all logic is pure NGPL with arrays.
 
-/* ---------------------------------------------------------------------------
- * Static round constants K[0..63] — initialized once, read-only.
- * Each value fits in a signed 64-bit integer for the interpreter.
- * --------------------------------------------------------------------------- */
+// ---------------------------------------------------------------------------
+// Static round constants K[0..63] — initialized once, read-only.
+// Each value fits in a signed 64-bit integer for the interpreter.
+// ---------------------------------------------------------------------------
 
 let K : u32 = [
     1116352408, 1899447441, 3049323471, 3921009573,
@@ -25,13 +25,13 @@ let K : u32 = [
     2428436474, 2756734187, 3204031479, 3329325298,
 ];
 
-/* ---------------------------------------------------------------------------
- * SHA-256 padding helpers.
- *
- * SHA-256 padding requires a 0x80 byte after the message and a big-endian
- * 64-bit bit-length suffix.  These helpers overlay the padding on reads
- * beyond the original data.
- * --------------------------------------------------------------------------- */
+// ---------------------------------------------------------------------------
+// SHA-256 padding helpers.
+//
+// SHA-256 padding requires a 0x80 byte after the message and a big-endian
+// 64-bit bit-length suffix.  These helpers overlay the padding on reads
+// beyond the original data.
+// ---------------------------------------------------------------------------
 
 fn get_padded_byte(data : byte[], off ¤byte : usize, total_size ¤byte : usize) → u8?:
     if off >= total_size: return ∅
@@ -58,9 +58,9 @@ fn get_padded_word(data : byte[], off ¤byte : usize, total_size ¤byte : usize)
     let b3 : u32 = get_padded_byte(data, off + 3, total_size) ?? 0
     (b0 « 24) | (b1 « 16) | (b2 « 8) | b3
 
-/* ---------------------------------------------------------------------------
- * SHA-256 sigma helpers for message-schedule expansion.
- * --------------------------------------------------------------------------- */
+// ---------------------------------------------------------------------------
+// SHA-256 sigma helpers for message-schedule expansion.
+// ---------------------------------------------------------------------------
 
 fn expand_Σ₀(prev : u32) → u32:
     (prev ↻ 7) ^ (prev ↻ 18) ^ (prev » 3)
@@ -68,78 +68,78 @@ fn expand_Σ₀(prev : u32) → u32:
 fn expand_Σ₁(prev : u32) → u32:
     (prev ↻ 17) ^ (prev ↻ 19) ^ (prev » 10)
 
-/* ---------------------------------------------------------------------------
- * sha256(data) — full SHA-256 implementation in pure NGPL.
- *
- * Uses « » for shifts, ↺ ↻ for rotations, and subscript access for the
- * message schedule W[0..63] and round constants K[t].
- * --------------------------------------------------------------------------- */
+// ---------------------------------------------------------------------------
+// sha256(data) — full SHA-256 implementation in pure NGPL.
+//
+// Uses « » for shifts, ↺ ↻ for rotations, and subscript access for the
+// message schedule W[0..63] and round constants K[t].
+// ---------------------------------------------------------------------------
 
 fn sha256(data : byte[]) → int?:
-    /* Compute padded message length per SHA-256 spec. */
+    // Compute padded message length per SHA-256 spec.
     let rem := data.sizeof % 64
     let pad_len := (119 - rem) % 64
     let total_size := data.sizeof + 1 + pad_len + 8
     static_assert_eq(@unitof(total_size), ¤byte)
 
-    /* Initial hash values per FIPS 180-4 Section 5.3.3. */
+    // Initial hash values per FIPS 180-4 Section 5.3.3.
     let H : mut u32 = [
         1779033703, 3144134277, 1013904242, 2773480762,
         1359893119, 2600822924, 528734635,  1541459225,
     ]
 
-    /* Process each 64-byte block. */
+    // Process each 64-byte block.
     foreach blk_off := 0…64…(total_size - 1):
         static_assert_eq(@unitof(blk_off), ¤byte)
-        /* --- Load W[0..63]: first 16 from data, rest filled by expansion. --- */
+        // --- Load W[0..63]: first 16 from data, rest filled by expansion. ---
         let load_word : mut = λi : usize |data, blk_off, total_size| → u32: get_padded_word(data, blk_off + i * 4 ¤byte, total_size) ?? 0
         let W : mut = generate(load_word, 0…15) ⧺ 48 ⍴ [0]
 
-        /* --- Message-schedule expansion: W[16..63]. --- */
+        // --- Message-schedule expansion: W[16..63]. ---
         foreach j := 16…63:
             W[j] ← @wrap(W[j - 16] + expand_Σ₀(W[j - 15]) +
                          W[j - 7] + expand_Σ₁(W[j - 2]))
 
-        /* --- Working variables: copy of current hash state. --- */
+        // --- Working variables: copy of current hash state. ---
         let v : mut = H[0…7]
 
-        /* --- 64 compression rounds using K[t] and W[t]. --- */
+        // --- 64 compression rounds using K[t] and W[t]. ---
         foreach t := 0…63:
-            /* Σ₁(e) = ROTR(6,e) ⊕ ROTR(11,e) ⊕ ROTR(25,e). */
+            // Σ₁(e) = ROTR(6,e) ⊕ ROTR(11,e) ⊕ ROTR(25,e).
             let Σ₁ := (v[4] ↻ 6) ^ (v[4] ↻ 11) ^ (v[4] ↻ 25)
 
-            /* ch(e,f,g) = (e ∧ f) ⊕ (¬e ∧ g). */
+            // ch(e,f,g) = (e ∧ f) ⊕ (¬e ∧ g).
             let ch := (v[4] & v[5]) ^ (~v[4] & v[6])
 
-            /* t1 = h + Σ₁ + ch + K[t] + W[t]. */
+            // t1 = h + Σ₁ + ch + K[t] + W[t].
             let t1 := @wrap(v[7] + Σ₁ + ch + K[t] + W[t])
 
-            /* Σ₀(a) = ROTR(2,a) ⊕ ROTR(13,a) ⊕ ROTR(22,a). */
+            // Σ₀(a) = ROTR(2,a) ⊕ ROTR(13,a) ⊕ ROTR(22,a).
             let Σ₀ := (v[0] ↻ 2) ^ (v[0] ↻ 13) ^ (v[0] ↻ 22)
 
-            /* maj(a,b,c) = (a ∧ b) ⊕ (a ∧ c) ⊕ (b ∧ c). */
+            // maj(a,b,c) = (a ∧ b) ⊕ (a ∧ c) ⊕ (b ∧ c).
             let maj := (v[0] & v[1]) ^ (v[0] & v[2]) ^ (v[1] & v[2])
 
-            /* t2 = Σ₀ + maj. */
+            // t2 = Σ₀ + maj.
             let t2 := @wrap(Σ₀ + maj)
 
-            /* Shift working variables right by one position. */
+            // Shift working variables right by one position.
             v[1…7] ← v[0…6]
             v[0] ← @wrap(t1 + t2)
             v[4] ← @wrap(v[4] + t1)
 
-        /* --- Add compressed chunk to current hash state. --- */
+        // --- Add compressed chunk to current hash state. ---
         H ← @wrap(H + v)
 
-    /* Pack final hash: H[0]«224 | … | H[7] using left fold. */
+    // Pack final hash: H[0]«224 | … | H[7] using left fold.
     (λacc : int, h : int → int: (acc « 32) | h) ⌿ (H, 0)
 
-/* ---------------------------------------------------------------------------
- * Unit tests — FIPS 180-4 test vectors for SHA-256.
- *
- * @test(sha256) marks these as tests for the sha256 function: they run
- * automatically on the first call to sha256.
- * --------------------------------------------------------------------------- */
+// ---------------------------------------------------------------------------
+// Unit tests — FIPS 180-4 test vectors for SHA-256.
+//
+// @test(sha256) marks these as tests for the sha256 function: they run
+// automatically on the first call to sha256.
+// ---------------------------------------------------------------------------
 
 @test(sha256)
 fn test_sha256_empty() → ∅:

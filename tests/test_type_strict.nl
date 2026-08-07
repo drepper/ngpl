@@ -1,6 +1,6 @@
-/* Type strictness tests: return type checking and mixed-type arithmetic. */
+// Type strictness tests: return type checking and mixed-type arithmetic.
 
-/* --- Return type mismatch: function body vs declared type --- */
+// --- Return type mismatch: function body vs declared type ---
 
 fn returns_float_as_int() → int:
   1.25
@@ -34,7 +34,7 @@ fn returns_int_as_f32() → f32:
 fn test_return_int_for_f32() → ∅:
   returns_int_as_f32()
 
-/* Return type matches: these should succeed. */
+// Return type matches: these should succeed.
 
 fn returns_int_ok() → int:
   42
@@ -65,7 +65,7 @@ fn returns_bool_ok() → bool:
 fn test_return_bool_ok() → ∅:
   assert(returns_bool_ok())
 
-/* Return type check with explicit return statement. */
+// Return type check with explicit return statement.
 
 fn early_return_float_as_int(x: int) → int:
   if x > 0:
@@ -77,7 +77,7 @@ fn early_return_float_as_int(x: int) → int:
 fn test_early_return_mismatch() → ∅:
   early_return_float_as_int(1)
 
-/* Return type check with optional return type. */
+// Return type check with optional return type.
 
 fn returns_float_as_int_opt() → int?:
   1.25
@@ -87,7 +87,7 @@ fn returns_float_as_int_opt() → int?:
 fn test_return_float_for_int_optional() → ∅:
   returns_float_as_int_opt()
 
-/* Optional returning none is fine regardless of inner type. */
+// Optional returning none is fine regardless of inner type.
 
 fn returns_none_for_int_opt() → int?:
   ∅
@@ -97,7 +97,7 @@ fn test_return_none_for_optional() → ∅:
   let r : mut = returns_none_for_int_opt()
   assert_eq(0, r ?? 0)
 
-/* Lambda return type mismatch. */
+// Lambda return type mismatch.
 
 @test
 @expect error "return type is int but body evaluates to float"
@@ -105,14 +105,14 @@ fn test_lambda_return_mismatch() → ∅:
   let f : mut = λx : int → int: 1.5
   f(0)
 
-/* Lambda with correct return type. */
+// Lambda with correct return type.
 
 @test
 fn test_lambda_return_ok() → ∅:
   let f : mut = λx : int → int: x + 1
   assert_eq(6, f(5))
 
-/* Void return type allows anything (value is discarded). */
+// Void return type allows anything (value is discarded).
 
 fn void_return() → ∅:
   42
@@ -121,7 +121,7 @@ fn void_return() → ∅:
 fn test_void_return() → ∅:
   void_return()
 
-/* --- Mixed-type arithmetic rejection --- */
+// --- Mixed-type arithmetic rejection ---
 
 @test
 @expect error "matching types"
@@ -178,14 +178,14 @@ fn test_mod_float_int() → ∅:
 fn test_pow_int_float() → ∅:
   let r : mut = 4 ↑ 0.5
 
-/* float↑int is allowed (needed for units, always well-defined). */
+// float↑int is allowed (needed for units, always well-defined).
 
 @test
 fn test_pow_float_int_ok() → ∅:
   let r : mut = 4.0 ↑ 2
   assert_true(r == 16.0)
 
-/* Same-type arithmetic succeeds. */
+// Same-type arithmetic succeeds.
 
 @test
 fn test_add_int_int() → ∅:
@@ -199,7 +199,7 @@ fn test_add_float_float() → ∅:
 fn test_mul_float_float() → ∅:
   assert_true(6.0 == 2.0 * 3.0)
 
-/* Mixed types through function call: co returns f32, foo adds int + f32. */
+// Mixed types through function call: co returns f32, foo adds int + f32.
 
 fn co() → f32:
   1.25
@@ -212,7 +212,7 @@ fn foo(a : int) → int:
 fn test_mixed_via_call() → ∅:
   foo(1)
 
-/* --- Helpers --- */
+// --- Helpers ---
 
 fn assert_eq(a: int, b: int):
   if a != b:

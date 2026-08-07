@@ -1,6 +1,6 @@
 // test_multidim.nl -- tests for multi-dimensional subscript syntax arr[i, j]
 
-/* ---- 2D read access ----------------------------------------------------- */
+// ---- 2D read access -----------------------------------------------------
 
 @test
 fn test_2d_read() → ∅:
@@ -17,7 +17,7 @@ fn test_2d_read_variable_index() → ∅:
     let c : mut = 2
     assert_eq(m[r, c], 60)
 
-/* ---- 2D write access ---------------------------------------------------- */
+// ---- 2D write access ----------------------------------------------------
 
 @test
 fn test_2d_write() → ∅:
@@ -36,7 +36,7 @@ fn test_2d_write_variable_index() → ∅:
     m[r, c] ← 7
     assert_eq(m[1, 0], 7)
 
-/* ---- 3D access ---------------------------------------------------------- */
+// ---- 3D access ----------------------------------------------------------
 
 @test
 fn test_3d_read() → ∅:
@@ -54,7 +54,7 @@ fn test_3d_write() → ∅:
     assert_eq(a[1, 0, 1], 55)
     assert_eq(a[0, 0, 0], 0)
 
-/* ---- mixed: single subscript on outer, multi on inner ------------------- */
+// ---- mixed: single subscript on outer, multi on inner -------------------
 
 @test
 fn test_single_then_multi() → ∅:
@@ -63,7 +63,7 @@ fn test_single_then_multi() → ∅:
     assert_eq(row[0, 0], 13)
     assert_eq(row[2, 3], 24)
 
-/* ---- equivalence: arr[i, j] == arr[i][j] ------------------------------- */
+// ---- equivalence: arr[i, j] == arr[i][j] -------------------------------
 
 @test
 fn test_equiv_chained() → ∅:
@@ -72,7 +72,7 @@ fn test_equiv_chained() → ∅:
         foreach c := 0…2:
             assert_eq(m[r, c], m[r][c])
 
-/* ---- out-of-bounds ------------------------------------------------------ */
+// ---- out-of-bounds ------------------------------------------------------
 
 @test
 @expect error "out of range"
@@ -92,7 +92,7 @@ fn test_2d_write_oob() → ∅:
     let m : mut = (2, 3) ⍴ 0
     m[0, 3] ← 1
 
-/* ---- non-array inner dimension ------------------------------------------ */
+// ---- non-array inner dimension ------------------------------------------
 
 @test
 @expect error "requires nested arrays"

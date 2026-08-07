@@ -1,4 +1,4 @@
-/* Tests for std.arena allocator. */
+// Tests for std.arena allocator.
 
 @test
 fn test_arena_alloc_and_deinit() → ∅:

@@ -1,8 +1,7 @@
-/* Tests for enum types: definition, access, comparison, @flag enums,
- * bitwise flag operations, std.errors, and invalid operations.
- */
+// Tests for enum types: definition, access, comparison, @flag enums,
+// bitwise flag operations, std.errors, and invalid operations.
 
-/* ---- basic enum definition and member access ----------------------------- */
+// ---- basic enum definition and member access -----------------------------
 
 enum Color:
     red
@@ -29,7 +28,7 @@ fn test_enum_equality() → ∅:
     assert(not (a == c))
     assert(a != c)
 
-/* ---- enum with explicit values ------------------------------------------- */
+// ---- enum with explicit values -------------------------------------------
 
 enum Status:
     ok = 0
@@ -44,7 +43,7 @@ fn test_enum_explicit_values() → ∅:
     assert(Status.error == 20)
     assert(Status.fatal == 30)
 
-/* ---- enum with mixed auto and explicit ----------------------------------- */
+// ---- enum with mixed auto and explicit -----------------------------------
 
 enum Level:
     low
@@ -59,7 +58,7 @@ fn test_enum_mixed_values() → ∅:
     assert(Level.high == 10)
     assert(Level.critical == 11)
 
-/* ---- enum with underlying type ------------------------------------------- */
+// ---- enum with underlying type -------------------------------------------
 
 enum SmallEnum : u8:
     a
@@ -72,7 +71,7 @@ fn test_enum_underlying_type() → ∅:
     assert(x == 0)
     assert(x == SmallEnum.a)
 
-/* ---- @flag enum: powers of two ------------------------------------------- */
+// ---- @flag enum: powers of two -------------------------------------------
 
 @flag
 enum Perms:
@@ -126,7 +125,7 @@ fn test_flag_and_test_membership() → ∅:
     assert(has_read)
     assert(not has_exec)
 
-/* ---- @flag enum with explicit values ------------------------------------- */
+// ---- @flag enum with explicit values -------------------------------------
 
 @flag
 enum Flags:
@@ -142,7 +141,7 @@ fn test_flag_explicit_and_auto() → ∅:
     assert(Flags.c == 8)
     assert(Flags.d == 16)
 
-/* ---- @flag enum with explicit zero (no auto nil) ------------------------- */
+// ---- @flag enum with explicit zero (no auto nil) -------------------------
 
 @flag
 enum Mode:
@@ -155,7 +154,7 @@ fn test_flag_explicit_zero_no_nil() → ∅:
     assert(Mode.off == 0)
     assert(Mode.read == 1)
 
-/* ---- std.errors enum ----------------------------------------------------- */
+// ---- std.errors enum -----------------------------------------------------
 
 @test
 fn test_std_errors_runtime() → ∅:
@@ -177,17 +176,17 @@ fn test_std_errors_library() → ∅:
 
 @test
 fn test_std_errors_grouping() → ∅:
-    /* Runtime errors are in 100-199 */
+    // Runtime errors are in 100-199
     let div : mut = std.errors.division_by_zero
     assert(div == 100 ∧ 100 <= 199)
-    /* Compile errors are in 200-299 */
+    // Compile errors are in 200-299
     let typ : mut = std.errors.type_mismatch
     assert(typ == 200 ∧ 200 <= 299)
-    /* Library errors are in 300-399 */
+    // Library errors are in 300-399
     let fnf : mut = std.errors.file_not_found
     assert(fnf == 300 ∧ 300 <= 399)
 
-/* ---- invalid operations on non-flag enums -------------------------------- */
+// ---- invalid operations on non-flag enums --------------------------------
 
 @expect error "bitwise operations require @flag enum"
 fn error_bitor_non_flag() → ∅:
@@ -212,7 +211,7 @@ fn error_bitnot_non_flag() → ∅:
     let a : mut = Color.red
     let b : mut = ~a
 
-/* ---- cross-enum comparison error ----------------------------------------- */
+// ---- cross-enum comparison error -----------------------------------------
 
 @expect error "cannot compare enum"
 fn error_cross_enum_compare() → ∅:

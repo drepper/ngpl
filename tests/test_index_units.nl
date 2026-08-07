@@ -1,13 +1,12 @@
-/* Tests for array index unit requirements.
- *
- * Untyped integer constants (literals) are accepted without unit annotation.
- * Typed integers (i32, u32, u32fast, etc.) require the correct unit:
- *   - byte (B)      for u8[] / byte[] arrays
- *   - ptrdiff        for all other arrays
- * Wrong units are always rejected.
- */
+// Tests for array index unit requirements.
+//
+// Untyped integer constants (literals) are accepted without unit annotation.
+// Typed integers (i32, u32, u32fast, etc.) require the correct unit:
+//   - byte (B)      for u8[] / byte[] arrays
+//   - ptrdiff        for all other arrays
+// Wrong units are always rejected.
 
-/* ---- untyped integer constants need no annotation ------------------------ */
+// ---- untyped integer constants need no annotation ------------------------
 
 @test
 fn test_read_bare_literal() → ∅:
@@ -49,7 +48,7 @@ fn test_slice_assign_bare_literal() → ∅:
     assert_eq(arr[1], 88)
     assert_eq(arr[2], 99)
 
-/* ---- sizeof-derived indices carry correct unit automatically ------------- */
+// ---- sizeof-derived indices carry correct unit automatically -------------
 
 @test
 fn test_sizeof_derived_index() → ∅:
@@ -73,7 +72,7 @@ fn test_byte_sizeof_index() → ∅:
     let last : mut = buf[buf.sizeof - 1]
     assert_eq(last, 5)
 
-/* ---- typed integers without unit rejected (indexing) --------------------- */
+// ---- typed integers without unit rejected (indexing) ---------------------
 
 @test
 @expect error "requires unit ptrdiff"
@@ -124,7 +123,7 @@ fn test_reject_foreach_typed_index() → ∅:
     foreach i : i32 = 0…2:
         let x : mut = arr[i]
 
-/* ---- typed integers without unit rejected (parameter passing) ------------ */
+// ---- typed integers without unit rejected (parameter passing) ------------
 
 fn needs_ptrdiff(arr : i32[], idx ¤ptrdiff : i32) → i32:
     arr[idx]
@@ -171,7 +170,7 @@ fn test_accept_unit_value_param() → ∅:
     let idx ¤ptrdiff : mut i32 = 1
     assert_eq(needs_ptrdiff(arr, idx), 20)
 
-/* ---- typed integers with correct unit accepted --------------------------- */
+// ---- typed integers with correct unit accepted ---------------------------
 
 @test
 fn test_typed_with_ptrdiff() → ∅:
@@ -186,7 +185,7 @@ fn test_typed_with_byte() → ∅:
     let idx ¤byte : mut i32 = 2
     assert_eq(buf[idx], 30)
 
-/* ---- wrong unit rejected ------------------------------------------------ */
+// ---- wrong unit rejected ------------------------------------------------
 
 @test
 @expect error "requires unit ptrdiff"
@@ -206,7 +205,7 @@ fn test_reject_meter_for_general() → ∅:
     let arr : mut = [1, 2, 3]
     let x : mut = arr[0 ¤meter]
 
-/* ---- arithmetic unit enforcement ---------------------------------------- */
+// ---- arithmetic unit enforcement ----------------------------------------
 
 // addition: typed int + unit → error
 @test
@@ -290,7 +289,7 @@ fn test_cmp_unit_lt_const() → ∅:
     let a ¤ptrdiff : mut i32 = 1
     assert_eq(a < 5, true)
 
-/* ---- tuple indexing unchanged (no unit needed) -------------------------- */
+// ---- tuple indexing unchanged (no unit needed) --------------------------
 
 @test
 fn test_tuple_bare_int() → ∅:

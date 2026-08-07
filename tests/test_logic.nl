@@ -1,11 +1,10 @@
-/* Tests for binary logic operations: ∧ ∨ ⊕ ⊼ ⊽ ¬
- *
- * These operate on logical truth values.  For bool operands the value
- * is used directly; for integers a nonzero test is applied first.
- * All results are bool (true/false).
- */
+// Tests for binary logic operations: ∧ ∨ ⊕ ⊼ ⊽ ¬
+//
+// These operate on logical truth values.  For bool operands the value
+// is used directly; for integers a nonzero test is applied first.
+// All results are bool (true/false).
 
-/* ---- ∧ (logic AND) ------------------------------------------------------ */
+// ---- ∧ (logic AND) ------------------------------------------------------
 
 @test
 fn test_and_true_true() → ∅:
@@ -23,7 +22,7 @@ fn test_and_false_true() → ∅:
 fn test_and_false_false() → ∅:
     assert(not (false ∧ false))
 
-/* ---- ∨ (logic OR) ------------------------------------------------------- */
+// ---- ∨ (logic OR) -------------------------------------------------------
 
 @test
 fn test_or_true_false() → ∅:
@@ -37,7 +36,7 @@ fn test_or_false_false() → ∅:
 fn test_or_false_true() → ∅:
     assert(false ∨ true)
 
-/* ---- ⊕ (logic XOR) ----------------------------------------------------- */
+// ---- ⊕ (logic XOR) -----------------------------------------------------
 
 @test
 fn test_xor_true_true() → ∅:
@@ -51,7 +50,7 @@ fn test_xor_true_false() → ∅:
 fn test_xor_false_false() → ∅:
     assert(not (false ⊕ false))
 
-/* ---- ⊼ (logic NAND) ---------------------------------------------------- */
+// ---- ⊼ (logic NAND) ----------------------------------------------------
 
 @test
 fn test_nand_true_true() → ∅:
@@ -65,7 +64,7 @@ fn test_nand_true_false() → ∅:
 fn test_nand_false_false() → ∅:
     assert(false ⊼ false)
 
-/* ---- ⊽ (logic NOR) ----------------------------------------------------- */
+// ---- ⊽ (logic NOR) -----------------------------------------------------
 
 @test
 fn test_nor_false_false() → ∅:
@@ -79,7 +78,7 @@ fn test_nor_true_false() → ∅:
 fn test_nor_true_true() → ∅:
     assert(not (true ⊽ true))
 
-/* ---- ¬ (logic NOT) ------------------------------------------------------ */
+// ---- ¬ (logic NOT) ------------------------------------------------------
 
 @test
 fn test_not_true() → ∅:
@@ -89,7 +88,7 @@ fn test_not_true() → ∅:
 fn test_not_false() → ∅:
     assert(¬false)
 
-/* ---- integer operands: nonzero test ------------------------------------- */
+// ---- integer operands: nonzero test -------------------------------------
 
 @test
 fn test_and_int_nonzero() → ∅:
@@ -147,7 +146,7 @@ fn test_nor_int() → ∅:
     let c : mut i32 = 1
     assert(not (a ⊽ c))
 
-/* ---- unsigned integer operands ------------------------------------------ */
+// ---- unsigned integer operands ------------------------------------------
 
 @test
 fn test_and_u8() → ∅:
@@ -156,25 +155,25 @@ fn test_and_u8() → ∅:
     assert(not (a ∧ b))
     assert(a ∧ a)
 
-/* ---- precedence: ∧ binds tighter than ∨ -------------------------------- */
+// ---- precedence: ∧ binds tighter than ∨ --------------------------------
 
 @test
 fn test_precedence_and_or() → ∅:
-    /* false ∨ true ∧ true  =  false ∨ (true ∧ true)  =  true */
+    // false ∨ true ∧ true  =  false ∨ (true ∧ true)  =  true
     assert(false ∨ true ∧ true)
-    /* true ∧ false ∨ true  =  (true ∧ false) ∨ true  =  true */
+    // true ∧ false ∨ true  =  (true ∧ false) ∨ true  =  true
     assert(true ∧ false ∨ true)
-    /* true ∧ false ∨ false  =  (true ∧ false) ∨ false  =  false */
+    // true ∧ false ∨ false  =  (true ∧ false) ∨ false  =  false
     assert(not (true ∧ false ∨ false))
 
-/* ---- precedence: ⊕ is between ∧ and ∨ ---------------------------------- */
+// ---- precedence: ⊕ is between ∧ and ∨ ----------------------------------
 
 @test
 fn test_precedence_xor() → ∅:
-    /* true ∧ true ⊕ true ∧ true  =  (true ∧ true) ⊕ (true ∧ true)  =  false */
+    // true ∧ true ⊕ true ∧ true  =  (true ∧ true) ⊕ (true ∧ true)  =  false
     assert(not (true ∧ true ⊕ true ∧ true))
 
-/* ---- element-wise on arrays --------------------------------------------- */
+// ---- element-wise on arrays ---------------------------------------------
 
 @test
 fn test_and_array() → ∅:
@@ -209,15 +208,15 @@ fn test_xor_array() → ∅:
     assert(not r[1])
     assert(r[2])
 
-/* ---- logic ops combined with comparison --------------------------------- */
+// ---- logic ops combined with comparison ---------------------------------
 
 @test
 fn test_logic_with_comparison() → ∅:
     let x : mut i32 = 10
     let y : mut i32 = 20
-    /* (x < y) ∧ (y > 0)  =  true ∧ true  =  true */
+    // (x < y) ∧ (y > 0)  =  true ∧ true  =  true
     assert(x < y ∧ y > 0)
-    /* (x > y) ∨ (y == 20)  =  false ∨ true  =  true */
+    // (x > y) ∨ (y == 20)  =  false ∨ true  =  true
     assert(x > y ∨ y == 20)
 
 @start

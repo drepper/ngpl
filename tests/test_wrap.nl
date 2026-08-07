@@ -1,11 +1,10 @@
-/* Tests for @wrap annotation — explicit wrapping arithmetic.
- *
- * @wrap(expr) enables modular arithmetic for all operations within
- * the wrapped expression, even for signed types that normally abort
- * on overflow.
- */
+// Tests for @wrap annotation — explicit wrapping arithmetic.
+//
+// @wrap(expr) enables modular arithmetic for all operations within
+// the wrapped expression, even for signed types that normally abort
+// on overflow.
 
-/* ---- @wrap on signed types: wraps instead of aborting -------------------- */
+// ---- @wrap on signed types: wraps instead of aborting --------------------
 
 @test
 fn test_wrap_i8_add() → ∅:
@@ -41,7 +40,7 @@ fn test_wrap_i32_negate() → ∅:
     let z : mut = @wrap(⁻x)
     assert_eq(z, ⁻2147483648)
 
-/* ---- @wrap on unsigned types: still wraps as expected -------------------- */
+// ---- @wrap on unsigned types: still wraps as expected --------------------
 
 @test
 fn test_wrap_u32_add() → ∅:
@@ -50,17 +49,17 @@ fn test_wrap_u32_add() → ∅:
     let z : mut = @wrap(x + y)
     assert_eq(z, 1)
 
-/* ---- @wrap does not affect operations outside its scope ----------------- */
+// ---- @wrap does not affect operations outside its scope -----------------
 
 @expect error "integer overflow"
 fn error_no_wrap_i8() → ∅:
     let x : mut i8 = 127
     let y : mut i8 = 1
-    /* @wrap only on the subtraction, not the addition */
+    // @wrap only on the subtraction, not the addition
     let dummy : mut = @wrap(x - y)
     let z : mut = x + y
 
-/* ---- @wrap with complex expressions ------------------------------------- */
+// ---- @wrap with complex expressions -------------------------------------
 
 @test
 fn test_wrap_chained_add() → ∅:

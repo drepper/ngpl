@@ -1,10 +1,9 @@
-/* Tests for integer overflow/underflow detection.
- *
- * Unsigned types wrap silently (modular arithmetic).
- * Signed types and untyped-to-signed coercion raise OverflowError.
- */
+// Tests for integer overflow/underflow detection.
+//
+// Unsigned types wrap silently (modular arithmetic).
+// Signed types and untyped-to-signed coercion raise OverflowError.
 
-/* ---- static: assignment overflow ----------------------------------------- */
+// ---- static: assignment overflow -----------------------------------------
 
 @expect error "integer overflow.*does not fit in i8"
 fn error_i8_too_large() → ∅:
@@ -26,7 +25,7 @@ fn error_i32_too_large() → ∅:
 fn error_i64_too_large() → ∅:
     let x : mut i64 = 9223372036854775808
 
-/* ---- static: unsigned assignment wraps ----------------------------------- */
+// ---- static: unsigned assignment wraps -----------------------------------
 
 @test
 fn test_u8_wraps_on_assign() → ∅:
@@ -43,7 +42,7 @@ fn test_u32_wraps_on_assign() → ∅:
     let x : mut u32 = 4294967296
     assert_eq(x, 0)
 
-/* ---- dynamic: signed arithmetic overflow --------------------------------- */
+// ---- dynamic: signed arithmetic overflow ---------------------------------
 
 @expect error "integer overflow"
 fn error_i8_add_overflow() → ∅:
@@ -74,7 +73,7 @@ fn error_i32_negate_min() → ∅:
     let x : mut i32 = ⁻2147483648
     let z : mut = ⁻x
 
-/* ---- dynamic: unsigned arithmetic wraps ---------------------------------- */
+// ---- dynamic: unsigned arithmetic wraps ----------------------------------
 
 @test
 fn test_u8_add_wraps() → ∅:
@@ -104,7 +103,7 @@ fn test_u32_mul_wraps() → ∅:
     let z : mut = x * y
     assert_eq(z, 0)
 
-/* ---- boundary values: signed types --------------------------------------- */
+// ---- boundary values: signed types ---------------------------------------
 
 @test
 fn test_i8_max() → ∅:
@@ -126,7 +125,7 @@ fn test_i32_min() → ∅:
     let x : mut i32 = ⁻2147483648
     assert_eq(x, ⁻2147483648)
 
-/* ---- bitwise ops always wrap (not overflow) ------------------------------ */
+// ---- bitwise ops always wrap (not overflow) ------------------------------
 
 @test
 fn test_bitwise_not_i8() → ∅:

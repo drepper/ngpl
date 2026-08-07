@@ -1,16 +1,15 @@
-/* Error and warning detection tests using @expect annotations.
- *
- * Function-level @expect: the interpreter tries to parse and evaluate
- * the function; produced diagnostics are matched against expectations.
- *
- * Statement-level @expect: the annotation appears before a statement
- * inside a function body; diagnostics from that single statement are
- * captured and matched.
- */
+// Error and warning detection tests using @expect annotations.
+//
+// Function-level @expect: the interpreter tries to parse and evaluate
+// the function; produced diagnostics are matched against expectations.
+//
+// Statement-level @expect: the annotation appears before a statement
+// inside a function body; diagnostics from that single statement are
+// captured and matched.
 
 let GLOBAL_C := 42
 
-/* --- let immutability --------------------------------------------------- */
+// --- let immutability ---------------------------------------------------
 
 @expect error "cannot assign to let variable 'x'"
 fn error_const_assign() → ∅:
@@ -26,15 +25,15 @@ fn error_const_redef() → ∅:
 fn error_global_const_assign() → ∅:
     GLOBAL_C ← 999
 
-/* --- foreach immutability ------------------------------------------------- */
+// --- foreach immutability -------------------------------------------------
 
 @expect error "cannot assign to foreach variable 'i'"
 fn error_foreach_assign() → ∅:
     foreach i := 1…3:
         i ← i + 1
 
-/* foreach variable redefinition is a warning, not an error.
- * The new variable shadows the loop variable after the redefinition. */
+// foreach variable redefinition is a warning, not an error.
+// The new variable shadows the loop variable after the redefinition.
 @test
 fn warn_foreach_redef() → ∅:
     let total : mut = 0
@@ -44,51 +43,51 @@ fn warn_foreach_redef() → ∅:
         total ← total + i
     assert_eq(total, 297)
 
-/* foreach without type requires := not = */
+// foreach without type requires := not =
 @expect error "requires ':='"
 fn error_foreach_bare_eq() → ∅:
     foreach i = 1…3:
         std.print(i)
 
-/* let without type requires := not = */
+// let without type requires := not =
 @expect error "requires ':='"
 fn error_let_bare_eq() → ∅:
     let x = 42
 
-/* --- fast type restrictions ----------------------------------------------- */
+// --- fast type restrictions -----------------------------------------------
 
 @expect error "fast type.*cannot be used as array element"
 fn error_fast_array() → ∅:
     let arr : mut u8fast[10] = 0
     std.print(arr[0])
 
-/* --- type mismatch -------------------------------------------------------- */
+// --- type mismatch --------------------------------------------------------
 
 @expect error "assert_eq failed"
 fn error_assert_mismatch() → ∅:
     assert_eq(1, 2)
 
-/* --- division by zero ----------------------------------------------------- */
+// --- division by zero -----------------------------------------------------
 
 @expect error "expected error.*division_by_zero"
 fn error_div_zero() → ∅:
     let x : mut = 10 / 0
     let y : mut = x + 1
 
-/* --- parse errors --------------------------------------------------------- */
+// --- parse errors ---------------------------------------------------------
 
 @expect error "unexpected token: 'fn'"
 fn error_nested_fn() → ∅:
     fn inner() → ∅:
         std.print("bad")
 
-/* --- unknown types -------------------------------------------------------- */
+// --- unknown types --------------------------------------------------------
 
 @expect error "unknown type 'i1'"
 fn error_unknown_type_var() → ∅:
     let x : mut i1 = 0
 
-/* --- call-by-reference errors ---------------------------------------------- */
+// --- call-by-reference errors ----------------------------------------------
 
 fn takes_ref(x : &i32[]) → ∅:
     x[0] = 1
@@ -106,7 +105,7 @@ fn error_val_with_ampersand() → ∅:
     let a : mut i32[] = [1, 2, 3]
     takes_val(&a)
 
-/* --- immutable parameter errors -------------------------------------------- */
+// --- immutable parameter errors --------------------------------------------
 
 fn try_assign_param(x : i32) → ∅:
     x ← 99
@@ -116,7 +115,7 @@ fn error_param_immutable() → ∅:
     @expect error "cannot assign to let variable 'x'"
     try_assign_param(42)
 
-/* --- fixed-size array parameter mismatch ----------------------------------- */
+// --- fixed-size array parameter mismatch -----------------------------------
 
 fn needs_three(arr : i32[3]) → i32:
     arr[0]

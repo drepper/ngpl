@@ -7,7 +7,7 @@ fn test_fast_local() → ∅:
 
 @test
 fn test_fast_wrapping() → ∅:
-    /* u8fast is 32-bit on x86_64, so 255 + 1 = 256, not 0. */
+    // u8fast is 32-bit on x86_64, so 255 + 1 = 256, not 0.
     let x : mut u8fast = 255
     x ← x + 1
     assert_eq(x, 256)
@@ -15,7 +15,7 @@ fn test_fast_wrapping() → ∅:
 @test
 fn test_fast_signed() → ∅:
     let x : mut i8fast = ⁻1
-    /* i8fast is 32-bit signed, so ⁻1 stays ⁻1 (no 8-bit wrapping). */
+    // i8fast is 32-bit signed, so ⁻1 stays ⁻1 (no 8-bit wrapping).
     assert_eq(x, ⁻1)
 
 @start

@@ -1,25 +1,25 @@
-/* Tests for generic functions. */
+// Tests for generic functions.
 
-/* Identity function: return type follows parameter type. */
+// Identity function: return type follows parameter type.
 fn identity(x : T') → T':
     x
 
-/* Both parameters must have the same type. */
+// Both parameters must have the same type.
 fn add_g(a : T', b : T') → T':
     a + b
 
-/* Different generic names allow different argument types. */
+// Different generic names allow different argument types.
 fn pick_first(a : T', b : U') → T':
     a
 
 fn pick_second(a : T', b : U') → U':
     b
 
-/* Generic used only in parameters, concrete return type. */
+// Generic used only in parameters, concrete return type.
 fn to_bool(x : T') → bool:
     x != 0
 
-/* ------------------------------------------------------------------ */
+// ------------------------------------------------------------------
 
 @test
 fn test_identity_int() → ∅:
@@ -73,7 +73,7 @@ fn test_generic_curry() → ∅:
     let add10 : mut = add_g(10)
     assert_eq(add10(20), 30)
 
-/* --- local variables with generic types --------------------------------- */
+// --- local variables with generic types ---------------------------------
 
 fn double_typed(x : T') → T':
     let result : T' = x + x
@@ -85,7 +85,7 @@ fn test_local_var_generic_type() → ∅:
     let a : mut i32 = 5
     assert_eq(double_typed(a), 10)
 
-/* Multiple generic type parameters in local vars. */
+// Multiple generic type parameters in local vars.
 fn swap_add(a : T', b : U') → T':
     let first : T' = a
     let second : U' = b
@@ -95,7 +95,7 @@ fn swap_add(a : T', b : U') → T':
 fn test_local_var_multi_generic() → ∅:
     assert_eq(swap_add(10, 20), 20)
 
-/* Generic array element type in local var. */
+// Generic array element type in local var.
 fn first_elem(arr : T'[]) → T':
     let elem : T' = arr[0]
     elem
@@ -105,7 +105,7 @@ fn test_local_var_generic_array() → ∅:
     let a : mut i32[] = [7, 8, 9]
     assert_eq(first_elem(a), 7)
 
-/* --- local type aliases with generic types ------------------------------ */
+// --- local type aliases with generic types ------------------------------
 
 fn add_aliased(a : T', b : T') → T':
     type Local = T'
@@ -120,7 +120,7 @@ fn test_local_type_alias_generic() → ∅:
     let b : mut u32 = 200
     assert_eq(add_aliased(a, b), 300)
 
-/* Local type alias for generic array type. */
+// Local type alias for generic array type.
 fn sum_aliased(arr : T'[]) → T':
     type Elem = T'
     let total : mut Elem = 0

@@ -1,6 +1,6 @@
-/* Test foreach loop: ranges, wrapping, tuples, constants. */
+// Test foreach loop: ranges, wrapping, tuples, constants.
 
-/* Simple range iteration. */
+// Simple range iteration.
 @test
 fn test_foreach_range() → ∅:
     let sum : mut = 0
@@ -8,7 +8,7 @@ fn test_foreach_range() → ∅:
         sum ← sum + i
     assert_eq(sum, 55)
 
-/* Descending range. */
+// Descending range.
 @test
 fn test_foreach_desc() → ∅:
     let result : mut = 0
@@ -16,7 +16,7 @@ fn test_foreach_desc() → ∅:
         result ← result * 10 + i
     assert_eq(result, 54321)
 
-/* Typed loop variable. */
+// Typed loop variable.
 @test
 fn test_foreach_typed() → ∅:
     let total : mut u32 = 0
@@ -24,7 +24,7 @@ fn test_foreach_typed() → ∅:
         total ← total + k
     assert_eq(total, 6)
 
-/* Two variables, two ranges — wrapping shorter range. */
+// Two variables, two ranges — wrapping shorter range.
 @test
 fn test_foreach_wrap() → ∅:
     let sum_i : mut = 0
@@ -32,12 +32,12 @@ fn test_foreach_wrap() → ∅:
     foreach i, j := 1…6, 10…12:
         sum_i ← sum_i + i
         sum_j ← sum_j + j
-    /* i: 1,2,3,4,5,6                         → 21 */
-    /* j: 10,11,12,10,11,12 (wraps around)    → 66 */
+    // i: 1,2,3,4,5,6                         → 21
+    // j: 10,11,12,10,11,12 (wraps around)    → 66
     assert_eq(sum_i, 21)
     assert_eq(sum_j, 66)
 
-/* Single variable with multiple ranges → tuple. */
+// Single variable with multiple ranges → tuple.
 @test
 fn test_foreach_tuple() → ∅:
     let sum_first : mut = 0
@@ -48,16 +48,16 @@ fn test_foreach_tuple() → ∅:
     assert_eq(sum_first, 6)
     assert_eq(sum_second, 33)
 
-/* Tuple with wrapping: ranges of different lengths. */
+// Tuple with wrapping: ranges of different lengths.
 @test
 fn test_foreach_tuple_wrap() → ∅:
     let count : mut = 0
     foreach t := 1…2, 10…13:
         count ← count + 1
-    /* Longest range has 4 elements, loop runs 4 times. */
+    // Longest range has 4 elements, loop runs 4 times.
     assert_eq(count, 4)
 
-/* Foreach with brace block. */
+// Foreach with brace block.
 @test
 fn test_foreach_brace() → ∅:
     let sum : mut = 0
@@ -66,7 +66,7 @@ fn test_foreach_brace() → ∅:
     }
     assert_eq(sum, 15)
 
-/* Accumulate array elements using foreach. */
+// Accumulate array elements using foreach.
 @test
 fn test_foreach_array() → ∅:
     let data : mut = [10, 20, 30, 40]

@@ -1,6 +1,6 @@
-/* Tests for std.format(allocator, fmt_str, args…). */
+// Tests for std.format(allocator, fmt_str, args…).
 
-/* --- Basic substitution ------------------------------------------- */
+// --- Basic substitution -------------------------------------------
 
 @test
 fn test_format_no_args() → ∅:
@@ -32,7 +32,7 @@ fn test_format_bool_arg() → ∅:
     assert_eq(std.format(alloc, "{} and {}", true, false), "true and false")
     alloc.deinit()
 
-/* --- Format specifiers -------------------------------------------- */
+// --- Format specifiers --------------------------------------------
 
 @test
 fn test_format_hex() → ∅:
@@ -59,7 +59,7 @@ fn test_format_char() → ∅:
     assert_eq(std.format(alloc, "{:c}", 65), "A")
     alloc.deinit()
 
-/* --- Arrays ------------------------------------------------------- */
+// --- Arrays -------------------------------------------------------
 
 @test
 fn test_format_array() → ∅:
@@ -71,11 +71,11 @@ fn test_format_array() → ∅:
 fn test_format_empty_array() → ∅:
     let alloc : mut = std.arena.allocator()
     let arr : mut = [1]
-    /* slice to empty not available; test single-element */
+    // slice to empty not available; test single-element
     assert_eq(std.format(alloc, "{}", [42]), "[42]")
     alloc.deinit()
 
-/* --- Escaping ----------------------------------------------------- */
+// --- Escaping -----------------------------------------------------
 
 @test
 fn test_format_literal_braces() → ∅:
@@ -89,7 +89,7 @@ fn test_format_mixed_literal_and_arg() → ∅:
     assert_eq(std.format(alloc, "{{{}}} = {}", "x", 1), "{x} = 1")
     alloc.deinit()
 
-/* --- Error cases -------------------------------------------------- */
+// --- Error cases --------------------------------------------------
 
 @test
 @expect error "not enough arguments"

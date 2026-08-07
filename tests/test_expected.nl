@@ -1,9 +1,8 @@
-/* Tests for expected (result) types: T?E syntax, division returning
- * expected values, ? propagation, ?? recovery, and comparison with
- * optional (T?) types.
- */
+// Tests for expected (result) types: T?E syntax, division returning
+// expected values, ? propagation, ?? recovery, and comparison with
+// optional (T?) types.
 
-/* ---- postfix optional syntax (T?) ---------------------------------------- */
+// ---- postfix optional syntax (T?) ----------------------------------------
 
 fn opt_double(x : int?) → int?:
     let v : mut = x?
@@ -19,7 +18,7 @@ fn test_optional_postfix_none() → ∅:
     let r : mut = opt_double(∅)
     assert_eq(r ?? ⁻1, ⁻1)
 
-/* ---- division returns expected value ------------------------------------- */
+// ---- division returns expected value -------------------------------------
 
 @test
 fn test_div_success_unwrap() → ∅:
@@ -45,7 +44,7 @@ fn test_mod_zero_recovery() → ∅:
     let v : mut = x ?? ⁻1
     assert_eq(v, ⁻1)
 
-/* ---- ? propagation for expected values ----------------------------------- */
+// ---- ? propagation for expected values -----------------------------------
 
 fn safe_div(a : int, b : int) → int?std.errors:
     (a / b)?
@@ -60,7 +59,7 @@ fn test_expected_propagate_err() → ∅:
     let r : mut = safe_div(10, 0)
     assert_eq(r ?? ⁻1, ⁻1)
 
-/* ---- chained division with ?? -------------------------------------------- */
+// ---- chained division with ?? --------------------------------------------
 
 @test
 fn test_div_chain_recovery() → ∅:
@@ -74,7 +73,7 @@ fn test_div_chain_zero() → ∅:
     let b : mut = (a / 2) ?? 0
     assert_eq(b, 0)
 
-/* ---- expected error is std.errors value ---------------------------------- */
+// ---- expected error is std.errors value ----------------------------------
 
 fn div_or_err(a : int, b : int) → int?std.errors:
     (a / b)?
@@ -85,7 +84,7 @@ fn test_expected_err_is_std_errors() → ∅:
     let fallback : mut = r ?? ⁻1
     assert_eq(fallback, ⁻1)
 
-/* ---- using unwrapped expected in arithmetic ------------------------------ */
+// ---- using unwrapped expected in arithmetic ------------------------------
 
 @test
 fn test_unwrapped_expected_arithmetic() → ∅:
@@ -93,7 +92,7 @@ fn test_unwrapped_expected_arithmetic() → ∅:
     let y : mut = x + 10
     assert_eq(y, 15)
 
-/* ---- T! abbreviation for T?std.errors ------------------------------------ */
+// ---- T! abbreviation for T?std.errors ------------------------------------
 
 fn bang_div(a : int, b : int) → int!:
     (a / b)?
@@ -121,7 +120,7 @@ fn test_bang_param_err() → ∅:
     let v : mut = 10 / 0
     assert_eq(bang_param(v), 0)
 
-/* ---- error on unwrap of expected error ----------------------------------- */
+// ---- error on unwrap of expected error -----------------------------------
 
 @expect error "expected error"
 fn error_unwrap_expected() → ∅:
