@@ -73,6 +73,66 @@ fn test_generic_curry() → ∅:
     let add10 : mut = add_g(10)
     assert_eq(add10(20), 30)
 
+/* --- local variables with generic types --------------------------------- */
+
+fn double_typed(x : T') → T':
+    let result : T' = x + x
+    result
+
+@test
+fn test_local_var_generic_type() → ∅:
+    assert_eq(double_typed(21), 42)
+    let a : mut i32 = 5
+    assert_eq(double_typed(a), 10)
+
+/* Multiple generic type parameters in local vars. */
+fn swap_add(a : T', b : U') → T':
+    let first : T' = a
+    let second : U' = b
+    first + first
+
+@test
+fn test_local_var_multi_generic() → ∅:
+    assert_eq(swap_add(10, 20), 20)
+
+/* Generic array element type in local var. */
+fn first_elem(arr : T'[]) → T':
+    let elem : T' = arr[0]
+    elem
+
+@test
+fn test_local_var_generic_array() → ∅:
+    let a : mut i32[] = [7, 8, 9]
+    assert_eq(first_elem(a), 7)
+
+/* --- local type aliases with generic types ------------------------------ */
+
+fn add_aliased(a : T', b : T') → T':
+    type Local = T'
+    let x : Local = a
+    let y : Local = b
+    x + y
+
+@test
+fn test_local_type_alias_generic() → ∅:
+    assert_eq(add_aliased(3, 4), 7)
+    let a : mut u32 = 100
+    let b : mut u32 = 200
+    assert_eq(add_aliased(a, b), 300)
+
+/* Local type alias for generic array type. */
+fn sum_aliased(arr : T'[]) → T':
+    type Elem = T'
+    let total : mut Elem = 0
+    foreach i := 0…(arr.sizeof - 1):
+        total ← total + arr[i]
+    total
+
+@test
+fn test_local_type_alias_generic_array() → ∅:
+    let a : mut i32[] = [10, 20, 30]
+    assert_eq(sum_aliased(a), 60)
+
 @start
 fn main() → ∅:
     std.print("generic tests passed")

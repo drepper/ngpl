@@ -23,7 +23,7 @@ from interp.ast import (
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr,
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
-    UnitExpr, UnitOfExpr, UnitRefExpr, RefExpr,
+    UnitExpr, UnitOfExpr, UnitRefExpr, RefExpr, TypeDef,
 )
 from interp.value import (
     Value, IntValue, FloatValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
@@ -34,7 +34,7 @@ from interp.value import (
     _TYPE_BITS, FLOAT_TYPES, FAST_TYPES,
     _split_optional_type, MAX_TENSOR_RANK,
     is_generic_type, runtime_type_of,
-    UnitValue, RefValue, deep_copy_value,
+    UnitValue, RefValue, deep_copy_value, register_type_alias,
 )
 from interp.env import Env
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
@@ -499,6 +499,7 @@ class Evaluator:
         self._wrapping: bool = False
         self._catch_depth: int = 0
         self._pure_func_name: str | None = None
+        self._generic_map: dict[str, str] = {}
         self._last_pos: tuple[int, int, int | None] | None = None
         # Pre-compute builtin function mappings (avoid repeated lookups).
         self._ops = {
@@ -1835,7 +1836,10 @@ class Evaluator:
                         f"cannot redefine {kind} variable '{stmt.name}'")
             value = self.eval_expr(stmt.init_expr)
             if stmt.type_annotation is not None:
-                value = coerce_to_type(value, stmt.type_annotation)
+                ann = stmt.type_annotation
+                if self._generic_map and is_generic_type(ann):
+                    ann = _substitute_generics(ann, self._generic_map)
+                value = coerce_to_type(value, ann)
             if stmt.unit_spec is not None:
                 from interp.units import eval_unit_formula
                 unit = eval_unit_formula(stmt.unit_spec)
@@ -1846,6 +1850,13 @@ class Evaluator:
             self.env.define(stmt.name, value)
             if stmt.is_const:
                 self._frozen_vars[stmt.name] = "let"
+            return none()
+
+        if isinstance(stmt, TypeDef):
+            target = stmt.target
+            if self._generic_map and is_generic_type(target):
+                target = _substitute_generics(target, self._generic_map)
+            register_type_alias(stmt.name, target)
             return none()
 
         if isinstance(stmt, ExprStmt):
@@ -2563,8 +2574,8 @@ class Evaluator:
             pt is not None and is_generic_type(pt) for _, pt in all_typed_params
         ) or (func.ret_type is not None and is_generic_type(func.ret_type))
 
+        generic_map: dict[str, str] = {}
         if has_generics:
-            generic_map: dict[str, str] = {}
             for (pname, ptype), arg in zip(func.params, regular_args):
                 if ptype is None:
                     continue
@@ -2641,6 +2652,7 @@ class Evaluator:
         old_ret_type = self._current_ret_type
         old_pure = self._pure_func_name
         old_frozen = self._frozen_vars.copy()
+        old_generic_map = self._generic_map
         for param_name, _ in func.params:
             if param_name not in func.param_muts and param_name not in func.param_refs:
                 self._frozen_vars[param_name] = "let"
@@ -2648,6 +2660,7 @@ class Evaluator:
             self.env = call_env
             self._current_ret_type = resolved_ret_type
             self._pure_func_name = None if func.is_impure else func.name
+            self._generic_map = generic_map
             result = self.eval_stmts(func.body)
             self._check_return_type(result, resolved_ret_type, func.name)
             return self._wrap_optional_return(result, resolved_ret_type)
@@ -2661,6 +2674,7 @@ class Evaluator:
             self._current_ret_type = old_ret_type
             self._pure_func_name = old_pure
             self._frozen_vars = old_frozen
+            self._generic_map = old_generic_map
 
     def _check_return_type(self, result: Value, ret_type: str | None, func_name: str) -> Value:
         """Verify the return value matches the declared return type."""

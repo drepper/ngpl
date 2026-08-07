@@ -935,6 +935,8 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
         return IntValue(value.value, target_width)
     if isinstance(value, ObjectValue) and isinstance(value.obj, ArrayValue):
         arr = value.obj
-        coerced = [coerce_to_type(arr.get(i), target_width) for i in range(arr.sizeof)]
-        return ObjectValue(ArrayValue(coerced, element_type=target_width))
+        arr_info = _parse_array_type(target_width)
+        elem_target = arr_info[0] if arr_info is not None else target_width
+        coerced = [coerce_to_type(arr.get(i), elem_target) for i in range(arr.sizeof)]
+        return ObjectValue(ArrayValue(coerced, element_type=elem_target))
     return value

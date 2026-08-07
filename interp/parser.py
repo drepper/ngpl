@@ -675,6 +675,9 @@ class Parser:
         if self._check("LET"):
             return self._parse_var_def()
 
+        if self._check("TYPE"):
+            return self._parse_type_def()
+
         if self._check("IF"):
             return self._parse_if_stmt()
 
