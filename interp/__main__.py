@@ -12,12 +12,14 @@ from interp.env import Env
 from interp.ast import (
     FuncDef as ASTFuncDef, EnumDef as ASTEnumDef, UnitDef as ASTUnitDef,
     VarDef as ASTVarDef, TypeDef as ASTTypeDef,
+    StructDef as ASTStructDef, ImplBlock as ASTImplBlock,
 )
+import interp.ast as _ast
 from interp.value import (
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
-    NoneValue, ExpectedValue, EnumType, EnumValue,
+    NoneValue, ExpectedValue, EnumType, EnumValue, StructType,
     coerce_to_type, validate_param_type, validate_type, none, FAST_TYPES,
-    register_type_alias,
+    register_type_alias, register_user_type,
 )
 from interp.eval import Evaluator, unwrap_optional
 from interp.errors import format_diagnostic, extract_position, strip_position_prefix
@@ -222,6 +224,191 @@ def _show_error(exc: BaseException, source: str, source_path: str,
             print(f"error: {msg}", file=sys.stderr)
 
 
+def _expr_var_refs(expr) -> set[str]:
+    """Collect VarRef names referenced in an expression tree."""
+    if expr is None:
+        return set()
+    refs: set[str] = set()
+    if isinstance(expr, _ast.VarRef):
+        refs.add(expr.name)
+    elif isinstance(expr, _ast.BinOp):
+        refs |= _expr_var_refs(expr.left)
+        refs |= _expr_var_refs(expr.right)
+    elif isinstance(expr, _ast.UnaryOp):
+        refs |= _expr_var_refs(expr.operand)
+    elif isinstance(expr, _ast.FuncCall):
+        for a in expr.args:
+            refs |= _expr_var_refs(a)
+    elif isinstance(expr, _ast.MethodCall):
+        refs |= _expr_var_refs(expr.obj)
+        for a in expr.args:
+            refs |= _expr_var_refs(a)
+    elif isinstance(expr, _ast.GetAttr):
+        refs |= _expr_var_refs(expr.obj)
+    elif isinstance(expr, _ast.StructLit):
+        for _, val in expr.field_inits:
+            refs |= _expr_var_refs(val)
+    elif isinstance(expr, _ast.Subscript):
+        refs |= _expr_var_refs(expr.obj)
+        for idx in expr.indices:
+            refs |= _expr_var_refs(idx)
+    elif isinstance(expr, _ast.OptSome):
+        refs |= _expr_var_refs(expr.value)
+    elif isinstance(expr, _ast.TryUnwrap):
+        refs |= _expr_var_refs(expr.expr)
+    elif isinstance(expr, _ast.LambdaExpr):
+        pass
+    return refs
+
+
+def _find_consuming_calls(expr, struct_vars: dict[str, StructType]) -> set[str]:
+    """Find variables consumed by method calls in an expression tree."""
+    consumed: set[str] = set()
+    if isinstance(expr, _ast.MethodCall):
+        if isinstance(expr.obj, _ast.VarRef):
+            var_name = expr.obj.name
+            if var_name in struct_vars:
+                st = struct_vars[var_name]
+                method = st.methods.get(expr.method)
+                if (method is not None
+                        and method.params
+                        and method.params[0][0] == "self"
+                        and expr.method not in st._ref_self_methods):
+                    consumed.add(var_name)
+        consumed |= _find_consuming_calls(expr.obj, struct_vars)
+        for a in expr.args:
+            consumed |= _find_consuming_calls(a, struct_vars)
+    elif isinstance(expr, _ast.BinOp):
+        consumed |= _find_consuming_calls(expr.left, struct_vars)
+        consumed |= _find_consuming_calls(expr.right, struct_vars)
+    elif isinstance(expr, _ast.UnaryOp):
+        consumed |= _find_consuming_calls(expr.operand, struct_vars)
+    elif isinstance(expr, _ast.FuncCall):
+        for a in expr.args:
+            consumed |= _find_consuming_calls(a, struct_vars)
+    elif isinstance(expr, _ast.GetAttr):
+        consumed |= _find_consuming_calls(expr.obj, struct_vars)
+    return consumed
+
+
+def _infer_struct_type(expr, env, struct_vars: dict[str, StructType]) -> StructType | None:
+    """Infer whether an expression produces a struct instance."""
+    if isinstance(expr, _ast.StructLit):
+        try:
+            st = env.lookup(expr.name)
+            if isinstance(st, StructType):
+                return st
+        except KeyError:
+            pass
+    elif isinstance(expr, _ast.MethodCall):
+        if isinstance(expr.obj, _ast.VarRef):
+            try:
+                val = env.lookup(expr.obj.name)
+                if isinstance(val, StructType):
+                    method = val.methods.get(expr.method)
+                    if method is not None and method.ret_type == val.name:
+                        return val
+            except KeyError:
+                pass
+            if expr.obj.name in struct_vars:
+                st = struct_vars[expr.obj.name]
+                method = st.methods.get(expr.method)
+                if method is not None and method.ret_type == st.name:
+                    return st
+    elif isinstance(expr, _ast.FuncCall):
+        try:
+            fv = env.lookup(expr.name)
+            if isinstance(fv, FuncValue) and fv.ret_type:
+                try:
+                    st = env.lookup(fv.ret_type)
+                    if isinstance(st, StructType):
+                        return st
+                except KeyError:
+                    pass
+        except KeyError:
+            pass
+    return None
+
+
+def _stmt_top_exprs(stmt) -> list:
+    """Return expressions that should be checked for moved-variable reads."""
+    if isinstance(stmt, _ast.ExprStmt):
+        return [stmt.expr]
+    if isinstance(stmt, ASTVarDef):
+        return [stmt.init_expr] if stmt.init_expr else []
+    if isinstance(stmt, tuple) and len(stmt) == 3 and stmt[0] == "assign_stmt":
+        target = stmt[1]
+        result = [stmt[2]]
+        if isinstance(target, _ast.GetAttr):
+            result.append(target.obj)
+        elif isinstance(target, _ast.Subscript):
+            result.append(target.obj)
+        return result
+    if isinstance(stmt, _ast.ReturnStmt):
+        return [stmt.value] if stmt.value else []
+    return []
+
+
+def _static_check_moves(stmts: list, env,
+                         moved: set[str] | None = None,
+                         struct_vars: dict[str, StructType] | None = None,
+                         ) -> str | None:
+    """Detect use of struct variables after consuming method calls.
+
+    Walks statements linearly.  Returns an error message or None.
+    """
+    if moved is None:
+        moved = set()
+    if struct_vars is None:
+        struct_vars = {}
+
+    for stmt in stmts:
+        exprs = _stmt_top_exprs(stmt)
+        for expr in exprs:
+            for name in _expr_var_refs(expr):
+                if name in moved:
+                    return f"use of moved value '{name}'"
+
+        if isinstance(stmt, ASTVarDef):
+            st = _infer_struct_type(stmt.init_expr, env, struct_vars)
+            if st is not None:
+                struct_vars[stmt.name] = st
+            moved.discard(stmt.name)
+
+        for expr in exprs:
+            moved |= _find_consuming_calls(expr, struct_vars)
+
+        if isinstance(stmt, tuple) and len(stmt) == 3 and stmt[0] == "assign_stmt":
+            target = stmt[1]
+            if isinstance(target, _ast.VarRef):
+                moved.discard(target.name)
+                st = _infer_struct_type(stmt[2], env, struct_vars)
+                if st is not None:
+                    struct_vars[target.name] = st
+
+        if isinstance(stmt, _ast.IfStmt):
+            cond_refs = _expr_var_refs(stmt.cond)
+            for name in cond_refs:
+                if name in moved:
+                    return f"use of moved value '{name}'"
+            err = _static_check_moves(stmt.cons, env, moved.copy(), dict(struct_vars))
+            if err:
+                return err
+            if stmt.alt is not None:
+                alt_cond, alt_cons, alt_rest = stmt.alt
+                if alt_cond is not None:
+                    alt_stmt = _ast.IfStmt(alt_cond, alt_cons, alt_rest)
+                    err = _static_check_moves([alt_stmt], env, moved.copy(),
+                                              dict(struct_vars))
+                elif alt_cons:
+                    err = _static_check_moves(alt_cons, env, moved.copy(),
+                                              dict(struct_vars))
+                if err:
+                    return err
+
+    return None
+
+
 def main():
     """Run the NGPL interpreter on a source file."""
     args = _parse_args()
@@ -316,6 +503,12 @@ def main():
             et = EnumType(defn.name, defn.underlying_type, members, defn.is_flag)
             env.define(defn.name, et)
 
+    for defn in definitions:
+        if isinstance(defn, ASTStructDef):
+            register_user_type(defn.name)
+            st = StructType(defn.name, defn.fields)
+            env.define(defn.name, st)
+
     startup_func: FuncValue | None = None
     standalone_tests: list[FuncValue] = []
     referenced_tests: dict[str, list[FuncValue]] = defaultdict(list)
@@ -356,6 +549,44 @@ def main():
                 else:
                     standalone_tests.append(fv)
 
+    for defn in definitions:
+        if isinstance(defn, ASTImplBlock):
+            try:
+                st = env.lookup(defn.struct_name)
+            except KeyError:
+                st = None
+            if not isinstance(st, StructType):
+                print(f"Error: impl block for unknown struct '{defn.struct_name}'",
+                      file=sys.stderr)
+                sys.exit(1)
+            for method_def in defn.methods:
+                for param_name, param_type in method_def.params:
+                    if param_type is not None:
+                        validate_param_type(param_type, method_def.name, param_name)
+                if method_def.ret_type is not None and not validate_type(method_def.ret_type):
+                    raise TypeError(
+                        f"in {defn.struct_name}.{method_def.name}: "
+                        f"unknown return type '{method_def.ret_type}'")
+                fv = FuncValue(method_def.name, method_def.params,
+                               method_def.body, env, method_def.ret_type,
+                               is_impure=method_def.is_impure,
+                               param_muts=method_def.param_muts)
+                if method_def.name in st.methods:
+                    print(f"Error: duplicate method '{method_def.name}' "
+                          f"in impl {defn.struct_name}", file=sys.stderr)
+                    sys.exit(1)
+                st.methods[method_def.name] = fv
+                if getattr(method_def, "_self_is_ref", False):
+                    st._ref_self_methods.add(method_def.name)
+
+    for defn in definitions:
+        if isinstance(defn, ASTFuncDef) and not defn.expect_annotations:
+            if not getattr(defn, "_parse_error", None):
+                move_err = _static_check_moves(defn.body, env)
+                if move_err is not None:
+                    print(f"Error in {defn.name}: {move_err}", file=sys.stderr)
+                    sys.exit(1)
+
     if args.start is not None:
         try:
             val = env.lookup(args.start)
@@ -388,6 +619,11 @@ def main():
                         validate_param_type(param_type, defn.name, param_name)
             except (TypeError, ValueError) as e:
                 errors_produced.append(("error", str(e)))
+
+        if not errors_produced:
+            move_err = _static_check_moves(defn.body, env)
+            if move_err is not None:
+                errors_produced.append(("error", move_err))
 
         if not errors_produced:
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,

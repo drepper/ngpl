@@ -1,0 +1,160 @@
+// Tests for struct (product type) definitions with Rust-like syntax.
+
+struct Point:
+    x: f64
+    y: f64
+
+impl Point:
+    fn new(x: f64, y: f64) -> Point:
+        Point { x: x, y: y }
+
+    fn distance(&self) -> f64:
+        √(self.x ↑ 2.0 + self.y ↑ 2.0)
+
+    fn scale(&mut self, factor: f64) → ∅:
+        self.x ← self.x * factor
+        self.y ← self.y * factor
+
+    fn origin() -> Point:
+        Point { x: 0.0, y: 0.0 }
+
+    fn sum_components(self) -> f64:
+        self.x + self.y
+
+// Static method call.
+@test
+fn test_struct_static() → ∅:
+    let p := Point.origin()
+    assert_eq(p.x, 0.0)
+    assert_eq(p.y, 0.0)
+
+// Struct literal construction.
+@test
+fn test_struct_literal() → ∅:
+    let p := Point { x: 1.0, y: 2.0 }
+    assert_eq(p.x, 1.0)
+    assert_eq(p.y, 2.0)
+
+// Static factory method.
+@test
+fn test_struct_new() → ∅:
+    let p := Point.new(3.0, 4.0)
+    assert_eq(p.x, 3.0)
+    assert_eq(p.y, 4.0)
+
+// Immutable self method.
+@test
+fn test_struct_method() → ∅:
+    let p := Point.new(3.0, 4.0)
+    assert_eq(p.distance(), 5.0)
+
+// Mutable self method.
+@test
+fn test_struct_mut_method() → ∅:
+    let p : mut = Point.new(3.0, 4.0)
+    p.scale(2.0)
+    assert_eq(p.x, 6.0)
+    assert_eq(p.y, 8.0)
+
+// Direct field assignment on mutable variable.
+@test
+fn test_field_assign() → ∅:
+    let p : mut = Point.new(1.0, 2.0)
+    p.x ← 10.0
+    assert_eq(p.x, 10.0)
+    assert_eq(p.y, 2.0)
+
+// Error: field assignment on immutable variable.
+@test
+@expect error "cannot assign to field"
+fn test_field_assign_immutable() → ∅:
+    let p := Point.new(1.0, 2.0)
+    p.x ← 10.0
+
+// A second struct to test independently.
+struct Counter:
+    count: int
+
+impl Counter:
+    fn new() -> Counter:
+        Counter { count: 0 }
+
+    fn value(&self) -> int:
+        self.count
+
+    fn increment(&mut self) → ∅:
+        self.count ← self.count + 1
+
+    fn add(&mut self, n: int) → ∅:
+        self.count ← self.count + n
+
+// Counter with methods.
+@test
+fn test_counter() → ∅:
+    let c : mut = Counter.new()
+    assert_eq(c.value(), 0)
+    c.increment()
+    assert_eq(c.value(), 1)
+    c.increment()
+    assert_eq(c.value(), 2)
+    c.add(10)
+    assert_eq(c.value(), 12)
+
+// Struct with no methods (fields only).
+struct Pair:
+    first: int
+    second: int
+
+@test
+fn test_plain_struct() → ∅:
+    let p := Pair { first: 42, second: 99 }
+    assert_eq(p.first, 42)
+    assert_eq(p.second, 99)
+
+// Error: missing field in struct literal.
+@test
+@expect error "missing field"
+fn test_missing_field() → ∅:
+    let p := Point { x: 1.0 }
+
+// Error: unknown field in struct literal.
+@test
+@expect error "has no field"
+fn test_unknown_field() → ∅:
+    let p := Point { x: 1.0, y: 2.0, z: 3.0 }
+
+// Consuming self: calling a method with bare self invalidates the variable.
+@test
+fn test_consume_self() → ∅:
+    let p := Point.new(3.0, 4.0)
+    let s := p.sum_components()
+    assert_eq(s, 7.0)
+
+// Error: use object after consuming method.
+@test
+@expect error "moved"
+fn test_use_after_consume() → ∅:
+    let p := Point.new(3.0, 4.0)
+    let s := p.sum_components()
+    assert_eq(p.x, 3.0)
+
+// Error: call method on consumed object.
+@test
+@expect error "moved"
+fn test_method_after_consume() → ∅:
+    let p := Point.new(3.0, 4.0)
+    p.sum_components()
+    p.distance()
+
+// Reassignment after consume on mutable variable.
+@test
+fn test_reassign_after_consume() → ∅:
+    let p : mut = Point.new(1.0, 2.0)
+    let s := p.sum_components()
+    assert_eq(s, 3.0)
+    p ← Point.new(5.0, 6.0)
+    assert_eq(p.sum_components(), 11.0)
+
+@start
+fn main() → ∅:
+    std.print("struct tests passed")

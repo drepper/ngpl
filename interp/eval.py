@@ -24,11 +24,13 @@ from interp.ast import (
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
     UnitExpr, UnitOfExpr, UnitRefExpr, RefExpr, TypeDef,
+    StructLit,
 )
 from interp.value import (
     Value, IntValue, FloatValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
     FuncValue, LambdaValue, BuiltinFunc, ObjectValue, BuiltinBoundMethod,
     ArrayValue, TupleValue, EnumType, EnumValue, RangeValue, TypeValue, UnitOfValue,
+    StructType, StructInstance,
     mk_int, mk_int_wrap, mk_str, mk_bool, mk_float, none, some, is_none, is_some,
     resolve_width, resolve_float_width, wrap_int, coerce_to_type, coerce_arg,
     _TYPE_BITS, FLOAT_TYPES, FAST_TYPES,
@@ -175,6 +177,10 @@ def _collect_refs(node) -> set[str]:
         refs |= _collect_refs(node.expr)
     elif isinstance(node, UnitOfExpr):
         refs |= _collect_refs(node.expr)
+    elif isinstance(node, StructLit):
+        refs.add(node.name)
+        for _, expr in node.field_inits:
+            refs |= _collect_refs(expr)
     return refs
 
 
@@ -1297,6 +1303,9 @@ class Evaluator:
             return none()
 
         if isinstance(node, VarRef):
+            if self._frozen_vars.get(node.name) == "moved":
+                raise TypeError(
+                    f"use of moved value '{node.name}'")
             if (self._pure_func_name is not None
                     and not self.env.has_local(node.name)
                     and self.env.is_mutable_global(node.name)):
@@ -1519,6 +1528,9 @@ class Evaluator:
                 raise _ReturnSentinel(none())
             return val
 
+        if isinstance(node, StructLit):
+            return self._eval_struct_lit(node)
+
         if isinstance(node, FuncCall):
             args = [self.eval_expr(a) for a in node.args]
             return self._call_func(node.name, args)
@@ -1526,7 +1538,19 @@ class Evaluator:
         if isinstance(node, MethodCall):
             obj = self.eval_expr(node.obj)
             args = [self.eval_expr(a) for a in node.args]
-            return self._call_method(obj, node.method, args)
+            result = self._call_method(obj, node.method, args)
+            unwrapped_obj = unwrap_optional(obj)
+            if (isinstance(unwrapped_obj, ObjectValue)
+                    and isinstance(unwrapped_obj.obj, StructInstance)
+                    and isinstance(node.obj, VarRef)):
+                inst = unwrapped_obj.obj
+                method = inst.struct_type.methods.get(node.method)
+                if (method is not None
+                        and method.params
+                        and method.params[0][0] == "self"
+                        and node.method not in inst.struct_type._ref_self_methods):
+                    self._frozen_vars[node.obj.name] = "moved"
+            return result
 
         if isinstance(node, GetAttr):
             obj = self.eval_expr(node.obj)
@@ -1536,6 +1560,12 @@ class Evaluator:
                     return EnumValue(unwrapped, unwrapped.members[node.attr])
                 raise AttributeError(
                     f"enum '{unwrapped.name}' has no member '{node.attr}'")
+            if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, StructInstance):
+                inst = unwrapped.obj
+                if node.attr in inst.field_values:
+                    return inst.field_values[node.attr]
+                raise AttributeError(
+                    f"struct '{inst.struct_type.name}' has no field '{node.attr}'")
             if isinstance(unwrapped, TupleValue):
                 if node.attr == "sizeof":
                     return self._sizeof_result(len(unwrapped.elements))
@@ -1843,11 +1873,49 @@ class Evaluator:
                     iu = unwrap_optional(idx_val)
                     iu = self._check_index_unit(iu, unwrapped.obj)
                     unwrapped.obj.set(iu.value, rhs)
+            elif isinstance(target_ast, GetAttr):
+                if isinstance(target_ast.obj, VarRef):
+                    obj_name = target_ast.obj.name
+                    if self._frozen_vars.get(obj_name) == "moved":
+                        raise TypeError(
+                            f"use of moved value '{obj_name}'")
+                    if obj_name in self._frozen_vars:
+                        kind = self._frozen_vars[obj_name]
+                        raise TypeError(
+                            f"cannot assign to field '{target_ast.attr}' of "
+                            f"{kind} variable '{obj_name}'")
+                    if self.env.is_const_global(obj_name):
+                        raise TypeError(
+                            f"cannot assign to field '{target_ast.attr}' of "
+                            f"let variable '{obj_name}'")
+                obj_val = self.eval_expr(target_ast.obj)
+                au = unwrap_optional(obj_val)
+                if isinstance(au, ObjectValue) and isinstance(au.obj, StructInstance):
+                    inst = au.obj
+                    if target_ast.attr not in inst.field_values:
+                        raise TypeError(
+                            f"struct '{inst.struct_type.name}' has no field "
+                            f"'{target_ast.attr}'")
+                    field_type = None
+                    for fname, ftype in inst.struct_type.fields:
+                        if fname == target_ast.attr:
+                            field_type = ftype
+                            break
+                    if field_type is not None:
+                        rhs = coerce_arg(rhs, field_type, "field assignment",
+                                         target_ast.attr)
+                    inst.field_values[target_ast.attr] = rhs
+                else:
+                    raise TypeError("field assignment requires a struct instance")
             elif isinstance(target_ast, VarRef):
                 if target_ast.name in self._frozen_vars:
                     kind = self._frozen_vars[target_ast.name]
-                    raise TypeError(
-                        f"cannot assign to {kind} variable '{target_ast.name}'")
+                    if kind == "moved":
+                        del self._frozen_vars[target_ast.name]
+                    else:
+                        raise TypeError(
+                            f"cannot assign to {kind} variable "
+                            f"'{target_ast.name}'")
                 if self.env.is_const_global(target_ast.name):
                     raise TypeError(
                         f"cannot assign to let variable "
@@ -2309,7 +2377,7 @@ class Evaluator:
         Builtins, enum types, module objects, and non-replaceable
         user-defined functions are always accessible.
         """
-        if isinstance(val, (BuiltinFunc, EnumType)):
+        if isinstance(val, (BuiltinFunc, EnumType, StructType)):
             return True
         if isinstance(val, FuncValue) and not val.is_replaceable:
             return True
@@ -2349,6 +2417,8 @@ class Evaluator:
             return "tuple"
         if isinstance(u, EnumValue):
             return u.enum_type.name
+        if isinstance(u, ObjectValue) and isinstance(u.obj, StructInstance):
+            return u.obj.struct_type.name
         if isinstance(u, ObjectValue) and isinstance(u.obj, ArrayValue):
             return "array"
         if isinstance(u, RangeValue):
@@ -2460,6 +2530,37 @@ class Evaluator:
         return ObjectValue(ArrayValue(elements))
 
     # ------------------------------------------------------------------
+    # Struct literal evaluation
+    # ------------------------------------------------------------------
+
+    def _eval_struct_lit(self, node: StructLit) -> Value:
+        """Evaluate a struct literal: Name { field: expr, ... }."""
+        try:
+            struct_type = self.env.lookup(node.name)
+        except KeyError:
+            raise TypeError(f"unknown struct type '{node.name}'")
+        if not isinstance(struct_type, StructType):
+            raise TypeError(f"'{node.name}' is not a struct type")
+        field_values: dict[str, Value] = {}
+        for field_name, field_expr in node.field_inits:
+            found_type = None
+            for fname, ftype in struct_type.fields:
+                if fname == field_name:
+                    found_type = ftype
+                    break
+            if found_type is None:
+                raise TypeError(
+                    f"struct '{node.name}' has no field '{field_name}'")
+            value = self.eval_expr(field_expr)
+            value = coerce_arg(value, found_type, node.name, field_name)
+            field_values[field_name] = value
+        for fname, ftype in struct_type.fields:
+            if fname not in field_values:
+                raise TypeError(
+                    f"missing field '{fname}' in struct '{node.name}' literal")
+        return ObjectValue(StructInstance(struct_type, field_values))
+
+    # ------------------------------------------------------------------
     # Function calls
     # ------------------------------------------------------------------
 
@@ -2486,6 +2587,21 @@ class Evaluator:
         unwrapped = unwrap_optional(obj)
         if method_name == "__call__":
             return self._do_call(unwrapped, args)
+        if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, StructInstance):
+            inst = unwrapped.obj
+            method = inst.struct_type.methods.get(method_name)
+            if method is not None:
+                if method.params and method.params[0][0] == "self":
+                    return self._call_user_func(method, [unwrapped] + list(args))
+                return self._call_user_func(method, list(args))
+            raise AttributeError(
+                f"struct '{inst.struct_type.name}' has no method '{method_name}'")
+        if isinstance(unwrapped, StructType):
+            method = unwrapped.methods.get(method_name)
+            if method is not None:
+                return self._call_user_func(method, list(args))
+            raise AttributeError(
+                f"struct '{unwrapped.name}' has no static method '{method_name}'")
         if isinstance(unwrapped, ObjectValue):
             python_obj = unwrapped.obj
             meth = getattr(python_obj, method_name, None)

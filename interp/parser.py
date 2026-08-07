@@ -18,6 +18,7 @@ from interp.ast import (
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
     UnitExpr, UnitDef, UnitName, UnitBinOp, UnitSqrt, UnitLit,
     UnitOfExpr, UnitRefExpr,
+    StructDef, ImplBlock, StructLit,
     set_pos,
 )
 from interp.lexer import Token, KEYWORDS
@@ -214,6 +215,12 @@ class Parser:
         if self._check("ENUM"):
             return self._parse_enum_def(is_flag)
 
+        if self._check("STRUCT"):
+            return self._parse_struct_def()
+
+        if self._check("IMPL"):
+            return self._parse_impl_block()
+
         if self._check("UNIT"):
             return self._parse_unit_def()
 
@@ -236,7 +243,8 @@ class Parser:
     def _parse_function_def(self, is_start, is_test=False, test_refs=None,
                             expect_annotations: list[tuple[str, str]] | None = None,
                             is_replaceable: bool = False,
-                            is_impure: bool = False):
+                            is_impure: bool = False,
+                            struct_name: str | None = None):
         """Parse: fn name '(' [params] ')' ('->' ret_type)? block
 
         The parameter list is enclosed in parentheses.  An empty parameter
@@ -245,6 +253,8 @@ class Parser:
         When @expect annotations are present, parse errors in the body are
         captured instead of propagated — the FuncDef stores the error message
         so main.py can match it against expected patterns.
+
+        When struct_name is set, handles self / mut self as the first parameter.
         """
         self._eat("FN")
         name_tok = self._eat("IDENT")
@@ -256,6 +266,55 @@ class Parser:
         param_muts: set[str] = set()
         pack_param: tuple[str, str | None] | None = None
         self._eat("PUNCT", "(")
+
+        self_is_ref = False
+        if struct_name is not None:
+            while self._try_eat("NEWLINE"):
+                pass
+            if not (self._check("PUNCT") and self._cur().value == ")"):
+                if self._check("OP") and self._cur().value == "&":
+                    saved = self.pos
+                    self.pos += 1
+                    if self._check("MUT"):
+                        nxt = self.pos + 1
+                        if (nxt < len(self.tokens)
+                                and self.tokens[nxt].type == "IDENT"
+                                and self.tokens[nxt].value == "self"):
+                            self._eat("MUT")
+                            self._eat("IDENT")
+                            params.append(("self", struct_name))
+                            param_muts.add("self")
+                            self_is_ref = True
+                            self._try_eat("NEWLINE")
+                            self._try_eat("PUNCT", ",")
+                        else:
+                            self.pos = saved
+                    elif (self._check("IDENT")
+                          and self._cur().value == "self"):
+                        self._eat("IDENT")
+                        params.append(("self", struct_name))
+                        self_is_ref = True
+                        self._try_eat("NEWLINE")
+                        self._try_eat("PUNCT", ",")
+                    else:
+                        self.pos = saved
+                elif self._check("MUT"):
+                    next_idx = self.pos + 1
+                    if (next_idx < len(self.tokens)
+                            and self.tokens[next_idx].type == "IDENT"
+                            and self.tokens[next_idx].value == "self"):
+                        self._eat("MUT")
+                        self._eat("IDENT")
+                        params.append(("self", struct_name))
+                        param_muts.add("self")
+                        self._try_eat("NEWLINE")
+                        self._try_eat("PUNCT", ",")
+                elif self._check("IDENT") and self._cur().value == "self":
+                    self._eat("IDENT")
+                    params.append(("self", struct_name))
+                    self._try_eat("NEWLINE")
+                    self._try_eat("PUNCT", ",")
+
         while not (self._check("PUNCT") and self._cur().value == ")"):
             while self._try_eat("NEWLINE"):
                 pass
@@ -351,15 +410,18 @@ class Parser:
                                param_refs=param_refs,
                                param_muts=param_muts)
                 fdef._parse_error = str(e)
+                fdef._self_is_ref = self_is_ref
                 self._skip_to_next_definition()
                 return fdef
         else:
             body = self._parse_block()
-        return FuncDef(name, params, ret_type, body, is_start, is_test,
+        fdef = FuncDef(name, params, ret_type, body, is_start, is_test,
                        test_refs, expect_annotations, is_replaceable,
                        pack_param, param_units, is_impure,
                        param_refs=param_refs,
                        param_muts=param_muts)
+        fdef._self_is_ref = self_is_ref
+        return fdef
 
     def _parse_dotted_name(self) -> str:
         """Parse a possibly dotted name like 'std.errors'."""
@@ -424,6 +486,82 @@ class Parser:
 
         self._eat("DEDENT")
         return EnumDef(name, underlying_type, members, is_flag)
+
+    def _parse_struct_def(self):
+        """Parse: struct Name: INDENT field_definitions DEDENT"""
+        self._eat("STRUCT")
+        name_tok = self._eat("IDENT")
+        name = name_tok.value
+        self._eat("PUNCT", ":")
+        while self._try_eat("NEWLINE"):
+            pass
+
+        fields: list[tuple[str, str]] = []
+        if self._check("INDENT"):
+            self._eat("INDENT")
+            while True:
+                while self._try_eat("NEWLINE"):
+                    pass
+                if self._check("DEDENT", "EOF"):
+                    break
+                field_name_tok = self._eat("IDENT")
+                self._eat("PUNCT", ":")
+                type_tok = self._eat("IDENT")
+                field_type = type_tok.value
+                if self._check("PUNCT") and self._cur().value == "[":
+                    self.pos += 1
+                    if self._check("PUNCT") and self._cur().value == "]":
+                        self.pos += 1
+                        field_type += "[]"
+                    elif self._check("INT"):
+                        size_tok = self._eat("INT")
+                        self._eat("PUNCT", "]")
+                        field_type += f"[{size_tok.value}]"
+                    else:
+                        self._eat("PUNCT", "]")
+                        field_type += "[]"
+                if self._check("OP") and self._cur().value == "?":
+                    self.pos += 1
+                    field_type += "?"
+                fields.append((field_name_tok.value, field_type))
+                self._try_eat("PUNCT", ",")
+                while self._try_eat("NEWLINE"):
+                    pass
+            self._eat("DEDENT")
+        return StructDef(name, fields)
+
+    def _parse_impl_block(self):
+        """Parse: impl StructName: INDENT method_definitions DEDENT"""
+        self._eat("IMPL")
+        name_tok = self._eat("IDENT")
+        struct_name = name_tok.value
+        self._eat("PUNCT", ":")
+        while self._try_eat("NEWLINE"):
+            pass
+        self._eat("INDENT")
+
+        methods: list[FuncDef] = []
+        while True:
+            while self._try_eat("NEWLINE"):
+                pass
+            if self._check("DEDENT", "EOF"):
+                break
+            is_impure = False
+            if self._check("IMPURE"):
+                self._eat("IMPURE")
+                is_impure = True
+                self._try_eat("NEWLINE")
+            if not self._check("FN"):
+                raise ParseError(
+                    f"expected 'fn' in impl block, got "
+                    f"{self._tok_display(self._cur())}",
+                    self._cur())
+            method = self._parse_function_def(
+                is_start=False, struct_name=struct_name,
+                is_impure=is_impure)
+            methods.append(method)
+        self._eat("DEDENT")
+        return ImplBlock(struct_name, methods)
 
     def _skip_to_next_definition(self):
         """Advance past tokens until we reach the next top-level definition.
@@ -1410,6 +1548,8 @@ class Parser:
             if (self._cur().type == "PUNCT" and self._cur().value == "("):
                 args = self._parse_call_args()
                 node = self._set_pos(FuncCall(name, args), tok)
+            elif self._check("PUNCT") and self._cur().value == "{" and self._is_struct_literal_start():
+                node = self._set_pos(self._parse_struct_lit(name), tok)
             else:
                 node = self._set_pos(VarRef(name), tok)
 
@@ -1445,6 +1585,46 @@ class Parser:
             return node
 
         raise ParseError(f"unexpected token: {self._tok_display(tok)}", tok)
+
+    def _is_struct_literal_start(self) -> bool:
+        """Check if { starts a struct literal (vs. a brace block)."""
+        lookahead = self.pos + 1
+        while (lookahead < len(self.tokens)
+               and self.tokens[lookahead].type in ("NEWLINE", "INDENT", "DEDENT")):
+            lookahead += 1
+        if lookahead >= len(self.tokens):
+            return False
+        if (self.tokens[lookahead].type == "PUNCT"
+                and self.tokens[lookahead].value == "}"):
+            return True
+        if (self.tokens[lookahead].type == "IDENT"
+                and lookahead + 1 < len(self.tokens)
+                and self.tokens[lookahead + 1].type == "PUNCT"
+                and self.tokens[lookahead + 1].value == ":"):
+            return True
+        return False
+
+    def _parse_struct_lit(self, name: str) -> StructLit:
+        """Parse struct literal body: { field: expr, ... }."""
+        self._eat("PUNCT", "{")
+        field_inits: list[tuple[str, object]] = []
+        while True:
+            while not self._check("EOF") and self._cur().type in ("NEWLINE", "INDENT", "DEDENT"):
+                self.pos += 1
+            if self._check("PUNCT") and self._cur().value == "}":
+                break
+            field_name_tok = self._eat("IDENT")
+            self._eat("PUNCT", ":")
+            value_expr = self._parse_or_expr()
+            field_inits.append((field_name_tok.value, value_expr))
+            while not self._check("EOF") and self._cur().type in ("NEWLINE", "INDENT", "DEDENT"):
+                self.pos += 1
+            if not self._try_eat("PUNCT", ","):
+                break
+        while not self._check("EOF") and self._cur().type in ("NEWLINE", "INDENT", "DEDENT"):
+            self.pos += 1
+        self._eat("PUNCT", "}")
+        return StructLit(name, field_inits)
 
     def _parse_bracket_access(self, node, bracket_tok=None):
         """Parse [expr, ...] after node — returns Subscript, SliceAccess, or MultiSlice."""

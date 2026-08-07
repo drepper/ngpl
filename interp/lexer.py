@@ -62,6 +62,8 @@ KEYWORDS = {
     "unit": "UNIT",
     "impure": "IMPURE",
     "enumerate": "ENUMERATE",
+    "struct": "STRUCT",
+    "impl": "IMPL",
 }
 
 # Keywords recognized only after the @ prefix.  The @ is part of the

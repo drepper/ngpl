@@ -500,6 +500,35 @@ class EnumValue(Value):
         return self.value
 
 
+class StructType(Value):
+    """Runtime representation of a struct (product type) definition."""
+
+    __slots__ = ("name", "fields", "methods", "_ref_self_methods")
+
+    def __init__(self, name: str, fields: list[tuple[str, str]],
+                 methods: dict[str, "FuncValue"] | None = None):
+        self.name = name
+        self.fields = fields
+        self.methods: dict[str, FuncValue] = methods or {}
+        self._ref_self_methods: set[str] = set()
+
+    def display(self):
+        return f"<struct {self.name}>"
+
+
+class StructInstance:
+    """An instance of a struct (product type), wrapped in ObjectValue."""
+
+    def __init__(self, struct_type: StructType, field_values: dict[str, Value]):
+        self.struct_type = struct_type
+        self.field_values = field_values
+
+    def display(self) -> str:
+        fields = ", ".join(
+            f"{k}: {v.display()}" for k, v in self.field_values.items())
+        return f"{self.struct_type.name} {{ {fields} }}"
+
+
 class RangeValue(Value):
     """A range value representing start…end or start…step…end (inclusive)."""
 
@@ -765,6 +794,8 @@ def runtime_type_of(value: "Value") -> str:
     if isinstance(value, NoneValue):
         return "\N{EMPTY SET}"
     if isinstance(value, ObjectValue):
+        if isinstance(value.obj, StructInstance):
+            return value.obj.struct_type.name
         if isinstance(value.obj, ArrayValue):
             et = value.obj.element_type or "int"
             return et + "[]"
@@ -776,6 +807,12 @@ def runtime_type_of(value: "Value") -> str:
 
 
 _TYPE_ALIASES: dict[str, str] = {}
+_USER_TYPES: set[str] = set()
+
+
+def register_user_type(name: str):
+    """Register a user-defined type name (struct, etc.)."""
+    _USER_TYPES.add(name)
 
 
 def register_type_alias(name: str, target: str):
@@ -811,9 +848,9 @@ def validate_type(type_name: str) -> bool:
     if arr is not None:
         base = arr[0]
     base = resolve_type_alias(base)
-    if base not in BUILTIN_TYPES:
-        return False
-    return True
+    if base in BUILTIN_TYPES or base in _USER_TYPES:
+        return True
+    return False
 
 
 def validate_param_type(param_type: str, func_name: str, param_name: str):
@@ -907,6 +944,9 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
             f"got {type(value).__name__}")
 
     if is_generic_type(param_type):
+        return value
+
+    if param_type in _USER_TYPES:
         return value
 
     raise TypeError(

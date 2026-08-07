@@ -510,3 +510,27 @@ class UnitLit:
 
     def __init__(self, value: int):
         self.value = value
+
+
+class StructDef:
+    """Struct (product type) definition: struct Name: fields."""
+
+    def __init__(self, name: str, fields: list[tuple[str, str]]):
+        self.name = name
+        self.fields = fields
+
+
+class ImplBlock:
+    """Implementation block: impl StructName: methods."""
+
+    def __init__(self, struct_name: str, methods: list):
+        self.struct_name = struct_name
+        self.methods = methods
+
+
+class StructLit:
+    """Struct literal: Name { field: value, ... }."""
+
+    def __init__(self, name: str, field_inits: list[tuple[str, object]]):
+        self.name = name
+        self.field_inits = field_inits
