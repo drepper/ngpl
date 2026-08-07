@@ -1,4 +1,4 @@
 @start
 fn main() → ∅:
-    var arr : i32[3] = 0
-    var x := arr[5]
+    let arr : mut i32[3] = 0
+    let x : mut = arr[5]

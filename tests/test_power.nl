@@ -9,7 +9,7 @@ fn assert_eq_int(a:i64, b:i64, msg:str):
     std.print("FAIL: ", msg, " (got ", a, " expected ", b, ")")
 
 fn approx_eq(a:f64, b:f64, msg:str):
-  var diff := a - b
+  let diff : mut = a - b
   if diff < 0.0:
     diff ← ⁻diff
   if diff > 0.0001:
@@ -37,7 +37,7 @@ fn test_int_pow_large():
 
 fn test_int_pow_negative_exp():
   @expect error "non-negative"
-  var r := 2 ↑ ⁻1
+  let r : mut = 2 ↑ ⁻1
 
 // --- Float exponentiation ---
 
@@ -57,10 +57,10 @@ fn test_float_pow_zero():
 
 fn test_mixed_pow_rejected():
   @expect error "matching types"
-  var a := 4 ↑ 0.5
+  let a : mut = 4 ↑ 0.5
 
   @expect error "matching types"
-  var b := 8 ↑ (1.0 / 3.0)
+  let b : mut = 8 ↑ (1.0 / 3.0)
 
 // --- Right associativity ---
 
@@ -81,36 +81,36 @@ fn test_precedence_neg():
 // --- Overflow detected ---
 
 fn test_overflow():
-  var x: i8 = 2
+  let x: mut i8 = 2
   @expect error "overflow"
-  var r := x ↑ 8
+  let r : mut = x ↑ 8
 
 // --- Power with units ---
 
 fn test_unit_pow():
-  var d ¤meter := 3.0
-  var area := d ↑ 2
+  let d ¤meter : mut = 3.0
+  let area : mut = d ↑ 2
   // 3.0 m ^ 2 = 9.0 m^2
   approx_eq(area, 9.0, "3.0m ↑ 2 value")
   std.print(area)
 
 fn test_unit_pow_cube():
-  var d ¤meter := 2.0
-  var vol := d ↑ 3
+  let d ¤meter : mut = 2.0
+  let vol : mut = d ↑ 3
   // 2.0 m ^ 3 = 8.0 m^3
   approx_eq(vol, 8.0, "2.0m ↑ 3 value")
 
 fn test_unit_pow_zero():
-  var d ¤meter := 5.0
-  var r := d ↑ 0
+  let d ¤meter : mut = 5.0
+  let r : mut = d ↑ 0
   // m^0 = dimensionless
   approx_eq(r, 1.0, "5.0m ↑ 0 dimensionless")
 
 fn test_unit_exp_rejected():
-  var d ¤meter := 5.0
-  var e ¤second := 2.0
+  let d ¤meter : mut = 5.0
+  let e ¤second : mut = 2.0
   @expect error "exponent cannot have a unit"
-  var r := d ↑ e
+  let r : mut = d ↑ e
 
 @start
 fn main():

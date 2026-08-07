@@ -220,22 +220,7 @@ class Parser:
         if self._check("FN"):
             return self._parse_function_def(is_start, is_test, test_refs, expect_annotations,
                                             is_replaceable, is_impure)
-        elif self._check("CONST"):
-            self._eat("CONST")
-            name_tok = self._eat("IDENT")
-            type_ann = None
-            if self._try_eat("PUNCT", ":"):
-                if self._check("IDENT"):
-                    type_ann = self._eat("IDENT").value
-                    if self._check("PUNCT") and self._cur().value == "[":
-                        self.pos += 1
-                        self._eat("PUNCT", "]")
-                        type_ann += "[]"
-            self._eat("PUNCT", "=")
-            init_expr = self._parse_or_expr()
-            self._try_eat("PUNCT", ";")
-            return ("const_assign", name_tok.value, type_ann, init_expr)
-        elif self._check("VAR", "LET"):
+        elif self._check("LET"):
             return self._parse_var_def()
         elif self._check("EOF"):
             return None  # end of file reached cleanly
@@ -433,11 +418,10 @@ class Parser:
                 self.pos += 1
 
     def _parse_var_def(self):
-        """Parse: var/const name [¤unit] := expr  |  var/const name [¤unit] : type = expr  |  var name : type[size] = init"""
+        """Parse: let name [¤unit] := expr  |  let name [¤unit] : [mut] type = expr  |  let name : mut type[size] = init"""
         kw_tok = self._cur()
-        keyword = kw_tok.value
-        is_const = keyword == "const"
-        self._eat(keyword.upper())
+        self._eat("LET")
+        keyword = "let"
         name_tok = self._eat("IDENT")
 
         unit_spec = None
@@ -446,28 +430,32 @@ class Parser:
             unit_spec = self._parse_unit_spec()
 
         type_annotation = None
+        is_const = True
         has_colon = self._try_eat("PUNCT", ":")
-        if has_colon and self._check("IDENT"):
-            type_annotation = self._eat("IDENT").value
-            if self._check("PUNCT") and self._cur().value == "[":
-                self.pos += 1
-                if self._check("PUNCT") and self._cur().value == "]":
+        if has_colon:
+            if self._try_eat("MUT"):
+                is_const = False
+            if self._check("IDENT"):
+                type_annotation = self._eat("IDENT").value
+                if self._check("PUNCT") and self._cur().value == "[":
                     self.pos += 1
-                    type_annotation += "[]"
-                else:
-                    size_expr = self._parse_or_expr()
-                    self._eat("PUNCT", "]")
-                    self._eat("PUNCT", "=")
-                    init_expr = self._parse_or_expr()
-                    self._try_eat("PUNCT", ";")
-                    return self._set_pos(VarDef(name_tok.value, type_annotation,
-                                  ArrayAlloc(type_annotation, size_expr, init_expr),
-                              is_const, unit_spec=unit_spec), kw_tok)
+                    if self._check("PUNCT") and self._cur().value == "]":
+                        self.pos += 1
+                        type_annotation += "[]"
+                    else:
+                        size_expr = self._parse_or_expr()
+                        self._eat("PUNCT", "]")
+                        self._eat("PUNCT", "=")
+                        init_expr = self._parse_or_expr()
+                        self._try_eat("PUNCT", ";")
+                        return self._set_pos(VarDef(name_tok.value, type_annotation,
+                                      ArrayAlloc(type_annotation, size_expr, init_expr),
+                                  is_const, unit_spec=unit_spec), kw_tok)
 
         if not has_colon:
             if not (self._check("PUNCT") and self._cur().value == ":"):
                 raise ParseError(
-                    f"{keyword} definition requires ':=' or ': type ='",
+                    f"{keyword} definition requires ':=' or ': [mut] type ='",
                     self._cur())
             self._eat("PUNCT", ":")
         self._eat("PUNCT", "=")
@@ -618,7 +606,7 @@ class Parser:
         if self._check("EXPECT"):
             return self._parse_expect_stmt()
 
-        if self._check("VAR", "LET", "CONST"):
+        if self._check("LET"):
             return self._parse_var_def()
 
         if self._check("IF"):

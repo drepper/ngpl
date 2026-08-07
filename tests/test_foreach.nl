@@ -3,7 +3,7 @@
 /* Simple range iteration. */
 @test
 fn test_foreach_range() → ∅:
-    var sum := 0
+    let sum : mut = 0
     foreach i := 1…10:
         sum ← sum + i
     assert_eq(sum, 55)
@@ -11,7 +11,7 @@ fn test_foreach_range() → ∅:
 /* Descending range. */
 @test
 fn test_foreach_desc() → ∅:
-    var result := 0
+    let result : mut = 0
     foreach i := 5…1:
         result ← result * 10 + i
     assert_eq(result, 54321)
@@ -19,7 +19,7 @@ fn test_foreach_desc() → ∅:
 /* Typed loop variable. */
 @test
 fn test_foreach_typed() → ∅:
-    var total : u32 = 0
+    let total : mut u32 = 0
     foreach k : u32 = 0…3:
         total ← total + k
     assert_eq(total, 6)
@@ -27,8 +27,8 @@ fn test_foreach_typed() → ∅:
 /* Two variables, two ranges — wrapping shorter range. */
 @test
 fn test_foreach_wrap() → ∅:
-    var sum_i := 0
-    var sum_j := 0
+    let sum_i : mut = 0
+    let sum_j : mut = 0
     foreach i, j := 1…6, 10…12:
         sum_i ← sum_i + i
         sum_j ← sum_j + j
@@ -40,8 +40,8 @@ fn test_foreach_wrap() → ∅:
 /* Single variable with multiple ranges → tuple. */
 @test
 fn test_foreach_tuple() → ∅:
-    var sum_first := 0
-    var sum_second := 0
+    let sum_first : mut = 0
+    let sum_second : mut = 0
     foreach pair := 1…3, 10…12:
         sum_first ← sum_first + pair[0]
         sum_second ← sum_second + pair[1]
@@ -51,7 +51,7 @@ fn test_foreach_tuple() → ∅:
 /* Tuple with wrapping: ranges of different lengths. */
 @test
 fn test_foreach_tuple_wrap() → ∅:
-    var count := 0
+    let count : mut = 0
     foreach t := 1…2, 10…13:
         count ← count + 1
     /* Longest range has 4 elements, loop runs 4 times. */
@@ -60,7 +60,7 @@ fn test_foreach_tuple_wrap() → ∅:
 /* Foreach with brace block. */
 @test
 fn test_foreach_brace() → ∅:
-    var sum := 0
+    let sum : mut = 0
     foreach i := 1…5 {
         sum ← sum + i;
     }
@@ -69,8 +69,8 @@ fn test_foreach_brace() → ∅:
 /* Accumulate array elements using foreach. */
 @test
 fn test_foreach_array() → ∅:
-    var data := [10, 20, 30, 40]
-    var total := 0
+    let data : mut = [10, 20, 30, 40]
+    let total : mut = 0
     foreach idx := 0…data.sizeof - 1:
         total ← total + data[idx]
     assert_eq(total, 100)

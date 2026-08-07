@@ -1792,7 +1792,7 @@ class Evaluator:
                         f"cannot assign to {kind} variable '{target_ast.name}'")
                 if self.env.is_const_global(target_ast.name):
                     raise TypeError(
-                        f"cannot assign to const variable "
+                        f"cannot assign to let variable "
                         f"'{target_ast.name}'")
                 if (self._pure_func_name is not None
                         and not self.env.has_local(target_ast.name)):
@@ -1835,7 +1835,7 @@ class Evaluator:
                     value = UnitValue(value, unit)
             self.env.define(stmt.name, value)
             if stmt.is_const:
-                self._frozen_vars[stmt.name] = "const"
+                self._frozen_vars[stmt.name] = "let"
             return none()
 
         if isinstance(stmt, ExprStmt):

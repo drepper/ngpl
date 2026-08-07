@@ -11,7 +11,7 @@ enum Color:
 
 @test
 fn test_enum_member_access() → ∅:
-    var c := Color.red
+    let c : mut = Color.red
     assert_eq(c, Color.red)
 
 @test
@@ -22,9 +22,9 @@ fn test_enum_sequential_values() → ∅:
 
 @test
 fn test_enum_equality() → ∅:
-    var a := Color.red
-    var b := Color.red
-    var c := Color.blue
+    let a : mut = Color.red
+    let b : mut = Color.red
+    let c : mut = Color.blue
     assert(a == b)
     assert(not (a == c))
     assert(a != c)
@@ -68,7 +68,7 @@ enum SmallEnum : u8:
 
 @test
 fn test_enum_underlying_type() → ∅:
-    var x := SmallEnum.a
+    let x : mut = SmallEnum.a
     assert(x == 0)
     assert(x == SmallEnum.a)
 
@@ -92,37 +92,37 @@ fn test_flag_nil_auto_created() → ∅:
 
 @test
 fn test_flag_combine_or() → ∅:
-    var rw := Perms.read | Perms.write
+    let rw : mut = Perms.read | Perms.write
     assert(rw == 3)
 
 @test
 fn test_flag_combine_all() → ∅:
-    var all := Perms.read | Perms.write | Perms.exec
+    let all : mut = Perms.read | Perms.write | Perms.exec
     assert(all == 7)
 
 @test
 fn test_flag_and() → ∅:
-    var rw := Perms.read | Perms.write
-    var r := rw & Perms.read
+    let rw : mut = Perms.read | Perms.write
+    let r : mut = rw & Perms.read
     assert_eq(r, Perms.read)
 
 @test
 fn test_flag_xor() → ∅:
-    var rw := Perms.read | Perms.write
-    var toggled := rw ^ Perms.write
+    let rw : mut = Perms.read | Perms.write
+    let toggled : mut = rw ^ Perms.write
     assert_eq(toggled, Perms.read)
 
 @test
 fn test_flag_not() → ∅:
-    var rw := Perms.read | Perms.write
-    var notrw := ~rw
+    let rw : mut = Perms.read | Perms.write
+    let notrw : mut = ~rw
     assert_eq(notrw, Perms.exec)
 
 @test
 fn test_flag_and_test_membership() → ∅:
-    var rw := Perms.read | Perms.write
-    var has_read := (rw & Perms.read) == Perms.read
-    var has_exec := (rw & Perms.exec) == Perms.exec
+    let rw : mut = Perms.read | Perms.write
+    let has_read : mut = (rw & Perms.read) == Perms.read
+    let has_exec : mut = (rw & Perms.exec) == Perms.exec
     assert(has_read)
     assert(not has_exec)
 
@@ -159,7 +159,7 @@ fn test_flag_explicit_zero_no_nil() → ∅:
 
 @test
 fn test_std_errors_runtime() → ∅:
-    var e := std.errors.division_by_zero
+    let e : mut = std.errors.division_by_zero
     assert(e == 100)
     assert_eq(e, std.errors.division_by_zero)
 
@@ -178,53 +178,53 @@ fn test_std_errors_library() → ∅:
 @test
 fn test_std_errors_grouping() → ∅:
     /* Runtime errors are in 100-199 */
-    var div := std.errors.division_by_zero
+    let div : mut = std.errors.division_by_zero
     assert(div == 100 ∧ 100 <= 199)
     /* Compile errors are in 200-299 */
-    var typ := std.errors.type_mismatch
+    let typ : mut = std.errors.type_mismatch
     assert(typ == 200 ∧ 200 <= 299)
     /* Library errors are in 300-399 */
-    var fnf := std.errors.file_not_found
+    let fnf : mut = std.errors.file_not_found
     assert(fnf == 300 ∧ 300 <= 399)
 
 /* ---- invalid operations on non-flag enums -------------------------------- */
 
 @expect error "bitwise operations require @flag enum"
 fn error_bitor_non_flag() → ∅:
-    var a := Color.red
-    var b := Color.green
-    var c := a | b
+    let a : mut = Color.red
+    let b : mut = Color.green
+    let c : mut = a | b
 
 @expect error "bitwise operations require @flag enum"
 fn error_bitand_non_flag() → ∅:
-    var a := Color.red
-    var b := Color.green
-    var c := a & b
+    let a : mut = Color.red
+    let b : mut = Color.green
+    let c : mut = a & b
 
 @expect error "bitwise operations require @flag enum"
 fn error_bitxor_non_flag() → ∅:
-    var a := Color.red
-    var b := Color.green
-    var c := a ^ b
+    let a : mut = Color.red
+    let b : mut = Color.green
+    let c : mut = a ^ b
 
 @expect error "bitwise-not requires @flag enum"
 fn error_bitnot_non_flag() → ∅:
-    var a := Color.red
-    var b := ~a
+    let a : mut = Color.red
+    let b : mut = ~a
 
 /* ---- cross-enum comparison error ----------------------------------------- */
 
 @expect error "cannot compare enum"
 fn error_cross_enum_compare() → ∅:
-    var a := Color.red
-    var b := Status.ok
-    var x := a == b
+    let a : mut = Color.red
+    let b : mut = Status.ok
+    let x : mut = a == b
 
 @expect error "cannot combine enum"
 fn error_cross_enum_bitor() → ∅:
-    var a := Perms.read
-    var b := Flags.a
-    var c := a | b
+    let a : mut = Perms.read
+    let b : mut = Flags.a
+    let c : mut = a | b
 
 @start
 fn main() → ∅:

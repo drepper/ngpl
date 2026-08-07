@@ -1,3 +1,3 @@
 @start
 fn main() → ∅:
-    var x : i32 =
+    let x : mut i32 =

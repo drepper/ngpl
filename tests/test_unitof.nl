@@ -8,70 +8,70 @@ fn assert_true(cond:bool, msg:str):
 
 @test
 fn test_unitof_meter():
-  var a ¤meter := 5
+  let a ¤meter : mut = 5
   assert_true(@unitof(a) == ¤meter, "unitof meter")
 
 @test
 fn test_unitof_second():
-  var t ¤second := 10
+  let t ¤second : mut = 10
   assert_true(@unitof(t) == ¤second, "unitof second")
 
 @test
 fn test_unitof_kilogram():
-  var m ¤kilogram := 3
+  let m ¤kilogram : mut = 3
   assert_true(@unitof(m) == ¤kilogram, "unitof kilogram")
 
 // --- @unitof on dimensionless value ---
 
 @test
 fn test_unitof_dimensionless():
-  var x := 42
+  let x : mut = 42
   assert_true(@unitof(x) != ¤meter, "dimensionless != meter")
 
 // --- @unitof equality of same unit ---
 
 @test
 fn test_unitof_same_unit():
-  var a ¤meter := 5
-  var b ¤meter := 10
+  let a ¤meter : mut = 5
+  let b ¤meter : mut = 10
   assert_true(@unitof(a) == @unitof(b), "same unit vars equal")
 
 // --- @unitof inequality of different units ---
 
 @test
 fn test_unitof_different_units():
-  var a ¤meter := 5
-  var b ¤second := 3
+  let a ¤meter : mut = 5
+  let b ¤second : mut = 3
   assert_true(@unitof(a) != @unitof(b), "meter != second")
 
 // --- @unitof on sizeof result ---
 
 @test
 fn test_unitof_sizeof():
-  var arr := [1, 2, 3]
-  var sz := arr.sizeof
+  let arr : mut = [1, 2, 3]
+  let sz : mut = arr.sizeof
   assert_true(@unitof(sz) == ¤ptrdiff, "sizeof has unit ptrdiff")
 
 @test
 fn test_unitof_sizeof_bytes():
-  var buf: u8[4] = [1, 2, 3, 4]
-  var sz := buf.sizeof
+  let buf: mut u8[4] = [1, 2, 3, 4]
+  let sz : mut = buf.sizeof
   assert_true(@unitof(sz) == ¤byte, "sizeof u8[] has unit byte")
 
 // --- @unitof on derived unit ---
 
 @test
 fn test_unitof_derived():
-  var d ¤meter := 100
-  var t ¤second := 10
-  var speed := d / t
+  let d ¤meter : mut = 100
+  let t ¤second : mut = 10
+  let speed : mut = d / t
   assert_true(@unitof(speed) == ¤meter/second, "speed has unit m/s")
 
 // --- @unitof with kilometer (same dimension as meter but different unit) ---
 
 @test
 fn test_unitof_kilometer():
-  var d ¤kilometer := 5
+  let d ¤kilometer : mut = 5
   assert_true(@unitof(d) == ¤kilometer, "unitof kilometer")
   assert_true(@unitof(d) != ¤meter, "kilometer != meter")
 
@@ -79,15 +79,15 @@ fn test_unitof_kilometer():
 
 @test
 fn test_static_assert_unitof():
-  var a ¤meter := 5
+  let a ¤meter : mut = 5
   static_assert_eq(@unitof(a), ¤meter)
 
 // --- dimensionless comparison ---
 
 @test
 fn test_unitof_dimensionless_eq():
-  var x := 42
-  var y := 99
+  let x : mut = 42
+  let y : mut = 99
   assert_true(@unitof(x) == @unitof(y), "both dimensionless")
 
 @start

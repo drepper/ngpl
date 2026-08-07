@@ -36,8 +36,8 @@ fn test_identity_string() → ∅:
 
 @test
 fn test_identity_typed_int() → ∅:
-    var x : i32 = 7
-    var r := identity(x)
+    let x : mut i32 = 7
+    let r : mut = identity(x)
     assert_eq(r, 7)
 
 @test
@@ -46,8 +46,8 @@ fn test_add_same_type() → ∅:
 
 @test
 fn test_add_typed() → ∅:
-    var a : u32 = 100
-    var b : u32 = 200
+    let a : mut u32 = 100
+    let b : mut u32 = 200
     assert_eq(add_g(a, b), 300)
 
 @test
@@ -63,14 +63,14 @@ fn test_generic_with_concrete_return() → ∅:
 
 @test
 fn test_generic_type_mismatch() → ∅:
-    var a : i32 = 1
-    var b : u32 = 2
+    let a : mut i32 = 1
+    let b : mut u32 = 2
     @expect error "generic type T'"
     add_g(a, b)
 
 @test
 fn test_generic_curry() → ∅:
-    var add10 := add_g(10)
+    let add10 : mut = add_g(10)
     assert_eq(add10(20), 30)
 
 @start

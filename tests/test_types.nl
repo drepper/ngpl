@@ -3,7 +3,7 @@
 /* Untyped int coerced to u32 on function call. */
 @test
 fn test_widen_to_u32() → ∅:
-    var result := add_u32(100, 200)
+    let result : mut = add_u32(100, 200)
     assert_eq(result, 300)
 
 fn add_u32(a : u32, b : u32) → u32:

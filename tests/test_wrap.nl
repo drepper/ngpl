@@ -9,65 +9,65 @@
 
 @test
 fn test_wrap_i8_add() → ∅:
-    var x : i8 = 127
-    var y : i8 = 1
-    var z := @wrap(x + y)
+    let x : mut i8 = 127
+    let y : mut i8 = 1
+    let z : mut = @wrap(x + y)
     assert_eq(z, ⁻128)
 
 @test
 fn test_wrap_i8_sub() → ∅:
-    var x : i8 = ⁻128
-    var y : i8 = 1
-    var z := @wrap(x - y)
+    let x : mut i8 = ⁻128
+    let y : mut i8 = 1
+    let z : mut = @wrap(x - y)
     assert_eq(z, 127)
 
 @test
 fn test_wrap_i8_mul() → ∅:
-    var x : i8 = 64
-    var y : i8 = 4
-    var z := @wrap(x * y)
+    let x : mut i8 = 64
+    let y : mut i8 = 4
+    let z : mut = @wrap(x * y)
     assert_eq(z, 0)
 
 @test
 fn test_wrap_i32_add() → ∅:
-    var x : i32 = 2147483647
-    var y : i32 = 1
-    var z := @wrap(x + y)
+    let x : mut i32 = 2147483647
+    let y : mut i32 = 1
+    let z : mut = @wrap(x + y)
     assert_eq(z, ⁻2147483648)
 
 @test
 fn test_wrap_i32_negate() → ∅:
-    var x : i32 = ⁻2147483648
-    var z := @wrap(⁻x)
+    let x : mut i32 = ⁻2147483648
+    let z : mut = @wrap(⁻x)
     assert_eq(z, ⁻2147483648)
 
 /* ---- @wrap on unsigned types: still wraps as expected -------------------- */
 
 @test
 fn test_wrap_u32_add() → ∅:
-    var x : u32 = 4294967295
-    var y : u32 = 2
-    var z := @wrap(x + y)
+    let x : mut u32 = 4294967295
+    let y : mut u32 = 2
+    let z : mut = @wrap(x + y)
     assert_eq(z, 1)
 
 /* ---- @wrap does not affect operations outside its scope ----------------- */
 
 @expect error "integer overflow"
 fn error_no_wrap_i8() → ∅:
-    var x : i8 = 127
-    var y : i8 = 1
+    let x : mut i8 = 127
+    let y : mut i8 = 1
     /* @wrap only on the subtraction, not the addition */
-    var dummy := @wrap(x - y)
-    var z := x + y
+    let dummy : mut = @wrap(x - y)
+    let z : mut = x + y
 
 /* ---- @wrap with complex expressions ------------------------------------- */
 
 @test
 fn test_wrap_chained_add() → ∅:
-    var a : i8 = 100
-    var b : i8 = 100
-    var c : i8 = 100
-    var z := @wrap(a + b + c)
+    let a : mut i8 = 100
+    let b : mut i8 = 100
+    let c : mut i8 = 100
+    let z : mut = @wrap(a + b + c)
     assert_eq(z, 44)
 
 @start

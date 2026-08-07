@@ -11,40 +11,40 @@
 
 @test
 fn test_read_bare_literal() → ∅:
-    var arr := [10, 20, 30]
+    let arr : mut = [10, 20, 30]
     assert_eq(arr[0], 10)
     assert_eq(arr[2], 30)
 
 @test
 fn test_write_bare_literal() → ∅:
-    var arr := [0, 0, 0]
+    let arr : mut = [0, 0, 0]
     arr[1] ← 42
     assert_eq(arr[1], 42)
 
 @test
 fn test_byte_read_bare_literal() → ∅:
-    var buf : u8[3] = 0
+    let buf : mut u8[3] = 0
     buf[0] ← 10; buf[1] ← 20; buf[2] ← 30
     assert_eq(buf[0], 10)
     assert_eq(buf[2], 30)
 
 @test
 fn test_byte_write_bare_literal() → ∅:
-    var buf : u8[4] = 0
+    let buf : mut u8[4] = 0
     buf[1] ← 255
     assert_eq(buf[1], 255)
 
 @test
 fn test_slice_bare_literal() → ∅:
-    var arr := [10, 20, 30, 40, 50]
-    var sub := arr[1…3]
+    let arr : mut = [10, 20, 30, 40, 50]
+    let sub : mut = arr[1…3]
     assert_eq(sub.sizeof, 3)
     assert_eq(sub[0], 20)
     assert_eq(sub[2], 40)
 
 @test
 fn test_slice_assign_bare_literal() → ∅:
-    var arr := [0, 0, 0, 0]
+    let arr : mut = [0, 0, 0, 0]
     arr[1…2] ← [88, 99]
     assert_eq(arr[1], 88)
     assert_eq(arr[2], 99)
@@ -53,24 +53,24 @@ fn test_slice_assign_bare_literal() → ∅:
 
 @test
 fn test_sizeof_derived_index() → ∅:
-    var arr := [5, 10, 15, 20]
-    var last := arr[arr.sizeof - 1]
+    let arr : mut = [5, 10, 15, 20]
+    let last : mut = arr[arr.sizeof - 1]
     assert_eq(last, 20)
 
 @test
 fn test_foreach_sizeof_index() → ∅:
-    var arr := [1, 2, 3, 4]
-    var total := 0
+    let arr : mut = [1, 2, 3, 4]
+    let total : mut = 0
     foreach i := 0…arr.sizeof - 1:
         total ← total + arr[i]
     assert_eq(total, 10)
 
 @test
 fn test_byte_sizeof_index() → ∅:
-    var buf : u8[5] = 0
+    let buf : mut u8[5] = 0
     buf[0] ← 1; buf[1] ← 2; buf[2] ← 3
     buf[3] ← 4; buf[4] ← 5
-    var last := buf[buf.sizeof - 1]
+    let last : mut = buf[buf.sizeof - 1]
     assert_eq(last, 5)
 
 /* ---- typed integers without unit rejected (indexing) --------------------- */
@@ -78,51 +78,51 @@ fn test_byte_sizeof_index() → ∅:
 @test
 @expect error "requires unit ptrdiff"
 fn test_reject_i32_index_read() → ∅:
-    var arr := [1, 2, 3]
-    var idx : i32 = 0
-    var x := arr[idx]
+    let arr : mut = [1, 2, 3]
+    let idx : mut i32 = 0
+    let x : mut = arr[idx]
 
 @test
 @expect error "requires unit ptrdiff"
 fn test_reject_i32_index_write() → ∅:
-    var arr := [1, 2, 3]
-    var idx : i32 = 0
+    let arr : mut = [1, 2, 3]
+    let idx : mut i32 = 0
     arr[idx] ← 99
 
 @test
 @expect error "requires unit ptrdiff"
 fn test_reject_u32_index() → ∅:
-    var arr := [1, 2, 3]
-    var idx : u32 = 0
-    var x := arr[idx]
+    let arr : mut = [1, 2, 3]
+    let idx : mut u32 = 0
+    let x : mut = arr[idx]
 
 @test
 @expect error "requires unit ptrdiff"
 fn test_reject_u32fast_index() → ∅:
-    var arr := [1, 2, 3]
-    var idx : u32fast = 0
-    var x := arr[idx]
+    let arr : mut = [1, 2, 3]
+    let idx : mut u32fast = 0
+    let x : mut = arr[idx]
 
 @test
 @expect error "requires unit B"
 fn test_reject_i32_byte_index_read() → ∅:
-    var buf : u8[3] = 0
-    var idx : i32 = 0
-    var x := buf[idx]
+    let buf : mut u8[3] = 0
+    let idx : mut i32 = 0
+    let x : mut = buf[idx]
 
 @test
 @expect error "requires unit B"
 fn test_reject_i32_byte_index_write() → ∅:
-    var buf : u8[3] = 0
-    var idx : i32 = 0
+    let buf : mut u8[3] = 0
+    let idx : mut i32 = 0
     buf[idx] ← 99
 
 @test
 @expect error "requires unit ptrdiff"
 fn test_reject_foreach_typed_index() → ∅:
-    var arr := [10, 20, 30]
+    let arr : mut = [10, 20, 30]
     foreach i : i32 = 0…2:
-        var x := arr[i]
+        let x : mut = arr[i]
 
 /* ---- typed integers without unit rejected (parameter passing) ------------ */
 
@@ -135,55 +135,55 @@ fn needs_byte(buf : byte[], off ¤byte : usize) → u8:
 @test
 @expect error "requires unit ptrdiff"
 fn test_reject_typed_int_param_ptrdiff() → ∅:
-    var arr := [1, 2, 3]
-    var idx : i32 = 0
+    let arr : mut = [1, 2, 3]
+    let idx : mut i32 = 0
     needs_ptrdiff(arr, idx)
 
 @test
 @expect error "requires unit B"
 fn test_reject_typed_int_param_byte() → ∅:
-    var buf : u8[3] = 0
+    let buf : mut u8[3] = 0
     buf[0] ← 10
-    var off : usize = 0
+    let off : mut usize = 0
     needs_byte(buf, off)
 
 @test
 @expect error "requires unit ptrdiff"
 fn test_reject_u32_param() → ∅:
-    var arr := [1, 2, 3]
-    var idx : u32 = 1
+    let arr : mut = [1, 2, 3]
+    let idx : mut u32 = 1
     needs_ptrdiff(arr, idx)
 
 @test
 fn test_accept_untyped_const_param_ptrdiff() → ∅:
-    var arr := [10, 20, 30]
+    let arr : mut = [10, 20, 30]
     assert_eq(needs_ptrdiff(arr, 1), 20)
 
 @test
 fn test_accept_untyped_const_param_byte() → ∅:
-    var buf : u8[3] = 0
+    let buf : mut u8[3] = 0
     buf[0] ← 10; buf[1] ← 20; buf[2] ← 30
     assert_eq(needs_byte(buf, 2), 30)
 
 @test
 fn test_accept_unit_value_param() → ∅:
-    var arr := [10, 20, 30]
-    var idx ¤ptrdiff : i32 = 1
+    let arr : mut = [10, 20, 30]
+    let idx ¤ptrdiff : mut i32 = 1
     assert_eq(needs_ptrdiff(arr, idx), 20)
 
 /* ---- typed integers with correct unit accepted --------------------------- */
 
 @test
 fn test_typed_with_ptrdiff() → ∅:
-    var arr := [10, 20, 30]
-    var idx ¤ptrdiff : i32 = 1
+    let arr : mut = [10, 20, 30]
+    let idx ¤ptrdiff : mut i32 = 1
     assert_eq(arr[idx], 20)
 
 @test
 fn test_typed_with_byte() → ∅:
-    var buf : u8[3] = 0
+    let buf : mut u8[3] = 0
     buf[0] ← 10; buf[1] ← 20; buf[2] ← 30
-    var idx ¤byte : i32 = 2
+    let idx ¤byte : mut i32 = 2
     assert_eq(buf[idx], 30)
 
 /* ---- wrong unit rejected ------------------------------------------------ */
@@ -191,20 +191,20 @@ fn test_typed_with_byte() → ∅:
 @test
 @expect error "requires unit ptrdiff"
 fn test_reject_byte_for_general() → ∅:
-    var arr := [1, 2, 3]
-    var x := arr[0 ¤byte]
+    let arr : mut = [1, 2, 3]
+    let x : mut = arr[0 ¤byte]
 
 @test
 @expect error "requires unit B"
 fn test_reject_ptrdiff_for_byte() → ∅:
-    var buf : u8[3] = 0
-    var x := buf[0 ¤ptrdiff]
+    let buf : mut u8[3] = 0
+    let x : mut = buf[0 ¤ptrdiff]
 
 @test
 @expect error "requires unit ptrdiff"
 fn test_reject_meter_for_general() → ∅:
-    var arr := [1, 2, 3]
-    var x := arr[0 ¤meter]
+    let arr : mut = [1, 2, 3]
+    let x : mut = arr[0 ¤meter]
 
 /* ---- arithmetic unit enforcement ---------------------------------------- */
 
@@ -212,89 +212,89 @@ fn test_reject_meter_for_general() → ∅:
 @test
 @expect error "cannot .+ typed integer"
 fn test_arith_typed_plus_unit() → ∅:
-    var a : i32 = 5
-    var b ¤ptrdiff : i32 = 3
-    var x := a + b
+    let a : mut i32 = 5
+    let b ¤ptrdiff : mut i32 = 3
+    let x : mut = a + b
 
 // addition: unit + typed int → error
 @test
 @expect error "cannot .+ unit .+ with typed integer"
 fn test_arith_unit_plus_typed() → ∅:
-    var a ¤ptrdiff : i32 = 3
-    var b : i32 = 5
-    var x := a + b
+    let a ¤ptrdiff : mut i32 = 3
+    let b : mut i32 = 5
+    let x : mut = a + b
 
 // subtraction: unit - typed int → error
 @test
 @expect error "cannot - unit .+ with typed integer"
 fn test_arith_unit_minus_typed() → ∅:
-    var a ¤ptrdiff : i32 = 3
-    var b : i32 = 1
-    var x := a - b
+    let a ¤ptrdiff : mut i32 = 3
+    let b : mut i32 = 1
+    let x : mut = a - b
 
-// addition: unit + untyped const → ok
+// addition: unit + untyped let → ok
 @test
 fn test_arith_unit_plus_const() → ∅:
-    var a ¤ptrdiff : i32 = 3
-    var x := a + 2
+    let a ¤ptrdiff : mut i32 = 3
+    let x : mut = a + 2
     assert_eq(x, 5 ¤ptrdiff)
 
-// subtraction: unit - untyped const → ok
+// subtraction: unit - untyped let → ok
 @test
 fn test_arith_unit_minus_const() → ∅:
-    var a ¤ptrdiff : i32 = 5
-    var x := a - 1
+    let a ¤ptrdiff : mut i32 = 5
+    let x : mut = a - 1
     assert_eq(x, 4 ¤ptrdiff)
 
 // multiplication: unit × typed int → ok (scalar)
 @test
 fn test_arith_unit_times_typed() → ∅:
-    var a ¤byte : i32 = 3
-    var b : i32 = 4
-    var x := a * b
+    let a ¤byte : mut i32 = 3
+    let b : mut i32 = 4
+    let x : mut = a * b
     assert_eq(x, 12 ¤byte)
 
 // multiplication: typed int × unit → ok (scalar)
 @test
 fn test_arith_typed_times_unit() → ∅:
-    var a : i32 = 4
-    var b ¤byte : i32 = 3
-    var x := a * b
+    let a : mut i32 = 4
+    let b ¤byte : mut i32 = 3
+    let x : mut = a * b
     assert_eq(x, 12 ¤byte)
 
 // comparison: unit == typed int → error
 @test
 @expect error "cannot compare unit .+ with typed integer"
 fn test_cmp_unit_eq_typed() → ∅:
-    var a ¤ptrdiff : i32 = 3
-    var b : i32 = 3
-    var x := a == b
+    let a ¤ptrdiff : mut i32 = 3
+    let b : mut i32 = 3
+    let x : mut = a == b
 
 // comparison: typed int < unit → error
 @test
 @expect error "cannot compare typed integer .+ without unit with unit"
 fn test_cmp_typed_lt_unit() → ∅:
-    var a : i32 = 1
-    var b ¤ptrdiff : i32 = 3
-    var x := a < b
+    let a : mut i32 = 1
+    let b ¤ptrdiff : mut i32 = 3
+    let x : mut = a < b
 
-// comparison: unit == untyped const → ok
+// comparison: unit == untyped let → ok
 @test
 fn test_cmp_unit_eq_const() → ∅:
-    var a ¤ptrdiff : i32 = 3
+    let a ¤ptrdiff : mut i32 = 3
     assert_eq(a == 3, true)
 
-// comparison: unit < untyped const → ok
+// comparison: unit < untyped let → ok
 @test
 fn test_cmp_unit_lt_const() → ∅:
-    var a ¤ptrdiff : i32 = 1
+    let a ¤ptrdiff : mut i32 = 1
     assert_eq(a < 5, true)
 
 /* ---- tuple indexing unchanged (no unit needed) -------------------------- */
 
 @test
 fn test_tuple_bare_int() → ∅:
-    var t := (10, 20, 30)
+    let t : mut = (10, 20, 30)
     assert_eq(t[0], 10)
     assert_eq(t[2], 30)
 

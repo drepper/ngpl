@@ -1,3 +1,3 @@
 @start
 fn main() → ∅:
-    var x : i32 = undefined_var
+    let x : mut i32 = undefined_var

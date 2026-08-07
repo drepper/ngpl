@@ -10,7 +10,7 @@ testdir=$topdir/tests
 
 all_tests=(
     "$testdir"/test_byte.nl
-    "$testdir"/test_const.nl
+    "$testdir"/test_let.nl
     "$testdir"/test_errors.nl
     "$testdir"/test_fast.nl
     "$testdir"/test_foreach.nl

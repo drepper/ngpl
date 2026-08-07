@@ -6,7 +6,7 @@
  * Each value fits in a signed 64-bit integer for the interpreter.
  * --------------------------------------------------------------------------- */
 
-const K : u32 = [
+let K : u32 = [
     1116352408, 1899447441, 3049323471, 3921009573,
      961987163, 1508970993, 2453635748, 2870763221,
     3624381080,  310598401,  607225278, 1426881987,
@@ -37,25 +37,25 @@ fn get_padded_byte(data : byte[], off ¤byte : usize, total_size ¤byte : usize)
     if off >= total_size: return ∅
     if off < data.sizeof: return data[off]
     if off == data.sizeof: return 128
-    var len_start := total_size - 8
+    let len_start : mut = total_size - 8
     if off >= len_start:
-        const bit_len := data.sizeof * 8
-        const byte_idx := off - len_start
+        let bit_len := data.sizeof * 8
+        let byte_idx := off - len_start
         return (bit_len » ((7 - byte_idx) * 8)) & 255
     ∅
 
 fn get_padded_word(data : byte[], off ¤byte : usize, total_size ¤byte : usize) → u32?:
     if off + 4 <= data.sizeof:
-        const b0 : u32 = data[off]
-        const b1 : u32 = data[off + 1]
-        const b2 : u32 = data[off + 2]
-        const b3 : u32 = data[off + 3]
+        let b0 : u32 = data[off]
+        let b1 : u32 = data[off + 1]
+        let b2 : u32 = data[off + 2]
+        let b3 : u32 = data[off + 3]
         return (b0 « 24) | (b1 « 16) | (b2 « 8) | b3
     if off >= total_size: return ∅
-    const b0 : u32 = get_padded_byte(data, off, total_size) ?? 0
-    const b1 : u32 = get_padded_byte(data, off + 1, total_size) ?? 0
-    const b2 : u32 = get_padded_byte(data, off + 2, total_size) ?? 0
-    const b3 : u32 = get_padded_byte(data, off + 3, total_size) ?? 0
+    let b0 : u32 = get_padded_byte(data, off, total_size) ?? 0
+    let b1 : u32 = get_padded_byte(data, off + 1, total_size) ?? 0
+    let b2 : u32 = get_padded_byte(data, off + 2, total_size) ?? 0
+    let b3 : u32 = get_padded_byte(data, off + 3, total_size) ?? 0
     (b0 « 24) | (b1 « 16) | (b2 « 8) | b3
 
 /* ---------------------------------------------------------------------------
@@ -77,13 +77,13 @@ fn expand_Σ₁(prev : u32) → u32:
 
 fn sha256(data : byte[]) → int?:
     /* Compute padded message length per SHA-256 spec. */
-    const rem := data.sizeof % 64
-    const pad_len := (119 - rem) % 64
-    const total_size := data.sizeof + 1 + pad_len + 8
+    let rem := data.sizeof % 64
+    let pad_len := (119 - rem) % 64
+    let total_size := data.sizeof + 1 + pad_len + 8
     static_assert_eq(@unitof(total_size), ¤byte)
 
     /* Initial hash values per FIPS 180-4 Section 5.3.3. */
-    var H : u32 = [
+    let H : mut u32 = [
         1779033703, 3144134277, 1013904242, 2773480762,
         1359893119, 2600822924, 528734635,  1541459225,
     ]
@@ -92,8 +92,8 @@ fn sha256(data : byte[]) → int?:
     foreach blk_off := 0…64…(total_size - 1):
         static_assert_eq(@unitof(blk_off), ¤byte)
         /* --- Load W[0..63]: first 16 from data, rest filled by expansion. --- */
-        var load_word := λi : usize |data, blk_off, total_size| → u32: get_padded_word(data, blk_off + i * 4 ¤byte, total_size) ?? 0
-        var W := generate(load_word, 0…15) ⧺ 48 ⍴ [0]
+        let load_word : mut = λi : usize |data, blk_off, total_size| → u32: get_padded_word(data, blk_off + i * 4 ¤byte, total_size) ?? 0
+        let W : mut = generate(load_word, 0…15) ⧺ 48 ⍴ [0]
 
         /* --- Message-schedule expansion: W[16..63]. --- */
         foreach j := 16…63:
@@ -101,27 +101,27 @@ fn sha256(data : byte[]) → int?:
                          W[j - 7] + expand_Σ₁(W[j - 2]))
 
         /* --- Working variables: copy of current hash state. --- */
-        var v := H[0…7]
+        let v : mut = H[0…7]
 
         /* --- 64 compression rounds using K[t] and W[t]. --- */
         foreach t := 0…63:
             /* Σ₁(e) = ROTR(6,e) ⊕ ROTR(11,e) ⊕ ROTR(25,e). */
-            const Σ₁ := (v[4] ↻ 6) ^ (v[4] ↻ 11) ^ (v[4] ↻ 25)
+            let Σ₁ := (v[4] ↻ 6) ^ (v[4] ↻ 11) ^ (v[4] ↻ 25)
 
             /* ch(e,f,g) = (e ∧ f) ⊕ (¬e ∧ g). */
-            const ch := (v[4] & v[5]) ^ (~v[4] & v[6])
+            let ch := (v[4] & v[5]) ^ (~v[4] & v[6])
 
             /* t1 = h + Σ₁ + ch + K[t] + W[t]. */
-            const t1 := @wrap(v[7] + Σ₁ + ch + K[t] + W[t])
+            let t1 := @wrap(v[7] + Σ₁ + ch + K[t] + W[t])
 
             /* Σ₀(a) = ROTR(2,a) ⊕ ROTR(13,a) ⊕ ROTR(22,a). */
-            const Σ₀ := (v[0] ↻ 2) ^ (v[0] ↻ 13) ^ (v[0] ↻ 22)
+            let Σ₀ := (v[0] ↻ 2) ^ (v[0] ↻ 13) ^ (v[0] ↻ 22)
 
             /* maj(a,b,c) = (a ∧ b) ⊕ (a ∧ c) ⊕ (b ∧ c). */
-            const maj := (v[0] & v[1]) ^ (v[0] & v[2]) ^ (v[1] & v[2])
+            let maj := (v[0] & v[1]) ^ (v[0] & v[2]) ^ (v[1] & v[2])
 
             /* t2 = Σ₀ + maj. */
-            const t2 := @wrap(Σ₀ + maj)
+            let t2 := @wrap(Σ₀ + maj)
 
             /* Shift working variables right by one position. */
             v[1…7] ← v[0…6]
@@ -143,28 +143,28 @@ fn sha256(data : byte[]) → int?:
 
 @test(sha256)
 fn test_sha256_empty() → ∅:
-    var data := std.bytes("")
-    var hash := sha256(data)
+    let data : mut = std.bytes("")
+    let hash : mut = sha256(data)
     assert_eq(hash, 0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
 
 @test(sha256)
 fn test_sha256_abc() → ∅:
-    var data := std.bytes("abc")
-    var hash := sha256(data)
+    let data : mut = std.bytes("abc")
+    let hash : mut = sha256(data)
     assert_eq(hash, 0xba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad)
 
 @test(sha256)
 fn test_sha256_448bit() → ∅:
-    var data := std.bytes("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")
-    var hash := sha256(data)
+    let data : mut = std.bytes("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")
+    let hash : mut = sha256(data)
     assert_eq(hash, 0x248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1)
 
 @start
 fn main() → ∅:
-    var alloc := std.arena.allocator()
-    var dir := std.fs.cwd()
-    var file := dir.openFile("CLAUDE.md")
-    var data := file.read_file(alloc)
-    var hash := sha256(data)
+    let alloc : mut = std.arena.allocator()
+    let dir : mut = std.fs.cwd()
+    let file : mut = dir.openFile("CLAUDE.md")
+    let data : mut = file.read_file(alloc)
+    let hash : mut = sha256(data)
     alloc.deinit()
     std.print(hash)

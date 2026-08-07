@@ -30,7 +30,7 @@ class Token:
 # Keywords: maps keyword string to token type.
 KEYWORDS = {
     "fn": "FN",
-    "var": "VAR",
+    "mut": "MUT",
     "if": "IF",
     "else": "ELSE",
     "elif": "ELIF",
@@ -50,7 +50,6 @@ KEYWORDS = {
     "some": "SOME",
     "start": "START",
     "test": "TEST",
-    "const": "CONST",
     "foreach": "FOREACH",
     "expect": "EXPECT",
     "wrap": "WRAP",

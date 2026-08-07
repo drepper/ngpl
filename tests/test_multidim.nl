@@ -4,7 +4,7 @@
 
 @test
 fn test_2d_read() → ∅:
-    var m := (3, 4) ⍴ (1…12)
+    let m : mut = (3, 4) ⍴ (1…12)
     assert_eq(m[0, 0], 1)
     assert_eq(m[0, 3], 4)
     assert_eq(m[1, 0], 5)
@@ -12,16 +12,16 @@ fn test_2d_read() → ∅:
 
 @test
 fn test_2d_read_variable_index() → ∅:
-    var m := (2, 3) ⍴ [10, 20, 30, 40, 50, 60]
-    var r := 1
-    var c := 2
+    let m : mut = (2, 3) ⍴ [10, 20, 30, 40, 50, 60]
+    let r : mut = 1
+    let c : mut = 2
     assert_eq(m[r, c], 60)
 
 /* ---- 2D write access ---------------------------------------------------- */
 
 @test
 fn test_2d_write() → ∅:
-    var m := (2, 3) ⍴ 0
+    let m : mut = (2, 3) ⍴ 0
     m[0, 1] ← 42
     m[1, 2] ← 99
     assert_eq(m[0, 1], 42)
@@ -30,9 +30,9 @@ fn test_2d_write() → ∅:
 
 @test
 fn test_2d_write_variable_index() → ∅:
-    var m := (2, 2) ⍴ 0
-    var r := 1
-    var c := 0
+    let m : mut = (2, 2) ⍴ 0
+    let r : mut = 1
+    let c : mut = 0
     m[r, c] ← 7
     assert_eq(m[1, 0], 7)
 
@@ -40,7 +40,7 @@ fn test_2d_write_variable_index() → ∅:
 
 @test
 fn test_3d_read() → ∅:
-    var a := (2, 3, 4) ⍴ (1…24)
+    let a : mut = (2, 3, 4) ⍴ (1…24)
     assert_eq(a[0, 0, 0], 1)
     assert_eq(a[0, 0, 3], 4)
     assert_eq(a[0, 2, 3], 12)
@@ -49,7 +49,7 @@ fn test_3d_read() → ∅:
 
 @test
 fn test_3d_write() → ∅:
-    var a := (2, 2, 2) ⍴ 0
+    let a : mut = (2, 2, 2) ⍴ 0
     a[1, 0, 1] ← 55
     assert_eq(a[1, 0, 1], 55)
     assert_eq(a[0, 0, 0], 0)
@@ -58,8 +58,8 @@ fn test_3d_write() → ∅:
 
 @test
 fn test_single_then_multi() → ∅:
-    var a := (2, 3, 4) ⍴ (1…24)
-    var row := a[1]
+    let a : mut = (2, 3, 4) ⍴ (1…24)
+    let row : mut = a[1]
     assert_eq(row[0, 0], 13)
     assert_eq(row[2, 3], 24)
 
@@ -67,7 +67,7 @@ fn test_single_then_multi() → ∅:
 
 @test
 fn test_equiv_chained() → ∅:
-    var m := (3, 3) ⍴ (1…9)
+    let m : mut = (3, 3) ⍴ (1…9)
     foreach r := 0…2:
         foreach c := 0…2:
             assert_eq(m[r, c], m[r][c])
@@ -77,19 +77,19 @@ fn test_equiv_chained() → ∅:
 @test
 @expect error "out of range"
 fn test_2d_oob_row() → ∅:
-    var m := (2, 3) ⍴ 0
-    var x := m[2, 0]
+    let m : mut = (2, 3) ⍴ 0
+    let x : mut = m[2, 0]
 
 @test
 @expect error "out of range"
 fn test_2d_oob_col() → ∅:
-    var m := (2, 3) ⍴ 0
-    var x := m[0, 3]
+    let m : mut = (2, 3) ⍴ 0
+    let x : mut = m[0, 3]
 
 @test
 @expect error "out of range"
 fn test_2d_write_oob() → ∅:
-    var m := (2, 3) ⍴ 0
+    let m : mut = (2, 3) ⍴ 0
     m[0, 3] ← 1
 
 /* ---- non-array inner dimension ------------------------------------------ */
@@ -97,8 +97,8 @@ fn test_2d_write_oob() → ∅:
 @test
 @expect error "requires nested arrays"
 fn test_flat_multi_subscript() → ∅:
-    var a := [1, 2, 3]
-    var x := a[0, 0]
+    let a : mut = [1, 2, 3]
+    let x : mut = a[0, 0]
 
 @start
 fn main() → ∅:

@@ -2,8 +2,8 @@
 
 /* Sum all pack arguments (untyped pack). */
 fn sum_all(acc : int, rest… : int) → int:
-    var i : int = 0
-    var s := acc
+    let i : mut int = 0
+    let s : mut = acc
     while i < rest.sizeof:
         s ← s + rest[i]
         i ← i + 1
@@ -19,8 +19,8 @@ fn first_of(args… : T'):
 
 /* Apply a function to each pack element and sum. */
 fn apply_sum(f, args… : int) → int:
-    var s : int = 0
-    var i : int = 0
+    let s : mut int = 0
+    let i : mut int = 0
     while i < args.sizeof:
         s ← s + f(args[i])
         i ← i + 1
@@ -49,7 +49,7 @@ fn test_first() → ∅:
 
 @test
 fn test_typeof_pack() → ∅:
-    var r := first_of(42)
+    let r : mut = first_of(42)
     assert_eq(@typeof(r), @typeof(0))
 
 fn double(x : int) → int:
@@ -114,8 +114,8 @@ fn test_pack_index_access() → ∅:
 
 /* Sum via concrete-typed pack. */
 fn int_sum(vals… : int) → int:
-    var s : int = 0
-    var i : int = 0
+    let s : mut int = 0
+    let i : mut int = 0
     while i < vals.sizeof:
         s ← s + vals[i]
         i ← i + 1
@@ -129,8 +129,8 @@ fn test_int_sum() → ∅:
 
 /* Pack with typed regular params and typed pack. */
 fn prepend_and_sum(base : int, extra… : int) → int:
-    var s := base
-    var i : int = 0
+    let s : mut = base
+    let i : mut int = 0
     while i < extra.sizeof:
         s ← s + extra[i]
         i ← i + 1
@@ -163,7 +163,7 @@ fn test_sizeof_pack_several() → ∅:
 /* @sizeof on arrays. */
 @test
 fn test_sizeof_array() → ∅:
-    var arr := [10, 20, 30, 40]
+    let arr : mut = [10, 20, 30, 40]
     assert_eq(@sizeof(arr), 4)
 
 /* @sizeof on strings. */
@@ -175,7 +175,7 @@ fn test_sizeof_string() → ∅:
 /* @sizeof matches .sizeof on arrays and packs. */
 @test
 fn test_sizeof_matches_dot_sizeof() → ∅:
-    var arr := [1, 2, 3]
+    let arr : mut = [1, 2, 3]
     assert_eq(@sizeof(arr), arr.sizeof)
 
 fn sizeof_both(args… : int) → int:

@@ -8,137 +8,137 @@
 
 @expect error "integer overflow.*does not fit in i8"
 fn error_i8_too_large() → ∅:
-    var x : i8 = 128
+    let x : mut i8 = 128
 
 @expect error "integer overflow.*does not fit in i8"
 fn error_i8_too_small() → ∅:
-    var x : i8 = ⁻129
+    let x : mut i8 = ⁻129
 
 @expect error "integer overflow.*does not fit in i16"
 fn error_i16_too_large() → ∅:
-    var x : i16 = 32768
+    let x : mut i16 = 32768
 
 @expect error "integer overflow.*does not fit in i32"
 fn error_i32_too_large() → ∅:
-    var x : i32 = 2147483648
+    let x : mut i32 = 2147483648
 
 @expect error "integer overflow.*does not fit in i64"
 fn error_i64_too_large() → ∅:
-    var x : i64 = 9223372036854775808
+    let x : mut i64 = 9223372036854775808
 
 /* ---- static: unsigned assignment wraps ----------------------------------- */
 
 @test
 fn test_u8_wraps_on_assign() → ∅:
-    var x : u8 = 256
+    let x : mut u8 = 256
     assert_eq(x, 0)
 
 @test
 fn test_u8_wraps_negative() → ∅:
-    var x : u8 = ⁻1
+    let x : mut u8 = ⁻1
     assert_eq(x, 255)
 
 @test
 fn test_u32_wraps_on_assign() → ∅:
-    var x : u32 = 4294967296
+    let x : mut u32 = 4294967296
     assert_eq(x, 0)
 
 /* ---- dynamic: signed arithmetic overflow --------------------------------- */
 
 @expect error "integer overflow"
 fn error_i8_add_overflow() → ∅:
-    var x : i8 = 127
-    var y : i8 = 1
-    var z := x + y
+    let x : mut i8 = 127
+    let y : mut i8 = 1
+    let z : mut = x + y
 
 @expect error "integer overflow"
 fn error_i8_sub_underflow() → ∅:
-    var x : i8 = ⁻128
-    var y : i8 = 1
-    var z := x - y
+    let x : mut i8 = ⁻128
+    let y : mut i8 = 1
+    let z : mut = x - y
 
 @expect error "integer overflow"
 fn error_i16_mul_overflow() → ∅:
-    var x : i16 = 200
-    var y : i16 = 200
-    var z := x * y
+    let x : mut i16 = 200
+    let y : mut i16 = 200
+    let z : mut = x * y
 
 @expect error "integer overflow"
 fn error_i32_add_overflow() → ∅:
-    var x : i32 = 2147483647
-    var y : i32 = 1
-    var z := x + y
+    let x : mut i32 = 2147483647
+    let y : mut i32 = 1
+    let z : mut = x + y
 
 @expect error "integer overflow"
 fn error_i32_negate_min() → ∅:
-    var x : i32 = ⁻2147483648
-    var z := ⁻x
+    let x : mut i32 = ⁻2147483648
+    let z : mut = ⁻x
 
 /* ---- dynamic: unsigned arithmetic wraps ---------------------------------- */
 
 @test
 fn test_u8_add_wraps() → ∅:
-    var x : u8 = 255
-    var y : u8 = 1
-    var z := x + y
+    let x : mut u8 = 255
+    let y : mut u8 = 1
+    let z : mut = x + y
     assert_eq(z, 0)
 
 @test
 fn test_u8_sub_wraps() → ∅:
-    var x : u8 = 0
-    var y : u8 = 1
-    var z := x - y
+    let x : mut u8 = 0
+    let y : mut u8 = 1
+    let z : mut = x - y
     assert_eq(z, 255)
 
 @test
 fn test_u32_add_wraps() → ∅:
-    var x : u32 = 4294967295
-    var y : u32 = 1
-    var z := x + y
+    let x : mut u32 = 4294967295
+    let y : mut u32 = 1
+    let z : mut = x + y
     assert_eq(z, 0)
 
 @test
 fn test_u32_mul_wraps() → ∅:
-    var x : u32 = 65536
-    var y : u32 = 65536
-    var z := x * y
+    let x : mut u32 = 65536
+    let y : mut u32 = 65536
+    let z : mut = x * y
     assert_eq(z, 0)
 
 /* ---- boundary values: signed types --------------------------------------- */
 
 @test
 fn test_i8_max() → ∅:
-    var x : i8 = 127
+    let x : mut i8 = 127
     assert_eq(x, 127)
 
 @test
 fn test_i8_min() → ∅:
-    var x : i8 = ⁻128
+    let x : mut i8 = ⁻128
     assert_eq(x, ⁻128)
 
 @test
 fn test_i32_max() → ∅:
-    var x : i32 = 2147483647
+    let x : mut i32 = 2147483647
     assert_eq(x, 2147483647)
 
 @test
 fn test_i32_min() → ∅:
-    var x : i32 = ⁻2147483648
+    let x : mut i32 = ⁻2147483648
     assert_eq(x, ⁻2147483648)
 
 /* ---- bitwise ops always wrap (not overflow) ------------------------------ */
 
 @test
 fn test_bitwise_not_i8() → ∅:
-    var x : i8 = 0
-    var y := ~x
+    let x : mut i8 = 0
+    let y : mut = ~x
     assert_eq(y, ⁻1)
 
 @test
 fn test_shift_left_wraps() → ∅:
-    var x : u8 = 128
-    var s : u8 = 1
-    var y := x « s
+    let x : mut u8 = 128
+    let s : mut u8 = 1
+    let y : mut = x « s
     assert_eq(y, 0)
 
 @start

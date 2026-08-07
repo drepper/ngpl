@@ -113,19 +113,19 @@ This concept is similar to Go's untyped constants and Odin's untyped integers.  
 
 3. **Arithmetic on untyped integers.**  When two `untyped int` values are combined with an arithmetic operator, the result is also `untyped int` with arbitrary precision — no overflow occurs.  This allows compile-time constant expressions to compute exact results regardless of magnitude.
 
-4. **Type inference with `var name := expr`.**  When a variable is defined with `:=` (no explicit type) and the initializer is an `untyped int`, the variable's type is `int` (arbitrary-precision).  To get a fixed-width type, use the explicit form: `var name : u32 = expr`.
+4. **Type inference with `let name := expr`.**  When a binding is defined with `:=` (no explicit type) and the initializer is an `untyped int`, the binding's type is `int` (arbitrary-precision).  To get a fixed-width type, use the explicit form: `let name : u32 = expr`.
 
-5. **Array initialization.**  In `var name : u32[64] = 0`, the `0` is an `untyped int` that coerces to the array's element type `u32`.
+5. **Array initialization.**  In `let name : mut u32[64] = 0`, the `0` is an `untyped int` that coerces to the array's element type `u32`.
 
 ### Examples
 
 ```
-const K : u32 = [1116352408, 1899447441, ...];   /* array of u32, literals coerced */
-var blk_off : usize = 0;                           /* usize variable for byte offsets */
-var rem : usize = data_size % 64;                  /* remainder operator, result coerced to usize */
-var i : u32 = 0;                                   /* u32 loop counter */
-var hash := 0;                                     /* int (arbitrary-precision), inferred from untyped int */
-var W : i32[64] = 0;                               /* array of 64 i32 elements, each initialized to 0 */
+let K : u32 = [1116352408, 1899447441, ...];       /* array of u32, literals coerced */
+let blk_off : mut usize = 0;                       /* mutable usize binding for byte offsets */
+let rem : mut usize = data_size % 64;              /* remainder operator, result coerced to usize */
+let i : mut u32 = 0;                               /* mutable u32 loop counter */
+let hash := 0;                                     /* int (arbitrary-precision), inferred from untyped int */
+let W : mut i32[64] = 0;                           /* array of 64 i32 elements, each initialized to 0 */
 ```
 
 ### Design Rationale
@@ -156,7 +156,7 @@ The primary use case is **loop indices and local counters** where the exact widt
 Fast types wrap at the width of their underlying type, not the minimum width.  For example, `u8fast` on x86_64 wraps at 2³² (not 2⁸):
 
 ```
-var x : u8fast = 255
+let x : mut u8fast = 255
 x ← x + 1
 /* x is 256, not 0 — because u8fast is 32-bit on this platform */
 ```
@@ -167,13 +167,13 @@ This means code using fast types must not rely on narrow wrapping behavior.  If 
 
 Fast types **cannot** be used in data structure definitions that are visible outside function scope.  This prevents platform-dependent memory layouts from leaking across compilation boundaries:
 
-- **Array element types**: `var arr : u8fast[64] = 0` is an error
-- **Const definitions**: `const K : u32fast = [...]` is an error
+- **Array element types**: `let arr : mut u8fast[64] = 0` is an error
+- **Let definitions**: `let K : u32fast = [...]` is an error
 - **Struct/product type members**: not allowed (when implemented)
 
 Fast types **are** allowed for:
 
-- Local scalar variables: `var i : u32fast = 0`
+- Local scalar bindings: `let i : mut u32fast = 0`
 - Loop indices: `foreach k : u32fast = 0…63:`
 - Function parameters: `fn f x : u32fast → int:`
 
@@ -205,15 +205,15 @@ Integer overflow behavior depends on whether the type is **signed** or **unsigne
 Unsigned types (`u8`, `u16`, `u32`, `u64`, `usize`, `byte`, and all unsigned fast variants) use **modular arithmetic**.  Operations that exceed the type's range silently wrap:
 
 ```
-var x : u8 = 255
-var y : u8 = 1
-var z := x + y          /* z is 0 (wrapped modulo 256) */
+let x : mut u8 = 255
+let y : mut u8 = 1
+let z : mut = x + y          /* z is 0 (wrapped modulo 256) */
 
-var a : u32 = 4294967295
-var b : u32 = 1
-var c := a + b           /* c is 0 (wrapped modulo 2³²) */
+let a : mut u32 = 4294967295
+let b : mut u32 = 1
+let c : mut = a + b           /* c is 0 (wrapped modulo 2³²) */
 
-var d : u8 = -1          /* d is 255 (modular representation) */
+let d : mut u8 = -1          /* d is 255 (modular representation) */
 ```
 
 This matches C's unsigned semantics and Rust's `Wrapping<T>`.  Algorithms like SHA-256 depend on this behavior.
@@ -223,12 +223,12 @@ This matches C's unsigned semantics and Rust's `Wrapping<T>`.  Algorithms like S
 Signed types (`i8`, `i16`, `i32`, `i64`, and all signed fast variants) **abort on overflow**.  Any arithmetic operation that produces a result outside the type's range raises an `OverflowError`:
 
 ```
-var x : i8 = 127
-var y : i8 = 1
-var z := x + y           /* ERROR: integer overflow */
+let x : mut i8 = 127
+let y : mut i8 = 1
+let z : mut = x + y           /* ERROR: integer overflow */
 
-var a : i32 = -2147483648
-var b := -a              /* ERROR: integer overflow (negation) */
+let a : mut i32 = -2147483648
+let b : mut = -a              /* ERROR: integer overflow (negation) */
 ```
 
 This is the default strict mode behavior, as mandated by the language design: "in strict mode arithmetic overflow/underflow must be reported or lead to termination."
@@ -242,8 +242,8 @@ The untyped `int` type has arbitrary precision — overflow is impossible.  When
 Assigning an untyped integer literal to a signed typed variable checks that the value fits:
 
 ```
-var x : i8 = 128         /* ERROR: 128 does not fit in i8 (range -128..127) */
-var y : u8 = 256         /* y is 0 (unsigned wraps) */
+let x : mut i8 = 128         /* ERROR: 128 does not fit in i8 (range -128..127) */
+let y : mut u8 = 256         /* y is 0 (unsigned wraps) */
 ```
 
 #### Bitwise Operations
@@ -300,11 +300,11 @@ A number literal is interpreted as floating-point when any of the following are 
 All standard arithmetic operators (`+`, `-`, `*`, `/`, `%`) work on floating-point values.  When both operands are floats, the result uses the wider of the two types.  The width promotion order is: `f16`/`bfloat` < `f32` < `f64`/`float`.
 
 ```
-var a := 3.0 + 2.0      // 5.0 (float)
-var b := 1.5f32 * 2.0   // 3.0 (float — f32 promoted to float)
-var c := 10.0 / 4.0     // 2.5 (float)
-var d := 7.0 % 3.0      // 1.0 (float, uses fmod semantics)
-var e := -3.14           // -3.14 (negation)
+let a : mut = 3.0 + 2.0      // 5.0 (float)
+let b : mut = 1.5f32 * 2.0   // 3.0 (float — f32 promoted to float)
+let c : mut = 10.0 / 4.0     // 2.5 (float)
+let d : mut = 7.0 % 3.0      // 1.0 (float, uses fmod semantics)
+let e : mut = -3.14           // -3.14 (negation)
 ```
 
 Division by zero on floats produces an error (same as integer division by zero), not IEEE 754 infinity.
@@ -314,9 +314,9 @@ Division by zero on floats produces an error (same as integer division by zero),
 When an integer and a float are combined in an arithmetic expression, the integer is promoted to the float type:
 
 ```
-var a := 2 + 3.0        // 5.0 — int promoted to float
-var b := 3 * 2.5f32     // 7.5 — int promoted to f32
-var c := 10.0 / 4       // 2.5 — int 4 promoted to float
+let a : mut = 2 + 3.0        // 5.0 — int promoted to float
+let b : mut = 3 * 2.5f32     // 7.5 — int promoted to f32
+let c : mut = 10.0 / 4       // 2.5 — int 4 promoted to float
 ```
 
 This promotion is implicit and always safe (integers have exact float representations up to the significand width).
@@ -356,8 +356,8 @@ square(3.14)             // ERROR: float cannot coerce to integer
 When a value is stored in a fixed-width float type, it is rounded to that type's precision using IEEE 754 round-to-nearest semantics.  The `bfloat` type truncates the lower 16 bits of the `f32` representation:
 
 ```
-var x : f32 = 3.14      // stored as approximately 3.140000104904175
-var y : f16 = 1.0       // exact in f16
+let x : mut f32 = 3.14      // stored as approximately 3.140000104904175
+let y : mut f16 = 1.0       // exact in f16
 ```
 
 #### Root Operators
@@ -373,29 +373,29 @@ Three unary prefix operators compute roots of floating-point values:
 Root operators are only allowed on floating-point values.  Applying them to integers is a type error:
 
 ```
-var a := √9.0           // 3.0
-var b := ∛27.0          // 3.0
-var c := ∜16.0          // 2.0
-var d := -√25.0         // -5.0 (negation binds looser than √)
-var e := √√256.0        // 4.0 (chained: fourth root)
+let a : mut = √9.0           // 3.0
+let b : mut = ∛27.0          // 3.0
+let c : mut = ∜16.0          // 2.0
+let d : mut = -√25.0         // -5.0 (negation binds looser than √)
+let e : mut = √√256.0        // 4.0 (chained: fourth root)
 
-var x := 9
+let x : mut = 9
 @expect error "floating-point"
-var r := √x             // ERROR: integer operand
+let r : mut = √x             // ERROR: integer operand
 ```
 
 When applied to a value with a unit, the root is also taken of the unit's dimensions.  Each dimension exponent must be divisible by the root degree, and the unit's conversion factor must be a perfect power:
 
 ```
-var area ¤meter*meter := 36.0
-var side := √area       // 6.0 m (√(m²) = m)
+let area ¤meter*meter : mut = 36.0
+let side : mut = √area       // 6.0 m (√(m²) = m)
 
-var vol ¤meter*meter*meter := 125.0
-var edge := ∛vol        // 5.0 m (∛(m³) = m)
+let vol ¤meter*meter*meter : mut = 125.0
+let edge : mut = ∛vol        // 5.0 m (∛(m³) = m)
 
-var d ¤meter := 9.0
+let d ¤meter : mut = 9.0
 @expect error "exponent"
-var r := √d             // ERROR: √(m¹) has odd exponent
+let r : mut = √d             // ERROR: √(m¹) has odd exponent
 ```
 
 #### Power Operator
@@ -403,24 +403,24 @@ var r := √d             // ERROR: √(m¹) has odd exponent
 The binary operator `↑` (U+2191, UPWARDS ARROW) computes exponentiation.  It is right-associative and binds tighter than multiplication but looser than unary operators (except negation, which binds looser than `↑`):
 
 ```
-var a := 2 ↑ 10         // 1024 (integer)
-var b := 3 ↑ 4          // 81
-var c := 2.0 ↑ 0.5      // √2 ≈ 1.4142
-var d := 4.0 ↑ -0.5     // 1/√4 = 0.5
+let a : mut = 2 ↑ 10         // 1024 (integer)
+let b : mut = 3 ↑ 4          // 81
+let c : mut = 2.0 ↑ 0.5      // √2 ≈ 1.4142
+let d : mut = 4.0 ↑ -0.5     // 1/√4 = 0.5
 ```
 
 **Integer rules**: both operands must be integers.  The exponent must be non-negative (negative integer exponents are a type error since the result would be fractional).  Overflow is detected and reported:
 
 ```
-var x: i8 = 2
+let x : mut i8 = 2
 @expect error "overflow"
-var r := x ↑ 8          // 256 overflows i8
+let r : mut = x ↑ 8          // 256 overflows i8
 ```
 
 **Float rules**: either or both operands may be float.  An integer operand is promoted to float.  Negative exponents are allowed:
 
 ```
-var r := 2.0 ↑ -1.0     // 0.5
+let r : mut = 2.0 ↑ -1.0     // 0.5
 ```
 
 **Precedence and associativity**:
@@ -432,10 +432,10 @@ var r := 2.0 ↑ -1.0     // 0.5
 **With units**: a unit-bearing base raised to an integer exponent scales the unit dimensions accordingly.  The exponent itself cannot carry a unit:
 
 ```
-var d ¤meter := 3.0
-var area := d ↑ 2       // 9.0 m^2
-var vol  := d ↑ 3       // 27.0 m^3
-var r    := d ↑ 0       // 1.0 (dimensionless — m^0)
+let d ¤meter : mut = 3.0
+let area : mut = d ↑ 2       // 9.0 m^2
+let vol : mut = d ↑ 3       // 27.0 m^3
+let r : mut = d ↑ 0       // 1.0 (dimensionless — m^0)
 ```
 
 #### Truthiness
@@ -470,8 +470,8 @@ Binary logic operations use Unicode glyphs and operate on logical truth values. 
 For `bool` operands the value is used directly.  For integer operands (`i8`, `u32`, `int`, etc.) a nonzero test is applied: zero maps to `false`, any nonzero value maps to `true`.  Floating-point operands are not allowed and produce a type error.
 
 ```
-var a : i32 = 42
-var b : i32 = 0
+let a : mut i32 = 42
+let b : mut i32 = 0
 a ∧ b                       /* false — 42 is truthy, 0 is falsy */
 a ∨ b                       /* true  — at least one is truthy */
 ¬b                           /* true  — 0 is falsy */
@@ -497,11 +497,11 @@ This means `a == 0 ∧ b != 0` parses as `(a == 0) ∧ (b != 0)`, and `x ∧ y �
 Like arithmetic operators, the logic operators iterate element-wise over arrays and vectors:
 
 ```
-var a : i32[3] = 0
+let a : mut i32[3] = 0
 a[0] ← 1; a[1] ← 0; a[2] ← 5
-var b : i32[3] = 0
+let b : mut i32[3] = 0
 b[0] ← 3; b[1] ← 0; b[2] ← 0
-var r := a ∧ b              /* [true, false, false] */
+let r : mut = a ∧ b              /* [true, false, false] */
 ```
 
 #### Distinction from Other Operators
@@ -518,28 +518,28 @@ var r := a ∧ b              /* [true, false, false] */
 The `@wrap(expr)` annotation enables modular arithmetic for all operations within its scope, even for signed types that would normally abort on overflow.  This is useful for cryptographic algorithms and other code that intentionally uses wrapping arithmetic on signed types:
 
 ```
-var x : i8 = 127
-var y : i8 = 1
-var z := @wrap(x + y)      /* z is -128 (wraps instead of aborting) */
+let x : mut i8 = 127
+let y : mut i8 = 1
+let z : mut = @wrap(x + y)      /* z is -128 (wraps instead of aborting) */
 
-var a : i32 = -2147483648
-var b := @wrap(-a)          /* b is -2147483648 (wraps instead of aborting) */
+let a : mut i32 = -2147483648
+let b : mut = @wrap(-a)          /* b is -2147483648 (wraps instead of aborting) */
 ```
 
 `@wrap` applies to the entire expression within the parentheses, including nested sub-expressions and function arguments.  Operations outside the `@wrap` scope retain their normal overflow behavior:
 
 ```
-var x : i8 = 127
-var y : i8 = 1
-var safe := @wrap(x - y)    /* wrapping subtraction */
-var z := x + y               /* ERROR: still aborts outside @wrap */
+let x : mut i8 = 127
+let y : mut i8 = 1
+let safe : mut = @wrap(x - y)    /* wrapping subtraction */
+let z : mut = x + y               /* ERROR: still aborts outside @wrap */
 ```
 
 For unsigned types, `@wrap` is a no-op since they already use modular arithmetic, but it serves as documentation of intent:
 
 ```
 /* SHA-256 compression round — u32 additions intentionally wrap. */
-const t1 := @wrap(v[7] + s1 + ch + K[t] + W[t])
+let t1 := @wrap(v[7] + s1 + ch + K[t] + W[t])
 ```
 
 #### Design Rationale
@@ -589,7 +589,7 @@ Dynamic arrays support iteration with `foreach`:
 
 ```
 fn sum_bytes data : byte[] → int:
-    var total := 0
+    let total : mut = 0
     foreach b := data:
         total ← total + b
     total
@@ -683,7 +683,7 @@ The `@impure` annotation lifts the restriction.  An impure function may read and
 
 #### What is a mutable global?
 
-A top-level binding introduced with `var` is a mutable global.  Bindings introduced with `const`, `fn`, or `enum` are immutable and visible to all functions regardless of purity.
+A top-level binding introduced with `let mut` is a mutable global.  Bindings introduced with `let`, `fn`, or `enum` are immutable and visible to all functions regardless of purity.
 
 #### Rules
 
@@ -695,8 +695,8 @@ A top-level binding introduced with `var` is a mutable global.  Bindings introdu
 #### Examples
 
 ```
-var counter := 0
-const LIMIT := 100
+let counter : mut = 0
+let LIMIT := 100
 
 fn pure_ok(x : int) → int:           /* pure — uses only parameter */
     x * 2
@@ -795,56 +795,63 @@ fn abs x : int → int { if x < 0 { return -x; } x }
 ```
 
 
-### Const Bindings
+### Bindings: `let` and `mut`
 
-The `const` keyword defines an immutable binding.  It can appear at module level (global constant) or inside a function body (local constant).
-
-#### Module-Level `const`
-
-A module-level `const` defines a global constant visible throughout the compilation unit:
+The `let` keyword introduces a binding.  By default, bindings are **immutable** — they cannot be reassigned after initialization.  Adding `mut` to the type makes the binding mutable.
 
 ```
-const PI := 3
-const MAX_SIZE : u32 = 1024
+let x := 42                  /* immutable, type inferred */
+let y : i32 = 42             /* immutable, explicit type */
+let z : mut = 0              /* mutable, type inferred */
+let w : mut i32 = 0          /* mutable, explicit type */
 ```
 
-Module-level constants are **not variables** — they need not occupy storage at runtime.  The compiler is free to substitute the value at every use site and eliminate the binding entirely.  This is a fundamental difference from C++, where `const` creates a variable with an immutable value that still has an address, a lifetime, and can be passed by reference.  In NGPL, taking the address of a `const` binding is not permitted.
+#### Module-Level `let`
 
-Because module-level constants cannot be modified, they are accessible from pure functions (see [Function Purity](#function-purity)).
-
-#### Function-Scope `const`
-
-The `const` keyword can also be used in place of `var` inside a function body to define a local binding that cannot be modified after initialization:
+A module-level `let` defines a global constant visible throughout the compilation unit:
 
 ```
-const pi := 3
-const max_size : u32 = 1024
+let PI := 3
+let MAX_SIZE : u32 = 1024
 ```
 
-A `const` binding is initialized exactly like a `var` — with `:=` for type-inferred definitions or `: type =` for explicitly typed ones.  After initialization, any attempt to reassign or redefine the binding is a compile-time (or runtime, in the interpreter) error:
+Module-level immutable bindings are **not variables** — they need not occupy storage at runtime.  The compiler is free to substitute the value at every use site and eliminate the binding entirely.  This is a fundamental difference from C++, where `const` creates a variable with an immutable value that still has an address, a lifetime, and can be passed by reference.  In NGPL, taking the address of an immutable `let` binding is not permitted.
+
+Module-level mutable bindings (`let name : mut type = expr`) are mutable globals.  They are accessible only from `@impure` functions (see [Function Purity](#function-purity)).
+
+#### Function-Scope `let`
+
+Inside a function body, `let` defines a local binding:
 
 ```
-const x := 42
-x ← 99              /* ERROR: cannot assign to const variable 'x' */
-var x := 99          /* ERROR: cannot redefine const variable 'x' */
+let pi := 3
+let max_size : u32 = 1024
 ```
 
-As with module-level constants, the compiler may eliminate function-scope `const` bindings that have values known at compile time.  When the initializer is not a compile-time constant, the binding behaves like a read-only local variable.
+After initialization, any attempt to reassign or redefine an immutable binding is a compile-time (or runtime, in the interpreter) error:
 
-`foreach` loop variables are implicitly `const` for assignment — they cannot be reassigned with `←`.  Redefinition with `var` or `const` is permitted but produces a warning (see [Constant Loop Variables](#constant-loop-variables)).
+```
+let x := 42
+x ← 99              /* ERROR: cannot assign to let binding 'x' */
+let x : mut = 99    /* ERROR: cannot redefine let binding 'x' */
+```
+
+As with module-level constants, the compiler may eliminate function-scope `let` bindings that have values known at compile time.  When the initializer is not a compile-time constant, the binding behaves like a read-only local variable.
+
+`foreach` loop variables are implicitly immutable — they cannot be reassigned with `←`.  Redefinition with `let` or `let ... : mut` is permitted but produces a warning (see [Constant Loop Variables](#constant-loop-variables)).
 
 #### Comparison with Other Languages
 
 | Feature | C/C++ | Rust | Zig | Go | NGPL |
 |---------|-------|------|-----|----|---------------|
-| Local immutability | `const` | default (`let`) | `const` | no | `const` |
-| Mutable keyword | (default) | `mut` | `var` | (default) | `var` |
-| `const` has address | yes | yes (`let`) | no | N/A | no |
-| `const` eliminated | only with `constexpr` | only with `const` | yes | N/A | yes |
+| Immutable binding | `const` | `let` (default) | `const` | no | `let` (default) |
+| Mutable binding | (default) | `let mut` | `var` | (default) | `let : mut` |
+| Immutable has address | yes | yes | no | N/A | no |
+| Immutable eliminated | only with `constexpr` | only with `const` | yes | N/A | yes |
 
 In C++, `const` creates a variable that happens to be immutable — it still has an address, participates in linkage, and can be passed by reference.  Only `constexpr` guarantees compile-time evaluation and potential elimination.  In Zig, `const` bindings are closer to NGPL: they are values, not locations, and the compiler eliminates them freely.  Rust's `const` items (module-level) are inlined at every use site like NGPL; Rust's `let` bindings (function-local) are immutable by default but always have an address.
 
-Unlike Rust where immutability is the default (`let` vs `let mut`), NGPL defaults to mutability (`var`) and opts into immutability (`const`).  This matches C/C++ and Zig conventions and avoids cluttering code with `mut` annotations in imperative-style code where most variables are modified.
+Like Rust, NGPL defaults to immutability — `let` creates an immutable binding, and `mut` must be explicitly requested in the type.  This encourages a functional style where most bindings are never reassigned, and makes mutable state visible at the definition site.
 
 
 ### Optional Types (`T?`)
@@ -869,7 +876,7 @@ The `?` operator unwraps an optional value or **propagates** `∅` to the enclos
 
 ```
 fn get_padded_word data : byte[], off : usize, total_size : usize → u32?:
-    var b0 : u32 = get_padded_byte(data, off, total_size)?
+    let b0 : mut u32 = get_padded_byte(data, off, total_size)?
     ...
 ```
 
@@ -886,7 +893,7 @@ This matches Rust's `?` operator.  The compile-time restriction ensures that `�
 The `??` operator provides a default value when an optional is `∅`:
 
 ```
-var b0 : u32 = get_padded_byte(data, off, total_size) ?? 0
+let b0 : mut u32 = get_padded_byte(data, off, total_size) ?? 0
 ```
 
 Semantics of `expr ?? default`:
@@ -942,19 +949,19 @@ An expected value is either `ok(value)` or `err(error)`:
 Integer division and remainder (`/`, `%`) return an expected value with error type `std.errors` rather than raising a runtime exception:
 
 ```
-var x := 10 / 3           /* ok(3) — successful division */
-var y := 10 / 0           /* err(std.errors.division_by_zero) */
+let x : mut = 10 / 3           /* ok(3) — successful division */
+let y : mut = 10 / 0           /* err(std.errors.division_by_zero) */
 ```
 
 This means division by zero is a **recoverable error** rather than an immediate program abort.  The caller chooses the error-handling strategy:
 
 ```
 /* Recovery with ?? */
-var result := (10 / 0) ?? -1         /* result is -1 */
+let result : mut = (10 / 0) ?? -1         /* result is -1 */
 
 /* Propagation with ? (requires T?E or T? return type) */
 fn compute x : int → int?std.errors:
-    var q := (x / 2)?                /* propagates error if x/2 fails */
+    let q : mut = (x / 2)?                /* propagates error if x/2 fails */
     q + 10
 ```
 
@@ -978,8 +985,8 @@ When an expected-error is propagated to a function with an optional return type 
 The `??` operator works on both optional and expected values.  For an expected error, the right-hand side provides the fallback:
 
 ```
-var safe := (x / y) ?? 0            /* 0 on division by zero */
-var padded := get_padded_byte(data, pos, total_size) ?? 0  /* 0 on absent byte */
+let safe : mut = (x / y) ?? 0            /* 0 on division by zero */
+let padded : mut = get_padded_byte(data, pos, total_size) ?? 0  /* 0 on absent byte */
 ```
 
 | Input | Behavior |
@@ -992,11 +999,11 @@ var padded := get_padded_byte(data, pos, total_size) ?? 0  /* 0 on absent byte *
 When an expected value holding `ok(v)` is used in an operation that expects a plain value (arithmetic, comparison, etc.), it is automatically unwrapped to `v`.  An expected value holding `err(e)` raises a runtime error at the point of use:
 
 ```
-var x := 10 / 3      /* x is ok(3) */
-var y := x + 1        /* x auto-unwraps to 3, y is 4 */
+let x : mut = 10 / 3      /* x is ok(3) */
+let y : mut = x + 1        /* x auto-unwraps to 3, y is 4 */
 
-var z := 10 / 0       /* z is err(std.errors.division_by_zero) */
-var w := z + 1        /* runtime error: unwrap of expected error */
+let z : mut = 10 / 0       /* z is err(std.errors.division_by_zero) */
+let w : mut = z + 1        /* runtime error: unwrap of expected error */
 ```
 
 This ensures that errors cannot be silently ignored — they must be handled (with `?` or `??`) or they surface at the next use site.
@@ -1013,10 +1020,10 @@ fn get_padded_byte ... → u8?:
 
 fn get_padded_word ... → u32?:
     if off >= total_size: return ∅             /* fully out of range */
-    var b0 : u32 = get_padded_byte(...) ?? 0     /* absent bytes → 0 */
-    var b1 : u32 = get_padded_byte(...) ?? 0
-    var b2 : u32 = get_padded_byte(...) ?? 0
-    var b3 : u32 = get_padded_byte(...) ?? 0
+    let b0 : mut u32 = get_padded_byte(...) ?? 0     /* absent bytes → 0 */
+    let b1 : mut u32 = get_padded_byte(...) ?? 0
+    let b2 : mut u32 = get_padded_byte(...) ?? 0
+    let b3 : mut u32 = get_padded_byte(...) ?? 0
     (b0 « 24) | (b1 « 16) | (b2 « 8) | b3
 
 fn sha256 data → int?:
@@ -1202,7 +1209,7 @@ The `foreach` loop iterates over **ranges** and **containers**, binding one or m
 foreach var1 [: type1] [, var2 [: type2] ...] := expr1 [, expr2 ...] block
 ```
 
-The `:=` separates the variable list from the iterable expressions, consistent with variable definitions using `var x := expr`.  When a type annotation is present on the last variable, the `:` is consumed by the type syntax, so only `=` follows (e.g., `foreach k : u32 = 0…3:`).  The block uses either `:` (layout) or `{ }` (braces), like all other block constructs.
+The `:=` separates the variable list from the iterable expressions, consistent with variable definitions using `let x : mut = expr`.  When a type annotation is present on the last variable, the `:` is consumed by the type syntax, so only `=` follows (e.g., `foreach k : u32 = 0…3:`).  The block uses either `:` (layout) or `{ }` (braces), like all other block constructs.
 
 #### Ranges
 
@@ -1303,8 +1310,8 @@ Tuple elements are accessed by integer index (`pair[0]`, `pair[1]`).  In the fut
 In addition to ranges, `foreach` iterates directly over array elements:
 
 ```
-var data := [10, 20, 30, 40]
-var total := 0
+let data : mut = [10, 20, 30, 40]
+let total : mut = 0
 foreach val := data:
     total ← total + val
 /* total is 100 */
@@ -1314,7 +1321,7 @@ This works with any array, including dynamic arrays passed as parameters:
 
 ```
 fn sum_bytes data : byte[] → int:
-    var total := 0
+    let total : mut = 0
     foreach b := data:
         total ← total + b
     total
@@ -1331,11 +1338,11 @@ foreach i := 1…5:
     i ← i + 1          /* ERROR: cannot assign to foreach variable 'i' */
 ```
 
-Redefinition with `var` or `const` is permitted but produces a **warning**.  The new variable shadows the loop variable for the remainder of the iteration:
+Redefinition with `let mut` or `let` is permitted but produces a **warning**.  The new variable shadows the loop variable for the remainder of the iteration:
 
 ```
 foreach i := 1…3:
-    var i := 99         /* WARNING: redefinition of foreach variable 'i' */
+    let i : mut = 99         /* WARNING: redefinition of foreach variable 'i' */
     /* i is 99 here, not the loop counter */
 ```
 
@@ -1345,7 +1352,7 @@ This distinction exists because shadowing is a common intentional pattern (e.g.,
 
 Accumulate a sum:
 ```
-var sum := 0
+let sum : mut = 0
 foreach i := 1…100:
     sum ← sum + i
 /* sum is 5050 */
@@ -1362,8 +1369,8 @@ foreach row, col := 0…2, 0…3:
 Tuple destructuring by index:
 ```
 foreach point := [1,2,3], [10,20,30]:
-    var x := point[0]
-    var y := point[1]
+    let x : mut = point[0]
+    let y : mut = point[1]
 ```
 
 #### Design Rationale
@@ -1374,8 +1381,8 @@ foreach point := [1,2,3], [10,20,30]:
 | Range syntax | `range(1, 11)` | `1..=10` | `0..10` | `1…10` (inclusive) |
 | Stepped range | `range(0, 11, 2)` | `(0..=10).step_by(2)` | N/A | `0…2…10` |
 | Multiple iterables | `zip(a, b)` | `a.zip(b)` | N/A | built-in with wrapping |
-| Tuple binding | destructuring | destructuring | N/A | single var → tuple |
-| Loop var mutability | mutable | immutable | N/A | immutable |
+| Tuple binding | destructuring | destructuring | N/A | single let → tuple |
+| Loop binding mutability | mutable | immutable | N/A | immutable |
 | Shorter-range behavior | `zip` truncates | `zip` truncates | N/A | wraps around |
 
 The wrapping behavior for shorter ranges is deliberate: it enables patterns like cycling through a palette or repeating a short sequence across a longer one, which are common in array programming languages like APL.  Languages that truncate to the shortest require explicit repetition; wrapping makes the common case trivial.
@@ -1426,14 +1433,14 @@ When a lambda body requires more than one expression, use the usual block syntax
 
 ```
 // Layout-driven (indented block)
-var f := λx : int → int:
-    var y := x * 2
+let f : mut = λx : int → int:
+    let y : mut = x * 2
     y + 1
 
 // Brace-delimited
-var g := λx : int → int: {
-    var y := x + 10;
-    var z := y * 2;
+let g : mut = λx : int → int: {
+    let y : mut = x + 10;
+    let z : mut = y * 2;
     z
 }
 ```
@@ -1441,7 +1448,7 @@ var g := λx : int → int: {
 Early return is supported inside multi-statement lambda bodies:
 
 ```
-var clamp := λx : int |lo, hi| → int:
+let clamp : mut = λx : int |lo, hi| → int:
     if x < lo:
         return lo
     if x > hi:
@@ -1452,8 +1459,8 @@ var clamp := λx : int |lo, hi| → int:
 When passing a multi-statement lambda as a function argument, braces are required because indentation tracking is suppressed inside parentheses:
 
 ```
-var result := apply(λx : int → int: {
-    var a := x + 1;
+let result : mut = apply(λx : int → int: {
+    let a : mut = x + 1;
     a * 2
 }, 4)
 ```
@@ -1472,10 +1479,10 @@ The lambda body has a restricted environment:
 fn helper x : i32 → i32:
     x + 100
 
-var offset := 10
-var f := λx : i32 |offset| → i32: helper(x) + offset   // OK: helper is non-replaceable, offset is captured
-var g := λx : i32 → i32: helper(x)                     // OK: helper needs no capture
-var h := λx : i32 → i32: x + offset                     // ERROR: references 'offset' but has no capture list
+let offset : mut = 10
+let f : mut = λx : i32 |offset| → i32: helper(x) + offset   // OK: helper is non-replaceable, offset is captured
+let g : mut = λx : i32 → i32: helper(x)                     // OK: helper needs no capture
+let h : mut = λx : i32 → i32: x + offset                     // ERROR: references 'offset' but has no capture list
 ```
 
 #### Calling Lambdas
@@ -1483,14 +1490,14 @@ var h := λx : i32 → i32: x + offset                     // ERROR: references 
 Lambdas are first-class values.  They can be assigned to variables, passed as arguments, and returned from functions.
 
 ```
-var double := λx : int → int: x * 2
+let double : mut = λx : int → int: x * 2
 assert_eq(10, double(5))
 ```
 
 Immediate application uses parentheses around the lambda:
 
 ```
-var result := (λx : int → int: x + 1)(5)   // result is 6
+let result : mut = (λx : int → int: x + 1)(5)   // result is 6
 ```
 
 #### Lambdas as Arguments and Return Values
@@ -1502,7 +1509,7 @@ fn apply f, x : i32 → i32:
 fn make_adder n : i32:
     λx : int |n| → int: x + n
 
-var add3 := make_adder(3)
+let add3 : mut = make_adder(3)
 assert_eq(8, add3(5))
 assert_eq(15, apply(λx : int → int: x * 3, 5))
 ```
@@ -1515,7 +1522,7 @@ Calling a function with fewer arguments than its parameter list produces a parti
 fn add a : i32, b : i32 → i32:
     a + b
 
-var add5 := add(5)                  // returns λb (partial add[5])
+let add5 : mut = add(5)                  // returns λb (partial add[5])
 assert_eq(8, add5(3))
 ```
 
@@ -1525,16 +1532,16 @@ Multi-step currying is supported:
 fn add3 a : i32, b : i32, c : i32 → i32:
     a + b + c
 
-var f1 := add3(1)                   // λb, c
-var f2 := f1(2)                     // λc
+let f1 : mut = add3(1)                   // λb, c
+let f2 : mut = f1(2)                     // λc
 assert_eq(6, f2(3))               // 1 + 2 + 3
 ```
 
 Lambdas themselves support partial application:
 
 ```
-var mul := λx : int, y : int → int: x * y
-var triple := mul(3)
+let mul : mut = λx : int, y : int → int: x * y
+let triple : mut = mul(3)
 assert_eq(15, triple(5))
 ```
 
@@ -1550,10 +1557,10 @@ fn strategy x : i32 → i32:
     x * 2
 
 // Must capture — strategy could change after the lambda is created
-var f := λx : i32 |strategy| → i32: strategy(x)
+let f : mut = λx : i32 |strategy| → i32: strategy(x)
 
 // ERROR: strategy is @replaceable and not captured
-var g := λx : i32 → i32: strategy(x)
+let g : mut = λx : i32 → i32: strategy(x)
 ```
 
 This distinction ensures that lambdas with no capture list or an empty capture list are guaranteed to be pure with respect to user-defined state — they depend only on their parameters and immutable bindings.
@@ -1587,7 +1594,7 @@ Automatic currying follows Haskell's model: every function of N parameters is co
 Range expressions (`start…end` and `start…step…end`) are first-class values.  They can be stored in variables, passed as arguments, and iterated with `foreach`.
 
 ```
-var r := 1…10
+let r : mut = 1…10
 foreach i := r:
     ...
 ```
@@ -1595,7 +1602,7 @@ foreach i := r:
 Ranges bind tighter than comparison but looser than arithmetic:
 
 ```
-var r := 1 + 2 … 10 - 3             // equivalent to (1+2)…(10-3) = 3…7
+let r : mut = 1 + 2 … 10 - 3             // equivalent to (1+2)…(10-3) = 3…7
 ```
 
 
@@ -1616,13 +1623,13 @@ generate(func, range)
 #### Basic Usage
 
 ```
-var squares := generate(λx : int → int: x * x, 1…5)
+let squares : mut = generate(λx : int → int: x * x, 1…5)
 // squares = [1, 4, 9, 16, 25]
 
 fn double x : i32 → i32:
     x * 2
 
-var doubled := generate(double, 1…4)
+let doubled : mut = generate(double, 1…4)
 // doubled = [2, 4, 6, 8]
 ```
 
@@ -1634,25 +1641,25 @@ A curried function can be used as the mapping function:
 fn multiply a : i32, b : i32 → i32:
     a * b
 
-var tripled := generate(multiply(3), 1…5)
+let tripled : mut = generate(multiply(3), 1…5)
 // tripled = [3, 6, 9, 12, 15]
 ```
 
 #### With Stepped and Descending Ranges
 
 ```
-var evens := generate(λx : int → int: x, 0…2…10)
+let evens : mut = generate(λx : int → int: x, 0…2…10)
 // evens = [0, 2, 4, 6, 8, 10]
 
-var desc := generate(λx : int → int: x * x, 3…1)
+let desc : mut = generate(λx : int → int: x * x, 3…1)
 // desc = [9, 4, 1]
 ```
 
 #### With Captures
 
 ```
-var offset := 100
-var arr := generate(λx : int |offset| → int: x + offset, 1…3)
+let offset : mut = 100
+let arr : mut = generate(λx : int |offset| → int: x + offset, 1…3)
 // arr = [101, 102, 103]
 ```
 
@@ -1700,22 +1707,22 @@ shape ⍴ data
 When the left operand is a single integer, the result is a one-dimensional array:
 
 ```
-var zeros := 64 ⍴ 0               // [0, 0, ..., 0] — 64 elements
-var pattern := 5 ⍴ [1, 2, 3]      // [1, 2, 3, 1, 2] — cycling
-var first3 := 3 ⍴ [10, 20, 30, 40, 50]  // [10, 20, 30] — truncating
+let zeros : mut = 64 ⍴ 0               // [0, 0, ..., 0] — 64 elements
+let pattern : mut = 5 ⍴ [1, 2, 3]      // [1, 2, 3, 1, 2] — cycling
+let first3 : mut = 3 ⍴ [10, 20, 30, 40, 50]  // [10, 20, 30] — truncating
 ```
 
 The dimension can be a variable:
 
 ```
-var n := 100
-var buf := n ⍴ 0
+let n : mut = 100
+let buf : mut = n ⍴ 0
 ```
 
 When the right operand is a range, it is expanded before cycling:
 
 ```
-var a := 5 ⍴ (1…3)                // [1, 2, 3, 1, 2]
+let a : mut = 5 ⍴ (1…3)                // [1, 2, 3, 1, 2]
 ```
 
 #### Matrices and Tensors
@@ -1723,12 +1730,12 @@ var a := 5 ⍴ (1…3)                // [1, 2, 3, 1, 2]
 When the left operand is a tuple, the result is a nested array whose depth matches the number of dimensions:
 
 ```
-var m := (2, 3) ⍴ 0               // 2×3 matrix of zeros
-var filled := (2, 3) ⍴ [1, 2, 3, 4, 5, 6]
+let m : mut = (2, 3) ⍴ 0               // 2×3 matrix of zeros
+let filled : mut = (2, 3) ⍴ [1, 2, 3, 4, 5, 6]
 // filled[0] = [1, 2, 3]
 // filled[1] = [4, 5, 6]
 
-var cycled := (3, 2) ⍴ [1, 2, 3, 4, 5]
+let cycled : mut = (3, 2) ⍴ [1, 2, 3, 4, 5]
 // cycled[0] = [1, 2]
 // cycled[1] = [3, 4]
 // cycled[2] = [5, 1]  — cycling wraps around
@@ -1741,7 +1748,7 @@ Elements fill in row-major order, matching APL/BQN semantics.
 The maximum number of dimensions is controlled by a global limit (`MAX_TENSOR_RANK`, default 8).  This same limit applies to all tensor operations in the language.  Exceeding it is a compile-time or runtime error:
 
 ```
-var too_deep := (1,1,1,1,1,1,1,1,1) ⍴ 0   // error if more than MAX_TENSOR_RANK dims
+let too_deep : mut = (1,1,1,1,1,1,1,1,1) ⍴ 0   // error if more than MAX_TENSOR_RANK dims
 ```
 
 #### Array Bounds Checking
@@ -1749,15 +1756,15 @@ var too_deep := (1,1,1,1,1,1,1,1,1) ⍴ 0   // error if more than MAX_TENSOR_RAN
 Arrays perform strict bounds checking on both reads and writes.  Accessing an index outside `0..length-1` is a runtime error:
 
 ```
-var a := [1, 2, 3]
-var x := a[3]             // error: array index 3 out of range (length 3)
+let a : mut = [1, 2, 3]
+let x : mut = a[3]             // error: array index 3 out of range (length 3)
 a[⁻1] ← 4                // error: array index -1 out of range (length 3)
 ```
 
 This replaces the earlier behavior where out-of-bounds writes silently extended the array.  To grow an array, use `⍴` to reshape it to the desired size:
 
 ```
-var W := 64 ⍴ generate(load_word, 0…15)   // extend 16-element result to 64
+let W : mut = 64 ⍴ generate(load_word, 0…15)   // extend 16-element result to 64
 ```
 
 #### Multi-Dimensional Subscript
@@ -1765,8 +1772,8 @@ var W := 64 ⍴ generate(load_word, 0…15)   // extend 16-element result to 64
 Nested arrays (matrices, 3D arrays, etc.) can be indexed with comma-separated indices inside a single pair of brackets instead of chaining multiple bracket pairs:
 
 ```
-var m := (2, 3) ⍴ [1, 2, 3, 4, 5, 6]
-var x := m[1, 2]           // 6 — equivalent to m[1][2]
+let m : mut = (2, 3) ⍴ [1, 2, 3, 4, 5, 6]
+let x : mut = m[1, 2]           // 6 — equivalent to m[1][2]
 
 m[0, 1] ← 42              // write access
 ```
@@ -1774,8 +1781,8 @@ m[0, 1] ← 42              // write access
 This extends to higher dimensions:
 
 ```
-var a := (2, 3, 4) ⍴ (1…24)
-var y := a[1, 2, 3]        // 24 — equivalent to a[1][2][3]
+let a : mut = (2, 3, 4) ⍴ (1…24)
+let y : mut = a[1, 2, 3]        // 24 — equivalent to a[1][2][3]
 a[1, 0, 1] ← 55            // write access
 ```
 
@@ -1794,16 +1801,16 @@ Array indices follow a tiered rule based on the integer's type status:
 3. **Wrong units** are always rejected regardless of whether the integer is typed or untyped.
 
 ```
-var arr := [10, 20, 30]
-var x := arr[0]                // OK — untyped integer constant
+let arr : mut = [10, 20, 30]
+let x : mut = arr[0]                // OK — untyped integer constant
 
-var idx : i32 = 1
-var z := arr[idx]              // error: typed integer without unit
-var idx2 ¤ptrdiff : i32 = 1
-var w := arr[idx2]             // OK — variable carries ptrdiff unit
+let idx : mut i32 = 1
+let z : mut = arr[idx]              // error: typed integer without unit
+let idx2 ¤ptrdiff : mut i32 = 1
+let w : mut = arr[idx2]             // OK — variable carries ptrdiff unit
 
-var buf : u8[4] = 0
-var b := buf[0]                // OK — untyped integer constant
+let buf : mut u8[4] = 0
+let b : mut = buf[0]                // OK — untyped integer constant
 ```
 
 Units are attached at the point of declaration — variable definitions, or function parameters:
@@ -1820,8 +1827,8 @@ fn read_byte data : byte[], off ¤byte : usize → u8:
 The `.sizeof` property returns the appropriate unit automatically (`ptrdiff` for general arrays, `byte` for byte arrays), so loop bounds derived from `.sizeof` produce correctly-typed indices:
 
 ```
-var arr := [1, 2, 3, 4]
-var total := 0
+let arr : mut = [1, 2, 3, 4]
+let total : mut = 0
 foreach i := 0…arr.sizeof - 1:       // i carries ptrdiff unit
     total ← total + arr[i]           // OK — i already has ptrdiff
 ```
@@ -1830,7 +1837,7 @@ When a loop variable is explicitly typed, a unit-carrying copy is needed for ind
 
 ```
 foreach j : u32fast = 16…63:
-    var ji ¤ptrdiff := j
+    let ji ¤ptrdiff : mut = j
     W[ji] ← W[ji - 16] + expand(W[ji - 2])
 ```
 
@@ -1845,7 +1852,7 @@ Slice access (`arr[start…end]`) follows the same rule: both bounds must carry 
 
 Tuple indexing is not affected — tuples accept bare integer indices without unit annotation (`pair[0]`, `pair[1]`).
 
-**Rationale.**  The unit requirement catches a category of bugs that arise when byte offsets are used where element indices are expected (or vice versa).  Untyped integer constants are exempt because they appear overwhelmingly as literal subscripts (`arr[0]`, `arr[2]`) where the intent is unambiguous and requiring annotation would add noise without safety benefit.  Typed integers, by contrast, often originate from computations or parameters where the domain (byte offset vs. element index) is not obvious from context — the unit must be attached at the point of declaration (`var idx ¤ptrdiff := n` or `param ¤byte : type`), not at the subscript site.
+**Rationale.**  The unit requirement catches a category of bugs that arise when byte offsets are used where element indices are expected (or vice versa).  Untyped integer constants are exempt because they appear overwhelmingly as literal subscripts (`arr[0]`, `arr[2]`) where the intent is unambiguous and requiring annotation would add noise without safety benefit.  Typed integers, by contrast, often originate from computations or parameters where the domain (byte offset vs. element index) is not obvious from context — the unit must be attached at the point of declaration (`let idx ¤ptrdiff : mut = n` or `param ¤byte : type`), not at the subscript site.
 
 #### Arithmetic Unit Enforcement
 
@@ -1856,23 +1863,23 @@ When one operand of a binary operation carries a unit and the other does not, th
 - **Typed integers** without a unit are rejected.  The programmer must attach the matching unit at the declaration site.
 
 ```
-var a ¤ptrdiff : i32 = 5
-var b : i32 = 3
+let a ¤ptrdiff : mut i32 = 5
+let b : mut i32 = 3
 
-var x := a + 2         // OK — untyped constant, result is 7 ¤ptrdiff
-var y := a + b         // error: cannot + unit ptrdiff with typed integer i32
-var z := a == 5        // OK — untyped constant comparison
-var w := a < b         // error: cannot compare unit ptrdiff with typed integer i32
+let x : mut = a + 2         // OK — untyped constant, result is 7 ¤ptrdiff
+let y : mut = a + b         // error: cannot + unit ptrdiff with typed integer i32
+let z : mut = a == 5        // OK — untyped constant comparison
+let w : mut = a < b         // error: cannot compare unit ptrdiff with typed integer i32
 ```
 
 **Multiplicative operations** (`*`, `/`, `%`) allow mixing freely — a typed integer without unit acts as a dimensionless scalar:
 
 ```
-var a ¤byte : i32 = 4
-var b : i32 = 3
+let a ¤byte : mut i32 = 4
+let b : mut i32 = 3
 
-var x := a * b         // OK — result is 12 ¤byte (scalar multiplication)
-var y := b * a         // OK — result is 12 ¤byte
+let x : mut = a * b         // OK — result is 12 ¤byte (scalar multiplication)
+let y : mut = b * a         // OK — result is 12 ¤byte
 ```
 
 **Rationale.**  Addition and comparison only make physical sense between quantities of the same dimension.  A typed integer without a unit is ambiguous — it might be a byte offset, an element count, or something else entirely.  Multiplication by a scalar, on the other hand, is always dimensionally valid (scaling).  Untyped constants are exempt because their use as small literal adjustments (`offset + 1`, `count - 1`) is unambiguous and pervasive.
@@ -1935,7 +1942,7 @@ This allows `⧺` and `⍴` to combine naturally without parentheses for common 
 
 ```
 // Build message schedule: 16 loaded words followed by 48 zero placeholders.
-var W := generate(load_word, 0…15) ⧺ 48 ⍴ [0]
+let W : mut = generate(load_word, 0…15) ⧺ 48 ⍴ [0]
 ```
 
 This is clearer than the equivalent `64 ⍴ generate(load_word, 0…15)` because it does not rely on the cycling semantics of `⍴` to silently repeat data that will be overwritten.
@@ -2018,34 +2025,34 @@ Folding an empty container without an initial value is a runtime error.  A singl
 Summation without initial value:
 
 ```
-var total := (λa : int, b : int → int: a + b) ⌿ [1, 2, 3, 4, 5]
+let total : mut = (λa : int, b : int → int: a + b) ⌿ [1, 2, 3, 4, 5]
 // total = 15
 ```
 
 Summation with explicit initial value:
 
 ```
-var total := (λa : int, b : int → int: a + b) ⌿ ([1, 2, 3, 4, 5], 100)
+let total : mut = (λa : int, b : int → int: a + b) ⌿ ([1, 2, 3, 4, 5], 100)
 // total = 115
 ```
 
 Bit packing (used in SHA-256 to assemble the final hash from eight 32-bit words).  The initial value 0 is needed because the first hash word must be shifted into position:
 
 ```
-var hash := (λacc : int, h : int → int: (acc « 32) | h) ⌿ (H, 0)
+let hash : mut = (λacc : int, h : int → int: (acc « 32) | h) ⌿ (H, 0)
 ```
 
 String concatenation without initial value:
 
 ```
-var joined := (λacc : str, s : str → str: acc + s) ⌿ ["a", "b", "c"]
+let joined : mut = (λacc : str, s : str → str: acc + s) ⌿ ["a", "b", "c"]
 // joined = "abc"
 ```
 
 Folding over a range:
 
 ```
-var sum := (λa : int, b : int → int: a + b) ⌿ 1…100
+let sum : mut = (λa : int, b : int → int: a + b) ⌿ 1…100
 ```
 
 Named functions as the left operand:
@@ -2054,7 +2061,7 @@ Named functions as the left operand:
 fn add x : int, y : int → int:
     x + y
 
-var total := add ⌿ [10, 20, 30]   // 60
+let total : mut = add ⌿ [10, 20, 30]   // 60
 ```
 
 Currying and fold combine naturally.  A curried function produces the mapping, and fold reduces the result:
@@ -2063,9 +2070,9 @@ Currying and fold combine naturally.  A curried function produces the mapping, a
 fn multiply a : int, b : int → int:
     a * b
 
-var triple := multiply(3)
-var tripled := generate(triple, 1…5)   // [3, 6, 9, 12, 15]
-var total := add ⌿ tripled             // 45
+let triple : mut = multiply(3)
+let tripled : mut = generate(triple, 1…5)   // [3, 6, 9, 12, 15]
+let total : mut = add ⌿ tripled             // 45
 ```
 
 #### Design Rationale
@@ -2128,13 +2135,13 @@ The critical design property of `catch` is **syntactic scope**.  Errors from fun
 
 ```
 fn risky → i32:
-    var a := [1]
+    let a : mut = [1]
     a[99]              // raises IndexError
 
 fn caller → i32?:
     catch:
         risky()        // error from risky() propagates — NOT caught
-        var a := [1, 2]
+        let a : mut = [1, 2]
         a[5]           // this error WOULD be caught (direct operation)
 ```
 
@@ -2227,14 +2234,14 @@ Two compile-time assertion functions verify conditions using only constant expre
 
 - `static_assert_eq(expected, actual)` — fails at compile time if the two constant values differ: `static_assert_eq(120, 2 * 3 * 4 * 5)`.
 
-Constant expressions include literals, arithmetic/logic operations on literals, unary operators, and array/tuple literals composed of constants.  References to variables — even `const` variables — are not compile-time constants for these purposes; use `assert` or `assert_eq` for those.
+Constant expressions include literals, arithmetic/logic operations on literals, unary operators, and array/tuple literals composed of constants.  References to variables — even `let` variables — are not compile-time constants for these purposes; use `assert` or `assert_eq` for those.
 
 ```
 static_assert(true)                     /* OK */
 static_assert_eq(10, 3 + 7)            /* OK */
 static_assert_eq("hello", "hello")     /* OK */
 
-var x := 42
+let x : mut = 42
 static_assert(x)                       /* ERROR: not a compile-time constant */
 ```
 
@@ -2255,18 +2262,18 @@ Built-in introspection functions use the `@` prefix and return values that can b
   The result carries a unit: for `u8[]` (byte arrays) the unit is `byte`; for all other containers the unit is `ptrdiff`.  Because dimensionless arithmetic is allowed with unit-bearing values, the sizeof result can be used directly in index computations, loop bounds, and arithmetic without explicit unit stripping.
 
 ```
-var arr := [10, 20, 30]
-var sz := arr.sizeof          // 3 ptrdiff
-var last := sz - 1            // 2 ptrdiff (dimensionless 1 adopts unit)
-var buf: u8[4] = [0, 0, 0, 0]
-var bytes := buf.sizeof       // 4 byte
+let arr : mut = [10, 20, 30]
+let sz : mut = arr.sizeof          // 3 ptrdiff
+let last : mut = sz - 1            // 2 ptrdiff (dimensionless 1 adopts unit)
+let buf : mut u8[4] = [0, 0, 0, 0]
+let bytes : mut = buf.sizeof       // 4 byte
 ```
 
 `@sizeof` is particularly useful for parameter packs, where it provides a consistent way to query the element count alongside `@typeof` for element types:
 
 ```
 fn process args… : T':
-    var i : int = 0
+    let i : mut int = 0
     while i < @sizeof(args):
         std.print(@typeof(args[i]))
         i ← i + 1
@@ -2275,7 +2282,7 @@ fn process args… : T':
 Type and result-of values can be compared with `==` and used with `assert_eq` and `static_assert_eq`:
 
 ```
-var x : i32 = 10
+let x : mut i32 = 10
 assert_eq(@typeof(x), @typeof(x + 1))         /* both are i32 */
 
 fn example → i32: 42
@@ -2291,9 +2298,9 @@ static_assert_eq(@typeof("a"), @typeof("b"))   /* both are str */
   A standalone unit reference `¤unit` (without a preceding expression) produces a `UnitOfValue` for comparison purposes:
 
 ```
-var d ¤meter := 100
-var t ¤second := 10
-var speed := d / t
+let d ¤meter : mut = 100
+let t ¤second : mut = 10
+let speed : mut = d / t
 
 assert_true(@unitof(d) == ¤meter)             /* true */
 assert_true(@unitof(speed) == ¤meter/second)  /* derived unit */
@@ -2302,7 +2309,7 @@ assert_true(@unitof(42) != ¤meter)            /* dimensionless */
 static_assert_eq(@unitof(d), ¤meter)          /* compile-time check */
 
 /* Unit propagation through sizeof and ranges */
-var data: u8[4] = [0, 0, 0, 0]
+let data : mut u8[4] = [0, 0, 0, 0]
 static_assert_eq(@unitof(data.sizeof), ¤byte) /* byte[] sizeof has unit byte */
 ```
 
@@ -2333,14 +2340,14 @@ test result: ok. 3 passed; 0 failed
 ```
 @test(sha256)
 fn test_sha256_empty → ∅:
-    var data := std.bytes("")
-    var hash := sha256(data)
+    let data : mut = std.bytes("")
+    let hash : mut = sha256(data)
     assert_eq(hash, 0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
 
 @test(sha256)
 fn test_sha256_abc → ∅:
-    var data := std.bytes("abc")
-    var hash := sha256(data)
+    let data : mut = std.bytes("abc")
+    let hash : mut = sha256(data)
     assert_eq(hash, 0xba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad)
 ```
 
@@ -2381,7 +2388,7 @@ Multiple `@expect` annotations can appear before a single function.  The level k
 ```
 fn test_something → ∅:
     @expect warning "redefinition of foreach variable"
-    var i := 99
+    let i : mut = 99
 ```
 
 Statement-level `@expect` wraps a single statement.  The evaluator executes the statement, captures any errors and warnings it produces, and matches them against the expectations.  If all expectations are satisfied, execution continues normally.  If any expectation is unmatched, the test fails.
@@ -2417,14 +2424,14 @@ When an `@expect`-annotated function has a parse error, the parser recovers by s
 Function-level `@expect` for errors:
 
 ```
-@expect error "cannot assign to const variable 'x'"
-fn error_const_assign → ∅:
-    const x := 42
+@expect error "cannot assign to let binding 'x'"
+fn error_let_assign() → ∅:
+    let x := 42
     x ← 99
 
 @expect error "unexpected token: 'fn'"
-fn error_nested_fn → ∅:
-    fn inner → ∅:
+fn error_nested_fn() → ∅:
+    fn inner() → ∅:
         std.print("bad")
 ```
 
@@ -2433,10 +2440,10 @@ Statement-level `@expect` for warnings inside a `@test` function:
 ```
 @test
 fn warn_foreach_redef → ∅:
-    var total := 0
+    let total : mut = 0
     foreach i := 1…3:
         @expect warning "redefinition of foreach variable 'i'"
-        var i := 99
+        let i : mut = 99
         total ← total + i
     assert_eq(total, 297)
 ```
@@ -2502,8 +2509,8 @@ enum Level:
 Enum members are accessed through the enum's name, not as bare identifiers:
 
 ```
-var c := Color.red
-var l := Level.high
+let c : mut = Color.red
+let l : mut = Level.high
 ```
 
 #### Comparison
@@ -2511,14 +2518,14 @@ var l := Level.high
 Enum values of the same type can be compared with `==` and `!=`.  Comparing values from different enum types is a type error.  Enum values can also be compared with integer literals:
 
 ```
-var c := Color.red
+let c : mut = Color.red
 assert_eq(c == Color.red, true)     /* same-type comparison */
 assert_eq(c == 0, true)             /* compare with integer */
 ```
 
 ```
 /* ERROR: cannot compare enum 'Color' with enum 'Status' */
-var x := Color.red == Status.ok
+let x : mut = Color.red == Status.ok
 ```
 
 #### Underlying Type
@@ -2579,14 +2586,14 @@ Flag enums support bitwise operations to combine, test, and remove flags:
 These operations are only valid on `@flag` enums.  Attempting bitwise operations on a non-flag enum is a type error.  Cross-enum operations (mixing two different enum types) are also type errors.
 
 ```
-var rw := Perms.read | Perms.write    /* combine: 3 */
-var r := rw & Perms.read              /* intersect: Perms.read */
-var toggled := rw ^ Perms.write       /* toggle: Perms.read */
-var others := ~rw                     /* complement: Perms.exec */
+let rw : mut = Perms.read | Perms.write    /* combine: 3 */
+let r : mut = rw & Perms.read              /* intersect: Perms.read */
+let toggled : mut = rw ^ Perms.write       /* toggle: Perms.read */
+let others : mut = ~rw                     /* complement: Perms.exec */
 
 /* Test membership */
-var has_read := (rw & Perms.read) == Perms.read    /* true */
-var has_exec := (rw & Perms.exec) == Perms.exec    /* false */
+let has_read : mut = (rw & Perms.read) == Perms.read    /* true */
+let has_exec : mut = (rw & Perms.exec) == Perms.exec    /* false */
 ```
 
 The complement operator `~` masks against the union of all defined member values, so `~Perms.read` yields `Perms.write | Perms.exec` rather than a full integer complement.
@@ -2602,7 +2609,7 @@ A built-in enum `std.errors` provides standardized error codes grouped by catego
 | 300-399 | Library/runtime errors | `file_not_found` (300), `permission_denied` (301), `io_error` (302), `allocation_failed` (303), `invalid_argument` (304) |
 
 ```
-var err := std.errors.division_by_zero
+let err : mut = std.errors.division_by_zero
 assert_eq(err == 100, true)
 ```
 
@@ -2653,13 +2660,13 @@ When a generic function is called, the interpreter resolves each generic type pa
 identity(42)         /* T' resolves to int */
 identity(true)       /* T' resolves to bool */
 
-var x : i32 = 7
+let x : mut i32 = 7
 identity(x)          /* T' resolves to i32 */
 
 add_g(10, 20)        /* T' resolves to int, returns int */
 
-var a : i32 = 1
-var b : u32 = 2
+let a : mut i32 = 1
+let b : mut u32 = 2
 add_g(a, b)          /* error: T' is i32 from 'a' but u32 from 'b' */
 ```
 
@@ -2683,7 +2690,7 @@ Here `T'[]` matches an array argument; `T'` resolves to the element type.
 Generic functions support currying.  Partial application fixes some arguments and their types; the remaining generic parameters are resolved when the curried function is called:
 
 ```
-var add10 := add_g(10)    /* partial: T' not yet resolved */
+let add10 : mut = add_g(10)    /* partial: T' not yet resolved */
 add10(20)                 /* T' resolves to int, returns 30 */
 ```
 
@@ -2709,8 +2716,8 @@ A pack parameter is declared by suffixing `…` to the parameter name.  An optio
 
 ```
 fn sum_all acc : int, rest… : int → int:
-    var i : int = 0
-    var s := acc
+    let i : mut int = 0
+    let s : mut = acc
     while i < rest.sizeof:
         s ← s + rest[i]
         i ← i + 1
@@ -2759,7 +2766,7 @@ Currying applies to the regular (non-pack) parameters.  When a function with a p
 fn greet prefix : str, names… : str → str:
     prefix
 
-var g := greet("Hello")    /* curries prefix */
+let g : mut = greet("Hello")    /* curries prefix */
 g("Alice", "Bob")          /* names captures "Alice", "Bob" */
 ```
 
@@ -2783,8 +2790,8 @@ The ellipsis suffix keeps pack declarations compact.  Unlike C++ which requires 
 #### Syntax
 
 ```
-comptime foreach var := pack_or_container:
-    /* body — var has a different type each iteration */
+comptime foreach v := pack_or_container:
+    /* body — v has a different type each iteration */
 ```
 
 The syntax is identical to `foreach` except for the `comptime` prefix.
@@ -2795,7 +2802,7 @@ A regular `foreach` cannot iterate over a parameter pack because packs are heter
 
 ```
 fn ct_sum args… : int → int:
-    var s : int = 0
+    let s : mut int = 0
     comptime foreach v := args:
         s ← s + v
     s
@@ -2807,7 +2814,7 @@ Each iteration binds `v` to one pack element.  When the pack has a generic type,
 
 ```
 fn hetero_count args… → int:
-    var ints : int = 0
+    let ints : mut int = 0
     comptime foreach v := args:
         if @typeof(v) == @typeof(0):
             ints ← ints + 1
@@ -2822,10 +2829,10 @@ hetero_count(1, "a", 2)    /* returns 2 */
 
 ```
 fn indexed_sum args… : int → int:
-    var s : int = 0
+    let s : mut int = 0
     comptime foreach pair := @enumerate(args):
-        var idx := pair[0]
-        var val := pair[1]
+        let idx : mut = pair[0]
+        let val : mut = pair[1]
         s ← s + val * (idx + 1)
     s
 ```
@@ -2835,7 +2842,7 @@ fn indexed_sum args… : int → int:
 `comptime foreach` also works on arrays and ranges, behaving identically to `foreach` in those cases:
 
 ```
-var s : int = 0
+let s : mut int = 0
 comptime foreach v := [10, 20, 30]:
     s ← s + v
 /* s is 60 */
@@ -2896,7 +2903,7 @@ Each value type has a default representation:
 - **Types**: the type name.
 
 ```
-var alloc := std.arena.allocator()
+let alloc : mut = std.arena.allocator()
 
 std.format(alloc, "{} + {} = {}", 1, 2, 3)       /* "1 + 2 = 3" */
 std.format(alloc, "hex: {:x}", 255)               /* "hex: ff" */
@@ -2927,8 +2934,8 @@ The standard library provides two allocator subsystems under the `std` module: a
 #### Heap Allocator (`std.heap`)
 
 ```
-var alloc := std.heap.allocator()
-var buf := alloc.alloc(4096)
+let alloc : mut = std.heap.allocator()
+let buf : mut = alloc.alloc(4096)
 ```
 
 `std.heap.allocator()` returns the global mmap-backed allocator.  It uses a bump-pointer strategy within large (4 MiB minimum) anonymous mmap regions.  Individual allocations cannot be freed; the allocator is intended for long-lived program state.
@@ -2936,10 +2943,10 @@ var buf := alloc.alloc(4096)
 #### Arena Allocator (`std.arena`)
 
 ```
-var alloc := std.arena.allocator()
-var dir := std.fs.cwd()
-var file := dir.openFile("data.bin")
-var data := file.read_file(alloc)
+let alloc : mut = std.arena.allocator()
+let dir : mut = std.fs.cwd()
+let file : mut = dir.openFile("data.bin")
+let data : mut = file.read_file(alloc)
 /* ... use data ... */
 alloc.deinit()
 ```
@@ -2975,9 +2982,9 @@ The language supports attaching physical units to numeric values.  Units enable 
 A unit annotation uses `¤` followed by a unit name:
 
 ```
-var distance ¤meter := 100
-var elapsed  ¤second := 10
-var speed    ¤meter/second := distance / elapsed
+let distance ¤meter : mut = 100
+let elapsed ¤second : mut = 10
+let speed ¤meter/second : mut = distance / elapsed
 ```
 
 The `¤` (U+00A4, CURRENCY SIGN) can appear in two positions:
@@ -2988,7 +2995,7 @@ The `¤` (U+00A4, CURRENCY SIGN) can appear in two positions:
 Whitespace around `¤` is flexible: it can appear immediately after the preceding token (`x¤meter`, `42¤kilogram`) or separated by spaces (`x ¤ meter`).  This is a consequence of normal tokenization — `¤` is a single-character operator.
 
 ```
-var d ¤kilometer := 5     // variable with unit kilometer
+let d ¤kilometer : mut = 5     // variable with unit kilometer
 d ← 3000¤meter           // expression with unit meter, converted to kilometer
 ```
 
@@ -2999,15 +3006,15 @@ Builtin units use identifier syntax with full names: `meter`, `second`, `kilogra
 Compound unit specifications combine names with `*` (multiplication), `/` (division), and `√` (square root):
 
 ```
-var velocity ¤meter/second := 10
-var area     ¤meter*meter := 25
+let velocity ¤meter/second : mut = 10
+let area ¤meter*meter : mut = 25
 ```
 
 In expression context, `*` and `/` after `¤` are consumed as unit operators only when followed by another unit name, not by a number.  This avoids ambiguity with arithmetic operators:
 
 ```
-var a ¤meter := 5
-var b := a * 3            // 15 m (scalar multiplication, not unit formula)
+let a ¤meter : mut = 5
+let b : mut = a * 3            // 15 m (scalar multiplication, not unit formula)
 ```
 
 #### Unit Definitions
@@ -3054,11 +3061,11 @@ The interpreter provides the following builtin units:
 - **Dimensioned + dimensionless arithmetic**: when one operand carries a unit and the other is a plain (dimensionless) numeric value, the dimensionless value is treated as having a compatible, invisible unit.  This applies to addition, subtraction, multiplication, division, modulus, and comparisons.  For addition and subtraction the result inherits the unit.  For multiplication and division, scalar-times-unit and unit-times-scalar both preserve the unit; division of a dimensionless value by a unit-bearing value produces an inverse unit.  Modulus follows the same rule as addition (result inherits the unit).
 
   ```
-  var a ¤meter := 10
-  var b := a + 3       // 13 m
-  var c := 2 * a       // 20 m
-  var d := a / 5       // 2 m
-  var e := a % 3       // 1 m
+  let a ¤meter : mut = 10
+  let b : mut = a + 3       // 13 m
+  let c : mut = 2 * a       // 20 m
+  let d : mut = a / 5       // 2 m
+  let e : mut = a % 3       // 1 m
   ```
 
   **Note**: assigning a plain dimensionless value to a variable with a declared unit is still an error.  The relaxation applies only to arithmetic operations, not to assignment or initialization.
@@ -3068,7 +3075,7 @@ The interpreter provides the following builtin units:
 When assigning a value to a variable with a declared unit, the value must be convertible without loss.  For integer values, this means the converted result must be an exact integer:
 
 ```
-var t ¤second := 0
+let t ¤second : mut = 0
 t ← 2000¤millisecond   // 2000 ms = 2 s (exact, allowed)
 t ← 500¤millisecond    // 500 ms = 0.5 s (not integer, rejected)
 ```
@@ -3082,9 +3089,9 @@ Conversion uses exact rational arithmetic (Python `fractions.Fraction`) internal
 When a variable is defined with initialization but without an explicit unit, the unit is derived from the initialization value:
 
 ```
-var a ¤meter := 5
-var b := a              // b inherits unit m
-var c := b + a          // 10 m (works because b has unit m)
+let a ¤meter : mut = 5
+let b : mut = a              // b inherits unit m
+let c : mut = b + a          // 10 m (works because b has unit m)
 ```
 
 #### Unit Propagation through Ranges
@@ -3092,7 +3099,7 @@ var c := b + a          // 10 m (works because b has unit m)
 When a `foreach` range has one or more unit-bearing bounds, the unit is propagated to the loop variable:
 
 ```
-var total ¤byte := 128
+let total ¤byte : mut = 128
 foreach off := 0…64…(total - 1):
     // off has unit byte, inherited from the range bound
     static_assert_eq(@unitof(off), ¤byte)

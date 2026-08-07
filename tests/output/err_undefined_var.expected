@@ -1,6 +1,6 @@
 error: 'undefined variable: undefined_var'
-  --> tests/output/err_undefined_var.nl:3:19
+  --> tests/output/err_undefined_var.nl:3:23
     |
-  3 |     var x : i32 = undefined_var
-    |                   ^^^^^^^^^^^^^
+  3 |     let x : mut i32 = undefined_var
+    |                       ^^^^^^^^^^^^^
     |

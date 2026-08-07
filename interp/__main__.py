@@ -257,23 +257,18 @@ def main():
 
     evaluator = Evaluator(env)
     for defn in definitions:
-        if isinstance(defn, tuple) and len(defn) == 4 and defn[0] == "const_assign":
-            _, name, type_ann, init_expr = defn
-            if type_ann is not None and type_ann in FAST_TYPES:
-                print(f"Error: fast type '{type_ann}' cannot be used in const definition '{name}'",
+        if isinstance(defn, ASTVarDef):
+            if defn.is_const and defn.type_annotation is not None and defn.type_annotation in FAST_TYPES:
+                print(f"Error: fast type '{defn.type_annotation}' cannot be used in let definition '{defn.name}'",
                       file=sys.stderr)
                 sys.exit(1)
-            value = evaluator.eval_expr(init_expr)
-            if type_ann is not None:
-                value = coerce_to_type(value, type_ann)
-            env.define(name, value)
-            env._const_globals.add(name)
-        elif isinstance(defn, ASTVarDef):
             value = evaluator.eval_expr(defn.init_expr)
             if defn.type_annotation is not None:
                 value = coerce_to_type(value, defn.type_annotation)
             env.define(defn.name, value)
-            if not defn.is_const:
+            if defn.is_const:
+                env._const_globals.add(defn.name)
+            else:
                 env._mutable_globals.add(defn.name)
 
     for defn in definitions:

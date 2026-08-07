@@ -93,66 +93,66 @@ fn test_not_false() → ∅:
 
 @test
 fn test_and_int_nonzero() → ∅:
-    var a : i32 = 42
-    var b : i32 = 7
+    let a : mut i32 = 42
+    let b : mut i32 = 7
     assert(a ∧ b)
 
 @test
 fn test_and_int_zero() → ∅:
-    var a : i32 = 42
-    var b : i32 = 0
+    let a : mut i32 = 42
+    let b : mut i32 = 0
     assert(not (a ∧ b))
 
 @test
 fn test_or_int_one_zero() → ∅:
-    var a : i32 = 0
-    var b : i32 = 1
+    let a : mut i32 = 0
+    let b : mut i32 = 1
     assert(a ∨ b)
 
 @test
 fn test_xor_int_both_nonzero() → ∅:
-    var a : i32 = 5
-    var b : i32 = 3
+    let a : mut i32 = 5
+    let b : mut i32 = 3
     assert(not (a ⊕ b))
 
 @test
 fn test_xor_int_one_zero() → ∅:
-    var a : i32 = 5
-    var b : i32 = 0
+    let a : mut i32 = 5
+    let b : mut i32 = 0
     assert(a ⊕ b)
 
 @test
 fn test_not_int_nonzero() → ∅:
-    var x : i32 = 100
+    let x : mut i32 = 100
     assert(not (¬x))
 
 @test
 fn test_not_int_zero() → ∅:
-    var x : i32 = 0
+    let x : mut i32 = 0
     assert(¬x)
 
 @test
 fn test_nand_int() → ∅:
-    var a : i32 = 1
-    var b : i32 = 1
+    let a : mut i32 = 1
+    let b : mut i32 = 1
     assert(not (a ⊼ b))
-    var c : i32 = 0
+    let c : mut i32 = 0
     assert(a ⊼ c)
 
 @test
 fn test_nor_int() → ∅:
-    var a : i32 = 0
-    var b : i32 = 0
+    let a : mut i32 = 0
+    let b : mut i32 = 0
     assert(a ⊽ b)
-    var c : i32 = 1
+    let c : mut i32 = 1
     assert(not (a ⊽ c))
 
 /* ---- unsigned integer operands ------------------------------------------ */
 
 @test
 fn test_and_u8() → ∅:
-    var a : u8 = 255
-    var b : u8 = 0
+    let a : mut u8 = 255
+    let b : mut u8 = 0
     assert(not (a ∧ b))
     assert(a ∧ a)
 
@@ -178,33 +178,33 @@ fn test_precedence_xor() → ∅:
 
 @test
 fn test_and_array() → ∅:
-    var a : i32[3] = 0
+    let a : mut i32[3] = 0
     a[0] ← 1; a[1] ← 0; a[2] ← 5
-    var b : i32[3] = 0
+    let b : mut i32[3] = 0
     b[0] ← 3; b[1] ← 0; b[2] ← 0
-    var r := a ∧ b
+    let r : mut = a ∧ b
     assert(r[0])
     assert(not r[1])
     assert(not r[2])
 
 @test
 fn test_or_array() → ∅:
-    var a : i32[3] = 0
+    let a : mut i32[3] = 0
     a[0] ← 1; a[1] ← 0; a[2] ← 0
-    var b : i32[3] = 0
+    let b : mut i32[3] = 0
     b[0] ← 0; b[1] ← 0; b[2] ← 7
-    var r := a ∨ b
+    let r : mut = a ∨ b
     assert(r[0])
     assert(not r[1])
     assert(r[2])
 
 @test
 fn test_xor_array() → ∅:
-    var a : i32[3] = 0
+    let a : mut i32[3] = 0
     a[0] ← 1; a[1] ← 0; a[2] ← 5
-    var b : i32[3] = 0
+    let b : mut i32[3] = 0
     b[0] ← 3; b[1] ← 0; b[2] ← 0
-    var r := a ⊕ b
+    let r : mut = a ⊕ b
     assert(not r[0])
     assert(not r[1])
     assert(r[2])
@@ -213,8 +213,8 @@ fn test_xor_array() → ∅:
 
 @test
 fn test_logic_with_comparison() → ∅:
-    var x : i32 = 10
-    var y : i32 = 20
+    let x : mut i32 = 10
+    let y : mut i32 = 20
     /* (x < y) ∧ (y > 0)  =  true ∧ true  =  true */
     assert(x < y ∧ y > 0)
     /* (x > y) ∨ (y == 20)  =  false ∨ true  =  true */

@@ -8,21 +8,21 @@
  * captured and matched.
  */
 
-const GLOBAL_C := 42
+let GLOBAL_C := 42
 
-/* --- const immutability --------------------------------------------------- */
+/* --- let immutability --------------------------------------------------- */
 
-@expect error "cannot assign to const variable 'x'"
+@expect error "cannot assign to let variable 'x'"
 fn error_const_assign() → ∅:
-    const x := 42
+    let x := 42
     x ← 99
 
-@expect error "cannot redefine const variable 'x'"
+@expect error "cannot redefine let variable 'x'"
 fn error_const_redef() → ∅:
-    const x := 42
-    var x := 99
+    let x := 42
+    let x : mut = 99
 
-@expect error "cannot assign to const variable 'GLOBAL_C'"
+@expect error "cannot assign to let variable 'GLOBAL_C'"
 fn error_global_const_assign() → ∅:
     GLOBAL_C ← 999
 
@@ -37,10 +37,10 @@ fn error_foreach_assign() → ∅:
  * The new variable shadows the loop variable after the redefinition. */
 @test
 fn warn_foreach_redef() → ∅:
-    var total := 0
+    let total : mut = 0
     foreach i := 1…3:
         @expect warning "redefinition of foreach variable 'i'"
-        var i := 99
+        let i : mut = 99
         total ← total + i
     assert_eq(total, 297)
 
@@ -50,20 +50,16 @@ fn error_foreach_bare_eq() → ∅:
     foreach i = 1…3:
         std.print(i)
 
-/* var/const without type requires := not = */
+/* let without type requires := not = */
 @expect error "requires ':='"
-fn error_var_bare_eq() → ∅:
-    var x = 42
-
-@expect error "requires ':='"
-fn error_const_bare_eq() → ∅:
-    const x = 42
+fn error_let_bare_eq() → ∅:
+    let x = 42
 
 /* --- fast type restrictions ----------------------------------------------- */
 
 @expect error "fast type.*cannot be used as array element"
 fn error_fast_array() → ∅:
-    var arr : u8fast[10] = 0
+    let arr : mut u8fast[10] = 0
     std.print(arr[0])
 
 /* --- type mismatch -------------------------------------------------------- */
@@ -76,8 +72,8 @@ fn error_assert_mismatch() → ∅:
 
 @expect error "expected error.*division_by_zero"
 fn error_div_zero() → ∅:
-    var x := 10 / 0
-    var y := x + 1
+    let x : mut = 10 / 0
+    let y : mut = x + 1
 
 /* --- parse errors --------------------------------------------------------- */
 
@@ -90,7 +86,7 @@ fn error_nested_fn() → ∅:
 
 @expect error "unknown type 'i1'"
 fn error_unknown_type_var() → ∅:
-    var x : i1 = 0
+    let x : mut i1 = 0
 
 @start
 fn main() → ∅:

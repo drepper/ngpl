@@ -48,7 +48,7 @@ fn returns_float_ok() → f64:
 
 @test
 fn test_return_float_ok() → ∅:
-  var r := returns_float_ok()
+  let r : mut = returns_float_ok()
   assert_true(r > 3.0)
 
 fn returns_str_ok() → str:
@@ -94,7 +94,7 @@ fn returns_none_for_int_opt() → int?:
 
 @test
 fn test_return_none_for_optional() → ∅:
-  var r := returns_none_for_int_opt()
+  let r : mut = returns_none_for_int_opt()
   assert_eq(0, r ?? 0)
 
 /* Lambda return type mismatch. */
@@ -102,14 +102,14 @@ fn test_return_none_for_optional() → ∅:
 @test
 @expect error "return type is int but body evaluates to float"
 fn test_lambda_return_mismatch() → ∅:
-  var f := λx : int → int: 1.5
+  let f : mut = λx : int → int: 1.5
   f(0)
 
 /* Lambda with correct return type. */
 
 @test
 fn test_lambda_return_ok() → ∅:
-  var f := λx : int → int: x + 1
+  let f : mut = λx : int → int: x + 1
   assert_eq(6, f(5))
 
 /* Void return type allows anything (value is discarded). */
@@ -126,63 +126,63 @@ fn test_void_return() → ∅:
 @test
 @expect error "matching types"
 fn test_add_int_float() → ∅:
-  var r := 2 + 3.0
+  let r : mut = 2 + 3.0
 
 @test
 @expect error "matching types"
 fn test_add_float_int() → ∅:
-  var r := 3.0 + 2
+  let r : mut = 3.0 + 2
 
 @test
 @expect error "matching types"
 fn test_sub_int_float() → ∅:
-  var r := 5 - 1.0
+  let r : mut = 5 - 1.0
 
 @test
 @expect error "matching types"
 fn test_sub_float_int() → ∅:
-  var r := 5.0 - 1
+  let r : mut = 5.0 - 1
 
 @test
 @expect error "matching types"
 fn test_mul_int_float() → ∅:
-  var r := 3 * 2.5
+  let r : mut = 3 * 2.5
 
 @test
 @expect error "matching types"
 fn test_mul_float_int() → ∅:
-  var r := 2.5 * 3
+  let r : mut = 2.5 * 3
 
 @test
 @expect error "matching types"
 fn test_div_int_float() → ∅:
-  var r := 10 / 2.0
+  let r : mut = 10 / 2.0
 
 @test
 @expect error "matching types"
 fn test_div_float_int() → ∅:
-  var r := 10.0 / 2
+  let r : mut = 10.0 / 2
 
 @test
 @expect error "matching types"
 fn test_mod_int_float() → ∅:
-  var r := 7 % 2.0
+  let r : mut = 7 % 2.0
 
 @test
 @expect error "matching types"
 fn test_mod_float_int() → ∅:
-  var r := 7.0 % 2
+  let r : mut = 7.0 % 2
 
 @test
 @expect error "matching types"
 fn test_pow_int_float() → ∅:
-  var r := 4 ↑ 0.5
+  let r : mut = 4 ↑ 0.5
 
 /* float↑int is allowed (needed for units, always well-defined). */
 
 @test
 fn test_pow_float_int_ok() → ∅:
-  var r := 4.0 ↑ 2
+  let r : mut = 4.0 ↑ 2
   assert_true(r == 16.0)
 
 /* Same-type arithmetic succeeds. */

@@ -2,21 +2,21 @@
 
 /* Sum all pack elements using comptime foreach. */
 fn ct_sum(args… : int) → int:
-    var s : int = 0
+    let s : mut int = 0
     comptime foreach v := args:
         s ← s + v
     s
 
 /* Count elements via comptime foreach. */
 fn ct_count(args…) → int:
-    var n : int = 0
+    let n : mut int = 0
     comptime foreach v := args:
         n ← n + 1
     n
 
 /* Apply a function to each pack element. */
 fn apply_each(f, args… : int) → int:
-    var s : int = 0
+    let s : mut int = 0
     comptime foreach v := args:
         s ← s + f(v)
     s
@@ -49,17 +49,17 @@ fn test_ct_apply_each() → ∅:
 /* comptime foreach also works on regular arrays. */
 @test
 fn test_ct_foreach_array() → ∅:
-    var s : int = 0
+    let s : mut int = 0
     comptime foreach v := [10, 20, 30]:
         s ← s + v
     assert_eq(s, 60)
 
 /* comptime foreach with @enumerate over a pack. */
 fn indexed_sum(args… : int) → int:
-    var s : int = 0
+    let s : mut int = 0
     comptime foreach pair := @enumerate(args):
-        var idx := pair[0]
-        var val := pair[1]
+        let idx : mut = pair[0]
+        let val : mut = pair[1]
         s ← s + val * (idx + 1)
     s
 
@@ -69,8 +69,8 @@ fn test_ct_enumerate() → ∅:
 
 /* Heterogeneous pack: each iteration sees a different type. */
 fn hetero_count(args…) → int:
-    var ints : int = 0
-    var strs : int = 0
+    let ints : mut int = 0
+    let strs : mut int = 0
     comptime foreach v := args:
         if @typeof(v) == @typeof(0):
             ints ← ints + 1
@@ -84,7 +84,7 @@ fn test_ct_hetero_types() → ∅:
 
 /* Empty pack produces zero iterations. */
 fn ct_empty(args…) → int:
-    var ran : int = 0
+    let ran : mut int = 0
     comptime foreach v := args:
         ran ← 1
     ran

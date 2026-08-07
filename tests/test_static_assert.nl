@@ -73,14 +73,14 @@ fn test_static_assert_eq_fail() → ∅:
 @test
 @expect error "compile-time constant"
 fn test_static_assert_non_const() → ∅:
-    var x := 42
+    let x : mut = 42
     static_assert(x)
 
 /* Error: static_assert_eq with non-constant. */
 @test
 @expect error "compile-time constant"
 fn test_static_assert_eq_non_const() → ∅:
-    var x := 10
+    let x : mut = 10
     static_assert_eq(x, 10)
 
 @start

@@ -1,4 +1,4 @@
 @start
 fn main() → ∅:
-    var x : i32 = 42
+    let x : mut i32 = 42
     x + "hello"

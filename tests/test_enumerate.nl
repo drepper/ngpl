@@ -3,8 +3,8 @@
 /* Basic enumerate over an array. */
 @test
 fn test_enumerate_basic() → ∅:
-    var indices := 0
-    var values := 0
+    let indices : mut = 0
+    let values : mut = 0
     foreach pair := @enumerate([10, 20, 30]):
         indices ← indices + pair[0]
         values ← values + pair[1]
@@ -14,7 +14,7 @@ fn test_enumerate_basic() → ∅:
 /* Enumerate with two variables (index, value destructured). */
 @test
 fn test_enumerate_two_vars() → ∅:
-    var sum := 0
+    let sum : mut = 0
     foreach i, v := @enumerate([5, 4, 3, 2, 1]):
         sum ← sum + i * v
     /* 0*5 + 1*4 + 2*3 + 3*2 + 4*1 = 0+4+6+6+4 = 20 */
@@ -23,7 +23,7 @@ fn test_enumerate_two_vars() → ∅:
 /* Enumerate over an empty array. */
 @test
 fn test_enumerate_empty() → ∅:
-    var count := 0
+    let count : mut = 0
     foreach pair := @enumerate([]):
         count ← count + 1
     assert_eq(count, 0)
@@ -31,8 +31,8 @@ fn test_enumerate_empty() → ∅:
 /* Enumerate over a single-element array. */
 @test
 fn test_enumerate_single() → ∅:
-    var idx := ⁻1
-    var val := ⁻1
+    let idx : mut = ⁻1
+    let val : mut = ⁻1
     foreach i, v := @enumerate([42]):
         idx ← i
         val ← v
@@ -42,8 +42,8 @@ fn test_enumerate_single() → ∅:
 /* Enumerate with range value. */
 @test
 fn test_enumerate_range() → ∅:
-    var sum_idx := 0
-    var sum_val := 0
+    let sum_idx : mut = 0
+    let sum_val : mut = 0
     foreach pair := @enumerate(10…14):
         sum_idx ← sum_idx + pair[0]
         sum_val ← sum_val + pair[1]
@@ -56,8 +56,8 @@ fn square(x : int) → int:
 
 @test
 fn test_enumerate_generated() → ∅:
-    var arr := generate(square, 1…4)
-    var total := 0
+    let arr : mut = generate(square, 1…4)
+    let total : mut = 0
     foreach i, v := @enumerate(arr):
         total ← total + i + v
     /* values: 1,4,9,16; indices: 0,1,2,3 */
@@ -68,7 +68,7 @@ fn test_enumerate_generated() → ∅:
 @test
 @expect error "@enumerate can only be used inside foreach"
 fn test_enumerate_outside_foreach() → ∅:
-    var x := @enumerate([1, 2, 3])
+    let x : mut = @enumerate([1, 2, 3])
 
 @start
 fn main() → ∅:

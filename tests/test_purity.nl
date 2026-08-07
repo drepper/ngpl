@@ -7,13 +7,13 @@
  * The @impure annotation lifts this restriction.
  */
 
-var counter := 0
-const LIMIT := 100
+let counter : mut = 0
+let LIMIT := 100
 
 /* Pure function assigning to a local variable is fine. */
 @test
 fn test_pure_local_assign() → ∅:
-    var x := 0
+    let x : mut = 0
     x ← 42
     assert_eq(x, 42)
 
@@ -27,7 +27,7 @@ fn test_pure_rejects_global_write() → ∅:
 @test
 @expect error "pure function.*cannot read mutable global"
 fn test_pure_rejects_global_read() → ∅:
-    var x := counter
+    let x : mut = counter
 
 /* Pure function CAN read a constant. */
 @test
