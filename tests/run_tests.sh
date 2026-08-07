@@ -40,6 +40,7 @@ all_tests=(
     "$testdir"/sha256.nl
     "$testdir"/test_arena.nl
     "$testdir"/test_comptime_foreach.nl
+    "$testdir"/test_comptime_introspect.nl
     "$testdir"/test_exit_code.nl
     "$testdir"/test_float.nl
     "$testdir"/test_format.nl

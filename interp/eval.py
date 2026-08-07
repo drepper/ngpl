@@ -2714,8 +2714,9 @@ class Evaluator:
             self._current_ret_type = resolved_ret_type
             self._pure_func_name = None if func.is_impure else func.name
             self._generic_map = generic_map
-            self._comptime_vars = (
-                {func.pack_param[0]} if has_pack else set())
+            self._comptime_vars = {n for n, _ in func.params}
+            if has_pack:
+                self._comptime_vars.add(func.pack_param[0])
             result = self.eval_stmts(func.body)
             self._check_return_type(result, resolved_ret_type, func.name)
             return self._wrap_optional_return(result, resolved_ret_type)
