@@ -2021,8 +2021,7 @@ class Evaluator:
         var_names = [v[0] for v in node.vars]
         for name in var_names:
             self._frozen_vars[name] = "foreach"
-        if node.is_comptime:
-            self._comptime_vars |= set(var_names)
+        self._comptime_vars |= set(var_names)
         try:
             for idx in range(max_len):
                 if num_vars == 1 and num_iters > 1:
@@ -2047,8 +2046,7 @@ class Evaluator:
         finally:
             for name in var_names:
                 self._frozen_vars.pop(name, None)
-            if node.is_comptime:
-                self._comptime_vars -= set(var_names)
+            self._comptime_vars -= set(var_names)
         return none()
 
     def _resolve_iterable(self, expr, is_comptime: bool = False) -> list[Value]:

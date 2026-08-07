@@ -3259,7 +3259,7 @@ When a `foreach` range has one or more unit-bearing bounds, the unit is propagat
 let total ¤byte : mut = 128
 foreach off := 0…64…(total - 1):
     // off has unit byte, inherited from the range bound
-    let x : mut = off + 1   // x also carries unit byte
+    static_assert_eq(@unitof(off), ¤byte)
 ```
 
 This allows sizeof results and other unit-bearing values to flow naturally through loop constructs without losing dimensional information.
