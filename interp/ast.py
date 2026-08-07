@@ -410,7 +410,7 @@ class StaticAssertEq:
 
 
 class EnumerateExpr:
-    """Enumerate expression: @enumerate(container).
+    """Enumerate expression: enumerate(container).
 
     Wraps an iterable so that foreach yields (index, value) tuples.
     """

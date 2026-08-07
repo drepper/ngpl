@@ -1511,26 +1511,26 @@ The wrapping behavior for shorter ranges is deliberate: it enables patterns like
 
 #### Enumerate
 
-The `@enumerate(container)` built-in wraps an iterable so that `foreach` yields `(index, value)` tuples, with the index starting at 0:
+The `enumerate(container)` built-in wraps an iterable so that `foreach` yields `(index, value)` tuples, with the index starting at 0:
 
 ```
-foreach pair := @enumerate([10, 20, 30]):
-    std.print(pair[0], pair[1])      /* 0 10, 1 20, 2 30 */
+foreach pair := enumerate([10, 20, 30]):
+    std.print(pair[0], pair[1])      // 0 10, 1 20, 2 30
 ```
 
 With two loop variables, the tuple is destructured automatically:
 
 ```
-foreach i, v := @enumerate([10, 20, 30]):
-    std.print(i, v)                  /* 0 10, 1 20, 2 30 */
+foreach i, v := enumerate([10, 20, 30]):
+    std.print(i, v)                  // 0 10, 1 20, 2 30
 ```
 
-`@enumerate` works with arrays, ranges, and any other iterable.  Using `@enumerate` outside a `foreach` context is an error.
+`enumerate` works with arrays, ranges, and any other iterable.  Using `enumerate` outside a `foreach` context is an error.
 
 | Feature | Python | Rust | Zig | NGPL |
 |---------|--------|------|-----|---------------|
-| Enumerate | `enumerate(x)` | `x.iter().enumerate()` | N/A | `@enumerate(x)` |
-| Destructuring | `for i, v in enumerate(x)` | `for (i, v) in x.enumerate()` | N/A | `foreach i, v := @enumerate(x)` |
+| Enumerate | `enumerate(x)` | `x.iter().enumerate()` | N/A | `enumerate(x)` |
+| Destructuring | `for i, v in enumerate(x)` | `for (i, v) in x.enumerate()` | N/A | `foreach i, v := enumerate(x)` |
 
 
 ### Anonymous Functions (Lambdas)
@@ -2991,14 +2991,14 @@ fn hetero_count args… → int:
 hetero_count(1, "a", 2)    /* returns 2 */
 ```
 
-#### With @enumerate
+#### With enumerate
 
-`@enumerate` works inside `comptime foreach` to provide `(index, value)` pairs:
+`enumerate` works inside `comptime foreach` to provide `(index, value)` pairs:
 
 ```
 fn indexed_sum args… : int → int:
     let s : mut int = 0
-    comptime foreach pair := @enumerate(args):
+    comptime foreach pair := enumerate(args):
         let idx : mut = pair[0]
         let val : mut = pair[1]
         s ← s + val * (idx + 1)

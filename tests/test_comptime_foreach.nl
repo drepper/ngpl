@@ -54,10 +54,10 @@ fn test_ct_foreach_array() → ∅:
         s ← s + v
     assert_eq(s, 60)
 
-// comptime foreach with @enumerate over a pack.
+// comptime foreach with enumerate over a pack.
 fn indexed_sum(args… : int) → int:
     let s : mut int = 0
-    comptime foreach pair := @enumerate(args):
+    comptime foreach pair := enumerate(args):
         let idx : mut = pair[0]
         let val : mut = pair[1]
         s ← s + val * (idx + 1)

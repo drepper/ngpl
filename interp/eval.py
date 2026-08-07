@@ -1617,7 +1617,7 @@ class Evaluator:
             return RangeValue(s.value, e.value, step)
 
         if isinstance(node, EnumerateExpr):
-            raise TypeError("@enumerate can only be used inside foreach")
+            raise TypeError("enumerate can only be used inside foreach")
 
         if isinstance(node, TypeOfExpr):
             val = self.eval_expr(node.expr)

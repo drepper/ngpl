@@ -61,12 +61,12 @@ KEYWORDS = {
     "type": "TYPE",
     "unit": "UNIT",
     "impure": "IMPURE",
+    "enumerate": "ENUMERATE",
 }
 
 # Keywords recognized only after the @ prefix.  The @ is part of the
 # token — no whitespace may separate it from the name.
 AT_KEYWORDS: dict[str, str] = {
-    "enumerate": "ENUMERATE",
     "typeof": "TYPEOF",
     "resultof": "RESULTOF",
     "sizeof": "SIZEOF",
