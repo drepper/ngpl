@@ -1790,6 +1790,10 @@ class Evaluator:
                     kind = self._frozen_vars[target_ast.name]
                     raise TypeError(
                         f"cannot assign to {kind} variable '{target_ast.name}'")
+                if self.env.is_const_global(target_ast.name):
+                    raise TypeError(
+                        f"cannot assign to const variable "
+                        f"'{target_ast.name}'")
                 if (self._pure_func_name is not None
                         and not self.env.has_local(target_ast.name)):
                     raise TypeError(

@@ -8,6 +8,8 @@
  * captured and matched.
  */
 
+const GLOBAL_C := 42
+
 /* --- const immutability --------------------------------------------------- */
 
 @expect error "cannot assign to const variable 'x'"
@@ -19,6 +21,10 @@ fn error_const_assign() → ∅:
 fn error_const_redef() → ∅:
     const x := 42
     var x := 99
+
+@expect error "cannot assign to const variable 'GLOBAL_C'"
+fn error_global_const_assign() → ∅:
+    GLOBAL_C ← 999
 
 /* --- foreach immutability ------------------------------------------------- */
 

@@ -267,6 +267,7 @@ def main():
             if type_ann is not None:
                 value = coerce_to_type(value, type_ann)
             env.define(name, value)
+            env._const_globals.add(name)
         elif isinstance(defn, ASTVarDef):
             value = evaluator.eval_expr(defn.init_expr)
             if defn.type_annotation is not None:

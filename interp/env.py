@@ -17,6 +17,7 @@ class Env:
     def __init__(self, parent=None):
         self._frames = [{}]  # stack of dicts: name → Value
         self._mutable_globals: set[str] = set()
+        self._const_globals: set[str] = set()
         if parent is not None:
             self._parent = parent
         else:
@@ -67,6 +68,14 @@ class Env:
     def has_local(self, name: str) -> bool:
         """Check if the name is defined in the current (innermost) frame."""
         return name in self._frames[-1]
+
+    def is_const_global(self, name: str) -> bool:
+        """Return True if *name* is a const global variable."""
+        if name in self._const_globals:
+            return True
+        if self._parent is not None:
+            return self._parent.is_const_global(name)
+        return False
 
     def is_mutable_global(self, name: str) -> bool:
         """Return True if *name* is a mutable global variable."""
