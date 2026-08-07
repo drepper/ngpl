@@ -1,0 +1,28 @@
+error: undefined variable: undefined_thing
+  --> <repl:1>:1:1
+    |
+  1 | undefined_thing
+    | ^^^^^^^^^^^^^^^
+    |
+3
+error: array index 9 out of range (length 2)
+  --> <repl:4>:1:3
+    |
+  1 | a[9]
+    |   ^
+    |
+"still alive"
+error: bad_call: argument 'n' expected int, got StrValue
+  --> <repl:7>:1:10
+    |
+  1 | bad_call("text")
+    |          ^^^^^^
+    |
+8
+error: unexpected token: '+'
+  --> <repl:9>:1:4
+    |
+  1 | 1 +++ 2
+    |    ^
+    |
+"recovered"

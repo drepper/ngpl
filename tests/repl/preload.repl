@@ -1,0 +1,6 @@
+triple(7)
+LIMIT
+fn combine(n : int) → int:
+    triple(n) + LIMIT
+
+combine(1)

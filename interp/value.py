@@ -213,6 +213,11 @@ class UnitValue(Value):
         return self.inner.to_python()
 
 
+_STR_ESCAPES = {
+    "\\": "\\\\", '"': '\\"', "\n": "\\n", "\t": "\\t", "\r": "\\r",
+}
+
+
 class StrValue(Value):
     """String value (UTF-8)."""
 
@@ -222,7 +227,10 @@ class StrValue(Value):
         self.value = value
 
     def display(self):
-        return repr(self.value)
+        # Rendered with the language's own quoting rather than Python's
+        # repr, which would quote with apostrophes.
+        body = "".join(_STR_ESCAPES.get(c, c) for c in self.value)
+        return f'"{body}"'
 
     def to_python(self):
         return self.value
@@ -409,6 +417,11 @@ class ObjectValue(Value):
         self.obj = obj
 
     def display(self):
+        # Wrapped objects that can describe themselves do so; the rest
+        # fall back to their type name.
+        shown = getattr(self.obj, "display", None)
+        if callable(shown):
+            return shown()
         return f"<{type(self.obj).__name__}>"
 
 
@@ -623,6 +636,11 @@ class ArrayValue(Value):
             self._backing[self._offset + index] = value
         else:
             self.elements[index] = value
+
+    def display(self) -> str:
+        """Render the array using the language's own literal syntax."""
+        return "[" + ", ".join(self.get(i).display()
+                               for i in range(self.sizeof)) + "]"
 
 
 class RefValue(Value):

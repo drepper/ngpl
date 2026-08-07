@@ -183,7 +183,12 @@ def _parse_args() -> argparse.Namespace:
         prog="NGPL",
         description="Prototype interpreter for the NGPL programming language.",
     )
-    parser.add_argument("source", help="source file to interpret")
+    parser.add_argument("source", nargs="?",
+                        help="source file to interpret; without one the "
+                             "interpreter starts a REPL")
+    parser.add_argument("--repl", action="store_true",
+                        help="enter the REPL after loading the source instead "
+                             "of running the startup function")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--test", action="store_true",
                        help="run all tests and exit without executing the startup function")
@@ -415,9 +420,13 @@ def _static_check_moves(stmts: list, env,
             if err:
                 return err
             if stmt.alt is not None:
-                alt_cond, alt_cons, alt_rest = stmt.alt
+                # A branch is (cond, body) when nothing follows it and
+                # (cond, body, rest) when further branches do; a plain
+                # else has no condition.
+                alt_cond, alt_cons, *alt_rest = stmt.alt
                 if alt_cond is not None:
-                    alt_stmt = _ast.IfStmt(alt_cond, alt_cons, alt_rest)
+                    alt_stmt = _ast.IfStmt(alt_cond, alt_cons,
+                                           alt_rest[0] if alt_rest else None)
                     err = _static_check_moves([alt_stmt], env, moved.copy(),
                                               dict(struct_vars))
                 elif alt_cons:
@@ -429,55 +438,57 @@ def _static_check_moves(stmts: list, env,
     return None
 
 
-def main():
-    """Run the NGPL interpreter on a source file."""
-    args = _parse_args()
+class DefinitionError(Exception):
+    """A top-level definition could not be installed into the environment."""
 
-    source_path = args.source
-    if not os.path.isfile(source_path):
-        print(f"Error: file not found: {source_path}", file=sys.stderr)
-        sys.exit(1)
 
-    with open(source_path, "r", encoding="utf-8") as f:
-        source = f.read()
+class LoadedProgram:
+    """The parts of a program that installing its definitions produced."""
 
-    try:
-        tokens = process_indentation(tokenize(source))
-    except Exception as e:
-        _show_error(e, source, source_path,
-                    show_backtrace=args.interpreter_backtrace)
-        sys.exit(1)
+    def __init__(self):
+        self.startup_func: FuncValue | None = None
+        self.standalone_tests: list[FuncValue] = []
+        self.referenced_tests: dict[str, list[FuncValue]] = defaultdict(list)
+        self.expect_funcs: list[ASTFuncDef] = []
 
-    try:
-        parser = Parser(tokens)
-        definitions = parser.parse()
-    except Exception as e:
-        _show_error(e, source, source_path,
-                    show_backtrace=args.interpreter_backtrace)
-        sys.exit(1)
 
-    if not definitions:
-        print("Warning: no definitions found in source file", file=sys.stderr)
-        return
+def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
+                        honor_start: bool = True) -> LoadedProgram:
+    """Install top-level definitions into an environment.
 
-    env = Env()
-    setup_std_env(env, source_path, _program_args(args.program_args))
+    Definitions are installed in dependency order: type aliases, then
+    variables, units, enums, structs, functions, and finally impl blocks,
+    which need their struct to exist already.
+
+    Args:
+        definitions: the parsed top-level definitions.
+        env: the environment to define names in.
+        evaluator: used to evaluate variable initializers.
+        honor_start: whether an @start annotation designates the startup
+            function.  False when the command line already named one.
+
+    Returns:
+        A LoadedProgram holding the startup function and the tests found.
+
+    Raises:
+        DefinitionError: when a definition is not well-formed.
+    """
+    program = LoadedProgram()
 
     for defn in definitions:
         if isinstance(defn, ASTTypeDef):
             if not validate_type(defn.target):
-                print(f"Error: type alias '{defn.name}' refers to unknown type "
-                      f"'{defn.target}'", file=sys.stderr)
-                sys.exit(1)
+                raise DefinitionError(
+                    f"type alias '{defn.name}' refers to unknown type "
+                    f"'{defn.target}'")
             register_type_alias(defn.name, defn.target)
 
-    evaluator = Evaluator(env)
     for defn in definitions:
         if isinstance(defn, ASTVarDef):
             if defn.is_const and defn.type_annotation is not None and defn.type_annotation in FAST_TYPES:
-                print(f"Error: fast type '{defn.type_annotation}' cannot be used in let definition '{defn.name}'",
-                      file=sys.stderr)
-                sys.exit(1)
+                raise DefinitionError(
+                    f"fast type '{defn.type_annotation}' cannot be used in "
+                    f"let definition '{defn.name}'")
             value = evaluator.eval_expr(defn.init_expr)
             if defn.type_annotation is not None:
                 value = coerce_to_type(value, defn.type_annotation)
@@ -529,15 +540,10 @@ def main():
             st = StructType(defn.name, defn.fields)
             env.define(defn.name, st)
 
-    startup_func: FuncValue | None = None
-    standalone_tests: list[FuncValue] = []
-    referenced_tests: dict[str, list[FuncValue]] = defaultdict(list)
-    expect_funcs: list[ASTFuncDef] = []
-
     for defn in definitions:
         if isinstance(defn, ASTFuncDef):
             if defn.expect_annotations:
-                expect_funcs.append(defn)
+                program.expect_funcs.append(defn)
                 continue
 
             for param_name, param_type in defn.params:
@@ -556,18 +562,17 @@ def main():
                           param_muts=defn.param_muts)
             env.define(defn.name, fv)
 
-            if args.start is None and defn.is_start:
-                if startup_func is not None:
-                    print("Error: multiple @start functions defined", file=sys.stderr)
-                    sys.exit(1)
-                startup_func = fv
+            if honor_start and defn.is_start:
+                if program.startup_func is not None:
+                    raise DefinitionError("multiple @start functions defined")
+                program.startup_func = fv
 
             if defn.is_test:
                 if defn.test_refs:
                     for ref in defn.test_refs:
-                        referenced_tests[ref].append(fv)
+                        program.referenced_tests[ref].append(fv)
                 else:
-                    standalone_tests.append(fv)
+                    program.standalone_tests.append(fv)
 
     for defn in definitions:
         if isinstance(defn, ASTImplBlock):
@@ -576,9 +581,8 @@ def main():
             except KeyError:
                 st = None
             if not isinstance(st, StructType):
-                print(f"Error: impl block for unknown struct '{defn.struct_name}'",
-                      file=sys.stderr)
-                sys.exit(1)
+                raise DefinitionError(
+                    f"impl block for unknown struct '{defn.struct_name}'")
             for method_def in defn.methods:
                 for param_name, param_type in method_def.params:
                     if param_type is not None:
@@ -592,9 +596,9 @@ def main():
                                is_impure=method_def.is_impure,
                                param_muts=method_def.param_muts)
                 if method_def.name in st.methods:
-                    print(f"Error: duplicate method '{method_def.name}' "
-                          f"in impl {defn.struct_name}", file=sys.stderr)
-                    sys.exit(1)
+                    raise DefinitionError(
+                        f"duplicate method '{method_def.name}' "
+                        f"in impl {defn.struct_name}")
                 st.methods[method_def.name] = fv
                 if getattr(method_def, "_self_is_ref", False):
                     st._ref_self_methods.add(method_def.name)
@@ -604,8 +608,64 @@ def main():
             if not getattr(defn, "_parse_error", None):
                 move_err = _static_check_moves(defn.body, env)
                 if move_err is not None:
-                    print(f"Error in {defn.name}: {move_err}", file=sys.stderr)
-                    sys.exit(1)
+                    raise DefinitionError(f"in {defn.name}: {move_err}")
+
+    return program
+
+
+def main():
+    """Run the NGPL interpreter on a source file."""
+    args = _parse_args()
+
+    source_path = args.source
+    source = ""
+    definitions = []
+
+    if source_path is not None:
+        if not os.path.isfile(source_path):
+            print(f"Error: file not found: {source_path}", file=sys.stderr)
+            sys.exit(1)
+
+        with open(source_path, "r", encoding="utf-8") as f:
+            source = f.read()
+
+        try:
+            tokens = process_indentation(tokenize(source))
+        except Exception as e:
+            _show_error(e, source, source_path,
+                        show_backtrace=args.interpreter_backtrace)
+            sys.exit(1)
+
+        try:
+            parser = Parser(tokens)
+            definitions = parser.parse()
+        except Exception as e:
+            _show_error(e, source, source_path,
+                        show_backtrace=args.interpreter_backtrace)
+            sys.exit(1)
+
+        if not definitions and not args.repl:
+            print("Warning: no definitions found in source file", file=sys.stderr)
+            return
+    elif args.test:
+        print("Error: --test requires a source file", file=sys.stderr)
+        sys.exit(1)
+
+    env = Env()
+    setup_std_env(env, source_path or "", _program_args(args.program_args))
+
+    evaluator = Evaluator(env)
+    try:
+        program = install_definitions(definitions, env, evaluator,
+                                      honor_start=args.start is None)
+    except DefinitionError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    startup_func = program.startup_func
+    standalone_tests = program.standalone_tests
+    referenced_tests = program.referenced_tests
+    expect_funcs = program.expect_funcs
 
     if args.start is not None:
         try:
@@ -730,9 +790,12 @@ def main():
         if any_failed:
             sys.exit(1)
 
-    if startup_func is None:
-        print("No @start function found — nothing to execute", file=sys.stderr)
-        return
+    # Without a startup function there is nothing to run, so hand the
+    # session to the user rather than exiting silently.
+    if args.repl or startup_func is None:
+        from interp.repl import Repl
+        hooks = {} if args.skip_tests else dict(referenced_tests)
+        sys.exit(Repl(env, Evaluator(env, test_hooks=hooks)).run())
 
     hooks = {} if args.skip_tests else dict(referenced_tests)
     evaluator = Evaluator(env, test_hooks=hooks)

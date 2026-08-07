@@ -3393,3 +3393,158 @@ The builtin units use conventional abbreviations: `B` for byte, `m` for meter, `
 | Lossless check | no | N/A | no | yes (integers) |
 
 The `¤` syntax keeps unit annotations visually distinct from type annotations (which use `:`) and avoids ambiguity with function call or subscript delimiters.  The lossless conversion check for integers prevents silent truncation when converting between units of different scale.
+
+
+Chapter 12: The Interpreter — The Interactive Read-Eval-Print Loop
+------------------------------------------------------------------
+
+### Entering the REPL
+
+The interpreter starts an interactive session in three situations, in order of precedence:
+
+1. `--repl` is given.  The source file, if any, is loaded first and its definitions become available, but the startup function is *not* run.
+2. No source file is given at all.  The session starts with only `std` in scope.
+3. A source file is given but defines no startup function.  Rather than exiting with nothing done, the interpreter hands the loaded definitions to the user.
+
+```
+$ ngpl                          # empty session
+$ ngpl --repl program.nl        # load program.nl, do not run main
+$ ngpl library.nl               # library.nl has no @start ⇒ REPL
+```
+
+The third case replaces what was previously a bare "nothing to execute" message.  A file of pure definitions is the normal shape of a library, and loading one interactively is the fastest way to exercise it.
+
+Standalone tests still run before the session begins, so a session never starts on top of code already known to be broken.
+
+`--test` requires a source file and never enters the REPL.
+
+### What Can Be Entered
+
+A source file may contain only definitions; every statement must live inside a function.  The REPL lifts that restriction, because the restriction exists to keep files reviewable, not to keep expressions from being evaluated.  An entry may be:
+
+* any definition a file may contain — `fn`, `let`, `type`, `unit`, `enum`, `struct`, `impl`;
+* any statement — assignment, `if`, `foreach`, `while`, `catch`;
+* a bare expression, which is evaluated and its value shown.
+
+```
+>>> 1 + 2
+3
+>>> let x := 42
+>>> x * 2
+84
+>>> foreach i := 1…3:
+...     std.print(i)
+...
+1
+2
+3
+```
+
+Only a bare expression reports a value.  A statement that happens to end in an expression stays silent, exactly as it would inside a function body, so that a loop or a conditional does not print its last iteration's value.
+
+Definitions accumulate in one environment for the life of the session: a function defined in one entry is callable from the next, and a function may refer to names defined earlier.
+
+### Multi-Line Input
+
+Input is read one line at a time and accumulated until it forms something complete.  Two rules decide when that is.
+
+**A line that cannot stand alone continues.**  Input that stops in the middle of a bracket, a string literal, or an expression is incomplete, and the REPL reads on:
+
+```
+>>> 1 +
+... 2
+3
+>>> std.print("a",
+...           "b")
+ab
+```
+
+**A layout block continues until an empty line.**  Once a line ending in `:` is followed by an indented body, input continues even though what has been typed would already parse:
+
+```
+>>> fn double(n : int) → int:
+...     n * 2
+...
+>>> double(21)
+42
+```
+
+The empty line is required because the alternative — ending the definition as soon as it parses — would make it impossible to give a function a second statement.  After `n * 2` the function is syntactically complete, so without the rule there would be no way to add a line to it.  This follows Python's REPL, and for the same reason.
+
+An annotation on its own line is also incomplete, since the definition it applies to has not been given yet:
+
+```
+>>> @test
+... fn test_double() → ∅:
+...     assert_eq(double(21), 42)
+...
+test test_double ... ok
+```
+
+Because a `@test` function is run as soon as it is defined, the REPL is a direct way to develop a test: write it, watch it fail, fix the function, and define it again.
+
+The empty line also serves as an escape.  Input that the rules above keep waiting on — a string literal accidentally left open, say — is abandoned by pressing Enter on an empty line, without having to guess what the interpreter is still waiting for.
+
+`@expect`-annotated functions are accepted but not checked interactively; their expectations are verified when the file is run.
+
+### Displaying Values
+
+A result is shown using the language's own literal syntax, so that what is printed could be typed back in:
+
+```
+>>> "hello"
+"hello"
+>>> [1, 2, 3]
+[1, 2, 3]
+>>> Point { x: 3, y: 4 }
+Point { x: 3, y: 4 }
+>>> std.sys.page_size()
+4096 B
+```
+
+Strings are shown quoted, which distinguishes the string `"42"` from the integer `42` and the empty string from no output at all.  `std.print` writes its argument unquoted and returns `∅`, so a call to it produces exactly one line rather than a line plus an echoed result.
+
+### Errors
+
+An error ends the entry that caused it and nothing else.  The session keeps its bindings and continues:
+
+```
+>>> a[9]
+error: array index 9 out of range (length 2)
+  --> <repl:4>:1:3
+    |
+  1 | a[9]
+    |   ^
+    |
+>>> "still alive"
+"still alive"
+```
+
+Diagnostics carry the same source excerpt and caret as in file mode, with the entry number standing in for a file name.  Parse errors, type errors, and runtime errors are all reported this way, and none of them ends the session.
+
+### Non-Interactive Input
+
+When standard input is not a terminal the REPL prints no banner and no prompts, so a piped script produces exactly its results:
+
+```
+$ printf '1 + 2\nlet x := 5\nx * x\n' | ngpl
+3
+25
+```
+
+This makes the REPL usable as a filter and gives the interpreter's own test suite a way to exercise it.
+
+### Comparison with Other Languages
+
+| Feature | Python | Julia | GHCi | Zig | NGPL |
+|---------|--------|-------|------|-----|---------------|
+| Block terminated by | empty line | `end` keyword | layout / `:{` `:}` | n/a (no REPL) | empty line |
+| Bare expression shown | yes | yes | yes | n/a | yes |
+| Statements at top level | yes (also in files) | yes (also in files) | via `let`/IO | n/a | REPL only |
+| Definitions redefinable | yes | yes (with warning) | yes | n/a | yes |
+| Auto-enter without entry point | no | no | n/a | n/a | yes |
+| Prompts when piped | yes | no | yes | n/a | no |
+
+The closest model is Python's, and the empty-line rule is taken from it directly.  The significant departure is that statements and definitions are separated in files but united in the REPL: a file keeps the property that all code is inside a named, reviewable unit, while the REPL — where the unit of work is the entry, not the file — does not need it.
+
+Entering the REPL automatically when a file defines no startup function has no counterpart in these languages, and follows from the interpreter's role in a fast edit-evaluate-check loop: a library that cannot be run should still be explorable without a wrapper program.

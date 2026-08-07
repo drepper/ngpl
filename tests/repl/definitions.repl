@@ -1,0 +1,34 @@
+fn double(n : int) → int:
+    n * 2
+
+double(21)
+fn fact(n : int) → int:
+    let acc : mut = 1
+    foreach i := 1…n:
+        acc ← acc * i
+    acc
+
+fact(5)
+struct Point:
+    x : int
+    y : int
+
+impl Point:
+    fn sum(&self) → int:
+        self.x + self.y
+
+let p := Point { x: 3, y: 4 }
+p
+p.x
+p.sum()
+enum Color:
+    red
+    green
+
+Color.green
+type Small = u8
+let b : Small = 7
+b
+unit tick
+let t := 5¤tick
+t

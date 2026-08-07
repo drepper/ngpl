@@ -102,10 +102,15 @@ if ((failed > 0)); then
     exit 1
 fi
 
-# Run output-capture tests only when running all tests.
+# Run output-capture and REPL tests only when running all tests.
 if (($# == 0)); then
     echo
     if python "$testdir"/run_output_tests.py 2>&1; then
+        :
+    else
+        exit 1
+    fi
+    if python "$testdir"/run_repl_tests.py 2>&1; then
         :
     else
         exit 1

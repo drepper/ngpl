@@ -758,7 +758,7 @@ class StdModule:
         from interp.eval import unwrap_optional
         from interp.value import (IntValue, FloatValue, BoolValue, StrValue, ObjectValue,
                                   ArrayValue, EnumValue, ExpectedValue, NoneValue,
-                                  UnitValue, mk_str)
+                                  UnitValue, none)
 
         parts = []
         for arg in args:
@@ -797,7 +797,9 @@ class StdModule:
 
         output = "".join(parts) + "\n"
         os.write(1, output.encode("utf-8"))
-        return mk_str("")
+        # print is a statement, not a value-producing expression; returning
+        # the empty string would make the REPL echo it after every call.
+        return none()
 
     # ------------------------------------------------------------------
     # SHA-256 helpers — byte-level ops and block compression.

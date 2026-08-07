@@ -1,0 +1,10 @@
+3
+ab
+[1, 2, 3]
+small
+big
+test test_double ... ok
+test test_wrong ... FAILED
+  assert_eq failed:
+  expected: 4
+  actual:   5

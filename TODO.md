@@ -241,8 +241,10 @@ Build System and Tooling
 [ ] language server protocol (LSP) mode: expose type information, optimization decisions,
     diagnostics, and code navigation.
 
-[ ] REPL: interactive read-eval-print loop when no startup function is defined or on request.
-    Define functions/variables, call functions, inspect values.
+[x] REPL: interactive read-eval-print loop when no startup function is defined or on request.
+    Define functions/variables, call functions, inspect values.  Entered via --repl, when no
+    source file is given, or when the source defines no @start function.  Accepts definitions,
+    statements, and bare expressions; layout blocks are terminated by an empty line.
 
 [ ] compiler mode: ahead-of-time compilation to native code.  Startup function designation
     via command line or attribute.

@@ -1,0 +1,11 @@
+let x := 42
+x
+let total : mut = 0
+foreach i := 1…4:
+    total ← total + i
+
+total
+if total > 5:
+    std.print("big")
+
+std.print("printed")

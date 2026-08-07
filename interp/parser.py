@@ -24,11 +24,20 @@ from interp.ast import (
 from interp.lexer import Token, KEYWORDS
 
 
+# Token types that can begin a top-level definition, either as the
+# definition keyword itself or as an annotation preceding it.
+DEFINITION_STARTERS = frozenset({
+    "START", "REPLACEABLE", "TEST", "FLAG", "IMPURE", "EXPECT",
+    "ENUM", "STRUCT", "IMPL", "UNIT", "TYPE", "FN", "LET",
+})
+
+
 class ParseError(Exception):
     """Raised when the parser encounters invalid input."""
 
     def __init__(self, message, token=None):
         self.raw_message = message
+        self.token = token
         if token:
             self.line = token.line
             self.col = token.col
@@ -156,6 +165,31 @@ class Parser:
             if definition is not None:
                 definitions.append(definition)
         return definitions
+
+    def parse_repl(self):
+        """Parse interactive input as a mix of definitions and statements.
+
+        A source file may only contain definitions, but the REPL also
+        accepts the statements and expressions that would otherwise have
+        to be wrapped in a function.  Input starting with a definition
+        keyword or annotation is parsed as a definition; anything else is
+        parsed as a statement, so a bare expression arrives as ExprStmt.
+        """
+        items = []
+        while not self._check("EOF"):
+            while self._try_eat("NEWLINE"):
+                pass
+            while self._check("INDENT", "DEDENT"):
+                self.pos += 1
+            if self._check("EOF"):
+                break
+            if self._cur().type in DEFINITION_STARTERS:
+                item = self._parse_definition()
+            else:
+                item = self._parse_statement()
+            if item is not None:
+                items.append(item)
+        return items
 
     def _parse_definition(self):
         """Parse a single top-level definition (function, const, enum, or variable)."""
