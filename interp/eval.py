@@ -283,15 +283,15 @@ def _builtin_fs_cwd(args):
 
 
 def _builtin_dir_open_file(args):
-    """dir.openFile(name, mode?, flags?) — open file relative to directory."""
+    """dir.open_file(name, mode?, flags?) — open file relative to directory."""
     if len(args) < 1 or len(args) > 3:
-        raise TypeError("dir.openFile(name, mode?, flags?) takes 1-3 arguments")
+        raise TypeError("dir.open_file(name, mode?, flags?) takes 1-3 arguments")
     dir_fd = args[0]
     if isinstance(dir_fd, ObjectValue):
         dir_fd = dir_fd.obj
     name_arg = unwrap_optional(args[1])
     if not isinstance(name_arg, StrValue):
-        raise TypeError(f"openFile expects string for name, got {type(name_arg).__name__}")
+        raise TypeError(f"open_file expects string for name, got {type(name_arg).__name__}")
     mode = None
     flags = None
     if len(args) > 2:

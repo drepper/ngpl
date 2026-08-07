@@ -186,7 +186,7 @@ def _checked_sysconf(name: int, what: str) -> int:
 class DirFD:
     """Wrapper around a file descriptor opened as a directory.
 
-    Provides openFile() which calls openat(dirfd, pathname, flags).
+    Provides open_file() which calls openat(dirfd, pathname, flags).
     The raw fd is accessible via .fd for direct use in the language.
     """
 
@@ -222,9 +222,6 @@ class DirFD:
             errno = ctypes.get_errno()
             raise OSError(f"openat({self._fd}, {name!r}): {os.strerror(errno)} (errno={errno})")
         return FileStream(fd)
-
-    # Alias for the language-level name (camelCase).
-    openFile = open_file
 
 
 # ---------------------------------------------------------------------------

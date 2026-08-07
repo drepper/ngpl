@@ -270,7 +270,8 @@ Runtime
 [ ] object file format: possibly custom format supporting partial recompilation.
     Dynamic linking support for system libraries (e.g., Vulkan shared objects).
 
-[ ] do not use camelcase for identifiers.  Change all functions in the std module to use underscores.
+[x] do not use camelcase for identifiers.  Change all functions in the std module to use
+    underscores.  openFile was the last one; it is now open_file, with no alias kept.
 
 [ ] add name member function (no parameters) for directory object which returns the absolute path of
     the directory.

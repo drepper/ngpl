@@ -3102,7 +3102,7 @@ let buf : mut = alloc.alloc(4096)
 ```
 let alloc : mut = std.arena.allocator()
 let dir : mut = std.fs.cwd()
-let file : mut = dir.openFile("data.bin")
+let file : mut = dir.open_file("data.bin")
 let data : mut = file.read_file(alloc)
 /* ... use data ... */
 alloc.deinit()

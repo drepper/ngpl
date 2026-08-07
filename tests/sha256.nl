@@ -161,7 +161,7 @@ fn test_sha256_448bit() → ∅:
 fn main() → ∅:
     let alloc : mut = std.arena.allocator()
     let dir : mut = std.fs.cwd()
-    let file : mut = dir.openFile("CLAUDE.md")
+    let file : mut = dir.open_file("CLAUDE.md")
     let data : mut = file.read_file(alloc)
     let hash : mut = sha256(data)
     alloc.deinit()

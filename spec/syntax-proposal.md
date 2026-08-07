@@ -251,7 +251,7 @@ The following program demonstrates the proposed syntax:
     @start
     fn main() -> none {
         var dir = fs.cwd();
-        var file = dir.openFile("CLAUDE.md");
+        var file = dir.open_file("CLAUDE.md");
         var data = file.read_file(heap.allocator());
         var hash = sha256(data);
         hash.format(None, get_stdout());
