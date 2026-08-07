@@ -1,4 +1,4 @@
-"""Lexical analyzer for the newlang language.
+"""Lexical analyzer for the NGPL language.
 
 Scans source text (UTF-8) and produces a stream of typed tokens.
 Handles identifiers, keywords, integer/string literals, operators,

@@ -1,4 +1,4 @@
-"""Output-capture test runner for the newlang interpreter.
+"""Output-capture test runner for the NGPL interpreter.
 
 Runs .nl test programs and compares their stderr/stdout against
 corresponding .expected files.  Each test is a pair:

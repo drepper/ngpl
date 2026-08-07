@@ -9,7 +9,7 @@ these are initial choices to be validated through experiments.
 1. File Structure
 -----------------
 
-Source files have the extension `.nl` (newlang). A source file contains a sequence
+Source files have the extension `.nl` (NGPL). A source file contains a sequence
 of top-level definitions: function definitions and variable definitions. No code
 may appear outside these constructs.
 

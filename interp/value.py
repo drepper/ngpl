@@ -1,4 +1,4 @@
-"""Runtime value types for the newlang language.
+"""Runtime value types for the NGPL language.
 
 Each runtime value is wrapped in one of these classes. The evaluator
 operates on these values rather than raw Python objects to support
@@ -408,7 +408,7 @@ class ObjectValue(Value):
 
 
 class BuiltinBoundMethod(Value):
-    """A bound method on a Python object (exposed to newlang)."""
+    """A bound method on a Python object (exposed to NGPL)."""
 
     __slots__ = ("obj", "method_name")
 

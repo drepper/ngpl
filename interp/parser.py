@@ -1,4 +1,4 @@
-"""Recursive descent parser for the newlang language.
+"""Recursive descent parser for the NGPL language.
 
 Builds an Abstract Syntax Tree (AST) from a token stream produced by the lexer.
 Supports function definitions, variable definitions, if/while/control flow,

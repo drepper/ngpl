@@ -181,7 +181,7 @@ Fast types **are** allowed for:
 
 This design mirrors C's `uint_fast8_t` family from `<stdint.h>` but with a cleaner naming convention and stricter usage rules.  The C standard allows fast types anywhere, which can lead to surprising behavior when data structures have different sizes on different platforms.  Restricting fast types to local computation prevents this class of portability bugs while preserving the performance benefit for the common case of loop indices.
 
-| Feature | C (`<stdint.h>`) | Rust | Zig | This language |
+| Feature | C (`<stdint.h>`) | Rust | Zig | NGPL |
 |---------|-----------------|------|-----|---------------|
 | Fast types | `uint_fast8_t` etc. | none | none | `u8fast` etc. |
 | Data structure restriction | none | N/A | N/A | enforced |
@@ -544,7 +544,7 @@ const t1 := @wrap(v[7] + s1 + ch + K[t] + W[t])
 
 #### Design Rationale
 
-| Feature | C | Rust | Zig | This language |
+| Feature | C | Rust | Zig | NGPL |
 |---------|---|------|-----|---------------|
 | Signed overflow | UB | panic (debug) / wrap (release) | UB / `@addWithOverflow` | abort |
 | Unsigned overflow | wraps | wraps | wraps | wraps |
@@ -599,7 +599,7 @@ The loop iterates over each element of the array.  The loop variable is constant
 
 #### Design Rationale
 
-| Feature | C | Rust | Zig | Go | This language |
+| Feature | C | Rust | Zig | Go | NGPL |
 |---------|---|------|-----|----|---------------|
 | Array + size | separate pointer and length | slice `&[u8]` | `[]const u8` | `[]byte` | `byte[]` with `.sizeof` |
 | Size access | manual tracking | `.len()` | `.len` | `len(s)` | `.sizeof` |
@@ -667,7 +667,7 @@ Inside the parameter list, `:` always introduces a type annotation because the p
 
 The parenthesized parameter list makes the function signature unambiguously context-free — the parser always knows where parameters end, regardless of type annotations.  This is consistent with most contemporary languages.
 
-| Feature | C/C++ | Rust | Haskell | Python | Zig | This language |
+| Feature | C/C++ | Rust | Haskell | Python | Zig | NGPL |
 |---------|-------|------|---------|--------|-----|---------------|
 | Parameter delimiters | `(...)` | `(...)` | none | `(...)` | `(...)` | `(...)` |
 | Parameter separator | `,` | `,` | space | `,` | `,` | `,` |
@@ -731,9 +731,9 @@ A pure function may call an impure function.  The impure callee is responsible f
 | Rust | pure (by convention) | `unsafe` (different scope) | — |
 | D | `pure` attribute | default is impure | compiler |
 | Zig | — | — | no purity system |
-| This language | pure | `@impure` annotation | runtime |
+| NGPL | pure | `@impure` annotation | runtime |
 
-Haskell enforces purity through the type system — impure computations have a different type (`IO a`).  D inverts the default: functions are impure unless annotated `pure`.  This language follows Haskell's philosophy (pure by default) but uses a simpler annotation mechanism (`@impure`) rather than a monadic type.
+Haskell enforces purity through the type system — impure computations have a different type (`IO a`).  D inverts the default: functions are impure unless annotated `pure`.  NGPL follows Haskell's philosophy (pure by default) but uses a simpler annotation mechanism (`@impure`) rather than a monadic type.
 
 #### Design Rationale
 
@@ -795,16 +795,33 @@ fn abs x : int → int { if x < 0 { return -x; } x }
 ```
 
 
-### Const Local Variables
+### Const Bindings
 
-The `const` keyword can be used in place of `var` to define a local variable that cannot be modified after initialization:
+The `const` keyword defines an immutable binding.  It can appear at module level (global constant) or inside a function body (local constant).
+
+#### Module-Level `const`
+
+A module-level `const` defines a global constant visible throughout the compilation unit:
+
+```
+const PI := 3
+const MAX_SIZE : u32 = 1024
+```
+
+Module-level constants are **not variables** — they need not occupy storage at runtime.  The compiler is free to substitute the value at every use site and eliminate the binding entirely.  This is a fundamental difference from C++, where `const` creates a variable with an immutable value that still has an address, a lifetime, and can be passed by reference.  In NGPL, taking the address of a `const` binding is not permitted.
+
+Because module-level constants cannot be modified, they are accessible from pure functions (see [Function Purity](#function-purity)).
+
+#### Function-Scope `const`
+
+The `const` keyword can also be used in place of `var` inside a function body to define a local binding that cannot be modified after initialization:
 
 ```
 const pi := 3
 const max_size : u32 = 1024
 ```
 
-A `const` variable is initialized exactly like a `var` — with `:=` for type-inferred definitions or `: type =` for explicitly typed ones.  After initialization, any attempt to reassign or redefine the variable is a compile-time (or runtime, in the interpreter) error:
+A `const` binding is initialized exactly like a `var` — with `:=` for type-inferred definitions or `: type =` for explicitly typed ones.  After initialization, any attempt to reassign or redefine the binding is a compile-time (or runtime, in the interpreter) error:
 
 ```
 const x := 42
@@ -812,18 +829,22 @@ x ← 99              /* ERROR: cannot assign to const variable 'x' */
 var x := 99          /* ERROR: cannot redefine const variable 'x' */
 ```
 
-The `const` keyword at function scope is distinct from module-level `const` declarations, which define global constants.  Both prevent modification, but module-level constants are visible across the entire compilation unit while function-scope `const` variables follow normal scoping rules.
+As with module-level constants, the compiler may eliminate function-scope `const` bindings that have values known at compile time.  When the initializer is not a compile-time constant, the binding behaves like a read-only local variable.
 
 `foreach` loop variables are implicitly `const` for assignment — they cannot be reassigned with `←`.  Redefinition with `var` or `const` is permitted but produces a warning (see [Constant Loop Variables](#constant-loop-variables)).
 
-#### Design Rationale
+#### Comparison with Other Languages
 
-| Feature | C/C++ | Rust | Zig | Go | This language |
+| Feature | C/C++ | Rust | Zig | Go | NGPL |
 |---------|-------|------|-----|----|---------------|
 | Local immutability | `const` | default (`let`) | `const` | no | `const` |
 | Mutable keyword | (default) | `mut` | `var` | (default) | `var` |
+| `const` has address | yes | yes (`let`) | no | N/A | no |
+| `const` eliminated | only with `constexpr` | only with `const` | yes | N/A | yes |
 
-Unlike Rust where immutability is the default (`let` vs `let mut`), this language defaults to mutability (`var`) and opts into immutability (`const`).  This matches C/C++ and Zig conventions and avoids cluttering code with `mut` annotations in imperative-style code where most variables are modified.
+In C++, `const` creates a variable that happens to be immutable — it still has an address, participates in linkage, and can be passed by reference.  Only `constexpr` guarantees compile-time evaluation and potential elimination.  In Zig, `const` bindings are closer to NGPL: they are values, not locations, and the compiler eliminates them freely.  Rust's `const` items (module-level) are inlined at every use site like NGPL; Rust's `let` bindings (function-local) are immutable by default but always have an address.
+
+Unlike Rust where immutability is the default (`let` vs `let mut`), NGPL defaults to mutability (`var`) and opts into immutability (`const`).  This matches C/C++ and Zig conventions and avoids cluttering code with `mut` annotations in imperative-style code where most variables are modified.
 
 
 ### Optional Types (`T?`)
@@ -1009,7 +1030,7 @@ Expected values and optionals compose naturally: a function returning `T?` can u
 
 #### Design Rationale
 
-| Feature | Rust | C++26 | Zig | Swift | This language |
+| Feature | Rust | C++26 | Zig | Swift | NGPL |
 |---------|------|-------|-----|-------|---------------|
 | Optional type | `Option<T>` | `std::optional<T>` | `?T` | `T?` | `T?` |
 | Result type | `Result<T,E>` | `std::expected<T,E>` | `!T` (error union) | — | `T?E` |
@@ -1082,7 +1103,7 @@ In `get_padded_byte`, the `data` parameter is typed as `byte[]` (a dynamic byte 
 
 Parameter type enforcement catches type errors early and enables the interpreter to coerce values to the correct width automatically.  Leaving the type annotation optional preserves the scripting-mode flexibility: untyped parameters accept any value, which is useful for generic functions and for parameters whose types are not yet part of the built-in set (such as user-defined structs or standard library objects like `Bytes`).
 
-| Feature | Rust | Zig | Python | This language |
+| Feature | Rust | Zig | Python | NGPL |
 |---------|------|-----|--------|---------------|
 | Parameter types | Required | Required | Optional (hints only) | Optional (enforced when present) |
 | Coercion | No (explicit conversion) | No | N/A | Yes (integer widening) |
@@ -1160,7 +1181,7 @@ This flexibility allows programmers to choose the style that best fits each situ
 
 #### Design Rationale
 
-| Feature | Python | Haskell | Rust | This language |
+| Feature | Python | Haskell | Rust | NGPL |
 |---------|--------|---------|------|---------------|
 | Layout blocks | Required (no braces) | Optional (`where`, `let`, `do`) | No | Optional |
 | Brace blocks | No | Optional | Required | Optional |
@@ -1347,7 +1368,7 @@ foreach point := [1,2,3], [10,20,30]:
 
 #### Design Rationale
 
-| Feature | Python | Rust | Zig | This language |
+| Feature | Python | Rust | Zig | NGPL |
 |---------|--------|------|-----|---------------|
 | Iteration keyword | `for` | `for` | `for` | `foreach` |
 | Range syntax | `range(1, 11)` | `1..=10` | `0..10` | `1…10` (inclusive) |
@@ -1378,7 +1399,7 @@ foreach i, v := @enumerate([10, 20, 30]):
 
 `@enumerate` works with arrays, ranges, and any other iterable.  Using `@enumerate` outside a `foreach` context is an error.
 
-| Feature | Python | Rust | Zig | This language |
+| Feature | Python | Rust | Zig | NGPL |
 |---------|--------|------|-----|---------------|
 | Enumerate | `enumerate(x)` | `x.iter().enumerate()` | N/A | `@enumerate(x)` |
 | Destructuring | `for i, v in enumerate(x)` | `for (i, v) in x.enumerate()` | N/A | `foreach i, v := @enumerate(x)` |
@@ -1548,7 +1569,7 @@ add(5)                             // WARNING: lambda value is not used
 
 #### Design Rationale
 
-| Feature | Haskell | Rust | Python | This language |
+| Feature | Haskell | Rust | Python | NGPL |
 |---------|---------|------|--------|---------------|
 | Lambda syntax | `\x -> x+1` | `\|x\| x+1` | `lambda x: x+1` | `λx : int → int: x+1` |
 | Capture | implicit | explicit (`move`) | implicit | explicit (`\|…\|`) |
@@ -1556,7 +1577,7 @@ add(5)                             // WARNING: lambda value is not used
 | Multi-expression body | no (one expr) | yes (block) | no (one expr) | yes (block or layout) |
 | Unused lambda warning | no | yes (unused `Result`) | no | yes |
 
-The explicit capture list follows the principle that a lambda's dependencies should be visible at the definition site.  Unlike Rust's closure inference, this language requires the programmer to declare what is captured — making the lambda self-documenting and preventing accidental capture of mutable state.
+The explicit capture list follows the principle that a lambda's dependencies should be visible at the definition site.  Unlike Rust's closure inference, NGPL requires the programmer to declare what is captured — making the lambda self-documenting and preventing accidental capture of mutable state.
 
 Automatic currying follows Haskell's model: every function of N parameters is conceptually a chain of N single-parameter functions.  This makes point-free style and function composition natural.
 
@@ -1651,7 +1672,7 @@ For higher-rank results (matrices, tensors), `generate` will accept multi-dimens
 
 #### Design Rationale
 
-| Feature | Haskell | Python | Rust | APL | This language |
+| Feature | Haskell | Python | Rust | APL | NGPL |
 |---------|---------|--------|------|-----|---------------|
 | Map+collect | `map f [1..n]` | `[f(x) for x in range(1,n+1)]` | `(1..=n).map(f).collect()` | `f⍳n` | `generate(f, 1…n)` |
 | Result type | list | list | `Vec<T>` | array | array |
@@ -1867,14 +1888,14 @@ var y := b * a         // OK — result is 12 ¤byte
 
 #### Design Rationale
 
-| Feature | APL/BQN | Python | Rust | This language |
+| Feature | APL/BQN | Python | Rust | NGPL |
 |---------|---------|--------|------|---------------|
 | Reshape | `n ⍴ data` | `numpy.reshape` | N/A | `n ⍴ data` |
 | Fill mode | cycle | error on mismatch | N/A | cycle |
 | Bounds check | implicit | `IndexError` | panic | `IndexError` |
 | Syntax | glyph | method | method | glyph |
 
-The APL tradition uses `⍴` both monadically (query shape) and dyadically (reshape).  This language currently implements only the dyadic form.  The monadic form (returning the shape of an array) may be added in future.
+The APL tradition uses `⍴` both monadically (query shape) and dyadically (reshape).  NGPL currently implements only the dyadic form.  The monadic form (returning the shape of an array) may be added in future.
 
 The cycling semantics follow APL: when the data has fewer elements than the result requires, elements are reused from the beginning.  This makes `n ⍴ scalar` a natural way to create filled arrays, and `n ⍴ array` extends arrays without requiring explicit concatenation.
 
@@ -1928,7 +1949,7 @@ This is clearer than the equivalent `64 ⍴ generate(load_word, 0…15)` because
 | Haskell  | `++`                |
 | Python   | `+` (overloaded)    |
 | Rust     | `.extend()` / `[a, b].concat()` |
-| This language | `⧺`           |
+| NGPL | `⧺`           |
 
 Using a dedicated glyph avoids overloading `+` (which is element-wise addition on arrays) and is visually distinct from arithmetic.
 
@@ -2049,7 +2070,7 @@ var total := add ⌿ tripled             // 45
 
 #### Design Rationale
 
-| Feature | APL/BQN | Haskell | Rust | Python | This language |
+| Feature | APL/BQN | Haskell | Rust | Python | NGPL |
 |---------|---------|---------|------|--------|---------------|
 | Left fold | `/` (reduce) | `foldl`/`foldl1` | `.fold()` | `functools.reduce` | `f ⌿ x` |
 | Right fold | N/A | `foldr`/`foldr1` | `.rfold()` | N/A | `f ⍀ x` |
@@ -2125,7 +2146,7 @@ This design avoids the problems of stack-unwinding exception systems: reasoning 
 
 #### Comparison with Other Languages
 
-| Feature | C++ `try/catch` | Rust `?` | Zig `catch` | This language |
+| Feature | C++ `try/catch` | Rust `?` | Zig `catch` | NGPL |
 |---------|-----------------|----------|-------------|---------------|
 | Scope | Stack-unwinding | Expression-level | Expression-level | Syntactic block |
 | Cross-call | Catches all | Propagates | Propagates | Does not catch |
@@ -2172,7 +2193,7 @@ fn main → u8:
     0                           // success
 ```
 
-| Feature | C/C++ | Rust | Zig | Go | This language |
+| Feature | C/C++ | Rust | Zig | Go | NGPL |
 |---------|-------|------|-----|----|---------------|
 | Entry point | `main` | `main` | `pub fn main` | `func main` | `@start fn name` |
 | Exit code type | `int` | `()` / `ExitCode` | `u8` / `void` | implicit 0 | `u8` / `i8` / `∅` |
@@ -2217,7 +2238,7 @@ var x := 42
 static_assert(x)                       /* ERROR: not a compile-time constant */
 ```
 
-| Feature | C/C++ | Rust | Zig | This language |
+| Feature | C/C++ | Rust | Zig | NGPL |
 |---------|-------|------|-----|---------------|
 | Compile-time assert | `static_assert` | `const_assert!` (nightly) | `comptime` + assert | `static_assert` / `static_assert_eq` |
 
@@ -2285,7 +2306,7 @@ var data: u8[4] = [0, 0, 0, 0]
 static_assert_eq(@unitof(data.sizeof), ¤byte) /* byte[] sizeof has unit byte */
 ```
 
-| Feature | C++ | Rust | Zig | This language |
+| Feature | C++ | Rust | Zig | NGPL |
 |---------|-----|------|-----|---------------|
 | Type-of expression | `decltype(expr)` | — | `@TypeOf` | `@typeof(expr)` |
 | Return type query | `decltype(f())` | — | `@typeInfo` | `@resultof(func)` |
@@ -2327,14 +2348,14 @@ fn test_sha256_abc → ∅:
 
 The test system draws from several languages:
 
-| Feature | Rust | Zig | This language |
+| Feature | Rust | Zig | NGPL |
 |---------|------|-----|---------------|
 | Annotation | `#[test]` | `test` block | `@test` / `@test(func)` |
 | Runs with program | No (`cargo test` only) | No | Yes (always, unless skipped) |
 | Function-level binding | No | No | Yes (`@test(func)` triggers on first call) |
 | Assertion | `assert!` macro | `std.testing.expect` | `assert` / `assert_eq` builtins |
 
-The function-level binding via `@test(func)` is unique to this language.  It ensures that a function's tests run before the function is ever used in production, catching regressions at the earliest possible point.  The `pthread_once` execution model ensures no runtime overhead after the first call.
+The function-level binding via `@test(func)` is unique to NGPL.  It ensures that a function's tests run before the function is ever used in production, catching regressions at the earliest possible point.  The `pthread_once` execution model ensures no runtime overhead after the first call.
 
 The `std.bytes(string)` function creates a `Bytes` object from a UTF-8 string literal, enabling test functions to construct known inputs for cryptographic and binary data operations.
 
@@ -2432,7 +2453,7 @@ This test verifies both that the warning is produced and that the redefined vari
 
 #### Design Rationale
 
-| Feature | Rust | LLVM FileCheck | This language |
+| Feature | Rust | LLVM FileCheck | NGPL |
 |---------|------|----------------|---------------|
 | Error testing | `#[should_panic]` | `// expected-error` | `@expect error "pattern"` |
 | Warning testing | No | `// expected-warning` | `@expect warning "pattern"` |
@@ -2589,7 +2610,7 @@ The grouping by integer ranges allows category checks:  runtime errors are in 10
 
 #### Design Rationale
 
-| Feature | C/C++ | Rust | Zig | This language |
+| Feature | C/C++ | Rust | Zig | NGPL |
 |---------|-------|------|-----|---------------|
 | Scoping | global (C), scoped (`enum class`, C++) | scoped | scoped | scoped (qualified access) |
 | Underlying type | optional (`enum class : u8`) | implicit | `u8`..`u64` | optional (`: u8`) |
@@ -2668,7 +2689,7 @@ add10(20)                 /* T' resolves to int, returns 30 */
 
 #### Comparison with Other Languages
 
-| Feature | Haskell | Rust | C++ | Zig | This language |
+| Feature | Haskell | Rust | C++ | Zig | NGPL |
 |---------|---------|------|-----|-----|---------------|
 | Syntax | `a` (lowercase) | `<T>` | `template<typename T>` | `anytype` | `T'` (apostrophe suffix) |
 | Declaration | implicit | explicit `<T>` block | explicit `template` | implicit | implicit (recognized by `'`) |
@@ -2744,7 +2765,7 @@ g("Alice", "Bob")          /* names captures "Alice", "Bob" */
 
 #### Comparison with Other Languages
 
-| Feature | C++ | Rust | Zig | Python | This language |
+| Feature | C++ | Rust | Zig | Python | NGPL |
 |---------|-----|------|-----|--------|---------------|
 | Syntax | `Args...` | none (macros) | `anytype` + comptime | `*args` | `name…` |
 | Type constraint | `template<typename... Args>` | N/A | comptime checks | none | `: type` annotation |
@@ -2822,7 +2843,7 @@ comptime foreach v := [10, 20, 30]:
 
 #### Comparison with Other Languages
 
-| Feature | C++ | Rust | Zig | This language |
+| Feature | C++ | Rust | Zig | NGPL |
 |---------|-----|------|-----|---------------|
 | Pack iteration | fold expressions, `std::apply` | proc macros | `inline for` | `comptime foreach` |
 | Heterogeneous | yes (each expansion differs) | N/A | yes (`inline for`) | yes (type changes per iteration) |
@@ -2887,7 +2908,7 @@ alloc.deinit()
 
 #### Comparison with Other Languages
 
-| Feature | C++ `std::format` | Python `format` | Rust `format!` | This language |
+| Feature | C++ `std::format` | Python `format` | Rust `format!` | NGPL |
 |---------|-------------------|-----------------|----------------|---------------|
 | Syntax | `"{}"` | `"{}"` | `"{}"` | `"{}"` |
 | Positional args | `"{0}"` | `"{0}"` | `"{0}"` | sequential only |
@@ -3092,7 +3113,7 @@ The builtin units use conventional abbreviations: `B` for byte, `m` for meter, `
 
 #### Comparison with Other Languages
 
-| Feature | Rust | C++ (proposed) | F# | This language |
+| Feature | Rust | C++ (proposed) | F# | NGPL |
 |---------|------|----------------|-----|---------------|
 | Units | third-party crate (`uom`) | no standard | units of measure | built-in |
 | Syntax | type system | N/A | `[<Measure>]` attribute | `¤` annotation |

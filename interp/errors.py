@@ -1,4 +1,4 @@
-"""Error display for the newlang interpreter.
+"""Error display for the NGPL interpreter.
 
 Formats error messages with source context, line/column indicators,
 and optional syntax highlighting, similar to modern compilers like

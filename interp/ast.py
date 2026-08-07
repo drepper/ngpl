@@ -1,4 +1,4 @@
-"""Abstract Syntax Tree nodes for the newlang language.
+"""Abstract Syntax Tree nodes for the NGPL language.
 
 Each class represents one construct in the source language. The parser builds
 a tree of these nodes; the evaluator walks the tree to produce results.

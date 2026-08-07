@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run all newlang test files and report a summary.
+# Run all NGPL test files and report a summary.
 # Exit with non-zero status if any test file fails.
 
 topdir=$(cd "$(dirname "$(realpath "$0")")/.." && pwd) || exit 1

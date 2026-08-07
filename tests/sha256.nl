@@ -1,5 +1,5 @@
-/* SHA-256 implemented entirely in newlang using bitwise operators. */
-/* No std helpers — all logic is pure newlang with arrays. */
+/* SHA-256 implemented entirely in NGPL using bitwise operators. */
+/* No std helpers — all logic is pure NGPL with arrays. */
 
 /* ---------------------------------------------------------------------------
  * Static round constants K[0..63] — initialized once, read-only.
@@ -69,7 +69,7 @@ fn expand_Σ₁(prev : u32) → u32:
     (prev ↻ 17) ^ (prev ↻ 19) ^ (prev » 10)
 
 /* ---------------------------------------------------------------------------
- * sha256(data) — full SHA-256 implementation in pure newlang.
+ * sha256(data) — full SHA-256 implementation in pure NGPL.
  *
  * Uses « » for shifts, ↺ ↻ for rotations, and subscript access for the
  * message schedule W[0..63] and round constants K[t].

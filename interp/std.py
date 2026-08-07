@@ -1,6 +1,6 @@
 """Standard library (std) runtime.
 
-Implements the built-in modules available to all newlang programs.
+Implements the built-in modules available to all NGPL programs.
 Uses direct system calls via ctypes where Python's os module does not
 expose sufficient low-level control.
 
@@ -348,7 +348,7 @@ def _format_string(template, *args):
     """Format a string with optional arguments.
 
     Supports %s (string), %d (int), %x (hex), %X (uppercase hex).
-    The template is a newlang StrValue; args are runtime Values.
+    The template is a NGPL StrValue; args are runtime Values.
 
     Args:
         template: format string (StrValue or Python str).
@@ -410,7 +410,7 @@ class StdModule:
     """The std module providing built-in runtime services.
 
     This is the entry point for all runtime functionality available to
-    newlang programs. It is initialized once when the interpreter starts
+    NGPL programs. It is initialized once when the interpreter starts
     and its methods are registered as builtin functions in the global env.
     """
 
@@ -645,7 +645,7 @@ class StdModule:
         (like format) and writes the result followed by a newline to stdout.
 
         Args:
-            args: list of newlang Value objects.
+            args: list of NGPL Value objects.
 
         Returns:
             NoneValue.
@@ -692,16 +692,16 @@ class StdModule:
 
     # ------------------------------------------------------------------
     # SHA-256 helpers — byte-level ops and block compression.
-    # These provide the mutable-byte operations that newlang cannot yet
+    # These provide the mutable-byte operations that NGPL cannot yet
     # express without arrays or mutable state.  The message-schedule
-    # expansion (W[16..79]) is implemented in newlang using bitwise
+    # expansion (W[16..79]) is implemented in NGPL using bitwise
     # operators (& | ^ ~ << >>) and recursion.
     # ------------------------------------------------------------------
 
     def sha256_pad(self, args):
         """sha256_pad(data_handle) — pad input per SHA-256 spec.
 
-        Returns an ObjectValue wrapping the padded bytearray so newlang code
+        Returns an ObjectValue wrapping the padded bytearray so NGPL code
         can extract bytes via sha256_getbyte and words via sha256_getword.
         """
         if len(args) != 1:
@@ -879,7 +879,7 @@ class StdModule:
         using the standard FIPS 180-4 expansion formula, and packs them into a Python int
         where each word occupies 32 consecutive bit positions [i*32 .. (i+1)*32 - 1].
 
-        This enables newlang code to express the full message-schedule computation using
+        This enables NGPL code to express the full message-schedule computation using
         only bitwise shift-and-mask operations — no arrays or mutable state required.
 
         Args:

@@ -1,4 +1,4 @@
-"""Evaluator (interpreter) for the newlang language.
+"""Evaluator (interpreter) for the NGPL language.
 
 Walks the AST produced by the parser and executes it, maintaining an
 environment that maps variable names to runtime values.
@@ -483,7 +483,7 @@ def _substitute_generics(type_str: str, generic_map: dict[str, str]) -> str:
 
 
 class Evaluator:
-    """Evaluates newlang AST in a given environment.
+    """Evaluates NGPL AST in a given environment.
 
     The evaluator maintains an environment (Env) for variable lookups and
     provides methods to evaluate expressions and statements.

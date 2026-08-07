@@ -1,4 +1,4 @@
-"""Unit system for dimensional analysis in newlang.
+"""Unit system for dimensional analysis in NGPL.
 
 Provides Unit class for tracking physical dimensions and conversion factors,
 with builtin SI units, byte units, and abstract units.

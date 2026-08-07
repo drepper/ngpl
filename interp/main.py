@@ -1,4 +1,4 @@
-"""Entry point for the newlang prototype interpreter."""
+"""Entry point for the NGPL prototype interpreter."""
 
 import argparse
 import re
@@ -172,8 +172,8 @@ def _run_test(test_fv: FuncValue, env: Env) -> tuple[bool, str]:
 def _parse_args() -> argparse.Namespace:
     """Parse command-line arguments for the interpreter."""
     parser = argparse.ArgumentParser(
-        prog="newlang",
-        description="Prototype interpreter for the newlang programming language.",
+        prog="NGPL",
+        description="Prototype interpreter for the NGPL programming language.",
     )
     parser.add_argument("source", help="source file to interpret")
     group = parser.add_mutually_exclusive_group()
@@ -192,7 +192,7 @@ def _parse_args() -> argparse.Namespace:
 def _show_error(exc: BaseException, source: str, source_path: str,
                 evaluator: Evaluator | None = None, *,
                 show_backtrace: bool = False) -> None:
-    """Display a formatted error diagnostic for a newlang exception."""
+    """Display a formatted error diagnostic for a NGPL exception."""
     if show_backtrace:
         import traceback
         traceback.print_exc()
@@ -222,7 +222,7 @@ def _show_error(exc: BaseException, source: str, source_path: str,
 
 
 def main():
-    """Run the newlang interpreter on a source file."""
+    """Run the NGPL interpreter on a source file."""
     args = _parse_args()
 
     source_path = args.source
