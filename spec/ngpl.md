@@ -3184,6 +3184,108 @@ alloc.deinit()
 The allocator parameter ensures that the caller controls where the formatted string is allocated, following the language's principle of explicit memory management.  Unlike C++ `std::format` which allocates via `std::allocator`, the allocator is a visible first-class argument.
 
 
+### Resource Lifetime and Scope
+
+A value that holds an operating system resource — an open file or directory, so far — is owned by the binding it was assigned to.  When that binding's scope ends, the resource is released:
+
+```
+@start
+fn main() → ∅:
+    let dir : mut = std.fs.cwd()
+    let file : mut = dir.open_file("data.bin")
+    let data : mut = file.read_file(alloc)
+    std.print(data.sizeof)
+    // main's scope ends here: file is closed, then dir
+```
+
+Nothing in the source says to close the file.  The scope in which `file` was defined ends at the end of `main`, and that is enough to know the descriptor is finished with.
+
+This is what a `defer` statement would express one call at a time, without needing the statement: the release is attached to the binding rather than written out at the point of acquisition, so it cannot be forgotten, cannot be written twice, and does not have to be repeated on every path out of the function.
+
+#### Order
+
+Bindings are destroyed in reverse order of definition.  A resource acquired by using an earlier one is therefore released before the thing it came from — above, `file` is closed before `dir`, never the other way round.
+
+#### Every Exit
+
+The scope ends however it is left: by running off the end, by an early `return`, or by an error propagating out.  A file opened before a failing operation is closed while that error travels outward.
+
+A destructor that fails does not replace the reason the scope was left.  The failure is reported as a warning, and the original return or error continues on its way — a program that is already failing should not have its diagnosis replaced by a complaint about the cleanup.
+
+#### Ownership
+
+Two kinds of binding are not destroyed by the scope that names them.
+
+**Returned values.**  Ownership passes to the caller, so a function may open a file and hand it back:
+
+```
+fn open_input():
+    let dir : mut = std.fs.cwd()
+    dir.open_file("input.txt")
+```
+
+`dir` is closed as `open_input` returns; the file is not, because it is the value being handed over.  It is then owned by whatever binding receives it, and closed when *that* scope ends.
+
+**Parameters.**  An argument names a value the caller owns, so a function that takes a file does not close it:
+
+```
+fn read_all(f, alloc):
+    f.read_file(alloc)
+```
+
+The caller's file is still open after `read_all` returns.
+
+#### Releasing Early
+
+`close()` releases the resource before the scope ends, for a program that knows it is finished sooner:
+
+```
+let file : mut = dir.open_file("data.bin")
+let data : mut = file.read_file(alloc)
+file.close()
+process_for_a_long_time(data)
+```
+
+Once closed, the value is unavailable.  Every operation on it is an error:
+
+```
+file.close()
+_ ← file.fd
+
+error: fd: file is closed
+```
+
+That is the point of making close destructive rather than a hint.  A file descriptor number is reused by the kernel as soon as it is released, so an operation on a closed file would not fail — it would silently act on whatever unrelated file has since been given the same number.
+
+Closing twice is an error for the same reason:
+
+```
+error: close: file is closed
+```
+
+The second `close` says the program has lost track of the descriptor's lifetime.  Scope-end release is not an error after an explicit `close`, however: the program said it was finished early, and the scope ending afterwards has nothing left to do.
+
+#### What Is Not Yet Tracked
+
+Ownership is followed through bindings, returns, and parameters.  It is not yet followed into other places a value can be put — stored in a global, in a struct field, or in an array — where the resource is currently released when the defining scope ends even though something else still refers to it.  A temporary that is never bound at all, as in `dir.open_file("x").read_file(alloc)`, is not tracked either and leaks its descriptor until the program exits.
+
+Closing those gaps is the business of the ownership and borrow system, which is a separate and larger piece of work.
+
+#### Comparison with Other Languages
+
+| Feature | C | C++ | Rust | Zig | Go | NGPL |
+|---------|---|-----|------|-----|-----|---------------|
+| Release at scope end | no | destructors | `Drop` | `defer` | `defer` (function) | automatic |
+| Written at the acquisition | n/a | no | no | yes | yes | no |
+| Ownership passes on return | n/a | yes (move) | yes | manual | manual | yes |
+| Use after release | undefined | undefined | rejected at compile time | undefined | undefined | error at runtime |
+| Double release | undefined | n/a | rejected at compile time | possible | possible | error |
+
+The model is C++'s and Rust's rather than Go's and Zig's: the release belongs to the type, not to a statement the programmer has to remember at each acquisition.  `defer` is the alternative that was considered and not taken — it is explicit, but it puts the burden back on every use, and a `defer` that is forgotten looks exactly like code that never needed one.
+
+Where this differs from C++ and Rust is what happens on a mistake.  Both make use-after-release undefined or impossible; here it is a diagnosed error at runtime.  A compile-time answer needs the ownership system that is still to come, and until then a definite error is better than an operation on whatever file inherited the descriptor number.
+
+
 ### Standard Library: Memory Allocators
 
 The standard library provides two allocator subsystems under the `std` module: a global heap allocator and per-instance arena allocators.  Both return allocator objects with an `alloc(size)` method that yields a byte buffer.

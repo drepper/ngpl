@@ -181,7 +181,15 @@ Memory and Lifetime Management
 
 [ ] reference counting for boxed values with implicit deallocation.
 
-[ ] defer statement for explicit cleanup at scope exit.
+[x] defer statement for explicit cleanup at scope exit.  Decided against: cleanup is
+    attached to the type rather than written out at each acquisition, so a value holding
+    an OS resource is released when its binding's scope ends, on every exit path.
+    Ownership passes on return and is not taken by parameters.  Implemented for open
+    files and directories; close() releases early and makes the value unavailable.
+
+[ ] follow resource ownership into globals, struct fields, and array elements, and track
+    temporaries that are never bound.  Those still release at the defining scope's end
+    or leak; needs the ownership/borrow system.
 
 [ ] address spaces: named memory regions with read/write/exec flags and access costs.
     Separate code and data address spaces.  Support for accelerator memory, cross-process

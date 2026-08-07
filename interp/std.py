@@ -188,17 +188,46 @@ class DirFD:
 
     Provides open_file() which calls openat(dirfd, pathname, flags).
     The raw fd is accessible via .fd for direct use in the language.
+
+    Like FileStream, the descriptor is a resource owned by the binding
+    the directory was assigned to, and is released when that binding's
+    scope ends.  Without that, a function that opens a directory to reach
+    one file would leak a descriptor on every call.
     """
 
-    __slots__ = ("_fd",)
+    __slots__ = ("_fd", "_closed")
 
     def __init__(self, fd: int):
         self._fd = fd
+        self._closed = False
+
+    def _check_open(self, what: str):
+        """Reject an operation on a directory that has already been closed."""
+        if self._closed:
+            raise OSError(f"{what}: directory is closed")
+
+    @property
+    def is_closed(self) -> bool:
+        """Whether the descriptor has been released."""
+        return self._closed
 
     @property
     def fd(self) -> int:
         """The underlying directory file descriptor number."""
+        self._check_open("fd")
         return self._fd
+
+    def close(self):
+        """Close the directory descriptor and make it unavailable."""
+        self._check_open("close")
+        _close(self._fd)
+        self._closed = True
+
+    def destroy(self):
+        """Release the descriptor because the owning scope has ended."""
+        if not self._closed:
+            _close(self._fd)
+            self._closed = True
 
     def open_file(self, name, mode=None, flags=None):
         """Open a file relative to this directory using openat.
@@ -211,6 +240,7 @@ class DirFD:
         Returns:
             FileStream wrapping the new file descriptor.
         """
+        self._check_open("open_file")
         if isinstance(name, str):
             name = name.encode("utf-8")
         if mode is None:
@@ -234,15 +264,34 @@ class FileStream:
     Provides read_file() which reads the entire file content into
     allocated memory using the provided allocator, then returns the
     result as a Bytes object containing the raw data.
+
+    The file descriptor is a resource owned by the binding the stream was
+    assigned to.  It is released when close() is called explicitly, and
+    otherwise when that binding's scope ends.  Either way the stream
+    becomes unavailable: every operation on a closed file is an error, so
+    a descriptor cannot be used after it has been handed back to the
+    kernel and possibly reissued to something else.
     """
 
-    __slots__ = ("_fd",)
+    __slots__ = ("_fd", "_closed")
 
     def __init__(self, fd: int):
         self._fd = fd
+        self._closed = False
+
+    def _check_open(self, what: str):
+        """Reject an operation on a file that has already been closed."""
+        if self._closed:
+            raise OSError(f"{what}: file is closed")
+
+    @property
+    def is_closed(self) -> bool:
+        """Whether the descriptor has been released."""
+        return self._closed
 
     @property
     def fd(self) -> int:
+        self._check_open("fd")
         return self._fd
 
     def read_file(self, allocator):
@@ -262,6 +311,7 @@ class FileStream:
         """
         from interp.value import ObjectValue, ArrayValue, mk_int
 
+        self._check_open("read_file")
         fsize = _get_file_size(self._fd)
         buf_result = allocator.alloc(fsize)
 
@@ -288,8 +338,27 @@ class FileStream:
         return ObjectValue(ArrayValue(elements, element_type="byte"))
 
     def close(self):
-        """Close the file descriptor."""
+        """Close the file descriptor and make the file unavailable.
+
+        Closing a file that is already closed is an error rather than a
+        no-op: the second close says the program has lost track of the
+        descriptor's lifetime, and on a descriptor the kernel has since
+        reissued it would close an unrelated file.
+        """
+        self._check_open("close")
         _close(self._fd)
+        self._closed = True
+
+    def destroy(self):
+        """Release the descriptor because the owning scope has ended.
+
+        Unlike close(), this is not an error on an already-closed file:
+        an explicit close is the program saying it is finished early, and
+        the scope ending afterwards has nothing left to do.
+        """
+        if not self._closed:
+            _close(self._fd)
+            self._closed = True
 
 
 # ---------------------------------------------------------------------------

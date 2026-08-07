@@ -1658,12 +1658,14 @@ class Evaluator:
                         return attr_val
                     if callable(attr_val):
                         return BuiltinBoundMethod(unwrapped.obj, node.attr)
+                    # bool before int: bool is a subclass of int, so the
+                    # int test would otherwise turn true/false into 1/0.
+                    if isinstance(attr_val, bool):
+                        return mk_bool(attr_val)
                     if isinstance(attr_val, int):
                         return mk_int(attr_val)
                     if isinstance(attr_val, str):
                         return mk_str(attr_val)
-                    if isinstance(attr_val, bool):
-                        return mk_bool(attr_val)
                     return ObjectValue(attr_val)
             elif isinstance(unwrapped, IntValue):
                 # int.value attribute? No, just return the int itself.
@@ -2919,6 +2921,12 @@ class Evaluator:
             if param_name not in func.param_muts and param_name not in func.param_refs:
                 self._frozen_vars[param_name] = "let"
         self._call_stack.append([func.name, self._last_pos, func.source_label])
+        returned: Value | None = None
+        # Parameters hold values the caller owns, so leaving this scope
+        # must not destroy them.
+        borrowed = {name for name, _ in func.params}
+        if has_pack:
+            borrowed.add(func.pack_param[0])
         try:
             self.env = call_env
             self._current_ret_type = resolved_ret_type
@@ -2929,10 +2937,12 @@ class Evaluator:
                 self._comptime_vars.add(func.pack_param[0])
             result = self.eval_stmts(func.body)
             self._check_return_type(result, resolved_ret_type, func.name)
-            return self._wrap_optional_return(result, resolved_ret_type)
+            returned = self._wrap_optional_return(result, resolved_ret_type)
+            return returned
         except _ReturnSentinel as e:
             self._check_return_type(e.value, resolved_ret_type, func.name)
-            return self._wrap_optional_return(e.value, resolved_ret_type)
+            returned = self._wrap_optional_return(e.value, resolved_ret_type)
+            return returned
         except _PropagatedError as pe:
             raise pe.original from pe
         except BaseException as e:
@@ -2942,6 +2952,7 @@ class Evaluator:
             attach_backtrace(e, self._call_stack)
             raise
         finally:
+            self._end_scope(call_env, returned, borrowed)
             self._call_stack.pop()
             self.env = old_env
             self._current_ret_type = old_ret_type
@@ -2949,6 +2960,65 @@ class Evaluator:
             self._frozen_vars = old_frozen
             self._generic_map = old_generic_map
             self._comptime_vars = old_comptime_vars
+
+    def _end_scope(self, call_env, returned, borrowed: set[str]):
+        """Destroy the resources a departing scope owns.
+
+        A value that holds an operating system resource -- an open file,
+        for now -- is owned by the binding it was assigned to, and is
+        released when that binding's scope ends, however it ends.
+        Bindings are destroyed in reverse order of definition, so a
+        resource acquired using an earlier one is released first.
+
+        Two kinds of binding are left alone.  Parameters name values the
+        caller owns.  The returned value is handed to the caller, which
+        takes ownership with it -- destroying it here would give the
+        caller a closed file.
+
+        A destructor that fails becomes a warning rather than an error:
+        the scope is already being left, and in the common case it is
+        being left because something else went wrong.
+
+        Args:
+            call_env: the environment whose local frame is ending.
+            returned: the value being handed to the caller, if any.
+            borrowed: names of bindings this scope does not own.
+        """
+        frame = call_env._frames[-1]
+        if not frame:
+            return
+
+        # Look through an optional or a successful expected to find the
+        # object that is really escaping.  unwrap_optional is not usable
+        # here: it raises for an expected holding an error, which is an
+        # ordinary way for a function to return.
+        escaping = set()
+        candidates = [returned]
+        if isinstance(returned, SomeValue):
+            candidates.append(returned.value)
+        elif isinstance(returned, ExpectedValue) and returned.is_ok():
+            candidates.append(returned.ok_value)
+        for value in candidates:
+            if isinstance(value, ObjectValue):
+                escaping.add(id(value.obj))
+
+        for name in reversed(list(frame)):
+            if name in borrowed:
+                continue
+            value = frame[name]
+            if not isinstance(value, ObjectValue):
+                continue
+            destroy = getattr(value.obj, "destroy", None)
+            if not callable(destroy) or id(value.obj) in escaping:
+                continue
+            # Two bindings can name the same resource; destroying it once
+            # is enough, and each destructor tolerates being run twice.
+            escaping.add(id(value.obj))
+            try:
+                destroy()
+            except Exception as e:
+                self._warnings.append(
+                    f"destroying '{name}' at end of scope failed: {e}")
 
     def _check_return_type(self, result: Value, ret_type: str | None, func_name: str) -> Value:
         """Verify the return value matches the declared return type."""
