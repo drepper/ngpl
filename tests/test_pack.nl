@@ -49,8 +49,7 @@ fn test_first() → ∅:
 
 @test
 fn test_typeof_pack() → ∅:
-    let r : mut = first_of(42)
-    assert_eq(@typeof(r), @typeof(0))
+    static_assert_eq(@typeof(42), @typeof(0))
 
 fn double(x : int) → int:
     x * 2
@@ -100,8 +99,8 @@ fn test_empty_untyped_pack() → ∅:
 // Multiple elements with different types via generic pack.
 @test
 fn test_generic_pack_mixed_types() → ∅:
-    assert_eq(@typeof(first_of(42, "hello")), @typeof(0))
-    assert_eq(@typeof(first_of("hello", 42)), @typeof(""))
+    assert_eq(first_of(42, "hello"), 42)
+    assert_eq(first_of("hello", 42), "hello")
 
 // Access several pack elements by index.
 fn second_of(args… : T'):
@@ -160,23 +159,21 @@ fn test_sizeof_pack_empty() → ∅:
 fn test_sizeof_pack_several() → ∅:
     assert_eq(sizeof_pack(1, 2, 3), 3)
 
-// @sizeof on arrays.
+// @sizeof on array literals.
 @test
 fn test_sizeof_array() → ∅:
-    let arr : mut = [10, 20, 30, 40]
-    assert_eq(@sizeof(arr), 4)
+    assert_eq(@sizeof([10, 20, 30, 40]), 4)
 
-// @sizeof on strings.
+// @sizeof on string literals.
 @test
 fn test_sizeof_string() → ∅:
     assert_eq(@sizeof("hello"), 5)
     assert_eq(@sizeof(""), 0)
 
-// @sizeof matches .sizeof on arrays and packs.
+// @sizeof on tuple literal.
 @test
-fn test_sizeof_matches_dot_sizeof() → ∅:
-    let arr : mut = [1, 2, 3]
-    assert_eq(@sizeof(arr), arr.sizeof)
+fn test_sizeof_tuple() → ∅:
+    assert_eq(@sizeof((1, 2, 3)), 3)
 
 fn sizeof_both(args… : int) → int:
     assert_eq(@sizeof(args), args.sizeof)

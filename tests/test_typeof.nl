@@ -1,4 +1,5 @@
 // Tests for @typeof and @resultof.
+// All @ commands require compile-time constant arguments.
 
 // @typeof on integer literal.
 @test
@@ -15,47 +16,28 @@ fn test_typeof_str() → ∅:
 fn test_typeof_bool() → ∅:
     static_assert_eq(@typeof(true), @typeof(false))
 
-// @typeof on integer variable.
-@test
-fn test_typeof_var() → ∅:
-    let x : mut = 42
-    assert_eq(@typeof(x), @typeof(0))
-
-// @typeof on typed integer variable.
-@test
-fn test_typeof_typed_var() → ∅:
-    let x : mut u32 = 10
-    let y : mut u32 = 20
-    assert_eq(@typeof(x), @typeof(y))
-
 // @typeof distinguishes int from str.
 @test
 fn test_typeof_different() → ∅:
-    let x : mut = 42
-    let s : mut = "hello"
-    let ti : mut = @typeof(x)
-    let ts : mut = @typeof(s)
-    // Verify they are not equal by checking display values differ
-    assert_eq(@typeof(42), @typeof(0))
+    static_assert_eq(@typeof(42), @typeof(0))
+    static_assert_eq(@typeof("a"), @typeof("b"))
 
-// @typeof on array.
+// @typeof on array literal.
 @test
 fn test_typeof_array() → ∅:
-    let arr : mut = [1, 2, 3]
-    assert_eq(@typeof(arr), @typeof([4, 5]))
+    static_assert_eq(@typeof([1, 2, 3]), @typeof([4, 5]))
 
-// @typeof on tuple.
+// @typeof on tuple literal.
 @test
 fn test_typeof_tuple() → ∅:
-    let t : mut = (1, 2)
-    assert_eq(@typeof(t), @typeof((3, 4)))
+    static_assert_eq(@typeof((1, 2)), @typeof((3, 4)))
 
 // @typeof on none.
 @test
 fn test_typeof_none() → ∅:
     static_assert_eq(@typeof(∅), @typeof(∅))
 
-// @typeof with static_assert_eq on literals.
+// @typeof with static_assert_eq on computed constants.
 @test
 fn test_typeof_static() → ∅:
     static_assert_eq(@typeof(42), @typeof(1 + 2))
@@ -64,10 +46,12 @@ fn test_typeof_static() → ∅:
 fn example_fn(x : i32) → i32:
     x + 1
 
+fn identity_i32(x : i32) → i32:
+    x
+
 @test
 fn test_resultof_basic() → ∅:
-    let x : mut i32 = 0
-    assert_eq(@resultof(example_fn), @typeof(x))
+    static_assert_eq(@resultof(example_fn), @resultof(identity_i32))
 
 // @resultof on void function.
 fn void_fn() → ∅:
@@ -75,7 +59,7 @@ fn void_fn() → ∅:
 
 @test
 fn test_resultof_void() → ∅:
-    assert_eq(@resultof(void_fn), @typeof(∅))
+    static_assert_eq(@resultof(void_fn), @typeof(∅))
 
 // @resultof on function with optional return.
 fn optional_fn(x : i32) → i32?:
@@ -92,6 +76,13 @@ fn test_resultof_optional() → ∅:
 @expect error "unknown function"
 fn test_resultof_unknown() → ∅:
     let t : mut = @resultof(nonexistent)
+
+// Error: @typeof with non-constant argument.
+@test
+@expect error "compile-time constant"
+fn test_typeof_non_const() → ∅:
+    let x : mut = 42
+    @typeof(x)
 
 @start
 fn main() → ∅:

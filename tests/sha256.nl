@@ -80,7 +80,6 @@ fn sha256(data : byte[]) → int?:
     let rem := data.sizeof % 64
     let pad_len := (119 - rem) % 64
     let total_size := data.sizeof + 1 + pad_len + 8
-    static_assert_eq(@unitof(total_size), ¤byte)
 
     // Initial hash values per FIPS 180-4 Section 5.3.3.
     let H : mut u32 = [
@@ -90,7 +89,6 @@ fn sha256(data : byte[]) → int?:
 
     // Process each 64-byte block.
     foreach blk_off := 0…64…(total_size - 1):
-        static_assert_eq(@unitof(blk_off), ¤byte)
         // --- Load W[0..63]: first 16 from data, rest filled by expansion. ---
         let load_word : mut = λi : usize |data, blk_off, total_size| → u32: get_padded_word(data, blk_off + i * 4 ¤byte, total_size) ?? 0
         let W : mut = generate(load_word, 0…15) ⧺ 48 ⍴ [0]

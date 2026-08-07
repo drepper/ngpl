@@ -2372,66 +2372,55 @@ static_assert(x)                       /* ERROR: not a compile-time constant */
 
 #### Type Introspection
 
-Built-in introspection functions use the `@` prefix and return values that can be compared for equality:
+Built-in introspection functions use the `@` prefix and return values that can be compared for equality.  All `@` operations are compile-time: their arguments must be compile-time constant expressions (literals, constant arithmetic, other `@` expressions) or compile-time variables (parameter pack names, `comptime foreach` loop variables).  Passing a runtime variable is an error — use the equivalent runtime operation (e.g., `.sizeof`) instead.
 
-- `@typeof(expr)` — evaluates the expression and returns a `type` value representing its runtime type.  The type name reflects the concrete type: `int`, `i32`, `u8`, `str`, `bool`, `\N{EMPTY SET}`, `array`, `tuple`, `fn`, `\N{GREEK SMALL LETTER LAMDA}`, or an enum name.
+- `@typeof(expr)` — evaluates the expression and returns a `type` value representing its type.  The type name reflects the concrete type: `int`, `i32`, `u8`, `str`, `bool`, `\N{EMPTY SET}`, `array`, `tuple`, `fn`, `\N{GREEK SMALL LETTER LAMDA}`, or an enum name.
 
 - `@resultof(func)` — looks up a named function and returns a `type` value for its declared return type.
 
-- `@sizeof(expr)` — returns the number of elements in a container.  Works on arrays, tuples (including parameter packs), and strings.  This is the free-function equivalent of the `.sizeof` member — `@sizeof(x)` and `x.sizeof` always return the same value.  Passing a non-container (e.g., an integer or boolean) is an error.
+- `@sizeof(expr)` — returns the number of elements in a container.  Works on array literals, tuple literals, string literals, and parameter packs.  Passing a non-container (e.g., an integer or boolean) is an error.  For runtime containers, use `.sizeof` instead.
 
   The result carries a unit: for `u8[]` (byte arrays) the unit is `byte`; for all other containers the unit is `ptrdiff`.  Because dimensionless arithmetic is allowed with unit-bearing values, the sizeof result can be used directly in index computations, loop bounds, and arithmetic without explicit unit stripping.
 
 ```
+// .sizeof is the runtime equivalent — use on variables
 let arr : mut = [10, 20, 30]
 let sz : mut = arr.sizeof          // 3 ptrdiff
 let last : mut = sz - 1            // 2 ptrdiff (dimensionless 1 adopts unit)
-let buf : mut u8[4] = [0, 0, 0, 0]
-let bytes : mut = buf.sizeof       // 4 byte
+
+// @sizeof works on compile-time constants
+static_assert_eq(@sizeof([1, 2, 3]), @sizeof("abc"))
 ```
 
-`@sizeof` is particularly useful for parameter packs, where it provides a consistent way to query the element count alongside `@typeof` for element types:
+`@sizeof` is particularly useful for parameter packs, which are compile-time entities:
 
 ```
 fn process args… : T':
     let i : mut int = 0
     while i < @sizeof(args):
-        std.print(@typeof(args[i]))
         i ← i + 1
 ```
 
-Type and result-of values can be compared with `==` and used with `assert_eq` and `static_assert_eq`:
+Type and result-of values can be compared with `==` and used with `static_assert_eq`:
 
 ```
-let x : mut i32 = 10
-assert_eq(@typeof(x), @typeof(x + 1))         /* both are i32 */
-
 fn example → i32: 42
-assert_eq(@resultof(example), @typeof(x))      /* i32 == i32 */
 
-/* With static_assert_eq for compile-time checks */
-static_assert_eq(@typeof(42), @typeof(1 + 2))  /* both are int */
-static_assert_eq(@typeof("a"), @typeof("b"))   /* both are str */
+// compile-time type checks on literals
+static_assert_eq(@typeof(42), @typeof(1 + 2))  // both are int
+static_assert_eq(@typeof("a"), @typeof("b"))   // both are str
+static_assert_eq(@resultof(example), @resultof(example))
 ```
 
-- `@unitof(expr)` — returns the unit attached to a value as a `UnitOfValue`.  If the value has no unit (dimensionless), returns a dimensionless unit value.  Supports equality (`==`) and inequality (`!=`) comparison with other `@unitof` results and with standalone unit references (`¤meter`, `¤byte`, etc.).  Can be used with `static_assert_eq` for compile-time unit verification.
+- `@unitof(expr)` — returns the unit attached to a value as a `UnitOfValue`.  The argument must be a compile-time constant expression.  If the value has no unit (dimensionless), returns a dimensionless unit value.  Supports equality (`==`) and inequality (`!=`) comparison with other `@unitof` results and with standalone unit references (`¤meter`, `¤byte`, etc.).
 
   A standalone unit reference `¤unit` (without a preceding expression) produces a `UnitOfValue` for comparison purposes:
 
 ```
-let d ¤meter : mut = 100
-let t ¤second : mut = 10
-let speed : mut = d / t
-
-assert_true(@unitof(d) == ¤meter)             /* true */
-assert_true(@unitof(speed) == ¤meter/second)  /* derived unit */
-assert_true(@unitof(42) != ¤meter)            /* dimensionless */
-
-static_assert_eq(@unitof(d), ¤meter)          /* compile-time check */
-
-/* Unit propagation through sizeof and ranges */
-let data : mut u8[4] = [0, 0, 0, 0]
-static_assert_eq(@unitof(data.sizeof), ¤byte) /* byte[] sizeof has unit byte */
+// @unitof on compile-time unit expressions
+static_assert_eq(@unitof(5 ¤meter), ¤meter)
+assert_true(@unitof(42) != ¤meter)            // dimensionless
+assert_true(@unitof(100 ¤meter / (10 ¤second)) == ¤meter/second)
 ```
 
 | Feature | C++ | Rust | Zig | NGPL |
@@ -2903,7 +2892,7 @@ Inside the function body, the pack parameter behaves as a tuple:
 
 - **Indexing**: `pack[i]` retrieves element `i` (zero-based).
 - **Size**: `pack.sizeof` returns the number of captured elements (an `int`).
-- **Type**: `@typeof(pack[i])` returns the type of the i-th element.
+- **Type**: In a `comptime foreach`, `@typeof(v)` returns the type of the current element.
 
 #### Generic Packs
 
@@ -3270,7 +3259,7 @@ When a `foreach` range has one or more unit-bearing bounds, the unit is propagat
 let total ¤byte : mut = 128
 foreach off := 0…64…(total - 1):
     // off has unit byte, inherited from the range bound
-    static_assert_eq(@unitof(off), ¤byte)
+    let x : mut = off + 1   // x also carries unit byte
 ```
 
 This allows sizeof results and other unit-bearing values to flow naturally through loop constructs without losing dimensional information.

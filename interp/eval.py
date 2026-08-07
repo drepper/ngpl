@@ -197,6 +197,19 @@ def _is_const_expr(node) -> bool:
     return False
 
 
+def _is_comptime_expr(node, comptime_vars: set[str]) -> bool:
+    """Check whether an AST node is evaluable at compile time.
+
+    Like _is_const_expr but also allows references to compile-time
+    variables (pack parameters, comptime foreach loop variables).
+    """
+    if _is_const_expr(node):
+        return True
+    if isinstance(node, VarRef) and node.name in comptime_vars:
+        return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
@@ -500,6 +513,7 @@ class Evaluator:
         self._catch_depth: int = 0
         self._pure_func_name: str | None = None
         self._generic_map: dict[str, str] = {}
+        self._comptime_vars: set[str] = set()
         self._last_pos: tuple[int, int, int | None] | None = None
         # Pre-compute builtin function mappings (avoid repeated lookups).
         self._ops = {
@@ -1620,40 +1634,76 @@ class Evaluator:
             raise TypeError("enumerate can only be used inside foreach")
 
         if isinstance(node, TypeOfExpr):
+            cached = getattr(node, "_cached_value", None)
+            if cached is not None:
+                return cached
+            if not _is_comptime_expr(node.expr, self._comptime_vars):
+                raise TypeError(
+                    "@typeof requires a compile-time constant argument")
             val = self.eval_expr(node.expr)
-            return TypeValue(self._value_type_name(val))
+            result = TypeValue(self._value_type_name(val))
+            if _is_const_expr(node.expr):
+                node._cached_value = result
+            return result
 
         if isinstance(node, SizeOfExpr):
+            cached = getattr(node, "_cached_value", None)
+            if cached is not None:
+                return cached
+            if not _is_comptime_expr(node.expr, self._comptime_vars):
+                raise TypeError(
+                    "@sizeof requires a compile-time constant argument")
             val = self.eval_expr(node.expr)
             unwrapped = unwrap_optional(val)
             if isinstance(unwrapped, TupleValue):
-                return self._sizeof_result(len(unwrapped.elements))
-            if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
-                return self._sizeof_result(
+                result = self._sizeof_result(len(unwrapped.elements))
+            elif isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
+                result = self._sizeof_result(
                     unwrapped.obj.sizeof,
                     unwrapped.obj.element_type)
-            if isinstance(unwrapped, StrValue):
-                return self._sizeof_result(len(unwrapped.value))
-            raise TypeError(
-                f"@sizeof: expected array, tuple, or string, got {type(unwrapped).__name__}")
+            elif isinstance(unwrapped, StrValue):
+                result = self._sizeof_result(len(unwrapped.value))
+            else:
+                raise TypeError(
+                    f"@sizeof: expected array, tuple, or string, "
+                    f"got {type(unwrapped).__name__}")
+            if _is_const_expr(node.expr):
+                node._cached_value = result
+            return result
 
         if isinstance(node, ResultOfExpr):
+            cached = getattr(node, "_cached_value", None)
+            if cached is not None:
+                return cached
             try:
                 func = self.env.lookup(node.name)
             except KeyError:
                 raise TypeError(f"@resultof: unknown function '{node.name}'")
             if isinstance(func, FuncValue):
-                return TypeValue(func.ret_type or "\N{EMPTY SET}")
-            if isinstance(func, BuiltinFunc):
-                return TypeValue("builtin")
-            raise TypeError(f"@resultof: '{node.name}' is not a function")
+                result = TypeValue(func.ret_type or "\N{EMPTY SET}")
+            elif isinstance(func, BuiltinFunc):
+                result = TypeValue("builtin")
+            else:
+                raise TypeError(f"@resultof: '{node.name}' is not a function")
+            node._cached_value = result
+            return result
 
         if isinstance(node, UnitOfExpr):
+            cached = getattr(node, "_cached_value", None)
+            if cached is not None:
+                return cached
+            if not _is_comptime_expr(node.expr, self._comptime_vars):
+                raise TypeError(
+                    "@unitof requires a compile-time constant argument")
             val = self.eval_expr(node.expr)
             unwrapped = unwrap_optional(val)
             if isinstance(unwrapped, UnitValue):
-                return UnitOfValue(unwrapped.unit)
-            return UnitOfValue(None)
+                result = UnitOfValue(unwrapped.unit)
+            else:
+                result = UnitOfValue(None)
+            if _is_const_expr(node.expr):
+                node._cached_value = result
+            return result
 
         if isinstance(node, UnitRefExpr):
             from interp.units import eval_unit_formula
@@ -1971,6 +2021,8 @@ class Evaluator:
         var_names = [v[0] for v in node.vars]
         for name in var_names:
             self._frozen_vars[name] = "foreach"
+        if node.is_comptime:
+            self._comptime_vars |= set(var_names)
         try:
             for idx in range(max_len):
                 if num_vars == 1 and num_iters > 1:
@@ -1995,6 +2047,8 @@ class Evaluator:
         finally:
             for name in var_names:
                 self._frozen_vars.pop(name, None)
+            if node.is_comptime:
+                self._comptime_vars -= set(var_names)
         return none()
 
     def _resolve_iterable(self, expr, is_comptime: bool = False) -> list[Value]:
@@ -2653,6 +2707,7 @@ class Evaluator:
         old_pure = self._pure_func_name
         old_frozen = self._frozen_vars.copy()
         old_generic_map = self._generic_map
+        old_comptime_vars = self._comptime_vars
         for param_name, _ in func.params:
             if param_name not in func.param_muts and param_name not in func.param_refs:
                 self._frozen_vars[param_name] = "let"
@@ -2661,6 +2716,8 @@ class Evaluator:
             self._current_ret_type = resolved_ret_type
             self._pure_func_name = None if func.is_impure else func.name
             self._generic_map = generic_map
+            self._comptime_vars = (
+                {func.pack_param[0]} if has_pack else set())
             result = self.eval_stmts(func.body)
             self._check_return_type(result, resolved_ret_type, func.name)
             return self._wrap_optional_return(result, resolved_ret_type)
@@ -2675,6 +2732,7 @@ class Evaluator:
             self._pure_func_name = old_pure
             self._frozen_vars = old_frozen
             self._generic_map = old_generic_map
+            self._comptime_vars = old_comptime_vars
 
     def _check_return_type(self, result: Value, ret_type: str | None, func_name: str) -> Value:
         """Verify the return value matches the declared return type."""

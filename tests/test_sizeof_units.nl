@@ -114,13 +114,12 @@ fn test_sizeof_in_arithmetic():
   let plus_one : mut = sz + 1
   assert_eq_int(plus_one, 6, "sizeof+1")
 
-// --- @sizeof with ptrdiff ---
+// --- @sizeof on compile-time constant ---
 
 @test
 fn test_at_sizeof_ptrdiff():
-  let arr : mut = [1, 2, 3]
-  let sz : mut = @sizeof(arr)
-  assert_eq_int(sz, 3, "@sizeof arr is 3")
+  let sz : mut = @sizeof([1, 2, 3])
+  assert_eq_int(sz, 3, "@sizeof literal is 3")
 
 @start
 fn main():
