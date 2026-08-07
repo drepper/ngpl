@@ -3130,6 +3130,128 @@ Arenas are useful when a group of allocations share a common lifetime (e.g., pro
 Both allocators accept the same interface (`alloc(size)`) and can be passed interchangeably to functions like `file.read_file(allocator)`.
 
 
+### Product Type Layout (`@repr`)
+
+A struct has no defined layout unless it asks for one.  The implementation may order its fields as it likes and insert or omit padding as it likes, which leaves it free to sort fields by alignment and waste nothing:
+
+```
+struct Loose:
+    a : u8
+    b : i64
+    c : u8
+```
+
+Nothing in the language reveals where `a`, `b`, and `c` sit in memory, and nothing may depend on it.  This is the right default: the layout that a source-order reading would give is rarely the layout a program wants, and freezing it by accident costs memory in every program that never needed the guarantee.
+
+The freedom has to be given up when the bytes are the point — when a struct is handed to a foreign function, mapped over a file or a device register, or sent across a wire.  The `@repr` attribute does that:
+
+```
+@repr(C)
+struct Point:
+    x : i32
+    y : i64
+```
+
+`@repr(C)` is currently the only layout defined.  An unrecognized name is rejected at parse time rather than ignored, since silently accepting `@repr(packed)` and laying the struct out some other way is the one behavior guaranteed to corrupt data.
+
+#### The C Layout
+
+`@repr(C)` produces exactly what a C compiler produces for the same declaration on the target, following the System V AMD64 psABI on x86-64:
+
+* fields are placed in declaration order;
+* each field begins at the next offset that is a multiple of its own alignment, and the bytes skipped become padding;
+* the struct's alignment is the largest alignment among its fields;
+* the struct's size is rounded up to a multiple of that alignment, so that every element of an array of the struct stays aligned.
+
+For `Point` above, `x` occupies bytes 0–3, four bytes of padding follow, and `y` occupies bytes 8–15 — sixteen bytes with eight-byte alignment, matching `struct { int32_t x; int64_t y; }`.
+
+An empty `@repr(C)` struct has size 0 and alignment 1, as in C.  (C++ would give it size 1 so that two objects have distinct addresses; the language imposes no such requirement.)
+
+#### Querying the Layout
+
+A struct with a defined layout answers three questions, on the type itself or on any instance of it.  All three results carry the `byte` unit:
+
+| Query | Result | Description |
+|-------|--------|-------------|
+| `T.sizeof` | `int¤byte` | Size of the struct, including tail padding |
+| `T.alignof` | `int¤byte` | Alignment of the struct |
+| `T.offsetof(name)` | `int¤byte` | Offset of the named field from the start |
+
+```
+@repr(C)
+struct Mixed:
+    a : u8
+    b : i32
+    c : u8
+
+Mixed.sizeof            // 12 B — three bytes of tail padding
+Mixed.alignof           // 4 B
+Mixed.offsetof("b")     // 4 B
+```
+
+Asking any of the three of a struct without `@repr(C)` is an error, not a guess:
+
+```
+Loose.sizeof
+error: struct 'Loose' has no defined layout; annotate it with @repr(C) to give it one
+```
+
+This is the substantive difference the attribute makes.  A size that the implementation is free to change is not a size a program can use, so reporting one would invite exactly the dependency the default is designed to prevent.
+
+#### Which Types May Appear
+
+Every field of a `@repr(C)` struct must have a type with a C representation.  The rule is checked when the struct is defined, not when its layout is first requested, so the error appears where the offending field is written:
+
+| Field type | Allowed | Reason |
+|------------|---------|--------|
+| `i8`…`i64`, `u8`…`u64`, `usize`, `byte`, `bool` | yes | fixed width |
+| `f16`, `f32`, `f64`, `bfloat` | yes | fixed width |
+| `i32fast` and other fast types | yes | width is platform-defined but concrete |
+| `T[N]` | yes, if `T` is | contiguous, `N × sizeof(T)` bytes |
+| another `@repr(C)` struct | yes | has a layout of its own |
+| `int`, `float` | no | arbitrary precision, no fixed width |
+| `str` | no | not a plain sequence of bytes |
+| `T?`, `T?E` | no | representation is not defined |
+| `T[]` | no | dynamically sized |
+| a struct without `@repr(C)` | no | has no layout to embed |
+
+```
+@repr(C)
+struct Header:
+    magic : u32
+    length : int
+
+error: in @repr(C) struct 'Header', field 'length': type 'int' is
+arbitrary-precision and has no defined C representation; use a sized
+type such as i64
+```
+
+A struct that contains itself is rejected for the same reason a C struct cannot: the layout would have no finite size.
+
+#### Interaction with the Rest of the Language
+
+`@repr` constrains only layout.  A `@repr(C)` struct is an ordinary struct in every other respect: it takes methods through `impl`, its fields are read and assigned the same way, and it obeys the same move semantics.  Nor does the attribute imply anything about how the struct is passed to or returned from a function — argument passing is a separate question from in-memory layout, and the psABI answers it with separate rules.
+
+In the interpreter the attribute has no effect on execution: values are Python objects, not byte buffers, so nothing observes the padding.  It is recorded and validated because the two consumers that will observe it — foreign function calls and the compiler's code generator — need it to have been checked at the point of definition rather than discovered to be impossible later.
+
+#### Comparison with Other Languages
+
+| Feature | C | C++ | Rust | Zig | NGPL |
+|---------|---|-----|------|-----|---------------|
+| Default layout | declaration order | declaration order | unspecified | unspecified | unspecified |
+| Opt in to C layout | n/a (is the default) | n/a | `#[repr(C)]` | `extern struct` | `@repr(C)` |
+| Field reordering allowed | no | no | yes (default) | yes (default) | yes (default) |
+| Size of a layout-free struct | n/a | n/a | `size_of` still answers | `@sizeOf` still answers | error |
+| Empty struct size | 0 | 1 | 0 | 0 | 0 |
+| Packed variant | `__attribute__((packed))` | attribute | `#[repr(packed)]` | `packed struct` | not yet defined |
+
+The attribute is Rust's `#[repr(C)]` under a different spelling, and the reasoning is the same: an unspecified default lets the implementation pack better, and an explicit opt-in serves the cases that need to match a foreign definition.
+
+The one deliberate departure is that Rust and Zig will still tell a program the size of a layout-free struct, on the grounds that the number is true for the current compilation even if it is not stable across compilations.  Here that question is an error, because a number that is accurate today and different tomorrow is precisely the kind of fact a program should not be able to build on.
+
+A packed layout — one that suppresses padding entirely — is a natural second `@repr` kind and is not yet defined.
+
+
 ### Standard Library: System Environment
 
 Three submodules of `std` expose the context the operating system hands to a running program: `std.args` for the command line, `std.env` for the environment, and `std.sys` for the CPU and memory properties of the machine.  All three are read-only.  A program cannot rewrite its own command line or environment from the language; doing so is a property of the process that the runtime, not the program, is responsible for.

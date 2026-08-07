@@ -27,7 +27,7 @@ from interp.lexer import Token, KEYWORDS
 # Token types that can begin a top-level definition, either as the
 # definition keyword itself or as an annotation preceding it.
 DEFINITION_STARTERS = frozenset({
-    "START", "REPLACEABLE", "TEST", "FLAG", "IMPURE", "EXPECT",
+    "START", "REPLACEABLE", "TEST", "FLAG", "IMPURE", "EXPECT", "REPR",
     "ENUM", "STRUCT", "IMPL", "UNIT", "TYPE", "FN", "LET",
 })
 
@@ -198,6 +198,7 @@ class Parser:
         is_flag = False
         is_replaceable = False
         is_impure = False
+        repr_kind: str | None = None
         test_refs: list[str] = []
         expect_annotations: list[tuple[str, str]] = []
 
@@ -229,6 +230,9 @@ class Parser:
                 self._eat("IMPURE")
                 is_impure = True
                 self._try_eat("NEWLINE")
+            elif self._check("REPR"):
+                repr_kind = self._parse_repr_annotation()
+                self._try_eat("NEWLINE")
             elif self._check("EXPECT"):
                 self._eat("EXPECT")
                 if not self._check("IDENT"):
@@ -250,7 +254,12 @@ class Parser:
             return self._parse_enum_def(is_flag)
 
         if self._check("STRUCT"):
-            return self._parse_struct_def()
+            return self._parse_struct_def(repr_kind)
+
+        if repr_kind is not None:
+            raise ParseError(
+                f"@repr({repr_kind}) applies to a struct, but none follows",
+                self._cur())
 
         if self._check("IMPL"):
             return self._parse_impl_block()
@@ -521,7 +530,25 @@ class Parser:
         self._eat("DEDENT")
         return EnumDef(name, underlying_type, members, is_flag)
 
-    def _parse_struct_def(self):
+    def _parse_repr_annotation(self) -> str:
+        """Parse: @repr '(' KIND ')' and return the layout kind."""
+        from interp.layout import KNOWN_REPRS
+
+        self._eat("REPR")
+        self._eat("PUNCT", "(")
+        if not self._check("IDENT"):
+            raise ParseError("expected a layout kind after @repr(",
+                             self._cur())
+        kind_tok = self._eat("IDENT")
+        if kind_tok.value not in KNOWN_REPRS:
+            known = ", ".join(sorted(KNOWN_REPRS))
+            raise ParseError(
+                f"unknown layout '{kind_tok.value}' in @repr; known: {known}",
+                kind_tok)
+        self._eat("PUNCT", ")")
+        return kind_tok.value
+
+    def _parse_struct_def(self, repr_kind: str | None = None):
         """Parse: struct Name: INDENT field_definitions DEDENT"""
         self._eat("STRUCT")
         name_tok = self._eat("IDENT")
@@ -562,7 +589,7 @@ class Parser:
                 while self._try_eat("NEWLINE"):
                     pass
             self._eat("DEDENT")
-        return StructDef(name, fields)
+        return StructDef(name, fields, repr_kind)
 
     def _parse_impl_block(self):
         """Parse: impl StructName: INDENT method_definitions DEDENT"""

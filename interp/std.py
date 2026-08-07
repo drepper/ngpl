@@ -757,7 +757,7 @@ class StdModule:
         """
         from interp.eval import unwrap_optional
         from interp.value import (IntValue, FloatValue, BoolValue, StrValue, ObjectValue,
-                                  ArrayValue, EnumValue, ExpectedValue, NoneValue,
+                                  ArrayValue, EnumValue, ExpectedValue,
                                   UnitValue, none)
 
         parts = []
@@ -790,10 +790,10 @@ class StdModule:
                     parts.append(f"<bytes {len(obj.data)}>")
                 else:
                     parts.append(f"<{type(obj).__name__}>")
-            elif isinstance(uv, NoneValue):
-                parts.append(uv.display())
             else:
-                parts.append(str(uv))
+                # Every Value can describe itself; falling back to str()
+                # would print the internal representation instead.
+                parts.append(uv.display())
 
         output = "".join(parts) + "\n"
         os.write(1, output.encode("utf-8"))

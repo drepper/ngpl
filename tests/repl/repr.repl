@@ -1,0 +1,15 @@
+@repr(C)
+struct Point:
+    x : i32
+    y : i64
+
+Point
+Point.sizeof
+Point.alignof
+Point.offsetof("y")
+struct Loose:
+    a : i32
+
+Loose
+Loose.sizeof
+"still alive"

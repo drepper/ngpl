@@ -1,0 +1,12 @@
+<struct Point @repr(C)>
+16 B
+8 B
+8 B
+<struct Loose>
+error: struct 'Loose' has no defined layout; annotate it with @repr(C) to give it one
+  --> <repl:8>:1:1
+    |
+  1 | Loose.sizeof
+    | ^^^^^
+    |
+"still alive"

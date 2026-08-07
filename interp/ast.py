@@ -513,11 +513,17 @@ class UnitLit:
 
 
 class StructDef:
-    """Struct (product type) definition: struct Name: fields."""
+    """Struct (product type) definition: struct Name: fields.
 
-    def __init__(self, name: str, fields: list[tuple[str, str]]):
+    repr_kind is the layout attribute from @repr(...), or None when the
+    struct has no defined layout.
+    """
+
+    def __init__(self, name: str, fields: list[tuple[str, str]],
+                 repr_kind: str | None = None):
         self.name = name
         self.fields = fields
+        self.repr_kind = repr_kind
 
 
 class ImplBlock:

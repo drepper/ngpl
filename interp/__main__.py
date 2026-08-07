@@ -22,6 +22,7 @@ from interp.value import (
     register_type_alias, register_user_type,
 )
 from interp.eval import Evaluator, unwrap_optional
+from interp.layout import LayoutError, struct_layout, struct_lookup
 from interp.errors import format_diagnostic, extract_position, strip_position_prefix
 
 
@@ -537,8 +538,19 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
     for defn in definitions:
         if isinstance(defn, ASTStructDef):
             register_user_type(defn.name)
-            st = StructType(defn.name, defn.fields)
+            st = StructType(defn.name, defn.fields, repr_kind=defn.repr_kind)
             env.define(defn.name, st)
+
+    # Every struct exists by now, so a @repr(C) layout can be checked even
+    # when it names a struct declared further down the file.  Checking here
+    # rather than on first use means an unrepresentable field is reported
+    # where it is written.
+    for defn in definitions:
+        if isinstance(defn, ASTStructDef) and defn.repr_kind is not None:
+            try:
+                struct_layout(env.lookup(defn.name), struct_lookup(env))
+            except LayoutError as e:
+                raise DefinitionError(str(e))
 
     for defn in definitions:
         if isinstance(defn, ASTFuncDef):

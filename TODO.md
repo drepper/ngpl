@@ -65,8 +65,13 @@ Type System
 
 [ ] sum types (tagged unions, equivalent to std::variant).  match construct to deconstruct.
 
-[ ] product types (structs) with unspecified layout by default.  Attributes to force layout
-    (C-compatible, packed, etc).
+[x] product types (structs) with unspecified layout by default.  Attributes to force layout.
+    @repr(C) gives a struct the platform C layout and makes .sizeof, .alignof, and
+    .offsetof(name) available; without it those queries are an error rather than a guess.
+    Field types without a C representation are rejected where the field is declared.
+
+[ ] further @repr kinds beyond C: packed (no padding at all), and possibly a transparent
+    single-field form.  Decide whether alignment can be raised as well as suppressed.
 
 [ ] type aliases and user-defined cast functions (comptime, invoked in preference to builtins).
 
@@ -267,8 +272,17 @@ Runtime
 
 [ ] do not use camelcase for identifiers.  Change all functions in the std module to use underscores.
 
-[ ] add name member function (no parameters) for directory object which returns the absolute path of the
-    directory.
+[ ] add name member function (no parameters) for directory object which returns the absolute path of
+    the directory.
+
+[ ] exit function to terminate the process with the exit code given as argument
+
+[ ] abort function to terminate the process with the signal given as argument (if no signal is
+    given or it is zero or invalid), use SIGABRT.
+
+[ ] add backtrace support.  when the program exits abnormally show the call stack of functions of
+    the program (not the interpreter).  Add also API in the std module to access the callstack
+    at any time.
 
 
 Syntax Decisions Still Open

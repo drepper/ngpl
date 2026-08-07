@@ -1,0 +1,10 @@
+// The attribute describes a struct's layout, so it must be followed by
+// a struct.
+
+@repr(C)
+fn not_a_struct() → ∅:
+    std.print("unreachable")
+
+@start
+fn main() → ∅:
+    not_a_struct()

@@ -514,18 +514,27 @@ class EnumValue(Value):
 
 
 class StructType(Value):
-    """Runtime representation of a struct (product type) definition."""
+    """Runtime representation of a struct (product type) definition.
 
-    __slots__ = ("name", "fields", "methods", "_ref_self_methods")
+    repr_kind holds the layout attribute given by @repr(...), or None
+    when the struct has no defined layout and the implementation is free
+    to order and pad its fields as it sees fit.
+    """
+
+    __slots__ = ("name", "fields", "methods", "repr_kind", "_ref_self_methods")
 
     def __init__(self, name: str, fields: list[tuple[str, str]],
-                 methods: dict[str, "FuncValue"] | None = None):
+                 methods: dict[str, "FuncValue"] | None = None,
+                 repr_kind: str | None = None):
         self.name = name
         self.fields = fields
         self.methods: dict[str, FuncValue] = methods or {}
+        self.repr_kind = repr_kind
         self._ref_self_methods: set[str] = set()
 
     def display(self):
+        if self.repr_kind is not None:
+            return f"<struct {self.name} @repr({self.repr_kind})>"
         return f"<struct {self.name}>"
 
 

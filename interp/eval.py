@@ -1179,6 +1179,43 @@ class Evaluator:
         raise TypeError(
             f"cannot convert {type(inner).__name__} with units")
 
+    def _struct_offsetof(self, struct_type, args):
+        """Return the byte offset of a named field within a @repr(C) struct."""
+        from interp.layout import LayoutError, struct_layout, struct_lookup
+        from interp.units import BUILTIN_UNITS
+
+        if len(args) != 1:
+            raise TypeError(
+                f"{struct_type.name}.offsetof takes one field name")
+        name = unwrap_optional(args[0])
+        if not isinstance(name, StrValue):
+            raise TypeError(
+                f"{struct_type.name}.offsetof: field name must be a str")
+        try:
+            layout = struct_layout(struct_type, struct_lookup(self.env))
+            offset = layout.offset_of(name.value)
+        except LayoutError as e:
+            raise TypeError(f"{struct_type.name}.offsetof: {e}"
+                            if "no field" in str(e) else str(e))
+        return UnitValue(mk_int(offset), BUILTIN_UNITS["byte"])
+
+    def _struct_layout_attr(self, struct_type, attr: str):
+        """Return a struct's C size or alignment as a byte-valued result.
+
+        Both are only meaningful for a struct whose layout is defined,
+        so a struct without @repr(C) reports why the question cannot be
+        answered rather than inventing a number.
+        """
+        from interp.layout import LayoutError, struct_layout, struct_lookup
+        from interp.units import BUILTIN_UNITS
+
+        try:
+            layout = struct_layout(struct_type, struct_lookup(self.env))
+        except LayoutError as e:
+            raise TypeError(str(e))
+        value = layout.size if attr == "sizeof" else layout.align
+        return UnitValue(mk_int(value), BUILTIN_UNITS["byte"])
+
     def _sizeof_result(self, count: int, element_type: str | None = None):
         from interp.units import BUILTIN_UNITS
         if element_type in ("u8", "byte"):
@@ -1564,8 +1601,16 @@ class Evaluator:
                 inst = unwrapped.obj
                 if node.attr in inst.field_values:
                     return inst.field_values[node.attr]
+                if node.attr in ("sizeof", "alignof"):
+                    return self._struct_layout_attr(inst.struct_type, node.attr)
                 raise AttributeError(
                     f"struct '{inst.struct_type.name}' has no field '{node.attr}'")
+            if isinstance(unwrapped, StructType):
+                if node.attr in ("sizeof", "alignof"):
+                    return self._struct_layout_attr(unwrapped, node.attr)
+                raise AttributeError(
+                    f"struct type '{unwrapped.name}' has no attribute "
+                    f"'{node.attr}'")
             if isinstance(unwrapped, TupleValue):
                 if node.attr == "sizeof":
                     return self._sizeof_result(len(unwrapped.elements))
@@ -2597,6 +2642,8 @@ class Evaluator:
             raise AttributeError(
                 f"struct '{inst.struct_type.name}' has no method '{method_name}'")
         if isinstance(unwrapped, StructType):
+            if method_name == "offsetof":
+                return self._struct_offsetof(unwrapped, args)
             method = unwrapped.methods.get(method_name)
             if method is not None:
                 return self._call_user_func(method, list(args))
