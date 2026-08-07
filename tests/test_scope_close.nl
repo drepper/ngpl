@@ -26,6 +26,54 @@ fn test_scope_end_releases_descriptors() → ∅:
     assert(file.fd < 50)
 
 // ---------------------------------------------------------------------
+// A resource that is never bound is released with its statement
+// ---------------------------------------------------------------------
+
+// In `std.fs.cwd().open_file(name)` the directory exists only to reach
+// the file.  Its descriptor is released as the statement ends, while the
+// file it produced lives on in the binding.
+//
+// Releasing it is observable: descriptors are handed out lowest-first,
+// so the directory opened afterwards reuses the number the temporary
+// gave back, which is below the still-open file's.
+@test
+fn test_temporary_directory_is_released() → ∅:
+    let file : mut = std.fs.cwd().open_file("CLAUDE.md")
+    let later : mut = std.fs.cwd()
+    assert(later.fd < file.fd)
+    assert(¬file.is_closed)
+
+// A directory kept in a binding holds its descriptor for the whole
+// scope, so nothing is available to reuse and the number goes up.
+@test
+fn test_bound_directory_is_held() → ∅:
+    let dir : mut = std.fs.cwd()
+    let file : mut = dir.open_file("CLAUDE.md")
+    let later : mut = std.fs.cwd()
+    assert(later.fd > file.fd)
+
+// The file produced by the temporary is fully usable afterwards.
+@test
+fn test_file_from_temporary_directory_works() → ∅:
+    let alloc : mut = std.arena.allocator()
+    let file : mut = std.fs.cwd().open_file("CLAUDE.md")
+    let data : mut = file.read_file(alloc)
+    assert(data.sizeof > 0)
+    alloc.deinit()
+
+// Repeating the pattern does not accumulate descriptors.
+fn opens_via_temporary() → ∅:
+    let file : mut = std.fs.cwd().open_file("CLAUDE.md")
+    _ ← file.fd
+
+@test
+fn test_temporary_pattern_does_not_leak() → ∅:
+    foreach i := 1…200:
+        opens_via_temporary()
+    let file : mut = std.fs.cwd().open_file("CLAUDE.md")
+    assert(file.fd < 50)
+
+// ---------------------------------------------------------------------
 // A returned resource escapes its defining scope
 // ---------------------------------------------------------------------
 

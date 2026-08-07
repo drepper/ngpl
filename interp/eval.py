@@ -527,6 +527,9 @@ class Evaluator:
         # tracks the statement currently executing in that frame, so an
         # unwound stack still says where each caller had got to.
         self._call_stack: list[list] = []
+        # Resources produced by the statement currently running, so that
+        # any the statement does not keep can be released as it ends.
+        self._temporaries: list | None = None
         # Pre-compute builtin function mappings (avoid repeated lookups).
         self._ops = {
             "+": self._op_add,
@@ -1880,6 +1883,27 @@ class Evaluator:
         return result
 
     def eval_stmt(self, stmt):
+        """Evaluate a single statement, releasing what it does not keep.
+
+        Resources produced while the statement runs but neither bound to
+        a name nor handed back as its value are released as it finishes.
+
+        Returns:
+            The last computed value, or a _ReturnSentinel for return statements.
+        """
+        outer = self._temporaries
+        self._temporaries = []
+        try:
+            result = self._eval_stmt(stmt)
+            self._release_temporaries(result)
+            return result
+        except BaseException:
+            self._release_temporaries(None)
+            raise
+        finally:
+            self._temporaries = outer
+
+    def _eval_stmt(self, stmt):
         """Evaluate a single statement.
 
         Returns:
@@ -2733,7 +2757,7 @@ class Evaluator:
 
                 # Wrap non-Value results in ObjectValue.
                 if not isinstance(result, Value):
-                    return ObjectValue(result)
+                    return self._track_temporary(ObjectValue(result))
                 return result
 
         # Fallback: try the original value's attribute.
@@ -2767,7 +2791,7 @@ class Evaluator:
                 result = meth(*py_args)
 
             if not isinstance(result, Value):
-                return ObjectValue(result)
+                return self._track_temporary(ObjectValue(result))
             return result
 
         raise AttributeError(f"no method '{method_name}' on {type(obj).__name__}")
@@ -2960,6 +2984,54 @@ class Evaluator:
             self._frozen_vars = old_frozen
             self._generic_map = old_generic_map
             self._comptime_vars = old_comptime_vars
+
+    def _track_temporary(self, value):
+        """Note a freshly produced resource so an unkept one can be released.
+
+        A resource that is never assigned to anything has no binding to
+        own it and no scope to end, so without this it would survive
+        until the program exits.  `std.fs.cwd().open_file(name)` is the
+        motivating case: the directory exists only to reach the file.
+        """
+        if self._temporaries is not None and isinstance(value, ObjectValue):
+            if callable(getattr(value.obj, "destroy", None)):
+                self._temporaries.append(value.obj)
+        return value
+
+    def _release_temporaries(self, result):
+        """Destroy resources this statement produced and did not keep.
+
+        A temporary is kept when the statement bound it to a name or when
+        it is the statement's own value, which the surrounding expression
+        or the caller may still be about to use.  Everything else was
+        needed only while the statement ran.
+
+        Args:
+            result: the value the statement produced, if it completed.
+        """
+        temporaries = self._temporaries
+        if not temporaries:
+            return
+
+        kept = set()
+        for value in (result, result.value if isinstance(result, SomeValue) else None):
+            if isinstance(value, ObjectValue):
+                kept.add(id(value.obj))
+        # Anything the statement bound to a name is owned by that binding
+        # now, and is released when its scope ends instead.
+        for frame in self.env._frames:
+            for bound in frame.values():
+                if isinstance(bound, ObjectValue):
+                    kept.add(id(bound.obj))
+
+        for obj in reversed(temporaries):
+            if id(obj) in kept:
+                continue
+            kept.add(id(obj))
+            try:
+                obj.destroy()
+            except Exception as e:
+                self._warnings.append(f"releasing a temporary failed: {e}")
 
     def _end_scope(self, call_env, returned, borrowed: set[str]):
         """Destroy the resources a departing scope owns.

@@ -160,8 +160,10 @@ fn test_sha256_448bit() → ∅:
 @start
 fn main() → ∅:
     let alloc : mut = std.arena.allocator()
-    let dir : mut = std.fs.cwd()
-    let file : mut = dir.open_file("CLAUDE.md")
+    // The directory is only a way to reach the file, so it is left as a
+    // temporary: its descriptor is released as this statement ends,
+    // while the file it produced lives on in the binding below.
+    let file : mut = std.fs.cwd().open_file("CLAUDE.md")
     let data : mut = file.read_file(alloc)
     let hash : mut = sha256(data)
     alloc.deinit()

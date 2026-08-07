@@ -3265,11 +3265,40 @@ error: close: file is closed
 
 The second `close` says the program has lost track of the descriptor's lifetime.  Scope-end release is not an error after an explicit `close`, however: the program said it was finished early, and the scope ending afterwards has nothing left to do.
 
+#### Temporaries
+
+A resource that is never assigned to anything has no binding to own it and no scope to end.  Such a temporary is released when the statement that produced it finishes:
+
+```
+let file : mut = std.fs.cwd().open_file("data.bin")
+```
+
+The directory exists only to reach the file.  Its descriptor is released as the statement ends, while the file it produced lives on in `file` and is released when *that* binding's scope ends.  Writing the directory into a binding of its own would instead hold it open for the whole scope, which is the reason to prefer the form above when the directory is not needed again.
+
+The release is observable, because descriptors are handed out lowest-first:
+
+```
+let file : mut = std.fs.cwd().open_file("data.bin")   // directory 4, file 5
+let later : mut = std.fs.cwd()                        // 4 again
+```
+
+A statement keeps what it binds to a name and what it produces as its own value; everything else it made was needed only while it ran.
+
 #### What Is Not Yet Tracked
 
-Ownership is followed through bindings, returns, and parameters.  It is not yet followed into other places a value can be put — stored in a global, in a struct field, or in an array — where the resource is currently released when the defining scope ends even though something else still refers to it.  A temporary that is never bound at all, as in `dir.open_file("x").read_file(alloc)`, is not tracked either and leaks its descriptor until the program exits.
+Ownership is followed through bindings, returns, parameters, and temporaries.  It is not yet followed into the other places a value can be put — stored in a global, in a struct field, or in an array — where the resource is released when the defining scope ends even though something else still refers to it.
 
-Closing those gaps is the business of the ownership and borrow system, which is a separate and larger piece of work.
+Nor is a resource released when the binding holding it is overwritten:
+
+```
+foreach i := 1…50:
+    let f : mut = std.fs.cwd().open_file("data.bin")
+    use(f)
+```
+
+Each iteration rebinds `f`, and the file the previous iteration opened loses its only binding without being released; the descriptors accumulate until the function returns.  Releasing on reassignment is the rule that would close this, and it needs to know that nothing else refers to the old value — which is the ownership question again.
+
+Closing these gaps is the business of the ownership and borrow system, which is a separate and larger piece of work.
 
 #### Comparison with Other Languages
 

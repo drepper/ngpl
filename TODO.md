@@ -187,9 +187,10 @@ Memory and Lifetime Management
     Ownership passes on return and is not taken by parameters.  Implemented for open
     files and directories; close() releases early and makes the value unavailable.
 
-[ ] follow resource ownership into globals, struct fields, and array elements, and track
-    temporaries that are never bound.  Those still release at the defining scope's end
-    or leak; needs the ownership/borrow system.
+[ ] follow resource ownership into globals, struct fields, and array elements, and release
+    a resource when the binding holding it is overwritten (rebinding in a loop currently
+    accumulates descriptors until the function returns).  Needs the ownership/borrow system.
+    Temporaries that are never bound are already released with their statement.
 
 [ ] address spaces: named memory regions with read/write/exec flags and access costs.
     Separate code and data address spaces.  Support for accelerator memory, cross-process
