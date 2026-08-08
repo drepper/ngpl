@@ -503,6 +503,18 @@ def _substitute_generics(type_str: str, generic_map: dict[str, str]) -> str:
 # ---------------------------------------------------------------------------
 
 
+# The array member functions, mapped to how many arguments each takes.
+# Modelled on Rust's Vec: push/pop at the end, insert/remove at an index,
+# and get for a bounds-checked read.
+_ARRAY_METHODS: dict[str, int] = {
+    "push": 1,
+    "pop": 0,
+    "insert": 2,
+    "remove": 1,
+    "get": 1,
+}
+
+
 class Evaluator:
     """Evaluates NGPL AST in a given environment.
 
@@ -1188,6 +1200,47 @@ class Evaluator:
                 target_unit)
         raise TypeError(
             f"cannot convert {type(inner).__name__} with units")
+
+    def _call_array_method(self, array: ArrayValue, name: str, args):
+        """Call one of the array's built-in member functions.
+
+        Indices are checked for the same unit agreement that `arr[i]`
+        requires, so the member functions and the subscript syntax accept
+        exactly the same index expressions.
+
+        The two operations that can fail on a well-formed program --
+        asking for an element that may not be there, and taking one off
+        an array that may be empty -- answer with an optional.  The two
+        that indicate a mistake in the program's own bookkeeping --
+        inserting or removing at an index the array does not have --
+        raise instead.
+        """
+        arity = _ARRAY_METHODS[name]
+        if len(args) != arity:
+            raise TypeError(
+                f"array.{name} takes {arity} argument"
+                f"{'' if arity == 1 else 's'}, got {len(args)}")
+
+        if name == "push":
+            array.push(unwrap_optional(args[0]))
+            return none()
+
+        if name == "pop":
+            popped = array.pop()
+            return none() if popped is None else popped
+
+        index = self._check_index_unit(unwrap_optional(args[0]), array)
+
+        if name == "get":
+            if 0 <= index.value < array.sizeof:
+                return array.get(index.value)
+            return none()
+
+        if name == "insert":
+            array.insert(index.value, unwrap_optional(args[1]))
+            return none()
+
+        return array.remove(index.value)
 
     def _callstack_value(self, args):
         """Return the interpreted program's call stack, innermost first.
@@ -2791,6 +2844,10 @@ class Evaluator:
         if (method_name == "callstack" and isinstance(unwrapped, ObjectValue)
                 and unwrapped.obj is std):
             return self._callstack_value(args)
+        if (isinstance(unwrapped, ObjectValue)
+                and isinstance(unwrapped.obj, ArrayValue)
+                and method_name in _ARRAY_METHODS):
+            return self._call_array_method(unwrapped.obj, method_name, args)
         if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, StructInstance):
             inst = unwrapped.obj
             method = inst.struct_type.methods.get(method_name)

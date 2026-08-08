@@ -2232,6 +2232,75 @@ The APL tradition uses `⍴` both monadically (query shape) and dyadically (resh
 The cycling semantics follow APL: when the data has fewer elements than the result requires, elements are reused from the beginning.  This makes `n ⍴ scalar` a natural way to create filled arrays, and `n ⍴ array` extends arrays without requiring explicit concatenation.
 
 
+### Array Member Functions
+
+Arrays carry five member functions for growing, shrinking, and reading them.  The set and the semantics are Rust's `Vec`:
+
+| Function | Result | Description |
+|----------|--------|-------------|
+| `push(v)` | `∅` | Append `v` to the end |
+| `pop()` | `T?` | Remove and return the last element, or `∅` when empty |
+| `insert(i, v)` | `∅` | Insert `v` at index `i`, shifting later elements right |
+| `remove(i)` | `T` | Remove and return the element at `i`, shifting later ones left |
+| `get(i)` | `T?` | The element at `i`, or `∅` when there is none |
+
+```
+let v : mut = [1, 2, 3]
+v.push(4)               // [1, 2, 3, 4]
+v.pop()                 // 4, leaving [1, 2, 3]
+v.insert(0, 0)          // [0, 1, 2, 3]
+v.remove(1)             // 1, leaving [0, 2, 3]
+v.get(0)                // 0
+v.get(99)               // ∅
+```
+
+`insert` accepts an index equal to the length, which appends; anything beyond that is an error.
+
+#### Which Failures Are Optionals
+
+The five split into two groups, on a distinction worth stating because it decides how a caller has to write the call.
+
+`pop` and `get` answer with an optional.  Asking for an element that may not be there is an ordinary thing for a correct program to do — draining a queue until it is empty, or looking up an index that came from outside — so the empty answer is a result, not a failure:
+
+```
+let last : mut = v.pop() ?? 0
+let first : mut = v.get(0) ?? ⁻1
+```
+
+`insert` and `remove` raise instead.  An index the array does not have means the program has lost track of its own length, and there is no sensible value to return in its place — `remove` would have to invent an element.  Rust reaches the same split for the same reason, with `Option` for `pop` and `get` and a panic for `insert` and `remove`.
+
+Note that `get` is the bounds-checked reader and the subscript is not: `v[9]` on a three-element array is still an error.  The two coexist deliberately, because an index the program believes is valid and an index it is testing are different situations, and writing them the same way would hide which one is meant.
+
+#### Indices
+
+An index passed to `get`, `insert`, or `remove` follows the same unit rule as a subscript: a byte array wants a `¤byte` index, anything else a `¤ptrdiff` one, and an untyped integer constant is always accepted.
+
+```
+let bytes : mut = std.bytes("abc")
+bytes.get(1¤byte)        // 98
+bytes.get(1¤count)       // error: array index requires unit B, got count
+```
+
+A value that is pushed or inserted takes the array's element type, exactly as an assignment through a subscript would.
+
+#### Views
+
+A view borrows a window into another array's storage, so it has no length of its own to change.  `push`, `pop`, `insert`, and `remove` on one are errors; `get` is not, since reading a view is what a view is for.
+
+#### Comparison with Other Languages
+
+| Operation | C++ `vector` | Rust `Vec` | Python `list` | Go slice | NGPL |
+|-----------|-------------|-----------|--------------|----------|---------------|
+| Append | `push_back` | `push` | `append` | `append(s, v)` | `push` |
+| Remove last | `pop_back` (returns nothing) | `pop` → `Option` | `pop()` raises | manual reslice | `pop` → `T?` |
+| Insert at index | `insert` (iterator) | `insert` | `insert` | manual | `insert` |
+| Remove at index | `erase` (iterator) | `remove` | `pop(i)` | manual | `remove` |
+| Checked read | `at` throws | `get` → `Option` | none | none | `get` → `T?` |
+| Unchecked read | `[]` | `[]` | `[]` | `[]` | `[]` |
+
+The naming follows Rust rather than C++, whose `push_back`/`pop_back` carry a symmetry with `push_front` that no other language here needs, and whose `pop_back` returns nothing so that a caller must read before popping.  Python's `pop` raises on an empty list, which turns the common drain loop into either a length test or an exception handler; the optional makes it one expression.
+
+
 ### Array Concatenation (`⧺`)
 
 The `⧺` operator (U+29FA, DOUBLE PLUS) concatenates two arrays at the outermost dimension.

@@ -655,6 +655,55 @@ class ArrayValue(Value):
         else:
             self.elements[index] = value
 
+    def _coerced(self, value: Value) -> Value:
+        """Bring a value to the array's element type before storing it."""
+        if self.element_type is not None and isinstance(value, IntValue):
+            return mk_int(value.value, self.element_type)
+        return value
+
+    def _check_resizable(self, op: str):
+        """Reject an operation that would change the length of a view.
+
+        A view borrows a window into another array's storage, so it has
+        no length of its own to change: growing or shrinking it would
+        have to move the elements the owner still refers to.
+        """
+        if self._backing is not None:
+            raise TypeError(f"{op}: cannot resize a view into another array")
+
+    def push(self, value: Value):
+        """Append a value to the end of the array."""
+        self._check_resizable("push")
+        self.elements.append(self._coerced(value))
+
+    def pop(self) -> Value | None:
+        """Remove and return the last element, or None when empty."""
+        self._check_resizable("pop")
+        if not self.elements:
+            return None
+        return self.elements.pop()
+
+    def insert(self, index: int, value: Value):
+        """Insert a value at index, shifting later elements right.
+
+        The index may equal the length, which appends.
+        """
+        self._check_resizable("insert")
+        n = len(self.elements)
+        if index < 0 or index > n:
+            raise IndexError(
+                f"insert index {index} out of range (length {n})")
+        self.elements.insert(index, self._coerced(value))
+
+    def remove(self, index: int) -> Value:
+        """Remove and return the element at index, shifting later ones left."""
+        self._check_resizable("remove")
+        n = len(self.elements)
+        if index < 0 or index >= n:
+            raise IndexError(
+                f"remove index {index} out of range (length {n})")
+        return self.elements.pop(index)
+
     def display(self) -> str:
         """Render the array using the language's own literal syntax."""
         return "[" + ", ".join(self.get(i).display()
