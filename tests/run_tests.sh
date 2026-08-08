@@ -54,6 +54,7 @@ all_tests=(
     "$testdir"/test_view_assign.ngpl
     "$testdir"/test_slice_param.ngpl
     "$testdir"/test_matrix_param.ngpl
+    "$testdir"/test_if.ngpl
     "$testdir"/test_type_alias.ngpl
     "$testdir"/test_struct.ngpl
     "$testdir"/test_move.ngpl

@@ -965,26 +965,27 @@ class Parser:
         cond = self._parse_or_expr()
         cons_body = self._parse_block()
 
-        alt = None
+        # Collected in source order, then nested so that the first
+        # clause is the outermost: the evaluator walks from the outside
+        # in, and a chain built the other way would test the last
+        # clause first.
+        clauses: list[tuple[object, list]] = []
         while True:
             self._skip_nl()
             if self._check("ELIF"):
                 self._eat("ELIF")
                 elif_cond = self._parse_or_expr()
-                elif_body = self._parse_block()
-                if alt is None:
-                    alt = (elif_cond, elif_body)
-                else:
-                    alt = (elif_cond, elif_body, alt)
+                clauses.append((elif_cond, self._parse_block()))
             elif self._check("ELSE"):
                 self._eat("ELSE")
-                else_body = self._parse_block()
-                if alt is None:
-                    alt = (None, else_body)
-                else:
-                    alt = (None, else_body, alt)
+                clauses.append((None, self._parse_block()))
             else:
                 break
+
+        alt = None
+        for clause_cond, clause_body in reversed(clauses):
+            alt = ((clause_cond, clause_body) if alt is None
+                   else (clause_cond, clause_body, alt))
 
         return IfStmt(cond, cons_body, alt)
 
