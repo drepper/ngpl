@@ -1,4 +1,4 @@
-// test_arrows.nl — verify ASCII arrow forms <- and -> work as aliases
+// test_arrows.ngpl — verify ASCII arrow forms <- and -> work as aliases
 
 // -> works for function return type (ASCII form of →)
 fn add_ascii(a: i32, b: i32) -> i32:

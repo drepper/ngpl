@@ -1,4 +1,4 @@
-// test_reshape.nl — tests for ⍴ (reshape) operator and array bounds checking
+// test_reshape.ngpl — tests for ⍴ (reshape) operator and array bounds checking
 
 // --- ⍴ with scalar creates vector of copies ---
 

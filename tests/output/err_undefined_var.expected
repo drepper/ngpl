@@ -1,5 +1,5 @@
 error: 'undefined variable: undefined_var'
-  --> tests/output/err_undefined_var.nl:3:19
+  --> tests/output/err_undefined_var.ngpl:3:19
     |
   3 |     let x : i32 = undefined_var
     |                   ^^^^^^^^^^^^^

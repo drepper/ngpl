@@ -1,5 +1,5 @@
 error: unexpected token: newline
-  --> tests/output/err_parse_missing_expr.nl:3:18
+  --> tests/output/err_parse_missing_expr.ngpl:3:18
     |
   3 |     let x : i32 =
     |                  ^

@@ -1,4 +1,4 @@
-// test_slice_param.nl -- passing part of a vector or matrix to a function
+// test_slice_param.ngpl -- passing part of a vector or matrix to a function
 //
 // A range picks out part of a dimension, and what comes back is what
 // gets passed.  The parameter sees the length of the range, not the

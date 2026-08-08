@@ -1,4 +1,4 @@
-// test_lambda.nl — tests for anonymous functions (λ) and currying
+// test_lambda.ngpl — tests for anonymous functions (λ) and currying
 
 // Basic lambda: identity
 @test

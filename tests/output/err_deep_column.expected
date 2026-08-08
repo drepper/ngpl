@@ -1,5 +1,5 @@
 error: addition expected int+int, float+float, or str+str, got IntValue+StrValue
-  --> tests/output/err_deep_column.nl:6:19
+  --> tests/output/err_deep_column.ngpl:6:19
     |
   6 |     let result := a + b + c + "bad"
     |                   ^^^^^^^^^^^^^^^^^

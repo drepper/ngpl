@@ -2,7 +2,7 @@
 //
 // The values themselves depend on how and where the program is run, so
 // these tests check invariants that must hold on every machine.  The
-// exact-value tests live in tests/output/sysenv.nl, which is invoked
+// exact-value tests live in tests/output/sysenv.ngpl, which is invoked
 // with a fixed command line and a fixed environment.
 
 // ---------------------------------------------------------------------

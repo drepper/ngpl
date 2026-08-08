@@ -1,5 +1,5 @@
 error: unknown layout 'Rust' in @repr; known: C
-  --> tests/output/repr_unknown_kind.nl:3:7
+  --> tests/output/repr_unknown_kind.ngpl:3:7
     |
   3 | @repr(Rust)
     |       ^^^^

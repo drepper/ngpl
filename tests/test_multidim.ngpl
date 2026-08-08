@@ -1,4 +1,4 @@
-// test_multidim.nl -- tests for multi-dimensional subscript syntax arr[i, j]
+// test_multidim.ngpl -- tests for multi-dimensional subscript syntax arr[i, j]
 
 // ---- 2D read access -----------------------------------------------------
 

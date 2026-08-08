@@ -1,4 +1,4 @@
-// test_catch.nl -- tests for catch statement (scoped error handling)
+// test_catch.ngpl -- tests for catch statement (scoped error handling)
 
 // --- Helper functions ---
 

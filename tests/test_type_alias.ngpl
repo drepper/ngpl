@@ -1,4 +1,4 @@
-// test_type_alias.nl -- type alias definitions
+// test_type_alias.ngpl -- type alias definitions
 
 type Index = i32
 type Vec3 = f64[3]

@@ -1,4 +1,4 @@
-// test_generate.nl — tests for the generate function
+// test_generate.ngpl — tests for the generate function
 
 // Basic: generate with lambda over a range
 @test

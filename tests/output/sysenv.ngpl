@@ -2,7 +2,7 @@
 //
 // The output test runner supplies a fixed command line (sysenv.args)
 // and a fixed set of environment variables (sysenv.env), so unlike the
-// invariant tests in tests/test_sysenv.nl this program can check the
+// invariant tests in tests/test_sysenv.ngpl this program can check the
 // values themselves.
 
 @start

@@ -1,5 +1,5 @@
 error: expected function or variable definition, got integer 123
-  --> tests/output/err_parse_line1.nl:1:1
+  --> tests/output/err_parse_line1.ngpl:1:1
     |
   1 | 123 + 456
     | ^^^

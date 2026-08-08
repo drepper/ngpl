@@ -1,4 +1,4 @@
-// test_view_assign.nl -- reshape-as-view with multi-dimensional slice assignment
+// test_view_assign.ngpl -- reshape-as-view with multi-dimensional slice assignment
 
 @test
 fn test_reshape_view_write() → ∅:

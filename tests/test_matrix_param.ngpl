@@ -1,4 +1,4 @@
-// test_matrix_param.nl -- matrix and higher-dimension parameter types
+// test_matrix_param.ngpl -- matrix and higher-dimension parameter types
 //
 // An array type names one entry per dimension: `i32[2,4]` is two rows
 // of four.  An entry that gives a size fixes that dimension and the

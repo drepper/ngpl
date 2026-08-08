@@ -1,9 +1,9 @@
 """Output-capture test runner for the NGPL interpreter.
 
-Runs .nl test programs and compares their stderr/stdout against
+Runs NGPL test programs and compares their stderr/stdout against
 corresponding .expected files.  Each test is a pair:
 
-    tests/output/test_name.nl       -- the source program
+    tests/output/test_name.ngpl     -- the source program
     tests/output/test_name.expected -- expected stderr output
 
 Three optional files control how the program is invoked and checked:
@@ -23,6 +23,9 @@ so tests work regardless of terminal settings.
 
 Exit code is 0 if all tests pass, 1 otherwise.
 """
+
+# The extension NGPL source files carry.
+SOURCE_EXT = ".ngpl"
 
 import os
 import re
@@ -72,11 +75,11 @@ def _read_lines(path: str) -> list[str]:
     return text.split("\n")
 
 
-def run_test(nl_path: str, expected_path: str) -> tuple[bool, str]:
+def run_test(src_path: str, expected_path: str) -> tuple[bool, str]:
     """Run a single output test, return (passed, detail_message)."""
     top_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    rel_path = os.path.relpath(nl_path, top_dir)
-    base = nl_path[:-3]
+    rel_path = os.path.relpath(src_path, top_dir)
+    base = src_path[:-len(SOURCE_EXT)]
 
     cmd = [sys.executable, "-m", "interp", rel_path]
     prog_args = _read_lines(base + ".args")
@@ -146,8 +149,8 @@ def main():
 
     tests: list[tuple[str, str]] = []
     for name in sorted(os.listdir(test_dir)):
-        if name.endswith(".nl"):
-            base = name[:-3]
+        if name.endswith(SOURCE_EXT):
+            base = name[:-len(SOURCE_EXT)]
             expected = os.path.join(test_dir, base + ".expected")
             if os.path.isfile(expected):
                 tests.append((os.path.join(test_dir, name), expected))
@@ -160,9 +163,9 @@ def main():
     failed = 0
     print(f"\nrunning {len(tests)} output tests", file=sys.stderr)
 
-    for nl_path, expected_path in tests:
-        name = os.path.basename(nl_path)[:-3]
-        ok, detail = run_test(nl_path, expected_path)
+    for src_path, expected_path in tests:
+        name = os.path.basename(src_path)[:-len(SOURCE_EXT)]
+        ok, detail = run_test(src_path, expected_path)
         if ok:
             print(f"test {name} ... {_GREEN}ok{_RESET}", file=sys.stderr)
             passed += 1

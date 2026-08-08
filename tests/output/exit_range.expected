@@ -1,5 +1,5 @@
 error: std.exit: exit code 300 is outside the range 0…255 that a process can report
-  --> tests/output/exit_range.nl:6:14
+  --> tests/output/exit_range.ngpl:6:14
     |
   6 |     std.exit(300)
     |              ^^^

@@ -1,4 +1,4 @@
-// test_concat.nl -- tests for ⧺ (array concatenation at outermost dimension)
+// test_concat.ngpl -- tests for ⧺ (array concatenation at outermost dimension)
 
 // --- Basic concatenation ---
 

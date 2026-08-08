@@ -1,4 +1,4 @@
-// test_exit_code.nl -- tests for @start function exit codes
+// test_exit_code.ngpl -- tests for @start function exit codes
 
 // The @start function returns u8 — used as process exit code.
 // In test mode the return value is ignored by the test runner,

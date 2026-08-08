@@ -4635,7 +4635,7 @@ An empty parameter is preserved as an empty string and is distinct from an absen
 When running under the interpreter, everything after a `--` separator on the interpreter's command line becomes the program's parameters:
 
 ```
-$ python -m interp program.nl -- alpha "beta gamma" delta
+$ python -m interp program.ngpl -- alpha "beta gamma" delta
 ```
 
 The separator may be omitted when no parameter could be mistaken for an interpreter option.  A compiled program takes its command line directly from the initial process stack, and the `--` separator does not apply.
@@ -4883,8 +4883,8 @@ The interpreter starts an interactive session in three situations, in order of p
 
 ```
 $ ngpl                          # empty session
-$ ngpl --repl program.nl        # load program.nl, do not run main
-$ ngpl library.nl               # library.nl has no @start ⇒ REPL
+$ ngpl --repl program.ngpl        # load program.ngpl, do not run main
+$ ngpl library.ngpl               # library.ngpl has no @start ⇒ REPL
 ```
 
 The third case replaces what was previously a bare "nothing to execute" message.  A file of pure definitions is the normal shape of a library, and loading one interactively is the fastest way to exercise it.
@@ -5080,8 +5080,8 @@ Unlike `exit`, `abort` reports where it was called from, since a program that ab
 before abort
 aborted: SIGABRT
 backtrace (innermost call first):
-  #0 give_up at program.nl:5:4
-  #1 main at program.nl:10:4
+  #0 give_up at program.ngpl:5:4
+  #1 main at program.ngpl:10:4
 ```
 
 ### Backtraces
@@ -5090,16 +5090,16 @@ When a program ends abnormally the interpreter prints the chain of calls that le
 
 ```
 error: array index 9 out of range (length 2)
-  --> program.nl:6:12
+  --> program.ngpl:6:12
     |
   6 |     values[n]
     |            ^
     |
 backtrace (innermost call first):
-  #0 innermost at program.nl:6:11
-  #1 middle at program.nl:9:14
-  #2 outer at program.nl:12:11
-  #3 main at program.nl:17:20
+  #0 innermost at program.ngpl:6:11
+  #1 middle at program.ngpl:9:14
+  #2 outer at program.ngpl:12:11
+  #3 main at program.ngpl:17:20
 ```
 
 Each frame reports where execution had reached in that function, not merely where the function was entered, so the chain reads as a sequence of call sites.
