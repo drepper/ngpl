@@ -62,6 +62,7 @@ all_tests=(
     "$testdir"/test_scope_close.nl
     "$testdir"/test_borrow_foreach.nl
     "$testdir"/test_array_methods.nl
+    "$testdir"/test_iterator.nl
 )
 
 # Filter tests if command-line patterns are given.

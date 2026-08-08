@@ -139,6 +139,32 @@ fn test_get_with_default() → ∅:
     assert_eq(v.get(0) ?? ⁻1, 1)
     assert_eq(v.get(9) ?? ⁻1, ⁻1)
 
+// The result in a boolean context tests presence, not truth: an element
+// of 0 is a value that is there.
+@test
+fn test_get_presence_not_truth() → ∅:
+    let v : mut = [0]
+    let present : mut = false
+    if v.get(0):
+        present ← true
+    assert(present)
+    let absent : mut = false
+    if v.get(9):
+        absent ← true
+    assert(¬absent)
+
+@test
+fn test_pop_presence_not_truth() → ∅:
+    let v : mut = [0]
+    let present : mut = false
+    if v.pop():
+        present ← true
+    assert(present)
+    let absent : mut = false
+    if v.pop():
+        absent ← true
+    assert(¬absent)
+
 // Unlike get, a subscript out of range is still an error.
 @expect error "out of range"
 fn error_subscript_still_checks() → ∅:

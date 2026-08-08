@@ -61,8 +61,9 @@ def setup_std_env(env: Env, program: str = "", program_args: list[str] | None = 
     The program name and its arguments are handed to std.args so that the
     interpreted program can read its own command line.
     """
-    from interp.std import std
+    from interp.std import std, make_file_type_enum
     std.errors = _make_std_errors()
+    std.filetype = make_file_type_enum()
     std.args.set_command_line(program, program_args or [])
     env.define("std", ObjectValue(std))
     env.define("assert", BuiltinFunc("assert", -1, _builtin_assert))

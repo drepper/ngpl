@@ -1037,6 +1037,72 @@ Unlike `?` which propagates `∅`, `??` recovers from it.  This is the right cho
 When the unwrapped value has a narrower unsigned type than the target variable, implicit widening is permitted.  For example, `get_padded_byte` returns `u8?`; after `??` or `?` produces a `u8` value, assigning it to a `u32` variable widens it.  This is safe because every `u8` value is representable as `u32`.
 
 
+### Optionals in a Boolean Context
+
+An optional may be used directly wherever a condition is expected.  It is true when it holds a value and false when it is `∅`:
+
+```
+let e : mut = it.next()
+while e:
+    use(e)
+    e ← it.next()
+
+if std.env.get("VERBOSE"):
+    enable_logging()
+```
+
+Writing `e != ∅` means the same thing and remains correct; the direct form is shorter and is the one to prefer.
+
+#### Presence, Not Truth
+
+The test asks whether the optional *holds* a value, not whether that value is itself truthy.  This is C++'s `std::optional` and its `operator bool()`, which reports engagement: `std::optional<int> o = 0;` is true, because a zero is a value that is there.
+
+The distinction matters exactly where it is easiest to get wrong:
+
+```
+let v : mut = [0, 0, 0]
+let it : mut = v.iterate()
+let e : mut = it.next()
+while e:
+    // runs three times, not zero
+```
+
+An element of `0`, `""`, or `false` is a value.  Only the absence of one ends the loop.  Under the other rule — testing the contained value — every loop over numbers would stop at the first zero, and the bug would appear only for the inputs that happen to contain one.
+
+This extends to `∅` itself.  An optional holding `∅` is present:
+
+```
+let v : mut = [∅, 1]
+```
+
+iterates twice rather than none.  An operation that produces an optional marks it present, which is what separates "there was a value, and it was `∅`" from "there was no value".
+
+#### A Bare Value Keeps Its Own Truthiness
+
+Only an optional tests presence.  A value that is not one is still judged on its own terms, which is what the logic operators need:
+
+```
+if 0:            // false
+if "":           // false
+if v.get(0):     // true, even when the element is 0
+```
+
+The two rules coexist because they answer different questions.  `if 0` asks whether a number is nonzero; `if v.get(0)` asks whether there was an element to look at.  Collapsing them would force every caller of a fallible operation to spell out the comparison again.
+
+#### Comparison with Other Languages
+
+| Language | Optional in a condition | Tests |
+|----------|------------------------|-------|
+| C++ | `if (opt)` | engagement |
+| Rust | `if opt.is_some()` | engagement, but explicit |
+| Swift | `if let x = opt` | engagement, and binds |
+| Zig | `if (opt) \|x\|` | engagement, and binds |
+| Python | `if x is not None` | identity, explicit |
+| NGPL | `if opt` | engagement |
+
+C++ is the closest, and the one this follows.  Rust deliberately requires `is_some()` or a `match`, on the grounds that an implicit conversion hides a decision; that is a defensible position, but the cost lands on every loop over an iterator, which is the most common place an optional appears.  Swift and Zig bind the value in the same breath, which is more convenient still and needs syntax this language has not yet decided on.
+
+
 ### Expected Types (`T?E`) and Result Handling
 
 An **expected type** `T?E` represents a computation that either succeeds with a value of type `T` or fails with an error of type `E`.  This is the language's counterpart to `Result<T,E>` in Rust and `std::expected<T,E>` in C++26.
@@ -2299,6 +2365,113 @@ A view borrows a window into another array's storage, so it has no length of its
 | Unchecked read | `[]` | `[]` | `[]` | `[]` | `[]` |
 
 The naming follows Rust rather than C++, whose `push_back`/`pop_back` carry a symmetry with `push_front` that no other language here needs, and whose `pop_back` returns nothing so that a caller must read before popping.  Python's `pop` raises on an empty list, which turns the common drain loop into either a length test or an exception handler; the optional makes it one expression.
+
+
+### Iterators
+
+A container hands out an iterator with `iterate()`.  The iterator has exactly one member function:
+
+| Function | Result | Description |
+|----------|--------|-------------|
+| `next()` | `T?` | The next value, or `∅` when there are none left |
+
+```
+let it : mut = values.iterate()
+let e : mut = it.next()
+while e:
+    use(e)
+    e ← it.next()
+```
+
+The result is used directly as the condition; there is no need to compare it with `∅`.  See [Optionals in a Boolean Context](#optionals-in-a-boolean-context) for why an element of `0` does not end the loop.
+
+That is the whole protocol.  An iterator is anything that can answer `next()`, which keeps the concept small enough that a container can provide one without implementing a trait, and keeps a consumer working for any container that does.
+
+An iterator holds its own position, so several over the same container advance independently.  It reads the container as it is at the time of the call rather than taking a snapshot: a write to an element the iterator has not reached yet is seen when it gets there.
+
+#### Arrays
+
+```
+let v : mut = [10, 20, 30]
+let it : mut = v.iterate()
+it.next()        // 10
+it.next()        // 20
+it.next()        // 30
+it.next()        // ∅
+```
+
+Once exhausted an iterator stays exhausted; further calls keep answering `∅`.
+
+#### Directories
+
+`std.fs.cwd()` and any other directory can be iterated too.  Here the values are entries rather than plain elements:
+
+```
+let dir : mut = std.fs.cwd()
+let it : mut = dir.iterate()
+let e : mut = it.next()
+while e:
+    std.print(e.name, " ", e.type)
+    e ← it.next()
+```
+
+| Member | Type | Description |
+|--------|------|-------------|
+| `name` | `str` | The entry's name within its directory, never a path |
+| `type` | `std.filetype` | What kind of thing the entry is |
+
+Entries arrive from the kernel in blocks, and the iterator refills its buffer as it empties rather than reading the whole directory up front — a directory can be far larger than the program wants to hold at once.
+
+`.` and `..` are not produced.  Every caller that walks a tree would otherwise have to filter them, and one that forgets recurses for ever; leaving them out removes a whole class of bug at the cost of a fact the program almost certainly knows already.
+
+The iterator reads through the directory's descriptor, so it stops working once that directory is closed or its scope ends.
+
+#### File Types
+
+`std.filetype` names the kinds of thing a directory entry can be, with the values of the `S_IF*` constants in `<sys/stat.h>`:
+
+| Member | Value | `<sys/stat.h>` |
+|--------|-------|----------------|
+| `fifo` | 0x1000 | `S_IFIFO` |
+| `chr` | 0x2000 | `S_IFCHR` |
+| `dir` | 0x4000 | `S_IFDIR` |
+| `blk` | 0x6000 | `S_IFBLK` |
+| `reg` | 0x8000 | `S_IFREG` |
+| `lnk` | 0xA000 | `S_IFLNK` |
+| `sock` | 0xC000 | `S_IFSOCK` |
+| `unknown` | 0 | none |
+
+```
+if e.type == std.filetype.dir:
+    descend(e.name)
+```
+
+The kernel reports an entry's type as a `DT_*` value, which is the matching `S_IF*` value shifted right by twelve.  The `S_IF*` form is the one exposed, because it is what a program comparing against a `stat` result already has.
+
+`unknown` has no `S_IF*` counterpart.  Some filesystems do not record an entry's kind in the directory itself, and report `DT_UNKNOWN`; an entry of that type has to be opened to find out what it is.  A program that must know the kind has to handle this rather than assume it never happens.
+
+#### Values That Are Themselves Empty
+
+An iterator marks a produced value as present, so an element that is itself `∅` is not mistaken for the end:
+
+```
+let v : mut = [∅, 1]
+```
+
+iterates twice.  This is the same mechanism that makes an element of `0` a value rather than a terminator, described below.
+
+#### Comparison with Other Languages
+
+| Language | Obtain | Advance | End signalled by |
+|----------|--------|---------|------------------|
+| C++ | `begin()` | `++it` | comparison with `end()` |
+| Rust | `iter()` | `next()` | `None` |
+| Python | `iter()` | `__next__` | `StopIteration` |
+| Go | `range` | built into the loop | second return value |
+| Zig | `iterator()` | `next()` | `null` |
+| NGPL | `iterate()` | `next()` | `∅` |
+
+Rust and Zig arrive at the same shape as this, and for the same reason: an end signalled by the return value needs no second call to test for it, no sentinel object to compare against, and no exception for a condition that is not exceptional.  C++'s pair of iterators is the outlier, and it is the one form where the two halves can be mismatched.
 
 
 ### Array Concatenation (`⧺`)

@@ -1,0 +1,263 @@
+// Tests for iterators.
+//
+// A container hands out an iterator with iterate().  The iterator has
+// one member function, next(), which returns the next value or ∅ when
+// there are no more.  Arrays and directories both provide one.
+//
+// The result is used directly as the loop condition.  As with C++'s
+// std::optional and its operator bool(), the test asks whether there was
+// a value at all, not whether that value was itself truthy.
+//
+// The directory tests run against the repository root, which is the
+// working directory the test runner uses.
+
+// ---------------------------------------------------------------------
+// Array iterators
+// ---------------------------------------------------------------------
+
+@test
+fn test_array_iterate_in_order() → ∅:
+    let v : mut = [10, 20, 30]
+    let it : mut = v.iterate()
+    assert_eq(it.next(), 10)
+    assert_eq(it.next(), 20)
+    assert_eq(it.next(), 30)
+
+// Exhaustion is reported as ∅, and stays ∅ on further calls.
+@test
+fn test_array_iterate_ends_with_none() → ∅:
+    let v : mut = [1]
+    let it : mut = v.iterate()
+    assert_eq(it.next(), 1)
+    assert_eq(it.next(), ∅)
+    assert_eq(it.next(), ∅)
+
+@test
+fn test_array_iterate_empty() → ∅:
+    let v : mut = []
+    let it : mut = v.iterate()
+    assert_eq(it.next(), ∅)
+
+// The usual shape of a loop over an iterator.
+@test
+fn test_array_iterate_loop() → ∅:
+    let v : mut = [1, 2, 3, 4]
+    let it : mut = v.iterate()
+    let total : mut = 0
+    let e : mut = it.next()
+    while e:
+        total ← total + e
+        e ← it.next()
+    assert_eq(total, 10)
+
+// Two iterators over one array advance independently.
+@test
+fn test_array_iterators_are_independent() → ∅:
+    let v : mut = [1, 2, 3]
+    let a : mut = v.iterate()
+    let b : mut = v.iterate()
+    assert_eq(a.next(), 1)
+    assert_eq(a.next(), 2)
+    assert_eq(b.next(), 1)
+
+// An iterator reads the array as it is now, not as it was.
+@test
+fn test_array_iterator_sees_later_writes() → ∅:
+    let v : mut = [1, 2]
+    let it : mut = v.iterate()
+    assert_eq(it.next(), 1)
+    v[1] ← 99
+    assert_eq(it.next(), 99)
+
+// Iterating a byte array yields its bytes.
+@test
+fn test_iterate_byte_array() → ∅:
+    let b : mut = std.bytes("abc")
+    let it : mut = b.iterate()
+    assert_eq(it.next(), 97)
+    assert_eq(it.next(), 98)
+    assert_eq(it.next(), 99)
+    assert_eq(it.next(), ∅)
+
+// ---------------------------------------------------------------------
+// The result in a boolean context tests presence, not truth
+// ---------------------------------------------------------------------
+
+// An element of 0 is a value, so it does not end the loop.
+@test
+fn test_falsy_elements_do_not_end_iteration() → ∅:
+    let v : mut = [0, 0, 0]
+    let it : mut = v.iterate()
+    let count : mut = 0
+    let e : mut = it.next()
+    while e:
+        count ← count + 1
+        e ← it.next()
+    assert_eq(count, 3)
+
+// Nor does an empty string or a false.
+@test
+fn test_other_falsy_elements() → ∅:
+    let s : mut = ["", "x"]
+    let it : mut = s.iterate()
+    let count : mut = 0
+    let e : mut = it.next()
+    while e:
+        count ← count + 1
+        e ← it.next()
+    assert_eq(count, 2)
+
+// An element that is itself ∅ is still an element, so an iterator can
+// carry ∅ without it being mistaken for the end.
+@test
+fn test_none_element_is_still_present() → ∅:
+    let v : mut = [∅, 1]
+    let it : mut = v.iterate()
+    let count : mut = 0
+    let e : mut = it.next()
+    while e:
+        count ← count + 1
+        e ← it.next()
+    assert_eq(count, 2)
+
+// A bare value keeps its own truthiness: only an optional tests presence.
+@test
+fn test_bare_values_keep_their_truthiness() → ∅:
+    let taken : mut = 0
+    if 0:
+        taken ← 1
+    assert_eq(taken, 0)
+    if 5:
+        taken ← 2
+    assert_eq(taken, 2)
+
+// Comparing with ∅ remains a correct way to write the same test.
+@test
+fn test_comparison_with_none_still_works() → ∅:
+    let v : mut = [1, 2]
+    let it : mut = v.iterate()
+    let count : mut = 0
+    let e : mut = it.next()
+    while e != ∅:
+        count ← count + 1
+        e ← it.next()
+    assert_eq(count, 2)
+
+@expect error "iterator.next takes no arguments"
+fn error_next_with_argument() → ∅:
+    let v : mut = [1]
+    let it : mut = v.iterate()
+    _ ← it.next(0)
+
+@expect error "answers only next"
+fn error_iterator_other_method() → ∅:
+    let v : mut = [1]
+    let it : mut = v.iterate()
+    _ ← it.rewind()
+
+// ---------------------------------------------------------------------
+// Directory iterators
+// ---------------------------------------------------------------------
+
+// Every entry has a name, and no entry is empty.
+@test
+fn test_directory_entries_have_names() → ∅:
+    let dir : mut = std.fs.cwd()
+    let it : mut = dir.iterate()
+    let count : mut = 0
+    let e : mut = it.next()
+    while e:
+        assert(e.name.sizeof > 0)
+        count ← count + 1
+        e ← it.next()
+    assert(count > 0)
+
+// A known regular file is found, with the right type.
+@test
+fn test_directory_finds_regular_file() → ∅:
+    let dir : mut = std.fs.cwd()
+    let it : mut = dir.iterate()
+    let found : mut = false
+    let e : mut = it.next()
+    while e:
+        if e.name == "CLAUDE.md":
+            found ← true
+            assert_eq(e.type, std.filetype.reg)
+        e ← it.next()
+    assert(found)
+
+// A known subdirectory is found, with the right type.
+@test
+fn test_directory_finds_subdirectory() → ∅:
+    let dir : mut = std.fs.cwd()
+    let it : mut = dir.iterate()
+    let found : mut = false
+    let e : mut = it.next()
+    while e:
+        if e.name == "interp":
+            found ← true
+            assert_eq(e.type, std.filetype.dir)
+        e ← it.next()
+    assert(found)
+
+// The two entries every directory has are deliberately not produced, so
+// that walking a tree does not need to filter them and cannot recurse
+// for ever by forgetting to.
+@test
+fn test_directory_omits_dot_entries() → ∅:
+    let dir : mut = std.fs.cwd()
+    let it : mut = dir.iterate()
+    let e : mut = it.next()
+    while e:
+        assert(e.name != ".")
+        assert(e.name != "..")
+        e ← it.next()
+
+// Exhaustion is reported the same way as for an array.
+@test
+fn test_directory_ends_with_none() → ∅:
+    let dir : mut = std.fs.cwd()
+    let it : mut = dir.iterate()
+    let e : mut = it.next()
+    while e:
+        e ← it.next()
+    assert_eq(it.next(), ∅)
+
+// Every entry's type is one the enum names.
+@test
+fn test_directory_types_are_known() → ∅:
+    let dir : mut = std.fs.cwd()
+    let it : mut = dir.iterate()
+    let e : mut = it.next()
+    while e:
+        let t : mut = e.type
+        assert(t == std.filetype.reg ∨ t == std.filetype.dir
+               ∨ t == std.filetype.lnk ∨ t == std.filetype.fifo
+               ∨ t == std.filetype.chr ∨ t == std.filetype.blk
+               ∨ t == std.filetype.sock ∨ t == std.filetype.unknown)
+        e ← it.next()
+
+// The enum values are the S_IF* constants from <sys/stat.h>.  They are
+// written in hex here because the language has no octal literal, in
+// which those constants are conventionally spelled.
+@test
+fn test_filetype_values_match_sys_stat() → ∅:
+    assert_eq(std.filetype.fifo, 0x1000)     // S_IFIFO,  0o010000
+    assert_eq(std.filetype.chr, 0x2000)      // S_IFCHR,  0o020000
+    assert_eq(std.filetype.dir, 0x4000)      // S_IFDIR,  0o040000
+    assert_eq(std.filetype.blk, 0x6000)      // S_IFBLK,  0o060000
+    assert_eq(std.filetype.reg, 0x8000)      // S_IFREG,  0o100000
+    assert_eq(std.filetype.lnk, 0xA000)      // S_IFLNK,  0o120000
+    assert_eq(std.filetype.sock, 0xC000)     // S_IFSOCK, 0o140000
+    assert_eq(std.filetype.unknown, 0)       // DT_UNKNOWN has no S_IF form
+
+// A directory whose descriptor has been released cannot be iterated.
+@expect error "iterate: directory is closed"
+fn error_iterate_closed_directory() → ∅:
+    let dir : mut = std.fs.cwd()
+    dir.close()
+    _ ← dir.iterate()
+
+@start
+fn main() → ∅:
+    std.print("iterator tests passed")

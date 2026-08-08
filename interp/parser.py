@@ -1637,8 +1637,7 @@ class Parser:
                 if self._check("PUNCT") and self._cur().value == ".":
                     dot_tok = self._cur()
                     self.pos += 1
-                    attr_tok = self._eat("IDENT")
-                    attr_name = attr_tok.value
+                    attr_name = self._eat_member_name()
                     if self._check("PUNCT") and self._cur().value == "(":
                         args = self._parse_call_args()
                         node = self._set_pos(MethodCall(node, attr_name, args), dot_tok)
@@ -1726,13 +1725,28 @@ class Parser:
             return MultiSlice(node, specs)
         return Subscript(node, indices)
 
+    def _eat_member_name(self) -> str:
+        """Read the name after a `.`, which may spell a keyword.
+
+        A member called `type` or `is` is a perfectly good name, and the
+        position after a dot cannot be anything but a member, so there is
+        nothing for a keyword to be ambiguous with here.
+        """
+        tok = self._cur()
+        if tok.type == "IDENT" or (isinstance(tok.value, str)
+                                   and KEYWORDS.get(tok.value) == tok.type):
+            self.pos += 1
+            return tok.value
+        raise ParseError(
+            f"expected a member name after '.', got {self._tok_display(tok)}",
+            tok)
+
     def _parse_postfix(self, node):
         """Chain .attr, [idx], and (args) postfix operators onto node."""
         while True:
             if self._check("PUNCT") and self._cur().value == ".":
                 self.pos += 1
-                attr_tok = self._eat("IDENT")
-                attr_name = attr_tok.value
+                attr_name = self._eat_member_name()
                 if self._check("PUNCT") and self._cur().value == "(":
                     args = self._parse_call_args()
                     node = MethodCall(node, attr_name, args)

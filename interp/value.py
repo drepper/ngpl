@@ -710,6 +710,49 @@ class ArrayValue(Value):
                                for i in range(self.sizeof)) + "]"
 
 
+class Iterator(Value):
+    """A source of successive values.
+
+    The whole protocol is next(): it returns the next value, or ∅ when
+    there are none left.  An iterator is obtained from a container with
+    iterate(), and holds whatever position it needs to resume from.
+
+    A produced value is marked present, so that testing an iterator's
+    result in a boolean context asks whether there was a value at all
+    rather than whether that value was itself truthy -- an element of 0
+    or "" ends no loop.  It also lets an iterator carry ∅ as an ordinary
+    value without that being mistaken for the end.
+    """
+
+    __slots__ = ()
+
+    def next(self) -> "Value":
+        raise NotImplementedError
+
+    def display(self):
+        return "<iterator>"
+
+
+class ArrayIterator(Iterator):
+    """Walks an array's elements in order."""
+
+    __slots__ = ("array", "index")
+
+    def __init__(self, array: "ArrayValue"):
+        self.array = array
+        self.index = 0
+
+    def next(self) -> "Value":
+        if self.index >= self.array.sizeof:
+            return NoneValue()
+        value = self.array.get(self.index)
+        self.index += 1
+        return SomeValue(value)
+
+    def display(self):
+        return f"<array iterator at {self.index}>"
+
+
 class Reference(Value):
     """A place that can be read through and written through.
 

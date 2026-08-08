@@ -241,6 +241,8 @@ String and I/O
 [ ] multi-line string literals ("""…""" syntax, possibly with " continuation prefix).
 
 [ ] binary and hexadecimal number literal suffixes (₂ for binary, ₕ for hexadecimal).
+    Also add octal literals: file modes and the S_IF* constants are conventionally
+    written in octal, and std.filetype's values have to be spelled in hex without them.
 
 [ ] format string type-specific formatting via attributes on type definitions (like Rust
     Display/Debug, Haskell Show).

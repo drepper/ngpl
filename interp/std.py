@@ -37,6 +37,22 @@ O_DIRECTORY = 0o200000  # must be a directory
 S_IRUSR = 0o400       # user read
 S_IWUSR = 0o200       # user write
 EINVAL = 22           # invalid argument
+SYS_GETDENTS64 = 217  # x86_64 syscall number
+
+# File type bits from <sys/stat.h>.  getdents64 reports a directory
+# entry's type as a DT_* value, which is the corresponding S_IF* value
+# shifted right by 12, so one table serves for both.
+S_IFMT_SHIFT = 12
+_FILE_TYPES: dict[str, int] = {
+    "unknown": 0,          # DT_UNKNOWN: the filesystem did not say
+    "fifo": 0o010000,      # S_IFIFO
+    "chr": 0o020000,       # S_IFCHR
+    "dir": 0o040000,       # S_IFDIR
+    "blk": 0o060000,       # S_IFBLK
+    "reg": 0o100000,       # S_IFREG
+    "lnk": 0o120000,       # S_IFLNK
+    "sock": 0o140000,      # S_IFSOCK
+}
 
 # sysconf(3) selectors (glibc bits/confname.h)
 _SC_PAGESIZE = 30
@@ -183,6 +199,112 @@ def _checked_sysconf(name: int, what: str) -> int:
 # Value-level wrapper for a directory fd (opened with O_DIRECTORY)
 # ---------------------------------------------------------------------------
 
+def make_file_type_enum():
+    """Create the std.filetype enum naming the S_IF* file kinds."""
+    from interp.value import EnumType
+    return EnumType("filetype", "u32", dict(_FILE_TYPES), is_flag=False)
+
+
+class DirEntry:
+    """One entry of a directory, as reported by getdents64.
+
+    name is the entry's name within its directory, never a path.  type
+    is a std.filetype value; it is `unknown` when the filesystem does
+    not record the kind in the directory itself, in which case the entry
+    has to be opened to find out.
+    """
+
+    __slots__ = ("name", "type")
+
+    def __init__(self, name: str, file_type):
+        self.name = name
+        self.type = file_type
+
+    def display(self) -> str:
+        return f"{self.name} ({self.type.display()})"
+
+
+class DirIterator:
+    """Walks a directory's entries using getdents64.
+
+    Entries arrive from the kernel in blocks, so a buffer is refilled as
+    it empties rather than the whole directory being read up front: a
+    directory can be far larger than the program wants to hold.
+
+    `.` and `..` are not produced.  Every caller that walks a tree would
+    otherwise have to filter them, and one that forgets recurses for
+    ever.
+    """
+
+    __slots__ = ("_fd", "_buffer", "_offset", "_length", "_done", "_types")
+
+    _BUFFER_SIZE = 32768
+
+    def __init__(self, fd: int, file_type_enum):
+        self._fd = fd
+        self._buffer = ctypes.create_string_buffer(self._BUFFER_SIZE)
+        self._offset = 0
+        self._length = 0
+        self._done = False
+        self._types = file_type_enum
+
+    def _refill(self) -> bool:
+        """Read the next block of entries; False when the directory ends."""
+        if self._done:
+            return False
+        n = _getdents64(SYS_GETDENTS64, self._fd,
+                        ctypes.cast(self._buffer, ctypes.c_void_p),
+                        self._BUFFER_SIZE)
+        if n < 0:
+            errno = ctypes.get_errno()
+            raise OSError(f"getdents64: {os.strerror(errno)} (errno={errno})")
+        if n == 0:
+            self._done = True
+            return False
+        self._offset = 0
+        self._length = n
+        return True
+
+    def next(self):
+        """Return the next entry, or ∅ when the directory is exhausted."""
+        from interp.value import EnumValue, ObjectValue, none, some
+
+        while True:
+            if self._offset >= self._length:
+                if not self._refill():
+                    return none()
+                continue
+
+            raw = self._buffer.raw
+            base = self._offset
+            reclen = int.from_bytes(raw[base + 16:base + 18], "little")
+            if reclen <= 0:
+                # A malformed record would otherwise loop for ever.
+                self._done = True
+                return none()
+            d_type = raw[base + 18]
+            name_bytes = raw[base + 19:base + reclen]
+            name = _decode(name_bytes.split(b"\x00", 1)[0])
+            self._offset += reclen
+
+            if name in (".", ".."):
+                continue
+
+            mode = d_type << S_IFMT_SHIFT
+            for member, value in _FILE_TYPES.items():
+                if value == mode:
+                    file_type = EnumValue(self._types,
+                                          self._types.members[member])
+                    break
+            else:
+                file_type = EnumValue(self._types,
+                                      self._types.members["unknown"])
+            return some(ObjectValue(DirEntry(name, file_type)))
+
+    def display(self) -> str:
+        return "<directory iterator>"
+
+
 class DirFD:
     """Wrapper around a file descriptor opened as a directory.
 
@@ -228,6 +350,15 @@ class DirFD:
         if not self._closed:
             _close(self._fd)
             self._closed = True
+
+    def iterate(self):
+        """Return an iterator over this directory's entries.
+
+        The iterator reads through this directory's descriptor, so it
+        stops working once the directory is closed or its scope ends.
+        """
+        self._check_open("iterate")
+        return DirIterator(self._fd, std.filetype)
 
     def open_file(self, name, mode=None, flags=None):
         """Open a file relative to this directory using openat.
@@ -1386,12 +1517,14 @@ class EnvModule:
 
     def get(self, name):
         """Look up a variable; returns the value or ∅ when it is unset."""
-        from interp.value import mk_str, none
+        from interp.value import mk_str, none, some
         key = _as_name(name, "std.env.get")
         raw = _getenv(key.encode("utf-8"))
         if raw is None:
             return none()
-        return mk_str(_decode(raw))
+        # Marked present so that an empty value is still a value in a
+        # boolean context: FOO= is set, and must not read as unset.
+        return some(mk_str(_decode(raw)))
 
     def has(self, name):
         """Report whether a variable is present in the environment."""

@@ -36,7 +36,7 @@ from interp.value import (
     _TYPE_BITS, FLOAT_TYPES, FAST_TYPES,
     _split_optional_type, MAX_TENSOR_RANK,
     is_generic_type, runtime_type_of,
-    UnitValue, RefValue, Reference, ElementRef,
+    UnitValue, RefValue, Reference, ElementRef, Iterator, ArrayIterator,
     deep_copy_value, register_type_alias, DISCARD_NAME,
 )
 from interp.env import Env
@@ -512,6 +512,7 @@ _ARRAY_METHODS: dict[str, int] = {
     "insert": 2,
     "remove": 1,
     "get": 1,
+    "iterate": 0,
 }
 
 
@@ -671,6 +672,11 @@ class Evaluator:
         """Equality comparison."""
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
+        # ∅ equals itself and nothing else.  Without this the fall-through
+        # below reports every comparison against ∅ as unequal, including
+        # ∅ == ∅, which makes `while e != ∅` loop for ever.
+        if isinstance(lu, NoneValue) or isinstance(ru, NoneValue):
+            return mk_bool(isinstance(lu, NoneValue) and isinstance(ru, NoneValue))
         if isinstance(lu, EnumValue) and isinstance(ru, EnumValue):
             if lu.enum_type is not ru.enum_type:
                 raise TypeError(
@@ -1221,19 +1227,22 @@ class Evaluator:
                 f"array.{name} takes {arity} argument"
                 f"{'' if arity == 1 else 's'}, got {len(args)}")
 
+        if name == "iterate":
+            return ArrayIterator(array)
+
         if name == "push":
             array.push(unwrap_optional(args[0]))
             return none()
 
         if name == "pop":
             popped = array.pop()
-            return none() if popped is None else popped
+            return none() if popped is None else some(popped)
 
         index = self._check_index_unit(unwrap_optional(args[0]), array)
 
         if name == "get":
             if 0 <= index.value < array.sizeof:
-                return array.get(index.value)
+                return some(array.get(index.value))
             return none()
 
         if name == "insert":
@@ -1721,7 +1730,7 @@ class Evaluator:
             if isinstance(unwrapped, ObjectValue):
                 attr_val = getattr(unwrapped.obj, node.attr, None)
                 if attr_val is not None:
-                    if isinstance(attr_val, EnumType):
+                    if isinstance(attr_val, Value):
                         return attr_val
                     if callable(attr_val):
                         return BuiltinBoundMethod(unwrapped.obj, node.attr)
@@ -2839,6 +2848,14 @@ class Evaluator:
         unwrapped = unwrap_optional(obj)
         if method_name == "__call__":
             return self._do_call(unwrapped, args)
+        if isinstance(unwrapped, Iterator):
+            if method_name != "next":
+                raise AttributeError(
+                    f"an iterator has no method '{method_name}'; it answers "
+                    f"only next()")
+            if args:
+                raise TypeError("iterator.next takes no arguments")
+            return unwrapped.next()
         # callstack reads evaluator state, which a plain method on the
         # std object has no way to reach.
         if (method_name == "callstack" and isinstance(unwrapped, ObjectValue)
