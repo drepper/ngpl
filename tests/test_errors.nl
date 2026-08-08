@@ -122,7 +122,7 @@ fn needs_three(arr : i32[3]) → i32:
 
 @test
 fn error_fixed_array_size_mismatch() → ∅:
-    let a : mut i32[] = [1, 2, 3, 4]
+    let a : i32[] = [1, 2, 3, 4]
     @expect error "expected i32\\[3\\].*length 3.*got array of length 4"
     needs_three(a)
 

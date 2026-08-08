@@ -17,7 +17,7 @@ fn test_let_typed() → ∅:
 fn test_let_in_expr() → ∅:
     let a := 10
     let b := 20
-    let c : mut = a + b
+    let c := a + b
     assert_eq(c, 30)
 
 // Let re-binding across loop iterations.

@@ -29,17 +29,17 @@ fn error_i64_too_large() → ∅:
 
 @test
 fn test_u8_wraps_on_assign() → ∅:
-    let x : mut u8 = 256
+    let x : u8 = 256
     assert_eq(x, 0)
 
 @test
 fn test_u8_wraps_negative() → ∅:
-    let x : mut u8 = ⁻1
+    let x : u8 = ⁻1
     assert_eq(x, 255)
 
 @test
 fn test_u32_wraps_on_assign() → ∅:
-    let x : mut u32 = 4294967296
+    let x : u32 = 4294967296
     assert_eq(x, 0)
 
 // ---- dynamic: signed arithmetic overflow ---------------------------------
@@ -77,67 +77,67 @@ fn error_i32_negate_min() → ∅:
 
 @test
 fn test_u8_add_wraps() → ∅:
-    let x : mut u8 = 255
-    let y : mut u8 = 1
-    let z : mut = x + y
+    let x : u8 = 255
+    let y : u8 = 1
+    let z := x + y
     assert_eq(z, 0)
 
 @test
 fn test_u8_sub_wraps() → ∅:
-    let x : mut u8 = 0
-    let y : mut u8 = 1
-    let z : mut = x - y
+    let x : u8 = 0
+    let y : u8 = 1
+    let z := x - y
     assert_eq(z, 255)
 
 @test
 fn test_u32_add_wraps() → ∅:
-    let x : mut u32 = 4294967295
-    let y : mut u32 = 1
-    let z : mut = x + y
+    let x : u32 = 4294967295
+    let y : u32 = 1
+    let z := x + y
     assert_eq(z, 0)
 
 @test
 fn test_u32_mul_wraps() → ∅:
-    let x : mut u32 = 65536
-    let y : mut u32 = 65536
-    let z : mut = x * y
+    let x : u32 = 65536
+    let y : u32 = 65536
+    let z := x * y
     assert_eq(z, 0)
 
 // ---- boundary values: signed types ---------------------------------------
 
 @test
 fn test_i8_max() → ∅:
-    let x : mut i8 = 127
+    let x : i8 = 127
     assert_eq(x, 127)
 
 @test
 fn test_i8_min() → ∅:
-    let x : mut i8 = ⁻128
+    let x : i8 = ⁻128
     assert_eq(x, ⁻128)
 
 @test
 fn test_i32_max() → ∅:
-    let x : mut i32 = 2147483647
+    let x : i32 = 2147483647
     assert_eq(x, 2147483647)
 
 @test
 fn test_i32_min() → ∅:
-    let x : mut i32 = ⁻2147483648
+    let x : i32 = ⁻2147483648
     assert_eq(x, ⁻2147483648)
 
 // ---- bitwise ops always wrap (not overflow) ------------------------------
 
 @test
 fn test_bitwise_not_i8() → ∅:
-    let x : mut i8 = 0
-    let y : mut = ~x
+    let x : i8 = 0
+    let y := ~x
     assert_eq(y, ⁻1)
 
 @test
 fn test_shift_left_wraps() → ∅:
-    let x : mut u8 = 128
-    let s : mut u8 = 1
-    let y : mut = x « s
+    let x : u8 = 128
+    let s : u8 = 1
+    let y := x « s
     assert_eq(y, 0)
 
 @start

@@ -36,8 +36,8 @@ fn test_identity_string() → ∅:
 
 @test
 fn test_identity_typed_int() → ∅:
-    let x : mut i32 = 7
-    let r : mut = identity(x)
+    let x : i32 = 7
+    let r := identity(x)
     assert_eq(r, 7)
 
 @test
@@ -46,8 +46,8 @@ fn test_add_same_type() → ∅:
 
 @test
 fn test_add_typed() → ∅:
-    let a : mut u32 = 100
-    let b : mut u32 = 200
+    let a : u32 = 100
+    let b : u32 = 200
     assert_eq(add_g(a, b), 300)
 
 @test
@@ -63,14 +63,14 @@ fn test_generic_with_concrete_return() → ∅:
 
 @test
 fn test_generic_type_mismatch() → ∅:
-    let a : mut i32 = 1
-    let b : mut u32 = 2
+    let a : i32 = 1
+    let b : u32 = 2
     @expect error "generic type T'"
     add_g(a, b)
 
 @test
 fn test_generic_curry() → ∅:
-    let add10 : mut = add_g(10)
+    let add10 := add_g(10)
     assert_eq(add10(20), 30)
 
 // --- local variables with generic types ---------------------------------
@@ -82,7 +82,7 @@ fn double_typed(x : T') → T':
 @test
 fn test_local_var_generic_type() → ∅:
     assert_eq(double_typed(21), 42)
-    let a : mut i32 = 5
+    let a : i32 = 5
     assert_eq(double_typed(a), 10)
 
 // Multiple generic type parameters in local vars.
@@ -102,7 +102,7 @@ fn first_elem(arr : T'[]) → T':
 
 @test
 fn test_local_var_generic_array() → ∅:
-    let a : mut i32[] = [7, 8, 9]
+    let a : i32[] = [7, 8, 9]
     assert_eq(first_elem(a), 7)
 
 // --- local type aliases with generic types ------------------------------
@@ -116,8 +116,8 @@ fn add_aliased(a : T', b : T') → T':
 @test
 fn test_local_type_alias_generic() → ∅:
     assert_eq(add_aliased(3, 4), 7)
-    let a : mut u32 = 100
-    let b : mut u32 = 200
+    let a : u32 = 100
+    let b : u32 = 200
     assert_eq(add_aliased(a, b), 300)
 
 // Local type alias for generic array type.
@@ -130,7 +130,7 @@ fn sum_aliased(arr : T'[]) → T':
 
 @test
 fn test_local_type_alias_generic_array() → ∅:
-    let a : mut i32[] = [10, 20, 30]
+    let a : i32[] = [10, 20, 30]
     assert_eq(sum_aliased(a), 60)
 
 @start

@@ -133,7 +133,7 @@ fn test_repr_struct_behaves_normally() → ∅:
 // An instance answers for its type.
 @test
 fn test_instance_layout() → ∅:
-    let p : mut = Point { x: 1, y: 2 }
+    let p := Point { x: 1, y: 2 }
     assert_eq(p.sizeof, 16)
     assert_eq(p.alignof, 8)
 
@@ -160,7 +160,7 @@ fn error_offsetof_without_repr() → ∅:
 // A struct with no layout is still a perfectly usable struct.
 @test
 fn test_loose_struct_still_works() → ∅:
-    let l : mut = Loose { a: 1, b: 2 }
+    let l := Loose { a: 1, b: 2 }
     assert_eq(l.a, 1)
     assert_eq(l.b, 2)
 

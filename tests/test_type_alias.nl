@@ -38,7 +38,7 @@ fn sum_row(r : Row) → i32:
 
 @test
 fn test_alias_dynamic_array_param() → ∅:
-  let a : mut i32[] = [1, 2, 3, 4]
+  let a : i32[] = [1, 2, 3, 4]
   assert_eq(sum_row(a), 10)
 
 // --- alias chains (alias of alias) ----------------------------------------

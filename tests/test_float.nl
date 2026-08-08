@@ -34,11 +34,11 @@ fn test_float_arithmetic():
   static_assert(3.0 * 2.0 == 6.0)
 
   // Division
-  let quot : mut = 3.0 / 2.0
+  let quot := 3.0 / 2.0
   assert_true(quot == 1.5, "3.0 / 2.0 should be 1.5")
 
   // Modulus
-  let rem : mut = 7.0 % 3.0
+  let rem := 7.0 % 3.0
   assert_true(rem == 1.0, "7.0 % 3.0 should be 1.0")
 
   // Negation
@@ -92,47 +92,47 @@ fn as_f32(x:f32) -> f32:
 
 fn test_float_coercion_in_functions():
   // Test int-to-float parameter coercion
-  let r : mut = add_floats(3, 4)
+  let r := add_floats(3, 4)
   assert_true(r == 7.0, "add_floats(3, 4) should be 7.0")
 
   // Test float-to-float coercion (narrowing)
-  let s : mut = as_f32(3.14)
+  let s := as_f32(3.14)
   // f32 precision: 3.14 becomes approximately 3.140000104904175
   assert_true(s > 3.13, "as_f32(3.14) should be > 3.13")
   assert_true(s < 3.15, "as_f32(3.14) should be < 3.15")
 
 fn test_float_in_conditionals():
-  let x : mut = 0.0
+  let x := 0.0
   if x:
     assert_true(false, "0.0 should be falsy")
-  let y : mut = 1.5
+  let y := 1.5
   if not y:
     assert_true(false, "1.5 should be truthy")
 
 fn test_float_format():
-  let alloc : mut = std.heap.allocator()
-  let s : mut = std.format(alloc, "value: {}", 3.14)
+  let alloc := std.heap.allocator()
+  let s := std.format(alloc, "value: {}", 3.14)
   assert_true(s == "value: 3.14", "format float failed")
 
   // Fixed-point format specifier
-  let s2 : mut = std.format(alloc, "{:.2f}", 3.14)
+  let s2 := std.format(alloc, "{:.2f}", 3.14)
   assert_true(s2 == "3.14", "format .2f failed")
 
   // Scientific notation
-  let s3 : mut = std.format(alloc, "{:.2e}", 1500.0)
+  let s3 := std.format(alloc, "{:.2e}", 1500.0)
   assert_true(s3 == "1.50e+03", "format .2e failed")
 
 fn test_hex_float_literal():
   // Hex float: 0x1.8p1 = 1.5 * 2^1 = 3.0
-  let a : mut = 0x1.8p1
+  let a := 0x1.8p1
   assert_true(a == 3.0, "0x1.8p1 should be 3.0")
 
   // 0x1p0 = 1.0
-  let b : mut = 0x1p0
+  let b := 0x1p0
   assert_true(b == 1.0, "0x1p0 should be 1.0")
 
   // 0x1p-1 = 0.5
-  let c : mut = 0x1p-1
+  let c := 0x1p-1
   assert_true(c == 0.5, "0x1p-1 should be 0.5")
 
 fn reject_float(x:i32) -> i32:

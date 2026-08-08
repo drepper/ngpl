@@ -66,14 +66,14 @@ fn test_unitof_dimensionless_eq():
 
 @test
 fn test_runtime_unitof_sizeof():
-  let arr : mut = [1, 2, 3]
-  let sz : mut = arr.sizeof
+  let arr := [1, 2, 3]
+  let sz := arr.sizeof
   assert_true(sz == 3, "sizeof is 3")
 
 @test
 fn test_runtime_unitof_bytes():
-  let buf: mut u8[4] = [1, 2, 3, 4]
-  let sz : mut = buf.sizeof
+  let buf: u8[4] = [1, 2, 3, 4]
+  let sz := buf.sizeof
   assert_true(sz == 4, "sizeof is 4")
 
 @start

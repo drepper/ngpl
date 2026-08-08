@@ -15,7 +15,7 @@
 // Without a borrow the loop variable holds a copy of the element.
 @test
 fn test_plain_iteration_copies() → ∅:
-    let nums : mut = [1, 2, 3]
+    let nums := [1, 2, 3]
     let total : mut = 0
     foreach x := nums:
         static_assert_eq(@typeof(x), "int")
@@ -28,7 +28,7 @@ fn test_plain_iteration_copies() → ∅:
 // A shared borrow refers to the element, but only for reading.
 @test
 fn test_shared_borrow_type() → ∅:
-    let nums : mut = [1, 2, 3]
+    let nums := [1, 2, 3]
     foreach x := &nums:
         static_assert_eq(@typeof(x), "&int")
 
@@ -129,7 +129,7 @@ fn test_two_mut_borrows() → ∅:
 
 @test
 fn test_shared_borrow_reads() → ∅:
-    let nums : mut = [1, 2, 3]
+    let nums := [1, 2, 3]
     let total : mut = 0
     foreach x := &nums:
         total ← total + x
@@ -138,7 +138,7 @@ fn test_shared_borrow_reads() → ∅:
 // The array is untouched by a shared borrow.
 @test
 fn test_shared_borrow_leaves_array_alone() → ∅:
-    let nums : mut = [1, 2, 3]
+    let nums := [1, 2, 3]
     foreach x := &nums:
         assert(x > 0)
     assert_eq(nums[0], 1)

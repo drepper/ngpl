@@ -11,67 +11,67 @@ fn assert_eq_int(a:i64, b:i64, msg:str):
 // --- Basic unit annotation on variables ---
 
 fn test_basic_units():
-  let x ¤meter : mut = 5
-  let y ¤second : mut = 10
-  let z ¤kilogram : mut = 3
+  let x ¤meter := 5
+  let y ¤second := 10
+  let z ¤kilogram := 3
   assert_true(true, "basic unit definition should work")
 
 // --- Same-unit addition ---
 
 fn test_same_unit_add():
-  let a ¤meter : mut = 3
-  let b ¤meter : mut = 7
-  let c : mut = a + b
+  let a ¤meter := 3
+  let b ¤meter := 7
+  let c := a + b
   // c should be 10 m
   std.print(c)
 
 // --- Same-unit subtraction ---
 
 fn test_same_unit_sub():
-  let a ¤meter : mut = 10
-  let b ¤meter : mut = 3
-  let c : mut = a - b
+  let a ¤meter := 10
+  let b ¤meter := 3
+  let c := a - b
   // c should be 7 m
   std.print(c)
 
 // --- Unit-scalar multiplication ---
 
 fn test_scalar_mul():
-  let a ¤meter : mut = 5
-  let b : mut = a * 3
+  let a ¤meter := 5
+  let b := a * 3
   // b should be 15 m
   std.print(b)
 
 fn test_scalar_mul_rev():
-  let a ¤meter : mut = 5
-  let b : mut = 3 * a
+  let a ¤meter := 5
+  let b := 3 * a
   // b should be 15 m
   std.print(b)
 
 // --- Unit multiplication (derived units) ---
 
 fn test_unit_mul():
-  let a ¤meter : mut = 5
-  let b ¤second : mut = 2
-  let c : mut = a * b
+  let a ¤meter := 5
+  let b ¤second := 2
+  let c := a * b
   // c should be 10 m*s
   std.print(c)
 
 // --- Unit division ---
 
 fn test_unit_div():
-  let dist ¤meter : mut = 100
-  let time ¤second : mut = 10
-  let speed : mut = dist / time
+  let dist ¤meter := 100
+  let time ¤second := 10
+  let speed := dist / time
   // speed should have unit m/s
   std.print(speed)
 
 // --- Dimensionless result from division ---
 
 fn test_dimensionless_div():
-  let a ¤meter : mut = 10
-  let b ¤meter : mut = 5
-  let ratio : mut = a / b
+  let a ¤meter := 10
+  let b ¤meter := 5
+  let ratio := a / b
   // same unit cancels, result is plain 2
   std.print(ratio)
 
@@ -100,8 +100,8 @@ fn test_lossless_reject():
 // --- Incompatible unit rejection ---
 
 fn test_incompatible_add():
-  let a ¤meter : mut = 5
-  let b ¤second : mut = 3
+  let a ¤meter := 5
+  let b ¤second := 3
   @expect error "incompatible units"
   let c : mut = a + b
 
@@ -120,35 +120,35 @@ fn test_dimensionless_assign():
 // --- Dimensioned + dimensionless arithmetic ---
 
 fn test_add_dimensioned_dimensionless():
-  let a ¤meter : mut = 5
-  let b : mut = a + 3
+  let a ¤meter := 5
+  let b := a + 3
   // 3 adopts unit meter, result is 8 m
   assert_eq_int(b, 8, "5m + 3")
-  let c : mut = 2 + a
+  let c := 2 + a
   assert_eq_int(c, 7, "2 + 5m")
 
 // --- Addition of compatible but different units ---
 
 fn test_add_km_and_m():
-  let a ¤kilometer : mut = 3
-  let b ¤meter : mut = 500
-  let c : mut = a + b
+  let a ¤kilometer := 3
+  let b ¤meter := 500
+  let c := a + b
   // Result in base (m): 3000 + 500 = 3500 m
   std.print(c)
 
 // --- Comparison of unitful values ---
 
 fn test_unit_comparison():
-  let a ¤meter : mut = 5
-  let b ¤meter : mut = 10
+  let a ¤meter := 5
+  let b ¤meter := 10
   assert_true(a < b, "5m < 10m")
   assert_true(b > a, "10m > 5m")
   assert_true(a == a, "5m == 5m")
   assert_true(a != b, "5m != 10m")
 
 fn test_unit_comparison_different():
-  let a ¤kilometer : mut = 1
-  let b ¤meter : mut = 1000
+  let a ¤kilometer := 1
+  let b ¤meter := 1000
   // 1 km == 1000 m (converted to base)
   assert_true(a == b, "1 km == 1000 m")
   assert_true(not (a < b), "1 km not < 1000 m")
@@ -156,8 +156,8 @@ fn test_unit_comparison_different():
 // --- Negation ---
 
 fn test_negation():
-  let a ¤meter : mut = 5
-  let b : mut = ⁻a
+  let a ¤meter := 5
+  let b := ⁻a
   std.print(b)
 
 // --- Byte units ---
@@ -169,16 +169,16 @@ fn test_byte_units():
   assert_eq_int(a, 1048576, "1024 KiB to B")
 
 fn test_byte_display():
-  let a ¤byte : mut = 42
+  let a ¤byte := 42
   std.print(a)
 
 // --- Unit inference from init value ---
 
 fn test_unit_inference():
-  let a ¤meter : mut = 5
-  let b : mut = a
+  let a ¤meter := 5
+  let b := a
   // b should inherit unit m from a
-  let c : mut = b + a
+  let c := b + a
   // c should be 10 m (works because b has unit m)
   std.print(c)
 
@@ -188,76 +188,76 @@ unit speed = meter / second
 unit accel = meter / second / second
 
 fn test_user_units():
-  let v ¤"speed" : mut = 10
-  let a ¤"accel" : mut = 2
+  let v ¤"speed" := 10
+  let a ¤"accel" := 2
   std.print(v)
   std.print(a)
 
 // --- Formatting ---
 
 fn test_format():
-  let alloc : mut = std.heap.allocator()
-  let d ¤meter : mut = 42
-  let s : mut = std.format(alloc, "distance: {}", d)
+  let alloc := std.heap.allocator()
+  let d ¤meter := 42
+  let s := std.format(alloc, "distance: {}", d)
   assert_true(s == "distance: 42 m", "format with unit")
 
 // --- Count and distance units ---
 
 fn test_abstract_units():
-  let n ¤count : mut = 10
-  let d ¤distance : mut = 50
+  let n ¤count := 10
+  let d ¤distance := 50
   std.print(n)
   std.print(d)
 
 // --- Unit-aware modulus ---
 
 fn test_unit_mod():
-  let a ¤meter : mut = 7
-  let b ¤meter : mut = 3
-  let c : mut = a % b
+  let a ¤meter := 7
+  let b ¤meter := 3
+  let c := a % b
   // 7 m % 3 m = 1 m
   std.print(c)
 
 // --- Float with units ---
 
 fn test_float_units():
-  let a ¤meter : mut = 3.5
-  let b ¤meter : mut = 1.5
-  let c : mut = a + b
+  let a ¤meter := 3.5
+  let b ¤meter := 1.5
+  let c := a + b
   std.print(c)
 
 // --- Compound unit spec on expression ---
 
 fn test_compound_unit_spec():
-  let v ¤meter/second : mut = 10
+  let v ¤meter/second := 10
   std.print(v)
 
 // --- Spacing: ¤ immediately after variable name (no whitespace before) ---
 
 fn test_unit_no_space_before():
-  let x¤meter : mut = 7
-  let y¤second : mut = 3
-  let z : mut = x * y
+  let x¤meter := 7
+  let y¤second := 3
+  let z := x * y
   std.print(z)
 
 // --- Spacing: whitespace after ¤ ---
 
 fn test_unit_space_after():
-  let a ¤ meter : mut = 12
-  let b ¤ second : mut = 4
-  let c : mut = a / b
+  let a ¤ meter := 12
+  let b ¤ second := 4
+  let c := a / b
   std.print(c)
 
 // --- Spacing: no space before ¤, space after ¤ ---
 
 fn test_unit_no_space_before_space_after():
-  let p¤ kilogram : mut = 5
+  let p¤ kilogram := 5
   std.print(p)
 
 // --- Spacing: ¤ on expression with no space ---
 
 fn test_unit_expr_no_space():
-  let x : mut = 42¤meter
+  let x := 42¤meter
   std.print(x)
 
 @start

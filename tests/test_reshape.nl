@@ -4,14 +4,14 @@
 
 @test
 fn test_reshape_scalar():
-    let a : mut = 5 ⍴ 0
+    let a := 5 ⍴ 0
     assert_eq(a.sizeof, 5)
     assert_eq(a[0], 0)
     assert_eq(a[4], 0)
 
 @test
 fn test_reshape_scalar_nonzero():
-    let a : mut = 3 ⍴ 42
+    let a := 3 ⍴ 42
     assert_eq(a.sizeof, 3)
     assert_eq(a[0], 42)
     assert_eq(a[1], 42)
@@ -22,7 +22,7 @@ fn test_reshape_scalar_nonzero():
 @test
 fn test_reshape_cycle():
     let src : mut = [1, 2, 3]
-    let a : mut = 7 ⍴ src
+    let a := 7 ⍴ src
     assert_eq(a.sizeof, 7)
     assert_eq(a[0], 1)
     assert_eq(a[2], 3)
@@ -32,7 +32,7 @@ fn test_reshape_cycle():
 @test
 fn test_reshape_extend():
     let src : mut = [10, 20, 30]
-    let a : mut = 6 ⍴ src
+    let a := 6 ⍴ src
     assert_eq(a.sizeof, 6)
     assert_eq(a[3], 10)
     assert_eq(a[5], 30)
@@ -40,7 +40,7 @@ fn test_reshape_extend():
 @test
 fn test_reshape_truncate():
     let src : mut = [1, 2, 3, 4, 5]
-    let a : mut = 2 ⍴ src
+    let a := 2 ⍴ src
     assert_eq(a.sizeof, 2)
     assert_eq(a[0], 1)
     assert_eq(a[1], 2)
@@ -48,14 +48,14 @@ fn test_reshape_truncate():
 @test
 fn test_reshape_identity():
     let src : mut = [5, 6, 7]
-    let a : mut = 3 ⍴ src
+    let a := 3 ⍴ src
     assert_eq(a.sizeof, 3)
     assert_eq(a[0], 5)
     assert_eq(a[2], 7)
 
 @test
 fn test_reshape_empty():
-    let a : mut = 0 ⍴ 42
+    let a := 0 ⍴ 42
     assert_eq(a.sizeof, 0)
 
 // --- ⍴ with generate ---
@@ -63,7 +63,7 @@ fn test_reshape_empty():
 @test
 fn test_reshape_with_generate():
     let src : mut = generate(λx : int → int: x * 10, 0…3)
-    let a : mut = 8 ⍴ src
+    let a := 8 ⍴ src
     assert_eq(a.sizeof, 8)
     assert_eq(a[0], 0)
     assert_eq(a[1], 10)
@@ -74,7 +74,7 @@ fn test_reshape_with_generate():
 
 @test
 fn test_reshape_range():
-    let a : mut = 5 ⍴ (1…3)
+    let a := 5 ⍴ (1…3)
     assert_eq(a.sizeof, 5)
     assert_eq(a[0], 1)
     assert_eq(a[2], 3)
@@ -85,8 +85,8 @@ fn test_reshape_range():
 
 @test
 fn test_reshape_variable_dim():
-    let n : mut = 4
-    let a : mut = n ⍴ 99
+    let n := 4
+    let a := n ⍴ 99
     assert_eq(a.sizeof, 4)
     assert_eq(a[3], 99)
 
@@ -94,7 +94,7 @@ fn test_reshape_variable_dim():
 
 @test
 fn test_reshape_matrix():
-    let a : mut = (2, 3) ⍴ 0
+    let a := (2, 3) ⍴ 0
     assert_eq(a.sizeof, 2)
     assert_eq(a[0].sizeof, 3)
     assert_eq(a[0, 0], 0)
@@ -102,7 +102,7 @@ fn test_reshape_matrix():
 
 @test
 fn test_reshape_matrix_data():
-    let a : mut = (2, 3) ⍴ [1, 2, 3, 4, 5, 6]
+    let a := (2, 3) ⍴ [1, 2, 3, 4, 5, 6]
     assert_eq(a[0, 0], 1)
     assert_eq(a[0, 2], 3)
     assert_eq(a[1, 0], 4)
@@ -110,7 +110,7 @@ fn test_reshape_matrix_data():
 
 @test
 fn test_reshape_matrix_cycle():
-    let a : mut = (2, 3) ⍴ [1, 2]
+    let a := (2, 3) ⍴ [1, 2]
     assert_eq(a[0, 0], 1)
     assert_eq(a[0, 1], 2)
     assert_eq(a[0, 2], 1)

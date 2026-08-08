@@ -69,7 +69,7 @@ fn test_foreach_brace() → ∅:
 // Accumulate array elements using foreach.
 @test
 fn test_foreach_array() → ∅:
-    let data : mut = [10, 20, 30, 40]
+    let data := [10, 20, 30, 40]
     let total : mut = 0
     foreach idx := 0…data.sizeof - 1:
         total ← total + data[idx]

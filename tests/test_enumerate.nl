@@ -56,7 +56,7 @@ fn square(x : int) → int:
 
 @test
 fn test_enumerate_generated() → ∅:
-    let arr : mut = generate(square, 1…4)
+    let arr := generate(square, 1…4)
     let total : mut = 0
     foreach i, v := enumerate(arr):
         total ← total + i + v

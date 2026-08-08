@@ -15,7 +15,7 @@ enum MyErr:
 // ---------------------------------------------------------------------
 
 fn expected_matching(x : int) → int!:
-    let q : mut = (x / 0)?
+    let q := (x / 0)?
     q
 
 @test
@@ -24,7 +24,7 @@ fn test_expected_matching() → ∅:
 
 // The long form names the same error type, so it matches too.
 fn spelled_out(x : int) → int?std.errors:
-    let q : mut = (x / 0)?
+    let q := (x / 0)?
     q
 
 @test
@@ -33,7 +33,7 @@ fn test_long_form_matches() → ∅:
 
 // An optional return absorbs any error: the detail is discarded.
 fn optional_absorbs(x : int) → int?:
-    let q : mut = (x / 0)?
+    let q := (x / 0)?
     q
 
 @test
@@ -42,7 +42,7 @@ fn test_optional_absorbs_any_error() → ∅:
 
 // Propagating from another function with the same error type.
 fn chained(x : int) → int!:
-    let q : mut = expected_matching(x)?
+    let q := expected_matching(x)?
     q + 1
 
 @test
@@ -51,7 +51,7 @@ fn test_chained_propagation() → ∅:
 
 // The success path is unaffected.
 fn succeeds(x : int) → int!:
-    let q : mut = (x / 2)?
+    let q := (x / 2)?
     q
 
 @test

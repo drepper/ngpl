@@ -48,7 +48,7 @@ fn returns_float_ok() → f64:
 
 @test
 fn test_return_float_ok() → ∅:
-  let r : mut = returns_float_ok()
+  let r := returns_float_ok()
   assert_true(r > 3.0)
 
 fn returns_str_ok() → str:
@@ -94,7 +94,7 @@ fn returns_none_for_int_opt() → int?:
 
 @test
 fn test_return_none_for_optional() → ∅:
-  let r : mut = returns_none_for_int_opt()
+  let r := returns_none_for_int_opt()
   assert_eq(0, r ?? 0)
 
 // Lambda return type mismatch.
@@ -109,7 +109,7 @@ fn test_lambda_return_mismatch() → ∅:
 
 @test
 fn test_lambda_return_ok() → ∅:
-  let f : mut = λx : int → int: x + 1
+  let f := λx : int → int: x + 1
   assert_eq(6, f(5))
 
 // Void return type allows anything (value is discarded).
@@ -182,7 +182,7 @@ fn test_pow_int_float() → ∅:
 
 @test
 fn test_pow_float_int_ok() → ∅:
-  let r : mut = 4.0 ↑ 2
+  let r := 4.0 ↑ 2
   assert_true(r == 16.0)
 
 // Same-type arithmetic succeeds.

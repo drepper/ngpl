@@ -11,7 +11,7 @@
 
 @test
 fn test_exists_is_a_present_optional() → ∅:
-    let v : mut = [10, 20]
+    let v := [10, 20]
     assert_eq(v.get(0), ∃(10))
     assert_eq(v.get(9), ∅)
 
@@ -48,7 +48,7 @@ fn error_assert_eq_optional_with_plain() → ∅:
 // ?? is the other way to get a plain value out.
 @test
 fn test_default_still_compares_plainly() → ∅:
-    let v : mut = [1]
+    let v := [1]
     assert_eq(v.get(0) ?? 0, 1)
     assert_eq(v.get(9) ?? 0, 0)
 
@@ -58,7 +58,7 @@ fn test_default_still_compares_plainly() → ∅:
 
 @test
 fn test_match_present_binds_the_value() → ∅:
-    let v : mut = [42]
+    let v := [42]
     let seen : mut = 0
     match v.get(0):
         ∃(x):
@@ -69,7 +69,7 @@ fn test_match_present_binds_the_value() → ∅:
 
 @test
 fn test_match_absent() → ∅:
-    let v : mut = []
+    let v := []
     let seen : mut = 0
     match v.get(0):
         ∃(x):
@@ -81,7 +81,7 @@ fn test_match_absent() → ∅:
 // A falsy value is still present, so it takes the ∃ arm.
 @test
 fn test_match_present_but_falsy() → ∅:
-    let v : mut = [0]
+    let v := [0]
     let took : mut = ""
     match v.get(0):
         ∃(x):
@@ -93,7 +93,7 @@ fn test_match_present_but_falsy() → ∅:
 // The arms may be written in either order.
 @test
 fn test_match_arm_order() → ∅:
-    let v : mut = [7]
+    let v := [7]
     let seen : mut = 0
     match v.get(0):
         ∅:
@@ -105,7 +105,7 @@ fn test_match_arm_order() → ∅:
 // A single-statement arm may sit on the same line as its colon.
 @test
 fn test_match_inline_arms() → ∅:
-    let v : mut = [3]
+    let v := [3]
     let seen : mut = 0
     match v.get(0):
         ∃(x): seen ← x
@@ -115,7 +115,7 @@ fn test_match_inline_arms() → ∅:
 // _ matches whatever the earlier arms did not.
 @test
 fn test_match_wildcard() → ∅:
-    let v : mut = []
+    let v := []
     let took : mut = ""
     match v.get(0):
         ∃(x):
@@ -127,8 +127,8 @@ fn test_match_wildcard() → ∅:
 // Matching an iterator drives a loop one step at a time.
 @test
 fn test_match_over_an_iterator() → ∅:
-    let v : mut = [1, 2, 3]
-    let it : mut = v.iterate()
+    let v := [1, 2, 3]
+    let it := v.iterate()
     let total : mut = 0
     let running : mut = true
     while running:

@@ -68,7 +68,7 @@ fn optional_fn(x : i32) → i32?:
 
 @test
 fn test_resultof_optional() → ∅:
-    let rt : mut = @resultof(optional_fn)
+    let rt := @resultof(optional_fn)
     assert_eq(rt, rt)
 
 // Error: @resultof with unknown function.

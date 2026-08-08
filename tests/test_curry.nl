@@ -8,15 +8,15 @@ fn multiply(a : int, b : int) → int:
 // Curry a named function to create a doubler.
 @test
 fn test_curry_named_fn() → ∅:
-    let double : mut = multiply(2)
+    let double := multiply(2)
     assert_eq(double(5), 10)
     assert_eq(double(7), 14)
 
 // Curry a named function and use it with generate.
 @test
 fn test_curry_named_with_generate() → ∅:
-    let triple : mut = multiply(3)
-    let result : mut = generate(triple, 1…5)
+    let triple := multiply(3)
+    let result := generate(triple, 1…5)
     assert_eq(result[0], 3)
     assert_eq(result[1], 6)
     assert_eq(result[2], 9)
@@ -29,14 +29,14 @@ fn add3(a : int, b : int, c : int) → int:
 
 @test
 fn test_curry_staged() → ∅:
-    let f1 : mut = add3(10)
-    let f2 : mut = f1(20)
+    let f1 := add3(10)
+    let f2 := f1(20)
     assert_eq(f2(30), 60)
 
 // Curry two arguments at once.
 @test
 fn test_curry_two_at_once() → ∅:
-    let f : mut = add3(100, 200)
+    let f := add3(100, 200)
     assert_eq(f(300), 600)
 
 // --- Lambda currying ---
@@ -44,17 +44,17 @@ fn test_curry_two_at_once() → ∅:
 // Curry a lambda to create a fixed-offset function.
 @test
 fn test_curry_lambda() → ∅:
-    let add : mut = λa : int, b : int → int: a + b
-    let add10 : mut = add(10)
+    let add := λa : int, b : int → int: a + b
+    let add10 := add(10)
     assert_eq(add10(5), 15)
     assert_eq(add10(25), 35)
 
 // Curry a lambda and use it with generate.
 @test
 fn test_curry_lambda_with_generate() → ∅:
-    let power : mut = λbase : int, exp : int → int: base * exp
-    let times5 : mut = power(5)
-    let result : mut = generate(times5, 0…4)
+    let power := λbase : int, exp : int → int: base * exp
+    let times5 := power(5)
+    let result := generate(times5, 0…4)
     assert_eq(result[0], 0)
     assert_eq(result[1], 5)
     assert_eq(result[2], 10)
@@ -64,17 +64,17 @@ fn test_curry_lambda_with_generate() → ∅:
 // Three-parameter lambda curried in stages.
 @test
 fn test_curry_lambda_staged() → ∅:
-    let f : mut = λa : int, b : int, c : int → int: a + b + c
-    let f1 : mut = f(1)
-    let f2 : mut = f1(2)
+    let f := λa : int, b : int, c : int → int: a + b + c
+    let f1 := f(1)
+    let f2 := f1(2)
     assert_eq(f2(3), 6)
 
 // Curry a lambda with captures.
 @test
 fn test_curry_lambda_with_capture() → ∅:
-    let offset : mut = 100
-    let add_offset : mut = λx : int, y : int |offset| → int: x + y + offset
-    let f : mut = add_offset(50)
+    let offset := 100
+    let add_offset := λx : int, y : int |offset| → int: x + y + offset
+    let f := add_offset(50)
     assert_eq(f(10), 160)
 
 // --- Curried functions as first-class values ---
@@ -88,8 +88,8 @@ fn apply_and_sum(f, arr : int[]) → int:
 
 @test
 fn test_curry_as_argument() → ∅:
-    let double : mut = multiply(2)
-    let result : mut = apply_and_sum(double, [1, 2, 3, 4, 5])
+    let double := multiply(2)
+    let result := apply_and_sum(double, [1, 2, 3, 4, 5])
     assert_eq(result, 30)
 
 // --- Curried functions with generate and fold ---
@@ -99,10 +99,10 @@ fn add(a : int, b : int) → int:
 
 @test
 fn test_curry_with_fold() → ∅:
-    let add5 : mut = add(5)
-    let arr : mut = generate(add5, 0…4)
+    let add5 := add(5)
+    let arr := generate(add5, 0…4)
     // arr = [5, 6, 7, 8, 9]
-    let total : mut = add ⌿ arr
+    let total := add ⌿ arr
     assert_eq(total, 35)
 
 // --- Error cases ---

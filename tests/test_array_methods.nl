@@ -117,25 +117,25 @@ fn test_insert_remove_round_trip() → ∅:
 
 @test
 fn test_get_in_range() → ∅:
-    let v : mut = [10, 20, 30]
+    let v := [10, 20, 30]
     assert_eq(v.get(0), ∃(10))
     assert_eq(v.get(2), ∃(30))
 
 @test
 fn test_get_out_of_range_is_none() → ∅:
-    let v : mut = [1, 2]
+    let v := [1, 2]
     assert_eq(v.get(2), ∅)
     assert_eq(v.get(99), ∅)
 
 @test
 fn test_get_on_empty() → ∅:
-    let v : mut = []
+    let v := []
     assert_eq(v.get(0), ∅)
 
 // The optional composes with ?? to supply a default.
 @test
 fn test_get_with_default() → ∅:
-    let v : mut = [1, 2]
+    let v := [1, 2]
     assert_eq(v.get(0) ?? ⁻1, 1)
     assert_eq(v.get(9) ?? ⁻1, ⁻1)
 
@@ -143,7 +143,7 @@ fn test_get_with_default() → ∅:
 // of 0 is a value that is there.
 @test
 fn test_get_presence_not_truth() → ∅:
-    let v : mut = [0]
+    let v := [0]
     let present : mut = false
     if v.get(0):
         present ← true
@@ -221,7 +221,7 @@ fn test_push_coerces_to_element_type() → ∅:
 // An index carries the same unit rule as a subscript does.
 @test
 fn test_index_unit_is_accepted() → ∅:
-    let v : mut = std.bytes("abc")
+    let v := std.bytes("abc")
     assert_eq(v.get(1¤byte), ∃(98))
 
 @expect error "array index requires unit"
@@ -308,8 +308,8 @@ fn test_fixed_array_reads_and_writes_elements() → ∅:
 // one every time round and never advance.
 @test
 fn test_fixed_array_iterates() → ∅:
-    let v : mut i32[3] = [1, 2, 3]
-    let it : mut = v.iterate()
+    let v : i32[3] = [1, 2, 3]
+    let it := v.iterate()
     let total : mut = 0
     while e := it.next():
         total ← total + e
@@ -338,7 +338,7 @@ fn error_fixed_stays_fixed_when_passed() → ∅:
 // type decides.
 @test
 fn test_fixed_to_dynamic_becomes_dynamic() → ∅:
-    let f : mut i32[3] = [1, 2, 3]
+    let f : i32[3] = [1, 2, 3]
     let d : mut i32[] = f
     d.push(4)
     assert_eq(d.sizeof, 4)
@@ -380,7 +380,7 @@ fn grows_by_copy(a : mut i32[]) → i32:
 
 @test
 fn test_fixed_into_mutable_dynamic_param_by_value() → ∅:
-    let f : mut i32[3] = [1, 2, 3]
+    let f : i32[3] = [1, 2, 3]
     assert_eq(grows_by_copy(f), 4)
     // The caller's array is untouched, and still fixed.
     assert_eq(f.sizeof, 3)
@@ -416,13 +416,13 @@ fn reads_dynamic(a : i32[]) → i32:
 
 @test
 fn test_fixed_into_immutable_dynamic_param() → ∅:
-    let f : mut i32[3] = [1, 2, 3]
+    let f : i32[3] = [1, 2, 3]
     assert_eq(reads_dynamic(f), 4)
 
 // A dynamic array is what a resizable parameter asks for.
 @test
 fn test_dynamic_into_mutable_dynamic_param() → ∅:
-    let d : mut i32[] = [1, 2, 3]
+    let d : i32[] = [1, 2, 3]
     grows_by_copy(d)
     assert_eq(d.sizeof, 3)
 
@@ -434,6 +434,6 @@ fn writes_element(a : mut i32[3]) → i32:
 
 @test
 fn test_fixed_into_fixed_param() → ∅:
-    let f : mut i32[3] = [1, 2, 3]
+    let f : i32[3] = [1, 2, 3]
     assert_eq(writes_element(f), 9)
     assert_eq(f[0], 1)

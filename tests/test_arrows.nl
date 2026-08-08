@@ -25,7 +25,7 @@ fn test_ascii_arrow_array_assign():
 // -> in lambda return type (ASCII form)
 @test
 fn test_ascii_arrow_lambda():
-  let f : mut = λx : int -> int: x * 3
+  let f := λx : int -> int: x * 3
   assert_eq(15, f(5))
 
 // Mix: ASCII -> for return, Unicode ← for assignment
@@ -41,13 +41,13 @@ fn double_unicode(x: i32) → i32:
 
 @test
 fn test_unicode_arrow_return():
-  let x : mut = double_unicode(7)
+  let x := double_unicode(7)
   assert_eq(14, x)
 
 // Unicode → in lambda
 @test
 fn test_unicode_arrow_lambda():
-  let f : mut = λx : int → int: x + 10
+  let f := λx : int → int: x + 10
   assert_eq(42, f(32))
 
 @start

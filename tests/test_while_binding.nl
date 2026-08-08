@@ -11,8 +11,8 @@
 
 @test
 fn test_binds_each_iteration() → ∅:
-    let v : mut = [1, 2, 3]
-    let it : mut = v.iterate()
+    let v := [1, 2, 3]
+    let it := v.iterate()
     let total : mut = 0
     while e := it.next():
         total ← total + e
@@ -21,8 +21,8 @@ fn test_binds_each_iteration() → ∅:
 // The expression runs once per iteration, not once for the whole loop.
 @test
 fn test_expression_is_re_evaluated() → ∅:
-    let source : mut = [5, 4, 3]
-    let it : mut = source.iterate()
+    let source := [5, 4, 3]
+    let it := source.iterate()
     let seen : mut = []
     while e := it.next():
         seen.push(e)
@@ -33,8 +33,8 @@ fn test_expression_is_re_evaluated() → ∅:
 // A loop whose first value is absent runs its body no times.
 @test
 fn test_empty_runs_body_never() → ∅:
-    let v : mut = []
-    let it : mut = v.iterate()
+    let v := []
+    let it := v.iterate()
     let ran : mut = 0
     while e := it.next():
         ran ← ran + 1
@@ -43,8 +43,8 @@ fn test_empty_runs_body_never() → ∅:
 // The test is on the bound value, so a falsy element does not stop it.
 @test
 fn test_falsy_values_continue() → ∅:
-    let v : mut = [0, 0]
-    let it : mut = v.iterate()
+    let v := [0, 0]
+    let it := v.iterate()
     let ran : mut = 0
     while e := it.next():
         ran ← ran + 1
@@ -69,8 +69,8 @@ fn test_binding_a_plain_value() → ∅:
 // value itself -- the value in Rust's Some(value), not the Some.
 @test
 fn test_bound_to_the_value_itself() → ∅:
-    let v : mut i32[] = [3]
-    let it : mut = v.iterate()
+    let v : i32[] = [3]
+    let it := v.iterate()
     while e := it.next():
         static_assert_eq(@typeof(e), "i32")
         assert_eq(e + 1, 4)
@@ -102,8 +102,8 @@ fn test_unwraps_get() → ∅:
 // added to it, and every element larger by one afterwards.
 @test
 fn test_mut_binding_updates_the_vector() → ∅:
-    let v : mut i32[] = [1, 2, 3, 4]
-    let it : mut = v.iterate()
+    let v : i32[] = [1, 2, 3, 4]
+    let it := v.iterate()
     while e : mut = it.next():
         e ← e + 1
     assert_eq(v[0], 2)
@@ -114,8 +114,8 @@ fn test_mut_binding_updates_the_vector() → ∅:
 // The change is real, not a view of a copy.
 @test
 fn test_mut_binding_result_is_observable() → ∅:
-    let v : mut i32[] = [10, 20]
-    let it : mut = v.iterate()
+    let v : i32[] = [10, 20]
+    let it := v.iterate()
     while e : mut = it.next():
         e ← e + 1
     let total : mut = 0
@@ -126,16 +126,16 @@ fn test_mut_binding_result_is_observable() → ∅:
 // A mut binding names the element, so its type is a mutable reference.
 @test
 fn test_mut_binding_type() → ∅:
-    let v : mut i32[] = [1]
-    let it : mut = v.iterate()
+    let v : i32[] = [1]
+    let it := v.iterate()
     while e : mut = it.next():
         static_assert_eq(@typeof(e), "&mut i32")
 
 // Without mut the binding is a copy, and the vector is left alone.
 @test
 fn test_plain_binding_does_not_write_back() → ∅:
-    let v : mut i32[] = [1, 2, 3]
-    let it : mut = v.iterate()
+    let v : i32[] = [1, 2, 3]
+    let it := v.iterate()
     let seen : mut = 0
     while e := it.next():
         seen ← seen + e
@@ -158,8 +158,8 @@ fn error_mut_on_a_plain_value() → ∅:
 
 @test
 fn test_typed_binding() → ∅:
-    let v : mut = [7, 8]
-    let it : mut = v.iterate()
+    let v := [7, 8]
+    let it := v.iterate()
     let total : mut = 0
     while e : int = it.next():
         total ← total + e
@@ -180,8 +180,8 @@ fn error_assign_to_bound_variable() → ∅:
 // Its type can be asked for inside the body.
 @test
 fn test_typeof_bound_variable() → ∅:
-    let v : mut = [1]
-    let it : mut = v.iterate()
+    let v := [1]
+    let it := v.iterate()
     while e := it.next():
         static_assert_eq(@typeof(e), "int")
 
@@ -216,12 +216,12 @@ fn test_inline_body() → ∅:
 // Nested loops each keep their own binding.
 @test
 fn test_nested_bindings() → ∅:
-    let outer : mut = [1, 2]
-    let oit : mut = outer.iterate()
+    let outer := [1, 2]
+    let oit := outer.iterate()
     let total : mut = 0
     while a := oit.next():
-        let inner : mut = [10, 20]
-        let iit : mut = inner.iterate()
+        let inner := [10, 20]
+        let iit := inner.iterate()
         while b := iit.next():
             total ← total + (a * b)
     assert_eq(total, 90)

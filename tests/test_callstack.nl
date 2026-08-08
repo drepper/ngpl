@@ -14,8 +14,8 @@
 // Each entry is a (name, line, column) tuple.
 @test
 fn test_frame_shape() → ∅:
-    let frames : mut = std.callstack()
-    let top : mut = frames[0]
+    let frames := std.callstack()
+    let top := frames[0]
     assert_eq(top[0], "test_frame_shape")
     assert(top[1] > 0)
 
@@ -31,7 +31,7 @@ fn level_two() → str:
     level_three()
 
 fn level_three() → str:
-    let frames : mut = std.callstack()
+    let frames := std.callstack()
     frames[0][0]
 
 // A function three levels down still names itself at entry 0.
@@ -41,7 +41,7 @@ fn test_names_own_frame() → ∅:
 
 // The callers appear after it, outward in order.
 fn check_chain() → bool:
-    let frames : mut = std.callstack()
+    let frames := std.callstack()
     assert_eq(frames[0][0], "check_chain")
     assert_eq(frames[1][0], "outer_of_chain")
     assert_eq(frames[2][0], "test_chain_order")
@@ -56,7 +56,7 @@ fn test_chain_order() → ∅:
 
 // The stack grows and shrinks with the calls it describes.
 fn depth() → int:
-    let frames : mut = std.callstack()
+    let frames := std.callstack()
     frames.sizeof
 
 fn depth_plus_one() → int:

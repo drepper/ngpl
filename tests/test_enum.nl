@@ -10,7 +10,7 @@ enum Color:
 
 @test
 fn test_enum_member_access() → ∅:
-    let c : mut = Color.red
+    let c := Color.red
     assert_eq(c, Color.red)
 
 @test
@@ -21,9 +21,9 @@ fn test_enum_sequential_values() → ∅:
 
 @test
 fn test_enum_equality() → ∅:
-    let a : mut = Color.red
-    let b : mut = Color.red
-    let c : mut = Color.blue
+    let a := Color.red
+    let b := Color.red
+    let c := Color.blue
     assert(a == b)
     assert(not (a == c))
     assert(a != c)
@@ -67,7 +67,7 @@ enum SmallEnum : u8:
 
 @test
 fn test_enum_underlying_type() → ∅:
-    let x : mut = SmallEnum.a
+    let x := SmallEnum.a
     assert(x == 0)
     assert(x == SmallEnum.a)
 
@@ -91,37 +91,37 @@ fn test_flag_nil_auto_created() → ∅:
 
 @test
 fn test_flag_combine_or() → ∅:
-    let rw : mut = Perms.read | Perms.write
+    let rw := Perms.read | Perms.write
     assert(rw == 3)
 
 @test
 fn test_flag_combine_all() → ∅:
-    let all : mut = Perms.read | Perms.write | Perms.exec
+    let all := Perms.read | Perms.write | Perms.exec
     assert(all == 7)
 
 @test
 fn test_flag_and() → ∅:
-    let rw : mut = Perms.read | Perms.write
-    let r : mut = rw & Perms.read
+    let rw := Perms.read | Perms.write
+    let r := rw & Perms.read
     assert_eq(r, Perms.read)
 
 @test
 fn test_flag_xor() → ∅:
-    let rw : mut = Perms.read | Perms.write
-    let toggled : mut = rw ^ Perms.write
+    let rw := Perms.read | Perms.write
+    let toggled := rw ^ Perms.write
     assert_eq(toggled, Perms.read)
 
 @test
 fn test_flag_not() → ∅:
-    let rw : mut = Perms.read | Perms.write
-    let notrw : mut = ~rw
+    let rw := Perms.read | Perms.write
+    let notrw := ~rw
     assert_eq(notrw, Perms.exec)
 
 @test
 fn test_flag_and_test_membership() → ∅:
-    let rw : mut = Perms.read | Perms.write
-    let has_read : mut = (rw & Perms.read) == Perms.read
-    let has_exec : mut = (rw & Perms.exec) == Perms.exec
+    let rw := Perms.read | Perms.write
+    let has_read := (rw & Perms.read) == Perms.read
+    let has_exec := (rw & Perms.exec) == Perms.exec
     assert(has_read)
     assert(not has_exec)
 
@@ -158,7 +158,7 @@ fn test_flag_explicit_zero_no_nil() → ∅:
 
 @test
 fn test_std_errors_runtime() → ∅:
-    let e : mut = std.errors.division_by_zero
+    let e := std.errors.division_by_zero
     assert(e == 100)
     assert_eq(e, std.errors.division_by_zero)
 
@@ -177,13 +177,13 @@ fn test_std_errors_library() → ∅:
 @test
 fn test_std_errors_grouping() → ∅:
     // Runtime errors are in 100-199
-    let div : mut = std.errors.division_by_zero
+    let div := std.errors.division_by_zero
     assert(div == 100 ∧ 100 <= 199)
     // Compile errors are in 200-299
-    let typ : mut = std.errors.type_mismatch
+    let typ := std.errors.type_mismatch
     assert(typ == 200 ∧ 200 <= 299)
     // Library errors are in 300-399
-    let fnf : mut = std.errors.file_not_found
+    let fnf := std.errors.file_not_found
     assert(fnf == 300 ∧ 300 <= 399)
 
 // ---- invalid operations on non-flag enums --------------------------------

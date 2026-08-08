@@ -4,13 +4,13 @@
 fn test_reshape_view_write() → ∅:
   let a: mut i32[] = 16 ⍴ 0
   ((4, 4) ⍴ a)[1…2,1…2] = (2, 2) ⍴ 1
-  let exp: mut i32[16] = [0,0,0,0,0,1,1,0,0,1,1,0,0,0,0,0]
+  let exp: i32[16] = [0,0,0,0,0,1,1,0,0,1,1,0,0,0,0,0]
   assert_eq(a, exp)
 
 @test
 fn test_reshape_view_read() → ∅:
   let a: mut i32[] = 1…16
-  let m : mut = (4, 4) ⍴ a
+  let m := (4, 4) ⍴ a
   assert_eq(m[0, 0], 1)
   assert_eq(m[1, 1], 6)
   assert_eq(m[3, 3], 16)
@@ -46,7 +46,7 @@ fn reshape_by_val(arr : mut i32[]) → ∅:
 
 @test
 fn test_reshape_val_no_modify() → ∅:
-  let a : mut i32[] = 4 ⍴ 0
+  let a : i32[] = 4 ⍴ 0
   reshape_by_val(a)
   assert_eq(a[1], 0)
 
@@ -74,7 +74,7 @@ fn set_element_val(arr : mut i32[], idx, val : i32) → ∅:
 
 @test
 fn test_element_val_no_modify() → ∅:
-  let a : mut i32[] = [10, 20, 30]
+  let a : i32[] = [10, 20, 30]
   set_element_val(a, 1, 77)
   assert_eq(a[1], 20)
 
@@ -88,7 +88,7 @@ fn sum_dynamic(arr : i32[]) → i32:
 
 @test
 fn test_dynamic_accepts_fixed() → ∅:
-  let a : mut i32[3] = [10, 20, 30]
+  let a : i32[3] = [10, 20, 30]
   assert_eq(sum_dynamic(a), 60)
 
 // --- fixed-size param accepts dynamic array of exact size ------------------
@@ -98,14 +98,14 @@ fn sum_fixed(arr : i32[3]) → i32:
 
 @test
 fn test_fixed_accepts_dynamic_exact() → ∅:
-  let a : mut i32[] = [10, 20, 30]
+  let a : i32[] = [10, 20, 30]
   assert_eq(sum_fixed(a), 60)
 
 // --- fixed-size param also accepts fixed-size of same length ---------------
 
 @test
 fn test_fixed_accepts_fixed_same() → ∅:
-  let a : mut i32[3] = [10, 20, 30]
+  let a : i32[3] = [10, 20, 30]
   assert_eq(sum_fixed(a), 60)
 
 @start

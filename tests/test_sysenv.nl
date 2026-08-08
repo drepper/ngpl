@@ -12,20 +12,20 @@
 // all() reports as many parameters as count() promises.
 @test
 fn test_args_count_matches_all() → ∅:
-    let params : mut = std.args.all()
+    let params := std.args.all()
     assert_eq(params.sizeof, std.args.count())
 
 // get(i) and all()[i] name the same parameter.
 @test
 fn test_args_get_matches_all() → ∅:
-    let params : mut = std.args.all()
+    let params := std.args.all()
     foreach i, v := enumerate(params):
         assert_eq(std.args.get(i), ∃(v))
 
 // The program name is always known, even with no parameters.
 @test
 fn test_args_program_present() → ∅:
-    let name : mut = std.args.program()
+    let name := std.args.program()
     assert(name.sizeof > 0)
 
 // Indexing past the last parameter is an error, not a silent empty string.
@@ -41,7 +41,7 @@ fn error_args_get_out_of_range() → ∅:
 // names() reports as many variables as count() promises.
 @test
 fn test_env_count_matches_names() → ∅:
-    let names : mut = std.env.names()
+    let names := std.env.names()
     assert_eq(names.sizeof, std.env.count())
 
 // Every listed variable is present and has a value.
@@ -54,14 +54,14 @@ fn test_env_listed_names_resolve() → ∅:
 // A variable that is not set reads as ∅ rather than an empty string.
 @test
 fn test_env_missing_is_none() → ∅:
-    let missing : mut = std.env.get("NGPL_NO_SUCH_VARIABLE_EXISTS")
+    let missing := std.env.get("NGPL_NO_SUCH_VARIABLE_EXISTS")
     assert_eq(missing, ∅)
     assert(¬std.env.has("NGPL_NO_SUCH_VARIABLE_EXISTS"))
 
 // The ?? operator supplies a default for an unset variable.
 @test
 fn test_env_default() → ∅:
-    let shell : mut = std.env.get("NGPL_NO_SUCH_VARIABLE_EXISTS") ?? "fallback"
+    let shell := std.env.get("NGPL_NO_SUCH_VARIABLE_EXISTS") ?? "fallback"
     assert_eq(shell, "fallback")
 
 // ---------------------------------------------------------------------
@@ -83,13 +83,13 @@ fn test_sys_cpu_counts_ordered() → ∅:
 // usable_cpus() is exactly the population count of the affinity mask.
 @test
 fn test_sys_affinity_matches_usable() → ∅:
-    let cpus : mut = std.sys.affinity_cpus()
+    let cpus := std.sys.affinity_cpus()
     assert_eq(cpus.sizeof, std.sys.usable_cpus())
 
 // Every CPU id listed is actually set in the mask, and the ids ascend.
 @test
 fn test_sys_affinity_cpus_consistent() → ∅:
-    let mask : mut = std.sys.affinity()
+    let mask := std.sys.affinity()
     let previous : mut = ⁻1
     foreach cpu := std.sys.affinity_cpus():
         assert(((mask >> cpu) & 1) == 1)
@@ -99,7 +99,7 @@ fn test_sys_affinity_cpus_consistent() → ∅:
 // Memory sizes are positive and the page size is a power of two.
 @test
 fn test_sys_memory() → ∅:
-    let page : mut = std.sys.page_size()
+    let page := std.sys.page_size()
     assert(page > 0)
     assert((page & (page - 1)) == 0)
     assert(std.sys.total_memory() >= page)

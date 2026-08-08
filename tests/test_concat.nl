@@ -4,9 +4,9 @@
 
 @test
 fn test_concat_two_arrays():
-    let a : mut = [1, 2, 3]
-    let b : mut = [4, 5]
-    let c : mut = a ⧺ b
+    let a := [1, 2, 3]
+    let b := [4, 5]
+    let c := a ⧺ b
     assert_eq(c.sizeof, 5)
     assert_eq(c[0], 1)
     assert_eq(c[4], 5)
@@ -15,17 +15,17 @@ fn test_concat_two_arrays():
 
 @test
 fn test_concat_empty_left():
-    let a : mut = 0 ⍴ [0]
-    let b : mut = [1, 2]
-    let c : mut = a ⧺ b
+    let a := 0 ⍴ [0]
+    let b := [1, 2]
+    let c := a ⧺ b
     assert_eq(c.sizeof, 2)
     assert_eq(c[0], 1)
 
 @test
 fn test_concat_empty_right():
-    let a : mut = [1, 2]
-    let b : mut = 0 ⍴ [0]
-    let c : mut = a ⧺ b
+    let a := [1, 2]
+    let b := 0 ⍴ [0]
+    let c := a ⧺ b
     assert_eq(c.sizeof, 2)
     assert_eq(c[1], 2)
 
@@ -33,7 +33,7 @@ fn test_concat_empty_right():
 
 @test
 fn test_concat_chain():
-    let r : mut = [1] ⧺ [2] ⧺ [3]
+    let r := [1] ⧺ [2] ⧺ [3]
     assert_eq(r.sizeof, 3)
     assert_eq(r[0], 1)
     assert_eq(r[1], 2)
@@ -43,8 +43,8 @@ fn test_concat_chain():
 
 @test
 fn test_concat_with_reshape():
-    let a : mut = [10, 20]
-    let b : mut = a ⧺ 3 ⍴ [0]
+    let a := [10, 20]
+    let b := a ⧺ 3 ⍴ [0]
     assert_eq(b.sizeof, 5)
     assert_eq(b[0], 10)
     assert_eq(b[1], 20)
@@ -73,7 +73,7 @@ fn test_concat_typed_arrays():
     a[0] ← 100
     a[1] ← 200
     b[0] ← 300
-    let c : mut = a ⧺ b
+    let c := a ⧺ b
     assert_eq(c.sizeof, 5)
     assert_eq(c[0], 100)
     assert_eq(c[2], 300)

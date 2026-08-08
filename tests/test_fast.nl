@@ -14,7 +14,7 @@ fn test_fast_wrapping() → ∅:
 
 @test
 fn test_fast_signed() → ∅:
-    let x : mut i8fast = ⁻1
+    let x : i8fast = ⁻1
     // i8fast is 32-bit signed, so ⁻1 stays ⁻1 (no 8-bit wrapping).
     assert_eq(x, ⁻1)
 

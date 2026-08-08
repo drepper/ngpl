@@ -81,34 +81,34 @@ fn test_precedence_neg():
 // --- Overflow detected ---
 
 fn test_overflow():
-  let x: mut i8 = 2
+  let x: i8 = 2
   @expect error "overflow"
   let r : mut = x ↑ 8
 
 // --- Power with units ---
 
 fn test_unit_pow():
-  let d ¤meter : mut = 3.0
-  let area : mut = d ↑ 2
+  let d ¤meter := 3.0
+  let area := d ↑ 2
   // 3.0 m ^ 2 = 9.0 m^2
   approx_eq(area, 9.0, "3.0m ↑ 2 value")
   std.print(area)
 
 fn test_unit_pow_cube():
-  let d ¤meter : mut = 2.0
-  let vol : mut = d ↑ 3
+  let d ¤meter := 2.0
+  let vol := d ↑ 3
   // 2.0 m ^ 3 = 8.0 m^3
   approx_eq(vol, 8.0, "2.0m ↑ 3 value")
 
 fn test_unit_pow_zero():
-  let d ¤meter : mut = 5.0
-  let r : mut = d ↑ 0
+  let d ¤meter := 5.0
+  let r := d ↑ 0
   // m^0 = dimensionless
   approx_eq(r, 1.0, "5.0m ↑ 0 dimensionless")
 
 fn test_unit_exp_rejected():
-  let d ¤meter : mut = 5.0
-  let e ¤second : mut = 2.0
+  let d ¤meter := 5.0
+  let e ¤second := 2.0
   @expect error "exponent cannot have a unit"
   let r : mut = d ↑ e
 

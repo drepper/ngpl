@@ -17,8 +17,8 @@
 
 @test
 fn test_array_iterate_in_order() → ∅:
-    let v : mut = [10, 20, 30]
-    let it : mut = v.iterate()
+    let v := [10, 20, 30]
+    let it := v.iterate()
     assert_eq(it.next(), ∃(10))
     assert_eq(it.next(), ∃(20))
     assert_eq(it.next(), ∃(30))
@@ -26,23 +26,23 @@ fn test_array_iterate_in_order() → ∅:
 // Exhaustion is reported as ∅, and stays ∅ on further calls.
 @test
 fn test_array_iterate_ends_with_none() → ∅:
-    let v : mut = [1]
-    let it : mut = v.iterate()
+    let v := [1]
+    let it := v.iterate()
     assert_eq(it.next(), ∃(1))
     assert_eq(it.next(), ∅)
     assert_eq(it.next(), ∅)
 
 @test
 fn test_array_iterate_empty() → ∅:
-    let v : mut = []
-    let it : mut = v.iterate()
+    let v := []
+    let it := v.iterate()
     assert_eq(it.next(), ∅)
 
 // The usual shape of a loop over an iterator.
 @test
 fn test_array_iterate_loop() → ∅:
-    let v : mut = [1, 2, 3, 4]
-    let it : mut = v.iterate()
+    let v := [1, 2, 3, 4]
+    let it := v.iterate()
     let total : mut = 0
     while e := it.next():
         total ← total + e
@@ -51,9 +51,9 @@ fn test_array_iterate_loop() → ∅:
 // Two iterators over one array advance independently.
 @test
 fn test_array_iterators_are_independent() → ∅:
-    let v : mut = [1, 2, 3]
-    let a : mut = v.iterate()
-    let b : mut = v.iterate()
+    let v := [1, 2, 3]
+    let a := v.iterate()
+    let b := v.iterate()
     assert_eq(a.next(), ∃(1))
     assert_eq(a.next(), ∃(2))
     assert_eq(b.next(), ∃(1))
@@ -62,7 +62,7 @@ fn test_array_iterators_are_independent() → ∅:
 @test
 fn test_array_iterator_sees_later_writes() → ∅:
     let v : mut = [1, 2]
-    let it : mut = v.iterate()
+    let it := v.iterate()
     assert_eq(it.next(), ∃(1))
     v[1] ← 99
     assert_eq(it.next(), ∃(99))
@@ -70,8 +70,8 @@ fn test_array_iterator_sees_later_writes() → ∅:
 // Iterating a byte array yields its bytes.
 @test
 fn test_iterate_byte_array() → ∅:
-    let b : mut = std.bytes("abc")
-    let it : mut = b.iterate()
+    let b := std.bytes("abc")
+    let it := b.iterate()
     assert_eq(it.next(), ∃(97))
     assert_eq(it.next(), ∃(98))
     assert_eq(it.next(), ∃(99))
@@ -84,8 +84,8 @@ fn test_iterate_byte_array() → ∅:
 // An element of 0 is a value, so it does not end the loop.
 @test
 fn test_falsy_elements_do_not_end_iteration() → ∅:
-    let v : mut = [0, 0, 0]
-    let it : mut = v.iterate()
+    let v := [0, 0, 0]
+    let it := v.iterate()
     let count : mut = 0
     while e := it.next():
         count ← count + 1
@@ -94,8 +94,8 @@ fn test_falsy_elements_do_not_end_iteration() → ∅:
 // Nor does an empty string or a false.
 @test
 fn test_other_falsy_elements() → ∅:
-    let s : mut = ["", "x"]
-    let it : mut = s.iterate()
+    let s := ["", "x"]
+    let it := s.iterate()
     let count : mut = 0
     while e := it.next():
         count ← count + 1
@@ -105,8 +105,8 @@ fn test_other_falsy_elements() → ∅:
 // carry ∅ without it being mistaken for the end.
 @test
 fn test_none_element_is_still_present() → ∅:
-    let v : mut = [∅, 1]
-    let it : mut = v.iterate()
+    let v := [∅, 1]
+    let it := v.iterate()
     let count : mut = 0
     while e := it.next():
         count ← count + 1
@@ -126,8 +126,8 @@ fn test_bare_values_keep_their_truthiness() → ∅:
 // Comparing with ∅ remains a correct way to write the same test.
 @test
 fn test_comparison_with_none_still_works() → ∅:
-    let v : mut = [1, 2]
-    let it : mut = v.iterate()
+    let v := [1, 2]
+    let it := v.iterate()
     let count : mut = 0
     let e : mut = it.next()
     while e != ∅:
@@ -154,8 +154,8 @@ fn error_iterator_other_method() → ∅:
 // Every entry has a name, and no entry is empty.
 @test
 fn test_directory_entries_have_names() → ∅:
-    let dir : mut = std.fs.cwd()
-    let it : mut = dir.iterate()
+    let dir := std.fs.cwd()
+    let it := dir.iterate()
     let count : mut = 0
     while e := it.next():
         assert(e.name.sizeof > 0)
@@ -165,8 +165,8 @@ fn test_directory_entries_have_names() → ∅:
 // A known regular file is found, with the right type.
 @test
 fn test_directory_finds_regular_file() → ∅:
-    let dir : mut = std.fs.cwd()
-    let it : mut = dir.iterate()
+    let dir := std.fs.cwd()
+    let it := dir.iterate()
     let found : mut = false
     while e := it.next():
         if e.name == "CLAUDE.md":
@@ -177,8 +177,8 @@ fn test_directory_finds_regular_file() → ∅:
 // A known subdirectory is found, with the right type.
 @test
 fn test_directory_finds_subdirectory() → ∅:
-    let dir : mut = std.fs.cwd()
-    let it : mut = dir.iterate()
+    let dir := std.fs.cwd()
+    let it := dir.iterate()
     let found : mut = false
     while e := it.next():
         if e.name == "interp":
@@ -191,8 +191,8 @@ fn test_directory_finds_subdirectory() → ∅:
 // for ever by forgetting to.
 @test
 fn test_directory_omits_dot_entries() → ∅:
-    let dir : mut = std.fs.cwd()
-    let it : mut = dir.iterate()
+    let dir := std.fs.cwd()
+    let it := dir.iterate()
     while e := it.next():
         assert(e.name != ".")
         assert(e.name != "..")
@@ -200,8 +200,8 @@ fn test_directory_omits_dot_entries() → ∅:
 // Exhaustion is reported the same way as for an array.
 @test
 fn test_directory_ends_with_none() → ∅:
-    let dir : mut = std.fs.cwd()
-    let it : mut = dir.iterate()
+    let dir := std.fs.cwd()
+    let it := dir.iterate()
     while e := it.next():
         _ ← e
     assert_eq(it.next(), ∅)
@@ -209,10 +209,10 @@ fn test_directory_ends_with_none() → ∅:
 // Every entry's type is one the enum names.
 @test
 fn test_directory_types_are_known() → ∅:
-    let dir : mut = std.fs.cwd()
-    let it : mut = dir.iterate()
+    let dir := std.fs.cwd()
+    let it := dir.iterate()
     while e := it.next():
-        let t : mut = e.type
+        let t := e.type
         assert(t == std.filetype.reg ∨ t == std.filetype.dir
                ∨ t == std.filetype.lnk ∨ t == std.filetype.fifo
                ∨ t == std.filetype.chr ∨ t == std.filetype.blk

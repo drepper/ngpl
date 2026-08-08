@@ -8,45 +8,45 @@
 
 @test
 fn test_wrap_i8_add() → ∅:
-    let x : mut i8 = 127
-    let y : mut i8 = 1
-    let z : mut = @wrap(x + y)
+    let x : i8 = 127
+    let y : i8 = 1
+    let z := @wrap(x + y)
     assert_eq(z, ⁻128)
 
 @test
 fn test_wrap_i8_sub() → ∅:
-    let x : mut i8 = ⁻128
-    let y : mut i8 = 1
-    let z : mut = @wrap(x - y)
+    let x : i8 = ⁻128
+    let y : i8 = 1
+    let z := @wrap(x - y)
     assert_eq(z, 127)
 
 @test
 fn test_wrap_i8_mul() → ∅:
-    let x : mut i8 = 64
-    let y : mut i8 = 4
-    let z : mut = @wrap(x * y)
+    let x : i8 = 64
+    let y : i8 = 4
+    let z := @wrap(x * y)
     assert_eq(z, 0)
 
 @test
 fn test_wrap_i32_add() → ∅:
-    let x : mut i32 = 2147483647
-    let y : mut i32 = 1
-    let z : mut = @wrap(x + y)
+    let x : i32 = 2147483647
+    let y : i32 = 1
+    let z := @wrap(x + y)
     assert_eq(z, ⁻2147483648)
 
 @test
 fn test_wrap_i32_negate() → ∅:
-    let x : mut i32 = ⁻2147483648
-    let z : mut = @wrap(⁻x)
+    let x : i32 = ⁻2147483648
+    let z := @wrap(⁻x)
     assert_eq(z, ⁻2147483648)
 
 // ---- @wrap on unsigned types: still wraps as expected --------------------
 
 @test
 fn test_wrap_u32_add() → ∅:
-    let x : mut u32 = 4294967295
-    let y : mut u32 = 2
-    let z : mut = @wrap(x + y)
+    let x : u32 = 4294967295
+    let y : u32 = 2
+    let z := @wrap(x + y)
     assert_eq(z, 1)
 
 // ---- @wrap does not affect operations outside its scope -----------------
@@ -63,10 +63,10 @@ fn error_no_wrap_i8() → ∅:
 
 @test
 fn test_wrap_chained_add() → ∅:
-    let a : mut i8 = 100
-    let b : mut i8 = 100
-    let c : mut i8 = 100
-    let z : mut = @wrap(a + b + c)
+    let a : i8 = 100
+    let b : i8 = 100
+    let c : i8 = 100
+    let z := @wrap(a + b + c)
     assert_eq(z, 44)
 
 @start

@@ -37,7 +37,7 @@ fn get_padded_byte(data : byte[], off ¤byte : usize, total_size ¤byte : usize)
     if off >= total_size: return ∅
     if off < data.sizeof: return data[off]
     if off == data.sizeof: return 128
-    let len_start : mut = total_size - 8
+    let len_start := total_size - 8
     if off >= len_start:
         let bit_len := data.sizeof * 8
         let byte_idx := off - len_start
@@ -90,7 +90,7 @@ fn sha256(data : byte[]) → int?:
     // Process each 64-byte block.
     foreach blk_off := 0…64…(total_size - 1):
         // --- Load W[0..63]: first 16 from data, rest filled by expansion. ---
-        let load_word : mut = λi : usize |data, blk_off, total_size| → u32: get_padded_word(data, blk_off + i * 4 ¤byte, total_size) ?? 0
+        let load_word := λi : usize |data, blk_off, total_size| → u32: get_padded_word(data, blk_off + i * 4 ¤byte, total_size) ?? 0
         let W : mut = generate(load_word, 0…15) ⧺ 48 ⍴ [0]
 
         // --- Message-schedule expansion: W[16..63]. ---
@@ -141,30 +141,30 @@ fn sha256(data : byte[]) → int?:
 
 @test(sha256)
 fn test_sha256_empty() → ∅:
-    let data : mut = std.bytes("")
-    let hash : mut = sha256(data)
+    let data := std.bytes("")
+    let hash := sha256(data)
     assert_eq(hash, ∃(0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855))
 
 @test(sha256)
 fn test_sha256_abc() → ∅:
-    let data : mut = std.bytes("abc")
-    let hash : mut = sha256(data)
+    let data := std.bytes("abc")
+    let hash := sha256(data)
     assert_eq(hash, ∃(0xba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad))
 
 @test(sha256)
 fn test_sha256_448bit() → ∅:
-    let data : mut = std.bytes("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")
-    let hash : mut = sha256(data)
+    let data := std.bytes("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")
+    let hash := sha256(data)
     assert_eq(hash, ∃(0x248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1))
 
 @start
 fn main() → ∅:
-    let alloc : mut = std.arena.allocator()
+    let alloc := std.arena.allocator()
     // The directory is only a way to reach the file, so it is left as a
     // temporary: its descriptor is released as this statement ends,
     // while the file it produced lives on in the binding below.
-    let file : mut = std.fs.cwd().open_file("CLAUDE.md")
-    let data : mut = file.read_file(alloc)
-    let hash : mut = sha256(data)
+    let file := std.fs.cwd().open_file("CLAUDE.md")
+    let data := file.read_file(alloc)
+    let hash := sha256(data)
     alloc.deinit()
     std.print(hash)

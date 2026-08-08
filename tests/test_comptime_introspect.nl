@@ -31,7 +31,7 @@ fn typeof_array_param(arr : i32[]) → ∅:
 
 @test
 fn test_typeof_array_param() → ∅:
-    let a : mut i32[] = [1, 2, 3]
+    let a : i32[] = [1, 2, 3]
     typeof_array_param(a)
 
 // --- @typeof on foreach loop variables ---
@@ -43,7 +43,7 @@ fn test_typeof_foreach_range() → ∅:
 
 @test
 fn test_typeof_foreach_array() → ∅:
-    let arr : mut = [10, 20, 30]
+    let arr := [10, 20, 30]
     foreach v := arr:
         static_assert_eq(@typeof(v), @typeof(0))
 
@@ -65,7 +65,7 @@ fn test_unitof_foreach_range() → ∅:
 
 @test
 fn test_unitof_foreach_stepped() → ∅:
-    let total ¤byte : mut = 128
+    let total ¤byte := 128
     foreach off := 0…64…(total - 1):
         static_assert_eq(@unitof(off), ¤byte)
 

@@ -4,7 +4,7 @@
 
 @test
 fn test_2d_read() → ∅:
-    let m : mut = (3, 4) ⍴ (1…12)
+    let m := (3, 4) ⍴ (1…12)
     assert_eq(m[0, 0], 1)
     assert_eq(m[0, 3], 4)
     assert_eq(m[1, 0], 5)
@@ -12,9 +12,9 @@ fn test_2d_read() → ∅:
 
 @test
 fn test_2d_read_variable_index() → ∅:
-    let m : mut = (2, 3) ⍴ [10, 20, 30, 40, 50, 60]
-    let r : mut = 1
-    let c : mut = 2
+    let m := (2, 3) ⍴ [10, 20, 30, 40, 50, 60]
+    let r := 1
+    let c := 2
     assert_eq(m[r, c], 60)
 
 // ---- 2D write access ----------------------------------------------------
@@ -31,8 +31,8 @@ fn test_2d_write() → ∅:
 @test
 fn test_2d_write_variable_index() → ∅:
     let m : mut = (2, 2) ⍴ 0
-    let r : mut = 1
-    let c : mut = 0
+    let r := 1
+    let c := 0
     m[r, c] ← 7
     assert_eq(m[1, 0], 7)
 
@@ -40,7 +40,7 @@ fn test_2d_write_variable_index() → ∅:
 
 @test
 fn test_3d_read() → ∅:
-    let a : mut = (2, 3, 4) ⍴ (1…24)
+    let a := (2, 3, 4) ⍴ (1…24)
     assert_eq(a[0, 0, 0], 1)
     assert_eq(a[0, 0, 3], 4)
     assert_eq(a[0, 2, 3], 12)
@@ -58,8 +58,8 @@ fn test_3d_write() → ∅:
 
 @test
 fn test_single_then_multi() → ∅:
-    let a : mut = (2, 3, 4) ⍴ (1…24)
-    let row : mut = a[1]
+    let a := (2, 3, 4) ⍴ (1…24)
+    let row := a[1]
     assert_eq(row[0, 0], 13)
     assert_eq(row[2, 3], 24)
 
@@ -67,7 +67,7 @@ fn test_single_then_multi() → ∅:
 
 @test
 fn test_equiv_chained() → ∅:
-    let m : mut = (3, 3) ⍴ (1…9)
+    let m := (3, 3) ⍴ (1…9)
     foreach r := 0…2:
         foreach c := 0…2:
             assert_eq(m[r, c], m[r][c])

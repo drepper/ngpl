@@ -51,7 +51,7 @@ fn test_struct_method() → ∅:
 // Mutable self method.
 @test
 fn test_struct_mut_method() → ∅:
-    let p : mut = Point.new(3.0, 4.0)
+    let p := Point.new(3.0, 4.0)
     p.scale(2.0)
     assert_eq(p.x, 6.0)
     assert_eq(p.y, 8.0)
@@ -91,7 +91,7 @@ impl Counter:
 // Counter with methods.
 @test
 fn test_counter() → ∅:
-    let c : mut = Counter.new()
+    let c := Counter.new()
     assert_eq(c.value(), 0)
     c.increment()
     assert_eq(c.value(), 1)
