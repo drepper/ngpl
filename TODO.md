@@ -109,8 +109,10 @@ Control Flow and Expressions
     results: ∃(name) binds a present value or a success, ∄(name) binds a failure's error,
     ∅ matches absence, _ matches the rest, and a value no arm accepts is an error.
     ∄(e) is also an expression, which is how a function originates an error rather than
-    propagating one.  Sum types will use the same statement.  Still missing: static
-    exhaustiveness, which needs the subject's type.
+    propagating one.  Sum types will use the same statement.  Exhaustiveness is checked
+    where the subject's type can be worked out -- a call with a declared return type,
+    division, a written-out ∃/∅/∄, or a builtin optional-returning method -- and at run
+    time otherwise; it will reach further as type inference grows.
 
 [ ] loop break/continue statements.  Non-local exits from nested loops.
 

@@ -1194,7 +1194,45 @@ match v.get(0):
 error: match has no arm for ∅; add the missing pattern or a _ arm
 ```
 
-An optional has exactly two shapes, so covering it means writing both arms or using `_`.  The check happens when the `match` runs, not when it is compiled: a `match` whose missing arm is never reached does not report anything.  Static exhaustiveness needs the type of the subject, which the interpreter does not yet track through arbitrary expressions.
+An optional has exactly two shapes and a result has two, so covering one means writing both arms or using `_`.
+
+The check happens where the `match` is written, not where it runs.  A gap is a property of the code, so a missing arm that only an unlucky input would reach is reported all the same:
+
+```
+fn never_called() → ∅:
+    let v : mut = [1]
+    match v.get(0):
+        ∃(x):
+            std.print(x)
+
+Error: in never_called: match has no arm for ∅; add the missing pattern
+or a _ arm
+```
+
+#### Patterns That Cannot Match
+
+A pattern belonging to a different type is reported as itself rather than as a missing arm, since naming the mistake is more use than naming its consequence:
+
+```
+match 10 / b:
+    ∃(v): use(v)
+    ∅: nothing()
+
+error: ∅ cannot match a result, whose failure is ∄(e)
+```
+
+Two further mistakes need no knowledge of the subject at all, and are always reported: a repeated pattern, and an arm written after `_`.  Both are arms that can never run.
+
+#### What Can Be Checked
+
+Exhaustiveness needs the subject's type.  It is known for:
+
+* a call to a function with a declared return type;
+* division and remainder, which produce a result;
+* `∃(...)`, `∅`, and `∄(...)` written out;
+* the standard library's optional-returning methods — `next`, `get`, `pop` — unless a struct in scope defines a method of that name, in which case nothing is assumed.
+
+Where it is not known — most often a `match` on a variable, whose type the interpreter does not track through assignment — no static claim is made and the gap is found when the `match` runs, as before.  This is the weaker half of the check and will shrink as type inference grows; nothing is reported wrongly in the meantime, since an undetermined type produces no diagnostic rather than a guess.
 
 #### Choosing Between `match`, `??`, and `while`
 
@@ -1216,9 +1254,9 @@ Three constructs handle an optional, and they are not interchangeable:
 | Swift | `.some(x)` / `.success(x)` | `nil` | `.failure(e)` | compile time |
 | Zig | `\|x\|` on `if`/`while` | `else` | `else \|e\|` | n/a (not a match) |
 | Scala | `Some(x)` / `Success(x)` | `None` | `Failure(e)` | compile time (warning) |
-| NGPL | `∃(x)` | `∅` | `∄(e)` | run time, for now |
+| NGPL | `∃(x)` | `∅` | `∄(e)` | compile time where the type is known |
 
-The shape is Rust's, and the glyphs read as the mathematical statements they are.  Where Rust needs four constructors across two types — `Some`/`None` and `Ok`/`Err` — the same three patterns serve both here, because `∃` asks only whether a value arrived and does not care which type carried it.  That is a smaller vocabulary for the same coverage, at the cost of not distinguishing an optional from a result in the pattern itself.  Where this falls short of Rust and Scala is exhaustiveness — theirs is a compile error, and here it is a runtime one until the type of a matched expression is tracked.  `match` is deliberately more general than optionals need: sum types will use the same statement, which is why the patterns are a list of shapes rather than a special form for `∃` and `∅`.
+The shape is Rust's, and the glyphs read as the mathematical statements they are.  Where Rust needs four constructors across two types — `Some`/`None` and `Ok`/`Err` — the same three patterns serve both here, because `∃` asks only whether a value arrived and does not care which type carried it.  That is a smaller vocabulary for the same coverage, at the cost of not distinguishing an optional from a result in the pattern itself.  Where this falls short of Rust and Scala is the reach of exhaustiveness rather than its existence: theirs follows from a type known for every expression, while here it covers the subjects whose type can be worked out and leaves the rest to a runtime check.  `match` is deliberately more general than optionals need: sum types will use the same statement, which is why the patterns are a list of shapes rather than a special form for `∃` and `∅`.
 
 
 ### Optionals in a Boolean Context

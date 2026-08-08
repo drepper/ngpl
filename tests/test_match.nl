@@ -213,10 +213,11 @@ fn test_match_result_wildcard() → ∅:
     assert_eq(took, "anything else")
 
 // ∅ does not stand in for a failure: an absent value and a failed one
-// are different answers, and a match that handles only absence has not
-// handled failure.
-@expect error "match has no arm for a failed result"
-fn error_result_needs_a_failure_arm() → ∅:
+// are different answers.  Writing ∅ for a result is caught as the wrong
+// pattern for the type, which is more use than being told an arm is
+// missing.
+@expect error "∅ cannot match a result"
+fn error_absent_pattern_on_a_result() → ∅:
     match 10 / 0:
         ∃(v):
             std.print(v)
@@ -224,14 +225,128 @@ fn error_result_needs_a_failure_arm() → ∅:
             std.print("none")
 
 // Nor does ∄ stand in for absence.
-@expect error "match has no arm for ∅"
-fn error_optional_needs_an_absent_arm() → ∅:
+@expect error "cannot match an optional, whose absence is"
+fn error_failure_pattern_on_an_optional() → ∅:
     let v : mut = []
     match v.get(0):
         ∃(x):
             std.print(x)
         ∄(e):
             std.print("err")
+
+// ---------------------------------------------------------------------
+// Coverage is checked when the function is defined
+// ---------------------------------------------------------------------
+//
+// These functions are never run.  The gap is found from the shape of the
+// code, so a match whose missing arm would only be reached on some
+// unlucky input is reported all the same.
+
+@expect error "match has no arm for ∅"
+fn error_optional_missing_absent_arm() → ∅:
+    let v : mut = [1]
+    match v.get(0):
+        ∃(x):
+            std.print(x)
+
+@expect error "match has no arm for a failed result"
+fn error_result_missing_failure_arm() → ∅:
+    match 10 / 2:
+        ∃(v):
+            std.print(v)
+
+// A function's declared return type says which shapes its value has.
+fn returns_optional(n : int) → int?:
+    if n < 0: return ∅
+    n
+
+@expect error "match has no arm for ∅"
+fn error_missing_arm_through_a_call() → ∅:
+    match returns_optional(1):
+        ∃(x):
+            std.print(x)
+
+fn returns_result(n : int) → int!:
+    if n < 0:
+        return ∄(std.errors.invalid_argument)
+    n
+
+@expect error "match has no arm for a failed result"
+fn error_missing_arm_through_a_result_call() → ∅:
+    match returns_result(1):
+        ∃(x):
+            std.print(x)
+
+// A plain value has only one shape, so one arm covers it.
+fn returns_plain(n : int) → int:
+    n * 2
+
+@test
+fn test_plain_subject_needs_one_arm() → ∅:
+    let seen : mut = 0
+    match returns_plain(3):
+        ∃(x):
+            seen ← x
+    assert_eq(seen, 6)
+
+@expect error "∅ cannot match a plain value"
+fn error_absent_pattern_on_a_plain_value() → ∅:
+    match returns_plain(3):
+        ∃(x):
+            std.print(x)
+        ∅:
+            std.print("none")
+
+// ---------------------------------------------------------------------
+// Arms that can never be reached
+// ---------------------------------------------------------------------
+//
+// These need no knowledge of the subject at all.
+
+@expect error "match repeats the .* pattern"
+fn error_duplicate_present_arm() → ∅:
+    let v : mut = [1]
+    match v.get(0):
+        ∃(x):
+            std.print(x)
+        ∃(y):
+            std.print(y)
+        ∅:
+            std.print("none")
+
+@expect error "match repeats the ∅ pattern"
+fn error_duplicate_absent_arm() → ∅:
+    let v : mut = [1]
+    match v.get(0):
+        ∃(x):
+            std.print(x)
+        ∅:
+            std.print("none")
+        ∅:
+            std.print("again")
+
+@expect error "match has arms after _"
+fn error_arm_after_wildcard() → ∅:
+    let v : mut = [1]
+    match v.get(0):
+        _:
+            std.print("anything")
+        ∅:
+            std.print("unreachable")
+
+// ---------------------------------------------------------------------
+// Where the subject's type is not knowable, the check is at run time
+// ---------------------------------------------------------------------
+
+// The subject is a variable, whose type the checker does not track, so
+// the gap is found when the match runs instead.
+@expect error "match has no arm for ∅"
+fn error_unknown_subject_checked_at_run_time() → ∅:
+    let v : mut = []
+    let x : mut = v.get(0)
+    match x:
+        ∃(y):
+            std.print(y)
 
 // The bound name names the matched value, so it cannot be assigned to.
 @expect error "cannot assign to match variable 'x'"

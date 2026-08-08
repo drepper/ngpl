@@ -511,6 +511,115 @@ def _check_try_in(body, ret_type, env, *, in_lambda: bool = False) -> str | None
     return None
 
 
+# Builtin methods that answer with an optional.  A user-defined method of
+# the same name suppresses the assumption rather than risking a wrong one.
+_OPTIONAL_METHODS = frozenset({"next", "get", "pop"})
+
+_ARM_PATTERN = {"some": "\N{THERE EXISTS}(...)", "none": "\N{EMPTY SET}",
+                "err": "\N{THERE DOES NOT EXIST}(...)", "wildcard": "_"}
+_ARM_SUBJECT = {"some": "a present value", "none": "\N{EMPTY SET}",
+                "err": "a failed result"}
+_SUBJECT_SHAPES = {"optional": {"some", "none"},
+                   "expected": {"some", "err"},
+                   "plain": {"some"}}
+_SUBJECT_NAME = {"optional": "an optional", "expected": "a result",
+                 "plain": "a plain value"}
+
+
+def _user_defines_method(name: str, env) -> bool:
+    """Whether any struct in scope defines a method of this name."""
+    for frame in env._frames:
+        for value in frame.values():
+            if isinstance(value, StructType) and name in value.methods:
+                return True
+    return False
+
+
+def _match_subject_kind(expr, env) -> str | None:
+    """Classify what a match subject can be: optional, expected, or plain.
+
+    Returns None when it cannot be determined without running the
+    program, in which case no static claim is made and the check falls to
+    the evaluator.
+    """
+    if isinstance(expr, (_ast.OptSome, _ast.NoneLit)):
+        return "optional"
+    if isinstance(expr, _ast.ExpErr):
+        return "expected"
+    if isinstance(expr, _ast.BinOp) and expr.op in ("/", "%"):
+        return "expected"
+    if isinstance(expr, _ast.FuncCall):
+        try:
+            callee = env.lookup(expr.name)
+        except KeyError:
+            return None
+        ret_type = getattr(callee, "ret_type", None)
+        if not ret_type:
+            return None
+        _, opt_err = _split_optional_type(ret_type)
+        if opt_err is None:
+            return "plain"
+        return "optional" if opt_err == "" else "expected"
+    if isinstance(expr, _ast.MethodCall):
+        if (expr.method in _OPTIONAL_METHODS
+                and not _user_defines_method(expr.method, env)):
+            return "optional"
+    return None
+
+
+def _check_one_match(node, env) -> str | None:
+    """Check one match for unreachable and missing arms.
+
+    Two kinds of mistake need no knowledge of the subject: a repeated
+    pattern, and an arm written after `_`.  Both are arms that can never
+    run, and saying so is always possible.
+
+    The rest -- a pattern that does not belong to the subject's type, and
+    a shape left unhandled -- needs the subject's type, and is checked
+    only where that can be worked out.
+    """
+    seen: set[str] = set()
+    for index, arm in enumerate(node.arms):
+        if arm.kind in seen:
+            return (f"match repeats the {_ARM_PATTERN[arm.kind]} pattern; "
+                    f"the second one can never be reached")
+        seen.add(arm.kind)
+        if arm.kind == "wildcard" and index != len(node.arms) - 1:
+            return "match has arms after _, which can never be reached"
+
+    subject = _match_subject_kind(node.subject, env)
+    if subject is None:
+        return None
+    shapes = _SUBJECT_SHAPES[subject]
+
+    for arm in node.arms:
+        if arm.kind == "wildcard" or arm.kind in shapes:
+            continue
+        hint = {"none": ", whose failure is \N{THERE DOES NOT EXIST}(e)",
+                "err": ", whose absence is \N{EMPTY SET}"}.get(arm.kind, "")
+        return (f"{_ARM_PATTERN[arm.kind]} cannot match "
+                f"{_SUBJECT_NAME[subject]}{hint}")
+
+    if "wildcard" in seen:
+        return None
+    missing = sorted(shapes - seen)
+    if missing:
+        return ("match has no arm for "
+                + " or ".join(_ARM_SUBJECT[m] for m in missing)
+                + "; add the missing pattern or a _ arm")
+    return None
+
+
+def _static_check_match(func_def, env) -> str | None:
+    """Check every match in a function, lambdas included."""
+    for node in _iter_ast(func_def.body):
+        if isinstance(node, _ast.MatchStmt):
+            problem = _check_one_match(node, env)
+            if problem is not None:
+                return problem
+    return None
+
+
 def _static_check_moves(stmts: list, env,
                          moved: set[str] | None = None,
                          struct_vars: dict[str, StructType] | None = None,
@@ -755,6 +864,10 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                 if try_err is not None:
                     raise DefinitionError(
                         f"in {defn.struct_name}.{method_def.name}: {try_err}")
+                match_err = _static_check_match(method_def, env)
+                if match_err is not None:
+                    raise DefinitionError(
+                        f"in {defn.struct_name}.{method_def.name}: {match_err}")
                 st.methods[method_def.name] = fv
                 if getattr(method_def, "_self_is_ref", False):
                     st._ref_self_methods.add(method_def.name)
@@ -768,6 +881,9 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                 try_err = _static_check_try(defn, env)
                 if try_err is not None:
                     raise DefinitionError(f"in {defn.name}: {try_err}")
+                match_err = _static_check_match(defn, env)
+                if match_err is not None:
+                    raise DefinitionError(f"in {defn.name}: {match_err}")
 
     return program
 
@@ -868,6 +984,11 @@ def main():
             try_err = _static_check_try(defn, env)
             if try_err is not None:
                 errors_produced.append(("error", try_err))
+
+        if not errors_produced:
+            match_err = _static_check_match(defn, env)
+            if match_err is not None:
+                errors_produced.append(("error", match_err))
 
         if not errors_produced:
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,
