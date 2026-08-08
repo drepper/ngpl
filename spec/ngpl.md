@@ -1716,7 +1716,25 @@ Everything below follows from that one rule.  Because the properties are inherit
 
 The rule also explains why a function that writes through a view of a parameter counts as modifying that parameter, and so does not draw the [unused-`mut` warning](#an-unused-mut-is-a-warning): the write reaches the parameter.
 
-Binding the result as `mut` would claim write access, so taking a mutable view of something that may only be read is rejected, at the binding:
+Because the access is inherited, a binding does not repeat it.  `let m := (2, 2) ⍴ a` may be written exactly when `a` may be, and saying `mut` as well states what is already true:
+
+```
+let a : mut i32[] = 4 ⍴ 0
+let m : mut = (2, 2) ⍴ a
+
+warning: 'm' is declared mut, but a reshape already carries the access of what
+it was built from; naming a full type is what would change it
+```
+
+Naming a full type is how a binding says what it wants instead of what it was given, and that declaration is then the one that counts:
+
+```
+let m : mut i32[] = (2, 2) ⍴ a     // the type decides, not the source
+```
+
+The warning applies only where there is something to inherit: a reshape of a literal has no source binding, so `let m : mut = (2, 3) ⍴ 0` needs its `mut` and does not draw one.
+
+Binding the result as `mut` would claim write access, so taking a mutable view of something that may only be read is rejected rather than merely redundant, at the binding:
 
 ```
 fn broken(arr : &i32[]) → ∅:

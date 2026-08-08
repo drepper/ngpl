@@ -2240,8 +2240,6 @@ class Evaluator:
             return none()
 
         if isinstance(stmt, VarDef):
-            if not stmt.is_const:
-                self._check_mutable_view_source(stmt)
             if stmt.name == DISCARD_NAME:
                 # `let _ := expr` discards too, so that a value can be
                 # thrown away without inventing a name for it.
@@ -2269,8 +2267,9 @@ class Evaluator:
                 else:
                     value = UnitValue(value, unit)
             self.env.define(stmt.name, value)
-            if stmt.is_const:
-                self._frozen_vars[stmt.name] = "let"
+            if not self._bind_reshape_access(stmt):
+                if stmt.is_const:
+                    self._frozen_vars[stmt.name] = "let"
             return none()
 
         if isinstance(stmt, TypeDef):
@@ -2326,35 +2325,59 @@ class Evaluator:
             alt = rest[0] if rest else None
         return none()
 
-    def _check_mutable_view_source(self, stmt):
-        """Reject a mut binding that would take a writable view of a
-        value it may only read.
+    def _reshape_binding_source(self, stmt):
+        """Describe the source a reshape binding inherits its access from.
 
-        A reshape shares the storage it was built from, so binding one
-        as mut hands out write access to that storage.  The binding is
-        where this has to be caught: once the view exists it is a
-        mutable local of its own, and a write through it says nothing
-        about where its storage came from.
+        A binding takes its access from the reshape's source only when
+        it declares no type of its own.  Naming a full type is how a
+        program says what it wants instead of what it was given, and
+        that declaration is then the one that counts.
+
+        Returns (name, frozen_kind) for such a binding, or None.
         """
+        if stmt.type_annotation is not None:
+            return None
         expr = stmt.init_expr
         if not isinstance(expr, ReshapeExpr):
-            return
+            return None
         inner = expr.data
         while isinstance(inner, ReshapeExpr):
             inner = inner.data
         if not isinstance(inner, VarRef):
-            return
+            return None
 
         name = inner.name
         kind = self._frozen_vars.get(name)
         if kind == "moved":
             raise TypeError(f"use of moved value '{name}'")
+        if kind is None and self.env.is_const_global(name):
+            kind = "let"
+        return name, kind
+
+    def _bind_reshape_access(self, stmt) -> bool:
+        """Give a reshape binding the access its source was held under.
+
+        A reshape shares the storage it was built from, so the binding
+        can be written exactly when that storage could.  Asking for mut
+        on a source that may only be read is refused: a view cannot hand
+        out access its source did not have.
+
+        Returns True when the binding's access was decided here.
+        """
+        source = self._reshape_binding_source(stmt)
+        if source is None:
+            return False
+        name, kind = source
         if kind is not None:
-            raise TypeError(
-                f"cannot take a mutable view of {kind} variable '{name}'")
-        if self.env.is_const_global(name):
-            raise TypeError(
-                f"cannot take a mutable view of let variable '{name}'")
+            if not stmt.is_const:
+                raise TypeError(
+                    f"cannot take a mutable view of {kind} variable '{name}'")
+            self._frozen_vars[stmt.name] = "borrowed"
+        else:
+            # The source may be written, so the view may be too, whether
+            # or not the binding repeated mut.
+            self._frozen_vars.pop(stmt.name, None)
+        return True
 
     def _check_assignable(self, target_ast):
         """Reject a write reaching an immutable binding.

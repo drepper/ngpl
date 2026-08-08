@@ -18,7 +18,7 @@ fn test_reshape_view_read() → ∅:
 @test
 fn test_reshape_view_propagates() → ∅:
   let a: mut i32[] = 4 ⍴ 0
-  let m : mut = (2, 2) ⍴ a
+  let m := (2, 2) ⍴ a
   m[0, 1] = 42
   assert_eq(a[1], 42)
 
@@ -27,7 +27,7 @@ fn test_reshape_view_propagates() → ∅:
 // &mut: the view shares the caller's storage and is written through,
 // so the parameter has to be lent for writing, not just for reading.
 fn reshape_by_ref(arr : &mut i32[]) → ∅:
-  let m : mut = (2, 2) ⍴ arr
+  let m := (2, 2) ⍴ arr
   m[0, 1] = 42
 
 @test
@@ -41,7 +41,7 @@ fn test_reshape_ref_modifies_caller() → ∅:
 // mut, because the view is written through.  The parameter is this
 // function's own copy, so the caller is still unaffected.
 fn reshape_by_val(arr : mut i32[]) → ∅:
-  let m : mut = (2, 2) ⍴ arr
+  let m := (2, 2) ⍴ arr
   m[0, 1] = 99
 
 @test

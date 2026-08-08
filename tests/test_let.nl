@@ -215,7 +215,7 @@ fn test_shared_view_of_shared_borrow() → ∅:
 // And a mutable view of something lent for writing is fine, and reaches
 // the caller.
 fn writes_through_a_view(arr : &mut i32[]) → ∅:
-    let m : mut = (2, 2) ⍴ arr
+    let m := (2, 2) ⍴ arr
     m[0, 1] = 42
 
 @test

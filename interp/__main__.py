@@ -718,6 +718,14 @@ def _modified_names(body) -> set[str]:
     return modified
 
 
+def _reshape_source_is_mutable(expr, mutable_names: set[str]) -> bool:
+    """Whether a reshape draws its access from a mutable binding."""
+    inner = expr.data
+    while isinstance(inner, _ast.ReshapeExpr):
+        inner = inner.data
+    return isinstance(inner, _ast.VarRef) and inner.name in mutable_names
+
+
 def _unused_mut_warnings(func_def) -> list[tuple[str, tuple | None]]:
     """Find mut bindings and parameters the function never modifies.
 
@@ -729,6 +737,13 @@ def _unused_mut_warnings(func_def) -> list[tuple[str, tuple | None]]:
     """
     modified = _modified_names(func_def.body)
     warnings: list[tuple[str, tuple | None]] = []
+
+    # Names this function can see to be mutable, for judging whether a
+    # reshape binding inherits mut and so does not need to repeat it.
+    mutable_names = set(func_def.param_muts)
+    for node in _iter_ast(func_def.body):
+        if isinstance(node, _ast.VarDef) and not node.is_const:
+            mutable_names.add(node.name)
 
     for name in func_def.params:
         param_name = name[0] if isinstance(name, tuple) else name
@@ -746,7 +761,26 @@ def _unused_mut_warnings(func_def) -> list[tuple[str, tuple | None]]:
     for node in _iter_ast(func_def.body):
         if not isinstance(node, _ast.VarDef) or node.is_const:
             continue
-        if node.name in modified or node.name == DISCARD_NAME:
+        if node.name == DISCARD_NAME:
+            continue
+        # A reshape binding without a type of its own takes its access
+        # from the source, so repeating mut states what is already true.
+        # Only when the source is a binding this function can see to be
+        # mutable: a reshape of a literal has nothing to inherit from,
+        # and one of an immutable source is an error rather than a
+        # redundancy.
+        if (node.type_annotation is None
+                and isinstance(node.init_expr, _ast.ReshapeExpr)
+                and _reshape_source_is_mutable(node.init_expr, mutable_names)):
+            message = (f"'{node.name}' is declared mut, but a reshape already "
+                       f"carries the access of what it was built from; "
+                       f"naming a full type is what would change it")
+            if id(node) in marked:
+                node.static_warnings = [message]
+            else:
+                warnings.append((message, getattr(node, "pos", None)))
+            continue
+        if node.name in modified:
             continue
         message = f"'{node.name}' is declared mut but is never modified"
         if id(node) in marked:
