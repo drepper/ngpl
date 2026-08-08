@@ -20,6 +20,7 @@ from interp.ast import (
     UnitExpr, UnitDef, UnitName, UnitBinOp, UnitSqrt, UnitLit,
     UnitOfExpr, UnitRefExpr,
     StructDef, ImplBlock, StructLit,
+    MatchStmt, MatchArm, ExpErr,
     set_pos,
 )
 from interp.lexer import Token, KEYWORDS
@@ -893,6 +894,9 @@ class Parser:
         if self._check("FOREACH"):
             return self._parse_foreach_stmt()
 
+        if self._check("MATCH"):
+            return self._parse_match_stmt()
+
         if self._check("CATCH"):
             return self._parse_catch_stmt()
 
@@ -1086,6 +1090,64 @@ class Parser:
             return self._set_pos(BorrowExpr(self._parse_or_expr(), is_mut),
                                  amp_tok)
         return self._parse_or_expr()
+
+    def _parse_match_stmt(self):
+        """Parse: match expr: INDENT arm+ DEDENT
+
+        Each arm is a pattern, a colon, and a body -- either statements
+        on the same line or an indented block, as elsewhere.
+        """
+        kw_tok = self._eat("MATCH")
+        subject = self._parse_or_expr()
+        self._eat("PUNCT", ":")
+        while self._try_eat("NEWLINE"):
+            pass
+        if not self._check("INDENT"):
+            raise ParseError("match requires an indented list of arms",
+                             self._cur())
+        self._eat("INDENT")
+
+        arms: list[MatchArm] = []
+        while True:
+            while self._try_eat("NEWLINE"):
+                pass
+            if self._check("DEDENT", "EOF"):
+                break
+            arms.append(self._parse_match_arm())
+        self._eat("DEDENT")
+        if not arms:
+            raise ParseError("match requires at least one arm", kw_tok)
+        return self._set_pos(MatchStmt(subject, arms), kw_tok)
+
+    def _parse_match_arm(self) -> MatchArm:
+        """Parse one arm: ∃(name) | ∅ | _  followed by ':' and a body."""
+        kind: str
+        name = None
+        if self._check("SOME"):
+            self.pos += 1
+            self._eat("PUNCT", "(")
+            name = self._eat("IDENT").value
+            self._eat("PUNCT", ")")
+            kind = "some"
+        elif self._check("NOTEXISTS"):
+            self.pos += 1
+            self._eat("PUNCT", "(")
+            name = self._eat("IDENT").value
+            self._eat("PUNCT", ")")
+            kind = "err"
+        elif self._check("NONE"):
+            self.pos += 1
+            kind = "none"
+        elif (self._check("IDENT") and self._cur().value == "_"):
+            self.pos += 1
+            kind = "wildcard"
+        else:
+            raise ParseError(
+                "expected a match pattern: \N{THERE EXISTS}(name), "
+                "\N{THERE DOES NOT EXIST}(name), \N{EMPTY SET}, or _",
+                self._cur())
+        body = self._parse_block()
+        return MatchArm(kind, name, body)
 
     def _parse_catch_stmt(self):
         """Parse: catch block"""
@@ -1595,6 +1657,14 @@ class Parser:
         if tok.type == "FALSE":
             self.pos += 1
             return self._set_pos(BoolLit(False), tok)
+
+        # Failed-result constructor ∄(...).
+        if tok.type == "NOTEXISTS":
+            self.pos += 1
+            self._eat("PUNCT", "(")
+            value = self._parse_or_expr()
+            self._eat("PUNCT", ")")
+            return self._set_pos(ExpErr(value), tok)
 
         # Optional some(...) constructor.
         if tok.type == "SOME":

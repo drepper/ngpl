@@ -20,7 +20,7 @@ fn test_args_count_matches_all() → ∅:
 fn test_args_get_matches_all() → ∅:
     let params : mut = std.args.all()
     foreach i, v := enumerate(params):
-        assert_eq(std.args.get(i), v)
+        assert_eq(std.args.get(i), ∃(v))
 
 // The program name is always known, even with no parameters.
 @test

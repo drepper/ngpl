@@ -24,7 +24,7 @@ fn test_push_onto_empty() → ∅:
 @test
 fn test_pop_returns_last() → ∅:
     let v : mut = [1, 2, 3]
-    assert_eq(v.pop(), 3)
+    assert_eq(v.pop(), ∃(3))
     assert_eq(v.sizeof, 2)
     assert_eq(v[1], 2)
 
@@ -38,8 +38,8 @@ fn test_pop_empty_is_none() → ∅:
 @test
 fn test_pop_until_empty() → ∅:
     let v : mut = [1, 2]
-    assert_eq(v.pop(), 2)
-    assert_eq(v.pop(), 1)
+    assert_eq(v.pop(), ∃(2))
+    assert_eq(v.pop(), ∃(1))
     assert_eq(v.pop(), ∅)
     assert_eq(v.sizeof, 0)
 
@@ -48,7 +48,7 @@ fn test_pop_until_empty() → ∅:
 fn test_push_pop_round_trip() → ∅:
     let v : mut = [1, 2]
     v.push(3)
-    assert_eq(v.pop(), 3)
+    assert_eq(v.pop(), ∃(3))
     assert_eq(v.sizeof, 2)
     assert_eq(v[0], 1)
     assert_eq(v[1], 2)
@@ -118,8 +118,8 @@ fn test_insert_remove_round_trip() → ∅:
 @test
 fn test_get_in_range() → ∅:
     let v : mut = [10, 20, 30]
-    assert_eq(v.get(0), 10)
-    assert_eq(v.get(2), 30)
+    assert_eq(v.get(0), ∃(10))
+    assert_eq(v.get(2), ∃(30))
 
 @test
 fn test_get_out_of_range_is_none() → ∅:
@@ -216,13 +216,13 @@ fn test_push_coerces_to_element_type() → ∅:
     let v : mut = std.bytes("ab")
     v.push(67)
     assert_eq(v.sizeof, 3)
-    assert_eq(v.get(2¤byte), 67)
+    assert_eq(v.get(2¤byte), ∃(67))
 
 // An index carries the same unit rule as a subscript does.
 @test
 fn test_index_unit_is_accepted() → ∅:
     let v : mut = std.bytes("abc")
-    assert_eq(v.get(1¤byte), 98)
+    assert_eq(v.get(1¤byte), ∃(98))
 
 @expect error "array index requires unit"
 fn error_index_wrong_unit() → ∅:

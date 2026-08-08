@@ -1,0 +1,257 @@
+// Tests for ∃(VAL) and the match statement.
+//
+// ∃(v) is a present optional — Rust's Some(v).  It is how a program
+// names one, whether to build it or to compare against it.  match
+// dispatches on which of the two an optional is, binding the value in
+// the present case.
+
+// ---------------------------------------------------------------------
+// ∃(VAL) builds and compares a present optional
+// ---------------------------------------------------------------------
+
+@test
+fn test_exists_is_a_present_optional() → ∅:
+    let v : mut = [10, 20]
+    assert_eq(v.get(0), ∃(10))
+    assert_eq(v.get(9), ∅)
+
+// ∃ and the some keyword spell the same thing.
+@test
+fn test_exists_equals_some() → ∅:
+    assert(∃(5) == some(5))
+    assert(∃(5) != ∅)
+
+// It nests: an optional holding an optional is distinguishable.
+@test
+fn test_exists_nests() → ∅:
+    assert(∃(∅) != ∅)
+
+// ---------------------------------------------------------------------
+// An optional may not be compared with a plain value
+// ---------------------------------------------------------------------
+//
+// The two are different things, and an equality that quietly looked
+// through the optional would make `it.next() == 97` read as a test of
+// the element when it is really a test of the element and of there
+// being one at all.
+
+@expect error "cannot compare an optional with a plain value"
+fn error_compare_optional_with_plain() → ∅:
+    let v : mut = [1]
+    assert(v.get(0) == 1)
+
+@expect error "cannot compare an optional with a plain value"
+fn error_assert_eq_optional_with_plain() → ∅:
+    let v : mut = [1]
+    assert_eq(v.get(0), 1)
+
+// ?? is the other way to get a plain value out.
+@test
+fn test_default_still_compares_plainly() → ∅:
+    let v : mut = [1]
+    assert_eq(v.get(0) ?? 0, 1)
+    assert_eq(v.get(9) ?? 0, 0)
+
+// ---------------------------------------------------------------------
+// match on an optional
+// ---------------------------------------------------------------------
+
+@test
+fn test_match_present_binds_the_value() → ∅:
+    let v : mut = [42]
+    let seen : mut = 0
+    match v.get(0):
+        ∃(x):
+            seen ← x
+        ∅:
+            seen ← ⁻1
+    assert_eq(seen, 42)
+
+@test
+fn test_match_absent() → ∅:
+    let v : mut = []
+    let seen : mut = 0
+    match v.get(0):
+        ∃(x):
+            seen ← x
+        ∅:
+            seen ← ⁻1
+    assert_eq(seen, ⁻1)
+
+// A falsy value is still present, so it takes the ∃ arm.
+@test
+fn test_match_present_but_falsy() → ∅:
+    let v : mut = [0]
+    let took : mut = ""
+    match v.get(0):
+        ∃(x):
+            took ← "present"
+        ∅:
+            took ← "absent"
+    assert_eq(took, "present")
+
+// The arms may be written in either order.
+@test
+fn test_match_arm_order() → ∅:
+    let v : mut = [7]
+    let seen : mut = 0
+    match v.get(0):
+        ∅:
+            seen ← ⁻1
+        ∃(x):
+            seen ← x
+    assert_eq(seen, 7)
+
+// A single-statement arm may sit on the same line as its colon.
+@test
+fn test_match_inline_arms() → ∅:
+    let v : mut = [3]
+    let seen : mut = 0
+    match v.get(0):
+        ∃(x): seen ← x
+        ∅: seen ← ⁻1
+    assert_eq(seen, 3)
+
+// _ matches whatever the earlier arms did not.
+@test
+fn test_match_wildcard() → ∅:
+    let v : mut = []
+    let took : mut = ""
+    match v.get(0):
+        ∃(x):
+            took ← "present"
+        _:
+            took ← "anything else"
+    assert_eq(took, "anything else")
+
+// Matching an iterator drives a loop one step at a time.
+@test
+fn test_match_over_an_iterator() → ∅:
+    let v : mut = [1, 2, 3]
+    let it : mut = v.iterate()
+    let total : mut = 0
+    let running : mut = true
+    while running:
+        match it.next():
+            ∃(x):
+                total ← total + x
+            ∅:
+                running ← false
+    assert_eq(total, 6)
+
+// ---------------------------------------------------------------------
+// match on a result
+// ---------------------------------------------------------------------
+//
+// ∃ covers both a present optional and a successful result: in each the
+// question "was there a value" is answered yes.  ∄ is the failed result,
+// which answers no and says why, where ∅ answers no and does not.
+
+@test
+fn test_match_result_ok() → ∅:
+    let seen : mut = 0
+    match 10 / 2:
+        ∃(v):
+            seen ← v
+        ∄(e):
+            seen ← ⁻1
+    assert_eq(seen, 5)
+
+@test
+fn test_match_result_err_binds_the_error() → ∅:
+    let took : mut = ""
+    match 10 / 0:
+        ∃(v):
+            took ← "ok"
+        ∄(e):
+            assert_eq(e, std.errors.division_by_zero)
+            took ← "err"
+    assert_eq(took, "err")
+
+// ∄(VAL) builds a failed result, which is how a function reports one.
+fn checked(n : int) → int!:
+    if n < 0:
+        return ∄(std.errors.invalid_argument)
+    n * 2
+
+@test
+fn test_explicit_error_return_ok_path() → ∅:
+    let seen : mut = 0
+    match checked(5):
+        ∃(v):
+            seen ← v
+        ∄(e):
+            seen ← ⁻1
+    assert_eq(seen, 10)
+
+@test
+fn test_explicit_error_return_err_path() → ∅:
+    let took : mut = ""
+    match checked(⁻1):
+        ∃(v):
+            took ← "ok"
+        ∄(e):
+            assert_eq(e, std.errors.invalid_argument)
+            took ← "err"
+    assert_eq(took, "err")
+
+// The error reaches ?? as well, so ∄ is a value like any other.
+@test
+fn test_explicit_error_with_default() → ∅:
+    assert_eq(checked(⁻1) ?? 0, 0)
+    assert_eq(checked(5) ?? 0, 10)
+
+// A wildcard covers a failure too.
+@test
+fn test_match_result_wildcard() → ∅:
+    let took : mut = ""
+    match 10 / 0:
+        ∃(v):
+            took ← "ok"
+        _:
+            took ← "anything else"
+    assert_eq(took, "anything else")
+
+// ∅ does not stand in for a failure: an absent value and a failed one
+// are different answers, and a match that handles only absence has not
+// handled failure.
+@expect error "match has no arm for a failed result"
+fn error_result_needs_a_failure_arm() → ∅:
+    match 10 / 0:
+        ∃(v):
+            std.print(v)
+        ∅:
+            std.print("none")
+
+// Nor does ∄ stand in for absence.
+@expect error "match has no arm for ∅"
+fn error_optional_needs_an_absent_arm() → ∅:
+    let v : mut = []
+    match v.get(0):
+        ∃(x):
+            std.print(x)
+        ∄(e):
+            std.print("err")
+
+// The bound name names the matched value, so it cannot be assigned to.
+@expect error "cannot assign to match variable 'x'"
+fn error_assign_to_match_binding() → ∅:
+    let v : mut = [1]
+    match v.get(0):
+        ∃(x):
+            x ← 9
+        ∅:
+            std.print("none")
+
+// A match that does not cover the value it is given is an error rather
+// than a silent no-op.
+@expect error "match has no arm for"
+fn error_match_not_exhaustive() → ∅:
+    let v : mut = []
+    match v.get(0):
+        ∃(x):
+            std.print(x)
+
+@start
+fn main() → ∅:
+    std.print("match tests passed")

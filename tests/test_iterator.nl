@@ -19,16 +19,16 @@
 fn test_array_iterate_in_order() → ∅:
     let v : mut = [10, 20, 30]
     let it : mut = v.iterate()
-    assert_eq(it.next(), 10)
-    assert_eq(it.next(), 20)
-    assert_eq(it.next(), 30)
+    assert_eq(it.next(), ∃(10))
+    assert_eq(it.next(), ∃(20))
+    assert_eq(it.next(), ∃(30))
 
 // Exhaustion is reported as ∅, and stays ∅ on further calls.
 @test
 fn test_array_iterate_ends_with_none() → ∅:
     let v : mut = [1]
     let it : mut = v.iterate()
-    assert_eq(it.next(), 1)
+    assert_eq(it.next(), ∃(1))
     assert_eq(it.next(), ∅)
     assert_eq(it.next(), ∅)
 
@@ -54,27 +54,27 @@ fn test_array_iterators_are_independent() → ∅:
     let v : mut = [1, 2, 3]
     let a : mut = v.iterate()
     let b : mut = v.iterate()
-    assert_eq(a.next(), 1)
-    assert_eq(a.next(), 2)
-    assert_eq(b.next(), 1)
+    assert_eq(a.next(), ∃(1))
+    assert_eq(a.next(), ∃(2))
+    assert_eq(b.next(), ∃(1))
 
 // An iterator reads the array as it is now, not as it was.
 @test
 fn test_array_iterator_sees_later_writes() → ∅:
     let v : mut = [1, 2]
     let it : mut = v.iterate()
-    assert_eq(it.next(), 1)
+    assert_eq(it.next(), ∃(1))
     v[1] ← 99
-    assert_eq(it.next(), 99)
+    assert_eq(it.next(), ∃(99))
 
 // Iterating a byte array yields its bytes.
 @test
 fn test_iterate_byte_array() → ∅:
     let b : mut = std.bytes("abc")
     let it : mut = b.iterate()
-    assert_eq(it.next(), 97)
-    assert_eq(it.next(), 98)
-    assert_eq(it.next(), 99)
+    assert_eq(it.next(), ∃(97))
+    assert_eq(it.next(), ∃(98))
+    assert_eq(it.next(), ∃(99))
     assert_eq(it.next(), ∅)
 
 // ---------------------------------------------------------------------

@@ -24,6 +24,7 @@ from interp.ast import (
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
     UnitExpr, UnitOfExpr, UnitRefExpr, RefExpr, BorrowExpr, TypeDef,
+    MatchStmt, ExpErr,
     StructLit,
 )
 from interp.value import (
@@ -672,8 +673,38 @@ class Evaluator:
             f"exponentiation expected numeric operands, "
             f"got {type(lu).__name__} and {type(ru).__name__}")
 
+    @staticmethod
+    def _reject_mixed_optional(left, right, what: str):
+        """Reject comparing an optional against a plain value.
+
+        An optional and the value it may hold are different things, and
+        an equality that quietly looked through the optional would make
+        `it.next() == 97` read as a test of the element when it is
+        really a test of the element *and* of there being one at all.
+        """
+        left_opt = isinstance(left, (SomeValue, NoneValue))
+        right_opt = isinstance(right, (SomeValue, NoneValue))
+        if left_opt == right_opt:
+            return
+        raise TypeError(
+            f"{what}: cannot compare an optional with a plain value; write "
+            f"\N{THERE EXISTS}(v) to compare against a present value, "
+            f"\N{EMPTY SET} against an absent one, or ?? to supply a default")
+
     def _op_eq(self, left, right):
         """Equality comparison."""
+        self._reject_mixed_optional(left, right, "==")
+        # Two optionals are compared by shape first and contents second,
+        # so that a present-but-empty optional and an absent one are
+        # told apart: ∃(∅) is not ∅.
+        if isinstance(left, (SomeValue, NoneValue)):
+            left_present = isinstance(left, SomeValue)
+            right_present = isinstance(right, SomeValue)
+            if left_present != right_present:
+                return mk_bool(False)
+            if not left_present:
+                return mk_bool(True)
+            return self._op_eq(left.value, right.value)
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
         # ∅ equals itself and nothing else.  Without this the fall-through
@@ -1654,6 +1685,9 @@ class Evaluator:
             value = self.eval_expr(node.value)
             return some(value)
 
+        if isinstance(node, ExpErr):
+            return ExpectedValue.err(self.eval_expr(node.value))
+
         if isinstance(node, TryUnwrap):
             if not self._current_ret_type:
                 raise TypeError(
@@ -2192,6 +2226,9 @@ class Evaluator:
         if isinstance(stmt, ForEachStmt):
             return self._eval_foreach(stmt)
 
+        if isinstance(stmt, MatchStmt):
+            return self._eval_match(stmt)
+
         if isinstance(stmt, CatchStmt):
             return self._eval_catch(stmt)
 
@@ -2533,6 +2570,63 @@ class Evaluator:
     # ------------------------------------------------------------------
     # Catch statement (scoped error handling)
     # ------------------------------------------------------------------
+
+    def _eval_match(self, node: MatchStmt):
+        """Dispatch on the shape of a value.
+
+        An optional matches ∃(name), which binds the value it holds, or
+        ∅ when it holds nothing.  A `_` arm matches anything.  The bound
+        name exists only for its arm, and cannot be assigned to: it
+        names the matched value, and writing to it would say nothing
+        about the value that was matched.
+        """
+        subject = self.eval_expr(node.subject)
+        shape, inner = self._match_shape(subject)
+
+        for arm in node.arms:
+            if arm.kind == "wildcard":
+                return self.eval_stmts(arm.body)
+            if arm.kind != shape:
+                continue
+            if arm.kind == "none":
+                return self.eval_stmts(arm.body)
+            # ∃(name) or ∄(name), both of which bind.
+            old_frozen = self._frozen_vars.get(arm.name)
+            self.env.define(arm.name, inner)
+            self._frozen_vars[arm.name] = "match"
+            try:
+                return self.eval_stmts(arm.body)
+            finally:
+                if old_frozen is None:
+                    self._frozen_vars.pop(arm.name, None)
+                else:
+                    self._frozen_vars[arm.name] = old_frozen
+
+        described = {"some": "a present value",
+                     "none": "\N{EMPTY SET}",
+                     "err": "a failed result"}[shape]
+        raise TypeError(
+            f"match has no arm for {described}; add the missing pattern "
+            f"or a _ arm")
+
+    @staticmethod
+    def _match_shape(subject):
+        """Classify a match subject, and give the value an arm would bind.
+
+        ∃ covers both a present optional and a successful result: in each
+        the question "was there a value" is answered yes.  ∄ is the
+        failed result, which answers no and says why; ∅ is the absent
+        optional, which answers no and does not.
+        """
+        if isinstance(subject, ExpectedValue):
+            if subject.is_ok():
+                return "some", subject.ok_value
+            return "err", subject.err_value
+        if isinstance(subject, NoneValue):
+            return "none", subject
+        if isinstance(subject, SomeValue):
+            return "some", subject.value
+        return "some", subject
 
     def _eval_catch(self, node: CatchStmt):
         """Evaluate a catch block: catch errors from direct operations.

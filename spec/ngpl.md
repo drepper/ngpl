@@ -1066,6 +1066,161 @@ Unlike `?` which propagates `∅`, `??` recovers from it.  This is the right cho
 When the unwrapped value has a narrower unsigned type than the target variable, implicit widening is permitted.  For example, `get_padded_byte` returns `u8?`; after `??` or `?` produces a `u8` value, assigning it to a `u32` variable widens it.  This is safe because every `u8` value is representable as `u32`.
 
 
+### Naming a Present Optional (`∃`)
+
+`∃(v)` is an optional that holds `v`, the counterpart of `∅` for absence.  It is Rust's `Some(v)` under a shorter spelling:
+
+```
+∃(42)                     // an optional holding 42
+∅                       // an optional holding nothing
+```
+
+`some(v)` is the same constructor written as a keyword and remains accepted; `∃(v)` is the form to use, and the form an optional is shown as when a value is displayed rather than printed — `std.print` unwraps, as it does for every optional.
+
+#### An Optional Is Not the Value It Holds
+
+Comparing an optional with a plain value is an error:
+
+```
+v.get(0) == 1
+
+error: ==: cannot compare an optional with a plain value; write ∃(v) to
+compare against a present value, ∅ against an absent one, or ?? to
+supply a default
+```
+
+This is what `∃` is for.  An equality that quietly looked through the optional would make
+
+```
+assert_eq(it.next(), 97)
+```
+
+read as a test of the element, when it is really a test of the element *and* of there being an element at all — two claims wearing the disguise of one.  The distinction matters most exactly where it is least visible: a test that passes because the iterator produced 97 and a test that would also have passed had it produced nothing are not the same test.  Written out, the intent is unambiguous:
+
+```
+assert_eq(it.next(), ∃(97))   // there was a value, and it was 97
+assert_eq(it.next(), ∅)       // there was none
+assert_eq(it.next() ?? 0, 97)  // 97, or nothing at all
+```
+
+Two optionals are compared by shape first and contents second, so nesting survives:
+
+```
+∃(∅) == ∅                 // false — one holds something, the other nothing
+∃(∃(1)) == ∃(∃(1))       // true
+```
+
+Arithmetic and the other operators still unwrap implicitly, as [Implicit Unwrapping](#implicit-unwrapping) describes.  Only equality is strict, because only equality can silently answer a different question than the one asked.
+
+
+### The `match` Statement
+
+`match` dispatches on which shape a value has, binding what it holds:
+
+```
+match it.next():
+    ∃(x):
+        use(x)
+    ∅:
+        done()
+```
+
+Patterns are `∃(name)` for a present optional or a successful result, which binds the value to `name`; `∄(name)` for a failed result, which binds the error; `∅` for an absent optional; and `_` for anything not already matched.  Arms may be written in either order, and a single-statement arm may sit on the same line as its colon:
+
+```
+match v.get(i):
+    ∃(x): total ← total + x
+    ∅: break_out ← true
+```
+
+The name is bound only within its arm and cannot be assigned to: it names the value that was matched, and writing to it would say nothing about that value.
+
+A falsy value is still a present one, so `∃(x)` takes an element of `0` — the arm chosen depends on whether there was a value, not on what it was.
+
+#### Matching a Result
+
+The same statement handles a result, with `∄(name)` binding the error:
+
+```
+match 10 / b:
+    ∃(v):
+        use(v)
+    ∄(e):
+        report(e)
+```
+
+`∃` covers both a present optional and a successful result because in each the question *was there a value* is answered yes, and the arm wants the value either way.  The two negative answers are distinct, and that is why they have separate patterns:
+
+| Pattern | Answers "was there a value" | Says why not |
+|---------|----------------------------|--------------|
+| `∃(v)` | yes | — |
+| `∅` | no | no |
+| `∄(e)` | no | yes |
+
+Neither stands in for the other.  A `match` on a result that handles only `∅` has not handled failure, and reports as much rather than falling through:
+
+```
+match 10 / 0:
+    ∃(v): use(v)
+    ∅: nothing()
+
+error: match has no arm for a failed result; add the missing pattern or a _ arm
+```
+
+The glyphs are meant to read as what they say: `∃` there is a value, `∅` the set is empty, `∄` there is no value — and, since `∄` takes an argument, here is what stopped there being one.
+
+#### Constructing a Failure (`∄`)
+
+`∄(e)` is also an expression: a failed result carrying `e`.  It is how a function reports an error of its own rather than propagating one:
+
+```
+fn checked(n : int) → int!:
+    if n < 0:
+        return ∄(std.errors.invalid_argument)
+    n * 2
+```
+
+Before this there was no way to write an error at all — expected values arose only from division, `catch`, and `?` propagation, so a function could pass a failure along but never originate one.  A function whose return type is expected auto-wraps an ordinary value in success, so only the failing path needs saying.
+
+#### Coverage
+
+A `match` given a value no arm accepts is an error rather than a silent no-op:
+
+```
+match v.get(0):
+    ∃(x):
+        std.print(x)
+
+error: match has no arm for ∅; add the missing pattern or a _ arm
+```
+
+An optional has exactly two shapes, so covering it means writing both arms or using `_`.  The check happens when the `match` runs, not when it is compiled: a `match` whose missing arm is never reached does not report anything.  Static exhaustiveness needs the type of the subject, which the interpreter does not yet track through arbitrary expressions.
+
+#### Choosing Between `match`, `??`, and `while`
+
+Three constructs handle an optional, and they are not interchangeable:
+
+| Construct | Use when |
+|-----------|----------|
+| `??` | a default will do, and the two cases need no separate code |
+| `match` | both cases need their own code |
+| `while name := …` | the value arrives repeatedly and absence ends the loop |
+
+`match` is the general one and the most verbose; reaching for it where `??` suffices spends three lines to say what one says.
+
+#### Comparison with Other Languages
+
+| Language | Value present | Absent | Failed | Exhaustiveness |
+|----------|--------------|--------|--------|----------------|
+| Rust | `Some(x)` / `Ok(x)` | `None` | `Err(e)` | compile time |
+| Swift | `.some(x)` / `.success(x)` | `nil` | `.failure(e)` | compile time |
+| Zig | `\|x\|` on `if`/`while` | `else` | `else \|e\|` | n/a (not a match) |
+| Scala | `Some(x)` / `Success(x)` | `None` | `Failure(e)` | compile time (warning) |
+| NGPL | `∃(x)` | `∅` | `∄(e)` | run time, for now |
+
+The shape is Rust's, and the glyphs read as the mathematical statements they are.  Where Rust needs four constructors across two types — `Some`/`None` and `Ok`/`Err` — the same three patterns serve both here, because `∃` asks only whether a value arrived and does not care which type carried it.  That is a smaller vocabulary for the same coverage, at the cost of not distinguishing an optional from a result in the pattern itself.  Where this falls short of Rust and Scala is exhaustiveness — theirs is a compile error, and here it is a runtime one until the type of a matched expression is tracked.  `match` is deliberately more general than optionals need: sum types will use the same statement, which is why the patterns are a list of shapes rather than a special form for `∃` and `∅`.
+
+
 ### Optionals in a Boolean Context
 
 An optional may be used directly wherever a condition is expected.  It is true when it holds a value and false when it is `∅`:
@@ -1142,7 +1297,7 @@ The `?` postfix on a type introduces an optional when no error type follows, and
 
 | Syntax | Meaning |
 |--------|---------|
-| `T?` | optional — success (`some(v)`) or absence (`∅`) |
+| `T?` | optional — success (`∃(v)`) or absence (`∅`) |
 | `T?E` | expected — success (`ok(v)`) or error (`err(e)` where `e` is of type `E`) |
 | `T!` | abbreviation for `T?std.errors` |
 

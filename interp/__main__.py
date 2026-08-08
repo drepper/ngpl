@@ -18,7 +18,7 @@ from interp.ast import (
 import interp.ast as _ast
 from interp.value import (
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
-    NoneValue, ExpectedValue, EnumType, EnumValue, StructType,
+    NoneValue, SomeValue, ExpectedValue, EnumType, EnumValue, StructType,
     coerce_to_type, validate_param_type, validate_type, none, FAST_TYPES,
     register_type_alias, register_user_type, DISCARD_NAME,
     _split_optional_type,
@@ -125,6 +125,18 @@ def _builtin_assert_eq(args):
     if len(args) != 2:
         raise TypeError("assert_eq requires exactly 2 arguments")
     a0, a1 = args[0], args[1]
+    Evaluator._reject_mixed_optional(a0, a1, "assert_eq")
+    # Compared by shape first, so ∃(∅) and ∅ are not reported as equal.
+    if isinstance(a0, (SomeValue, NoneValue)):
+        a0_present = isinstance(a0, SomeValue)
+        a1_present = isinstance(a1, SomeValue)
+        if a0_present != a1_present:
+            raise AssertionError(
+                f"assert_eq failed:\n  expected: {a0.display()}\n"
+                f"  actual:   {a1.display()}")
+        if not a0_present:
+            return none()
+        return _builtin_assert_eq([a0.value, a1.value])
     if isinstance(a0, ExpectedValue) and isinstance(a1, ExpectedValue):
         if a0.is_ok() and a1.is_ok():
             return _builtin_assert_eq([a0.ok_value, a1.ok_value])

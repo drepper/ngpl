@@ -119,7 +119,7 @@ fn error_element_of_parameter() → ∅:
 fn test_reading_a_let_element() → ∅:
     let v := [1, 2, 3]
     assert_eq(v[0], 1)
-    assert_eq(v.get(2), 3)
+    assert_eq(v.get(2), ∃(3))
     let total : mut = 0
     foreach x := v:
         total ← total + x

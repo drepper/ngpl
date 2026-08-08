@@ -561,3 +561,31 @@ class StructLit:
     def __init__(self, name: str, field_inits: list[tuple[str, object]]):
         self.name = name
         self.field_inits = field_inits
+
+
+class ExpErr:
+    """Constructor for a failed result: ∄(expr)."""
+
+    def __init__(self, value):
+        self.value = value
+
+
+class MatchArm:
+    """One arm of a match: a pattern and the statements it guards.
+
+    kind is "some" (∃(name), binding the contained value), "none" (∅),
+    or "wildcard" (_).  name is set only for "some".
+    """
+
+    def __init__(self, kind: str, name: str | None, body):
+        self.kind = kind
+        self.name = name
+        self.body = body
+
+
+class MatchStmt:
+    """match subject: arms — dispatch on the shape of a value."""
+
+    def __init__(self, subject, arms: list[MatchArm]):
+        self.subject = subject
+        self.arms = arms

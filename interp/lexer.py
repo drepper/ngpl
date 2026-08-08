@@ -88,7 +88,7 @@ _NORMALIZE_OPS = {
 
 
 # Single-character operators.
-SINGLE_OPS = set("+-*/%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ⍴⧺⌿⍀¤√∛∜↑⁻")
+SINGLE_OPS = set("+-*/%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ∃∄⍴⧺⌿⍀¤√∛∜↑⁻")
 
 # Binary operators that signal line continuation when trailing.
 _CONTINUATION_OPS = frozenset({
@@ -362,6 +362,13 @@ def tokenize(src: str):
         if ch in SINGLE_OPS:
             if ch == "λ":
                 tokens.append(Token("LAMBDA", ch, line, col))
+            elif ch == "\N{THERE DOES NOT EXIST}":
+                # ∄(e) is a failed result carrying the reason.
+                tokens.append(Token("NOTEXISTS", ch, line, col))
+            elif ch == "\N{THERE EXISTS}":
+                # ∃(v) is the present optional; the same token as the
+                # `some` keyword it spells more briefly.
+                tokens.append(Token("SOME", ch, line, col))
             elif ch == "=" or ch in ",.;:(){}[]…":
                 tokens.append(Token("PUNCT", ch, line, col))
             elif ch == "\N{RIGHTWARDS ARROW}":

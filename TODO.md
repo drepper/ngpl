@@ -105,7 +105,12 @@ Data Structures
 Control Flow and Expressions
 -----------------------------
 
-[ ] match statement for deconstructing sum types and optionals.
+[x] match statement for deconstructing sum types and optionals.  Done for optionals and
+    results: ∃(name) binds a present value or a success, ∄(name) binds a failure's error,
+    ∅ matches absence, _ matches the rest, and a value no arm accepts is an error.
+    ∄(e) is also an expression, which is how a function originates an error rather than
+    propagating one.  Sum types will use the same statement.  Still missing: static
+    exhaustiveness, which needs the subject's type.
 
 [ ] loop break/continue statements.  Non-local exits from nested loops.
 
