@@ -1,0 +1,7 @@
+@likely
+fn f() → ∅:
+    ∅
+
+@start
+fn main() → ∅:
+    f()

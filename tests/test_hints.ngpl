@@ -1,0 +1,153 @@
+// test_hints.ngpl -- @likely/@unlikely on conditions, @hot/@cold on functions
+//
+// These say how often something is expected to happen.  They match
+// GCC's __builtin_expect and its hot and cold function attributes: a
+// hint tells the compiler where to spend its effort and never changes
+// what the program computes.  The interpreter records them and runs
+// the code exactly as it would without them.
+
+// ---------------------------------------------------------------------
+// @likely and @unlikely on a condition
+// ---------------------------------------------------------------------
+
+// @unlikely says the condition is expected to be false, @likely that
+// it is expected to be true.  Both branches still run when reached.
+fn classify(n : int) → int:
+    @unlikely
+    if n < 0:
+        return ⁻1
+    @likely
+    if n > 0:
+        return 1
+    0
+
+@test
+fn test_hint_does_not_change_the_branch() → ∅:
+    assert_eq(classify(⁻5), ⁻1)
+    assert_eq(classify(0), 0)
+    assert_eq(classify(7), 1)
+
+// A hinted condition that is expected to be false but is true still
+// takes the branch: the hint is not a promise.
+@test
+fn test_unlikely_branch_still_taken() → ∅:
+    let taken : mut = false
+    @unlikely
+    if true:
+        taken ← true
+    assert(taken)
+
+@test
+fn test_likely_branch_still_skipped() → ∅:
+    let taken : mut = false
+    @likely
+    if false:
+        taken ← true
+    assert(¬taken)
+
+// The hint belongs to the whole statement, so elif and else are
+// unaffected and still reached.
+@test
+fn test_hint_with_elif_and_else() → ∅:
+    let which : mut = 0
+    @unlikely
+    if false:
+        which ← 1
+    elif true:
+        which ← 2
+    else:
+        which ← 3
+    assert_eq(which, 2)
+
+@test
+fn test_hint_with_else() → ∅:
+    let which : mut = 0
+    @likely
+    if false:
+        which ← 1
+    else:
+        which ← 2
+    assert_eq(which, 2)
+
+// A hint on a nested condition applies to that one.
+@test
+fn test_nested_hints() → ∅:
+    let reached : mut = 0
+    @likely
+    if true:
+        @unlikely
+        if true:
+            reached ← 1
+    assert_eq(reached, 1)
+
+// ---------------------------------------------------------------------
+// @hot and @cold on a function
+// ---------------------------------------------------------------------
+
+// @cold says the function is not expected to run often, @hot that it
+// is.  Neither changes what the function returns.
+@cold
+fn rarely_called() → int:
+    41
+
+@hot
+fn often_called() → int:
+    1
+
+@test
+fn test_function_hints_do_not_change_results() → ∅:
+    assert_eq(rarely_called() + often_called(), 42)
+
+// A hint sits alongside the other annotations rather than replacing
+// them.
+@cold
+@impure
+fn hinted_and_impure() → int:
+    hint_counter
+
+let hint_counter : mut = 5
+
+@test
+fn test_hint_with_other_annotations() → ∅:
+    assert_eq(hinted_and_impure(), 5)
+
+// A method takes a hint too.
+struct Counter:
+    n : i32
+
+impl Counter:
+    @hot
+    fn get(&self) → i32:
+        self.n
+
+    @cold
+    fn describe(&self) → str:
+        "a counter"
+
+@test
+fn test_method_hints() → ∅:
+    let c := Counter{n: 9}
+    assert_eq(c.get(), 9)
+    assert_eq(c.describe(), "a counter")
+
+// ---------------------------------------------------------------------
+// The names stay ordinary identifiers
+// ---------------------------------------------------------------------
+
+// Only the @ makes them annotations, so a program is free to use the
+// words for its own bindings.
+@test
+fn test_names_remain_usable() → ∅:
+    let hot := 1
+    let cold := 2
+    let likely := 3
+    let unlikely := 4
+    assert_eq(hot + cold + likely + unlikely, 10)
+
+// A hint that names nothing it can apply to is a parse error, so
+// those cases are output tests: hint_conflict, hint_no_function,
+// hint_wrong_statement, and hint_at_top_level under tests/output.
+
+@start
+fn main() → ∅:
+    std.print("hint tests passed")

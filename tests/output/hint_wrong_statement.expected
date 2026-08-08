@@ -1,0 +1,7 @@
+error: @unlikely applies to an if statement, but none follows
+  --> tests/output/hint_wrong_statement.ngpl:4:5
+    |
+  4 |     let x := 5
+    |     ^^^
+  5 |     std.print(x)
+    |

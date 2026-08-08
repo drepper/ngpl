@@ -1,0 +1,7 @@
+error: @likely applies to an if statement, not to a definition; @hot and @cold are the hints for a function
+  --> tests/output/hint_at_top_level.ngpl:1:1
+    |
+  1 | @likely
+    | ^^^^^^^
+  2 | fn f() → ∅:
+    |

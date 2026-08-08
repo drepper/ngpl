@@ -101,10 +101,14 @@ class IfStmt:
           or None for a plain else without a new condition
     """
 
-    def __init__(self, cond, cons, alt=None):
+    def __init__(self, cond, cons, alt=None, hint: str | None = None):
         self.cond = cond       # expression
         self.cons = cons       # list of statements
         self.alt = alt         # tuple (cond, cons, rest) or None
+        # "likely" or "unlikely" from an annotation, saying which way
+        # the condition is expected to go.  A hint never changes what
+        # the program computes.
+        self.hint = hint
 
 
 class WhileStmt:
@@ -149,7 +153,8 @@ class FuncDef:
                  param_units: dict[str, object] | None = None,
                  is_impure: bool = False,
                  param_refs: set[str] | None = None,
-                 param_muts: set[str] | None = None):
+                 param_muts: set[str] | None = None,
+                 hint: str | None = None):
         self.name = name
         self.params = params
         # Where each parameter was written, for diagnostics about it.
@@ -166,6 +171,10 @@ class FuncDef:
         self.pack_param = pack_param
         self.param_units: dict[str, object] = param_units or {}
         self.is_impure = is_impure
+        # "hot" or "cold" from an annotation, saying how often the
+        # function is expected to run.  A hint never changes what the
+        # function computes.
+        self.hint = hint
 
 
 class VarDef:

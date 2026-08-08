@@ -1,0 +1,5 @@
+@start
+fn main() → ∅:
+    @unlikely
+    let x := 5
+    std.print(x)

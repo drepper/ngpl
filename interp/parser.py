@@ -30,6 +30,7 @@ from interp.lexer import Token, KEYWORDS
 # definition keyword itself or as an annotation preceding it.
 DEFINITION_STARTERS = frozenset({
     "START", "REPLACEABLE", "TEST", "FLAG", "IMPURE", "EXPECT", "REPR",
+    "HOT", "COLD",
     "ENUM", "STRUCT", "IMPL", "UNIT", "TYPE", "FN", "LET",
 })
 
@@ -221,6 +222,7 @@ class Parser:
         is_flag = False
         is_replaceable = False
         is_impure = False
+        hint: str | None = None
         repr_kind: str | None = None
         test_refs: list[str] = []
         expect_annotations: list[tuple[str, str]] = []
@@ -253,6 +255,21 @@ class Parser:
                 self._eat("IMPURE")
                 is_impure = True
                 self._try_eat("NEWLINE")
+            elif self._check("LIKELY") or self._check("UNLIKELY"):
+                tok = self._cur()
+                raise ParseError(
+                    f"@{tok.value} applies to an if statement, not to a "
+                    f"definition; @hot and @cold are the hints for a function",
+                    tok)
+            elif self._check("HOT") or self._check("COLD"):
+                tok = self._eat(self._cur().type)
+                other = "cold" if tok.type == "HOT" else "hot"
+                if hint == other:
+                    raise ParseError(
+                        f"@{tok.value} contradicts @{other} on the same "
+                        f"function", tok)
+                hint = tok.value
+                self._try_eat("NEWLINE")
             elif self._check("REPR"):
                 repr_kind = self._parse_repr_annotation()
                 self._try_eat("NEWLINE")
@@ -272,6 +289,11 @@ class Parser:
                 self._try_eat("NEWLINE")
             else:
                 break
+
+        if hint is not None and not self._check("FN"):
+            raise ParseError(
+                f"@{hint} applies to a function, but none follows",
+                self._cur())
 
         if self._check("ENUM"):
             return self._parse_enum_def(is_flag)
@@ -295,7 +317,7 @@ class Parser:
 
         if self._check("FN"):
             return self._parse_function_def(is_start, is_test, test_refs, expect_annotations,
-                                            is_replaceable, is_impure)
+                                            is_replaceable, is_impure, hint=hint)
         elif self._check("LET"):
             return self._parse_var_def()
         elif self._check("EOF"):
@@ -310,7 +332,8 @@ class Parser:
                             expect_annotations: list[tuple[str, str]] | None = None,
                             is_replaceable: bool = False,
                             is_impure: bool = False,
-                            struct_name: str | None = None):
+                            struct_name: str | None = None,
+                            hint: str | None = None):
         """Parse: fn name '(' [params] ')' ('->' ret_type)? block
 
         The parameter list is enclosed in parentheses.  An empty parameter
@@ -466,7 +489,7 @@ class Parser:
                                test_refs, expect_annotations, is_replaceable,
                                pack_param, param_units, is_impure,
                                param_refs=param_refs,
-                               param_muts=param_muts)
+                               param_muts=param_muts, hint=hint)
                 fdef.param_positions = param_positions
                 fdef._parse_error = str(e)
                 fdef._self_is_ref = self_is_ref
@@ -478,7 +501,7 @@ class Parser:
                        test_refs, expect_annotations, is_replaceable,
                        pack_param, param_units, is_impure,
                        param_refs=param_refs,
-                       param_muts=param_muts)
+                       param_muts=param_muts, hint=hint)
         fdef.param_positions = param_positions
         fdef._self_is_ref = self_is_ref
         return fdef
@@ -614,10 +637,23 @@ class Parser:
             if self._check("DEDENT", "EOF"):
                 break
             is_impure = False
-            if self._check("IMPURE"):
-                self._eat("IMPURE")
-                is_impure = True
-                self._try_eat("NEWLINE")
+            hint: str | None = None
+            while True:
+                if self._check("IMPURE"):
+                    self._eat("IMPURE")
+                    is_impure = True
+                    self._try_eat("NEWLINE")
+                elif self._check("HOT") or self._check("COLD"):
+                    tok = self._eat(self._cur().type)
+                    other = "cold" if tok.type == "HOT" else "hot"
+                    if hint == other:
+                        raise ParseError(
+                            f"@{tok.value} contradicts @{other} on the same "
+                            f"method", tok)
+                    hint = tok.value
+                    self._try_eat("NEWLINE")
+                else:
+                    break
             if not self._check("FN"):
                 raise ParseError(
                     f"expected 'fn' in impl block, got "
@@ -625,7 +661,7 @@ class Parser:
                     self._cur())
             method = self._parse_function_def(
                 is_start=False, struct_name=struct_name,
-                is_impure=is_impure)
+                is_impure=is_impure, hint=hint)
             methods.append(method)
         self._eat("DEDENT")
         return ImplBlock(struct_name, methods)
@@ -738,6 +774,7 @@ class Parser:
         elif self._check("OP") and self._cur().value == "!":
             self.pos += 1
             target += "?std.errors"
+
         self._try_eat("PUNCT", ";")
         return self._set_pos(TypeDef(name_tok.value, target), kw_tok)
 
@@ -884,6 +921,9 @@ class Parser:
         if self._check("TYPE"):
             return self._parse_type_def()
 
+        if self._check("LIKELY") or self._check("UNLIKELY"):
+            return self._parse_hinted_if()
+
         if self._check("IF"):
             return self._parse_if_stmt()
 
@@ -959,7 +999,7 @@ class Parser:
         self._try_eat("PUNCT", ";")
         return ExprStmt(expr)
 
-    def _parse_if_stmt(self):
+    def _parse_if_stmt(self, hint: str | None = None):
         """Parse: if expr block (elif expr block)* (else block)?"""
         self._eat("IF")
         cond = self._parse_or_expr()
@@ -987,7 +1027,7 @@ class Parser:
             alt = ((clause_cond, clause_body) if alt is None
                    else (clause_cond, clause_body, alt))
 
-        return IfStmt(cond, cons_body, alt)
+        return IfStmt(cond, cons_body, alt, hint=hint)
 
     def _parse_while_stmt(self):
         """Parse: while [var [: type]] ':=' expr block, or while expr block
@@ -1170,6 +1210,29 @@ class Parser:
             value = self._parse_or_expr()
         self._try_eat("PUNCT", ";")
         return ReturnStmt(value)
+
+    def _parse_hinted_if(self):
+        """Parse: (@likely | @unlikely) if ...
+
+        The hint says which way the condition is expected to go, so it
+        belongs to the `if` and to nothing else.
+        """
+        tok = self._eat(self._cur().type)
+        hint = tok.value
+        other = "unlikely" if hint == "likely" else "likely"
+        self._skip_nl()
+        while self._check("LIKELY") or self._check("UNLIKELY"):
+            dup = self._eat(self._cur().type)
+            if dup.value != hint:
+                raise ParseError(
+                    f"@{dup.value} contradicts @{hint} on the same condition",
+                    dup)
+            raise ParseError(f"@{hint} is given twice on the same condition", dup)
+        if not self._check("IF"):
+            raise ParseError(
+                f"@{hint} applies to an if statement, but none follows",
+                self._cur())
+        return self._parse_if_stmt(hint=hint)
 
     def _parse_expect_stmt(self):
         """Parse: @expect (error|warning) "pattern" \\n statement"""

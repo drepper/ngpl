@@ -1,0 +1,8 @@
+@hot
+@cold
+fn confused() → int:
+    0
+
+@start
+fn main() → ∅:
+    std.print(confused())

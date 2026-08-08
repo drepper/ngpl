@@ -74,6 +74,10 @@ AT_KEYWORDS: dict[str, str] = {
     "sizeof": "SIZEOF",
     "unitof": "UNITOF",
     "repr": "REPR",
+    "likely": "LIKELY",
+    "unlikely": "UNLIKELY",
+    "hot": "HOT",
+    "cold": "COLD",
 }
 
 # Double-character operators that must be checked before single ones.

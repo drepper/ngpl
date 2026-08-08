@@ -1,0 +1,7 @@
+error: @cold contradicts @hot on the same function
+  --> tests/output/hint_conflict.ngpl:2:1
+    |
+  2 | @cold
+    | ^^^^^
+  3 | fn confused() → int:
+    |

@@ -796,6 +796,86 @@ Both forms are always accepted.  The lexer normalizes the ASCII forms to their U
 The Unicode forms are preferred in source code for visual clarity and consistency with the other Unicode operators (`«`, `»`, `↺`, `↻`, `∧`, `∨`, `⊕`, `⍴`, `⧺`).  The ASCII forms exist to support environments where entering Unicode characters is inconvenient.
 
 
+### Optimization Hints
+
+Four annotations say how often something is expected to happen.  They exist for the compiler's benefit and never change what a program computes: a hinted branch is still taken when its condition holds, and a hinted function still returns what it returned before.  Removing every hint from a program leaves its behaviour identical.
+
+| Annotation | Applies to | Says |
+|------------|-----------|------|
+| `@likely` | an `if` statement | the condition is expected to be true |
+| `@unlikely` | an `if` statement | the condition is expected to be false |
+| `@hot` | a function or method | it is expected to run often |
+| `@cold` | a function or method | it is expected to run rarely |
+
+These match GCC's, and C++'s, facilities of the same names.  `@likely` and `@unlikely` correspond to `__builtin_expect(cond, 1)` and `__builtin_expect(cond, 0)`, and to the C++20 `[[likely]]` and `[[unlikely]]` attributes; `@hot` and `@cold` correspond to `__attribute__((hot))` and `__attribute__((cold))`.
+
+#### Hinting a Condition
+
+The hint precedes the `if` and belongs to its condition, not to a branch:
+
+```
+fn classify(n : int) → int:
+    @unlikely
+    if n < 0:
+        return ⁻1
+    @likely
+    if n > 0:
+        return 1
+    0
+```
+
+This differs from C++, which attaches the attribute to a branch — `if (x) [[likely]] { … }` marks the compound statement rather than the condition.  Naming the condition says the same thing once instead of once per branch, and leaves `elif` and `else` to be reached in the usual way.
+
+A hint is an expectation, not a promise.  A condition marked `@unlikely` that turns out true still takes its branch:
+
+```
+@unlikely
+if true:
+    taken ← true     // runs
+```
+
+#### Hinting a Function
+
+The annotation precedes the definition and sits alongside the others:
+
+```
+@cold
+@impure
+fn report_failure() → ∅:
+    …
+
+impl Counter:
+    @hot
+    fn get(&self) → i32:
+        self.n
+```
+
+A compiler is expected to read `@cold` as licence to optimize the function for size rather than speed, and to treat calls to it as unlikely branches, which is what GCC does.  The interpreter records the hint and does nothing else with it.
+
+#### What Is Rejected
+
+A hint has to name something it can apply to, and cannot contradict itself:
+
+```
+@hot
+@cold
+fn confused() → int:       // error: @cold contradicts @hot on the same function
+
+@cold
+struct S:                  // error: @cold applies to a function, but none follows
+
+@unlikely
+let x := 5                 // error: @unlikely applies to an if statement, but none follows
+```
+
+`likely`, `unlikely`, `hot`, and `cold` are recognized only after `@`, so they remain available as ordinary identifiers:
+
+```
+let hot := 1
+let cold := 2
+```
+
+
 ### Function Return Values
 
 The `return` keyword is used for early returns from a function — exiting before the end of the function body.  For the final expression in a function body, the `return` keyword is optional: the last expression in the body, written without a trailing semicolon, is the function's return value.
