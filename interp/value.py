@@ -1026,6 +1026,77 @@ def register_type_alias(name: str, target: str):
     _TYPE_ALIASES[name] = target
 
 
+# Sum types, by name, each holding the alternatives it admits.
+_SUM_TYPES: dict[str, list[str]] = {}
+
+
+def register_sum_type(name: str, alternatives: list[str]):
+    """Register `type NAME = A | B` and the alternatives it admits."""
+    _SUM_TYPES[name] = list(alternatives)
+    _USER_TYPES.add(name)
+
+
+def sum_type_alternatives(name: str) -> list[str] | None:
+    """Return the alternatives of a sum type, or None if not one."""
+    return _SUM_TYPES.get(name)
+
+
+def sum_type_admits(name: str, value: "Value") -> bool:
+    """Whether a value is one of a sum type's alternatives."""
+    alternatives = _SUM_TYPES.get(name)
+    if alternatives is None:
+        return False
+    return runtime_type_of(value) in alternatives
+
+
+def sum_type_settle(name: str, value: "Value") -> "Value":
+    """Bring a value to whichever alternative of a sum type it belongs to.
+
+    A value that already has one of the alternatives' types is that
+    alternative.  An untyped number does not, so it settles on the one
+    alternative that can hold it, the way it would settle on a
+    parameter's type.  Where more than one could, the program has to
+    say which it meant.
+
+    Returns the value under its alternative, or raises TypeError.
+    """
+    alternatives = _SUM_TYPES[name]
+    actual = runtime_type_of(value)
+    if actual in alternatives:
+        return value
+
+    # Only an untyped number is open to settling; anything else has a
+    # type of its own already and simply is not one of these.
+    untyped_int = isinstance(value, IntValue) and value.width == "int"
+    untyped_float = isinstance(value, FloatValue) and value.width == "float"
+    if untyped_int or untyped_float:
+        family = FLOAT_TYPES if untyped_float else set(_TYPE_BITS)
+        candidates = []
+        for alt in alternatives:
+            if alt not in family:
+                continue
+            try:
+                # coerce_to_type carries integers to their width but
+                # leaves a float as it found it, so a float alternative
+                # is built directly.
+                settled = (mk_float(value.value, alt) if untyped_float
+                           else coerce_to_type(value, alt))
+            except (TypeError, OverflowError):
+                continue
+            candidates.append((alt, settled))
+        if len(candidates) == 1:
+            return candidates[0][1]
+        if len(candidates) > 1:
+            raise TypeError(
+                f"'{name}' is {' | '.join(alternatives)}, and this value "
+                f"could be {' or '.join(a for a, _ in candidates)}; "
+                f"write the type meant")
+
+    raise TypeError(
+        f"'{name}' is {' | '.join(alternatives)}, "
+        f"but the value is {actual}")
+
+
 def resolve_type_alias(type_name: str) -> str:
     """Resolve type aliases transitively, returning the underlying type."""
     seen: set[str] = set()
@@ -1222,6 +1293,13 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
     if is_generic_type(param_type):
         return value
 
+    if param_type in _SUM_TYPES:
+        try:
+            return sum_type_settle(param_type, value)
+        except TypeError as e:
+            raise TypeError(
+                f"{func_name}: argument '{param_name}': {e}") from None
+
     if param_type in _USER_TYPES:
         return value
 
@@ -1242,6 +1320,11 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
         return value
     if not validate_type(target_width):
         raise TypeError(f"unknown type '{target_width}'")
+    if target_width in _SUM_TYPES:
+        # A sum type admits its alternatives and nothing else.  The
+        # value keeps its own type, which is what says which
+        # alternative it is.
+        return sum_type_settle(target_width, value)
     if isinstance(value, UnitValue):
         value = value.inner
     if isinstance(value, IntValue):

@@ -20,7 +20,8 @@ from interp.value import (
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
     NoneValue, SomeValue, ExpectedValue, EnumType, EnumValue, StructType,
     coerce_to_type, validate_param_type, validate_type, none, FAST_TYPES,
-    register_type_alias, register_user_type, DISCARD_NAME,
+    register_type_alias, register_sum_type,
+    sum_type_alternatives, register_user_type, DISCARD_NAME,
     _split_optional_type,
 )
 from interp.eval import Evaluator, unwrap_optional, _ARRAY_MUTATORS
@@ -556,6 +557,30 @@ _SUBJECT_NAME = {"optional": "an optional", "expected": "a result",
                  "plain": "a plain value"}
 
 
+def _declared_sum_type(name: str, func_def) -> str | None:
+    """The sum type a parameter of this function was declared with.
+
+    A parameter is where a type is written down.  A name bound from an
+    expression carries the alternative's own type instead, and nothing
+    is claimed about it here.
+    """
+    for param in func_def.params:
+        param_name = param[0] if isinstance(param, tuple) else param
+        param_type = param[1] if isinstance(param, tuple) else None
+        if param_name != name or param_type is None:
+            continue
+        if sum_type_alternatives(param_type) is not None:
+            return param_type
+    return None
+
+
+def _arm_pattern(arm) -> str:
+    """How an arm's pattern is written, for a diagnostic about it."""
+    if arm.kind == "type":
+        return f"'{arm.type_name}(...)'"
+    return _ARM_PATTERN[arm.kind]
+
+
 def _user_defines_method(name: str, env) -> bool:
     """Whether any struct in scope defines a method of this name."""
     for frame in env._frames:
@@ -565,13 +590,20 @@ def _user_defines_method(name: str, env) -> bool:
     return False
 
 
-def _match_subject_kind(expr, env) -> str | None:
+def _match_subject_kind(expr, env, func_def=None) -> str | None:
     """Classify what a match subject can be: optional, expected, or plain.
 
     Returns None when it cannot be determined without running the
     program, in which case no static claim is made and the check falls to
     the evaluator.
     """
+    # A name declared with a sum type is matched by alternative, and
+    # the type is what says which alternatives there are.
+    if isinstance(expr, _ast.VarRef) and func_def is not None:
+        declared = _declared_sum_type(expr.name, func_def)
+        if declared is not None:
+            return declared
+
     if isinstance(expr, (_ast.OptSome, _ast.NoneLit)):
         return "optional"
     if isinstance(expr, _ast.ExpErr):
@@ -586,6 +618,8 @@ def _match_subject_kind(expr, env) -> str | None:
         ret_type = getattr(callee, "ret_type", None)
         if not ret_type:
             return None
+        if sum_type_alternatives(ret_type) is not None:
+            return ret_type
         _, opt_err = _split_optional_type(ret_type)
         if opt_err is None:
             return "plain"
@@ -597,7 +631,7 @@ def _match_subject_kind(expr, env) -> str | None:
     return None
 
 
-def _check_one_match(node, env) -> str | None:
+def _check_one_match(node, env, func_def=None) -> str | None:
     """Check one match for unreachable and missing arms.
 
     Two kinds of mistake need no knowledge of the subject: a repeated
@@ -608,18 +642,43 @@ def _check_one_match(node, env) -> str | None:
     a shape left unhandled -- needs the subject's type, and is checked
     only where that can be worked out.
     """
+    # Two arms naming different alternatives are different patterns,
+    # so a type arm is identified by the type it names.
     seen: set[str] = set()
     for index, arm in enumerate(node.arms):
-        if arm.kind in seen:
-            return (f"match repeats the {_ARM_PATTERN[arm.kind]} pattern; "
+        key = arm.type_name if arm.kind == "type" else arm.kind
+        if key in seen:
+            return (f"match repeats the {_arm_pattern(arm)} pattern; "
                     f"the second one can never be reached")
-        seen.add(arm.kind)
+        seen.add(key)
         if arm.kind == "wildcard" and index != len(node.arms) - 1:
             return "match has arms after _, which can never be reached"
 
-    subject = _match_subject_kind(node.subject, env)
+    subject = _match_subject_kind(node.subject, env, func_def)
     if subject is None:
         return None
+
+    alternatives = sum_type_alternatives(subject)
+    if alternatives is not None:
+        for arm in node.arms:
+            if arm.kind == "wildcard":
+                continue
+            if arm.kind != "type":
+                return (f"{_arm_pattern(arm)} cannot match '{subject}', "
+                        f"which is {' | '.join(alternatives)}")
+            if arm.type_name not in alternatives:
+                return (f"'{arm.type_name}' is not an alternative of "
+                        f"'{subject}', which is "
+                        f"{' | '.join(alternatives)}")
+        if "wildcard" in seen:
+            return None
+        missing = [a for a in alternatives if a not in seen]
+        if missing:
+            return ("match has no arm for "
+                    + " or ".join(missing)
+                    + "; add the missing pattern or a _ arm")
+        return None
+
     shapes = _SUBJECT_SHAPES[subject]
 
     for arm in node.arms:
@@ -627,7 +686,7 @@ def _check_one_match(node, env) -> str | None:
             continue
         hint = {"none": ", whose failure is \N{THERE DOES NOT EXIST}(e)",
                 "err": ", whose absence is \N{EMPTY SET}"}.get(arm.kind, "")
-        return (f"{_ARM_PATTERN[arm.kind]} cannot match "
+        return (f"{_arm_pattern(arm)} cannot match "
                 f"{_SUBJECT_NAME[subject]}{hint}")
 
     if "wildcard" in seen:
@@ -644,7 +703,7 @@ def _static_check_match(func_def, env) -> str | None:
     """Check every match in a function, lambdas included."""
     for node in _iter_ast(func_def.body):
         if isinstance(node, _ast.MatchStmt):
-            problem = _check_one_match(node, env)
+            problem = _check_one_match(node, env, func_def)
             if problem is not None:
                 return problem
     return None
@@ -962,6 +1021,17 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
             register_user_type(defn.name)
             st = StructType(defn.name, defn.fields, repr_kind=defn.repr_kind)
             env.define(defn.name, st)
+
+    # Every struct and enum exists by now, so an alternative may be
+    # declared below the sum type that names it.
+    for defn in definitions:
+        if isinstance(defn, _ast.SumTypeDef):
+            for alt in defn.alternatives:
+                if not validate_type(alt):
+                    raise DefinitionError(
+                        f"sum type '{defn.name}' names unknown type "
+                        f"'{alt}' as an alternative")
+            register_sum_type(defn.name, defn.alternatives)
 
     # Every struct exists by now, so a @repr(C) layout can be checked even
     # when it names a struct declared further down the file.  Checking here

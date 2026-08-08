@@ -3931,6 +3931,109 @@ Type aliases improve readability by attaching domain meaning to primitive types.
 | Transitive | Yes | Yes | Yes | Yes |
 
 
+### Sum Types
+
+A sum type holds a value of exactly one of several alternatives.  `|` between named types declares one:
+
+```
+struct Circle:
+    r : f64
+struct Rect:
+    w : f64
+    h : f64
+
+type Shape = Circle | Rect
+```
+
+The alternatives are types that exist on their own, so a sum composes them rather than declaring anything new inside itself.  An alternative may be declared below the sum type that names it.  A type named twice is a mistake rather than two alternatives, and is rejected:
+
+```
+type T = i32 | i32     // error: 'i32' is named twice in the alternatives of 'T'
+```
+
+#### What the Tag Is
+
+A value of a sum type carries which alternative it is.  The alternatives are distinct named types, so the value's own type is the tag: there is no separate discriminant to keep in step with the data, and no way for the two to disagree.
+
+The language does not promise a layout.  A compiler is free to place a discriminant beside the payload, or to use a spare bit pattern within the payload where one exists.
+
+#### Reaching the Value
+
+`match` names an alternative and binds the value under it, with its own type, so its fields are reachable:
+
+```
+fn area(s : Shape) → f64:
+    match s:
+        Circle(c):  3.14159 × c.r × c.r
+        Rect(v):    v.w × v.h
+```
+
+Every alternative has to be reached, or a `_` arm has to stand for the rest:
+
+```
+match s:
+    Circle(c):  c.r      // error: match has no arm for Rect
+
+match s:
+    Circle(c):  c.r
+    _:          0.0      // fine
+```
+
+An arm naming a type that is not an alternative is rejected, as is a pattern belonging to some other kind of subject:
+
+```
+Tri(t):  …               // error: 'Tri' is not an alternative of 'Shape'
+∅:       …               // error: ∅ cannot match 'Shape', which is Circle | Rect
+```
+
+Exhaustiveness is checked where the subject's type is written down, which is a parameter.  A name bound from an expression carries the alternative's own type, and nothing is claimed about it.
+
+#### What a Sum Type Admits
+
+Its alternatives, and nothing else, at a binding and at a call:
+
+```
+let a : Shape = Circle{r: 1.0}      // fine
+let b : Shape = Tri{b: 1.0, h: 2.0} // error: 'Shape' is Circle | Rect, but the value is Tri
+```
+
+#### Untyped Numbers
+
+An untyped number is not yet either alternative of `type Scalar = i32 | f64`.  It settles on the alternative that can hold it, the way it would settle on a parameter of a plain type.  An untyped integer considers only integer alternatives and an untyped float only float ones:
+
+```
+kind_of(5)      // i32
+kind_of(2.5)    // f64
+```
+
+Where more than one alternative could hold it, no choice is made:
+
+```
+type Widths = i32 | i64
+width_kind(5)   // error: could be i32 or i64; write the type meant
+
+let a : i64 = 5
+width_kind(a)   // fine
+```
+
+#### Comparison with Other Languages
+
+| | Rust | C++ | Zig | NGPL |
+|---|------|-----|-----|------|
+| Declaration | `enum` with payloads | `std::variant<A, B>` | `union(enum)` | `type S = A \| B` |
+| Alternatives | declared inside | existing types | declared inside | existing types |
+| Two of the same type | yes, distinct names | by index | yes, distinct names | no |
+| Dispatch | `match` | `std::visit` | `switch` | `match` |
+| Exhaustive | yes | yes | yes | yes |
+| Untagged form | `union`, unsafe | `union` | `union` | none yet |
+
+NGPL's declaration is closest to `std::variant`, which is what [CLAUDE.md](../CLAUDE.md) calls for: the alternatives are existing types, composed.  Dispatch is closer to Rust's, since `match` names an alternative rather than taking a visitor.
+
+The cost of composing existing types is that an alternative has no name apart from its type, so two alternatives cannot share one.  Rust's `enum` gives every alternative a name and allows `A(i32)` and `B(i32)` to be different; here a program that wants that declares two structs.
+
+An untagged union is deliberately absent.  Without a tag nothing can say which alternative is live, so no `match` over one can be checked and every read is a claim the compiler cannot verify.  That belongs with the insecure mode, which does not exist yet.  When it arrives it need not be a second construct: dropping the tag is a representation, and `@repr` is where representations are written.
+
+
 ### Enumeration Types
 
 Enumerations define a named set of integer constants grouped under a single type.  Enum members are not in the global namespace — they must be qualified with the enum's name (e.g., `Color.red`).

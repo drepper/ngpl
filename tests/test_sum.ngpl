@@ -1,0 +1,188 @@
+// test_sum.ngpl -- sum types: type NAME = A | B
+//
+// A sum type is a choice between named types.  A value of one is a
+// value of exactly one alternative and carries which one, so the tag
+// is the alternative's own identity rather than a number the program
+// has to keep in step with the data.
+//
+// `match` names an alternative to reach the value under it.
+
+struct Circle:
+    r : f64
+
+struct Rect:
+    w : f64
+    h : f64
+
+struct Tri:
+    b : f64
+    h : f64
+
+type Shape = Circle | Rect
+
+// ---------------------------------------------------------------------
+// Matching an alternative
+// ---------------------------------------------------------------------
+
+fn area(s : Shape) → f64:
+    match s:
+        Circle(c):  3.0 × c.r × c.r
+        Rect(v):    v.w × v.h
+
+@test
+fn test_match_picks_the_alternative() → ∅:
+    assert_eq(area(Circle{r: 2.0}), 12.0)
+    assert_eq(area(Rect{w: 3.0, h: 4.0}), 12.0)
+
+// The bound name is the value under its own type, so its fields are
+// reachable.
+fn width_of(s : Shape) → f64:
+    match s:
+        Circle(c):  c.r × 2.0
+        Rect(v):    v.w
+
+@test
+fn test_bound_name_has_the_alternative_type() → ∅:
+    assert_eq(width_of(Circle{r: 1.5}), 3.0)
+    assert_eq(width_of(Rect{w: 7.0, h: 1.0}), 7.0)
+
+// A `_` arm stands for the alternatives not named.
+fn is_round(s : Shape) → bool:
+    match s:
+        Circle(c):  true
+        _:          false
+
+@test
+fn test_wildcard_covers_the_rest() → ∅:
+    assert(is_round(Circle{r: 1.0}))
+    assert(¬is_round(Rect{w: 1.0, h: 1.0}))
+
+// ---------------------------------------------------------------------
+// What a sum type admits
+// ---------------------------------------------------------------------
+
+@test
+fn test_binding_accepts_an_alternative() → ∅:
+    let a : Shape = Circle{r: 1.0}
+    let b : Shape = Rect{w: 2.0, h: 3.0}
+    assert_eq(area(a) + area(b), 9.0)
+
+@expect error "'Shape' is Circle . Rect, but the value is Tri"
+fn error_binding_rejects_a_non_alternative() → ∅:
+    let s : Shape = Tri{b: 1.0, h: 2.0}
+    _ ← area(s)
+
+@expect error "argument .s.: .Shape. is Circle . Rect, but the value is Tri"
+fn error_argument_rejects_a_non_alternative() → ∅:
+    _ ← area(Tri{b: 1.0, h: 2.0})
+
+// ---------------------------------------------------------------------
+// Every alternative has to be reached
+// ---------------------------------------------------------------------
+
+@expect error "match has no arm for Rect"
+fn error_match_not_exhaustive(s : Shape) → f64:
+    match s:
+        Circle(c):  c.r
+
+@expect error "'Tri' is not an alternative of 'Shape'"
+fn error_arm_names_a_foreign_type(s : Shape) → f64:
+    match s:
+        Circle(c):  c.r
+        Rect(v):    v.w
+        Tri(t):     t.b
+
+@expect error "match repeats the .Circle.* pattern"
+fn error_repeated_alternative(s : Shape) → f64:
+    match s:
+        Circle(c):  c.r
+        Circle(d):  d.r
+        Rect(v):    v.w
+
+@expect error "cannot match 'Shape', which is Circle . Rect"
+fn error_optional_pattern_on_a_sum(s : Shape) → f64:
+    match s:
+        ∅:          0.0
+        Circle(c):  c.r
+
+// ---------------------------------------------------------------------
+// Built-in types as alternatives
+// ---------------------------------------------------------------------
+
+type Scalar = i32 | f64
+
+fn kind_of(v : Scalar) → str:
+    match v:
+        i32(n):  "integer"
+        f64(x):  "float"
+
+// An untyped number settles on the one alternative that can hold it,
+// the way it would settle on a parameter's type.
+@test
+fn test_untyped_number_settles() → ∅:
+    assert_eq(kind_of(5), "integer")
+    assert_eq(kind_of(2.5), "float")
+
+@test
+fn test_typed_value_keeps_its_alternative() → ∅:
+    let n : i32 = 7
+    let x : f64 = 1.5
+    assert_eq(kind_of(n), "integer")
+    assert_eq(kind_of(x), "float")
+
+// Where more than one alternative could hold it, the program has to
+// say which it meant.
+type Widths = i32 | i64
+
+fn width_kind(v : Widths) → int:
+    match v:
+        i32(n):  32
+        i64(n):  64
+
+@expect error "could be i32 or i64; write the type meant"
+fn error_ambiguous_untyped_number() → ∅:
+    _ ← width_kind(5)
+
+@test
+fn test_explicit_type_resolves_the_choice() → ∅:
+    let a : i32 = 5
+    let b : i64 = 5
+    assert_eq(width_kind(a), 32)
+    assert_eq(width_kind(b), 64)
+
+// ---------------------------------------------------------------------
+// Declaring one
+// ---------------------------------------------------------------------
+
+// More than two alternatives, and the order they are written is the
+// order a missing arm is reported in.
+type Any3 = Circle | Rect | Tri
+
+fn name_of(s : Any3) → str:
+    match s:
+        Circle(c):  "circle"
+        Rect(v):    "rect"
+        Tri(t):     "tri"
+
+@test
+fn test_three_alternatives() → ∅:
+    assert_eq(name_of(Circle{r: 1.0}), "circle")
+    assert_eq(name_of(Rect{w: 1.0, h: 1.0}), "rect")
+    assert_eq(name_of(Tri{b: 1.0, h: 1.0}), "tri")
+
+// An alternative may be declared below the sum type that names it.
+type Later = Circle | Declared_below
+
+struct Declared_below:
+    v : i32
+
+@test
+fn test_alternative_declared_later() → ∅:
+    let l : Later = Declared_below{v: 3}
+    match l:
+        Circle(c):        assert(false)
+        Declared_below(d): assert_eq(d.v, 3)
+
+@start
+fn main() → ∅:
+    std.print("sum type tests passed")

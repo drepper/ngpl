@@ -20,7 +20,7 @@ from interp.ast import (
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
-    RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr,
+    RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr, SumTypeDef,
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
     UnitExpr, UnitOfExpr, UnitRefExpr, RefExpr, BorrowExpr, TypeDef,
@@ -40,6 +40,7 @@ from interp.value import (
     is_generic_type, runtime_type_of,
     UnitValue, RefValue, Reference, ElementRef, Iterator, ArrayIterator,
     deep_copy_value, register_type_alias, DISCARD_NAME,
+    register_sum_type, sum_type_alternatives, sum_type_admits,
 )
 from interp.env import Env
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
@@ -2317,6 +2318,10 @@ class Evaluator:
                     self._frozen_vars[stmt.name] = "let"
             return none()
 
+        if isinstance(stmt, SumTypeDef):
+            register_sum_type(stmt.name, stmt.alternatives)
+            return none()
+
         if isinstance(stmt, TypeDef):
             target = stmt.target
             if self._generic_map and is_generic_type(target):
@@ -2722,6 +2727,12 @@ class Evaluator:
         about the value that was matched.
         """
         subject = self.eval_expr(node.subject)
+
+        # A sum type is matched by naming an alternative, so the arm to
+        # run is the one whose type the value actually has.
+        if any(arm.kind == "type" for arm in node.arms):
+            return self._eval_match_by_type(node, subject)
+
         shape, inner = self._match_shape(subject)
 
         for arm in node.arms:
@@ -2749,6 +2760,37 @@ class Evaluator:
         raise TypeError(
             f"match has no arm for {described}; add the missing pattern "
             f"or a _ arm")
+
+    def _eval_match_by_type(self, node: MatchStmt, subject: Value):
+        """Run the arm naming the alternative the value actually is."""
+        actual = runtime_type_of(unwrap_optional(subject))
+        for arm in node.arms:
+            if arm.kind == "wildcard":
+                return self.eval_stmts(arm.body)
+            if arm.kind != "type" or arm.type_name != actual:
+                continue
+            return self._eval_bound_arm(arm, subject)
+        raise TypeError(
+            f"match has no arm for {actual}; add the missing pattern "
+            f"or a _ arm")
+
+    def _eval_bound_arm(self, arm, value: Value):
+        """Run an arm with its name bound to the matched value.
+
+        The name exists only for its arm and cannot be assigned to: it
+        names the matched value, and writing to it would say nothing
+        about the value that was matched.
+        """
+        old_frozen = self._frozen_vars.get(arm.name)
+        self.env.define(arm.name, value)
+        self._frozen_vars[arm.name] = "match"
+        try:
+            return self.eval_stmts(arm.body)
+        finally:
+            if old_frozen is None:
+                self._frozen_vars.pop(arm.name, None)
+            else:
+                self._frozen_vars[arm.name] = old_frozen
 
     @staticmethod
     def _match_shape(subject):

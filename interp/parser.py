@@ -17,7 +17,7 @@ from interp.ast import (
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, TypeDef, EnumDef,
     LambdaExpr, ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
-    UnitExpr, UnitDef, UnitName, UnitBinOp, UnitSqrt, UnitLit,
+    UnitExpr, UnitDef, UnitName, UnitBinOp, UnitSqrt, UnitLit, SumTypeDef,
     UnitOfExpr, UnitRefExpr,
     StructDef, ImplBlock, StructLit,
     MatchStmt, MatchArm, ExpErr,
@@ -775,6 +775,23 @@ class Parser:
             self.pos += 1
             target += "?std.errors"
 
+        # `type N = A | B` names a choice between types rather than
+        # another name for one of them.
+        if self._check("OP") and self._cur().value == "|":
+            alternatives = [target]
+            while self._check("OP") and self._cur().value == "|":
+                self.pos += 1
+                alt_tok = self._eat("IDENT")
+                alt = alt_tok.value + self._parse_array_suffix()
+                if alt in alternatives:
+                    raise ParseError(
+                        f"'{alt}' is named twice in the alternatives of "
+                        f"'{name_tok.value}'", alt_tok)
+                alternatives.append(alt)
+            self._try_eat("PUNCT", ";")
+            return self._set_pos(
+                SumTypeDef(name_tok.value, alternatives), kw_tok)
+
         self._try_eat("PUNCT", ";")
         return self._set_pos(TypeDef(name_tok.value, target), kw_tok)
 
@@ -1187,10 +1204,22 @@ class Parser:
         elif (self._check("IDENT") and self._cur().value == "_"):
             self.pos += 1
             kind = "wildcard"
+        elif self._check("IDENT"):
+            # Type(name): an alternative of a sum type, binding the
+            # value under the type that says which alternative it is.
+            type_tok = self._eat("IDENT")
+            type_name = type_tok.value
+            self._eat("PUNCT", "(")
+            name = self._eat("IDENT").value
+            self._eat("PUNCT", ")")
+            kind = "type"
+            body = self._parse_block()
+            return MatchArm(kind, name, body, type_name=type_name)
         else:
             raise ParseError(
                 "expected a match pattern: \N{THERE EXISTS}(name), "
-                "\N{THERE DOES NOT EXIST}(name), \N{EMPTY SET}, or _",
+                "\N{THERE DOES NOT EXIST}(name), \N{EMPTY SET}, "
+                "Type(name), or _",
                 self._cur())
         body = self._parse_block()
         return MatchArm(kind, name, body)

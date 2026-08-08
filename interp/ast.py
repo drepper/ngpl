@@ -473,6 +473,20 @@ class FoldExpr:
         self.init = init
 
 
+class SumTypeDef:
+    """Sum type definition: type NAME = A | B | C.
+
+    A value of the type is a value of exactly one alternative, and
+    carries which one.  The alternatives are named types, so the tag is
+    the alternative's identity rather than a number the program has to
+    keep in step with the data.
+    """
+
+    def __init__(self, name: str, alternatives: list[str]):
+        self.name = name
+        self.alternatives = alternatives
+
+
 class TypeDef:
     """Type alias definition at top level: type NAME = TARGET [DESCRIPTION]."""
 
@@ -590,14 +604,18 @@ class ExpErr:
 class MatchArm:
     """One arm of a match: a pattern and the statements it guards.
 
-    kind is "some" (∃(name), binding the contained value), "none" (∅),
-    or "wildcard" (_).  name is set only for "some".
+    kind is "some" (∃(name), binding the contained value), "err"
+    (∄(name)), "none" (∅), "type" (Type(name), one alternative of a sum
+    type), or "wildcard" (_).  name is the bound name, set for every
+    kind that binds; type_name is set only for "type".
     """
 
-    def __init__(self, kind: str, name: str | None, body):
+    def __init__(self, kind: str, name: str | None, body,
+                 type_name: str | None = None):
         self.kind = kind
         self.name = name
         self.body = body
+        self.type_name = type_name
 
 
 class MatchStmt:
