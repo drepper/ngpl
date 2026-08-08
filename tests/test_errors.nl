@@ -89,7 +89,7 @@ fn error_unknown_type_var() → ∅:
 
 // --- call-by-reference errors ----------------------------------------------
 
-fn takes_ref(x : &i32[]) → ∅:
+fn takes_ref(x : &mut i32[]) → ∅:
     x[0] = 1
 
 @expect error "is by-reference.*caller must pass"

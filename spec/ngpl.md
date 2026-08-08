@@ -834,6 +834,35 @@ let z : mut = 0              /* mutable, type inferred */
 let w : mut i32 = 0          /* mutable, explicit type */
 ```
 
+#### What Immutability Covers
+
+`let` protects what a binding names, not only the name.  An element or a field is part of the thing the binding holds, so writing to one is writing to the binding:
+
+```
+let v := [1, 2, 3]
+v[0] ← 9
+
+error: cannot assign to element of let variable 'v'
+```
+
+The whole chain of subscripts, slices, and fields is followed back to the binding it starts from, so reaching further in changes nothing:
+
+```
+let m := [[1, 2], [3, 4]]
+m[0][1] ← 9        // same error, naming m
+```
+
+Reading is never restricted — only writes are.
+
+The alternative, where `let` stops reassignment but leaves the contents open, makes the keyword nearly worthless for anything but scalars: an immutable binding to an array whose elements anyone may overwrite guarantees nothing a reader can rely on.  C's `const` applies to the pointer or the pointee depending on where it is written, which is the source of its reputation for confusion; here there is one rule and it covers everything the binding reaches.
+
+This applies to every immutable binding, including function parameters and loop variables, which report their own kind:
+
+```
+foreach x := rows:
+    x[0] ← 9        // error: cannot assign to element of foreach variable 'x'
+```
+
 #### Module-Level `let`
 
 A module-level `let` defines a global constant visible throughout the compilation unit:
@@ -1332,6 +1361,18 @@ fn increment(x : mut i32) → i32:
 
 Parameters without a type annotation are also immutable — there is no way to mark an untyped parameter as mutable (add a type annotation if mutation is needed).
 
+Immutability covers what the parameter names, not only the name, so writing to an element of an array parameter needs `mut` as much as reassigning it does:
+
+```
+fn broken(arr : i32[]) → ∅:
+    arr[0] ← 9        // error: cannot assign to element of let variable 'arr'
+
+fn fine(arr : mut i32[]) → ∅:
+    arr[0] ← 9        // writes to this function's own copy
+```
+
+`mut` does not make the write visible to the caller: an array parameter is passed by value, so `fine` writes to its copy and the caller's array is unchanged.  Passing `&arr` is what shares the array — see [Call-by-Value and Call-by-Reference](#call-by-value-and-call-by-reference).
+
 This follows Rust's convention where `fn foo(x: i32)` produces an immutable binding and `fn foo(mut x: i32)` produces a mutable one.  The design encourages writing functions that do not modify their inputs, making control flow easier to follow.
 
 | Feature | Rust | Zig | C++ | Python | NGPL |
@@ -1344,13 +1385,27 @@ This follows Rust's convention where `fn foo(x: i32)` produces an immutable bind
 
 By default, function parameters are passed **by value**.  For mutable compound values such as arrays, the interpreter creates a deep copy of the argument so that modifications inside the function do not affect the caller.  Scalar values (integers, floats, booleans, strings) are immutable and naturally passed by value without copying.
 
-To pass a parameter **by reference**, prefix the type annotation with `&`:
+To pass a parameter **by reference**, prefix the type annotation with `&`.  A bare `&` lends the value for reading; `&mut` lends it for writing:
 
 ```
-fn fill_zeros(arr : &i32[]) → ∅:
+fn total(arr : &i32[]) → i32:              // may read
+    arr[0] + arr[1]
+
+fn fill_zeros(arr : &mut i32[]) → ∅:     // may write
     foreach i := 0…(arr.sizeof - 1):
         arr[i] = 0
 ```
+
+`&` says where the value lives, not that the callee may change it.  Writing through one is an error:
+
+```
+fn broken(arr : &i32[]) → ∅:
+    arr[0] = 99
+
+error: cannot assign to element of borrowed variable 'arr'
+```
+
+This is the same distinction `foreach` draws with `&` and `&mut`, and the one `impl` methods draw with `&self` and `&mut self`.  Only `mut` grants the right to write, whether the value arrived by value or by reference; a by-value parameter needs `mut` for the same reason, the difference being only whose copy is written.
 
 At the call site, the argument must also be prefixed with `&` to make the reference explicit:
 
@@ -1363,9 +1418,41 @@ fill_zeros(&data)
 #### Semantics
 
 - **By-value parameters** receive a deep copy of mutable data.  Changes to the parameter inside the function are local to that invocation and are not visible to the caller.
-- **By-reference parameters** receive a reference to the caller's binding.  Assignments to the parameter (including element mutation and reshape-as-view operations) are visible to the caller after the function returns.
+- **Shared by-reference parameters** (`&T`) receive a reference the callee may read but not write.
+- **Mutable by-reference parameters** (`&mut T`) receive a reference the callee may write.  Assignments to the parameter, including element mutation, are visible to the caller after the function returns.
 - Passing a non-reference argument to a `&`-parameter is a type error: *"parameter 'x' is by-reference, caller must pass &x"*.
 - Passing a `&`-argument to a by-value parameter is a type error: *"parameter 'x' is by-value, caller must not pass a reference"*.
+
+#### A View Carries the Access It Was Built From
+
+A reshape shares the storage it was built from, so binding one as `mut` would hand out write access to that storage.  Taking a mutable view of something that may only be read is therefore rejected, at the binding:
+
+```
+fn broken(arr : &i32[]) → ∅:
+    let m : mut = (2, 2) ⍴ arr
+
+error: cannot take a mutable view of borrowed variable 'arr'
+```
+
+The binding is where this has to be caught.  Once the view exists it is a mutable local of its own, and a write through it carries no record of where its storage came from — checking the write would see only `m`, which is mutable, and allow it.  Refusing to create the view in the first place is what keeps `&` meaning what it says.
+
+The same applies to any immutable source, not only a borrow: a `let` local and a by-value parameter are both rejected, naming their own kind.
+
+A read-only view of a shared borrow is fine, since it hands out nothing the borrow did not already permit:
+
+```
+fn fine(arr : &i32[]) → i32:
+    let m := (2, 2) ⍴ arr      // not mut
+    m[0, 0]
+```
+
+As does a mutable view of something lent for writing:
+
+```
+fn also_fine(arr : &mut i32[]) → ∅:
+    let m : mut = (2, 2) ⍴ arr
+    m[0, 1] = 42                             // reaches the caller
+```
 
 #### Interaction with Reshape Views
 

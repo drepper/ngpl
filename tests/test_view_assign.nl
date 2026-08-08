@@ -24,7 +24,9 @@ fn test_reshape_view_propagates() → ∅:
 
 // --- call-by-reference: reshape inside function modifies caller's array ---
 
-fn reshape_by_ref(arr : &i32[]) → ∅:
+// &mut: the view shares the caller's storage and is written through,
+// so the parameter has to be lent for writing, not just for reading.
+fn reshape_by_ref(arr : &mut i32[]) → ∅:
   let m : mut = (2, 2) ⍴ arr
   m[0, 1] = 42
 
@@ -36,7 +38,9 @@ fn test_reshape_ref_modifies_caller() → ∅:
 
 // --- call-by-value: reshape inside function does NOT modify caller's array ---
 
-fn reshape_by_val(arr : i32[]) → ∅:
+// mut, because the view is written through.  The parameter is this
+// function's own copy, so the caller is still unaffected.
+fn reshape_by_val(arr : mut i32[]) → ∅:
   let m : mut = (2, 2) ⍴ arr
   m[0, 1] = 99
 
@@ -48,7 +52,10 @@ fn test_reshape_val_no_modify() → ∅:
 
 // --- call-by-reference: direct element assignment modifies caller ----------
 
-fn set_element_ref(arr : &i32[], idx, val : i32) → ∅:
+// &mut, not &: a shared borrow says where the value lives, not that
+// the callee may change it.  This one does change it, and the caller
+// sees the change.
+fn set_element_ref(arr : &mut i32[], idx, val : i32) → ∅:
   arr[idx] = val
 
 @test
@@ -59,7 +66,10 @@ fn test_element_ref_modifies_caller() → ∅:
 
 // --- call-by-value: direct element assignment does NOT modify caller --------
 
-fn set_element_val(arr : i32[], idx, val : i32) → ∅:
+// mut, because writing an element is writing to the binding, and a
+// parameter is immutable by default.  The copy is what is written, so
+// the caller is still unaffected -- which is what this tests.
+fn set_element_val(arr : mut i32[], idx, val : i32) → ∅:
   arr[idx] = val
 
 @test

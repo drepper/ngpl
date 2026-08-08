@@ -2026,6 +2026,7 @@ class Evaluator:
         # LHS can be a VarRef (variable shadowing) or Subscript (array mutation).
         if isinstance(stmt, tuple) and len(stmt) == 3 and stmt[0] == "assign_stmt":
             _, target_ast, rhs_ast = stmt
+            self._check_assignable(target_ast)
             rhs = self.eval_expr(rhs_ast)
             if isinstance(target_ast, MultiSlice):
                 # arr[range, range, ...] ← matrix — multi-dim slice write.
@@ -2064,20 +2065,6 @@ class Evaluator:
                     iu = self._check_index_unit(iu, unwrapped.obj)
                     unwrapped.obj.set(iu.value, rhs)
             elif isinstance(target_ast, GetAttr):
-                if isinstance(target_ast.obj, VarRef):
-                    obj_name = target_ast.obj.name
-                    if self._frozen_vars.get(obj_name) == "moved":
-                        raise TypeError(
-                            f"use of moved value '{obj_name}'")
-                    if obj_name in self._frozen_vars:
-                        kind = self._frozen_vars[obj_name]
-                        raise TypeError(
-                            f"cannot assign to field '{target_ast.attr}' of "
-                            f"{kind} variable '{obj_name}'")
-                    if self.env.is_const_global(obj_name):
-                        raise TypeError(
-                            f"cannot assign to field '{target_ast.attr}' of "
-                            f"let variable '{obj_name}'")
                 obj_val = self.eval_expr(target_ast.obj)
                 au = unwrap_optional(obj_val)
                 if isinstance(au, ObjectValue) and isinstance(au.obj, StructInstance):
@@ -2139,6 +2126,8 @@ class Evaluator:
             return none()
 
         if isinstance(stmt, VarDef):
+            if not stmt.is_const:
+                self._check_mutable_view_source(stmt)
             if stmt.name == DISCARD_NAME:
                 # `let _ := expr` discards too, so that a value can be
                 # thrown away without inventing a name for it.
@@ -2219,6 +2208,73 @@ class Evaluator:
                 return none()
             alt = rest[0] if rest else None
         return none()
+
+    def _check_mutable_view_source(self, stmt):
+        """Reject a mut binding that would take a writable view of a
+        value it may only read.
+
+        A reshape shares the storage it was built from, so binding one
+        as mut hands out write access to that storage.  The binding is
+        where this has to be caught: once the view exists it is a
+        mutable local of its own, and a write through it says nothing
+        about where its storage came from.
+        """
+        expr = stmt.init_expr
+        if not isinstance(expr, ReshapeExpr):
+            return
+        inner = expr.data
+        while isinstance(inner, ReshapeExpr):
+            inner = inner.data
+        if not isinstance(inner, VarRef):
+            return
+
+        name = inner.name
+        kind = self._frozen_vars.get(name)
+        if kind == "moved":
+            raise TypeError(f"use of moved value '{name}'")
+        if kind is not None:
+            raise TypeError(
+                f"cannot take a mutable view of {kind} variable '{name}'")
+        if self.env.is_const_global(name):
+            raise TypeError(
+                f"cannot take a mutable view of let variable '{name}'")
+
+    def _check_assignable(self, target_ast):
+        """Reject a write reaching an immutable binding.
+
+        Writing to an element or a field is writing to the thing that
+        holds it, so `let` protects what a binding names and not merely
+        the name: a binding that cannot be reassigned cannot have its
+        parts assigned either.  The whole chain of subscripts, slices,
+        and fields is followed down to the binding it starts from.
+
+        The name itself is left to the VarRef case, which reports
+        reassignment rather than a write through.
+        """
+        part = None
+        base = target_ast
+        while True:
+            if isinstance(base, (Subscript, SliceAccess, MultiSlice)):
+                part = part or "element"
+                base = base.obj
+            elif isinstance(base, GetAttr):
+                part = part or f"field '{base.attr}'"
+                base = base.obj
+            else:
+                break
+        if part is None or not isinstance(base, VarRef):
+            return
+
+        name = base.name
+        kind = self._frozen_vars.get(name)
+        if kind == "moved":
+            raise TypeError(f"use of moved value '{name}'")
+        if kind is not None:
+            raise TypeError(
+                f"cannot assign to {part} of {kind} variable '{name}'")
+        if self.env.is_const_global(name):
+            raise TypeError(
+                f"cannot assign to {part} of let variable '{name}'")
 
     def _eval_while(self, node: WhileStmt):
         """Evaluate a while loop, with or without a bound variable."""
@@ -3147,8 +3203,14 @@ class Evaluator:
         old_generic_map = self._generic_map
         old_comptime_vars = self._comptime_vars
         for param_name, _ in func.params:
-            if param_name not in func.param_muts and param_name not in func.param_refs:
-                self._frozen_vars[param_name] = "let"
+            # Only `mut` grants the right to write, whether the value
+            # came by value or by reference.  A plain `&T` is a shared
+            # borrow: it says where the value lives, not that the callee
+            # may change it.  `&mut T` is the one that may.
+            if param_name in func.param_muts:
+                continue
+            self._frozen_vars[param_name] = (
+                "borrowed" if param_name in func.param_refs else "let")
         self._call_stack.append([func.name, self._last_pos, func.source_label])
         returned: Value | None = None
         # Parameters hold values the caller owns, so leaving this scope
