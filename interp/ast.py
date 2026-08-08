@@ -152,6 +152,8 @@ class FuncDef:
                  param_muts: set[str] | None = None):
         self.name = name
         self.params = params
+        # Where each parameter was written, for diagnostics about it.
+        self.param_positions: dict[str, tuple[int, int, int | None]] = {}
         self.param_refs: set[str] = param_refs or set()
         self.param_muts: set[str] = param_muts or set()
         self.ret_type = ret_type

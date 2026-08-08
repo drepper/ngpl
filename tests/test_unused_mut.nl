@@ -1,0 +1,135 @@
+// Tests for the warning about a mut binding that is never modified.
+//
+// A binding marked mut promises that it changes.  One that does not is
+// either a leftover from code that used to change it, or a claim the
+// reader will trust and be wrong about.  It is a warning rather than an
+// error because the program is well-formed and may be mid-edit.
+
+// ---------------------------------------------------------------------
+// The warning fires
+// ---------------------------------------------------------------------
+
+@expect warning "'unused' is declared mut but is never modified"
+fn warn_let_never_modified() → ∅:
+    let unused : mut = 5
+    assert_eq(unused, 5)
+
+@expect warning "parameter 'n' is declared mut but is never modified"
+fn warn_parameter_never_modified(n : mut i32) → ∅:
+    assert_eq(n, n)
+
+// ---------------------------------------------------------------------
+// The warning can be expected on the statement itself
+// ---------------------------------------------------------------------
+//
+// The warning is found before the program runs, but a statement-level
+// @expect still matches it, so a test can pin one binding without
+// annotating the whole function.
+
+@test
+fn test_statement_level_expect() → ∅:
+    @expect warning "'here' is declared mut but is never modified"
+    let here : mut = 5
+    assert_eq(here, 5)
+
+// Only the marked statement is covered.  `changed` is modified, so it
+// draws nothing; an unmarked and unmodified one would still be reported.
+@test
+fn test_statement_level_expect_is_local() → ∅:
+    @expect warning "'marked' is declared mut but is never modified"
+    let marked : mut = 1
+    let changed : mut = 2
+    changed ← 3
+    assert_eq(marked + changed, 4)
+
+// ---------------------------------------------------------------------
+// Every way of modifying counts
+// ---------------------------------------------------------------------
+
+@test
+fn test_assignment_counts() → ∅:
+    let x : mut = 1
+    x ← 2
+    assert_eq(x, 2)
+
+@test
+fn test_element_assignment_counts() → ∅:
+    let v : mut = [1, 2]
+    v[0] ← 9
+    assert_eq(v[0], 9)
+
+@test
+fn test_nested_element_assignment_counts() → ∅:
+    let m : mut = [[1, 2]]
+    m[0][1] ← 9
+    assert_eq(m[0][1], 9)
+
+struct Point:
+    x : i32
+
+@test
+fn test_field_assignment_counts() → ∅:
+    let p : mut = Point { x: 1 }
+    p.x ← 9
+    assert_eq(p.x, 9)
+
+@test
+fn test_push_counts() → ∅:
+    let v : mut = [1]
+    v.push(2)
+    assert_eq(v.sizeof, 2)
+
+@test
+fn test_pop_counts() → ∅:
+    let v : mut = [1, 2]
+    _ ← v.pop()
+    assert_eq(v.sizeof, 1)
+
+// Passing by reference may modify, so it counts even though nothing
+// visible happens here.
+fn might_write(a : &mut i32[]) → ∅:
+    a.push(9)
+
+@test
+fn test_reference_argument_counts() → ∅:
+    let v : mut = [1]
+    might_write(&v)
+    assert_eq(v.sizeof, 2)
+
+// A mutable borrow in a foreach writes through to the elements.
+@test
+fn test_mut_borrow_counts() → ∅:
+    let v : mut = [1, 2]
+    foreach e := &mut v:
+        e ← e + 1
+    assert_eq(v[0], 2)
+
+// A mut parameter that is written to is not warned about.
+fn writes_its_copy(a : mut i32[]) → i32:
+    a.push(9)
+    a.sizeof
+
+@test
+fn test_modified_parameter_is_quiet() → ∅:
+    assert_eq(writes_its_copy([1]), 2)
+
+// ---------------------------------------------------------------------
+// A plain let is never warned about
+// ---------------------------------------------------------------------
+
+@test
+fn test_immutable_binding_is_quiet() → ∅:
+    let fixed := 5
+    assert_eq(fixed, 5)
+
+// Nor is a loop or match binding, which are not declared mut.
+@test
+fn test_loop_bindings_are_quiet() → ∅:
+    let total : mut = 0
+    foreach i := 1…3:
+        total ← total + i
+    assert_eq(total, 6)
+
+@start
+fn main() → ∅:
+    std.print("unused mut tests passed")

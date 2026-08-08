@@ -23,7 +23,7 @@ from interp.value import (
     register_type_alias, register_user_type, DISCARD_NAME,
     _split_optional_type,
 )
-from interp.eval import Evaluator, unwrap_optional
+from interp.eval import Evaluator, unwrap_optional, _ARRAY_MUTATORS
 from interp.layout import LayoutError, struct_layout, struct_lookup
 from interp.errors import (format_diagnostic, extract_position,
                            strip_position_prefix, format_backtrace,
@@ -184,15 +184,45 @@ else:
     _GREEN = _RED = _BOLD = _RESET = ""
 
 
-def _run_test(test_fv: FuncValue, env: Env) -> tuple[bool, str]:
-    """Run a single test function, return (passed, error_message)."""
+def _run_test(test_fv: FuncValue, env: Env, source: str = "",
+              source_path: str = "") -> tuple[bool, str]:
+    """Run a single test function, return (passed, report).
+
+    A failing test reports where it failed, with the offending line and
+    a caret, and the call chain when the failure is deeper than the test
+    body.  A bare message leaves the reader to find the line themselves,
+    which for an assertion buried in a helper can mean reading the whole
+    file.
+    """
+    evaluator = Evaluator(env)
     try:
-        Evaluator(env)._call_user_func(test_fv, [])
+        evaluator._call_user_func(test_fv, [])
         return True, ""
-    except AssertionError as e:
-        return False, str(e)
     except Exception as e:
-        return False, str(e)
+        return False, _test_failure_report(e, evaluator, source, source_path)
+
+
+def _test_failure_report(exc: BaseException, evaluator: Evaluator,
+                         source: str, source_path: str) -> str:
+    """Format a test failure the way other diagnostics are formatted."""
+    message = strip_position_prefix(
+        str(exc.args[0]) if isinstance(exc, KeyError) and exc.args else str(exc))
+    # "assert_eq failed: ..." already says what happened; prefixing it
+    # with "assertion failed" would say it twice.
+    if isinstance(exc, AssertionError) and not message.lower().startswith("assert"):
+        message = f"assertion failed: {message}"
+
+    position = extract_position(exc) or evaluator._last_pos
+    if position is None or not source:
+        return message
+
+    line, col, end_col = position
+    report = format_diagnostic(source, source_path, line, col, message,
+                               end_col=end_col, level="error")
+    trace = format_backtrace(exc, source_path)
+    if trace is not None:
+        report += "\n" + trace
+    return report
 
 
 def _parse_args() -> argparse.Namespace:
@@ -620,6 +650,113 @@ def _static_check_match(func_def, env) -> str | None:
     return None
 
 
+def _modified_names(body) -> set[str]:
+    """Names a body may change, by any route the language offers.
+
+    Deliberately generous: a name is counted as modified when there is
+    any plausible way the code could change it.  A warning that fires
+    where nothing is wrong is worse than one that stays quiet, so
+    anything uncertain counts as a modification.
+    """
+    modified: set[str] = set()
+
+    def walk(node):
+        """Like _iter_ast, but yields the tuples statements are encoded as."""
+        if isinstance(node, list):
+            for item in node:
+                yield from walk(item)
+            return
+        if isinstance(node, tuple):
+            yield node
+            for item in node:
+                yield from walk(item)
+            return
+        if type(node).__module__ != "interp.ast":
+            return
+        yield node
+        for value in vars(node).values():
+            yield from walk(value)
+
+    def base_of(expr):
+        while isinstance(expr, (_ast.Subscript, _ast.SliceAccess,
+                                _ast.MultiSlice, _ast.GetAttr)):
+            expr = expr.obj
+        return expr.name if isinstance(expr, _ast.VarRef) else None
+
+    for node in walk(body):
+        # x ← v, x[i] ← v, x.f ← v
+        if isinstance(node, tuple):
+            if len(node) == 3 and node[0] in ("assign_stmt", "assign"):
+                target = node[1]
+                name = target if isinstance(target, str) else base_of(target)
+                if name is not None:
+                    modified.add(name)
+            elif len(node) == 4 and node[0] == "const_assign":
+                modified.add(node[1])
+            continue
+        # x.push(...) and the other methods that change an array
+        if isinstance(node, _ast.MethodCall):
+            if node.method in _ARRAY_MUTATORS:
+                name = base_of(node.obj)
+                if name is not None:
+                    modified.add(name)
+        # &x at a call site: the callee may write through it
+        elif isinstance(node, _ast.RefExpr):
+            modified.add(node.name)
+        # foreach e := &mut x
+        elif isinstance(node, _ast.BorrowExpr) and node.is_mut:
+            name = base_of(node.expr)
+            if name is not None:
+                modified.add(name)
+        # (dims ⍴ x): the result shares x's storage and inherits its
+        # access, so writing through it writes x.
+        elif isinstance(node, _ast.ReshapeExpr):
+            name = base_of(node.data)
+            if name is not None:
+                modified.add(name)
+
+    return modified
+
+
+def _unused_mut_warnings(func_def) -> list[tuple[str, tuple | None]]:
+    """Find mut bindings and parameters the function never modifies.
+
+    A binding marked mut promises that it changes; one that does not is
+    either a leftover from code that used to change it or a signal the
+    reader will trust and be wrong about.  Either way the mut says
+    something untrue, so it is worth pointing out -- as a warning, since
+    the program is well-formed and may be mid-edit.
+    """
+    modified = _modified_names(func_def.body)
+    warnings: list[tuple[str, tuple | None]] = []
+
+    for name in func_def.params:
+        param_name = name[0] if isinstance(name, tuple) else name
+        if param_name in func_def.param_muts and param_name not in modified:
+            warnings.append((
+                f"parameter '{param_name}' is declared mut but is never "
+                f"modified",
+                func_def.param_positions.get(param_name)))
+
+    # A statement the programmer marked with @expect handles its own
+    # diagnostics, so its warning is left for that rather than reported.
+    marked = {id(node.stmt) for node in _iter_ast(func_def.body)
+              if isinstance(node, _ast.ExpectStmt)}
+
+    for node in _iter_ast(func_def.body):
+        if not isinstance(node, _ast.VarDef) or node.is_const:
+            continue
+        if node.name in modified or node.name == DISCARD_NAME:
+            continue
+        message = f"'{node.name}' is declared mut but is never modified"
+        if id(node) in marked:
+            # Read back by the evaluator when the @expect runs.
+            node.static_warnings = [message]
+            continue
+        warnings.append((message, getattr(node, "pos", None)))
+    return warnings
+
+
 def _static_check_moves(stmts: list, env,
                          moved: set[str] | None = None,
                          struct_vars: dict[str, StructType] | None = None,
@@ -696,6 +833,8 @@ class LoadedProgram:
         self.standalone_tests: list[FuncValue] = []
         self.referenced_tests: dict[str, list[FuncValue]] = defaultdict(list)
         self.expect_funcs: list[ASTFuncDef] = []
+        # (message, position) pairs found while installing definitions.
+        self.warnings: list[tuple[str, tuple | None]] = []
 
 
 def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
@@ -884,6 +1023,7 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                 match_err = _static_check_match(defn, env)
                 if match_err is not None:
                     raise DefinitionError(f"in {defn.name}: {match_err}")
+                program.warnings.extend(_unused_mut_warnings(defn))
 
     return program
 
@@ -936,6 +1076,15 @@ def main():
     except DefinitionError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
+
+    for message, position in program.warnings:
+        if position is not None:
+            line, col, end_col = position
+            print(format_diagnostic(source, source_path, line, col, message,
+                                    end_col=end_col, level="warning"),
+                  file=sys.stderr)
+        else:
+            print(f"warning: {message}", file=sys.stderr)
 
     startup_func = program.startup_func
     standalone_tests = program.standalone_tests
@@ -1002,6 +1151,12 @@ def main():
                 errors_produced.append(("error", str(e)))
             errors_produced.extend(("warning", w) for w in eval_inst._warnings)
 
+        # Added last: a non-empty list above skips running the function,
+        # and the expected error would then never be produced.
+        errors_produced.extend(
+            ("warning", message)
+            for message, _ in _unused_mut_warnings(defn))
+
         remaining = list(defn.expect_annotations)
         matched: list[tuple[str, str]] = []
         for level, msg in errors_produced:
@@ -1047,13 +1202,13 @@ def main():
         passed = expect_passed
         failed = expect_failed
         for test_fv in all_tests:
-            ok, msg = _run_test(test_fv, env)
+            ok, msg = _run_test(test_fv, env, source, source_path)
             if ok:
                 print(f"test {test_fv.name} ... {_GREEN}ok{_RESET}", file=sys.stderr)
                 passed += 1
             else:
                 print(f"test {test_fv.name} ... {_RED}{_BOLD}FAILED{_RESET}", file=sys.stderr)
-                print(f"  {msg}", file=sys.stderr)
+                print(msg, file=sys.stderr)
                 failed += 1
 
         if failed == 0:
@@ -1068,9 +1223,11 @@ def main():
     if not args.skip_tests:
         any_failed = False
         for test_fv in standalone_tests:
-            ok, msg = _run_test(test_fv, env)
+            ok, msg = _run_test(test_fv, env, source, source_path)
             if not ok:
-                print(f"test {test_fv.name} ... {_RED}{_BOLD}FAILED{_RESET}: {msg}", file=sys.stderr)
+                print(f"test {test_fv.name} ... {_RED}{_BOLD}FAILED{_RESET}",
+                      file=sys.stderr)
+                print(msg, file=sys.stderr)
                 any_failed = True
         if any_failed:
             sys.exit(1)

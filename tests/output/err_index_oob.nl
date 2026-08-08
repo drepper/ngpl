@@ -1,4 +1,4 @@
 @start
 fn main() → ∅:
-    let arr : mut i32[3] = 0
-    let x : mut = arr[5]
+    let arr : i32[3] = 0
+    let x := arr[5]

@@ -6,12 +6,15 @@ fn sum_bytes(data : byte[]) → int:
 
 @test
 fn test_byte_array() → ∅:
+    // Only read, so mut is a claim this code does not keep.  Marking the
+    // statement is how a test says the warning is meant to be there.
+    @expect warning "'data' is declared mut but is never modified"
     let data : mut = std.bytes("abc")
     assert_eq(sum_bytes(data), 294)
 
 @test
 fn test_byte_sizeof() → ∅:
-    let data : mut = std.bytes("hello")
+    let data := std.bytes("hello")
     assert_eq(data.sizeof, 5)
 
 @start

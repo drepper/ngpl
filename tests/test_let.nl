@@ -169,13 +169,15 @@ fn test_exclusive_borrow_writes() → ∅:
     assert_eq(a[1], 20)
 
 // ---------------------------------------------------------------------
-// A view carries the access it was built from
+// A reshape inherits & and mut from its source
 // ---------------------------------------------------------------------
 //
-// A reshape shares the storage it was built from, so binding one as mut
-// hands out write access to that storage.  The binding is where this is
-// caught: once the view exists it is a mutable local of its own, and a
-// write through it says nothing about where its storage came from.
+// A reshape does not copy.  The result shares the storage it was built
+// from and the access that storage was held under, so ⍴ changes a
+// value's shape and not the terms it is held on.  Binding the result as
+// mut would claim write access, which is where a source that may only
+// be read is caught: once the view exists it is a mutable local of its
+// own, and a write through it says nothing about where it came from.
 
 fn mut_view_of_shared(arr : &i32[]) → ∅:
     let m : mut = (2, 2) ⍴ arr

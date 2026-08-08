@@ -2137,6 +2137,9 @@ class Evaluator:
         # LHS can be a VarRef (variable shadowing) or Subscript (array mutation).
         if isinstance(stmt, tuple) and len(stmt) == 3 and stmt[0] == "assign_stmt":
             _, target_ast, rhs_ast = stmt
+            target_pos = getattr(target_ast, "pos", None)
+            if target_pos is not None:
+                self._last_pos = target_pos
             self._check_assignable(target_ast)
             rhs = self.eval_expr(rhs_ast)
             if isinstance(target_ast, MultiSlice):
@@ -2607,6 +2610,9 @@ class Evaluator:
         any expectation remains unmatched.
         """
         diagnostics: list[tuple[str, str]] = []
+        # Warnings found before the program ran, about this statement.
+        diagnostics.extend(
+            ("warning", w) for w in getattr(node.stmt, "static_warnings", ()))
         saved_warnings = self._warnings
         self._warnings = []
         try:

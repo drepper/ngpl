@@ -1,3 +1,3 @@
 @start
 fn main() → ∅:
-    let x : mut i32 = if
+    let x : i32 = if

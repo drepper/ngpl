@@ -1,6 +1,6 @@
 error: array index 5 out of range (length 3)
-  --> tests/output/err_index_oob.nl:4:23
+  --> tests/output/err_index_oob.nl:4:18
     |
-  4 |     let x : mut = arr[5]
-    |                       ^
+  4 |     let x := arr[5]
+    |                  ^
     |

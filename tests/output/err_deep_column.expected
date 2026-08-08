@@ -1,6 +1,6 @@
 error: addition expected int+int, float+float, or str+str, got IntValue+StrValue
-  --> tests/output/err_deep_column.nl:6:24
+  --> tests/output/err_deep_column.nl:6:19
     |
-  6 |     let result : mut = a + b + c + "bad"
-    |                        ^^^^^^^^^^^^^^^^^
+  6 |     let result := a + b + c + "bad"
+    |                   ^^^^^^^^^^^^^^^^^
     |

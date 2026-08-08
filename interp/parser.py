@@ -309,6 +309,7 @@ class Parser:
         param_units: dict[str, object] = {}
         param_refs: set[str] = set()
         param_muts: set[str] = set()
+        param_positions: dict[str, tuple[int, int, int | None]] = {}
         pack_param: tuple[str, str | None] | None = None
         self._eat("PUNCT", "(")
 
@@ -368,6 +369,8 @@ class Parser:
             if not self._check("IDENT"):
                 break
             param_name_tok = self._eat("IDENT")
+            param_positions[param_name_tok.value] = (
+                param_name_tok.line, param_name_tok.col, param_name_tok.end_col)
             is_pack = self._try_eat("PUNCT", "\N{HORIZONTAL ELLIPSIS}")
             param_unit = None
             if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
@@ -454,6 +457,7 @@ class Parser:
                                pack_param, param_units, is_impure,
                                param_refs=param_refs,
                                param_muts=param_muts)
+                fdef.param_positions = param_positions
                 fdef._parse_error = str(e)
                 fdef._self_is_ref = self_is_ref
                 self._skip_to_next_definition()
@@ -465,6 +469,7 @@ class Parser:
                        pack_param, param_units, is_impure,
                        param_refs=param_refs,
                        param_muts=param_muts)
+        fdef.param_positions = param_positions
         fdef._self_is_ref = self_is_ref
         return fdef
 

@@ -1,6 +1,6 @@
 error: unexpected token: newline
-  --> tests/output/err_parse_missing_expr.nl:3:22
+  --> tests/output/err_parse_missing_expr.nl:3:18
     |
-  3 |     let x : mut i32 =
-    |                      ^
+  3 |     let x : i32 =
+    |                  ^
     |

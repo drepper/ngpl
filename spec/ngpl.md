@@ -834,6 +834,56 @@ let z : mut = 0              /* mutable, type inferred */
 let w : mut i32 = 0          /* mutable, explicit type */
 ```
 
+#### An Unused `mut` Is a Warning
+
+A binding marked `mut` that the function never modifies draws a warning, reported where the binding is written:
+
+```
+let unused : mut = 5
+
+warning: 'unused' is declared mut but is never modified
+```
+
+The same applies to a parameter, reported at the parameter:
+
+```
+fn f(n : mut i32) → ∅:
+
+warning: parameter 'n' is declared mut but is never modified
+```
+
+`mut` is a claim that the binding changes, and a reader who sees one plans around it — looking for where the value moves, or declining to reason about it as a constant.  A `mut` that never changes anything is either left over from code that used to change it, or a claim that was never true; both mislead in the same direction.
+
+It is a warning rather than an error because the program is well-formed and may be mid-edit: a binding is often marked `mut` before the line that writes it is typed.
+
+A statement-level `@expect` matches it, so a test can pin one binding without annotating the whole function:
+
+```
+@expect warning "'data' is declared mut but is never modified"
+let data : mut = std.bytes("abc")
+```
+
+A marked statement handles its own diagnostics, so the warning is not also reported at the top level.  Other bindings in the same function are unaffected — marking one says nothing about the rest.
+
+The warning is found before the program runs, unlike the warnings produced during evaluation, but `@expect` treats the two alike: what a diagnostic is about matters to the reader, and when it was noticed does not.
+
+#### What Counts as Modifying
+
+The check is deliberately generous, since a warning that fires where nothing is wrong is worse than one that stays quiet.  All of these count:
+
+| Form | Example |
+|------|---------|
+| assignment | `x ← 1` |
+| element or field assignment | `v[0] ← 1`, `p.x ← 1`, `m[0][1] ← 1` |
+| a method that changes an array | `v.push(1)`, `v.pop()`, `v.insert(...)`, `v.remove(...)` |
+| passing by reference | `f(&v)` — the callee may write through it |
+| lending for writing | `foreach e := &mut v` |
+| reshaping | `(2, 2) ⍴ v` — the result shares `v`'s storage |
+
+Passing `&v` counts even when the parameter turns out to be a shared borrow, and reshaping counts even when the result is only read.  Following either through would mean resolving what happens next, and the cost of being wrong — a warning on correct code — is higher than the cost of staying quiet on a `mut` a stricter check would have caught.
+
+The check is made where the function is defined, so it does not depend on the function being called.
+
 #### What Immutability Covers
 
 `let` protects what a binding names, not only the name.  An element or a field is part of the thing the binding holds, so writing to one is writing to the binding:
@@ -1651,9 +1701,22 @@ fill_zeros(&data)
 - Passing a non-reference argument to a `&`-parameter is a type error: *"parameter 'x' is by-reference, caller must pass &x"*.
 - Passing a `&`-argument to a by-value parameter is a type error: *"parameter 'x' is by-value, caller must not pass a reference"*.
 
-#### A View Carries the Access It Was Built From
+#### A Reshape Inherits `&` and `mut` from Its Source
 
-A reshape shares the storage it was built from, so binding one as `mut` would hand out write access to that storage.  Taking a mutable view of something that may only be read is therefore rejected, at the binding:
+A reshape does not copy.  The result shares the storage it was built from, and with it the access that storage was available under: reshaping something lent for reading yields a view that may be read, and reshaping something lent for writing yields one that may be written.  `⍴` changes the shape of a value, not the terms on which it is held.
+
+| Source | Result |
+|--------|--------|
+| `&T[]` — lent for reading | may be read |
+| `&mut T[]` — lent for writing | may be written, and the write reaches the source |
+| a `let` binding | may be read |
+| a `mut` binding | may be written |
+
+Everything below follows from that one rule.  Because the properties are inherited rather than chosen, a view cannot be used to gain access its source did not have — which is what makes `&` and `mut` mean the same thing after a reshape as before it.
+
+The rule also explains why a function that writes through a view of a parameter counts as modifying that parameter, and so does not draw the [unused-`mut` warning](#an-unused-mut-is-a-warning): the write reaches the parameter.
+
+Binding the result as `mut` would claim write access, so taking a mutable view of something that may only be read is rejected, at the binding:
 
 ```
 fn broken(arr : &i32[]) → ∅:

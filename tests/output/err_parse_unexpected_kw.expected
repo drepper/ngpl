@@ -1,6 +1,6 @@
 error: unexpected token: 'if'
-  --> tests/output/err_parse_unexpected_kw.nl:3:23
+  --> tests/output/err_parse_unexpected_kw.nl:3:19
     |
-  3 |     let x : mut i32 = if
-    |                       ^^
+  3 |     let x : i32 = if
+    |                   ^^
     |

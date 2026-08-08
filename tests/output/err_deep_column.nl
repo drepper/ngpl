@@ -1,6 +1,6 @@
 @start
 fn main() → ∅:
-    let a : mut i32 = 1
-    let b : mut i32 = 2
-    let c : mut i32 = 3
-    let result : mut = a + b + c + "bad"
+    let a : i32 = 1
+    let b : i32 = 2
+    let c : i32 = 3
+    let result := a + b + c + "bad"
