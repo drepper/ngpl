@@ -1158,7 +1158,7 @@ fn safe_div a : int, b : int → int!:
     (a / b)?
 ```
 
-`int!` is exactly equivalent to `int?std.errors` — both in parameter types and return types.
+`int!` is exactly equivalent to `int?std.errors` — both in parameter types and return types.  Since `std.errors` is what almost every fallible operation in the standard library reports, `T!` is the form to write; the long form is for the rare case of naming it alongside another error type, where the symmetry helps.  The rest of this document and the test suite use `T!`.
 
 #### Constructors
 
@@ -1183,7 +1183,7 @@ This means division by zero is a **recoverable error** rather than an immediate 
 let result : mut = (10 / 0) ?? -1         /* result is -1 */
 
 /* Propagation with ? (requires T?E or T? return type) */
-fn compute x : int → int?std.errors:
+fn compute x : int → int!:
     let q : mut = (x / 2)?                /* propagates error if x/2 fails */
     q + 10
 ```
@@ -1199,9 +1199,44 @@ The `?` postfix operator works on both optional and expected values:
 | `ok(v)` | evaluates to `v` |
 | `err(e)` | returns `err(e)` from enclosing function (if return type is `T?E`) or `∅` (if `T?`) |
 
-The enclosing function must declare a compatible return type; using `?` in a function that returns a plain type is a compile error.
+#### What `?` Requires of Its Function
 
-When an expected-error is propagated to a function with an optional return type (`T?`), the error is converted to `∅` — the error detail is discarded.  When propagated to a function with an expected return type (`T?E`), the error is preserved.
+`?` returns from the function it is written in, so that function has to be able to say that it failed.  Two rules follow, both checked when the function is defined rather than when the `?` runs.
+
+**The return type must be optional or expected.**  A function returning a plain type has no way to report the failure it would be propagating:
+
+```
+fn broken(x : int) → int:
+    let q : mut = (x / 2)?
+
+error: in broken: ? requires the enclosing function to return an
+optional or an expected type, but it returns 'int'
+```
+
+**An expected return must promise the error type being propagated.**  The caller reads the error as the declared type, so propagating a different one would hand it something it cannot interpret:
+
+```
+enum MyErr:
+    bad
+
+fn broken(x : int) → int?MyErr:
+    let q : mut = (x / 0)?        // division fails with std.errors
+
+error: in broken: ? propagates an error of type 'std.errors', but the
+function returns errors of type 'MyErr'
+```
+
+An optional return (`T?`) needs no match: the error is converted to `∅` and the detail discarded, so any error type is absorbed.  An expected return (`T?E`) preserves the error, which is why it has to agree.
+
+The error type is determined from the expression `?` is applied to — division and remainder fail with `std.errors`, and a call fails with whatever its own return type declares.  Where it cannot be determined without running the program, the check is made when the error is actually propagated instead.
+
+A lambda is its own function for this purpose.  A `?` inside one returns from the lambda, so it is checked against the lambda's return type and not the enclosing function's:
+
+```
+fn caller() → ∅:                                  // plain, and that is fine
+    let f : mut = λa : int, b : int → int!: (a / b)?
+    std.print(f(10, 0) ?? ⁻1)
+```
 
 #### The `??` Operator on Expected Values
 

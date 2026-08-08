@@ -64,6 +64,7 @@ all_tests=(
     "$testdir"/test_array_methods.nl
     "$testdir"/test_iterator.nl
     "$testdir"/test_while_binding.nl
+    "$testdir"/test_try_return_type.nl
 )
 
 # Filter tests if command-line patterns are given.

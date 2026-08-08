@@ -1,0 +1,92 @@
+// Tests for what `?` requires of the function it is written in.
+//
+// `?` returns from that function when the value it is applied to is
+// absent or failed, so the function has to be able to say so: its
+// return type must be optional or expected.  When it is expected, the
+// error being propagated has to be the error type it promises, since
+// the caller will read it as that type.
+
+enum MyErr:
+    bad
+    worse
+
+// ---------------------------------------------------------------------
+// A matching return type is accepted
+// ---------------------------------------------------------------------
+
+fn expected_matching(x : int) → int!:
+    let q : mut = (x / 0)?
+    q
+
+@test
+fn test_expected_matching() → ∅:
+    assert_eq(expected_matching(4) ?? ⁻1, ⁻1)
+
+// The long form names the same error type, so it matches too.
+fn spelled_out(x : int) → int?std.errors:
+    let q : mut = (x / 0)?
+    q
+
+@test
+fn test_long_form_matches() → ∅:
+    assert_eq(spelled_out(4) ?? ⁻1, ⁻1)
+
+// An optional return absorbs any error: the detail is discarded.
+fn optional_absorbs(x : int) → int?:
+    let q : mut = (x / 0)?
+    q
+
+@test
+fn test_optional_absorbs_any_error() → ∅:
+    assert_eq(optional_absorbs(4) ?? ⁻1, ⁻1)
+
+// Propagating from another function with the same error type.
+fn chained(x : int) → int!:
+    let q : mut = expected_matching(x)?
+    q + 1
+
+@test
+fn test_chained_propagation() → ∅:
+    assert_eq(chained(4) ?? ⁻1, ⁻1)
+
+// The success path is unaffected.
+fn succeeds(x : int) → int!:
+    let q : mut = (x / 2)?
+    q
+
+@test
+fn test_success_path() → ∅:
+    assert_eq(succeeds(10) ?? ⁻1, 5)
+
+// ---------------------------------------------------------------------
+// A function that cannot report failure may not use ?
+// ---------------------------------------------------------------------
+
+@expect error "requires the enclosing function to return an optional"
+fn error_plain_return_type() → int:
+    let q : mut = (10 / 2)?
+    q
+
+@expect error "requires the enclosing function to return an optional"
+fn error_void_return_type() → ∅:
+    let q : mut = (10 / 2)?
+    std.print(q)
+
+// ---------------------------------------------------------------------
+// The propagated error must be the one the function promises
+// ---------------------------------------------------------------------
+
+@expect error "propagates an error of type 'std.errors'"
+fn error_mismatched_error_type() → int?MyErr:
+    let q : mut = (10 / 0)?
+    q
+
+// The mismatch is caught through a call as well as through division.
+@expect error "propagates an error of type 'std.errors'"
+fn error_mismatched_through_call() → int?MyErr:
+    let q : mut = expected_matching(4)?
+    q
+
+@start
+fn main() → ∅:
+    std.print("try return type tests passed")

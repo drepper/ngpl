@@ -21,6 +21,7 @@ from interp.value import (
     NoneValue, ExpectedValue, EnumType, EnumValue, StructType,
     coerce_to_type, validate_param_type, validate_type, none, FAST_TYPES,
     register_type_alias, register_user_type, DISCARD_NAME,
+    _split_optional_type,
 )
 from interp.eval import Evaluator, unwrap_optional
 from interp.layout import LayoutError, struct_layout, struct_lookup
@@ -412,6 +413,92 @@ def _stmt_top_exprs(stmt) -> list:
     return []
 
 
+def _iter_ast(node, stop_at=()):
+    """Yield every AST node reachable from node, itself included.
+
+    Nodes listed in stop_at are yielded but not descended into, so a
+    caller can treat them as boundaries and handle their contents on
+    their own terms.
+    """
+    if isinstance(node, (list, tuple)):
+        for item in node:
+            yield from _iter_ast(item, stop_at)
+        return
+    if type(node).__module__ != "interp.ast":
+        return
+    yield node
+    if stop_at and isinstance(node, stop_at):
+        return
+    for value in vars(node).values():
+        yield from _iter_ast(value, stop_at)
+
+
+def _propagated_error_type(expr, env) -> str | None:
+    """The error type an expression can produce, when it is knowable.
+
+    Returns None when the expression's error type cannot be determined
+    without evaluating it, in which case no static claim is made.
+    """
+    if isinstance(expr, _ast.BinOp) and expr.op in ("/", "%"):
+        # Division and remainder report failure as std.errors.
+        return "std.errors"
+    if isinstance(expr, _ast.FuncCall):
+        try:
+            callee = env.lookup(expr.name)
+        except KeyError:
+            return None
+        ret_type = getattr(callee, "ret_type", None)
+        if not ret_type:
+            return None
+        _, err = _split_optional_type(ret_type)
+        return err or None
+    return None
+
+
+def _static_check_try(func_def, env) -> str | None:
+    """Check every `?` in a function against its declared return type.
+
+    `?` returns from the function it is written in when the value it is
+    applied to is absent or failed, so that function has to be able to
+    say so: its return type must be optional or expected.  When it is
+    expected, the error being propagated has to be the error type it
+    promises, since the caller will read it as that type.
+
+    An optional return absorbs any error -- the detail is discarded and
+    ∅ returned -- so nothing needs to match there.
+    """
+    return _check_try_in(func_def.body, func_def.ret_type, env)
+
+
+def _check_try_in(body, ret_type, env, *, in_lambda: bool = False) -> str | None:
+    """Check the `?` operators of one function or lambda body."""
+    _, opt_err = _split_optional_type(ret_type) if ret_type else (None, None)
+    where = "lambda" if in_lambda else "enclosing function"
+
+    for node in _iter_ast(body, stop_at=(_ast.LambdaExpr,)):
+        # A lambda is its own function: a ? inside one returns from the
+        # lambda, so it is checked against the lambda's return type.
+        if isinstance(node, _ast.LambdaExpr):
+            nested = _check_try_in(node.body, node.ret_type, env,
+                                   in_lambda=True)
+            if nested is not None:
+                return nested
+            continue
+        if not isinstance(node, _ast.TryUnwrap):
+            continue
+        if opt_err is None:
+            return (f"? requires the {where} to return an optional or an "
+                    f"expected type, but it returns "
+                    f"'{ret_type or chr(8709)}'")
+        if opt_err == "":
+            continue
+        source = _propagated_error_type(node.expr, env)
+        if source is not None and source != opt_err:
+            return (f"? propagates an error of type '{source}', but the "
+                    f"{where} returns errors of type '{opt_err}'")
+    return None
+
+
 def _static_check_moves(stmts: list, env,
                          moved: set[str] | None = None,
                          struct_vars: dict[str, StructType] | None = None,
@@ -652,6 +739,10 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                     raise DefinitionError(
                         f"duplicate method '{method_def.name}' "
                         f"in impl {defn.struct_name}")
+                try_err = _static_check_try(method_def, env)
+                if try_err is not None:
+                    raise DefinitionError(
+                        f"in {defn.struct_name}.{method_def.name}: {try_err}")
                 st.methods[method_def.name] = fv
                 if getattr(method_def, "_self_is_ref", False):
                     st._ref_self_methods.add(method_def.name)
@@ -662,6 +753,9 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                 move_err = _static_check_moves(defn.body, env)
                 if move_err is not None:
                     raise DefinitionError(f"in {defn.name}: {move_err}")
+                try_err = _static_check_try(defn, env)
+                if try_err is not None:
+                    raise DefinitionError(f"in {defn.name}: {try_err}")
 
     return program
 
@@ -757,6 +851,11 @@ def main():
             move_err = _static_check_moves(defn.body, env)
             if move_err is not None:
                 errors_produced.append(("error", move_err))
+
+        if not errors_produced:
+            try_err = _static_check_try(defn, env)
+            if try_err is not None:
+                errors_produced.append(("error", try_err))
 
         if not errors_produced:
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,

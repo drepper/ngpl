@@ -46,7 +46,7 @@ fn test_mod_zero_recovery() → ∅:
 
 // ---- ? propagation for expected values -----------------------------------
 
-fn safe_div(a : int, b : int) → int?std.errors:
+fn safe_div(a : int, b : int) → int!:
     (a / b)?
 
 @test
@@ -75,7 +75,7 @@ fn test_div_chain_zero() → ∅:
 
 // ---- expected error is std.errors value ----------------------------------
 
-fn div_or_err(a : int, b : int) → int?std.errors:
+fn div_or_err(a : int, b : int) → int!:
     (a / b)?
 
 @test
@@ -92,7 +92,35 @@ fn test_unwrapped_expected_arithmetic() → ∅:
     let y : mut = x + 10
     assert_eq(y, 15)
 
-// ---- T! abbreviation for T?std.errors ------------------------------------
+// ---- T! and T?std.errors are the same type -------------------------------
+//
+// T! is the form used throughout; this pins that the long form still
+// parses and means exactly the same thing.
+
+fn long_form(a : int, b : int) → int?std.errors:
+    (a / b)?
+
+fn short_form(a : int, b : int) → int!:
+    (a / b)?
+
+@test
+fn test_long_and_short_agree_on_ok() → ∅:
+    assert_eq(long_form(10, 2) ?? ⁻1, short_form(10, 2) ?? ⁻1)
+
+@test
+fn test_long_and_short_agree_on_err() → ∅:
+    assert_eq(long_form(10, 0) ?? ⁻1, short_form(10, 0) ?? ⁻1)
+
+// A value from one is accepted where the other is expected, which it
+// could not be if they were different types.
+fn takes_short(x : int!) → int:
+    x ?? 0
+
+@test
+fn test_long_form_value_fits_short_form_parameter() → ∅:
+    assert_eq(takes_short(long_form(10, 2)), 5)
+
+// ---- T! abbreviation ------------------------------------------------------
 
 fn bang_div(a : int, b : int) → int!:
     (a / b)?

@@ -943,16 +943,17 @@ class Evaluator:
         return mk_int(value, width)
 
     def _division_error(self) -> ExpectedValue:
-        """Create an ExpectedValue.err for division by zero using std.errors."""
-        try:
-            std_obj = self.env.lookup("std")
-            if isinstance(std_obj, ObjectValue):
-                errors_enum = getattr(std_obj.obj, "errors", None)
-                if isinstance(errors_enum, EnumType):
-                    return ExpectedValue.err(
-                        EnumValue(errors_enum, errors_enum.members["division_by_zero"]))
-        except Exception:
-            pass
+        """Create an ExpectedValue.err for division by zero using std.errors.
+
+        The enum is taken from the std module itself rather than looked
+        up by name: a lambda's environment does not reach the globals,
+        so the lookup failed there and the error degraded to a string,
+        which is not the type the return annotation promises.
+        """
+        errors_enum = getattr(std, "errors", None)
+        if isinstance(errors_enum, EnumType):
+            return ExpectedValue.err(
+                EnumValue(errors_enum, errors_enum.members["division_by_zero"]))
         return ExpectedValue.err(mk_str("division by zero"))
 
     @staticmethod
@@ -1666,6 +1667,15 @@ class Evaluator:
                 if val.is_ok():
                     return val.ok_value
                 if opt_err != "":
+                    # The static check catches this wherever the error
+                    # type can be worked out from the source; this is
+                    # the backstop for the cases where it cannot.
+                    actual = self._value_type_name(val.err_value)
+                    if actual != opt_err.rsplit(".", 1)[-1]:
+                        raise TypeError(
+                            f"? propagates an error of type '{actual}', but "
+                            f"the function returns errors of type "
+                            f"'{opt_err}'")
                     raise _ReturnSentinel(ExpectedValue.err(val.err_value))
                 raise _ReturnSentinel(none())
             if isinstance(val, SomeValue):
