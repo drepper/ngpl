@@ -150,6 +150,27 @@ class Parser:
         """Return True if the current token type is one of the given types."""
         return self._cur().type in types
 
+    def _parse_array_suffix(self) -> str:
+        """Parse the bracketed dimensions of an array type.
+
+        One entry per dimension, each either a size or empty, so that
+        `[4]`, `[]`, `[2,3]`, and `[2,]` all read the same way: a size
+        fixes that dimension, an empty entry leaves it open.
+
+        Returns the text to append to the element type, or "" when the
+        next token does not open an array type.
+        """
+        if not (self._check("PUNCT") and self._cur().value == "["):
+            return ""
+        self.pos += 1
+        dims: list[str] = []
+        while True:
+            dims.append(str(self._eat("INT").value) if self._check("INT") else "")
+            if self._try_eat("PUNCT", ",") is None:
+                break
+        self._eat("PUNCT", "]")
+        return "[" + ",".join(dims) + "]"
+
     # ------------------------------------------------------------------
     # Top-level parsing
     # ------------------------------------------------------------------
@@ -397,18 +418,7 @@ class Parser:
                         is_mut = True
                     type_tok = self._eat("IDENT")
                     param_type = type_tok.value
-                if self._check("PUNCT") and self._cur().value == "[":
-                    self.pos += 1
-                    if self._check("PUNCT") and self._cur().value == "]":
-                        self.pos += 1
-                        param_type += "[]"
-                    elif self._check("INT"):
-                        size_tok = self._eat("INT")
-                        self._eat("PUNCT", "]")
-                        param_type += f"[{size_tok.value}]"
-                    else:
-                        self._eat("PUNCT", "]")
-                        param_type += "[]"
+                param_type += self._parse_array_suffix()
                 if self._check("OP") and self._cur().value == "?":
                     self.pos += 1
                     param_type += "?"
@@ -576,18 +586,7 @@ class Parser:
                 self._eat("PUNCT", ":")
                 type_tok = self._eat("IDENT")
                 field_type = type_tok.value
-                if self._check("PUNCT") and self._cur().value == "[":
-                    self.pos += 1
-                    if self._check("PUNCT") and self._cur().value == "]":
-                        self.pos += 1
-                        field_type += "[]"
-                    elif self._check("INT"):
-                        size_tok = self._eat("INT")
-                        self._eat("PUNCT", "]")
-                        field_type += f"[{size_tok.value}]"
-                    else:
-                        self._eat("PUNCT", "]")
-                        field_type += "[]"
+                field_type += self._parse_array_suffix()
                 if self._check("OP") and self._cur().value == "?":
                     self.pos += 1
                     field_type += "?"
@@ -684,13 +683,25 @@ class Parser:
                         self.pos += 1
                         type_annotation += "[]"
                     else:
-                        size_expr = self._parse_or_expr()
+                        # One extent per dimension, each an expression so
+                        # that a length can be computed rather than only
+                        # written out, or empty to take that dimension
+                        # from the initializer.
+                        def extent():
+                            if self._check("PUNCT") and self._cur().value in (",", "]"):
+                                return None
+                            return self._parse_or_expr()
+
+                        dims = [extent()]
+                        while self._try_eat("PUNCT", ","):
+                            dims.append(extent())
                         self._eat("PUNCT", "]")
                         self._eat("PUNCT", "=")
                         init_expr = self._parse_or_expr()
                         self._try_eat("PUNCT", ";")
                         return self._set_pos(VarDef(name_tok.value, type_annotation,
-                                      ArrayAlloc(type_annotation, size_expr, init_expr),
+                                      ArrayAlloc(type_annotation, dims[0], init_expr,
+                                                 rest_dims=dims[1:]),
                                   is_const, unit_spec=unit_spec), kw_tok)
 
         if not has_colon:
@@ -718,18 +729,7 @@ class Parser:
         self._eat("PUNCT", "=")
         type_tok = self._eat("IDENT")
         target = type_tok.value
-        if self._check("PUNCT") and self._cur().value == "[":
-            self.pos += 1
-            if self._check("PUNCT") and self._cur().value == "]":
-                self.pos += 1
-                target += "[]"
-            elif self._check("INT"):
-                size_tok = self._eat("INT")
-                self._eat("PUNCT", "]")
-                target += f"[{size_tok.value}]"
-            else:
-                self._eat("PUNCT", "]")
-                target += "[]"
+        target += self._parse_array_suffix()
         if self._check("OP") and self._cur().value == "?":
             self.pos += 1
             target += "?"
@@ -1206,10 +1206,7 @@ class Parser:
                     f"lambda parameter '{name}' requires a type annotation", self._cur())
             self._eat("PUNCT", ":")
             ptype = self._eat("IDENT").value
-            if self._check("PUNCT") and self._cur().value == "[":
-                self.pos += 1
-                self._eat("PUNCT", "]")
-                ptype += "[]"
+            ptype += self._parse_array_suffix()
             params.append((name, ptype))
             if not self._try_eat("PUNCT", ","):
                 break

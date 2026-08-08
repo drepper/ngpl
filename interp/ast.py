@@ -263,12 +263,18 @@ class TryUnwrap:
 
 
 class ArrayAlloc:
-    """Array allocation: new type[size] or var name : type[size] = init."""
+    """Array allocation: new type[size] or var name : type[size] = init.
 
-    def __init__(self, element_type, size_expr, init_expr=None):
+    A multi-dimensional allocation keeps its outermost extent in
+    size_expr and the rest in rest_dims, so `i32[2,3]` is two rows of
+    the three-element rows built one level down.
+    """
+
+    def __init__(self, element_type, size_expr, init_expr=None, rest_dims=None):
         self.element_type = element_type  # type string like "i32", "u64"
         self.size_expr = size_expr        # expression AST node for the count
         self.init_expr = init_expr        # optional per-element initializer
+        self.rest_dims = rest_dims or []  # expressions for further dimensions
 
 
 class RangeExpr:

@@ -646,6 +646,17 @@ class ArrayValue(Value):
             return self._length
         return len(self.elements)
 
+    def values(self) -> list[Value]:
+        """Return the elements as a plain list.
+
+        A view has no `elements` list of its own, so anything wanting
+        to walk an array has to come through here rather than reading
+        the attribute, which is None for a view.
+        """
+        if self._backing is not None:
+            return self._backing[self._offset:self._offset + self._length]
+        return list(self.elements)
+
     def set(self, index: int, value: Value):
         """Set element at index; raises IndexError if out of range."""
         if self.element_type is not None and isinstance(value, IntValue):
@@ -1024,13 +1035,52 @@ def resolve_type_alias(type_name: str) -> str:
     return type_name
 
 
-def _parse_array_type(type_name: str) -> tuple[str, int | None] | None:
-    """Parse an array type string, returning (element_type, size_or_None) or None."""
+def _parse_array_type(type_name: str) -> tuple[str, list[int | None]] | None:
+    """Parse an array type string.
+
+    Returns (element_type, dims), where dims has one entry per
+    dimension: an int where the type fixes that dimension, None where
+    it leaves it open.  `i32[]` is one open dimension, `i32[2,3]` two
+    fixed ones, `i32[,3]` an open one over a fixed one.
+    """
     import re
-    m = re.fullmatch(r"(\w+)\[(\d+)?\]", type_name)
+    m = re.fullmatch(r"(\w+)\[(\d*(?:,\d*)*)\]", type_name)
     if m is None:
         return None
-    return m.group(1), int(m.group(2)) if m.group(2) else None
+    return m.group(1), [int(d) if d else None for d in m.group(2).split(",")]
+
+
+def array_shape(arr: "ArrayValue") -> list[int | None]:
+    """Return the dimensions of a nested array.
+
+    A matrix reports [rows, columns], a plain array [length].  A level
+    whose rows have different lengths has no single width to report, so
+    it reports None and the walk stops there: the rank is still known
+    even where an extent is not.
+    """
+    dims: list[int | None] = [arr.sizeof]
+    rows = arr.values()
+    while rows:
+        inner = []
+        for row in rows:
+            if isinstance(row, SomeValue):
+                row = row.value
+            if not isinstance(row, ObjectValue) or not isinstance(row.obj, ArrayValue):
+                return dims
+            inner.append(row.obj)
+        widths = {row.sizeof for row in inner}
+        if len(widths) != 1:
+            dims.append(None)
+            return dims
+        dims.append(widths.pop())
+        rows = [elem for row in inner for elem in row.values()]
+    return dims
+
+
+def format_shape(dims: list[int | None]) -> str:
+    """Render dimensions the way an array type writes them."""
+    return "\N{MULTIPLICATION SIGN}".join(
+        "?" if d is None else str(d) for d in dims)
 
 
 def validate_type(type_name: str) -> bool:
@@ -1099,16 +1149,47 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
 
     arr_info = _parse_array_type(param_type)
     if arr_info is not None:
-        elem_type, expected_size = arr_info
+        elem_type, declared = arr_info
         unwrapped = value
         if isinstance(value, SomeValue):
             unwrapped = value.value
         if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
-            if expected_size is not None and unwrapped.obj.sizeof != expected_size:
+            actual = array_shape(unwrapped.obj)
+            # The type names one entry per dimension, so an argument
+            # with a different number of them does not fit however long
+            # its outermost one happens to be.  Slicing a matrix along
+            # one dimension keeps the others, which is what a row range
+            # meets here.
+            if len(actual) != len(declared):
+                got = (f"array of length {actual[0]}" if len(actual) == 1
+                       else f"a {format_shape(actual)} array")
                 raise TypeError(
                     f"{func_name}: argument '{param_name}' expected "
-                    f"{param_type} (length {expected_size}), "
-                    f"got array of length {unwrapped.obj.sizeof}")
+                    f"{param_type} "
+                    f"({len(declared)} dimension"
+                    f"{'' if len(declared) == 1 else 's'}), "
+                    f"got {got}")
+            for axis, (want, have) in enumerate(zip(declared, actual)):
+                if have is None:
+                    # An open dimension is one extent the type does not
+                    # name, not the absence of one, so rows of differing
+                    # lengths are not a dimension at all.
+                    raise TypeError(
+                        f"{func_name}: argument '{param_name}' expected "
+                        f"{param_type} (dimension {axis + 1} is one extent), "
+                        f"got a {format_shape(actual)} array whose rows "
+                        f"differ in length")
+                if want is None or want == have:
+                    continue
+                if len(declared) == 1:
+                    raise TypeError(
+                        f"{func_name}: argument '{param_name}' expected "
+                        f"{param_type} (length {want}), "
+                        f"got array of length {have}")
+                raise TypeError(
+                    f"{func_name}: argument '{param_name}' expected "
+                    f"{param_type} (dimension {axis + 1} is {want}), "
+                    f"got a {format_shape(actual)} array")
             return unwrapped
         if isinstance(unwrapped, ObjectValue) and hasattr(unwrapped.obj, "data"):
             raw = bytes(unwrapped.obj.data)
@@ -1180,7 +1261,7 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
         else:
             # T[] says dynamic and T[n] says fixed; either way the target
             # decides, not the source.
-            declared = arr_info[1]
+            declared = arr_info[1][0]
         if declared is not None and arr.sizeof != declared:
             raise TypeError(
                 f"array size mismatch: type '{target_width}' declares "

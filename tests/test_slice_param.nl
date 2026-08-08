@@ -1,0 +1,252 @@
+// test_slice_param.nl -- passing part of a vector or matrix to a function
+//
+// A range picks out part of a dimension, and what comes back is what
+// gets passed.  The parameter sees the length of the range, not the
+// length of the source, so a fixed-size parameter checks the range.
+//
+// A range keeps the dimensions it does not name, so slicing a matrix
+// along one dimension leaves a matrix, which no one-dimensional
+// parameter takes.
+//
+// Selecting a whole row shares that row's storage; narrowing a row has
+// to build a new one, so it copies.  Both are exercised below.
+
+fn sum_dyn(a : i32[]) → i32:
+    let t : mut = 0
+    foreach x := a:
+        t ← t + x
+    t
+
+fn sum_fixed3(a : i32[3]) → i32:
+    a[0] + a[1] + a[2]
+
+fn len_dyn(a : i32[]) → i32:
+    a.sizeof
+
+// There is no parameter syntax for a second dimension, so a matrix
+// arrives either through a dynamic parameter -- whose length is the
+// number of rows -- or through an untyped one.
+fn sum_matrix(m) → i32:
+    let t : mut = 0
+    foreach r := m:
+        foreach x := r:
+            t ← t + x
+    t
+
+fn rows_fixed2(m : i32[2]) → i32:
+    m.sizeof
+
+// ---------------------------------------------------------------------
+// A vector, sliced along its one dimension
+// ---------------------------------------------------------------------
+
+// The range is shorter than the vector, and the parameter sees the
+// range.
+@test
+fn test_vector_slice_to_dynamic() → ∅:
+    let v : i32[] = [10, 20, 30, 40, 50, 60]
+    assert_eq(len_dyn(v[1…3]), 3)
+    assert_eq(sum_dyn(v[1…3]), 90)
+
+// A fixed-size parameter is satisfied by a range of that length, even
+// though the vector it was cut from is longer.
+@test
+fn test_vector_slice_to_fixed() → ∅:
+    let v : i32[] = [10, 20, 30, 40, 50, 60]
+    assert_eq(sum_fixed3(v[1…3]), 90)
+
+// A whole-vector range reaches the same parameter, since what is
+// checked is the length of the range.
+@test
+fn test_vector_full_range_to_fixed() → ∅:
+    let v : i32[] = [10, 20, 30]
+    assert_eq(sum_fixed3(v[0…2]), 60)
+
+// The length checked is the range's, so a range of the wrong length is
+// rejected however long the source was.
+@expect error "length 3., got array of length 4"
+fn error_slice_wrong_length() → ∅:
+    let v : i32[] = [10, 20, 30, 40, 50, 60]
+    _ ← sum_fixed3(v[1…4])
+
+@expect error "length 3., got array of length 2"
+fn error_slice_too_short() → ∅:
+    let v : i32[] = [10, 20, 30, 40, 50, 60]
+    _ ← sum_fixed3(v[1…2])
+
+// A range that runs past the end is caught where it is taken.
+@expect error "out of range"
+fn error_slice_past_end() → ∅:
+    let v : i32[] = [10, 20, 30]
+    _ ← sum_dyn(v[1…5])
+
+// ---------------------------------------------------------------------
+// A vector slice is a copy
+// ---------------------------------------------------------------------
+
+fn writes_first(a : mut i32[]) → ∅:
+    a[0] = 99
+
+// Narrowing a vector builds a new one, so the callee writes into that
+// and the source is untouched.
+@test
+fn test_vector_slice_is_a_copy() → ∅:
+    let v : i32[] = [10, 20, 30, 40]
+    writes_first(v[1…2])
+    assert_eq(v[1], 20)
+
+// ---------------------------------------------------------------------
+// A matrix, sliced along one dimension at a time
+// ---------------------------------------------------------------------
+
+// A single row is a view into the matrix, so it arrives with the row's
+// own length rather than the matrix's.
+@test
+fn test_matrix_row_to_dynamic() → ∅:
+    let m := (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    assert_eq(len_dyn(m[1]), 4)
+    assert_eq(sum_dyn(m[1]), 26)
+
+// Part of a row: the second dimension is ranged, the first is not.
+@test
+fn test_matrix_partial_row() → ∅:
+    let m := (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    assert_eq(len_dyn(m[1, 0…2]), 3)
+    assert_eq(sum_dyn(m[1, 0…2]), 18)
+    assert_eq(sum_fixed3(m[1, 0…2]), 18)
+
+// Part of a column: the first dimension is ranged, the second is not.
+@test
+fn test_matrix_partial_column() → ∅:
+    let m := (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    assert_eq(len_dyn(m[0…1, 2]), 2)
+    assert_eq(sum_dyn(m[0…1, 2]), 10)
+
+// Ranging the first dimension keeps the second, so two rows of a 3×4
+// matrix are a 2×4 matrix, not two elements.  Only an untyped
+// parameter takes that.
+@test
+fn test_matrix_row_range_stays_two_dimensional() → ∅:
+    let m := (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    let rows := m[0…1]
+    assert_eq(rows.sizeof, 2)
+    assert_eq(rows[0].sizeof, 4)
+    assert_eq(sum_matrix(rows), 36)
+
+// A parameter naming one dimension does not take it, however many rows
+// were selected: the length it would check is not the length it has.
+@expect error "1 dimension., got a 2.4 array"
+fn error_row_range_to_dynamic() → ∅:
+    let m := (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    _ ← len_dyn(m[0…1])
+
+// Not even when the row count is the one the parameter asks for.
+@expect error "1 dimension., got a 2.4 array"
+fn error_row_range_to_fixed() → ∅:
+    let m := (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    _ ← rows_fixed2(m[0…1])
+
+@expect error "1 dimension., got a 3.4 array"
+fn error_whole_matrix_to_fixed() → ∅:
+    let m := (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    _ ← rows_fixed2(m[0…2])
+
+// ---------------------------------------------------------------------
+// A matrix, sliced along both dimensions
+// ---------------------------------------------------------------------
+
+// Both dimensions ranged, and neither range covers its whole
+// dimension.  Two of them are still two dimensions.
+@test
+fn test_matrix_block() → ∅:
+    let m := (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    let b := m[0…1, 1…2]
+    assert_eq(b.sizeof, 2)
+    assert_eq(b[0].sizeof, 2)
+    assert_eq(sum_matrix(b), 18)
+    assert_eq(b[0, 0], 2)
+    assert_eq(b[1, 1], 7)
+
+@expect error "1 dimension., got a 2.2 array"
+fn error_block_to_fixed_rows() → ∅:
+    let m := (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    _ ← rows_fixed2(m[0…1, 1…2])
+
+// A single row of a block is one dimension again, and does fit.
+@test
+fn test_block_row_to_fixed() → ∅:
+    let m := (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    assert_eq(len_dyn(m[0…1, 1…2][1]), 2)
+
+// ---------------------------------------------------------------------
+// What a slice shares and what it copies
+// ---------------------------------------------------------------------
+
+// A row selected whole is the matrix's own row, so writing it reaches
+// the array the matrix was built from.  A row taken by subscript does
+// not inherit its access the way a reshape does, so the binding has to
+// ask for mut itself.
+@test
+fn test_whole_row_is_shared() → ∅:
+    let a : mut i32[] = 12 ⍴ 0
+    let m := (3, 4) ⍴ a
+    let r : mut = m[1]
+    r[0] = 55
+    assert_eq(a[4], 55)
+
+// A range of rows keeps those rows themselves, so they are shared too.
+@test
+fn test_row_range_is_shared() → ∅:
+    let a : mut i32[] = 12 ⍴ 0
+    let m := (3, 4) ⍴ a
+    let rows : mut = m[0…1]
+    rows[0][1] = 66
+    assert_eq(a[1], 66)
+
+// Narrowing a row cannot hand back the row itself, so a block is a
+// copy and writing it leaves the source alone.
+@test
+fn test_narrowed_block_is_a_copy() → ∅:
+    let a : mut i32[] = 12 ⍴ 0
+    let m := (3, 4) ⍴ a
+    let b : mut = m[0…1, 1…2]
+    b[0][0] = 77
+    assert_eq(a[1], 0)
+
+// Which is what a callee sees: a block parameter is the callee's own.
+@test
+fn test_block_argument_is_a_copy() → ∅:
+    let a : mut i32[] = 12 ⍴ 0
+    let m := (3, 4) ⍴ a
+    writes_first(m[0…1, 1…2][0])
+    assert_eq(a[1], 0)
+
+// A whole row passed by reference does reach the caller's array.
+fn writes_row_ref(r : &mut i32[]) → ∅:
+    r[0] = 88
+
+@test
+fn test_whole_row_by_reference() → ∅:
+    let a : mut i32[] = 12 ⍴ 0
+    let m := (3, 4) ⍴ a
+    let r : mut = m[2]
+    writes_row_ref(&r)
+    assert_eq(a[8], 88)
+
+// ---------------------------------------------------------------------
+// Slices reach the array operators
+// ---------------------------------------------------------------------
+
+// A row is a view, so the operators have to read it through the view
+// rather than expect a list of its own.
+@test
+fn test_operators_on_rows() → ∅:
+    let m := (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    assert_eq(len_dyn(m[0] + m[1]), 4)
+    assert_eq(sum_dyn(m[0] + m[1]), 36)
+    assert_eq(len_dyn(m[0] ⧺ m[1]), 8)
+    assert_eq(sum_dyn(m[0] ⧺ m[1]), 36)
+
+@start
+fn main() → ∅:
+    std.print("slice parameter tests passed")

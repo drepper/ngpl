@@ -2951,6 +2951,170 @@ The same holds for a shared borrow, a `foreach` variable, and any other immutabl
 
 A view borrows a window into another array's storage, so it has no length of its own to change.  `push`, `pop`, `insert`, and `remove` on one are errors; `get` is not, since reading a view is what a view is for.
 
+#### Slicing a Dimension
+
+A range in a subscript selects part of a dimension.  `v[1…3]` takes three elements, and a matrix takes one spec per dimension, each of which is a point or a range:
+
+```
+let m := (3, 4) ⍴ (1…12)
+m[1]              // a whole row: 4 elements
+m[1, 0…2]         // part of that row: 3 elements
+m[0…1, 2]         // part of a column: 2 elements
+m[0…1]            // two whole rows
+m[0…1, 1…2]      // a block: 2 rows of 2
+```
+
+What a slice shares follows from what it had to build.  Selecting along one dimension hands back the rows themselves, so writing through the result reaches the array the matrix was built from.  Narrowing a row cannot hand back that row, so it builds a new one and the result is a copy:
+
+```
+let a : mut i32[] = 12 ⍴ 0
+let m := (3, 4) ⍴ a
+
+let r : mut = m[1]           // a whole row, shared
+r[0] = 55                    // a[4] is now 55
+
+let b : mut = m[0…1, 1…2]   // narrowed, so copied
+b[0][0] = 77                 // a is unchanged
+```
+
+A one-dimensional slice narrows by definition, so `v[1…3]` is always a copy.
+
+Unlike a reshape, a slice does not inherit `mut` from its source: the binding above says `mut` for itself.
+
+#### Passing Part of an Array
+
+A slice is an argument like any other, and the parameter sees the length of the range rather than the length of what it was cut from.  A fixed-size parameter therefore checks the range:
+
+```
+fn sum3(a : i32[3]) → i32:
+    a[0] + a[1] + a[2]
+
+let v : i32[] = [10, 20, 30, 40, 50, 60]
+sum3(v[1…3])        // ok: the range is 3 long
+sum3(v[1…4])        // error: got array of length 4
+```
+
+A range keeps the dimensions it does not name, so slicing a matrix along one dimension leaves a matrix.  Two rows of a 3×4 are a 2×4, not two elements, and a parameter naming one dimension does not take it however many rows were selected:
+
+```
+fn rows2(m : i32[2]) → i32:
+    m.sizeof
+
+rows2(m[0…1])       // error: expected i32[2] (1 dimension), got a 2×4 array
+rows2(m[0…1, 1…2])  // error: got a 2×2 array
+```
+
+Reaching one dimension takes a point rather than a range on the others, which is what `m[1]` and `m[1, 0…2]` do above.  A parameter that means to take the matrix says so with a matrix type, described next.
+
+#### Array Types
+
+An array type names one entry per dimension, so the rank is written down rather than inferred:
+
+| Type | Meaning |
+|------|---------|
+| `i32[]` | one dimension, any length |
+| `i32[4]` | one dimension, exactly 4 |
+| `i32[2,4]` | two rows of four |
+| `i32[,4]` | any number of rows, each four wide |
+| `i32[2,]` | two rows, any width |
+| `i32[,]` | a matrix of any shape |
+| `i32[2,2,3]` | three dimensions, all fixed |
+| `i32[,2,]` | three dimensions, the middle one fixed |
+
+An entry that gives a size fixes that dimension and the argument has to match it.  An entry left empty leaves the dimension open.  There is no limit on the number of dimensions, and `i32[]` is the one-dimensional case of the same rule rather than a special form.
+
+Both the rank and each fixed extent are checked at the call:
+
+```
+fn corner(m : i32[2,4]) → i32:
+    m[0, 0]
+
+corner((3, 4) ⍴ (1…12))    // error: expected i32[2,4] (dimension 1 is 2), got a 3×4 array
+corner([1, 2, 3, 4, 5, 6, 7, 8])   // error: expected i32[2,4] (2 dimensions), got array of length 8
+```
+
+A dimension is checked where it is written, so a type may fix some dimensions and leave others open:
+
+```
+fn rows_of_four(m : i32[,4]) → i32:
+    m.shape[0]
+
+rows_of_four((2, 4) ⍴ (1…8))     // 2
+rows_of_four((3, 4) ⍴ (1…12))    // 3
+rows_of_four((2, 3) ⍴ (1…6))     // error: dimension 2 is 4, got a 2×3 array
+```
+
+##### Reading the Open Dimensions
+
+`.shape` is one extent per dimension, which is how a function reads what its own type left open:
+
+```
+fn sum_matrix(m : i32[,]) → i32:
+    let t : mut = 0
+    foreach r := 0…(m.shape[0] - 1):
+        foreach c := 0…(m.shape[1] - 1):
+            t ← t + m[r, c]
+    t
+```
+
+`m.shape.sizeof` is the rank, and `v.shape[0]` is `v.sizeof` for a one-dimensional array.  A slice reports the shape it was cut to rather than the one it came from, so `sum_matrix(m[0…1])` sees two rows.
+
+##### Writing a Matrix Out
+
+Nested brackets give the elements a row at a time, one level of nesting per dimension:
+
+```
+let m := [[1, 2, 3], [4, 5, 6]]                    // 2×3
+let c := [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]      // 2×2×2
+```
+
+Such a literal is an argument like any other and meets the same checks:
+
+```
+corner([[1, 2, 3, 4], [5, 6, 7, 8]])   // fits i32[2,4]
+corner([[1, 2, 3], [4, 5, 6]])         // error: dimension 2 is 4, got a 2×3 array
+```
+
+An empty entry is one extent the type does not name, not the absence of one.  Rows of differing lengths are therefore not a dimension at all, and such an array fits no matrix type, not even a wholly open one:
+
+```
+sum_matrix([[1, 2, 3], [4, 5]])
+
+error: expected i32[,] (dimension 2 is one extent), got a 2×? array
+whose rows differ in length
+```
+
+`?` is how a shape reports a dimension that has no single extent.
+
+##### Elsewhere a Type Is Written
+
+The same syntax spells a variable's type, a type alias, and a struct field.  A variable annotation checks the initializer's shape, and a scalar initializer fills every element as it does for one dimension:
+
+```
+let m : i32[2,3] = [[1, 2, 3], [4, 5, 6]]   // checked
+let z : i32[2,3] = 0                        // 2×3 of zeros
+let bad : i32[2,3] = (3, 2) ⍴ (1…6)        // error: declared 2×3, got 3×2
+
+type Grid = i32[2,3]
+```
+
+An empty extent here takes the one the initializer had, while the extents that are written are still checked against it:
+
+```
+let b : i32[,3] = [[1, 2, 3], [4, 5, 6]]    // two rows, checked three wide
+let b : i32[,3] = [[1, 2], [3, 4]]          // error: declared ?×3, got 2×2
+```
+
+A fill value has no extent to give, so it cannot stand in for one that was left empty:
+
+```
+let z : i32[,3] = 0
+
+error: declared ?×3, but a fill value gives no extent for the empty dimension
+```
+
+Under `@repr(C)` a multi-dimensional field lays out as C's `T[n][m]`: the rows sit one after another, so `i32[2,3]` is 24 bytes and the alignment is still the element's.  Every dimension has to be fixed, since a dynamic one has no C representation.
+
 #### Comparison with Other Languages
 
 | Operation | C++ `vector` | Rust `Vec` | Python `list` | Go slice | NGPL |

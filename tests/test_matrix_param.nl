@@ -1,0 +1,329 @@
+// test_matrix_param.nl -- matrix and higher-dimension parameter types
+//
+// An array type names one entry per dimension: `i32[2,4]` is two rows
+// of four.  An entry that gives a size fixes that dimension and the
+// argument has to match it.  An entry left empty leaves the dimension
+// open, and the function reads what it was actually given from
+// `.shape`.
+
+// ---------------------------------------------------------------------
+// Every dimension fixed
+// ---------------------------------------------------------------------
+
+fn corner_2x4(m : i32[2,4]) → i32:
+    m[0, 0]
+
+@test
+fn test_all_dimensions_fixed() → ∅:
+    let m := (2, 4) ⍴ (1…8)
+    assert_eq(corner_2x4(m), 1)
+
+// A matrix of the right rank but the wrong extent does not fit.
+@expect error "dimension 1 is 2., got a 3.4 array"
+fn error_wrong_row_count() → ∅:
+    let m := (3, 4) ⍴ (1…12)
+    _ ← corner_2x4(m)
+
+@expect error "dimension 2 is 4., got a 2.3 array"
+fn error_wrong_column_count() → ∅:
+    let m := (2, 3) ⍴ (1…6)
+    _ ← corner_2x4(m)
+
+// Nor does one of the wrong rank, whichever way it is wrong.
+@expect error "2 dimensions., got array of length 8"
+fn error_vector_for_matrix() → ∅:
+    let v : i32[] = [1, 2, 3, 4, 5, 6, 7, 8]
+    _ ← corner_2x4(v)
+
+@expect error "1 dimension., got a 2.4 array"
+fn error_matrix_for_vector() → ∅:
+    let m := (2, 4) ⍴ (1…8)
+    _ ← len_dyn(m)
+
+// ---------------------------------------------------------------------
+// A dimension left open
+// ---------------------------------------------------------------------
+
+// Any number of rows, but each of them four wide.
+fn rows_of_four(m : i32[,4]) → i32:
+    m.shape[0]
+
+@test
+fn test_open_first_dimension() → ∅:
+    assert_eq(rows_of_four((2, 4) ⍴ (1…8)), 2)
+    assert_eq(rows_of_four((3, 4) ⍴ (1…12)), 3)
+
+// The fixed dimension is still checked.
+@expect error "dimension 2 is 4., got a 2.3 array"
+fn error_open_rows_wrong_width() → ∅:
+    _ ← rows_of_four((2, 3) ⍴ (1…6))
+
+// Two rows, any width.
+fn two_rows(m : i32[2,]) → i32:
+    m.shape[1]
+
+@test
+fn test_open_second_dimension() → ∅:
+    assert_eq(two_rows((2, 3) ⍴ (1…6)), 3)
+    assert_eq(two_rows((2, 5) ⍴ (1…10)), 5)
+
+@expect error "dimension 1 is 2., got a 3.4 array"
+fn error_two_rows_wrong_count() → ∅:
+    _ ← two_rows((3, 4) ⍴ (1…12))
+
+// Both open: a matrix of any shape, and nothing to check but the rank.
+fn sum_matrix(m : i32[,]) → i32:
+    let t : mut = 0
+    foreach r := 0…(m.shape[0] - 1):
+        foreach c := 0…(m.shape[1] - 1):
+            t ← t + m[r, c]
+    t
+
+@test
+fn test_both_dimensions_open() → ∅:
+    assert_eq(sum_matrix((3, 4) ⍴ (1…12)), 78)
+    assert_eq(sum_matrix((2, 3) ⍴ (1…6)), 21)
+
+// Rank is still checked when every dimension is open.
+@expect error "2 dimensions., got array of length 4"
+fn error_vector_for_open_matrix() → ∅:
+    let v : i32[] = [1, 2, 3, 4]
+    _ ← sum_matrix(v)
+
+// ---------------------------------------------------------------------
+// Reading the open dimensions
+// ---------------------------------------------------------------------
+
+// `.shape` is one extent per dimension, so a function reads what its
+// type left open.
+fn shape_of(m : i32[,]) → ∅:
+    assert_eq(m.shape[0], 3)
+    assert_eq(m.shape[1], 4)
+
+@test
+fn test_shape_reports_actual_sizes() → ∅:
+    shape_of((3, 4) ⍴ (1…12))
+
+@test
+fn test_shape_of_a_vector() → ∅:
+    let v : i32[] = [1, 2, 3]
+    assert_eq(v.shape[0], 3)
+    assert_eq(v.shape.sizeof, 1)
+
+@test
+fn test_shape_rank() → ∅:
+    assert_eq(((3, 4) ⍴ (1…12)).shape.sizeof, 2)
+    assert_eq(((2, 2, 3) ⍴ (1…12)).shape.sizeof, 3)
+
+// A slice arrives with the shape it was cut to, not the shape it came
+// from, which is what the open dimension records.
+@test
+fn test_shape_of_a_slice() → ∅:
+    let m := (3, 4) ⍴ (1…12)
+    assert_eq(sum_matrix(m[0…1]), 36)
+    assert_eq(rows_of_four(m[0…1]), 2)
+    assert_eq(two_rows(m[0…1, 1…2]), 2)
+
+// ---------------------------------------------------------------------
+// More than two dimensions
+// ---------------------------------------------------------------------
+
+fn cube_2x2x3(t : i32[2,2,3]) → i32:
+    t[0, 0, 0]
+
+fn any_cube(t : i32[,,]) → i32:
+    t.shape[0] * t.shape[1] * t.shape[2]
+
+@test
+fn test_three_dimensions_fixed() → ∅:
+    assert_eq(cube_2x2x3((2, 2, 3) ⍴ (1…12)), 1)
+
+@test
+fn test_three_dimensions_open() → ∅:
+    assert_eq(any_cube((2, 2, 3) ⍴ (1…12)), 12)
+    assert_eq(any_cube((2, 3, 4) ⍴ (1…24)), 24)
+
+// Mixed: the middle dimension is the one that is fixed.
+fn middle_two(t : i32[,2,]) → i32:
+    t.shape[0] + t.shape[2]
+
+@test
+fn test_three_dimensions_mixed() → ∅:
+    assert_eq(middle_two((2, 2, 3) ⍴ (1…12)), 5)
+
+@expect error "dimension 2 is 2., got a 2.3.4 array"
+fn error_middle_dimension_wrong() → ∅:
+    _ ← middle_two((2, 3, 4) ⍴ (1…24))
+
+@expect error "3 dimensions., got a 3.4 array"
+fn error_matrix_for_cube() → ∅:
+    _ ← any_cube((3, 4) ⍴ (1…12))
+
+// ---------------------------------------------------------------------
+// One dimension keeps working the way it did
+// ---------------------------------------------------------------------
+
+fn len_dyn(a : i32[]) → i32:
+    a.sizeof
+
+fn sum_fixed3(a : i32[3]) → i32:
+    a[0] + a[1] + a[2]
+
+@test
+fn test_one_dimension_still_works() → ∅:
+    let v : i32[] = [10, 20, 30]
+    assert_eq(len_dyn(v), 3)
+    assert_eq(sum_fixed3(v), 60)
+
+@expect error "length 3., got array of length 4"
+fn error_one_dimension_wrong_length() → ∅:
+    let v : i32[] = [10, 20, 30, 40]
+    _ ← sum_fixed3(v)
+
+// ---------------------------------------------------------------------
+// The same syntax elsewhere a type is written
+// ---------------------------------------------------------------------
+
+// A variable annotation, where the initializer has to match the shape.
+@test
+fn test_variable_annotation() → ∅:
+    let m : i32[2,3] = (2, 3) ⍴ (1…6)
+    assert_eq(m[1, 2], 6)
+    assert_eq(m.shape[0], 2)
+    assert_eq(m.shape[1], 3)
+
+@expect error "declared 2.3, got 3.2"
+fn error_annotation_shape_mismatch() → ∅:
+    let m : i32[2,3] = (3, 2) ⍴ (1…6)
+    _ ← m[0, 0]
+
+@expect error "declared 2.3, got 6"
+fn error_annotation_rank_mismatch() → ∅:
+    let m : i32[2,3] = [1, 2, 3, 4, 5, 6]
+    _ ← m[0, 0]
+
+// A scalar initializer fills every element, as it does for one
+// dimension.
+@test
+fn test_allocation_fills() → ∅:
+    let z : i32[2,3] = 0
+    assert_eq(z.shape[0], 2)
+    assert_eq(z.shape[1], 3)
+    assert_eq(z[1, 2], 0)
+    let c : i32[2,2,3] = 7
+    assert_eq(c.shape.sizeof, 3)
+    assert_eq(c[1, 1, 2], 7)
+
+// A type alias.
+type Grid = i32[2,3]
+
+@test
+fn test_type_alias() → ∅:
+    let g : Grid = (2, 3) ⍴ (1…6)
+    assert_eq(g[1, 2], 6)
+
+// A struct field, which a C representation lays out as C's T[n][m]:
+// the rows sit one after another, so 2×3 i32 is 24 bytes and the
+// alignment is still the element's.
+@repr(C)
+struct Board:
+    cells : i32[2,3]
+    tag : i32
+
+@test
+fn test_struct_field_layout() → ∅:
+    assert_eq(Board.sizeof, 28)
+    assert_eq(Board.alignof, 4)
+
+// ---------------------------------------------------------------------
+// Writing a matrix out
+// ---------------------------------------------------------------------
+
+// Nested brackets give the elements a row at a time, one level of
+// nesting per dimension.
+@test
+fn test_nested_literal() → ∅:
+    let m := [[1, 2, 3], [4, 5, 6]]
+    assert_eq(m.shape[0], 2)
+    assert_eq(m.shape[1], 3)
+    assert_eq(m[1, 2], 6)
+
+@test
+fn test_nested_literal_three_deep() → ∅:
+    let c := [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+    assert_eq(c.shape.sizeof, 3)
+    assert_eq(c[1, 1, 0], 7)
+
+// It is an argument like any other, and meets the same checks.
+@test
+fn test_nested_literal_as_argument() → ∅:
+    assert_eq(corner_2x4([[1, 2, 3, 4], [5, 6, 7, 8]]), 1)
+    assert_eq(sum_matrix([[1, 2], [3, 4]]), 10)
+    assert_eq(rows_of_four([[1, 2, 3, 4], [5, 6, 7, 8]]), 2)
+
+@expect error "dimension 2 is 4., got a 2.3 array"
+fn error_nested_literal_wrong_width() → ∅:
+    _ ← corner_2x4([[1, 2, 3], [4, 5, 6]])
+
+// And it names the element type through the annotation, at any depth.
+@test
+fn test_nested_literal_element_type() → ∅:
+    let u : u8[2,2] = [[300, 2], [3, 4]]
+    assert_eq(u[0, 0], 44)
+    let w : u8[2,2,2] = [[[300, 2], [3, 4]], [[5, 6], [7, 8]]]
+    assert_eq(w[0, 0, 0], 44)
+
+// ---------------------------------------------------------------------
+// Rows of differing lengths are not a dimension
+// ---------------------------------------------------------------------
+
+// An empty entry is one extent the type does not name, not the absence
+// of one, so a ragged argument does not fit even a wholly open type.
+@expect error "dimension 2 is one extent.*whose rows differ"
+fn error_ragged_to_open_matrix() → ∅:
+    _ ← sum_matrix([[1, 2, 3], [4, 5]])
+
+@expect error "dimension 2 is one extent.*whose rows differ"
+fn error_ragged_to_fixed_width() → ∅:
+    _ ← rows_of_four([[1, 2, 3], [4, 5]])
+
+// ---------------------------------------------------------------------
+// An empty extent in a variable's type
+// ---------------------------------------------------------------------
+
+// The initializer decides an empty extent, and the extents that are
+// written are still checked against it.
+@test
+fn test_let_open_extents() → ∅:
+    let a : i32[,] = [[1, 2, 3], [4, 5, 6]]
+    assert_eq(a.shape[1], 3)
+    let b : i32[,3] = [[1, 2, 3], [4, 5, 6]]
+    assert_eq(b.shape[0], 2)
+    let c : i32[2,] = [[1, 2, 3], [4, 5, 6]]
+    assert_eq(c.shape[1], 3)
+
+@expect error "declared .×3, got 2.2"
+fn error_let_open_rows_wrong_width() → ∅:
+    let b : i32[,3] = [[1, 2], [3, 4]]
+    _ ← b[0, 0]
+
+@expect error "declared 2.., got 3.2"
+fn error_let_fixed_rows_wrong_count() → ∅:
+    let c : i32[2,] = [[1, 2], [3, 4], [5, 6]]
+    _ ← c[0, 0]
+
+@expect error "declared ..., got 2.."
+fn error_let_ragged() → ∅:
+    let r : i32[,] = [[1, 2, 3], [4, 5]]
+    _ ← r[0, 0]
+
+// A fill value has no extent to give, so an empty one cannot be
+// filled.
+@expect error "gives no extent for the empty dimension"
+fn error_fill_with_open_extent() → ∅:
+    let z : i32[,3] = 0
+    _ ← z[0, 0]
+
+@start
+fn main() → ∅:
+    std.print("matrix parameter tests passed")

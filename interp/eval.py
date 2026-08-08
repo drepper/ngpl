@@ -35,7 +35,8 @@ from interp.value import (
     mk_int, mk_int_wrap, mk_str, mk_bool, mk_float, none, some, is_none, is_some,
     resolve_width, resolve_float_width, wrap_int, coerce_to_type, coerce_arg,
     _TYPE_BITS, FLOAT_TYPES, FAST_TYPES,
-    _split_optional_type, _parse_array_type, MAX_TENSOR_RANK,
+    _split_optional_type, _parse_array_type, MAX_TENSOR_RANK, array_shape,
+    format_shape,
     is_generic_type, runtime_type_of,
     UnitValue, RefValue, Reference, ElementRef, Iterator, ArrayIterator,
     deep_copy_value, register_type_alias, DISCARD_NAME,
@@ -140,6 +141,8 @@ def _collect_refs(node) -> set[str]:
             refs |= _collect_refs(e)
     elif isinstance(node, ArrayAlloc):
         refs |= _collect_refs(node.size_expr)
+        for d in node.rest_dims:
+            refs |= _collect_refs(d)
         if node.init_expr:
             refs |= _collect_refs(node.init_expr)
     elif isinstance(node, RangeExpr):
@@ -968,7 +971,7 @@ class Evaluator:
                 f"got {type(ru).__name__}")
         etype = la.element_type or ra.element_type
         return ObjectValue(
-            ArrayValue(list(la.elements) + list(ra.elements),
+            ArrayValue(la.values() + ra.values(),
                        element_type=etype))
 
     def _mk_int(self, value: int, width: str) -> IntValue:
@@ -1042,15 +1045,15 @@ class Evaluator:
         if la is not None and ra is not None:
             etype = la.element_type or ra.element_type
             return ObjectValue(ArrayValue(
-                [op_fn(l, r) for l, r in zip(la.elements, ra.elements)],
+                [op_fn(l, r) for l, r in zip(la.values(), ra.values())],
                 element_type=etype))
         if la is not None:
             return ObjectValue(ArrayValue(
-                [op_fn(l, right) for l in la.elements],
+                [op_fn(l, right) for l in la.values()],
                 element_type=la.element_type))
         if ra is not None:
             return ObjectValue(ArrayValue(
-                [op_fn(left, r) for r in ra.elements],
+                [op_fn(left, r) for r in ra.values()],
                 element_type=ra.element_type))
         return op_fn(left, right)
 
@@ -1262,7 +1265,7 @@ class Evaluator:
         if param_name not in func.param_refs:
             return
         array_type = _parse_array_type(param_type)
-        if array_type is None or array_type[1] is not None:
+        if array_type is None or array_type[1][0] is not None:
             return  # not a parameter whose length is open
         value = arg_value
         if isinstance(value, RefValue):
@@ -1434,6 +1437,21 @@ class Evaluator:
                 f"array index requires unit {required.display_name}, "
                 f"got typed integer {iu.width} without unit")
         raise TypeError("array index must be an integer")
+
+    def _alloc_nested(self, sizes: list[int], fill: Value,
+                      etype: str | None) -> Value:
+        """Build an array of the given dimensions filled with one value.
+
+        The innermost dimension holds the fill; each dimension above it
+        holds that many of whatever the level below built.
+        """
+        inner = sizes[1:]
+        if not inner:
+            return ObjectValue(ArrayValue([fill] * sizes[0],
+                                          element_type=etype,
+                                          fixed_size=sizes[0]))
+        rows = [self._alloc_nested(inner, fill, etype) for _ in range(sizes[0])]
+        return ObjectValue(ArrayValue(rows, fixed_size=sizes[0]))
 
     def _eval_multi_slice_read(self, val: Value, specs: list) -> Value:
         """Read a multi-dimensional slice from a nested array."""
@@ -1837,6 +1855,12 @@ class Evaluator:
                     return self._sizeof_result(
                         unwrapped.obj.sizeof,
                         unwrapped.obj.element_type)
+                if node.attr == "shape":
+                    # One extent per dimension, which is how a function
+                    # reads the dimensions its parameter type left open.
+                    return TupleValue([
+                        self._sizeof_result(d) if d is not None else none()
+                        for d in array_shape(unwrapped.obj)])
             if isinstance(unwrapped, ObjectValue):
                 attr_val = getattr(unwrapped.obj, node.attr, None)
                 if attr_val is not None:
@@ -2034,27 +2058,48 @@ class Evaluator:
             if etype and etype in FAST_TYPES:
                 raise TypeError(
                     f"fast type '{etype}' cannot be used as array element type")
-            size_val = self.eval_expr(node.size_expr)
-            sz = unwrap_optional(size_val)
-            if isinstance(sz, IntValue):
+            sizes = []
+            for dim in [node.size_expr, *node.rest_dims]:
+                if dim is None:
+                    # Left empty, so the initializer decides it.
+                    sizes.append(None)
+                    continue
+                dv = unwrap_optional(self.eval_expr(dim))
+                if isinstance(dv, UnitValue):
+                    dv = dv.inner
+                if not isinstance(dv, IntValue):
+                    sizes = None
+                    break
+                sizes.append(dv.value)
+            if sizes is not None:
                 init_val = self.eval_expr(node.init_expr) if node.init_expr is not None else mk_int(0)
                 if isinstance(init_val, ObjectValue) and isinstance(init_val.obj, ArrayValue):
-                    arr = init_val.obj
-                    if arr.sizeof != sz.value:
+                    declared = format_shape(sizes)
+                    actual = array_shape(init_val.obj)
+                    if len(actual) != len(sizes) or any(
+                            have is None or (want is not None and want != have)
+                            for want, have in zip(sizes, actual)):
                         raise TypeError(
-                            f"array size mismatch: declared {sz.value}, got {arr.sizeof}")
+                            f"array size mismatch: declared {declared}, "
+                            f"got {format_shape(actual)}")
+                    # An empty extent takes the one the initializer had.
+                    sizes = list(actual)
                     # The declared length travels with the value, so the
                     # operations that would change it can refuse.
+                    arr = init_val.obj
                     elements = [arr.get(i) for i in range(arr.sizeof)]
-                    if etype:
+                    if etype and len(sizes) == 1:
                         elements = [coerce_to_type(e, etype) for e in elements]
                     return ObjectValue(ArrayValue(elements, element_type=etype,
-                                                  fixed_size=sz.value))
+                                                  fixed_size=sizes[0]))
+                if any(d is None for d in sizes):
+                    raise TypeError(
+                        f"array size mismatch: declared {format_shape(sizes)}, "
+                        f"but a fill value gives no extent for the empty "
+                        f"dimension")
                 if etype and isinstance(init_val, IntValue):
                     init_val = mk_int(init_val.value, etype)
-                return ObjectValue(ArrayValue([init_val] * sz.value,
-                                              element_type=etype,
-                                              fixed_size=sz.value))
+                return self._alloc_nested(sizes, init_val, etype)
 
         raise TypeError(f"unexpected expression: {type(node).__name__}")
 
@@ -2619,7 +2664,7 @@ class Evaluator:
         if isinstance(val, RangeValue):
             return [mk_int(i) for i in val.to_list()]
         if isinstance(val, ObjectValue) and isinstance(val.obj, ArrayValue):
-            return list(val.obj.elements)
+            return val.obj.values()
         if is_comptime and isinstance(val, TupleValue):
             return list(val.elements)
         raise TypeError(
@@ -2897,7 +2942,7 @@ class Evaluator:
         if isinstance(cu, RangeValue):
             elements = [mk_int(i) for i in cu.to_list()]
         elif isinstance(cu, ObjectValue) and isinstance(cu.obj, ArrayValue):
-            elements = list(cu.obj.elements)
+            elements = cu.obj.values()
         else:
             raise TypeError(
                 f"fold requires array or range, got {type(cu).__name__}")
@@ -3373,7 +3418,7 @@ class Evaluator:
                     and isinstance(arg_value.obj, ArrayValue):
                 declared = _parse_array_type(param_type)
                 if declared is not None:
-                    arg_value.obj.fixed_size = declared[1]
+                    arg_value.obj.fixed_size = declared[1][0]
             if param_name in func.param_units:
                 from interp.units import eval_unit_formula
                 unit = eval_unit_formula(func.param_units[param_name])

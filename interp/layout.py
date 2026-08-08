@@ -168,13 +168,17 @@ def type_layout(type_name: str, lookup, seen: frozenset[str] = frozenset()
 
     array = _parse_array_type(resolved)
     if array is not None:
-        element, count = array
-        if count is None:
+        element, dims = array
+        if any(d is None for d in dims):
             raise LayoutError(
                 f"dynamically sized array '{type_name}' has no defined C "
                 f"representation; give it a fixed size")
         size, align = type_layout(element, lookup, seen)
-        return size * count, align
+        # A multi-dimensional array lays out as C's T[n][m]: the rows sit
+        # one after another, so the alignment is still the element's.
+        for count in dims:
+            size *= count
+        return size, align
 
     nested = lookup(resolved)
     if nested is not None:
