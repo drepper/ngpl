@@ -108,11 +108,20 @@ class IfStmt:
 
 
 class WhileStmt:
-    """While loop."""
+    """While loop.
 
-    def __init__(self, cond, body):
+    var_name, when set, names a variable bound to the condition's value
+    at the start of every iteration, as `while e := next()` does.  The
+    bound value is then what decides whether the body runs.
+    """
+
+    def __init__(self, cond, body, var_name: str | None = None,
+                 var_type: str | None = None, var_is_mut: bool = False):
         self.cond = cond
         self.body = body
+        self.var_name = var_name
+        self.var_type = var_type
+        self.var_is_mut = var_is_mut
 
 
 class ReturnStmt:

@@ -44,10 +44,8 @@ fn test_array_iterate_loop() → ∅:
     let v : mut = [1, 2, 3, 4]
     let it : mut = v.iterate()
     let total : mut = 0
-    let e : mut = it.next()
-    while e:
+    while e := it.next():
         total ← total + e
-        e ← it.next()
     assert_eq(total, 10)
 
 // Two iterators over one array advance independently.
@@ -89,10 +87,8 @@ fn test_falsy_elements_do_not_end_iteration() → ∅:
     let v : mut = [0, 0, 0]
     let it : mut = v.iterate()
     let count : mut = 0
-    let e : mut = it.next()
-    while e:
+    while e := it.next():
         count ← count + 1
-        e ← it.next()
     assert_eq(count, 3)
 
 // Nor does an empty string or a false.
@@ -101,10 +97,8 @@ fn test_other_falsy_elements() → ∅:
     let s : mut = ["", "x"]
     let it : mut = s.iterate()
     let count : mut = 0
-    let e : mut = it.next()
-    while e:
+    while e := it.next():
         count ← count + 1
-        e ← it.next()
     assert_eq(count, 2)
 
 // An element that is itself ∅ is still an element, so an iterator can
@@ -114,10 +108,8 @@ fn test_none_element_is_still_present() → ∅:
     let v : mut = [∅, 1]
     let it : mut = v.iterate()
     let count : mut = 0
-    let e : mut = it.next()
-    while e:
+    while e := it.next():
         count ← count + 1
-        e ← it.next()
     assert_eq(count, 2)
 
 // A bare value keeps its own truthiness: only an optional tests presence.
@@ -165,11 +157,9 @@ fn test_directory_entries_have_names() → ∅:
     let dir : mut = std.fs.cwd()
     let it : mut = dir.iterate()
     let count : mut = 0
-    let e : mut = it.next()
-    while e:
+    while e := it.next():
         assert(e.name.sizeof > 0)
         count ← count + 1
-        e ← it.next()
     assert(count > 0)
 
 // A known regular file is found, with the right type.
@@ -178,12 +168,10 @@ fn test_directory_finds_regular_file() → ∅:
     let dir : mut = std.fs.cwd()
     let it : mut = dir.iterate()
     let found : mut = false
-    let e : mut = it.next()
-    while e:
+    while e := it.next():
         if e.name == "CLAUDE.md":
             found ← true
             assert_eq(e.type, std.filetype.reg)
-        e ← it.next()
     assert(found)
 
 // A known subdirectory is found, with the right type.
@@ -192,12 +180,10 @@ fn test_directory_finds_subdirectory() → ∅:
     let dir : mut = std.fs.cwd()
     let it : mut = dir.iterate()
     let found : mut = false
-    let e : mut = it.next()
-    while e:
+    while e := it.next():
         if e.name == "interp":
             found ← true
             assert_eq(e.type, std.filetype.dir)
-        e ← it.next()
     assert(found)
 
 // The two entries every directory has are deliberately not produced, so
@@ -207,20 +193,17 @@ fn test_directory_finds_subdirectory() → ∅:
 fn test_directory_omits_dot_entries() → ∅:
     let dir : mut = std.fs.cwd()
     let it : mut = dir.iterate()
-    let e : mut = it.next()
-    while e:
+    while e := it.next():
         assert(e.name != ".")
         assert(e.name != "..")
-        e ← it.next()
 
 // Exhaustion is reported the same way as for an array.
 @test
 fn test_directory_ends_with_none() → ∅:
     let dir : mut = std.fs.cwd()
     let it : mut = dir.iterate()
-    let e : mut = it.next()
-    while e:
-        e ← it.next()
+    while e := it.next():
+        _ ← e
     assert_eq(it.next(), ∅)
 
 // Every entry's type is one the enum names.
@@ -228,14 +211,12 @@ fn test_directory_ends_with_none() → ∅:
 fn test_directory_types_are_known() → ∅:
     let dir : mut = std.fs.cwd()
     let it : mut = dir.iterate()
-    let e : mut = it.next()
-    while e:
+    while e := it.next():
         let t : mut = e.type
         assert(t == std.filetype.reg ∨ t == std.filetype.dir
                ∨ t == std.filetype.lnk ∨ t == std.filetype.fifo
                ∨ t == std.filetype.chr ∨ t == std.filetype.blk
                ∨ t == std.filetype.sock ∨ t == std.filetype.unknown)
-        e ← it.next()
 
 // The enum values are the S_IF* constants from <sys/stat.h>.  They are
 // written in hex here because the language has no octal literal, in

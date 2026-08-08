@@ -980,11 +980,57 @@ class Parser:
         return IfStmt(cond, cons_body, alt)
 
     def _parse_while_stmt(self):
-        """Parse: while expr block"""
+        """Parse: while [var [: type]] ':=' expr block, or while expr block
+
+        The binding form mirrors foreach: the expression is evaluated
+        afresh each time round, bound to the variable, and its value is
+        what the loop tests.
+        """
         self._eat("WHILE")
+        var_name = None
+        var_type = None
+        var_is_mut = False
+        if self._at_while_binding():
+            var_name = self._eat("IDENT").value
+            self._eat("PUNCT", ":")
+            if self._try_eat("MUT"):
+                var_is_mut = True
+            if self._check("IDENT"):
+                var_type = self._eat("IDENT").value
+                if self._check("OP") and self._cur().value == "?":
+                    self.pos += 1
+                    var_type += "?"
+            self._eat("PUNCT", "=")
         cond = self._parse_or_expr()
         body = self._parse_block()
-        return WhileStmt(cond, body)
+        return WhileStmt(cond, body, var_name, var_type, var_is_mut)
+
+    def _at_while_binding(self) -> bool:
+        """Tell `while e := expr:` from a plain condition `while e:`.
+
+        Both start with an identifier and a colon; what follows decides.
+        A '=' next is the untyped binding.  A type name followed by '='
+        is the typed one -- which an inline body that happens to be an
+        assignment would also look like, so such a body has to be
+        written as an indented block.
+        """
+        if not self._check("IDENT"):
+            return False
+        after = self.tokens[self.pos + 1] if self.pos + 1 < len(self.tokens) else None
+        if after is None or after.type != "PUNCT" or after.value != ":":
+            return False
+        third = self.tokens[self.pos + 2] if self.pos + 2 < len(self.tokens) else None
+        if third is None:
+            return False
+        if third.type == "PUNCT" and third.value == "=":
+            return True
+        if third.type == "MUT":
+            return True
+        if third.type != "IDENT":
+            return False
+        fourth = self.tokens[self.pos + 3] if self.pos + 3 < len(self.tokens) else None
+        return (fourth is not None and fourth.type == "PUNCT"
+                and fourth.value == "=")
 
     def _parse_foreach_stmt(self, is_comptime: bool = False):
         """Parse: [comptime] foreach var1 [: type1] [, var2 [: type2]] := expr1 [, expr2] block

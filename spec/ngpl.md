@@ -1486,6 +1486,135 @@ This flexibility allows programmers to choose the style that best fits each situ
 The dual-mode approach draws from Haskell's optional layout rule while using Python's `:` syntax for familiarity.  The key advantage over Python is that braces remain available — useful for single-line blocks, machine-generated code, and situations where explicit delimiters reduce ambiguity.  The key advantage over Rust is that the common case of simple, sequential blocks needs no closing delimiter.
 
 
+### While Loop
+
+The plain form tests an expression each time round:
+
+```
+while n < 4:
+    n ← n + 1
+```
+
+#### Binding Form
+
+A `while` may also name a variable, using the same `:=` as `foreach`:
+
+```
+while e := it.next():
+    use(e)
+```
+
+The expression is evaluated afresh at the start of every iteration, bound to the name, and the bound value is what decides whether the body runs.  This is `foreach` applied to a sequence produced a step at a time rather than known up front — which is exactly what an iterator is.
+
+Without it the same loop has to call `next()` twice and keep the variable alive outside the loop that owns it:
+
+```
+let e : mut = it.next()
+while e:
+    use(e)
+    e ← it.next()
+```
+
+The repetition is the problem: the two calls must stay identical, and the one at the bottom is easy to forget or to place inside a conditional by accident, either of which loops for ever.  The binding form has one call and no way to omit it.
+
+A type may be given, as for a `foreach` variable:
+
+```
+while e : int = it.next():
+    total ← total + e
+```
+
+#### The Name Holds the Value, Not the Optional
+
+The body runs only when a value arrived, so inside it the name is bound to the value itself rather than to the optional that carried it.  `e` above is an element, not something that has to be unwrapped first:
+
+```
+while e := it.next():
+    total ← total + e         // an integer, added directly
+```
+
+This is Rust's `while let Some(e) = it.next()` without the pattern: the shape of the loop already says that the body is the case where a value was there, so restating it in every loop adds nothing.
+
+The rule holds for every operation that answers with an optional, not only iterators:
+
+```
+while x := v.pop():                 // x is the popped element
+while name := std.env.get(key):     // name is the value of the variable
+```
+
+After the loop the name holds `∅` — the value that ended it.
+
+#### Writing Back Through a `mut` Binding
+
+A binding declared `mut` names the element rather than a copy of it, so assigning to it writes into the container:
+
+```
+let v : mut i32[] = [1, 2, 3, 4]
+let it : mut = v.iterate()
+while e : mut = it.next():
+    e ← e + 1
+// v is now [2, 3, 4, 5]
+```
+
+The two forms differ in exactly this, which their types state:
+
+```
+while e := it.next():          // @typeof(e) is "i32" -- a copy
+while e : mut = it.next():     // @typeof(e) is "&mut i32" -- the element
+```
+
+A plain binding leaves the container untouched, so a loop that only reads cannot change anything by accident, and one that means to change something has to say so.
+
+`mut` is rejected where there is nothing to write back to.  `v.pop()` removes the element and hands over the value itself; there is no longer a place in the container for it, so:
+
+```
+while x : mut = v.pop():
+
+error: 'x' is declared mut, but the loop produces values that cannot be
+written back
+```
+
+This is the same distinction `&` and `&mut` draw for `foreach`, reached from the other direction: there the borrow is written on the container, here the mutability is written on the binding, because a `while` has no container in the syntax to write it on.
+
+#### The Bound Name
+
+The name is rebound at the start of each iteration, so assigning to it inside the body would be overwritten before it could be read.  It is therefore frozen, exactly as a `foreach` variable is:
+
+```
+while e := it.next():
+    e ← 99
+
+error: cannot assign to while variable 'e'
+```
+
+The value is tested with the ordinary rules, so an optional tests presence and an element of `0` does not end the loop — see [Optionals in a Boolean Context](#optionals-in-a-boolean-context).  A plain value is tested on its own terms, so `while remaining := n:` runs until `n` reaches zero.
+
+#### Telling the Two Forms Apart
+
+Both forms begin with an identifier followed by a colon, since `while e:` is a plain condition on `e` and `while e := ...` is a binding.  What comes after the colon decides: `=` means the untyped binding, and a type name followed by `=` means the typed one.
+
+An inline body that is itself an assignment — `while e: x = 5` — has the same shape as a typed binding and is rejected.  Written as an indented block it is unambiguous:
+
+```
+while e:
+    x = 5
+```
+
+#### Comparison with Other Languages
+
+| Language | Loop while a value keeps arriving |
+|----------|-----------------------------------|
+| C | `while ((e = next()) != NULL)` |
+| C++17 | no `while` form; `if (auto e = f(); e)` for the single test |
+| Rust | `while let Some(e) = it.next()` |
+| Go | `for e := next(); e != nil; e = next()` |
+| Zig | `while (it.next()) \|e\|` |
+| Python | `while (e := it.next()) is not None` |
+| NGPL | `while e := it.next():` |
+
+Rust and Zig bind and test in one construct, as this does.  C's idiom is the same shape but needs the assignment parenthesized and compared explicitly, which is the classic source of `=` written where `==` was meant.  Go has no binding `while` at all, so the call appears twice, which is the repetition this form removes.
+
+
 ### Foreach Loop
 
 The `foreach` loop iterates over **ranges** and **containers**, binding one or more loop variables that are constant within the loop body.

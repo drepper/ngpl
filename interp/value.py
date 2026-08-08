@@ -745,9 +745,12 @@ class ArrayIterator(Iterator):
     def next(self) -> "Value":
         if self.index >= self.array.sizeof:
             return NoneValue()
-        value = self.array.get(self.index)
+        index = self.index
         self.index += 1
-        return SomeValue(value)
+        # A reference rather than a copy, so a mutable loop binding can
+        # write the element back.  Reading one yields the element, so an
+        # ordinary loop cannot tell the difference.
+        return SomeValue(ElementRef(self.array, index))
 
     def display(self):
         return f"<array iterator at {self.index}>"

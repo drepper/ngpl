@@ -231,12 +231,16 @@ def unwrap_optional(value):
     Everything else → returned as-is.
     """
     if isinstance(value, SomeValue):
-        return value.value
+        return unwrap_optional(value.value)
     if isinstance(value, ExpectedValue):
         if value.is_ok():
             return value.ok_value
         raise TypeError(
             f"unwrap of expected error: {value.err_value.display()}")
+    # A reference stands for what it points at wherever a value is
+    # wanted; only assignment and @typeof look at the reference itself.
+    if isinstance(value, Reference):
+        return value.get()
     return value
 
 
@@ -2217,9 +2221,49 @@ class Evaluator:
         return none()
 
     def _eval_while(self, node: WhileStmt):
-        """Evaluate a while loop. Repeatedly check condition and execute body."""
-        while to_bool(self.eval_expr(node.cond)):
-            self.eval_stmts(node.body)
+        """Evaluate a while loop, with or without a bound variable."""
+        if node.var_name is None:
+            while to_bool(self.eval_expr(node.cond)):
+                self.eval_stmts(node.body)
+            return none()
+
+        name = node.var_name
+        # A plain binding is rebound every iteration, so assigning to it
+        # would be overwritten; it is frozen, as a foreach variable is.
+        # A mut binding is the exception, and only means anything when
+        # what it names can be written through.
+        if not node.var_is_mut:
+            self._frozen_vars[name] = "while"
+        self._comptime_vars = self._comptime_vars | {name}
+        try:
+            while True:
+                value = self.eval_expr(node.cond)
+                if not to_bool(value):
+                    # Nothing arrived, so there is nothing to bind and
+                    # the body does not run.
+                    self.env.define(name, none())
+                    break
+                # The body runs only when a value was there, so the name
+                # is bound to the value itself rather than to the
+                # optional wrapping it.
+                bound = value.value if isinstance(value, SomeValue) else value
+                if node.var_is_mut:
+                    if not isinstance(bound, Reference):
+                        raise TypeError(
+                            f"'{name}' is declared mut, but the loop produces "
+                            f"values that cannot be written back")
+                elif isinstance(bound, Reference):
+                    # A plain binding names the value, not the place it
+                    # came from, so it holds a copy and its type is the
+                    # element's own.
+                    bound = bound.get()
+                if node.var_type is not None and not isinstance(bound, Reference):
+                    bound = coerce_to_type(bound, node.var_type)
+                self.env.define(name, bound)
+                self.eval_stmts(node.body)
+        finally:
+            self._frozen_vars.pop(name, None)
+            self._comptime_vars = self._comptime_vars - {name}
         return none()
 
     def _eval_foreach(self, node: ForEachStmt):
