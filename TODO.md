@@ -177,7 +177,10 @@ Memory and Lifetime Management
 -------------------------------
 
 [ ] lifetime system akin to Rust: borrow checker, ownership, move semantics.
-    Stack allocation preferred for local lifetimes.
+    Stack allocation preferred for local lifetimes.  Partially started: foreach can borrow an
+    array with & (read) or &mut (write through to the elements), and a mutable borrow of an
+    immutable binding is rejected.  Still missing: borrows anywhere other than a foreach
+    iterable, and any check that two borrows do not overlap.
 
 [ ] reference counting for boxed values with implicit deallocation.
 

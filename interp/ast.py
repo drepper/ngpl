@@ -64,6 +64,18 @@ class RefExpr:
         self.name = name
 
 
+class BorrowExpr:
+    """Borrow of a container: &expr or &mut expr in a foreach iterable.
+
+    A shared borrow (is_mut false) lets the loop read the elements; a
+    mutable borrow lets it write to them through the loop variable.
+    """
+
+    def __init__(self, expr, is_mut: bool):
+        self.expr = expr
+        self.is_mut = is_mut
+
+
 class BinOp:
     """Binary operator: + - * / == != < > <= >= and or."""
 

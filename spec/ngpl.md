@@ -1633,6 +1633,110 @@ foreach i, v := enumerate([10, 20, 30]):
 | Destructuring | `for i, v in enumerate(x)` | `for (i, v) in x.enumerate()` | N/A | `foreach i, v := enumerate(x)` |
 
 
+### Borrowing in a Foreach Loop (`&` and `&mut`)
+
+Iterating an array ordinarily gives the loop a copy of each element, so the loop variable is frozen and assigning to it is rejected — writing to a copy that is about to be discarded is a mistake, not an intention.  Prefixing the container with `&` or `&mut` says what the loop wants to do with the elements instead.
+
+#### `&mut` — Lending for Writing
+
+```
+let nums : mut = [1, 2, 3]
+foreach x := &mut nums:
+    x ← x + 1
+// nums is now [2, 3, 4]
+```
+
+Under `&mut` the loop variable *refers to* the element rather than holding a copy of it.  Reading it gives the element's value, and assigning to it writes into the array.  This is the one kind of loop variable that may be assigned to, precisely because the assignment goes somewhere that outlives the iteration.
+
+Several containers may be lent at once, one variable each:
+
+```
+foreach x, y := &mut a, &mut b:
+    x ← x + 1
+    y ← y + 1
+```
+
+#### `&` — Lending for Reading
+
+```
+let total : mut = 0
+foreach x := &nums:
+    total ← total + x
+```
+
+A shared borrow also refers to the element rather than copying it, but it may only be read.  Assigning to the loop variable is an error:
+
+```
+foreach x := &nums:
+    x ← x + 1
+
+error: cannot assign to borrowed variable 'x'
+```
+
+The diagnostic differs from the one for a plain `foreach`, which reports a *foreach* variable, because the programmer has said something different: with `&` they asked for a borrow and are being told which kind they took, rather than being told that loop variables are not assignable at all.
+
+#### The Type of the Loop Variable
+
+The three forms differ in the type they give the loop variable, and `@typeof` reports it:
+
+```
+foreach a := nums:              // @typeof(a) is "int"
+foreach b := &nums:             // @typeof(b) is "&int"
+foreach c := &mut nums:         // @typeof(c) is "&mut int"
+```
+
+The referent type follows the elements, so borrowing a `str[]` gives `&str` and `&mut str`.
+
+Reading a borrowed variable yields the element, not the reference — `b + 1` is an integer addition, with no dereferencing step to write.  The reference shows only in the type, which is where it matters: it is what distinguishes a loop that may write to the container from one that may not.
+
+Because the language has no literal for a reference type, a type is compared against its written name:
+
+```
+static_assert_eq(@typeof(c), "&mut int")
+```
+
+#### What May Be Lent
+
+A mutable borrow is a promise to write, so it may only be taken of something writable.  Lending an immutable binding for writing is rejected where the borrow is taken, not where the write happens:
+
+```
+let nums := [1, 2, 3]
+foreach x := &mut nums:
+    x ← x + 1
+
+error: cannot mutably borrow let variable 'nums'
+```
+
+Both forms currently require an array.  Ranges and tuples have no elements to lend a reference to.
+
+Destructuring a borrowed container is rejected, because it is not yet decided whether the parts or the whole would be lent:
+
+```
+foreach a, b := &mut pairs:
+
+error: foreach over a borrow needs one variable per borrowed container
+```
+
+#### Why the Distinction Is Explicit
+
+A language could make `foreach x := nums` write through whenever the loop assigns to `x`, and many do.  Requiring `&mut` states at the top of the loop that the container is about to change, so a reader knows before reading the body — and it makes the far more common read-only loop say so as well.  It also leaves `foreach x := nums` free to mean the copy it appears to mean.
+
+The borrow is written on the container rather than on the loop variable because it is the container that is being lent.  `foreach x := &mut nums` reads as "for each x in a mutable borrow of nums", which is what happens.
+
+#### Comparison with Other Languages
+
+| Language | Read-only iteration | Mutating iteration |
+|----------|--------------------|-------------------|
+| C++ | `for (auto x : v)` | `for (auto& x : v)` |
+| Rust | `for x in &v` | `for x in &mut v` |
+| Go | `for _, x := range v` (copy) | index and assign `v[i]` |
+| Zig | `for (v) \|x\|` | `for (v) \|*x\|` |
+| Python | `for x in v` (copy for numbers) | index and assign `v[i]` |
+| NGPL | `foreach x := v` or `&v` | `foreach x := &mut v` |
+
+The syntax is Rust's, and so is the reasoning: the two borrows are different enough that spelling them differently is worth the characters.  C++ makes the same distinction on the loop variable rather than the container, which reads as a property of `x` when it is really a statement about `v`.  Go and Python offer no borrowing form at all, so a mutating loop has to index the container manually and the connection between the index and the element is left to the reader.
+
+
 ### Anonymous Functions (Lambdas)
 
 Anonymous functions are introduced with the `λ` (U+03BB, GREEK SMALL LETTER LAMDA) keyword.

@@ -60,6 +60,7 @@ all_tests=(
     "$testdir"/test_callstack.nl
     "$testdir"/test_discard.nl
     "$testdir"/test_scope_close.nl
+    "$testdir"/test_borrow_foreach.nl
 )
 
 # Filter tests if command-line patterns are given.

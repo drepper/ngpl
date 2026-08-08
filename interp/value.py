@@ -661,7 +661,24 @@ class ArrayValue(Value):
                                for i in range(self.sizeof)) + "]"
 
 
-class RefValue(Value):
+class Reference(Value):
+    """A place that can be read through and written through.
+
+    Reading a name bound to a reference yields the referent, and
+    assigning to that name writes through to wherever the reference
+    points rather than rebinding the name.
+    """
+
+    __slots__ = ()
+
+    def get(self) -> "Value":
+        raise NotImplementedError
+
+    def set(self, value: "Value"):
+        raise NotImplementedError
+
+
+class RefValue(Reference):
     """A mutable reference to a binding in a specific environment frame.
 
     When passed to a function parameter declared with &type, modifications
@@ -682,6 +699,37 @@ class RefValue(Value):
 
     def display(self):
         return f"&{self.name}"
+
+
+class ElementRef(Reference):
+    """A reference to one element of an array.
+
+    Produced by iterating an array with & or &mut.  Both forms refer to
+    the element rather than copying it; only the mutable form may be
+    written through, so that assigning to the loop variable writes into
+    the array.
+    """
+
+    __slots__ = ("array", "index", "is_mut")
+
+    def __init__(self, array: "ArrayValue", index: int, is_mut: bool = True):
+        self.array = array
+        self.index = index
+        self.is_mut = is_mut
+
+    def get(self) -> "Value":
+        return self.array.get(self.index)
+
+    def set(self, value: "Value"):
+        # The loop variable is frozen, so this is a backstop rather than
+        # the diagnostic a program normally sees.
+        if not self.is_mut:
+            raise TypeError("cannot write through a shared borrow")
+        self.array.set(self.index, value)
+
+    def display(self):
+        prefix = "&mut " if self.is_mut else "&"
+        return f"{prefix}{self.get().display()}"
 
 
 def deep_copy_value(v: Value) -> Value:

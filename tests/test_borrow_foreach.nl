@@ -1,0 +1,187 @@
+// Tests for iterating an array with & and &mut.
+//
+// Iterating `arr` plainly gives the loop a copy of each element.  `&arr`
+// lends the elements for reading and `&mut arr` for writing: in both the
+// loop variable refers to the element, and only the mutable form may be
+// assigned to, which writes into the array.
+//
+// The three forms give the loop variable the types int, &int, and
+// &mut int respectively.
+
+// ---------------------------------------------------------------------
+// The three forms of iteration, and the type each gives the loop variable
+// ---------------------------------------------------------------------
+
+// Without a borrow the loop variable holds a copy of the element.
+@test
+fn test_plain_iteration_copies() → ∅:
+    let nums : mut = [1, 2, 3]
+    let total : mut = 0
+    foreach x := nums:
+        static_assert_eq(@typeof(x), "int")
+        total ← total + x
+    assert_eq(total, 6)
+    // The array is untouched: a copy has nowhere to write back to.
+    assert_eq(nums[0], 1)
+    assert_eq(nums[2], 3)
+
+// A shared borrow refers to the element, but only for reading.
+@test
+fn test_shared_borrow_type() → ∅:
+    let nums : mut = [1, 2, 3]
+    foreach x := &nums:
+        static_assert_eq(@typeof(x), "&int")
+
+// A mutable borrow refers to the element and may be written through.
+@test
+fn test_mut_borrow_type() → ∅:
+    let nums : mut = [1, 2, 3]
+    foreach x := &mut nums:
+        static_assert_eq(@typeof(x), "&mut int")
+
+// All three side by side over the same array.
+@test
+fn test_three_forms_differ() → ∅:
+    let nums : mut = [1, 2, 3]
+    foreach a := nums:
+        static_assert_eq(@typeof(a), "int")
+    foreach b := &nums:
+        static_assert_eq(@typeof(b), "&int")
+    foreach c := &mut nums:
+        static_assert_eq(@typeof(c), "&mut int")
+
+// The element type is carried through the borrow, not fixed at int.
+@test
+fn test_borrow_type_follows_element_type() → ∅:
+    let words : mut = ["a", "b"]
+    foreach w := &words:
+        static_assert_eq(@typeof(w), "&str")
+    foreach w := &mut words:
+        static_assert_eq(@typeof(w), "&mut str")
+
+// ---------------------------------------------------------------------
+// &mut writes through to the array
+// ---------------------------------------------------------------------
+
+@test
+fn test_mut_borrow_updates_elements() → ∅:
+    let nums : mut = [1, 2, 3]
+    foreach x := &mut nums:
+        x ← x + 1
+    assert_eq(nums[0], 2)
+    assert_eq(nums[1], 3)
+    assert_eq(nums[2], 4)
+
+// The change is visible to a later ordinary iteration, so it really is
+// the array that changed and not a copy.
+@test
+fn test_mut_borrow_result_is_observable() → ∅:
+    let nums : mut = [1, 2, 3]
+    foreach x := &mut nums:
+        x ← x + 1
+    let total : mut = 0
+    foreach v := nums:
+        total ← total + v
+    assert_eq(total, 9)
+
+// Reading the loop variable yields the element, not the reference.
+@test
+fn test_mut_borrow_reads_the_element() → ∅:
+    let nums : mut = [10, 20]
+    let seen : mut = 0
+    foreach x := &mut nums:
+        seen ← seen + x
+    assert_eq(seen, 30)
+
+// Assigning something other than the old value works the same way.
+@test
+fn test_mut_borrow_plain_assignment() → ∅:
+    let nums : mut = [1, 2, 3]
+    foreach x := &mut nums:
+        x ← 7
+    assert_eq(nums[0], 7)
+    assert_eq(nums[2], 7)
+
+// An empty array is simply not iterated.
+@test
+fn test_mut_borrow_empty_array() → ∅:
+    let nums : mut = []
+    foreach x := &mut nums:
+        x ← 1
+    assert_eq(nums.sizeof, 0)
+
+// Two arrays can be borrowed at once, one variable each.
+@test
+fn test_two_mut_borrows() → ∅:
+    let a : mut = [1, 2]
+    let b : mut = [10, 20]
+    foreach x, y := &mut a, &mut b:
+        x ← x + 1
+        y ← y + 1
+    assert_eq(a[0], 2)
+    assert_eq(a[1], 3)
+    assert_eq(b[0], 11)
+    assert_eq(b[1], 21)
+
+// ---------------------------------------------------------------------
+// & lends for reading only
+// ---------------------------------------------------------------------
+
+@test
+fn test_shared_borrow_reads() → ∅:
+    let nums : mut = [1, 2, 3]
+    let total : mut = 0
+    foreach x := &nums:
+        total ← total + x
+    assert_eq(total, 6)
+
+// The array is untouched by a shared borrow.
+@test
+fn test_shared_borrow_leaves_array_alone() → ∅:
+    let nums : mut = [1, 2, 3]
+    foreach x := &nums:
+        assert(x > 0)
+    assert_eq(nums[0], 1)
+    assert_eq(nums[1], 2)
+    assert_eq(nums[2], 3)
+
+@expect error "cannot assign to borrowed variable 'x'"
+fn error_assign_through_shared_borrow() → ∅:
+    let nums : mut = [1, 2, 3]
+    foreach x := &nums:
+        x ← x + 1
+
+// ---------------------------------------------------------------------
+// What may be borrowed
+// ---------------------------------------------------------------------
+
+// An immutable binding cannot be lent out for writing.
+@expect error "cannot mutably borrow let variable 'nums'"
+fn error_mut_borrow_of_let() → ∅:
+    let nums := [1, 2, 3]
+    foreach x := &mut nums:
+        x ← x + 1
+
+@expect error "foreach over &mut requires an array"
+fn error_mut_borrow_of_non_array() → ∅:
+    let n : mut = 5
+    foreach x := &mut n:
+        x ← x + 1
+
+@expect error "foreach over & requires an array"
+fn error_shared_borrow_of_non_array() → ∅:
+    let n : mut = 5
+    foreach x := &n:
+        assert(x > 0)
+
+// Destructuring a borrowed array has no meaning yet: it is unclear
+// whether the parts or the whole would be lent.
+@expect error "one variable per borrowed container"
+fn error_borrow_with_destructuring() → ∅:
+    let pairs : mut = [(1, 2), (3, 4)]
+    foreach a, b := &mut pairs:
+        assert(a > 0)
+
+@start
+fn main() → ∅:
+    std.print("borrow foreach tests passed")

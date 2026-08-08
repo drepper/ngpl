@@ -9,7 +9,8 @@ indentation (INDENT/DEDENT tokens).
 """
 
 from interp.ast import (
-    IntLit, FloatLit, StrLit, BoolLit, NoneLit, VarRef, RefExpr, BinOp, UnaryOp,
+    IntLit, FloatLit, StrLit, BoolLit, NoneLit, VarRef, RefExpr, BorrowExpr,
+    BinOp, UnaryOp,
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
@@ -1020,11 +1021,25 @@ class Parser:
         self._eat("PUNCT", "=")
         iterables = []
         while True:
-            iterables.append(self._parse_or_expr())
+            iterables.append(self._parse_iterable())
             if not self._try_eat("PUNCT", ","):
                 break
         body = self._parse_block()
         return ForEachStmt(vars_list, iterables, body, is_comptime)
+
+    def _parse_iterable(self):
+        """Parse one foreach iterable, which may be borrowed.
+
+        `&expr` iterates the elements for reading; `&mut expr` iterates
+        them for writing, so the loop variable refers to the element
+        rather than to a copy of it.
+        """
+        if self._check("OP") and self._cur().value == "&":
+            amp_tok = self._eat("OP", "&")
+            is_mut = self._try_eat("MUT") is not None
+            return self._set_pos(BorrowExpr(self._parse_or_expr(), is_mut),
+                                 amp_tok)
+        return self._parse_or_expr()
 
     def _parse_catch_stmt(self):
         """Parse: catch block"""

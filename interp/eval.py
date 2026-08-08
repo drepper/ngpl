@@ -23,7 +23,7 @@ from interp.ast import (
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr,
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
-    UnitExpr, UnitOfExpr, UnitRefExpr, RefExpr, TypeDef,
+    UnitExpr, UnitOfExpr, UnitRefExpr, RefExpr, BorrowExpr, TypeDef,
     StructLit,
 )
 from interp.value import (
@@ -36,7 +36,8 @@ from interp.value import (
     _TYPE_BITS, FLOAT_TYPES, FAST_TYPES,
     _split_optional_type, MAX_TENSOR_RANK,
     is_generic_type, runtime_type_of,
-    UnitValue, RefValue, deep_copy_value, register_type_alias, DISCARD_NAME,
+    UnitValue, RefValue, Reference, ElementRef,
+    deep_copy_value, register_type_alias, DISCARD_NAME,
 )
 from interp.env import Env
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
@@ -1380,7 +1381,7 @@ class Evaluator:
                     f"pure function '{self._pure_func_name}' cannot "
                     f"read mutable global variable '{node.name}'")
             val = self.env.lookup(node.name)
-            if isinstance(val, RefValue):
+            if isinstance(val, Reference):
                 return val.get()
             return val
 
@@ -1434,6 +1435,16 @@ class Evaluator:
                 if eu.name != au.name:
                     raise TypeError(
                         f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
+            elif (isinstance(eu, TypeValue) and isinstance(au, StrValue)) or \
+                 (isinstance(eu, StrValue) and isinstance(au, TypeValue)):
+                # A type may be checked against its written name, which is
+                # the only way to name one the language has no literal for.
+                type_name = eu.name if isinstance(eu, TypeValue) else au.name
+                spelled = au.value if isinstance(au, StrValue) else eu.value
+                if type_name != spelled:
+                    raise TypeError(
+                        f"static_assert_eq failed:\n  expected: {type_name}\n"
+                        f"  actual:   {spelled}")
             elif isinstance(eu, UnitOfValue) and isinstance(au, UnitOfValue):
                 eq = self._op_eq(expected, actual)
                 if not eq.value:
@@ -1749,7 +1760,18 @@ class Evaluator:
             if not _is_comptime_expr(node.expr, self._comptime_vars):
                 raise TypeError(
                     "@typeof requires a compile-time constant argument")
-            val = self.eval_expr(node.expr)
+            # Reading a name bound to a reference yields the referent, so
+            # the binding itself is inspected to report the borrow.
+            val = None
+            if isinstance(node.expr, VarRef):
+                try:
+                    bound = self.env.lookup(node.expr.name)
+                except KeyError:
+                    bound = None
+                if isinstance(bound, Reference):
+                    val = bound
+            if val is None:
+                val = self.eval_expr(node.expr)
             result = TypeValue(self._value_type_name(val))
             if _is_const_expr(node.expr):
                 node._cached_value = result
@@ -2033,7 +2055,7 @@ class Evaluator:
                         f"pure function '{self._pure_func_name}' cannot "
                         f"assign to non-local variable '{target_ast.name}'")
                 current = self.env.lookup(target_ast.name)
-                if isinstance(current, RefValue):
+                if isinstance(current, Reference):
                     current.set(rhs)
                     return none()
                 if isinstance(current, UnitValue):
@@ -2141,7 +2163,14 @@ class Evaluator:
     def _eval_foreach(self, node: ForEachStmt):
         """Evaluate a foreach loop over ranges or containers."""
         sequences: list[list[Value]] = []
+        # None for an ordinary iterable, "shared" or "mut" for a borrow.
+        borrows: list[str | None] = []
         for expr in node.iterables:
+            if isinstance(expr, BorrowExpr):
+                borrows.append("mut" if expr.is_mut else "shared")
+                sequences.append(self._resolve_borrow(expr))
+                continue
+            borrows.append(None)
             if isinstance(expr, EnumerateExpr):
                 inner = self._resolve_iterable(expr.expr, node.is_comptime)
                 sequences.append([
@@ -2199,8 +2228,28 @@ class Evaluator:
                 f"(must match or use 1 variable)")
 
         var_names = [v[0] for v in node.vars]
-        for name in var_names:
-            self._frozen_vars[name] = "foreach"
+
+        if any(borrows) and (destructure or num_vars != num_iters):
+            raise TypeError(
+                "foreach over a borrow needs one variable per borrowed "
+                "container")
+
+        # A mutably borrowed variable is the one kind of loop variable
+        # that may be assigned to, because assigning to it writes into
+        # the container rather than rebinding the name.
+        freeze_kinds: list[str | None] = []
+        for i in range(num_vars):
+            borrow = borrows[i] if i < len(borrows) and num_vars == num_iters else None
+            if borrow == "mut":
+                freeze_kinds.append(None)
+            elif borrow == "shared":
+                freeze_kinds.append("borrowed")
+            else:
+                freeze_kinds.append("foreach")
+
+        for name, kind in zip(var_names, freeze_kinds):
+            if kind is not None:
+                self._frozen_vars[name] = kind
         self._comptime_vars |= set(var_names)
         try:
             for idx in range(max_len):
@@ -2219,7 +2268,9 @@ class Evaluator:
                 else:
                     for (var_name, var_type), seq in zip(node.vars, sequences):
                         val = seq[idx % len(seq)]
-                        if var_type is not None:
+                        # A reference is bound as-is; coercing it would
+                        # replace it with a copy of the element.
+                        if var_type is not None and not isinstance(val, Reference):
                             val = coerce_to_type(val, var_type)
                         self.env.define(var_name, val)
                 self.eval_stmts(node.body)
@@ -2228,6 +2279,37 @@ class Evaluator:
                 self._frozen_vars.pop(name, None)
             self._comptime_vars -= set(var_names)
         return none()
+
+    def _resolve_borrow(self, expr: BorrowExpr) -> list[Value]:
+        """Resolve a borrowed iterable to the values the loop will bind.
+
+        A mutable borrow yields a reference per element, so that
+        assigning to the loop variable writes into the array.  A shared
+        borrow yields the elements themselves; the loop variable is
+        frozen, so the copy can never be written back.
+        """
+        if expr.is_mut and isinstance(expr.expr, VarRef):
+            # Writing through a mutable borrow is writing to the binding,
+            # so one may not be taken of something that cannot be written.
+            name = expr.expr.name
+            frozen = self._frozen_vars.get(name)
+            if frozen is not None and frozen != "moved":
+                raise TypeError(
+                    f"cannot mutably borrow {frozen} variable '{name}'")
+            if self.env.is_const_global(name):
+                raise TypeError(
+                    f"cannot mutably borrow let variable '{name}'")
+
+        val = unwrap_optional(self.eval_expr(expr.expr))
+        if not (isinstance(val, ObjectValue)
+                and isinstance(val.obj, ArrayValue)):
+            kind = "&mut" if expr.is_mut else "&"
+            raise TypeError(
+                f"foreach over {kind} requires an array, got "
+                f"{self._value_type_name(val)}")
+        array = val.obj
+        return [ElementRef(array, i, expr.is_mut)
+                for i in range(array.sizeof)]
 
     def _resolve_iterable(self, expr, is_comptime: bool = False) -> list[Value]:
         """Resolve an expression to a list of values for foreach iteration."""
@@ -2500,6 +2582,11 @@ class Evaluator:
     @staticmethod
     def _value_type_name(val: Value) -> str:
         """Return the type name string for a runtime value."""
+        if isinstance(val, ElementRef):
+            prefix = "&mut " if val.is_mut else "&"
+            return prefix + Evaluator._value_type_name(val.get())
+        if isinstance(val, RefValue):
+            return "&mut " + Evaluator._value_type_name(val.get())
         u = unwrap_optional(val)
         if isinstance(u, UnitValue):
             return Evaluator._value_type_name(u.inner)
