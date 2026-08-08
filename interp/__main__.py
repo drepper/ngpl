@@ -953,43 +953,9 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
     """
     program = LoadedProgram()
 
-    for defn in definitions:
-        if isinstance(defn, ASTTypeDef):
-            if not validate_type(defn.target):
-                raise DefinitionError(
-                    f"type alias '{defn.name}' refers to unknown type "
-                    f"'{defn.target}'")
-            register_type_alias(defn.name, defn.target)
-
-    for defn in definitions:
-        if isinstance(defn, ASTVarDef):
-            if defn.name == DISCARD_NAME:
-                # Evaluated for its effects, then dropped; nothing is bound.
-                evaluator.eval_expr(defn.init_expr)
-                continue
-            if defn.is_const and defn.type_annotation is not None and defn.type_annotation in FAST_TYPES:
-                raise DefinitionError(
-                    f"fast type '{defn.type_annotation}' cannot be used in "
-                    f"let definition '{defn.name}'")
-            value = evaluator.eval_expr(defn.init_expr)
-            if defn.type_annotation is not None:
-                value = coerce_to_type(value, defn.type_annotation)
-            env.define(defn.name, value)
-            if defn.is_const:
-                env._const_globals.add(defn.name)
-            else:
-                env._mutable_globals.add(defn.name)
-
-    for defn in definitions:
-        if isinstance(defn, ASTUnitDef):
-            from interp.units import eval_unit_formula, register_user_unit, Unit
-            from fractions import Fraction
-            if defn.formula is not None:
-                unit = eval_unit_formula(defn.formula)
-                unit = Unit(unit.components, unit.factor, defn.name)
-            else:
-                unit = Unit({defn.name: 1}, Fraction(1), defn.name)
-            register_user_unit(defn.name, unit)
+    # Named types first: an alias, a sum, a global, or a signature
+    # may refer to any of them, and each may be declared below
+    # whatever names it.
 
     for defn in definitions:
         if isinstance(defn, ASTEnumDef):
@@ -1032,6 +998,44 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                         f"sum type '{defn.name}' names unknown type "
                         f"'{alt}' as an alternative")
             register_sum_type(defn.name, defn.alternatives)
+
+    for defn in definitions:
+        if isinstance(defn, ASTTypeDef):
+            if not validate_type(defn.target):
+                raise DefinitionError(
+                    f"type alias '{defn.name}' refers to unknown type "
+                    f"'{defn.target}'")
+            register_type_alias(defn.name, defn.target)
+
+    for defn in definitions:
+        if isinstance(defn, ASTVarDef):
+            if defn.name == DISCARD_NAME:
+                # Evaluated for its effects, then dropped; nothing is bound.
+                evaluator.eval_expr(defn.init_expr)
+                continue
+            if defn.is_const and defn.type_annotation is not None and defn.type_annotation in FAST_TYPES:
+                raise DefinitionError(
+                    f"fast type '{defn.type_annotation}' cannot be used in "
+                    f"let definition '{defn.name}'")
+            value = evaluator.eval_expr(defn.init_expr)
+            if defn.type_annotation is not None:
+                value = coerce_to_type(value, defn.type_annotation)
+            env.define(defn.name, value)
+            if defn.is_const:
+                env._const_globals.add(defn.name)
+            else:
+                env._mutable_globals.add(defn.name)
+
+    for defn in definitions:
+        if isinstance(defn, ASTUnitDef):
+            from interp.units import eval_unit_formula, register_user_unit, Unit
+            from fractions import Fraction
+            if defn.formula is not None:
+                unit = eval_unit_formula(defn.formula)
+                unit = Unit(unit.components, unit.factor, defn.name)
+            else:
+                unit = Unit({defn.name: 1}, Fraction(1), defn.name)
+            register_user_unit(defn.name, unit)
 
     # Every struct exists by now, so a @repr(C) layout can be checked even
     # when it names a struct declared further down the file.  Checking here

@@ -60,6 +60,33 @@ fn test_alias_mut_var() → ∅:
   x ← 99
   assert_eq(x, 99)
 
+  std.print("type alias tests passed")
+
+// ---------------------------------------------------------------------
+// A named type may be declared below the alias that refers to it
+// ---------------------------------------------------------------------
+
+// The alias is registered after the structs exist, so an alias may
+// name one whether it appears above or below.
+type EarlyRef = DeclaredLater
+
+struct DeclaredLater:
+    v : i32
+
+@test
+fn test_alias_of_a_struct() → ∅:
+    let a : EarlyRef = DeclaredLater{v: 4}
+    assert_eq(a.v, 4)
+
+struct DeclaredFirst:
+    w : i32
+
+type LateRef = DeclaredFirst
+
+@test
+fn test_alias_of_an_earlier_struct() → ∅:
+    let b : LateRef = DeclaredFirst{w: 9}
+    assert_eq(b.w, 9)
+
 @start
 fn main() → ∅:
-  std.print("type alias tests passed")
