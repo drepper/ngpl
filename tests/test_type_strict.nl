@@ -146,12 +146,12 @@ fn test_sub_float_int() → ∅:
 @test
 @expect error "matching types"
 fn test_mul_int_float() → ∅:
-  let r : mut = 3 * 2.5
+  let r : mut = 3 × 2.5
 
 @test
 @expect error "matching types"
 fn test_mul_float_int() → ∅:
-  let r : mut = 2.5 * 3
+  let r : mut = 2.5 × 3
 
 @test
 @expect error "matching types"
@@ -197,7 +197,7 @@ fn test_add_float_float() → ∅:
 
 @test
 fn test_mul_float_float() → ∅:
-  assert_true(6.0 == 2.0 * 3.0)
+  assert_true(6.0 == 2.0 × 3.0)
 
 // Mixed types through function call: co returns f32, foo adds int + f32.
 

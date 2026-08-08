@@ -43,7 +43,7 @@ fn test_static_assert_negation() → ∅:
 // static_assert_eq with arithmetic.
 @test
 fn test_static_assert_eq_arithmetic() → ∅:
-    static_assert_eq(120, 2 * 3 * 4 * 5)
+    static_assert_eq(120, 2 × 3 × 4 × 5)
 
 // Error: static_assert with false.
 @test

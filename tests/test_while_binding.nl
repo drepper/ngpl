@@ -223,7 +223,7 @@ fn test_nested_bindings() → ∅:
         let inner := [10, 20]
         let iit := inner.iterate()
         while b := iit.next():
-            total ← total + (a * b)
+            total ← total + (a × b)
     assert_eq(total, 90)
 
 @start

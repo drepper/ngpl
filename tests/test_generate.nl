@@ -3,7 +3,7 @@
 // Basic: generate with lambda over a range
 @test
 fn test_generate_basic():
-  let arr := generate(λx : int → int: x * 2, 1…5)
+  let arr := generate(λx : int → int: x × 2, 1…5)
   assert_eq(5, arr.sizeof)
   assert_eq(2, arr[0])
   assert_eq(4, arr[1])
@@ -13,7 +13,7 @@ fn test_generate_basic():
 
 // Generate with a named function
 fn square(x: i32) → i32:
-  x * x
+  x × x
 
 @test
 fn test_generate_named_func():
@@ -26,7 +26,7 @@ fn test_generate_named_func():
 
 // Generate with a curried function
 fn multiply(a: i32, b: i32) → i32:
-  a * b
+  a × b
 
 @test
 fn test_generate_curried():
@@ -53,7 +53,7 @@ fn test_generate_stepped():
 // Generate with descending range
 @test
 fn test_generate_descending():
-  let arr := generate(λx : int → int: x * x, 3…1)
+  let arr := generate(λx : int → int: x × x, 3…1)
   assert_eq(3, arr.sizeof)
   assert_eq(9, arr[0])
   assert_eq(4, arr[1])
@@ -79,7 +79,7 @@ fn test_generate_single():
 // Generate result can be iterated with foreach
 @test
 fn test_generate_foreach():
-  let arr := generate(λx : int → int: x * 10, 1…3)
+  let arr := generate(λx : int → int: x × 10, 1…3)
   let sum : mut = 0
   foreach v := arr:
     sum ← sum + v

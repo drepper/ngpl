@@ -63,14 +63,14 @@ fn test_sub_dimensionless_minus_unit():
 @test
 fn test_mul_unit_times_dimensionless():
   let a ¤meter := 5
-  let b := a * 3
-  assert_eq_int(b, 15, "5m * 3 = 15m")
+  let b := a × 3
+  assert_eq_int(b, 15, "5m × 3 = 15m")
 
 @test
 fn test_mul_dimensionless_times_unit():
   let a ¤meter := 5
-  let b := 3 * a
-  assert_eq_int(b, 15, "3 * 5m = 15m")
+  let b := 3 × a
+  assert_eq_int(b, 15, "3 × 5m = 15m")
 
 // --- dimensionless / unit-bearing ---
 
@@ -109,8 +109,8 @@ fn test_cmp_unit_with_dimensionless():
 fn test_sizeof_in_arithmetic():
   let arr := [10, 20, 30, 40, 50]
   let sz := arr.sizeof
-  let doubled := sz * 2
-  assert_eq_int(doubled, 10, "sizeof*2")
+  let doubled := sz × 2
+  assert_eq_int(doubled, 10, "sizeof×2")
   let plus_one := sz + 1
   assert_eq_int(plus_one, 6, "sizeof+1")
 

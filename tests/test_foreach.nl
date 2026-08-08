@@ -13,7 +13,7 @@ fn test_foreach_range() → ∅:
 fn test_foreach_desc() → ∅:
     let result : mut = 0
     foreach i := 5…1:
-        result ← result * 10 + i
+        result ← result × 10 + i
     assert_eq(result, 54321)
 
 // Typed loop variable.

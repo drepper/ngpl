@@ -4,7 +4,7 @@ let a := [1, 2]
 a[9]
 "still alive"
 fn bad_call(n : int) → int:
-    n * 2
+    n × 2
 
 bad_call("text")
 bad_call(4)

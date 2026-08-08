@@ -52,7 +52,7 @@ fn test_typeof_pack() → ∅:
     static_assert_eq(@typeof(42), @typeof(0))
 
 fn double(x : int) → int:
-    x * 2
+    x × 2
 
 @test
 fn test_apply_sum() → ∅:

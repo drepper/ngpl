@@ -295,13 +295,27 @@ A number literal is interpreted as floating-point when any of the following are 
 2. It contains an exponent (`e`/`E` for decimal, `p`/`P` for hex)
 3. It has a float type suffix (`f16`, `f32`, `f64`, `bfloat`)
 
+#### The Multiplication Operator
+
+Multiplication is written `×` (U+00D7 MULTIPLICATION SIGN).  `*` is not an operator, and using it is a lexical error:
+
+```
+3 * 4
+
+error: unexpected character: '*'
+```
+
+`*` became the multiplication sign in programming languages because early character sets had nothing better, and every language since has inherited the workaround rather than the reason.  A language whose source is required to be UTF-8 has the actual character available, and `×` is what the arithmetic already looks like everywhere outside a program.  The same reasoning gives the glyph operators elsewhere in this document.  Division is still written `/`; `÷` is intended but not yet implemented.
+
+`*` keeps its place in `/*` and `*/`, which delimit a block comment and are not operators.
+
 #### Arithmetic on Floating-Point Values
 
-All standard arithmetic operators (`+`, `-`, `*`, `/`, `%`) work on floating-point values.  When both operands are floats, the result uses the wider of the two types.  The width promotion order is: `f16`/`bfloat` < `f32` < `f64`/`float`.
+All standard arithmetic operators (`+`, `-`, `×`, `/`, `%`) work on floating-point values.  When both operands are floats, the result uses the wider of the two types.  The width promotion order is: `f16`/`bfloat` < `f32` < `f64`/`float`.
 
 ```
 let a : mut = 3.0 + 2.0      // 5.0 (float)
-let b : mut = 1.5f32 * 2.0   // 3.0 (float — f32 promoted to float)
+let b : mut = 1.5f32 × 2.0   // 3.0 (float — f32 promoted to float)
 let c : mut = 10.0 / 4.0     // 2.5 (float)
 let d : mut = 7.0 % 3.0      // 1.0 (float, uses fmod semantics)
 let e : mut = -3.14           // -3.14 (negation)
@@ -315,7 +329,7 @@ When an integer and a float are combined in an arithmetic expression, the intege
 
 ```
 let a : mut = 2 + 3.0        // 5.0 — int promoted to float
-let b : mut = 3 * 2.5f32     // 7.5 — int promoted to f32
+let b : mut = 3 × 2.5f32     // 7.5 — int promoted to f32
 let c : mut = 10.0 / 4       // 2.5 — int 4 promoted to float
 ```
 
@@ -346,7 +360,7 @@ Passing a float to an integer parameter is a type error:
 
 ```
 fn square x:i32 -> i32:
-  x * x
+  x × x
 @expect error "expected i32"
 square(3.14)             // ERROR: float cannot coerce to integer
 ```
@@ -387,10 +401,10 @@ let r : mut = √x             // ERROR: integer operand
 When applied to a value with a unit, the root is also taken of the unit's dimensions.  Each dimension exponent must be divisible by the root degree, and the unit's conversion factor must be a perfect power:
 
 ```
-let area ¤meter*meter : mut = 36.0
+let area ¤meter×meter : mut = 36.0
 let side : mut = √area       // 6.0 m (√(m²) = m)
 
-let vol ¤meter*meter*meter : mut = 125.0
+let vol ¤meter×meter×meter : mut = 125.0
 let edge : mut = ∛vol        // 5.0 m (∛(m³) = m)
 
 let d ¤meter : mut = 9.0
@@ -426,7 +440,7 @@ let r : mut = 2.0 ↑ -1.0     // 0.5
 **Precedence and associativity**:
 
 - Right-associative: `2 ↑ 3 ↑ 2` = `2 ↑ (3 ↑ 2)` = `2 ↑ 9` = 512
-- Binds tighter than `*`: `2 * 3 ↑ 2` = `2 * 9` = 18
+- Binds tighter than `×`: `2 × 3 ↑ 2` = `2 × 9` = 18
 - Unary minus binds looser: `-2 ↑ 2` = `-(2 ↑ 2)` = -4
 
 **With units**: a unit-bearing base raised to an integer exponent scales the unit dimensions accordingly.  The exponent itself cannot carry a unit:
@@ -727,7 +741,7 @@ let counter : mut = 0
 let LIMIT := 100
 
 fn pure_ok(x : int) → int:           /* pure — uses only parameter */
-    x * 2
+    x × 2
 
 fn reads_const() → int:              /* pure — constants are not mutable globals */
     LIMIT
@@ -1227,7 +1241,7 @@ The glyphs are meant to read as what they say: `∃` there is a value, `∅` the
 fn checked(n : int) → int!:
     if n < 0:
         return ∄(std.errors.invalid_argument)
-    n * 2
+    n × 2
 ```
 
 Before this there was no way to write an error at all — expected values arose only from division, `catch`, and `?` propagation, so a function could pass a failure along but never originate one.  A function whose return type is expected auto-wraps an ordinary value in success, so only the failing path needs saying.
@@ -1841,7 +1855,7 @@ The rules are:
    if x < 0: return -x
    ```
 
-5. **Line continuation.**  A trailing binary operator (`+`, `-`, `*`, `/`, `%`, `|`, `&`, `^`, `<<`, `>>`, `«`, `»`, `↺`, `↻`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `??`, `←`, `and`, `or`) or a trailing `=` (in variable definitions) signals that the expression continues on the next line.  The indentation of the continuation line does not create a new block:
+5. **Line continuation.**  A trailing binary operator (`+`, `-`, `×`, `/`, `%`, `|`, `&`, `^`, `<<`, `>>`, `«`, `»`, `↺`, `↻`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `??`, `←`, `and`, `or`) or a trailing `=` (in variable definitions) signals that the expression continues on the next line.  The indentation of the continuation line does not create a new block:
    ```
    W[j] ← W[j - 16] + expand_s0(W[j - 15]) +
            W[j - 7] + expand_s1(W[j - 2])
@@ -2350,13 +2364,13 @@ When a lambda body requires more than one expression, use the usual block syntax
 ```
 // Layout-driven (indented block)
 let f : mut = λx : int → int:
-    let y : mut = x * 2
+    let y : mut = x × 2
     y + 1
 
 // Brace-delimited
 let g : mut = λx : int → int: {
     let y : mut = x + 10;
-    let z : mut = y * 2;
+    let z : mut = y × 2;
     z
 }
 ```
@@ -2377,7 +2391,7 @@ When passing a multi-statement lambda as a function argument, braces are require
 ```
 let result : mut = apply(λx : int → int: {
     let a : mut = x + 1;
-    a * 2
+    a × 2
 }, 4)
 ```
 
@@ -2406,7 +2420,7 @@ let h : mut = λx : i32 → i32: x + offset                     // ERROR: refere
 Lambdas are first-class values.  They can be assigned to variables, passed as arguments, and returned from functions.
 
 ```
-let double : mut = λx : int → int: x * 2
+let double : mut = λx : int → int: x × 2
 assert_eq(10, double(5))
 ```
 
@@ -2427,7 +2441,7 @@ fn make_adder n : i32:
 
 let add3 : mut = make_adder(3)
 assert_eq(8, add3(5))
-assert_eq(15, apply(λx : int → int: x * 3, 5))
+assert_eq(15, apply(λx : int → int: x × 3, 5))
 ```
 
 #### Function Currying
@@ -2456,7 +2470,7 @@ assert_eq(6, f2(3))               // 1 + 2 + 3
 Lambdas themselves support partial application:
 
 ```
-let mul : mut = λx : int, y : int → int: x * y
+let mul : mut = λx : int, y : int → int: x × y
 let triple : mut = mul(3)
 assert_eq(15, triple(5))
 ```
@@ -2470,7 +2484,7 @@ A function marked `@replaceable` can have its implementation swapped at runtime 
 ```
 @replaceable
 fn strategy x : i32 → i32:
-    x * 2
+    x × 2
 
 // Must capture — strategy could change after the lambda is created
 let f : mut = λx : i32 |strategy| → i32: strategy(x)
@@ -2539,11 +2553,11 @@ generate(func, range)
 #### Basic Usage
 
 ```
-let squares : mut = generate(λx : int → int: x * x, 1…5)
+let squares : mut = generate(λx : int → int: x × x, 1…5)
 // squares = [1, 4, 9, 16, 25]
 
 fn double x : i32 → i32:
-    x * 2
+    x × 2
 
 let doubled : mut = generate(double, 1…4)
 // doubled = [2, 4, 6, 8]
@@ -2555,7 +2569,7 @@ A curried function can be used as the mapping function:
 
 ```
 fn multiply a : i32, b : i32 → i32:
-    a * b
+    a × b
 
 let tripled : mut = generate(multiply(3), 1…5)
 // tripled = [3, 6, 9, 12, 15]
@@ -2567,7 +2581,7 @@ let tripled : mut = generate(multiply(3), 1…5)
 let evens : mut = generate(λx : int → int: x, 0…2…10)
 // evens = [0, 2, 4, 6, 8, 10]
 
-let desc : mut = generate(λx : int → int: x * x, 3…1)
+let desc : mut = generate(λx : int → int: x × x, 3…1)
 // desc = [9, 4, 1]
 ```
 
@@ -2788,24 +2802,24 @@ let z : mut = a == 5        // OK — untyped constant comparison
 let w : mut = a < b         // error: cannot compare unit ptrdiff with typed integer i32
 ```
 
-**Multiplicative operations** (`*`, `/`, `%`) allow mixing freely — a typed integer without unit acts as a dimensionless scalar:
+**Multiplicative operations** (`×`, `/`, `%`) allow mixing freely — a typed integer without unit acts as a dimensionless scalar:
 
 ```
 let a ¤byte : mut i32 = 4
 let b : mut i32 = 3
 
-let x : mut = a * b         // OK — result is 12 ¤byte (scalar multiplication)
-let y : mut = b * a         // OK — result is 12 ¤byte
+let x : mut = a × b         // OK — result is 12 ¤byte (scalar multiplication)
+let y : mut = b × a         // OK — result is 12 ¤byte
 ```
 
 **Rationale.**  Addition and comparison only make physical sense between quantities of the same dimension.  A typed integer without a unit is ambiguous — it might be a byte offset, an element count, or something else entirely.  Multiplication by a scalar, on the other hand, is always dimensionally valid (scaling).  Untyped constants are exempt because their use as small literal adjustments (`offset + 1`, `count - 1`) is unambiguous and pervasive.
 
 #### Operator Precedence
 
-`⍴` binds tighter than arithmetic (`+`, `-`, `*`, `/`) but looser than unary operators (`-x`, `~x`).  This means:
+`⍴` binds tighter than arithmetic (`+`, `-`, `×`, `/`) but looser than unary operators (`-x`, `~x`).  This means:
 
 ```
-3 * 4 ⍴ 0     // 3 * [0, 0, 0, 0] — reshape first, then multiply
+3 × 4 ⍴ 0     // 3 × [0, 0, 0, 0] — reshape first, then multiply
 2 + 3 ⍴ 5     // 2 + [5, 5, 5]    — reshape first, then add
 ```
 
@@ -3397,7 +3411,7 @@ Currying and fold combine naturally.  A curried function produces the mapping, a
 
 ```
 fn multiply a : int, b : int → int:
-    a * b
+    a × b
 
 let triple : mut = multiply(3)
 let tripled : mut = generate(triple, 1…5)   // [3, 6, 9, 12, 15]
@@ -3561,7 +3575,7 @@ Two compile-time assertion functions verify conditions using only constant expre
 
 - `static_assert(condition)` — fails at compile time if the condition is `false` or zero.  An optional second argument provides a custom error message: `static_assert(2 + 2 == 4)`, `static_assert(false, "unreachable")`.
 
-- `static_assert_eq(expected, actual)` — fails at compile time if the two constant values differ: `static_assert_eq(120, 2 * 3 * 4 * 5)`.
+- `static_assert_eq(expected, actual)` — fails at compile time if the two constant values differ: `static_assert_eq(120, 2 × 3 × 4 × 5)`.
 
 Constant expressions include literals, arithmetic/logic operations on literals, unary operators, and array/tuple literals composed of constants.  References to variables — even `let` variables — are not compile-time constants for these purposes; use `assert` or `assert_eq` for those.
 
@@ -4198,7 +4212,7 @@ fn indexed_sum args… : int → int:
     comptime foreach pair := enumerate(args):
         let idx : mut = pair[0]
         let val : mut = pair[1]
-        s ← s + val * (idx + 1)
+        s ← s + val × (idx + 1)
     s
 ```
 
@@ -4727,18 +4741,18 @@ d ← 3000¤meter           // expression with unit meter, converted to kilomete
 
 Builtin units use identifier syntax with full names: `meter`, `second`, `kilogram`, `kilometer`, `millisecond`, `byte`, etc.  User-defined units are referenced with string syntax: `¤"speed"`, `¤"widgets"`.
 
-Compound unit specifications combine names with `*` (multiplication), `/` (division), and `√` (square root):
+Compound unit specifications combine names with `×` (multiplication), `/` (division), and `√` (square root):
 
 ```
 let velocity ¤meter/second : mut = 10
-let area ¤meter*meter : mut = 25
+let area ¤meter×meter : mut = 25
 ```
 
-In expression context, `*` and `/` after `¤` are consumed as unit operators only when followed by another unit name, not by a number.  This avoids ambiguity with arithmetic operators:
+In expression context, `×` and `/` after `¤` are consumed as unit operators only when followed by another unit name, not by a number.  This avoids ambiguity with arithmetic operators:
 
 ```
 let a ¤meter : mut = 5
-let b : mut = a * 3            // 15 m (scalar multiplication, not unit formula)
+let b : mut = a × 3            // 15 m (scalar multiplication, not unit formula)
 ```
 
 #### Unit Definitions
@@ -4746,7 +4760,7 @@ let b : mut = a * 3            // 15 m (scalar multiplication, not unit formula)
 New units are introduced with the `unit` keyword.  A base unit has no formula; a derived unit specifies the conversion in terms of existing units using integer ratios for exact representation:
 
 ```
-unit mph = 1609344 / 3600000 * meter / second
+unit mph = 1609344 / 3600000 × meter / second
 unit widgets
 ```
 
@@ -4774,7 +4788,7 @@ The interpreter provides the following builtin units:
 
 - **Addition/subtraction**: both operands must have units with the same dimensions.  If the units differ (e.g., `km` and `m`), both are converted to their base form (factor = 1) before the operation.  If the units are identical, no conversion occurs.
 
-- **Multiplication**: dimensions combine by adding exponents.  `meter * second` produces a unit with components `{meter: 1, second: 1}`.  Scalar multiplication (`5 * 3¤meter`) preserves the unit.
+- **Multiplication**: dimensions combine by adding exponents.  `meter × second` produces a unit with components `{meter: 1, second: 1}`.  Scalar multiplication (`5 × 3¤meter`) preserves the unit.
 
 - **Division**: dimensions combine by subtracting exponents.  `meter / second` produces `{meter: 1, second: -1}`.  Division of identical units produces a dimensionless result (plain numeric value).
 
@@ -4787,7 +4801,7 @@ The interpreter provides the following builtin units:
   ```
   let a ¤meter : mut = 10
   let b : mut = a + 3       // 13 m
-  let c : mut = 2 * a       // 20 m
+  let c : mut = 2 × a       // 20 m
   let d : mut = a / 5       // 2 m
   let e : mut = a % 3       // 1 m
   ```
@@ -4891,7 +4905,7 @@ A source file may contain only definitions; every statement must live inside a f
 >>> 1 + 2
 3
 >>> let x := 42
->>> x * 2
+>>> x × 2
 84
 >>> foreach i := 1…3:
 ...     std.print(i)
@@ -4924,13 +4938,13 @@ ab
 
 ```
 >>> fn double(n : int) → int:
-...     n * 2
+...     n × 2
 ...
 >>> double(21)
 42
 ```
 
-The empty line is required because the alternative — ending the definition as soon as it parses — would make it impossible to give a function a second statement.  After `n * 2` the function is syntactically complete, so without the rule there would be no way to add a line to it.  This follows Python's REPL, and for the same reason.
+The empty line is required because the alternative — ending the definition as soon as it parses — would make it impossible to give a function a second statement.  After `n × 2` the function is syntactically complete, so without the rule there would be no way to add a line to it.  This follows Python's REPL, and for the same reason.
 
 An annotation on its own line is also incomplete, since the definition it applies to has not been given yet:
 
@@ -4988,7 +5002,7 @@ Diagnostics carry the same source excerpt and caret as in file mode, with the en
 When standard input is not a terminal the REPL prints no banner and no prompts, so a piped script produces exactly its results:
 
 ```
-$ printf '1 + 2\nlet x := 5\nx * x\n' | ngpl
+$ printf '1 + 2\nlet x := 5\nx × x\n' | ngpl
 3
 25
 ```

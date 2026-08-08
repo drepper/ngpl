@@ -40,7 +40,7 @@ class Unit:
         for k, v in other.components.items():
             components[k] = components.get(k, 0) + v
         return Unit(components, self.factor * other.factor,
-                    f"{self.display_name}*{other.display_name}")
+                    f"{self.display_name}{_MUL}{other.display_name}")
 
     def __truediv__(self, other: "Unit") -> "Unit":
         components = dict(self.components)
@@ -87,6 +87,9 @@ def _isqrt_exact(n: int) -> int | None:
     return r if r * r == n else None
 
 
+# The multiplication operator, as a unit formula is both read and written.
+_MUL = "\N{MULTIPLICATION SIGN}"
+
 _DIMENSION_ABBREV: dict[str, str] = {
     "meter": "m",
     "second": "s",
@@ -115,11 +118,11 @@ def _display_from_components(components: dict[str, int]) -> str:
         abbr = _DIMENSION_ABBREV.get(name, name)
         den_parts.append(abbr if exp == 1 else f"{abbr}^{exp}")
     if num_parts and den_parts:
-        return "*".join(num_parts) + "/" + "*".join(den_parts)
+        return _MUL.join(num_parts) + "/" + _MUL.join(den_parts)
     if num_parts:
-        return "*".join(num_parts)
+        return _MUL.join(num_parts)
     if den_parts:
-        return "1/" + "*".join(den_parts)
+        return "1/" + _MUL.join(den_parts)
     return "1"
 
 
@@ -210,7 +213,7 @@ def eval_unit_formula(node) -> Unit:
     if isinstance(node, UnitBinOp):
         left = eval_unit_formula(node.left)
         right = eval_unit_formula(node.right)
-        if node.op == "*":
+        if node.op == _MUL:
             return left * right
         if node.op == "/":
             return left / right

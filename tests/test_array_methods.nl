@@ -238,7 +238,7 @@ fn error_index_wrong_unit() → ∅:
 fn test_push_in_a_loop() → ∅:
     let v : mut = []
     foreach i := 1…4:
-        v.push(i * i)
+        v.push(i × i)
     assert_eq(v.sizeof, 4)
     assert_eq(v[0], 1)
     assert_eq(v[3], 16)

@@ -88,11 +88,11 @@ _NORMALIZE_OPS = {
 
 
 # Single-character operators.
-SINGLE_OPS = set("+-*/%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ∃∄⍴⧺⌿⍀¤√∛∜↑⁻")
+SINGLE_OPS = set("+-/%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ∃∄⍴⧺⌿⍀¤√∛∜↑⁻×")
 
 # Binary operators that signal line continuation when trailing.
 _CONTINUATION_OPS = frozenset({
-    "+", "-", "*", "/", "%",
+    "+", "-", "\N{MULTIPLICATION SIGN}", "/", "%",
     "|", "&", "^",
     "<<", ">>", "«", "»", "↺", "↻",
     "==", "!=", "<", ">", "<=", ">=",
@@ -373,8 +373,14 @@ def tokenize(src: str):
                 tokens.append(Token("PUNCT", ch, line, col))
             elif ch == "\N{RIGHTWARDS ARROW}":
                 tokens.append(Token("OP", "->", line, col))
-            elif ch in "+-*/%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻":
+            elif ch in "+-/%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻\N{MULTIPLICATION SIGN}":
                 tokens.append(Token("OP", ch, line, col))
+            else:
+                # Reaching here means the character was added to
+                # SINGLE_OPS but to none of the branches above, which
+                # would otherwise drop it without a token.
+                raise LexerError(
+                    f"operator {ch!r} has no token kind", line, col)
             pos += 1
             continue
 

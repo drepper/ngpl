@@ -25,7 +25,7 @@ fn test_ascii_arrow_array_assign():
 // -> in lambda return type (ASCII form)
 @test
 fn test_ascii_arrow_lambda():
-  let f := λx : int -> int: x * 3
+  let f := λx : int -> int: x × 3
   assert_eq(15, f(5))
 
 // Mix: ASCII -> for return, Unicode ← for assignment
@@ -37,7 +37,7 @@ fn test_mixed_arrows():
 
 // Mix: Unicode → for return type (in a helper), ASCII <- for assignment
 fn double_unicode(x: i32) → i32:
-  x * 2
+  x × 2
 
 @test
 fn test_unicode_arrow_return():

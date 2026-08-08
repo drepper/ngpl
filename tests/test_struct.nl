@@ -12,8 +12,8 @@ impl Point:
         √(self.x ↑ 2.0 + self.y ↑ 2.0)
 
     fn scale(&mut self, factor: f64) → ∅:
-        self.x ← self.x * factor
-        self.y ← self.y * factor
+        self.x ← self.x × factor
+        self.y ← self.y × factor
 
     fn origin() -> Point:
         Point { x: 0.0, y: 0.0 }

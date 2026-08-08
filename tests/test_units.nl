@@ -38,13 +38,13 @@ fn test_same_unit_sub():
 
 fn test_scalar_mul():
   let a ¤meter := 5
-  let b := a * 3
+  let b := a × 3
   // b should be 15 m
   std.print(b)
 
 fn test_scalar_mul_rev():
   let a ¤meter := 5
-  let b := 3 * a
+  let b := 3 × a
   // b should be 15 m
   std.print(b)
 
@@ -53,8 +53,8 @@ fn test_scalar_mul_rev():
 fn test_unit_mul():
   let a ¤meter := 5
   let b ¤second := 2
-  let c := a * b
-  // c should be 10 m*s
+  let c := a × b
+  // c should be 10 m×s
   std.print(c)
 
 // --- Unit division ---
@@ -232,12 +232,22 @@ fn test_compound_unit_spec():
   let v ¤meter/second := 10
   std.print(v)
 
+// --- Compound unit spec with multiplication ---
+
+// A declared compound unit has to agree with the one the arithmetic
+// derives, so this checks the formula and the operator together.
+fn test_compound_unit_mul_spec():
+  let side ¤meter := 6
+  let area ¤meter×meter := side × side
+  assert_true(area == 36¤meter×meter, "6m × 6m is 36 m×m")
+  std.print(area)
+
 // --- Spacing: ¤ immediately after variable name (no whitespace before) ---
 
 fn test_unit_no_space_before():
   let x¤meter := 7
   let y¤second := 3
-  let z := x * y
+  let z := x × y
   std.print(z)
 
 // --- Spacing: whitespace after ¤ ---
@@ -290,6 +300,7 @@ fn main():
   test_unit_mod()
   test_float_units()
   test_compound_unit_spec()
+  test_compound_unit_mul_spec()
   test_unit_no_space_before()
   test_unit_space_after()
   test_unit_no_space_before_space_after()

@@ -11,7 +11,7 @@ let _ := 1 + 1
 // ---------------------------------------------------------------------
 
 fn counted(n : int) → int:
-    n * 2
+    n × 2
 
 // The right-hand side still runs; only its value is dropped.
 @test

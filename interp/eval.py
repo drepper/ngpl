@@ -559,7 +559,7 @@ class Evaluator:
         self._ops = {
             "+": self._op_add,
             "-": self._op_sub,
-            "*": self._op_mul,
+            "\N{MULTIPLICATION SIGN}": self._op_mul,
             "/": self._op_div,
             "%": self._op_mod,
             "==": self._op_eq,
@@ -1098,8 +1098,8 @@ class Evaluator:
             op_fn = self._ops[op]
             return UnitValue(op_fn(l_base, r_base), l_unit.base_form())
 
-        if op == "*":
-            result = self._ops["*"](l_inner, r_inner)
+        if op == "\N{MULTIPLICATION SIGN}":
+            result = self._ops["\N{MULTIPLICATION SIGN}"](l_inner, r_inner)
             if l_is_unit and r_is_unit:
                 result_unit = l_unit * r_unit
                 if result_unit.is_dimensionless():

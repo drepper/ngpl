@@ -15,9 +15,9 @@ describe(5)
 describe(50)
 @test
 fn test_double() → ∅:
-    assert_eq(2 * 2, 4)
+    assert_eq(2 × 2, 4)
 
 @test
 fn test_wrong() → ∅:
-    assert_eq(2 * 2, 5)
+    assert_eq(2 × 2, 5)
 

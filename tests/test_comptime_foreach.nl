@@ -22,7 +22,7 @@ fn apply_each(f, args… : int) → int:
     s
 
 fn double(x : int) → int:
-    x * 2
+    x × 2
 
 // ------------------------------------------------------------------
 
@@ -60,12 +60,12 @@ fn indexed_sum(args… : int) → int:
     comptime foreach pair := enumerate(args):
         let idx := pair[0]
         let val := pair[1]
-        s ← s + val * (idx + 1)
+        s ← s + val × (idx + 1)
     s
 
 @test
 fn test_ct_enumerate() → ∅:
-    assert_eq(indexed_sum(10, 20, 30), 10 * 1 + 20 * 2 + 30 * 3)
+    assert_eq(indexed_sum(10, 20, 30), 10 × 1 + 20 × 2 + 30 × 3)
 
 // Heterogeneous pack: each iteration sees a different type.
 fn hetero_count(args…) → int:
@@ -76,7 +76,7 @@ fn hetero_count(args…) → int:
             ints ← ints + 1
         if @typeof(v) == @typeof(""):
             strs ← strs + 1
-    ints * 10 + strs
+    ints × 10 + strs
 
 @test
 fn test_ct_hetero_types() → ∅:

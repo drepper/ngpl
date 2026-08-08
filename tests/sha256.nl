@@ -39,9 +39,9 @@ fn get_padded_byte(data : byte[], off ¤byte : usize, total_size ¤byte : usize)
     if off == data.sizeof: return 128
     let len_start := total_size - 8
     if off >= len_start:
-        let bit_len := data.sizeof * 8
+        let bit_len := data.sizeof × 8
         let byte_idx := off - len_start
-        return (bit_len » ((7 - byte_idx) * 8)) & 255
+        return (bit_len » ((7 - byte_idx) × 8)) & 255
     ∅
 
 fn get_padded_word(data : byte[], off ¤byte : usize, total_size ¤byte : usize) → u32?:
@@ -90,7 +90,7 @@ fn sha256(data : byte[]) → int?:
     // Process each 64-byte block.
     foreach blk_off := 0…64…(total_size - 1):
         // --- Load W[0..63]: first 16 from data, rest filled by expansion. ---
-        let load_word := λi : usize |data, blk_off, total_size| → u32: get_padded_word(data, blk_off + i * 4 ¤byte, total_size) ?? 0
+        let load_word := λi : usize |data, blk_off, total_size| → u32: get_padded_word(data, blk_off + i × 4 ¤byte, total_size) ?? 0
         let W : mut = generate(load_word, 0…15) ⧺ 48 ⍴ [0]
 
         // --- Message-schedule expansion: W[16..63]. ---

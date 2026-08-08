@@ -45,7 +45,7 @@ fn apply(f, x: i32) → i32:
 
 @test
 fn test_lambda_as_arg():
-  let double := λx : int → int: x * 2
+  let double := λx : int → int: x × 2
   assert_eq(10, apply(double, 5))
 
 // Lambda returned from a function
@@ -87,7 +87,7 @@ fn test_lambda_immediate():
 // Lambda currying: partial application of lambda
 @test
 fn test_lambda_partial():
-  let f := λx : int, y : int → int: x * y
+  let f := λx : int, y : int → int: x × y
   let double := f(2)
   assert_eq(10, double(5))
   assert_eq(14, double(7))
@@ -129,7 +129,7 @@ fn test_lambda_nonreplaceable_func():
 // Replaceable function requires capture
 @replaceable
 fn mutable_fn(x: i32) → i32:
-  x * 2
+  x × 2
 
 @test
 fn test_lambda_replaceable_captured():
@@ -146,7 +146,7 @@ fn test_lambda_replaceable_uncaptured():
 @test
 @expect error "empty capture list"
 fn test_lambda_empty_capture_list():
-  let f : mut = λx : int || → int: x * 2
+  let f : mut = λx : int || → int: x × 2
 
 // Optional return type wraps result in Some
 @test
@@ -203,7 +203,7 @@ fn test_lambda_missing_return_type():
 @test
 fn test_lambda_multi_stmt_layout() → ∅:
   let f := λx : int → int:
-    let y := x * 2
+    let y := x × 2
     y + 1
   assert_eq(11, f(5))
 
@@ -212,7 +212,7 @@ fn test_lambda_multi_stmt_layout() → ∅:
 fn test_lambda_multi_stmt_brace() → ∅:
   let f := λx : int → int: {
     let y := x + 10;
-    let z := y * 2;
+    let z := y × 2;
     z
   }
   assert_eq(30, f(5))
@@ -223,7 +223,7 @@ fn test_lambda_multi_stmt_return() → ∅:
   let f := λx : int → int:
     if x < 0:
       return 0
-    x * x
+    x × x
   assert_eq(25, f(5))
   assert_eq(0, f(⁻3))
 
@@ -232,7 +232,7 @@ fn test_lambda_multi_stmt_return() → ∅:
 fn test_lambda_multi_stmt_capture() → ∅:
   let base := 100
   let f := λx : int |base| → int:
-    let doubled := x * 2
+    let doubled := x × 2
     base + doubled
   assert_eq(110, f(5))
 
@@ -251,7 +251,7 @@ fn test_lambda_multi_stmt_loop() → ∅:
 fn test_lambda_multi_stmt_as_arg() → ∅:
   let result := apply(λx : int → int: {
     let a := x + 1;
-    a * 2
+    a × 2
   }, 4)
   assert_eq(10, result)
 

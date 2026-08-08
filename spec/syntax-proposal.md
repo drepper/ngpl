@@ -140,7 +140,7 @@ Supported expression forms:
 - Integer and string literals
 - Variable references
 - Function calls
-- Arithmetic: `+`, `-`, `*`, `/` (integer division truncates toward zero)
+- Arithmetic: `+`, `-`, `×`, `/` (integer division truncates toward zero)
 - Comparison: `==`, `!=`, `<`, `>`, `<=`, `>=`
 - Boolean logic: `and`, `or`, `not`
 - Concatenation: strings use `+`
@@ -214,7 +214,7 @@ prototype uses `(...)` because:
 
 The current prototype uses standard C-like precedence:
 
-    1. `*` `/` (highest)
+    1. `×` `/` (highest)
     2. `+` `-`
     3. `<` `>` `<=` `>=`
     4. `==` `!=`

@@ -250,7 +250,7 @@ fn test_arith_unit_minus_const() → ∅:
 fn test_arith_unit_times_typed() → ∅:
     let a ¤byte : i32 = 3
     let b : i32 = 4
-    let x := a * b
+    let x := a × b
     assert_eq(x, 12 ¤byte)
 
 // multiplication: typed int × unit → ok (scalar)
@@ -258,7 +258,7 @@ fn test_arith_unit_times_typed() → ∅:
 fn test_arith_typed_times_unit() → ∅:
     let a : i32 = 4
     let b ¤byte : i32 = 3
-    let x := a * b
+    let x := a × b
     assert_eq(x, 12 ¤byte)
 
 // comparison: unit == typed int → error

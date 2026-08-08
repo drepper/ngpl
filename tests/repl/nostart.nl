@@ -2,4 +2,4 @@
 // into the REPL on its own without --repl being given.
 
 fn square(n : int) → int:
-    n * n
+    n × n

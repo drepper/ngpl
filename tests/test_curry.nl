@@ -3,7 +3,7 @@
 // --- Named function currying ---
 
 fn multiply(a : int, b : int) → int:
-    a * b
+    a × b
 
 // Curry a named function to create a doubler.
 @test
@@ -52,7 +52,7 @@ fn test_curry_lambda() → ∅:
 // Curry a lambda and use it with generate.
 @test
 fn test_curry_lambda_with_generate() → ∅:
-    let power := λbase : int, exp : int → int: base * exp
+    let power := λbase : int, exp : int → int: base × exp
     let times5 := power(5)
     let result := generate(times5, 0…4)
     assert_eq(result[0], 0)

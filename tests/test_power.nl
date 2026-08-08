@@ -72,7 +72,7 @@ fn test_right_assoc():
 
 fn test_precedence_mul():
   // 2 * 3 ↑ 2 = 2 * 9 = 18
-  assert_eq_int(2 * 3 ↑ 2, 18, "2*3↑2")
+  assert_eq_int(2 × 3 ↑ 2, 18, "2*3↑2")
 
 fn test_precedence_neg():
   // ⁻2 ↑ 2 = ⁻(2↑2) = ⁻4 (negation binds looser)

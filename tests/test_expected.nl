@@ -6,7 +6,7 @@
 
 fn opt_double(x : int?) → int?:
     let v := x?
-    v * 2
+    v × 2
 
 @test
 fn test_optional_postfix_some() → ∅:

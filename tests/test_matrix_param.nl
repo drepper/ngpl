@@ -132,7 +132,7 @@ fn cube_2x2x3(t : i32[2,2,3]) → i32:
     t[0, 0, 0]
 
 fn any_cube(t : i32[,,]) → i32:
-    t.shape[0] * t.shape[1] * t.shape[2]
+    t.shape[0] × t.shape[1] × t.shape[2]
 
 @test
 fn test_three_dimensions_fixed() → ∅:

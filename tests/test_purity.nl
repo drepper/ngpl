@@ -35,7 +35,7 @@ fn test_pure_reads_const() → ∅:
 
 // Pure function CAN call other functions.
 fn double(x : int) → int:
-    x * 2
+    x × 2
 
 @test
 fn test_pure_calls_function() → ∅:

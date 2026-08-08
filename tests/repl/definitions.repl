@@ -1,11 +1,11 @@
 fn double(n : int) → int:
-    n * 2
+    n × 2
 
 double(21)
 fn fact(n : int) → int:
     let acc : mut = 1
     foreach i := 1…n:
-        acc ← acc * i
+        acc ← acc × i
     acc
 
 fact(5)

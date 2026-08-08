@@ -16,7 +16,7 @@ fn test_enumerate_basic() → ∅:
 fn test_enumerate_two_vars() → ∅:
     let sum : mut = 0
     foreach i, v := enumerate([5, 4, 3, 2, 1]):
-        sum ← sum + i * v
+        sum ← sum + i × v
     // 0*5 + 1*4 + 2*3 + 3*2 + 4*1 = 0+4+6+6+4 = 20
     assert_eq(sum, 20)
 
@@ -52,7 +52,7 @@ fn test_enumerate_range() → ∅:
 
 // Enumerate used with generate.
 fn square(x : int) → int:
-    x * x
+    x × x
 
 @test
 fn test_enumerate_generated() → ∅:

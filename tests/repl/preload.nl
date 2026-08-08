@@ -1,7 +1,7 @@
 // Fixture for the REPL preload tests: definitions the session inherits.
 
 fn triple(n : int) → int:
-    n * 3
+    n × 3
 
 let LIMIT := 99
 

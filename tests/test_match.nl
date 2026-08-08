@@ -172,7 +172,7 @@ fn test_match_result_err_binds_the_error() → ∅:
 fn checked(n : int) → int!:
     if n < 0:
         return ∄(std.errors.invalid_argument)
-    n * 2
+    n × 2
 
 @test
 fn test_explicit_error_return_ok_path() → ∅:
@@ -279,7 +279,7 @@ fn error_missing_arm_through_a_result_call() → ∅:
 
 // A plain value has only one shape, so one arm covers it.
 fn returns_plain(n : int) → int:
-    n * 2
+    n × 2
 
 @test
 fn test_plain_subject_needs_one_arm() → ∅:

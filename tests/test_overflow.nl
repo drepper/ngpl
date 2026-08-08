@@ -60,7 +60,7 @@ fn error_i8_sub_underflow() → ∅:
 fn error_i16_mul_overflow() → ∅:
     let x : mut i16 = 200
     let y : mut i16 = 200
-    let z : mut = x * y
+    let z : mut = x × y
 
 @expect error "integer overflow"
 fn error_i32_add_overflow() → ∅:
@@ -100,7 +100,7 @@ fn test_u32_add_wraps() → ∅:
 fn test_u32_mul_wraps() → ∅:
     let x : u32 = 65536
     let y : u32 = 65536
-    let z := x * y
+    let z := x × y
     assert_eq(z, 0)
 
 // ---- boundary values: signed types ---------------------------------------

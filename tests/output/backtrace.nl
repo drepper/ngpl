@@ -9,7 +9,7 @@ fn middle(n : int) → int:
     innermost(n) + 1
 
 fn outer(n : int) → int:
-    middle(n) * 2
+    middle(n) × 2
 
 @start
 fn main() → ∅:

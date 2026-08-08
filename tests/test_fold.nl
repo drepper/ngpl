@@ -9,7 +9,7 @@ fn test_left_fold_sum() → ∅:
 // Left fold: product without init.
 @test
 fn test_left_fold_product() → ∅:
-    let result := (λa : int, b : int → int: a * b) ⌿ [1, 2, 3, 4, 5]
+    let result := (λa : int, b : int → int: a × b) ⌿ [1, 2, 3, 4, 5]
     assert_eq(result, 120)
 
 // Left fold: with explicit init via 2-tuple.
@@ -99,7 +99,7 @@ fn test_left_fold_single() → ∅:
 @test
 fn test_right_fold_build() → ∅:
     // f(3, 10) = 3+20=23, f(2, 23) = 2+46=48, f(1, 48) = 1+96=97
-    let result := (λa : int, b : int → int: a + b * 2) ⍀ ([1, 2, 3], 10)
+    let result := (λa : int, b : int → int: a + b × 2) ⍀ ([1, 2, 3], 10)
     assert_eq(result, 97)
 
 // Error: fold without init on empty container.

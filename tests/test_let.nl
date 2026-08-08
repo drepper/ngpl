@@ -25,7 +25,7 @@ fn test_let_in_expr() → ∅:
 fn test_let_in_loop() → ∅:
     let sum : mut = 0
     foreach i := 1…5:
-        let doubled := i * 2
+        let doubled := i × 2
         sum ← sum + doubled
     assert_eq(sum, 30)
 
@@ -40,7 +40,7 @@ fn test_mut_param() → ∅:
 
 // Immutable parameter cannot be reassigned but value is independent.
 fn double_val(x : i32) → i32:
-    x * 2
+    x × 2
 
 @test
 fn test_immutable_param() → ∅:

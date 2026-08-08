@@ -24,7 +24,7 @@ fn test_wrap_i8_sub() → ∅:
 fn test_wrap_i8_mul() → ∅:
     let x : i8 = 64
     let y : i8 = 4
-    let z := @wrap(x * y)
+    let z := @wrap(x × y)
     assert_eq(z, 0)
 
 @test

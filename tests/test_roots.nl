@@ -79,7 +79,7 @@ fn test_fourth_root_int_rejected():
 // --- Roots with units ---
 
 fn test_sqrt_unit():
-  let area ¤meter*meter := 36.0
+  let area ¤meter×meter := 36.0
   let side := √area
   // √(36 m^2) = 6 m
   approx_eq(side, 6.0, "√(36 m^2) value")
@@ -92,14 +92,14 @@ fn test_sqrt_unit_incompatible():
   let r : mut = √d
 
 fn test_cbrt_unit():
-  let vol ¤meter*meter*meter := 125.0
+  let vol ¤meter×meter×meter := 125.0
   let side := ∛vol
   // ∛(125 m^3) = 5 m
   approx_eq(side, 5.0, "∛(125 m^3) value")
   std.print(side)
 
 fn test_fourth_root_unit():
-  let x ¤meter*meter*meter*meter := 625.0
+  let x ¤meter×meter×meter×meter := 625.0
   let r := ∜x
   // ∜(625 m^4) = 5 m (approximately)
   approx_eq(r, 5.0, "∜(625 m^4) value")
