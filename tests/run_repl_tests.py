@@ -29,6 +29,17 @@ import subprocess
 import sys
 
 
+# Same scheme as the interpreter's own test report, so a run reads as one
+# thing.  Colour only when stderr is a terminal; a captured run stays
+# plain.
+if sys.stderr.isatty():
+    _GREEN = "\033[32m"
+    _RED = "\033[31m"
+    _BOLD = "\033[1m"
+    _RESET = "\033[0m"
+else:
+    _GREEN = _RED = _BOLD = _RESET = ""
+
 _ANSI_RE = re.compile(r"\033\[[0-9;]*m")
 
 
@@ -131,14 +142,16 @@ def main():
         name = os.path.basename(repl_path)[:-5]
         ok, detail = run_test(repl_path, expected_path)
         if ok:
-            print(f"test {name} ... ok", file=sys.stderr)
+            print(f"test {name} ... {_GREEN}ok{_RESET}", file=sys.stderr)
             passed += 1
         else:
-            print(f"test {name} ... FAILED", file=sys.stderr)
+            print(f"test {name} ... {_RED}{_BOLD}FAILED{_RESET}",
+                  file=sys.stderr)
             print(detail, file=sys.stderr)
             failed += 1
 
-    status = "ok" if failed == 0 else "FAILED"
+    status = (f"{_GREEN}ok{_RESET}" if failed == 0
+              else f"{_RED}{_BOLD}FAILED{_RESET}")
     print(f"\ntest result: {status}. {passed} passed; {failed} failed\n",
           file=sys.stderr)
     sys.exit(0 if failed == 0 else 1)
