@@ -122,10 +122,11 @@ parameters, `match` by alternative, and static checks for a repeated
 alternative, an alternative that does not belong to the type, a
 non-type pattern, and a missing alternative.
 
+Alternatives may be structs, built-in types, or enums.  Enums became
+usable as type names after this was first written.
+
 Not implemented:
 
-- Enums as alternatives.  Enums are not usable as type names anywhere
-  in the language yet, so this is not specific to sum types.
 - Exhaustiveness where the subject is not a parameter.  A parameter is
   where a type is written down; a name bound from an expression carries
   the alternative's own type, and nothing is claimed about it.

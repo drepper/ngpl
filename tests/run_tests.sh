@@ -57,6 +57,7 @@ all_tests=(
     "$testdir"/test_if.ngpl
     "$testdir"/test_hints.ngpl
     "$testdir"/test_sum.ngpl
+    "$testdir"/test_enum_type.ngpl
     "$testdir"/test_type_alias.ngpl
     "$testdir"/test_struct.ngpl
     "$testdir"/test_move.ngpl

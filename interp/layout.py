@@ -23,7 +23,8 @@ arbitrary-precision -- have none, and neither do `str`, optionals, or
 dynamically sized arrays, which are not plain sequences of bytes.
 """
 
-from interp.value import _TYPE_BITS, _parse_array_type, resolve_type_alias
+from interp.value import (_TYPE_BITS, _parse_array_type, resolve_type_alias,
+                          is_enum_type, enum_underlying_type)
 
 # Size and alignment in bytes for each scalar type with a C counterpart.
 # Sub-word integers align to their own width, which is what the psABI
@@ -165,6 +166,10 @@ def type_layout(type_name: str, lookup, seen: frozenset[str] = frozenset()
         raise LayoutError(
             "type 'str' has no defined C representation; use a sized byte "
             "array such as u8[16]")
+
+    # An enum is stored as an integer, so it lays out as that integer.
+    if is_enum_type(resolved):
+        return type_layout(enum_underlying_type(resolved), lookup, seen)
 
     array = _parse_array_type(resolved)
     if array is not None:

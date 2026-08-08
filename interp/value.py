@@ -1026,6 +1026,37 @@ def register_type_alias(name: str, target: str):
     _TYPE_ALIASES[name] = target
 
 
+# Enum type names, so that a type written in a signature can be
+# recognized as one without reaching for the environment.
+# Each enum's name, mapped to the integer type its values are stored
+# in.  None where the enum did not say, which C spells `int`.
+_ENUM_TYPES: dict[str, str | None] = {}
+
+
+def register_enum_type(name: str, underlying: str | None = None):
+    """Register an enum's name as a type that may be written down."""
+    _ENUM_TYPES[name] = underlying
+    _USER_TYPES.add(name)
+
+
+def is_enum_type(name: str) -> bool:
+    """Whether a type name names an enum."""
+    return name in _ENUM_TYPES
+
+
+def enum_underlying_type(name: str) -> str | None:
+    """The integer type an enum's values are stored in.
+
+    An enum that names no type is `int`, which is unbounded and so has
+    no layout.  Where one is needed, C's choice of `int` for an
+    unfixed enum applies, which is i32 on the platforms targeted here.
+    """
+    underlying = _ENUM_TYPES.get(name)
+    if underlying is None or underlying == "int":
+        return "i32"
+    return underlying
+
+
 # Sum types, by name, each holding the alternatives it admits.
 _SUM_TYPES: dict[str, list[str]] = {}
 
@@ -1293,6 +1324,14 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
     if is_generic_type(param_type):
         return value
 
+    if param_type in _ENUM_TYPES:
+        if not (isinstance(value, EnumValue)
+                and value.enum_type.name == param_type):
+            raise TypeError(
+                f"{func_name}: argument '{param_name}' expected "
+                f"{param_type}, got {runtime_type_of(value)}")
+        return value
+
     if param_type in _SUM_TYPES:
         try:
             return sum_type_settle(param_type, value)
@@ -1320,7 +1359,20 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
         return value
     if not validate_type(target_width):
         raise TypeError(f"unknown type '{target_width}'")
-    if target_width in _SUM_TYPES:
+    # An array is coerced element by element further down, so a named
+    # type here describes the elements rather than the array.
+    scalar = not (isinstance(value, ObjectValue)
+                  and isinstance(value.obj, ArrayValue))
+
+    if scalar and target_width in _ENUM_TYPES:
+        if not (isinstance(value, EnumValue)
+                and value.enum_type.name == target_width):
+            raise TypeError(
+                f"'{target_width}' is an enum, "
+                f"but the value is {runtime_type_of(value)}")
+        return value
+
+    if scalar and target_width in _SUM_TYPES:
         # A sum type admits its alternatives and nothing else.  The
         # value keeps its own type, which is what says which
         # alternative it is.

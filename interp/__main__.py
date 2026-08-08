@@ -20,7 +20,7 @@ from interp.value import (
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
     NoneValue, SomeValue, ExpectedValue, EnumType, EnumValue, StructType,
     coerce_to_type, validate_param_type, validate_type, none, FAST_TYPES,
-    register_type_alias, register_sum_type,
+    register_type_alias, register_sum_type, register_enum_type,
     sum_type_alternatives, register_user_type, DISCARD_NAME,
     _split_optional_type,
 )
@@ -980,6 +980,7 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
             if defn.is_flag and 0 not in members.values():
                 members["nil"] = 0
             et = EnumType(defn.name, defn.underlying_type, members, defn.is_flag)
+            register_enum_type(defn.name, defn.underlying_type)
             env.define(defn.name, et)
 
     for defn in definitions:

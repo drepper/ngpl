@@ -3945,7 +3945,7 @@ struct Rect:
 type Shape = Circle | Rect
 ```
 
-The alternatives are types that exist on their own, so a sum composes them rather than declaring anything new inside itself.  An alternative may be declared below the sum type that names it.  A type named twice is a mistake rather than two alternatives, and is rejected:
+The alternatives are types that exist on their own -- structs, built-in types, or enums -- so a sum composes them rather than declaring anything new inside itself.  An alternative may be declared below the sum type that names it.  A type named twice is a mistake rather than two alternatives, and is rejected:
 
 ```
 type T = i32 | i32     // error: 'i32' is named twice in the alternatives of 'T'
@@ -4102,6 +4102,58 @@ enum SmallEnum : u8:
 ```
 
 When no underlying type is specified, the default is `int` (arbitrary precision).
+
+#### An Enum as a Type
+
+An enum names a type, so it can be written wherever a type can — a parameter, a return type, a binding, a struct field, an array element, an alias, or an alternative of a sum type:
+
+```
+enum Color:
+    red
+    green
+
+fn paint(c : Color) → Color:
+    c
+
+let c : Color = Color.red
+type Hue = Color
+
+struct Item:
+    hue : Color
+    n : i32
+
+let arr : Color[2] = [Color.red, Color.green]
+type Paint = Color | Circle
+```
+
+The type admits that enum and nothing else.  Another enum is not it, and neither is the integer a member compares equal to:
+
+```
+paint(Size.small)   // error: expected Color, got Size
+paint(0)            // error: expected Color, got int
+```
+
+That a member compares equal to its integer, as [Comparison](#comparison) describes, is a convenience of the comparison and not a claim that the two are the same thing.
+
+An enum may be declared below whatever names it, as a struct may.
+
+##### Under `@repr(C)`
+
+An enum is stored as an integer and lays out as that integer.  An enum that names no underlying type is `int`, which is unbounded and has no layout; where one is needed, C's choice for an unfixed enum applies, which is `i32` on the platforms targeted here:
+
+```
+@repr(C)
+struct Plain:
+    e : Color        // 4 bytes, as C's `enum Color`
+    n : i32
+                     // sizeof 8, alignof 4
+
+@repr(C)
+struct Sized:
+    e : Small        // `enum Small : u8` -- 1 byte, then 3 of padding
+    n : i32
+                     // sizeof 8, alignof 4
+```
 
 #### Flag Enums (`@flag`)
 
