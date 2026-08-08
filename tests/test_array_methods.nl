@@ -257,3 +257,183 @@ fn test_pop_into_another_array() → ∅:
 @start
 fn main() → ∅:
     std.print("array method tests passed")
+
+// ---------------------------------------------------------------------
+// A fixed-size array cannot be resized
+// ---------------------------------------------------------------------
+//
+// The length is part of the type, which is what lets a reader know how
+// much is there without tracing where it came from.  Resizing one would
+// make the type a lie.
+
+@expect error "push: cannot resize a fixed-size array"
+fn error_push_on_fixed_array() → ∅:
+    let v : mut i32[3] = [1, 2, 3]
+    v.push(4)
+
+@expect error "pop: cannot resize a fixed-size array"
+fn error_pop_on_fixed_array() → ∅:
+    let v : mut i32[3] = [1, 2, 3]
+    _ ← v.pop()
+
+@expect error "insert: cannot resize a fixed-size array"
+fn error_insert_on_fixed_array() → ∅:
+    let v : mut i32[3] = [1, 2, 3]
+    v.insert(0, 9)
+
+@expect error "remove: cannot resize a fixed-size array"
+fn error_remove_on_fixed_array() → ∅:
+    let v : mut i32[3] = [1, 2, 3]
+    _ ← v.remove(0)
+
+// The message says how many the type promises.
+@expect error "holds 3 elements"
+fn error_message_names_the_length() → ∅:
+    let v : mut i32[3] = [1, 2, 3]
+    v.push(4)
+
+// Reading is unaffected: only the length is fixed, not the contents.
+@test
+fn test_fixed_array_reads_and_writes_elements() → ∅:
+    let v : mut i32[3] = [1, 2, 3]
+    assert_eq(v[0], 1)
+    assert_eq(v.get(2), ∃(3))
+    assert_eq(v.get(9), ∅)
+    v[0] ← 9
+    assert_eq(v[0], 9)
+    assert_eq(v.sizeof, 3)
+
+// An iterator over a fixed-size array works as any other.  The iterator
+// is bound once: calling iterate() in the condition would make a fresh
+// one every time round and never advance.
+@test
+fn test_fixed_array_iterates() → ∅:
+    let v : mut i32[3] = [1, 2, 3]
+    let it : mut = v.iterate()
+    let total : mut = 0
+    while e := it.next():
+        total ← total + e
+    assert_eq(total, 6)
+
+// A dynamic array of the same element type is unaffected.
+@test
+fn test_dynamic_array_still_resizes() → ∅:
+    let v : mut i32[] = [1, 2, 3]
+    v.push(4)
+    assert_eq(v.sizeof, 4)
+    assert_eq(v.pop(), ∃(4))
+
+// A copy of a fixed-size array is still fixed-size: copying does not
+// change the type.  The parameter is mut, so that what is being tested
+// is the fixed length rather than the parameter's immutability.
+fn receives_fixed(a : mut i32[3]) → ∅:
+    a.push(4)
+
+@expect error "cannot resize a fixed-size array"
+fn error_fixed_stays_fixed_when_passed() → ∅:
+    let v : mut i32[3] = [1, 2, 3]
+    receives_fixed(v)
+
+// Assigning to a dynamic type makes a dynamic array, since the target
+// type decides.
+@test
+fn test_fixed_to_dynamic_becomes_dynamic() → ∅:
+    let f : mut i32[3] = [1, 2, 3]
+    let d : mut i32[] = f
+    d.push(4)
+    assert_eq(d.sizeof, 4)
+    assert_eq(f.sizeof, 3)
+
+// ---------------------------------------------------------------------
+// Mutating methods obey the same rule as writing an element
+// ---------------------------------------------------------------------
+
+@expect error "push: cannot modify let variable 'v'"
+fn error_push_on_let_binding() → ∅:
+    let v := [1, 2]
+    v.push(3)
+
+@expect error "pop: cannot modify let variable 'v'"
+fn error_pop_on_let_binding() → ∅:
+    let v := [1, 2]
+    _ ← v.pop()
+
+@expect error "cannot modify borrowed variable 'arr'"
+fn error_push_through_shared_borrow() → ∅:
+    let v : mut = [1, 2]
+    pushes_through(&v)
+
+fn pushes_through(arr : &int[]) → ∅:
+    arr.push(3)
+
+// ---------------------------------------------------------------------
+// A fixed array cannot be passed where the length may change
+// ---------------------------------------------------------------------
+//
+// A by-value mut T[] parameter takes a copy, and the copy is dynamic --
+// the same conversion `let d : mut i32[] = f` performs -- so a fixed
+// array may be passed and the callee may grow its own copy.
+
+fn grows_by_copy(a : mut i32[]) → i32:
+    a.push(4)
+    a.sizeof
+
+@test
+fn test_fixed_into_mutable_dynamic_param_by_value() → ∅:
+    let f : mut i32[3] = [1, 2, 3]
+    assert_eq(grows_by_copy(f), 4)
+    // The caller's array is untouched, and still fixed.
+    assert_eq(f.sizeof, 3)
+
+@expect error "cannot resize a fixed-size array"
+fn error_caller_array_is_still_fixed() → ∅:
+    let f : mut i32[3] = [1, 2, 3]
+    _ ← grows_by_copy(f)
+    f.push(9)
+
+// &mut T[] is different: there is no copy, so the callee would change
+// the length of the caller's own array, which a fixed one cannot allow.
+
+fn grows_by_reference(a : &mut i32[]) → ∅:
+    a.push(4)
+
+@expect error "by-reference mutable 'i32"
+fn error_fixed_into_mutable_dynamic_ref_param() → ∅:
+    let f : mut i32[3] = [1, 2, 3]
+    grows_by_reference(&f)
+
+// A dynamic array through the same reference parameter is fine.
+@test
+fn test_dynamic_into_mutable_dynamic_ref_param() → ∅:
+    let d : mut i32[] = [1, 2, 3]
+    grows_by_reference(&d)
+    assert_eq(d.sizeof, 4)
+
+// An immutable dynamic parameter is fine: the callee cannot resize it,
+// so nothing it may do depends on the length being open.
+fn reads_dynamic(a : i32[]) → i32:
+    a[0] + a[2]
+
+@test
+fn test_fixed_into_immutable_dynamic_param() → ∅:
+    let f : mut i32[3] = [1, 2, 3]
+    assert_eq(reads_dynamic(f), 4)
+
+// A dynamic array is what a resizable parameter asks for.
+@test
+fn test_dynamic_into_mutable_dynamic_param() → ∅:
+    let d : mut i32[] = [1, 2, 3]
+    grows_by_copy(d)
+    assert_eq(d.sizeof, 3)
+
+// A fixed parameter of the same length takes a fixed argument, and its
+// elements may still be written.
+fn writes_element(a : mut i32[3]) → i32:
+    a[0] ← 9
+    a[0]
+
+@test
+fn test_fixed_into_fixed_param() → ∅:
+    let f : mut i32[3] = [1, 2, 3]
+    assert_eq(writes_element(f), 9)
+    assert_eq(f[0], 1)

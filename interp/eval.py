@@ -35,7 +35,7 @@ from interp.value import (
     mk_int, mk_int_wrap, mk_str, mk_bool, mk_float, none, some, is_none, is_some,
     resolve_width, resolve_float_width, wrap_int, coerce_to_type, coerce_arg,
     _TYPE_BITS, FLOAT_TYPES, FAST_TYPES,
-    _split_optional_type, MAX_TENSOR_RANK,
+    _split_optional_type, _parse_array_type, MAX_TENSOR_RANK,
     is_generic_type, runtime_type_of,
     UnitValue, RefValue, Reference, ElementRef, Iterator, ArrayIterator,
     deep_copy_value, register_type_alias, DISCARD_NAME,
@@ -511,6 +511,9 @@ def _substitute_generics(type_str: str, generic_map: dict[str, str]) -> str:
 # The array member functions, mapped to how many arguments each takes.
 # Modelled on Rust's Vec: push/pop at the end, insert/remove at an index,
 # and get for a bounds-checked read.
+# The array methods that change the array rather than only reading it.
+_ARRAY_MUTATORS = frozenset({"push", "pop", "insert", "remove"})
+
 _ARRAY_METHODS: dict[str, int] = {
     "push": 1,
     "pop": 0,
@@ -1243,6 +1246,63 @@ class Evaluator:
         raise TypeError(
             f"cannot convert {type(inner).__name__} with units")
 
+    def _check_resizable_argument(self, func, param_name, param_type,
+                                  arg_value):
+        """Reject a fixed-size array where a resizable one is asked for.
+
+        Only a by-reference parameter is affected.  `&mut T[]` lets the
+        callee change the length of the caller's own array, which a
+        fixed-size one cannot allow.  A by-value `mut T[]` takes a copy,
+        and a copy handed to a dynamically-sized parameter is dynamic --
+        the same conversion `let d : mut i32[] = f` performs -- so there
+        is nothing to refuse.
+        """
+        if param_type is None or param_name not in func.param_muts:
+            return
+        if param_name not in func.param_refs:
+            return
+        array_type = _parse_array_type(param_type)
+        if array_type is None or array_type[1] is not None:
+            return  # not a parameter whose length is open
+        value = arg_value
+        if isinstance(value, RefValue):
+            value = value.get()
+        value = unwrap_optional(value)
+        if not (isinstance(value, ObjectValue)
+                and isinstance(value.obj, ArrayValue)):
+            return
+        fixed = value.obj.fixed_size
+        if fixed is None:
+            return
+        raise TypeError(
+            f"{func.name}: parameter '{param_name}' is a by-reference "
+            f"mutable '{param_type}', whose length the function may change, "
+            f"but the argument is a fixed-size array of {fixed} element"
+            f"{'' if fixed == 1 else 's'}")
+
+    def _check_mutating_call(self, node):
+        """Reject a method that changes an array held by a `let` binding.
+
+        push and its kin change the array as surely as writing an
+        element does, so the same rule applies: a binding that cannot be
+        reassigned cannot have its contents rearranged either.
+        """
+        base = node.obj
+        while isinstance(base, (Subscript, SliceAccess, MultiSlice, GetAttr)):
+            base = base.obj
+        if not isinstance(base, VarRef):
+            return
+        name = base.name
+        kind = self._frozen_vars.get(name)
+        if kind == "moved":
+            raise TypeError(f"use of moved value '{name}'")
+        if kind is not None:
+            raise TypeError(
+                f"{node.method}: cannot modify {kind} variable '{name}'")
+        if self.env.is_const_global(name):
+            raise TypeError(
+                f"{node.method}: cannot modify let variable '{name}'")
+
     def _call_array_method(self, array: ArrayValue, name: str, args):
         """Call one of the array's built-in member functions.
 
@@ -1726,6 +1786,8 @@ class Evaluator:
             return self._call_func(node.name, args)
 
         if isinstance(node, MethodCall):
+            if node.method in _ARRAY_MUTATORS:
+                self._check_mutating_call(node)
             obj = self.eval_expr(node.obj)
             args = [self.eval_expr(a) for a in node.args]
             result = self._call_method(obj, node.method, args)
@@ -1981,13 +2043,18 @@ class Evaluator:
                     if arr.sizeof != sz.value:
                         raise TypeError(
                             f"array size mismatch: declared {sz.value}, got {arr.sizeof}")
+                    # The declared length travels with the value, so the
+                    # operations that would change it can refuse.
+                    elements = [arr.get(i) for i in range(arr.sizeof)]
                     if etype:
-                        coerced = [coerce_to_type(arr.get(i), etype) for i in range(arr.sizeof)]
-                        return ObjectValue(ArrayValue(coerced, element_type=etype))
-                    return init_val
+                        elements = [coerce_to_type(e, etype) for e in elements]
+                    return ObjectValue(ArrayValue(elements, element_type=etype,
+                                                  fixed_size=sz.value))
                 if etype and isinstance(init_val, IntValue):
                     init_val = mk_int(init_val.value, etype)
-                return ObjectValue(ArrayValue([init_val] * sz.value, element_type=etype))
+                return ObjectValue(ArrayValue([init_val] * sz.value,
+                                              element_type=etype,
+                                              fixed_size=sz.value))
 
         raise TypeError(f"unexpected expression: {type(node).__name__}")
 
@@ -3255,6 +3322,8 @@ class Evaluator:
 
         call_env = func.env.copy_for_call()
         for (param_name, param_type), arg_value in zip(resolved_params, regular_args):
+            self._check_resizable_argument(func, param_name, param_type,
+                                           arg_value)
             is_ref_param = param_name in func.param_refs
             if is_ref_param:
                 if not isinstance(arg_value, RefValue):
@@ -3268,6 +3337,14 @@ class Evaluator:
                     f"{func.name}: parameter '{param_name}' is by-value, "
                     f"caller must not pass a reference")
             arg_value = deep_copy_value(arg_value)
+            # The copy takes the parameter's shape: a dynamically-sized
+            # parameter yields a dynamic array whatever it was given, as
+            # `let d : mut i32[] = f` does.
+            if param_type is not None and isinstance(arg_value, ObjectValue) \
+                    and isinstance(arg_value.obj, ArrayValue):
+                declared = _parse_array_type(param_type)
+                if declared is not None:
+                    arg_value.obj.fixed_size = declared[1]
             if param_name in func.param_units:
                 from interp.units import eval_unit_formula
                 unit = eval_unit_formula(func.param_units[param_name])

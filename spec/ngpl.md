@@ -2793,6 +2793,79 @@ bytes.get(1¤count)       // error: array index requires unit B, got count
 
 A value that is pushed or inserted takes the array's element type, exactly as an assignment through a subscript would.
 
+#### Fixed-Size Arrays
+
+An array whose type names a length — `i32[3]` rather than `i32[]` — keeps that length for as long as it exists.  The four resizing operations are errors on one:
+
+```
+let v : mut i32[3] = [1, 2, 3]
+v.push(4)
+
+error: push: cannot resize a fixed-size array; its type says it holds 3 elements
+```
+
+The length is in the type precisely so that a reader knows how much is there without tracing where the value came from; an array that could grow would make the type a lie.  `get` and element assignment are unaffected — only the length is fixed, not the contents.
+
+The length travels with the value, so a copy of a fixed-size array is still fixed:
+
+```
+fn f(a : mut i32[3]) → ∅:
+    a.push(4)                   // still an error, on this function's own copy
+```
+
+Assigning to a dynamic type produces a dynamic array, since the target type decides:
+
+```
+let f : mut i32[3] = [1, 2, 3]
+let d : mut i32[] = f           // d may grow; f may not
+```
+
+#### Passing a Fixed Array
+
+A by-value parameter takes a copy, and the copy has the parameter's shape — a `mut T[]` parameter yields a dynamic array whatever it was handed, which is the same conversion `let d : mut i32[] = f` performs.  A fixed array may therefore be passed to one, and the callee may grow its own copy:
+
+```
+fn grows(a : mut i32[]) → ∅:
+    a.push(4)                   // grows the copy
+
+let f : mut i32[3] = [1, 2, 3]
+grows(f)                        // fine; f is still three elements
+```
+
+`&mut T[]` is a different matter.  There is no copy, so the callee would change the length of the caller's own array, which a fixed one cannot allow:
+
+```
+fn grows(a : &mut i32[]) → ∅:
+    a.push(4)
+
+grows(&f)
+
+error: grows: parameter 'a' is a by-reference mutable 'i32[]', whose length the
+function may change, but the argument is a fixed-size array of 3 elements
+```
+
+Refusing at the call matters here.  Without it the call succeeds and the failure appears inside `grows`, blaming `a` for being fixed — a parameter whose own type says `i32[]` and whose body is written exactly as that type allows.  The mistake is the caller's, and that is where it is reported.
+
+| Parameter | Fixed argument | Why |
+|-----------|---------------|-----|
+| `i32[]` | accepted | immutable, so the length is never changed |
+| `mut i32[3]` | accepted | a copy, and the length matches |
+| `mut i32[]` | accepted | a copy, which the parameter's type makes dynamic |
+| `&mut i32[]` | refused | no copy, and the caller's length is not open |
+
+#### Mutating an Immutable Binding
+
+`push`, `pop`, `insert`, and `remove` change the array, so they follow the rule that [writing an element](#what-immutability-covers) does: a binding that cannot be reassigned cannot have its contents rearranged either.
+
+```
+let v := [1, 2]
+v.push(3)
+
+error: push: cannot modify let variable 'v'
+```
+
+The same holds for a shared borrow, a `foreach` variable, and any other immutable binding, each named by its own kind.
+
 #### Views
 
 A view borrows a window into another array's storage, so it has no length of its own to change.  `push`, `pop`, `insert`, and `remove` on one are errors; `get` is not, since reading a view is what a view is for.

@@ -609,11 +609,12 @@ class ArrayValue(Value):
     at the given offset/length.  Reads and writes go through the backing.
     """
 
-    __slots__ = ("elements", "element_type", "_backing", "_offset", "_length")
+    __slots__ = ("elements", "element_type", "fixed_size",
+                 "_backing", "_offset", "_length")
 
     def __init__(self, elements=None, element_type: str | None = None,
                  *, backing: list | None = None, offset: int = 0,
-                 length: int | None = None):
+                 length: int | None = None, fixed_size: int | None = None):
         if backing is not None:
             self._backing = backing
             self._offset = offset
@@ -625,6 +626,9 @@ class ArrayValue(Value):
             self._length = 0
             self.elements = list(elements) if elements else []
         self.element_type = element_type
+        # Set when the array's type names a length, as in i32[4].  Such
+        # an array has that many elements for as long as it exists.
+        self.fixed_size = fixed_size
 
     def get(self, index: int) -> Value:
         """Return element at index; raises IndexError if out of range."""
@@ -662,14 +666,23 @@ class ArrayValue(Value):
         return value
 
     def _check_resizable(self, op: str):
-        """Reject an operation that would change the length of a view.
+        """Reject an operation that would change the array's length.
 
         A view borrows a window into another array's storage, so it has
         no length of its own to change: growing or shrinking it would
         have to move the elements the owner still refers to.
+
+        A fixed-size array has its length in its type, which is what
+        lets a reader know how much is there without tracing where it
+        came from.  Resizing one would make the type a lie.
         """
         if self._backing is not None:
             raise TypeError(f"{op}: cannot resize a view into another array")
+        if self.fixed_size is not None:
+            raise TypeError(
+                f"{op}: cannot resize a fixed-size array; its type says it "
+                f"holds {self.fixed_size} element"
+                f"{'' if self.fixed_size == 1 else 's'}")
 
     def push(self, value: Value):
         """Append a value to the end of the array."""
@@ -835,7 +848,10 @@ def deep_copy_value(v: Value) -> Value:
             elems = [arr.get(i) for i in range(arr.sizeof)]
         else:
             elems = list(arr.elements)
-        return ObjectValue(ArrayValue(elems, arr.element_type))
+        # A copy of a fixed-size array is still fixed-size: the length
+        # is part of the type, and copying does not change the type.
+        return ObjectValue(ArrayValue(elems, arr.element_type,
+                                      fixed_size=arr.fixed_size))
     return v
 
 
@@ -1156,6 +1172,20 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
         arr = value.obj
         arr_info = _parse_array_type(target_width)
         elem_target = arr_info[0] if arr_info is not None else target_width
+        if arr_info is None:
+            # The target names no array shape at all -- an element type
+            # standing in for the whole -- so whatever the value already
+            # was, it stays.
+            declared = arr.fixed_size
+        else:
+            # T[] says dynamic and T[n] says fixed; either way the target
+            # decides, not the source.
+            declared = arr_info[1]
+        if declared is not None and arr.sizeof != declared:
+            raise TypeError(
+                f"array size mismatch: type '{target_width}' declares "
+                f"{declared} elements, got {arr.sizeof}")
         coerced = [coerce_to_type(arr.get(i), elem_target) for i in range(arr.sizeof)]
-        return ObjectValue(ArrayValue(coerced, element_type=elem_target))
+        return ObjectValue(ArrayValue(coerced, element_type=elem_target,
+                                      fixed_size=declared))
     return value
