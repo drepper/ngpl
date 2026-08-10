@@ -1,7 +1,7 @@
 # NGPL
 
 Design notes for the language.  The reference manual is
-[spec/ngpl.md](spec/ngpl.md); the documents below record the questions
+[spec/spec.md](spec/spec.md); the documents below record the questions
 each feature had to answer, what was considered, and why the answer is
 what it is.
 

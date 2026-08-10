@@ -10,7 +10,7 @@ The Bootstrap Language and the Full Language
 --------------------------------------------
 
 The Python interpreter in `interp/` is the **bootstrap implementation**.  What it accepts is the
-**bootstrap language**, which is a strict subset of the full language that `spec/ngpl.md`
+**bootstrap language**, which is a strict subset of the full language that `spec/spec.md`
 specifies.  The subset is defined by the implementation: a feature is in the bootstrap language
 when `interp/` implements it, and belongs to the full language until then.
 
@@ -35,7 +35,7 @@ An outstanding item with no tag is not a missing feature but a gap in one the bo
 has: something it accepts that it should refuse, or reports less well than it should.  Those are
 corrections rather than crossings, so no tag travels with the checkmark.
 
-`spec/ngpl.md` marks the same boundary from the other side, so a section describing a feature the
+`spec/spec.md` marks the same boundary from the other side, so a section describing a feature the
 bootstrap does not have says so.
 
 ### Already Refused

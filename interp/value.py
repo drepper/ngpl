@@ -111,7 +111,7 @@ _TYPE_BITS = _IntWidths(_NAMED_TYPE_BITS)
 
 # The width of an integer literal that named none.  It is not a type a
 # program can write: an untyped value settles on one the moment it is
-# bound or combined with something that has one.  See spec/ngpl.md,
+# bound or combined with something that has one.  See spec/spec.md,
 # "Untyped Integer Constants".
 UNTYPED = "untyped"
 
@@ -1432,7 +1432,7 @@ def format_shape(dims: list[int | None]) -> str:
 
 # The arbitrary-precision types.  A value of one has no fixed width, so
 # holding it needs a representation the bootstrap does not carry; they
-# belong to the full language.  See spec/ngpl.md, "Two Languages, One
+# belong to the full language.  See spec/spec.md, "Two Languages, One
 # Specification".
 _FULL_LANGUAGE_TYPES: dict[str, str] = {"int": "i64", "float": "f64"}
 

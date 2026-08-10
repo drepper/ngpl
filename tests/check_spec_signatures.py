@@ -113,7 +113,7 @@ def as_program(signature: str) -> str | None:
 
 def main():
     top = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    path = os.path.join(top, "spec", "ngpl.md")
+    path = os.path.join(top, "spec", "spec.md")
     rel = os.path.relpath(path, top)
 
     checked = skipped = 0
