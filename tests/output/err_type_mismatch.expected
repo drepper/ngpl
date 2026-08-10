@@ -1,6 +1,6 @@
 error: addition expected int+int, float+float, or str+str, got IntValue+StrValue
-  --> tests/output/err_type_mismatch.ngpl:4:5
+  --> tests/output/err_type_mismatch.ngpl:4:9
     |
-  4 |     x + "hello"
-    |     ^^^^^^^^^^^
+  4 |     _ ← x + "hello"
+    |         ^^^^^^^^^^^
     |

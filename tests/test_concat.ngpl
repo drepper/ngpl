@@ -89,4 +89,4 @@ fn test_concat_in_assignment():
 
 @start
 fn main():
-    0
+    ∅

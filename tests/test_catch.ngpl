@@ -104,4 +104,4 @@ fn test_catch_returns_value_on_success():
 
 @start
 fn main():
-    0
+    ∅

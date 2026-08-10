@@ -1,0 +1,7 @@
+warning: the value of this statement is not used; the signature hands nothing back, so the last statement is not a return value; name a return type, or write '_ ← …' to drop the value
+  --> tests/output/static_trailing_value.ngpl:6:5
+    |
+  6 |     1
+    |     ^
+  7 | 
+    |

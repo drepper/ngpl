@@ -1307,9 +1307,32 @@ error: in main: the value of this statement is not used; it computes
 something and nothing reads it
 ```
 
+#### The Last Statement of a Body
+
+A body ending in an expression is how a function returns one, so the last statement is the return value and nothing is said about it — whether the caller reads it is the caller's business.
+
+That holds only where the signature says something comes back.  Where it says nothing, the last statement is not a return value either, and what it computes goes nowhere:
+
+```
+fn f():
+    1
+
+warning: the value of this statement is not used; the signature hands
+nothing back, so the last statement is not a return value; name a
+return type, or write '_ ← …' to drop the value
+```
+
+This is a warning rather than an error.  The program is well-formed, the missing piece is most likely the return type rather than the statement, and the interpreter does hand the value to a caller that reads it — a caller relying on that is what the warning is there to bring to light.
+
+`∅` is what a body writes when it does nothing, and is not reported: there is no value there to go unread.
+
+```
+fn does_nothing():
+    ∅
+```
+
 #### What Is Not Reported
 
-- **The last statement of a body.**  It is what the function hands back, whether or not the caller reads it.
 - **A call to a function that returns nothing.**  There was no value to drop.
 - **A call to an `@impure` function.**  The effect is what the statement was for, and the value is beside the point.
 - **A statement whose expression contains an effect.**  `bump() + 1` runs `bump`, which is a reason for the line to exist.
@@ -1328,7 +1351,9 @@ The value is still computed and the call still happens; only the result is dropp
 
 #### Design Rationale
 
-The check reports an error rather than a warning because there is no reading of the program under which the statement was intended: either the value was meant to be used, and something is missing, or it was not, and `_ ←` says so in one token.  A warning would leave both possibilities open and, over a large program, would be scrolled past.
+A statement in the middle of a block is an error rather than a warning because there is no reading of the program under which it was intended: either the value was meant to be used, and something is missing, or it was not, and `_ ←` says so in one token.  A warning would leave both possibilities open and, over a large program, would be scrolled past.
+
+The last statement of a `∅`-returning body is a warning instead because there *is* a reading under which the program works: the interpreter hands the value back and a caller may be reading it, as one does for a function returning a lambda, which has no type to write down yet.  Such a program is doing something the signature does not say, which is worth reporting, but it is not broken and refusing to run it would be.
 
 Attaching the rule to every non-`∅` return type rather than to annotated declarations follows from the language's treatment of a signature as a promise.  `fn f() → i64` says a caller gets an `i64`; a call that ignores it is not using the function as declared.  C has to opt in per declaration because its history is full of functions returning a status nobody checks; a language starting from scratch has no such history to preserve.
 

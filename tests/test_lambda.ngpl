@@ -48,8 +48,10 @@ fn test_lambda_as_arg():
   let double := λx : i64 → i64: x × 2
   assert_eq(10, apply(double, 5))
 
-// Lambda returned from a function
-fn make_adder(n: i32):
+// Lambda returned from a function.  There is no function type to
+// write yet, so the signature says T': something comes back, and
+// what it is depends on the call.
+fn make_adder(n: i32) → T':
   λx : i64 |n| → i64: x + n
 
 @test
@@ -257,4 +259,4 @@ fn test_lambda_multi_stmt_as_arg():
 
 @start
 fn main():
-  0
+  ∅

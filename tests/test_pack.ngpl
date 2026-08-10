@@ -14,7 +14,7 @@ fn count_args(args…) → i64:
     @dropunit(args.sizeof)
 
 // Return the first pack element.
-fn first_of(args… : T'):
+fn first_of(args… : T') → T':
     args[0]
 
 // Apply a function to each pack element and sum.
@@ -103,7 +103,7 @@ fn test_generic_pack_mixed_types():
     assert_eq(first_of("hello", 42), "hello")
 
 // Access several pack elements by index.
-fn second_of(args… : T'):
+fn second_of(args… : T') → T':
     args[1]
 
 @test

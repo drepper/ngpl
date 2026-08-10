@@ -1,0 +1,10 @@
+// A body ending in an expression is how a function returns one, but
+// only where the signature says something comes back.  Here it says
+// nothing, so the 1 is not a return value and what it computes goes
+// nowhere.  The program is well-formed, so this is a warning.
+fn f():
+    1
+
+@start
+fn main():
+    f()

@@ -53,9 +53,10 @@ fn identity_i32(x : i32) → i32:
 fn test_resultof_basic():
     static_assert_eq(@resultof(example_fn), @resultof(identity_i32))
 
-// @resultof on void function.
+// @resultof on void function.  The body computes something and
+// drops it; the signature is what @resultof reads.
 fn void_fn():
-    0
+    _ ← 0
 
 @test
 fn test_resultof_void():

@@ -510,10 +510,13 @@ in the compiler.
     a declared side effect (@impure attribute for now), mark the statement as unused.  Assume
     all functions not returning ∅ have the equivalent of gcc's warn_unused_result attribute.
     Allow catching the error with @expect.  Reported at the definition as an error, and
-    catchable with @expect on the function or on the statement.  The last statement of a
-    body is what the function hands back and is left alone, as is a call returning ∅, a
-    call to an @impure function, a statement holding one, and a call the check cannot
-    resolve to a declaration.  `_ ←` says the value is meant to be dropped.
+    catchable with @expect on the function or on the statement.  Left alone: a call
+    returning ∅, a call to an @impure function, a statement holding one, a bare ∅, and a
+    call the check cannot resolve to a declaration.  `_ ←` says the value is meant to be
+    dropped.  The last statement of a body is the return value where the signature hands
+    something back; where it hands nothing back it is not, and that draws a warning rather
+    than an error, since the program still runs and the missing piece is usually the
+    return type.
 
 [x] Require functions using std.print or std.println to be marked with @impure.
 

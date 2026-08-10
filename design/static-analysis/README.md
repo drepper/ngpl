@@ -50,11 +50,32 @@ the `∅` return type as the escape that does not need writing down, and
 `_ ←`, which the language already has as a discard target, as the way
 to say a value is deliberately dropped.
 
-### What is left alone
+### The last statement of a body
 
-- **The last statement of a body.**  It is what the function hands
-  back.  The interpreter returns it whatever the signature says, so
-  calling it unused would be wrong as well as unhelpful.
+A body ending in an expression is how a function returns one, so where
+the signature says something comes back the last statement is the
+return value and nothing is said about it.
+
+Where the signature says nothing, it is not a return value either, and
+what it computes goes nowhere.  Reporting it is the whole point of the
+check — `fn f(): 1` is a missing return type — but it is a *warning*,
+for two reasons.  The program is well-formed: the interpreter does hand
+the value to a caller that reads it, and refusing to run a program that
+works would be wrong.  And the fix is usually the signature rather than
+the statement being pointed at, which is the same situation as the
+unused-`mut` warning.
+
+There is one construct that cannot be fixed by naming a return type: a
+function returning a lambda, since there is no function type to write.
+`→ T'` is what such a signature says today — something comes back, and
+what it is depends on the call — and it settles the warning honestly
+until a function type exists.
+
+`∅` is exempt.  It is what a body writes when it does nothing, the
+language having no `pass`, and there is no value there to go unread.
+
+### What else is left alone
+
 - **A call to a function returning `∅`.**  Nothing was dropped.
 - **A call to an `@impure` function**, and any statement whose
   expression contains one.  The effect is why the line is there.
@@ -71,10 +92,15 @@ show the declaration for.
 
 ### Error, not warning
 
-There is no reading of `doubled(21)` as a statement under which the
-program is right.  Either a binding is missing or the value is not
-wanted, and the second takes one token to say.  A warning would leave
-both open, and in a large program would be scrolled past.
+There is no reading of `doubled(21)` as a statement in the middle of a
+block under which the program is right.  Either a binding is missing or
+the value is not wanted, and the second takes one token to say.  A
+warning would leave both open, and in a large program would be scrolled
+past.
+
+The trailing statement of a `∅`-returning body is the one case that
+does have such a reading, which is why it is the one case reported as a
+warning.
 
 ## Effects That Say So
 
@@ -145,9 +171,11 @@ check treats the call as having an effect.
 
 Implemented in the interpreter, at definition time:
 
-- a statement whose value nothing reads, including inside loops, if
-  branches, match arms, and lambdas, catchable with `@expect` at the
-  function or at the statement;
+- a statement whose value nothing reads, as an error, including inside
+  loops, if branches, match arms, and lambdas, catchable with `@expect`
+  at the function or at the statement;
+- a body ending in a value its signature does not hand back, as a
+  warning, catchable the same two ways;
 - `std.print` and `std.println` requiring `@impure`;
 - calling an `@impure` function or method requiring `@impure`.
 
@@ -159,4 +187,6 @@ Not implemented:
 - An impure lambda passed as a value.  The lambda's own body is checked
   as part of the function that writes it, but a call through a
   parameter holding it is not resolved.
+- A function type, which is what a function returning a lambda would
+  name instead of `T'`.
 - The same checks in the compiler, which does not exist yet.

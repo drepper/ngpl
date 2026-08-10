@@ -1379,6 +1379,10 @@ def _dropped_value_finding(expr, env, struct_vars) -> str | None:
     """
     if _has_declared_effect(expr, env, struct_vars):
         return None
+    if isinstance(expr, _ast.NoneLit):
+        # ∅ is what a body writes when it does nothing.  There is no
+        # value there to go unread, so there is nothing to report.
+        return None
     if isinstance(expr, (_ast.FuncCall, _ast.MethodCall)):
         callee = _called_func(expr, env, struct_vars)
         if callee is None or _says_nothing(callee.ret_type):
@@ -1456,12 +1460,13 @@ def _check_one_unused_value(stmt, env, struct_vars,
 def _static_unused_value_check(func_def, env, struct_vars) -> str | None:
     """Find a statement in a function whose value nothing reads.
 
-    The last statement of a body is what the function hands back, so it
-    is left alone whatever the signature says: whether the caller reads
-    the value is the caller's business, and a body ending in an
-    expression is how a function returns one.  A lambda hands back its
-    last statement the same way, so one written inside this function is
-    walked on those terms rather than as part of the block holding it.
+    The last statement of a body is left to _trailing_value_warnings:
+    where the signature hands something back it is the return value,
+    and where it does not the mistake is likely the missing return type
+    rather than the statement, which is a warning rather than an error.
+    A lambda hands back its last statement the same way, so one written
+    inside this function is walked on those terms rather than as part
+    of the block holding it.
     """
     finding = _check_unused_values(func_def.body, env, struct_vars, True)
     if finding is not None:
@@ -1472,6 +1477,55 @@ def _static_unused_value_check(func_def, env, struct_vars) -> str | None:
             if finding is not None:
                 return finding
     return None
+
+
+def _trailing_value_warning(body, env, struct_vars,
+                            warnings: list[tuple[str, tuple | None]]):
+    """Report a body that ends in a value its signature does not hand back.
+
+    A body ending in an expression is how a function returns one, but
+    only where the signature says something comes back.  Where it says
+    nothing, the last statement is not a return value and what it
+    computes goes nowhere -- most often because the return type was
+    left off by mistake.
+
+    A warning rather than an error: the program is well-formed, the
+    interpreter does pass the value to a caller that reads it, and the
+    fix is a signature rather than the statement being complained
+    about.
+    """
+    if not isinstance(body, list) or not body:
+        return
+    last = body[-1]
+    marked = isinstance(last, _ast.ExpectStmt)
+    stmt = last.stmt if marked else last
+    if not isinstance(stmt, _ast.ExprStmt):
+        return
+    if _dropped_value_finding(stmt.expr, env, struct_vars) is None:
+        return
+    message = ("the value of this statement is not used; the signature "
+               "hands nothing back, so the last statement is not a return "
+               "value; name a return type, or write "
+               "'_ \N{LEFTWARDS ARROW} \N{HORIZONTAL ELLIPSIS}' to drop "
+               "the value")
+    if marked:
+        # Read back by the evaluator when the @expect runs.
+        stmt.static_warnings = (
+            list(getattr(stmt, "static_warnings", ())) + [message])
+        return
+    warnings.append((message, _node_pos(stmt.expr)))
+
+
+def _trailing_value_warnings(func_def, env,
+                             struct_vars) -> list[tuple[str, tuple | None]]:
+    """Every body in a function that ends in a value nothing hands back."""
+    warnings: list[tuple[str, tuple | None]] = []
+    if _says_nothing(func_def.ret_type):
+        _trailing_value_warning(func_def.body, env, struct_vars, warnings)
+    for node in _iter_ast(func_def.body):
+        if isinstance(node, _ast.LambdaExpr) and _says_nothing(node.ret_type):
+            _trailing_value_warning(node.body, env, struct_vars, warnings)
+    return warnings
 
 
 def _static_check_moves(stmts: list, env,
@@ -1546,15 +1600,32 @@ class DefinitionError(Exception):
     `pos` is where in the source the objection lies, when the check
     that raised this knew.  Without one the message is printed on its
     own, as it always was.
+
+    `warnings` are the ones found before the objection.  They are
+    about definitions that were checked through, so they are still
+    true and are reported rather than lost to the error.
     """
 
     def __init__(self, message, pos=None):
         super().__init__(message)
         self.pos = pos
+        self.warnings: list[tuple[str, tuple | None]] = []
         if pos is not None:
             # The names extract_position reads, so the same position
             # reaches the prompt's diagnostic as well as the file's.
             self.line, self.col, self.end_col = pos
+
+
+def _report_warnings(warnings, source: str, source_path: str):
+    """Print warnings found while installing, in the order they were found."""
+    for message, position in warnings:
+        if position is not None:
+            line, col, end_col = position
+            print(format_diagnostic(source, source_path, line, col, message,
+                                    end_col=end_col, level="warning"),
+                  file=sys.stderr)
+        else:
+            print(f"warning: {message}", file=sys.stderr)
 
 
 class LoadedProgram:
@@ -1571,6 +1642,26 @@ class LoadedProgram:
 
 def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                         honor_start: bool = True) -> LoadedProgram:
+    """Install top-level definitions, keeping the warnings found on the way.
+
+    A definition that is not well-formed stops the installation, but
+    the warnings found before it are about definitions that were
+    checked through, so they travel out with the error rather than
+    being lost to it.
+    """
+    program = LoadedProgram()
+    try:
+        _install_definitions(definitions, env, evaluator, program,
+                             honor_start=honor_start)
+    except DefinitionError as e:
+        e.warnings = program.warnings
+        raise
+    return program
+
+
+def _install_definitions(definitions, env: Env, evaluator: Evaluator,
+                         program: LoadedProgram, *,
+                         honor_start: bool = True) -> None:
     """Install top-level definitions into an environment.
 
     Definitions are installed in dependency order: type aliases, then
@@ -1581,17 +1672,14 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
         definitions: the parsed top-level definitions.
         env: the environment to define names in.
         evaluator: used to evaluate variable initializers.
+        program: collects the startup function, the tests, and the
+            warnings found while installing.
         honor_start: whether an @start annotation designates the startup
             function.  False when the command line already named one.
-
-    Returns:
-        A LoadedProgram holding the startup function and the tests found.
 
     Raises:
         DefinitionError: when a definition is not well-formed.
     """
-    program = LoadedProgram()
-
     # Named types first: an alias, a sum, a global, or a signature
     # may refer to any of them, and each may be declared below
     # whatever names it.
@@ -1837,6 +1925,8 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                 program.warnings.extend(
                     _redundant_return_type_warning(defn))
                 program.warnings.extend(_unused_mut_warnings(defn))
+                program.warnings.extend(
+                    _trailing_value_warnings(defn, env, struct_vars))
 
     # Every method is installed by now, so a call from one method to
     # another resolves whichever order the two were written in.
@@ -1853,8 +1943,8 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                     raise DefinitionError(
                         f"in {defn.struct_name}.{method_def.name}: {finding}",
                         _finding_pos(finding) or _node_pos(method_def))
-
-    return program
+            program.warnings.extend(
+                _trailing_value_warnings(method_def, env, struct_vars))
 
 
 def main():
@@ -1903,6 +1993,7 @@ def main():
         program = install_definitions(definitions, env, evaluator,
                                       honor_start=args.start is None)
     except DefinitionError as e:
+        _report_warnings(e.warnings, source, source_path)
         if e.pos is not None:
             line, col, end_col = e.pos
             print(format_diagnostic(source, source_path, line, col, str(e),
@@ -1912,14 +2003,7 @@ def main():
             print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    for message, position in program.warnings:
-        if position is not None:
-            line, col, end_col = position
-            print(format_diagnostic(source, source_path, line, col, message,
-                                    end_col=end_col, level="warning"),
-                  file=sys.stderr)
-        else:
-            print(f"warning: {message}", file=sys.stderr)
+    _report_warnings(program.warnings, source, source_path)
 
     startup_func = program.startup_func
     standalone_tests = program.standalone_tests
@@ -2013,7 +2097,9 @@ def main():
         errors_produced.extend(
             ("warning", message)
             for message, _ in (_redundant_return_type_warning(defn)
-                               + _unused_mut_warnings(defn)))
+                               + _unused_mut_warnings(defn)
+                               + _trailing_value_warnings(
+                                   defn, env, _struct_vars_of(defn, env))))
 
         remaining = list(defn.expect_annotations)
         matched: list[tuple[str, str]] = []

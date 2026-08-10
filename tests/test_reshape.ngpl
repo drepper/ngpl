@@ -158,4 +158,4 @@ fn test_reshape_empty_source():
 
 @start
 fn main():
-    0
+    ∅

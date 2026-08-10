@@ -1344,6 +1344,7 @@ class Parser:
 
     def _parse_lambda(self):
         """Parse: λ [param1 : type1 [, paramN : typeN]] [|capture1 [, captureN]|] -> ret_type : expr"""
+        lambda_tok = self._cur()
         self._eat("LAMBDA")
         params: list[tuple[str, str]] = []
         while self._check("IDENT"):
@@ -1416,7 +1417,8 @@ class Parser:
                 body = self._parse_or_expr()
         else:
             body = self._parse_or_expr()
-        return LambdaExpr(params, captures, ret_type, body)
+        return self._set_pos(
+            LambdaExpr(params, captures, ret_type, body), lambda_tok)
 
     # ------------------------------------------------------------------
     # Expression parsing (precedence climbing)
