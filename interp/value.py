@@ -1359,6 +1359,18 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
         return value
     if not validate_type(target_width):
         raise TypeError(f"unknown type '{target_width}'")
+
+    # An optional or expected target says what a value has to be when
+    # there is one; absence is what the ? or ! admits on its own.
+    base, opt_err = _split_optional_type(target_width)
+    if opt_err is not None:
+        if isinstance(value, (NoneValue, ExpectedValue)):
+            return value
+        if isinstance(value, SomeValue):
+            return SomeValue(coerce_to_type(value.value, base))
+        settled = coerce_to_type(value, base)
+        return (SomeValue(settled) if opt_err == ""
+                else ExpectedValue.ok(settled))
     # An array is coerced element by element further down, so a named
     # type here describes the elements rather than the array.
     scalar = not (isinstance(value, ObjectValue)

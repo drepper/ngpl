@@ -2098,8 +2098,11 @@ class Evaluator:
                         f"array size mismatch: declared {format_shape(sizes)}, "
                         f"but a fill value gives no extent for the empty "
                         f"dimension")
-                if etype and isinstance(init_val, IntValue):
-                    init_val = mk_int(init_val.value, etype)
+                if etype:
+                    # Through coerce_to_type rather than mk_int, which
+                    # would take any element type for an integer width
+                    # and build a value whose width is a type name.
+                    init_val = coerce_to_type(init_val, etype)
                 return self._alloc_nested(sizes, init_val, etype)
 
         raise TypeError(f"unexpected expression: {type(node).__name__}")

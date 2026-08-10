@@ -21,6 +21,44 @@ fn test_optional_param_none() → ∅:
 fn unwrap_or_zero(x : int?) → int:
     x ?? 0
 
+// ---------------------------------------------------------------------
+// An optional or expected binding
+// ---------------------------------------------------------------------
+
+// A binding says it is optional the same way a parameter or a type
+// alias does, with ? after the type.
+@test
+fn test_optional_binding_holds_a_value() → ∅:
+    let x : i32? = 5
+    assert_eq(x ?? 0, 5)
+
+@test
+fn test_optional_binding_holds_nothing() → ∅:
+    let x : i32? = ∅
+    assert_eq(x ?? 0, 0)
+
+// The ? admits absence; what is there when there is something still
+// has to be the type.
+@test
+fn test_optional_binding_matches() → ∅:
+    let x : i32? = 7
+    match x:
+        ∃(v):  assert_eq(v, 7)
+        ∅:     assert(false)
+
+@test
+fn test_optional_binding_matches_absent() → ∅:
+    let x : i32? = ∅
+    match x:
+        ∃(v):  assert(false)
+        ∅:     assert(true)
+
+// ! is the expected form, as it is elsewhere.
+@test
+fn test_expected_binding() → ∅:
+    let e : i32! = 7
+    assert_eq(e ?? 0, 7)
+
 @start
 fn main() → ∅:
     std.print("type tests passed")

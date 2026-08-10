@@ -1171,6 +1171,23 @@ fn get_padded_byte data : byte[], off ¤byte : usize, total_size ¤byte : usize 
 
 A function with return type `u8?` auto-wraps non-`∅` return values in `some`.  Returning `∅` explicitly signals absence.  The caller receives either `some(value)` or `∅`.
 
+A binding says it the same way, with `?` after the type.  `!` gives the expected form, as it does elsewhere:
+
+```
+let x : i32? = 5
+let y : i32? = ∅
+let e : i32! = 7        // ok(7)
+```
+
+The `?` is what admits absence.  What the binding holds when it holds something still has to be the type:
+
+```
+let s : Shape? = ∅                  // fine
+let s : Shape? = Tri{b: 1.0, h: 2.0}   // error: 'Shape' is Circle | Rect, but the value is Tri
+```
+
+Without the `?`, a binding has no way to hold nothing: a definition requires an initializer, so `let s : Shape` alone does not parse.  This is why a `match` over a sum type never meets an absent value unless the type asked for one.
+
 #### The `?` Postfix Operator
 
 The `?` operator unwraps an optional value or **propagates** `∅` to the enclosing function:

@@ -740,6 +740,17 @@ class Parser:
                                                  rest_dims=dims[1:]),
                                   is_const, unit_spec=unit_spec), kw_tok)
 
+                # An optional or expected binding, spelled as it is in a
+                # signature or a type alias.
+                if self._check("OP") and self._cur().value == "?":
+                    self.pos += 1
+                    type_annotation += "?"
+                    if self._check("IDENT"):
+                        type_annotation += self._parse_dotted_name()
+                elif self._check("OP") and self._cur().value == "!":
+                    self.pos += 1
+                    type_annotation += "?std.errors"
+
         if not has_colon:
             if not (self._check("PUNCT") and self._cur().value == ":"):
                 raise ParseError(

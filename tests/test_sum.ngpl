@@ -183,6 +183,44 @@ fn test_alternative_declared_later() → ∅:
         Circle(c):        assert(false)
         Declared_below(d): assert_eq(d.v, 3)
 
+// ---------------------------------------------------------------------
+// An optional of a sum type
+// ---------------------------------------------------------------------
+
+// The ? admits absence, which is the only way a binding of a sum type
+// can hold something that is not one of the alternatives.
+@test
+fn test_optional_sum_absent() → ∅:
+    let s : Shape? = ∅
+    match s:
+        ∃(v):  assert(false)
+        ∅:     assert(true)
+
+@test
+fn test_optional_sum_present() → ∅:
+    let s : Shape? = Circle{r: 2.0}
+    match s:
+        ∃(v):  assert_eq(area(v), 12.0)
+        ∅:     assert(false)
+
+// What it holds, when it holds something, still has to be an
+// alternative.
+@expect error "'Shape' is Circle . Rect, but the value is Tri"
+fn error_optional_sum_rejects_a_non_alternative() → ∅:
+    let s : Shape? = Tri{b: 1.0, h: 2.0}
+    _ ← s
+
+// ---------------------------------------------------------------------
+// A sum type as an array's element type
+// ---------------------------------------------------------------------
+
+// A fill value has to be an alternative, and the diagnostic says what
+// it was rather than naming the element type back.
+@expect error "'Shape' is Circle . Rect, but the value is int"
+fn error_array_fill_is_not_an_alternative() → ∅:
+    let a : Shape[3] = 0
+    _ ← a
+
 @start
 fn main() → ∅:
     std.print("sum type tests passed")
