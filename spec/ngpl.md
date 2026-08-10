@@ -4334,6 +4334,42 @@ enum SmallEnum : u8:
 
 When no underlying type is specified, the default is `int` (arbitrary precision).
 
+#### Kinds Do Not Run Together
+
+Widths convert within a kind, and an integer becomes a float where one is asked for.  The kinds themselves do not: a string is not a number, a number is not a string, and a boolean is neither.
+
+```
+let s : str = "text"
+let n : i32 = 5
+let f : f64 = 1        // 1.0
+let b : bool = true
+```
+
+```
+let x : i32 = "hello"
+
+error: 'i32' cannot hold a string
+```
+
+```
+let s : str = 42
+
+error: 'str' cannot hold an integer
+```
+
+The same holds wherever a value meets a type that is already fixed — an assignment, an array element, an argument, a return:
+
+```
+let x : mut i32 = 5
+x ← "hello"          // error: 'x' holds i32 and cannot take a string
+
+let a : mut i32[] = [1, 2, 3]
+a[0] = "x"             // error: an array of i32 cannot hold a string
+
+fn f() → i32:
+    "hello"            // error: return type is i32 but body evaluates to str
+```
+
 #### Parting with a Unit
 
 A unit is part of a type, so a type that states no unit is not the type of a value that carries one.  A binding and a return both refuse it:

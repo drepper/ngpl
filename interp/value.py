@@ -662,8 +662,13 @@ class ArrayValue(Value):
 
     def set(self, index: int, value: Value):
         """Set element at index; raises IndexError if out of range."""
-        if self.element_type is not None and isinstance(value, IntValue):
-            value = mk_int(value.value, self.element_type)
+        if self.element_type is not None:
+            mismatch = _scalar_kind_mismatch(value, self.element_type)
+            if mismatch is not None:
+                raise TypeError(
+                    f"an array of {self.element_type} cannot hold {mismatch}")
+            if isinstance(value, IntValue):
+                value = mk_int(value.value, self.element_type)
         n = self.sizeof
         if index < 0 or index >= n:
             raise IndexError(
@@ -1368,6 +1373,35 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
         f"{func_name}: argument '{param_name}' has unknown type '{param_type}'")
 
 
+_SCALAR_TARGETS = {"str", "bool", "int"}
+
+
+def _scalar_kind_mismatch(value: "Value", target: str) -> str | None:
+    """Say how a scalar value differs in kind from the type named.
+
+    Widths convert within a kind and an integer becomes a float, but
+    the kinds themselves do not run together: a string is not a number
+    and a number is not a string.  Returns a description, or None where
+    there is nothing to object to.
+    """
+    if target not in _SCALAR_TARGETS and target not in _TYPE_BITS \
+            and target not in FLOAT_TYPES:
+        return None
+    if isinstance(value, StrValue):
+        return None if target == "str" else "a string"
+    if target == "str":
+        kind = {BoolValue: "a boolean", IntValue: "an integer",
+                FloatValue: "a number"}.get(type(value))
+        return kind
+    if isinstance(value, BoolValue):
+        return None if target == "bool" else "a boolean"
+    if target == "bool":
+        return "a number" if isinstance(value, (IntValue, FloatValue)) else None
+    if isinstance(value, FloatValue) and target not in FLOAT_TYPES:
+        return "a floating-point number"
+    return None
+
+
 def coerce_to_type(value: Value, target_width: str) -> Value:
     """Coerce a value to a target integer type.
 
@@ -1393,6 +1427,13 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
         settled = coerce_to_type(value, base)
         return (SomeValue(settled) if opt_err == ""
                 else ExpectedValue.ok(settled))
+    # A scalar of one kind is not a value of another, whatever the
+    # widths involved.
+    mismatch = _scalar_kind_mismatch(value, target_width)
+    if mismatch is not None:
+        raise TypeError(
+            f"'{target_width}' cannot hold {mismatch}")
+
     # A type states no unit, so a value carrying one is not that type.
     # Parting with a unit is a real change and is said with @dropunit
     # rather than done quietly at a binding.

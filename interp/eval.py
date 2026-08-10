@@ -39,6 +39,7 @@ from interp.value import (
     _split_optional_type, _parse_array_type, MAX_TENSOR_RANK, array_shape,
     format_shape,
     is_generic_type, runtime_type_of, is_type_name, _is_unsigned,
+    _scalar_kind_mismatch,
     UnitValue, RefValue, Reference, ElementRef, Iterator, ArrayIterator,
     deep_copy_value, register_type_alias, DISCARD_NAME,
     register_sum_type, sum_type_alternatives, sum_type_admits,
@@ -2307,6 +2308,8 @@ class Evaluator:
                 self._last_pos = target_pos
             self._check_assignable(target_ast)
             rhs = self.eval_expr(rhs_ast)
+            if isinstance(target_ast, VarRef):
+                self._check_assigned_kind(target_ast.name, rhs)
             if isinstance(target_ast, MultiSlice):
                 # arr[range, range, ...] ← matrix — multi-dim slice write.
                 arr_val = self.eval_expr(target_ast.obj)
@@ -2550,6 +2553,24 @@ class Evaluator:
             # or not the binding repeated mut.
             self._frozen_vars.pop(stmt.name, None)
         return True
+
+    def _check_assigned_kind(self, name: str, rhs: Value):
+        """Refuse an assignment that changes what kind of value a name holds.
+
+        A binding's type does not change under assignment, so a string
+        cannot take the place of a number, nor a number of a string.
+        Widths still convert, as they do at a definition.
+        """
+        try:
+            current = self.env.lookup(name)
+        except KeyError:
+            return
+        if isinstance(current, Reference):
+            current = current.get()
+        held = runtime_type_of(unwrap_optional(current))
+        mismatch = _scalar_kind_mismatch(unwrap_optional(rhs), held)
+        if mismatch is not None:
+            raise TypeError(f"'{name}' holds {held} and cannot take {mismatch}")
 
     def _check_assignable(self, target_ast):
         """Reject a write reaching an immutable binding.
@@ -3921,6 +3942,10 @@ class Evaluator:
                 raise TypeError(
                     f"{func_name}: return type is {ret_type} "
                     f"but body evaluates to {inner.width}")
+            if isinstance(inner, (StrValue, BoolValue)):
+                raise TypeError(
+                    f"{func_name}: return type is {ret_type} "
+                    f"but body evaluates to {self._value_type_name(inner)}")
             if isinstance(inner, IntValue):
                 return coerce_to_type(inner, check) if opt_err is None else result
         elif check in FLOAT_TYPES:
@@ -3928,6 +3953,10 @@ class Evaluator:
                 raise TypeError(
                     f"{func_name}: return type is {ret_type} "
                     f"but body evaluates to {inner.width}")
+            if isinstance(inner, (StrValue, BoolValue)):
+                raise TypeError(
+                    f"{func_name}: return type is {ret_type} "
+                    f"but body evaluates to {self._value_type_name(inner)}")
         elif check == "str":
             if not isinstance(inner, StrValue):
                 raise TypeError(

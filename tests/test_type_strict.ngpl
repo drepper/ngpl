@@ -222,6 +222,78 @@ fn assert_true(cond: bool):
   if not cond:
     std.print("FAIL: condition was false")
 
+// ---------------------------------------------------------------------
+// A scalar of one kind is not a value of another
+// ---------------------------------------------------------------------
+
+// Widths convert within a kind and an integer becomes a float, but the
+// kinds do not run together.
+@test
+fn test_conversions_within_a_kind_still_work() → ∅:
+    let n : i32 = 5
+    let x : f64 = 1
+    let g : f64 = 2.5
+    let s : str = "text"
+    let b : bool = true
+    // assert_eq in this file takes two ints, so the rest use assert.
+    assert_eq(n, 5)
+    assert(x == 1.0)
+    assert(g == 2.5)
+    assert(s == "text")
+    assert(b)
+
+@test
+@expect error "'i32' cannot hold a string"
+fn error_string_into_a_number() → ∅:
+    let x : i32 = "hello"
+
+@test
+@expect error "'str' cannot hold an integer"
+fn error_number_into_a_string() → ∅:
+    let s : str = 42
+
+@test
+@expect error "'f64' cannot hold a string"
+fn error_string_into_a_float() → ∅:
+    let f : f64 = "hi"
+
+@test
+@expect error "'bool' cannot hold a number"
+fn error_number_into_a_bool() → ∅:
+    let b : bool = 42
+
+@test
+@expect error "'u8' cannot hold a boolean"
+fn error_bool_into_a_number() → ∅:
+    let x : u8 = true
+
+// The same holds where a value meets a type that is already fixed:
+// an assignment, an array element, a parameter, and a return.
+@test
+@expect error "holds i32 and cannot take a string"
+fn error_assignment_changes_the_kind() → ∅:
+    let x : mut i32 = 5
+    x ← "hello"
+
+@test
+@expect error "an array of i32 cannot hold a string"
+fn error_element_changes_the_kind() → ∅:
+    let a : mut i32[] = [1, 2, 3]
+    a[0] = "x"
+
+fn wants_a_number(x : i32) → ∅:
+    ∅
+
+@test
+@expect error "expected i32"
+fn error_argument_of_another_kind() → ∅:
+    wants_a_number("hello")
+
+@test
+@expect error "return type is i32 but body evaluates to str"
+fn error_returns_another_kind() → i32:
+    "hello"
+
 @start
 fn main() → ∅:
   std.print("type strictness tests passed")
