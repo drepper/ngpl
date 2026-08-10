@@ -1102,7 +1102,27 @@ fn greet(name) → ∅:
 
 `∅` is what a function returns when it returns nothing, so a signature that names it is repeating what the absence of a return type already said.  Most functions that return nothing are procedures called for their effect, and they are the majority of what a program writes; the shorter form is the one to use, and this document uses it throughout.
 
-Writing `→ ∅` remains available, and is worth reaching for where a reader might otherwise wonder whether the return type was forgotten — a long signature, or one sitting among neighbours that all return something.
+Writing `→ ∅` is accepted and draws a warning, since the two spellings mean the same and having both invites a reader to look for a difference that is not there:
+
+```
+fn greet(name) → ∅:
+    std.println("hello {}", name)
+
+warning: a return type of ∅ says what leaving it off says; the shorter
+form is the one to use
+```
+
+Two signatures are left alone.  A lambda has to state a return type, so `∅` is the only way for one to say this and there is nothing shorter to point at.  And a generic return type is left alone even where it settles on `∅`:
+
+```
+fn passthrough(x : G') → G':
+    x
+
+passthrough(5)                  /* G' is i64 */
+passthrough(does_nothing())     /* G' is ∅, and still no warning */
+```
+
+The signature wrote a type variable, which says the caller decides what comes back.  That is a different claim from `∅`, and it stays a different claim on the call where the answer happens to be `∅`.
 
 Every other return type has to be written.  There is no inference from the body: a function that hands back an `i32` says `→ i32`, and a signature is a promise the body is read against rather than a summary of what it happened to do.
 

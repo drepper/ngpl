@@ -1,0 +1,31 @@
+// A signature that says nothing about what comes back hands nothing
+// back, so writing ∅ adds no information.  The two spellings mean the
+// same thing, which is why the long one is worth pointing out: it
+// invites a reader to look for a difference that is not there.
+fn short_form(name : str):
+    std.println("a: {}", name)
+
+fn long_form(name : str) → ∅:
+    std.println("b: {}", name)
+
+// A generic return type is left alone even where it settles on ∅.  The
+// signature wrote a type variable, which says the caller decides, and
+// that is a different claim.
+fn passthrough(x : G') → G':
+    x
+
+// A method's signature reads like any other.
+struct Counter:
+    n : i32
+
+impl Counter:
+    fn show(self) → ∅:
+        std.println("counter {}", self.n)
+
+@start
+fn main():
+    short_form("x")
+    long_form("y")
+    std.println("{}", passthrough(5))
+    std.println("{}", passthrough(short_form("z")))
+    Counter{n: 3}.show()

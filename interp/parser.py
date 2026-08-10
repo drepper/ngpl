@@ -482,11 +482,17 @@ class Parser:
         # spelled two ways.
         ret_type = "\N{EMPTY SET}"
         ret_unit = None
+        # Where the return type was written, so a redundant one can be
+        # pointed at.  None when the signature left it off.
+        ret_type_pos = None
+        arrow_tok = self._cur()
         if self._try_eat("OP", "->"):
             if self._check("IDENT", "NONE", "OPT"):
                 ret_tok = self._cur()
                 self.pos += 1
                 ret_type = ret_tok.value
+                ret_type_pos = (arrow_tok.line, arrow_tok.col,
+                                ret_tok.end_col)
                 # A return type may name an array, as a parameter may.
                 ret_type += self._parse_array_suffix()
                 # A return type may state a unit, as a parameter may,
@@ -515,6 +521,7 @@ class Parser:
                                param_muts=param_muts, hint=hint,
                                ret_unit=ret_unit)
                 fdef.param_positions = param_positions
+                fdef.ret_type_pos = ret_type_pos
                 fdef._parse_error = str(e)
                 fdef._self_is_ref = self_is_ref
                 self._set_pos(fdef, kw_tok)
@@ -529,6 +536,7 @@ class Parser:
                        param_muts=param_muts, hint=hint,
                        ret_unit=ret_unit)
         fdef.param_positions = param_positions
+        fdef.ret_type_pos = ret_type_pos
         fdef._self_is_ref = self_is_ref
         return self._set_pos(fdef, kw_tok)
 

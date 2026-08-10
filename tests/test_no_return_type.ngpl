@@ -8,21 +8,24 @@
 fn says_nothing(name : str):
     std.println("a: {}", name)
 
-fn says_void(name : str) → ∅:
-    std.println("b: {}", name)
-
-// --- The two spellings agree ---------------------------------------
+// --- What the shorter form records ---------------------------------
 
 @test
-fn test_both_forms_run() → ∅:
+fn test_the_shorter_form_runs():
     says_nothing("x")
-    says_void("y")
 
-// The type a function has is the one it wrote, and both wrote ∅ —
-// one of them by saying nothing.
+// A signature that says nothing about what comes back records ∅, so a
+// function written the short way answers about its type the way one
+// written → ∅ would.  That the two agree is checked end to end in
+// tests/output/return_type_void_warning.ngpl, which also shows the
+// warning the long form now draws — a function carrying an @expect is
+// not installed, so it cannot be called from here as well.
 @test
-fn test_both_forms_have_the_same_type() → ∅:
-    static_assert_eq(@resultof(says_nothing), @resultof(says_void))
+fn test_the_shorter_form_records_nothing():
+    static_assert_eq(@resultof(says_nothing), @resultof(also_says_nothing))
+
+fn also_says_nothing():
+    std.println("c")
 
 // --- Everything else still has to be written -----------------------
 

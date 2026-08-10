@@ -57,6 +57,12 @@ the sized types do not have.
 Completed
 ---------
 
+[x] writing → ∅ on a function or a method draws a warning, since it says what
+    leaving the return type off says and having both spellings invites a reader to look
+    for a difference that is not there.  A lambda is exempt, having to state a return
+    type at all, and so is a generic return type even on the call where it settles on ∅:
+    the signature wrote a type variable, which is a different claim.
+
 [x] a match reads a subject whose type is written down — a parameter, or a let that
     states one — so a missing arm on an optional or a result is reported at the
     definition.  A match on a parameter was left entirely to runtime before, which is

@@ -161,6 +161,9 @@ class FuncDef:
         self.params = params
         # Where each parameter was written, for diagnostics about it.
         self.param_positions: dict[str, tuple[int, int, int | None]] = {}
+        # Where the return type was written, or None where the
+        # signature left it off and ∅ was recorded for it.
+        self.ret_type_pos: tuple[int, int, int | None] | None = None
         self.param_refs: set[str] = param_refs or set()
         self.param_muts: set[str] = param_muts or set()
         self.ret_type = ret_type

@@ -1112,6 +1112,27 @@ def _reshape_source_is_mutable(expr, mutable_names: set[str]) -> bool:
     return isinstance(inner, _ast.VarRef) and inner.name in mutable_names
 
 
+def _redundant_return_type_warning(func_def) -> list[tuple[str, tuple | None]]:
+    """Point out a return type that repeats what saying nothing says.
+
+    A signature with no return type hands nothing back, so writing ∅
+    adds no information.  It is worth saying because the two spellings
+    invite a reader to look for a difference between them.
+
+    A generic return type is left alone even where it settles on ∅: the
+    signature wrote a type variable, which says the caller decides, and
+    that is not the same claim.  A lambda is left alone too, since one
+    has to state a return type and ∅ is the only way to say this.
+    """
+    if getattr(func_def, "ret_type_pos", None) is None:
+        return []
+    if func_def.ret_type != "\N{EMPTY SET}":
+        return []
+    return [("a return type of ∅ says what leaving it off says; "
+             "the shorter form is the one to use",
+             func_def.ret_type_pos)]
+
+
 def _unused_mut_warnings(func_def) -> list[tuple[str, tuple | None]]:
     """Find mut bindings and parameters the function never modifies.
 
@@ -1471,6 +1492,10 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                     f"impl block for unknown struct '{defn.struct_name}'",
                     _node_pos(defn))
             for method_def in defn.methods:
+                # A method's signature reads like any other, so the
+                # redundant ∅ is worth the same word.
+                program.warnings.extend(
+                    _redundant_return_type_warning(method_def))
                 for param_name, param_type in method_def.params:
                     if param_type is not None:
                         validate_param_type(param_type, method_def.name, param_name)
@@ -1524,6 +1549,8 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                 if return_err is not None:
                     raise DefinitionError(f"in {defn.name}: {return_err}",
                                           _finding_pos(return_err) or _node_pos(defn))
+                program.warnings.extend(
+                    _redundant_return_type_warning(defn))
                 program.warnings.extend(_unused_mut_warnings(defn))
 
     return program
@@ -1672,7 +1699,8 @@ def main():
         # and the expected error would then never be produced.
         errors_produced.extend(
             ("warning", message)
-            for message, _ in _unused_mut_warnings(defn))
+            for message, _ in (_redundant_return_type_warning(defn)
+                               + _unused_mut_warnings(defn)))
 
         remaining = list(defn.expect_annotations)
         matched: list[tuple[str, str]] = []
