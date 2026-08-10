@@ -3709,6 +3709,28 @@ It still refuses anything that is neither a name nor a constant, since answering
 
 `@sizeof` and `@unitof` keep the stricter rule, since those ask about the value rather than the type.
 
+#### Type Names as Values
+
+A type name can only be a type, so it names one wherever it appears.  A type therefore needs no witness value to be compared against:
+
+```
+let n : i32 = 1
+static_assert_eq(@typeof(n), i32)
+
+let b0 := data[0 ¤byte]        // data is byte[]
+static_assert_eq(@typeof(b0), byte)
+```
+
+Struct and enum names work the same way, although the name is also how a program reaches the members, so `Shade` is both the type and the qualifier in `Shade.light`.
+
+Being a type name, it is available for nothing else.  A definition that would take one for a variable, a loop variable, a parameter, or a function is refused:
+
+```
+let byte := 5
+
+error: 'byte' names a type and cannot name a variable
+```
+
 - `@typeof(expr)` — evaluates the expression and returns a `type` value representing its type.  The type name reflects the concrete type: `int`, `i32`, `u8`, `str`, `bool`, `\N{EMPTY SET}`, `array`, `tuple`, `fn`, `\N{GREEK SMALL LETTER LAMDA}`, or an enum name.
 
 - `@resultof(func)` — looks up a named function and returns a `type` value for its declared return type.

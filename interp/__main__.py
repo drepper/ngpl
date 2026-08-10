@@ -21,7 +21,7 @@ from interp.value import (
     NoneValue, SomeValue, ExpectedValue, EnumType, EnumValue, StructType,
     coerce_to_type, validate_param_type, validate_type, none, FAST_TYPES,
     register_type_alias, register_sum_type, register_enum_type,
-    sum_type_alternatives, register_user_type, DISCARD_NAME,
+    sum_type_alternatives, register_user_type, DISCARD_NAME, is_type_name,
     _split_optional_type,
 )
 from interp.eval import Evaluator, unwrap_optional, _ARRAY_MUTATORS
@@ -1055,7 +1055,14 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                 program.expect_funcs.append(defn)
                 continue
 
+            if is_type_name(defn.name):
+                raise DefinitionError(
+                    f"'{defn.name}' names a type and cannot name a function")
             for param_name, param_type in defn.params:
+                if is_type_name(param_name):
+                    raise DefinitionError(
+                        f"in {defn.name}: '{param_name}' names a type and "
+                        f"cannot name a parameter")
                 if param_type is not None:
                     validate_param_type(param_type, defn.name, param_name)
             if defn.pack_param is not None:

@@ -1016,6 +1016,17 @@ _TYPE_ALIASES: dict[str, str] = {}
 _USER_TYPES: set[str] = set()
 
 
+def is_type_name(name: str) -> bool:
+    """Whether a name names a type rather than something a program binds.
+
+    A type name is reserved: it names a type wherever it appears, and
+    no definition may take it for a variable, a parameter, or a
+    function.
+    """
+    return (name in BUILTIN_TYPES or name in FAST_TYPES
+            or name in _USER_TYPES or name in _TYPE_ALIASES)
+
+
 def register_user_type(name: str):
     """Register a user-defined type name (struct, etc.)."""
     _USER_TYPES.add(name)

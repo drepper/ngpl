@@ -37,7 +37,7 @@ from interp.value import (
     _TYPE_BITS, FLOAT_TYPES, FAST_TYPES,
     _split_optional_type, _parse_array_type, MAX_TENSOR_RANK, array_shape,
     format_shape,
-    is_generic_type, runtime_type_of,
+    is_generic_type, runtime_type_of, is_type_name,
     UnitValue, RefValue, Reference, ElementRef, Iterator, ArrayIterator,
     deep_copy_value, register_type_alias, DISCARD_NAME,
     register_sum_type, sum_type_alternatives, sum_type_admits,
@@ -191,6 +191,18 @@ def _collect_refs(node) -> set[str]:
     return refs
 
 
+def _as_type_value(value):
+    """Bring a named type to the type value that stands for it.
+
+    A struct or enum name evaluates to the type itself, since the name
+    is also how a program reaches its members.  Where a type is being
+    compared, that is the same thing `@typeof` reports.
+    """
+    if isinstance(value, (StructType, EnumType)):
+        return TypeValue(value.name)
+    return value
+
+
 def _is_const_expr(node) -> bool:
     """Check whether an AST node is a compile-time constant expression."""
     if isinstance(node, (IntLit, FloatLit, StrLit, BoolLit, NoneLit)):
@@ -204,6 +216,9 @@ def _is_const_expr(node) -> bool:
     if isinstance(node, TupleLit):
         return all(_is_const_expr(e) for e in node.elements)
     if isinstance(node, (TypeOfExpr, ResultOfExpr, SizeOfExpr, UnitOfExpr, UnitRefExpr)):
+        return True
+    # A type name stands for its type, which is as constant as a literal.
+    if isinstance(node, VarRef) and is_type_name(node.name):
         return True
     if isinstance(node, UnitExpr):
         return _is_const_expr(node.expr)
@@ -1557,7 +1572,14 @@ class Evaluator:
                 raise TypeError(
                     f"pure function '{self._pure_func_name}' cannot "
                     f"read mutable global variable '{node.name}'")
-            val = self.env.lookup(node.name)
+            try:
+                val = self.env.lookup(node.name)
+            except KeyError:
+                # A type name stands for its type wherever it appears,
+                # which is what lets @typeof be compared against it.
+                if is_type_name(node.name):
+                    return TypeValue(node.name)
+                raise
             if isinstance(val, Reference):
                 return val.get()
             return val
@@ -1594,8 +1616,8 @@ class Evaluator:
                     "static_assert_eq requires compile-time constant expressions")
             expected = self.eval_expr(node.expected)
             actual = self.eval_expr(node.actual)
-            eu = unwrap_optional(expected)
-            au = unwrap_optional(actual)
+            eu = _as_type_value(unwrap_optional(expected))
+            au = _as_type_value(unwrap_optional(actual))
             if isinstance(eu, IntValue) and isinstance(au, IntValue):
                 if eu.value != au.value:
                     raise TypeError(
@@ -1614,8 +1636,8 @@ class Evaluator:
                         f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
             elif (isinstance(eu, TypeValue) and isinstance(au, StrValue)) or \
                  (isinstance(eu, StrValue) and isinstance(au, TypeValue)):
-                # A type may be checked against its written name, which is
-                # the only way to name one the language has no literal for.
+                # A type may also be checked against its name as a
+                # string, which predates naming the type directly.
                 type_name = eu.name if isinstance(eu, TypeValue) else au.name
                 spelled = au.value if isinstance(au, StrValue) else eu.value
                 if type_name != spelled:
@@ -2291,6 +2313,9 @@ class Evaluator:
             return none()
 
         if isinstance(stmt, VarDef):
+            if is_type_name(stmt.name):
+                raise TypeError(
+                    f"'{stmt.name}' names a type and cannot name a variable")
             if stmt.name == DISCARD_NAME:
                 # `let _ := expr` discards too, so that a value can be
                 # thrown away without inventing a name for it.
@@ -2585,6 +2610,11 @@ class Evaluator:
                 f"(must match or use 1 variable)")
 
         var_names = [v[0] for v in node.vars]
+        for var_name in var_names:
+            if is_type_name(var_name):
+                raise TypeError(
+                    f"'{var_name}' names a type and cannot name a "
+                    f"loop variable")
 
         if any(borrows) and (destructure or num_vars != num_iters):
             raise TypeError(
