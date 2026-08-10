@@ -153,4 +153,4 @@ fn error_zero_width() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("integer width tests passed")
+    std.println("integer width tests passed")

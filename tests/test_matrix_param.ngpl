@@ -351,4 +351,4 @@ fn error_empty_subscript_on_a_value() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("matrix parameter tests passed")
+    std.println("matrix parameter tests passed")

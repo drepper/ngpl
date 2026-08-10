@@ -96,4 +96,4 @@ fn error_abort_signal_not_an_integer() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("callstack tests passed")
+    std.println("callstack tests passed")

@@ -3,5 +3,5 @@ error: @unlikely applies to an if statement, but none follows
     |
   4 |     let x := 5
     |     ^^^
-  5 |     std.print("{}", x)
+  5 |     std.println("{}", x)
     |

@@ -184,4 +184,4 @@ fn error_borrow_with_destructuring() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("borrow foreach tests passed")
+    std.println("borrow foreach tests passed")

@@ -157,4 +157,4 @@ fn error_unwrap_expected() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("expected tests passed")
+    std.println("expected tests passed")

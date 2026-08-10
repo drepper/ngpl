@@ -49,4 +49,4 @@ fn test_mixed() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("layout tests passed")
+    std.println("layout tests passed")

@@ -1,6 +1,6 @@
 error: 1.5 is a floating-point literal, so its suffix cannot be 'i32'
-  --> tests/output/literal_suffix_int_on_float.ngpl:5:21
+  --> tests/output/literal_suffix_int_on_float.ngpl:5:23
     |
-  5 |     std.print("{}", 1.5i32)
-    |                     ^
+  5 |     std.println("{}", 1.5i32)
+    |                       ^
     |

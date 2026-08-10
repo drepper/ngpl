@@ -71,4 +71,4 @@ fn test_wrap_chained_add() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("wrap tests passed")
+    std.println("wrap tests passed")

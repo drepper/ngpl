@@ -70,7 +70,7 @@ fn error_plain_return_type() → i64:
 @expect error "requires the enclosing function to return an optional"
 fn error_void_return_type() → ∅:
     let q : mut = (10 ÷ 2)?
-    std.print("{}", q)
+    std.println("{}", q)
 
 // ---------------------------------------------------------------------
 // The propagated error must be the one the function promises
@@ -89,4 +89,4 @@ fn error_mismatched_through_call() → i64?MyErr:
 
 @start
 fn main() → ∅:
-    std.print("try return type tests passed")
+    std.println("try return type tests passed")

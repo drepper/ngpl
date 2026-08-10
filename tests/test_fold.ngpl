@@ -118,4 +118,4 @@ fn test_fold_non_iterable() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("fold tests passed")
+    std.println("fold tests passed")

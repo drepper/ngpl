@@ -6,5 +6,5 @@ fn give_up() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("before abort")
+    std.println("before abort")
     give_up()

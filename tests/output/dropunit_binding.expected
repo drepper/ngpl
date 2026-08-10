@@ -3,5 +3,5 @@ error: 'u32' carries no unit, but the value is B; use @dropunit to part with it
     |
   4 |     let a : u32 = v
     |                   ^
-  5 |     std.print("{}", a)
+  5 |     std.println("{}", a)
     |

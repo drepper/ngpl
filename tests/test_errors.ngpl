@@ -47,7 +47,7 @@ fn warn_foreach_redef() → ∅:
 @expect error "requires ':='"
 fn error_foreach_bare_eq() → ∅:
     foreach i = 1…3:
-        std.print("{}", i)
+        std.println("{}", i)
 
 // let without type requires := not =
 @expect error "requires ':='"
@@ -59,7 +59,7 @@ fn error_let_bare_eq() → ∅:
 @expect error "fast type.*cannot be used as array element"
 fn error_fast_array() → ∅:
     let arr : mut u8fast[10] = 0
-    std.print("{}", arr[0])
+    std.println("{}", arr[0])
 
 // --- type mismatch --------------------------------------------------------
 
@@ -79,7 +79,7 @@ fn error_div_zero() → ∅:
 @expect error "unexpected token: 'fn'"
 fn error_nested_fn() → ∅:
     fn inner() → ∅:
-        std.print("bad")
+        std.println("bad")
 
 // --- unknown types --------------------------------------------------------
 
@@ -129,4 +129,4 @@ fn error_fixed_array_size_mismatch() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("error tests passed")
+    std.println("error tests passed")

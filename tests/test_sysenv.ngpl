@@ -106,4 +106,4 @@ fn test_sys_memory() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("system environment tests passed")
+    std.println("system environment tests passed")

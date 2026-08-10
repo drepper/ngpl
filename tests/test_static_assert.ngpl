@@ -121,4 +121,4 @@ fn test_array_local_is_left_alone() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("static_assert tests passed")
+    std.println("static_assert tests passed")

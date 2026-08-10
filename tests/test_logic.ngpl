@@ -221,4 +221,4 @@ fn test_logic_with_comparison() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("logic tests passed")
+    std.println("logic tests passed")

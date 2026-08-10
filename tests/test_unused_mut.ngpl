@@ -132,4 +132,4 @@ fn test_loop_bindings_are_quiet() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("unused mut tests passed")
+    std.println("unused mut tests passed")

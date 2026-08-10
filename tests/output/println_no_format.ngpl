@@ -1,0 +1,6 @@
+// println's own complaint suggests the empty template, since that is
+// how a blank line is written.  print's does not: an empty template
+// there produces nothing at all.
+@start
+fn main() → ∅:
+    std.println()

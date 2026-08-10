@@ -19,4 +19,4 @@ fn test_byte_sizeof() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("byte tests passed")
+    std.println("byte tests passed")

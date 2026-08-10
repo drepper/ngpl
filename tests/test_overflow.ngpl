@@ -331,4 +331,4 @@ fn test_signed_right_shift_stops_one_earlier() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("overflow tests passed")
+    std.println("overflow tests passed")

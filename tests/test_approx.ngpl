@@ -122,4 +122,4 @@ fn error_approx_on_strings() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("approximate comparison tests passed")
+    std.println("approximate comparison tests passed")

@@ -116,4 +116,4 @@ fn test_curry_too_many_args() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("curry tests passed")
+    std.println("curry tests passed")

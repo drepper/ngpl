@@ -173,4 +173,4 @@ fn test_nested_in_else() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("if tests passed")
+    std.println("if tests passed")

@@ -256,7 +256,7 @@ fn test_pop_into_another_array() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("array method tests passed")
+    std.println("array method tests passed")
 
 // ---------------------------------------------------------------------
 // A fixed-size array cannot be resized

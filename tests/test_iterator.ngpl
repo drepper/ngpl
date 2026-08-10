@@ -241,4 +241,4 @@ fn error_iterate_closed_directory() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("iterator tests passed")
+    std.println("iterator tests passed")

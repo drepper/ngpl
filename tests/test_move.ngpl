@@ -57,4 +57,4 @@ fn test_reassign_after_consume() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("move tests passed")
+    std.println("move tests passed")

@@ -3,4 +3,4 @@ fn measured(n ¤meter : i32) → i32:
 
 @start
 fn main() → ∅:
-    std.print("{}", measured(5 ¤meter))
+    std.println("{}", measured(5 ¤meter))

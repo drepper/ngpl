@@ -6,6 +6,6 @@ foreach i := 1…4:
 
 total
 if total > 5:
-    std.print("big")
+    std.println("big")
 
-std.print("printed")
+std.println("printed")

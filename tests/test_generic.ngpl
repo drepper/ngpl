@@ -135,4 +135,4 @@ fn test_local_type_alias_generic_array() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("generic tests passed")
+    std.println("generic tests passed")

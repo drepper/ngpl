@@ -249,4 +249,4 @@ fn test_operators_on_rows() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("slice parameter tests passed")
+    std.println("slice parameter tests passed")

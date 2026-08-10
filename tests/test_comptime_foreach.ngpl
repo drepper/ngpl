@@ -95,4 +95,4 @@ fn test_ct_empty_no_iterations() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("comptime foreach tests passed")
+    std.println("comptime foreach tests passed")

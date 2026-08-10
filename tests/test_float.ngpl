@@ -3,7 +3,7 @@
 
 fn assert_true(cond:bool, msg:str):
   if not cond:
-    std.print("{}", msg)
+    std.println("{}", msg)
 
 fn test_float_literals():
   // Untyped float literal (inferred as "float")
@@ -173,4 +173,4 @@ fn main():
   test_hex_float_literal()
   test_float_type_rejection()
   test_integer_initializer_within_the_significand()
-  std.print("float tests passed")
+  std.println("float tests passed")

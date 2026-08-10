@@ -220,9 +220,9 @@ fn test_match_result_wildcard() → ∅:
 fn error_absent_pattern_on_a_result() → ∅:
     match 10 ÷ 0:
         ∃(v):
-            std.print("{}", v)
+            std.println("{}", v)
         ∅:
-            std.print("none")
+            std.println("none")
 
 // Nor does ∄ stand in for absence.
 @expect error "cannot match an optional, whose absence is"
@@ -230,9 +230,9 @@ fn error_failure_pattern_on_an_optional() → ∅:
     let v : mut = []
     match v.get(0):
         ∃(x):
-            std.print("{}", x)
+            std.println("{}", x)
         ∄(e):
-            std.print("err")
+            std.println("err")
 
 // ---------------------------------------------------------------------
 // Coverage is checked when the function is defined
@@ -247,13 +247,13 @@ fn error_optional_missing_absent_arm() → ∅:
     let v : mut = [1]
     match v.get(0):
         ∃(x):
-            std.print("{}", x)
+            std.println("{}", x)
 
 @expect error "match has no arm for a failed result"
 fn error_result_missing_failure_arm() → ∅:
     match 10 ÷ 2:
         ∃(v):
-            std.print("{}", v)
+            std.println("{}", v)
 
 // A function's declared return type says which shapes its value has.
 fn returns_optional(n : i64) → i64?:
@@ -264,7 +264,7 @@ fn returns_optional(n : i64) → i64?:
 fn error_missing_arm_through_a_call() → ∅:
     match returns_optional(1):
         ∃(x):
-            std.print("{}", x)
+            std.println("{}", x)
 
 fn returns_result(n : i64) → i64!:
     if n < 0:
@@ -275,7 +275,7 @@ fn returns_result(n : i64) → i64!:
 fn error_missing_arm_through_a_result_call() → ∅:
     match returns_result(1):
         ∃(x):
-            std.print("{}", x)
+            std.println("{}", x)
 
 // A plain value has only one shape, so one arm covers it.
 fn returns_plain(n : i64) → i64:
@@ -293,9 +293,9 @@ fn test_plain_subject_needs_one_arm() → ∅:
 fn error_absent_pattern_on_a_plain_value() → ∅:
     match returns_plain(3):
         ∃(x):
-            std.print("{}", x)
+            std.println("{}", x)
         ∅:
-            std.print("none")
+            std.println("none")
 
 // ---------------------------------------------------------------------
 // Arms that can never be reached
@@ -308,31 +308,31 @@ fn error_duplicate_present_arm() → ∅:
     let v : mut = [1]
     match v.get(0):
         ∃(x):
-            std.print("{}", x)
+            std.println("{}", x)
         ∃(y):
-            std.print("{}", y)
+            std.println("{}", y)
         ∅:
-            std.print("none")
+            std.println("none")
 
 @expect error "match repeats the ∅ pattern"
 fn error_duplicate_absent_arm() → ∅:
     let v : mut = [1]
     match v.get(0):
         ∃(x):
-            std.print("{}", x)
+            std.println("{}", x)
         ∅:
-            std.print("none")
+            std.println("none")
         ∅:
-            std.print("again")
+            std.println("again")
 
 @expect error "match has arms after _"
 fn error_arm_after_wildcard() → ∅:
     let v : mut = [1]
     match v.get(0):
         _:
-            std.print("anything")
+            std.println("anything")
         ∅:
-            std.print("unreachable")
+            std.println("unreachable")
 
 // ---------------------------------------------------------------------
 // Where the subject's type is not knowable, the check is at run time
@@ -346,7 +346,7 @@ fn error_unknown_subject_checked_at_run_time() → ∅:
     let x : mut = v.get(0)
     match x:
         ∃(y):
-            std.print("{}", y)
+            std.println("{}", y)
 
 // The bound name names the matched value, so it cannot be assigned to.
 @expect error "cannot assign to match variable 'x'"
@@ -356,7 +356,7 @@ fn error_assign_to_match_binding() → ∅:
         ∃(x):
             x ← 9
         ∅:
-            std.print("none")
+            std.println("none")
 
 // A match that does not cover the value it is given is an error rather
 // than a silent no-op.
@@ -365,8 +365,8 @@ fn error_match_not_exhaustive() → ∅:
     let v : mut = []
     match v.get(0):
         ∃(x):
-            std.print("{}", x)
+            std.println("{}", x)
 
 @start
 fn main() → ∅:
-    std.print("match tests passed")
+    std.println("match tests passed")

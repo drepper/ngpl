@@ -8,4 +8,4 @@ fn classify(x : i32?) → i32:
 
 @start
 fn main() → ∅:
-    std.print("{}", classify(∃(3)))
+    std.println("{}", classify(∃(3)))

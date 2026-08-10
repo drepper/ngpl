@@ -10,4 +10,4 @@ backtrace (innermost call first):
   #0 innermost at tests/output/backtrace.ngpl:6:11
   #1 middle at tests/output/backtrace.ngpl:9:14
   #2 outer at tests/output/backtrace.ngpl:12:11
-  #3 main at tests/output/backtrace.ngpl:17:26
+  #3 main at tests/output/backtrace.ngpl:17:28

@@ -3,5 +3,5 @@ error: in main: use of moved value 'b'
     |
  14 |     let second := b.consume()
     |                   ^
- 15 |     std.print("{} {}", first, second)
+ 15 |     std.println("{} {}", first, second)
     |

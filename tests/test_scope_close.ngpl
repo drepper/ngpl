@@ -173,4 +173,4 @@ fn error_double_close_dir() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("scope close tests passed")
+    std.println("scope close tests passed")

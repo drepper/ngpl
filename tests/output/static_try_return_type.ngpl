@@ -5,4 +5,4 @@ fn divide(a : i32, b : i32) → i32:
 
 @start
 fn main() → ∅:
-    std.print("{}", divide(6, 3))
+    std.println("{}", divide(6, 3))

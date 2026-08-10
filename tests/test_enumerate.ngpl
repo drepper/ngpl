@@ -72,4 +72,4 @@ fn test_enumerate_outside_foreach() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("enumerate tests passed")
+    std.println("enumerate tests passed")

@@ -2,4 +2,4 @@
 fn main() → ∅:
     let v ¤byte : u32 = 7
     let a : u32 = v
-    std.print("{}", a)
+    std.println("{}", a)

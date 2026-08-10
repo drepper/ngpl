@@ -77,4 +77,4 @@ fn test_foreach_array() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("foreach tests passed")
+    std.println("foreach tests passed")

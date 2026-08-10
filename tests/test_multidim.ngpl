@@ -102,4 +102,4 @@ fn test_flat_multi_subscript() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("multidim tests passed")
+    std.println("multidim tests passed")

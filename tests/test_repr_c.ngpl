@@ -178,4 +178,4 @@ fn error_offsetof_not_a_string() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("repr(C) tests passed")
+    std.println("repr(C) tests passed")

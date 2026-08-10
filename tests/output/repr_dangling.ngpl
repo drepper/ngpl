@@ -3,7 +3,7 @@
 
 @repr(C)
 fn not_a_struct() → ∅:
-    std.print("unreachable")
+    std.println("unreachable")
 
 @start
 fn main() → ∅:

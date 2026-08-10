@@ -197,4 +197,4 @@ fn test_sizeof_of_a_bool() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("parameter pack tests passed")
+    std.println("parameter pack tests passed")

@@ -65,4 +65,4 @@ fn error_float_binding_names_the_replacement() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("bootstrap tests passed")
+    std.println("bootstrap tests passed")

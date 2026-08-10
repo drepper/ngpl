@@ -37,4 +37,4 @@ fn test_arena_reset() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("arena tests passed")
+    std.println("arena tests passed")

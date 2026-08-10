@@ -110,4 +110,4 @@ fn test_fixed_accepts_fixed_same() → ∅:
 
 @start
 fn main() → ∅:
-  std.print("view assign tests passed")
+  std.println("view assign tests passed")

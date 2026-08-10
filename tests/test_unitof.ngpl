@@ -3,7 +3,7 @@
 
 fn assert_true(cond:bool, msg:str):
   if not cond:
-    std.print("FAIL: {}", msg)
+    std.println("FAIL: {}", msg)
 
 // --- @unitof on unit-bearing literal expressions ---
 
@@ -78,4 +78,4 @@ fn test_runtime_unitof_bytes():
 
 @start
 fn main():
-  std.print("unitof tests passed")
+  std.println("unitof tests passed")

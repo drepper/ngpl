@@ -299,4 +299,4 @@ fn test_tuple_bare_int() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("index unit tests passed")
+    std.println("index unit tests passed")

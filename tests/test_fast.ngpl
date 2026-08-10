@@ -20,4 +20,4 @@ fn test_fast_signed() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("fast type tests passed")
+    std.println("fast type tests passed")

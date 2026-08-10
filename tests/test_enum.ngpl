@@ -227,4 +227,4 @@ fn error_cross_enum_bitor() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("enum tests passed")
+    std.println("enum tests passed")

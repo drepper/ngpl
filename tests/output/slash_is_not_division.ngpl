@@ -2,4 +2,4 @@
 // Saying that is better than reading `10 / 3` as the start of one.
 @start
 fn main() → ∅:
-    std.print("{}", 10 / 3)
+    std.println("{}", 10 / 3)

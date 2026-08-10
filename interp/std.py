@@ -1108,13 +1108,49 @@ class StdModule:
         elements = [mk_int(b, "byte") for b in raw]
         return ObjectValue(ArrayValue(elements, element_type="byte"))
 
+    def _write_formatted(self, args, where: str, newline: bool):
+        """Render a template and write it to stdout.
+
+        Shared by print and println, which differ only in whether a
+        newline follows what the template produced.
+        """
+        from interp.eval import unwrap_optional
+        from interp.value import StrValue, none, runtime_type_of
+
+        if not args:
+            # An empty template is worth suggesting only where it does
+            # something: for println it is how a blank line is written,
+            # while for print it produces nothing at all.
+            hint = ('; std.println("") writes an empty line'
+                    if newline else "")
+            raise TypeError(
+                f"{where}(fmt, ...) requires a format string{hint}")
+        template = unwrap_optional(args[0])
+        if not isinstance(template, StrValue):
+            raise TypeError(
+                f"{where}: the first argument is the format string, but "
+                f"this one is {runtime_type_of(template)}; to write a value "
+                f"on its own, say {where}(\"{{}}\", \N{HORIZONTAL ELLIPSIS})")
+        output = _render_template(template.value, args[1:], where)
+        if newline:
+            output += "\n"
+        os.write(1, output.encode("utf-8"))
+        # Writing is a statement, not a value-producing expression;
+        # returning the empty string would make the REPL echo it after
+        # every call.
+        return none()
+
     def print(self, args):
-        """print(fmt, ...) — write a formatted line to stdout.
+        """print(fmt, ...) — write formatted text to stdout.
 
         Takes a template first, as C++'s std::print does, and fills its
         replacement fields from the arguments that follow.  The fields
         are the ones std.format reads, so a value looks the same
         whichever way it is written out.
+
+        Nothing follows what the template produced, so consecutive
+        calls run together on one line.  std.println is this call with
+        a newline after it, which is what a line of output wants.
 
         Args:
             args[0]: StrValue — the template.
@@ -1123,24 +1159,21 @@ class StdModule:
         Returns:
             NoneValue.
         """
-        from interp.eval import unwrap_optional
-        from interp.value import StrValue, none, runtime_type_of
+        return self._write_formatted(args, "std.print", newline=False)
 
-        if not args:
-            raise TypeError(
-                "std.print(fmt, ...) requires a format string; "
-                "std.print(\"\") writes an empty line")
-        template = unwrap_optional(args[0])
-        if not isinstance(template, StrValue):
-            raise TypeError(
-                f"std.print: the first argument is the format string, but "
-                f"this one is {runtime_type_of(template)}; to write a value "
-                f"on its own, say std.print(\"{{}}\", …)")
-        output = _render_template(template.value, args[1:], "std.print") + "\n"
-        os.write(1, output.encode("utf-8"))
-        # print is a statement, not a value-producing expression; returning
-        # the empty string would make the REPL echo it after every call.
-        return none()
+    def println(self, args):
+        """println(fmt, ...) — write a formatted line to stdout.
+
+        std.print with a newline after it.
+
+        Args:
+            args[0]: StrValue — the template.
+            args[1:]: values to substitute into it.
+
+        Returns:
+            NoneValue.
+        """
+        return self._write_formatted(args, "std.println", newline=True)
 
     # ------------------------------------------------------------------
     # SHA-256 helpers — byte-level ops and block compression.

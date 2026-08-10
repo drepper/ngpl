@@ -1,0 +1,12 @@
+// std.print writes what the template produced and nothing after it, so
+// consecutive calls run together on one line.  std.println is the same
+// call with a newline, which is what a line of output wants.
+@start
+fn main() → ∅:
+    std.print("a")
+    std.print("b")
+    std.print("c")
+    std.println("")
+    std.print("{} + {} = ", 2, 3)
+    std.println("{}", 5)
+    std.println("a line of its own")

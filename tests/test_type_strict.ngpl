@@ -216,11 +216,11 @@ fn test_mixed_via_call() → ∅:
 
 fn assert_eq(a: i64, b: i64):
   if a != b:
-    std.print("FAIL: expected {} got {}", a, b)
+    std.println("FAIL: expected {} got {}", a, b)
 
 fn assert_true(cond: bool):
   if not cond:
-    std.print("FAIL: condition was false")
+    std.println("FAIL: condition was false")
 
 // ---------------------------------------------------------------------
 // A scalar of one kind is not a value of another
@@ -334,4 +334,4 @@ fn error_argument_too_wide_for_f32() → ∅:
 
 @start
 fn main() → ∅:
-  std.print("type strictness tests passed")
+  std.println("type strictness tests passed")

@@ -1023,7 +1023,7 @@ The function name is a single identifier.  Parameters are enclosed in parenthese
 
 ```
 fn main() → ∅:                               /* no parameters */
-    std.print("hello")
+    std.println("hello")
 
 fn add(a : int, b : int) → int:              /* two typed parameters */
     a + b
@@ -1250,10 +1250,10 @@ fn abs x : int → int:
     x
 
 fn greet name → ∅:
-    std.print("hello {}", name);
+    std.println("hello {}", name);
 ```
 
-In `add`, the expression `a + b` (no semicolon) is the implicit return value.  In `abs`, the early return uses `return`; the final `x` is an implicit return.  In `greet`, the semicolon after `std.print(...)` discards the result, so the function returns `∅`.
+In `add`, the expression `a + b` (no semicolon) is the implicit return value.  In `abs`, the early return uses `return`; the final `x` is an implicit return.  In `greet`, the semicolon after `std.println(...)` discards the result, so the function returns `∅`.
 
 The same functions can equivalently be written with braces:
 
@@ -1462,7 +1462,7 @@ foreach _ := 1…4:
     tick()
 
 foreach i, _ := enumerate(values):
-    std.print("{}", i)
+    std.println("{}", i)
 ```
 
 And a parameter a function does not use, which documents the fact in the signature rather than leaving a reader to check the body:
@@ -1582,7 +1582,7 @@ When the unwrapped value has a narrower unsigned type than the target variable, 
 ∅                       // an optional holding nothing
 ```
 
-`some(v)` is the same constructor written as a keyword and remains accepted; `∃(v)` is the form to use, and the form an optional is shown as when a value is displayed rather than printed — `std.print` unwraps, as it does for every optional.
+`some(v)` is the same constructor written as a keyword and remains accepted; `∃(v)` is the form to use, and the form an optional is shown as when a value is displayed rather than printed — `std.print` and `std.println` unwrap, as they do for every optional.
 
 #### An Optional Is Not the Value It Holds
 
@@ -1696,7 +1696,7 @@ A `match` given a value no arm accepts is an error rather than a silent no-op:
 ```
 match v.get(0):
     ∃(x):
-        std.print("{}", x)
+        std.println("{}", x)
 
 error: match has no arm for ∅; add the missing pattern or a _ arm
 ```
@@ -1710,7 +1710,7 @@ fn never_called() → ∅:
     let v : mut = [1]
     match v.get(0):
         ∃(x):
-            std.print("{}", x)
+            std.println("{}", x)
 
 error: in never_called: match has no arm for ∅; add the missing pattern
 or a _ arm
@@ -1935,7 +1935,7 @@ A lambda is its own function for this purpose.  A `?` inside one returns from th
 ```
 fn caller() → ∅:                                  // plain, and that is fine
     let f : mut = λa : int, b : int → int!: (a ÷ b)?
-    std.print("{}", f(10, 0) ?? ⁻1)
+    std.println("{}", f(10, 0) ?? ⁻1)
 ```
 
 #### The `??` Operator on Expected Values
@@ -2486,10 +2486,10 @@ A range expression `start…end` (using the `…` character) generates an inclus
 
 ```
 foreach i := 1…10:
-    std.print("{}", i)            /* prints 1, 2, 3, ..., 10 */
+    std.println("{}", i)            /* prints 1, 2, 3, ..., 10 */
 
 foreach j := 5…1:
-    std.print("{}", j)            /* prints 5, 4, 3, 2, 1 */
+    std.println("{}", j)            /* prints 5, 4, 3, 2, 1 */
 ```
 
 The direction is determined by comparing `start` and `end`: ascending if `start ≤ end`, descending otherwise.  The type of the loop variable is **untyped int** — its actual integer width is decided by the context in which it is used, not committed to `int` at the range site.
@@ -2500,24 +2500,24 @@ A three-part range `start…step…end` iterates from `start` to `end` (inclusiv
 
 ```
 foreach i := 0…2…10:
-    std.print("{}", i)            /* prints 0, 2, 4, 6, 8, 10 */
+    std.println("{}", i)            /* prints 0, 2, 4, 6, 8, 10 */
 
 foreach j := 1…3…10:
-    std.print("{}", j)            /* prints 1, 4, 7, 10 */
+    std.println("{}", j)            /* prints 1, 4, 7, 10 */
 ```
 
 The step can be negative for descending iteration:
 
 ```
 foreach k := 10…-3…0:
-    std.print("{}", k)            /* prints 10, 7, 4, 1 */
+    std.println("{}", k)            /* prints 10, 7, 4, 1 */
 ```
 
 The step must be a non-zero integer.  The end bound is inclusive: the last value produced is the largest (or smallest, for negative step) value in the sequence that does not exceed the bound.  When the step does not evenly divide the range, the final value may be less than `end`:
 
 ```
 foreach i := 0…3…10:
-    std.print("{}", i)            /* prints 0, 3, 6, 9 (not 10) */
+    std.println("{}", i)            /* prints 0, 3, 6, 9 (not 10) */
 ```
 
 Stepped ranges are particularly useful for block-oriented processing:
@@ -2568,8 +2568,8 @@ When there is exactly **one** variable but **multiple** iterable expressions, th
 
 ```
 foreach pair := 1…3, 10…12:
-    std.print("{}", pair[0])      /* 1, 2, 3 */
-    std.print("{}", pair[1])      /* 10, 11, 12 */
+    std.println("{}", pair[0])      /* 1, 2, 3 */
+    std.println("{}", pair[1])      /* 10, 11, 12 */
 ```
 
 Tuple elements are accessed by integer index (`pair[0]`, `pair[1]`).  In the future, access by unique type name will also be supported when the element types are distinct.  Wrapping rules apply to each iterable independently.
@@ -2663,14 +2663,14 @@ The `enumerate(container)` built-in wraps an iterable so that `foreach` yields `
 
 ```
 foreach pair := enumerate([10, 20, 30]):
-    std.print("{} {}", pair[0], pair[1])      // 0 10, 1 20, 2 30
+    std.println("{} {}", pair[0], pair[1])      // 0 10, 1 20, 2 30
 ```
 
 With two loop variables, the tuple is destructured automatically:
 
 ```
 foreach i, v := enumerate([10, 20, 30]):
-    std.print("{} {}", i, v)                  // 0 10, 1 20, 2 30
+    std.println("{} {}", i, v)                  // 0 10, 1 20, 2 30
 ```
 
 `enumerate` works with arrays, ranges, and any other iterable.  Using `enumerate` outside a `foreach` context is an error.
@@ -3681,7 +3681,7 @@ let dir : mut = std.fs.cwd()
 let it : mut = dir.iterate()
 let e : mut = it.next()
 while e:
-    std.print("{} {}", e.name, e.type)
+    std.println("{} {}", e.name, e.type)
     e ← it.next()
 ```
 
@@ -4412,7 +4412,7 @@ fn error_let_assign() → ∅:
 @expect error "unexpected token: 'fn'"
 fn error_nested_fn() → ∅:
     fn inner() → ∅:
-        std.print("bad")
+        std.println("bad")
 ```
 
 Statement-level `@expect` for warnings inside a `@test` function:
@@ -5345,26 +5345,38 @@ The `t` and `u` flags have no counterpart in the other three languages because t
 
 #### Printing
 
-`std.print` writes a formatted line to standard output.  It takes the same template and the same replacement fields as `std.format`, so a value looks the same whichever way it leaves the program:
+Two calls write to standard output.  Both take the same template and the same replacement fields as `std.format`, so a value looks the same whichever way it leaves the program:
 
 ```
-std.print(fmt_str, args…)
+std.print(fmt_str, args…)      /* what the template produced        */
+std.println(fmt_str, args…)    /* the same, and then a newline      */
 ```
 
-It differs from `std.format` in two ways: there is no allocator, since nothing is retained, and a newline is appended.
+They differ from `std.format` in having no allocator, since nothing is retained.  They differ from each other only in the newline.
+
+`std.println` is the one to reach for when the text is a line of its own, which is most of the time:
 
 ```
 let a : i8 = 42
 let d ¤meter : i32 = 5
 
-std.print("plain")                    /* plain               */
-std.print("{} and {}", 1, "two")      /* 1 and two           */
-std.print("[{:*<6}]", a)              /* [42****]            */
-std.print("{} {:t} {:xt}", a, a, a)   /* 42 42i8 2ai8        */
-std.print("{} {:u} {:ut}", d, d, d)   /* 5 m 5 5i32          */
+std.println("plain")                    /* plain               */
+std.println("{} and {}", 1, "two")      /* 1 and two           */
+std.println("[{:*<6}]", a)              /* [42****]            */
+std.println("{} {:t} {:xt}", a, a, a)   /* 42 42i8 2ai8        */
+std.println("{} {:u} {:ut}", d, d, d)   /* 5 m 5 5i32          */
 ```
 
-The template is not optional.  A call with no arguments is an error, and so is one whose first argument is not a string — that spelling wrote the value itself in an earlier version of the language, and is now a mistake worth reporting rather than a second way to say the same thing.  A single value on its own is written `std.print("{}", v)`, and an empty line is `std.print("")`.
+`std.print` writes nothing after what the template produced, so consecutive calls run together and a line can be built from several of them:
+
+```
+std.print("{} + {} = ", 2, 3)
+std.println("{}", 5)                    /* 2 + 3 = 5           */
+```
+
+Splitting them this way rather than giving one call a flag keeps the common case the shorter thing to write, and keeps the name saying what the call does: a reader does not have to look at an argument to know whether a line ended.
+
+The template is not optional in either.  A call with no arguments is an error, and so is one whose first argument is not a string — that spelling wrote the value itself in an earlier version of the language, and is now a mistake worth reporting rather than a second way to say the same thing.  A single value on its own is written `std.println("{}", v)`, and an empty line is `std.println("")`.  `std.print("")` is not an error but does nothing, which is why only `println`'s diagnostic suggests it.
 
 
 ### Resource Lifetime and Scope
@@ -5377,7 +5389,7 @@ fn main() → ∅:
     let dir : mut = std.fs.cwd()
     let file : mut = dir.open_file("data.bin")
     let data : mut = file.read_file(alloc)
-    std.print("{}", data.sizeof)
+    std.println("{}", data.sizeof)
     // main's scope ends here: file is closed, then dir
 ```
 
@@ -5675,9 +5687,9 @@ Three submodules of `std` expose the context the operating system hands to a run
 ```
 @start
 fn main() → ∅:
-    std.print("running as {}", std.args.program())
+    std.println("running as {}", std.args.program())
     foreach arg := std.args.all():
-        std.print("parameter: {}", arg)
+        std.println("parameter: {}", arg)
 ```
 
 | Method | Result | Description |
@@ -5706,7 +5718,7 @@ The separator may be omitted when no parameter could be mistaken for an interpre
 ```
 let home : mut = std.env.get("HOME") ?? "/"
 foreach name := std.env.names():
-    std.print("{} = {}", name, std.env.get(name) ?? "")
+    std.println("{} = {}", name, std.env.get(name) ?? "")
 ```
 
 | Method | Result | Description |
@@ -5730,7 +5742,7 @@ The operating system does not guarantee that environment variables are valid UTF
 
 ```
 let workers : mut = std.sys.usable_cpus()
-std.print("using {} of {}", workers, std.sys.total_cpus())
+std.println("using {} of {}", workers, std.sys.total_cpus())
 ```
 
 | Method | Result | Description |
@@ -5911,8 +5923,8 @@ This allows sizeof results and other unit-bearing values to flow naturally throu
 When formatting or printing a value with a unit, the unit's display name is appended after a space:
 
 ```
-std.print("{}", 42¤meter)     // prints: 42 m
-std.print("{}", 1024¤kibibyte) // prints: 1024 KiB
+std.println("{}", 42¤meter)     // prints: 42 m
+std.println("{}", 1024¤kibibyte) // prints: 1024 KiB
 ```
 
 The builtin units use conventional abbreviations: `B` for byte, `m` for meter, `s` for second, etc.
@@ -6002,7 +6014,7 @@ A source file may contain only definitions; every statement must live inside a f
 >>> x × 2
 84
 >>> foreach i := 1…3:
-...     std.print("{}", i)
+...     std.println("{}", i)
 ...
 1
 2
@@ -6023,7 +6035,7 @@ Input is read one line at a time and accumulated until it forms something comple
 >>> 1 +
 ... 2
 3
->>> std.print("a",
+>>> std.println("a",
 ...           "b")
 ab
 ```
@@ -6130,9 +6142,9 @@ Two standard library functions end a program before its startup function returns
 
 ```
 fn quit_early() → ∅:
-    std.print("quitting")
+    std.println("quitting")
     std.exit(42)
-    std.print("unreachable")
+    std.println("unreachable")
 ```
 
 `exit` terminates immediately with the given status.  Nothing after the call runs, and the startup function's own return value is not consulted — the two are alternative ways of choosing a status, and an explicit `exit` wins because it happened.
@@ -6211,7 +6223,7 @@ A program can inspect its own call stack at any point, not only when failing:
 ```
 fn log_caller() → ∅:
     foreach frame := std.callstack():
-        std.print("{} at line {} column {}", frame[0], frame[1], frame[2])
+        std.println("{} at line {} column {}", frame[0], frame[1], frame[2])
 ```
 
 `std.callstack()` returns an array of `(name, line, column)` tuples, innermost first.  Entry 0 is the function that called `callstack`, not `callstack` itself, so a function can name itself with `std.callstack()[0][0]` without accounting for the call it just made.

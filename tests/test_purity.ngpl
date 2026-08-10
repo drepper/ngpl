@@ -64,4 +64,4 @@ fn test_pure_calls_impure() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("purity tests passed")
+    std.println("purity tests passed")

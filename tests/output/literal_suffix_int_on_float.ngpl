@@ -2,4 +2,4 @@
 // spelled with an integer type.
 @start
 fn main() → ∅:
-    std.print("{}", 1.5i32)
+    std.println("{}", 1.5i32)

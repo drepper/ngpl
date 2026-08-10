@@ -57,6 +57,11 @@ the sized types do not have.
 Completed
 ---------
 
+[x] std.print writes what its template produced and nothing after it; std.println is the
+    same call with a newline.  Splitting them keeps the common case the shorter thing to
+    write and keeps the name saying what the call does, rather than a flag a reader has to
+    look at to know whether a line ended.
+
 [x] an integer literal takes the width of what it is combined with, as an untyped constant
     does in Go, rather than making the expression arbitrary-precision.  The result then lives
     in that width and wraps or overflows as it would, and a shift of it is bounded by it —

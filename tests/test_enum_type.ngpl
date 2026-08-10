@@ -190,4 +190,4 @@ fn error_array_fill_is_not_a_member() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("enum type tests passed")
+    std.println("enum type tests passed")

@@ -7,4 +7,4 @@ fn returns_a_scalar() → u32:
 
 @start
 fn main() → ∅:
-    std.print("not reached")
+    std.println("not reached")

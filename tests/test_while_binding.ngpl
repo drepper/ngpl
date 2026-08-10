@@ -228,4 +228,4 @@ fn test_nested_bindings() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("while binding tests passed")
+    std.println("while binding tests passed")

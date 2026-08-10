@@ -4,11 +4,11 @@
 // and the comparison below checks the unit as well as the number.
 fn assert_eq_int(a, b, msg:str):
   if a != b:
-    std.print("FAIL: {} (got {} expected {})", msg, a, b)
+    std.println("FAIL: {} (got {} expected {})", msg, a, b)
 
 fn assert_true(cond:bool, msg:str):
   if not cond:
-    std.print("FAIL: {}", msg)
+    std.println("FAIL: {}", msg)
 
 // --- sizeof returns ptrdiff unit ---
 
@@ -212,4 +212,4 @@ fn main():
   test_sizeof_type_versus_value()
   test_sizeof_of_a_scalar_binding()
   test_sizeof_of_written_array_types()
-  std.print("sizeof_units tests passed")
+  std.println("sizeof_units tests passed")

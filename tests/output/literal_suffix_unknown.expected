@@ -1,6 +1,6 @@
 error: 'b16' is not a type, so it cannot be the suffix of 1.5
-  --> tests/output/literal_suffix_unknown.ngpl:4:21
+  --> tests/output/literal_suffix_unknown.ngpl:4:23
     |
-  4 |     std.print("{}", 1.5b16)
-    |                     ^
+  4 |     std.println("{}", 1.5b16)
+    |                       ^
     |

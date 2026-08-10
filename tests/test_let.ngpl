@@ -58,7 +58,7 @@ fn test_untyped_param_immutable() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("let tests passed")
+    std.println("let tests passed")
 
 // ---------------------------------------------------------------------
 // let protects what a binding names, not only the name

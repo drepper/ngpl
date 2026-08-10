@@ -3,5 +3,5 @@ error: @repr(C) applies to a struct, but none follows
     |
   5 | fn not_a_struct() → ∅:
     | ^^
-  6 |     std.print("unreachable")
+  6 |     std.println("unreachable")
     |

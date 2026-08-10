@@ -6,4 +6,4 @@ fn never_called() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("main")
+    std.println("main")

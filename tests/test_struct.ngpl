@@ -209,4 +209,4 @@ fn error_non_struct_binding() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("struct tests passed")
+    std.println("struct tests passed")

@@ -44,4 +44,4 @@ fn test_step_large() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("stepped range tests passed")
+    std.println("stepped range tests passed")

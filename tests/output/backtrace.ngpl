@@ -13,5 +13,5 @@ fn outer(n ¤ptrdiff : i64) → i64:
 
 @start
 fn main() → ∅:
-    std.print("before")
-    std.print("{}", outer(9 ¤ptrdiff))
+    std.println("before")
+    std.println("{}", outer(9 ¤ptrdiff))

@@ -135,4 +135,4 @@ fn test_unitof_runtime_var() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("comptime introspection tests passed")
+    std.println("comptime introspection tests passed")

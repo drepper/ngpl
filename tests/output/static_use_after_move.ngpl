@@ -12,4 +12,4 @@ fn main() → ∅:
     let b := Buffer{n: 7}
     let first := b.consume()
     let second := b.consume()
-    std.print("{} {}", first, second)
+    std.println("{} {}", first, second)

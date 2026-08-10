@@ -213,4 +213,4 @@ fn test_format_too_few_args() → ∅:
 
 @start
 fn main() → ∅:
-    std.print("format tests passed")
+    std.println("format tests passed")

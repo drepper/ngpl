@@ -60,7 +60,7 @@ fn test_alias_mut_var() → ∅:
   x ← 99
   assert_eq(x, 99)
 
-  std.print("type alias tests passed")
+  std.println("type alias tests passed")
 
 // ---------------------------------------------------------------------
 // A named type may be declared below the alias that refers to it

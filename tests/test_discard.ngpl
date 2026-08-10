@@ -117,13 +117,13 @@ fn error_read_in_expression() → ∅:
 @expect error "cannot be read"
 fn error_read_as_argument() → ∅:
     _ ← 5
-    std.print("{}", _)
+    std.println("{}", _)
 
 @expect error "cannot be read"
 fn error_read_as_condition() → ∅:
     _ ← true
     if _:
-        std.print("unreachable")
+        std.println("unreachable")
 
 @expect error "cannot be read"
 fn error_discard_of_itself() → ∅:
@@ -133,7 +133,7 @@ fn error_discard_of_itself() → ∅:
 @expect error "cannot be read"
 fn error_read_foreach_variable() → ∅:
     foreach _ := 1…3:
-        std.print("{}", _)
+        std.println("{}", _)
 
 // Nor an unused parameter.
 @expect error "cannot be read"
@@ -145,4 +145,4 @@ fn reads_its_ignored_parameter(_ : i64) → i64:
 
 @start
 fn main() → ∅:
-    std.print("discard tests passed")
+    std.println("discard tests passed")
