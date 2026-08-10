@@ -22,6 +22,7 @@ from interp.value import (
     coerce_to_type, validate_param_type, validate_type, none, FAST_TYPES,
     register_type_alias, register_sum_type, register_enum_type,
     sum_type_alternatives, register_user_type, DISCARD_NAME, is_type_name,
+    register_struct_type,
     _split_optional_type, _TYPE_BITS, FLOAT_TYPES, resolve_type_alias,
     check_bootstrap_type,
 )
@@ -1109,7 +1110,7 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                                     f"'{field_name}'")
                 except TypeError as e:
                     raise DefinitionError(str(e)) from None
-            register_user_type(defn.name)
+            register_struct_type(defn.name)
             st = StructType(defn.name, defn.fields, repr_kind=defn.repr_kind)
             env.define(defn.name, st)
 

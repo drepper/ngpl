@@ -26,10 +26,14 @@ Two rules hold:
 - A feature outside the subset is refused rather than ignored.  Using one is an error naming the
   feature, so a program that runs is one the full language would run the same way.
 
-Every item below that is still outstanding is tagged `[FULL]`: it is part of the full language and
-not yet part of the bootstrap.  When an item is implemented the tag goes with the checkmark, and
-the feature has crossed into the bootstrap language.  The boundary only moves that way; nothing
-leaves the bootstrap once it is in.
+An outstanding item tagged `[FULL]` is part of the full language and not yet part of the
+bootstrap.  When it is implemented the tag goes with the checkmark, and the feature has crossed
+into the bootstrap language.  The boundary only moves that way; nothing leaves the bootstrap once
+it is in.
+
+An outstanding item with no tag is not a missing feature but a gap in one the bootstrap already
+has: something it accepts that it should refuse, or reports less well than it should.  Those are
+corrections rather than crossings, so no tag travels with the checkmark.
 
 `spec/ngpl.md` marks the same boundary from the other side, so a section describing a feature the
 bootstrap does not have says so.
@@ -52,6 +56,10 @@ the sized types do not have.
 
 Completed
 ---------
+
+[x] check a struct-typed parameter at the call, and a binding declared with a struct type,
+    so the wrong struct is reported where it is passed rather than at the first field that
+    turns out to be missing.
 
 [x] @min and @max giving the extreme values a numeric type can hold, as C++'s
     numeric_limits max() and lowest() do.  Invalid for anything else.

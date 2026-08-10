@@ -1152,6 +1152,30 @@ def is_type_name(name: str) -> bool:
             or _parse_int_width(name) is not None)
 
 
+# Struct names, so that a parameter or binding naming one can be held
+# to it the way an enum or a sum type is.
+_STRUCT_TYPES: set[str] = set()
+
+
+def register_struct_type(name: str):
+    """Register a struct's name as a type that may be written down."""
+    _STRUCT_TYPES.add(name)
+    _USER_TYPES.add(name)
+
+
+def is_struct_type(name: str) -> bool:
+    """Whether a type name names a struct."""
+    return name in _STRUCT_TYPES
+
+
+def struct_type_admits(name: str, value: "Value") -> bool:
+    """Whether a value is an instance of the named struct."""
+    inner = value.value if isinstance(value, SomeValue) else value
+    return (isinstance(inner, ObjectValue)
+            and isinstance(inner.obj, StructInstance)
+            and inner.obj.struct_type.name == name)
+
+
 def register_user_type(name: str):
     """Register a user-defined type name (struct, etc.)."""
     _USER_TYPES.add(name)
@@ -1506,6 +1530,13 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
     if is_generic_type(param_type):
         return value
 
+    if param_type in _STRUCT_TYPES:
+        if not struct_type_admits(param_type, value):
+            raise TypeError(
+                f"{func_name}: argument '{param_name}' expected "
+                f"{param_type}, got {runtime_type_of(value)}")
+        return value
+
     if param_type in _ENUM_TYPES:
         if not (isinstance(value, EnumValue)
                 and value.enum_type.name == param_type):
@@ -1601,6 +1632,13 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
     # type here describes the elements rather than the array.
     scalar = not (isinstance(value, ObjectValue)
                   and isinstance(value.obj, ArrayValue))
+
+    if scalar and target_width in _STRUCT_TYPES:
+        if not struct_type_admits(target_width, value):
+            raise TypeError(
+                f"'{target_width}' is a struct, "
+                f"but the value is {runtime_type_of(value)}")
+        return value
 
     if scalar and target_width in _ENUM_TYPES:
         if not (isinstance(value, EnumValue)

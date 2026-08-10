@@ -4450,6 +4450,24 @@ would not survive the conversion
 
 The same holds at an argument, where the conversion is the same one.
 
+#### A Struct Type Is Checked Where It Is Met
+
+A parameter or binding declared with a struct type takes that struct and nothing else, in the same way an enum or a sum type does:
+
+```
+fn area(p : Point) → i32:
+    p.x
+
+area(Other{y: 5})    // error: argument 'p' expected Point, got Other
+area(5)              // error: argument 'p' expected Point, got int
+
+let a : Point = Other{y: 5}
+
+error: 'Point' is a struct, but the value is Other
+```
+
+The check is at the boundary rather than at first use, so the wrong struct is reported where it is passed instead of later, wherever a field turns out to be missing.
+
 #### Kinds Do Not Run Together
 
 Widths convert within a kind, and an integer becomes a float where one is asked for.  The kinds themselves do not: a string is not a number, a number is not a string, and a boolean is neither.

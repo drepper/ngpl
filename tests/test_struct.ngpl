@@ -155,6 +155,58 @@ fn test_reassign_after_consume() → ∅:
     p ← Point.new(5.0, 6.0)
     assert_eq(p.sum_components(), 11.0)
 
+// ---------------------------------------------------------------------
+// A struct type is checked where a value meets it
+// ---------------------------------------------------------------------
+
+struct Checked:
+    x : i32
+
+struct Other:
+    y : i32
+
+fn takes_checked(p : Checked) → i32:
+    p.x
+
+fn takes_checked_ref(p : &Checked) → i32:
+    p.x
+
+@test
+fn test_the_right_struct_is_taken() → ∅:
+    let a := Checked{x: 1}
+    assert_eq(takes_checked(a), 1)
+    let b : mut = Checked{x: 2}
+    assert_eq(takes_checked_ref(&b), 2)
+
+@test
+fn test_a_binding_declared_with_a_struct_type() → ∅:
+    let a : Checked = Checked{x: 3}
+    assert_eq(a.x, 3)
+
+// The wrong struct is caught where it is passed, not later wherever a
+// field turns out to be missing.
+@test
+@expect error "argument 'p' expected Checked, got Other"
+fn error_wrong_struct_argument() → ∅:
+    _ ← takes_checked(Other{y: 5})
+
+@test
+@expect error "argument 'p' expected Checked, got int"
+fn error_non_struct_argument() → ∅:
+    _ ← takes_checked(5)
+
+@test
+@expect error "'Checked' is a struct, but the value is Other"
+fn error_wrong_struct_binding() → ∅:
+    let a : Checked = Other{y: 5}
+    _ ← a.x
+
+@test
+@expect error "'Checked' is a struct, but the value is str"
+fn error_non_struct_binding() → ∅:
+    let a : Checked = "hi"
+    _ ← a.x
+
 @start
 fn main() → ∅:
     std.print("struct tests passed")
