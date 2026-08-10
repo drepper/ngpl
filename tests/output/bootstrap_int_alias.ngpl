@@ -1,0 +1,6 @@
+// The bootstrap does not provide the arbitrary-precision types.
+type MyInt = int
+
+@start
+fn main() → ∅:
+    ∅

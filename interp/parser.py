@@ -473,6 +473,8 @@ class Parser:
                 ret_tok = self._cur()
                 self.pos += 1
                 ret_type = ret_tok.value
+                # A return type may name an array, as a parameter may.
+                ret_type += self._parse_array_suffix()
                 # A return type may state a unit, as a parameter may,
                 # so a function can hand back a measured value.
                 if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":

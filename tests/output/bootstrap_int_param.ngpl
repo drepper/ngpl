@@ -1,0 +1,7 @@
+// The bootstrap does not provide the arbitrary-precision types.
+fn f(x : int) → ∅:
+    ∅
+
+@start
+fn main() → ∅:
+    f(1)

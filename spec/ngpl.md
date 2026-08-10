@@ -34,6 +34,46 @@ The interpreter serves as both a development environment and the bootstrap imple
 - The interpreter exposes internal state — parse trees, type information, generated intermediate representations — enabling tools that visualize and analyze code.
 - It bootstraps the language: the full compiler is written in the language itself, with the interpreter serving as the initial compilation target.
 
+### Two Languages, One Specification
+
+This document specifies the **full language**.  What the Python interpreter in `interp/` accepts is the **bootstrap language**, a strict subset of it.
+
+The distinction is deliberate.  A bootstrap implementation exists to be small enough to write by hand and to get a self-hosting compiler off the ground; it does not need every feature, and paying for the ones it does not need would defeat its purpose.  So the bootstrap language is defined by what `interp/` implements, and everything else is marked here as belonging to the full language.
+
+Two rules follow from this:
+
+- **The subset is strict.**  A program the bootstrap accepts means the same thing in the full language.  The bootstrap never accepts something the full language rejects, and never gives an accepted program a different meaning.
+- **A feature outside the subset is refused, not ignored.**  Using one in the bootstrap is an error naming the feature, rather than a silent difference in behaviour.  A program that runs is a program the full language would run the same way.
+
+The boundary moves in one direction: as `interp/` grows, features cross from the full language into the bootstrap and their marks are removed here.  Nothing crosses the other way.
+
+Sections describing a feature outside the bootstrap subset are marked:
+
+> **Full language.**  Not available in the bootstrap implementation.
+
+[TODO.md](../TODO.md) tracks the same boundary from the other side, tagging each unimplemented item with `[FULL]`.
+
+#### Arbitrary-Precision Numbers
+
+`int` and `float` are the arbitrary-precision types, and are **full language** only.  A variable, parameter, or return type naming one is refused by the bootstrap:
+
+```
+let n : int = 5
+
+error: 'int' is an arbitrary-precision type, which the bootstrap
+implementation does not provide; use a sized type such as i64
+```
+
+This is the one place where the subset is visible in ordinary code, so it is worth being precise about what is and is not affected.  An *untyped* integer literal is unaffected — it is arbitrary-precision while it is being computed with, and settles on the type it is used at:
+
+```
+let n := 5              // fine, settles as needed
+let n : i64 = 5         // fine
+let big := 1 « 40           // fine, computed at full precision
+```
+
+What the bootstrap does not provide is a *variable* that stays arbitrary-precision, since that needs a runtime representation the sized types do not.
+
 ### The Compiler
 
 The compiler transforms source into efficient machine code:
@@ -101,6 +141,8 @@ The language provides fixed-width integer types with explicit signedness and bit
 
 Additionally, `int` denotes an arbitrary-precision integer with no fixed width.  This type can represent any integer value regardless of magnitude.
 
+> **Full language.**  `int` and `float` are not available as declared types in the bootstrap implementation.  See [Arbitrary-Precision Numbers](#arbitrary-precision-numbers).
+
 ### Untyped Integer Constants
 
 Integer literals in source code are of type **`untyped int`**.  An untyped integer is not yet committed to any specific integer type — it is a compile-time value that can be implicitly coerced to any integer type whose range can represent the value.
@@ -113,7 +155,7 @@ This concept is similar to Go's untyped constants and Odin's untyped integers.  
 
 3. **Arithmetic on untyped integers.**  When two `untyped int` values are combined with an arithmetic operator, the result is also `untyped int` with arbitrary precision — no overflow occurs.  This allows compile-time constant expressions to compute exact results regardless of magnitude.
 
-4. **Type inference with `let name := expr`.**  When a binding is defined with `:=` (no explicit type) and the initializer is an `untyped int`, the binding's type is `int` (arbitrary-precision).  To get a fixed-width type, use the explicit form: `let name : u32 = expr`.
+4. **Type inference with `let name := expr`.**  When a binding is defined with `:=` (no explicit type) and the initializer is an `untyped int`, the binding's type is `int` (arbitrary-precision).  To get a fixed-width type, use the explicit form: `let name : u32 = expr`.  The inferred form stays available in the bootstrap; only *writing* `int` is refused there.
 
 5. **Array initialization.**  In `let name : mut u32[64] = 0`, the `0` is an `untyped int` that coerces to the array's element type `u32`.
 

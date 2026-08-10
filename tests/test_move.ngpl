@@ -1,17 +1,17 @@
 // Tests for move semantics: consuming self invalidates the caller's variable.
 
 struct Bag:
-    items: int
+    items: i64
     label: str
 
 impl Bag:
-    fn new(n: int, label: str) -> Bag:
+    fn new(n: i64, label: str) -> Bag:
         Bag { items: n, label: label }
 
-    fn peek(&self) -> int:
+    fn peek(&self) -> i64:
         self.items
 
-    fn take(self) -> int:
+    fn take(self) -> i64:
         self.items
 
 // Consuming method works and returns the value.

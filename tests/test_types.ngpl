@@ -18,7 +18,7 @@ fn test_optional_param_some() → ∅:
 fn test_optional_param_none() → ∅:
     assert_eq(unwrap_or_zero(∅), 0)
 
-fn unwrap_or_zero(x : int?) → int:
+fn unwrap_or_zero(x : i64?) → i64:
     x ?? 0
 
 // ---------------------------------------------------------------------

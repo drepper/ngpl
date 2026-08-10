@@ -10,7 +10,7 @@ let _ := 1 + 1
 // Assigning to _ discards
 // ---------------------------------------------------------------------
 
-fn counted(n : int) → int:
+fn counted(n : i64) → i64:
     n × 2
 
 // The right-hand side still runs; only its value is dropped.
@@ -89,7 +89,7 @@ fn test_foreach_pair_discard() → ∅:
     assert_eq(total, 3)
 
 // A parameter the function does not use.
-fn second(_ : int, keep : int) → int:
+fn second(_ : i64, keep : i64) → i64:
     keep
 
 @test
@@ -140,7 +140,7 @@ fn error_read_foreach_variable() → ∅:
 fn error_read_unused_parameter() → ∅:
     let n : mut = reads_its_ignored_parameter(1)
 
-fn reads_its_ignored_parameter(_ : int) → int:
+fn reads_its_ignored_parameter(_ : i64) → i64:
     _
 
 @start

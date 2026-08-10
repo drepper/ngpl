@@ -1,0 +1,68 @@
+// test_bootstrap.ngpl -- what the bootstrap implementation refuses
+//
+// The Python interpreter in interp/ implements the bootstrap language,
+// a strict subset of the full language.  int and float are the
+// arbitrary-precision types and belong to the full language, so a
+// declaration naming one is refused rather than quietly given a
+// different meaning.
+//
+// An untyped literal is unaffected: it is arbitrary-precision while it
+// is computed with and settles on the type it is used at.
+
+// ---------------------------------------------------------------------
+// What is still allowed
+// ---------------------------------------------------------------------
+
+@test
+fn test_untyped_literals_are_unaffected() → ∅:
+    let n := 5
+    let big := 1 « 40
+    assert_eq(n, 5)
+    assert_eq(big, 1099511627776)
+
+@test
+fn test_sized_types_are_the_way_to_declare() → ∅:
+    let a : i64 = 5
+    let b : f64 = 1.5
+    let c : u8 = 200
+    assert_eq(a, 5)
+    assert(b == 1.5)
+    assert_eq(c, 200)
+
+// A computation may exceed a sized type while it stays untyped.
+@test
+fn test_untyped_arithmetic_keeps_its_precision() → ∅:
+    let wide := (1 « 40) + 1
+    assert_eq(wide, 1099511627777)
+
+// ---------------------------------------------------------------------
+// What is refused
+// ---------------------------------------------------------------------
+
+@test
+@expect error "'int' is an arbitrary-precision type"
+fn error_int_binding() → ∅:
+    let n : int = 5
+
+@test
+@expect error "'float' is an arbitrary-precision type"
+fn error_float_binding() → ∅:
+    let f : float = 1.5
+
+@test
+@expect error "use a sized type such as i64"
+fn error_int_binding_names_the_replacement() → ∅:
+    let n : int = 5
+
+@test
+@expect error "use a sized type such as f64"
+fn error_float_binding_names_the_replacement() → ∅:
+    let f : float = 1.5
+
+// The refusal reaches every place a type is declared; the parameter,
+// return, field, and alias cases are output tests, since those are
+// reported before any function runs.
+
+@start
+fn main() → ∅:
+    std.print("bootstrap tests passed")

@@ -1,0 +1,7 @@
+// The bootstrap does not provide the arbitrary-precision types.
+struct S:
+    n : int
+
+@start
+fn main() → ∅:
+    ∅

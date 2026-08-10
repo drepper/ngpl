@@ -1,17 +1,17 @@
 // An error raised several calls deep reports the whole chain, innermost
 // first, naming only the program's own functions.
 
-fn innermost(n : int) → int:
+fn innermost(n ¤ptrdiff : i64) → i64:
     let values := [1, 2]
     values[n]
 
-fn middle(n : int) → int:
+fn middle(n ¤ptrdiff : i64) → i64:
     innermost(n) + 1
 
-fn outer(n : int) → int:
+fn outer(n ¤ptrdiff : i64) → i64:
     middle(n) × 2
 
 @start
 fn main() → ∅:
     std.print("before")
-    std.print(outer(9))
+    std.print(outer(9 ¤ptrdiff))

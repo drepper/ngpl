@@ -77,7 +77,7 @@ fn test_resultof_optional() → ∅:
 fn test_resultof_unknown() → ∅:
     let t : mut = @resultof(nonexistent)
 
-fn returns_int() → int:
+fn returns_int() → i64:
     1
 
 // A binding's type is static even where its value is not, so @typeof

@@ -184,7 +184,7 @@ fn test_shift_right_past_the_width_is_a_compile_error() → ∅:
 
 // A count that is not written down cannot be judged in advance, so
 // that shift reports when it runs.
-fn shift_by(n : int) → int:
+fn shift_by(n : i64) → i64:
     let b : byte = 3
     match b « n:
         ∃(v):  v
@@ -202,7 +202,7 @@ fn test_shift_of_an_untyped_integer() → ∅:
     assert_eq(n « 40, 1099511627776)
 
 // The error can be recovered from, as division by zero can.
-fn recover_with(n : int) → int:
+fn recover_with(n : i64) → i64:
     let b : byte = 3
     (b « n) ?? 99
 

@@ -55,11 +55,11 @@ fn test_chain_order() → ∅:
     assert(outer_of_chain())
 
 // The stack grows and shrinks with the calls it describes.
-fn depth() → int:
+fn depth() → i64:
     let frames := std.callstack()
     @dropunit(frames.sizeof)
 
-fn depth_plus_one() → int:
+fn depth_plus_one() → i64:
     depth()
 
 @test

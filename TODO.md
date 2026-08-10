@@ -6,8 +6,54 @@ add test cases and adjust the language specification.  Once a to do item is comp
 checkmark, commit the change, and change back to main.
 
 
+The Bootstrap Language and the Full Language
+--------------------------------------------
+
+The Python interpreter in `interp/` is the **bootstrap implementation**.  What it accepts is the
+**bootstrap language**, which is a strict subset of the full language that `spec/ngpl.md`
+specifies.  The subset is defined by the implementation: a feature is in the bootstrap language
+when `interp/` implements it, and belongs to the full language until then.
+
+A bootstrap exists to be small enough to write by hand and to carry a self-hosting compiler far
+enough to take over.  It does not need every feature, and paying for the ones it does not need
+would defeat the point of having one.
+
+Two rules hold:
+
+- The subset is strict.  A program the bootstrap accepts means the same thing in the full
+  language.  The bootstrap never accepts what the full language rejects, and never gives an
+  accepted program a different meaning.
+- A feature outside the subset is refused rather than ignored.  Using one is an error naming the
+  feature, so a program that runs is one the full language would run the same way.
+
+Every item below that is still outstanding is tagged `[FULL]`: it is part of the full language and
+not yet part of the bootstrap.  When an item is implemented the tag goes with the checkmark, and
+the feature has crossed into the bootstrap language.  The boundary only moves that way; nothing
+leaves the bootstrap once it is in.
+
+`spec/ngpl.md` marks the same boundary from the other side, so a section describing a feature the
+bootstrap does not have says so.
+
+### Already Refused
+
+`int` and `float`, the arbitrary-precision types, are full-language only.  A variable, parameter,
+return type, struct field, or type alias naming one is an error in the bootstrap:
+
+    let n : int = 5
+
+    error: 'n': 'int' is an arbitrary-precision type, which the bootstrap
+    implementation does not provide; use a sized type such as i64
+
+An *untyped* literal is unaffected.  It is arbitrary-precision while it is being computed with and
+settles on the type it is used at, so `let n := 5` and `1 « 40` are both fine.  What the bootstrap
+does not provide is a variable that stays arbitrary-precision, since that needs a representation
+the sized types do not have.
+
+
 Completed
 ---------
+
+[x] sum types (tagged unions, equivalent to std::variant).  match construct to deconstruct.
 
 [x] allow lambda functions to have bodies of multiple statement.  Indicate using the usual syntax of
     colon at the end of { } block.
@@ -54,26 +100,25 @@ Completed
 Type System
 -----------
 
-[ ] arbitrary-precision floating-point type for extended precision computation.
+[ ] [FULL] arbitrary-precision floating-point type for extended precision computation.
 
-[ ] ratio type (arbitrary-precision numerator/denominator).  Automatic decay to float when mixed
+[ ] [FULL] ratio type (arbitrary-precision numerator/denominator).  Automatic decay to float when mixed
     with floating-point values.  Untyped ratio preserved at compile time.
 
 [x] unit system: attach units (meters, seconds, bytes, count, …) to numeric types.  Enforce
     dimensional consistency: addition requires same unit, multiplication/division derive units.
     Design derived units and attribute-based annotations (e.g., radius vs diameter).
 
-[ ] sum types (tagged unions, equivalent to std::variant).  match construct to deconstruct.
 
 [x] product types (structs) with unspecified layout by default.  Attributes to force layout.
     @repr(C) gives a struct the platform C layout and makes .sizeof, .alignof, and
     .offsetof(name) available; without it those queries are an error rather than a guess.
     Field types without a C representation are rejected where the field is declared.
 
-[ ] further @repr kinds beyond C: packed (no padding at all), and possibly a transparent
+[ ] [FULL] further @repr kinds beyond C: packed (no padding at all), and possibly a transparent
     single-field form.  Decide whether alignment can be raised as well as suppressed.
 
-[ ] type aliases and user-defined cast functions (comptime, invoked in preference to builtins).
+[ ] [FULL] type aliases and user-defined cast functions (comptime, invoked in preference to builtins).
 
 [x] add binary power operator ↑.  for integers on the left only allow integers on the right.  Ensure
     overflow and underflow are detected.
@@ -85,21 +130,21 @@ Type System
 Data Structures
 ---------------
 
-[ ] map type with literal syntax for initialized variables and member-function operations
+[ ] [FULL] map type with literal syntax for initialized variables and member-function operations
     (insert, lookup, delete, iterate).
 
-[ ] set type with opaque representation (bitmask, array/vector, or tree depending on attributes).
+[ ] [FULL] set type with opaque representation (bitmask, array/vector, or tree depending on attributes).
     Sets on enumerations restrict to defined values.
 
-[ ] matrix type: 2D+ built-in data structure with arithmetic operations (multiply, transpose,
+[ ] [FULL] matrix type: 2D+ built-in data structure with arithmetic operations (multiply, transpose,
     element-wise ops).  Attributes: diagonal, upper/lower triangle, sparse.
 
-[ ] tensor type for limited dimensionality with GPU-offloadable operations.
+[ ] [FULL] tensor type for limited dimensionality with GPU-offloadable operations.
 
-[ ] vector/matrix attributes: sparse, list-backed (O(n) access, stable addresses),
+[ ] [FULL] vector/matrix attributes: sparse, list-backed (O(n) access, stable addresses),
     tree-backed (O(log n) access).
 
-[ ] slice/view types for arrays, matrices, and strings following Rust ownership model.
+[ ] [FULL] slice/view types for arrays, matrices, and strings following Rust ownership model.
 
 
 Control Flow and Expressions
@@ -114,48 +159,48 @@ Control Flow and Expressions
     division, a written-out ∃/∅/∄, or a builtin optional-returning method -- and at run
     time otherwise; it will reach further as type inference grows.
 
-[ ] loop break/continue statements.  Non-local exits from nested loops.
+[ ] [FULL] loop break/continue statements.  Non-local exits from nested loops.
 
-[ ] multiple statements on one line with semicolon separator.
+[ ] [FULL] multiple statements on one line with semicolon separator.
 
-[ ] insecure mode scoping: per compilation-unit, function, or block (like Rust unsafe).
+[ ] [FULL] insecure mode scoping: per compilation-unit, function, or block (like Rust unsafe).
 
-[ ] lazy evaluation support: lazy attribute on expressions/functions, with eager as default.
+[ ] [FULL] lazy evaluation support: lazy attribute on expressions/functions, with eager as default.
     Interaction with coroutines for opportunistic evaluation.
 
 
 Functions and Combinators
 -------------------------
 
-[ ] purity enforcement: functions pure by default, impure annotation required for global
+[ ] [FULL] purity enforcement: functions pure by default, impure annotation required for global
     variable access.  Strict mode disallows impure functions.
 
-[ ] Listable/threadable attribute: functions auto-map over array/vector arguments
+[ ] [FULL] Listable/threadable attribute: functions auto-map over array/vector arguments
     (like Wolfram's Listable or APL's implicit mapping).
 
-[ ] combinator glyphs for function composition and pipelines (APL/BQN/UIUA-inspired).
+[ ] [FULL] combinator glyphs for function composition and pipelines (APL/BQN/UIUA-inspired).
     Ranges-library equivalent for container operations.
 
-[ ] optional monad methods: and_then, or_else, and other chaining operations on optional values.
+[ ] [FULL] optional monad methods: and_then, or_else, and other chaining operations on optional values.
 
-[ ] user-defined operators with Unicode code points from mathematical operator classes.
+[ ] [FULL] user-defined operators with Unicode code points from mathematical operator classes.
 
-[ ] prefix/functional form of infix operators (like Forth reverse notation or Haskell sections).
+[ ] [FULL] prefix/functional form of infix operators (like Forth reverse notation or Haskell sections).
 
 
 Compile-Time and Metaprogramming
 ---------------------------------
 
-[ ] comptime functions: attribute to mark functions as evaluable at compile time when all
+[ ] [FULL] comptime functions: attribute to mark functions as evaluable at compile time when all
     arguments are constant.  if constexpr equivalent for conditional compilation.
 
-[ ] hygienic macro system: expansion after scanning, before parsing.  Distinct invocation
+[ ] [FULL] hygienic macro system: expansion after scanning, before parsing.  Distinct invocation
     syntax from function calls.  Reference Rust and Common Lisp macro systems.
 
-[ ] reflection/introspection: access to parse tree in comptime functions.  Create derived
+[ ] [FULL] reflection/introspection: access to parse tree in comptime functions.  Create derived
     types and functions.  Match C++26, Rust, and Zig reflection capabilities.
 
-[ ] function replacement: runtime replacement of @replaceable functions via compiled blobs
+[ ] [FULL] function replacement: runtime replacement of @replaceable functions via compiled blobs
     with matching type signatures.  Concurrent execution support.  REPL command to override
     replaceability attribute.  (Partially implemented: @replaceable attribute exists.)
 
@@ -163,33 +208,33 @@ Compile-Time and Metaprogramming
 Module System
 -------------
 
-[ ] module system for composable programs and code reuse.  Name mangling with module prefix.
+[ ] [FULL] module system for composable programs and code reuse.  Name mangling with module prefix.
     Import/export declarations.  Visibility control.
 
-[ ] multi-file compilation: compiler accepts multiple source files, build function determines
+[ ] [FULL] multi-file compilation: compiler accepts multiple source files, build function determines
     compilation strategy.
 
 
 Contract System
 ---------------
 
-[ ] contracts/assertions with human-understandable descriptions.  Inspired by C++26 contracts.
+[ ] [FULL] contracts/assertions with human-understandable descriptions.  Inspired by C++26 contracts.
     Pre/post conditions on functions.  Violations can log, terminate, or trigger debugger.
 
-[ ] logging facility integrated into the runtime.  Callable from comptime and runtime code.
+[ ] [FULL] logging facility integrated into the runtime.  Callable from comptime and runtime code.
     Logging functions can terminate the program.
 
 
 Memory and Lifetime Management
 -------------------------------
 
-[ ] lifetime system akin to Rust: borrow checker, ownership, move semantics.
+[ ] [FULL] lifetime system akin to Rust: borrow checker, ownership, move semantics.
     Stack allocation preferred for local lifetimes.  Partially started: foreach can borrow an
     array with & (read) or &mut (write through to the elements), and a mutable borrow of an
     immutable binding is rejected.  Still missing: borrows anywhere other than a foreach
     iterable, and any check that two borrows do not overlap.
 
-[ ] reference counting for boxed values with implicit deallocation.
+[ ] [FULL] reference counting for boxed values with implicit deallocation.
 
 [x] defer statement for explicit cleanup at scope exit.  Decided against: cleanup is
     attached to the type rather than written out at each acquisition, so a value holding
@@ -197,12 +242,12 @@ Memory and Lifetime Management
     Ownership passes on return and is not taken by parameters.  Implemented for open
     files and directories; close() releases early and makes the value unavailable.
 
-[ ] follow resource ownership into globals, struct fields, and array elements, and release
+[ ] [FULL] follow resource ownership into globals, struct fields, and array elements, and release
     a resource when the binding holding it is overwritten (rebinding in a loop currently
     accumulates descriptors until the function returns).  Needs the ownership/borrow system.
     Temporaries that are never bound are already released with their statement.
 
-[ ] address spaces: named memory regions with read/write/exec flags and access costs.
+[ ] [FULL] address spaces: named memory regions with read/write/exec flags and access costs.
     Separate code and data address spaces.  Support for accelerator memory, cross-process
     memory, and per-thread memory regions.
 
@@ -210,33 +255,33 @@ Memory and Lifetime Management
 Concurrency
 -----------
 
-[ ] gang concurrency: execution context pools for SIMD-like parallel execution (OpenMP-style).
+[ ] [FULL] gang concurrency: execution context pools for SIMD-like parallel execution (OpenMP-style).
 
-[ ] job concurrency: explicitly created execution contexts for independent tasks.
+[ ] [FULL] job concurrency: explicitly created execution contexts for independent tasks.
 
-[ ] coroutines: implicit support via lazy evaluation, explicit creation with type system
+[ ] [FULL] coroutines: implicit support via lazy evaluation, explicit creation with type system
     representation.  Execution context pool reuse for coroutine scheduling.
 
-[ ] communication channels: Transputer/Occam-style channels, Go-style channels.
+[ ] [FULL] communication channels: Transputer/Occam-style channels, Go-style channels.
     Mapping to OS message queues.
 
-[ ] memory model: define shared vs private memory for threads.  Not required to follow POSIX.
+[ ] [FULL] memory model: define shared vs private memory for threads.  Not required to follow POSIX.
     Consistent work-splitting for non-associative parallel operations.
 
 
 Floating-Point
 --------------
 
-[ ] Inf/NaN handling: fault on Inf/NaN, deferred checking (check after full computation).
+[ ] [FULL] Inf/NaN handling: fault on Inf/NaN, deferred checking (check after full computation).
     Per-function or per-scope configuration.
 
-[ ] precision improvements: Kahan summation, Veltkamp splits / Dekker multiplication,
+[ ] [FULL] precision improvements: Kahan summation, Veltkamp splits / Dekker multiplication,
     FMA operations.
 
-[ ] rounding mode control: per-scope or per-function attribute, not compile-time.
+[ ] [FULL] rounding mode control: per-scope or per-function attribute, not compile-time.
     Assumption mode vs active selection.
 
-[ ] associativity exploitation: opt-in reordering for non-bit-accurate computation.
+[ ] [FULL] associativity exploitation: opt-in reordering for non-bit-accurate computation.
 
 [x] add the root functions using unary √, ∛, ∜.  only allowed for floating-point values.  Allowed
     in specification for units.
@@ -245,26 +290,26 @@ Floating-Point
 String and I/O
 --------------
 
-[ ] multi-line string literals ("""…""" syntax, possibly with " continuation prefix).
+[ ] [FULL] multi-line string literals ("""…""" syntax, possibly with " continuation prefix).
 
-[ ] binary and hexadecimal number literal suffixes (₂ for binary, ₕ for hexadecimal).
+[ ] [FULL] binary and hexadecimal number literal suffixes (₂ for binary, ₕ for hexadecimal).
     Also add octal literals: file modes and the S_IF* constants are conventionally
     written in octal, and std.filetype's values have to be spelled in hex without them.
 
-[ ] format string type-specific formatting via attributes on type definitions (like Rust
+[ ] [FULL] format string type-specific formatting via attributes on type definitions (like Rust
     Display/Debug, Haskell Show).
 
 
 Build System and Tooling
 -------------------------
 
-[ ] built-in build system: @build-annotated comptime function provides build recipe.
+[ ] [FULL] built-in build system: @build-annotated comptime function provides build recipe.
     Recompiled when source changes.  SBOM generation in output binary.
 
-[ ] JIT compilation in interpreter: background compilation of hot functions, transparent
+[ ] [FULL] JIT compilation in interpreter: background compilation of hot functions, transparent
     switchover.  REPL commands to inspect generated code, machine code, and parse trees.
 
-[ ] language server protocol (LSP) mode: expose type information, optimization decisions,
+[ ] [FULL] language server protocol (LSP) mode: expose type information, optimization decisions,
     diagnostics, and code navigation.
 
 [x] REPL: interactive read-eval-print loop when no startup function is defined or on request.
@@ -272,29 +317,29 @@ Build System and Tooling
     source file is given, or when the source defines no @start function.  Accepts definitions,
     statements, and bare expressions; layout blocks are terminated by an empty line.
 
-[ ] compiler mode: ahead-of-time compilation to native code.  Startup function designation
+[ ] [FULL] compiler mode: ahead-of-time compilation to native code.  Startup function designation
     via command line or attribute.
 
 
 Runtime
 -------
 
-[ ] native runtime using kernel interfaces directly (no libc dependency).  io_uring-based
+[ ] [FULL] native runtime using kernel interfaces directly (no libc dependency).  io_uring-based
     async I/O on Linux.
 
-[ ] concurrency via clone3 and futex on Linux.
+[ ] [FULL] concurrency via clone3 and futex on Linux.
 
-[ ] Vulkan code generation for GPU offloading of vector/matrix/tensor operations.
+[ ] [FULL] Vulkan code generation for GPU offloading of vector/matrix/tensor operations.
 
-[ ] minimal runtime initialization: only pull in code for features actually used.
+[ ] [FULL] minimal runtime initialization: only pull in code for features actually used.
 
-[ ] object file format: possibly custom format supporting partial recompilation.
+[ ] [FULL] object file format: possibly custom format supporting partial recompilation.
     Dynamic linking support for system libraries (e.g., Vulkan shared objects).
 
 [x] do not use camelcase for identifiers.  Change all functions in the std module to use
     underscores.  openFile was the last one; it is now open_file, with no alias kept.
 
-[ ] add name member function (no parameters) for directory object which returns the absolute path of
+[ ] [FULL] add name member function (no parameters) for directory object which returns the absolute path of
     the directory.
 
 [x] exit function to terminate the process with the exit code given as argument.  std.exit(code)
@@ -315,20 +360,20 @@ Runtime
 Syntax Decisions Still Open
 ----------------------------
 
-[ ] operator precedence model: traditional precedence, APL-style right-to-left,
+[ ] [FULL] operator precedence model: traditional precedence, APL-style right-to-left,
     or hybrid (precedence for arithmetic, flat for others).
 
-[ ] function call delimiter: parentheses, brackets (Wolfram-style), or no delimiters (Haskell).
+[ ] [FULL] function call delimiter: parentheses, brackets (Wolfram-style), or no delimiters (Haskell).
 
-[ ] integer division semantics: two operators (Python), explicit cast requirement,
+[ ] [FULL] integer division semantics: two operators (Python), explicit cast requirement,
     or ÷ with prefix/suffix modifiers.
 
-[ ] binary/boolean operation semantics on mixed-width integers: reject, zero-extend,
+[ ] [FULL] binary/boolean operation semantics on mixed-width integers: reject, zero-extend,
     or repeat.
 
-[ ] attribute syntax for variables, functions, statements, blocks, and scopes.
+[ ] [FULL] attribute syntax for variables, functions, statements, blocks, and scopes.
 
-[ ] macro invocation syntax: distinguish from function calls (Rust #[...] style, name
+[ ] [FULL] macro invocation syntax: distinguish from function calls (Rust #[...] style, name
     annotation, or different parameter delimiters).
 
 System Environment

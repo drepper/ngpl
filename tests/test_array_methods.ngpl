@@ -363,7 +363,7 @@ fn error_push_through_shared_borrow() → ∅:
     let v : mut = [1, 2]
     pushes_through(&v)
 
-fn pushes_through(arr : &int[]) → ∅:
+fn pushes_through(arr : &i64[]) → ∅:
     arr.push(3)
 
 // ---------------------------------------------------------------------

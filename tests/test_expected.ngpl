@@ -4,7 +4,7 @@
 
 // ---- postfix optional syntax (T?) ----------------------------------------
 
-fn opt_double(x : int?) → int?:
+fn opt_double(x : i64?) → i64?:
     let v := x?
     v × 2
 
@@ -46,7 +46,7 @@ fn test_mod_zero_recovery() → ∅:
 
 // ---- ? propagation for expected values -----------------------------------
 
-fn safe_div(a : int, b : int) → int!:
+fn safe_div(a : i64, b : i64) → i64!:
     (a / b)?
 
 @test
@@ -75,7 +75,7 @@ fn test_div_chain_zero() → ∅:
 
 // ---- expected error is std.errors value ----------------------------------
 
-fn div_or_err(a : int, b : int) → int!:
+fn div_or_err(a : i64, b : i64) → i64!:
     (a / b)?
 
 @test
@@ -97,10 +97,10 @@ fn test_unwrapped_expected_arithmetic() → ∅:
 // T! is the form used throughout; this pins that the long form still
 // parses and means exactly the same thing.
 
-fn long_form(a : int, b : int) → int?std.errors:
+fn long_form(a : i64, b : i64) → i64?std.errors:
     (a / b)?
 
-fn short_form(a : int, b : int) → int!:
+fn short_form(a : i64, b : i64) → i64!:
     (a / b)?
 
 @test
@@ -113,7 +113,7 @@ fn test_long_and_short_agree_on_err() → ∅:
 
 // A value from one is accepted where the other is expected, which it
 // could not be if they were different types.
-fn takes_short(x : int!) → int:
+fn takes_short(x : i64!) → i64:
     x ?? 0
 
 @test
@@ -122,7 +122,7 @@ fn test_long_form_value_fits_short_form_parameter() → ∅:
 
 // ---- T! abbreviation ------------------------------------------------------
 
-fn bang_div(a : int, b : int) → int!:
+fn bang_div(a : i64, b : i64) → i64!:
     (a / b)?
 
 @test
@@ -135,7 +135,7 @@ fn test_bang_return_err() → ∅:
     let r := bang_div(10, 0)
     assert_eq(r ?? ⁻1, ⁻1)
 
-fn bang_param(x : int!) → int:
+fn bang_param(x : i64!) → i64:
     x ?? 0
 
 @test

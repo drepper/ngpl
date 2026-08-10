@@ -1,6 +1,6 @@
-// A @repr(C) struct cannot hold an arbitrary-precision field: there is
-// no C type to match it to.  The error names the field, not just the
-// struct, and points at the sized type to use instead.
+// An arbitrary-precision field has no C type to match it to.  In the
+// bootstrap it does not get that far: the type itself is not provided,
+// and the error names the field and the sized type to use instead.
 
 @repr(C)
 struct Header:

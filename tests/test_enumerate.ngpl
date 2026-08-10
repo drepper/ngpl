@@ -51,7 +51,7 @@ fn test_enumerate_range() → ∅:
     assert_eq(sum_val, 60)   // 10+11+12+13+14
 
 // Enumerate used with generate.
-fn square(x : int) → int:
+fn square(x : i64) → i64:
     x × x
 
 @test

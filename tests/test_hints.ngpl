@@ -12,7 +12,7 @@
 
 // @unlikely says the condition is expected to be false, @likely that
 // it is expected to be true.  Both branches still run when reached.
-fn classify(n : int) → int:
+fn classify(n : i64) → i64:
     @unlikely
     if n < 0:
         return ⁻1
@@ -87,11 +87,11 @@ fn test_nested_hints() → ∅:
 // @cold says the function is not expected to run often, @hot that it
 // is.  Neither changes what the function returns.
 @cold
-fn rarely_called() → int:
+fn rarely_called() → i64:
     41
 
 @hot
-fn often_called() → int:
+fn often_called() → i64:
     1
 
 @test
@@ -102,7 +102,7 @@ fn test_function_hints_do_not_change_results() → ∅:
 // them.
 @cold
 @impure
-fn hinted_and_impure() → int:
+fn hinted_and_impure() → i64:
     hint_counter
 
 let hint_counter : mut = 5

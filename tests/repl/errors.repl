@@ -3,7 +3,7 @@ undefined_thing
 let a := [1, 2]
 a[9]
 "still alive"
-fn bad_call(n : int) → int:
+fn bad_call(n : i64) → i64:
     n × 2
 
 bad_call("text")

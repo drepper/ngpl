@@ -2,11 +2,11 @@
 
 // --- Return type mismatch: function body vs declared type ---
 
-fn returns_float_as_int() → int:
+fn returns_float_as_int() → i64:
   1.25
 
 @test
-@expect error "return type is int but body evaluates to float"
+@expect error "return type is i64 but body evaluates to float"
 fn test_return_float_for_int() → ∅:
   returns_float_as_int()
 
@@ -36,7 +36,7 @@ fn test_return_int_for_f32() → ∅:
 
 // Return type matches: these should succeed.
 
-fn returns_int_ok() → int:
+fn returns_int_ok() → i64:
   42
 
 @test
@@ -67,29 +67,29 @@ fn test_return_bool_ok() → ∅:
 
 // Return type check with explicit return statement.
 
-fn early_return_float_as_int(x: int) → int:
+fn early_return_float_as_int(x: i64) → i64:
   if x > 0:
     return 1.5
   0
 
 @test
-@expect error "return type is int but body evaluates to float"
+@expect error "return type is i64 but body evaluates to float"
 fn test_early_return_mismatch() → ∅:
   early_return_float_as_int(1)
 
 // Return type check with optional return type.
 
-fn returns_float_as_int_opt() → int?:
+fn returns_float_as_int_opt() → i64?:
   1.25
 
 @test
-@expect error "return type is int.* but body evaluates to float"
+@expect error "return type is i64.* but body evaluates to float"
 fn test_return_float_for_int_optional() → ∅:
   returns_float_as_int_opt()
 
 // Optional returning none is fine regardless of inner type.
 
-fn returns_none_for_int_opt() → int?:
+fn returns_none_for_int_opt() → i64?:
   ∅
 
 @test
@@ -100,16 +100,16 @@ fn test_return_none_for_optional() → ∅:
 // Lambda return type mismatch.
 
 @test
-@expect error "return type is int but body evaluates to float"
+@expect error "return type is i64 but body evaluates to float"
 fn test_lambda_return_mismatch() → ∅:
-  let f : mut = λx : int → int: 1.5
+  let f : mut = λx : i64 → i64: 1.5
   f(0)
 
 // Lambda with correct return type.
 
 @test
 fn test_lambda_return_ok() → ∅:
-  let f := λx : int → int: x + 1
+  let f := λx : i64 → i64: x + 1
   assert_eq(6, f(5))
 
 // Void return type allows anything (value is discarded).
@@ -204,7 +204,7 @@ fn test_mul_float_float() → ∅:
 fn co() → f32:
   1.25
 
-fn foo(a : int) → int:
+fn foo(a : i64) → i64:
   a + co()
 
 @test
@@ -214,7 +214,7 @@ fn test_mixed_via_call() → ∅:
 
 // --- Helpers ---
 
-fn assert_eq(a: int, b: int):
+fn assert_eq(a: i64, b: i64):
   if a != b:
     std.print("FAIL: expected ", a, " got ", b)
 

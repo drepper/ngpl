@@ -1,6 +1,6 @@
 triple(7)
 LIMIT
-fn combine(n : int) → int:
+fn combine(n : i64) → i64:
     triple(n) + LIMIT
 
 combine(1)

@@ -23,6 +23,7 @@ from interp.value import (
     register_type_alias, register_sum_type, register_enum_type,
     sum_type_alternatives, register_user_type, DISCARD_NAME, is_type_name,
     _split_optional_type, _TYPE_BITS, FLOAT_TYPES, resolve_type_alias,
+    check_bootstrap_type,
 )
 from interp.eval import Evaluator, unwrap_optional, _ARRAY_MUTATORS
 from interp.layout import LayoutError, struct_layout, struct_lookup
@@ -1101,6 +1102,13 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
 
     for defn in definitions:
         if isinstance(defn, ASTStructDef):
+            for field_name, field_type in defn.fields:
+                try:
+                    check_bootstrap_type(
+                        field_type, f"struct '{defn.name}': field "
+                                    f"'{field_name}'")
+                except TypeError as e:
+                    raise DefinitionError(str(e)) from None
             register_user_type(defn.name)
             st = StructType(defn.name, defn.fields, repr_kind=defn.repr_kind)
             env.define(defn.name, st)
@@ -1122,6 +1130,11 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                 raise DefinitionError(
                     f"type alias '{defn.name}' refers to unknown type "
                     f"'{defn.target}'")
+            try:
+                check_bootstrap_type(defn.target,
+                                     f"type alias '{defn.name}'")
+            except TypeError as e:
+                raise DefinitionError(str(e)) from None
             register_type_alias(defn.name, defn.target)
 
     for defn in definitions:
@@ -1180,14 +1193,27 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                         f"in {defn.name}: '{param_name}' names a type and "
                         f"cannot name a parameter")
                 if param_type is not None:
-                    validate_param_type(param_type, defn.name, param_name)
+                    try:
+                        validate_param_type(param_type, defn.name, param_name)
+                    except TypeError as e:
+                        raise DefinitionError(str(e)) from None
             if defn.pack_param is not None:
                 pp_name, pp_type = defn.pack_param
                 if pp_type is not None:
-                    validate_param_type(pp_type, defn.name, pp_name)
-            if defn.ret_type is not None and not validate_type(defn.ret_type):
-                raise TypeError(
-                    f"in {defn.name}: unknown return type '{defn.ret_type}'")
+                    try:
+                        validate_param_type(pp_type, defn.name, pp_name)
+                    except TypeError as e:
+                        raise DefinitionError(str(e)) from None
+            if defn.ret_type is not None:
+                if not validate_type(defn.ret_type):
+                    raise DefinitionError(
+                        f"in {defn.name}: unknown return type "
+                        f"'{defn.ret_type}'")
+                try:
+                    check_bootstrap_type(defn.ret_type,
+                                         f"in {defn.name}: return type")
+                except TypeError as e:
+                    raise DefinitionError(str(e)) from None
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,
                           defn.is_replaceable, defn.pack_param, defn.param_units,
                           defn.is_impure, param_refs=defn.param_refs,

@@ -1,27 +1,27 @@
 // Test layout-driven scoping, mixed mode, and edge cases.
 
-fn abs_layout(x : int) → int:
+fn abs_layout(x : i64) → i64:
     if x < 0: return ⁻x
     x
 
-fn abs_brace(x : int) → int {
+fn abs_brace(x : i64) → i64 {
     if x < 0 { return ⁻x; }
     x
 }
 
-fn fib(n : int) → int:
+fn fib(n : i64) → i64:
     if n <= 1: return n
     fib(n - 1) + fib(n - 2)
 
 // Mixed: layout function body, brace block inside.
-fn mixed_test(x : int) → int:
+fn mixed_test(x : i64) → i64:
     if x > 10 {
         return x - 10;
     }
     x
 
 // Mixed: brace function body, layout block inside.
-fn mixed_test2(x : int) → int {
+fn mixed_test2(x : i64) → i64 {
     if x > 10:
         return x - 10
     x

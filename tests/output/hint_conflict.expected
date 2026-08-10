@@ -3,5 +3,5 @@ error: @cold contradicts @hot on the same function
     |
   2 | @cold
     | ^^^^^
-  3 | fn confused() → int:
+  3 | fn confused() → i64:
     |

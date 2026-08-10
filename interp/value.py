@@ -1227,6 +1227,36 @@ def format_shape(dims: list[int | None]) -> str:
         "?" if d is None else str(d) for d in dims)
 
 
+# The arbitrary-precision types.  A value of one has no fixed width, so
+# holding it needs a representation the bootstrap does not carry; they
+# belong to the full language.  See spec/ngpl.md, "Two Languages, One
+# Specification".
+_FULL_LANGUAGE_TYPES: dict[str, str] = {"int": "i64", "float": "f64"}
+
+
+def check_bootstrap_type(type_name: str, where: str):
+    """Refuse a type the bootstrap implementation does not provide.
+
+    A declared type is what asks for a representation; an untyped
+    literal does not, and is arbitrary-precision while it is being
+    computed with, so it is left alone.
+    """
+    # The written name, not what it resolves to.  A generic that infers
+    # int was not a declaration of one, and an alias that names int is
+    # refused where the alias is declared.
+    base, _ = _split_optional_type(type_name)
+    arr = _parse_array_type(base)
+    if arr is not None:
+        base = arr[0]
+    sized = _FULL_LANGUAGE_TYPES.get(base)
+    if sized is None:
+        return
+    raise TypeError(
+        f"{where}: '{base}' is an arbitrary-precision type, which the "
+        f"bootstrap implementation does not provide; use a sized type "
+        f"such as {sized}")
+
+
 def validate_type(type_name: str) -> bool:
     """Return True if type_name is a known builtin type (with optional/expected/array modifiers)."""
     type_name = resolve_type_alias(type_name)
@@ -1247,6 +1277,8 @@ def validate_param_type(param_type: str, func_name: str, param_name: str):
     if not validate_type(param_type):
         raise TypeError(
             f"in {func_name}: parameter '{param_name}' has unknown type '{param_type}'")
+    check_bootstrap_type(param_type,
+                         f"in {func_name}: parameter '{param_name}'")
 
 
 def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str) -> "Value":

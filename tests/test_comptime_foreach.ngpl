@@ -1,27 +1,27 @@
 // Tests for comptime foreach over parameter packs.
 
 // Sum all pack elements using comptime foreach.
-fn ct_sum(args… : int) → int:
-    let s : mut int = 0
+fn ct_sum(args… : i64) → i64:
+    let s : mut i64 = 0
     comptime foreach v := args:
         s ← s + v
     s
 
 // Count elements via comptime foreach.
-fn ct_count(args…) → int:
-    let n : mut int = 0
+fn ct_count(args…) → i64:
+    let n : mut i64 = 0
     comptime foreach v := args:
         n ← n + 1
     n
 
 // Apply a function to each pack element.
-fn apply_each(f, args… : int) → int:
-    let s : mut int = 0
+fn apply_each(f, args… : i64) → i64:
+    let s : mut i64 = 0
     comptime foreach v := args:
         s ← s + f(v)
     s
 
-fn double(x : int) → int:
+fn double(x : i64) → i64:
     x × 2
 
 // ------------------------------------------------------------------
@@ -49,14 +49,14 @@ fn test_ct_apply_each() → ∅:
 // comptime foreach also works on regular arrays.
 @test
 fn test_ct_foreach_array() → ∅:
-    let s : mut int = 0
+    let s : mut i64 = 0
     comptime foreach v := [10, 20, 30]:
         s ← s + v
     assert_eq(s, 60)
 
 // comptime foreach with enumerate over a pack.
-fn indexed_sum(args… : int) → int:
-    let s : mut int = 0
+fn indexed_sum(args… : i64) → i64:
+    let s : mut i64 = 0
     comptime foreach pair := enumerate(args):
         let idx := pair[0]
         let val := pair[1]
@@ -68,9 +68,9 @@ fn test_ct_enumerate() → ∅:
     assert_eq(indexed_sum(10, 20, 30), 10 × 1 + 20 × 2 + 30 × 3)
 
 // Heterogeneous pack: each iteration sees a different type.
-fn hetero_count(args…) → int:
-    let ints : mut int = 0
-    let strs : mut int = 0
+fn hetero_count(args…) → i64:
+    let ints : mut i64 = 0
+    let strs : mut i64 = 0
     comptime foreach v := args:
         if @typeof(v) == @typeof(0):
             ints ← ints + 1
@@ -83,8 +83,8 @@ fn test_ct_hetero_types() → ∅:
     assert_eq(hetero_count(1, "a", 2, "b", "c"), 20 + 3)
 
 // Empty pack produces zero iterations.
-fn ct_empty(args…) → int:
-    let ran : mut int = 0
+fn ct_empty(args…) → i64:
+    let ran : mut i64 = 0
     comptime foreach v := args:
         ran ← 1
     ran

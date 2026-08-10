@@ -87,7 +87,7 @@ fn expand_Σ₁(prev : u32) → u32:
 // message schedule W[0..63] and round constants K[t].
 // ---------------------------------------------------------------------------
 
-fn sha256(data : byte[]) → int?:
+fn sha256(data : byte[]) → u32[8]?:
     // Compute padded message length per SHA-256 spec.
     let rem := data.sizeof % 64
     let pad_len := (119 - rem) % 64
@@ -141,8 +141,10 @@ fn sha256(data : byte[]) → int?:
         // --- Add compressed chunk to current hash state. ---
         H ← @wrap(H + v)
 
-    // Pack final hash: H[0]«224 | … | H[7] using left fold.
-    (λacc : int, h : int → int: (acc « 32) | h) ⌿ (H, 0)
+    // The eight words are the hash.  Packing them into one number
+    // would need an integer wider than any the bootstrap has, so the
+    // digest is handed back as the words it is made of.
+    H
 
 // ---------------------------------------------------------------------------
 // Unit tests — FIPS 180-4 test vectors for SHA-256.
@@ -155,19 +157,19 @@ fn sha256(data : byte[]) → int?:
 fn test_sha256_empty() → ∅:
     let data := std.bytes("")
     let hash := sha256(data)
-    assert_eq(hash, ∃(0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855))
+    assert_eq(hash, ∃([0xe3b0c442, 0x98fc1c14, 0x9afbf4c8, 0x996fb924, 0x27ae41e4, 0x649b934c, 0xa495991b, 0x7852b855]))
 
 @test(sha256)
 fn test_sha256_abc() → ∅:
     let data := std.bytes("abc")
     let hash := sha256(data)
-    assert_eq(hash, ∃(0xba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad))
+    assert_eq(hash, ∃([0xba7816bf, 0x8f01cfea, 0x414140de, 0x5dae2223, 0xb00361a3, 0x96177a9c, 0xb410ff61, 0xf20015ad]))
 
 @test(sha256)
 fn test_sha256_448bit() → ∅:
     let data := std.bytes("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")
     let hash := sha256(data)
-    assert_eq(hash, ∃(0x248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1))
+    assert_eq(hash, ∃([0x248d6a61, 0xd20638b8, 0xe5c02693, 0x0c3e6039, 0xa33ce459, 0x64ff2167, 0xf6ecedd4, 0x19db06c1]))
 
 @start
 fn main() → ∅:

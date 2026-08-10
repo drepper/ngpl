@@ -73,19 +73,19 @@ fn test_field_assign_immutable() → ∅:
 
 // A second struct to test independently.
 struct Counter:
-    count: int
+    count: i64
 
 impl Counter:
     fn new() -> Counter:
         Counter { count: 0 }
 
-    fn value(&self) -> int:
+    fn value(&self) -> i64:
         self.count
 
     fn increment(&mut self) → ∅:
         self.count ← self.count + 1
 
-    fn add(&mut self, n: int) → ∅:
+    fn add(&mut self, n: i64) → ∅:
         self.count ← self.count + n
 
 // Counter with methods.
@@ -102,8 +102,8 @@ fn test_counter() → ∅:
 
 // Struct with no methods (fields only).
 struct Pair:
-    first: int
-    second: int
+    first: i64
+    second: i64
 
 @test
 fn test_plain_struct() → ∅:

@@ -5,7 +5,7 @@ std.print("a",
 [1,
  2,
  3]
-fn describe(n : int) → ∅:
+fn describe(n : i64) → ∅:
     if n > 10:
         std.print("big")
     else:

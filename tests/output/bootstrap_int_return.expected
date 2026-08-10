@@ -1,0 +1,1 @@
+Error: in f: return type: 'int' is an arbitrary-precision type, which the bootstrap implementation does not provide; use a sized type such as i64

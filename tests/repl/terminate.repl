@@ -1,8 +1,8 @@
-fn inner() → int:
+fn inner() → i64:
     let values := [1]
     values[5]
 
-fn outer() → int:
+fn outer() → i64:
     inner()
 
 outer()

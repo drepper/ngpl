@@ -1,6 +1,6 @@
 @hot
 @cold
-fn confused() → int:
+fn confused() → i64:
     0
 
 @start

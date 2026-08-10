@@ -161,7 +161,7 @@ fn test_typed_binding() → ∅:
     let v := [7, 8]
     let it := v.iterate()
     let total : mut = 0
-    while e : int = it.next():
+    while e : i64 = it.next():
         total ← total + e
     assert_eq(total, 15)
 

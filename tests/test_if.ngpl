@@ -82,7 +82,7 @@ fn test_else_after_failing_elif() → ∅:
 // A chain of them, in order
 // ---------------------------------------------------------------------
 
-fn pick(n : int) → int:
+fn pick(n : i64) → i64:
     if n == 1:
         return 10
     elif n == 2:
@@ -100,7 +100,7 @@ fn test_chain_picks_in_order() → ∅:
     assert_eq(pick(4), 99)
 
 // The first match wins even when a later condition would also hold.
-fn first_match(n : int) → int:
+fn first_match(n : i64) → i64:
     if n > 0:
         return 1
     elif n > ⁻10:

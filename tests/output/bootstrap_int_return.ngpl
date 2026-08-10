@@ -1,0 +1,7 @@
+// The bootstrap does not provide the arbitrary-precision types.
+fn f() → int:
+    1
+
+@start
+fn main() → ∅:
+    std.print(f())

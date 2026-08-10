@@ -34,7 +34,7 @@ fn test_pure_reads_const() → ∅:
     assert_eq(LIMIT, 100)
 
 // Pure function CAN call other functions.
-fn double(x : int) → int:
+fn double(x : i64) → i64:
     x × 2
 
 @test
@@ -47,7 +47,7 @@ fn bump_counter() → ∅:
     counter ← counter + 1
 
 @impure
-fn get_counter() → int:
+fn get_counter() → i64:
     counter
 
 @test

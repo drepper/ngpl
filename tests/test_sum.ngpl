@@ -134,7 +134,7 @@ fn test_typed_value_keeps_its_alternative() → ∅:
 // say which it meant.
 type Widths = i32 | i64
 
-fn width_kind(v : Widths) → int:
+fn width_kind(v : Widths) → i64:
     match v:
         i32(n):  32
         i64(n):  64

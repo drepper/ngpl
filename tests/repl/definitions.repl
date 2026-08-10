@@ -1,8 +1,8 @@
-fn double(n : int) → int:
+fn double(n : i64) → i64:
     n × 2
 
 double(21)
-fn fact(n : int) → int:
+fn fact(n : i64) → i64:
     let acc : mut = 1
     foreach i := 1…n:
         acc ← acc × i
@@ -10,11 +10,11 @@ fn fact(n : int) → int:
 
 fact(5)
 struct Point:
-    x : int
-    y : int
+    x : i64
+    y : i64
 
 impl Point:
-    fn sum(&self) → int:
+    fn sum(&self) → i64:
         self.x + self.y
 
 let p := Point { x: 3, y: 4 }

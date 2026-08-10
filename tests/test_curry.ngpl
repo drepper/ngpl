@@ -2,7 +2,7 @@
 
 // --- Named function currying ---
 
-fn multiply(a : int, b : int) → int:
+fn multiply(a : i64, b : i64) → i64:
     a × b
 
 // Curry a named function to create a doubler.
@@ -24,7 +24,7 @@ fn test_curry_named_with_generate() → ∅:
     assert_eq(result[4], 15)
 
 // Three-parameter function curried in stages.
-fn add3(a : int, b : int, c : int) → int:
+fn add3(a : i64, b : i64, c : i64) → i64:
     a + b + c
 
 @test
@@ -44,7 +44,7 @@ fn test_curry_two_at_once() → ∅:
 // Curry a lambda to create a fixed-offset function.
 @test
 fn test_curry_lambda() → ∅:
-    let add := λa : int, b : int → int: a + b
+    let add := λa : i64, b : i64 → i64: a + b
     let add10 := add(10)
     assert_eq(add10(5), 15)
     assert_eq(add10(25), 35)
@@ -52,7 +52,7 @@ fn test_curry_lambda() → ∅:
 // Curry a lambda and use it with generate.
 @test
 fn test_curry_lambda_with_generate() → ∅:
-    let power := λbase : int, exp : int → int: base × exp
+    let power := λbase : i64, exp : i64 → i64: base × exp
     let times5 := power(5)
     let result := generate(times5, 0…4)
     assert_eq(result[0], 0)
@@ -64,7 +64,7 @@ fn test_curry_lambda_with_generate() → ∅:
 // Three-parameter lambda curried in stages.
 @test
 fn test_curry_lambda_staged() → ∅:
-    let f := λa : int, b : int, c : int → int: a + b + c
+    let f := λa : i64, b : i64, c : i64 → i64: a + b + c
     let f1 := f(1)
     let f2 := f1(2)
     assert_eq(f2(3), 6)
@@ -73,14 +73,14 @@ fn test_curry_lambda_staged() → ∅:
 @test
 fn test_curry_lambda_with_capture() → ∅:
     let offset := 100
-    let add_offset := λx : int, y : int |offset| → int: x + y + offset
+    let add_offset := λx : i64, y : i64 |offset| → i64: x + y + offset
     let f := add_offset(50)
     assert_eq(f(10), 160)
 
 // --- Curried functions as first-class values ---
 
 // Pass a curried function to another function.
-fn apply_and_sum(f, arr : int[]) → int:
+fn apply_and_sum(f, arr : i64[]) → i64:
     let total : mut = 0
     foreach v := arr:
         total ← total + f(v)
@@ -94,7 +94,7 @@ fn test_curry_as_argument() → ∅:
 
 // --- Curried functions with generate and fold ---
 
-fn add(a : int, b : int) → int:
+fn add(a : i64, b : i64) → i64:
     a + b
 
 @test

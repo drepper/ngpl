@@ -169,7 +169,7 @@ fn test_match_result_err_binds_the_error() → ∅:
     assert_eq(took, "err")
 
 // ∄(VAL) builds a failed result, which is how a function reports one.
-fn checked(n : int) → int!:
+fn checked(n : i64) → i64!:
     if n < 0:
         return ∄(std.errors.invalid_argument)
     n × 2
@@ -256,7 +256,7 @@ fn error_result_missing_failure_arm() → ∅:
             std.print(v)
 
 // A function's declared return type says which shapes its value has.
-fn returns_optional(n : int) → int?:
+fn returns_optional(n : i64) → i64?:
     if n < 0: return ∅
     n
 
@@ -266,7 +266,7 @@ fn error_missing_arm_through_a_call() → ∅:
         ∃(x):
             std.print(x)
 
-fn returns_result(n : int) → int!:
+fn returns_result(n : i64) → i64!:
     if n < 0:
         return ∄(std.errors.invalid_argument)
     n
@@ -278,7 +278,7 @@ fn error_missing_arm_through_a_result_call() → ∅:
             std.print(x)
 
 // A plain value has only one shape, so one arm covers it.
-fn returns_plain(n : int) → int:
+fn returns_plain(n : i64) → i64:
     n × 2
 
 @test

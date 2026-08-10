@@ -39,6 +39,7 @@ from interp.value import (
     _split_optional_type, _parse_array_type, MAX_TENSOR_RANK, array_shape,
     format_shape,
     is_generic_type, runtime_type_of, is_type_name, _is_unsigned,
+    check_bootstrap_type,
     _scalar_kind_mismatch,
     UnitValue, RefValue, Reference, ElementRef, Iterator, ArrayIterator,
     deep_copy_value, register_type_alias, DISCARD_NAME,
@@ -2408,6 +2409,9 @@ class Evaluator:
             return none()
 
         if isinstance(stmt, VarDef):
+            if stmt.type_annotation is not None:
+                check_bootstrap_type(stmt.type_annotation,
+                                     f"'{stmt.name}'")
             if is_type_name(stmt.name):
                 raise TypeError(
                     f"'{stmt.name}' names a type and cannot name a variable")
