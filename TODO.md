@@ -53,6 +53,9 @@ the sized types do not have.
 Completed
 ---------
 
+[x] @min and @max giving the extreme values a numeric type can hold, as C++'s
+    numeric_limits max() and lowest() do.  Invalid for anything else.
+
 [x] integer types of any stated bit width (i7, u13, u1, i128), with the range, wrapping,
     shift bound, and storage all following from the width.
 

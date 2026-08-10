@@ -264,6 +264,28 @@ def _int_is_exact_in_float(value: int, width: str) -> bool:
         return False
 
 
+# Exponent and mantissa bits of each floating-point format, from which
+# the largest finite value it can hold follows.
+_FLOAT_FORMAT: dict[str, tuple[int, int]] = {
+    "f16": (5, 10), "bfloat": (8, 7), "f32": (8, 23), "f64": (11, 52),
+}
+
+
+def float_limits(width: str) -> tuple[float, float] | None:
+    """The lowest and largest finite values a float format can hold."""
+    fmt = _FLOAT_FORMAT.get(width)
+    if fmt is None:
+        return None
+    exp_bits, mant_bits = fmt
+    largest = (2 - 2.0 ** -mant_bits) * 2.0 ** (2 ** (exp_bits - 1) - 1)
+    return -largest, largest
+
+
+def int_limits(width: str) -> tuple[int, int] | None:
+    """The lowest and largest values an integer type can hold."""
+    return _int_range(width)
+
+
 def _clamp_float(value: float, width: str) -> float:
     import struct
     fmt = _FLOAT_STRUCT_FMT.get(width)

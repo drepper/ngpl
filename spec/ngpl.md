@@ -4001,6 +4001,8 @@ error: 'byte' names a type and cannot name a variable
 
 - `@dropunit(expr)` — the value without the unit it carries.  See [Parting with a Unit](#parting-with-a-unit).
 
+- `@min(T)`, `@max(T)` — the extreme values a numeric type can hold.  See [The Limits of a Numeric Type](#the-limits-of-a-numeric-type).
+
 - `@resultof(func)` — looks up a named function and returns a `type` value for its declared return type.
 
 - `@sizeof(expr)` — the storage a type occupies, or the number of elements a container holds.  See [`@sizeof` of a Type](#sizeof-of-a-type) and [`@sizeof` of a Value](#sizeof-of-a-value).
@@ -4483,6 +4485,48 @@ a[0] = "x"             // error: an array of i32 cannot hold a string
 fn f() → i32:
     "hello"            // error: return type is i32 but body evaluates to str
 ```
+
+#### The Limits of a Numeric Type
+
+`@min` and `@max` give the extreme values a numeric type can hold.  The operand may name the type, or name something of it, since the question is about the type either way:
+
+```
+@min(i8)     // -128
+@max(i8)     // 127
+@max(u8)     // 255
+@max(u7)     // 127
+@max(u128)   // 340282366920938463463374607431768211455
+
+let a : u8 = 5
+@max(a)      // 255, from a's type
+```
+
+The answer is a value *of that type*, so `@typeof(@max(u8))` is `u8`, and it is decided by the type rather than by anything the program does, so it is a compile-time constant:
+
+```
+static_assert_eq(@max(u8), 255)
+```
+
+Anything that is not a numeric type is refused, as are `int` and `float`, which have no extremes to report:
+
+```
+@max(str)     // error: 'str' is not a numeric type
+@max(bool)    // error: 'bool' is not a numeric type
+@max(int)     // error: 'int' is arbitrary-precision and has no largest value
+```
+
+##### Floating-Point, and a Note on C++
+
+For a floating-point type these are the **lowest** and **largest finite** values, so `@min(f32)` is negative and `@max(f32)` is its positive counterpart.
+
+This matches C++'s `std::numeric_limits<T>::max()` and `lowest()`.  It deliberately does **not** match C++'s `min()`, which for a floating-point type returns the smallest positive normalized value rather than the most negative one — a difference between the integer and floating-point cases that C++ found confusing enough to add `lowest()` in C++11 to work around.  Here `@min` means the smallest value the type can hold, whatever the type.
+
+| | integer | floating-point |
+|---|---------|---------------|
+| `@min(T)` | most negative | most negative finite |
+| `@max(T)` | largest | largest finite |
+| C++ `min()` | most negative | *smallest positive* |
+| C++ `lowest()` | most negative | most negative finite |
 
 #### Parting with a Unit
 

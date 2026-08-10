@@ -267,6 +267,18 @@ class MultiSlice:
         self.specs = specs
 
 
+class LimitExpr:
+    """@min(T) or @max(T): the extreme value a numeric type can hold.
+
+    kind is "min" or "max".  The operand names a type, or names
+    something whose type is asked about instead.
+    """
+
+    def __init__(self, kind: str, expr):
+        self.kind = kind
+        self.expr = expr
+
+
 class DropUnitExpr:
     """@dropunit(expr): the value without the unit it carries.
 

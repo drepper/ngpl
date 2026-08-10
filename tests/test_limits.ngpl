@@ -1,0 +1,116 @@
+// test_limits.ngpl -- @min and @max
+//
+// The extreme values a numeric type can hold.  The operand may name
+// the type or name something of it, since the question is about the
+// type either way, and the answer is a value of that type.
+//
+// For an integer these are the ends of its range.  For a float they
+// are the lowest and largest finite values, which is C++'s lowest()
+// and max() rather than its min() -- see the note in the spec.
+
+// ---------------------------------------------------------------------
+// The limits are the ends of the range
+// ---------------------------------------------------------------------
+
+@test
+fn test_signed_limits() → ∅:
+    let low : i8 = ⁻128
+    let high : i8 = 127
+    assert_eq(@min(i8), low)
+    assert_eq(@max(i8), high)
+
+@test
+fn test_unsigned_limits() → ∅:
+    let high : u8 = 255
+    assert_eq(@min(u8), 0)
+    assert_eq(@max(u8), high)
+
+// A stated width is a type like any other, so its limits follow from
+// it too.
+@test
+fn test_stated_width_limits() → ∅:
+    let low : i7 = ⁻64
+    let high : i7 = 63
+    assert_eq(@min(i7), low)
+    assert_eq(@max(i7), high)
+    assert_eq(@min(u1), 0)
+    assert_eq(@max(u1), 1)
+
+@test
+fn test_wide_limits() → ∅:
+    assert_eq(@max(u128), 340282366920938463463374607431768211455)
+    assert_eq(@max(i127), 85070591730234615865843651857942052863)
+
+// ---------------------------------------------------------------------
+// The answer is a value of the type asked about
+// ---------------------------------------------------------------------
+
+@test
+fn test_the_limit_carries_the_type() → ∅:
+    static_assert_eq(@typeof(@max(u8)), u8)
+    static_assert_eq(@typeof(@min(i32)), i32)
+    static_assert_eq(@typeof(@min(f32)), f32)
+    static_assert_eq(@sizeof(@max(u8)), 1 ¤byte)
+
+// A name may stand for its type, as it may for @typeof and @sizeof.
+@test
+fn test_limit_of_a_binding() → ∅:
+    let a : u8 = 5
+    assert_eq(@max(a), 255)
+    assert_eq(@min(a), 0)
+
+// The limits are known from the type, so they are constants.
+@test
+fn test_limits_are_compile_time_constants() → ∅:
+    static_assert_eq(@max(u8), 255)
+    static_assert_eq(@min(u8), 0)
+    static_assert_eq(@max(i8), 127)
+
+// ---------------------------------------------------------------------
+// Floating-point
+// ---------------------------------------------------------------------
+
+// The lowest and largest finite values, so @min is the negative of
+// @max rather than the smallest positive value.
+@test
+fn test_float_limits() → ∅:
+    assert(@max(f16) == 65504.0)
+    assert(@min(f16) == ⁻65504.0)
+    assert(@min(f32) < 0.0)
+    assert(@max(f32) > 0.0)
+    assert(@min(f64) < @min(f32))
+    assert(@max(f64) > @max(f32))
+
+// ---------------------------------------------------------------------
+// Anything that is not a numeric type
+// ---------------------------------------------------------------------
+
+struct Point:
+    x : i32
+
+enum Shade:
+    light
+
+@test
+@expect error "'str' is not a numeric type"
+fn error_min_of_a_string() → ∅:
+    _ ← @min(str)
+
+@test
+@expect error "'bool' is not a numeric type"
+fn error_max_of_a_bool() → ∅:
+    _ ← @max(bool)
+
+@test
+@expect error "'Point' is not a numeric type"
+fn error_max_of_a_struct() → ∅:
+    _ ← @max(Point)
+
+@test
+@expect error "'Shade' is not a numeric type"
+fn error_max_of_an_enum() → ∅:
+    _ ← @max(Shade)
+
+@start
+fn main() → ∅:
+    std.print("limit tests passed")

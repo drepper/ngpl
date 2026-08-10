@@ -21,6 +21,7 @@ from interp.ast import (
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
     DropUnitExpr,
+    LimitExpr,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr, SumTypeDef,
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
@@ -37,6 +38,7 @@ from interp.value import (
     resolve_width, resolve_float_width, wrap_int, coerce_to_type, coerce_arg,
     _TYPE_BITS, FLOAT_TYPES, FAST_TYPES,
     _split_optional_type, _parse_array_type, MAX_TENSOR_RANK, array_shape,
+    int_limits, float_limits, resolve_type_alias,
     format_shape,
     is_generic_type, runtime_type_of, is_type_name, _is_unsigned,
     check_bootstrap_type,
@@ -218,7 +220,8 @@ def _is_const_expr(node) -> bool:
         return all(_is_const_expr(e) for e in node.elements)
     if isinstance(node, TupleLit):
         return all(_is_const_expr(e) for e in node.elements)
-    if isinstance(node, (TypeOfExpr, ResultOfExpr, SizeOfExpr, UnitOfExpr, UnitRefExpr)):
+    if isinstance(node, (TypeOfExpr, ResultOfExpr, SizeOfExpr, UnitOfExpr,
+                         UnitRefExpr, LimitExpr)):
         return True
     # A type name stands for its type, which is as constant as a literal.
     if isinstance(node, VarRef) and is_type_name(node.name):
@@ -2053,6 +2056,9 @@ class Evaluator:
                 node._cached_value = result
             return result
 
+        if isinstance(node, LimitExpr):
+            return self._eval_limit(node)
+
         if isinstance(node, DropUnitExpr):
             val = self.eval_expr(node.expr)
             inner = val.inner if isinstance(val, UnitValue) else val
@@ -2932,6 +2938,39 @@ class Evaluator:
             return f"{expr.obj.name}[{','.join(dims)}]"
         return None
 
+    def _eval_limit(self, node):
+        """The extreme value a numeric type can hold.
+
+        The operand may name the type or name something of it, since
+        the question is about the type either way.
+        """
+        written = self._written_type(node.expr)
+        if written is not None:
+            type_name = written
+        elif self._names_a_binding(node.expr):
+            type_name = runtime_type_of(
+                unwrap_optional(self.eval_expr(node.expr)))
+        else:
+            raise TypeError(
+                f"@{node.kind} requires a numeric type, a name, or an "
+                f"expression built from them")
+
+        resolved = resolve_type_alias(type_name)
+        bounds = int_limits(resolved)
+        if bounds is not None:
+            low, high = bounds
+            return mk_int(low if node.kind == "min" else high, resolved)
+        bounds = float_limits(resolved)
+        if bounds is not None:
+            low, high = bounds
+            return mk_float(low if node.kind == "min" else high, resolved)
+        if resolved in ("int", "float"):
+            raise TypeError(
+                f"@{node.kind}: '{resolved}' is arbitrary-precision and has "
+                f"no {'smallest' if node.kind == 'min' else 'largest'} value")
+        raise TypeError(
+            f"@{node.kind}: '{type_name}' is not a numeric type")
+
     def _type_byte_size(self, type_name: str):
         """The storage a type occupies, in bytes."""
         from interp.layout import LayoutError, struct_lookup, type_layout
@@ -2975,8 +3014,12 @@ class Evaluator:
                     and self._names_a_binding(expr.right))
         if isinstance(expr, UnaryOp):
             return self._names_a_binding(expr.operand)
-        if isinstance(expr, WrapExpr):
+        if isinstance(expr, (WrapExpr, DropUnitExpr)):
             return self._names_a_binding(expr.expr)
+        if isinstance(expr, LimitExpr):
+            # A limit is decided by the type it names, so asking about
+            # it settles without running anything.
+            return True
         if isinstance(expr, UnitExpr):
             return self._names_a_binding(expr.expr)
         if isinstance(expr, Subscript):

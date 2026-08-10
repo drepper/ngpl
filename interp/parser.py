@@ -15,6 +15,7 @@ from interp.ast import (
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
     DropUnitExpr,
+    LimitExpr,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, TypeDef, EnumDef,
     LambdaExpr, ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
@@ -1713,6 +1714,14 @@ class Parser:
             self._eat("PUNCT", ")")
             node = SizeOfExpr(expr)
             return self._parse_postfix(node)
+        if self._check("MIN", "MAX"):
+            kind = "min" if self._check("MIN") else "max"
+            self.pos += 1
+            self._eat("PUNCT", "(")
+            expr = self._parse_or_expr()
+            self._skip_nl()
+            self._eat("PUNCT", ")")
+            return self._parse_postfix(LimitExpr(kind, expr))
         if self._check("DROPUNIT"):
             self._eat("DROPUNIT")
             self._eat("PUNCT", "(")
