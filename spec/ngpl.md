@@ -686,7 +686,7 @@ Six operators ask the same questions allowing for that error.  Each pairs with t
 
 ##### The Tolerance
 
-`std.comparison_tolerance` says how much error to allow, following APL's `{QUAD}CT`.  Two numbers are alike when they differ by no more than that fraction of the larger of them:
+`std.comparison_tolerance` says how much error to allow, following APL's `⎕CT`.  Two numbers are alike when they differ by no more than that fraction of the larger of them:
 
 ```
 |a - b| ≤ std.comparison_tolerance × max(|a|, |b|)
@@ -4485,7 +4485,7 @@ let byte := 5
 error: 'byte' names a type and cannot name a variable
 ```
 
-- `@typeof(expr)` — evaluates the expression and returns a `type` value representing its type.  The type name reflects the concrete type: `int`, `i32`, `u8`, `str`, `bool`, `\N{EMPTY SET}`, `array`, `tuple`, `fn`, `\N{GREEK SMALL LETTER LAMDA}`, or an enum name.
+- `@typeof(expr)` — evaluates the expression and returns a `type` value representing its type.  The type name reflects the concrete type: `int`, `i32`, `u8`, `str`, `bool`, `∅`, `array`, `tuple`, `fn`, `λ`, or an enum name.
 
 - `@dropunit(expr)` — the value without the unit it carries.  See [Parting with a Unit](#parting-with-a-unit).
 
