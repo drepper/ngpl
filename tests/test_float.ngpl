@@ -34,7 +34,7 @@ fn test_float_arithmetic():
   static_assert(3.0 × 2.0 == 6.0)
 
   // Division
-  let quot := 3.0 / 2.0
+  let quot := 3.0 ÷ 2.0
   assert_true(quot == 1.5, "3.0 / 2.0 should be 1.5")
 
   // Modulus
@@ -56,7 +56,7 @@ fn test_mixed_int_float_rejected():
   let c : mut = 3 × 2.5
 
   @expect error "matching types"
-  let d : mut = 10.0 / 4
+  let d : mut = 10.0 ÷ 4
 
 fn test_float_comparisons():
   static_assert(1.0 < 2.0)

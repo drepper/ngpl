@@ -831,7 +831,7 @@ class Parser:
     def _parse_unit_spec(self):
         """Parse a unit specification after ¤ (no numeric literals)."""
         left = self._parse_unit_atom()
-        while self._check("OP") and self._cur().value in ("\N{MULTIPLICATION SIGN}", "/"):
+        while self._check("OP") and self._cur().value in ("\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}"):
             next_pos = self.pos + 1
             if next_pos >= len(self.tokens):
                 break
@@ -862,7 +862,7 @@ class Parser:
     def _parse_unit_formula(self):
         """Parse a unit formula in a unit definition (allows numeric factors)."""
         left = self._parse_unit_def_atom()
-        while self._check("OP") and self._cur().value in ("\N{MULTIPLICATION SIGN}", "/"):
+        while self._check("OP") and self._cur().value in ("\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}"):
             op = self._cur().value
             self.pos += 1
             right = self._parse_unit_def_atom()
@@ -1586,11 +1586,11 @@ class Parser:
         return left
 
     def _parse_mul_expr(self):
-        """mul_expr → reshape (('*' | '/' | '%') reshape)*"""
+        """mul_expr → reshape (('×' | '÷' | '%') reshape)*"""
         left = self._parse_reshape_expr()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value in ("\N{MULTIPLICATION SIGN}", "/", "%")):
+            if not (self._check("OP") and self._cur().value in ("\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}", "%")):
                 break
             op_tok = self._cur()
             self.pos += 1

@@ -156,12 +156,12 @@ fn test_mul_float_int() → ∅:
 @test
 @expect error "matching types"
 fn test_div_int_float() → ∅:
-  let r : mut = 10 / 2.0
+  let r : mut = 10 ÷ 2.0
 
 @test
 @expect error "matching types"
 fn test_div_float_int() → ∅:
-  let r : mut = 10.0 / 2
+  let r : mut = 10.0 ÷ 2
 
 @test
 @expect error "matching types"

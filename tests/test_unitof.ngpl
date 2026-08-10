@@ -41,7 +41,7 @@ fn test_unitof_different_units():
 
 @test
 fn test_unitof_derived():
-  static_assert_eq(@unitof(100 ¤meter / (10 ¤second)), ¤meter/second)
+  static_assert_eq(@unitof(100 ¤meter ÷ (10 ¤second)), ¤meter÷second)
 
 // --- @unitof with kilometer ---
 

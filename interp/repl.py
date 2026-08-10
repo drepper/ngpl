@@ -23,7 +23,7 @@ from interp.errors import (extract_position, format_backtrace,
                            format_diagnostic, strip_position_prefix,
                            ProgramAbort, ProgramExit)
 from interp.eval import Evaluator
-from interp.lexer import process_indentation, tokenize
+from interp.lexer import LexerError, process_indentation, tokenize
 from interp.parser import ParseError, Parser
 from interp.ast import (
     EnumDef as ASTEnumDef,
@@ -77,8 +77,13 @@ def _needs_more_input(src: str) -> bool:
 
     try:
         tokens = process_indentation(tokenize(src))
+    except LexerError as e:
+        # An unterminated string or block comment is waiting for the
+        # rest of itself.  Anything else the lexer refuses is finished
+        # and wrong, so let the entry run and report it rather than
+        # sitting at a continuation prompt no input can satisfy.
+        return e.incomplete
     except Exception:
-        # An unterminated string literal is the common case here.
         return True
 
     significant = [t for t in tokens

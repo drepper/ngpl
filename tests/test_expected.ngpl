@@ -22,13 +22,13 @@ fn test_optional_postfix_none() → ∅:
 
 @test
 fn test_div_success_unwrap() → ∅:
-    let x := 10 / 3
+    let x := 10 ÷ 3
     let v := x ?? ⁻1
     assert_eq(v, 3)
 
 @test
 fn test_div_zero_recovery() → ∅:
-    let x := 10 / 0
+    let x := 10 ÷ 0
     let v := x ?? ⁻1
     assert_eq(v, ⁻1)
 
@@ -47,7 +47,7 @@ fn test_mod_zero_recovery() → ∅:
 // ---- ? propagation for expected values -----------------------------------
 
 fn safe_div(a : i64, b : i64) → i64!:
-    (a / b)?
+    (a ÷ b)?
 
 @test
 fn test_expected_propagate_ok() → ∅:
@@ -63,20 +63,20 @@ fn test_expected_propagate_err() → ∅:
 
 @test
 fn test_div_chain_recovery() → ∅:
-    let a := (100 / 10) ?? 0
-    let b := (a / 2) ?? 0
+    let a := (100 ÷ 10) ?? 0
+    let b := (a ÷ 2) ?? 0
     assert_eq(b, 5)
 
 @test
 fn test_div_chain_zero() → ∅:
-    let a := (100 / 0) ?? 0
-    let b := (a / 2) ?? 0
+    let a := (100 ÷ 0) ?? 0
+    let b := (a ÷ 2) ?? 0
     assert_eq(b, 0)
 
 // ---- expected error is std.errors value ----------------------------------
 
 fn div_or_err(a : i64, b : i64) → i64!:
-    (a / b)?
+    (a ÷ b)?
 
 @test
 fn test_expected_err_is_std_errors() → ∅:
@@ -88,7 +88,7 @@ fn test_expected_err_is_std_errors() → ∅:
 
 @test
 fn test_unwrapped_expected_arithmetic() → ∅:
-    let x := (20 / 4) ?? 0
+    let x := (20 ÷ 4) ?? 0
     let y := x + 10
     assert_eq(y, 15)
 
@@ -98,10 +98,10 @@ fn test_unwrapped_expected_arithmetic() → ∅:
 // parses and means exactly the same thing.
 
 fn long_form(a : i64, b : i64) → i64?std.errors:
-    (a / b)?
+    (a ÷ b)?
 
 fn short_form(a : i64, b : i64) → i64!:
-    (a / b)?
+    (a ÷ b)?
 
 @test
 fn test_long_and_short_agree_on_ok() → ∅:
@@ -123,7 +123,7 @@ fn test_long_form_value_fits_short_form_parameter() → ∅:
 // ---- T! abbreviation ------------------------------------------------------
 
 fn bang_div(a : i64, b : i64) → i64!:
-    (a / b)?
+    (a ÷ b)?
 
 @test
 fn test_bang_return_ok() → ∅:
@@ -140,19 +140,19 @@ fn bang_param(x : i64!) → i64:
 
 @test
 fn test_bang_param_ok() → ∅:
-    let v := 10 / 2
+    let v := 10 ÷ 2
     assert_eq(bang_param(v), 5)
 
 @test
 fn test_bang_param_err() → ∅:
-    let v := 10 / 0
+    let v := 10 ÷ 0
     assert_eq(bang_param(v), 0)
 
 // ---- error on unwrap of expected error -----------------------------------
 
 @expect error "expected error"
 fn error_unwrap_expected() → ∅:
-    let x : mut = 10 / 0
+    let x : mut = 10 ÷ 0
     let y : mut = x + 1
 
 @start

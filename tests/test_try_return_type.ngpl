@@ -15,7 +15,7 @@ enum MyErr:
 // ---------------------------------------------------------------------
 
 fn expected_matching(x : i64) → i64!:
-    let q := (x / 0)?
+    let q := (x ÷ 0)?
     q
 
 @test
@@ -24,7 +24,7 @@ fn test_expected_matching() → ∅:
 
 // The long form names the same error type, so it matches too.
 fn spelled_out(x : i64) → i64?std.errors:
-    let q := (x / 0)?
+    let q := (x ÷ 0)?
     q
 
 @test
@@ -33,7 +33,7 @@ fn test_long_form_matches() → ∅:
 
 // An optional return absorbs any error: the detail is discarded.
 fn optional_absorbs(x : i64) → i64?:
-    let q := (x / 0)?
+    let q := (x ÷ 0)?
     q
 
 @test
@@ -51,7 +51,7 @@ fn test_chained_propagation() → ∅:
 
 // The success path is unaffected.
 fn succeeds(x : i64) → i64!:
-    let q := (x / 2)?
+    let q := (x ÷ 2)?
     q
 
 @test
@@ -64,12 +64,12 @@ fn test_success_path() → ∅:
 
 @expect error "requires the enclosing function to return an optional"
 fn error_plain_return_type() → i64:
-    let q : mut = (10 / 2)?
+    let q : mut = (10 ÷ 2)?
     q
 
 @expect error "requires the enclosing function to return an optional"
 fn error_void_return_type() → ∅:
-    let q : mut = (10 / 2)?
+    let q : mut = (10 ÷ 2)?
     std.print("{}", q)
 
 // ---------------------------------------------------------------------
@@ -78,7 +78,7 @@ fn error_void_return_type() → ∅:
 
 @expect error "propagates an error of type 'std.errors'"
 fn error_mismatched_error_type() → i64?MyErr:
-    let q : mut = (10 / 0)?
+    let q : mut = (10 ÷ 0)?
     q
 
 // The mismatch is caught through a call as well as through division.

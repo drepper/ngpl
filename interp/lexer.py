@@ -99,12 +99,12 @@ _NORMALIZE_OPS = {
 
 # Single-character operators.
 # The last six are the tolerant comparisons, paired with the exact ones.
-SINGLE_OPS = set("+-/%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ∃∄⍴⧺⌿⍀¤√∛∜↑⁻×"
+SINGLE_OPS = set("+-%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ∃∄⍴⧺⌿⍀¤√∛∜↑⁻×÷"
                  "≅≇⪅⪆⪉⪊")
 
 # Binary operators that signal line continuation when trailing.
 _CONTINUATION_OPS = frozenset({
-    "+", "-", "\N{MULTIPLICATION SIGN}", "/", "%",
+    "+", "-", "\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}", "%",
     "|", "&", "^",
     "<<", ">>", "«", "»", "↺", "↻",
     "==", "!=", "<", ">", "<=", ">=",
@@ -124,11 +124,18 @@ _CONTINUATION_OPS = frozenset({
 
 
 class LexerError(Exception):
-    """Raised when the lexer encounters invalid input."""
+    """Raised when the lexer encounters invalid input.
 
-    def __init__(self, message, line, col):
+    `incomplete` says whether more input could still finish what was
+    started — an unterminated string or block comment — as opposed to
+    input that no continuation can repair.  At the prompt the first
+    kind means keep reading and the second means report now.
+    """
+
+    def __init__(self, message, line, col, incomplete: bool = False):
         self.line = line
         self.col = col
+        self.incomplete = incomplete
         super().__init__(f"Line {line}, col {col}: {message}")
 
 
@@ -173,7 +180,8 @@ def _read_string(src, pos, start_line, start_col, line_start):
             text_chars.append(ch)
             end_pos += 1
 
-    raise LexerError("unterminated string literal", start_line, start_col)
+    raise LexerError("unterminated string literal", start_line, start_col,
+                     incomplete=True)
 
 
 def _check_literal_width(width: str, is_float: bool, text: str, line, col):
@@ -365,7 +373,8 @@ def tokenize(src: str):
         if ch == "/" and pos + 1 < length and src[pos + 1] == "*":
             end = src.find("*/", pos + 2)
             if end == -1:
-                raise LexerError("unterminated block comment", line, col)
+                raise LexerError("unterminated block comment", line, col,
+                                 incomplete=True)
             comment_text = src[pos:end + 2]
             nl_count = comment_text.count("\n")
             if nl_count > 0:
@@ -420,8 +429,8 @@ def tokenize(src: str):
                 tokens.append(Token("PUNCT", ch, line, col))
             elif ch == "\N{RIGHTWARDS ARROW}":
                 tokens.append(Token("OP", "->", line, col))
-            elif ch in ("+-/%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻"
-                        "\N{MULTIPLICATION SIGN}"
+            elif ch in ("+-%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻"
+                        "\N{MULTIPLICATION SIGN}\N{DIVISION SIGN}"
                         "≅≇⪅⪆⪉⪊"):
                 tokens.append(Token("OP", ch, line, col))
             else:
@@ -443,6 +452,14 @@ def tokenize(src: str):
             token_type = KEYWORDS.get(name, "IDENT")
             tokens.append(Token(token_type, name, line, col, pos - line_start))
             continue
+
+        if ch == "/":
+            # Reached only when the comment openings above did not
+            # match, so this is a lone slash where division was meant.
+            raise LexerError(
+                "'/' is not an operator; division is written "
+                "'\N{DIVISION SIGN}'.  A slash begins a comment, as "
+                "'//' or '/*'", line, col)
 
         raise LexerError(f"unexpected character: {ch!r}", line, col)
 

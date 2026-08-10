@@ -64,8 +64,9 @@ fn test_unit_mul():
 fn test_unit_div():
   let dist ¤meter := 100
   let time ¤second := 10
-  let speed := dist / time
-  // speed should have unit m/s
+  let speed := dist ÷ time
+  assert_true(speed == 10¤meter÷second, "100m over 10s is 10 m÷s")
+  assert_true(@unitof(speed) == @unitof(1¤meter÷second), "and carries that unit")
   std.print("{}", speed)
 
 // --- Dimensionless result from division ---
@@ -73,8 +74,9 @@ fn test_unit_div():
 fn test_dimensionless_div():
   let a ¤meter := 10
   let b ¤meter := 5
-  let ratio := a / b
+  let ratio := a ÷ b
   // same unit cancels, result is plain 2
+  assert_true(ratio == 2, "the unit divides out")
   std.print("{}", ratio)
 
 // --- Unit conversion: compatible units ---
@@ -186,8 +188,8 @@ fn test_unit_inference():
 
 // --- User-defined units ---
 
-unit speed = meter / second
-unit accel = meter / second / second
+unit speed = meter ÷ second
+unit accel = meter ÷ second ÷ second
 
 fn test_user_units():
   let v ¤"speed" := 10
@@ -231,7 +233,7 @@ fn test_float_units():
 // --- Compound unit spec on expression ---
 
 fn test_compound_unit_spec():
-  let v ¤meter/second := 10
+  let v ¤meter÷second := 10
   std.print("{}", v)
 
 // --- Compound unit spec with multiplication ---
@@ -307,7 +309,7 @@ fn test_unit_no_space_before():
 fn test_unit_space_after():
   let a ¤ meter := 12
   let b ¤ second := 4
-  let c := a / b
+  let c := a ÷ b
   std.print("{}", c)
 
 // --- Spacing: no space before ¤, space after ¤ ---

@@ -47,7 +47,7 @@ class Unit:
         for k, v in other.components.items():
             components[k] = components.get(k, 0) - v
         return Unit(components, self.factor / other.factor,
-                    f"{self.display_name}/{other.display_name}")
+                    f"{self.display_name}{_DIV}{other.display_name}")
 
     def sqrt(self) -> "Unit":
         for k, v in self.components.items():
@@ -87,8 +87,12 @@ def _isqrt_exact(n: int) -> int | None:
     return r if r * r == n else None
 
 
-# The multiplication operator, as a unit formula is both read and written.
+# The two operators a unit formula is built from, as it is both read
+# and written.  A derived unit displays the way it would be declared,
+# so "m÷s" rather than the "m/s" of ordinary SI notation: one answer
+# to how division is written serves the whole language.
 _MUL = "\N{MULTIPLICATION SIGN}"
+_DIV = "\N{DIVISION SIGN}"
 
 _DIMENSION_ABBREV: dict[str, str] = {
     "meter": "m",
@@ -118,11 +122,11 @@ def _display_from_components(components: dict[str, int]) -> str:
         abbr = _DIMENSION_ABBREV.get(name, name)
         den_parts.append(abbr if exp == 1 else f"{abbr}^{exp}")
     if num_parts and den_parts:
-        return _MUL.join(num_parts) + "/" + _MUL.join(den_parts)
+        return _MUL.join(num_parts) + _DIV + _MUL.join(den_parts)
     if num_parts:
         return _MUL.join(num_parts)
     if den_parts:
-        return "1/" + _MUL.join(den_parts)
+        return "1" + _DIV + _MUL.join(den_parts)
     return "1"
 
 
@@ -215,7 +219,7 @@ def eval_unit_formula(node) -> Unit:
         right = eval_unit_formula(node.right)
         if node.op == _MUL:
             return left * right
-        if node.op == "/":
+        if node.op == _DIV:
             return left / right
         raise TypeError(f"unknown unit operator '{node.op}'")
     if isinstance(node, UnitSqrt):

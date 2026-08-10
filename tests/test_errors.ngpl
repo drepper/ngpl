@@ -71,7 +71,7 @@ fn error_assert_mismatch() → ∅:
 
 @expect error "expected error.*division_by_zero"
 fn error_div_zero() → ∅:
-    let x : mut = 10 / 0
+    let x : mut = 10 ÷ 0
     let y : mut = x + 1
 
 // --- parse errors ---------------------------------------------------------

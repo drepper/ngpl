@@ -79,7 +79,7 @@ fn test_mul_dimensionless_times_unit():
 @test
 fn test_div_unit_by_dimensionless():
   let a ¤meter := 12
-  let b := a / 3
+  let b := a ÷ 3
   assert_eq_int(b, 4, "12m / 3 = 4m")
 
 // --- dimensionless % unit-bearing ---

@@ -588,7 +588,7 @@ class Evaluator:
             "+": self._op_add,
             "-": self._op_sub,
             "\N{MULTIPLICATION SIGN}": self._op_mul,
-            "/": self._op_div,
+            "\N{DIVISION SIGN}": self._op_div,
             "%": self._op_mod,
             "==": self._op_eq,
             "!=": self._op_neq,
@@ -1238,8 +1238,8 @@ class Evaluator:
                 return UnitValue(result, result_unit)
             return UnitValue(result, l_unit if l_is_unit else r_unit)
 
-        if op == "/":
-            result = self._ops["/"](l_inner, r_inner)
+        if op == "\N{DIVISION SIGN}":
+            result = self._ops["\N{DIVISION SIGN}"](l_inner, r_inner)
             if isinstance(result, ExpectedValue):
                 if not result.is_ok():
                     return result

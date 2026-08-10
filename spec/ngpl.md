@@ -527,9 +527,9 @@ A suffix that names no type is refused, as is a fractional number given an integ
 1.5i32      // error: 1.5 is a floating-point literal, so its suffix cannot be 'i32'
 ```
 
-#### The Multiplication Operator
+#### The Multiplication and Division Operators
 
-Multiplication is written `×` (U+00D7 MULTIPLICATION SIGN).  `*` is not an operator, and using it is a lexical error:
+Multiplication is written `×` (U+00D7 MULTIPLICATION SIGN) and division `÷` (U+00F7 DIVISION SIGN).  `*` and `/` are not operators, and using either as one is a lexical error:
 
 ```
 3 * 4
@@ -537,9 +537,17 @@ Multiplication is written `×` (U+00D7 MULTIPLICATION SIGN).  `*` is not an oper
 error: unexpected character: '*'
 ```
 
-`*` became the multiplication sign in programming languages because early character sets had nothing better, and every language since has inherited the workaround rather than the reason.  A language whose source is required to be UTF-8 has the actual character available, and `×` is what the arithmetic already looks like everywhere outside a program.  The same reasoning gives the glyph operators elsewhere in this document.  Division is still written `/`; `÷` is intended but not yet implemented.
+```
+10 / 3
 
-`*` keeps its place in `/*` and `*/`, which delimit a block comment and are not operators.
+error: '/' is not an operator; division is written '÷'.  A slash begins a comment, as '//' or '/*'
+```
+
+`*` and `/` became the arithmetic signs in programming languages because early character sets had nothing better, and every language since has inherited the workaround rather than the reason.  A language whose source is required to be UTF-8 has the actual characters available, and `×` and `÷` are what the arithmetic already looks like everywhere outside a program.  The same reasoning gives the glyph operators elsewhere in this document.
+
+Both characters keep the places they held that were never operators.  `*` and `/` delimit a block comment as `/*` and `*/`, and `//` begins a line comment.  Because a slash still opens a comment, the diagnostic for one used as division says so: reading `10 / 3` as an unterminated comment would be the less useful answer.
+
+The division sign is used wherever the language divides, including in a unit formula and in the unit a derived value displays.  A speed is declared `¤meter÷second` and prints as `m÷s` rather than the `m/s` of ordinary SI notation, so that the language has one answer to how division is written rather than one for arithmetic and another for units.
 
 #### Comparing Floating-Point Values
 
@@ -612,12 +620,12 @@ exact, so compare them with the exact operator
 
 #### Arithmetic on Floating-Point Values
 
-All standard arithmetic operators (`+`, `-`, `×`, `/`, `%`) work on floating-point values.  When both operands are floats, the result uses the wider of the two types.  The width promotion order is: `f16`/`bfloat16` < `f32` < `f64`/`float`.
+All standard arithmetic operators (`+`, `-`, `×`, `÷`, `%`) work on floating-point values.  When both operands are floats, the result uses the wider of the two types.  The width promotion order is: `f16`/`bfloat16` < `f32` < `f64`/`float`.
 
 ```
 let a : mut = 3.0 + 2.0      // 5.0 (float)
 let b : mut = 1.5f32 × 2.0   // 3.0 (float — f32 promoted to float)
-let c : mut = 10.0 / 4.0     // 2.5 (float)
+let c : mut = 10.0 ÷ 4.0     // 2.5 (float)
 let d : mut = 7.0 % 3.0      // 1.0 (float, uses fmod semantics)
 let e : mut = -3.14           // -3.14 (negation)
 ```
@@ -631,7 +639,7 @@ When an integer and a float are combined in an arithmetic expression, the intege
 ```
 let a : mut = 2 + 3.0        // 5.0 — int promoted to float
 let b : mut = 3 × 2.5f32     // 7.5 — int promoted to f32
-let c : mut = 10.0 / 4       // 2.5 — int 4 promoted to float
+let c : mut = 10.0 ÷ 4       // 2.5 — int 4 promoted to float
 ```
 
 This promotion is implicit and always safe (integers have exact float representations up to the significand width).
@@ -1604,7 +1612,7 @@ A falsy value is still a present one, so `∃(x)` takes an element of `0` — th
 The same statement handles a result, with `∄(name)` binding the error:
 
 ```
-match 10 / b:
+match 10 ÷ b:
     ∃(v):
         use(v)
     ∄(e):
@@ -1622,7 +1630,7 @@ match 10 / b:
 Neither stands in for the other.  A `match` on a result that handles only `∅` has not handled failure, and reports as much rather than falling through:
 
 ```
-match 10 / 0:
+match 10 ÷ 0:
     ∃(v): use(v)
     ∅: nothing()
 
@@ -1676,7 +1684,7 @@ or a _ arm
 A pattern belonging to a different type is reported as itself rather than as a missing arm, since naming the mistake is more use than naming its consequence:
 
 ```
-match 10 / b:
+match 10 ÷ b:
     ∃(v): use(v)
     ∅: nothing()
 
@@ -1803,14 +1811,14 @@ The `?` postfix on a type introduces an optional when no error type follows, and
 
 ```
 fn safe_div a : int, b : int → int?std.errors:
-    (a / b)?
+    (a ÷ b)?
 ```
 
 Since `std.errors` is the most common error type, the abbreviation `T!` is provided:
 
 ```
 fn safe_div a : int, b : int → int!:
-    (a / b)?
+    (a ÷ b)?
 ```
 
 `int!` is exactly equivalent to `int?std.errors` — both in parameter types and return types.  Since `std.errors` is what almost every fallible operation in the standard library reports, `T!` is the form to write; the long form is for the rare case of naming it alongside another error type, where the symmetry helps.  The rest of this document and the test suite use `T!`.
@@ -1824,22 +1832,22 @@ An expected value is either `ok(value)` or `err(error)`:
 
 #### Division Returns Expected Values
 
-Integer division and remainder (`/`, `%`) return an expected value with error type `std.errors` rather than raising a runtime exception:
+Integer division and remainder (`÷`, `%`) return an expected value with error type `std.errors` rather than raising a runtime exception:
 
 ```
-let x : mut = 10 / 3           /* ok(3) — successful division */
-let y : mut = 10 / 0           /* err(std.errors.division_by_zero) */
+let x : mut = 10 ÷ 3           /* ok(3) — successful division */
+let y : mut = 10 ÷ 0           /* err(std.errors.division_by_zero) */
 ```
 
 This means division by zero is a **recoverable error** rather than an immediate program abort.  The caller chooses the error-handling strategy:
 
 ```
 /* Recovery with ?? */
-let result : mut = (10 / 0) ?? -1         /* result is -1 */
+let result : mut = (10 ÷ 0) ?? -1         /* result is -1 */
 
 /* Propagation with ? (requires T?E or T? return type) */
 fn compute x : int → int!:
-    let q : mut = (x / 2)?                /* propagates error if x/2 fails */
+    let q : mut = (x ÷ 2)?                /* propagates error if x÷2 fails */
     q + 10
 ```
 
@@ -1862,7 +1870,7 @@ The `?` postfix operator works on both optional and expected values:
 
 ```
 fn broken(x : int) → int:
-    let q : mut = (x / 2)?
+    let q : mut = (x ÷ 2)?
 
 error: in broken: ? requires the enclosing function to return an
 optional or an expected type, but it returns 'int'
@@ -1875,7 +1883,7 @@ enum MyErr:
     bad
 
 fn broken(x : int) → int?MyErr:
-    let q : mut = (x / 0)?        // division fails with std.errors
+    let q : mut = (x ÷ 0)?        // division fails with std.errors
 
 error: in broken: ? propagates an error of type 'std.errors', but the
 function returns errors of type 'MyErr'
@@ -1889,7 +1897,7 @@ A lambda is its own function for this purpose.  A `?` inside one returns from th
 
 ```
 fn caller() → ∅:                                  // plain, and that is fine
-    let f : mut = λa : int, b : int → int!: (a / b)?
+    let f : mut = λa : int, b : int → int!: (a ÷ b)?
     std.print("{}", f(10, 0) ?? ⁻1)
 ```
 
@@ -1898,7 +1906,7 @@ fn caller() → ∅:                                  // plain, and that is fine
 The `??` operator works on both optional and expected values.  For an expected error, the right-hand side provides the fallback:
 
 ```
-let safe : mut = (x / y) ?? 0            /* 0 on division by zero */
+let safe : mut = (x ÷ y) ?? 0            /* 0 on division by zero */
 let padded : mut = get_padded_byte(data, pos, total_size) ?? 0  /* 0 on absent byte */
 ```
 
@@ -1912,10 +1920,10 @@ let padded : mut = get_padded_byte(data, pos, total_size) ?? 0  /* 0 on absent b
 When an expected value holding `ok(v)` is used in an operation that expects a plain value (arithmetic, comparison, etc.), it is automatically unwrapped to `v`.  An expected value holding `err(e)` raises a runtime error at the point of use:
 
 ```
-let x : mut = 10 / 3      /* x is ok(3) */
+let x : mut = 10 ÷ 3      /* x is ok(3) */
 let y : mut = x + 1        /* x auto-unwraps to 3, y is 4 */
 
-let z : mut = 10 / 0       /* z is err(std.errors.division_by_zero) */
+let z : mut = 10 ÷ 0       /* z is err(std.errors.division_by_zero) */
 let w : mut = z + 1        /* runtime error: unwrap of expected error */
 ```
 
@@ -2253,7 +2261,7 @@ The rules are:
    if x < 0: return -x
    ```
 
-5. **Line continuation.**  A trailing binary operator (`+`, `-`, `×`, `/`, `%`, `|`, `&`, `^`, `<<`, `>>`, `«`, `»`, `↺`, `↻`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `??`, `←`, `and`, `or`) or a trailing `=` (in variable definitions) signals that the expression continues on the next line.  The indentation of the continuation line does not create a new block:
+5. **Line continuation.**  A trailing binary operator (`+`, `-`, `×`, `÷`, `%`, `|`, `&`, `^`, `<<`, `>>`, `«`, `»`, `↺`, `↻`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `??`, `←`, `and`, `or`) or a trailing `=` (in variable definitions) signals that the expression continues on the next line.  The indentation of the continuation line does not create a new block:
    ```
    W[j] ← W[j - 16] + expand_s0(W[j - 15]) +
            W[j - 7] + expand_s1(W[j - 2])
@@ -3200,7 +3208,7 @@ let z : mut = a == 5        // OK — untyped constant comparison
 let w : mut = a < b         // error: cannot compare unit ptrdiff with typed integer i32
 ```
 
-**Multiplicative operations** (`×`, `/`, `%`) allow mixing freely — a typed integer without unit acts as a dimensionless scalar:
+**Multiplicative operations** (`×`, `÷`, `%`) allow mixing freely — a typed integer without unit acts as a dimensionless scalar:
 
 ```
 let a ¤byte : mut i32 = 4
@@ -3214,7 +3222,7 @@ let y : mut = b × a         // OK — result is 12 ¤byte
 
 #### Operator Precedence
 
-`⍴` binds tighter than arithmetic (`+`, `-`, `×`, `/`) but looser than unary operators (`-x`, `~x`).  This means:
+`⍴` binds tighter than arithmetic (`+`, `-`, `×`, `÷`) but looser than unary operators (`-x`, `~x`).  This means:
 
 ```
 3 × 4 ⍴ 0     // 3 × [0, 0, 0, 0] — reshape first, then multiply
@@ -4189,7 +4197,7 @@ static_assert_eq(@resultof(example), @resultof(example))
 // @unitof on compile-time unit expressions
 static_assert_eq(@unitof(5 ¤meter), ¤meter)
 assert_true(@unitof(42) != ¤meter)            // dimensionless
-assert_true(@unitof(100 ¤meter / (10 ¤second)) == ¤meter/second)
+assert_true(@unitof(100 ¤meter ÷ (10 ¤second)) == ¤meter÷second)
 ```
 
 | Feature | C++ | Rust | Zig | NGPL |
@@ -5653,7 +5661,7 @@ The affinity mask is an ordinary integer of arbitrary width, not a fixed 64-bit 
 Memory and page sizes carry the `byte` unit, so they combine correctly with `sizeof` results and other byte-valued quantities without further annotation:
 
 ```
-let pages : mut = std.sys.total_memory() / std.sys.page_size()
+let pages : mut = std.sys.total_memory() ÷ std.sys.page_size()
 ```
 
 #### Comparison with Other Languages
@@ -5682,7 +5690,7 @@ A unit annotation uses `¤` followed by a unit name:
 ```
 let distance ¤meter : mut = 100
 let elapsed ¤second : mut = 10
-let speed ¤meter/second : mut = distance / elapsed
+let speed ¤meter÷second : mut = distance ÷ elapsed
 ```
 
 The `¤` (U+00A4, CURRENCY SIGN) can appear in two positions:
@@ -5701,14 +5709,14 @@ d ← 3000¤meter           // expression with unit meter, converted to kilomete
 
 Builtin units use identifier syntax with full names: `meter`, `second`, `kilogram`, `kilometer`, `millisecond`, `byte`, etc.  User-defined units are referenced with string syntax: `¤"speed"`, `¤"widgets"`.
 
-Compound unit specifications combine names with `×` (multiplication), `/` (division), and `√` (square root):
+Compound unit specifications combine names with `×` (multiplication), `÷` (division), and `√` (square root):
 
 ```
-let velocity ¤meter/second : mut = 10
+let velocity ¤meter÷second : mut = 10
 let area ¤meter×meter : mut = 25
 ```
 
-In expression context, `×` and `/` after `¤` are consumed as unit operators only when followed by another unit name, not by a number.  This avoids ambiguity with arithmetic operators:
+In expression context, `×` and `÷` after `¤` are consumed as unit operators only when followed by another unit name, not by a number.  This avoids ambiguity with arithmetic operators:
 
 ```
 let a ¤meter : mut = 5
@@ -5720,7 +5728,7 @@ let b : mut = a × 3            // 15 m (scalar multiplication, not unit formula
 New units are introduced with the `unit` keyword.  A base unit has no formula; a derived unit specifies the conversion in terms of existing units using integer ratios for exact representation:
 
 ```
-unit mph = 1609344 / 3600000 × meter / second
+unit mph = 1609344 ÷ 3600000 × meter ÷ second
 unit widgets
 ```
 
@@ -5762,7 +5770,7 @@ The interpreter provides the following builtin units:
   let a ¤meter : mut = 10
   let b : mut = a + 3       // 13 m
   let c : mut = 2 × a       // 20 m
-  let d : mut = a / 5       // 2 m
+  let d : mut = a ÷ 5       // 2 m
   let e : mut = a % 3       // 1 m
   ```
 

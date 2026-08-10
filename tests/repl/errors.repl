@@ -9,4 +9,5 @@ fn bad_call(n : i64) → i64:
 bad_call("text")
 bad_call(4)
 1 +++ 2
+10 / 3
 "recovered"

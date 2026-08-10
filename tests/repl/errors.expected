@@ -25,4 +25,10 @@ error: unexpected token: '+'
   1 | 1 +++ 2
     |    ^
     |
+error: '/' is not an operator; division is written '÷'.  A slash begins a comment, as '//' or '/*'
+  --> <repl:10>:1:4
+    |
+  1 | 10 / 3
+    |    ^
+    |
 "recovered"

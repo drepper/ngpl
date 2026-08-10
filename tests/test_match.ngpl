@@ -150,7 +150,7 @@ fn test_match_over_an_iterator() → ∅:
 @test
 fn test_match_result_ok() → ∅:
     let seen : mut = 0
-    match 10 / 2:
+    match 10 ÷ 2:
         ∃(v):
             seen ← v
         ∄(e):
@@ -160,7 +160,7 @@ fn test_match_result_ok() → ∅:
 @test
 fn test_match_result_err_binds_the_error() → ∅:
     let took : mut = ""
-    match 10 / 0:
+    match 10 ÷ 0:
         ∃(v):
             took ← "ok"
         ∄(e):
@@ -205,7 +205,7 @@ fn test_explicit_error_with_default() → ∅:
 @test
 fn test_match_result_wildcard() → ∅:
     let took : mut = ""
-    match 10 / 0:
+    match 10 ÷ 0:
         ∃(v):
             took ← "ok"
         _:
@@ -218,7 +218,7 @@ fn test_match_result_wildcard() → ∅:
 // missing.
 @expect error "∅ cannot match a result"
 fn error_absent_pattern_on_a_result() → ∅:
-    match 10 / 0:
+    match 10 ÷ 0:
         ∃(v):
             std.print("{}", v)
         ∅:
@@ -251,7 +251,7 @@ fn error_optional_missing_absent_arm() → ∅:
 
 @expect error "match has no arm for a failed result"
 fn error_result_missing_failure_arm() → ∅:
-    match 10 / 2:
+    match 10 ÷ 2:
         ∃(v):
             std.print("{}", v)
 

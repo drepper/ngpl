@@ -57,6 +57,12 @@ the sized types do not have.
 Completed
 ---------
 
+[x] division is written ÷ rather than /, as multiplication is written × rather than *.
+    A slash is not an operator; it keeps only the comment openings // and /*, and one
+    used as division says so rather than being read as the start of a comment.  The
+    division sign is what a unit formula uses and what a derived unit displays, so a
+    speed is declared ¤meter÷second and prints as m÷s.
+
 [x] approximate comparisons for floating-point values: ≅ ≇ ⪅ ⪆ ⪉ ⪊ against == != <= >= < >,
     to within std.comparison_tolerance, which follows APL's ⎕CT in being a fraction of the
     larger operand rather than an absolute epsilon.  Scoping the tolerance is still open.
@@ -397,8 +403,8 @@ Syntax Decisions Still Open
 
 [ ] [FULL] function call delimiter: parentheses, brackets (Wolfram-style), or no delimiters (Haskell).
 
-[ ] [FULL] integer division semantics: two operators (Python), explicit cast requirement,
-    or ÷ with prefix/suffix modifiers.
+[ ] [FULL] integer division semantics: a second operator alongside ÷ (as Python has //),
+    an explicit cast requirement, or a modifier on ÷ saying which rounding is meant.
 
 [ ] [FULL] binary/boolean operation semantics on mixed-width integers: reject, zero-extend,
     or repeat.

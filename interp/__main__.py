@@ -485,7 +485,7 @@ def _propagated_error_type(expr, env) -> str | None:
     Returns None when the expression's error type cannot be determined
     without evaluating it, in which case no static claim is made.
     """
-    if isinstance(expr, _ast.BinOp) and expr.op in ("/", "%"):
+    if isinstance(expr, _ast.BinOp) and expr.op in ("\N{DIVISION SIGN}", "%"):
         # Division and remainder report failure as std.errors.
         return "std.errors"
     if isinstance(expr, _ast.FuncCall):
@@ -611,7 +611,7 @@ def _match_subject_kind(expr, env, func_def=None) -> str | None:
         return "optional"
     if isinstance(expr, _ast.ExpErr):
         return "expected"
-    if isinstance(expr, _ast.BinOp) and expr.op in ("/", "%"):
+    if isinstance(expr, _ast.BinOp) and expr.op in ("\N{DIVISION SIGN}", "%"):
         return "expected"
     if isinstance(expr, _ast.FuncCall):
         try:

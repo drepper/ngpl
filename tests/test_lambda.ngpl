@@ -165,7 +165,7 @@ fn test_lambda_optional_return_none():
 // ? inside lambda returns from lambda, not enclosing function
 fn safe_div(a : i32, b : i32) → i32?:
   if b == 0: return ∅
-  a / b
+  a ÷ b
 
 @test
 fn test_lambda_question_scoping():
@@ -176,14 +176,14 @@ fn test_lambda_question_scoping():
 // Expected return type wraps result in ExpectedValue.ok
 @test
 fn test_lambda_expected_return():
-  let f := λa : i64, b : i64 → i64!: (a / b)?
+  let f := λa : i64, b : i64 → i64!: (a ÷ b)?
   let r := f(10, 2)
   assert_eq(5, r ?? ⁻1)
 
 // Expected return type: division by zero yields error
 @test
 fn test_lambda_expected_return_err():
-  let f := λa : i64, b : i64 → i64!: (a / b)?
+  let f := λa : i64, b : i64 → i64!: (a ÷ b)?
   let r := f(10, 0)
   assert_eq(⁻1, r ?? ⁻1)
 
