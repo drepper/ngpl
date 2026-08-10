@@ -3715,7 +3715,28 @@ Two compile-time assertion functions verify conditions using only constant expre
 
 - `static_assert_eq(expected, actual)` — fails at compile time if the two constant values differ: `static_assert_eq(120, 2 × 3 × 4 × 5)`.
 
-Constant expressions include literals, arithmetic/logic operations on literals, unary operators, and array/tuple literals composed of constants.  References to variables — even `let` variables — are not compile-time constants for these purposes; use `assert` or `assert_eq` for those.
+Constant expressions include literals, arithmetic/logic operations on literals, unary operators, and array/tuple literals composed of constants.  A variable's *value* is not one — use `assert` or `assert_eq` for that — but its *type* is, so `@typeof`, `@sizeof`, and `@unitof` of a name are constants whatever the name holds:
+
+```
+let a : u8 = 4
+static_assert_eq(@typeof(a), u8)
+static_assert_eq(@sizeof(a), 1 ¤byte)
+static_assert_eq(@unitof(a), @unitof(1))
+```
+
+Because a declaration settles these, they are decided where they are written rather than when the code runs.  A wrong one is reported even in a function nothing calls:
+
+```
+fn never_called() → ∅:
+    let a : u8 = 4
+    static_assert_eq(@sizeof(a), 99 ¤byte)
+
+Error: in never_called: static_assert_eq failed:
+  expected: 1 B
+  actual:   99 B
+```
+
+An assertion naming something whose type is not written down — an untyped parameter, or a local whose type cannot be stood for without running the code — is left to be checked when the function runs.
 
 ```
 static_assert(true)                     /* OK */

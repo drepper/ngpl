@@ -22,7 +22,7 @@ from interp.value import (
     coerce_to_type, validate_param_type, validate_type, none, FAST_TYPES,
     register_type_alias, register_sum_type, register_enum_type,
     sum_type_alternatives, register_user_type, DISCARD_NAME, is_type_name,
-    _split_optional_type,
+    _split_optional_type, _TYPE_BITS, FLOAT_TYPES, resolve_type_alias,
 )
 from interp.eval import Evaluator, unwrap_optional, _ARRAY_MUTATORS
 from interp.layout import LayoutError, struct_layout, struct_lookup
@@ -700,6 +700,81 @@ def _check_one_match(node, env, func_def=None) -> str | None:
     return None
 
 
+def _placeholder_value(type_name: str, unit_spec, env):
+    """A value standing for anything of a declared type.
+
+    A static assertion over @typeof, @sizeof, or @unitof asks about the
+    type, so any value of that type answers it.  Only types that can be
+    stood for confidently are built; anything else returns None and the
+    assertion is left to run.
+    """
+    from interp.value import mk_int, mk_float, mk_bool, mk_str, UnitValue
+    from interp.units import eval_unit_formula
+    resolved = validate_type(type_name) and resolve_type_alias(type_name)
+    if not resolved:
+        return None
+    if resolved in _TYPE_BITS:
+        value = mk_int(0, resolved)
+    elif resolved == "int":
+        value = mk_int(0)
+    elif resolved in FLOAT_TYPES:
+        value = mk_float(0.0, resolved)
+    elif resolved == "bool":
+        value = mk_bool(False)
+    elif resolved == "str":
+        value = mk_str("")
+    else:
+        return None
+    if unit_spec is not None:
+        value = UnitValue(value, eval_unit_formula(unit_spec))
+    return value
+
+
+def _static_assert_check(func_def, env) -> str | None:
+    """Decide the static assertions a function's declarations settle.
+
+    An assertion over the type of a name is answerable without running
+    anything, since the declaration says what the type is.  Checking it
+    here means a wrong one is reported whether or not the function is
+    ever called.
+
+    Assertions naming anything that cannot be stood for are left alone,
+    to be checked when the function runs.
+    """
+    known = Env()
+    for param in func_def.params:
+        param_name = param[0] if isinstance(param, tuple) else param
+        param_type = param[1] if isinstance(param, tuple) else None
+        if param_type is None:
+            continue
+        value = _placeholder_value(param_type,
+                                   func_def.param_units.get(param_name), env)
+        if value is not None:
+            known.define(param_name, value)
+
+    checker = Evaluator(known)
+    checker._comptime_vars = {n for n, _ in
+                              [(p[0], None) if isinstance(p, tuple) else (p, None)
+                               for p in func_def.params]}
+    for node in _iter_ast(func_def.body):
+        if isinstance(node, _ast.VarDef) and node.type_annotation is not None:
+            value = _placeholder_value(node.type_annotation, node.unit_spec, env)
+            if value is not None:
+                known.define(node.name, value)
+            continue
+        if not isinstance(node, (_ast.StaticAssert, _ast.StaticAssertEq)):
+            continue
+        try:
+            checker.eval_expr(node)
+        except TypeError as e:
+            if "static_assert" in str(e) and "failed" in str(e):
+                return str(e)
+        except Exception:
+            # Not answerable from declarations alone; it runs instead.
+            pass
+    return None
+
+
 def _static_check_match(func_def, env) -> str | None:
     """Check every match in a function, lambdas included."""
     for node in _iter_ast(func_def.body):
@@ -1141,6 +1216,9 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                 match_err = _static_check_match(defn, env)
                 if match_err is not None:
                     raise DefinitionError(f"in {defn.name}: {match_err}")
+                assert_err = _static_assert_check(defn, env)
+                if assert_err is not None:
+                    raise DefinitionError(f"in {defn.name}: {assert_err}")
                 program.warnings.extend(_unused_mut_warnings(defn))
 
     return program

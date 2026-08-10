@@ -1,0 +1,3 @@
+Error: in never_called: static_assert_eq failed:
+  expected: 1 B
+  actual:   99 B

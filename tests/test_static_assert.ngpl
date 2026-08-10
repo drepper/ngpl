@@ -83,6 +83,42 @@ fn test_static_assert_eq_non_const() → ∅:
     let x : mut = 10
     static_assert_eq(x, 10)
 
+// ---------------------------------------------------------------------
+// Assertions a declaration settles are decided without running
+// ---------------------------------------------------------------------
+
+// @typeof, @sizeof, and @unitof of a name ask about its type, which
+// its declaration states, so these hold whether or not the function
+// is ever called.
+@test
+fn test_declared_type_settles_the_assertions() → ∅:
+    let a : u8 = 4
+    static_assert_eq(@typeof(a), u8)
+    static_assert_eq(@sizeof(a), 1 ¤byte)
+    static_assert_eq(@unitof(a), @unitof(1))
+
+@test
+fn test_declared_parameter_settles_the_assertions(n : u16) → ∅:
+    static_assert_eq(@typeof(n), u16)
+    static_assert_eq(@sizeof(n), 2 ¤byte)
+
+@test
+fn test_measured_local_keeps_its_unit() → ∅:
+    let d ¤meter : i32 = 5
+    static_assert_eq(@unitof(d), @unitof(1 ¤meter))
+    static_assert_eq(@sizeof(d), 4 ¤byte)
+
+// A name whose type cannot be stood for is left to run, so nothing is
+// claimed about it here.
+@test
+fn test_untyped_name_is_left_alone(x) → ∅:
+    static_assert_eq(@typeof(x), @typeof(x))
+
+@test
+fn test_array_local_is_left_alone() → ∅:
+    let a : i32[3] = 0
+    static_assert_eq(@sizeof(a), 3 ¤ptrdiff)
+
 @start
 fn main() → ∅:
     std.print("static_assert tests passed")
