@@ -57,6 +57,11 @@ the sized types do not have.
 Completed
 ---------
 
+[x] every signature the specification shows now parses.  Sixty-three were written without
+    parentheses — `fn add a : int, b : int → int:` — which the parser stopped accepting
+    long enough ago that no example carrying one had ever been run.  A check parses each
+    one, so the next such drift is caught rather than accumulated.
+
 [x] a function definition may leave the return type off, which says what → ∅ says.
     ∅ is what a function returns when it returns nothing, so naming it repeats what the
     absence already said, and the functions that return nothing are most of what a program
@@ -385,10 +390,6 @@ String and I/O
 
 Build System and Tooling
 -------------------------
-
-[ ] the specification still shows signatures without parentheses — `fn add a : int, b : int
-    → int:` and about fifteen others — which the parser has not accepted for some time.  They
-    predate the requirement and no example that carries one has ever been run.
 
 [ ] a struct field's diagnostic points at the struct rather than at the field, since a field
     is a (name, type) pair with no position of its own.  Carrying one would change the shape

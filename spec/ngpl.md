@@ -764,7 +764,7 @@ static_assert(2 > 1.5)         // int promoted to float
 Function parameters with float type annotations accept both integer and float arguments.  Integers are converted to the target float type; floats are clamped to the target precision:
 
 ```
-fn add x:f64, y:f64 -> f64:
+fn add(x:f64, y:f64) -> f64:
   x + y
 add(3, 4)               // both ints promoted to f64, result 7.0
 add(3.14, 2)             // 3.14 is float→f64, 2 is int→f64
@@ -773,7 +773,7 @@ add(3.14, 2)             // 3.14 is float→f64, 2 is int→f64
 Passing a float to an integer parameter is a type error:
 
 ```
-fn square x:i32 -> i32:
+fn square(x:i32) -> i32:
   x × x
 @expect error "expected i32"
 square(3.14)             // ERROR: float cannot coerce to integer
@@ -988,14 +988,14 @@ NGPL is alone in the row that matters: an unsigned type is not a modular counter
 Function parameters can be annotated with dynamic array types using the `type[]` syntax:
 
 ```
-fn process data : byte[] → int:
+fn process(data : byte[]) → int:
     ...
 ```
 
 A dynamic array parameter carries its size implicitly.  The size is accessible via the `.sizeof` property:
 
 ```
-fn count_bytes data : byte[] → usize:
+fn count_bytes(data : byte[]) → usize:
     data.sizeof
 ```
 
@@ -1045,7 +1045,7 @@ When a `Bytes` object (from file I/O or `std.bytes()`) is passed to a `byte[]` p
 Dynamic arrays support iteration with `foreach`:
 
 ```
-fn sum_bytes data : byte[] → int:
+fn sum_bytes(data : byte[]) → int:
     let total : mut = 0
     foreach b := data:
         total ← total + b
@@ -1329,14 +1329,14 @@ would require a significant amount of the total number of tokens for this constr
 #### Examples
 
 ```
-fn add a : int, b : int → int:
+fn add(a : int, b : int) → int:
     a + b
 
-fn abs x : int → int:
+fn abs(x : int) → int:
     if x < 0: return -x
     x
 
-fn greet name:
+fn greet(name):
     std.println("hello {}", name);
 ```
 
@@ -1345,8 +1345,8 @@ In `add`, the expression `a + b` (no semicolon) is the implicit return value.  I
 The same functions can equivalently be written with braces:
 
 ```
-fn add a : int, b : int → int { a + b }
-fn abs x : int → int { if x < 0 { return -x; } x }
+fn add(a : int, b : int) → int { a + b }
+fn abs(x : int) → int { if x < 0 { return -x; } x }
 ```
 
 
@@ -1595,7 +1595,7 @@ A function that may fail to produce a value declares an **optional return type**
 #### Declaration
 
 ```
-fn get_padded_byte data : byte[], off ¤byte : usize, total_size ¤byte : usize → u8?:
+fn get_padded_byte(data : byte[], off ¤byte : usize, total_size ¤byte : usize) → u8?:
     if off >= total_size: return ∅
     if off < data.sizeof: return data[off]
     ...
@@ -1626,7 +1626,7 @@ Without the `?`, a binding has no way to hold nothing: a definition requires an 
 The `?` operator unwraps an optional value or **propagates** `∅` to the enclosing function:
 
 ```
-fn get_padded_word data : byte[], off : usize, total_size : usize → u32?:
+fn get_padded_word(data : byte[], off : usize, total_size : usize) → u32?:
     let b0 : mut u32 = get_padded_byte(data, off, total_size)?
     ...
 ```
@@ -1934,14 +1934,14 @@ The `?` postfix on a type introduces an optional when no error type follows, and
 | `T!` | abbreviation for `T?std.errors` |
 
 ```
-fn safe_div a : int, b : int → int?std.errors:
+fn safe_div(a : int, b : int) → int?std.errors:
     (a ÷ b)?
 ```
 
 Since `std.errors` is the most common error type, the abbreviation `T!` is provided:
 
 ```
-fn safe_div a : int, b : int → int!:
+fn safe_div(a : int, b : int) → int!:
     (a ÷ b)?
 ```
 
@@ -1970,7 +1970,7 @@ This means division by zero is a **recoverable error** rather than an immediate 
 let result : mut = (10 ÷ 0) ?? -1         /* result is -1 */
 
 /* Propagation with ? (requires T?E or T? return type) */
-fn compute x : int → int!:
+fn compute(x : int) → int!:
     let q : mut = (x ÷ 2)?                /* propagates error if x÷2 fails */
     q + 10
 ```
@@ -2058,12 +2058,12 @@ This ensures that errors cannot be silently ignored — they must be handled (wi
 A function that returns `∅` for absent data, a caller that substitutes a default, and an outer function that propagates structural failure:
 
 ```
-fn get_padded_byte ... → u8?:
+fn get_padded_byte(...) → u8?:
     if pos >= total_size: return ∅
     ...
     ∅                                         /* zero-padding zone */
 
-fn get_padded_word ... → u32?:
+fn get_padded_word(...) → u32?:
     if off >= total_size: return ∅             /* fully out of range */
     let b0 : mut u32 = get_padded_byte(...) ?? 0     /* absent bytes → 0 */
     let b1 : mut u32 = get_padded_byte(...) ?? 0
@@ -2071,7 +2071,7 @@ fn get_padded_word ... → u32?:
     let b3 : mut u32 = get_padded_byte(...) ?? 0
     (b0 « 24) | (b1 « 16) | (b2 « 8) | b3
 
-fn sha256 data → int?:
+fn sha256(data) → int?:
     ...
     W[i] ← get_padded_word(...)?                   /* propagates ∅ */
     ...
@@ -2139,13 +2139,13 @@ When an argument is passed to a typed parameter:
 #### Examples
 
 ```
-fn get_padded_byte data : byte[], pos : usize, total_size : usize → ?u8:
+fn get_padded_byte(data : byte[], pos : usize, total_size : usize) → u8?:
     ...
 
-fn expand_s0 prev : u32 → int:
+fn expand_s0(prev : u32) → int:
     (prev ↻ 7) ^ (prev ↻ 18) ^ (prev » 3)
 
-fn maybe_use value : int?:
+fn maybe_use(value : int?):
     ...
 ```
 
@@ -2354,7 +2354,7 @@ Blocks of statements — function bodies, if/elif/else branches, while loop bodi
 The traditional approach uses `{` and `}` to delimit blocks:
 
 ```
-fn abs x : int → int {
+fn abs(x : int) → int {
     if x < 0 { return -x; }
     x
 }
@@ -2367,7 +2367,7 @@ Braces enclose zero or more statements.  Statements are separated by newlines or
 A colon `:` at the end of a construct header introduces a layout-driven block, where indentation determines the block's extent:
 
 ```
-fn abs x : int → int:
+fn abs(x : int) → int:
     if x < 0: return -x
     x
 ```
@@ -2398,13 +2398,13 @@ The rules are:
 Brace and layout blocks can be mixed freely.  A function body can use `:` while an inner `if` uses `{ }`, or vice versa:
 
 ```
-fn mixed x : int → int:
+fn mixed(x : int) → int:
     if x > 10 {
         return x - 10;
     }
     x
 
-fn mixed2 x : int → int {
+fn mixed2(x : int) → int {
     if x > 10:
         return x - 10
     x
@@ -2676,7 +2676,7 @@ foreach val := data:
 This works with any array, including dynamic arrays passed as parameters:
 
 ```
-fn sum_bytes data : byte[] → int:
+fn sum_bytes(data : byte[]) → int:
     let total : mut = 0
     foreach b := data:
         total ← total + b
@@ -2936,7 +2936,7 @@ The lambda body has a restricted environment:
 - If a capture list is present but a referenced name is missing from it, a compile-time error is raised.
 
 ```
-fn helper x : i32 → i32:
+fn helper(x : i32) → i32:
     x + 100
 
 let offset : mut = 10
@@ -2963,10 +2963,10 @@ let result : mut = (λx : int → int: x + 1)(5)   // result is 6
 #### Lambdas as Arguments and Return Values
 
 ```
-fn apply f, x : i32 → i32:
+fn apply(f, x : i32) → i32:
     f(x)
 
-fn make_adder n : i32:
+fn make_adder(n : i32):
     λx : int |n| → int: x + n
 
 let add3 : mut = make_adder(3)
@@ -2979,7 +2979,7 @@ assert_eq(15, apply(λx : int → int: x × 3, 5))
 Calling a function with fewer arguments than its parameter list produces a partially-applied lambda.  The provided arguments are captured automatically.
 
 ```
-fn add a : i32, b : i32 → i32:
+fn add(a : i32, b : i32) → i32:
     a + b
 
 let add5 : mut = add(5)                  // returns λb (partial add[5])
@@ -2989,7 +2989,7 @@ assert_eq(8, add5(3))
 Multi-step currying is supported:
 
 ```
-fn add3 a : i32, b : i32, c : i32 → i32:
+fn add3(a : i32, b : i32, c : i32) → i32:
     a + b + c
 
 let f1 : mut = add3(1)                   // λb, c
@@ -3013,7 +3013,7 @@ A function marked `@replaceable` can have its implementation swapped at runtime 
 
 ```
 @replaceable
-fn strategy x : i32 → i32:
+fn strategy(x : i32) → i32:
     x × 2
 
 // Must capture — strategy could change after the lambda is created
@@ -3086,7 +3086,7 @@ generate(func, range)
 let squares : mut = generate(λx : int → int: x × x, 1…5)
 // squares = [1, 4, 9, 16, 25]
 
-fn double x : i32 → i32:
+fn double(x : i32) → i32:
     x × 2
 
 let doubled : mut = generate(double, 1…4)
@@ -3098,7 +3098,7 @@ let doubled : mut = generate(double, 1…4)
 A curried function can be used as the mapping function:
 
 ```
-fn multiply a : i32, b : i32 → i32:
+fn multiply(a : i32, b : i32) → i32:
     a × b
 
 let tripled : mut = generate(multiply(3), 1…5)
@@ -3276,11 +3276,11 @@ let b : mut = buf[0]                // OK — untyped integer constant
 Units are attached at the point of declaration — variable definitions, or function parameters:
 
 ```
-fn safe_get arr : i32[], idx ¤ptrdiff : i32 → i32?:
+fn safe_get(arr : i32[], idx ¤ptrdiff : i32) → i32?:
     catch:
         arr[idx]             // OK — idx carries ptrdiff from declaration
 
-fn read_byte data : byte[], off ¤byte : usize → u8:
+fn read_byte(data : byte[], off ¤byte : usize) → u8:
     data[off]                // OK — off carries byte from declaration
 ```
 
@@ -3982,7 +3982,7 @@ let sum : mut = (λa : int, b : int → int: a + b) ⌿ 1…100
 Named functions as the left operand:
 
 ```
-fn add x : int, y : int → int:
+fn add(x : int, y : int) → int:
     x + y
 
 let total : mut = add ⌿ [10, 20, 30]   // 60
@@ -3991,7 +3991,7 @@ let total : mut = add ⌿ [10, 20, 30]   // 60
 Currying and fold combine naturally.  A curried function produces the mapping, and fold reduces the result:
 
 ```
-fn multiply a : int, b : int → int:
+fn multiply(a : int, b : int) → int:
     a × b
 
 let triple : mut = multiply(3)
@@ -4022,7 +4022,7 @@ The `catch` statement provides scoped error handling at the syntactic level.  Un
 #### Syntax
 
 ```
-fn safe_access arr : i32[], idx ¤ptrdiff : i32 → i32?:
+fn safe_access(arr : i32[], idx ¤ptrdiff : i32) → i32?:
     catch:
         arr[idx]
 ```
@@ -4058,11 +4058,11 @@ If no matching enum value is found, a string description of the error is used as
 The critical design property of `catch` is **syntactic scope**.  Errors from function calls inside the `catch` block are **not** caught:
 
 ```
-fn risky → i32:
+fn risky() → i32:
     let a : mut = [1]
     a[99]              // raises IndexError
 
-fn caller → i32?:
+fn caller() → i32?:
     catch:
         risky()        // error from risky() propagates — NOT caught
         let a : mut = [1, 2]
@@ -4095,15 +4095,15 @@ Unit testing is built into the language, similar to Rust's `#[test]` attribute. 
 
 ```
 @test
-fn test_something:
+fn test_something():
     ...
 
 @test(sha256)
-fn test_sha256_abc:
+fn test_sha256_abc():
     ...
 
 @test(encrypt, decrypt)
-fn test_round_trip:
+fn test_round_trip():
     ...
 ```
 
@@ -4118,7 +4118,7 @@ Exactly one function may be annotated with `@start` to designate it as the progr
 
 ```
 @start
-fn main → u8:
+fn main() → u8:
     if some_check_failed():
         return 1
     0                           // success
@@ -4352,7 +4352,7 @@ static_assert_eq(@sizeof([1, 2, 3]), @sizeof("abc"))
 `@sizeof` is particularly useful for parameter packs, which are compile-time entities:
 
 ```
-fn process args… : T':
+fn process(args… : T'):
     let i : mut int = 0
     while i < @sizeof(args):
         i ← i + 1
@@ -4361,7 +4361,7 @@ fn process args… : T':
 Type and result-of values can be compared with `==` and used with `static_assert_eq`:
 
 ```
-fn example → i32: 42
+fn example() → i32: 42
 
 // compile-time type checks on literals
 static_assert_eq(@typeof(42), @typeof(1 + 2))  // both are int
@@ -4406,13 +4406,13 @@ test result: ok. 3 passed; 0 failed
 
 ```
 @test(sha256)
-fn test_sha256_empty:
+fn test_sha256_empty():
     let data : mut = std.bytes("")
     let hash : mut = sha256(data)
     assert_eq(hash, 0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
 
 @test(sha256)
-fn test_sha256_abc:
+fn test_sha256_abc():
     let data : mut = std.bytes("abc")
     let hash : mut = sha256(data)
     assert_eq(hash, 0xba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad)
@@ -4444,7 +4444,7 @@ The `@expect` annotation allows writing tests that verify the interpreter/compil
 ```
 @expect error "regex pattern"
 @expect warning "regex pattern"
-fn function_name:
+fn function_name():
     /* code that should trigger the diagnostic */
 ```
 
@@ -4453,7 +4453,7 @@ Multiple `@expect` annotations can appear before a single function.  The level k
 #### Statement-Level Syntax
 
 ```
-fn test_something:
+fn test_something():
     @expect warning "redefinition of foreach variable"
     let i : mut = 99
 ```
@@ -4506,7 +4506,7 @@ Statement-level `@expect` for warnings inside a `@test` function:
 
 ```
 @test
-fn warn_foreach_redef:
+fn warn_foreach_redef():
     let total : mut = 0
     foreach i := 1…3:
         @expect warning "redefinition of foreach variable 'i'"
@@ -5098,13 +5098,13 @@ Generic functions allow a single function definition to operate on multiple type
 #### Syntax
 
 ```
-fn identity x : T' → T':
+fn identity(x : T') → T':
     x
 
-fn add_g a : T', b : T' → T':
+fn add_g(a : T', b : T') → T':
     a + b
 
-fn pick_first a : T', b : U' → T':
+fn pick_first(a : T', b : U') → T':
     a
 ```
 
@@ -5141,7 +5141,7 @@ If the return type uses a generic name that also appears in a parameter, the ret
 Generic types compose with array and optional suffixes:
 
 ```
-fn first_elem arr : T'[] → T':
+fn first_elem(arr : T'[]) → T':
     arr[0]
 ```
 
@@ -5177,7 +5177,7 @@ Parameter packs allow functions to accept a variable number of arguments.  The l
 A pack parameter is declared by suffixing `…` to the parameter name.  An optional type annotation constrains all captured elements:
 
 ```
-fn sum_all acc : int, rest… : int → int:
+fn sum_all(acc : int, rest… : int) → int:
     let i : mut int = 0
     let s : mut = acc
     while i < rest.sizeof:
@@ -5185,7 +5185,7 @@ fn sum_all acc : int, rest… : int → int:
         i ← i + 1
     s
 
-fn count_args args… → int:
+fn count_args(args…) → int:
     args.sizeof
 ```
 
@@ -5204,7 +5204,7 @@ Inside the function body, the pack parameter behaves as a tuple:
 A pack parameter can use a generic type.  In this case, each captured element retains its own type and no coercion is performed:
 
 ```
-fn first_of args… : T':
+fn first_of(args… : T'):
     args[0]
 
 first_of(42, "hello")    /* args[0] is int, args[1] is str */
@@ -5225,7 +5225,7 @@ count_args()    /* returns 0 */
 Currying applies to the regular (non-pack) parameters.  When a function with a pack receives fewer arguments than the number of regular parameters, it curries normally.  Once all regular parameters are supplied, additional arguments fill the pack:
 
 ```
-fn greet prefix : str, names… : str → str:
+fn greet(prefix : str, names… : str) → str:
     prefix
 
 let g : mut = greet("Hello")    /* curries prefix */
@@ -5263,7 +5263,7 @@ The syntax is identical to `foreach` except for the `comptime` prefix.
 A regular `foreach` cannot iterate over a parameter pack because packs are heterogeneous tuples, not arrays.  `comptime foreach` resolves this:
 
 ```
-fn ct_sum args… : int → int:
+fn ct_sum(args… : int) → int:
     let s : mut int = 0
     comptime foreach v := args:
         s ← s + v
@@ -5275,7 +5275,7 @@ ct_sum(1, 2, 3, 4)    /* returns 10 */
 Each iteration binds `v` to one pack element.  When the pack has a generic type, each element can have a different concrete type:
 
 ```
-fn hetero_count args… → int:
+fn hetero_count(args…) → int:
     let ints : mut int = 0
     comptime foreach v := args:
         if @typeof(v) == @typeof(0):
@@ -5290,7 +5290,7 @@ hetero_count(1, "a", 2)    /* returns 2 */
 `enumerate` works inside `comptime foreach` to provide `(index, value)` pairs:
 
 ```
-fn indexed_sum args… : int → int:
+fn indexed_sum(args… : int) → int:
     let s : mut int = 0
     comptime foreach pair := enumerate(args):
         let idx : mut = pair[0]

@@ -140,4 +140,11 @@ if (($# == 0)); then
     else
         exit 1
     fi
+    # The specification is the normative reference, so an example in it
+    # the parser would refuse is a defect in the document.
+    if python "$testdir"/check_spec_signatures.py 2>&1; then
+        :
+    else
+        exit 1
+    fi
 fi
