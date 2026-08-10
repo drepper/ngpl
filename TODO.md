@@ -57,6 +57,10 @@ the sized types do not have.
 Completed
 ---------
 
+[x] approximate comparisons for floating-point values: ≅ ≇ ⪅ ⪆ ⪉ ⪊ against == != <= >= < >,
+    to within std.comparison_tolerance, which follows APL's ⎕CT in being a fraction of the
+    larger operand rather than an absolute epsilon.  Scoping the tolerance is still open.
+
 [x] check a struct-typed parameter at the call, and a binding declared with a struct type,
     so the wrong struct is reported where it is passed rather than at the first field that
     turns out to be missing.

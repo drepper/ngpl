@@ -751,6 +751,12 @@ class StdModule:
         result = int.from_bytes(h, 'big')
         return result
 
+    # The tolerance the approximate comparisons use, following APL's
+    # ⎕CT.  Two numbers are alike when they differ by no more than this
+    # fraction of the larger of them, so it is relative rather than
+    # absolute and nothing but zero is alike to zero.
+    comparison_tolerance = 1e-13
+
     def __init__(self):
         self._allocator = MmapAllocator()
         self._fs = None  # lazy-initialized fs object

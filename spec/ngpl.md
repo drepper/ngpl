@@ -524,6 +524,75 @@ error: unexpected character: '*'
 
 `*` keeps its place in `/*` and `*/`, which delimit a block comment and are not operators.
 
+#### Comparing Floating-Point Values
+
+Floating-point arithmetic accumulates error, so asking whether two results are equal usually asks the wrong question:
+
+```
+let a : f64 = 0.1
+let b : f64 = 0.2
+let c : f64 = 0.3
+
+(a + b) == c        // false
+```
+
+Six operators ask the same questions allowing for that error.  Each pairs with the exact one it resembles:
+
+| Tolerant | Exact | Reads as |
+|----------|-------|----------|
+| `≅` | `==` | alike |
+| `≇` | `!=` | not alike |
+| `⪅` | `<=` | less than or alike |
+| `⪆` | `>=` | greater than or alike |
+| `⪉` | `<` | less than and not alike |
+| `⪊` | `>` | greater than and not alike |
+
+```
+(a + b) ≅ c         // true
+1.0 ⪅ 1.0         // true, alike
+1.0 ⪉ 1.0         // false, alike is not less than
+1.0 ⪉ 2.0         // true
+```
+
+##### The Tolerance
+
+`std.comparison_tolerance` says how much error to allow, following APL's `{QUAD}CT`.  Two numbers are alike when they differ by no more than that fraction of the larger of them:
+
+```
+|a - b| ≤ std.comparison_tolerance × max(|a|, |b|)
+```
+
+The tolerance is therefore **relative**, not absolute, so what counts as alike scales with the numbers being compared:
+
+```
+let big : f64 = 10000000000.0
+big ≅ (big + 0.0001)   // true, nothing beside a number that size
+big ≇ (big + 1.0)      // false at the default tolerance
+```
+
+One consequence is worth stating plainly, since it surprises people coming from an absolute epsilon: a fraction of zero is zero, so **nothing but zero is alike to zero**.  Comparing against zero is exact however wide the tolerance.
+
+It defaults to `1e-13` and may be set:
+
+```
+std.comparison_tolerance ← 0.01
+1.0 ≅ 1.001      // true at that tolerance
+```
+
+Setting it to zero makes the six operators the exact ones.
+
+These are for floating-point values.  Integers are exact, so comparing them tolerantly is refused rather than quietly answered:
+
+```
+let a : i32 = 1
+a ≅ b
+
+error: an approximate comparison is for floating-point values; integers are
+exact, so compare them with the exact operator
+```
+
+> **Full language.**  A single global tolerance is what the bootstrap provides.  Scoping it — per compilation unit, function, or block — belongs with the other floating-point controls and is not settled yet.
+
 #### Arithmetic on Floating-Point Values
 
 All standard arithmetic operators (`+`, `-`, `×`, `/`, `%`) work on floating-point values.  When both operands are floats, the result uses the wider of the two types.  The width promotion order is: `f16`/`bfloat` < `f32` < `f64`/`float`.

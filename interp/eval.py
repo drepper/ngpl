@@ -208,6 +208,12 @@ def _as_type_value(value):
     return value
 
 
+# Settings of the runtime that a program may write to.  Everything
+# else std holds is something it provides rather than something it is
+# told.
+_STD_SETTINGS = frozenset({"comparison_tolerance"})
+
+
 def _is_const_expr(node) -> bool:
     """Check whether an AST node is a compile-time constant expression."""
     if isinstance(node, (IntLit, FloatLit, StrLit, BoolLit, NoneLit)):
@@ -720,6 +726,48 @@ class Evaluator:
             f"{what}: cannot compare an optional with a plain value; write "
             f"\N{THERE EXISTS}(v) to compare against a present value, "
             f"\N{EMPTY SET} against an absent one, or ?? to supply a default")
+
+    _APPROX_OPS = frozenset("≅≇⪅⪆⪉⪊")
+
+    def _approx_alike(self, a: float, b: float) -> bool:
+        """Whether two numbers are alike to within the comparison tolerance.
+
+        The tolerance is a fraction of the larger of the two, as APL's
+        ⎕CT is, so what counts as alike scales with the numbers being
+        compared.  One consequence is that nothing but zero is alike to
+        zero, since a fraction of zero is zero.
+        """
+        if a == b:
+            return True
+        tolerance = getattr(std, "comparison_tolerance", 0.0)
+        return abs(a - b) <= tolerance * max(abs(a), abs(b))
+
+    def _op_approx(self, op: str, left, right):
+        """A comparison made to within the comparison tolerance."""
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
+        a, b, _ = self._promote_to_float(lu, ru)
+        if a is None:
+            if isinstance(lu, IntValue) and isinstance(ru, IntValue):
+                raise TypeError(
+                    f"{op}: an approximate comparison is for floating-point "
+                    f"values; integers are exact, so compare them with the "
+                    f"exact operator")
+            raise TypeError(
+                f"{op}: an approximate comparison expects numbers, got "
+                f"{self._value_type_name(lu)} and {self._value_type_name(ru)}")
+        alike = self._approx_alike(a, b)
+        if op == "≅":
+            return mk_bool(alike)
+        if op == "≇":
+            return mk_bool(not alike)
+        if op == "⪅":
+            return mk_bool(alike or a < b)
+        if op == "⪆":
+            return mk_bool(alike or a > b)
+        if op == "⪉":
+            return mk_bool(a < b and not alike)
+        return mk_bool(a > b and not alike)
 
     def _op_eq(self, left, right):
         """Equality comparison."""
@@ -1757,6 +1805,8 @@ class Evaluator:
                     self._call_stack[-1][1] = binop_pos
             if node.op == "\N{DOUBLE PLUS}":
                 return self._op_concat(left, right)
+            if node.op in self._APPROX_OPS:
+                return self._op_approx(node.op, left, right)
             lu = unwrap_optional(left)
             ru = unwrap_optional(right)
             if isinstance(lu, UnitValue) or isinstance(ru, UnitValue):
@@ -1971,6 +2021,8 @@ class Evaluator:
                         return mk_bool(attr_val)
                     if isinstance(attr_val, int):
                         return mk_int(attr_val)
+                    if isinstance(attr_val, float):
+                        return mk_float(attr_val)
                     if isinstance(attr_val, str):
                         return mk_str(attr_val)
                     return ObjectValue(attr_val)
@@ -2392,6 +2444,14 @@ class Evaluator:
                         rhs = coerce_arg(rhs, field_type, "field assignment",
                                          target_ast.attr)
                     inst.field_values[target_ast.attr] = rhs
+                elif isinstance(au, ObjectValue) and au.obj is std \
+                        and target_ast.attr in _STD_SETTINGS:
+                    setting = unwrap_optional(rhs)
+                    if not isinstance(setting, (FloatValue, IntValue)):
+                        raise TypeError(
+                            f"std.{target_ast.attr} is a number, but the "
+                            f"value is {self._value_type_name(setting)}")
+                    setattr(std, target_ast.attr, float(setting.value))
                 else:
                     raise TypeError("field assignment requires a struct instance")
             elif isinstance(target_ast, VarRef):

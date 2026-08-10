@@ -1,0 +1,125 @@
+// test_approx.ngpl -- comparisons made to within a tolerance
+//
+// Six operators pair with the exact ones: ≅ ≇ ⪅ ⪆ ⪉ ⪊ against
+// == != <= >= < >.  They ask the same questions, allowing for the
+// error that floating-point arithmetic accumulates.
+//
+// The tolerance is std.comparison_tolerance, following APL's ⎕CT: two
+// numbers are alike when they differ by no more than that fraction of
+// the larger of them.  It is relative rather than absolute, so what
+// counts as alike scales with the numbers compared.
+
+// ---------------------------------------------------------------------
+// What the tolerance is for
+// ---------------------------------------------------------------------
+
+// The arithmetic that motivates the whole thing.
+@test
+fn test_accumulated_error_is_forgiven() → ∅:
+    let a : f64 = 0.1
+    let b : f64 = 0.2
+    let c : f64 = 0.3
+    assert(¬((a + b) == c))
+    assert((a + b) ≅ c)
+    assert(¬((a + b) ≇ c))
+
+// ---------------------------------------------------------------------
+// Each operator against the one it pairs with
+// ---------------------------------------------------------------------
+
+@test
+fn test_alike_values() → ∅:
+    let a : f64 = 1.0
+    let b : f64 = 1.0
+    assert(a ≅ b)
+    assert(a ⪅ b)
+    assert(a ⪆ b)
+    assert(¬(a ⪉ b))
+    assert(¬(a ⪊ b))
+    assert(¬(a ≇ b))
+
+@test
+fn test_ordered_values() → ∅:
+    let a : f64 = 1.0
+    let b : f64 = 2.0
+    assert(a ⪉ b)
+    assert(a ⪅ b)
+    assert(b ⪊ a)
+    assert(b ⪆ a)
+    assert(a ≇ b)
+    assert(¬(a ≅ b))
+
+// The two that admit likeness accept it where the strict ones do not:
+// ⪅ is "less than or alike", ⪉ is "less than and not alike".
+@test
+fn test_alike_at_the_boundary() → ∅:
+    let a : f64 = 1.0
+    let b : f64 = 1.0000000000000002
+    assert(a ≅ b)
+    assert(a ⪅ b)
+    assert(a ⪆ b)
+    assert(¬(a ⪉ b))
+    assert(¬(a ⪊ b))
+
+// ---------------------------------------------------------------------
+// The tolerance is relative
+// ---------------------------------------------------------------------
+
+// What counts as alike scales with the numbers, so a difference that
+// is nothing beside a large value is everything beside a small one.
+@test
+fn test_tolerance_scales_with_the_values() → ∅:
+    let big : f64 = 10000000000.0
+    assert(big ≅ (big + 0.0001))
+    assert(big ≇ (big + 1.0))
+
+// A fraction of zero is zero, so nothing but zero is alike to zero.
+@test
+fn test_only_zero_is_alike_to_zero() → ∅:
+    let tiny : f64 = 0.000000001
+    assert(0.0 ≅ 0.0)
+    assert(0.0 ≇ tiny)
+
+// ---------------------------------------------------------------------
+// Adjusting the tolerance
+// ---------------------------------------------------------------------
+
+@test
+fn test_the_tolerance_can_be_widened() → ∅:
+    let a : f64 = 1.0
+    let b : f64 = 1.001
+    assert(a ≇ b)
+    std.comparison_tolerance ← 0.01
+    assert(a ≅ b)
+    std.comparison_tolerance ← 0.0000000000001
+
+// At a tolerance of zero the comparisons are the exact ones.
+@test
+fn test_a_zero_tolerance_is_exact() → ∅:
+    let a : f64 = 0.1
+    let b : f64 = 0.2
+    let c : f64 = 0.3
+    std.comparison_tolerance ← 0.0
+    assert((a + b) ≇ c)
+    assert(1.0 ≅ 1.0)
+    std.comparison_tolerance ← 0.0000000000001
+
+// ---------------------------------------------------------------------
+// What is not a floating-point comparison
+// ---------------------------------------------------------------------
+
+@test
+@expect error "integers are exact"
+fn error_approx_on_integers() → ∅:
+    let a : i32 = 1
+    let b : i32 = 2
+    assert(a ≅ b)
+
+@test
+@expect error "expects numbers"
+fn error_approx_on_strings() → ∅:
+    assert("a" ≅ "b")
+
+@start
+fn main() → ∅:
+    std.print("approximate comparison tests passed")

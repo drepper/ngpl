@@ -61,6 +61,7 @@ all_tests=(
     "$testdir"/test_bootstrap.ngpl
     "$testdir"/test_int_width.ngpl
     "$testdir"/test_limits.ngpl
+    "$testdir"/test_approx.ngpl
     "$testdir"/test_type_alias.ngpl
     "$testdir"/test_struct.ngpl
     "$testdir"/test_move.ngpl

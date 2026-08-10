@@ -95,7 +95,9 @@ _NORMALIZE_OPS = {
 
 
 # Single-character operators.
-SINGLE_OPS = set("+-/%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ∃∄⍴⧺⌿⍀¤√∛∜↑⁻×")
+# The last six are the tolerant comparisons, paired with the exact ones.
+SINGLE_OPS = set("+-/%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ∃∄⍴⧺⌿⍀¤√∛∜↑⁻×"
+                 "≅≇⪅⪆⪉⪊")
 
 # Binary operators that signal line continuation when trailing.
 _CONTINUATION_OPS = frozenset({
@@ -103,6 +105,12 @@ _CONTINUATION_OPS = frozenset({
     "|", "&", "^",
     "<<", ">>", "«", "»", "↺", "↻",
     "==", "!=", "<", ">", "<=", ">=",
+    "≅",
+    "≇",
+    "⪅",
+    "⪆",
+    "⪉",
+    "⪊",
     "??", "←",
     "∧", "∨", "⊕", "⊼", "⊽",
     "⍴",
@@ -380,7 +388,9 @@ def tokenize(src: str):
                 tokens.append(Token("PUNCT", ch, line, col))
             elif ch == "\N{RIGHTWARDS ARROW}":
                 tokens.append(Token("OP", "->", line, col))
-            elif ch in "+-/%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻\N{MULTIPLICATION SIGN}":
+            elif ch in ("+-/%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻"
+                        "\N{MULTIPLICATION SIGN}"
+                        "≅≇⪅⪆⪉⪊"):
                 tokens.append(Token("OP", ch, line, col))
             else:
                 # Reaching here means the character was added to

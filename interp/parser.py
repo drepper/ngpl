@@ -1467,12 +1467,19 @@ class Parser:
             left = self._set_binop_pos(BinOp(op_tok.value, left, right), left, right, op_tok)
         return left
 
+    _CMP_OPS = ("==", "!=", "<", ">", "<=", ">=", "≅", "≇", "⪅", "⪆", "⪉", "⪊")
+
     def _parse_cmp_expr(self):
-        """cmp_expr → range_expr (('==' | '!=' | '<' | '>' | '<=' | '>=') range_expr)*"""
+        """cmp_expr → range_expr (comparison range_expr)*
+
+        The tolerant comparisons sit at the same level as the exact
+        ones they are paired with, since they answer the same question
+        with a tolerance rather than a different question.
+        """
         left = self._parse_range_expr()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value in ("==", "!=", "<", ">", "<=", ">=")):
+            if not (self._check("OP") and self._cur().value in self._CMP_OPS):
                 break
             op_tok = self._cur()
             self.pos += 1
