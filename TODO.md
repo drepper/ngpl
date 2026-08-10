@@ -57,6 +57,13 @@ the sized types do not have.
 Completed
 ---------
 
+[x] saturating arithmetic: ⊞ ⊟ ⊠ hold a result at the nearest edge of the type
+    rather than reporting it.  With + reporting and @wrap coming round, that is three
+    answers to a result that will not fit, each written where it applies rather than set
+    for a region of code.  Integers only, since saturation needs a stated range to hold a
+    result inside; grouping and units follow the exact operator each answers to, and @wrap
+    does not reach them.
+
 [x] an unsigned type reports a result outside its range rather than coming round to it.
     The design mandate says arithmetic overflow/underflow must be reported and says nothing
     about signedness, and treating unsigned as modular exempted exactly the types used for

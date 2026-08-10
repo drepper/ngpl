@@ -590,6 +590,11 @@ class Evaluator:
             "\N{MULTIPLICATION SIGN}": self._op_mul,
             "\N{DIVISION SIGN}": self._op_div,
             "%": self._op_mod,
+            # Saturating arithmetic: the same sums, held at the edge of
+            # the type rather than reported for leaving it.
+            "\N{SQUARED PLUS}": self._op_sat_add,
+            "\N{SQUARED MINUS}": self._op_sat_sub,
+            "\N{SQUARED TIMES}": self._op_sat_mul,
             "==": self._op_eq,
             "!=": self._op_neq,
             "<": self._op_lt,
@@ -656,6 +661,52 @@ class Evaluator:
         if ff is not None:
             return mk_float(ff[0] * ff[1], ff[2])
         raise TypeError(f"multiplication expected int+int or float+float, got {type(lu).__name__}+{type(ru).__name__}")
+
+    def _saturate(self, value: int, width: str, op_name: str) -> IntValue:
+        """Hold a result at the nearest edge of its type.
+
+        A width with no bounds — an untyped literal, or `int` — has no
+        edge to be held at, so the result is exact.  That is not a
+        failure of the operator: an arbitrary-precision sum is already
+        the answer saturation would be protecting.
+        """
+        limits = int_limits(width)
+        if limits is None:
+            return IntValue(value, width)
+        lo, hi = limits
+        return IntValue(lo if value < lo else hi if value > hi else value,
+                        width)
+
+    def _sat_binop(self, left, right, op_name: str, combine):
+        """Shared body of the saturating operators."""
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
+        if isinstance(lu, IntValue) and isinstance(ru, IntValue):
+            width = resolve_width(lu.width, ru.width)
+            return self._saturate(combine(lu.value, ru.value), width, op_name)
+        # Saturation is about the edge of a stated range.  A float
+        # already answers overflow with an infinity, and nothing else
+        # has an edge at all, so neither has a saturating form.
+        raise TypeError(
+            f"{op_name} is for integers, which state the range it holds "
+            f"a result inside; got "
+            f"{runtime_type_of(lu)} and {runtime_type_of(ru)}")
+
+    def _op_sat_add(self, left, right):
+        """Saturating addition."""
+        return self._sat_binop(left, right, "saturating addition (⊞)",
+                               lambda a, b: a + b)
+
+    def _op_sat_sub(self, left, right):
+        """Saturating subtraction."""
+        return self._sat_binop(left, right, "saturating subtraction (⊟)",
+                               lambda a, b: a - b)
+
+    def _op_sat_mul(self, left, right):
+        """Saturating multiplication."""
+        return self._sat_binop(left, right,
+                               "saturating multiplication (⊠)",
+                               lambda a, b: a * b)
 
     def _op_div(self, left, right):
         """Division: integer (truncates toward zero, returns ExpectedValue) or float."""
@@ -1202,7 +1253,10 @@ class Evaluator:
         l_unit = lu.unit if l_is_unit else None
         r_unit = ru.unit if r_is_unit else None
 
-        if op in ("+", "-"):
+        # A saturating operator carries a unit the way the exact one it
+        # answers to does: holding a length at the edge of its type
+        # leaves it a length.
+        if op in ("+", "-", "\N{SQUARED PLUS}", "\N{SQUARED MINUS}"):
             if l_is_unit and not r_is_unit:
                 if isinstance(r_inner, IntValue) \
                         and not is_unwidthed(r_inner.width):
@@ -1231,8 +1285,8 @@ class Evaluator:
             op_fn = self._ops[op]
             return UnitValue(op_fn(l_base, r_base), l_unit.base_form())
 
-        if op == "\N{MULTIPLICATION SIGN}":
-            result = self._ops["\N{MULTIPLICATION SIGN}"](l_inner, r_inner)
+        if op in ("\N{MULTIPLICATION SIGN}", "\N{SQUARED TIMES}"):
+            result = self._ops[op](l_inner, r_inner)
             if l_is_unit and r_is_unit:
                 result_unit = l_unit * r_unit
                 if result_unit.is_dimensionless():

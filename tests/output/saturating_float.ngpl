@@ -1,0 +1,6 @@
+// Saturation holds a result at the edge of a range the type states.
+// A float answers overflow with an infinity, so it has no such edge
+// and no saturating form.
+@start
+fn main() → ∅:
+    std.println("{}", 1.5 ⊞ 2.5)

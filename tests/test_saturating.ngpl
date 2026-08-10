@@ -1,0 +1,174 @@
+// test_saturating.ngpl -- arithmetic held at the edge of its type
+//
+// ⊞ ⊟ ⊠ are the saturating forms of + − ×.  Where the exact operator
+// reports a result the type cannot hold, the saturating one gives the
+// nearest value it can: the edge of the range.
+//
+// Three answers to the same question, then, and each says which it
+// means where it is written: + reports, @wrap comes round, ⊞ holds.
+
+// --- Holding at the top -------------------------------------------
+
+@test
+fn test_unsigned_holds_at_the_top() → ∅:
+    let a : u8 = 255
+    assert_eq(a ⊞ 1, 255)
+    assert_eq(a ⊞ 100, 255)
+    let b : u16 = 65535
+    assert_eq(b ⊞ 1, 65535)
+
+@test
+fn test_signed_holds_at_the_top() → ∅:
+    let a : i8 = 127
+    assert_eq(a ⊞ 1, 127)
+    let b : i16 = 32767
+    assert_eq(b ⊞ 1000, 32767)
+
+// --- Holding at the bottom ----------------------------------------
+
+// Zero is where an unsigned range ends, which is what ⊟ is most often
+// reached for: a count that must not go below none.
+@test
+fn test_unsigned_holds_at_zero() → ∅:
+    let a : u8 = 0
+    assert_eq(a ⊟ 1, 0)
+    let b : u8 = 3
+    assert_eq(b ⊟ 10, 0)
+
+@test
+fn test_signed_holds_at_the_bottom() → ∅:
+    let a : i8 = ⁻128
+    assert_eq(a ⊟ 1, ⁻128)
+    assert_eq(a ⊟ 100, ⁻128)
+
+// --- Multiplication -----------------------------------------------
+
+@test
+fn test_multiplication_holds() → ∅:
+    let a : u8 = 100
+    assert_eq(a ⊠ 3, 255)
+    let b : i8 = ⁻100
+    assert_eq(b ⊠ 3, ⁻128)
+    let c : i8 = 100
+    assert_eq(c ⊠ 3, 127)
+
+// --- Where nothing needs holding ----------------------------------
+
+// A result inside the range is that result; saturating is not
+// rounding, and only the edge is different.
+@test
+fn test_a_result_that_fits_is_untouched() → ∅:
+    let a : u8 = 100
+    assert_eq(a ⊞ 55, 155)
+    assert_eq(a ⊟ 40, 60)
+    assert_eq(a ⊠ 2, 200)
+
+// The result keeps the type it was held inside.
+@test
+fn test_the_width_is_kept() → ∅:
+    let a : u8 = 255
+    static_assert_eq(@typeof(a ⊞ 1), u8)
+    let b : i16 = 5
+    static_assert_eq(@typeof(b ⊠ 2), i16)
+
+// The wider operand decides the range, as it does for the exact
+// operators.
+@test
+fn test_the_wider_type_decides_the_edge() → ∅:
+    let a : u8 = 200
+    let b : u16 = 200
+    assert_eq(a ⊞ b, 400)
+    static_assert_eq(@typeof(a ⊞ b), u16)
+
+// --- An arbitrary-precision operand has no edge --------------------
+
+// A literal takes the width it meets, so it is held by that width.
+@test
+fn test_a_literal_is_held_by_the_width_it_took() → ∅:
+    let a : u8 = 250
+    assert_eq(a ⊞ 10, 255)
+
+// With nothing stating a width there is no edge, and the sum is
+// exact.  That is the answer saturation would be protecting anyway.
+@test
+fn test_untyped_has_no_edge() → ∅:
+    assert_eq(100000 ⊞ 1, 100001)
+    let n := 1000000000000
+    assert_eq(n ⊠ 1000000, 1000000000000000000)
+
+// --- Grouping ------------------------------------------------------
+
+// A saturating operator binds as the exact one it answers to, so
+// swapping one for the other does not regroup an expression.
+@test
+fn test_precedence_matches_the_exact_operators() → ∅:
+    assert_eq(2 ⊞ 3 ⊠ 4, 14)
+    assert_eq((2 ⊞ 3) ⊠ 4, 20)
+    assert_eq(2 + 3 ⊠ 4, 14)
+
+// --- What has no edge to be held at --------------------------------
+
+// A float answers overflow with an infinity, so it has no edge for a
+// saturating operator to hold it at.
+@test
+@expect error "is for integers"
+fn test_float_has_no_saturating_form() → ∅:
+    std.println("{}", 1.5 ⊞ 2.5)
+
+@test
+@expect error "is for integers"
+fn test_string_has_no_saturating_form() → ∅:
+    std.println("{}", "a" ⊞ "b")
+
+// --- Units ---------------------------------------------------------
+
+// Holding a length at the edge of its type leaves it a length.
+@test
+fn test_a_measured_value_keeps_its_unit() → ∅:
+    let d ¤meter : i8 = 120
+    let e ¤meter : i8 = 100
+    assert_eq(d ⊞ e, 127¤meter)
+
+@test
+fn test_saturating_multiplication_derives_the_unit() → ∅:
+    let w ¤meter : i32 = 3
+    let h ¤meter : i32 = 4
+    assert_eq(w ⊠ h, 12¤meter×meter)
+
+// --- Element-wise on arrays ----------------------------------------
+
+@test
+fn test_arrays_saturate_element_by_element() → ∅:
+    let v : u8[3] = [250, 10, 200]
+    let r := v ⊞ 10
+    assert_eq(r[0], 255)
+    assert_eq(r[1], 20)
+    assert_eq(r[2], 210)
+
+// --- Against the other two answers ---------------------------------
+
+// The three forms differ only at the edge, and each says which it
+// means where it is written.
+@test
+fn test_the_three_answers_differ_only_at_the_edge() → ∅:
+    let a : u8 = 255
+    assert_eq(a ⊞ 1, 255)
+    assert_eq(@wrap(a + 1), 0)
+
+@test
+@expect error "integer overflow"
+fn test_the_exact_operator_still_reports() → ∅:
+    let a : u8 = 255
+    std.println("{}", a + 1)
+
+// @wrap says what an ordinary operator does inside it; it does not
+// reach an operator that already says what it does.
+@test
+fn test_wrap_does_not_override_a_saturating_operator() → ∅:
+    let a : u8 = 255
+    assert_eq(@wrap(a ⊞ 1), 255)
+    assert_eq(@wrap(a + 1), 0)
+
+@start
+fn main() → ∅:
+    std.println("saturating tests passed")

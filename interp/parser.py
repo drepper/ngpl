@@ -59,6 +59,14 @@ class ParseError(Exception):
 _TYPE_TO_KEYWORD: dict[str, str] = {v: k for k, v in KEYWORDS.items()}
 
 
+# The operators of each precedence level.  A saturating operator sits
+# with the exact one it answers to, so the two group alike.
+_ADD_OPS = frozenset({"+", "-",
+                      "\N{SQUARED PLUS}", "\N{SQUARED MINUS}"})
+_MUL_OPS = frozenset({"\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}", "%",
+                      "\N{SQUARED TIMES}"})
+
+
 class Parser:
     """Recursive descent parser."""
 
@@ -1563,11 +1571,15 @@ class Parser:
         return left
 
     def _parse_add_expr(self):
-        """add_expr → concat_expr (('+' | '-') concat_expr)*"""
+        """add_expr → concat_expr (('+' | '-' | '⊞' | '⊟') concat_expr)*
+
+        The saturating operators bind as the exact ones they answer to,
+        so replacing + with ⊞ in an expression does not regroup it.
+        """
         left = self._parse_concat_expr()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value in ("+", "-")):
+            if not (self._check("OP") and self._cur().value in _ADD_OPS):
                 break
             op_tok = self._cur()
             self.pos += 1
@@ -1591,11 +1603,11 @@ class Parser:
         return left
 
     def _parse_mul_expr(self):
-        """mul_expr → reshape (('×' | '÷' | '%') reshape)*"""
+        """mul_expr → reshape (('×' | '÷' | '%' | '⊠') reshape)*"""
         left = self._parse_reshape_expr()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value in ("\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}", "%")):
+            if not (self._check("OP") and self._cur().value in _MUL_OPS):
                 break
             op_tok = self._cur()
             self.pos += 1

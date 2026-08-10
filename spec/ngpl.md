@@ -332,6 +332,64 @@ Algorithms that depend on modular arithmetic say so this way.  SHA-256, whose ro
 
 Bitwise operations are a separate matter: they work on the bit representation rather than the value, so they produce wrapped results without `@wrap`.  See below.
 
+#### Saturating Arithmetic: `⊞ ⊟ ⊠`
+
+`⊞` (U+229E SQUARED PLUS), `⊟` (U+229F SQUARED MINUS), and `⊠` (U+22A0 SQUARED TIMES) are the saturating forms of `+`, `−`, and `×`.  Where the exact operator reports a result the type cannot hold, the saturating one gives the nearest value it can — the edge of the range:
+
+```
+let a : mut u8 = 255
+a ⊞ 1                         /* 255 — held at the top */
+
+let b : mut u8 = 3
+b ⊟ 10                        /* 0 — held at the bottom */
+
+let c : mut i8 = 100
+c ⊠ 3                         /* 127 */
+
+let d : mut i8 = -100
+d ⊠ 3                         /* -128 */
+```
+
+Only the edge differs.  A result the type can hold is that result, so `⊞` is not rounding and not a different sum:
+
+```
+let a : mut u8 = 100
+a ⊞ 55                        /* 155 */
+```
+
+There are now three answers to a result that will not fit, and each is written where it applies rather than set for a region of code: `+` reports it, `@wrap` comes round to the other end, `⊞` holds at the edge.  Saturating is what a quantity with a floor or a ceiling wants — a count that must not go below none, a level that must not pass full — where wrapping would turn the smallest value into the largest and reporting would end the program over a bound the program already knew about.
+
+The glyphs are the arithmetic signs in boxes, so the operator says which sum it is and the box says the result is held inside something.
+
+**Grouping** follows the exact operator each answers to, so `⊠` binds tighter than `⊞` and `⊟`, and swapping one form for the other does not regroup an expression:
+
+```
+2 ⊞ 3 ⊠ 4                     /* 14, as 2 + 3 × 4 is */
+```
+
+**Width.**  The result keeps the type it was held inside, and the wider operand decides the range, as for the exact operators.  A width that states no bounds — an untyped literal, or `int` — has no edge to be held at, so the result is exact; that is the answer saturation would have been protecting.
+
+**Units** travel as they do through the exact operators: `⊞` and `⊟` need matching units and keep them, `⊠` derives one.  Holding a length at the edge of its type leaves it a length.
+
+**`@wrap` does not reach them.**  `@wrap` says what an ordinary operator does inside it; an operator that already says what it does is not overridden:
+
+```
+let a : mut u8 = 255
+@wrap(a + 1)                  /* 0 */
+@wrap(a ⊞ 1)                  /* 255 — the operator was already explicit */
+```
+
+**Integers only.**  Saturation holds a result at the edge of a range the type states.  A float answers overflow with an infinity and has no such edge, and nothing else has one at all:
+
+```
+1.5 ⊞ 2.5
+
+error: saturating addition (⊞) is for integers, which state the range
+it holds a result inside; got float and float
+```
+
+C++26 provides `std::add_sat` and friends, and Rust `saturating_add`; both are integer-only for the same reason.  Writing them as operators rather than functions keeps an expression reading as arithmetic, which is what it is — `hp ⊟ damage` rather than `hp.saturating_sub(damage)`.
+
 #### Coercion
 
 A value that does not fit the type it is being given is refused for the same reason and with the same message:
@@ -2309,7 +2367,7 @@ The rules are:
    if x < 0: return -x
    ```
 
-5. **Line continuation.**  A trailing binary operator (`+`, `-`, `×`, `÷`, `%`, `|`, `&`, `^`, `<<`, `>>`, `«`, `»`, `↺`, `↻`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `??`, `←`, `and`, `or`) or a trailing `=` (in variable definitions) signals that the expression continues on the next line.  The indentation of the continuation line does not create a new block:
+5. **Line continuation.**  A trailing binary operator (`+`, `-`, `×`, `÷`, `%`, `⊞`, `⊟`, `⊠`, `|`, `&`, `^`, `<<`, `>>`, `«`, `»`, `↺`, `↻`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `??`, `←`, `and`, `or`) or a trailing `=` (in variable definitions) signals that the expression continues on the next line.  The indentation of the continuation line does not create a new block:
    ```
    W[j] ← W[j - 16] + expand_s0(W[j - 15]) +
            W[j - 7] + expand_s1(W[j - 2])
@@ -3256,7 +3314,7 @@ let z : mut = a == 5        // OK — untyped constant comparison
 let w : mut = a < b         // error: cannot compare unit ptrdiff with typed integer i32
 ```
 
-**Multiplicative operations** (`×`, `÷`, `%`) allow mixing freely — a typed integer without unit acts as a dimensionless scalar:
+**Multiplicative operations** (`×`, `÷`, `%`, `⊠`) allow mixing freely — a typed integer without unit acts as a dimensionless scalar:
 
 ```
 let a ¤byte : mut i32 = 4
