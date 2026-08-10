@@ -57,6 +57,13 @@ the sized types do not have.
 Completed
 ---------
 
+[x] an integer literal takes the width of what it is combined with, as an untyped constant
+    does in Go, rather than making the expression arbitrary-precision.  The result then lives
+    in that width and wraps or overflows as it would, and a shift of it is bounded by it —
+    which is what makes (p + 1) « 8 on a u8 parameter an error the definition settles.  `int`
+    is a separate thing and still wins against a fixed width, so an accumulator written
+    `let total := 0` is not narrowed by the first typed value added to it.
+
 [x] a static diagnostic points at what it objected to.  A check answers with the node it
     found as well as the message, DefinitionError carries the position, and the result is
     rendered with the same excerpt and caret a runtime error gets — in a file and at the

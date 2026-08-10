@@ -109,6 +109,41 @@ class _IntWidths:
 _TYPE_BITS = _IntWidths(_NAMED_TYPE_BITS)
 
 
+# The width of an integer literal that named none.  It is not a type a
+# program can write: an untyped value settles on one the moment it is
+# bound or combined with something that has one.  See spec/ngpl.md,
+# "Untyped Integer Constants".
+UNTYPED = "untyped"
+
+
+def is_unwidthed(width: str) -> bool:
+    """Whether a width fixes no number of bits.
+
+    True for `int`, which is arbitrary precision, and for an untyped
+    literal, which has not settled on anything yet.  Both are places
+    where a bit count cannot be asked for.
+    """
+    return width in ("int", UNTYPED)
+
+
+def settle_untyped(value: "Value") -> "Value":
+    """Commit an untyped integer to `int`, as a binding does.
+
+    A literal is untyped only while it is being computed with.  Naming
+    the result settles it, and what it settles on without a stated type
+    is `int` — arbitrary precision, so nothing is lost by the move.
+    """
+    if isinstance(value, IntValue) and value.width == UNTYPED:
+        return IntValue(value.value, "int")
+    if isinstance(value, UnitValue):
+        inner = settle_untyped(value.inner)
+        return value if inner is value.inner else UnitValue(inner, value.unit)
+    if isinstance(value, SomeValue):
+        inner = settle_untyped(value.value)
+        return value if inner is value.value else SomeValue(inner)
+    return value
+
+
 class _IntMasks:
     """The value mask of every integer type, derived from its width."""
 
@@ -128,12 +163,23 @@ _TYPE_MASK = _IntMasks()
 def resolve_width(w1: str, w2: str) -> str:
     """Determine the result type when combining two integer types.
 
-    Rules (wider wins):
-    - same + same → same
-    - int + fixed → int (arbitrary precision is wider than any fixed type)
-    - fixed + fixed (different) → wider fixed type
+    Three kinds of operand meet here, and they rank:
+
+    - An *untyped* literal is not committed to anything, so it takes
+      the type of what it is combined with: the 1 in `p + 1` is a u8
+      where p is, as an untyped constant is in Go.  The result is then
+      subject to that type's range, and can overflow or wrap where a
+      value of that type would.
+    - `int` is arbitrary precision, which is wider than any fixed
+      width, so it wins against one.  A binding written `let n := 0`
+      is an `int` and stays one; only a literal is untyped.
+    - Two fixed widths give the wider.
     """
     if w1 == w2:
+        return w1
+    if w1 == UNTYPED:
+        return w2
+    if w2 == UNTYPED:
         return w1
     if w1 == "int" or w2 == "int":
         return "int"
@@ -1114,7 +1160,7 @@ def runtime_type_of(value: "Value") -> str:
     if isinstance(value, SomeValue):
         return runtime_type_of(value.value)
     if isinstance(value, IntValue):
-        return value.width
+        return "int" if value.width == UNTYPED else value.width
     if isinstance(value, FloatValue):
         return value.width
     if isinstance(value, StrValue):
@@ -1258,7 +1304,7 @@ def sum_type_settle(name: str, value: "Value") -> "Value":
 
     # Only an untyped number is open to settling; anything else has a
     # type of its own already and simply is not one of these.
-    untyped_int = isinstance(value, IntValue) and value.width == "int"
+    untyped_int = isinstance(value, IntValue) and is_unwidthed(value.width)
     untyped_float = isinstance(value, FloatValue) and value.width == "float"
     if untyped_int or untyped_float:
         family = FLOAT_TYPES if untyped_float else _TYPE_BITS
@@ -1639,7 +1685,9 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
     """
     target_width = resolve_type_alias(target_width)
     if target_width is None or target_width == "int":
-        return value
+        # `int` holds anything an untyped literal could be, so the
+        # value settles on it rather than staying uncommitted.
+        return settle_untyped(value)
     if not validate_type(target_width):
         raise TypeError(f"unknown type '{target_width}'")
 

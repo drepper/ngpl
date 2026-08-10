@@ -1,0 +1,6 @@
+error: in f: this shift moves every value bit out, so it can only fail; the count is too far for the type shifted
+  --> tests/output/shift_untyped_adopts_width.ngpl:5:6
+    |
+  5 |     (p + 1) « 8
+    |      ^^^^^^^^^^
+    |

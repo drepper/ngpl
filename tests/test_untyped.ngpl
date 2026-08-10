@@ -1,0 +1,98 @@
+// test_untyped.ngpl -- what an integer literal is before it settles
+//
+// A literal states no width, so it has nothing to say about the type
+// of what it is combined with: it takes that type instead, as an
+// untyped constant does in Go.  The result then lives in that type,
+// and can overflow or wrap where a value of it would.
+//
+// `int` is a different thing.  A binding written `let n := 0` is an
+// int — arbitrary precision — and stays one; only a literal is
+// uncommitted.  Where the two meet a fixed width, they answer
+// differently, which is what these tests are about.
+
+// --- A literal takes the width it meets --------------------------
+
+@test
+fn test_literal_takes_the_typed_width() → ∅:
+    let p : u8 = 7
+    static_assert_eq(@typeof(p + 1), u8)
+    static_assert_eq(@typeof(1 + p), u8)
+    static_assert_eq(@typeof(p × 2), u8)
+
+// Having taken the width, the result lives in it.  Unsigned wraps.
+@test
+fn test_wrapping_follows_the_width_taken() → ∅:
+    let p : u8 = 255
+    assert_eq(p + 1, 0)
+    let q : u16 = 65535
+    assert_eq(q + 1, 0)
+
+// Signed overflow is reported rather than wrapped.
+@test
+@expect error "does not fit in i8"
+fn test_signed_overflow_is_reported() → ∅:
+    let i : i8 = 127
+    std.print("{}", i + 1)
+
+// --- Two literals stay uncommitted --------------------------------
+
+@test
+fn test_literals_together_stay_untyped() → ∅:
+    static_assert_eq(@typeof(1 + 2), int)
+    // Arbitrary precision, so no width confines the result.
+    assert_eq(100000000000000000000 + 1, 100000000000000000001)
+
+// --- A name settles what it was given ------------------------------
+
+// `int` is arbitrary precision, which is wider than any fixed width,
+// so it wins where a literal would have given way.
+@test
+fn test_an_int_binding_is_not_a_literal() → ∅:
+    let n := 0
+    static_assert_eq(@typeof(n), int)
+    let p : u8 = 200
+    static_assert_eq(@typeof(n + p), int)
+
+// The distinction is what keeps an accumulator from being truncated
+// by the first typed value added to it.
+@test
+fn test_an_accumulator_is_not_narrowed() → ∅:
+    let total : mut = 0
+    let a : u8 = 200
+    let b : u8 = 200
+    total ← total + a
+    total ← total + b
+    assert_eq(total, 400)
+
+// --- Shifts, which read the width ---------------------------------
+
+// A width bounds how far a shift may go, so a literal that has taken
+// one is bounded by it.
+@test
+@expect error "shift"
+fn test_shift_bounded_by_the_width_taken() → ∅:
+    let p : u8 = 1
+    std.print("{}", (p + 1) « 8)
+
+// An untyped value has no width for a count to pass.
+@test
+fn test_untyped_shift_is_unbounded() → ∅:
+    assert_eq(1 « 40, 1099511627776)
+
+// An int binding is arbitrary precision, so it is unbounded too.
+@test
+fn test_int_shift_is_unbounded() → ∅:
+    let n := 1
+    assert_eq(n « 40, 1099511627776)
+
+// --- Units still take an uncommitted number ------------------------
+
+@test
+fn test_a_literal_still_joins_a_measured_value() → ∅:
+    let d ¤meter : i32 = 5
+    let further := d + 2
+    assert_eq(@unitof(further), @unitof(d))
+
+@start
+fn main() → ∅:
+    std.print("untyped tests passed")

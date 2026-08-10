@@ -327,7 +327,29 @@ This is the default strict mode behavior, as mandated by the language design: "i
 
 #### Untyped `int`: Arbitrary Precision
 
-The untyped `int` type has arbitrary precision — overflow is impossible.  When a typed and untyped integer are combined, the result is `int` (arbitrary precision), so overflow cannot occur in mixed expressions.
+The untyped `int` type has arbitrary precision — overflow is impossible while a value stays untyped.
+
+A literal states no width, so it has nothing to say about the type of what it is combined with: it takes that type instead.  The `1` in `p + 1` is a `u8` where `p` is, and the result lives in `u8` — so it wraps or overflows as a `u8` would:
+
+```
+let p : u8 = 255
+p + 1                /* 0 — the literal is a u8, and u8 wraps */
+
+let i : i8 = 127
+i + 1                /* ERROR: 128 does not fit in i8 */
+```
+
+This is Go's rule for untyped constants, which is the model named above.  The alternative — making the mixed expression arbitrary-precision — would mean a value quietly leaving the type its variable was declared with, and a program could not then be read as staying inside the widths it wrote down.
+
+`int` is a different thing from an untyped literal, and the two answer differently.  `int` is arbitrary precision, which is wider than any fixed width, so where a literal gives way an `int` wins:
+
+```
+let n := 0           /* an int, not a literal */
+let p : u8 = 200
+n + p                /* int — an accumulator is not narrowed by what is added to it */
+```
+
+A value is untyped only while it is being computed with.  Naming it settles it: `let n := 0` is an `int` from that point on, as property 4 above says.
 
 #### Coercion Overflow
 
@@ -466,6 +488,16 @@ An untyped integer is arbitrary-precision and has no width for a count to pass, 
 ```
 let n := 1
 n « 40         // 1099511627776
+```
+
+A literal that has taken a width is bounded by it, since the width is now the type being shifted:
+
+```
+fn f(p : u8) → u8:
+    (p + 1) « 8
+
+error: in f: this shift moves every value bit out, so it can only fail;
+the count is too far for the type shifted
 ```
 
 This is what forces a program assembling a wide value from narrow parts to say the width it is working at.  Reading four bytes into a `u32` word is not a formality: shifting a `byte` by 24 would be the error above.

@@ -41,7 +41,7 @@ from interp.value import (
     int_limits, float_limits, resolve_type_alias,
     format_shape, _array_type_name, array_type_mismatch,
     is_generic_type, runtime_type_of, is_type_name, _is_unsigned,
-    check_bootstrap_type,
+    check_bootstrap_type, UNTYPED, is_unwidthed, settle_untyped,
     _scalar_kind_mismatch,
     UnitValue, RefValue, Reference, ElementRef, Iterator, ArrayIterator,
     deep_copy_value, register_type_alias, DISCARD_NAME,
@@ -1204,14 +1204,16 @@ class Evaluator:
 
         if op in ("+", "-"):
             if l_is_unit and not r_is_unit:
-                if isinstance(r_inner, IntValue) and r_inner.width != "int":
+                if isinstance(r_inner, IntValue) \
+                        and not is_unwidthed(r_inner.width):
                     raise TypeError(
                         f"cannot {op} unit {l_unit.display_name} with "
                         f"typed integer {r_inner.width} without unit")
                 op_fn = self._ops[op]
                 return UnitValue(op_fn(l_inner, r_inner), l_unit)
             if r_is_unit and not l_is_unit:
-                if isinstance(l_inner, IntValue) and l_inner.width != "int":
+                if isinstance(l_inner, IntValue) \
+                        and not is_unwidthed(l_inner.width):
                     raise TypeError(
                         f"cannot {op} typed integer {l_inner.width} "
                         f"without unit with unit {r_unit.display_name}")
@@ -1312,13 +1314,15 @@ class Evaluator:
 
         if op in ("==", "!=", "<", ">", "<=", ">="):
             if l_is_unit and not r_is_unit:
-                if isinstance(r_inner, IntValue) and r_inner.width != "int":
+                if isinstance(r_inner, IntValue) \
+                        and not is_unwidthed(r_inner.width):
                     raise TypeError(
                         f"cannot compare unit {l_unit.display_name} with "
                         f"typed integer {r_inner.width} without unit")
                 return self._ops[op](l_inner, r_inner)
             if r_is_unit and not l_is_unit:
-                if isinstance(l_inner, IntValue) and l_inner.width != "int":
+                if isinstance(l_inner, IntValue) \
+                        and not is_unwidthed(l_inner.width):
                     raise TypeError(
                         f"cannot compare typed integer {l_inner.width} "
                         f"without unit with unit {r_unit.display_name}")
@@ -1562,7 +1566,7 @@ class Evaluator:
                 raise TypeError("array index must be an integer")
             return iu.inner
         if isinstance(iu, IntValue):
-            if iu.width == "int":
+            if is_unwidthed(iu.width):
                 return iu
             raise TypeError(
                 f"array index requires unit {required.display_name}, "
@@ -1660,7 +1664,10 @@ class Evaluator:
                 self._call_stack[-1][1] = pos
 
         if isinstance(node, IntLit):
-            return mk_int(node.value, node.width)
+            # A literal with no suffix names no width, so it stays
+            # uncommitted until something it meets decides one.
+            return mk_int(node.value,
+                          UNTYPED if node.width == "int" else node.width)
 
         if isinstance(node, FloatLit):
             return mk_float(node.value, node.width)
@@ -2519,6 +2526,10 @@ class Evaluator:
                     raise TypeError(
                         f"cannot redefine {kind} variable '{stmt.name}'")
             value = self.eval_expr(stmt.init_expr)
+            if stmt.type_annotation is None:
+                # Naming a value settles it.  Without a type written
+                # down, what an untyped literal settles on is `int`.
+                value = settle_untyped(value)
             if stmt.type_annotation is not None \
                     and not isinstance(stmt.init_expr, ArrayAlloc):
                 # An array declaration writes its shape in brackets that
@@ -3401,7 +3412,9 @@ class Evaluator:
         if isinstance(u, UnitValue):
             return Evaluator._value_type_name(u.inner)
         if isinstance(u, IntValue):
-            return u.width
+            # An uncommitted literal answers with the type it settles
+            # on, which is what the program would write for it.
+            return "int" if u.width == UNTYPED else u.width
         if isinstance(u, FloatValue):
             return u.width
         if isinstance(u, StrValue):
@@ -3827,7 +3840,8 @@ class Evaluator:
                 unit = eval_unit_formula(func.param_units[param_name])
                 if isinstance(arg_value, UnitValue):
                     arg_value = self._convert_unit_value(arg_value, unit)
-                elif isinstance(arg_value, IntValue) and arg_value.width != "int":
+                elif isinstance(arg_value, IntValue) \
+                        and not is_unwidthed(arg_value.width):
                     raise TypeError(
                         f"{func.name}: parameter '{param_name}' requires unit "
                         f"{unit.display_name}, got typed integer "
@@ -4090,7 +4104,8 @@ class Evaluator:
             if isinstance(inner, FloatValue):
                 raise TypeError(
                     f"{func_name}: return type is {ret_type} "
-                    f"but body evaluates to {inner.width}")
+                    f"but body evaluates to "
+                    f"{self._value_type_name(inner)}")
             if isinstance(inner, (StrValue, BoolValue)):
                 raise TypeError(
                     f"{func_name}: return type is {ret_type} "
@@ -4101,7 +4116,8 @@ class Evaluator:
             if isinstance(inner, IntValue):
                 raise TypeError(
                     f"{func_name}: return type is {ret_type} "
-                    f"but body evaluates to {inner.width}")
+                    f"but body evaluates to "
+                    f"{self._value_type_name(inner)}")
             if isinstance(inner, (StrValue, BoolValue)):
                 raise TypeError(
                     f"{func_name}: return type is {ret_type} "

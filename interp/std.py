@@ -759,7 +759,7 @@ def _split_format_spec(spec: str) -> tuple[str, str]:
 def _int_type_suffix(value) -> str:
     """The suffix that would produce this number, or nothing if untyped."""
     width = getattr(value, "width", "int")
-    return "" if width in ("int", "float") else width
+    return "" if width in ("int", "float", "untyped") else width
 
 
 def _render_template(fmt: str, args, where: str) -> str:

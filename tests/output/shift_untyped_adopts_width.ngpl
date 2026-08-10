@@ -1,0 +1,5 @@
+// The literal 1 takes p's width, so (p + 1) is a u8 and a count of 8
+// moves every value bit out.  Both the width and the count are written
+// down, so this is settled at the definition — nothing calls f.
+fn f(p : u8) → u8:
+    (p + 1) « 8

@@ -35,7 +35,7 @@ from interp.ast import (
     UnitDef as ASTUnitDef,
     VarDef as ASTVarDef,
 )
-from interp.value import NoneValue, Value
+from interp.value import NoneValue, Value, is_unwidthed
 
 PROMPT = ">>> "
 CONTINUATION_PROMPT = "... "
@@ -127,7 +127,8 @@ def _display_with_type(value) -> str:
     if isinstance(value, UnitValue):
         return f"{_display_with_type(value.inner)} {value.unit.display_name}"
     if isinstance(value, IntValue):
-        return value.display() if value.width == "int" else f"{value.display()}{value.width}"
+        return (value.display() if is_unwidthed(value.width)
+                else f"{value.display()}{value.width}")
     if isinstance(value, FloatValue):
         return value.display() if value.width == "float" else f"{value.display()}{value.width}"
     return value.display()
