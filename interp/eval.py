@@ -600,8 +600,10 @@ class Evaluator:
             "|": self._op_bitor,
             "«": self._op_lshift,
             "»": self._op_rshift,
-            "↺": self._op_rotl,
-            "↻": self._op_rotr,
+            # Paired with the shifts by direction: ↻ turns the way «
+            # moves, and ↺ the way » does.
+            "↻": self._op_rotl,
+            "↺": self._op_rotr,
             "∧": self._op_logic_and,
             "∨": self._op_logic_or,
             "⊕": self._op_logic_xor,

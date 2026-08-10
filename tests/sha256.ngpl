@@ -75,15 +75,15 @@ fn get_padded_word(data : byte[], off ¤byte : usize, total_size ¤byte : usize)
 // ---------------------------------------------------------------------------
 
 fn expand_Σ₀(prev : u32) → u32:
-    (prev ↻ 7) ^ (prev ↻ 18) ^ (prev » 3)
+    (prev ↺ 7) ^ (prev ↺ 18) ^ (prev » 3)
 
 fn expand_Σ₁(prev : u32) → u32:
-    (prev ↻ 17) ^ (prev ↻ 19) ^ (prev » 10)
+    (prev ↺ 17) ^ (prev ↺ 19) ^ (prev » 10)
 
 // ---------------------------------------------------------------------------
 // sha256(data) — full SHA-256 implementation in pure NGPL.
 //
-// Uses « » for shifts, ↺ ↻ for rotations, and subscript access for the
+// Uses « » for shifts, ↻ ↺ for rotations, and subscript access for the
 // message schedule W[0..63] and round constants K[t].
 // ---------------------------------------------------------------------------
 
@@ -116,7 +116,7 @@ fn sha256(data : byte[]) → u32[8]?:
         // --- 64 compression rounds using K[t] and W[t]. ---
         foreach t := 0…63:
             // Σ₁(e) = ROTR(6,e) ⊕ ROTR(11,e) ⊕ ROTR(25,e).
-            let Σ₁ := (v[4] ↻ 6) ^ (v[4] ↻ 11) ^ (v[4] ↻ 25)
+            let Σ₁ := (v[4] ↺ 6) ^ (v[4] ↺ 11) ^ (v[4] ↺ 25)
 
             // ch(e,f,g) = (e ∧ f) ⊕ (¬e ∧ g).
             let ch := (v[4] & v[5]) ^ (~v[4] & v[6])
@@ -125,7 +125,7 @@ fn sha256(data : byte[]) → u32[8]?:
             let t1 := @wrap(v[7] + Σ₁ + ch + K[t] + W[t])
 
             // Σ₀(a) = ROTR(2,a) ⊕ ROTR(13,a) ⊕ ROTR(22,a).
-            let Σ₀ := (v[0] ↻ 2) ^ (v[0] ↻ 13) ^ (v[0] ↻ 22)
+            let Σ₀ := (v[0] ↺ 2) ^ (v[0] ↺ 13) ^ (v[0] ↺ 22)
 
             // maj(a,b,c) = (a ∧ b) ⊕ (a ∧ c) ⊕ (b ∧ c).
             let maj := (v[0] & v[1]) ^ (v[0] & v[2]) ^ (v[1] & v[2])

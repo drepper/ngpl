@@ -387,24 +387,35 @@ A right shift is bounded the same way: past the value bits there is nothing of t
 
 ##### Rotations Turn Within the Type
 
-A rotation turns the bits within the confines of the declared type, so the type does not change: a `u8` rotated is a `u8`, and a `u32` rotated is a `u32`.
+Each rotation is paired with the shift that goes the same way: `↻` turns the way `«` moves, and `↺` the way `»` does.  Where nothing would fall off the end the two agree exactly:
 
 ```
-let a : u8 = 1
-a ↻ 1        // 128, a u8
-a ↺ 1        // 2, a u8
+let a : u8 = 2
+a ↻ 1        // 4, the same as a « 1
+a ↺ 1        // 1, the same as a » 1
 ```
+
+They part company only where a bit would leave the value.  The shift drops it; the rotation brings it round:
+
+```
+let high : u8 = 128
+high ↻ 1     // 1
+high « 1     // 0
+```
+
+A rotation turns the bits within the confines of the declared type, so the type does not change: a `u8` rotated is a `u8`, and a `u32` rotated is a `u32`.
 
 Every bit comes round again, so nothing is lost however far the turn goes.  The count is therefore taken modulo the width, and turning all the way round arrives where it started:
 
 ```
-a ↻ 8        // 1, back where it began
-a ↻ 9        // 128, the same as ↻ 1
+let b : u8 = 1
+b ↻ 8        // 1, back where it began
+b ↻ 9        // 2, the same as ↻ 1
 ```
 
 This is where a rotation parts company with a shift.  A shift loses the bits it moves past the end, so a count that would lose them all is a mistake and is refused.  A rotation loses none, so every count is well defined and none is refused.
 
-The width need not be a power of two — `u7 ↻ 8` is `u7 ↻ 1` — and a signed type turns its whole representation, sign bit included.
+The width need not be a power of two — `u7 ↺ 8` is `u7 ↺ 1` — and a signed type turns its whole representation, sign bit included.
 
 An untyped integer states no width, so there are no confines for the bits to come round in and it cannot be rotated:
 
