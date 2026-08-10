@@ -3,5 +3,5 @@ struct S:
     a : i32
 
 @start
-fn main() → ∅:
+fn main():
     ∅

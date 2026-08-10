@@ -4,5 +4,5 @@ fn confused() → i64:
     0
 
 @start
-fn main() → ∅:
+fn main():
     std.println("{}", confused())

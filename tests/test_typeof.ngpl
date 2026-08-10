@@ -3,43 +3,43 @@
 
 // @typeof on integer literal.
 @test
-fn test_typeof_int() → ∅:
+fn test_typeof_int():
     static_assert_eq(@typeof(42), @typeof(0))
 
 // @typeof on string literal.
 @test
-fn test_typeof_str() → ∅:
+fn test_typeof_str():
     static_assert_eq(@typeof("hello"), @typeof("world"))
 
 // @typeof on bool literal.
 @test
-fn test_typeof_bool() → ∅:
+fn test_typeof_bool():
     static_assert_eq(@typeof(true), @typeof(false))
 
 // @typeof distinguishes int from str.
 @test
-fn test_typeof_different() → ∅:
+fn test_typeof_different():
     static_assert_eq(@typeof(42), @typeof(0))
     static_assert_eq(@typeof("a"), @typeof("b"))
 
 // @typeof on array literal.
 @test
-fn test_typeof_array() → ∅:
+fn test_typeof_array():
     static_assert_eq(@typeof([1, 2, 3]), @typeof([4, 5]))
 
 // @typeof on tuple literal.
 @test
-fn test_typeof_tuple() → ∅:
+fn test_typeof_tuple():
     static_assert_eq(@typeof((1, 2)), @typeof((3, 4)))
 
 // @typeof on none.
 @test
-fn test_typeof_none() → ∅:
+fn test_typeof_none():
     static_assert_eq(@typeof(∅), @typeof(∅))
 
 // @typeof with static_assert_eq on computed constants.
 @test
-fn test_typeof_static() → ∅:
+fn test_typeof_static():
     static_assert_eq(@typeof(42), @typeof(1 + 2))
 
 // @resultof on user function returning i32.
@@ -50,15 +50,15 @@ fn identity_i32(x : i32) → i32:
     x
 
 @test
-fn test_resultof_basic() → ∅:
+fn test_resultof_basic():
     static_assert_eq(@resultof(example_fn), @resultof(identity_i32))
 
 // @resultof on void function.
-fn void_fn() → ∅:
+fn void_fn():
     0
 
 @test
-fn test_resultof_void() → ∅:
+fn test_resultof_void():
     static_assert_eq(@resultof(void_fn), @typeof(∅))
 
 // @resultof on function with optional return.
@@ -67,14 +67,14 @@ fn optional_fn(x : i32) → i32?:
     x
 
 @test
-fn test_resultof_optional() → ∅:
+fn test_resultof_optional():
     let rt := @resultof(optional_fn)
     assert_eq(rt, rt)
 
 // Error: @resultof with unknown function.
 @test
 @expect error "unknown function"
-fn test_resultof_unknown() → ∅:
+fn test_resultof_unknown():
     let t : mut = @resultof(nonexistent)
 
 fn returns_int() → i64:
@@ -83,7 +83,7 @@ fn returns_int() → i64:
 // A binding's type is static even where its value is not, so @typeof
 // answers for any name in scope.
 @test
-fn test_typeof_of_a_runtime_binding() → ∅:
+fn test_typeof_of_a_runtime_binding():
     let x : mut = 42
     let y : mut = 7
     static_assert_eq(@typeof(x), @typeof(y))
@@ -95,7 +95,7 @@ fn test_typeof_of_a_runtime_binding() → ∅:
 // A type name can only be a type, so it names one wherever it appears
 // and a type needs no witness value to be compared against.
 @test
-fn test_type_name_as_a_value() → ∅:
+fn test_type_name_as_a_value():
     let n : i32 = 1
     static_assert_eq(@typeof(n), i32)
     let s := "hi"
@@ -104,7 +104,7 @@ fn test_type_name_as_a_value() → ∅:
     static_assert_eq(@typeof(b), bool)
 
 @test
-fn test_type_name_of_an_element() → ∅:
+fn test_type_name_of_an_element():
     let data := std.bytes("abc")
     let b0 := data[0 ¤byte]
     static_assert_eq(@typeof(b0), byte)
@@ -119,7 +119,7 @@ enum Shade:
     dark
 
 @test
-fn test_user_type_name_as_a_value() → ∅:
+fn test_user_type_name_as_a_value():
     let p := Point{x: 1}
     static_assert_eq(@typeof(p), Point)
     let c := Shade.light
@@ -130,22 +130,22 @@ fn test_user_type_name_as_a_value() → ∅:
 // A static assertion over unit-carrying values compares as the
 // arithmetic does, so the units have to agree as well as the numbers.
 @test
-fn test_static_assert_eq_respects_units() → ∅:
+fn test_static_assert_eq_respects_units():
     static_assert_eq(@sizeof(i32), 4 ¤byte)
 
 @test
 @expect error "incompatible units for comparison: B and ptrdiff"
-fn test_static_assert_eq_rejects_a_wrong_unit() → ∅:
+fn test_static_assert_eq_rejects_a_wrong_unit():
     static_assert_eq(@sizeof(i32), 4 ¤ptrdiff)
 
 @test
 @expect error "'byte' names a type and cannot name a variable"
-fn test_type_name_cannot_be_a_variable() → ∅:
+fn test_type_name_cannot_be_a_variable():
     let byte := 5
 
 @test
 @expect error "'i32' names a type and cannot name a loop variable"
-fn test_type_name_cannot_be_a_loop_variable() → ∅:
+fn test_type_name_cannot_be_a_loop_variable():
     foreach i32 := 1…3:
         std.println("{}", i32)
 
@@ -155,29 +155,29 @@ fn test_type_name_cannot_be_a_loop_variable() → ∅:
 // it would mean running the function.
 @test
 @expect error "a name, or an expression built from them"
-fn test_typeof_of_a_call() → ∅:
+fn test_typeof_of_a_call():
     let t : mut = @typeof(returns_int())
 
 // An expression built from names and operators is answerable, since
 // working it out changes nothing.
 @test
-fn test_typeof_of_an_expression() → ∅:
+fn test_typeof_of_an_expression():
     let v : u8 = 3
     static_assert_eq(@typeof(v « 2), u8)
     static_assert_eq(@sizeof(v « 2), 1 ¤byte)
     static_assert_eq(@typeof(~v), u8)
 
 @test
-fn test_typeof_of_a_subscript() → ∅:
+fn test_typeof_of_a_subscript():
     let a : i32[] = [1, 2, 3]
     let i := 0
     static_assert_eq(@typeof(a[i]), i32)
 
 @test
-fn test_unitof_of_an_expression() → ∅:
+fn test_unitof_of_an_expression():
     let d ¤meter : i32 = 5
     static_assert_eq(@unitof(d + d), @unitof(1 ¤meter))
 
 @start
-fn main() → ∅:
+fn main():
     std.println("typeof tests passed")

@@ -2,9 +2,9 @@
 // a struct.
 
 @repr(C)
-fn not_a_struct() → ∅:
+fn not_a_struct():
     std.println("unreachable")
 
 @start
-fn main() → ∅:
+fn main():
     not_a_struct()

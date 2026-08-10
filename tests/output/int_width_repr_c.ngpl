@@ -7,5 +7,5 @@ struct Packed:
     n : i32
 
 @start
-fn main() → ∅:
+fn main():
     std.println("{}", Packed.sizeof)

@@ -1,4 +1,4 @@
 @start
-fn main() → ∅:
+fn main():
     let x : i32 = 42
     x + "hello"

@@ -2,84 +2,84 @@
 
 // Basic static_assert with true condition.
 @test
-fn test_static_assert_true() → ∅:
+fn test_static_assert_true():
     static_assert(true)
 
 // static_assert with integer expression.
 @test
-fn test_static_assert_int() → ∅:
+fn test_static_assert_int():
     static_assert(1)
 
 // static_assert with computed constant.
 @test
-fn test_static_assert_computed() → ∅:
+fn test_static_assert_computed():
     static_assert(2 + 3 == 5)
 
 // static_assert_eq with equal integers.
 @test
-fn test_static_assert_eq_int() → ∅:
+fn test_static_assert_eq_int():
     static_assert_eq(42, 42)
 
 // static_assert_eq with computed constants.
 @test
-fn test_static_assert_eq_computed() → ∅:
+fn test_static_assert_eq_computed():
     static_assert_eq(10, 3 + 7)
 
 // static_assert_eq with strings.
 @test
-fn test_static_assert_eq_str() → ∅:
+fn test_static_assert_eq_str():
     static_assert_eq("hello", "hello")
 
 // static_assert_eq with booleans.
 @test
-fn test_static_assert_eq_bool() → ∅:
+fn test_static_assert_eq_bool():
     static_assert_eq(true, true)
 
 // static_assert with negation.
 @test
-fn test_static_assert_negation() → ∅:
+fn test_static_assert_negation():
     static_assert(⁻(⁻ 1))
 
 // static_assert_eq with arithmetic.
 @test
-fn test_static_assert_eq_arithmetic() → ∅:
+fn test_static_assert_eq_arithmetic():
     static_assert_eq(120, 2 × 3 × 4 × 5)
 
 // Error: static_assert with false.
 @test
 @expect error "static_assert failed"
-fn test_static_assert_false() → ∅:
+fn test_static_assert_false():
     static_assert(false)
 
 // Error: static_assert with zero.
 @test
 @expect error "static_assert failed"
-fn test_static_assert_zero() → ∅:
+fn test_static_assert_zero():
     static_assert(0)
 
 // Error: static_assert with message.
 @test
 @expect error "static_assert failed.*should be true"
-fn test_static_assert_message() → ∅:
+fn test_static_assert_message():
     static_assert(false, "should be true")
 
 // Error: static_assert_eq with unequal values.
 @test
 @expect error "static_assert_eq failed"
-fn test_static_assert_eq_fail() → ∅:
+fn test_static_assert_eq_fail():
     static_assert_eq(1, 2)
 
 // Error: static_assert with non-constant expression.
 @test
 @expect error "compile-time constant"
-fn test_static_assert_non_const() → ∅:
+fn test_static_assert_non_const():
     let x : mut = 42
     static_assert(x)
 
 // Error: static_assert_eq with non-constant.
 @test
 @expect error "compile-time constant"
-fn test_static_assert_eq_non_const() → ∅:
+fn test_static_assert_eq_non_const():
     let x : mut = 10
     static_assert_eq(x, 10)
 
@@ -91,19 +91,19 @@ fn test_static_assert_eq_non_const() → ∅:
 // its declaration states, so these hold whether or not the function
 // is ever called.
 @test
-fn test_declared_type_settles_the_assertions() → ∅:
+fn test_declared_type_settles_the_assertions():
     let a : u8 = 4
     static_assert_eq(@typeof(a), u8)
     static_assert_eq(@sizeof(a), 1 ¤byte)
     static_assert_eq(@unitof(a), @unitof(1))
 
 @test
-fn test_declared_parameter_settles_the_assertions(n : u16) → ∅:
+fn test_declared_parameter_settles_the_assertions(n : u16):
     static_assert_eq(@typeof(n), u16)
     static_assert_eq(@sizeof(n), 2 ¤byte)
 
 @test
-fn test_measured_local_keeps_its_unit() → ∅:
+fn test_measured_local_keeps_its_unit():
     let d ¤meter : i32 = 5
     static_assert_eq(@unitof(d), @unitof(1 ¤meter))
     static_assert_eq(@sizeof(d), 4 ¤byte)
@@ -111,14 +111,14 @@ fn test_measured_local_keeps_its_unit() → ∅:
 // A name whose type cannot be stood for is left to run, so nothing is
 // claimed about it here.
 @test
-fn test_untyped_name_is_left_alone(x) → ∅:
+fn test_untyped_name_is_left_alone(x):
     static_assert_eq(@typeof(x), @typeof(x))
 
 @test
-fn test_array_local_is_left_alone() → ∅:
+fn test_array_local_is_left_alone():
     let a : i32[3] = 0
     static_assert_eq(@sizeof(a), 3 ¤ptrdiff)
 
 @start
-fn main() → ∅:
+fn main():
     std.println("static_assert tests passed")

@@ -7,7 +7,7 @@ type Row = i32[]
 // --- alias used in variable definition ------------------------------------
 
 @test
-fn test_alias_var_def() → ∅:
+fn test_alias_var_def():
   let x : Index = 42
   assert_eq(x, 42)
 
@@ -17,13 +17,13 @@ fn add_indices(a : Index, b : Index) → Index:
   a + b
 
 @test
-fn test_alias_param() → ∅:
+fn test_alias_param():
   assert_eq(add_indices(10, 20), 30)
 
 // --- alias for fixed-size array -------------------------------------------
 
 @test
-fn test_alias_fixed_array() → ∅:
+fn test_alias_fixed_array():
   let v : Vec3 = [1.0, 2.0, 3.0]
   assert_eq(v[0], 1.0)
   assert_eq(v[2], 3.0)
@@ -37,7 +37,7 @@ fn sum_row(r : Row) → i32:
   total
 
 @test
-fn test_alias_dynamic_array_param() → ∅:
+fn test_alias_dynamic_array_param():
   let a : i32[] = [1, 2, 3, 4]
   assert_eq(sum_row(a), 10)
 
@@ -49,13 +49,13 @@ fn use_offset(o : Offset) → i32:
   o + 1
 
 @test
-fn test_alias_chain() → ∅:
+fn test_alias_chain():
   assert_eq(use_offset(9), 10)
 
 // --- alias in let with mut ------------------------------------------------
 
 @test
-fn test_alias_mut_var() → ∅:
+fn test_alias_mut_var():
   let x : mut Index = 0
   x ← 99
   assert_eq(x, 99)
@@ -74,7 +74,7 @@ struct DeclaredLater:
     v : i32
 
 @test
-fn test_alias_of_a_struct() → ∅:
+fn test_alias_of_a_struct():
     let a : EarlyRef = DeclaredLater{v: 4}
     assert_eq(a.v, 4)
 
@@ -84,9 +84,9 @@ struct DeclaredFirst:
 type LateRef = DeclaredFirst
 
 @test
-fn test_alias_of_an_earlier_struct() → ∅:
+fn test_alias_of_an_earlier_struct():
     let b : LateRef = DeclaredFirst{w: 9}
     assert_eq(b.w, 9)
 
 @start
-fn main() → ∅:
+fn main():

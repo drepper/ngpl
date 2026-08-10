@@ -11,7 +11,7 @@ impl Point:
     fn distance(&self) -> f64:
         √(self.x ↑ 2.0 + self.y ↑ 2.0)
 
-    fn scale(&mut self, factor: f64) → ∅:
+    fn scale(&mut self, factor: f64):
         self.x ← self.x × factor
         self.y ← self.y × factor
 
@@ -23,34 +23,34 @@ impl Point:
 
 // Static method call.
 @test
-fn test_struct_static() → ∅:
+fn test_struct_static():
     let p := Point.origin()
     assert_eq(p.x, 0.0)
     assert_eq(p.y, 0.0)
 
 // Struct literal construction.
 @test
-fn test_struct_literal() → ∅:
+fn test_struct_literal():
     let p := Point { x: 1.0, y: 2.0 }
     assert_eq(p.x, 1.0)
     assert_eq(p.y, 2.0)
 
 // Static factory method.
 @test
-fn test_struct_new() → ∅:
+fn test_struct_new():
     let p := Point.new(3.0, 4.0)
     assert_eq(p.x, 3.0)
     assert_eq(p.y, 4.0)
 
 // Immutable self method.
 @test
-fn test_struct_method() → ∅:
+fn test_struct_method():
     let p := Point.new(3.0, 4.0)
     assert_eq(p.distance(), 5.0)
 
 // Mutable self method.
 @test
-fn test_struct_mut_method() → ∅:
+fn test_struct_mut_method():
     let p := Point.new(3.0, 4.0)
     p.scale(2.0)
     assert_eq(p.x, 6.0)
@@ -58,7 +58,7 @@ fn test_struct_mut_method() → ∅:
 
 // Direct field assignment on mutable variable.
 @test
-fn test_field_assign() → ∅:
+fn test_field_assign():
     let p : mut = Point.new(1.0, 2.0)
     p.x ← 10.0
     assert_eq(p.x, 10.0)
@@ -67,7 +67,7 @@ fn test_field_assign() → ∅:
 // Error: field assignment on immutable variable.
 @test
 @expect error "cannot assign to field"
-fn test_field_assign_immutable() → ∅:
+fn test_field_assign_immutable():
     let p := Point.new(1.0, 2.0)
     p.x ← 10.0
 
@@ -82,15 +82,15 @@ impl Counter:
     fn value(&self) -> i64:
         self.count
 
-    fn increment(&mut self) → ∅:
+    fn increment(&mut self):
         self.count ← self.count + 1
 
-    fn add(&mut self, n: i64) → ∅:
+    fn add(&mut self, n: i64):
         self.count ← self.count + n
 
 // Counter with methods.
 @test
-fn test_counter() → ∅:
+fn test_counter():
     let c := Counter.new()
     assert_eq(c.value(), 0)
     c.increment()
@@ -106,7 +106,7 @@ struct Pair:
     second: i64
 
 @test
-fn test_plain_struct() → ∅:
+fn test_plain_struct():
     let p := Pair { first: 42, second: 99 }
     assert_eq(p.first, 42)
     assert_eq(p.second, 99)
@@ -114,18 +114,18 @@ fn test_plain_struct() → ∅:
 // Error: missing field in struct literal.
 @test
 @expect error "missing field"
-fn test_missing_field() → ∅:
+fn test_missing_field():
     let p := Point { x: 1.0 }
 
 // Error: unknown field in struct literal.
 @test
 @expect error "has no field"
-fn test_unknown_field() → ∅:
+fn test_unknown_field():
     let p := Point { x: 1.0, y: 2.0, z: 3.0 }
 
 // Consuming self: calling a method with bare self invalidates the variable.
 @test
-fn test_consume_self() → ∅:
+fn test_consume_self():
     let p := Point.new(3.0, 4.0)
     let s := p.sum_components()
     assert_eq(s, 7.0)
@@ -133,7 +133,7 @@ fn test_consume_self() → ∅:
 // Error: use object after consuming method.
 @test
 @expect error "moved"
-fn test_use_after_consume() → ∅:
+fn test_use_after_consume():
     let p := Point.new(3.0, 4.0)
     let s := p.sum_components()
     assert_eq(p.x, 3.0)
@@ -141,14 +141,14 @@ fn test_use_after_consume() → ∅:
 // Error: call method on consumed object.
 @test
 @expect error "moved"
-fn test_method_after_consume() → ∅:
+fn test_method_after_consume():
     let p := Point.new(3.0, 4.0)
     p.sum_components()
     p.distance()
 
 // Reassignment after consume on mutable variable.
 @test
-fn test_reassign_after_consume() → ∅:
+fn test_reassign_after_consume():
     let p : mut = Point.new(1.0, 2.0)
     let s := p.sum_components()
     assert_eq(s, 3.0)
@@ -172,14 +172,14 @@ fn takes_checked_ref(p : &Checked) → i32:
     p.x
 
 @test
-fn test_the_right_struct_is_taken() → ∅:
+fn test_the_right_struct_is_taken():
     let a := Checked{x: 1}
     assert_eq(takes_checked(a), 1)
     let b : mut = Checked{x: 2}
     assert_eq(takes_checked_ref(&b), 2)
 
 @test
-fn test_a_binding_declared_with_a_struct_type() → ∅:
+fn test_a_binding_declared_with_a_struct_type():
     let a : Checked = Checked{x: 3}
     assert_eq(a.x, 3)
 
@@ -187,26 +187,26 @@ fn test_a_binding_declared_with_a_struct_type() → ∅:
 // field turns out to be missing.
 @test
 @expect error "argument 'p' expected Checked, got Other"
-fn error_wrong_struct_argument() → ∅:
+fn error_wrong_struct_argument():
     _ ← takes_checked(Other{y: 5})
 
 @test
 @expect error "argument 'p' expected Checked, got int"
-fn error_non_struct_argument() → ∅:
+fn error_non_struct_argument():
     _ ← takes_checked(5)
 
 @test
 @expect error "'Checked' is a struct, but the value is Other"
-fn error_wrong_struct_binding() → ∅:
+fn error_wrong_struct_binding():
     let a : Checked = Other{y: 5}
     _ ← a.x
 
 @test
 @expect error "'Checked' is a struct, but the value is str"
-fn error_non_struct_binding() → ∅:
+fn error_non_struct_binding():
     let a : Checked = "hi"
     _ ← a.x
 
 @start
-fn main() → ∅:
+fn main():
     std.println("struct tests passed")

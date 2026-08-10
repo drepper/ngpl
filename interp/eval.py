@@ -2264,7 +2264,9 @@ class Evaluator:
             except KeyError:
                 raise TypeError(f"@resultof: unknown function '{node.name}'")
             if isinstance(func, FuncValue):
-                result = TypeValue(func.ret_type or "\N{EMPTY SET}")
+                # Every parsed signature records a return type, ∅ where
+                # none was written, so there is nothing to fall back to.
+                result = TypeValue(func.ret_type)
             elif isinstance(func, BuiltinFunc):
                 result = TypeValue("builtin")
             else:

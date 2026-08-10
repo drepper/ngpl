@@ -1,6 +1,6 @@
 // The count is written down and the type is declared, so this is
 // settled before anything runs.
 @start
-fn main() → ∅:
+fn main():
     let i : i8 = 1
     std.println("{}", i « 7)

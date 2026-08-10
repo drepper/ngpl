@@ -10,20 +10,20 @@
 // ---------------------------------------------------------------------
 
 @test
-fn test_exists_is_a_present_optional() → ∅:
+fn test_exists_is_a_present_optional():
     let v := [10, 20]
     assert_eq(v.get(0), ∃(10))
     assert_eq(v.get(9), ∅)
 
 // ∃ and the some keyword spell the same thing.
 @test
-fn test_exists_equals_some() → ∅:
+fn test_exists_equals_some():
     assert(∃(5) == some(5))
     assert(∃(5) != ∅)
 
 // It nests: an optional holding an optional is distinguishable.
 @test
-fn test_exists_nests() → ∅:
+fn test_exists_nests():
     assert(∃(∅) != ∅)
 
 // ---------------------------------------------------------------------
@@ -36,18 +36,18 @@ fn test_exists_nests() → ∅:
 // being one at all.
 
 @expect error "cannot compare an optional with a plain value"
-fn error_compare_optional_with_plain() → ∅:
+fn error_compare_optional_with_plain():
     let v : mut = [1]
     assert(v.get(0) == 1)
 
 @expect error "cannot compare an optional with a plain value"
-fn error_assert_eq_optional_with_plain() → ∅:
+fn error_assert_eq_optional_with_plain():
     let v : mut = [1]
     assert_eq(v.get(0), 1)
 
 // ?? is the other way to get a plain value out.
 @test
-fn test_default_still_compares_plainly() → ∅:
+fn test_default_still_compares_plainly():
     let v := [1]
     assert_eq(v.get(0) ?? 0, 1)
     assert_eq(v.get(9) ?? 0, 0)
@@ -57,7 +57,7 @@ fn test_default_still_compares_plainly() → ∅:
 // ---------------------------------------------------------------------
 
 @test
-fn test_match_present_binds_the_value() → ∅:
+fn test_match_present_binds_the_value():
     let v := [42]
     let seen : mut = 0
     match v.get(0):
@@ -68,7 +68,7 @@ fn test_match_present_binds_the_value() → ∅:
     assert_eq(seen, 42)
 
 @test
-fn test_match_absent() → ∅:
+fn test_match_absent():
     let v := []
     let seen : mut = 0
     match v.get(0):
@@ -80,7 +80,7 @@ fn test_match_absent() → ∅:
 
 // A falsy value is still present, so it takes the ∃ arm.
 @test
-fn test_match_present_but_falsy() → ∅:
+fn test_match_present_but_falsy():
     let v := [0]
     let took : mut = ""
     match v.get(0):
@@ -92,7 +92,7 @@ fn test_match_present_but_falsy() → ∅:
 
 // The arms may be written in either order.
 @test
-fn test_match_arm_order() → ∅:
+fn test_match_arm_order():
     let v := [7]
     let seen : mut = 0
     match v.get(0):
@@ -104,7 +104,7 @@ fn test_match_arm_order() → ∅:
 
 // A single-statement arm may sit on the same line as its colon.
 @test
-fn test_match_inline_arms() → ∅:
+fn test_match_inline_arms():
     let v := [3]
     let seen : mut = 0
     match v.get(0):
@@ -114,7 +114,7 @@ fn test_match_inline_arms() → ∅:
 
 // _ matches whatever the earlier arms did not.
 @test
-fn test_match_wildcard() → ∅:
+fn test_match_wildcard():
     let v := []
     let took : mut = ""
     match v.get(0):
@@ -126,7 +126,7 @@ fn test_match_wildcard() → ∅:
 
 // Matching an iterator drives a loop one step at a time.
 @test
-fn test_match_over_an_iterator() → ∅:
+fn test_match_over_an_iterator():
     let v := [1, 2, 3]
     let it := v.iterate()
     let total : mut = 0
@@ -148,7 +148,7 @@ fn test_match_over_an_iterator() → ∅:
 // which answers no and says why, where ∅ answers no and does not.
 
 @test
-fn test_match_result_ok() → ∅:
+fn test_match_result_ok():
     let seen : mut = 0
     match 10 ÷ 2:
         ∃(v):
@@ -158,7 +158,7 @@ fn test_match_result_ok() → ∅:
     assert_eq(seen, 5)
 
 @test
-fn test_match_result_err_binds_the_error() → ∅:
+fn test_match_result_err_binds_the_error():
     let took : mut = ""
     match 10 ÷ 0:
         ∃(v):
@@ -175,7 +175,7 @@ fn checked(n : i64) → i64!:
     n × 2
 
 @test
-fn test_explicit_error_return_ok_path() → ∅:
+fn test_explicit_error_return_ok_path():
     let seen : mut = 0
     match checked(5):
         ∃(v):
@@ -185,7 +185,7 @@ fn test_explicit_error_return_ok_path() → ∅:
     assert_eq(seen, 10)
 
 @test
-fn test_explicit_error_return_err_path() → ∅:
+fn test_explicit_error_return_err_path():
     let took : mut = ""
     match checked(⁻1):
         ∃(v):
@@ -197,13 +197,13 @@ fn test_explicit_error_return_err_path() → ∅:
 
 // The error reaches ?? as well, so ∄ is a value like any other.
 @test
-fn test_explicit_error_with_default() → ∅:
+fn test_explicit_error_with_default():
     assert_eq(checked(⁻1) ?? 0, 0)
     assert_eq(checked(5) ?? 0, 10)
 
 // A wildcard covers a failure too.
 @test
-fn test_match_result_wildcard() → ∅:
+fn test_match_result_wildcard():
     let took : mut = ""
     match 10 ÷ 0:
         ∃(v):
@@ -217,7 +217,7 @@ fn test_match_result_wildcard() → ∅:
 // pattern for the type, which is more use than being told an arm is
 // missing.
 @expect error "∅ cannot match a result"
-fn error_absent_pattern_on_a_result() → ∅:
+fn error_absent_pattern_on_a_result():
     match 10 ÷ 0:
         ∃(v):
             std.println("{}", v)
@@ -226,7 +226,7 @@ fn error_absent_pattern_on_a_result() → ∅:
 
 // Nor does ∄ stand in for absence.
 @expect error "cannot match an optional, whose absence is"
-fn error_failure_pattern_on_an_optional() → ∅:
+fn error_failure_pattern_on_an_optional():
     let v : mut = []
     match v.get(0):
         ∃(x):
@@ -243,14 +243,14 @@ fn error_failure_pattern_on_an_optional() → ∅:
 // unlucky input is reported all the same.
 
 @expect error "match has no arm for ∅"
-fn error_optional_missing_absent_arm() → ∅:
+fn error_optional_missing_absent_arm():
     let v : mut = [1]
     match v.get(0):
         ∃(x):
             std.println("{}", x)
 
 @expect error "match has no arm for a failed result"
-fn error_result_missing_failure_arm() → ∅:
+fn error_result_missing_failure_arm():
     match 10 ÷ 2:
         ∃(v):
             std.println("{}", v)
@@ -261,7 +261,7 @@ fn returns_optional(n : i64) → i64?:
     n
 
 @expect error "match has no arm for ∅"
-fn error_missing_arm_through_a_call() → ∅:
+fn error_missing_arm_through_a_call():
     match returns_optional(1):
         ∃(x):
             std.println("{}", x)
@@ -272,7 +272,7 @@ fn returns_result(n : i64) → i64!:
     n
 
 @expect error "match has no arm for a failed result"
-fn error_missing_arm_through_a_result_call() → ∅:
+fn error_missing_arm_through_a_result_call():
     match returns_result(1):
         ∃(x):
             std.println("{}", x)
@@ -282,7 +282,7 @@ fn returns_plain(n : i64) → i64:
     n × 2
 
 @test
-fn test_plain_subject_needs_one_arm() → ∅:
+fn test_plain_subject_needs_one_arm():
     let seen : mut = 0
     match returns_plain(3):
         ∃(x):
@@ -290,7 +290,7 @@ fn test_plain_subject_needs_one_arm() → ∅:
     assert_eq(seen, 6)
 
 @expect error "∅ cannot match a plain value"
-fn error_absent_pattern_on_a_plain_value() → ∅:
+fn error_absent_pattern_on_a_plain_value():
     match returns_plain(3):
         ∃(x):
             std.println("{}", x)
@@ -304,7 +304,7 @@ fn error_absent_pattern_on_a_plain_value() → ∅:
 // These need no knowledge of the subject at all.
 
 @expect error "match repeats the .* pattern"
-fn error_duplicate_present_arm() → ∅:
+fn error_duplicate_present_arm():
     let v : mut = [1]
     match v.get(0):
         ∃(x):
@@ -315,7 +315,7 @@ fn error_duplicate_present_arm() → ∅:
             std.println("none")
 
 @expect error "match repeats the ∅ pattern"
-fn error_duplicate_absent_arm() → ∅:
+fn error_duplicate_absent_arm():
     let v : mut = [1]
     match v.get(0):
         ∃(x):
@@ -326,7 +326,7 @@ fn error_duplicate_absent_arm() → ∅:
             std.println("again")
 
 @expect error "match has arms after _"
-fn error_arm_after_wildcard() → ∅:
+fn error_arm_after_wildcard():
     let v : mut = [1]
     match v.get(0):
         _:
@@ -341,7 +341,7 @@ fn error_arm_after_wildcard() → ∅:
 // The subject is a variable, whose type the checker does not track, so
 // the gap is found when the match runs instead.
 @expect error "match has no arm for ∅"
-fn error_unknown_subject_checked_at_run_time() → ∅:
+fn error_unknown_subject_checked_at_run_time():
     let v : mut = []
     let x : mut = v.get(0)
     match x:
@@ -350,7 +350,7 @@ fn error_unknown_subject_checked_at_run_time() → ∅:
 
 // The bound name names the matched value, so it cannot be assigned to.
 @expect error "cannot assign to match variable 'x'"
-fn error_assign_to_match_binding() → ∅:
+fn error_assign_to_match_binding():
     let v : mut = [1]
     match v.get(0):
         ∃(x):
@@ -361,12 +361,12 @@ fn error_assign_to_match_binding() → ∅:
 // A match that does not cover the value it is given is an error rather
 // than a silent no-op.
 @expect error "match has no arm for"
-fn error_match_not_exhaustive() → ∅:
+fn error_match_not_exhaustive():
     let v : mut = []
     match v.get(0):
         ∃(x):
             std.println("{}", x)
 
 @start
-fn main() → ∅:
+fn main():
     std.println("match tests passed")

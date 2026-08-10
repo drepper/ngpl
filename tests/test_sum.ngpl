@@ -30,7 +30,7 @@ fn area(s : Shape) → f64:
         Rect(v):    v.w × v.h
 
 @test
-fn test_match_picks_the_alternative() → ∅:
+fn test_match_picks_the_alternative():
     assert_eq(area(Circle{r: 2.0}), 12.0)
     assert_eq(area(Rect{w: 3.0, h: 4.0}), 12.0)
 
@@ -42,7 +42,7 @@ fn width_of(s : Shape) → f64:
         Rect(v):    v.w
 
 @test
-fn test_bound_name_has_the_alternative_type() → ∅:
+fn test_bound_name_has_the_alternative_type():
     assert_eq(width_of(Circle{r: 1.5}), 3.0)
     assert_eq(width_of(Rect{w: 7.0, h: 1.0}), 7.0)
 
@@ -53,7 +53,7 @@ fn is_round(s : Shape) → bool:
         _:          false
 
 @test
-fn test_wildcard_covers_the_rest() → ∅:
+fn test_wildcard_covers_the_rest():
     assert(is_round(Circle{r: 1.0}))
     assert(¬is_round(Rect{w: 1.0, h: 1.0}))
 
@@ -62,18 +62,18 @@ fn test_wildcard_covers_the_rest() → ∅:
 // ---------------------------------------------------------------------
 
 @test
-fn test_binding_accepts_an_alternative() → ∅:
+fn test_binding_accepts_an_alternative():
     let a : Shape = Circle{r: 1.0}
     let b : Shape = Rect{w: 2.0, h: 3.0}
     assert_eq(area(a) + area(b), 9.0)
 
 @expect error "'Shape' is Circle . Rect, but the value is Tri"
-fn error_binding_rejects_a_non_alternative() → ∅:
+fn error_binding_rejects_a_non_alternative():
     let s : Shape = Tri{b: 1.0, h: 2.0}
     _ ← area(s)
 
 @expect error "argument .s.: .Shape. is Circle . Rect, but the value is Tri"
-fn error_argument_rejects_a_non_alternative() → ∅:
+fn error_argument_rejects_a_non_alternative():
     _ ← area(Tri{b: 1.0, h: 2.0})
 
 // ---------------------------------------------------------------------
@@ -119,12 +119,12 @@ fn kind_of(v : Scalar) → str:
 // An untyped number settles on the one alternative that can hold it,
 // the way it would settle on a parameter's type.
 @test
-fn test_untyped_number_settles() → ∅:
+fn test_untyped_number_settles():
     assert_eq(kind_of(5), "integer")
     assert_eq(kind_of(2.5), "float")
 
 @test
-fn test_typed_value_keeps_its_alternative() → ∅:
+fn test_typed_value_keeps_its_alternative():
     let n : i32 = 7
     let x : f64 = 1.5
     assert_eq(kind_of(n), "integer")
@@ -140,11 +140,11 @@ fn width_kind(v : Widths) → i64:
         i64(n):  64
 
 @expect error "could be i32 or i64; write the type meant"
-fn error_ambiguous_untyped_number() → ∅:
+fn error_ambiguous_untyped_number():
     _ ← width_kind(5)
 
 @test
-fn test_explicit_type_resolves_the_choice() → ∅:
+fn test_explicit_type_resolves_the_choice():
     let a : i32 = 5
     let b : i64 = 5
     assert_eq(width_kind(a), 32)
@@ -165,7 +165,7 @@ fn name_of(s : Any3) → str:
         Tri(t):     "tri"
 
 @test
-fn test_three_alternatives() → ∅:
+fn test_three_alternatives():
     assert_eq(name_of(Circle{r: 1.0}), "circle")
     assert_eq(name_of(Rect{w: 1.0, h: 1.0}), "rect")
     assert_eq(name_of(Tri{b: 1.0, h: 1.0}), "tri")
@@ -177,7 +177,7 @@ struct Declared_below:
     v : i32
 
 @test
-fn test_alternative_declared_later() → ∅:
+fn test_alternative_declared_later():
     let l : Later = Declared_below{v: 3}
     match l:
         Circle(c):        assert(false)
@@ -190,14 +190,14 @@ fn test_alternative_declared_later() → ∅:
 // The ? admits absence, which is the only way a binding of a sum type
 // can hold something that is not one of the alternatives.
 @test
-fn test_optional_sum_absent() → ∅:
+fn test_optional_sum_absent():
     let s : Shape? = ∅
     match s:
         ∃(v):  assert(false)
         ∅:     assert(true)
 
 @test
-fn test_optional_sum_present() → ∅:
+fn test_optional_sum_present():
     let s : Shape? = Circle{r: 2.0}
     match s:
         ∃(v):  assert_eq(area(v), 12.0)
@@ -206,7 +206,7 @@ fn test_optional_sum_present() → ∅:
 // What it holds, when it holds something, still has to be an
 // alternative.
 @expect error "'Shape' is Circle . Rect, but the value is Tri"
-fn error_optional_sum_rejects_a_non_alternative() → ∅:
+fn error_optional_sum_rejects_a_non_alternative():
     let s : Shape? = Tri{b: 1.0, h: 2.0}
     _ ← s
 
@@ -217,10 +217,10 @@ fn error_optional_sum_rejects_a_non_alternative() → ∅:
 // A fill value has to be an alternative, and the diagnostic says what
 // it was rather than naming the element type back.
 @expect error "'Shape' is Circle . Rect, but the value is int"
-fn error_array_fill_is_not_an_alternative() → ∅:
+fn error_array_fill_is_not_an_alternative():
     let a : Shape[3] = 0
     _ ← a
 
 @start
-fn main() → ∅:
+fn main():
     std.println("sum type tests passed")

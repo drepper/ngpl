@@ -2,7 +2,7 @@
 
 // Basic enumerate over an array.
 @test
-fn test_enumerate_basic() → ∅:
+fn test_enumerate_basic():
     let indices : mut = 0
     let values : mut = 0
     foreach pair := enumerate([10, 20, 30]):
@@ -13,7 +13,7 @@ fn test_enumerate_basic() → ∅:
 
 // Enumerate with two variables (index, value destructured).
 @test
-fn test_enumerate_two_vars() → ∅:
+fn test_enumerate_two_vars():
     let sum : mut = 0
     foreach i, v := enumerate([5, 4, 3, 2, 1]):
         sum ← sum + i × v
@@ -22,7 +22,7 @@ fn test_enumerate_two_vars() → ∅:
 
 // Enumerate over an empty array.
 @test
-fn test_enumerate_empty() → ∅:
+fn test_enumerate_empty():
     let count : mut = 0
     foreach pair := enumerate([]):
         count ← count + 1
@@ -30,7 +30,7 @@ fn test_enumerate_empty() → ∅:
 
 // Enumerate over a single-element array.
 @test
-fn test_enumerate_single() → ∅:
+fn test_enumerate_single():
     let idx : mut = ⁻1
     let val : mut = ⁻1
     foreach i, v := enumerate([42]):
@@ -41,7 +41,7 @@ fn test_enumerate_single() → ∅:
 
 // Enumerate with range value.
 @test
-fn test_enumerate_range() → ∅:
+fn test_enumerate_range():
     let sum_idx : mut = 0
     let sum_val : mut = 0
     foreach pair := enumerate(10…14):
@@ -55,7 +55,7 @@ fn square(x : i64) → i64:
     x × x
 
 @test
-fn test_enumerate_generated() → ∅:
+fn test_enumerate_generated():
     let arr := generate(square, 1…4)
     let total : mut = 0
     foreach i, v := enumerate(arr):
@@ -67,9 +67,9 @@ fn test_enumerate_generated() → ∅:
 // Error: enumerate outside foreach.
 @test
 @expect error "enumerate can only be used inside foreach"
-fn test_enumerate_outside_foreach() → ∅:
+fn test_enumerate_outside_foreach():
     let x : mut = enumerate([1, 2, 3])
 
 @start
-fn main() → ∅:
+fn main():
     std.println("enumerate tests passed")

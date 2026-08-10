@@ -16,7 +16,7 @@ impl Bag:
 
 // Consuming method works and returns the value.
 @test
-fn test_consume_ok() → ∅:
+fn test_consume_ok():
     let b := Bag.new(5, "fruit")
     let n := b.take()
     assert_eq(n, 5)
@@ -24,7 +24,7 @@ fn test_consume_ok() → ∅:
 // Error: field access after consuming method.
 @test
 @expect error "moved"
-fn test_field_after_consume() → ∅:
+fn test_field_after_consume():
     let b := Bag.new(5, "fruit")
     let n := b.take()
     assert_eq(b.items, 5)
@@ -32,14 +32,14 @@ fn test_field_after_consume() → ∅:
 // Error: method call after consuming method.
 @test
 @expect error "moved"
-fn test_method_after_consume() → ∅:
+fn test_method_after_consume():
     let b := Bag.new(5, "fruit")
     b.take()
     b.peek()
 
 // Borrowing method does not consume.
 @test
-fn test_borrow_survives() → ∅:
+fn test_borrow_survives():
     let b := Bag.new(7, "tools")
     let a := b.peek()
     let c := b.peek()
@@ -48,7 +48,7 @@ fn test_borrow_survives() → ∅:
 
 // Reassignment after consume restores the variable.
 @test
-fn test_reassign_after_consume() → ∅:
+fn test_reassign_after_consume():
     let b : mut = Bag.new(1, "a")
     let n := b.take()
     assert_eq(n, 1)
@@ -56,5 +56,5 @@ fn test_reassign_after_consume() → ∅:
     assert_eq(b.peek(), 2)
 
 @start
-fn main() → ∅:
+fn main():
     std.println("move tests passed")

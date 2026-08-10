@@ -3,5 +3,5 @@
 // has already decided it cannot continue.
 
 @start
-fn main() → ∅:
+fn main():
     std.abort(999)

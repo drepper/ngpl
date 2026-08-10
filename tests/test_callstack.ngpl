@@ -13,7 +13,7 @@
 
 // Each entry is a (name, line, column) tuple.
 @test
-fn test_frame_shape() → ∅:
+fn test_frame_shape():
     let frames := std.callstack()
     let top := frames[0]
     assert_eq(top[0], "test_frame_shape")
@@ -21,7 +21,7 @@ fn test_frame_shape() → ∅:
 
 // Entry 0 is the function that asked, not callstack itself.
 @test
-fn test_innermost_is_caller() → ∅:
+fn test_innermost_is_caller():
     assert_eq(std.callstack()[0][0], "test_innermost_is_caller")
 
 fn level_one() → str:
@@ -36,7 +36,7 @@ fn level_three() → str:
 
 // A function three levels down still names itself at entry 0.
 @test
-fn test_names_own_frame() → ∅:
+fn test_names_own_frame():
     assert_eq(level_one(), "level_three")
 
 // The callers appear after it, outward in order.
@@ -51,7 +51,7 @@ fn outer_of_chain() → bool:
     check_chain()
 
 @test
-fn test_chain_order() → ∅:
+fn test_chain_order():
     assert(outer_of_chain())
 
 // The stack grows and shrinks with the calls it describes.
@@ -63,11 +63,11 @@ fn depth_plus_one() → i64:
     depth()
 
 @test
-fn test_depth_grows_with_nesting() → ∅:
+fn test_depth_grows_with_nesting():
     assert_eq(depth_plus_one(), depth() + 1)
 
 @expect error "takes no arguments"
-fn error_callstack_with_argument() → ∅:
+fn error_callstack_with_argument():
     let frames : mut = std.callstack(1)
 
 // ---------------------------------------------------------------------
@@ -75,15 +75,15 @@ fn error_callstack_with_argument() → ∅:
 // ---------------------------------------------------------------------
 
 @expect error "outside the range"
-fn error_exit_code_too_large() → ∅:
+fn error_exit_code_too_large():
     std.exit(256)
 
 @expect error "outside the range"
-fn error_exit_code_negative() → ∅:
+fn error_exit_code_negative():
     std.exit(⁻1)
 
 @expect error "must be an integer"
-fn error_exit_code_not_an_integer() → ∅:
+fn error_exit_code_not_an_integer():
     std.exit("42")
 
 // ---------------------------------------------------------------------
@@ -91,9 +91,9 @@ fn error_exit_code_not_an_integer() → ∅:
 // ---------------------------------------------------------------------
 
 @expect error "must be an integer"
-fn error_abort_signal_not_an_integer() → ∅:
+fn error_abort_signal_not_an_integer():
     std.abort("SIGTERM")
 
 @start
-fn main() → ∅:
+fn main():
     std.println("callstack tests passed")

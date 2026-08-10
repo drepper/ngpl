@@ -8,7 +8,7 @@ impl Buffer:
         self.n
 
 @start
-fn main() → ∅:
+fn main():
     let b := Buffer{n: 7}
     let first := b.consume()
     let second := b.consume()

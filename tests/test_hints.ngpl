@@ -22,7 +22,7 @@ fn classify(n : i64) → i64:
     0
 
 @test
-fn test_hint_does_not_change_the_branch() → ∅:
+fn test_hint_does_not_change_the_branch():
     assert_eq(classify(⁻5), ⁻1)
     assert_eq(classify(0), 0)
     assert_eq(classify(7), 1)
@@ -30,7 +30,7 @@ fn test_hint_does_not_change_the_branch() → ∅:
 // A hinted condition that is expected to be false but is true still
 // takes the branch: the hint is not a promise.
 @test
-fn test_unlikely_branch_still_taken() → ∅:
+fn test_unlikely_branch_still_taken():
     let taken : mut = false
     @unlikely
     if true:
@@ -38,7 +38,7 @@ fn test_unlikely_branch_still_taken() → ∅:
     assert(taken)
 
 @test
-fn test_likely_branch_still_skipped() → ∅:
+fn test_likely_branch_still_skipped():
     let taken : mut = false
     @likely
     if false:
@@ -48,7 +48,7 @@ fn test_likely_branch_still_skipped() → ∅:
 // The hint belongs to the whole statement, so elif and else are
 // unaffected and still reached.
 @test
-fn test_hint_with_elif_and_else() → ∅:
+fn test_hint_with_elif_and_else():
     let which : mut = 0
     @unlikely
     if false:
@@ -60,7 +60,7 @@ fn test_hint_with_elif_and_else() → ∅:
     assert_eq(which, 2)
 
 @test
-fn test_hint_with_else() → ∅:
+fn test_hint_with_else():
     let which : mut = 0
     @likely
     if false:
@@ -71,7 +71,7 @@ fn test_hint_with_else() → ∅:
 
 // A hint on a nested condition applies to that one.
 @test
-fn test_nested_hints() → ∅:
+fn test_nested_hints():
     let reached : mut = 0
     @likely
     if true:
@@ -95,7 +95,7 @@ fn often_called() → i64:
     1
 
 @test
-fn test_function_hints_do_not_change_results() → ∅:
+fn test_function_hints_do_not_change_results():
     assert_eq(rarely_called() + often_called(), 42)
 
 // A hint sits alongside the other annotations rather than replacing
@@ -108,7 +108,7 @@ fn hinted_and_impure() → i64:
 let hint_counter : mut = 5
 
 @test
-fn test_hint_with_other_annotations() → ∅:
+fn test_hint_with_other_annotations():
     assert_eq(hinted_and_impure(), 5)
 
 // A method takes a hint too.
@@ -125,7 +125,7 @@ impl Counter:
         "a counter"
 
 @test
-fn test_method_hints() → ∅:
+fn test_method_hints():
     let c := Counter{n: 9}
     assert_eq(c.get(), 9)
     assert_eq(c.describe(), "a counter")
@@ -137,7 +137,7 @@ fn test_method_hints() → ∅:
 // Only the @ makes them annotations, so a program is free to use the
 // words for its own bindings.
 @test
-fn test_names_remain_usable() → ∅:
+fn test_names_remain_usable():
     let hot := 1
     let cold := 2
     let likely := 3
@@ -149,5 +149,5 @@ fn test_names_remain_usable() → ∅:
 // hint_wrong_statement, and hint_at_top_level under tests/output.
 
 @start
-fn main() → ∅:
+fn main():
     std.println("hint tests passed")

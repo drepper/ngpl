@@ -8,5 +8,5 @@ struct Header:
     length : int
 
 @start
-fn main() → ∅:
+fn main():
     std.println("{}", Header.sizeof)

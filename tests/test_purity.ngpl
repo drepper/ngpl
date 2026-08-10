@@ -11,7 +11,7 @@ let LIMIT := 100
 
 // Pure function assigning to a local variable is fine.
 @test
-fn test_pure_local_assign() → ∅:
+fn test_pure_local_assign():
     let x : mut = 0
     x ← 42
     assert_eq(x, 42)
@@ -19,18 +19,18 @@ fn test_pure_local_assign() → ∅:
 // Pure function cannot assign to a mutable global.
 @test
 @expect error "pure function.*cannot assign to non-local"
-fn test_pure_rejects_global_write() → ∅:
+fn test_pure_rejects_global_write():
     counter ← 1
 
 // Pure function cannot read a mutable global.
 @test
 @expect error "pure function.*cannot read mutable global"
-fn test_pure_rejects_global_read() → ∅:
+fn test_pure_rejects_global_read():
     let x : mut = counter
 
 // Pure function CAN read a constant.
 @test
-fn test_pure_reads_const() → ∅:
+fn test_pure_reads_const():
     assert_eq(LIMIT, 100)
 
 // Pure function CAN call other functions.
@@ -38,12 +38,12 @@ fn double(x : i64) → i64:
     x × 2
 
 @test
-fn test_pure_calls_function() → ∅:
+fn test_pure_calls_function():
     assert_eq(double(3), 6)
 
 // An @impure function CAN read and write mutable globals.
 @impure
-fn bump_counter() → ∅:
+fn bump_counter():
     counter ← counter + 1
 
 @impure
@@ -51,17 +51,17 @@ fn get_counter() → i64:
     counter
 
 @test
-fn test_impure_allows_global_access() → ∅:
+fn test_impure_allows_global_access():
     bump_counter()
     assert_eq(get_counter(), 1)
 
 // Pure function calling an impure function is allowed —
 // the impure callee handles the side effect.
 @test
-fn test_pure_calls_impure() → ∅:
+fn test_pure_calls_impure():
     bump_counter()
     assert_eq(get_counter(), 2)
 
 @start
-fn main() → ∅:
+fn main():
     std.println("purity tests passed")

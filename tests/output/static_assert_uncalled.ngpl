@@ -1,9 +1,9 @@
 // The function is never called, but its declaration settles the
 // assertion, so the wrong one is reported all the same.
-fn never_called() → ∅:
+fn never_called():
     let a : u8 = 4
     static_assert_eq(@sizeof(a), 99 ¤byte)
 
 @start
-fn main() → ∅:
+fn main():
     std.println("main")

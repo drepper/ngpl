@@ -2,5 +2,5 @@
 // reported rather than silently truncated to 44.
 
 @start
-fn main() → ∅:
+fn main():
     std.exit(300)

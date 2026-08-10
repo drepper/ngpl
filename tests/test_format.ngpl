@@ -5,31 +5,31 @@
 // --- Basic substitution -------------------------------------------
 
 @test
-fn test_format_no_args() → ∅:
+fn test_format_no_args():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "hello world"), "hello world")
     alloc.deinit()
 
 @test
-fn test_format_one_int() → ∅:
+fn test_format_one_int():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "value: {}", 42), "value: 42")
     alloc.deinit()
 
 @test
-fn test_format_two_args() → ∅:
+fn test_format_two_args():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "{} + {} = {}", 1, 2, 3), "1 + 2 = 3")
     alloc.deinit()
 
 @test
-fn test_format_string_arg() → ∅:
+fn test_format_string_arg():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "hello {}", "world"), "hello world")
     alloc.deinit()
 
 @test
-fn test_format_bool_arg() → ∅:
+fn test_format_bool_arg():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "{} and {}", true, false), "true and false")
     alloc.deinit()
@@ -37,26 +37,26 @@ fn test_format_bool_arg() → ∅:
 // --- Format specifiers --------------------------------------------
 
 @test
-fn test_format_hex() → ∅:
+fn test_format_hex():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "{:x}", 255), "ff")
     assert_eq(std.format(alloc, "{:X}", 255), "FF")
     alloc.deinit()
 
 @test
-fn test_format_binary() → ∅:
+fn test_format_binary():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "{:b}", 10), "1010")
     alloc.deinit()
 
 @test
-fn test_format_octal() → ∅:
+fn test_format_octal():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "{:o}", 8), "10")
     alloc.deinit()
 
 @test
-fn test_format_char() → ∅:
+fn test_format_char():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "{:c}", 65), "A")
     alloc.deinit()
@@ -64,13 +64,13 @@ fn test_format_char() → ∅:
 // --- Arrays -------------------------------------------------------
 
 @test
-fn test_format_array() → ∅:
+fn test_format_array():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "{}", [1, 2, 3]), "[1, 2, 3]")
     alloc.deinit()
 
 @test
-fn test_format_empty_array() → ∅:
+fn test_format_empty_array():
     let alloc := std.arena.allocator()
     let arr := [1]
     // slice to empty not available; test single-element
@@ -80,13 +80,13 @@ fn test_format_empty_array() → ∅:
 // --- Escaping -----------------------------------------------------
 
 @test
-fn test_format_literal_braces() → ∅:
+fn test_format_literal_braces():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "{{}}"), "{}")
     alloc.deinit()
 
 @test
-fn test_format_mixed_literal_and_arg() → ∅:
+fn test_format_mixed_literal_and_arg():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "{{{}}} = {}", "x", 1), "{x} = 1")
     alloc.deinit()
@@ -97,7 +97,7 @@ fn test_format_mixed_literal_and_arg() → ∅:
 // as in C++'s std::format.
 
 @test
-fn test_format_alternate_form() → ∅:
+fn test_format_alternate_form():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "{:#x}", 255), "0xff")
     assert_eq(std.format(alloc, "{:#b}", 10), "0b1010")
@@ -105,14 +105,14 @@ fn test_format_alternate_form() → ∅:
     alloc.deinit()
 
 @test
-fn test_format_width() → ∅:
+fn test_format_width():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "[{:6}]", 42), "[    42]")
     assert_eq(std.format(alloc, "[{:06}]", 42), "[000042]")
     alloc.deinit()
 
 @test
-fn test_format_alignment() → ∅:
+fn test_format_alignment():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "[{:<6}]", 42), "[42    ]")
     assert_eq(std.format(alloc, "[{:>6}]", 42), "[    42]")
@@ -121,14 +121,14 @@ fn test_format_alignment() → ∅:
 
 // The character before the alignment is the one used to pad.
 @test
-fn test_format_fill() → ∅:
+fn test_format_fill():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "[{:*<6}]", 42), "[42****]")
     assert_eq(std.format(alloc, "[{:.>6}]", 42), "[....42]")
     alloc.deinit()
 
 @test
-fn test_format_sign() → ∅:
+fn test_format_sign():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "{:+}", 42), "+42")
     assert_eq(std.format(alloc, "{:+}", ⁻42), "-42")
@@ -136,7 +136,7 @@ fn test_format_sign() → ∅:
     alloc.deinit()
 
 @test
-fn test_format_float_presentation() → ∅:
+fn test_format_float_presentation():
     let alloc := std.arena.allocator()
     let f : f64 = 1.5
     assert_eq(std.format(alloc, "{:.3f}", f), "1.500")
@@ -147,7 +147,7 @@ fn test_format_float_presentation() → ∅:
 
 // Strings take the alignment part of the grammar as well.
 @test
-fn test_format_string_width() → ∅:
+fn test_format_string_width():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "[{:>5}]", "hi"), "[   hi]")
     assert_eq(std.format(alloc, "[{:<5}]", "hi"), "[hi   ]")
@@ -161,7 +161,7 @@ fn test_format_string_width() → ∅:
 // the type suffix, u leaves the unit off.
 
 @test
-fn test_format_type_flag() → ∅:
+fn test_format_type_flag():
     let alloc := std.arena.allocator()
     let a : i8 = 42
     let f : f32 = 1.5
@@ -172,7 +172,7 @@ fn test_format_type_flag() → ∅:
 
 // The flag sits after the C++ part of the specifier.
 @test
-fn test_format_type_flag_after_a_base() → ∅:
+fn test_format_type_flag_after_a_base():
     let alloc := std.arena.allocator()
     let a : i8 = 42
     assert_eq(std.format(alloc, "{:xt}", a), "2ai8")
@@ -181,13 +181,13 @@ fn test_format_type_flag_after_a_base() → ∅:
 
 // A number that was never given a width has no suffix to write.
 @test
-fn test_format_type_flag_on_untyped() → ∅:
+fn test_format_type_flag_on_untyped():
     let alloc := std.arena.allocator()
     assert_eq(std.format(alloc, "{:t}", 42), "42")
     alloc.deinit()
 
 @test
-fn test_format_unit_flag() → ∅:
+fn test_format_unit_flag():
     let alloc := std.arena.allocator()
     let d ¤meter : i32 = 5
     assert_eq(std.format(alloc, "{}", d), "5 m")
@@ -195,7 +195,7 @@ fn test_format_unit_flag() → ∅:
     alloc.deinit()
 
 @test
-fn test_format_both_flags() → ∅:
+fn test_format_both_flags():
     let alloc := std.arena.allocator()
     let d ¤meter : i32 = 5
     assert_eq(std.format(alloc, "{:t}", d), "5i32 m")
@@ -206,11 +206,11 @@ fn test_format_both_flags() → ∅:
 
 @test
 @expect error "not enough arguments"
-fn test_format_too_few_args() → ∅:
+fn test_format_too_few_args():
     let alloc : mut = std.arena.allocator()
     std.format(alloc, "{} {}", 1)
     alloc.deinit()
 
 @start
-fn main() → ∅:
+fn main():
     std.println("format tests passed")

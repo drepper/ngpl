@@ -9,7 +9,7 @@
 // Scope end releases the descriptor
 // ---------------------------------------------------------------------
 
-fn opens_and_drops() → ∅:
+fn opens_and_drops():
     let dir := std.fs.cwd()
     let file := dir.open_file("CLAUDE.md")
     _ ← file.fd
@@ -18,7 +18,7 @@ fn opens_and_drops() → ∅:
 // climb with every call.  Two hundred iterations would exhaust a typical
 // limit if nothing were being closed.
 @test
-fn test_scope_end_releases_descriptors() → ∅:
+fn test_scope_end_releases_descriptors():
     foreach i := 1…200:
         opens_and_drops()
     let dir := std.fs.cwd()
@@ -37,7 +37,7 @@ fn test_scope_end_releases_descriptors() → ∅:
 // so the directory opened afterwards reuses the number the temporary
 // gave back, which is below the still-open file's.
 @test
-fn test_temporary_directory_is_released() → ∅:
+fn test_temporary_directory_is_released():
     let file := std.fs.cwd().open_file("CLAUDE.md")
     let later := std.fs.cwd()
     assert(later.fd < file.fd)
@@ -46,7 +46,7 @@ fn test_temporary_directory_is_released() → ∅:
 // A directory kept in a binding holds its descriptor for the whole
 // scope, so nothing is available to reuse and the number goes up.
 @test
-fn test_bound_directory_is_held() → ∅:
+fn test_bound_directory_is_held():
     let dir := std.fs.cwd()
     let file := dir.open_file("CLAUDE.md")
     let later := std.fs.cwd()
@@ -54,7 +54,7 @@ fn test_bound_directory_is_held() → ∅:
 
 // The file produced by the temporary is fully usable afterwards.
 @test
-fn test_file_from_temporary_directory_works() → ∅:
+fn test_file_from_temporary_directory_works():
     let alloc := std.arena.allocator()
     let file := std.fs.cwd().open_file("CLAUDE.md")
     let data := file.read_file(alloc)
@@ -62,12 +62,12 @@ fn test_file_from_temporary_directory_works() → ∅:
     alloc.deinit()
 
 // Repeating the pattern does not accumulate descriptors.
-fn opens_via_temporary() → ∅:
+fn opens_via_temporary():
     let file := std.fs.cwd().open_file("CLAUDE.md")
     _ ← file.fd
 
 @test
-fn test_temporary_pattern_does_not_leak() → ∅:
+fn test_temporary_pattern_does_not_leak():
     foreach i := 1…200:
         opens_via_temporary()
     let file := std.fs.cwd().open_file("CLAUDE.md")
@@ -83,7 +83,7 @@ fn make_file():
 
 // Ownership passes to the caller, so the file is still open.
 @test
-fn test_returned_file_survives() → ∅:
+fn test_returned_file_survives():
     let alloc := std.arena.allocator()
     let file := make_file()
     assert(¬file.is_closed)
@@ -100,7 +100,7 @@ fn borrows(f) → bool:
 
 // The callee's scope ending must not close the caller's file.
 @test
-fn test_parameter_is_not_destroyed() → ∅:
+fn test_parameter_is_not_destroyed():
     let dir := std.fs.cwd()
     let file := dir.open_file("CLAUDE.md")
     assert(¬borrows(file))
@@ -112,7 +112,7 @@ fn test_parameter_is_not_destroyed() → ∅:
 // ---------------------------------------------------------------------
 
 @test
-fn test_close_marks_closed() → ∅:
+fn test_close_marks_closed():
     let dir := std.fs.cwd()
     let file := dir.open_file("CLAUDE.md")
     assert(¬file.is_closed)
@@ -121,20 +121,20 @@ fn test_close_marks_closed() → ∅:
 
 // Closing early and then letting the scope end is not a double release.
 @test
-fn test_close_then_scope_end() → ∅:
+fn test_close_then_scope_end():
     let dir := std.fs.cwd()
     let file := dir.open_file("CLAUDE.md")
     file.close()
 
 @expect error "fd: file is closed"
-fn error_fd_after_close() → ∅:
+fn error_fd_after_close():
     let dir : mut = std.fs.cwd()
     let file : mut = dir.open_file("CLAUDE.md")
     file.close()
     _ ← file.fd
 
 @expect error "read_file: file is closed"
-fn error_read_after_close() → ∅:
+fn error_read_after_close():
     let alloc : mut = std.arena.allocator()
     let dir : mut = std.fs.cwd()
     let file : mut = dir.open_file("CLAUDE.md")
@@ -142,7 +142,7 @@ fn error_read_after_close() → ∅:
     _ ← file.read_file(alloc)
 
 @expect error "close: file is closed"
-fn error_double_close() → ∅:
+fn error_double_close():
     let dir : mut = std.fs.cwd()
     let file : mut = dir.open_file("CLAUDE.md")
     file.close()
@@ -153,24 +153,24 @@ fn error_double_close() → ∅:
 // ---------------------------------------------------------------------
 
 @test
-fn test_dir_close_marks_closed() → ∅:
+fn test_dir_close_marks_closed():
     let dir := std.fs.cwd()
     assert(¬dir.is_closed)
     dir.close()
     assert(dir.is_closed)
 
 @expect error "open_file: directory is closed"
-fn error_open_on_closed_dir() → ∅:
+fn error_open_on_closed_dir():
     let dir : mut = std.fs.cwd()
     dir.close()
     _ ← dir.open_file("CLAUDE.md")
 
 @expect error "close: directory is closed"
-fn error_double_close_dir() → ∅:
+fn error_double_close_dir():
     let dir : mut = std.fs.cwd()
     dir.close()
     dir.close()
 
 @start
-fn main() → ∅:
+fn main():
     std.println("scope close tests passed")

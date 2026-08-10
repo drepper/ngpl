@@ -1,7 +1,7 @@
 // std.exit terminates at once with the given status: the line after it
 // never runs, and the @start function's own return value is not used.
 
-fn quit_early() → ∅:
+fn quit_early():
     std.println("quitting")
     std.exit(42)
     std.println("unreachable")

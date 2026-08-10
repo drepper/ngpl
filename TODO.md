@@ -57,6 +57,11 @@ the sized types do not have.
 Completed
 ---------
 
+[x] a function definition may leave the return type off, which says what → ∅ says.
+    ∅ is what a function returns when it returns nothing, so naming it repeats what the
+    absence already said, and the functions that return nothing are most of what a program
+    writes.  Both spellings remain; the tests and the specification use the shorter one.
+
 [x] saturating arithmetic: ⊞ ⊟ ⊠ hold a result at the nearest edge of the type
     rather than reporting it.  With + reporting and @wrap coming round, that is three
     answers to a result that will not fit, each written where it applies rather than set
@@ -380,6 +385,10 @@ String and I/O
 
 Build System and Tooling
 -------------------------
+
+[ ] the specification still shows signatures without parentheses — `fn add a : int, b : int
+    → int:` and about fifteen others — which the parser has not accepted for some time.  They
+    predate the requirement and no example that carries one has ever been run.
 
 [ ] a struct field's diagnostic points at the struct rather than at the field, since a field
     is a (name, type) pair with no position of its own.  Carrying one would change the shape

@@ -8,5 +8,5 @@ fn m() → u16:
     v - u
 
 @start
-fn main() → ∅:
+fn main():
     std.println("{}", m())

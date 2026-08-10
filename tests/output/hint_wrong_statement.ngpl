@@ -1,5 +1,5 @@
 @start
-fn main() → ∅:
+fn main():
     @unlikely
     let x := 5
     std.println("{}", x)

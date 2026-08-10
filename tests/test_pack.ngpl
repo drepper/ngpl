@@ -27,64 +27,64 @@ fn apply_sum(f, args… : i64) → i64:
     s
 
 @test
-fn test_sum_basic() → ∅:
+fn test_sum_basic():
     assert_eq(sum_all(1, 2, 3, 4), 10)
 
 @test
-fn test_sum_single() → ∅:
+fn test_sum_single():
     assert_eq(sum_all(100), 100)
 
 @test
-fn test_count_empty() → ∅:
+fn test_count_empty():
     assert_eq(count_args(), 0)
 
 @test
-fn test_count_several() → ∅:
+fn test_count_several():
     assert_eq(count_args(1, 2, 3), 3)
 
 @test
-fn test_first() → ∅:
+fn test_first():
     assert_eq(first_of(42, 99), 42)
     assert_eq(first_of("hello", "world"), "hello")
 
 @test
-fn test_typeof_pack() → ∅:
+fn test_typeof_pack():
     static_assert_eq(@typeof(42), @typeof(0))
 
 fn double(x : i64) → i64:
     x × 2
 
 @test
-fn test_apply_sum() → ∅:
+fn test_apply_sum():
     assert_eq(apply_sum(double, 1, 2, 3), 12)
 
 // --- Type mismatch tests ------------------------------------------
 
 @test
 @expect error "expected i64.*got StrValue"
-fn test_typed_pack_rejects_string() → ∅:
+fn test_typed_pack_rejects_string():
     sum_all(1, "oops")
 
 @test
 @expect error "expected i64.*got BoolValue"
-fn test_typed_pack_rejects_bool() → ∅:
+fn test_typed_pack_rejects_bool():
     sum_all(1, 2, true)
 
 @test
 @expect error "expected i64.*got StrValue"
-fn test_apply_sum_rejects_string() → ∅:
+fn test_apply_sum_rejects_string():
     apply_sum(double, 1, "bad", 3)
 
 @test
 @expect error "expected i64.*got BoolValue"
-fn test_apply_sum_rejects_bool() → ∅:
+fn test_apply_sum_rejects_bool():
     apply_sum(double, 1, true)
 
 // --- Edge cases ---------------------------------------------------
 
 // Pack with a single element.
 @test
-fn test_single_pack_element() → ∅:
+fn test_single_pack_element():
     assert_eq(count_args(42), 1)
     assert_eq(first_of(99), 99)
 
@@ -93,12 +93,12 @@ fn untyped_count(args…) → i64:
     @dropunit(args.sizeof)
 
 @test
-fn test_empty_untyped_pack() → ∅:
+fn test_empty_untyped_pack():
     assert_eq(untyped_count(), 0)
 
 // Multiple elements with different types via generic pack.
 @test
-fn test_generic_pack_mixed_types() → ∅:
+fn test_generic_pack_mixed_types():
     assert_eq(first_of(42, "hello"), 42)
     assert_eq(first_of("hello", 42), "hello")
 
@@ -107,7 +107,7 @@ fn second_of(args… : T'):
     args[1]
 
 @test
-fn test_pack_index_access() → ∅:
+fn test_pack_index_access():
     assert_eq(second_of(10, 20, 30), 20)
     assert_eq(second_of("a", "b", "c"), "b")
 
@@ -121,7 +121,7 @@ fn int_sum(vals… : i64) → i64:
     s
 
 @test
-fn test_int_sum() → ∅:
+fn test_int_sum():
     assert_eq(int_sum(), 0)
     assert_eq(int_sum(5), 5)
     assert_eq(int_sum(1, 2, 3, 4, 5), 15)
@@ -136,13 +136,13 @@ fn prepend_and_sum(base : i64, extra… : i64) → i64:
     s
 
 @test
-fn test_prepend_and_sum() → ∅:
+fn test_prepend_and_sum():
     assert_eq(prepend_and_sum(100), 100)
     assert_eq(prepend_and_sum(100, 1, 2, 3), 106)
 
 @test
 @expect error "expected i64.*got StrValue"
-fn test_prepend_and_sum_rejects_bad_pack() → ∅:
+fn test_prepend_and_sum_rejects_bad_pack():
     prepend_and_sum(100, "bad")
 
 // --- @sizeof tests ------------------------------------------------
@@ -152,27 +152,27 @@ fn sizeof_pack(args…) → i64:
     @dropunit(@sizeof(args))
 
 @test
-fn test_sizeof_pack_empty() → ∅:
+fn test_sizeof_pack_empty():
     assert_eq(sizeof_pack(), 0)
 
 @test
-fn test_sizeof_pack_several() → ∅:
+fn test_sizeof_pack_several():
     assert_eq(sizeof_pack(1, 2, 3), 3)
 
 // @sizeof on array literals.
 @test
-fn test_sizeof_array() → ∅:
+fn test_sizeof_array():
     assert_eq(@sizeof([10, 20, 30, 40]), 4)
 
 // @sizeof on string literals.
 @test
-fn test_sizeof_string() → ∅:
+fn test_sizeof_string():
     assert_eq(@sizeof("hello"), 5)
     assert_eq(@sizeof(""), 0)
 
 // @sizeof on tuple literal.
 @test
-fn test_sizeof_tuple() → ∅:
+fn test_sizeof_tuple():
     assert_eq(@sizeof((1, 2, 3)), 3)
 
 fn sizeof_both(args… : i64) → i64:
@@ -180,7 +180,7 @@ fn sizeof_both(args… : i64) → i64:
     @dropunit(@sizeof(args))
 
 @test
-fn test_sizeof_pack_matches_dot() → ∅:
+fn test_sizeof_pack_matches_dot():
     assert_eq(sizeof_both(5, 6), 2)
 
 // A scalar holds no elements to count, so @sizeof answers with what
@@ -188,13 +188,13 @@ fn test_sizeof_pack_matches_dot() → ∅:
 // nothing definite.
 @test
 @expect error "arbitrary-precision"
-fn test_sizeof_of_an_untyped_int() → ∅:
+fn test_sizeof_of_an_untyped_int():
     @sizeof(42)
 
 @test
-fn test_sizeof_of_a_bool() → ∅:
+fn test_sizeof_of_a_bool():
     static_assert_eq(@sizeof(true), 1 ¤byte)
 
 @start
-fn main() → ∅:
+fn main():
     std.println("parameter pack tests passed")

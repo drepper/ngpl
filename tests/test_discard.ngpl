@@ -15,7 +15,7 @@ fn counted(n : i64) → i64:
 
 // The right-hand side still runs; only its value is dropped.
 @test
-fn test_side_effect_still_happens() → ∅:
+fn test_side_effect_still_happens():
     let total : mut = 0
     foreach i := 1…3:
         total ← total + i
@@ -24,12 +24,12 @@ fn test_side_effect_still_happens() → ∅:
 
 // _ needs no declaration before it is assigned to.
 @test
-fn test_no_declaration_needed() → ∅:
+fn test_no_declaration_needed():
     _ ← counted(21)
 
 // Assigning twice is fine: there is no binding to redefine.
 @test
-fn test_repeated_assignment() → ∅:
+fn test_repeated_assignment():
     _ ← 1
     _ ← 2
     _ ← 3
@@ -47,7 +47,7 @@ enum Color:
     green
 
 @test
-fn test_all_types_discardable() → ∅:
+fn test_all_types_discardable():
     _ ← 42
     _ ← 3.5
     _ ← true
@@ -63,7 +63,7 @@ fn test_all_types_discardable() → ∅:
 
 // The `let` form discards too, and imposes no type of its own.
 @test
-fn test_let_form_discards() → ∅:
+fn test_let_form_discards():
     let _ := "a string"
     let _ := [1, 2, 3]
     let _ := counted(3)
@@ -74,7 +74,7 @@ fn test_let_form_discards() → ∅:
 
 // A loop that only needs to run a number of times.
 @test
-fn test_foreach_discard() → ∅:
+fn test_foreach_discard():
     let ticks : mut = 0
     foreach _ := 1…4:
         ticks ← ticks + 1
@@ -82,7 +82,7 @@ fn test_foreach_discard() → ∅:
 
 // Only one of the two loop variables is wanted.
 @test
-fn test_foreach_pair_discard() → ∅:
+fn test_foreach_pair_discard():
     let total : mut = 0
     foreach i, _ := enumerate([10, 20, 30]):
         total ← total + i
@@ -93,7 +93,7 @@ fn second(_ : i64, keep : i64) → i64:
     keep
 
 @test
-fn test_unused_parameter() → ∅:
+fn test_unused_parameter():
     assert_eq(second(99, 5), 5)
 
 // ---------------------------------------------------------------------
@@ -101,48 +101,48 @@ fn test_unused_parameter() → ∅:
 // ---------------------------------------------------------------------
 
 @expect error "cannot be read"
-fn error_read_after_assignment() → ∅:
+fn error_read_after_assignment():
     _ ← 5
     let n : mut = _
 
 @expect error "cannot be read"
-fn error_read_without_assignment() → ∅:
+fn error_read_without_assignment():
     let n : mut = _
 
 @expect error "cannot be read"
-fn error_read_in_expression() → ∅:
+fn error_read_in_expression():
     _ ← 5
     let n : mut = _ + 1
 
 @expect error "cannot be read"
-fn error_read_as_argument() → ∅:
+fn error_read_as_argument():
     _ ← 5
     std.println("{}", _)
 
 @expect error "cannot be read"
-fn error_read_as_condition() → ∅:
+fn error_read_as_condition():
     _ ← true
     if _:
         std.println("unreachable")
 
 @expect error "cannot be read"
-fn error_discard_of_itself() → ∅:
+fn error_discard_of_itself():
     _ ← _
 
 // Not even a loop variable named _ can be read inside its own body.
 @expect error "cannot be read"
-fn error_read_foreach_variable() → ∅:
+fn error_read_foreach_variable():
     foreach _ := 1…3:
         std.println("{}", _)
 
 // Nor an unused parameter.
 @expect error "cannot be read"
-fn error_read_unused_parameter() → ∅:
+fn error_read_unused_parameter():
     let n : mut = reads_its_ignored_parameter(1)
 
 fn reads_its_ignored_parameter(_ : i64) → i64:
     _
 
 @start
-fn main() → ∅:
+fn main():
     std.println("discard tests passed")

@@ -2,5 +2,5 @@
 // how a blank line is written.  print's does not: an empty template
 // there produces nothing at all.
 @start
-fn main() → ∅:
+fn main():
     std.println()

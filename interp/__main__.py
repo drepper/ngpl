@@ -494,6 +494,16 @@ class _Finding(str):
         return finding
 
 
+def _says_nothing(ret_type) -> bool:
+    """Whether a signature promises no value at all.
+
+    Leaving the return type off says what ∅ says, so the two read
+    alike here: neither describes a value that could be matched on or
+    carry an error type.
+    """
+    return not ret_type or ret_type == "\N{EMPTY SET}"
+
+
 def _finding_pos(finding) -> tuple[int, int, int | None] | None:
     """The position a finding carries, or None for a plain message."""
     return getattr(finding, "pos", None)
@@ -539,7 +549,7 @@ def _propagated_error_type(expr, env) -> str | None:
         except KeyError:
             return None
         ret_type = getattr(callee, "ret_type", None)
-        if not ret_type:
+        if _says_nothing(ret_type):
             return None
         _, err = _split_optional_type(ret_type)
         return err or None
@@ -666,7 +676,7 @@ def _match_subject_kind(expr, env, func_def=None) -> str | None:
         except KeyError:
             return None
         ret_type = getattr(callee, "ret_type", None)
-        if not ret_type:
+        if _says_nothing(ret_type):
             return None
         if sum_type_alternatives(ret_type) is not None:
             return ret_type
@@ -923,7 +933,7 @@ def _static_return_check(func_def) -> str | None:
     same check meets the value itself.
     """
     ret_type = getattr(func_def, "ret_type", None)
-    if not ret_type:
+    if _says_nothing(ret_type):
         return None
     base, _ = _split_optional_type(ret_type)
     check = resolve_type_alias(base if base else ret_type)

@@ -34,18 +34,18 @@ fn paint(c : Color) → Color:
     c
 
 @test
-fn test_parameter_and_return_type() → ∅:
+fn test_parameter_and_return_type():
     assert_eq(paint(Color.blue), Color.blue)
 
 @test
-fn test_binding_annotation() → ∅:
+fn test_binding_annotation():
     let c : Color = Color.red
     assert_eq(c, Color.red)
 
 type Hue = Color
 
 @test
-fn test_through_an_alias() → ∅:
+fn test_through_an_alias():
     let h : Hue = Color.green
     assert_eq(h, Color.green)
 
@@ -54,13 +54,13 @@ struct Item:
     n : i32
 
 @test
-fn test_struct_field() → ∅:
+fn test_struct_field():
     let it := Item{hue: Color.green, n: 7}
     assert_eq(it.hue, Color.green)
     assert_eq(it.n, 7)
 
 @test
-fn test_array_of_enums() → ∅:
+fn test_array_of_enums():
     let arr : Color[3] = [Color.red, Color.green, Color.blue]
     assert_eq(arr[2], Color.blue)
     assert_eq(arr.sizeof, 3)
@@ -71,7 +71,7 @@ fn count_perms(p : Perms) → Perms:
     p
 
 @test
-fn test_flag_enum_as_a_type() → ∅:
+fn test_flag_enum_as_a_type():
     let both := Perms.read | Perms.write
     assert_eq(count_perms(both), both)
 
@@ -80,17 +80,17 @@ fn test_flag_enum_as_a_type() → ∅:
 // ---------------------------------------------------------------------
 
 @expect error "expected Color, got Size"
-fn error_other_enum_rejected() → ∅:
+fn error_other_enum_rejected():
     _ ← paint(Size.small)
 
 // A member compares equal to its integer, but the integer is not a
 // value of the type.
 @expect error "expected Color, got int"
-fn error_integer_rejected() → ∅:
+fn error_integer_rejected():
     _ ← paint(0)
 
 @expect error "'Color' is an enum, but the value is Size"
-fn error_binding_rejects_other_enum() → ∅:
+fn error_binding_rejects_other_enum():
     let c : Color = Size.large
     _ ← paint(c)
 
@@ -109,17 +109,17 @@ fn describe(p : Paint) → str:
         Circle(s):  "a circle"
 
 @test
-fn test_enum_as_sum_alternative() → ∅:
+fn test_enum_as_sum_alternative():
     assert_eq(describe(Color.red), "a colour")
     assert_eq(describe(Circle{r: 1.0}), "a circle")
 
 @test
-fn test_sum_binding_with_an_enum() → ∅:
+fn test_sum_binding_with_an_enum():
     let p : Paint = Color.blue
     assert_eq(describe(p), "a colour")
 
 @expect error "'Paint' is Color . Circle, but the value is Size"
-fn error_sum_rejects_other_enum() → ∅:
+fn error_sum_rejects_other_enum():
     let p : Paint = Size.small
     _ ← describe(p)
 
@@ -144,18 +144,18 @@ struct JustSmall:
     e : Small
 
 @test
-fn test_c_layout_of_a_plain_enum() → ∅:
+fn test_c_layout_of_a_plain_enum():
     assert_eq(Plain.sizeof, 8)
     assert_eq(Plain.alignof, 4)
 
 // u8 leaves three bytes of padding before the i32.
 @test
-fn test_c_layout_of_a_sized_enum() → ∅:
+fn test_c_layout_of_a_sized_enum():
     assert_eq(Sized.sizeof, 8)
     assert_eq(Sized.alignof, 4)
 
 @test
-fn test_c_layout_of_a_sized_enum_alone() → ∅:
+fn test_c_layout_of_a_sized_enum_alone():
     assert_eq(JustSmall.sizeof, 1)
     assert_eq(JustSmall.alignof, 1)
 
@@ -171,23 +171,23 @@ enum Later:
     two
 
 @test
-fn test_enum_declared_after_use() → ∅:
+fn test_enum_declared_after_use():
     assert_eq(uses_later(Later.two), Later.two)
 
 type AliasOfLater = Later
 
 @test
-fn test_alias_of_a_later_enum() → ∅:
+fn test_alias_of_a_later_enum():
     let x : AliasOfLater = Later.one
     assert_eq(x, Later.one)
 
 // An array's fill value has to be a member, and the diagnostic says
 // what it was rather than naming the element type back.
 @expect error "'Color' is an enum, but the value is int"
-fn error_array_fill_is_not_a_member() → ∅:
+fn error_array_fill_is_not_a_member():
     let a : Color[3] = 0
     _ ← a
 
 @start
-fn main() → ∅:
+fn main():
     std.println("enum type tests passed")

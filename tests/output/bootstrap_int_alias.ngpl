@@ -2,5 +2,5 @@
 type MyInt = int
 
 @start
-fn main() → ∅:
+fn main():
     ∅

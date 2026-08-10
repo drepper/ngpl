@@ -13,7 +13,7 @@
 // ---------------------------------------------------------------------
 
 @test
-fn test_odd_widths_hold_their_range() → ∅:
+fn test_odd_widths_hold_their_range():
     let a : u7 = 127
     let b : i7 = 63
     let c : u13 = 8191
@@ -24,7 +24,7 @@ fn test_odd_widths_hold_their_range() → ∅:
     assert_eq(d, 1)
 
 @test
-fn test_wide_widths() → ∅:
+fn test_wide_widths():
     let a : i127 = 85070591730234615865843651857942052863
     let b : u128 = 340282366920938463463374607431768211455
     assert_eq(a, 85070591730234615865843651857942052863)
@@ -38,17 +38,17 @@ fn test_wide_widths() → ∅:
 // 127.  Going past is an overflow, as it is for the named types.
 @test
 @expect error "does not fit in i7 .range -64..63."
-fn error_signed_above_its_range() → ∅:
+fn error_signed_above_its_range():
     let a : i7 = 64
 
 @test
 @expect error "does not fit in i7 .range -64..63."
-fn error_signed_below_its_range() → ∅:
+fn error_signed_below_its_range():
     let a : i7 = ⁻65
 
 // An unsigned type wraps, as the named unsigned types do.
 @test
-fn test_unsigned_range_is_its_width() → ∅:
+fn test_unsigned_range_is_its_width():
     let a : u7 = 127
     let b : u1 = 1
     assert_eq(a, 127)
@@ -57,14 +57,14 @@ fn test_unsigned_range_is_its_width() → ∅:
 // One past the top of an odd width is refused like any other.
 @test
 @expect error "integer overflow.*does not fit in u7"
-fn error_u7_too_large() → ∅:
+fn error_u7_too_large():
     let a : u7 = 128
 
 // A signed type spends a bit on the sign, so a one-bit one would
 // have none left for the value and names no type.
 @test
 @expect error "unknown type 'i1'"
-fn error_one_bit_signed() → ∅:
+fn error_one_bit_signed():
     let a : i1 = 0
 
 // A variable holds at most 128 bits, and the sign counts against
@@ -72,12 +72,12 @@ fn error_one_bit_signed() → ∅:
 // signed one.
 @test
 @expect error "unknown type 'u129'"
-fn error_wider_than_a_variable() → ∅:
+fn error_wider_than_a_variable():
     let a : u129 = 0
 
 @test
 @expect error "unknown type 'i128'"
-fn error_signed_wider_than_a_variable() → ∅:
+fn error_signed_wider_than_a_variable():
     let a : i128 = 0
 
 // ---------------------------------------------------------------------
@@ -86,7 +86,7 @@ fn error_signed_wider_than_a_variable() → ∅:
 
 // The wider type wins, as it does among the named ones.
 @test
-fn test_the_wider_width_wins() → ∅:
+fn test_the_wider_width_wins():
     let a : u7 = 100
     let b : u13 = 5000
     let sum := a + b
@@ -94,7 +94,7 @@ fn test_the_wider_width_wins() → ∅:
     assert_eq(sum, 5100)
 
 @test
-fn test_arithmetic_leaves_the_width() → ∅:
+fn test_arithmetic_leaves_the_width():
     let a : u7 = 100
     let b : u7 = 100
     assert_eq(@wrap(a + b), 72)
@@ -104,7 +104,7 @@ fn test_arithmetic_leaves_the_width() → ∅:
 // ---------------------------------------------------------------------
 
 @test
-fn test_shift_within_the_value_bits() → ∅:
+fn test_shift_within_the_value_bits():
     let a : u7 = 1
     let b : i7 = 1
     assert_eq(a « 6, 64)
@@ -112,14 +112,14 @@ fn test_shift_within_the_value_bits() → ∅:
 
 @test
 @expect error "moves every value bit out"
-fn error_shift_past_an_unsigned_width() → ∅:
+fn error_shift_past_an_unsigned_width():
     let a : u7 = 1
     _ ← a « 7
 
 // A signed type has one value bit fewer, so it stops one earlier.
 @test
 @expect error "moves every value bit out"
-fn error_shift_past_a_signed_width() → ∅:
+fn error_shift_past_a_signed_width():
     let a : i7 = 1
     _ ← a « 6
 
@@ -129,7 +129,7 @@ fn error_shift_past_a_signed_width() → ∅:
 
 // A stated width occupies the whole bytes it takes to hold it.
 @test
-fn test_storage_is_whole_bytes() → ∅:
+fn test_storage_is_whole_bytes():
     static_assert_eq(@sizeof(u1), 1 ¤byte)
     static_assert_eq(@sizeof(u7), 1 ¤byte)
     static_assert_eq(@sizeof(u13), 2 ¤byte)
@@ -137,7 +137,7 @@ fn test_storage_is_whole_bytes() → ∅:
     static_assert_eq(@sizeof(u128), 16 ¤byte)
 
 @test
-fn test_type_name_and_sizeof_of_a_binding() → ∅:
+fn test_type_name_and_sizeof_of_a_binding():
     let a : u7 = 5
     static_assert_eq(@typeof(a), u7)
     static_assert_eq(@sizeof(a), 1 ¤byte)
@@ -146,15 +146,15 @@ fn test_type_name_and_sizeof_of_a_binding() → ∅:
 // else.
 @test
 @expect error "'u7' names a type and cannot name a variable"
-fn error_width_cannot_name_a_variable() → ∅:
+fn error_width_cannot_name_a_variable():
     let u7 := 5
 
 // A width of zero holds no values, so it names no type.
 @test
 @expect error "unknown type 'u0'"
-fn error_zero_width() → ∅:
+fn error_zero_width():
     let a : u0 = 0
 
 @start
-fn main() → ∅:
+fn main():
     std.println("integer width tests passed")

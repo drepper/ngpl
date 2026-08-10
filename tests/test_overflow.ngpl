@@ -6,70 +6,70 @@
 // ---- static: assignment overflow -----------------------------------------
 
 @expect error "integer overflow.*does not fit in i8"
-fn error_i8_too_large() → ∅:
+fn error_i8_too_large():
     let x : mut i8 = 128
 
 @expect error "integer underflow.*does not fit in i8"
-fn error_i8_too_small() → ∅:
+fn error_i8_too_small():
     let x : mut i8 = ⁻129
 
 @expect error "integer overflow.*does not fit in i16"
-fn error_i16_too_large() → ∅:
+fn error_i16_too_large():
     let x : mut i16 = 32768
 
 @expect error "integer overflow.*does not fit in i32"
-fn error_i32_too_large() → ∅:
+fn error_i32_too_large():
     let x : mut i32 = 2147483648
 
 @expect error "integer overflow.*does not fit in i64"
-fn error_i64_too_large() → ∅:
+fn error_i64_too_large():
     let x : mut i64 = 9223372036854775808
 
 // ---- static: an unsigned type refuses what it cannot hold ---------------
 
 @test
 @expect error "integer overflow.*does not fit in u8"
-fn error_u8_too_large_on_assign() → ∅:
+fn error_u8_too_large_on_assign():
     let x : u8 = 256
 
 @test
 @expect error "integer underflow.*does not fit in u8"
-fn error_u8_negative_on_assign() → ∅:
+fn error_u8_negative_on_assign():
     let x : u8 = ⁻1
 
 @test
 @expect error "integer overflow.*does not fit in u32"
-fn error_u32_too_large_on_assign() → ∅:
+fn error_u32_too_large_on_assign():
     let x : u32 = 4294967296
 
 // ---- dynamic: signed arithmetic overflow ---------------------------------
 
 @expect error "integer overflow"
-fn error_i8_add_overflow() → ∅:
+fn error_i8_add_overflow():
     let x : mut i8 = 127
     let y : mut i8 = 1
     let z : mut = x + y
 
 @expect error "integer underflow"
-fn error_i8_sub_underflow() → ∅:
+fn error_i8_sub_underflow():
     let x : mut i8 = ⁻128
     let y : mut i8 = 1
     let z : mut = x - y
 
 @expect error "integer overflow"
-fn error_i16_mul_overflow() → ∅:
+fn error_i16_mul_overflow():
     let x : mut i16 = 200
     let y : mut i16 = 200
     let z : mut = x × y
 
 @expect error "integer overflow"
-fn error_i32_add_overflow() → ∅:
+fn error_i32_add_overflow():
     let x : mut i32 = 2147483647
     let y : mut i32 = 1
     let z : mut = x + y
 
 @expect error "integer overflow"
-fn error_i32_negate_min() → ∅:
+fn error_i32_negate_min():
     let x : mut i32 = ⁻2147483648
     let z : mut = ⁻x
 
@@ -82,28 +82,28 @@ fn error_i32_negate_min() → ∅:
 
 @test
 @expect error "integer overflow.*does not fit in u8"
-fn error_u8_add_overflow() → ∅:
+fn error_u8_add_overflow():
     let x : u8 = 255
     let y : u8 = 1
     let z := x + y
 
 @test
 @expect error "integer underflow.*does not fit in u8"
-fn error_u8_sub_underflow() → ∅:
+fn error_u8_sub_underflow():
     let x : u8 = 0
     let y : u8 = 1
     let z := x - y
 
 @test
 @expect error "integer overflow.*does not fit in u32"
-fn error_u32_add_overflow() → ∅:
+fn error_u32_add_overflow():
     let x : u32 = 4294967295
     let y : u32 = 1
     let z := x + y
 
 @test
 @expect error "integer overflow.*does not fit in u32"
-fn error_u32_mul_overflow() → ∅:
+fn error_u32_mul_overflow():
     let x : u32 = 65536
     let y : u32 = 65536
     let z := x × y
@@ -114,19 +114,19 @@ fn error_u32_mul_overflow() → ∅:
 // meant.  SHA-256 is written this way.
 
 @test
-fn test_wrap_gives_modular_addition() → ∅:
+fn test_wrap_gives_modular_addition():
     let x : u8 = 255
     let y : u8 = 1
     assert_eq(@wrap(x + y), 0)
 
 @test
-fn test_wrap_gives_modular_subtraction() → ∅:
+fn test_wrap_gives_modular_subtraction():
     let x : u8 = 0
     let y : u8 = 1
     assert_eq(@wrap(x - y), 255)
 
 @test
-fn test_wrap_gives_modular_multiplication() → ∅:
+fn test_wrap_gives_modular_multiplication():
     let x : u32 = 65536
     let y : u32 = 65536
     assert_eq(@wrap(x × y), 0)
@@ -134,35 +134,35 @@ fn test_wrap_gives_modular_multiplication() → ∅:
 // ---- boundary values: signed types ---------------------------------------
 
 @test
-fn test_i8_max() → ∅:
+fn test_i8_max():
     let x : i8 = 127
     assert_eq(x, 127)
 
 @test
-fn test_i8_min() → ∅:
+fn test_i8_min():
     let x : i8 = ⁻128
     assert_eq(x, ⁻128)
 
 @test
-fn test_i32_max() → ∅:
+fn test_i32_max():
     let x : i32 = 2147483647
     assert_eq(x, 2147483647)
 
 @test
-fn test_i32_min() → ∅:
+fn test_i32_min():
     let x : i32 = ⁻2147483648
     assert_eq(x, ⁻2147483648)
 
 // ---- bitwise ops always wrap (not overflow) ------------------------------
 
 @test
-fn test_bitwise_not_i8() → ∅:
+fn test_bitwise_not_i8():
     let x : i8 = 0
     let y := ~x
     assert_eq(y, ⁻1)
 
 @test
-fn test_shift_left_wraps() → ∅:
+fn test_shift_left_wraps():
     let x : u8 = 128
     let s : u8 = 1
     let y := x « s
@@ -175,7 +175,7 @@ fn test_shift_left_wraps() → ∅:
 // The count says how far to move the bits, not what type to become,
 // so the result is the type of what was shifted.
 @test
-fn test_shift_keeps_the_operand_type() → ∅:
+fn test_shift_keeps_the_operand_type():
     let b : byte = 3
     let left := b « 4
     let right := b » 1
@@ -188,7 +188,7 @@ fn test_shift_keeps_the_operand_type() → ∅:
     static_assert_eq(@sizeof(wide), 4 ¤byte)
 
 @test
-fn test_shift_within_the_width() → ∅:
+fn test_shift_within_the_width():
     let b : byte = 3
     assert_eq(b « 4, 48)
     assert_eq(b » 1, 1)
@@ -200,13 +200,13 @@ fn test_shift_within_the_width() → ∅:
 // is settled before anything runs and is reported then.
 @test
 @expect error "moves every value bit out"
-fn test_shift_past_the_width_is_a_compile_error() → ∅:
+fn test_shift_past_the_width_is_a_compile_error():
     let b : byte = 3
     _ ← b « 8
 
 @test
 @expect error "moves every value bit out"
-fn test_shift_right_past_the_width_is_a_compile_error() → ∅:
+fn test_shift_right_past_the_width_is_a_compile_error():
     let u : u32 = 1
     _ ← u » 32
 
@@ -219,13 +219,13 @@ fn shift_by(n : i64) → i64:
         ∄(e):  ⁻1
 
 @test
-fn test_runtime_count_reports_when_it_runs() → ∅:
+fn test_runtime_count_reports_when_it_runs():
     assert_eq(shift_by(4), 48)
     assert_eq(shift_by(8), ⁻1)
 
 // An untyped integer has no width for a count to pass.
 @test
-fn test_shift_of_an_untyped_integer() → ∅:
+fn test_shift_of_an_untyped_integer():
     let n := 1
     assert_eq(n « 40, 1099511627776)
 
@@ -235,7 +235,7 @@ fn recover_with(n : i64) → i64:
     (b « n) ?? 99
 
 @test
-fn test_shift_error_recovers() → ∅:
+fn test_shift_error_recovers():
     assert_eq(recover_with(8), 99)
     assert_eq(recover_with(4), 48)
 
@@ -247,7 +247,7 @@ fn test_shift_error_recovers() → ∅:
 // turns the way « moves, and ↺ the way » does.  Where nothing
 // falls off the end the two agree exactly.
 @test
-fn test_rotation_agrees_with_the_shift_it_matches() → ∅:
+fn test_rotation_agrees_with_the_shift_it_matches():
     let a : u8 = 2
     assert_eq(a ↻ 1, a « 1)
     assert_eq(a ↺ 1, a » 1)
@@ -257,7 +257,7 @@ fn test_rotation_agrees_with_the_shift_it_matches() → ∅:
 // They part company once a bit would leave the value: the shift drops
 // it, the rotation brings it round.
 @test
-fn test_they_part_where_a_bit_would_be_lost() → ∅:
+fn test_they_part_where_a_bit_would_be_lost():
     let high : u8 = 128
     let low : u8 = 1
     assert_eq(high ↻ 1, 1)
@@ -268,7 +268,7 @@ fn test_they_part_where_a_bit_would_be_lost() → ∅:
 // The bits turn within the confines of the declared type, so the type
 // does not change.
 @test
-fn test_rotation_turns_within_the_width() → ∅:
+fn test_rotation_turns_within_the_width():
     let a : u8 = 1
     let turned := a ↻ 1
     static_assert_eq(@typeof(turned), u8)
@@ -279,7 +279,7 @@ fn test_rotation_turns_within_the_width() → ∅:
 // masked rather than refused.  This is where a rotation parts company
 // with a shift, which would have lost every bit.
 @test
-fn test_rotation_masks_the_count() → ∅:
+fn test_rotation_masks_the_count():
     let a : u8 = 1
     assert_eq(a ↻ 8, 1)
     assert_eq(a ↻ 9, 2)
@@ -288,7 +288,7 @@ fn test_rotation_masks_the_count() → ∅:
 // The width need not be a power of two for the count to be taken
 // modulo it.
 @test
-fn test_rotation_at_an_odd_width() → ∅:
+fn test_rotation_at_an_odd_width():
     let a : u7 = 1
     let b : u7 = 64
     assert_eq(a ↺ 1, 64)
@@ -298,14 +298,14 @@ fn test_rotation_at_an_odd_width() → ∅:
 
 // A signed type turns its whole representation, sign bit and all.
 @test
-fn test_rotation_of_a_signed_type() → ∅:
+fn test_rotation_of_a_signed_type():
     let a : i8 = 1
     assert_eq(a ↺ 1, ⁻128)
 
 // An untyped integer has no width for the bits to come round in.
 @test
 @expect error "has no width to turn within"
-fn error_rotation_without_a_width() → ∅:
+fn error_rotation_without_a_width():
     let n := 1
     _ ← n ↻ 1
 
@@ -317,7 +317,7 @@ fn error_rotation_without_a_width() → ∅:
 // the value, so an i8 holds seven value bits and seven is already too
 // far.
 @test
-fn test_shift_within_the_value_bits() → ∅:
+fn test_shift_within_the_value_bits():
     let i : i8 = 1
     let u : u8 = 1
     let b : byte = 1
@@ -326,7 +326,7 @@ fn test_shift_within_the_value_bits() → ∅:
     assert_eq(b « 7, 128)
 
 @test
-fn test_wider_types_keep_the_one_bit_difference() → ∅:
+fn test_wider_types_keep_the_one_bit_difference():
     let s : i32 = 1
     let u : u32 = 1
     assert_eq(s « 30, 1073741824)
@@ -334,29 +334,29 @@ fn test_wider_types_keep_the_one_bit_difference() → ∅:
 
 @test
 @expect error "moves every value bit out"
-fn test_signed_shift_stops_one_earlier() → ∅:
+fn test_signed_shift_stops_one_earlier():
     let i : i8 = 1
     _ ← i « 7
 
 @test
 @expect error "moves every value bit out"
-fn test_signed_32_stops_one_earlier() → ∅:
+fn test_signed_32_stops_one_earlier():
     let s : i32 = 1
     _ ← s « 31
 
 // A right shift is bounded the same way: past the value bits there is
 // nothing of the value left.
 @test
-fn test_signed_right_shift_within_range() → ∅:
+fn test_signed_right_shift_within_range():
     let i : i8 = 64
     assert_eq(i » 6, 1)
 
 @test
 @expect error "moves every value bit out"
-fn test_signed_right_shift_stops_one_earlier() → ∅:
+fn test_signed_right_shift_stops_one_earlier():
     let i : i8 = 64
     _ ← i » 7
 
 @start
-fn main() → ∅:
+fn main():
     std.println("overflow tests passed")

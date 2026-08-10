@@ -1,7 +1,7 @@
 @likely
-fn f() → ∅:
+fn f():
     ∅
 
 @start
-fn main() → ∅:
+fn main():
     f()

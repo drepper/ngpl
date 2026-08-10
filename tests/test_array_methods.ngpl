@@ -8,21 +8,21 @@
 // ---------------------------------------------------------------------
 
 @test
-fn test_push_appends() → ∅:
+fn test_push_appends():
     let v : mut = [1, 2, 3]
     v.push(4)
     assert_eq(v.sizeof, 4)
     assert_eq(v[3], 4)
 
 @test
-fn test_push_onto_empty() → ∅:
+fn test_push_onto_empty():
     let v : mut = []
     v.push(7)
     assert_eq(v.sizeof, 1)
     assert_eq(v[0], 7)
 
 @test
-fn test_pop_returns_last() → ∅:
+fn test_pop_returns_last():
     let v : mut = [1, 2, 3]
     assert_eq(v.pop(), ∃(3))
     assert_eq(v.sizeof, 2)
@@ -31,12 +31,12 @@ fn test_pop_returns_last() → ∅:
 // Popping an array that may be empty is an ordinary thing to do, so it
 // answers with an optional rather than failing.
 @test
-fn test_pop_empty_is_none() → ∅:
+fn test_pop_empty_is_none():
     let v : mut = []
     assert_eq(v.pop(), ∅)
 
 @test
-fn test_pop_until_empty() → ∅:
+fn test_pop_until_empty():
     let v : mut = [1, 2]
     assert_eq(v.pop(), ∃(2))
     assert_eq(v.pop(), ∃(1))
@@ -45,7 +45,7 @@ fn test_pop_until_empty() → ∅:
 
 // push then pop leaves the array as it was.
 @test
-fn test_push_pop_round_trip() → ∅:
+fn test_push_pop_round_trip():
     let v : mut = [1, 2]
     v.push(3)
     assert_eq(v.pop(), ∃(3))
@@ -58,7 +58,7 @@ fn test_push_pop_round_trip() → ∅:
 // ---------------------------------------------------------------------
 
 @test
-fn test_insert_at_front_shifts_right() → ∅:
+fn test_insert_at_front_shifts_right():
     let v : mut = [1, 2, 3]
     v.insert(0, 0)
     assert_eq(v.sizeof, 4)
@@ -67,7 +67,7 @@ fn test_insert_at_front_shifts_right() → ∅:
     assert_eq(v[3], 3)
 
 @test
-fn test_insert_in_middle() → ∅:
+fn test_insert_in_middle():
     let v : mut = [1, 3]
     v.insert(1, 2)
     assert_eq(v[0], 1)
@@ -76,14 +76,14 @@ fn test_insert_in_middle() → ∅:
 
 // Inserting at the length appends, as in Rust.
 @test
-fn test_insert_at_length_appends() → ∅:
+fn test_insert_at_length_appends():
     let v : mut = [1, 2]
     v.insert(2, 3)
     assert_eq(v.sizeof, 3)
     assert_eq(v[2], 3)
 
 @test
-fn test_remove_returns_element_and_shifts_left() → ∅:
+fn test_remove_returns_element_and_shifts_left():
     let v : mut = [1, 2, 3]
     assert_eq(v.remove(1), 2)
     assert_eq(v.sizeof, 2)
@@ -91,20 +91,20 @@ fn test_remove_returns_element_and_shifts_left() → ∅:
     assert_eq(v[1], 3)
 
 @test
-fn test_remove_first() → ∅:
+fn test_remove_first():
     let v : mut = [1, 2]
     assert_eq(v.remove(0), 1)
     assert_eq(v[0], 2)
 
 @test
-fn test_remove_last() → ∅:
+fn test_remove_last():
     let v : mut = [1, 2]
     assert_eq(v.remove(1), 2)
     assert_eq(v.sizeof, 1)
 
 // insert then remove at the same index leaves the array as it was.
 @test
-fn test_insert_remove_round_trip() → ∅:
+fn test_insert_remove_round_trip():
     let v : mut = [1, 2, 3]
     v.insert(1, 9)
     assert_eq(v.remove(1), 9)
@@ -116,25 +116,25 @@ fn test_insert_remove_round_trip() → ∅:
 // ---------------------------------------------------------------------
 
 @test
-fn test_get_in_range() → ∅:
+fn test_get_in_range():
     let v := [10, 20, 30]
     assert_eq(v.get(0), ∃(10))
     assert_eq(v.get(2), ∃(30))
 
 @test
-fn test_get_out_of_range_is_none() → ∅:
+fn test_get_out_of_range_is_none():
     let v := [1, 2]
     assert_eq(v.get(2), ∅)
     assert_eq(v.get(99), ∅)
 
 @test
-fn test_get_on_empty() → ∅:
+fn test_get_on_empty():
     let v := []
     assert_eq(v.get(0), ∅)
 
 // The optional composes with ?? to supply a default.
 @test
-fn test_get_with_default() → ∅:
+fn test_get_with_default():
     let v := [1, 2]
     assert_eq(v.get(0) ?? ⁻1, 1)
     assert_eq(v.get(9) ?? ⁻1, ⁻1)
@@ -142,7 +142,7 @@ fn test_get_with_default() → ∅:
 // The result in a boolean context tests presence, not truth: an element
 // of 0 is a value that is there.
 @test
-fn test_get_presence_not_truth() → ∅:
+fn test_get_presence_not_truth():
     let v := [0]
     let present : mut = false
     if v.get(0):
@@ -154,7 +154,7 @@ fn test_get_presence_not_truth() → ∅:
     assert(¬absent)
 
 @test
-fn test_pop_presence_not_truth() → ∅:
+fn test_pop_presence_not_truth():
     let v : mut = [0]
     let present : mut = false
     if v.pop():
@@ -167,7 +167,7 @@ fn test_pop_presence_not_truth() → ∅:
 
 // Unlike get, a subscript out of range is still an error.
 @expect error "out of range"
-fn error_subscript_still_checks() → ∅:
+fn error_subscript_still_checks():
     let v : mut = [1, 2]
     _ ← v[9]
 
@@ -176,17 +176,17 @@ fn error_subscript_still_checks() → ∅:
 // ---------------------------------------------------------------------
 
 @expect error "insert index 5 out of range"
-fn error_insert_past_end() → ∅:
+fn error_insert_past_end():
     let v : mut = [1, 2]
     v.insert(5, 9)
 
 @expect error "remove index 5 out of range"
-fn error_remove_past_end() → ∅:
+fn error_remove_past_end():
     let v : mut = [1, 2]
     _ ← v.remove(5)
 
 @expect error "remove index 0 out of range"
-fn error_remove_from_empty() → ∅:
+fn error_remove_from_empty():
     let v : mut = []
     _ ← v.remove(0)
 
@@ -195,24 +195,24 @@ fn error_remove_from_empty() → ∅:
 // ---------------------------------------------------------------------
 
 @expect error "array.push takes 1 argument"
-fn error_push_two_values() → ∅:
+fn error_push_two_values():
     let v : mut = [1]
     v.push(1, 2)
 
 @expect error "array.pop takes 0 arguments"
-fn error_pop_with_argument() → ∅:
+fn error_pop_with_argument():
     let v : mut = [1]
     _ ← v.pop(0)
 
 @expect error "array.insert takes 2 arguments"
-fn error_insert_one_argument() → ∅:
+fn error_insert_one_argument():
     let v : mut = [1]
     v.insert(0)
 
 // A pushed value takes the array's element type, so it can then be read
 // back with an index carrying that type's unit.
 @test
-fn test_push_coerces_to_element_type() → ∅:
+fn test_push_coerces_to_element_type():
     let v : mut = std.bytes("ab")
     v.push(67)
     assert_eq(v.sizeof, 3)
@@ -220,12 +220,12 @@ fn test_push_coerces_to_element_type() → ∅:
 
 // An index carries the same unit rule as a subscript does.
 @test
-fn test_index_unit_is_accepted() → ∅:
+fn test_index_unit_is_accepted():
     let v := std.bytes("abc")
     assert_eq(v.get(1¤byte), ∃(98))
 
 @expect error "array index requires unit"
-fn error_index_wrong_unit() → ∅:
+fn error_index_wrong_unit():
     let v : mut = std.bytes("abc")
     _ ← v.get(1¤count)
 
@@ -235,7 +235,7 @@ fn error_index_wrong_unit() → ∅:
 
 // Building an array by pushing in a loop.
 @test
-fn test_push_in_a_loop() → ∅:
+fn test_push_in_a_loop():
     let v : mut = []
     foreach i := 1…4:
         v.push(i × i)
@@ -245,7 +245,7 @@ fn test_push_in_a_loop() → ∅:
 
 // Draining one array into another.
 @test
-fn test_pop_into_another_array() → ∅:
+fn test_pop_into_another_array():
     let src : mut = [1, 2, 3]
     let dst : mut = []
     foreach i := 1…3:
@@ -255,7 +255,7 @@ fn test_pop_into_another_array() → ∅:
     assert_eq(dst[2], 1)
 
 @start
-fn main() → ∅:
+fn main():
     std.println("array method tests passed")
 
 // ---------------------------------------------------------------------
@@ -267,34 +267,34 @@ fn main() → ∅:
 // make the type a lie.
 
 @expect error "push: cannot resize a fixed-size array"
-fn error_push_on_fixed_array() → ∅:
+fn error_push_on_fixed_array():
     let v : mut i32[3] = [1, 2, 3]
     v.push(4)
 
 @expect error "pop: cannot resize a fixed-size array"
-fn error_pop_on_fixed_array() → ∅:
+fn error_pop_on_fixed_array():
     let v : mut i32[3] = [1, 2, 3]
     _ ← v.pop()
 
 @expect error "insert: cannot resize a fixed-size array"
-fn error_insert_on_fixed_array() → ∅:
+fn error_insert_on_fixed_array():
     let v : mut i32[3] = [1, 2, 3]
     v.insert(0, 9)
 
 @expect error "remove: cannot resize a fixed-size array"
-fn error_remove_on_fixed_array() → ∅:
+fn error_remove_on_fixed_array():
     let v : mut i32[3] = [1, 2, 3]
     _ ← v.remove(0)
 
 // The message says how many the type promises.
 @expect error "holds 3 elements"
-fn error_message_names_the_length() → ∅:
+fn error_message_names_the_length():
     let v : mut i32[3] = [1, 2, 3]
     v.push(4)
 
 // Reading is unaffected: only the length is fixed, not the contents.
 @test
-fn test_fixed_array_reads_and_writes_elements() → ∅:
+fn test_fixed_array_reads_and_writes_elements():
     let v : mut i32[3] = [1, 2, 3]
     assert_eq(v[0], 1)
     assert_eq(v.get(2), ∃(3))
@@ -307,7 +307,7 @@ fn test_fixed_array_reads_and_writes_elements() → ∅:
 // is bound once: calling iterate() in the condition would make a fresh
 // one every time round and never advance.
 @test
-fn test_fixed_array_iterates() → ∅:
+fn test_fixed_array_iterates():
     let v : i32[3] = [1, 2, 3]
     let it := v.iterate()
     let total : mut = 0
@@ -317,7 +317,7 @@ fn test_fixed_array_iterates() → ∅:
 
 // A dynamic array of the same element type is unaffected.
 @test
-fn test_dynamic_array_still_resizes() → ∅:
+fn test_dynamic_array_still_resizes():
     let v : mut i32[] = [1, 2, 3]
     v.push(4)
     assert_eq(v.sizeof, 4)
@@ -326,18 +326,18 @@ fn test_dynamic_array_still_resizes() → ∅:
 // A copy of a fixed-size array is still fixed-size: copying does not
 // change the type.  The parameter is mut, so that what is being tested
 // is the fixed length rather than the parameter's immutability.
-fn receives_fixed(a : mut i32[3]) → ∅:
+fn receives_fixed(a : mut i32[3]):
     a.push(4)
 
 @expect error "cannot resize a fixed-size array"
-fn error_fixed_stays_fixed_when_passed() → ∅:
+fn error_fixed_stays_fixed_when_passed():
     let v : mut i32[3] = [1, 2, 3]
     receives_fixed(v)
 
 // Assigning to a dynamic type makes a dynamic array, since the target
 // type decides.
 @test
-fn test_fixed_to_dynamic_becomes_dynamic() → ∅:
+fn test_fixed_to_dynamic_becomes_dynamic():
     let f : i32[3] = [1, 2, 3]
     let d : mut i32[] = f
     d.push(4)
@@ -349,21 +349,21 @@ fn test_fixed_to_dynamic_becomes_dynamic() → ∅:
 // ---------------------------------------------------------------------
 
 @expect error "push: cannot modify let variable 'v'"
-fn error_push_on_let_binding() → ∅:
+fn error_push_on_let_binding():
     let v := [1, 2]
     v.push(3)
 
 @expect error "pop: cannot modify let variable 'v'"
-fn error_pop_on_let_binding() → ∅:
+fn error_pop_on_let_binding():
     let v := [1, 2]
     _ ← v.pop()
 
 @expect error "cannot modify borrowed variable 'arr'"
-fn error_push_through_shared_borrow() → ∅:
+fn error_push_through_shared_borrow():
     let v : mut = [1, 2]
     pushes_through(&v)
 
-fn pushes_through(arr : &i64[]) → ∅:
+fn pushes_through(arr : &i64[]):
     arr.push(3)
 
 // ---------------------------------------------------------------------
@@ -379,14 +379,14 @@ fn grows_by_copy(a : mut i32[]) → i32:
     @dropunit(a.sizeof)
 
 @test
-fn test_fixed_into_mutable_dynamic_param_by_value() → ∅:
+fn test_fixed_into_mutable_dynamic_param_by_value():
     let f : i32[3] = [1, 2, 3]
     assert_eq(grows_by_copy(f), 4)
     // The caller's array is untouched, and still fixed.
     assert_eq(f.sizeof, 3)
 
 @expect error "cannot resize a fixed-size array"
-fn error_caller_array_is_still_fixed() → ∅:
+fn error_caller_array_is_still_fixed():
     let f : mut i32[3] = [1, 2, 3]
     _ ← grows_by_copy(f)
     f.push(9)
@@ -394,17 +394,17 @@ fn error_caller_array_is_still_fixed() → ∅:
 // &mut T[] is different: there is no copy, so the callee would change
 // the length of the caller's own array, which a fixed one cannot allow.
 
-fn grows_by_reference(a : &mut i32[]) → ∅:
+fn grows_by_reference(a : &mut i32[]):
     a.push(4)
 
 @expect error "by-reference mutable 'i32"
-fn error_fixed_into_mutable_dynamic_ref_param() → ∅:
+fn error_fixed_into_mutable_dynamic_ref_param():
     let f : mut i32[3] = [1, 2, 3]
     grows_by_reference(&f)
 
 // A dynamic array through the same reference parameter is fine.
 @test
-fn test_dynamic_into_mutable_dynamic_ref_param() → ∅:
+fn test_dynamic_into_mutable_dynamic_ref_param():
     let d : mut i32[] = [1, 2, 3]
     grows_by_reference(&d)
     assert_eq(d.sizeof, 4)
@@ -415,13 +415,13 @@ fn reads_dynamic(a : i32[]) → i32:
     a[0] + a[2]
 
 @test
-fn test_fixed_into_immutable_dynamic_param() → ∅:
+fn test_fixed_into_immutable_dynamic_param():
     let f : i32[3] = [1, 2, 3]
     assert_eq(reads_dynamic(f), 4)
 
 // A dynamic array is what a resizable parameter asks for.
 @test
-fn test_dynamic_into_mutable_dynamic_param() → ∅:
+fn test_dynamic_into_mutable_dynamic_param():
     let d : i32[] = [1, 2, 3]
     grows_by_copy(d)
     assert_eq(d.sizeof, 3)
@@ -433,7 +433,7 @@ fn writes_element(a : mut i32[3]) → i32:
     a[0]
 
 @test
-fn test_fixed_into_fixed_param() → ∅:
+fn test_fixed_into_fixed_param():
     let f : i32[3] = [1, 2, 3]
     assert_eq(writes_element(f), 9)
     assert_eq(f[0], 1)

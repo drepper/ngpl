@@ -1,0 +1,73 @@
+// test_no_return_type.ngpl -- a signature that says nothing about
+// what comes back
+//
+// Leaving the return type off says what → ∅ says: the function hands
+// nothing back.  The two are one signature spelled two ways, so
+// anything that can be asked of one can be asked of the other.
+
+fn says_nothing(name : str):
+    std.println("a: {}", name)
+
+fn says_void(name : str) → ∅:
+    std.println("b: {}", name)
+
+// --- The two spellings agree ---------------------------------------
+
+@test
+fn test_both_forms_run() → ∅:
+    says_nothing("x")
+    says_void("y")
+
+// The type a function has is the one it wrote, and both wrote ∅ —
+// one of them by saying nothing.
+@test
+fn test_both_forms_have_the_same_type() → ∅:
+    static_assert_eq(@resultof(says_nothing), @resultof(says_void))
+
+// --- Everything else still has to be written -----------------------
+
+// A signature is read as a promise, not derived from the body, so a
+// function handing back a value says which.
+fn hands_back_an_i32() → i32:
+    42
+
+@test
+fn test_a_stated_return_type_is_kept():
+    static_assert_eq(@resultof(hands_back_an_i32), i32)
+    assert_eq(hands_back_an_i32(), 42)
+
+// --- The shorter form carries the annotations ----------------------
+
+// A test function is the commonest thing that returns nothing, and
+// the annotations reach it the same way.
+@test
+fn test_the_annotation_reaches_the_shorter_form():
+    assert_eq(1 + 1, 2)
+
+fn only_called_by_a_test() → i32:
+    7
+
+@test(only_called_by_a_test)
+fn test_a_referenced_test_needs_no_arrow():
+    assert_eq(only_called_by_a_test(), 7)
+
+// --- Inside an impl block ------------------------------------------
+
+struct Counter:
+    n : i32
+
+impl Counter:
+    fn describe(self):
+        std.println("counter {}", self.n)
+
+    fn value(self) → i32:
+        self.n
+
+@test
+fn test_a_method_may_leave_it_off():
+    let c := Counter{n: 5}
+    assert_eq(c.value(), 5)
+
+@start
+fn main():
+    std.println("no-return-type tests passed")

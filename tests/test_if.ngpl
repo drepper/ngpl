@@ -10,21 +10,21 @@
 // ---------------------------------------------------------------------
 
 @test
-fn test_if_taken() → ∅:
+fn test_if_taken():
     let hit : mut = false
     if true:
         hit ← true
     assert(hit)
 
 @test
-fn test_if_not_taken() → ∅:
+fn test_if_not_taken():
     let hit : mut = false
     if false:
         hit ← true
     assert(¬hit)
 
 @test
-fn test_if_else() → ∅:
+fn test_if_else():
     let which : mut = 0
     if false:
         which ← 1
@@ -37,7 +37,7 @@ fn test_if_else() → ∅:
 // ---------------------------------------------------------------------
 
 @test
-fn test_elif_taken() → ∅:
+fn test_elif_taken():
     let which : mut = 0
     if false:
         which ← 1
@@ -46,7 +46,7 @@ fn test_elif_taken() → ∅:
     assert_eq(which, 2)
 
 @test
-fn test_elif_not_taken() → ∅:
+fn test_elif_not_taken():
     let which : mut = 0
     if false:
         which ← 1
@@ -56,7 +56,7 @@ fn test_elif_not_taken() → ∅:
 
 // An elif runs in preference to the else below it.
 @test
-fn test_elif_before_else() → ∅:
+fn test_elif_before_else():
     let which : mut = 0
     if false:
         which ← 1
@@ -68,7 +68,7 @@ fn test_elif_before_else() → ∅:
 
 // And the else runs only when no condition above it held.
 @test
-fn test_else_after_failing_elif() → ∅:
+fn test_else_after_failing_elif():
     let which : mut = 0
     if false:
         which ← 1
@@ -93,7 +93,7 @@ fn pick(n : i64) → i64:
         return 99
 
 @test
-fn test_chain_picks_in_order() → ∅:
+fn test_chain_picks_in_order():
     assert_eq(pick(1), 10)
     assert_eq(pick(2), 20)
     assert_eq(pick(3), 30)
@@ -111,7 +111,7 @@ fn first_match(n : i64) → i64:
         return 4
 
 @test
-fn test_first_match_wins() → ∅:
+fn test_first_match_wins():
     assert_eq(first_match(5), 1)
     assert_eq(first_match(⁻5), 2)
     assert_eq(first_match(⁻50), 3)
@@ -119,7 +119,7 @@ fn test_first_match_wins() → ∅:
 
 // A chain with no else falls through when nothing matches.
 @test
-fn test_chain_without_else() → ∅:
+fn test_chain_without_else():
     let which : mut = 0
     if false:
         which ← 1
@@ -131,7 +131,7 @@ fn test_chain_without_else() → ∅:
 
 // Only the matching clause runs; the others leave no trace.
 @test
-fn test_only_one_clause_runs() → ∅:
+fn test_only_one_clause_runs():
     let count : mut = 0
     if true:
         count ← count + 1
@@ -146,7 +146,7 @@ fn test_only_one_clause_runs() → ∅:
 // ---------------------------------------------------------------------
 
 @test
-fn test_nested_chains() → ∅:
+fn test_nested_chains():
     let which : mut = 0
     if true:
         if false:
@@ -160,7 +160,7 @@ fn test_nested_chains() → ∅:
     assert_eq(which, 2)
 
 @test
-fn test_nested_in_else() → ∅:
+fn test_nested_in_else():
     let which : mut = 0
     if false:
         which ← 1
@@ -172,5 +172,5 @@ fn test_nested_in_else() → ∅:
     assert_eq(which, 3)
 
 @start
-fn main() → ∅:
+fn main():
     std.println("if tests passed")

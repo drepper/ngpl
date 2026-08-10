@@ -49,6 +49,7 @@ all_tests=(
     "$testdir"/test_array_type.ngpl
     "$testdir"/test_untyped.ngpl
     "$testdir"/test_saturating.ngpl
+    "$testdir"/test_no_return_type.ngpl
     "$testdir"/test_pack.ngpl
     "$testdir"/test_power.ngpl
     "$testdir"/test_purity.ngpl

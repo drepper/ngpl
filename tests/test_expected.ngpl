@@ -9,37 +9,37 @@ fn opt_double(x : i64?) → i64?:
     v × 2
 
 @test
-fn test_optional_postfix_some() → ∅:
+fn test_optional_postfix_some():
     let r := opt_double(some(5))
     assert_eq(r ?? ⁻1, 10)
 
 @test
-fn test_optional_postfix_none() → ∅:
+fn test_optional_postfix_none():
     let r := opt_double(∅)
     assert_eq(r ?? ⁻1, ⁻1)
 
 // ---- division returns expected value -------------------------------------
 
 @test
-fn test_div_success_unwrap() → ∅:
+fn test_div_success_unwrap():
     let x := 10 ÷ 3
     let v := x ?? ⁻1
     assert_eq(v, 3)
 
 @test
-fn test_div_zero_recovery() → ∅:
+fn test_div_zero_recovery():
     let x := 10 ÷ 0
     let v := x ?? ⁻1
     assert_eq(v, ⁻1)
 
 @test
-fn test_mod_success_unwrap() → ∅:
+fn test_mod_success_unwrap():
     let x := 10 % 3
     let v := x ?? ⁻1
     assert_eq(v, 1)
 
 @test
-fn test_mod_zero_recovery() → ∅:
+fn test_mod_zero_recovery():
     let x := 10 % 0
     let v := x ?? ⁻1
     assert_eq(v, ⁻1)
@@ -50,25 +50,25 @@ fn safe_div(a : i64, b : i64) → i64!:
     (a ÷ b)?
 
 @test
-fn test_expected_propagate_ok() → ∅:
+fn test_expected_propagate_ok():
     let r := safe_div(10, 2)
     assert_eq(r ?? ⁻1, 5)
 
 @test
-fn test_expected_propagate_err() → ∅:
+fn test_expected_propagate_err():
     let r := safe_div(10, 0)
     assert_eq(r ?? ⁻1, ⁻1)
 
 // ---- chained division with ?? --------------------------------------------
 
 @test
-fn test_div_chain_recovery() → ∅:
+fn test_div_chain_recovery():
     let a := (100 ÷ 10) ?? 0
     let b := (a ÷ 2) ?? 0
     assert_eq(b, 5)
 
 @test
-fn test_div_chain_zero() → ∅:
+fn test_div_chain_zero():
     let a := (100 ÷ 0) ?? 0
     let b := (a ÷ 2) ?? 0
     assert_eq(b, 0)
@@ -79,7 +79,7 @@ fn div_or_err(a : i64, b : i64) → i64!:
     (a ÷ b)?
 
 @test
-fn test_expected_err_is_std_errors() → ∅:
+fn test_expected_err_is_std_errors():
     let r := div_or_err(1, 0)
     let fallback := r ?? ⁻1
     assert_eq(fallback, ⁻1)
@@ -87,7 +87,7 @@ fn test_expected_err_is_std_errors() → ∅:
 // ---- using unwrapped expected in arithmetic ------------------------------
 
 @test
-fn test_unwrapped_expected_arithmetic() → ∅:
+fn test_unwrapped_expected_arithmetic():
     let x := (20 ÷ 4) ?? 0
     let y := x + 10
     assert_eq(y, 15)
@@ -104,11 +104,11 @@ fn short_form(a : i64, b : i64) → i64!:
     (a ÷ b)?
 
 @test
-fn test_long_and_short_agree_on_ok() → ∅:
+fn test_long_and_short_agree_on_ok():
     assert_eq(long_form(10, 2) ?? ⁻1, short_form(10, 2) ?? ⁻1)
 
 @test
-fn test_long_and_short_agree_on_err() → ∅:
+fn test_long_and_short_agree_on_err():
     assert_eq(long_form(10, 0) ?? ⁻1, short_form(10, 0) ?? ⁻1)
 
 // A value from one is accepted where the other is expected, which it
@@ -117,7 +117,7 @@ fn takes_short(x : i64!) → i64:
     x ?? 0
 
 @test
-fn test_long_form_value_fits_short_form_parameter() → ∅:
+fn test_long_form_value_fits_short_form_parameter():
     assert_eq(takes_short(long_form(10, 2)), 5)
 
 // ---- T! abbreviation ------------------------------------------------------
@@ -126,12 +126,12 @@ fn bang_div(a : i64, b : i64) → i64!:
     (a ÷ b)?
 
 @test
-fn test_bang_return_ok() → ∅:
+fn test_bang_return_ok():
     let r := bang_div(10, 2)
     assert_eq(r ?? ⁻1, 5)
 
 @test
-fn test_bang_return_err() → ∅:
+fn test_bang_return_err():
     let r := bang_div(10, 0)
     assert_eq(r ?? ⁻1, ⁻1)
 
@@ -139,22 +139,22 @@ fn bang_param(x : i64!) → i64:
     x ?? 0
 
 @test
-fn test_bang_param_ok() → ∅:
+fn test_bang_param_ok():
     let v := 10 ÷ 2
     assert_eq(bang_param(v), 5)
 
 @test
-fn test_bang_param_err() → ∅:
+fn test_bang_param_err():
     let v := 10 ÷ 0
     assert_eq(bang_param(v), 0)
 
 // ---- error on unwrap of expected error -----------------------------------
 
 @expect error "expected error"
-fn error_unwrap_expected() → ∅:
+fn error_unwrap_expected():
     let x : mut = 10 ÷ 0
     let y : mut = x + 1
 
 @start
-fn main() → ∅:
+fn main():
     std.println("expected tests passed")

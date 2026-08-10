@@ -1088,10 +1088,28 @@ fn name '(' [param1 [: type1] [, param2 [: type2] ...]] ')' [→ return_type] bl
 
 The function name is a single identifier.  Parameters are enclosed in parentheses and separated by commas.  Each parameter is an identifier optionally followed by `: type`.  The return type is introduced by `→` (or the ASCII equivalent `->`).  The block is either a layout block (`:`) or a brace block (`{`).
 
+#### The Return Type Is Optional
+
+A signature that says nothing about what comes back says the same as one that writes `∅`.  These are one signature spelled two ways:
+
+```
+fn greet(name):
+    std.println("hello {}", name)
+
+fn greet(name) → ∅:
+    std.println("hello {}", name)
+```
+
+`∅` is what a function returns when it returns nothing, so a signature that names it is repeating what the absence of a return type already said.  Most functions that return nothing are procedures called for their effect, and they are the majority of what a program writes; the shorter form is the one to use, and this document uses it throughout.
+
+Writing `→ ∅` remains available, and is worth reaching for where a reader might otherwise wonder whether the return type was forgotten — a long signature, or one sitting among neighbours that all return something.
+
+Every other return type has to be written.  There is no inference from the body: a function that hands back an `i32` says `→ i32`, and a signature is a promise the body is read against rather than a summary of what it happened to do.
+
 #### Examples
 
 ```
-fn main() → ∅:                               /* no parameters */
+fn main():                               /* no parameters */
     std.println("hello")
 
 fn add(a : int, b : int) → int:              /* two typed parameters */
@@ -1109,7 +1127,7 @@ fn sha256(data : byte[]) → int?:             /* dynamic array parameter */
 Functions with no parameters use an empty parameter list `()`:
 
 ```
-fn main() → ∅:
+fn main():
     ...
 
 fn test_something():
@@ -1162,7 +1180,7 @@ fn reads_const() → int:              /* pure — constants are not mutable glo
     LIMIT
 
 @impure
-fn bump() → ∅:                       /* impure — reads and writes counter */
+fn bump():                       /* impure — reads and writes counter */
     counter ← counter + 1
 ```
 
@@ -1172,7 +1190,7 @@ Violating purity is a runtime error:
 fn bad_read() → int:                  /* ERROR: pure function cannot read mutable global */
     counter
 
-fn bad_write() → ∅:                   /* ERROR: pure function cannot assign to non-local */
+fn bad_write():                   /* ERROR: pure function cannot assign to non-local */
     counter ← 1
 ```
 
@@ -1256,7 +1274,7 @@ The annotation precedes the definition and sits alongside the others:
 ```
 @cold
 @impure
-fn report_failure() → ∅:
+fn report_failure():
     …
 
 impl Counter:
@@ -1318,7 +1336,7 @@ fn abs x : int → int:
     if x < 0: return -x
     x
 
-fn greet name → ∅:
+fn greet name:
     std.println("hello {}", name);
 ```
 
@@ -1356,7 +1374,7 @@ warning: 'unused' is declared mut but is never modified
 The same applies to a parameter, reported at the parameter:
 
 ```
-fn f(n : mut i32) → ∅:
+fn f(n : mut i32):
 
 warning: parameter 'n' is declared mut but is never modified
 ```
@@ -1775,7 +1793,7 @@ An optional has exactly two shapes and a result has two, so covering one means w
 The check happens where the `match` is written, not where it runs.  A gap is a property of the code, so a missing arm that only an unlucky input would reach is reported all the same:
 
 ```
-fn never_called() → ∅:
+fn never_called():
     let v : mut = [1]
     match v.get(0):
         ∃(x):
@@ -2002,7 +2020,7 @@ The error type is determined from the expression `?` is applied to — division 
 A lambda is its own function for this purpose.  A `?` inside one returns from the lambda, so it is checked against the lambda's return type and not the enclosing function's:
 
 ```
-fn caller() → ∅:                                  // plain, and that is fine
+fn caller():                                  // plain, and that is fine
     let f : mut = λa : int, b : int → int!: (a ÷ b)?
     std.println("{}", f(10, 0) ?? ⁻1)
 ```
@@ -2127,7 +2145,7 @@ fn get_padded_byte data : byte[], pos : usize, total_size : usize → ?u8:
 fn expand_s0 prev : u32 → int:
     (prev ↻ 7) ^ (prev ↻ 18) ^ (prev » 3)
 
-fn maybe_use value : int? → ∅:
+fn maybe_use value : int?:
     ...
 ```
 
@@ -2168,10 +2186,10 @@ Parameters without a type annotation are also immutable — there is no way to m
 Immutability covers what the parameter names, not only the name, so writing to an element of an array parameter needs `mut` as much as reassigning it does:
 
 ```
-fn broken(arr : i32[]) → ∅:
+fn broken(arr : i32[]):
     arr[0] ← 9        // error: cannot assign to element of let variable 'arr'
 
-fn fine(arr : mut i32[]) → ∅:
+fn fine(arr : mut i32[]):
     arr[0] ← 9        // writes to this function's own copy
 ```
 
@@ -2195,7 +2213,7 @@ To pass a parameter **by reference**, prefix the type annotation with `&`.  A ba
 fn total(arr : &i32[]) → i32:              // may read
     arr[0] + arr[1]
 
-fn fill_zeros(arr : &mut i32[]) → ∅:     // may write
+fn fill_zeros(arr : &mut i32[]):     // may write
     foreach i := 0…(arr.sizeof - 1):
         arr[i] = 0
 ```
@@ -2203,7 +2221,7 @@ fn fill_zeros(arr : &mut i32[]) → ∅:     // may write
 `&` says where the value lives, not that the callee may change it.  Writing through one is an error:
 
 ```
-fn broken(arr : &i32[]) → ∅:
+fn broken(arr : &i32[]):
     arr[0] = 99
 
 error: cannot assign to element of borrowed variable 'arr'
@@ -2263,7 +2281,7 @@ The warning applies only where there is something to inherit: a reshape of a lit
 Binding the result as `mut` would claim write access, so taking a mutable view of something that may only be read is rejected rather than merely redundant, at the binding:
 
 ```
-fn broken(arr : &i32[]) → ∅:
+fn broken(arr : &i32[]):
     let m : mut = (2, 2) ⍴ arr
 
 error: cannot take a mutable view of borrowed variable 'arr'
@@ -2284,7 +2302,7 @@ fn fine(arr : &i32[]) → i32:
 As does a mutable view of something lent for writing:
 
 ```
-fn also_fine(arr : &mut i32[]) → ∅:
+fn also_fine(arr : &mut i32[]):
     let m : mut = (2, 2) ⍴ arr
     m[0, 1] = 42                             // reaches the caller
 ```
@@ -2294,7 +2312,7 @@ fn also_fine(arr : &mut i32[]) → ∅:
 When a by-reference array parameter is reshaped inside a function using `⍴`, the resulting view shares the caller's backing storage.  Modifications through the reshaped view propagate to the caller's array:
 
 ```
-fn reshape_and_set(arr : &i32[]) → ∅:
+fn reshape_and_set(arr : &i32[]):
     let m : mut = (2, 2) ⍴ arr
     m[0, 1] = 42
 
@@ -2306,7 +2324,7 @@ reshape_and_set(&a)
 With a by-value parameter, the deep copy ensures the caller's array is unaffected:
 
 ```
-fn reshape_and_set_val(arr : i32[]) → ∅:
+fn reshape_and_set_val(arr : i32[]):
     let m : mut = (2, 2) ⍴ arr
     m[0, 1] = 99
 
@@ -3416,7 +3434,7 @@ The length is in the type precisely so that a reader knows how much is there wit
 The length travels with the value, so a copy of a fixed-size array is still fixed:
 
 ```
-fn f(a : mut i32[3]) → ∅:
+fn f(a : mut i32[3]):
     a.push(4)                   // still an error, on this function's own copy
 ```
 
@@ -3432,7 +3450,7 @@ let d : mut i32[] = f           // d may grow; f may not
 A by-value parameter takes a copy, and the copy has the parameter's shape — a `mut T[]` parameter yields a dynamic array whatever it was handed, which is the same conversion `let d : mut i32[] = f` performs.  A fixed array may therefore be passed to one, and the callee may grow its own copy:
 
 ```
-fn grows(a : mut i32[]) → ∅:
+fn grows(a : mut i32[]):
     a.push(4)                   // grows the copy
 
 let f : mut i32[3] = [1, 2, 3]
@@ -3442,7 +3460,7 @@ grows(f)                        // fine; f is still three elements
 `&mut T[]` is a different matter.  There is no copy, so the callee would change the length of the caller's own array, which a fixed one cannot allow:
 
 ```
-fn grows(a : &mut i32[]) → ∅:
+fn grows(a : &mut i32[]):
     a.push(4)
 
 grows(&f)
@@ -4077,15 +4095,15 @@ Unit testing is built into the language, similar to Rust's `#[test]` attribute. 
 
 ```
 @test
-fn test_something → ∅:
+fn test_something:
     ...
 
 @test(sha256)
-fn test_sha256_abc → ∅:
+fn test_sha256_abc:
     ...
 
 @test(encrypt, decrypt)
-fn test_round_trip → ∅:
+fn test_round_trip:
     ...
 ```
 
@@ -4152,7 +4170,7 @@ static_assert_eq(@unitof(a), @unitof(1))
 Because a declaration settles these, they are decided where they are written rather than when the code runs.  A wrong one is reported even in a function nothing calls:
 
 ```
-fn never_called() → ∅:
+fn never_called():
     let a : u8 = 4
     static_assert_eq(@sizeof(a), 99 ¤byte)
 
@@ -4388,13 +4406,13 @@ test result: ok. 3 passed; 0 failed
 
 ```
 @test(sha256)
-fn test_sha256_empty → ∅:
+fn test_sha256_empty:
     let data : mut = std.bytes("")
     let hash : mut = sha256(data)
     assert_eq(hash, 0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
 
 @test(sha256)
-fn test_sha256_abc → ∅:
+fn test_sha256_abc:
     let data : mut = std.bytes("abc")
     let hash : mut = sha256(data)
     assert_eq(hash, 0xba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad)
@@ -4426,7 +4444,7 @@ The `@expect` annotation allows writing tests that verify the interpreter/compil
 ```
 @expect error "regex pattern"
 @expect warning "regex pattern"
-fn function_name → ∅:
+fn function_name:
     /* code that should trigger the diagnostic */
 ```
 
@@ -4435,7 +4453,7 @@ Multiple `@expect` annotations can appear before a single function.  The level k
 #### Statement-Level Syntax
 
 ```
-fn test_something → ∅:
+fn test_something:
     @expect warning "redefinition of foreach variable"
     let i : mut = 99
 ```
@@ -4474,13 +4492,13 @@ Function-level `@expect` for errors:
 
 ```
 @expect error "cannot assign to let binding 'x'"
-fn error_let_assign() → ∅:
+fn error_let_assign():
     let x := 42
     x ← 99
 
 @expect error "unexpected token: 'fn'"
-fn error_nested_fn() → ∅:
-    fn inner() → ∅:
+fn error_nested_fn():
+    fn inner():
         std.println("bad")
 ```
 
@@ -4488,7 +4506,7 @@ Statement-level `@expect` for warnings inside a `@test` function:
 
 ```
 @test
-fn warn_foreach_redef → ∅:
+fn warn_foreach_redef:
     let total : mut = 0
     foreach i := 1…3:
         @expect warning "redefinition of foreach variable 'i'"
@@ -4895,7 +4913,7 @@ let plain := @dropunit(v)
 The same holds at a parameter.  One that states a unit has it applied on the way in; one that states none will not take a measured value quietly:
 
 ```
-fn plain(x : u32) → ∅:
+fn plain(x : u32):
     …
 
 plain(v)    // v is u32 ¤byte
@@ -5454,7 +5472,7 @@ A value that holds an operating system resource — an open file or directory, s
 
 ```
 @start
-fn main() → ∅:
+fn main():
     let dir : mut = std.fs.cwd()
     let file : mut = dir.open_file("data.bin")
     let data : mut = file.read_file(alloc)
@@ -5755,7 +5773,7 @@ Three submodules of `std` expose the context the operating system hands to a run
 
 ```
 @start
-fn main() → ∅:
+fn main():
     std.println("running as {}", std.args.program())
     foreach arg := std.args.all():
         std.println("parameter: {}", arg)
@@ -6125,7 +6143,7 @@ An annotation on its own line is also incomplete, since the definition it applie
 
 ```
 >>> @test
-... fn test_double() → ∅:
+... fn test_double():
 ...     assert_eq(double(21), 42)
 ...
 test test_double ... ok
@@ -6210,7 +6228,7 @@ Two standard library functions end a program before its startup function returns
 #### `std.exit(code)`
 
 ```
-fn quit_early() → ∅:
+fn quit_early():
     std.println("quitting")
     std.exit(42)
     std.println("unreachable")
@@ -6233,7 +6251,7 @@ This follows the language's general stance on overflow: a value that will not fi
 #### `std.abort(signal)`
 
 ```
-fn give_up() → ∅:
+fn give_up():
     std.abort()
 ```
 
@@ -6290,7 +6308,7 @@ The recorded stack travels with the failure rather than being read from the inte
 A program can inspect its own call stack at any point, not only when failing:
 
 ```
-fn log_caller() → ∅:
+fn log_caller():
     foreach frame := std.callstack():
         std.println("{} at line {} column {}", frame[0], frame[1], frame[2])
 ```

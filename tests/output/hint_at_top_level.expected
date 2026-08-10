@@ -3,5 +3,5 @@ error: @likely applies to an if statement, not to a definition; @hot and @cold a
     |
   1 | @likely
     | ^^^^^^^
-  2 | fn f() → ∅:
+  2 | fn f():
     |

@@ -3,5 +3,5 @@ fn f() → int:
     1
 
 @start
-fn main() → ∅:
+fn main():
     std.println("{}", f())

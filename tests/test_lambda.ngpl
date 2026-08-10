@@ -201,7 +201,7 @@ fn test_lambda_missing_return_type():
 
 // Multi-statement lambda with layout block
 @test
-fn test_lambda_multi_stmt_layout() → ∅:
+fn test_lambda_multi_stmt_layout():
   let f := λx : i64 → i64:
     let y := x × 2
     y + 1
@@ -209,7 +209,7 @@ fn test_lambda_multi_stmt_layout() → ∅:
 
 // Multi-statement lambda with brace block
 @test
-fn test_lambda_multi_stmt_brace() → ∅:
+fn test_lambda_multi_stmt_brace():
   let f := λx : i64 → i64: {
     let y := x + 10;
     let z := y × 2;
@@ -219,7 +219,7 @@ fn test_lambda_multi_stmt_brace() → ∅:
 
 // Multi-statement lambda with early return
 @test
-fn test_lambda_multi_stmt_return() → ∅:
+fn test_lambda_multi_stmt_return():
   let f := λx : i64 → i64:
     if x < 0:
       return 0
@@ -229,7 +229,7 @@ fn test_lambda_multi_stmt_return() → ∅:
 
 // Multi-statement lambda with capture
 @test
-fn test_lambda_multi_stmt_capture() → ∅:
+fn test_lambda_multi_stmt_capture():
   let base := 100
   let f := λx : i64 |base| → i64:
     let doubled := x × 2
@@ -238,7 +238,7 @@ fn test_lambda_multi_stmt_capture() → ∅:
 
 // Multi-statement lambda with loop
 @test
-fn test_lambda_multi_stmt_loop() → ∅:
+fn test_lambda_multi_stmt_loop():
   let f := λn : i64 → i64:
     let sum : mut = 0
     foreach i := 1…n:
@@ -248,7 +248,7 @@ fn test_lambda_multi_stmt_loop() → ∅:
 
 // Multi-statement lambda as argument (braces required inside parens)
 @test
-fn test_lambda_multi_stmt_as_arg() → ∅:
+fn test_lambda_multi_stmt_as_arg():
   let result := apply(λx : i64 → i64: {
     let a := x + 1;
     a × 2

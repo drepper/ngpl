@@ -475,7 +475,12 @@ class Parser:
                 break
         self._eat("PUNCT", ")")
 
-        ret_type = None
+        # A signature that says nothing about what comes back says the
+        # same as one that writes ∅: the function hands nothing back.
+        # Writing the arrow is then a choice about emphasis, not about
+        # meaning, so `fn f():` and `fn f() → ∅:` are one signature
+        # spelled two ways.
+        ret_type = "\N{EMPTY SET}"
         ret_unit = None
         if self._try_eat("OP", "->"):
             if self._check("IDENT", "NONE", "OPT"):

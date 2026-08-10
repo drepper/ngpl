@@ -2,7 +2,7 @@
 // consecutive calls run together on one line.  std.println is the same
 // call with a newline, which is what a line of output wants.
 @start
-fn main() → ∅:
+fn main():
     std.print("a")
     std.print("b")
     std.print("c")

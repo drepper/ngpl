@@ -28,25 +28,25 @@ fn mixed_test2(x : i64) → i64 {
 }
 
 @test
-fn test_abs() → ∅:
+fn test_abs():
     assert_eq(abs_layout(5), 5)
     assert_eq(abs_layout(⁻3), 3)
     assert_eq(abs_brace(5), 5)
     assert_eq(abs_brace(⁻3), 3)
 
 @test
-fn test_fib() → ∅:
+fn test_fib():
     assert_eq(fib(0), 0)
     assert_eq(fib(1), 1)
     assert_eq(fib(10), 55)
 
 @test
-fn test_mixed() → ∅:
+fn test_mixed():
     assert_eq(mixed_test(15), 5)
     assert_eq(mixed_test(5), 5)
     assert_eq(mixed_test2(15), 5)
     assert_eq(mixed_test2(5), 5)
 
 @start
-fn main() → ∅:
+fn main():
     std.println("layout tests passed")

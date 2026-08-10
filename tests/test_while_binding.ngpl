@@ -10,7 +10,7 @@
 // ---------------------------------------------------------------------
 
 @test
-fn test_binds_each_iteration() → ∅:
+fn test_binds_each_iteration():
     let v := [1, 2, 3]
     let it := v.iterate()
     let total : mut = 0
@@ -20,7 +20,7 @@ fn test_binds_each_iteration() → ∅:
 
 // The expression runs once per iteration, not once for the whole loop.
 @test
-fn test_expression_is_re_evaluated() → ∅:
+fn test_expression_is_re_evaluated():
     let source := [5, 4, 3]
     let it := source.iterate()
     let seen : mut = []
@@ -32,7 +32,7 @@ fn test_expression_is_re_evaluated() → ∅:
 
 // A loop whose first value is absent runs its body no times.
 @test
-fn test_empty_runs_body_never() → ∅:
+fn test_empty_runs_body_never():
     let v := []
     let it := v.iterate()
     let ran : mut = 0
@@ -42,7 +42,7 @@ fn test_empty_runs_body_never() → ∅:
 
 // The test is on the bound value, so a falsy element does not stop it.
 @test
-fn test_falsy_values_continue() → ∅:
+fn test_falsy_values_continue():
     let v := [0, 0]
     let it := v.iterate()
     let ran : mut = 0
@@ -52,7 +52,7 @@ fn test_falsy_values_continue() → ∅:
 
 // A plain expression works too, not only an optional.
 @test
-fn test_binding_a_plain_value() → ∅:
+fn test_binding_a_plain_value():
     let n : mut = 3
     let steps : mut = 0
     while remaining := n:
@@ -68,7 +68,7 @@ fn test_binding_a_plain_value() → ∅:
 // The body runs only when a value arrived, so inside it the name is the
 // value itself -- the value in Rust's Some(value), not the Some.
 @test
-fn test_bound_to_the_value_itself() → ∅:
+fn test_bound_to_the_value_itself():
     let v : i32[] = [3]
     let it := v.iterate()
     while e := it.next():
@@ -77,7 +77,7 @@ fn test_bound_to_the_value_itself() → ∅:
 
 // The same holds for every operation that answers with an optional.
 @test
-fn test_unwraps_pop() → ∅:
+fn test_unwraps_pop():
     let v : mut = [1, 2, 3]
     let sum : mut = 0
     while x := v.pop():
@@ -86,7 +86,7 @@ fn test_unwraps_pop() → ∅:
     assert_eq(v.sizeof, 0)
 
 @test
-fn test_unwraps_get() → ∅:
+fn test_unwraps_get():
     let v : mut = [42]
     let seen : mut = 0
     while x := v.get(0):
@@ -101,7 +101,7 @@ fn test_unwraps_get() → ∅:
 // The case in full: a modifiable i32 vector, a mut loop variable, one
 // added to it, and every element larger by one afterwards.
 @test
-fn test_mut_binding_updates_the_vector() → ∅:
+fn test_mut_binding_updates_the_vector():
     let v : i32[] = [1, 2, 3, 4]
     let it := v.iterate()
     while e : mut = it.next():
@@ -113,7 +113,7 @@ fn test_mut_binding_updates_the_vector() → ∅:
 
 // The change is real, not a view of a copy.
 @test
-fn test_mut_binding_result_is_observable() → ∅:
+fn test_mut_binding_result_is_observable():
     let v : i32[] = [10, 20]
     let it := v.iterate()
     while e : mut = it.next():
@@ -125,7 +125,7 @@ fn test_mut_binding_result_is_observable() → ∅:
 
 // A mut binding names the element, so its type is a mutable reference.
 @test
-fn test_mut_binding_type() → ∅:
+fn test_mut_binding_type():
     let v : i32[] = [1]
     let it := v.iterate()
     while e : mut = it.next():
@@ -133,7 +133,7 @@ fn test_mut_binding_type() → ∅:
 
 // Without mut the binding is a copy, and the vector is left alone.
 @test
-fn test_plain_binding_does_not_write_back() → ∅:
+fn test_plain_binding_does_not_write_back():
     let v : i32[] = [1, 2, 3]
     let it := v.iterate()
     let seen : mut = 0
@@ -147,7 +147,7 @@ fn test_plain_binding_does_not_write_back() → ∅:
 // mut is meaningless when the loop produces values with nowhere to
 // write them back to.
 @expect error "declared mut, but the loop produces values"
-fn error_mut_on_a_plain_value() → ∅:
+fn error_mut_on_a_plain_value():
     let v : mut = [1, 2]
     while x : mut = v.pop():
         x ← 0
@@ -157,7 +157,7 @@ fn error_mut_on_a_plain_value() → ∅:
 // ---------------------------------------------------------------------
 
 @test
-fn test_typed_binding() → ∅:
+fn test_typed_binding():
     let v := [7, 8]
     let it := v.iterate()
     let total : mut = 0
@@ -171,7 +171,7 @@ fn test_typed_binding() → ∅:
 
 // It is rebound every iteration, so assigning to it would be discarded.
 @expect error "cannot assign to while variable 'e'"
-fn error_assign_to_bound_variable() → ∅:
+fn error_assign_to_bound_variable():
     let v : mut = [1, 2]
     let it : mut = v.iterate()
     while e := it.next():
@@ -179,7 +179,7 @@ fn error_assign_to_bound_variable() → ∅:
 
 // Its type can be asked for inside the body.
 @test
-fn test_typeof_bound_variable() → ∅:
+fn test_typeof_bound_variable():
     let v := [1]
     let it := v.iterate()
     while e := it.next():
@@ -190,7 +190,7 @@ fn test_typeof_bound_variable() → ∅:
 // ---------------------------------------------------------------------
 
 @test
-fn test_plain_condition_still_works() → ∅:
+fn test_plain_condition_still_works():
     let n : mut = 0
     while n < 4:
         n ← n + 1
@@ -198,7 +198,7 @@ fn test_plain_condition_still_works() → ∅:
 
 // A bare name as the condition is still a condition, not a binding.
 @test
-fn test_bare_name_condition() → ∅:
+fn test_bare_name_condition():
     let ticks : mut = 3
     let ran : mut = 0
     while ticks:
@@ -208,14 +208,14 @@ fn test_bare_name_condition() → ∅:
 
 // A body on the same line as the colon still parses.
 @test
-fn test_inline_body() → ∅:
+fn test_inline_body():
     let k : mut = 2
     while k > 0: k ← k - 1
     assert_eq(k, 0)
 
 // Nested loops each keep their own binding.
 @test
-fn test_nested_bindings() → ∅:
+fn test_nested_bindings():
     let outer := [1, 2]
     let oit := outer.iterate()
     let total : mut = 0
@@ -227,5 +227,5 @@ fn test_nested_bindings() → ∅:
     assert_eq(total, 90)
 
 @start
-fn main() → ∅:
+fn main():
     std.println("while binding tests passed")

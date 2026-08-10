@@ -1,5 +1,5 @@
 // A suffix says what the literal is, so a fractional number cannot be
 // spelled with an integer type.
 @start
-fn main() → ∅:
+fn main():
     std.println("{}", 1.5i32)

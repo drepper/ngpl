@@ -27,28 +27,28 @@ fn double(x : i64) → i64:
 // ------------------------------------------------------------------
 
 @test
-fn test_ct_sum() → ∅:
+fn test_ct_sum():
     assert_eq(ct_sum(1, 2, 3, 4), 10)
 
 @test
-fn test_ct_sum_single() → ∅:
+fn test_ct_sum_single():
     assert_eq(ct_sum(42), 42)
 
 @test
-fn test_ct_count_empty() → ∅:
+fn test_ct_count_empty():
     assert_eq(ct_count(), 0)
 
 @test
-fn test_ct_count_several() → ∅:
+fn test_ct_count_several():
     assert_eq(ct_count(1, "two", true), 3)
 
 @test
-fn test_ct_apply_each() → ∅:
+fn test_ct_apply_each():
     assert_eq(apply_each(double, 1, 2, 3), 12)
 
 // comptime foreach also works on regular arrays.
 @test
-fn test_ct_foreach_array() → ∅:
+fn test_ct_foreach_array():
     let s : mut i64 = 0
     comptime foreach v := [10, 20, 30]:
         s ← s + v
@@ -64,7 +64,7 @@ fn indexed_sum(args… : i64) → i64:
     s
 
 @test
-fn test_ct_enumerate() → ∅:
+fn test_ct_enumerate():
     assert_eq(indexed_sum(10, 20, 30), 10 × 1 + 20 × 2 + 30 × 3)
 
 // Heterogeneous pack: each iteration sees a different type.
@@ -79,7 +79,7 @@ fn hetero_count(args…) → i64:
     ints × 10 + strs
 
 @test
-fn test_ct_hetero_types() → ∅:
+fn test_ct_hetero_types():
     assert_eq(hetero_count(1, "a", 2, "b", "c"), 20 + 3)
 
 // Empty pack produces zero iterations.
@@ -90,9 +90,9 @@ fn ct_empty(args…) → i64:
     ran
 
 @test
-fn test_ct_empty_no_iterations() → ∅:
+fn test_ct_empty_no_iterations():
     assert_eq(ct_empty(), 0)
 
 @start
-fn main() → ∅:
+fn main():
     std.println("comptime foreach tests passed")

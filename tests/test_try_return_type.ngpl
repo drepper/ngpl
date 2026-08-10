@@ -19,7 +19,7 @@ fn expected_matching(x : i64) → i64!:
     q
 
 @test
-fn test_expected_matching() → ∅:
+fn test_expected_matching():
     assert_eq(expected_matching(4) ?? ⁻1, ⁻1)
 
 // The long form names the same error type, so it matches too.
@@ -28,7 +28,7 @@ fn spelled_out(x : i64) → i64?std.errors:
     q
 
 @test
-fn test_long_form_matches() → ∅:
+fn test_long_form_matches():
     assert_eq(spelled_out(4) ?? ⁻1, ⁻1)
 
 // An optional return absorbs any error: the detail is discarded.
@@ -37,7 +37,7 @@ fn optional_absorbs(x : i64) → i64?:
     q
 
 @test
-fn test_optional_absorbs_any_error() → ∅:
+fn test_optional_absorbs_any_error():
     assert_eq(optional_absorbs(4) ?? ⁻1, ⁻1)
 
 // Propagating from another function with the same error type.
@@ -46,7 +46,7 @@ fn chained(x : i64) → i64!:
     q + 1
 
 @test
-fn test_chained_propagation() → ∅:
+fn test_chained_propagation():
     assert_eq(chained(4) ?? ⁻1, ⁻1)
 
 // The success path is unaffected.
@@ -55,7 +55,7 @@ fn succeeds(x : i64) → i64!:
     q
 
 @test
-fn test_success_path() → ∅:
+fn test_success_path():
     assert_eq(succeeds(10) ?? ⁻1, 5)
 
 // ---------------------------------------------------------------------
@@ -68,7 +68,7 @@ fn error_plain_return_type() → i64:
     q
 
 @expect error "requires the enclosing function to return an optional"
-fn error_void_return_type() → ∅:
+fn error_void_return_type():
     let q : mut = (10 ÷ 2)?
     std.println("{}", q)
 
@@ -88,5 +88,5 @@ fn error_mismatched_through_call() → i64?MyErr:
     q
 
 @start
-fn main() → ∅:
+fn main():
     std.println("try return type tests passed")

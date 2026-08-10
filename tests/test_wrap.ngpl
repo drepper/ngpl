@@ -7,35 +7,35 @@
 // ---- @wrap on signed types: wraps instead of aborting --------------------
 
 @test
-fn test_wrap_i8_add() → ∅:
+fn test_wrap_i8_add():
     let x : i8 = 127
     let y : i8 = 1
     let z := @wrap(x + y)
     assert_eq(z, ⁻128)
 
 @test
-fn test_wrap_i8_sub() → ∅:
+fn test_wrap_i8_sub():
     let x : i8 = ⁻128
     let y : i8 = 1
     let z := @wrap(x - y)
     assert_eq(z, 127)
 
 @test
-fn test_wrap_i8_mul() → ∅:
+fn test_wrap_i8_mul():
     let x : i8 = 64
     let y : i8 = 4
     let z := @wrap(x × y)
     assert_eq(z, 0)
 
 @test
-fn test_wrap_i32_add() → ∅:
+fn test_wrap_i32_add():
     let x : i32 = 2147483647
     let y : i32 = 1
     let z := @wrap(x + y)
     assert_eq(z, ⁻2147483648)
 
 @test
-fn test_wrap_i32_negate() → ∅:
+fn test_wrap_i32_negate():
     let x : i32 = ⁻2147483648
     let z := @wrap(⁻x)
     assert_eq(z, ⁻2147483648)
@@ -43,7 +43,7 @@ fn test_wrap_i32_negate() → ∅:
 // ---- @wrap on unsigned types: still wraps as expected --------------------
 
 @test
-fn test_wrap_u32_add() → ∅:
+fn test_wrap_u32_add():
     let x : u32 = 4294967295
     let y : u32 = 2
     let z := @wrap(x + y)
@@ -52,7 +52,7 @@ fn test_wrap_u32_add() → ∅:
 // ---- @wrap does not affect operations outside its scope -----------------
 
 @expect error "integer overflow"
-fn error_no_wrap_i8() → ∅:
+fn error_no_wrap_i8():
     let x : mut i8 = 127
     let y : mut i8 = 1
     // @wrap only on the subtraction, not the addition
@@ -62,7 +62,7 @@ fn error_no_wrap_i8() → ∅:
 // ---- @wrap with complex expressions -------------------------------------
 
 @test
-fn test_wrap_chained_add() → ∅:
+fn test_wrap_chained_add():
     let a : i8 = 100
     let b : i8 = 100
     let c : i8 = 100
@@ -70,5 +70,5 @@ fn test_wrap_chained_add() → ∅:
     assert_eq(z, 44)
 
 @start
-fn main() → ∅:
+fn main():
     std.println("wrap tests passed")

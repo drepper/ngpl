@@ -6,7 +6,7 @@
 // values themselves.
 
 @start
-fn main() → ∅:
+fn main():
     std.println("count: {}", std.args.count())
     foreach v := std.args.all():
         std.println("arg: [{}]", v)

@@ -2,7 +2,7 @@
 // replacement fields are std.format's, so what is written here is what
 // std.format would have produced.
 @start
-fn main() → ∅:
+fn main():
     let a : i8 = 42
     let d ¤meter : i32 = 5
     std.println("plain")

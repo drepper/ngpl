@@ -3,5 +3,5 @@ struct S:
     n : int
 
 @start
-fn main() → ∅:
+fn main():
     ∅

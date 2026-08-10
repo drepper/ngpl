@@ -6,5 +6,5 @@ fn returns_a_scalar() → u32:
     [1, 2, 3]
 
 @start
-fn main() → ∅:
+fn main():
     std.println("not reached")

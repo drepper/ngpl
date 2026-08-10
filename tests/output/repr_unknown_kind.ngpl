@@ -5,5 +5,5 @@ struct Header:
     magic : u32
 
 @start
-fn main() → ∅:
+fn main():
     std.println("{}", Header.sizeof)

@@ -7,7 +7,7 @@ fn returns_float_as_int() → i64:
 
 @test
 @expect error "return type is i64 but body evaluates to float"
-fn test_return_float_for_int() → ∅:
+fn test_return_float_for_int():
   returns_float_as_int()
 
 fn returns_int_as_float() → f64:
@@ -15,7 +15,7 @@ fn returns_int_as_float() → f64:
 
 @test
 @expect error "return type is f64 but body evaluates to int"
-fn test_return_int_for_float() → ∅:
+fn test_return_int_for_float():
   returns_int_as_float()
 
 fn returns_float_as_i32() → i32:
@@ -23,7 +23,7 @@ fn returns_float_as_i32() → i32:
 
 @test
 @expect error "return type is i32 but body evaluates to float"
-fn test_return_float_for_i32() → ∅:
+fn test_return_float_for_i32():
   returns_float_as_i32()
 
 fn returns_int_as_f32() → f32:
@@ -31,7 +31,7 @@ fn returns_int_as_f32() → f32:
 
 @test
 @expect error "return type is f32 but body evaluates to int"
-fn test_return_int_for_f32() → ∅:
+fn test_return_int_for_f32():
   returns_int_as_f32()
 
 // Return type matches: these should succeed.
@@ -40,14 +40,14 @@ fn returns_int_ok() → i64:
   42
 
 @test
-fn test_return_int_ok() → ∅:
+fn test_return_int_ok():
   assert_eq(42, returns_int_ok())
 
 fn returns_float_ok() → f64:
   3.14
 
 @test
-fn test_return_float_ok() → ∅:
+fn test_return_float_ok():
   let r := returns_float_ok()
   assert_true(r > 3.0)
 
@@ -55,14 +55,14 @@ fn returns_str_ok() → str:
   "hello"
 
 @test
-fn test_return_str_ok() → ∅:
+fn test_return_str_ok():
   assert_true(returns_str_ok() == "hello")
 
 fn returns_bool_ok() → bool:
   true
 
 @test
-fn test_return_bool_ok() → ∅:
+fn test_return_bool_ok():
   assert(returns_bool_ok())
 
 // Return type check with explicit return statement.
@@ -74,7 +74,7 @@ fn early_return_float_as_int(x: i64) → i64:
 
 @test
 @expect error "return type is i64 but body evaluates to float"
-fn test_early_return_mismatch() → ∅:
+fn test_early_return_mismatch():
   early_return_float_as_int(1)
 
 // Return type check with optional return type.
@@ -84,7 +84,7 @@ fn returns_float_as_int_opt() → i64?:
 
 @test
 @expect error "return type is i64.* but body evaluates to float"
-fn test_return_float_for_int_optional() → ∅:
+fn test_return_float_for_int_optional():
   returns_float_as_int_opt()
 
 // Optional returning none is fine regardless of inner type.
@@ -93,7 +93,7 @@ fn returns_none_for_int_opt() → i64?:
   ∅
 
 @test
-fn test_return_none_for_optional() → ∅:
+fn test_return_none_for_optional():
   let r := returns_none_for_int_opt()
   assert_eq(0, r ?? 0)
 
@@ -101,102 +101,102 @@ fn test_return_none_for_optional() → ∅:
 
 @test
 @expect error "return type is i64 but body evaluates to float"
-fn test_lambda_return_mismatch() → ∅:
+fn test_lambda_return_mismatch():
   let f : mut = λx : i64 → i64: 1.5
   f(0)
 
 // Lambda with correct return type.
 
 @test
-fn test_lambda_return_ok() → ∅:
+fn test_lambda_return_ok():
   let f := λx : i64 → i64: x + 1
   assert_eq(6, f(5))
 
 // Void return type allows anything (value is discarded).
 
-fn void_return() → ∅:
+fn void_return():
   42
 
 @test
-fn test_void_return() → ∅:
+fn test_void_return():
   void_return()
 
 // --- Mixed-type arithmetic rejection ---
 
 @test
 @expect error "matching types"
-fn test_add_int_float() → ∅:
+fn test_add_int_float():
   let r : mut = 2 + 3.0
 
 @test
 @expect error "matching types"
-fn test_add_float_int() → ∅:
+fn test_add_float_int():
   let r : mut = 3.0 + 2
 
 @test
 @expect error "matching types"
-fn test_sub_int_float() → ∅:
+fn test_sub_int_float():
   let r : mut = 5 - 1.0
 
 @test
 @expect error "matching types"
-fn test_sub_float_int() → ∅:
+fn test_sub_float_int():
   let r : mut = 5.0 - 1
 
 @test
 @expect error "matching types"
-fn test_mul_int_float() → ∅:
+fn test_mul_int_float():
   let r : mut = 3 × 2.5
 
 @test
 @expect error "matching types"
-fn test_mul_float_int() → ∅:
+fn test_mul_float_int():
   let r : mut = 2.5 × 3
 
 @test
 @expect error "matching types"
-fn test_div_int_float() → ∅:
+fn test_div_int_float():
   let r : mut = 10 ÷ 2.0
 
 @test
 @expect error "matching types"
-fn test_div_float_int() → ∅:
+fn test_div_float_int():
   let r : mut = 10.0 ÷ 2
 
 @test
 @expect error "matching types"
-fn test_mod_int_float() → ∅:
+fn test_mod_int_float():
   let r : mut = 7 % 2.0
 
 @test
 @expect error "matching types"
-fn test_mod_float_int() → ∅:
+fn test_mod_float_int():
   let r : mut = 7.0 % 2
 
 @test
 @expect error "matching types"
-fn test_pow_int_float() → ∅:
+fn test_pow_int_float():
   let r : mut = 4 ↑ 0.5
 
 // float↑int is allowed (needed for units, always well-defined).
 
 @test
-fn test_pow_float_int_ok() → ∅:
+fn test_pow_float_int_ok():
   let r := 4.0 ↑ 2
   assert_true(r == 16.0)
 
 // Same-type arithmetic succeeds.
 
 @test
-fn test_add_int_int() → ∅:
+fn test_add_int_int():
   assert_eq(5, 2 + 3)
 
 @test
-fn test_add_float_float() → ∅:
+fn test_add_float_float():
   assert_true(5.0 == 2.0 + 3.0)
 
 @test
-fn test_mul_float_float() → ∅:
+fn test_mul_float_float():
   assert_true(6.0 == 2.0 × 3.0)
 
 // Mixed types through function call: co returns f32, foo adds int + f32.
@@ -209,7 +209,7 @@ fn foo(a : i64) → i64:
 
 @test
 @expect error "matching types"
-fn test_mixed_via_call() → ∅:
+fn test_mixed_via_call():
   foo(1)
 
 // --- Helpers ---
@@ -229,7 +229,7 @@ fn assert_true(cond: bool):
 // Widths convert within a kind and an integer becomes a float, but the
 // kinds do not run together.
 @test
-fn test_conversions_within_a_kind_still_work() → ∅:
+fn test_conversions_within_a_kind_still_work():
     let n : i32 = 5
     let x : f64 = 1
     let g : f64 = 2.5
@@ -244,49 +244,49 @@ fn test_conversions_within_a_kind_still_work() → ∅:
 
 @test
 @expect error "'i32' cannot hold a string"
-fn error_string_into_a_number() → ∅:
+fn error_string_into_a_number():
     let x : i32 = "hello"
 
 @test
 @expect error "'str' cannot hold an integer"
-fn error_number_into_a_string() → ∅:
+fn error_number_into_a_string():
     let s : str = 42
 
 @test
 @expect error "'f64' cannot hold a string"
-fn error_string_into_a_float() → ∅:
+fn error_string_into_a_float():
     let f : f64 = "hi"
 
 @test
 @expect error "'bool' cannot hold a number"
-fn error_number_into_a_bool() → ∅:
+fn error_number_into_a_bool():
     let b : bool = 42
 
 @test
 @expect error "'u8' cannot hold a boolean"
-fn error_bool_into_a_number() → ∅:
+fn error_bool_into_a_number():
     let x : u8 = true
 
 // The same holds where a value meets a type that is already fixed:
 // an assignment, an array element, a parameter, and a return.
 @test
 @expect error "holds i32 and cannot take a string"
-fn error_assignment_changes_the_kind() → ∅:
+fn error_assignment_changes_the_kind():
     let x : mut i32 = 5
     x ← "hello"
 
 @test
 @expect error "an array of i32 cannot hold a string"
-fn error_element_changes_the_kind() → ∅:
+fn error_element_changes_the_kind():
     let a : mut i32[] = [1, 2, 3]
     a[0] = "x"
 
-fn wants_a_number(x : i32) → ∅:
+fn wants_a_number(x : i32):
     ∅
 
 @test
 @expect error "expected i32"
-fn error_argument_of_another_kind() → ∅:
+fn error_argument_of_another_kind():
     wants_a_number("hello")
 
 @test
@@ -300,38 +300,38 @@ fn error_returns_another_kind() → i32:
 
 @test
 @expect error "needs more significant bits than f32 has .24."
-fn error_integer_too_wide_for_f32() → ∅:
+fn error_integer_too_wide_for_f32():
     let f : f32 = 17000001
 
 @test
 @expect error "needs more significant bits than f32 has"
-fn error_just_past_the_f32_boundary() → ∅:
+fn error_just_past_the_f32_boundary():
     let f : f32 = 16777217
 
 @test
 @expect error "needs more significant bits than f16 has .11."
-fn error_integer_too_wide_for_f16() → ∅:
+fn error_integer_too_wide_for_f16():
     let f : f16 = 2049
 
 @test
 @expect error "needs more significant bits than bfloat16 has .8."
-fn error_integer_too_wide_for_bfloat16() → ∅:
+fn error_integer_too_wide_for_bfloat16():
     let f : bfloat16 = 257
 
 @test
 @expect error "needs more significant bits than f64 has .53."
-fn error_integer_too_wide_for_f64() → ∅:
+fn error_integer_too_wide_for_f64():
     let f : f64 = 9007199254740993
 
 // The same at an argument, where the conversion is the same one.
-fn takes_f32(x : f32) → ∅:
+fn takes_f32(x : f32):
     ∅
 
 @test
 @expect error "needs more significant bits than f32 has"
-fn error_argument_too_wide_for_f32() → ∅:
+fn error_argument_too_wide_for_f32():
     takes_f32(17000001)
 
 @start
-fn main() → ∅:
+fn main():
   std.println("type strictness tests passed")

@@ -4,7 +4,7 @@ std.println("ab")
 [1,
  2,
  3]
-fn describe(n : i64) → ∅:
+fn describe(n : i64):
     if n > 10:
         std.println("big")
     else:
@@ -13,10 +13,10 @@ fn describe(n : i64) → ∅:
 describe(5)
 describe(50)
 @test
-fn test_double() → ∅:
+fn test_double():
     assert_eq(2 × 2, 4)
 
 @test
-fn test_wrong() → ∅:
+fn test_wrong():
     assert_eq(2 × 2, 5)
 

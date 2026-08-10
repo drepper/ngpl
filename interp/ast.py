@@ -140,7 +140,8 @@ class FuncDef:
 
     name:      function identifier
     params:    list of (name, type_annotation_or_None) tuples
-    ret_type:  declared return type string, or None for implicit none
+    ret_type:  declared return type string.  A signature that
+               writes none records ∅, which is what it means.
     body:      list of statements
     is_start:  True if annotated with @start
     """
