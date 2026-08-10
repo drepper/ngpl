@@ -3978,12 +3978,27 @@ Given a type, `@sizeof` reports the storage it occupies, in bytes, and matches w
 @sizeof(Shade)      // an enum, as the integer it is stored in
 ```
 
+An array type may be written out too, and has a size when every dimension has one:
+
+```
+@sizeof(i32[4])     // 16 B
+@sizeof(u8[16])     // 16 B
+@sizeof(i16[2,3])   // 12 B
+@sizeof(u8[2,3,4])  // 24 B
+```
+
 A type with no defined storage is refused, and says why:
 
 ```
 @sizeof(int)        // error: arbitrary-precision; use a sized type such as i64
 @sizeof(str)        // error: no C representation; use a sized byte array
+
+@sizeof(i32[])
+error: 'i32[]' leaves a dimension open, so how much it occupies is not
+part of its type; give every dimension a size, or ask a value with .sizeof
 ```
+
+An open dimension is a property of the type, so `i32[,3]` is refused for the same reason.  An empty subscript has no reading as a value — `a[]` on an array is an error, not an index.
 
 #### `@sizeof` of a Value
 

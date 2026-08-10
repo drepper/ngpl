@@ -1952,14 +1952,28 @@ class Parser:
         return StructLit(name, field_inits)
 
     def _parse_bracket_access(self, node, bracket_tok=None):
-        """Parse [expr, ...] after node — returns Subscript, SliceAccess, or MultiSlice."""
-        idx_expr = self._parse_or_expr()
+        """Parse [expr, ...] after node — returns Subscript, SliceAccess, or MultiSlice.
+
+        An entry may be empty, which is how an array type leaves a
+        dimension open.  `i32[]` and `i32[,3]` are array types written
+        where an expression is expected, so they parse here and are
+        judged by whatever asked for them; a value has no such reading
+        and says so.
+        """
+        def entry():
+            if self._check("PUNCT") and self._cur().value in (",", "]"):
+                return None
+            return self._parse_or_expr()
+
+        idx_expr = entry()
         indices = [idx_expr]
         while self._check("PUNCT") and self._cur().value == ",":
             self.pos += 1
-            indices.append(self._parse_or_expr())
+            indices.append(entry())
         self._skip_nl()
         self._eat("PUNCT", "]")
+        if any(i is None for i in indices):
+            return Subscript(node, indices)
         has_range = any(isinstance(e, RangeExpr) for e in indices)
         if len(indices) == 1 and not has_range:
             return Subscript(node, indices)

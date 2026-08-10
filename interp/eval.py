@@ -1985,6 +1985,11 @@ class Evaluator:
             return ObjectValue(ArrayValue(elements))
 
         # Subscript read: arr[i] or arr[i, j, ...] or tuple[i].
+        if isinstance(node, Subscript) and any(i is None for i in node.indices):
+            raise TypeError(
+                "a subscript needs an index; an empty one is how an array "
+                "type leaves a dimension open, which is not a value")
+
         if isinstance(node, Subscript):
             val = self.eval_expr(node.obj)
             for idx_node in node.indices:
@@ -2948,9 +2953,12 @@ class Evaluator:
                 and is_type_name(expr.obj.name):
             dims = []
             for index in expr.indices:
-                if not isinstance(index, IntLit):
+                if index is None:
+                    dims.append("")
+                elif isinstance(index, IntLit):
+                    dims.append(str(index.value))
+                else:
                     return None
-                dims.append(str(index.value))
             return f"{expr.obj.name}[{','.join(dims)}]"
         return None
 

@@ -324,6 +324,31 @@ fn error_fill_with_open_extent() → ∅:
     let z : i32[,3] = 0
     _ ← z[0, 0]
 
+// ---------------------------------------------------------------------
+// An open dimension has no size to report
+// ---------------------------------------------------------------------
+
+// An array type may be written where an expression is expected, so
+// asking what one occupies is a question with an answer -- when every
+// dimension has a size.  An open one leaves the size out of the type.
+@test
+@expect error "leaves a dimension open"
+fn error_sizeof_of_a_dynamic_array_type() → ∅:
+    _ ← @sizeof(i32[])
+
+@test
+@expect error "leaves a dimension open"
+fn error_sizeof_of_a_partly_open_type() → ∅:
+    _ ← @sizeof(i32[,3])
+
+// A value has no such reading: an empty subscript is how a type
+// leaves a dimension open, not how a value is indexed.
+@test
+@expect error "a subscript needs an index"
+fn error_empty_subscript_on_a_value() → ∅:
+    let a : i32[] = [1, 2, 3]
+    _ ← a[]
+
 @start
 fn main() → ∅:
     std.print("matrix parameter tests passed")

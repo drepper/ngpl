@@ -208,9 +208,14 @@ def type_layout(type_name: str, lookup, seen: frozenset[str] = frozenset(),
     if array is not None:
         element, dims = array
         if any(d is None for d in dims):
+            if c_compatible:
+                raise LayoutError(
+                    f"dynamically sized array '{type_name}' has no defined C "
+                    f"representation; give it a fixed size")
             raise LayoutError(
-                f"dynamically sized array '{type_name}' has no defined C "
-                f"representation; give it a fixed size")
+                f"'{type_name}' leaves a dimension open, so how much it "
+                f"occupies is not part of its type; give every dimension a "
+                f"size, or ask a value with .sizeof")
         size, align = type_layout(element, lookup, seen, c_compatible)
         # A multi-dimensional array lays out as C's T[n][m]: the rows sit
         # one after another, so the alignment is still the element's.
