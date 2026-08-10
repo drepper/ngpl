@@ -1,1 +1,6 @@
-Error: in main: this shift moves every value bit out, so it can only fail; the count is too far for the type shifted
+error: in main: this shift moves every value bit out, so it can only fail; the count is too far for the type shifted
+  --> tests/output/shift_out_of_range_static.ngpl:6:21
+    |
+  6 |     std.print("{}", i « 7)
+    |                     ^^^^^
+    |

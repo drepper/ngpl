@@ -1,0 +1,7 @@
+error: in classify: match has arms after _, which can never be reached
+  --> tests/output/static_match_after_wildcard.ngpl:7:9
+    |
+  7 |         ∅: 1
+    |         ^
+  8 | 
+    |

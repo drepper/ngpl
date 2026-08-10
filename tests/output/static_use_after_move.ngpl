@@ -1,0 +1,15 @@
+// A method taking self by value consumes what it was called on, so the
+// name no longer stands for anything.  The caret points at the use.
+struct Buffer:
+    n : i32
+
+impl Buffer:
+    fn consume(self) → i32:
+        self.n
+
+@start
+fn main() → ∅:
+    let b := Buffer{n: 7}
+    let first := b.consume()
+    let second := b.consume()
+    std.print("{} {}", first, second)

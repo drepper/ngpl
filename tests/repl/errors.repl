@@ -10,4 +10,7 @@ bad_call("text")
 bad_call(4)
 1 +++ 2
 10 / 3
+fn needs_optional(a : i32, b : i32) → i32:
+    (a ÷ b)?
+
 "recovered"

@@ -1,1 +1,7 @@
-Error: type alias 'MyInt': 'int' is an arbitrary-precision type, which the bootstrap implementation does not provide; use a sized type such as i64
+error: type alias 'MyInt': 'int' is an arbitrary-precision type, which the bootstrap implementation does not provide; use a sized type such as i64
+  --> tests/output/bootstrap_int_alias.ngpl:2:1
+    |
+  2 | type MyInt = int
+    | ^^^^
+  3 | 
+    |

@@ -1,0 +1,7 @@
+error: in divide: ? requires the enclosing function to return an optional or an expected type, but it returns 'i32'
+  --> tests/output/static_try_return_type.ngpl:4:12
+    |
+  4 |     (a ÷ b)?
+    |            ^
+  5 | 
+    |

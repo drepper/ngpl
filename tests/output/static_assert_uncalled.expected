@@ -1,3 +1,9 @@
-Error: in never_called: static_assert_eq failed:
+error: in never_called: static_assert_eq failed:
   expected: 1 B
   actual:   99 B
+  --> tests/output/static_assert_uncalled.ngpl:5:5
+    |
+  5 |     static_assert_eq(@sizeof(a), 99 ¤byte)
+    |     ^^^^^^^^^^^^^^^^
+  6 | 
+    |

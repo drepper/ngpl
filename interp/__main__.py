@@ -335,6 +335,18 @@ def _report_abort(exc: ProgramAbort, source_path: str,
     deliver_abort(exc.signal_number)
 
 
+def _var_ref_node(expr, name: str):
+    """The node in an expression that reads `name`, when one is found.
+
+    A diagnostic about a name reads better pointing at the name than at
+    the expression holding it, and the node is where the position is.
+    """
+    for node in _iter_ast(expr):
+        if isinstance(node, _ast.VarRef) and node.name == name:
+            return node
+    return expr
+
+
 def _expr_var_refs(expr) -> set[str]:
     """Collect VarRef names referenced in an expression tree."""
     if expr is None:
@@ -460,6 +472,38 @@ def _stmt_top_exprs(stmt) -> list:
     return []
 
 
+class _Finding(str):
+    """A static check's message, remembering where it was found.
+
+    The checks read as they did when they answered with a plain string,
+    and every caller that tests one or interpolates it still works.
+    What is added is the position of the node the check objected to, so
+    the diagnostic can point at it rather than name the function and
+    leave the reader to search.
+
+    A check with no particular node to blame builds one of these
+    without a node, or returns a plain string; either way `pos` reads
+    as None through getattr.
+    """
+
+    pos: tuple[int, int, int | None] | None
+
+    def __new__(cls, message: str, node=None):
+        finding = super().__new__(cls, message)
+        finding.pos = getattr(node, "pos", None) if node is not None else None
+        return finding
+
+
+def _finding_pos(finding) -> tuple[int, int, int | None] | None:
+    """The position a finding carries, or None for a plain message."""
+    return getattr(finding, "pos", None)
+
+
+def _node_pos(node) -> tuple[int, int, int | None] | None:
+    """The position of an AST node, or None where it has none."""
+    return getattr(node, "pos", None)
+
+
 def _iter_ast(node, stop_at=()):
     """Yield every AST node reachable from node, itself included.
 
@@ -534,15 +578,17 @@ def _check_try_in(body, ret_type, env, *, in_lambda: bool = False) -> str | None
         if not isinstance(node, _ast.TryUnwrap):
             continue
         if opt_err is None:
-            return (f"? requires the {where} to return an optional or an "
-                    f"expected type, but it returns "
-                    f"'{ret_type or chr(8709)}'")
+            return _Finding(
+                f"? requires the {where} to return an optional or an "
+                f"expected type, but it returns "
+                f"'{ret_type or chr(8709)}'", node)
         if opt_err == "":
             continue
         source = _propagated_error_type(node.expr, env)
         if source is not None and source != opt_err:
-            return (f"? propagates an error of type '{source}', but the "
-                    f"{where} returns errors of type '{opt_err}'")
+            return _Finding(
+                f"? propagates an error of type '{source}', but the "
+                f"{where} returns errors of type '{opt_err}'", node)
     return None
 
 
@@ -652,11 +698,16 @@ def _check_one_match(node, env, func_def=None) -> str | None:
     for index, arm in enumerate(node.arms):
         key = arm.type_name if arm.kind == "type" else arm.kind
         if key in seen:
-            return (f"match repeats the {_arm_pattern(arm)} pattern; "
-                    f"the second one can never be reached")
+            return _Finding(
+                f"match repeats the {_arm_pattern(arm)} pattern; "
+                f"the second one can never be reached", arm)
         seen.add(key)
         if arm.kind == "wildcard" and index != len(node.arms) - 1:
-            return "match has arms after _, which can never be reached"
+            # The arm that cannot run is the one after _, so that is
+            # the one to point at.
+            return _Finding(
+                "match has arms after _, which can never be reached",
+                node.arms[index + 1])
 
     subject = _match_subject_kind(node.subject, env, func_def)
     if subject is None:
@@ -668,19 +719,21 @@ def _check_one_match(node, env, func_def=None) -> str | None:
             if arm.kind == "wildcard":
                 continue
             if arm.kind != "type":
-                return (f"{_arm_pattern(arm)} cannot match '{subject}', "
-                        f"which is {' | '.join(alternatives)}")
+                return _Finding(
+                    f"{_arm_pattern(arm)} cannot match '{subject}', "
+                    f"which is {' | '.join(alternatives)}", arm)
             if arm.type_name not in alternatives:
-                return (f"'{arm.type_name}' is not an alternative of "
-                        f"'{subject}', which is "
-                        f"{' | '.join(alternatives)}")
+                return _Finding(
+                    f"'{arm.type_name}' is not an alternative of "
+                    f"'{subject}', which is "
+                    f"{' | '.join(alternatives)}", arm)
         if "wildcard" in seen:
             return None
         missing = [a for a in alternatives if a not in seen]
         if missing:
-            return ("match has no arm for "
-                    + " or ".join(missing)
-                    + "; add the missing pattern or a _ arm")
+            return _Finding("match has no arm for "
+                            + " or ".join(missing)
+                            + "; add the missing pattern or a _ arm", node)
         return None
 
     shapes = _SUBJECT_SHAPES[subject]
@@ -690,16 +743,16 @@ def _check_one_match(node, env, func_def=None) -> str | None:
             continue
         hint = {"none": ", whose failure is \N{THERE DOES NOT EXIST}(e)",
                 "err": ", whose absence is \N{EMPTY SET}"}.get(arm.kind, "")
-        return (f"{_arm_pattern(arm)} cannot match "
-                f"{_SUBJECT_NAME[subject]}{hint}")
+        return _Finding(f"{_arm_pattern(arm)} cannot match "
+                        f"{_SUBJECT_NAME[subject]}{hint}", arm)
 
     if "wildcard" in seen:
         return None
     missing = sorted(shapes - seen)
     if missing:
-        return ("match has no arm for "
-                + " or ".join(_ARM_SUBJECT[m] for m in missing)
-                + "; add the missing pattern or a _ arm")
+        return _Finding("match has no arm for "
+                        + " or ".join(_ARM_SUBJECT[m] for m in missing)
+                        + "; add the missing pattern or a _ arm", node)
     return None
 
 
@@ -764,8 +817,9 @@ def _static_shift_check(node, checker) -> str | None:
             and err.enum_type.values_to_names.get(err.value) ==
             "shift_out_of_range"):
         return None
-    return ("this shift moves every value bit out, so it can only fail; "
-            "the count is too far for the type shifted")
+    return _Finding(
+        "this shift moves every value bit out, so it can only fail; "
+        "the count is too far for the type shifted", node)
 
 
 def _static_assert_check(func_def, env) -> str | None:
@@ -811,7 +865,7 @@ def _static_assert_check(func_def, env) -> str | None:
             checker.eval_expr(node)
         except TypeError as e:
             if "static_assert" in str(e) and "failed" in str(e):
-                return str(e)
+                return _Finding(str(e), node)
         except Exception:
             # Not answerable from declarations alone; it runs instead.
             pass
@@ -882,10 +936,11 @@ def _static_return_check(func_def) -> str | None:
         if dims is None:
             continue
         written = ",".join("" if d is None else str(d) for d in dims)
-        return (f"return type is {ret_type}, which is not an array type, "
-                f"but the body hands back {format_shape(dims)} elements; "
-                f"an array type says its shape, as "
-                f"'{check}[{written}]'")
+        return _Finding(
+            f"return type is {ret_type}, which is not an array type, "
+            f"but the body hands back {format_shape(dims)} elements; "
+            f"an array type says its shape, as "
+            f"'{check}[{written}]'", expr)
     return None
 
 
@@ -1058,7 +1113,8 @@ def _static_check_moves(stmts: list, env,
         for expr in exprs:
             for name in _expr_var_refs(expr):
                 if name in moved:
-                    return f"use of moved value '{name}'"
+                    return _Finding(f"use of moved value '{name}'",
+                                    _var_ref_node(expr, name))
 
         if isinstance(stmt, ASTVarDef):
             st = _infer_struct_type(stmt.init_expr, env, struct_vars)
@@ -1081,7 +1137,8 @@ def _static_check_moves(stmts: list, env,
             cond_refs = _expr_var_refs(stmt.cond)
             for name in cond_refs:
                 if name in moved:
-                    return f"use of moved value '{name}'"
+                    return _Finding(f"use of moved value '{name}'",
+                                    _var_ref_node(stmt.cond, name))
             err = _static_check_moves(stmt.cons, env, moved.copy(), dict(struct_vars))
             if err:
                 return err
@@ -1105,7 +1162,20 @@ def _static_check_moves(stmts: list, env,
 
 
 class DefinitionError(Exception):
-    """A top-level definition could not be installed into the environment."""
+    """A top-level definition could not be installed into the environment.
+
+    `pos` is where in the source the objection lies, when the check
+    that raised this knew.  Without one the message is printed on its
+    own, as it always was.
+    """
+
+    def __init__(self, message, pos=None):
+        super().__init__(message)
+        self.pos = pos
+        if pos is not None:
+            # The names extract_position reads, so the same position
+            # reaches the prompt's diagnostic as well as the file's.
+            self.line, self.col, self.end_col = pos
 
 
 class LoadedProgram:
@@ -1181,7 +1251,7 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                         field_type, f"struct '{defn.name}': field "
                                     f"'{field_name}'")
                 except TypeError as e:
-                    raise DefinitionError(str(e)) from None
+                    raise DefinitionError(str(e), _node_pos(defn)) from None
             register_struct_type(defn.name)
             st = StructType(defn.name, defn.fields, repr_kind=defn.repr_kind)
             env.define(defn.name, st)
@@ -1194,7 +1264,7 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                 if not validate_type(alt):
                     raise DefinitionError(
                         f"sum type '{defn.name}' names unknown type "
-                        f"'{alt}' as an alternative")
+                        f"'{alt}' as an alternative", _node_pos(defn))
             register_sum_type(defn.name, defn.alternatives)
 
     for defn in definitions:
@@ -1202,12 +1272,12 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
             if not validate_type(defn.target):
                 raise DefinitionError(
                     f"type alias '{defn.name}' refers to unknown type "
-                    f"'{defn.target}'")
+                    f"'{defn.target}'", _node_pos(defn))
             try:
                 check_bootstrap_type(defn.target,
                                      f"type alias '{defn.name}'")
             except TypeError as e:
-                raise DefinitionError(str(e)) from None
+                raise DefinitionError(str(e), _node_pos(defn)) from None
             register_type_alias(defn.name, defn.target)
 
     for defn in definitions:
@@ -1219,7 +1289,7 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
             if defn.is_const and defn.type_annotation is not None and defn.type_annotation in FAST_TYPES:
                 raise DefinitionError(
                     f"fast type '{defn.type_annotation}' cannot be used in "
-                    f"let definition '{defn.name}'")
+                    f"let definition '{defn.name}'", _node_pos(defn))
             value = evaluator.eval_expr(defn.init_expr)
             if defn.type_annotation is not None:
                 value = coerce_to_type(value, defn.type_annotation)
@@ -1249,7 +1319,7 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
             try:
                 struct_layout(env.lookup(defn.name), struct_lookup(env))
             except LayoutError as e:
-                raise DefinitionError(str(e))
+                raise DefinitionError(str(e), _node_pos(defn))
 
     for defn in definitions:
         if isinstance(defn, ASTFuncDef):
@@ -1259,34 +1329,35 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
 
             if is_type_name(defn.name):
                 raise DefinitionError(
-                    f"'{defn.name}' names a type and cannot name a function")
+                    f"'{defn.name}' names a type and cannot name a function",
+                    _node_pos(defn))
             for param_name, param_type in defn.params:
                 if is_type_name(param_name):
                     raise DefinitionError(
                         f"in {defn.name}: '{param_name}' names a type and "
-                        f"cannot name a parameter")
+                        f"cannot name a parameter", _node_pos(defn))
                 if param_type is not None:
                     try:
                         validate_param_type(param_type, defn.name, param_name)
                     except TypeError as e:
-                        raise DefinitionError(str(e)) from None
+                        raise DefinitionError(str(e), _node_pos(defn)) from None
             if defn.pack_param is not None:
                 pp_name, pp_type = defn.pack_param
                 if pp_type is not None:
                     try:
                         validate_param_type(pp_type, defn.name, pp_name)
                     except TypeError as e:
-                        raise DefinitionError(str(e)) from None
+                        raise DefinitionError(str(e), _node_pos(defn)) from None
             if defn.ret_type is not None:
                 if not validate_type(defn.ret_type):
                     raise DefinitionError(
                         f"in {defn.name}: unknown return type "
-                        f"'{defn.ret_type}'")
+                        f"'{defn.ret_type}'", _node_pos(defn))
                 try:
                     check_bootstrap_type(defn.ret_type,
                                          f"in {defn.name}: return type")
                 except TypeError as e:
-                    raise DefinitionError(str(e)) from None
+                    raise DefinitionError(str(e), _node_pos(defn)) from None
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,
                           defn.is_replaceable, defn.pack_param, defn.param_units,
                           defn.is_impure, param_refs=defn.param_refs,
@@ -1295,7 +1366,8 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
 
             if honor_start and defn.is_start:
                 if program.startup_func is not None:
-                    raise DefinitionError("multiple @start functions defined")
+                    raise DefinitionError("multiple @start functions defined",
+                                          _node_pos(defn))
                 program.startup_func = fv
 
             if defn.is_test:
@@ -1313,7 +1385,8 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                 st = None
             if not isinstance(st, StructType):
                 raise DefinitionError(
-                    f"impl block for unknown struct '{defn.struct_name}'")
+                    f"impl block for unknown struct '{defn.struct_name}'",
+                    _node_pos(defn))
             for method_def in defn.methods:
                 for param_name, param_type in method_def.params:
                     if param_type is not None:
@@ -1330,15 +1403,17 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                 if method_def.name in st.methods:
                     raise DefinitionError(
                         f"duplicate method '{method_def.name}' "
-                        f"in impl {defn.struct_name}")
+                        f"in impl {defn.struct_name}", _node_pos(method_def))
                 try_err = _static_check_try(method_def, env)
                 if try_err is not None:
                     raise DefinitionError(
-                        f"in {defn.struct_name}.{method_def.name}: {try_err}")
+                        f"in {defn.struct_name}.{method_def.name}: {try_err}",
+                        _finding_pos(try_err) or _node_pos(method_def))
                 match_err = _static_check_match(method_def, env)
                 if match_err is not None:
                     raise DefinitionError(
-                        f"in {defn.struct_name}.{method_def.name}: {match_err}")
+                        f"in {defn.struct_name}.{method_def.name}: {match_err}",
+                        _finding_pos(match_err) or _node_pos(method_def))
                 st.methods[method_def.name] = fv
                 if getattr(method_def, "_self_is_ref", False):
                     st._ref_self_methods.add(method_def.name)
@@ -1348,19 +1423,24 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
             if not getattr(defn, "_parse_error", None):
                 move_err = _static_check_moves(defn.body, env)
                 if move_err is not None:
-                    raise DefinitionError(f"in {defn.name}: {move_err}")
+                    raise DefinitionError(f"in {defn.name}: {move_err}",
+                                          _finding_pos(move_err) or _node_pos(defn))
                 try_err = _static_check_try(defn, env)
                 if try_err is not None:
-                    raise DefinitionError(f"in {defn.name}: {try_err}")
+                    raise DefinitionError(f"in {defn.name}: {try_err}",
+                                          _finding_pos(try_err) or _node_pos(defn))
                 match_err = _static_check_match(defn, env)
                 if match_err is not None:
-                    raise DefinitionError(f"in {defn.name}: {match_err}")
+                    raise DefinitionError(f"in {defn.name}: {match_err}",
+                                          _finding_pos(match_err) or _node_pos(defn))
                 assert_err = _static_assert_check(defn, env)
                 if assert_err is not None:
-                    raise DefinitionError(f"in {defn.name}: {assert_err}")
+                    raise DefinitionError(f"in {defn.name}: {assert_err}",
+                                          _finding_pos(assert_err) or _node_pos(defn))
                 return_err = _static_return_check(defn)
                 if return_err is not None:
-                    raise DefinitionError(f"in {defn.name}: {return_err}")
+                    raise DefinitionError(f"in {defn.name}: {return_err}",
+                                          _finding_pos(return_err) or _node_pos(defn))
                 program.warnings.extend(_unused_mut_warnings(defn))
 
     return program
@@ -1412,7 +1492,13 @@ def main():
         program = install_definitions(definitions, env, evaluator,
                                       honor_start=args.start is None)
     except DefinitionError as e:
-        print(f"Error: {e}", file=sys.stderr)
+        if e.pos is not None:
+            line, col, end_col = e.pos
+            print(format_diagnostic(source, source_path, line, col, str(e),
+                                    end_col=end_col),
+                  file=sys.stderr)
+        else:
+            print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
     for message, position in program.warnings:

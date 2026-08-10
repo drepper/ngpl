@@ -1,1 +1,7 @@
-Error: in returns_a_scalar: return type is u32, which is not an array type, but the body hands back 3 elements; an array type says its shape, as 'u32[3]'
+error: in returns_a_scalar: return type is u32, which is not an array type, but the body hands back 3 elements; an array type says its shape, as 'u32[3]'
+  --> tests/output/array_return_type_static.ngpl:6:5
+    |
+  6 |     [1, 2, 3]
+    |     ^^^^^^^^^
+  7 | 
+    |

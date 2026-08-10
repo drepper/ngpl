@@ -31,4 +31,10 @@ error: '/' is not an operator; division is written '÷'.  A slash begins a comme
   1 | 10 / 3
     |    ^
     |
+error: in needs_optional: ? requires the enclosing function to return an optional or an expected type, but it returns 'i32'
+  --> <repl:11>:2:12
+    |
+  2 |     (a ÷ b)?
+    |            ^
+    |
 "recovered"

@@ -434,8 +434,13 @@ The bound depends on the type shifted and on the count, so where the count is wr
 let i : i8 = 1
 i « 7
 
-Error: in main: this shift moves every value bit out, so it can only
+error: in main: this shift moves every value bit out, so it can only
 fail; the count is too far for the type shifted
+  --> shift.ngpl:2:1
+    |
+  2 | i « 7
+    | ^^^^^
+    |
 ```
 
 A count that is not written down cannot be judged in advance, so that shift reports `std.errors.shift_out_of_range` when it runs, and the value can be handled or recovered from as above:
@@ -1675,7 +1680,7 @@ fn never_called() → ∅:
         ∃(x):
             std.print("{}", x)
 
-Error: in never_called: match has no arm for ∅; add the missing pattern
+error: in never_called: match has no arm for ∅; add the missing pattern
 or a _ arm
 ```
 
@@ -3564,9 +3569,14 @@ Where the body writes the array out, the signature and the brackets settle it be
 fn returns_a_scalar() → u32:
     [1, 2, 3]
 
-Error: in returns_a_scalar: return type is u32, which is not an array
+error: in returns_a_scalar: return type is u32, which is not an array
 type, but the body hands back 3 elements; an array type says its shape,
 as 'u32[3]'
+  --> hash.ngpl:2:5
+    |
+  2 |     [1, 2, 3]
+    |     ^^^^^^^^^
+    |
 ```
 
 Only a literal answers this before anything runs, since its brackets say the shape where it is written.  A value whose shape is not written down is left to the check at runtime.
@@ -4045,9 +4055,14 @@ fn never_called() → ∅:
     let a : u8 = 4
     static_assert_eq(@sizeof(a), 99 ¤byte)
 
-Error: in never_called: static_assert_eq failed:
+error: in never_called: static_assert_eq failed:
   expected: 1 B
   actual:   99 B
+  --> sizes.ngpl:3:5
+    |
+  3 |     static_assert_eq(@sizeof(a), 99 ¤byte)
+    |     ^^^^^^^^^^^^^^^^
+    |
 ```
 
 An assertion naming something whose type is not written down — an untyped parameter, or a local whose type cannot be stood for without running the code — is left to be checked when the function runs.
@@ -6042,7 +6057,7 @@ error: array index 9 out of range (length 2)
 "still alive"
 ```
 
-Diagnostics carry the same source excerpt and caret as in file mode, with the entry number standing in for a file name.  Parse errors, type errors, and runtime errors are all reported this way, and none of them ends the session.
+Diagnostics carry the same source excerpt and caret as in file mode, with the entry number standing in for a file name.  Parse errors, type errors, checks a definition settles before it runs, and runtime errors are all reported this way, and none of them ends the session.
 
 ### Non-Interactive Input
 

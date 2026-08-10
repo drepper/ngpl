@@ -1,0 +1,11 @@
+// An arm written after _ can never run.  The caret points at the arm
+// that cannot be reached rather than at the _ that shadows it.
+fn classify(x : i32?) → i32:
+    match x:
+        ∃(v): v
+        _: 0
+        ∅: 1
+
+@start
+fn main() → ∅:
+    std.print("{}", classify(∃(3)))

@@ -347,7 +347,7 @@ class Parser:
 
         When struct_name is set, handles self / mut self as the first parameter.
         """
-        self._eat("FN")
+        kw_tok = self._eat("FN")
         name_tok = self._eat("IDENT")
         name = name_tok.value
 
@@ -504,6 +504,7 @@ class Parser:
                 fdef.param_positions = param_positions
                 fdef._parse_error = str(e)
                 fdef._self_is_ref = self_is_ref
+                self._set_pos(fdef, kw_tok)
                 self._skip_to_next_definition()
                 return fdef
         else:
@@ -516,7 +517,7 @@ class Parser:
                        ret_unit=ret_unit)
         fdef.param_positions = param_positions
         fdef._self_is_ref = self_is_ref
-        return fdef
+        return self._set_pos(fdef, kw_tok)
 
     def _parse_dotted_name(self) -> str:
         """Parse a possibly dotted name like 'std.errors'."""
@@ -533,7 +534,7 @@ class Parser:
 
         Members are: name [= integer_value], one per line or separated by commas.
         """
-        self._eat("ENUM")
+        kw_tok = self._eat("ENUM")
         name_tok = self._eat("IDENT")
         name = name_tok.value
 
@@ -580,7 +581,8 @@ class Parser:
                 pass
 
         self._eat("DEDENT")
-        return EnumDef(name, underlying_type, members, is_flag)
+        return self._set_pos(
+            EnumDef(name, underlying_type, members, is_flag), kw_tok)
 
     def _parse_repr_annotation(self) -> str:
         """Parse: @repr '(' KIND ')' and return the layout kind."""
@@ -602,7 +604,7 @@ class Parser:
 
     def _parse_struct_def(self, repr_kind: str | None = None):
         """Parse: struct Name: INDENT field_definitions DEDENT"""
-        self._eat("STRUCT")
+        kw_tok = self._eat("STRUCT")
         name_tok = self._eat("IDENT")
         name = name_tok.value
         self._eat("PUNCT", ":")
@@ -630,7 +632,7 @@ class Parser:
                 while self._try_eat("NEWLINE"):
                     pass
             self._eat("DEDENT")
-        return StructDef(name, fields, repr_kind)
+        return self._set_pos(StructDef(name, fields, repr_kind), kw_tok)
 
     def _parse_impl_block(self):
         """Parse: impl StructName: INDENT method_definitions DEDENT"""
@@ -820,13 +822,13 @@ class Parser:
 
     def _parse_unit_def(self):
         """Parse: unit name [= formula]"""
-        self._eat("UNIT")
+        kw_tok = self._eat("UNIT")
         name_tok = self._eat("IDENT")
         formula = None
         if self._try_eat("PUNCT", "="):
             formula = self._parse_unit_formula()
         self._try_eat("PUNCT", ";")
-        return UnitDef(name_tok.value, formula)
+        return self._set_pos(UnitDef(name_tok.value, formula), kw_tok)
 
     def _parse_unit_spec(self):
         """Parse a unit specification after ¤ (no numeric literals)."""
@@ -1209,6 +1211,7 @@ class Parser:
         """Parse one arm: ∃(name) | ∅ | _  followed by ':' and a body."""
         kind: str
         name = None
+        pattern_tok = self._cur()
         if self._check("SOME"):
             self.pos += 1
             self._eat("PUNCT", "(")
@@ -1237,7 +1240,9 @@ class Parser:
             self._eat("PUNCT", ")")
             kind = "type"
             body = self._parse_block()
-            return MatchArm(kind, name, body, type_name=type_name)
+            return self._set_pos(
+                MatchArm(kind, name, body, type_name=type_name),
+                pattern_tok)
         else:
             raise ParseError(
                 "expected a match pattern: \N{THERE EXISTS}(name), "
@@ -1245,7 +1250,7 @@ class Parser:
                 "Type(name), or _",
                 self._cur())
         body = self._parse_block()
-        return MatchArm(kind, name, body)
+        return self._set_pos(MatchArm(kind, name, body), pattern_tok)
 
     def _parse_catch_stmt(self):
         """Parse: catch block"""
@@ -1755,8 +1760,9 @@ class Parser:
             unit_spec = self._parse_unit_spec()
             node = UnitExpr(node, unit_spec)
         if self._check("OP") and self._cur().value == "?":
+            try_tok = self._cur()
             self.pos += 1
-            node = TryUnwrap(node)
+            node = self._set_pos(TryUnwrap(node), try_tok)
         return node
 
     def _parse_primary(self):
@@ -1828,8 +1834,12 @@ class Parser:
                 self._skip_nl()
                 if not self._try_eat("PUNCT", ","):
                     break
-            self._eat("PUNCT", "]")
-            return ArrayLit(elements)
+            close = self._eat("PUNCT", "]")
+            # The literal spans its brackets when both are on one line,
+            # so a diagnostic can underline the whole of it.
+            end = (close.end_col if close.line == tok.line
+                   and close.end_col is not None else None)
+            return set_pos(ArrayLit(elements), tok.line, tok.col, end)
 
         # Dynamic array allocation: new type[size].
         if tok.type == "IDENT" and tok.value == "new":
@@ -1863,14 +1873,14 @@ class Parser:
         if tok.type == "IDENT" and tok.value == "static_assert":
             self.pos += 1
             args = self._parse_call_args()
-            return StaticAssert(args)
+            return self._set_pos(StaticAssert(args), tok)
 
         if tok.type == "IDENT" and tok.value == "static_assert_eq":
             self.pos += 1
             args = self._parse_call_args()
             if len(args) != 2:
                 raise ParseError("static_assert_eq requires exactly 2 arguments", tok)
-            return StaticAssertEq(args[0], args[1])
+            return self._set_pos(StaticAssertEq(args[0], args[1]), tok)
 
         # Identifier (possibly function call, possibly followed by dotted chain).
         if tok.type == "IDENT":
@@ -2032,8 +2042,9 @@ class Parser:
             else:
                 break
         if self._check("OP") and self._cur().value == "?":
+            try_tok = self._cur()
             self.pos += 1
-            node = TryUnwrap(node)
+            node = self._set_pos(TryUnwrap(node), try_tok)
         return node
 
     def _parse_call_args(self):

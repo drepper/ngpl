@@ -57,6 +57,12 @@ the sized types do not have.
 Completed
 ---------
 
+[x] a static diagnostic points at what it objected to.  A check answers with the node it
+    found as well as the message, DefinitionError carries the position, and the result is
+    rendered with the same excerpt and caret a runtime error gets — in a file and at the
+    prompt alike.  Definitions that had no position now carry one, so the errors raised
+    while installing them are located too.
+
 [x] a type without brackets names a scalar, so an array meeting one is refused rather
     than read as a shorthand for what its elements are.  The rule holds at a binding, a
     parameter, and a return type.  Where the body writes the array out, the signature and
@@ -340,13 +346,16 @@ String and I/O
 [ ] a std.print call whose first argument is a literal of the wrong kind — std.print(42) — is
     settled by reading it, so it should be reported at parse time rather than when the branch
     holding it runs.  The same holds for a template whose field count does not match the number
-    of arguments after it, where both are written down.  Doing this well needs a static
-    diagnostic that carries a source position: DefinitionError is printed without a caret today,
-    which is why the check still runs at runtime, where the position is known.
+    of arguments after it, where both are written down.  The static diagnostic now carries a
+    source position, so the check can move without losing the caret.
 
 
 Build System and Tooling
 -------------------------
+
+[ ] a struct field's diagnostic points at the struct rather than at the field, since a field
+    is a (name, type) pair with no position of its own.  Carrying one would change the shape
+    the layout and struct-type code reads.
 
 [ ] [FULL] built-in build system: @build-annotated comptime function provides build recipe.
     Recompiled when source changes.  SBOM generation in output binary.

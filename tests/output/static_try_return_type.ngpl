@@ -1,0 +1,8 @@
+// `?` returns from the function it is written in, so that function has
+// to be able to say a value was absent.  The caret points at the ?.
+fn divide(a : i32, b : i32) → i32:
+    (a ÷ b)?
+
+@start
+fn main() → ∅:
+    std.print("{}", divide(6, 3))
