@@ -1,0 +1,10 @@
+// The signature says what the function returns and the brackets say
+// what the body hands back, so the two disagreeing is settled before
+// anything runs.  Reporting it at the definition means it is reported
+// whether or not the function is ever called — nothing here calls it.
+fn returns_a_scalar() → u32:
+    [1, 2, 3]
+
+@start
+fn main() → ∅:
+    std.print("not reached")

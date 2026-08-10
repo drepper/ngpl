@@ -1,0 +1,1 @@
+Error: in returns_a_scalar: return type is u32, which is not an array type, but the body hands back 3 elements; an array type says its shape, as 'u32[3]'

@@ -3558,6 +3558,19 @@ error: takes_a_scalar: argument 'n': 'u32' is not an array type, but the
 value is 3 elements; an array type says its shape, as 'u32[]' or 'u32[3]'
 ```
 
+Where the body writes the array out, the signature and the brackets settle it between them, so it is reported at the definition rather than when the function runs — whether or not anything ever calls it:
+
+```
+fn returns_a_scalar() → u32:
+    [1, 2, 3]
+
+Error: in returns_a_scalar: return type is u32, which is not an array
+type, but the body hands back 3 elements; an array type says its shape,
+as 'u32[3]'
+```
+
+Only a literal answers this before anything runs, since its brackets say the shape where it is written.  A value whose shape is not written down is left to the check at runtime.
+
 Reading the missing brackets as an element type would make `u32` and `u32[8]` two spellings of the same declaration, which costs the reader the one place the length was written down.  SHA-256's eight-word hash state was declared `u32` in this document's own example for a while, and nothing said so.
 
 The element type reaches every element however deep it sits, which is a separate matter from the shape:

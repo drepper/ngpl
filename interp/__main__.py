@@ -25,6 +25,7 @@ from interp.value import (
     register_struct_type,
     _split_optional_type, _TYPE_BITS, FLOAT_TYPES, resolve_type_alias,
     check_bootstrap_type,
+    _parse_array_type, format_shape, is_generic_type,
 )
 from interp.eval import Evaluator, unwrap_optional, _ARRAY_MUTATORS
 from interp.layout import LayoutError, struct_layout, struct_lookup
@@ -817,6 +818,77 @@ def _static_assert_check(func_def, env) -> str | None:
     return None
 
 
+def _literal_array_shape(expr) -> list[int | None] | None:
+    """The shape of an expression that is written out as an array.
+
+    Only a literal answers this: its brackets say the shape without
+    anything having to run.  A level whose rows are not all literals of
+    one length has no single extent to report, so it reports None and
+    the walk stops, as a runtime shape does.
+
+    Returns None for an expression that is not a literal array.
+    """
+    if not isinstance(expr, _ast.ArrayLit):
+        return None
+    dims: list[int | None] = [len(expr.elements)]
+    rows = expr.elements
+    while rows and all(isinstance(r, _ast.ArrayLit) for r in rows):
+        widths = {len(r.elements) for r in rows}
+        if len(widths) != 1:
+            dims.append(None)
+            break
+        dims.append(widths.pop())
+        rows = [e for r in rows for e in r.elements]
+    return dims
+
+
+def _returned_exprs(func_def):
+    """The expressions a function hands back.
+
+    An explicit `return` names one, and a body ending in an expression
+    hands that one back.  A lambda's returns are its own, so the walk
+    stops at one rather than crediting them to the function around it.
+    """
+    for node in _iter_ast(func_def.body, stop_at=(_ast.LambdaExpr,)):
+        if isinstance(node, _ast.ReturnStmt) and node.value is not None:
+            yield node.value
+    body = func_def.body
+    if isinstance(body, list) and body and isinstance(body[-1], _ast.ExprStmt):
+        yield body[-1].expr
+
+
+def _static_return_check(func_def) -> str | None:
+    """Refuse an array handed back where the return type names a scalar.
+
+    A literal says its shape where it is written, and the signature
+    says what the function returns, so the two disagreeing is settled
+    before anything runs.  Saying so then reports it whether or not the
+    function is ever called.
+
+    Anything whose shape is not written down is left to run, where the
+    same check meets the value itself.
+    """
+    ret_type = getattr(func_def, "ret_type", None)
+    if not ret_type:
+        return None
+    base, _ = _split_optional_type(ret_type)
+    check = resolve_type_alias(base if base else ret_type)
+    if not check or check == "\N{EMPTY SET}" or is_generic_type(check):
+        return None
+    if _parse_array_type(check) is not None:
+        return None
+    for expr in _returned_exprs(func_def):
+        dims = _literal_array_shape(expr)
+        if dims is None:
+            continue
+        written = ",".join("" if d is None else str(d) for d in dims)
+        return (f"return type is {ret_type}, which is not an array type, "
+                f"but the body hands back {format_shape(dims)} elements; "
+                f"an array type says its shape, as "
+                f"'{check}[{written}]'")
+    return None
+
+
 def _static_check_match(func_def, env) -> str | None:
     """Check every match in a function, lambdas included."""
     for node in _iter_ast(func_def.body):
@@ -1286,6 +1358,9 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                 assert_err = _static_assert_check(defn, env)
                 if assert_err is not None:
                     raise DefinitionError(f"in {defn.name}: {assert_err}")
+                return_err = _static_return_check(defn)
+                if return_err is not None:
+                    raise DefinitionError(f"in {defn.name}: {return_err}")
                 program.warnings.extend(_unused_mut_warnings(defn))
 
     return program
@@ -1406,6 +1481,11 @@ def main():
             assert_err = _static_assert_check(defn, env)
             if assert_err is not None:
                 errors_produced.append(("error", assert_err))
+
+        if not errors_produced:
+            return_err = _static_return_check(defn)
+            if return_err is not None:
+                errors_produced.append(("error", return_err))
 
         if not errors_produced:
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,

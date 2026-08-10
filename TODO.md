@@ -59,7 +59,9 @@ Completed
 
 [x] a type without brackets names a scalar, so an array meeting one is refused rather
     than read as a shorthand for what its elements are.  The rule holds at a binding, a
-    parameter, and a return type.  sha256.ngpl declared its eight-word hash state u32 and
+    parameter, and a return type.  Where the body writes the array out, the signature and
+    the brackets settle it between them and it is reported at the definition rather than
+    when the function runs.  sha256.ngpl declared its eight-word hash state u32 and
     nothing said so; it is u32[8].
 
 [x] division is written ÷ rather than /, as multiplication is written × rather than *.

@@ -105,14 +105,26 @@ fn takes_a_scalar(n : u32) → u32:
 fn test_scalar_parameter_refuses_an_array() → ∅:
     std.print("{}", takes_a_scalar([1, 2, 3]))
 
-// And so does a return type.
-fn returns_a_scalar() → u32:
-    [1, 2, 3]
+// A return type refuses it too.  Where the body writes the array out,
+// the signature and the brackets settle it between them and it is
+// reported at the definition, so that case is in
+// tests/output/array_return_type_static.ngpl rather than here.  What
+// is left to run is a value whose shape is not written down:
+fn hands_back_what_it_was_given(a) → u32:
+    a
 
 @test
 @expect error "is not an array type"
 fn test_scalar_return_refuses_an_array() → ∅:
-    std.print("{}", returns_a_scalar())
+    std.print("{}", hands_back_what_it_was_given([1, 2, 3]))
+
+// An array return type takes the literal that fits it.
+fn returns_three() → u32[3]:
+    [1, 2, 3]
+
+@test
+fn test_array_return_accepts_a_literal() → ∅:
+    assert_eq(returns_three().sizeof, 3)
 
 // --- The extent still has to match ----------------------------------
 
