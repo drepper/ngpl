@@ -167,21 +167,33 @@ fn test_shift_within_the_width() → ∅:
     let u : u32 = 1
     assert_eq(u « 31, 2147483648)
 
-// A count that reaches the width would shift every bit out.  That is a
-// mistake rather than a way to write zero, so it is refused.
+// A count that reaches the value bits would shift every one of them
+// out.  Where the count is written down and the type is declared, that
+// is settled before anything runs and is reported then.
 @test
-fn test_shift_past_the_width_fails() → ∅:
+@expect error "moves every value bit out"
+fn test_shift_past_the_width_is_a_compile_error() → ∅:
     let b : byte = 3
-    match b « 8:
-        ∃(v):  assert(false)
-        ∄(e):  assert_eq(e, std.errors.shift_out_of_range)
+    _ ← b « 8
 
 @test
-fn test_shift_right_past_the_width_fails() → ∅:
+@expect error "moves every value bit out"
+fn test_shift_right_past_the_width_is_a_compile_error() → ∅:
     let u : u32 = 1
-    match u » 32:
-        ∃(v):  assert(false)
-        ∄(e):  assert_eq(e, std.errors.shift_out_of_range)
+    _ ← u » 32
+
+// A count that is not written down cannot be judged in advance, so
+// that shift reports when it runs.
+fn shift_by(n : int) → int:
+    let b : byte = 3
+    match b « n:
+        ∃(v):  v
+        ∄(e):  ⁻1
+
+@test
+fn test_runtime_count_reports_when_it_runs() → ∅:
+    assert_eq(shift_by(4), 48)
+    assert_eq(shift_by(8), ⁻1)
 
 // An untyped integer has no width for a count to pass.
 @test
@@ -190,10 +202,14 @@ fn test_shift_of_an_untyped_integer() → ∅:
     assert_eq(n « 40, 1099511627776)
 
 // The error can be recovered from, as division by zero can.
+fn recover_with(n : int) → int:
+    let b : byte = 3
+    (b « n) ?? 99
+
 @test
 fn test_shift_error_recovers() → ∅:
-    let b : byte = 3
-    assert_eq((b « 8) ?? 99, 99)
+    assert_eq(recover_with(8), 99)
+    assert_eq(recover_with(4), 48)
 
 // ---------------------------------------------------------------------
 // A signed type has one value bit fewer
@@ -203,51 +219,45 @@ fn test_shift_error_recovers() → ∅:
 // the value, so an i8 holds seven value bits and seven is already too
 // far.
 @test
-fn test_signed_shift_stops_one_earlier() → ∅:
+fn test_shift_within_the_value_bits() → ∅:
     let i : i8 = 1
-    assert_eq(i « 6, 64)
-    match i « 7:
-        ∃(v):  assert(false)
-        ∄(e):  assert_eq(e, std.errors.shift_out_of_range)
-
-// The unsigned type of the same width has all eight.
-@test
-fn test_unsigned_shift_uses_every_bit() → ∅:
     let u : u8 = 1
-    assert_eq(u « 7, 128)
-    match u « 8:
-        ∃(v):  assert(false)
-        ∄(e):  assert_eq(e, std.errors.shift_out_of_range)
-
-// byte is unsigned, so it behaves as u8 does.
-@test
-fn test_byte_shift_uses_every_bit() → ∅:
     let b : byte = 1
+    assert_eq(i « 6, 64)
+    assert_eq(u « 7, 128)
     assert_eq(b « 7, 128)
-    match b « 8:
-        ∃(v):  assert(false)
-        ∄(e):  assert_eq(e, std.errors.shift_out_of_range)
 
-// The same one-bit difference at the wider types.
 @test
-fn test_signed_and_unsigned_at_32_bits() → ∅:
+fn test_wider_types_keep_the_one_bit_difference() → ∅:
     let s : i32 = 1
     let u : u32 = 1
     assert_eq(s « 30, 1073741824)
     assert_eq(u « 31, 2147483648)
-    match s « 31:
-        ∃(v):  assert(false)
-        ∄(e):  assert_eq(e, std.errors.shift_out_of_range)
+
+@test
+@expect error "moves every value bit out"
+fn test_signed_shift_stops_one_earlier() → ∅:
+    let i : i8 = 1
+    _ ← i « 7
+
+@test
+@expect error "moves every value bit out"
+fn test_signed_32_stops_one_earlier() → ∅:
+    let s : i32 = 1
+    _ ← s « 31
 
 // A right shift is bounded the same way: past the value bits there is
 // nothing of the value left.
 @test
-fn test_signed_right_shift_stops_one_earlier() → ∅:
+fn test_signed_right_shift_within_range() → ∅:
     let i : i8 = 64
     assert_eq(i » 6, 1)
-    match i » 7:
-        ∃(v):  assert(false)
-        ∄(e):  assert_eq(e, std.errors.shift_out_of_range)
+
+@test
+@expect error "moves every value bit out"
+fn test_signed_right_shift_stops_one_earlier() → ∅:
+    let i : i8 = 64
+    _ ← i » 7
 
 @start
 fn main() → ∅:

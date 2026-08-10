@@ -1,0 +1,1 @@
+Error: in main: this shift moves every value bit out, so it can only fail; the count is too far for the type shifted

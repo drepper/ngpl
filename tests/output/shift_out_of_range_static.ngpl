@@ -1,0 +1,6 @@
+// The count is written down and the type is declared, so this is
+// settled before anything runs.
+@start
+fn main() → ∅:
+    let i : i8 = 1
+    std.print(i « 7)

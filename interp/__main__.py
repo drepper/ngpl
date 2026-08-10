@@ -730,6 +730,41 @@ def _placeholder_value(type_name: str, unit_spec, env):
     return value
 
 
+_SHIFT_OPS = frozenset({"\N{LEFT-POINTING DOUBLE ANGLE QUOTATION MARK}",
+                        "\N{RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK}",
+                        "<<", ">>"})
+
+
+def _static_shift_check(node, checker) -> str | None:
+    """Report a shift whose count is already too far to be written.
+
+    The bound depends on the type shifted and on the count, so where
+    the count is a constant and the type is declared, the answer is
+    settled before anything runs.  Saying so then is better than
+    handing back an error value the program has to deal with.
+
+    Anything not settled that way is left alone, and the shift reports
+    at runtime as before.
+    """
+    from interp.eval import _is_const_expr
+    if not _is_const_expr(node.right):
+        return None
+    try:
+        result = checker.eval_expr(node)
+    except Exception:
+        return None
+    if not isinstance(result, ExpectedValue) or not result.is_err():
+        return None
+    err = result.err_value
+    if not (isinstance(err, EnumValue)
+            and err.enum_type.name == "errors"
+            and err.enum_type.values_to_names.get(err.value) ==
+            "shift_out_of_range"):
+        return None
+    return ("this shift moves every value bit out, so it can only fail; "
+            "the count is too far for the type shifted")
+
+
 def _static_assert_check(func_def, env) -> str | None:
     """Decide the static assertions a function's declarations settle.
 
@@ -761,6 +796,11 @@ def _static_assert_check(func_def, env) -> str | None:
             value = _placeholder_value(node.type_annotation, node.unit_spec, env)
             if value is not None:
                 known.define(node.name, value)
+            continue
+        if isinstance(node, _ast.BinOp) and node.op in _SHIFT_OPS:
+            problem = _static_shift_check(node, checker)
+            if problem is not None:
+                return problem
             continue
         if not isinstance(node, (_ast.StaticAssert, _ast.StaticAssertEq)):
             continue
@@ -1334,6 +1374,11 @@ def main():
             match_err = _static_check_match(defn, env)
             if match_err is not None:
                 errors_produced.append(("error", match_err))
+
+        if not errors_produced:
+            assert_err = _static_assert_check(defn, env)
+            if assert_err is not None:
+                errors_produced.append(("error", assert_err))
 
         if not errors_produced:
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,

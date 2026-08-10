@@ -293,6 +293,26 @@ u « 8      // err(errors.shift_out_of_range)
 
 A right shift is bounded the same way: past the value bits there is nothing of the value left.
 
+##### When It Is Known in Advance
+
+The bound depends on the type shifted and on the count, so where the count is written down and the type is declared, the answer is settled before anything runs.  It is a compile error then, rather than an error value the program has to deal with:
+
+```
+let i : i8 = 1
+i « 7
+
+Error: in main: this shift moves every value bit out, so it can only
+fail; the count is too far for the type shifted
+```
+
+A count that is not written down cannot be judged in advance, so that shift reports `std.errors.shift_out_of_range` when it runs, and the value can be handled or recovered from as above:
+
+```
+fn shift_by(n : int) → int:
+    let b : byte = 3
+    (b « n) ?? ⁻1
+```
+
 Being a value rather than a stop, it can be handled or recovered from:
 
 ```
