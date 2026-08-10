@@ -235,7 +235,9 @@ def _test_failure_report(exc: BaseException, evaluator: Evaluator,
 def _parse_args() -> argparse.Namespace:
     """Parse command-line arguments for the interpreter."""
     parser = argparse.ArgumentParser(
-        prog="NGPL",
+        # The name the interpreter is invoked as, which is what a usage
+        # line is for; NGPL is the language it runs.
+        prog="ngpli",
         description="Prototype interpreter for the NGPL programming language.",
     )
     parser.add_argument("source", nargs="?",

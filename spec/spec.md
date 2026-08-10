@@ -27,6 +27,8 @@ The language itself is designed around a set of foundational choices:
 
 ### The Interpreter
 
+The interpreter is invoked as `ngpli`, which is the name used for it throughout this document.  `ngpl` names the language, not a program that runs it, so a tool that does gets a name of its own.
+
 The interpreter serves as both a development environment and the bootstrap implementation of the language:
 
 - A **REPL** supports interactive function calls, variable inspection, and incremental code loading.
@@ -4680,14 +4682,14 @@ This test verifies both that the warning is produced and that the redefined vari
 The interpreter option `-Werror` makes every warning an error.  A warning is then printed as `error:` and stops the run before the startup function or any test executes, and the process exits with status 1:
 
 ```
-$ ngpl program.ngpl
+$ ngpli program.ngpl
 warning: 'unused' is declared mut but is never modified
   --> program.ngpl:3:5
     |
   3 |     let unused : mut = 5
     |     ^^^
     |
-$ ngpl -Werror program.ngpl
+$ ngpli -Werror program.ngpl
 error: 'unused' is declared mut but is never modified
   --> program.ngpl:3:5
     |
@@ -6271,9 +6273,9 @@ The interpreter starts an interactive session in three situations, in order of p
 3. A source file is given but defines no startup function.  Rather than exiting with nothing done, the interpreter hands the loaded definitions to the user.
 
 ```
-$ ngpl                          # empty session
-$ ngpl --repl program.ngpl        # load program.ngpl, do not run main
-$ ngpl library.ngpl               # library.ngpl has no @start ⇒ REPL
+$ ngpli                      # empty session
+$ ngpli --repl program.ngpl  # load program.ngpl, do not run main
+$ ngpli library.ngpl         # library.ngpl has no @start ⇒ REPL
 ```
 
 The third case replaces what was previously a bare "nothing to execute" message.  A file of pure definitions is the normal shape of a library, and loading one interactively is the fastest way to exercise it.
@@ -6413,7 +6415,7 @@ A definition that is refused reports what the checks found before the refusal, s
 When standard input is not a terminal the REPL prints no banner and no prompts, so a piped script produces exactly its results:
 
 ```
-$ printf '1 + 2\nlet x := 5\nx × x\n' | ngpl
+$ printf '1 + 2\nlet x := 5\nx × x\n' | ngpli
 3
 25
 ```
