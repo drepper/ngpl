@@ -1954,9 +1954,11 @@ class Evaluator:
             cached = getattr(node, "_cached_value", None)
             if cached is not None:
                 return cached
-            if not _is_comptime_expr(node.expr, self._comptime_vars):
+            if not _is_comptime_expr(node.expr, self._comptime_vars) \
+                    and not self._names_a_binding(node.expr):
                 raise TypeError(
-                    "@typeof requires a compile-time constant argument")
+                    "@typeof requires a compile-time constant argument "
+                    "or a name")
             # Reading a name bound to a reference yields the referent, so
             # the binding itself is inspected to report the borrow.
             val = None
@@ -2763,6 +2765,21 @@ class Evaluator:
         raise TypeError(
             f"match has no arm for {described}; add the missing pattern "
             f"or a _ arm")
+
+    def _names_a_binding(self, expr) -> bool:
+        """Whether an expression is a name that is bound in scope.
+
+        A binding's type is static information even where its value is
+        not, so `@typeof` can answer for one.  `@sizeof` and `@unitof`
+        keep the stricter test, since those ask about the value.
+        """
+        if not isinstance(expr, VarRef):
+            return False
+        try:
+            self.env.lookup(expr.name)
+        except KeyError:
+            return False
+        return True
 
     def _eval_match_by_type(self, node: MatchStmt, subject: Value):
         """Run the arm naming the alternative the value actually is."""

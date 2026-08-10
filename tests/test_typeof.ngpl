@@ -77,12 +77,30 @@ fn test_resultof_optional() → ∅:
 fn test_resultof_unknown() → ∅:
     let t : mut = @resultof(nonexistent)
 
-// Error: @typeof with non-constant argument.
+fn returns_int() → int:
+    1
+
+// A binding's type is static even where its value is not, so @typeof
+// answers for any name in scope.
 @test
-@expect error "compile-time constant"
-fn test_typeof_non_const() → ∅:
+fn test_typeof_of_a_runtime_binding() → ∅:
     let x : mut = 42
-    @typeof(x)
+    let y : mut = 7
+    static_assert_eq(@typeof(x), @typeof(y))
+
+// What it still refuses is an expression that is neither a name nor a
+// constant, since answering would mean evaluating it.
+@test
+@expect error "compile-time constant argument or a name"
+fn test_typeof_of_a_call() → ∅:
+    let t : mut = @typeof(returns_int())
+
+@test
+@expect error "compile-time constant argument or a name"
+fn test_typeof_of_a_subscript() → ∅:
+    let a : i32[] = [1, 2, 3]
+    let i : mut = 0
+    let t : mut = @typeof(a[i])
 
 @start
 fn main() → ∅:

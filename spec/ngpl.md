@@ -3693,6 +3693,22 @@ static_assert(x)                       /* ERROR: not a compile-time constant */
 
 Built-in introspection functions use the `@` prefix and return values that can be compared for equality.  All `@` operations are compile-time: their arguments must be compile-time constant expressions (literals, constant arithmetic, other `@` expressions) or compile-time variables (parameter pack names, `comptime foreach` loop variables).  Passing a runtime variable is an error — use the equivalent runtime operation (e.g., `.sizeof`) instead.
 
+`@typeof` is the exception, because it asks a question the others do not.  A binding's *type* is known without knowing its value, so `@typeof` answers for any name in scope:
+
+```
+let x : mut = 42
+static_assert_eq(@typeof(x), @typeof(y))    // fine, whatever x holds
+```
+
+It still refuses anything that is neither a name nor a constant, since answering would mean evaluating it:
+
+```
+@typeof(f())        // error: requires a compile-time constant argument or a name
+@typeof(a[i])       // error: likewise
+```
+
+`@sizeof` and `@unitof` keep the stricter rule, since those ask about the value rather than the type.
+
 - `@typeof(expr)` — evaluates the expression and returns a `type` value representing its type.  The type name reflects the concrete type: `int`, `i32`, `u8`, `str`, `bool`, `\N{EMPTY SET}`, `array`, `tuple`, `fn`, `\N{GREEK SMALL LETTER LAMDA}`, or an enum name.
 
 - `@resultof(func)` — looks up a named function and returns a `type` value for its declared return type.

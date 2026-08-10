@@ -92,13 +92,15 @@ fn comptime_typeof(args…) → int:
 fn test_typeof_comptime_foreach() → ∅:
     assert_eq(comptime_typeof(1, "a", 2), 2)
 
-// --- error: @typeof on non-comptime variable ---
+// --- @typeof on a runtime variable ---
 
+// The type of a binding is known without knowing its value, so this
+// is answerable; @sizeof below asks about the value and is not.
 @test
-@expect error "compile-time constant"
 fn test_typeof_runtime_var() → ∅:
     let x : mut = 42
-    @typeof(x)
+    let y : mut = 0
+    static_assert_eq(@typeof(x), @typeof(y))
 
 // --- error: @sizeof on runtime array variable ---
 
