@@ -385,6 +385,36 @@ u « 8      // err(errors.shift_out_of_range)
 
 A right shift is bounded the same way: past the value bits there is nothing of the value left.
 
+##### Rotations Turn Within the Type
+
+A rotation turns the bits within the confines of the declared type, so the type does not change: a `u8` rotated is a `u8`, and a `u32` rotated is a `u32`.
+
+```
+let a : u8 = 1
+a ↻ 1        // 128, a u8
+a ↺ 1        // 2, a u8
+```
+
+Every bit comes round again, so nothing is lost however far the turn goes.  The count is therefore taken modulo the width, and turning all the way round arrives where it started:
+
+```
+a ↻ 8        // 1, back where it began
+a ↻ 9        // 128, the same as ↻ 1
+```
+
+This is where a rotation parts company with a shift.  A shift loses the bits it moves past the end, so a count that would lose them all is a mistake and is refused.  A rotation loses none, so every count is well defined and none is refused.
+
+The width need not be a power of two — `u7 ↻ 8` is `u7 ↻ 1` — and a signed type turns its whole representation, sign bit included.
+
+An untyped integer states no width, so there are no confines for the bits to come round in and it cannot be rotated:
+
+```
+let n := 1
+n ↻ 1
+
+error: rotate-right: 'int' has no width to turn within; rotate a sized integer
+```
+
 ##### When It Is Known in Advance
 
 The bound depends on the type shifted and on the count, so where the count is written down and the type is declared, the answer is settled before anything runs.  It is a compile error then, rather than an error value the program has to deal with:

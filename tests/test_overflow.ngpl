@@ -212,6 +212,54 @@ fn test_shift_error_recovers() → ∅:
     assert_eq(recover_with(4), 48)
 
 // ---------------------------------------------------------------------
+// A rotation turns within the operand's own width
+// ---------------------------------------------------------------------
+
+// Every bit of the representation comes round again, so the width is
+// the operand's own and the result keeps its type.
+@test
+fn test_rotation_turns_within_the_width() → ∅:
+    let a : u8 = 1
+    let turned := a ↻ 1
+    static_assert_eq(@typeof(turned), u8)
+    assert_eq(turned, 128)
+    assert_eq(a ↺ 1, 2)
+
+// A count that turns all the way round is where it started, so it is
+// masked rather than refused.  This is where a rotation parts company
+// with a shift, which would have lost every bit.
+@test
+fn test_rotation_masks_the_count() → ∅:
+    let a : u8 = 1
+    assert_eq(a ↻ 8, 1)
+    assert_eq(a ↻ 9, 128)
+    assert_eq(a ↻ 17, 128)
+
+// The width need not be a power of two for the count to be taken
+// modulo it.
+@test
+fn test_rotation_at_an_odd_width() → ∅:
+    let a : u7 = 1
+    let b : u7 = 64
+    assert_eq(a ↻ 1, 64)
+    assert_eq(a ↻ 7, 1)
+    assert_eq(a ↻ 8, 64)
+    assert_eq(b ↺ 1, 1)
+
+// A signed type turns its whole representation, sign bit and all.
+@test
+fn test_rotation_of_a_signed_type() → ∅:
+    let a : i8 = 1
+    assert_eq(a ↻ 1, ⁻128)
+
+// An untyped integer has no width for the bits to come round in.
+@test
+@expect error "has no width to turn within"
+fn error_rotation_without_a_width() → ∅:
+    let n := 1
+    _ ← n ↻ 1
+
+// ---------------------------------------------------------------------
 // A signed type has one value bit fewer
 // ---------------------------------------------------------------------
 

@@ -915,32 +915,46 @@ class Evaluator:
             return mk_int_wrap(lu.value | ru.value, resolve_width(lu.width, ru.width))
         raise TypeError(f"bitwise-or expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
+    def _rotation_width(self, lu, ru, op_name: str) -> tuple[int, int]:
+        """The width a rotation turns within, and how far it turns.
+
+        A rotation moves every bit of the representation around, so the
+        width is the operand's own and the count is taken modulo it:
+        turning all the way round is where it started, which is a
+        harmless thing to write rather than a mistake.  This is where a
+        rotation parts company with a shift, which loses the bits it
+        moves past the end and so refuses a count that would lose them
+        all.
+        """
+        bits = _TYPE_BITS.get(lu.width)
+        if bits is None:
+            raise TypeError(
+                f"{op_name}: '{lu.width}' has no width to turn within; "
+                f"rotate a sized integer")
+        return bits, ru.value % bits
+
     def _op_rotl(self, left, right):
-        """Rotate left within the operand's bit width (default 32)."""
+        """Rotate left within the operand's own width."""
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-            w = resolve_width(lu.width, ru.width)
-            bits = _TYPE_BITS.get(w, 32)
+            bits, n = self._rotation_width(lu, ru, "rotate-left")
             mask = (1 << bits) - 1
-            n = ru.value & (bits - 1)
             val = lu.value & mask
             result = ((val << n) | (val >> (bits - n))) & mask
-            return mk_int_wrap(result, w)
+            return mk_int_wrap(result, lu.width)
         raise TypeError(f"rotate-left expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_rotr(self, left, right):
-        """Rotate right within the operand's bit width (default 32)."""
+        """Rotate right within the operand's own width."""
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-            w = resolve_width(lu.width, ru.width)
-            bits = _TYPE_BITS.get(w, 32)
+            bits, n = self._rotation_width(lu, ru, "rotate-right")
             mask = (1 << bits) - 1
-            n = ru.value & (bits - 1)
             val = lu.value & mask
             result = ((val >> n) | (val << (bits - n))) & mask
-            return mk_int_wrap(result, w)
+            return mk_int_wrap(result, lu.width)
         raise TypeError(f"rotate-right expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     @staticmethod
