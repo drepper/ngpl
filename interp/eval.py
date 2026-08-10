@@ -38,7 +38,7 @@ from interp.value import (
     _TYPE_BITS, FLOAT_TYPES, FAST_TYPES,
     _split_optional_type, _parse_array_type, MAX_TENSOR_RANK, array_shape,
     format_shape,
-    is_generic_type, runtime_type_of, is_type_name,
+    is_generic_type, runtime_type_of, is_type_name, _is_unsigned,
     UnitValue, RefValue, Reference, ElementRef, Iterator, ArrayIterator,
     deep_copy_value, register_type_alias, DISCARD_NAME,
     register_sum_type, sum_type_alternatives, sum_type_admits,
@@ -1020,15 +1020,22 @@ class Evaluator:
 
         A shift moves bits within the value it is given, so the result
         is the same type: the count says how far, not what type to
-        become.  A count that reaches or passes the width would shift
-        every bit out, which is a mistake rather than a way to write
-        zero, so it is refused.
+        become.  A count that reaches the number of value bits would
+        move every one of them out, which is a mistake rather than a
+        way to write zero, so it is refused.
+
+        A signed type has one value bit fewer than its width, since the
+        top bit carries the sign rather than part of the value: an i8
+        holds seven value bits, so seven is already too far.
         """
         bits = _TYPE_BITS.get(lu.width)
-        if bits is not None and ru.value >= bits:
-            return None, self._std_error(
-                "shift_out_of_range",
-                f"shift of {ru.value} on a {lu.width} of {bits} bits")
+        if bits is not None:
+            value_bits = bits if _is_unsigned(lu.width) else bits - 1
+            if ru.value >= value_bits:
+                return None, self._std_error(
+                    "shift_out_of_range",
+                    f"shift of {ru.value} on a {lu.width}, which has "
+                    f"{value_bits} value bits")
         if ru.value < 0:
             return None, self._std_error(
                 "shift_out_of_range", f"shift by {ru.value}")

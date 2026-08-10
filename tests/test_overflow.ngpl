@@ -195,6 +195,60 @@ fn test_shift_error_recovers() → ∅:
     let b : byte = 3
     assert_eq((b « 8) ?? 99, 99)
 
+// ---------------------------------------------------------------------
+// A signed type has one value bit fewer
+// ---------------------------------------------------------------------
+
+// The top bit of a signed type carries the sign rather than part of
+// the value, so an i8 holds seven value bits and seven is already too
+// far.
+@test
+fn test_signed_shift_stops_one_earlier() → ∅:
+    let i : i8 = 1
+    assert_eq(i « 6, 64)
+    match i « 7:
+        ∃(v):  assert(false)
+        ∄(e):  assert_eq(e, std.errors.shift_out_of_range)
+
+// The unsigned type of the same width has all eight.
+@test
+fn test_unsigned_shift_uses_every_bit() → ∅:
+    let u : u8 = 1
+    assert_eq(u « 7, 128)
+    match u « 8:
+        ∃(v):  assert(false)
+        ∄(e):  assert_eq(e, std.errors.shift_out_of_range)
+
+// byte is unsigned, so it behaves as u8 does.
+@test
+fn test_byte_shift_uses_every_bit() → ∅:
+    let b : byte = 1
+    assert_eq(b « 7, 128)
+    match b « 8:
+        ∃(v):  assert(false)
+        ∄(e):  assert_eq(e, std.errors.shift_out_of_range)
+
+// The same one-bit difference at the wider types.
+@test
+fn test_signed_and_unsigned_at_32_bits() → ∅:
+    let s : i32 = 1
+    let u : u32 = 1
+    assert_eq(s « 30, 1073741824)
+    assert_eq(u « 31, 2147483648)
+    match s « 31:
+        ∃(v):  assert(false)
+        ∄(e):  assert_eq(e, std.errors.shift_out_of_range)
+
+// A right shift is bounded the same way: past the value bits there is
+// nothing of the value left.
+@test
+fn test_signed_right_shift_stops_one_earlier() → ∅:
+    let i : i8 = 64
+    assert_eq(i » 6, 1)
+    match i » 7:
+        ∃(v):  assert(false)
+        ∄(e):  assert_eq(e, std.errors.shift_out_of_range)
+
 @start
 fn main() → ∅:
     std.print("overflow tests passed")

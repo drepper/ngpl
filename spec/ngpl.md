@@ -263,7 +263,7 @@ let u : u32 = 3
 u « 24         // a u32
 ```
 
-A count that reaches or passes the width would move every bit out of the value.  That is a mistake rather than a way to write zero, so it is refused with `std.errors.shift_out_of_range`, which arrives the way division by zero does:
+A count that reaches the number of **value bits** would move every one of them out.  That is a mistake rather than a way to write zero, so it is refused with `std.errors.shift_out_of_range`, which arrives the way division by zero does:
 
 ```
 let b : byte = 3
@@ -271,6 +271,27 @@ b « 8
 
 err(errors.shift_out_of_range)
 ```
+
+A signed type has one value bit fewer than its width, because the top bit carries the sign rather than part of the value.  An `i8` holds seven value bits, so seven is already too far, while the `u8` of the same width has eight:
+
+| Type | Value bits | Largest count |
+|------|-----------|---------------|
+| `u8`, `byte` | 8 | 7 |
+| `i8` | 7 | 6 |
+| `u32` | 32 | 31 |
+| `i32` | 31 | 30 |
+
+```
+let i : i8 = 1
+i « 6      // 64
+i « 7      // err(errors.shift_out_of_range)
+
+let u : u8 = 1
+u « 7      // 128
+u « 8      // err(errors.shift_out_of_range)
+```
+
+A right shift is bounded the same way: past the value bits there is nothing of the value left.
 
 Being a value rather than a stop, it can be handled or recovered from:
 
