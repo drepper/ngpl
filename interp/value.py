@@ -40,23 +40,36 @@ _NAMED_TYPE_BITS: dict[str, int] = {
     "u64fast": 64, "i64fast": 64,
 }
 
-# A width has to be written out, so there is a largest one that can be.
-# The bound is generous rather than meaningful: it exists to turn a
-# runaway name into a diagnostic instead of an allocation.
-MAX_INT_BITS = 1 << 16
+# The widest variable the language will hold.  Beyond this a value is
+# no longer a machine integer in any useful sense, and arbitrary
+# precision is what `int` is for.
+#
+# A signed type is counted with its sign against this, so the widest
+# signed type is one narrower than the widest unsigned one.  What each
+# width means is unchanged: iN is N bits holding -2**(N-1)..2**(N-1)-1,
+# as i8 and i64 always have.
+MAX_INT_BITS = 128
 
 
 def _parse_int_width(name: str) -> int | None:
     """The bit count an integer type name states, or None if it states none.
 
     `i32` and `u7` state theirs; `byte` and `usize` carry names instead
-    and are looked up.  A width of zero holds no values and is not a
-    type, so it is not one of these.
+    and are looked up.
+
+    A width names a type only when it leaves at least one bit for the
+    value and fits a variable: a signed type spends a bit on the sign,
+    so i1 holds nothing, and the sign counts against the width a
+    variable may reach, which makes i127 the widest signed type where
+    u128 is the widest unsigned one.
     """
     if len(name) < 2 or name[0] not in "iu" or not name[1:].isdigit():
         return None
     bits = int(name[1:])
-    if bits < 1 or bits > MAX_INT_BITS:
+    unsigned = name[0] == "u"
+    value_bits = bits if unsigned else bits - 1
+    limit = MAX_INT_BITS if unsigned else MAX_INT_BITS - 1
+    if value_bits < 1 or bits > limit:
         return None
     return bits
 

@@ -1,7 +1,7 @@
 // test_int_width.ngpl -- integer types that state their own bit width
 //
 // An integer type may state any width rather than pick from a fixed
-// set: i7, u13, i128 are types in the same way i32 is.  The width is
+// set: i7, u13, i127 are types in the same way i32 is.  The width is
 // read from the name, so the range, the wrapping, and the shift bound
 // all follow from it.
 //
@@ -25,9 +25,9 @@ fn test_odd_widths_hold_their_range() → ∅:
 
 @test
 fn test_wide_widths() → ∅:
-    let a : i128 = 170141183460469231731687303715884105727
+    let a : i127 = 85070591730234615865843651857942052863
     let b : u128 = 340282366920938463463374607431768211455
-    assert_eq(a, 170141183460469231731687303715884105727)
+    assert_eq(a, 85070591730234615865843651857942052863)
     assert_eq(b, 340282366920938463463374607431768211455)
 
 // ---------------------------------------------------------------------
@@ -56,11 +56,25 @@ fn test_unsigned_wraps_at_its_width() → ∅:
     assert_eq(b, 1)
     assert_eq(c, 0)
 
-// A one-bit signed type holds the sign bit and nothing else.
+// A signed type spends a bit on the sign, so a one-bit one would
+// have none left for the value and names no type.
 @test
-@expect error "does not fit in i1 .range -1..0."
+@expect error "unknown type 'i1'"
 fn error_one_bit_signed() → ∅:
-    let a : i1 = 1
+    let a : i1 = 0
+
+// A variable holds at most 128 bits, and the sign counts against
+// that, so u128 is the widest unsigned type and i127 the widest
+// signed one.
+@test
+@expect error "unknown type 'u129'"
+fn error_wider_than_a_variable() → ∅:
+    let a : u129 = 0
+
+@test
+@expect error "unknown type 'i128'"
+fn error_signed_wider_than_a_variable() → ∅:
+    let a : i128 = 0
 
 // ---------------------------------------------------------------------
 // Arithmetic
@@ -115,7 +129,8 @@ fn test_storage_is_whole_bytes() → ∅:
     static_assert_eq(@sizeof(u1), 1 ¤byte)
     static_assert_eq(@sizeof(u7), 1 ¤byte)
     static_assert_eq(@sizeof(u13), 2 ¤byte)
-    static_assert_eq(@sizeof(i128), 16 ¤byte)
+    static_assert_eq(@sizeof(i127), 16 ¤byte)
+    static_assert_eq(@sizeof(u128), 16 ¤byte)
 
 @test
 fn test_type_name_and_sizeof_of_a_binding() → ∅:

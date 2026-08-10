@@ -145,13 +145,13 @@ Additionally, `int` denotes an arbitrary-precision integer with no fixed width. 
 
 #### Any Width
 
-The table above lists the widths that see the most use, not the widths that exist.  An integer type states its width in its name, and any width may be stated: `i7`, `u13`, `u1`, and `i128` are types in the same way `i32` is.
+The table above lists the widths that see the most use, not the widths that exist.  An integer type states its width in its name, and any width may be stated: `i7`, `u13`, `u1`, and `i127` are types in the same way `i32` is.
 
 ```
 let a : u7 = 127
 let b : i7 = 63
 let c : u13 = 8191
-let d : i128 = 170141183460469231731687303715884105727
+let d : i127 = 85070591730234615865843651857942052863
 ```
 
 Everything about the type follows from the width, so nothing is special-cased for the familiar ones:
@@ -161,7 +161,24 @@ Everything about the type follows from the width, so nothing is special-cased fo
 - **Shifts.**  The bound is the value bits, so `u7` takes a count up to 6 and `i7` up to 5.
 - **Storage.**  `@sizeof` gives the whole bytes the width takes: 1 byte for `u7`, 2 for `u13`, 16 for `i128`.
 
-A width of zero holds no values and names no type.  `byte`, `usize`, and the `fast` variants carry a name instead of stating a width, and are listed above.
+Two bounds decide which widths name a type.
+
+A type needs at least one bit for the value, and a signed type spends one on the sign, so `u1` is a type and `i1` is not — a one-bit signed integer would have nothing left to hold.  A width of zero names no type either way.
+
+A variable holds at most **128 bits**, and the sign counts against that, so `u128` is the widest unsigned type and `i127` the widest signed one.  Beyond that a value is no longer a machine integer in any useful sense, and arbitrary precision is what `int` is for.
+
+```
+let a : u128 = 340282366920938463463374607431768211455   // widest unsigned
+let b : i127 = 85070591730234615865843651857942052863    // widest signed
+
+let c : i1   = 0     // error: unknown type 'i1'
+let d : i128 = 0     // error: unknown type 'i128'
+let e : u129 = 0     // error: unknown type 'u129'
+```
+
+What each width *means* is unchanged by this: `iN` is N bits holding −2^(N−1) to 2^(N−1)−1, as `i8` and `i64` always have.  The bound is on how wide a variable may be, not on how a width is read.
+
+`byte`, `usize`, and the `fast` variants carry a name instead of stating a width, and are listed above.
 
 Under `@repr(C)` the width must be one C has a type for:
 
