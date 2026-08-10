@@ -1402,6 +1402,13 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
         return sum_type_settle(target_width, value)
     if isinstance(value, UnitValue):
         value = value.inner
+    if target_width in FLOAT_TYPES:
+        # A float carries its width like an integer does, so a target
+        # that names one decides it.
+        if isinstance(value, IntValue):
+            return mk_float(float(value.value), target_width)
+        if isinstance(value, FloatValue):
+            return mk_float(value.value, target_width)
     if isinstance(value, IntValue):
         if _is_unsigned(target_width):
             return IntValue(wrap_int(value.value, target_width), target_width)

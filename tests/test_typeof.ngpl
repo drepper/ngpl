@@ -127,6 +127,17 @@ fn test_user_type_name_as_a_value() → ∅:
     assert_eq(c, Shade.light)
 
 // Being a type name, it is not available for anything else.
+// A static assertion over unit-carrying values compares as the
+// arithmetic does, so the units have to agree as well as the numbers.
+@test
+fn test_static_assert_eq_respects_units() → ∅:
+    static_assert_eq(@sizeof(i32), 4 ¤byte)
+
+@test
+@expect error "incompatible units for comparison: B and ptrdiff"
+fn test_static_assert_eq_rejects_a_wrong_unit() → ∅:
+    static_assert_eq(@sizeof(i32), 4 ¤ptrdiff)
+
 @test
 @expect error "'byte' names a type and cannot name a variable"
 fn test_type_name_cannot_be_a_variable() → ∅:

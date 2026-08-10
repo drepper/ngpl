@@ -49,6 +49,8 @@ fn get_padded_word(data : byte[], off ¤byte : usize, total_size ¤byte : usize)
         // width to state, and no unit to strip.
         let b0 := data[off]
         static_assert_eq(@typeof(b0), byte)
+        static_assert_eq(@sizeof(b0), 1 ¤byte)
+        static_assert_eq(@sizeof(b0), @sizeof(byte))
         let b1 := data[off + 1]
         let b2 := data[off + 2]
         let b3 := data[off + 3]

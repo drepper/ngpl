@@ -3746,6 +3746,13 @@ fixed.sizeof        // 4 ptrdiff
 
 This is the same split `.sizeof` already draws: on a struct type it gives bytes, on an array value it gives a count.
 
+A scalar holds no elements to count, so it answers with what its type occupies:
+
+```
+let b0 := data[off]        // data is byte[]
+@sizeof(b0)                // 1 B
+```
+
 A value answers from its type, so a length is only available where the type states one.  A dynamically sized array has a length, but not one that is part of its type:
 
 ```

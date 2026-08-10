@@ -166,6 +166,20 @@ fn test_sizeof_type_versus_value():
   assert_eq_int(@sizeof(fixed), 4 ¤ptrdiff, "the value is 4 elements")
   assert_eq_int(fixed.sizeof, 4 ¤ptrdiff, ".sizeof agrees")
 
+// A scalar holds no elements to count, so it answers with what its
+// type occupies.
+fn test_sizeof_of_a_scalar_binding():
+  let a : i8 = 1
+  let b : i16 = 1
+  let c : u32 = 1
+  let d : f64 = 1.0
+  let e := true
+  assert_eq_int(@sizeof(a), 1 ¤byte, "an i8 binding is 1 byte")
+  assert_eq_int(@sizeof(b), 2 ¤byte, "an i16 binding is 2 bytes")
+  assert_eq_int(@sizeof(c), 4 ¤byte, "a u32 binding is 4 bytes")
+  assert_eq_int(@sizeof(d), 8 ¤byte, "an f64 binding is 8 bytes")
+  assert_eq_int(@sizeof(e), 1 ¤byte, "a bool binding is 1 byte")
+
 @start
 fn main():
   test_sizeof_array_ptrdiff()
@@ -187,4 +201,5 @@ fn main():
   test_sizeof_of_fixed_arrays()
   test_sizeof_of_named_types()
   test_sizeof_type_versus_value()
+  test_sizeof_of_a_scalar_binding()
   std.print("sizeof_units tests passed")

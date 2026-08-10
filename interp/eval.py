@@ -1644,6 +1644,13 @@ class Evaluator:
                     raise TypeError(
                         f"static_assert_eq failed:\n  expected: {type_name}\n"
                         f"  actual:   {spelled}")
+            elif isinstance(eu, UnitValue) and isinstance(au, UnitValue):
+                # Through the arithmetic's own comparison, so that the
+                # units have to agree as well as the numbers.
+                eq = self._unit_binop("==", eu, au)
+                if not eq.value:
+                    raise TypeError(
+                        f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
             elif isinstance(eu, UnitOfValue) and isinstance(au, UnitOfValue):
                 eq = self._op_eq(expected, actual)
                 if not eq.value:
@@ -2038,6 +2045,10 @@ class Evaluator:
                         f"length is not part of its type; use .sizeof to "
                         f"read it")
                 result = self._sizeof_result(len(unwrapped.value))
+            elif named:
+                # A scalar holds no elements to count, but its type
+                # says what it occupies, which is the only size it has.
+                result = self._type_byte_size(runtime_type_of(unwrapped))
             else:
                 raise TypeError(
                     f"@sizeof: expected array, tuple, or string, "
