@@ -1093,9 +1093,11 @@ The function name is a single identifier.  Parameters are enclosed in parenthese
 A signature that says nothing about what comes back says the same as one that writes `∅`.  These are one signature spelled two ways:
 
 ```
+@impure
 fn greet(name):
     std.println("hello {}", name)
 
+@impure
 fn greet(name) → ∅:
     std.println("hello {}", name)
 ```
@@ -1105,6 +1107,7 @@ fn greet(name) → ∅:
 Writing `→ ∅` is accepted and draws a warning, since the two spellings mean the same and having both invites a reader to look for a difference that is not there:
 
 ```
+@impure
 fn greet(name) → ∅:
     std.println("hello {}", name)
 
@@ -1129,6 +1132,7 @@ Every other return type has to be written.  There is no inference from the body:
 #### Examples
 
 ```
+@impure
 fn main():                               /* no parameters */
     std.println("hello")
 
@@ -1172,20 +1176,33 @@ The parenthesized parameter list makes the function signature unambiguously cont
 
 ### Function Purity
 
-Functions are **pure by default**: they may only depend on their parameters and locally defined variables.  A pure function cannot read or write mutable global variables.  Accessing constants, calling other functions (pure or impure), and using locally defined variables are all permitted.
+Functions are **pure by default**: they may only depend on their parameters and locally defined variables, and everything they do is produce a return value.  A pure function cannot read or write mutable global variables, cannot write to the program's output, and cannot call a function that does either.  Accessing constants, calling other pure functions, and using locally defined variables are all permitted.
 
-The `@impure` annotation lifts the restriction.  An impure function may read and write mutable global variables freely.
+The `@impure` annotation lifts the restriction.  An impure function may read and write mutable global variables freely, may write output, and may call other impure functions.
 
 #### What is a mutable global?
 
 A top-level binding introduced with `let mut` is a mutable global.  Bindings introduced with `let`, `fn`, or `enum` are immutable and visible to all functions regardless of purity.
 
+#### What is a side effect?
+
+Two things a function can do are visible outside it and are not its return value:
+
+1. Reading or writing a mutable global.
+2. Writing to the program's output with `std.print` or `std.println`.
+
+A third follows from them: calling a function that does either.  All three make a function impure, and an impure function says so at its definition.
+
 #### Rules
 
 1. A pure function **cannot read** a mutable global variable.
 2. A pure function **cannot write** to any non-local variable (mutable global or otherwise).
-3. A pure function **can** read constants and call any function (pure or impure).
-4. An `@impure` function has no restrictions on global access.
+3. A pure function **cannot call** `std.print` or `std.println`.
+4. A pure function **cannot call** an `@impure` function or method.
+5. A pure function **can** read constants and call other pure functions.
+6. An `@impure` function has no restrictions on global access, on output, or on what it calls.
+
+Rules 3 and 4 are checked at the definition, before anything runs; rules 1 and 2 are checked in the interpreter when the access happens.
 
 #### Examples
 
@@ -1214,9 +1231,35 @@ fn bad_write():                   /* ERROR: pure function cannot assign to non-l
     counter ← 1
 ```
 
-#### Calling impure functions from pure functions
+#### Effects Travel Up the Call Chain
 
-A pure function may call an impure function.  The impure callee is responsible for the side effect; the call itself does not make the caller impure.  This keeps the annotation burden low — only functions that directly access mutable state need `@impure`.
+A function that calls an impure one has that function's effect, so it says `@impure` itself:
+
+```
+fn shout():
+    std.println("hello")
+
+error: in shout: std.println writes where the rest of the program can
+see it; a function that calls it says @impure
+```
+
+```
+@impure
+fn shout():
+    std.println("hello")
+
+fn greet():
+    shout()
+
+error: in greet: 'shout' is @impure, so a function that calls it says
+@impure too
+```
+
+The annotation therefore spreads outward from where the effect happens to every function that can reach it, including the startup function of a program that prints anything.  What it buys is that the absence of the annotation is a promise: a function without `@impure` computes its result and does nothing else, whatever it calls and however deep the calls go.
+
+A lambda is part of the function that writes it, so an effect inside one is an effect of the surrounding function.  A method carries the annotation the same way a function does, and reaches its callers the same way.
+
+Both checks are made at the definition, so a function that is never called is checked all the same.
 
 #### Comparison with other languages
 
@@ -1226,13 +1269,68 @@ A pure function may call an impure function.  The impure callee is responsible f
 | Rust | pure (by convention) | `unsafe` (different scope) | — |
 | D | `pure` attribute | default is impure | compiler |
 | Zig | — | — | no purity system |
-| NGPL | pure | `@impure` annotation | runtime |
+| NGPL | pure | `@impure` annotation | definition-time, plus runtime for globals |
 
-Haskell enforces purity through the type system — impure computations have a different type (`IO a`).  D inverts the default: functions are impure unless annotated `pure`.  NGPL follows Haskell's philosophy (pure by default) but uses a simpler annotation mechanism (`@impure`) rather than a monadic type.
+Haskell enforces purity through the type system — impure computations have a different type (`IO a`), and `IO` propagates to every caller exactly as `@impure` does here.  D inverts the default: functions are impure unless annotated `pure`.  D also checks propagation, since a `pure` function may only call `pure` functions.  NGPL follows Haskell's philosophy (pure by default) with a simpler annotation mechanism rather than a monadic type.
 
 #### Design Rationale
 
-Purity by default encourages a functional style and makes functions easier to reason about, test, and parallelize.  The `@impure` annotation makes side effects visible at the definition site rather than requiring the reader to trace through the function body.  Runtime enforcement (rather than compile-time) is appropriate for the interpreter; the compiler will move this check to compile-time where possible.
+Purity by default encourages a functional style and makes functions easier to reason about, test, and parallelize.  The `@impure` annotation makes side effects visible at the definition site rather than requiring the reader to trace through the function body — which is only true if the annotation is required wherever the effect can be reached, and that is what rules 3 and 4 provide.  An annotation a caller could omit would tell a reader nothing, since the function below it might still print.
+
+Global access remains a runtime check in the interpreter because whether a name is a mutable global depends on values the interpreter settles as it runs; the compiler will move it to compile-time where possible.
+
+
+### A Statement Whose Value Nothing Reads
+
+A function that hands back a value is called for that value.  A call whose result nothing reads is therefore either a mistake — a missing binding, a forgotten `_` — or a line that could be deleted, and the language reports it where it is written:
+
+```
+fn doubled(n : i64) → i64:
+    n × 2
+
+@impure
+fn main():
+    doubled(21)
+    std.println("done")
+
+error: in main: the result of 'doubled' is not used; a function that
+hands back a value is called for it, so write '_ ← …' where the value
+is meant to be dropped
+```
+
+This is the rule C compilers spell `warn_unused_result` on individual declarations, applied the other way around: every function that returns something other than `∅` is called for what it returns, and a function meant to be called for its effect says so by returning nothing.
+
+The same holds for an expression that is not a call at all.  A statement like `n + 1` computes something and drops it:
+
+```
+error: in main: the value of this statement is not used; it computes
+something and nothing reads it
+```
+
+#### What Is Not Reported
+
+- **The last statement of a body.**  It is what the function hands back, whether or not the caller reads it.
+- **A call to a function that returns nothing.**  There was no value to drop.
+- **A call to an `@impure` function.**  The effect is what the statement was for, and the value is beside the point.
+- **A statement whose expression contains an effect.**  `bump() + 1` runs `bump`, which is a reason for the line to exist.
+- **A call the checks cannot resolve**, such as one to a member function of a built-in type.  Nothing is claimed about a function whose declaration the check cannot read.
+- **`?`, `static_assert`, and `static_assert_eq`**, each of which does something other than produce a value.
+
+#### Saying the Value Is Meant to Go
+
+`_` is the discard target, and assigning to it says in so many words that the result is not wanted:
+
+```
+_ ← doubled(21)
+```
+
+The value is still computed and the call still happens; only the result is dropped, and the reader can see that it was on purpose.
+
+#### Design Rationale
+
+The check reports an error rather than a warning because there is no reading of the program under which the statement was intended: either the value was meant to be used, and something is missing, or it was not, and `_ ←` says so in one token.  A warning would leave both possibilities open and, over a large program, would be scrolled past.
+
+Attaching the rule to every non-`∅` return type rather than to annotated declarations follows from the language's treatment of a signature as a promise.  `fn f() → i64` says a caller gets an `i64`; a call that ignores it is not using the function as declared.  C has to opt in per declaration because its history is full of functions returning a status nobody checks; a language starting from scratch has no such history to preserve.
 
 
 ### Unicode and ASCII Arrow Equivalences
@@ -1356,6 +1454,7 @@ fn abs(x : int) → int:
     if x < 0: return -x
     x
 
+@impure
 fn greet(name):
     std.println("hello {}", name);
 ```
@@ -1813,6 +1912,7 @@ An optional has exactly two shapes and a result has two, so covering one means w
 The check happens where the `match` is written, not where it runs.  A gap is a property of the code, so a missing arm that only an unlucky input would reach is reported all the same:
 
 ```
+@impure
 fn never_called():
     let v : mut = [1]
     match v.get(0):
@@ -2052,6 +2152,7 @@ The error type is determined from the expression `?` is applied to — division 
 A lambda is its own function for this purpose.  A `?` inside one returns from the lambda, so it is checked against the lambda's return type and not the enclosing function's:
 
 ```
+@impure
 fn caller():                                  // plain, and that is fine
     let f : mut = λa : int, b : int → int!: (a ÷ b)?
     std.println("{}", f(10, 0) ?? ⁻1)
@@ -5504,6 +5605,7 @@ A value that holds an operating system resource — an open file or directory, s
 
 ```
 @start
+@impure
 fn main():
     let dir : mut = std.fs.cwd()
     let file : mut = dir.open_file("data.bin")
@@ -5805,6 +5907,7 @@ Three submodules of `std` expose the context the operating system hands to a run
 
 ```
 @start
+@impure
 fn main():
     std.println("running as {}", std.args.program())
     foreach arg := std.args.all():
@@ -6260,6 +6363,7 @@ Two standard library functions end a program before its startup function returns
 #### `std.exit(code)`
 
 ```
+@impure
 fn quit_early():
     std.println("quitting")
     std.exit(42)
@@ -6340,6 +6444,7 @@ The recorded stack travels with the failure rather than being read from the inte
 A program can inspect its own call stack at any point, not only when failing:
 
 ```
+@impure
 fn log_caller():
     foreach frame := std.callstack():
         std.println("{} at line {} column {}", frame[0], frame[1], frame[2])

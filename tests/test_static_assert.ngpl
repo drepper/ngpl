@@ -120,5 +120,6 @@ fn test_array_local_is_left_alone():
     static_assert_eq(@sizeof(a), 3 ¤ptrdiff)
 
 @start
+@impure
 fn main():
     std.println("static_assert tests passed")

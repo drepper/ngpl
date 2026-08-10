@@ -43,5 +43,6 @@ fn test_step_large():
     assert_eq(sum, 192) // 0 + 64 + 128
 
 @start
+@impure
 fn main():
     std.println("stepped range tests passed")

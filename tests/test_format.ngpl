@@ -212,5 +212,6 @@ fn test_format_too_few_args():
     alloc.deinit()
 
 @start
+@impure
 fn main():
     std.println("format tests passed")

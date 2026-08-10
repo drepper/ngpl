@@ -196,5 +196,6 @@ fn test_sizeof_of_a_bool():
     static_assert_eq(@sizeof(true), 1 ¤byte)
 
 @start
+@impure
 fn main():
     std.println("parameter pack tests passed")

@@ -1,0 +1,7 @@
+error: in main: the result of 'doubled' is not used; a function that hands back a value is called for it, so write '_ ← …' where the value is meant to be dropped
+  --> tests/output/static_unused_result.ngpl:10:5
+    |
+ 10 |     doubled(21)
+    |     ^^^^^^^
+ 11 |     std.println("done")
+    |

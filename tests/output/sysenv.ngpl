@@ -6,6 +6,7 @@
 // values themselves.
 
 @start
+@impure
 fn main():
     std.println("count: {}", std.args.count())
     foreach v := std.args.all():

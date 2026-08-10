@@ -57,6 +57,7 @@ fn error_let_bare_eq():
 // --- fast type restrictions -----------------------------------------------
 
 @expect error "fast type.*cannot be used as array element"
+@impure
 fn error_fast_array():
     let arr : mut u8fast[10] = 0
     std.println("{}", arr[0])
@@ -128,5 +129,6 @@ fn error_fixed_array_size_mismatch():
     needs_three(a)
 
 @start
+@impure
 fn main():
     std.println("error tests passed")

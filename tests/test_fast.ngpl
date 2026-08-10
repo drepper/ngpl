@@ -19,5 +19,6 @@ fn test_fast_signed():
     assert_eq(x, ⁻1)
 
 @start
+@impure
 fn main():
     std.println("fast type tests passed")

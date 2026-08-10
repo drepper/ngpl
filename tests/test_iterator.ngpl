@@ -240,5 +240,6 @@ fn error_iterate_closed_directory():
     _ ← dir.iterate()
 
 @start
+@impure
 fn main():
     std.println("iterator tests passed")

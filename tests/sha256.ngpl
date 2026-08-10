@@ -172,6 +172,7 @@ fn test_sha256_448bit():
     assert_eq(hash, ∃([0x248d6a61, 0xd20638b8, 0xe5c02693, 0x0c3e6039, 0xa33ce459, 0x64ff2167, 0xf6ecedd4, 0x19db06c1]))
 
 @start
+@impure
 fn main():
     let alloc := std.arena.allocator()
     // The directory is only a way to reach the file, so it is left as a

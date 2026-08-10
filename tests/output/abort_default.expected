@@ -2,4 +2,4 @@ before abort
 aborted: SIGABRT
 backtrace (innermost call first):
   #0 give_up at tests/output/abort_default.ngpl:5:4
-  #1 main at tests/output/abort_default.ngpl:10:4
+  #1 main at tests/output/abort_default.ngpl:11:4

@@ -1198,6 +1198,282 @@ def _unused_mut_warnings(func_def) -> list[tuple[str, tuple | None]]:
     return warnings
 
 
+# std calls that write where the rest of the program can see it.  A
+# function making one is doing something its signature has to admit to.
+_STD_OUTPUT_CALLS = frozenset({"print", "println"})
+
+
+def _struct_type_named(type_name, env) -> StructType | None:
+    """The struct a written type names, or None where it names none.
+
+    A parameter may be written as a reference or as mut, and neither
+    changes which struct the name stands for, so both are stripped
+    before the name is looked up.
+    """
+    if not type_name:
+        return None
+    base = type_name.strip()
+    for prefix in ("&mut ", "&", "mut "):
+        if base.startswith(prefix):
+            base = base[len(prefix):].strip()
+    try:
+        found = env.lookup(resolve_type_alias(base))
+    except KeyError:
+        return None
+    return found if isinstance(found, StructType) else None
+
+
+def _struct_vars_of(func_def, env, self_type=None) -> dict[str, StructType]:
+    """The names in a function that stand for a struct instance.
+
+    Enough to resolve `x.method()` back to the method it calls: the
+    parameters that say a struct type, the locals initialized from
+    something whose struct type is knowable, and, inside an impl block,
+    self.  A name whose type cannot be worked out is simply absent, and
+    a call through it is left unresolved rather than guessed at.
+    """
+    found: dict[str, StructType] = {}
+    if self_type is not None:
+        found["self"] = self_type
+    for param in func_def.params:
+        name, type_name = param if isinstance(param, tuple) else (param, None)
+        struct = _struct_type_named(type_name, env)
+        if struct is not None:
+            found[name] = struct
+    for node in _iter_ast(func_def.body):
+        if not isinstance(node, ASTVarDef):
+            continue
+        struct = _struct_type_named(node.type_annotation, env)
+        if struct is None:
+            struct = _infer_struct_type(node.init_expr, env, found)
+        if struct is not None:
+            found[node.name] = struct
+    return found
+
+
+def _called_func(expr, env, struct_vars) -> FuncValue | None:
+    """The function a call expression reaches, when that is knowable.
+
+    Answers None for anything the interpreter provides itself and for a
+    call through a name whose type is not written down: neither carries
+    the declarations these checks read, so nothing is claimed about it.
+    """
+    if isinstance(expr, _ast.FuncCall):
+        try:
+            found = env.lookup(expr.name)
+        except KeyError:
+            return None
+        return found if isinstance(found, FuncValue) else None
+    if isinstance(expr, _ast.MethodCall):
+        struct = None
+        if isinstance(expr.obj, _ast.VarRef):
+            struct = struct_vars.get(expr.obj.name)
+            if struct is None:
+                try:
+                    found = env.lookup(expr.obj.name)
+                except KeyError:
+                    found = None
+                if isinstance(found, StructType):
+                    struct = found
+        if struct is None:
+            struct = _infer_struct_type(expr.obj, env, struct_vars)
+        if struct is None:
+            return None
+        return struct.methods.get(expr.method)
+    return None
+
+
+class _Span:
+    """A position to point a diagnostic at where no one node holds it."""
+
+    def __init__(self, pos):
+        self.pos = pos
+
+
+def _call_site(expr):
+    """What a diagnostic about a call should point at.
+
+    A method call records where its dot was written, which on its own
+    reads as a complaint about the dot.  The call is the receiver, the
+    dot, and the name, so the three are underlined together.
+    """
+    if not isinstance(expr, _ast.MethodCall):
+        return expr
+    dot = getattr(expr, "pos", None)
+    obj = getattr(expr.obj, "pos", None)
+    if dot is None or obj is None or obj[0] != dot[0]:
+        return expr
+    return _Span((obj[0], obj[1], dot[2] + len(expr.method)))
+
+
+def _std_output_call(expr) -> str | None:
+    """The name of the std output call an expression makes, if any."""
+    if (isinstance(expr, _ast.MethodCall)
+            and isinstance(expr.obj, _ast.VarRef)
+            and expr.obj.name == "std"
+            and expr.method in _STD_OUTPUT_CALLS):
+        return f"std.{expr.method}"
+    return None
+
+
+def _static_purity_check(func_def, env, struct_vars) -> str | None:
+    """Refuse a function with a side effect its signature does not admit.
+
+    Writing to the program's output is a side effect, and so is calling
+    something that has one.  Either way the effect is part of what the
+    function is, so it is written at the definition rather than left
+    for a reader to find by following the calls.
+
+    A function already marked @impure has said so and is left alone.
+    """
+    if func_def.is_impure:
+        return None
+    for node in _iter_ast(func_def.body):
+        written = _std_output_call(node)
+        if written is not None:
+            return _Finding(
+                f"{written} writes where the rest of the program can see "
+                f"it; a function that calls it says @impure",
+                _call_site(node))
+        callee = _called_func(node, env, struct_vars)
+        if callee is not None and callee.is_impure:
+            return _Finding(
+                f"'{callee.name}' is @impure, so a function that calls it "
+                f"says @impure too", _call_site(node))
+    return None
+
+
+def _has_declared_effect(expr, env, struct_vars) -> bool:
+    """Whether an expression does something besides produce a value.
+
+    A call the checks cannot resolve is taken to have an effect: what
+    it does is not written down anywhere they can read, and claiming a
+    statement is pointless is only worth doing when it is certain.  A
+    call that is resolved says for itself, with @impure.  `?` hands
+    control back to the caller, and a static assertion is checked for
+    its own sake, so both are effects of their own.
+    """
+    for node in _iter_ast(expr):
+        if isinstance(node, (_ast.TryUnwrap, _ast.StaticAssert,
+                             _ast.StaticAssertEq)):
+            return True
+        if not isinstance(node, (_ast.FuncCall, _ast.MethodCall)):
+            continue
+        callee = _called_func(node, env, struct_vars)
+        if callee is None or callee.is_impure:
+            return True
+    return False
+
+
+def _dropped_value_finding(expr, env, struct_vars) -> str | None:
+    """What a statement whose value goes nowhere should be told.
+
+    A function that hands back a value is called for that value, so a
+    call whose result nothing reads is either a mistake or a line that
+    could be deleted.  The same holds for an expression that is not a
+    call at all: it computes something and drops it.
+
+    Nothing is said where the statement has an effect of its own --
+    that is what the statement was for, and the value is beside the
+    point.
+    """
+    if _has_declared_effect(expr, env, struct_vars):
+        return None
+    if isinstance(expr, (_ast.FuncCall, _ast.MethodCall)):
+        callee = _called_func(expr, env, struct_vars)
+        if callee is None or _says_nothing(callee.ret_type):
+            return None
+        return _Finding(
+            f"the result of '{callee.name}' is not used; a function that "
+            f"hands back a value is called for it, so write '_ ← …' where "
+            f"the value is meant to be dropped", _call_site(expr))
+    return _Finding(
+        "the value of this statement is not used; it computes something "
+        "and nothing reads it", expr)
+
+
+def _check_unused_values(stmts, env, struct_vars,
+                         keeps_value: bool) -> str | None:
+    """Look through a block for statements whose value goes nowhere.
+
+    keeps_value says whether the last statement of this block is what
+    the block hands back.  A function body hands back its last
+    statement, and so do the arms of a match and the body of a catch
+    standing in that position; the body of an if, a while, or a foreach
+    hands back nothing, so every statement in one is checked.
+    """
+    for index, stmt in enumerate(stmts):
+        finding = _check_one_unused_value(
+            stmt, env, struct_vars,
+            keeps_value and index == len(stmts) - 1)
+        if finding is not None:
+            return finding
+    return None
+
+
+def _check_one_unused_value(stmt, env, struct_vars,
+                            in_value_position: bool) -> str | None:
+    """Check one statement, and the blocks it holds, for a dropped value."""
+    if isinstance(stmt, _ast.ExpectStmt):
+        # The statement was marked as drawing a diagnostic, so the
+        # finding is handed to the @expect rather than reported.
+        inner = _check_one_unused_value(stmt.stmt, env, struct_vars,
+                                        in_value_position)
+        if inner is not None:
+            stmt.stmt.static_errors = (
+                list(getattr(stmt.stmt, "static_errors", ())) + [str(inner)])
+        return None
+    if isinstance(stmt, _ast.ExprStmt):
+        if in_value_position:
+            return None
+        return _dropped_value_finding(stmt.expr, env, struct_vars)
+    if isinstance(stmt, _ast.IfStmt):
+        finding = _check_unused_values(stmt.cons, env, struct_vars, False)
+        if finding is not None:
+            return finding
+        alt = stmt.alt
+        while alt is not None:
+            finding = _check_unused_values(alt[1], env, struct_vars, False)
+            if finding is not None:
+                return finding
+            alt = alt[2] if len(alt) == 3 else None
+        return None
+    if isinstance(stmt, (_ast.WhileStmt, _ast.ForEachStmt)):
+        return _check_unused_values(stmt.body, env, struct_vars, False)
+    if isinstance(stmt, _ast.MatchStmt):
+        for arm in stmt.arms:
+            finding = _check_unused_values(arm.body, env, struct_vars,
+                                           in_value_position)
+            if finding is not None:
+                return finding
+        return None
+    if isinstance(stmt, _ast.CatchStmt):
+        return _check_unused_values(stmt.body, env, struct_vars,
+                                    in_value_position)
+    return None
+
+
+def _static_unused_value_check(func_def, env, struct_vars) -> str | None:
+    """Find a statement in a function whose value nothing reads.
+
+    The last statement of a body is what the function hands back, so it
+    is left alone whatever the signature says: whether the caller reads
+    the value is the caller's business, and a body ending in an
+    expression is how a function returns one.  A lambda hands back its
+    last statement the same way, so one written inside this function is
+    walked on those terms rather than as part of the block holding it.
+    """
+    finding = _check_unused_values(func_def.body, env, struct_vars, True)
+    if finding is not None:
+        return finding
+    for node in _iter_ast(func_def.body):
+        if isinstance(node, _ast.LambdaExpr) and isinstance(node.body, list):
+            finding = _check_unused_values(node.body, env, struct_vars, True)
+            if finding is not None:
+                return finding
+    return None
+
+
 def _static_check_moves(stmts: list, env,
                          moved: set[str] | None = None,
                          struct_vars: dict[str, StructType] | None = None,
@@ -1549,9 +1825,34 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                 if return_err is not None:
                     raise DefinitionError(f"in {defn.name}: {return_err}",
                                           _finding_pos(return_err) or _node_pos(defn))
+                struct_vars = _struct_vars_of(defn, env)
+                purity_err = _static_purity_check(defn, env, struct_vars)
+                if purity_err is not None:
+                    raise DefinitionError(f"in {defn.name}: {purity_err}",
+                                          _finding_pos(purity_err) or _node_pos(defn))
+                unused_err = _static_unused_value_check(defn, env, struct_vars)
+                if unused_err is not None:
+                    raise DefinitionError(f"in {defn.name}: {unused_err}",
+                                          _finding_pos(unused_err) or _node_pos(defn))
                 program.warnings.extend(
                     _redundant_return_type_warning(defn))
                 program.warnings.extend(_unused_mut_warnings(defn))
+
+    # Every method is installed by now, so a call from one method to
+    # another resolves whichever order the two were written in.
+    for defn in definitions:
+        if not isinstance(defn, ASTImplBlock):
+            continue
+        st = env.lookup(defn.struct_name)
+        for method_def in defn.methods:
+            struct_vars = _struct_vars_of(method_def, env, self_type=st)
+            for finding in (_static_purity_check(method_def, env, struct_vars),
+                            _static_unused_value_check(method_def, env,
+                                                       struct_vars)):
+                if finding is not None:
+                    raise DefinitionError(
+                        f"in {defn.struct_name}.{method_def.name}: {finding}",
+                        _finding_pos(finding) or _node_pos(method_def))
 
     return program
 
@@ -1682,6 +1983,18 @@ def main():
             return_err = _static_return_check(defn)
             if return_err is not None:
                 errors_produced.append(("error", return_err))
+
+        if not errors_produced:
+            struct_vars = _struct_vars_of(defn, env)
+            purity_err = _static_purity_check(defn, env, struct_vars)
+            if purity_err is not None:
+                errors_produced.append(("error", purity_err))
+
+        if not errors_produced:
+            unused_err = _static_unused_value_check(
+                defn, env, _struct_vars_of(defn, env))
+            if unused_err is not None:
+                errors_produced.append(("error", unused_err))
 
         if not errors_produced:
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,

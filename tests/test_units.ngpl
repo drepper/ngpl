@@ -1,17 +1,20 @@
 // Unit system tests: dimensional analysis, conversion, and arithmetic.
 
+@impure
 fn assert_true(cond:bool, msg:str):
   if not cond:
     std.println("FAIL: {}", msg)
 
 // Untyped, so a measured value reaches it with its unit intact
 // and the comparison below checks the unit as well as the number.
+@impure
 fn assert_eq_int(a, b, msg:str):
   if a != b:
     std.println("FAIL: {} (got {} expected {})", msg, a, b)
 
 // --- Basic unit annotation on variables ---
 
+@impure
 fn test_basic_units():
   let x ¤meter := 5
   let y ¤second := 10
@@ -20,6 +23,7 @@ fn test_basic_units():
 
 // --- Same-unit addition ---
 
+@impure
 fn test_same_unit_add():
   let a ¤meter := 3
   let b ¤meter := 7
@@ -29,6 +33,7 @@ fn test_same_unit_add():
 
 // --- Same-unit subtraction ---
 
+@impure
 fn test_same_unit_sub():
   let a ¤meter := 10
   let b ¤meter := 3
@@ -38,12 +43,14 @@ fn test_same_unit_sub():
 
 // --- Unit-scalar multiplication ---
 
+@impure
 fn test_scalar_mul():
   let a ¤meter := 5
   let b := a × 3
   // b should be 15 m
   std.println("{}", b)
 
+@impure
 fn test_scalar_mul_rev():
   let a ¤meter := 5
   let b := 3 × a
@@ -52,6 +59,7 @@ fn test_scalar_mul_rev():
 
 // --- Unit multiplication (derived units) ---
 
+@impure
 fn test_unit_mul():
   let a ¤meter := 5
   let b ¤second := 2
@@ -61,6 +69,7 @@ fn test_unit_mul():
 
 // --- Unit division ---
 
+@impure
 fn test_unit_div():
   let dist ¤meter := 100
   let time ¤second := 10
@@ -71,6 +80,7 @@ fn test_unit_div():
 
 // --- Dimensionless result from division ---
 
+@impure
 fn test_dimensionless_div():
   let a ¤meter := 10
   let b ¤meter := 5
@@ -81,12 +91,14 @@ fn test_dimensionless_div():
 
 // --- Unit conversion: compatible units ---
 
+@impure
 fn test_unit_conversion_km_to_m():
   let d ¤meter : mut = 0
   d ← 3¤kilometer
   // 3 km = 3000 m
   assert_eq_int(d, 3000, "3 km to m")
 
+@impure
 fn test_unit_conversion_ms_to_s():
   let t ¤second : mut = 0
   t ← 2000¤millisecond
@@ -123,6 +135,7 @@ fn test_dimensionless_assign():
 
 // --- Dimensioned + dimensionless arithmetic ---
 
+@impure
 fn test_add_dimensioned_dimensionless():
   let a ¤meter := 5
   let b := a + 3
@@ -133,6 +146,7 @@ fn test_add_dimensioned_dimensionless():
 
 // --- Addition of compatible but different units ---
 
+@impure
 fn test_add_km_and_m():
   let a ¤kilometer := 3
   let b ¤meter := 500
@@ -142,6 +156,7 @@ fn test_add_km_and_m():
 
 // --- Comparison of unitful values ---
 
+@impure
 fn test_unit_comparison():
   let a ¤meter := 5
   let b ¤meter := 10
@@ -150,6 +165,7 @@ fn test_unit_comparison():
   assert_true(a == a, "5m == 5m")
   assert_true(a != b, "5m != 10m")
 
+@impure
 fn test_unit_comparison_different():
   let a ¤kilometer := 1
   let b ¤meter := 1000
@@ -159,6 +175,7 @@ fn test_unit_comparison_different():
 
 // --- Negation ---
 
+@impure
 fn test_negation():
   let a ¤meter := 5
   let b := ⁻a
@@ -166,18 +183,21 @@ fn test_negation():
 
 // --- Byte units ---
 
+@impure
 fn test_byte_units():
   let a ¤byte : mut = 0
   a ← 1024¤kibibyte
   // 1024 KiB = 1048576 B
   assert_eq_int(a, 1048576, "1024 KiB to B")
 
+@impure
 fn test_byte_display():
   let a ¤byte := 42
   std.println("{}", a)
 
 // --- Unit inference from init value ---
 
+@impure
 fn test_unit_inference():
   let a ¤meter := 5
   let b := a
@@ -191,6 +211,7 @@ fn test_unit_inference():
 unit speed = meter ÷ second
 unit accel = meter ÷ second ÷ second
 
+@impure
 fn test_user_units():
   let v ¤"speed" := 10
   let a ¤"accel" := 2
@@ -199,6 +220,7 @@ fn test_user_units():
 
 // --- Formatting ---
 
+@impure
 fn test_format():
   let alloc := std.heap.allocator()
   let d ¤meter := 42
@@ -207,6 +229,7 @@ fn test_format():
 
 // --- Count and distance units ---
 
+@impure
 fn test_abstract_units():
   let n ¤count := 10
   let d ¤distance := 50
@@ -215,6 +238,7 @@ fn test_abstract_units():
 
 // --- Unit-aware modulus ---
 
+@impure
 fn test_unit_mod():
   let a ¤meter := 7
   let b ¤meter := 3
@@ -224,6 +248,7 @@ fn test_unit_mod():
 
 // --- Float with units ---
 
+@impure
 fn test_float_units():
   let a ¤meter := 3.5
   let b ¤meter := 1.5
@@ -232,6 +257,7 @@ fn test_float_units():
 
 // --- Compound unit spec on expression ---
 
+@impure
 fn test_compound_unit_spec():
   let v ¤meter÷second := 10
   std.println("{}", v)
@@ -240,6 +266,7 @@ fn test_compound_unit_spec():
 
 // A declared compound unit has to agree with the one the arithmetic
 // derives, so this checks the formula and the operator together.
+@impure
 fn test_compound_unit_mul_spec():
   let side ¤meter := 6
   let area ¤meter×meter := side × side
@@ -250,6 +277,7 @@ fn test_compound_unit_mul_spec():
 
 // A unit is part of a type, so parting with one is a real change and
 // is written down rather than happening quietly at a boundary.
+@impure
 fn test_dropunit_parts_with_the_unit():
   let v ¤meter := 7
   let plain := @dropunit(v)
@@ -257,6 +285,7 @@ fn test_dropunit_parts_with_the_unit():
   assert_true(@unitof(v) != @unitof(plain), "the unit does not")
 
 // The width is the value's own and is untouched.
+@impure
 fn test_dropunit_keeps_the_width():
   let v ¤byte : u32 = 7
   let plain := @dropunit(v)
@@ -267,6 +296,7 @@ fn test_dropunit_keeps_the_width():
 fn measured(n ¤meter : i32) → i32:
   @dropunit(n)
 
+@impure
 fn test_dropunit_at_a_return():
   assert_eq_int(measured(5 ¤meter), 5, "returns the bare number")
 
@@ -277,6 +307,7 @@ fn test_dropunit_at_a_return():
 fn measured_bytes(n ¤byte : usize) → usize ¤byte:
   n
 
+@impure
 fn test_return_type_carrying_a_unit():
   let r := measured_bytes(5 ¤byte)
   assert_true(@unitof(r) == @unitof(5 ¤byte), "the unit comes back")
@@ -286,6 +317,7 @@ fn test_return_type_carrying_a_unit():
 fn bare_becomes_measured() → usize ¤byte:
   7
 
+@impure
 fn test_return_unit_adopts_a_bare_number():
   assert_eq_int(bare_becomes_measured(), 7 ¤byte, "adopts the unit")
 
@@ -293,11 +325,13 @@ fn test_return_unit_adopts_a_bare_number():
 fn in_bytes() → usize ¤byte:
   2 ¤kilobyte
 
+@impure
 fn test_return_unit_converts():
   assert_eq_int(in_bytes(), 2000 ¤byte, "2 kB is 2000 B")
 
 // --- Spacing: ¤ immediately after variable name (no whitespace before) ---
 
+@impure
 fn test_unit_no_space_before():
   let x¤meter := 7
   let y¤second := 3
@@ -306,6 +340,7 @@ fn test_unit_no_space_before():
 
 // --- Spacing: whitespace after ¤ ---
 
+@impure
 fn test_unit_space_after():
   let a ¤ meter := 12
   let b ¤ second := 4
@@ -314,17 +349,20 @@ fn test_unit_space_after():
 
 // --- Spacing: no space before ¤, space after ¤ ---
 
+@impure
 fn test_unit_no_space_before_space_after():
   let p¤ kilogram := 5
   std.println("{}", p)
 
 // --- Spacing: ¤ on expression with no space ---
 
+@impure
 fn test_unit_expr_no_space():
   let x := 42¤meter
   std.println("{}", x)
 
 @start
+@impure
 fn main():
   test_basic_units()
   test_same_unit_add()

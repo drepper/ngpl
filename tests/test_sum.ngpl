@@ -222,5 +222,6 @@ fn error_array_fill_is_not_an_alternative():
     _ ← a
 
 @start
+@impure
 fn main():
     std.println("sum type tests passed")

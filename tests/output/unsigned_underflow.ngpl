@@ -8,5 +8,6 @@ fn m() → u16:
     v - u
 
 @start
+@impure
 fn main():
     std.println("{}", m())

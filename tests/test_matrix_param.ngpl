@@ -352,5 +352,6 @@ fn error_empty_subscript_on_a_value():
     _ ← a[]
 
 @start
+@impure
 fn main():
     std.println("matrix parameter tests passed")

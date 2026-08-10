@@ -57,6 +57,7 @@ fn test_untyped_param_immutable():
     assert_eq(identity(7), 7)
 
 @start
+@impure
 fn main():
     std.println("let tests passed")
 

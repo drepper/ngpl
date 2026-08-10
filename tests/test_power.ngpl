@@ -1,13 +1,16 @@
 // Power operator ↑ tests.
 
+@impure
 fn assert_true(cond:bool, msg:str):
   if not cond:
     std.println("FAIL: {}", msg)
 
+@impure
 fn assert_eq_int(a:i64, b:i64, msg:str):
   if a != b:
     std.println("FAIL: {} (got {} expected {})", msg, a, b)
 
+@impure
 fn approx_eq(a:f64, b:f64, msg:str):
   let diff : mut = a - b
   if diff < 0.0:
@@ -17,19 +20,23 @@ fn approx_eq(a:f64, b:f64, msg:str):
 
 // --- Integer exponentiation ---
 
+@impure
 fn test_int_pow_basic():
   assert_eq_int(2 ↑ 10, 1024, "2↑10")
   assert_eq_int(3 ↑ 4, 81, "3↑4")
   assert_eq_int(5 ↑ 0, 1, "5↑0")
   assert_eq_int(7 ↑ 1, 7, "7↑1")
 
+@impure
 fn test_int_pow_zero_base():
   assert_eq_int(0 ↑ 5, 0, "0↑5")
   assert_eq_int(0 ↑ 0, 1, "0↑0")
 
+@impure
 fn test_int_pow_one():
   assert_eq_int(1 ↑ 100, 1, "1↑100")
 
+@impure
 fn test_int_pow_large():
   assert_eq_int(2 ↑ 20, 1048576, "2↑20")
 
@@ -41,15 +48,18 @@ fn test_int_pow_negative_exp():
 
 // --- Float exponentiation ---
 
+@impure
 fn test_float_pow_basic():
   approx_eq(2.0 ↑ 3.0, 8.0, "2.0↑3.0")
   approx_eq(4.0 ↑ 0.5, 2.0, "4.0↑0.5")
   approx_eq(27.0 ↑ (1.0 ÷ 3.0), 3.0, "27.0↑(1/3)")
 
+@impure
 fn test_float_pow_negative_exp():
   approx_eq(2.0 ↑ ⁻1.0, 0.5, "2.0↑⁻1.0")
   approx_eq(4.0 ↑ ⁻0.5, 0.5, "4.0↑⁻0.5")
 
+@impure
 fn test_float_pow_zero():
   approx_eq(5.0 ↑ 0.0, 1.0, "5.0↑0.0")
 
@@ -64,16 +74,19 @@ fn test_mixed_pow_rejected():
 
 // --- Right associativity ---
 
+@impure
 fn test_right_assoc():
   // 2 ↑ 3 ↑ 2 = 2 ↑ (3 ↑ 2) = 2 ↑ 9 = 512
   assert_eq_int(2 ↑ 3 ↑ 2, 512, "2↑3↑2 right-assoc")
 
 // --- Precedence: ↑ binds tighter than * ---
 
+@impure
 fn test_precedence_mul():
   // 2 * 3 ↑ 2 = 2 * 9 = 18
   assert_eq_int(2 × 3 ↑ 2, 18, "2*3↑2")
 
+@impure
 fn test_precedence_neg():
   // ⁻2 ↑ 2 = ⁻(2↑2) = ⁻4 (negation binds looser)
   assert_eq_int(⁻2 ↑ 2, ⁻4, "⁻2↑2")
@@ -87,6 +100,7 @@ fn test_overflow():
 
 // --- Power with units ---
 
+@impure
 fn test_unit_pow():
   let d ¤meter := 3.0
   let area := d ↑ 2
@@ -94,12 +108,14 @@ fn test_unit_pow():
   approx_eq(area, 9.0, "3.0m ↑ 2 value")
   std.println("{}", area)
 
+@impure
 fn test_unit_pow_cube():
   let d ¤meter := 2.0
   let vol := d ↑ 3
   // 2.0 m ^ 3 = 8.0 m^3
   approx_eq(vol, 8.0, "2.0m ↑ 3 value")
 
+@impure
 fn test_unit_pow_zero():
   let d ¤meter := 5.0
   let r := d ↑ 0
@@ -113,6 +129,7 @@ fn test_unit_exp_rejected():
   let r : mut = d ↑ e
 
 @start
+@impure
 fn main():
   test_int_pow_basic()
   test_int_pow_zero_base()

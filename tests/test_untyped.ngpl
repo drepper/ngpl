@@ -23,6 +23,7 @@ fn test_literal_takes_the_typed_width():
 // range is reported rather than adjusted.
 @test
 @expect error "integer overflow.*does not fit in u8"
+@impure
 fn test_overflow_follows_the_width_taken():
     let p : u8 = 255
     std.println("{}", p + 1)
@@ -39,6 +40,7 @@ fn test_wrapping_follows_the_width_taken():
 // Signed overflow is reported rather than wrapped.
 @test
 @expect error "does not fit in i8"
+@impure
 fn test_signed_overflow_is_reported():
     let i : i8 = 127
     std.println("{}", i + 1)
@@ -103,5 +105,6 @@ fn test_a_literal_still_joins_a_measured_value():
     assert_eq(@unitof(further), @unitof(d))
 
 @start
+@impure
 fn main():
     std.println("untyped tests passed")

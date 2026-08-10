@@ -112,11 +112,13 @@ fn test_precedence_matches_the_exact_operators():
 // saturating operator to hold it at.
 @test
 @expect error "is for integers"
+@impure
 fn test_float_has_no_saturating_form():
     std.println("{}", 1.5 ⊞ 2.5)
 
 @test
 @expect error "is for integers"
+@impure
 fn test_string_has_no_saturating_form():
     std.println("{}", "a" ⊞ "b")
 
@@ -157,6 +159,7 @@ fn test_the_three_answers_differ_only_at_the_edge():
 
 @test
 @expect error "integer overflow"
+@impure
 fn test_the_exact_operator_still_reports():
     let a : u8 = 255
     std.println("{}", a + 1)
@@ -170,5 +173,6 @@ fn test_wrap_does_not_override_a_saturating_operator():
     assert_eq(@wrap(a + 1), 0)
 
 @start
+@impure
 fn main():
     std.println("saturating tests passed")

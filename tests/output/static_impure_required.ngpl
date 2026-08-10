@@ -1,0 +1,9 @@
+// Writing to the program's output is a side effect, so the function
+// doing it says @impure.  The caret points at the call that writes.
+fn announce(name : str):
+    std.println("hello {}", name)
+
+@start
+@impure
+fn main():
+    announce("world")

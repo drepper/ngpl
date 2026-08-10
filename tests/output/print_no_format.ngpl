@@ -1,4 +1,5 @@
 // A call with nothing to write from: the template is not optional.
 @start
+@impure
 fn main():
     std.print()

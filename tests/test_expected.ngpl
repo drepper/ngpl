@@ -156,5 +156,6 @@ fn error_unwrap_expected():
     let y : mut = x + 1
 
 @start
+@impure
 fn main():
     std.println("expected tests passed")

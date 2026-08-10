@@ -172,5 +172,6 @@ fn error_double_close_dir():
     dir.close()
 
 @start
+@impure
 fn main():
     std.println("scope close tests passed")

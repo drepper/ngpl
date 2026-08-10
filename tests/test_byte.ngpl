@@ -18,5 +18,6 @@ fn test_byte_sizeof():
     assert_eq(data.sizeof, 5)
 
 @start
+@impure
 fn main():
     std.println("byte tests passed")

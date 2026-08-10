@@ -1,0 +1,167 @@
+// Tests for the statement whose value nothing reads.
+//
+// A function that hands back a value is called for that value, so a
+// call standing on its own as a statement is either a mistake or a
+// line that could be deleted.  The same holds for an expression that
+// is not a call at all: it computes something and drops it.
+//
+// A statement that has an effect of its own is left alone -- the value
+// was beside the point -- and `_ ←` says in so many words that the
+// value is meant to go nowhere.
+
+fn doubled(n : i64) → i64:
+    n × 2
+
+fn hands_nothing_back(n : i64):
+    assert(n == n)
+
+let ticks : mut = 0
+
+@impure
+fn bump() → i64:
+    ticks ← ticks + 1
+    ticks
+
+// ---------------------------------------------------------------------
+// A dropped result is refused
+// ---------------------------------------------------------------------
+
+@test
+@expect error "the result of 'doubled' is not used"
+fn test_dropped_result():
+    doubled(21)
+    assert(true)
+
+// The complaint does not depend on where in the block the statement is.
+@test
+@expect error "the result of 'doubled' is not used"
+fn test_dropped_result_in_a_loop():
+    foreach i := 1…3:
+        doubled(i)
+
+// An expression that is not a call at all drops its value the same way.
+@test
+@expect error "the value of this statement is not used"
+fn test_dropped_expression():
+    let n := 3
+    n + 1
+    assert_eq(n, 3)
+
+@test
+@expect error "the value of this statement is not used"
+fn test_a_bare_name_reads_nothing():
+    let n := 3
+    n
+    assert_eq(n, 3)
+
+// The body of an if hands back nothing, so a value written there goes
+// nowhere even when the if is the last statement of the function.
+@test
+@expect error "the value of this statement is not used"
+fn test_an_if_branch_hands_back_nothing():
+    let n := 3
+    if n > 0:
+        n + 1
+
+// A statement-level @expect covers the one statement it marks.
+@test
+fn test_statement_level_expect():
+    @expect error "the result of 'doubled' is not used"
+    doubled(21)
+    assert_eq(doubled(2), 4)
+
+// ---------------------------------------------------------------------
+// Saying the value is meant to be dropped
+// ---------------------------------------------------------------------
+
+@test
+fn test_discard_says_it():
+    _ ← doubled(21)
+    assert(true)
+
+@test
+fn test_a_used_result_is_quiet():
+    let n := doubled(21)
+    assert_eq(n, 42)
+
+@test
+fn test_a_result_used_as_an_argument_is_quiet():
+    assert_eq(doubled(doubled(3)), 12)
+
+// The last statement of a body is what the function hands back, so it
+// is not a dropped value whatever the caller does with it.
+@test
+fn test_the_last_statement_is_the_result():
+    assert_eq(doubled(4), 8)
+
+fn ends_in_an_expression(n : i64) → i64:
+    let m := n + 1
+    doubled(m)
+
+@test
+fn test_a_body_may_end_in_a_call():
+    assert_eq(ends_in_an_expression(3), 8)
+
+// ---------------------------------------------------------------------
+// Statements that do something are left alone
+// ---------------------------------------------------------------------
+
+// Nothing comes back from this one, so nothing was dropped.
+@test
+fn test_a_function_handing_nothing_back_is_quiet():
+    hands_nothing_back(3)
+    assert(true)
+
+// The call has a declared side effect, which is what the statement was
+// for; the value it also produces is beside the point.
+@test
+@impure
+fn test_an_impure_call_is_quiet():
+    bump()
+    assert_eq(ticks, 1)
+
+// A call the checks cannot resolve says nothing about itself, so no
+// claim is made about it either.
+@test
+fn test_a_builtin_call_is_quiet():
+    let v : mut = [1, 2]
+    v.push(3)
+    assert_eq(v.sizeof, 3)
+
+// A static assertion is checked for its own sake.
+@test
+fn test_a_static_assertion_is_quiet():
+    static_assert(1 + 1 == 2)
+    static_assert_eq(@typeof(1), int)
+
+// ---------------------------------------------------------------------
+// Methods
+// ---------------------------------------------------------------------
+
+struct Point:
+    x : i32
+
+impl Point:
+    fn x_value(&self) → i32:
+        self.x
+
+    fn describe(&self):
+        assert(self.x == self.x)
+
+@test
+@expect error "the result of 'x_value' is not used"
+fn test_a_dropped_method_result():
+    let p := Point{x: 1}
+    p.x_value()
+    assert(true)
+
+@test
+fn test_a_method_handing_nothing_back_is_quiet():
+    let p := Point{x: 1}
+    p.describe()
+    assert_eq(p.x_value(), 1)
+
+@start
+@impure
+fn main():
+    std.println("unused value tests passed")

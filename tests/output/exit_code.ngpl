@@ -1,12 +1,14 @@
 // std.exit terminates at once with the given status: the line after it
 // never runs, and the @start function's own return value is not used.
 
+@impure
 fn quit_early():
     std.println("quitting")
     std.exit(42)
     std.println("unreachable")
 
 @start
+@impure
 fn main() → u8:
     quit_early()
     std.println("also unreachable")

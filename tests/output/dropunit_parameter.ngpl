@@ -1,7 +1,9 @@
+@impure
 fn plain(x : u32):
     std.println("{}", x)
 
 @start
+@impure
 fn main():
     let v ¤byte : u32 = 7
     plain(v)

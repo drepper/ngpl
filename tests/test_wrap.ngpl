@@ -70,5 +70,6 @@ fn test_wrap_chained_add():
     assert_eq(z, 44)
 
 @start
+@impure
 fn main():
     std.println("wrap tests passed")

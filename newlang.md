@@ -9,3 +9,6 @@ what it is.
 
 - [Sum Types](design/sum-types/README.md) — how a program says a value
   is one of several alternatives
+- [Static Analysis: Effects and Unused Values](design/static-analysis/README.md)
+  — what a program has to say about its side effects, and what happens
+  to a value nothing reads

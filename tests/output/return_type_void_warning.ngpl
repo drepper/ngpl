@@ -2,9 +2,11 @@
 // back, so writing ∅ adds no information.  The two spellings mean the
 // same thing, which is why the long one is worth pointing out: it
 // invites a reader to look for a difference that is not there.
+@impure
 fn short_form(name : str):
     std.println("a: {}", name)
 
+@impure
 fn long_form(name : str) → ∅:
     std.println("b: {}", name)
 
@@ -19,10 +21,12 @@ struct Counter:
     n : i32
 
 impl Counter:
+    @impure
     fn show(self) → ∅:
         std.println("counter {}", self.n)
 
 @start
+@impure
 fn main():
     short_form("x")
     long_form("y")

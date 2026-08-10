@@ -134,5 +134,6 @@ fn test_local_type_alias_generic_array():
     assert_eq(sum_aliased(a), 60)
 
 @start
+@impure
 fn main():
     std.println("generic tests passed")

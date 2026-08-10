@@ -226,5 +226,6 @@ fn error_cross_enum_bitor():
     let c : mut = a | b
 
 @start
+@impure
 fn main():
     std.println("enum tests passed")

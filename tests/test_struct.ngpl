@@ -208,5 +208,6 @@ fn error_non_struct_binding():
     _ ← a.x
 
 @start
+@impure
 fn main():
     std.println("struct tests passed")

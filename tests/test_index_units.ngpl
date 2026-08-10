@@ -298,5 +298,6 @@ fn test_tuple_bare_int():
     assert_eq(t[2], 30)
 
 @start
+@impure
 fn main():
     std.println("index unit tests passed")

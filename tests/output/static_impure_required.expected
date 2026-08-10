@@ -1,0 +1,7 @@
+error: in announce: std.println writes where the rest of the program can see it; a function that calls it says @impure
+  --> tests/output/static_impure_required.ngpl:4:5
+    |
+  4 |     std.println("hello {}", name)
+    |     ^^^^^^^^^^^
+  5 | 
+    |

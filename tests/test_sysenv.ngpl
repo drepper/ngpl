@@ -105,5 +105,6 @@ fn test_sys_memory():
     assert(std.sys.total_memory() >= page)
 
 @start
+@impure
 fn main():
     std.println("system environment tests passed")

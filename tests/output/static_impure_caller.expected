@@ -1,0 +1,7 @@
+error: in greet: 'announce' is @impure, so a function that calls it says @impure too
+  --> tests/output/static_impure_caller.ngpl:9:5
+    |
+  9 |     announce("world")
+    |     ^^^^^^^^
+ 10 | 
+    |

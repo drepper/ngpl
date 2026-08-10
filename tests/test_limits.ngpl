@@ -112,5 +112,6 @@ fn error_max_of_an_enum():
     _ ← @max(Shade)
 
 @start
+@impure
 fn main():
     std.println("limit tests passed")

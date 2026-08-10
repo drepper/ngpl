@@ -1,0 +1,14 @@
+// The effect travels: a function calling an impure one has that
+// function's side effect and says so itself.  The caret points at the
+// call that carries it.
+@impure
+fn announce(name : str):
+    std.println("hello {}", name)
+
+fn greet():
+    announce("world")
+
+@start
+@impure
+fn main():
+    greet()

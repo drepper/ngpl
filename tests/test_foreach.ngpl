@@ -76,5 +76,6 @@ fn test_foreach_array():
     assert_eq(total, 100)
 
 @start
+@impure
 fn main():
     std.println("foreach tests passed")

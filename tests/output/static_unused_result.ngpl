@@ -1,0 +1,11 @@
+// A function that hands back a value is called for that value, so a
+// call standing on its own as a statement drops what it was called
+// for.  The caret points at the call.
+fn doubled(n : i64) → i64:
+    n × 2
+
+@start
+@impure
+fn main():
+    doubled(21)
+    std.println("done")

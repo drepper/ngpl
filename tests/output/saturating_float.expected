@@ -1,6 +1,6 @@
 error: saturating addition (⊞) is for integers, which state the range it holds a result inside; got float and float
-  --> tests/output/saturating_float.ngpl:6:23
+  --> tests/output/saturating_float.ngpl:7:23
     |
-  6 |     std.println("{}", 1.5 ⊞ 2.5)
+  7 |     std.println("{}", 1.5 ⊞ 2.5)
     |                       ^^^^^^^^^
     |

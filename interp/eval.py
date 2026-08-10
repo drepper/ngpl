@@ -2998,9 +2998,11 @@ class Evaluator:
         any expectation remains unmatched.
         """
         diagnostics: list[tuple[str, str]] = []
-        # Warnings found before the program ran, about this statement.
+        # Diagnostics found before the program ran, about this statement.
         diagnostics.extend(
             ("warning", w) for w in getattr(node.stmt, "static_warnings", ()))
+        diagnostics.extend(
+            ("error", e) for e in getattr(node.stmt, "static_errors", ()))
         saved_warnings = self._warnings
         self._warnings = []
         try:

@@ -108,6 +108,7 @@ fn hinted_and_impure() → i64:
 let hint_counter : mut = 5
 
 @test
+@impure
 fn test_hint_with_other_annotations():
     assert_eq(hinted_and_impure(), 5)
 
@@ -149,5 +150,6 @@ fn test_names_remain_usable():
 // hint_wrong_statement, and hint_at_top_level under tests/output.
 
 @start
+@impure
 fn main():
     std.println("hint tests passed")

@@ -2,10 +2,12 @@
 
 // Untyped, so a measured value reaches it with its unit intact
 // and the comparison below checks the unit as well as the number.
+@impure
 fn assert_eq_int(a, b, msg:str):
   if a != b:
     std.println("FAIL: {} (got {} expected {})", msg, a, b)
 
+@impure
 fn assert_true(cond:bool, msg:str):
   if not cond:
     std.println("FAIL: {}", msg)
@@ -13,12 +15,14 @@ fn assert_true(cond:bool, msg:str):
 // --- sizeof returns ptrdiff unit ---
 
 @test
+@impure
 fn test_sizeof_array_ptrdiff():
   let arr := [10, 20, 30]
   let sz := arr.sizeof
   assert_eq_int(sz, 3, "array sizeof is 3")
 
 @test
+@impure
 fn test_sizeof_string_ptrdiff():
   let s := "hello"
   let sz := s.sizeof
@@ -27,6 +31,7 @@ fn test_sizeof_string_ptrdiff():
 // --- sizeof byte[] returns byte unit ---
 
 @test
+@impure
 fn test_sizeof_byte_array():
   let buf: u8[4] = [1, 2, 3, 4]
   let sz := buf.sizeof
@@ -35,12 +40,14 @@ fn test_sizeof_byte_array():
 // --- dimensionless + unit-bearing: addition ---
 
 @test
+@impure
 fn test_add_unit_plus_dimensionless():
   let a ¤meter := 10
   let b := a + 3
   assert_eq_int(b, 13, "10m + 3")
 
 @test
+@impure
 fn test_add_dimensionless_plus_unit():
   let a ¤meter := 10
   let b := 5 + a
@@ -49,12 +56,14 @@ fn test_add_dimensionless_plus_unit():
 // --- dimensionless + unit-bearing: subtraction ---
 
 @test
+@impure
 fn test_sub_unit_minus_dimensionless():
   let a ¤meter := 10
   let b := a - 3
   assert_eq_int(b, 7, "10m - 3")
 
 @test
+@impure
 fn test_sub_dimensionless_minus_unit():
   let a ¤meter := 10
   let b := 20 - a
@@ -63,12 +72,14 @@ fn test_sub_dimensionless_minus_unit():
 // --- dimensionless * unit-bearing: multiplication preserves unit ---
 
 @test
+@impure
 fn test_mul_unit_times_dimensionless():
   let a ¤meter := 5
   let b := a × 3
   assert_eq_int(b, 15, "5m × 3 = 15m")
 
 @test
+@impure
 fn test_mul_dimensionless_times_unit():
   let a ¤meter := 5
   let b := 3 × a
@@ -77,6 +88,7 @@ fn test_mul_dimensionless_times_unit():
 // --- dimensionless / unit-bearing ---
 
 @test
+@impure
 fn test_div_unit_by_dimensionless():
   let a ¤meter := 12
   let b := a ÷ 3
@@ -85,12 +97,14 @@ fn test_div_unit_by_dimensionless():
 // --- dimensionless % unit-bearing ---
 
 @test
+@impure
 fn test_mod_unit_by_dimensionless():
   let a ¤meter := 10
   let b := a % 3
   assert_eq_int(b, 1, "10m % 3 = 1m")
 
 @test
+@impure
 fn test_mod_dimensionless_by_unit():
   let a ¤meter := 3
   let b := 10 % a
@@ -99,6 +113,7 @@ fn test_mod_dimensionless_by_unit():
 // --- comparison with dimensionless ---
 
 @test
+@impure
 fn test_cmp_unit_with_dimensionless():
   let a ¤meter := 5
   assert_true(a > 3, "5m > 3")
@@ -108,6 +123,7 @@ fn test_cmp_unit_with_dimensionless():
 // --- sizeof result used in arithmetic ---
 
 @test
+@impure
 fn test_sizeof_in_arithmetic():
   let arr := [10, 20, 30, 40, 50]
   let sz := arr.sizeof
@@ -119,6 +135,7 @@ fn test_sizeof_in_arithmetic():
 // --- @sizeof on compile-time constant ---
 
 @test
+@impure
 fn test_at_sizeof_ptrdiff():
   let sz := @sizeof([1, 2, 3])
   assert_eq_int(sz, 3, "@sizeof literal is 3")
@@ -127,6 +144,7 @@ fn test_at_sizeof_ptrdiff():
 
 // A type asks how much storage it takes; the answer is in bytes, and
 // matches what C reports for the same declaration.
+@impure
 fn test_sizeof_of_scalar_types():
   assert_eq_int(@sizeof(i8), 1 ¤byte, "i8 is 1 byte")
   assert_eq_int(@sizeof(i16), 2 ¤byte, "i16 is 2 bytes")
@@ -137,6 +155,7 @@ fn test_sizeof_of_scalar_types():
   assert_eq_int(@sizeof(f32), 4 ¤byte, "f32 is 4 bytes")
   assert_eq_int(@sizeof(f64), 8 ¤byte, "f64 is 8 bytes")
 
+@impure
 fn test_sizeof_of_fixed_arrays():
   assert_eq_int(@sizeof(i32[4]), 16 ¤byte, "i32[4] is 16 bytes")
   assert_eq_int(@sizeof(u8[16]), 16 ¤byte, "u8[16] is 16 bytes")
@@ -154,6 +173,7 @@ enum SizedShade:
 enum TinyShade : u8:
   a
 
+@impure
 fn test_sizeof_of_named_types():
   assert_eq_int(@sizeof(SizedPoint), 16 ¤byte, "struct is 16 bytes")
   assert_eq_int(@sizeof(SizedPoint[2]), 32 ¤byte, "two of them is 32")
@@ -162,6 +182,7 @@ fn test_sizeof_of_named_types():
 
 // A type asks for storage and a value asks for elements, which the
 // unit tells apart: bytes for the one, a count for the other.
+@impure
 fn test_sizeof_type_versus_value():
   let fixed : i32[4] = 0
   assert_eq_int(@sizeof(i32[4]), 16 ¤byte, "the type is 16 bytes")
@@ -170,6 +191,7 @@ fn test_sizeof_type_versus_value():
 
 // A scalar holds no elements to count, so it answers with what its
 // type occupies.
+@impure
 fn test_sizeof_of_a_scalar_binding():
   let a : i8 = 1
   let b : i16 = 1
@@ -183,6 +205,7 @@ fn test_sizeof_of_a_scalar_binding():
   assert_eq_int(@sizeof(e), 1 ¤byte, "a bool binding is 1 byte")
 
 // An array type written out has a size when every dimension has one.
+@impure
 fn test_sizeof_of_written_array_types():
   assert_eq_int(@sizeof(i32[4]), 16 ¤byte, "i32[4] is 16 bytes")
   assert_eq_int(@sizeof(u8[16]), 16 ¤byte, "u8[16] is 16 bytes")
@@ -190,6 +213,7 @@ fn test_sizeof_of_written_array_types():
   assert_eq_int(@sizeof(u8[2,3,4]), 24 ¤byte, "three dimensions")
 
 @start
+@impure
 fn main():
   test_sizeof_array_ptrdiff()
   test_sizeof_string_ptrdiff()

@@ -183,5 +183,6 @@ fn error_borrow_with_destructuring():
         assert(a > 0)
 
 @start
+@impure
 fn main():
     std.println("borrow foreach tests passed")

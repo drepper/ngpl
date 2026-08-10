@@ -1,6 +1,6 @@
 error: plain: parameter 'x' is u32, which carries no unit, but the argument is B; use @dropunit to part with it
-  --> tests/output/dropunit_parameter.ngpl:7:11
+  --> tests/output/dropunit_parameter.ngpl:9:11
     |
-  7 |     plain(v)
+  9 |     plain(v)
     |           ^
     |

@@ -88,5 +88,6 @@ fn error_mismatched_through_call() → i64?MyErr:
     q
 
 @start
+@impure
 fn main():
     std.println("try return type tests passed")

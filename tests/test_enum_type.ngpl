@@ -189,5 +189,6 @@ fn error_array_fill_is_not_a_member():
     _ ← a
 
 @start
+@impure
 fn main():
     std.println("enum type tests passed")

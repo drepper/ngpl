@@ -248,5 +248,6 @@ fn test_operators_on_rows():
     assert_eq(sum_dyn(m[0] ⧺ m[1]), 36)
 
 @start
+@impure
 fn main():
     std.println("slice parameter tests passed")

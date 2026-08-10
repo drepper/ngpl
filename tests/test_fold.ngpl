@@ -117,5 +117,6 @@ fn test_fold_non_iterable():
     result
 
 @start
+@impure
 fn main():
     std.println("fold tests passed")

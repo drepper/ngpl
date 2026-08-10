@@ -227,5 +227,6 @@ fn test_nested_bindings():
     assert_eq(total, 90)
 
 @start
+@impure
 fn main():
     std.println("while binding tests passed")

@@ -115,5 +115,6 @@ fn test_curry_too_many_args():
     f(3, 4)
 
 @start
+@impure
 fn main():
     std.println("curry tests passed")

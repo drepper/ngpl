@@ -81,6 +81,7 @@ all_tests=(
     "$testdir"/test_try_return_type.ngpl
     "$testdir"/test_match.ngpl
     "$testdir"/test_unused_mut.ngpl
+    "$testdir"/test_unused_value.ngpl
 )
 
 # Filter tests if command-line patterns are given.

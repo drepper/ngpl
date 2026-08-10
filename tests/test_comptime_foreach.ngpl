@@ -94,5 +94,6 @@ fn test_ct_empty_no_iterations():
     assert_eq(ct_empty(), 0)
 
 @start
+@impure
 fn main():
     std.println("comptime foreach tests passed")

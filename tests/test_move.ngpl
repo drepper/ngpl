@@ -56,5 +56,6 @@ fn test_reassign_after_consume():
     assert_eq(b.peek(), 2)
 
 @start
+@impure
 fn main():
     std.println("move tests passed")

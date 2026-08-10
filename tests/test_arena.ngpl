@@ -36,5 +36,6 @@ fn test_arena_reset():
     alloc.deinit()
 
 @start
+@impure
 fn main():
     std.println("arena tests passed")

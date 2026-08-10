@@ -48,5 +48,6 @@ fn test_mixed():
     assert_eq(mixed_test2(5), 5)
 
 @start
+@impure
 fn main():
     std.println("layout tests passed")

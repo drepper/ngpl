@@ -255,6 +255,7 @@ fn test_pop_into_another_array():
     assert_eq(dst[2], 1)
 
 @start
+@impure
 fn main():
     std.println("array method tests passed")
 
@@ -423,7 +424,7 @@ fn test_fixed_into_immutable_dynamic_param():
 @test
 fn test_dynamic_into_mutable_dynamic_param():
     let d : i32[] = [1, 2, 3]
-    grows_by_copy(d)
+    _ ← grows_by_copy(d)
     assert_eq(d.sizeof, 3)
 
 // A fixed parameter of the same length takes a fixed argument, and its

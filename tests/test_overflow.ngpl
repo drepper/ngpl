@@ -358,5 +358,6 @@ fn test_signed_right_shift_stops_one_earlier():
     _ ← i » 7
 
 @start
+@impure
 fn main():
     std.println("overflow tests passed")

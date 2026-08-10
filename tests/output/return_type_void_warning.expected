@@ -1,16 +1,16 @@
 warning: a return type of ∅ says what leaving it off says; the shorter form is the one to use
-  --> tests/output/return_type_void_warning.ngpl:22:19
+  --> tests/output/return_type_void_warning.ngpl:25:19
     |
- 22 |     fn show(self) → ∅:
+ 25 |     fn show(self) → ∅:
     |                   ^^^
- 23 |         std.println("counter {}", self.n)
+ 26 |         std.println("counter {}", self.n)
     |
 warning: a return type of ∅ says what leaving it off says; the shorter form is the one to use
-  --> tests/output/return_type_void_warning.ngpl:8:26
+  --> tests/output/return_type_void_warning.ngpl:10:26
     |
-  8 | fn long_form(name : str) → ∅:
+ 10 | fn long_form(name : str) → ∅:
     |                          ^^^
-  9 |     std.println("b: {}", name)
+ 11 |     std.println("b: {}", name)
     |
 a: x
 b: y

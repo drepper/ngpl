@@ -95,5 +95,6 @@ fn error_abort_signal_not_an_integer():
     std.abort("SIGTERM")
 
 @start
+@impure
 fn main():
     std.println("callstack tests passed")

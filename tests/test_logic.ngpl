@@ -220,5 +220,6 @@ fn test_logic_with_comparison():
     assert(x > y ∨ y == 20)
 
 @start
+@impure
 fn main():
     std.println("logic tests passed")

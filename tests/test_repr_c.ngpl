@@ -177,5 +177,6 @@ fn error_offsetof_not_a_string():
     let n : mut = Point.offsetof(0)
 
 @start
+@impure
 fn main():
     std.println("repr(C) tests passed")

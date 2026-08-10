@@ -5,6 +5,7 @@ fn give_up():
     std.abort()
 
 @start
+@impure
 fn main():
     std.println("before abort")
     give_up()

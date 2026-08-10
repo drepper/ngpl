@@ -121,5 +121,6 @@ fn error_approx_on_strings():
     assert("a" ≅ "b")
 
 @start
+@impure
 fn main():
     std.println("approximate comparison tests passed")

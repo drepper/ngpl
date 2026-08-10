@@ -172,5 +172,6 @@ fn test_nested_in_else():
     assert_eq(which, 3)
 
 @start
+@impure
 fn main():
     std.println("if tests passed")

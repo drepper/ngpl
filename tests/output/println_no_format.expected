@@ -1,6 +1,6 @@
 error: std.println(fmt, ...) requires a format string; std.println("") writes an empty line
-  --> tests/output/println_no_format.ngpl:6:5
+  --> tests/output/println_no_format.ngpl:7:5
     |
-  6 |     std.println()
+  7 |     std.println()
     |     ^^^
     |

@@ -95,5 +95,6 @@ fn test_whole_number_with_a_float_suffix():
 // tests, since a literal is read before anything runs.
 
 @start
+@impure
 fn main():
     std.println("type tests passed")

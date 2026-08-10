@@ -4,6 +4,7 @@
 // way for a while, and the eight words were quietly taken as the
 // elements of an array nobody had declared.
 @start
+@impure
 fn main():
     let h : u32 = [1, 2, 3, 4, 5, 6, 7, 8]
     std.println("{}", h)

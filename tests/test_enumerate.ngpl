@@ -71,5 +71,6 @@ fn test_enumerate_outside_foreach():
     let x : mut = enumerate([1, 2, 3])
 
 @start
+@impure
 fn main():
     std.println("enumerate tests passed")

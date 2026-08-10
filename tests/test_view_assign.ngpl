@@ -109,5 +109,6 @@ fn test_fixed_accepts_fixed_same():
   assert_eq(sum_fixed(a), 60)
 
 @start
+@impure
 fn main():
   std.println("view assign tests passed")

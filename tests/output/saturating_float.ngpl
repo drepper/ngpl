@@ -2,5 +2,6 @@
 // A float answers overflow with an infinity, so it has no such edge
 // and no saturating form.
 @start
+@impure
 fn main():
     std.println("{}", 1.5 ⊞ 2.5)

@@ -156,5 +156,6 @@ fn error_zero_width():
     let a : u0 = 0
 
 @start
+@impure
 fn main():
     std.println("integer width tests passed")

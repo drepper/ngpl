@@ -2,5 +2,6 @@ fn measured(n ¤meter : i32) → i32:
     n
 
 @start
+@impure
 fn main():
     std.println("{}", measured(5 ¤meter))

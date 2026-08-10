@@ -7,4 +7,4 @@ error: integer underflow: -2 does not fit in u16 (range 0..65535)
     |
 backtrace (innermost call first):
   #0 m at tests/output/unsigned_underflow.ngpl:8:4
-  #1 main at tests/output/unsigned_underflow.ngpl:12:22
+  #1 main at tests/output/unsigned_underflow.ngpl:13:22

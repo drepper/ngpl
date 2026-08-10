@@ -12,6 +12,7 @@ fn outer(n ¤ptrdiff : i64) → i64:
     middle(n) × 2
 
 @start
+@impure
 fn main():
     std.println("before")
     std.println("{}", outer(9 ¤ptrdiff))

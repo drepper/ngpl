@@ -1,6 +1,7 @@
 // Tests for @unitof intrinsic and standalone ¤unit references.
 // All @ commands require compile-time constant arguments.
 
+@impure
 fn assert_true(cond:bool, msg:str):
   if not cond:
     std.println("FAIL: {}", msg)
@@ -22,6 +23,7 @@ fn test_unitof_kilogram():
 // --- @unitof on dimensionless literal ---
 
 @test
+@impure
 fn test_unitof_dimensionless():
   assert_true(@unitof(42) != ¤meter, "dimensionless != meter")
 
@@ -34,6 +36,7 @@ fn test_unitof_same_unit():
 // --- @unitof inequality of different units ---
 
 @test
+@impure
 fn test_unitof_different_units():
   assert_true(@unitof(5 ¤meter) != @unitof(3 ¤second), "meter != second")
 
@@ -46,6 +49,7 @@ fn test_unitof_derived():
 // --- @unitof with kilometer ---
 
 @test
+@impure
 fn test_unitof_kilometer():
   static_assert_eq(@unitof(5 ¤kilometer), ¤kilometer)
   assert_true(@unitof(5 ¤kilometer) != ¤meter, "kilometer != meter")
@@ -59,23 +63,27 @@ fn test_static_assert_unitof():
 // --- dimensionless comparison ---
 
 @test
+@impure
 fn test_unitof_dimensionless_eq():
   assert_true(@unitof(42) == @unitof(99), "both dimensionless")
 
 // --- runtime unit queries use .unitof instead of @unitof ---
 
 @test
+@impure
 fn test_runtime_unitof_sizeof():
   let arr := [1, 2, 3]
   let sz := arr.sizeof
   assert_true(sz == 3, "sizeof is 3")
 
 @test
+@impure
 fn test_runtime_unitof_bytes():
   let buf: u8[4] = [1, 2, 3, 4]
   let sz := buf.sizeof
   assert_true(sz == 4, "sizeof is 4")
 
 @start
+@impure
 fn main():
   std.println("unitof tests passed")

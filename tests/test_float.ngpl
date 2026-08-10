@@ -1,6 +1,7 @@
 // Floating-point type tests: f16, f32, f64, bfloat16, float
 // Tests literals, arithmetic, comparisons, type coercion, and formatting.
 
+@impure
 fn assert_true(cond:bool, msg:str):
   if not cond:
     std.println("{}", msg)
@@ -23,6 +24,7 @@ fn test_float_literals():
   // Integer with float suffix becomes float
   static_assert(42f32 == 42.0f32)
 
+@impure
 fn test_float_arithmetic():
   // Addition
   static_assert(3.0 + 2.0 == 5.0)
@@ -90,6 +92,7 @@ fn add_floats(x:f64, y:f64) -> f64:
 fn as_f32(x:f32) -> f32:
   x
 
+@impure
 fn test_float_coercion_in_functions():
   // Test int-to-float parameter coercion
   let r := add_floats(3, 4)
@@ -101,6 +104,7 @@ fn test_float_coercion_in_functions():
   assert_true(s > 3.13, "as_f32(3.14) should be > 3.13")
   assert_true(s < 3.15, "as_f32(3.14) should be < 3.15")
 
+@impure
 fn test_float_in_conditionals():
   let x := 0.0
   if x:
@@ -109,6 +113,7 @@ fn test_float_in_conditionals():
   if not y:
     assert_true(false, "1.5 should be truthy")
 
+@impure
 fn test_float_format():
   let alloc := std.heap.allocator()
   let s := std.format(alloc, "value: {}", 3.14)
@@ -122,6 +127,7 @@ fn test_float_format():
   let s3 := std.format(alloc, "{:.2e}", 1500.0)
   assert_true(s3 == "1.50e+03", "format .2e failed")
 
+@impure
 fn test_hex_float_literal():
   // Hex float: 0x1.8p1 = 1.5 * 2^1 = 3.0
   let a := 0x1.8p1
@@ -148,6 +154,7 @@ fn test_float_type_rejection():
 // An integer is exact in a float when its odd part fits the
 // significand, so a power of two at the boundary is fine and the
 // odd number just past it is not.
+@impure
 fn test_integer_initializer_within_the_significand():
   let a : f32 = 16777216          // 2^24, exact
   let b : f32 = 17000002          // even, its odd part fits
@@ -161,6 +168,7 @@ fn test_integer_initializer_within_the_significand():
   assert_true(e == 9007199254740992.0, "2^53 is exact in f64")
 
 @start
+@impure
 fn main():
   test_float_literals()
   test_float_arithmetic()

@@ -55,6 +55,7 @@ fn test_alias_chain():
 // --- alias in let with mut ------------------------------------------------
 
 @test
+@impure
 fn test_alias_mut_var():
   let x : mut Index = 0
   x ← 99

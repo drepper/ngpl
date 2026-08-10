@@ -64,5 +64,6 @@ fn error_float_binding_names_the_replacement():
 // reported before any function runs.
 
 @start
+@impure
 fn main():
     std.println("bootstrap tests passed")

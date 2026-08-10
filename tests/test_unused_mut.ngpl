@@ -131,5 +131,6 @@ fn test_loop_bindings_are_quiet():
     assert_eq(total, 6)
 
 @start
+@impure
 fn main():
     std.println("unused mut tests passed")

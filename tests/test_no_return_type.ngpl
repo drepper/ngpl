@@ -5,12 +5,14 @@
 // nothing back.  The two are one signature spelled two ways, so
 // anything that can be asked of one can be asked of the other.
 
+@impure
 fn says_nothing(name : str):
     std.println("a: {}", name)
 
 // --- What the shorter form records ---------------------------------
 
 @test
+@impure
 fn test_the_shorter_form_runs():
     says_nothing("x")
 
@@ -24,6 +26,7 @@ fn test_the_shorter_form_runs():
 fn test_the_shorter_form_records_nothing():
     static_assert_eq(@resultof(says_nothing), @resultof(also_says_nothing))
 
+@impure
 fn also_says_nothing():
     std.println("c")
 
@@ -60,6 +63,7 @@ struct Counter:
     n : i32
 
 impl Counter:
+    @impure
     fn describe(self):
         std.println("counter {}", self.n)
 
@@ -72,5 +76,6 @@ fn test_a_method_may_leave_it_off():
     assert_eq(c.value(), 5)
 
 @start
+@impure
 fn main():
     std.println("no-return-type tests passed")

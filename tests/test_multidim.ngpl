@@ -101,5 +101,6 @@ fn test_flat_multi_subscript():
     let x : mut = a[0, 0]
 
 @start
+@impure
 fn main():
     std.println("multidim tests passed")

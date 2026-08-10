@@ -67,6 +67,7 @@ fn test_element_width_two_dimensions():
 // wherever it sits, not only in the first row.
 @test
 @expect error "does not fit"
+@impure
 fn test_element_out_of_range_in_a_later_row():
     let m : i8[2,2] = [[1, 2], [3, 300]]
     std.println("{}", m)
@@ -78,12 +79,14 @@ fn test_element_out_of_range_in_a_later_row():
 // as the elements of an array nobody had declared.
 @test
 @expect error "is not an array type"
+@impure
 fn test_array_initializer_needs_an_array_type():
     let h : u32 = [1, 2, 3]
     std.println("{}", h)
 
 @test
 @expect error "is not an array type"
+@impure
 fn test_nested_initializer_needs_an_array_type():
     let m : i32 = [[1, 2], [3, 4]]
     std.println("{}", m)
@@ -92,6 +95,7 @@ fn test_nested_initializer_needs_an_array_type():
 // missing brackets and not about integers.
 @test
 @expect error "is not an array type"
+@impure
 fn test_float_scalar_refuses_an_array():
     let f : f64 = [1.0, 2.0]
     std.println("{}", f)
@@ -102,6 +106,7 @@ fn takes_a_scalar(n : u32) → u32:
 
 @test
 @expect error "is not an array type"
+@impure
 fn test_scalar_parameter_refuses_an_array():
     std.println("{}", takes_a_scalar([1, 2, 3]))
 
@@ -115,6 +120,7 @@ fn hands_back_what_it_was_given(a) → u32:
 
 @test
 @expect error "is not an array type"
+@impure
 fn test_scalar_return_refuses_an_array():
     std.println("{}", hands_back_what_it_was_given([1, 2, 3]))
 
@@ -130,16 +136,19 @@ fn test_array_return_accepts_a_literal():
 
 @test
 @expect error "array size mismatch"
+@impure
 fn test_wrong_extent():
     let a : i32[3] = [1, 2]
     std.println("{}", a)
 
 @test
 @expect error "array size mismatch"
+@impure
 fn test_wrong_inner_extent():
     let m : i32[2,3] = [[1, 2, 3], [4, 5]]
     std.println("{}", m)
 
 @start
+@impure
 fn main():
     std.println("array type tests passed")

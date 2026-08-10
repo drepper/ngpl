@@ -4,7 +4,9 @@
 // and locally defined variables.  Reading or writing mutable global
 // variables from a pure function is an error.
 //
-// The @impure annotation lifts this restriction.
+// The @impure annotation lifts this restriction.  It also travels: a
+// function that calls an impure one has that function's side effect,
+// so it says @impure itself.
 
 let counter : mut = 0
 let LIMIT := 100
@@ -33,7 +35,7 @@ fn test_pure_rejects_global_read():
 fn test_pure_reads_const():
     assert_eq(LIMIT, 100)
 
-// Pure function CAN call other functions.
+// Pure function CAN call other pure functions.
 fn double(x : i64) → i64:
     x × 2
 
@@ -50,18 +52,82 @@ fn bump_counter():
 fn get_counter() → i64:
     counter
 
+// ---------------------------------------------------------------------
+// Impurity travels up the call chain
+// ---------------------------------------------------------------------
+
+// A function calling an impure one carries that side effect, so it
+// says @impure too.
 @test
+@impure
 fn test_impure_allows_global_access():
     bump_counter()
     assert_eq(get_counter(), 1)
 
-// Pure function calling an impure function is allowed —
-// the impure callee handles the side effect.
-@test
-fn test_pure_calls_impure():
+// The same holds one level further out: the caller of an impure
+// caller is impure as well.
+@impure
+fn bump_twice():
     bump_counter()
-    assert_eq(get_counter(), 2)
+    bump_counter()
+
+@test
+@impure
+fn test_impurity_reaches_the_outer_caller():
+    bump_twice()
+    assert_eq(get_counter(), 3)
+
+// A pure function that calls an impure one is refused, whether or not
+// it touches a global itself.
+@test
+@expect error "'bump_counter' is @impure, so a function that calls it says @impure too"
+fn test_pure_cannot_call_impure():
+    bump_counter()
+
+// Writing to the program's output is a side effect the same way.
+@test
+@expect error "std.println writes where the rest of the program can see it"
+fn test_pure_cannot_write_output():
+    std.println("from a pure function")
+
+@test
+@expect error "std.print writes where the rest of the program can see it"
+fn test_pure_cannot_write_output_without_a_newline():
+    std.print("from a pure function")
+
+// A lambda is part of the function that writes it, so an effect
+// inside one is the surrounding function's effect.
+@test
+@expect error "'bump_counter' is @impure"
+fn test_a_lambda_does_not_hide_the_effect():
+    let f := λ→ ∅: bump_counter()
+    f()
+
+// A method carries the annotation, and reaches its caller the same way.
+struct Tally:
+    n : i32
+
+impl Tally:
+    @impure
+    fn report(self) → i32:
+        std.println("tally {}", self.n)
+        self.n
+
+    fn value(self) → i32:
+        self.n
+
+@test
+@impure
+fn test_an_impure_method_needs_an_impure_caller():
+    let t := Tally{n: 7}
+    assert_eq(t.report(), 7)
+
+@test
+fn test_a_pure_method_is_left_alone():
+    let t := Tally{n: 7}
+    assert_eq(t.value(), 7)
 
 @start
+@impure
 fn main():
     std.println("purity tests passed")

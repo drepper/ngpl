@@ -341,6 +341,7 @@ fn error_arm_after_wildcard():
 // The subject is a variable, whose type the checker does not track, so
 // the gap is found when the match runs instead.
 @expect error "match has no arm for ∅"
+@impure
 fn error_unknown_subject_checked_at_run_time():
     let v : mut = []
     let x : mut = v.get(0)
@@ -350,6 +351,7 @@ fn error_unknown_subject_checked_at_run_time():
 
 // The bound name names the matched value, so it cannot be assigned to.
 @expect error "cannot assign to match variable 'x'"
+@impure
 fn error_assign_to_match_binding():
     let v : mut = [1]
     match v.get(0):
@@ -429,11 +431,13 @@ fn test_a_covered_parameter_match_runs():
     assert_eq(describes(∅), "absent")
 
 @test
+@impure
 fn test_a_wildcard_covers_a_parameter_match():
     let took : mut = 0
     match_with_wildcard(∃(7))
     assert_eq(took, 0)
 
+@impure
 fn match_with_wildcard(x : i64?):
     match x:
         _:
@@ -441,12 +445,14 @@ fn match_with_wildcard(x : i64?):
 
 // An untyped parameter says nothing, so nothing is claimed about it and
 // the match is left to run.
+@impure
 fn untyped_subject(x):
     match x:
         ∃(v):
             std.println("{}", v)
 
 @test
+@impure
 fn test_an_untyped_parameter_is_left_alone():
     untyped_subject(1)
 
@@ -467,5 +473,6 @@ fn test_an_inferred_local_is_left_alone():
             assert_eq(v, 5)
 
 @start
+@impure
 fn main():
     std.println("match tests passed")
