@@ -32,7 +32,7 @@ let K := [
 // beyond the original data.
 // ---------------------------------------------------------------------------
 
-fn get_padded_byte(data : byte[], off ¤byte : usize, total_size ¤byte : usize) → u8 ¤byte?:
+fn get_padded_byte(data : byte[], off ¤byte : usize, total_size ¤byte : usize) → u8?:
     if off >= total_size: return ∅
     if off < data.sizeof: return data[off]
     if off == data.sizeof: return 128
@@ -40,7 +40,10 @@ fn get_padded_byte(data : byte[], off ¤byte : usize, total_size ¤byte : usize)
     if off >= len_start:
         let bit_len := data.sizeof × 8
         let byte_idx := off - len_start
-        return (bit_len » ((7 - byte_idx) × 8)) & 255
+        // The suffix is worked out from the offsets, so it comes out
+        // measured; the byte it stands for is a number, not a quantity
+        // of bytes, so the unit is parted with here.
+        return @dropunit((bit_len » ((7 - byte_idx) × 8)) & 255)
     ∅
 
 fn get_padded_word(data : byte[], off ¤byte : usize, total_size ¤byte : usize) → u32?:
@@ -58,14 +61,13 @@ fn get_padded_word(data : byte[], off ¤byte : usize, total_size ¤byte : usize)
         let b3 : u32 = data[off + 3]
         return (b0 « 24) | (b1 « 16) | (b2 « 8) | b3
     if off >= total_size: return ∅
-    // These come back measured, because the padding is worked out from
-    // the offsets.  The word being assembled is a number rather than a
-    // quantity of bytes, so the unit is parted with here; u32 is the
-    // width the shifts below need.
-    let b0 : u32 = @dropunit(get_padded_byte(data, off, total_size) ?? 0)
-    let b1 : u32 = @dropunit(get_padded_byte(data, off + 1, total_size) ?? 0)
-    let b2 : u32 = @dropunit(get_padded_byte(data, off + 2, total_size) ?? 0)
-    let b3 : u32 = @dropunit(get_padded_byte(data, off + 3, total_size) ?? 0)
+    // u32 for the same reason as above: these are shifted into place
+    // too.  No unit reaches here — a byte of the message is a number
+    // rather than a quantity of bytes, however it was fetched.
+    let b0 : u32 = get_padded_byte(data, off, total_size) ?? 0
+    let b1 : u32 = get_padded_byte(data, off + 1, total_size) ?? 0
+    let b2 : u32 = get_padded_byte(data, off + 2, total_size) ?? 0
+    let b3 : u32 = get_padded_byte(data, off + 3, total_size) ?? 0
     (b0 « 24) | (b1 « 16) | (b2 « 8) | b3
 
 // ---------------------------------------------------------------------------

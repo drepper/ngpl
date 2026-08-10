@@ -4326,7 +4326,9 @@ fn wrong() → u8 ¤byte:
 error: return type is u8 ¤B, but the body evaluates to m
 ```
 
-This is what decides where a unit is parted with.  A function whose result is genuinely measured says so and hands the unit on; the caller parts with it where the meaning changes.  `get_padded_byte` in the SHA-256 example returns `u8 ¤byte?` because its padding is worked out from byte offsets, and its caller drops the unit as it assembles a plain 32-bit word.
+This is what decides where a unit is parted with.  A function whose result is genuinely measured says so and hands the unit on; one whose result is not parts with the unit at its own boundary, where the reason is local.
+
+The distinction is between a quantity and a number that happens to have been computed from one.  `¤byte` counts storage, so a length is measured in it; the *value* of a byte is a number between 0 and 255 and is not.  In the SHA-256 example `get_padded_byte` returns `u8?`, not `u8 ¤byte?`, even though its length suffix is worked out from byte offsets and so arrives measured: the byte it stands for is a number, and the unit is parted with there.  Declaring the unit on the function would have put it on every path, including the one that forwards an array element that never had it.
 
 #### An Enum as a Type
 
