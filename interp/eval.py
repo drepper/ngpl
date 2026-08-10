@@ -39,7 +39,7 @@ from interp.value import (
     _TYPE_BITS, FLOAT_TYPES, FAST_TYPES,
     _split_optional_type, _parse_array_type, MAX_TENSOR_RANK, array_shape,
     int_limits, float_limits, resolve_type_alias,
-    format_shape,
+    format_shape, _array_type_name, array_type_mismatch,
     is_generic_type, runtime_type_of, is_type_name, _is_unsigned,
     check_bootstrap_type,
     _scalar_kind_mismatch,
@@ -2284,10 +2284,13 @@ class Evaluator:
                     sizes = list(actual)
                     # The declared length travels with the value, so the
                     # operations that would change it can refuse.
+                    if etype:
+                        # Coercing against the whole written type reaches
+                        # every element, however many dimensions deep.
+                        return coerce_to_type(init_val,
+                                              _array_type_name(etype, sizes))
                     arr = init_val.obj
                     elements = [arr.get(i) for i in range(arr.sizeof)]
-                    if etype and len(sizes) == 1:
-                        elements = [coerce_to_type(e, etype) for e in elements]
                     return ObjectValue(ArrayValue(elements, element_type=etype,
                                                   fixed_size=sizes[0]))
                 if any(d is None for d in sizes):
@@ -2516,7 +2519,13 @@ class Evaluator:
                     raise TypeError(
                         f"cannot redefine {kind} variable '{stmt.name}'")
             value = self.eval_expr(stmt.init_expr)
-            if stmt.type_annotation is not None:
+            if stmt.type_annotation is not None \
+                    and not isinstance(stmt.init_expr, ArrayAlloc):
+                # An array declaration writes its shape in brackets that
+                # the annotation does not carry, and the allocation has
+                # already measured the value against the whole of it.
+                # Coercing again here would meet the element type alone
+                # and take an array for it.
                 ann = stmt.type_annotation
                 if self._generic_map and is_generic_type(ann):
                     ann = _substitute_generics(ann, self._generic_map)
@@ -4071,6 +4080,12 @@ class Evaluator:
                 f"{func_name}: return type is {ret_type}, but the body "
                 f"evaluates to {inner.unit.display_name}; "
                 f"use @dropunit to part with the unit")
+        # A return type states what leaves the function, so an array
+        # meeting one that names no array is refused as it would be at
+        # a binding or a parameter.
+        mismatch = array_type_mismatch(inner, check)
+        if mismatch is not None:
+            raise TypeError(f"{func_name}: {mismatch}")
         if check in _TYPE_BITS or check == "int":
             if isinstance(inner, FloatValue):
                 raise TypeError(

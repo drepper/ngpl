@@ -1312,6 +1312,39 @@ def _parse_array_type(type_name: str) -> tuple[str, list[int | None]] | None:
     return m.group(1), [int(d) if d else None for d in m.group(2).split(",")]
 
 
+def array_type_mismatch(value: "Value", type_name: str) -> str | None:
+    """Say how an array value differs from a type that names no array.
+
+    The brackets are what a type says an array with, so a type without
+    them names a scalar.  An array meeting one is not a shorthand for
+    what its elements are; it is a value the type does not describe.
+
+    Returns the explanation, or None where there is nothing to object
+    to — the value is not an array, or the type says it is one.
+    """
+    if not (isinstance(value, ObjectValue) and isinstance(value.obj, ArrayValue)):
+        return None
+    if _parse_array_type(type_name) is not None:
+        return None
+    arr = value.obj
+    return (f"'{type_name}' is not an array type, but the value is "
+            f"{format_shape(array_shape(arr))} elements; an array type "
+            f"says its shape, as '{type_name}[]' or "
+            f"'{type_name}[{arr.sizeof}]'")
+
+
+def _array_type_name(elem_type: str, dims: list[int | None]) -> str:
+    """Write the type of an array of `elem_type` with these dimensions.
+
+    With no dimensions left there is no array, so the element type
+    stands alone.  This is the inverse of _parse_array_type.
+    """
+    if not dims:
+        return elem_type
+    return elem_type + "[" + ",".join(
+        "" if d is None else str(d) for d in dims) + "]"
+
+
 def array_shape(arr: "ArrayValue") -> list[int | None]:
     """Return the dimensions of a nested array.
 
@@ -1449,6 +1482,14 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
                 f"{func_name}: argument '{param_name}' expected \N{EMPTY SET}, "
                 f"got {type(value).__name__}")
         return value
+
+    # A parameter states a type the way a binding does, so an array
+    # meeting one that names no array is refused the same way.
+    unwrapped_arg = value.value if isinstance(value, SomeValue) else value
+    mismatch = array_type_mismatch(unwrapped_arg, param_type)
+    if mismatch is not None:
+        raise TypeError(
+            f"{func_name}: argument '{param_name}': {mismatch}")
 
     arr_info = _parse_array_type(param_type)
     if arr_info is not None:
@@ -1675,20 +1716,20 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
     if isinstance(value, ObjectValue) and isinstance(value.obj, ArrayValue):
         arr = value.obj
         arr_info = _parse_array_type(target_width)
-        elem_target = arr_info[0] if arr_info is not None else target_width
         if arr_info is None:
-            # The target names no array shape at all -- an element type
-            # standing in for the whole -- so whatever the value already
-            # was, it stays.
-            declared = arr.fixed_size
-        else:
-            # T[] says dynamic and T[n] says fixed; either way the target
-            # decides, not the source.
-            declared = arr_info[1][0]
+            raise TypeError(array_type_mismatch(value, target_width))
+        # T[] says dynamic and T[n] says fixed; either way the target
+        # decides, not the source.
+        elem_type, dims = arr_info
+        declared = dims[0]
         if declared is not None and arr.sizeof != declared:
             raise TypeError(
                 f"array size mismatch: type '{target_width}' declares "
                 f"{declared} elements, got {arr.sizeof}")
+        # A dimension the target still has describes the rows, so what
+        # each element is measured against is the type with that one
+        # dimension taken off.
+        elem_target = _array_type_name(elem_type, dims[1:])
         coerced = [coerce_to_type(arr.get(i), elem_target) for i in range(arr.sizeof)]
         return ObjectValue(ArrayValue(coerced, element_type=elem_target,
                                       fixed_size=declared))

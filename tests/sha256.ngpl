@@ -94,7 +94,7 @@ fn sha256(data : byte[]) → u32[8]?:
     let total_size := data.sizeof + 1 + pad_len + 8
 
     // Initial hash values per FIPS 180-4 Section 5.3.3.
-    let H : mut u32 = [
+    let H : mut u32[8] = [
         1779033703, 3144134277, 1013904242, 2773480762,
         1359893119, 2600822924, 528734635,  1541459225,
     ]

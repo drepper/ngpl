@@ -57,6 +57,11 @@ the sized types do not have.
 Completed
 ---------
 
+[x] a type without brackets names a scalar, so an array meeting one is refused rather
+    than read as a shorthand for what its elements are.  The rule holds at a binding, a
+    parameter, and a return type.  sha256.ngpl declared its eight-word hash state u32 and
+    nothing said so; it is u32[8].
+
 [x] division is written ÷ rather than /, as multiplication is written × rather than *.
     A slash is not an operator; it keeps only the comment openings // and /*, and one
     used as division says so rather than being read as the start of a comment.  The

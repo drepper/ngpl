@@ -1,0 +1,9 @@
+// The brackets are what a type says an array with, so a type without
+// them is a statement about the value rather than a shorthand for what
+// its elements are.  SHA-256's eight-word hash state was declared this
+// way for a while, and the eight words were quietly taken as the
+// elements of an array nobody had declared.
+@start
+fn main() → ∅:
+    let h : u32 = [1, 2, 3, 4, 5, 6, 7, 8]
+    std.print("{}", h)

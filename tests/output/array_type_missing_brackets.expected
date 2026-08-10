@@ -1,0 +1,7 @@
+error: 'u32' is not an array type, but the value is 8 elements; an array type says its shape, as 'u32[]' or 'u32[8]'
+  --> tests/output/array_type_missing_brackets.ngpl:8:41
+    |
+  8 |     let h : u32 = [1, 2, 3, 4, 5, 6, 7, 8]
+    |                                         ^
+  9 |     std.print("{}", h)
+    |

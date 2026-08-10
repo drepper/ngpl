@@ -3535,6 +3535,39 @@ error: declared ?×3, but a fill value gives no extent for the empty dimension
 
 Under `@repr(C)` a multi-dimensional field lays out as C's `T[n][m]`: the rows sit one after another, so `i32[2,3]` is 24 bytes and the alignment is still the element's.  Every dimension has to be fixed, since a dynamic one has no C representation.
 
+##### A Type Without Brackets Names a Scalar
+
+The brackets are what a type says an array with, so a type without them names one value.  An array meeting such a type is not a shorthand for what its elements are; it is a value the type does not describe, and it is refused:
+
+```
+let h : u32 = [1, 2, 3, 4, 5, 6, 7, 8]
+
+error: 'u32' is not an array type, but the value is 8 elements; an array
+type says its shape, as 'u32[]' or 'u32[8]'
+```
+
+The rule holds wherever a type is written, so a parameter and a return type refuse the same array for the same reason:
+
+```
+fn takes_a_scalar(n : u32) → u32:
+    n
+
+takes_a_scalar([1, 2, 3])
+
+error: takes_a_scalar: argument 'n': 'u32' is not an array type, but the
+value is 3 elements; an array type says its shape, as 'u32[]' or 'u32[3]'
+```
+
+Reading the missing brackets as an element type would make `u32` and `u32[8]` two spellings of the same declaration, which costs the reader the one place the length was written down.  SHA-256's eight-word hash state was declared `u32` in this document's own example for a while, and nothing said so.
+
+The element type reaches every element however deep it sits, which is a separate matter from the shape:
+
+```
+let m : i8[2,2] = [[1, 2], [3, 300]]
+
+error: integer overflow: 300 does not fit in i8 (range -128..127)
+```
+
 #### Comparison with Other Languages
 
 | Operation | C++ `vector` | Rust `Vec` | Python `list` | Go slice | NGPL |

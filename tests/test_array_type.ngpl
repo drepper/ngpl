@@ -1,0 +1,133 @@
+// test_array_type.ngpl -- an array type says its shape
+//
+// The brackets in i32[3] or i32[2,3] are what a type says an array
+// with.  Leaving them off names a scalar, and a scalar is not an
+// array however many elements are written on the other side of the
+// equals sign: the declaration is a statement about the value, not a
+// shorthand for what the elements are.
+
+// --- Recognizing the syntax -----------------------------------------
+
+// A fixed extent, as sha256's eight-word hash state is declared.
+@test
+fn test_fixed_extent() → ∅:
+    let h : u32[8] = [
+        1779033703, 3144134277, 1013904242, 2773480762,
+        1359893119, 2600822924, 528734635,  1541459225,
+    ]
+    assert_eq(h.sizeof, 8)
+    assert_eq(h[0], 1779033703)
+    assert_eq(h[7], 1541459225)
+
+// An empty bracket leaves the extent to the initializer.
+@test
+fn test_dynamic_extent() → ∅:
+    let a : i32[] = [1, 2, 3]
+    assert_eq(a.sizeof, 3)
+
+// Two extents make a matrix, and the rows are arrays in their own right.
+@test
+fn test_two_dimensions() → ∅:
+    let m : i32[2,3] = [[1, 2, 3], [4, 5, 6]]
+    assert_eq(m.sizeof, 2)
+    assert_eq(m[0].sizeof, 3)
+    assert_eq(m[1][2], 6)
+
+// A dimension left empty takes the extent the initializer had, whether
+// it is the first or a later one.
+@test
+fn test_open_dimensions() → ∅:
+    let rows : i32[,3] = [[1, 2, 3], [4, 5, 6]]
+    assert_eq(rows.sizeof, 2)
+    let cols : i32[2,] = [[1, 2, 3], [4, 5, 6]]
+    assert_eq(cols[1].sizeof, 3)
+
+// Three extents, to show the shape is read as written rather than
+// only to a depth of two.
+@test
+fn test_three_dimensions() → ∅:
+    let t : i32[2,2,2] = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+    assert_eq(t[1][1][0], 7)
+
+// --- The element type reaches every element -------------------------
+
+// The type names what the elements are, so they arrive at that width
+// however many dimensions deep they sit.
+@test
+fn test_element_width_one_dimension() → ∅:
+    let a : u8[3] = [1, 2, 3]
+    static_assert_eq(@typeof(a[0]), u8)
+
+@test
+fn test_element_width_two_dimensions() → ∅:
+    let m : u8[2,2] = [[1, 2], [3, 4]]
+    static_assert_eq(@typeof(m[0][0]), u8)
+
+// A value that will not fit the declared element type is refused
+// wherever it sits, not only in the first row.
+@test
+@expect error "does not fit"
+fn test_element_out_of_range_in_a_later_row() → ∅:
+    let m : i8[2,2] = [[1, 2], [3, 300]]
+    std.print("{}", m)
+
+// --- A scalar type is not an array ----------------------------------
+
+// The mistake this refuses: sha256's hash state was declared u32 and
+// initialized with its eight words, and the eight were quietly taken
+// as the elements of an array nobody had declared.
+@test
+@expect error "is not an array type"
+fn test_array_initializer_needs_an_array_type() → ∅:
+    let h : u32 = [1, 2, 3]
+    std.print("{}", h)
+
+@test
+@expect error "is not an array type"
+fn test_nested_initializer_needs_an_array_type() → ∅:
+    let m : i32 = [[1, 2], [3, 4]]
+    std.print("{}", m)
+
+// The same for a float element type, so the refusal is about the
+// missing brackets and not about integers.
+@test
+@expect error "is not an array type"
+fn test_float_scalar_refuses_an_array() → ∅:
+    let f : f64 = [1.0, 2.0]
+    std.print("{}", f)
+
+// A parameter states a type the same way, so it refuses the same way.
+fn takes_a_scalar(n : u32) → u32:
+    n
+
+@test
+@expect error "is not an array type"
+fn test_scalar_parameter_refuses_an_array() → ∅:
+    std.print("{}", takes_a_scalar([1, 2, 3]))
+
+// And so does a return type.
+fn returns_a_scalar() → u32:
+    [1, 2, 3]
+
+@test
+@expect error "is not an array type"
+fn test_scalar_return_refuses_an_array() → ∅:
+    std.print("{}", returns_a_scalar())
+
+// --- The extent still has to match ----------------------------------
+
+@test
+@expect error "array size mismatch"
+fn test_wrong_extent() → ∅:
+    let a : i32[3] = [1, 2]
+    std.print("{}", a)
+
+@test
+@expect error "array size mismatch"
+fn test_wrong_inner_extent() → ∅:
+    let m : i32[2,3] = [[1, 2, 3], [4, 5]]
+    std.print("{}", m)
+
+@start
+fn main() → ∅:
+    std.print("array type tests passed")
