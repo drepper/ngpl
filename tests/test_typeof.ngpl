@@ -147,7 +147,7 @@ fn test_type_name_cannot_be_a_variable() → ∅:
 @expect error "'i32' names a type and cannot name a loop variable"
 fn test_type_name_cannot_be_a_loop_variable() → ∅:
     foreach i32 := 1…3:
-        std.print(i32)
+        std.print("{}", i32)
 
 // What it still refuses is an expression that is neither a name nor a
 // constant, since answering would mean evaluating it.

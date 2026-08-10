@@ -181,4 +181,4 @@ fn main() → ∅:
     let data := file.read_file(alloc)
     let hash := sha256(data)
     alloc.deinit()
-    std.print(hash)
+    std.print("{}", hash)

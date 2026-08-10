@@ -1,5 +1,5 @@
 fn plain(x : u32) → ∅:
-    std.print(x)
+    std.print("{}", x)
 
 @start
 fn main() → ∅:

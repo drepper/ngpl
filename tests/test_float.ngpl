@@ -3,7 +3,7 @@
 
 fn assert_true(cond:bool, msg:str):
   if not cond:
-    std.print(msg)
+    std.print("{}", msg)
 
 fn test_float_literals():
   // Untyped float literal (inferred as "float")

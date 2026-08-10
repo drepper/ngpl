@@ -1,0 +1,14 @@
+// std.print reads a template first, as C++'s std::print does.  The
+// replacement fields are std.format's, so what is written here is what
+// std.format would have produced.
+@start
+fn main() → ∅:
+    let a : i8 = 42
+    let d ¤meter : i32 = 5
+    std.print("plain")
+    std.print("{} and {}", 1, "two")
+    std.print("[{:>6}] [{:*<6}] [{:06}]", a, a, a)
+    std.print("{:#x} {:#b} {:+}", 255, 10, 7)
+    std.print("{:.3f}", 1.5)
+    std.print("{} {:t} {:xt}", a, a, a)
+    std.print("{} {:u} {:ut}", d, d, d)

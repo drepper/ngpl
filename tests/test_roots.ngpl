@@ -2,14 +2,14 @@
 
 fn assert_true(cond:bool, msg:str):
   if not cond:
-    std.print("FAIL: ", msg)
+    std.print("FAIL: {}", msg)
 
 fn approx_eq(a:f64, b:f64, msg:str):
   let diff : mut = a - b
   if diff < 0.0:
     diff ← ⁻diff
   if diff > 0.0001:
-    std.print("FAIL: ", msg, " (got ", a, " expected ", b, ")")
+    std.print("FAIL: {} (got {} expected {})", msg, a, b)
 
 // --- Square root ---
 
@@ -83,7 +83,7 @@ fn test_sqrt_unit():
   let side := √area
   // √(36 m^2) = 6 m
   approx_eq(side, 6.0, "√(36 m^2) value")
-  std.print(side)
+  std.print("{}", side)
 
 fn test_sqrt_unit_incompatible():
   let d ¤meter := 9.0
@@ -96,7 +96,7 @@ fn test_cbrt_unit():
   let side := ∛vol
   // ∛(125 m^3) = 5 m
   approx_eq(side, 5.0, "∛(125 m^3) value")
-  std.print(side)
+  std.print("{}", side)
 
 fn test_fourth_root_unit():
   let x ¤meter×meter×meter×meter := 625.0

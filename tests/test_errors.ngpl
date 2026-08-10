@@ -47,7 +47,7 @@ fn warn_foreach_redef() → ∅:
 @expect error "requires ':='"
 fn error_foreach_bare_eq() → ∅:
     foreach i = 1…3:
-        std.print(i)
+        std.print("{}", i)
 
 // let without type requires := not =
 @expect error "requires ':='"
@@ -59,7 +59,7 @@ fn error_let_bare_eq() → ∅:
 @expect error "fast type.*cannot be used as array element"
 fn error_fast_array() → ∅:
     let arr : mut u8fast[10] = 0
-    std.print(arr[0])
+    std.print("{}", arr[0])
 
 // --- type mismatch --------------------------------------------------------
 

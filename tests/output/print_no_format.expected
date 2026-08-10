@@ -1,0 +1,6 @@
+error: std.print(fmt, ...) requires a format string; std.print("") writes an empty line
+  --> tests/output/print_no_format.ngpl:4:5
+    |
+  4 |     std.print()
+    |     ^^^
+    |

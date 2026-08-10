@@ -1,0 +1,6 @@
+error: std.print: the first argument is the format string, but this one is int; to write a value on its own, say std.print("{}", …)
+  --> tests/output/print_first_arg_not_a_template.ngpl:5:15
+    |
+  5 |     std.print(42)
+    |               ^^
+    |

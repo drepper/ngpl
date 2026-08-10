@@ -4,11 +4,11 @@
 // and the comparison below checks the unit as well as the number.
 fn assert_eq_int(a, b, msg:str):
   if a != b:
-    std.print("FAIL: ", msg, " (got ", a, " expected ", b, ")")
+    std.print("FAIL: {} (got {} expected {})", msg, a, b)
 
 fn assert_true(cond:bool, msg:str):
   if not cond:
-    std.print("FAIL: ", msg)
+    std.print("FAIL: {}", msg)
 
 // --- sizeof returns ptrdiff unit ---
 

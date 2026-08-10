@@ -1,4 +1,4 @@
 // A suffix names the type of the literal, so it has to name one.
 @start
 fn main() → ∅:
-    std.print(1.5b16)
+    std.print("{}", 1.5b16)

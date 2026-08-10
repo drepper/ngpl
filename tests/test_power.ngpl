@@ -2,18 +2,18 @@
 
 fn assert_true(cond:bool, msg:str):
   if not cond:
-    std.print("FAIL: ", msg)
+    std.print("FAIL: {}", msg)
 
 fn assert_eq_int(a:i64, b:i64, msg:str):
   if a != b:
-    std.print("FAIL: ", msg, " (got ", a, " expected ", b, ")")
+    std.print("FAIL: {} (got {} expected {})", msg, a, b)
 
 fn approx_eq(a:f64, b:f64, msg:str):
   let diff : mut = a - b
   if diff < 0.0:
     diff ← ⁻diff
   if diff > 0.0001:
-    std.print("FAIL: ", msg, " (got ", a, " expected ", b, ")")
+    std.print("FAIL: {} (got {} expected {})", msg, a, b)
 
 // --- Integer exponentiation ---
 
@@ -92,7 +92,7 @@ fn test_unit_pow():
   let area := d ↑ 2
   // 3.0 m ^ 2 = 9.0 m^2
   approx_eq(area, 9.0, "3.0m ↑ 2 value")
-  std.print(area)
+  std.print("{}", area)
 
 fn test_unit_pow_cube():
   let d ¤meter := 2.0

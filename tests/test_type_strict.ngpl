@@ -216,7 +216,7 @@ fn test_mixed_via_call() → ∅:
 
 fn assert_eq(a: i64, b: i64):
   if a != b:
-    std.print("FAIL: expected ", a, " got ", b)
+    std.print("FAIL: expected {} got {}", a, b)
 
 fn assert_true(cond: bool):
   if not cond:

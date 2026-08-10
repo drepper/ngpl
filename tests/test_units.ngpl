@@ -2,13 +2,13 @@
 
 fn assert_true(cond:bool, msg:str):
   if not cond:
-    std.print("FAIL: ", msg)
+    std.print("FAIL: {}", msg)
 
 // Untyped, so a measured value reaches it with its unit intact
 // and the comparison below checks the unit as well as the number.
 fn assert_eq_int(a, b, msg:str):
   if a != b:
-    std.print("FAIL: ", msg, " (got ", a, " expected ", b, ")")
+    std.print("FAIL: {} (got {} expected {})", msg, a, b)
 
 // --- Basic unit annotation on variables ---
 
@@ -25,7 +25,7 @@ fn test_same_unit_add():
   let b ¤meter := 7
   let c := a + b
   // c should be 10 m
-  std.print(c)
+  std.print("{}", c)
 
 // --- Same-unit subtraction ---
 
@@ -34,7 +34,7 @@ fn test_same_unit_sub():
   let b ¤meter := 3
   let c := a - b
   // c should be 7 m
-  std.print(c)
+  std.print("{}", c)
 
 // --- Unit-scalar multiplication ---
 
@@ -42,13 +42,13 @@ fn test_scalar_mul():
   let a ¤meter := 5
   let b := a × 3
   // b should be 15 m
-  std.print(b)
+  std.print("{}", b)
 
 fn test_scalar_mul_rev():
   let a ¤meter := 5
   let b := 3 × a
   // b should be 15 m
-  std.print(b)
+  std.print("{}", b)
 
 // --- Unit multiplication (derived units) ---
 
@@ -57,7 +57,7 @@ fn test_unit_mul():
   let b ¤second := 2
   let c := a × b
   // c should be 10 m×s
-  std.print(c)
+  std.print("{}", c)
 
 // --- Unit division ---
 
@@ -66,7 +66,7 @@ fn test_unit_div():
   let time ¤second := 10
   let speed := dist / time
   // speed should have unit m/s
-  std.print(speed)
+  std.print("{}", speed)
 
 // --- Dimensionless result from division ---
 
@@ -75,7 +75,7 @@ fn test_dimensionless_div():
   let b ¤meter := 5
   let ratio := a / b
   // same unit cancels, result is plain 2
-  std.print(ratio)
+  std.print("{}", ratio)
 
 // --- Unit conversion: compatible units ---
 
@@ -136,7 +136,7 @@ fn test_add_km_and_m():
   let b ¤meter := 500
   let c := a + b
   // Result in base (m): 3000 + 500 = 3500 m
-  std.print(c)
+  std.print("{}", c)
 
 // --- Comparison of unitful values ---
 
@@ -160,7 +160,7 @@ fn test_unit_comparison_different():
 fn test_negation():
   let a ¤meter := 5
   let b := ⁻a
-  std.print(b)
+  std.print("{}", b)
 
 // --- Byte units ---
 
@@ -172,7 +172,7 @@ fn test_byte_units():
 
 fn test_byte_display():
   let a ¤byte := 42
-  std.print(a)
+  std.print("{}", a)
 
 // --- Unit inference from init value ---
 
@@ -182,7 +182,7 @@ fn test_unit_inference():
   // b should inherit unit m from a
   let c := b + a
   // c should be 10 m (works because b has unit m)
-  std.print(c)
+  std.print("{}", c)
 
 // --- User-defined units ---
 
@@ -192,8 +192,8 @@ unit accel = meter / second / second
 fn test_user_units():
   let v ¤"speed" := 10
   let a ¤"accel" := 2
-  std.print(v)
-  std.print(a)
+  std.print("{}", v)
+  std.print("{}", a)
 
 // --- Formatting ---
 
@@ -208,8 +208,8 @@ fn test_format():
 fn test_abstract_units():
   let n ¤count := 10
   let d ¤distance := 50
-  std.print(n)
-  std.print(d)
+  std.print("{}", n)
+  std.print("{}", d)
 
 // --- Unit-aware modulus ---
 
@@ -218,7 +218,7 @@ fn test_unit_mod():
   let b ¤meter := 3
   let c := a % b
   // 7 m % 3 m = 1 m
-  std.print(c)
+  std.print("{}", c)
 
 // --- Float with units ---
 
@@ -226,13 +226,13 @@ fn test_float_units():
   let a ¤meter := 3.5
   let b ¤meter := 1.5
   let c := a + b
-  std.print(c)
+  std.print("{}", c)
 
 // --- Compound unit spec on expression ---
 
 fn test_compound_unit_spec():
   let v ¤meter/second := 10
-  std.print(v)
+  std.print("{}", v)
 
 // --- Compound unit spec with multiplication ---
 
@@ -242,7 +242,7 @@ fn test_compound_unit_mul_spec():
   let side ¤meter := 6
   let area ¤meter×meter := side × side
   assert_true(area == 36¤meter×meter, "6m × 6m is 36 m×m")
-  std.print(area)
+  std.print("{}", area)
 
 // --- @dropunit ---
 
@@ -300,7 +300,7 @@ fn test_unit_no_space_before():
   let x¤meter := 7
   let y¤second := 3
   let z := x × y
-  std.print(z)
+  std.print("{}", z)
 
 // --- Spacing: whitespace after ¤ ---
 
@@ -308,19 +308,19 @@ fn test_unit_space_after():
   let a ¤ meter := 12
   let b ¤ second := 4
   let c := a / b
-  std.print(c)
+  std.print("{}", c)
 
 // --- Spacing: no space before ¤, space after ¤ ---
 
 fn test_unit_no_space_before_space_after():
   let p¤ kilogram := 5
-  std.print(p)
+  std.print("{}", p)
 
 // --- Spacing: ¤ on expression with no space ---
 
 fn test_unit_expr_no_space():
   let x := 42¤meter
-  std.print(x)
+  std.print("{}", x)
 
 @start
 fn main():

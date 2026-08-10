@@ -111,6 +111,13 @@ Completed
 
 [x] rewrite std.format with allocator parameter, C++ std::format-style {} fields, and array formatting.
 
+[x] std.print takes a format string first, as C++'s std::print does, and reads the same
+    replacement fields std.format reads.  The specifier is the full C++ grammar —
+    fill, align, sign, #, 0, width, precision, presentation type — with two flags of
+    NGPL's own for what an NGPL value carries and a C++ value does not: t writes the
+    type suffix, u leaves the unit off.  Neither is on by default, so a number is
+    written without its width and a measured value with its unit.
+
 [x] floating-point types: f16, f32, f64, bfloat16, float.  IEEE 754 semantics, arithmetic operators,
     literals with decimal/hex mantissa and exponent.
 
@@ -316,6 +323,13 @@ String and I/O
 
 [ ] [FULL] format string type-specific formatting via attributes on type definitions (like Rust
     Display/Debug, Haskell Show).
+
+[ ] a std.print call whose first argument is a literal of the wrong kind — std.print(42) — is
+    settled by reading it, so it should be reported at parse time rather than when the branch
+    holding it runs.  The same holds for a template whose field count does not match the number
+    of arguments after it, where both are written down.  Doing this well needs a static
+    diagnostic that carries a source position: DefinitionError is printed without a caret today,
+    which is why the check still runs at runtime, where the position is known.
 
 
 Build System and Tooling

@@ -4,4 +4,4 @@ fn f() → int:
 
 @start
 fn main() → ∅:
-    std.print(f())
+    std.print("{}", f())

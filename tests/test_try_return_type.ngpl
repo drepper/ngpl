@@ -70,7 +70,7 @@ fn error_plain_return_type() → i64:
 @expect error "requires the enclosing function to return an optional"
 fn error_void_return_type() → ∅:
     let q : mut = (10 / 2)?
-    std.print(q)
+    std.print("{}", q)
 
 // ---------------------------------------------------------------------
 // The propagated error must be the one the function promises

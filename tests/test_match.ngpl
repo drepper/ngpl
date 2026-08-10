@@ -220,7 +220,7 @@ fn test_match_result_wildcard() → ∅:
 fn error_absent_pattern_on_a_result() → ∅:
     match 10 / 0:
         ∃(v):
-            std.print(v)
+            std.print("{}", v)
         ∅:
             std.print("none")
 
@@ -230,7 +230,7 @@ fn error_failure_pattern_on_an_optional() → ∅:
     let v : mut = []
     match v.get(0):
         ∃(x):
-            std.print(x)
+            std.print("{}", x)
         ∄(e):
             std.print("err")
 
@@ -247,13 +247,13 @@ fn error_optional_missing_absent_arm() → ∅:
     let v : mut = [1]
     match v.get(0):
         ∃(x):
-            std.print(x)
+            std.print("{}", x)
 
 @expect error "match has no arm for a failed result"
 fn error_result_missing_failure_arm() → ∅:
     match 10 / 2:
         ∃(v):
-            std.print(v)
+            std.print("{}", v)
 
 // A function's declared return type says which shapes its value has.
 fn returns_optional(n : i64) → i64?:
@@ -264,7 +264,7 @@ fn returns_optional(n : i64) → i64?:
 fn error_missing_arm_through_a_call() → ∅:
     match returns_optional(1):
         ∃(x):
-            std.print(x)
+            std.print("{}", x)
 
 fn returns_result(n : i64) → i64!:
     if n < 0:
@@ -275,7 +275,7 @@ fn returns_result(n : i64) → i64!:
 fn error_missing_arm_through_a_result_call() → ∅:
     match returns_result(1):
         ∃(x):
-            std.print(x)
+            std.print("{}", x)
 
 // A plain value has only one shape, so one arm covers it.
 fn returns_plain(n : i64) → i64:
@@ -293,7 +293,7 @@ fn test_plain_subject_needs_one_arm() → ∅:
 fn error_absent_pattern_on_a_plain_value() → ∅:
     match returns_plain(3):
         ∃(x):
-            std.print(x)
+            std.print("{}", x)
         ∅:
             std.print("none")
 
@@ -308,9 +308,9 @@ fn error_duplicate_present_arm() → ∅:
     let v : mut = [1]
     match v.get(0):
         ∃(x):
-            std.print(x)
+            std.print("{}", x)
         ∃(y):
-            std.print(y)
+            std.print("{}", y)
         ∅:
             std.print("none")
 
@@ -319,7 +319,7 @@ fn error_duplicate_absent_arm() → ∅:
     let v : mut = [1]
     match v.get(0):
         ∃(x):
-            std.print(x)
+            std.print("{}", x)
         ∅:
             std.print("none")
         ∅:
@@ -346,7 +346,7 @@ fn error_unknown_subject_checked_at_run_time() → ∅:
     let x : mut = v.get(0)
     match x:
         ∃(y):
-            std.print(y)
+            std.print("{}", y)
 
 // The bound name names the matched value, so it cannot be assigned to.
 @expect error "cannot assign to match variable 'x'"
@@ -365,7 +365,7 @@ fn error_match_not_exhaustive() → ∅:
     let v : mut = []
     match v.get(0):
         ∃(x):
-            std.print(x)
+            std.print("{}", x)
 
 @start
 fn main() → ∅:

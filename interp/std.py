@@ -730,6 +730,141 @@ class StdoutFile:
 # Std module object — instantiated once at interpreter startup
 # ---------------------------------------------------------------------------
 
+# Replacement-field specifiers, as C++'s std::format has them:
+#
+#     [[fill]align][sign][#][0][width][.precision][type][flags]
+#
+# The type letters are C++'s, and Python's are close enough that the
+# work is handed to it once the parts NGPL adds have been taken off.
+#
+# NGPL adds two trailing flags, for the two things a value here carries
+# that a C++ value does not:
+#
+#     t   say the type, as the suffix that would produce it
+#     u   leave off the unit
+_NGPL_FORMAT_FLAGS = "tu"
+
+
+def _split_format_spec(spec: str) -> tuple[str, str]:
+    """Separate the C++ part of a specifier from the flags NGPL adds."""
+    flags = ""
+    while spec and spec[-1] in _NGPL_FORMAT_FLAGS:
+        # A type letter is not a flag, however it is spelled: only a
+        # trailing run of flag letters is taken.
+        flags = spec[-1] + flags
+        spec = spec[:-1]
+    return spec, flags
+
+
+def _int_type_suffix(value) -> str:
+    """The suffix that would produce this number, or nothing if untyped."""
+    width = getattr(value, "width", "int")
+    return "" if width in ("int", "float") else width
+
+
+def _render_template(fmt: str, args, where: str) -> str:
+    """Substitute values into a template's replacement fields.
+
+    Shared by std.format and std.print, so a value reads the same
+    however it reaches the output.
+    """
+    from interp.eval import unwrap_optional
+    from interp.value import (IntValue, FloatValue, BoolValue, StrValue,
+                              ObjectValue, ArrayValue, TupleValue,
+                              EnumValue, ExpectedValue, NoneValue,
+                              TypeValue, FuncValue, LambdaValue, UnitValue)
+    def _fmt_value(v, spec: str = "") -> str:
+        core, flags = _split_format_spec(spec)
+        uv = unwrap_optional(v)
+        if isinstance(uv, UnitValue):
+            inner = _fmt_value(uv.inner, spec)
+            if "u" in flags:
+                return inner
+            return inner + " " + uv.unit.display_name
+        if "t" in flags and isinstance(uv, (IntValue, FloatValue)):
+            return _fmt_value(uv, core) + _int_type_suffix(uv)
+        spec = core
+        if isinstance(uv, ExpectedValue):
+            if uv.is_ok():
+                return _fmt_value(uv.ok_value, spec)
+            return _fmt_value(uv.err_value, spec)
+        if isinstance(uv, NoneValue):
+            return "\N{EMPTY SET}"
+        if isinstance(uv, BoolValue):
+            text = "true" if uv.value else "false"
+            return format(text, spec) if spec else text
+        if isinstance(uv, StrValue):
+            return format(uv.value, spec) if spec else uv.value
+        if isinstance(uv, EnumValue):
+            return uv.display()
+        if isinstance(uv, TypeValue):
+            return uv.name
+        if isinstance(uv, IntValue):
+            if not spec:
+                return str(uv.value)
+            if spec.endswith("c"):
+                return format(chr(uv.value), spec[:-1] or "")
+            try:
+                return format(uv.value, spec)
+            except ValueError:
+                raise TypeError(
+                    f"'{spec}' does not format an integer")
+        if isinstance(uv, FloatValue):
+            if not spec:
+                return repr(uv.value)
+            try:
+                return format(uv.value, spec)
+            except ValueError:
+                raise TypeError(
+                    f"'{spec}' does not format a floating-point number")
+        if isinstance(uv, TupleValue):
+            inner = ", ".join(_fmt_value(e) for e in uv.elements)
+            return "[" + inner + "]"
+        if isinstance(uv, ObjectValue):
+            obj = uv.obj
+            if isinstance(obj, ArrayValue):
+                inner = ", ".join(_fmt_value(e) for e in obj.elements)
+                return "[" + inner + "]"
+            if isinstance(obj, Bytes):
+                return "[" + ", ".join(str(b) for b in obj.data) + "]"
+            return f"<{type(obj).__name__}>"
+        if isinstance(uv, (FuncValue, LambdaValue)):
+            name = getattr(uv, "name", "\N{GREEK SMALL LETTER LAMDA}")
+            return f"<fn {name}>"
+        return str(uv)
+
+    result: list[str] = []
+    arg_idx = 0
+    i = 0
+    while i < len(fmt):
+        ch = fmt[i]
+        if ch == "{":
+            if i + 1 < len(fmt) and fmt[i + 1] == "{":
+                result.append("{")
+                i += 2
+                continue
+            end = fmt.index("}", i + 1)
+            field = fmt[i + 1:end]
+            spec = ""
+            if ":" in field:
+                spec = field.split(":", 1)[1]
+            if arg_idx >= len(args):
+                raise TypeError(
+                    f"{where}: not enough arguments (need at least {arg_idx + 1}, "
+                    f"got {len(args)})")
+            result.append(_fmt_value(args[arg_idx], spec))
+            arg_idx += 1
+            i = end + 1
+        elif ch == "}" and i + 1 < len(fmt) and fmt[i + 1] == "}":
+            result.append("}")
+            i += 2
+        else:
+            result.append(ch)
+            i += 1
+
+    return "".join(result)
+
+
 class StdModule:
     """The std module providing built-in runtime services.
 
@@ -915,86 +1050,7 @@ class StdModule:
         fmt = template_val.value
         fmt_args = args[2:]
 
-        def _fmt_value(v, spec: str = "") -> str:
-            uv = unwrap_optional(v)
-            if isinstance(uv, UnitValue):
-                return _fmt_value(uv.inner, spec) + " " + uv.unit.display_name
-            if isinstance(uv, ExpectedValue):
-                if uv.is_ok():
-                    return _fmt_value(uv.ok_value, spec)
-                return _fmt_value(uv.err_value, spec)
-            if isinstance(uv, NoneValue):
-                return "\N{EMPTY SET}"
-            if isinstance(uv, BoolValue):
-                return "true" if uv.value else "false"
-            if isinstance(uv, StrValue):
-                return uv.value
-            if isinstance(uv, EnumValue):
-                return uv.display()
-            if isinstance(uv, TypeValue):
-                return uv.name
-            if isinstance(uv, IntValue):
-                if spec == "x":
-                    return format(uv.value, "x")
-                if spec == "X":
-                    return format(uv.value, "X")
-                if spec == "b":
-                    return format(uv.value, "b")
-                if spec == "o":
-                    return format(uv.value, "o")
-                if spec == "c":
-                    return chr(uv.value)
-                return str(uv.value)
-            if isinstance(uv, FloatValue):
-                if spec:
-                    return format(uv.value, spec)
-                return repr(uv.value)
-            if isinstance(uv, TupleValue):
-                inner = ", ".join(_fmt_value(e) for e in uv.elements)
-                return "[" + inner + "]"
-            if isinstance(uv, ObjectValue):
-                obj = uv.obj
-                if isinstance(obj, ArrayValue):
-                    inner = ", ".join(_fmt_value(e) for e in obj.elements)
-                    return "[" + inner + "]"
-                if isinstance(obj, Bytes):
-                    return "[" + ", ".join(str(b) for b in obj.data) + "]"
-                return f"<{type(obj).__name__}>"
-            if isinstance(uv, (FuncValue, LambdaValue)):
-                name = getattr(uv, "name", "\N{GREEK SMALL LETTER LAMDA}")
-                return f"<fn {name}>"
-            return str(uv)
-
-        result: list[str] = []
-        arg_idx = 0
-        i = 0
-        while i < len(fmt):
-            ch = fmt[i]
-            if ch == "{":
-                if i + 1 < len(fmt) and fmt[i + 1] == "{":
-                    result.append("{")
-                    i += 2
-                    continue
-                end = fmt.index("}", i + 1)
-                field = fmt[i + 1:end]
-                spec = ""
-                if ":" in field:
-                    spec = field.split(":", 1)[1]
-                if arg_idx >= len(fmt_args):
-                    raise TypeError(
-                        f"std.format: not enough arguments (need at least {arg_idx + 1}, "
-                        f"got {len(fmt_args)})")
-                result.append(_fmt_value(fmt_args[arg_idx], spec))
-                arg_idx += 1
-                i = end + 1
-            elif ch == "}" and i + 1 < len(fmt) and fmt[i + 1] == "}":
-                result.append("}")
-                i += 2
-            else:
-                result.append(ch)
-                i += 1
-
-        return mk_str("".join(result))
+        return mk_str(_render_template(fmt, fmt_args, "std.format"))
 
     def get_stdout(self, args):
         """get_stdout() — get a file descriptor for the standard output.
@@ -1053,58 +1109,34 @@ class StdModule:
         return ObjectValue(ArrayValue(elements, element_type="byte"))
 
     def print(self, args):
-        """print(...) — format arguments and write to stdout.
+        """print(fmt, ...) — write a formatted line to stdout.
 
-        This is a convenience function that concatenates all argument values
-        (like format) and writes the result followed by a newline to stdout.
+        Takes a template first, as C++'s std::print does, and fills its
+        replacement fields from the arguments that follow.  The fields
+        are the ones std.format reads, so a value looks the same
+        whichever way it is written out.
 
         Args:
-            args: list of NGPL Value objects.
+            args[0]: StrValue — the template.
+            args[1:]: values to substitute into it.
 
         Returns:
             NoneValue.
         """
         from interp.eval import unwrap_optional
-        from interp.value import (IntValue, FloatValue, BoolValue, StrValue, ObjectValue,
-                                  ArrayValue, EnumValue, ExpectedValue,
-                                  UnitValue, none)
+        from interp.value import StrValue, none, runtime_type_of
 
-        parts = []
-        for arg in args:
-            uv = unwrap_optional(arg) if not isinstance(arg, ExpectedValue) else arg
-            if isinstance(uv, UnitValue):
-                parts.append(uv.display())
-            elif isinstance(uv, ExpectedValue):
-                parts.append(uv.display())
-            elif isinstance(uv, EnumValue):
-                parts.append(uv.display())
-            elif isinstance(uv, IntValue):
-                if uv.value.bit_length() > 32 or uv.value < 0:
-                    parts.append(format(uv.value, "x"))
-                else:
-                    parts.append(str(uv.value))
-            elif isinstance(uv, FloatValue):
-                parts.append(repr(uv.value))
-            elif isinstance(uv, BoolValue):
-                parts.append("true" if uv.value else "false")
-            elif isinstance(uv, StrValue):
-                parts.append(uv.value)
-            elif isinstance(uv, ObjectValue):
-                obj = uv.obj
-                if isinstance(obj, ArrayValue):
-                    parts.append(f"<{obj.element_type or 'byte'}[{obj.sizeof}]>")
-                elif isinstance(obj, int):
-                    parts.append(str(obj))
-                elif isinstance(obj, Bytes):
-                    parts.append(f"<bytes {len(obj.data)}>")
-                else:
-                    parts.append(f"<{type(obj).__name__}>")
-            else:
-                # Every Value can describe itself; falling back to str()
-                # would print the internal representation instead.
-                parts.append(uv.display())
-
-        output = "".join(parts) + "\n"
+        if not args:
+            raise TypeError(
+                "std.print(fmt, ...) requires a format string; "
+                "std.print(\"\") writes an empty line")
+        template = unwrap_optional(args[0])
+        if not isinstance(template, StrValue):
+            raise TypeError(
+                f"std.print: the first argument is the format string, but "
+                f"this one is {runtime_type_of(template)}; to write a value "
+                f"on its own, say std.print(\"{{}}\", …)")
+        output = _render_template(template.value, args[1:], "std.print") + "\n"
         os.write(1, output.encode("utf-8"))
         # print is a statement, not a value-producing expression; returning
         # the empty string would make the REPL echo it after every call.

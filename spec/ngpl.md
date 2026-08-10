@@ -1205,7 +1205,7 @@ fn abs x : int → int:
     x
 
 fn greet name → ∅:
-    std.print("hello " + name);
+    std.print("hello {}", name);
 ```
 
 In `add`, the expression `a + b` (no semicolon) is the implicit return value.  In `abs`, the early return uses `return`; the final `x` is an implicit return.  In `greet`, the semicolon after `std.print(...)` discards the result, so the function returns `∅`.
@@ -1417,7 +1417,7 @@ foreach _ := 1…4:
     tick()
 
 foreach i, _ := enumerate(values):
-    std.print(i)
+    std.print("{}", i)
 ```
 
 And a parameter a function does not use, which documents the fact in the signature rather than leaving a reader to check the body:
@@ -1651,7 +1651,7 @@ A `match` given a value no arm accepts is an error rather than a silent no-op:
 ```
 match v.get(0):
     ∃(x):
-        std.print(x)
+        std.print("{}", x)
 
 error: match has no arm for ∅; add the missing pattern or a _ arm
 ```
@@ -1665,7 +1665,7 @@ fn never_called() → ∅:
     let v : mut = [1]
     match v.get(0):
         ∃(x):
-            std.print(x)
+            std.print("{}", x)
 
 Error: in never_called: match has no arm for ∅; add the missing pattern
 or a _ arm
@@ -1890,7 +1890,7 @@ A lambda is its own function for this purpose.  A `?` inside one returns from th
 ```
 fn caller() → ∅:                                  // plain, and that is fine
     let f : mut = λa : int, b : int → int!: (a / b)?
-    std.print(f(10, 0) ?? ⁻1)
+    std.print("{}", f(10, 0) ?? ⁻1)
 ```
 
 #### The `??` Operator on Expected Values
@@ -2441,10 +2441,10 @@ A range expression `start…end` (using the `…` character) generates an inclus
 
 ```
 foreach i := 1…10:
-    std.print(i)            /* prints 1, 2, 3, ..., 10 */
+    std.print("{}", i)            /* prints 1, 2, 3, ..., 10 */
 
 foreach j := 5…1:
-    std.print(j)            /* prints 5, 4, 3, 2, 1 */
+    std.print("{}", j)            /* prints 5, 4, 3, 2, 1 */
 ```
 
 The direction is determined by comparing `start` and `end`: ascending if `start ≤ end`, descending otherwise.  The type of the loop variable is **untyped int** — its actual integer width is decided by the context in which it is used, not committed to `int` at the range site.
@@ -2455,24 +2455,24 @@ A three-part range `start…step…end` iterates from `start` to `end` (inclusiv
 
 ```
 foreach i := 0…2…10:
-    std.print(i)            /* prints 0, 2, 4, 6, 8, 10 */
+    std.print("{}", i)            /* prints 0, 2, 4, 6, 8, 10 */
 
 foreach j := 1…3…10:
-    std.print(j)            /* prints 1, 4, 7, 10 */
+    std.print("{}", j)            /* prints 1, 4, 7, 10 */
 ```
 
 The step can be negative for descending iteration:
 
 ```
 foreach k := 10…-3…0:
-    std.print(k)            /* prints 10, 7, 4, 1 */
+    std.print("{}", k)            /* prints 10, 7, 4, 1 */
 ```
 
 The step must be a non-zero integer.  The end bound is inclusive: the last value produced is the largest (or smallest, for negative step) value in the sequence that does not exceed the bound.  When the step does not evenly divide the range, the final value may be less than `end`:
 
 ```
 foreach i := 0…3…10:
-    std.print(i)            /* prints 0, 3, 6, 9 (not 10) */
+    std.print("{}", i)            /* prints 0, 3, 6, 9 (not 10) */
 ```
 
 Stepped ranges are particularly useful for block-oriented processing:
@@ -2523,8 +2523,8 @@ When there is exactly **one** variable but **multiple** iterable expressions, th
 
 ```
 foreach pair := 1…3, 10…12:
-    std.print(pair[0])      /* 1, 2, 3 */
-    std.print(pair[1])      /* 10, 11, 12 */
+    std.print("{}", pair[0])      /* 1, 2, 3 */
+    std.print("{}", pair[1])      /* 10, 11, 12 */
 ```
 
 Tuple elements are accessed by integer index (`pair[0]`, `pair[1]`).  In the future, access by unique type name will also be supported when the element types are distinct.  Wrapping rules apply to each iterable independently.
@@ -2618,14 +2618,14 @@ The `enumerate(container)` built-in wraps an iterable so that `foreach` yields `
 
 ```
 foreach pair := enumerate([10, 20, 30]):
-    std.print(pair[0], pair[1])      // 0 10, 1 20, 2 30
+    std.print("{} {}", pair[0], pair[1])      // 0 10, 1 20, 2 30
 ```
 
 With two loop variables, the tuple is destructured automatically:
 
 ```
 foreach i, v := enumerate([10, 20, 30]):
-    std.print(i, v)                  // 0 10, 1 20, 2 30
+    std.print("{} {}", i, v)                  // 0 10, 1 20, 2 30
 ```
 
 `enumerate` works with arrays, ranges, and any other iterable.  Using `enumerate` outside a `foreach` context is an error.
@@ -3585,7 +3585,7 @@ let dir : mut = std.fs.cwd()
 let it : mut = dir.iterate()
 let e : mut = it.next()
 while e:
-    std.print(e.name, " ", e.type)
+    std.print("{} {}", e.name, e.type)
     e ← it.next()
 ```
 
@@ -5149,7 +5149,13 @@ std.format(allocator, fmt_str, args…)
 
 #### Replacement Fields
 
-Each `{}` in the format string consumes the next argument from the pack.  An optional format specifier follows a colon inside the braces:
+Each `{}` in the format string consumes the next argument from the pack.  An optional format specifier follows a colon inside the braces.  The specifier is C++'s, with two flags appended for the two things an NGPL value carries that a C++ value does not:
+
+```
+{:[[fill]align][sign][#][0][width][.precision][type][ngpl-flags]}
+```
+
+**Presentation type.**  The last character of the C++ part says how the value is written:
 
 | Specifier | Meaning | Example |
 |-----------|---------|---------|
@@ -5160,6 +5166,38 @@ Each `{}` in the format string consumes the next argument from the pack.  An opt
 | `b` | Binary | `std.format(a, "{:b}", 10)` → `"1010"` |
 | `o` | Octal | `std.format(a, "{:o}", 8)` → `"10"` |
 | `c` | Character (from code point) | `std.format(a, "{:c}", 65)` → `"A"` |
+| `f` | Fixed-point | `std.format(a, "{:.3f}", 1.5)` → `"1.500"` |
+| `e` | Scientific | `std.format(a, "{:.2e}", 1.5)` → `"1.50e+00"` |
+| `g` | Shortest of fixed and scientific | `std.format(a, "{:g}", 1.5)` → `"1.5"` |
+
+**Width, alignment, and fill.**  A number sets the minimum width; `<`, `>`, and `^` place the value within it, and the character *before* the alignment is the one used to pad:
+
+| Specifier | Meaning | Example |
+|-----------|---------|---------|
+| `6` | Minimum width | `"[{:6}]"` → `"[    42]"` |
+| `<6` | Left-aligned | `"[{:<6}]"` → `"[42    ]"` |
+| `>6` | Right-aligned | `"[{:>6}]"` → `"[    42]"` |
+| `^6` | Centred | `"[{:^6}]"` → `"[  42  ]"` |
+| `*<6` | Filled with `*` | `"[{:*<6}]"` → `"[42****]"` |
+| `06` | Zero-padded | `"[{:06}]"` → `"[000042]"` |
+
+**Sign, alternate form, and precision.**
+
+| Specifier | Meaning | Example |
+|-----------|---------|---------|
+| `+` | Sign on positive numbers too | `"{:+}"` → `"+42"` |
+| (space) | Space where the sign would be | `"[{: }]"` → `"[ 42]"` |
+| `#` | Base prefix | `"{:#x}"` → `"0xff"`, `"{:#b}"` → `"0b1010"` |
+| `.3` | Precision | `"{:8.2f}"` → `"    1.50"` |
+
+**NGPL flags.**  These follow the C++ part of the specifier.  Neither is on by default, so a value written without them looks as it would in any other language:
+
+| Flag | Meaning | Example |
+|------|---------|---------|
+| `t` | Append the type suffix | `let a : i8 = 42` → `"{:t}"` → `"42i8"`, `"{:xt}"` → `"2ai8"` |
+| `u` | Leave the unit off | `let d ¤meter : i32 = 5` → `"{}"` → `"5 m"`, `"{:u}"` → `"5"` |
+
+The flags combine, and combine with the rest of the specifier: `"{:ut}"` on that same `d` gives `"5i32"`.  A number that was never given a width — an untyped literal — has no suffix to write, so `t` adds nothing to it.
 
 Literal braces are escaped by doubling: `{{` produces `{`, `}}` produces `}`.
 
@@ -5195,10 +5233,37 @@ alloc.deinit()
 | Positional args | `"{0}"` | `"{0}"` | `"{0}"` | sequential only |
 | Named args | no | `"{name}"` | named in macro | no |
 | Format spec | `"{:x}"` | `"{:x}"` | `"{:x}"` | `"{:x}"` |
+| Type suffix | N/A | N/A | N/A | `"{:t}"` |
+| Unit suppression | N/A | N/A | N/A | `"{:u}"` |
 | Allocator | no | no | no | first argument |
 | Type-safe | compile-time | runtime | compile-time | runtime |
 
 The allocator parameter ensures that the caller controls where the formatted string is allocated, following the language's principle of explicit memory management.  Unlike C++ `std::format` which allocates via `std::allocator`, the allocator is a visible first-class argument.
+
+The `t` and `u` flags have no counterpart in the other three languages because the values they describe have no counterpart either: a C++ `int` does not remember that it was written `42i8`, and none of the three carries a unit through arithmetic.  Putting them in the specifier rather than in separate functions keeps one way of writing a value, and keeps the choice at the point where the value is written rather than at the point where it is defined.
+
+#### Printing
+
+`std.print` writes a formatted line to standard output.  It takes the same template and the same replacement fields as `std.format`, so a value looks the same whichever way it leaves the program:
+
+```
+std.print(fmt_str, args…)
+```
+
+It differs from `std.format` in two ways: there is no allocator, since nothing is retained, and a newline is appended.
+
+```
+let a : i8 = 42
+let d ¤meter : i32 = 5
+
+std.print("plain")                    /* plain               */
+std.print("{} and {}", 1, "two")      /* 1 and two           */
+std.print("[{:*<6}]", a)              /* [42****]            */
+std.print("{} {:t} {:xt}", a, a, a)   /* 42 42i8 2ai8        */
+std.print("{} {:u} {:ut}", d, d, d)   /* 5 m 5 5i32          */
+```
+
+The template is not optional.  A call with no arguments is an error, and so is one whose first argument is not a string — that spelling wrote the value itself in an earlier version of the language, and is now a mistake worth reporting rather than a second way to say the same thing.  A single value on its own is written `std.print("{}", v)`, and an empty line is `std.print("")`.
 
 
 ### Resource Lifetime and Scope
@@ -5211,7 +5276,7 @@ fn main() → ∅:
     let dir : mut = std.fs.cwd()
     let file : mut = dir.open_file("data.bin")
     let data : mut = file.read_file(alloc)
-    std.print(data.sizeof)
+    std.print("{}", data.sizeof)
     // main's scope ends here: file is closed, then dir
 ```
 
@@ -5509,9 +5574,9 @@ Three submodules of `std` expose the context the operating system hands to a run
 ```
 @start
 fn main() → ∅:
-    std.print("running as ", std.args.program())
+    std.print("running as {}", std.args.program())
     foreach arg := std.args.all():
-        std.print("parameter: ", arg)
+        std.print("parameter: {}", arg)
 ```
 
 | Method | Result | Description |
@@ -5540,7 +5605,7 @@ The separator may be omitted when no parameter could be mistaken for an interpre
 ```
 let home : mut = std.env.get("HOME") ?? "/"
 foreach name := std.env.names():
-    std.print(name, " = ", std.env.get(name) ?? "")
+    std.print("{} = {}", name, std.env.get(name) ?? "")
 ```
 
 | Method | Result | Description |
@@ -5564,7 +5629,7 @@ The operating system does not guarantee that environment variables are valid UTF
 
 ```
 let workers : mut = std.sys.usable_cpus()
-std.print("using ", workers, " of ", std.sys.total_cpus())
+std.print("using {} of {}", workers, std.sys.total_cpus())
 ```
 
 | Method | Result | Description |
@@ -5745,8 +5810,8 @@ This allows sizeof results and other unit-bearing values to flow naturally throu
 When formatting or printing a value with a unit, the unit's display name is appended after a space:
 
 ```
-std.print(42¤meter)     // prints: 42 m
-std.print(1024¤kibibyte) // prints: 1024 KiB
+std.print("{}", 42¤meter)     // prints: 42 m
+std.print("{}", 1024¤kibibyte) // prints: 1024 KiB
 ```
 
 The builtin units use conventional abbreviations: `B` for byte, `m` for meter, `s` for second, etc.
@@ -5836,7 +5901,7 @@ A source file may contain only definitions; every statement must live inside a f
 >>> x × 2
 84
 >>> foreach i := 1…3:
-...     std.print(i)
+...     std.print("{}", i)
 ...
 1
 2
@@ -6045,7 +6110,7 @@ A program can inspect its own call stack at any point, not only when failing:
 ```
 fn log_caller() → ∅:
     foreach frame := std.callstack():
-        std.print(frame[0], " at line ", frame[1], " column ", frame[2])
+        std.print("{} at line {} column {}", frame[0], frame[1], frame[2])
 ```
 
 `std.callstack()` returns an array of `(name, line, column)` tuples, innermost first.  Entry 0 is the function that called `callstack`, not `callstack` itself, so a function can name itself with `std.callstack()[0][0]` without accounting for the call it just made.

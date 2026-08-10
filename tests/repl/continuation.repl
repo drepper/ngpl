@@ -1,7 +1,6 @@
 1 +
 2
-std.print("a",
-          "b")
+std.print("ab")
 [1,
  2,
  3]
