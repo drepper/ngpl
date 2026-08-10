@@ -294,6 +294,44 @@ fn error_argument_of_another_kind() → ∅:
 fn error_returns_another_kind() → i32:
     "hello"
 
+// ---------------------------------------------------------------------
+// An integer initializer has to survive the conversion to a float
+// ---------------------------------------------------------------------
+
+@test
+@expect error "needs more significant bits than f32 has .24."
+fn error_integer_too_wide_for_f32() → ∅:
+    let f : f32 = 17000001
+
+@test
+@expect error "needs more significant bits than f32 has"
+fn error_just_past_the_f32_boundary() → ∅:
+    let f : f32 = 16777217
+
+@test
+@expect error "needs more significant bits than f16 has .11."
+fn error_integer_too_wide_for_f16() → ∅:
+    let f : f16 = 2049
+
+@test
+@expect error "needs more significant bits than bfloat has .8."
+fn error_integer_too_wide_for_bfloat() → ∅:
+    let f : bfloat = 257
+
+@test
+@expect error "needs more significant bits than f64 has .53."
+fn error_integer_too_wide_for_f64() → ∅:
+    let f : f64 = 9007199254740993
+
+// The same at an argument, where the conversion is the same one.
+fn takes_f32(x : f32) → ∅:
+    ∅
+
+@test
+@expect error "needs more significant bits than f32 has"
+fn error_argument_too_wide_for_f32() → ∅:
+    takes_f32(17000001)
+
 @start
 fn main() → ∅:
   std.print("type strictness tests passed")

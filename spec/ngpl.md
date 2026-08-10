@@ -4334,6 +4334,28 @@ enum SmallEnum : u8:
 
 When no underlying type is specified, the default is `int` (arbitrary precision).
 
+#### An Integer Has to Survive the Conversion
+
+An integer becomes a float where one is asked for, but only when it comes through unchanged.  An integer is exact in a float when its odd part fits the significand, so what matters is the significant bits it needs rather than its magnitude:
+
+| Type | Significand bits | Largest exact integer |
+|------|-----------------|----------------------|
+| `bfloat` | 8 | 256 |
+| `f16` | 11 | 2048 |
+| `f32` | 24 | 16777216 |
+| `f64` | 53 | 9007199254740992 |
+
+```
+let a : f32 = 16777216     // 2²⁴, exact
+let b : f32 = 17000002     // even, so its odd part still fits
+let c : f32 = 17000001
+
+error: 17000001 needs more significant bits than f32 has (24), so it
+would not survive the conversion
+```
+
+The same holds at an argument, where the conversion is the same one.
+
 #### Kinds Do Not Run Together
 
 Widths convert within a kind, and an integer becomes a float where one is asked for.  The kinds themselves do not: a string is not a number, a number is not a string, and a boolean is neither.

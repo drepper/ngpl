@@ -170,6 +170,29 @@ def resolve_float_width(w1: str, w2: str) -> str:
     return w1 if b1 >= b2 else w2
 
 
+# Significand bits per float type, counting the implicit leading one.
+# An integer is exact in the type when it needs no more than these.
+_SIGNIFICAND_BITS: dict[str, int] = {
+    "f16": 11, "bfloat": 8, "f32": 24, "f64": 53,
+}
+
+
+def _int_is_exact_in_float(value: int, width: str) -> bool:
+    """Whether an integer is representable in a float type without loss.
+
+    An integer is exact when its odd part fits the significand, so
+    2**24 and 17000002 are exact in an f32 while 17000001 is not:
+    the first two carry a factor of two the exponent can hold, and the
+    last needs a twenty-fifth significant bit.
+    """
+    if width not in _SIGNIFICAND_BITS:
+        return True
+    try:
+        return _clamp_float(float(value), width) == value
+    except OverflowError:
+        return False
+
+
 def _clamp_float(value: float, width: str) -> float:
     import struct
     fmt = _FLOAT_STRUCT_FMT.get(width)
@@ -1341,6 +1364,11 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
 
     if param_type in FLOAT_TYPES:
         if isinstance(value, IntValue):
+            if not _int_is_exact_in_float(value.value, param_type):
+                raise TypeError(
+                    f"{func_name}: argument '{param_name}' is {value.value}, "
+                    f"which needs more significant bits than {param_type} "
+                    f"has ({_SIGNIFICAND_BITS[param_type]})")
             return mk_float(float(value.value), param_type)
         if isinstance(value, FloatValue):
             return mk_float(value.value, param_type)
@@ -1466,6 +1494,11 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
         # A float carries its width like an integer does, so a target
         # that names one decides it.
         if isinstance(value, IntValue):
+            if not _int_is_exact_in_float(value.value, target_width):
+                raise TypeError(
+                    f"{value.value} needs more significant bits than "
+                    f"{target_width} has ({_SIGNIFICAND_BITS[target_width]}), "
+                    f"so it would not survive the conversion")
             return mk_float(float(value.value), target_width)
         if isinstance(value, FloatValue):
             return mk_float(value.value, target_width)

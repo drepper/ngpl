@@ -143,6 +143,23 @@ fn test_float_type_rejection():
   @expect error "expected i32"
   reject_float(3.14)
 
+// --- an integer initializer has to survive the conversion ---
+
+// An integer is exact in a float when its odd part fits the
+// significand, so a power of two at the boundary is fine and the
+// odd number just past it is not.
+fn test_integer_initializer_within_the_significand():
+  let a : f32 = 16777216          // 2^24, exact
+  let b : f32 = 17000002          // even, its odd part fits
+  let c : f16 = 2048              // 2^11
+  let d : bfloat = 256            // 2^8
+  let e : f64 = 9007199254740992  // 2^53
+  assert_true(a == 16777216.0, "2^24 is exact in f32")
+  assert_true(b == 17000002.0, "an even number just past it is exact")
+  assert_true(c == 2048.0, "2^11 is exact in f16")
+  assert_true(d == 256.0, "2^8 is exact in bfloat")
+  assert_true(e == 9007199254740992.0, "2^53 is exact in f64")
+
 @start
 fn main():
   test_float_literals()
@@ -155,4 +172,5 @@ fn main():
   test_float_format()
   test_hex_float_literal()
   test_float_type_rejection()
+  test_integer_initializer_within_the_significand()
   std.print("float tests passed")
