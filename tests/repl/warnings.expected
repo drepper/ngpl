@@ -1,0 +1,29 @@
+warning: the value of this statement is not used; the signature hands nothing back, so the last statement is not a return value; name a return type, or write '_ ← …' to drop the value
+  --> <repl:1>:2:5
+    |
+  2 |     1
+    |     ^
+    |
+1
+warning: 'step' is declared mut but is never modified
+  --> <repl:3>:2:5
+    |
+  2 |     let step : mut = 2
+    |     ^^^
+  3 |     n × step
+    |
+8i64
+warning: the value of this statement is not used; the signature hands nothing back, so the last statement is not a return value; name a return type, or write '_ ← …' to drop the value
+  --> <repl:6>:3:9
+    |
+  3 |         1
+    |         ^
+  4 |     fn b(&self):
+    |
+error: in P.b: std.println writes where the rest of the program can see it; a function that calls it says @impure
+  --> <repl:6>:5:9
+    |
+  5 |         std.println("x")
+    |         ^^^^^^^^^^^
+    |
+"still alive"

@@ -423,7 +423,9 @@ Build System and Tooling
 [x] REPL: interactive read-eval-print loop when no startup function is defined or on request.
     Define functions/variables, call functions, inspect values.  Entered via --repl, when no
     source file is given, or when the source defines no @start function.  Accepts definitions,
-    statements, and bare expressions; layout blocks are terminated by an empty line.
+    statements, and bare expressions; layout blocks are terminated by an empty line.  A
+    definition draws the same warnings it would in a file, pointed at the entry it was typed
+    in, and one that is refused still reports what the checks found before the refusal.
 
 [ ] [FULL] compiler mode: ahead-of-time compilation to native code.  Startup function designation
     via command line or attribute.

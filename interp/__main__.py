@@ -1617,9 +1617,14 @@ class DefinitionError(Exception):
 
 
 def _report_warnings(warnings, source: str, source_path: str):
-    """Print warnings found while installing, in the order they were found."""
+    """Print warnings found while installing, in the order they were found.
+
+    A position past the end of the text is shown as the message on its
+    own: the REPL checks one entry at a time and numbers lines within
+    it, so a warning from anywhere else has nothing here to point at.
+    """
     for message, position in warnings:
-        if position is not None:
+        if position is not None and position[0] <= source.count("\n") + 1:
             line, col, end_col = position
             print(format_diagnostic(source, source_path, line, col, message,
                                     end_col=end_col, level="warning"),

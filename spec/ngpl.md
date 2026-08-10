@@ -6350,6 +6350,26 @@ error: array index 9 out of range (length 2)
 
 Diagnostics carry the same source excerpt and caret as in file mode, with the entry number standing in for a file name.  Parse errors, type errors, checks a definition settles before it runs, and runtime errors are all reported this way, and none of them ends the session.
 
+### Warnings
+
+A definition draws the same warnings it would in a file, reported against the entry it was typed in:
+
+```
+>>> fn f():
+...     1
+...
+warning: the value of this statement is not used; the signature hands
+nothing back, so the last statement is not a return value; name a
+return type, or write '_ ← …' to drop the value
+  --> <repl:1>:2:5
+    |
+  2 |     1
+    |     ^
+    |
+```
+
+A definition that is refused reports what the checks found before the refusal, so an entry holding several definitions — an `impl` block, say — says everything that is wrong with it rather than only the first thing.
+
 ### Non-Interactive Input
 
 When standard input is not a terminal the REPL prints no banner and no prompts, so a piped script produces exactly its results:

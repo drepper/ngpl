@@ -214,7 +214,7 @@ class Repl:
 
         try:
             for item in items:
-                self._eval_item(item)
+                self._eval_item(item, src, name)
         except KeyboardInterrupt:
             print("\nKeyboardInterrupt", file=sys.stderr)
         except (SystemExit, ProgramExit, ProgramAbort):
@@ -223,13 +223,18 @@ class Repl:
         except Exception as e:
             self._show_error(e, src, name)
 
-    def _eval_item(self, item):
-        """Install a definition or evaluate a statement, showing any value."""
-        from interp.__main__ import install_definitions
+    def _eval_item(self, item, src: str, name: str):
+        """Install a definition or evaluate a statement, showing any value.
+
+        A definition draws the same warnings here as it would in a
+        file, reported against the entry it was typed in.
+        """
+        from interp.__main__ import _report_warnings, install_definitions
 
         if isinstance(item, _DEFINITION_NODES):
             program = install_definitions([item], self.env, self.evaluator,
                                           honor_start=False)
+            _report_warnings(program.warnings, src, name)
             self._label_definition(item)
             self._report_definition(item, program)
             return
@@ -294,7 +299,15 @@ class Repl:
         deliver_abort(exc.signal_number)
 
     def _show_error(self, exc: BaseException, src: str, name: str):
-        """Print a diagnostic for an error raised while handling an entry."""
+        """Print a diagnostic for an error raised while handling an entry.
+
+        A definition that could not be installed still had checks run
+        over it, and what those found is reported before the error that
+        stopped them.
+        """
+        from interp.__main__ import _report_warnings
+
+        _report_warnings(getattr(exc, "warnings", ()), src, name)
         pos = extract_position(exc)
         if pos is None:
             pos = self.evaluator._last_pos

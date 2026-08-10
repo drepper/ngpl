@@ -1,0 +1,19 @@
+fn f():
+    1
+
+f()
+fn g(n : i64) → i64:
+    let step : mut = 2
+    n × step
+
+g(4)
+struct P:
+    x : i32
+
+impl P:
+    fn a(&self):
+        1
+    fn b(&self):
+        std.println("x")
+
+"still alive"
