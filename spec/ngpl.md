@@ -250,6 +250,47 @@ let y : mut u8 = 256         /* y is 0 (unsigned wraps) */
 
 Bitwise operations (`&`, `|`, `^`, `~`, `«`, `»`, `↺`, `↻`) always produce wrapped results regardless of signedness, since they operate on the bit representation and the result is always in range after masking.
 
+#### Shifts
+
+A shift moves bits within the value it is given, so the result has the same type.  The count says how far to move them, not what type to become, and its own type does not enter into the result:
+
+```
+let b : byte = 3
+b « 4          // 48, a byte
+b » 1          // 1, a byte
+
+let u : u32 = 3
+u « 24         // a u32
+```
+
+A count that reaches or passes the width would move every bit out of the value.  That is a mistake rather than a way to write zero, so it is refused with `std.errors.shift_out_of_range`, which arrives the way division by zero does:
+
+```
+let b : byte = 3
+b « 8
+
+err(errors.shift_out_of_range)
+```
+
+Being a value rather than a stop, it can be handled or recovered from:
+
+```
+(b « 8) ?? 0    // 0
+
+match b « 8:
+    ∃(v):  …
+    ∄(e):  …
+```
+
+An untyped integer is arbitrary-precision and has no width for a count to pass, so any count is fine:
+
+```
+let n := 1
+n « 40         // 1099511627776
+```
+
+This is what forces a program assembling a wide value from narrow parts to say the width it is working at.  Reading four bytes into a `u32` word is not a formality: shifting a `byte` by 24 would be the error above.
+
 
 ### Floating-Point Types
 
@@ -4327,7 +4368,7 @@ A built-in enum `std.errors` provides standardized error codes grouped by catego
 
 | Range | Category | Members |
 |-------|----------|---------|
-| 100-199 | Runtime errors | `division_by_zero` (100), `index_out_of_range` (101), `stack_overflow` (102), `null_dereference` (103), `integer_overflow` (104), `assertion_failed` (105) |
+| 100-199 | Runtime errors | `division_by_zero` (100), `index_out_of_range` (101), `stack_overflow` (102), `null_dereference` (103), `integer_overflow` (104), `assertion_failed` (105), `shift_out_of_range` (106) |
 | 200-299 | Compile-time errors | `type_mismatch` (200), `unknown_type` (201), `syntax_error` (202), `undefined_variable` (203), `arity_mismatch` (204) |
 | 300-399 | Library/runtime errors | `file_not_found` (300), `permission_denied` (301), `io_error` (302), `allocation_failed` (303), `invalid_argument` (304) |
 

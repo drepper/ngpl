@@ -36,6 +36,7 @@ def _make_std_errors() -> EnumType:
     members = {
         # Runtime errors (100-199)
         "division_by_zero": 100,
+        "shift_out_of_range": 106,
         "index_out_of_range": 101,
         "stack_overflow": 102,
         "null_dereference": 103,

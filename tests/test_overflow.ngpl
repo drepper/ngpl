@@ -140,6 +140,61 @@ fn test_shift_left_wraps() → ∅:
     let y := x « s
     assert_eq(y, 0)
 
+// ---------------------------------------------------------------------
+// A shift keeps the type it is given
+// ---------------------------------------------------------------------
+
+// The count says how far to move the bits, not what type to become,
+// so the result is the type of what was shifted.
+@test
+fn test_shift_keeps_the_operand_type() → ∅:
+    let b : byte = 3
+    let left := b « 4
+    let right := b » 1
+    static_assert_eq(@typeof(left), byte)
+    static_assert_eq(@typeof(right), byte)
+    static_assert_eq(@sizeof(left), 1 ¤byte)
+    let u : u32 = 3
+    let wide := u « 24
+    static_assert_eq(@typeof(wide), u32)
+    static_assert_eq(@sizeof(wide), 4 ¤byte)
+
+@test
+fn test_shift_within_the_width() → ∅:
+    let b : byte = 3
+    assert_eq(b « 4, 48)
+    assert_eq(b » 1, 1)
+    let u : u32 = 1
+    assert_eq(u « 31, 2147483648)
+
+// A count that reaches the width would shift every bit out.  That is a
+// mistake rather than a way to write zero, so it is refused.
+@test
+fn test_shift_past_the_width_fails() → ∅:
+    let b : byte = 3
+    match b « 8:
+        ∃(v):  assert(false)
+        ∄(e):  assert_eq(e, std.errors.shift_out_of_range)
+
+@test
+fn test_shift_right_past_the_width_fails() → ∅:
+    let u : u32 = 1
+    match u » 32:
+        ∃(v):  assert(false)
+        ∄(e):  assert_eq(e, std.errors.shift_out_of_range)
+
+// An untyped integer has no width for a count to pass.
+@test
+fn test_shift_of_an_untyped_integer() → ∅:
+    let n := 1
+    assert_eq(n « 40, 1099511627776)
+
+// The error can be recovered from, as division by zero can.
+@test
+fn test_shift_error_recovers() → ∅:
+    let b : byte = 3
+    assert_eq((b « 8) ?? 99, 99)
+
 @start
 fn main() → ∅:
     std.print("overflow tests passed")

@@ -841,7 +841,10 @@ class Evaluator:
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-            return mk_int_wrap(lu.value << ru.value, resolve_width(lu.width, ru.width))
+            width, err = self._shift_result_width(lu, ru)
+            if err is not None:
+                return err
+            return mk_int_wrap(lu.value << ru.value, width)
         raise TypeError(f"left-shift expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_rshift(self, left, right):
@@ -854,9 +857,11 @@ class Evaluator:
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-            w = resolve_width(lu.width, ru.width)
+            width, err = self._shift_result_width(lu, ru)
+            if err is not None:
+                return err
             val = wrap_int(lu.value, lu.width)
-            return mk_int_wrap(val >> ru.value, w)
+            return mk_int_wrap(val >> ru.value, width)
         raise TypeError(f"right-shift expected int+int, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_bitand(self, left, right):
@@ -994,6 +999,39 @@ class Evaluator:
         if self._wrapping:
             return mk_int_wrap(value, width)
         return mk_int(value, width)
+
+    def _std_error(self, member: str, fallback: str) -> ExpectedValue:
+        """Create an ExpectedValue.err naming a member of std.errors.
+
+        The enum is taken from the std module itself rather than looked
+        up by name: a lambda's environment does not reach the globals,
+        so the lookup failed there and the error degraded to a string,
+        which is not the type the return annotation promises.
+        """
+        errors_enum = getattr(std, "errors", None)
+        if isinstance(errors_enum, EnumType):
+            return ExpectedValue.err(
+                EnumValue(errors_enum, errors_enum.members[member]))
+        return ExpectedValue.err(mk_str(fallback))
+
+    def _shift_result_width(self, lu, ru):
+        """The width a shift produces, or an error where it has none.
+
+        A shift moves bits within the value it is given, so the result
+        is the same type: the count says how far, not what type to
+        become.  A count that reaches or passes the width would shift
+        every bit out, which is a mistake rather than a way to write
+        zero, so it is refused.
+        """
+        bits = _TYPE_BITS.get(lu.width)
+        if bits is not None and ru.value >= bits:
+            return None, self._std_error(
+                "shift_out_of_range",
+                f"shift of {ru.value} on a {lu.width} of {bits} bits")
+        if ru.value < 0:
+            return None, self._std_error(
+                "shift_out_of_range", f"shift by {ru.value}")
+        return lu.width, None
 
     def _division_error(self) -> ExpectedValue:
         """Create an ExpectedValue.err for division by zero using std.errors.
