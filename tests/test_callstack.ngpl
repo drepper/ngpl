@@ -57,7 +57,7 @@ fn test_chain_order() → ∅:
 // The stack grows and shrinks with the calls it describes.
 fn depth() → int:
     let frames := std.callstack()
-    frames.sizeof
+    @dropunit(frames.sizeof)
 
 fn depth_plus_one() → int:
     depth()

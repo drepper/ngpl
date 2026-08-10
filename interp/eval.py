@@ -20,6 +20,7 @@ from interp.ast import (
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
+    DropUnitExpr,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr, SumTypeDef,
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
@@ -2043,6 +2044,14 @@ class Evaluator:
                 node._cached_value = result
             return result
 
+        if isinstance(node, DropUnitExpr):
+            val = self.eval_expr(node.expr)
+            inner = val.inner if isinstance(val, UnitValue) else val
+            if not isinstance(val, UnitValue):
+                self._warnings.append(
+                    "@dropunit: this value carries no unit to drop")
+            return inner
+
         if isinstance(node, SizeOfExpr):
             cached = getattr(node, "_cached_value", None)
             if cached is not None:
@@ -3827,6 +3836,14 @@ class Evaluator:
                 return result
         elif isinstance(inner, NoneValue):
             return result
+        # A return type states no unit, so a value carrying one is not
+        # the type promised.  Parting with a unit is a real change and
+        # is said rather than done quietly on the way out.
+        if isinstance(inner, UnitValue):
+            raise TypeError(
+                f"{func_name}: return type is {ret_type}, but the body "
+                f"evaluates to {inner.unit.display_name}; "
+                f"use @dropunit to part with the unit")
         if check in _TYPE_BITS or check == "int":
             if isinstance(inner, FloatValue):
                 raise TypeError(

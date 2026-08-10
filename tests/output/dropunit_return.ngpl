@@ -1,0 +1,6 @@
+fn measured(n ¤meter : i32) → i32:
+    n
+
+@start
+fn main() → ∅:
+    std.print(measured(5 ¤meter))

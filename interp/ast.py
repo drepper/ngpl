@@ -264,6 +264,17 @@ class MultiSlice:
         self.specs = specs
 
 
+class DropUnitExpr:
+    """@dropunit(expr): the value without the unit it carries.
+
+    A unit is part of a type, so parting with one is a real change and
+    is written down rather than happening quietly at a boundary.
+    """
+
+    def __init__(self, expr):
+        self.expr = expr
+
+
 class TryUnwrap:
     """Postfix ? operator: unwrap optional or propagate none."""
 

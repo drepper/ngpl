@@ -1,0 +1,10 @@
+error: measured: return type is i32, but the body evaluates to m; use @dropunit to part with the unit
+  --> tests/output/dropunit_return.ngpl:2:5
+    |
+  2 |     n
+    |     ^
+  3 | 
+    |
+backtrace (innermost call first):
+  #0 measured at tests/output/dropunit_return.ngpl:2:4
+  #1 main at tests/output/dropunit_return.ngpl:6:23

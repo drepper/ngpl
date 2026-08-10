@@ -14,6 +14,7 @@ from interp.ast import (
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
+    DropUnitExpr,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, TypeDef, EnumDef,
     LambdaExpr, ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
@@ -1701,6 +1702,14 @@ class Parser:
             self._skip_nl()
             self._eat("PUNCT", ")")
             node = SizeOfExpr(expr)
+            return self._parse_postfix(node)
+        if self._check("DROPUNIT"):
+            self._eat("DROPUNIT")
+            self._eat("PUNCT", "(")
+            expr = self._parse_or_expr()
+            self._skip_nl()
+            self._eat("PUNCT", ")")
+            node = DropUnitExpr(expr)
             return self._parse_postfix(node)
         if self._check("UNITOF"):
             self._eat("UNITOF")

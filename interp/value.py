@@ -1382,6 +1382,14 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
         settled = coerce_to_type(value, base)
         return (SomeValue(settled) if opt_err == ""
                 else ExpectedValue.ok(settled))
+    # A type states no unit, so a value carrying one is not that type.
+    # Parting with a unit is a real change and is said with @dropunit
+    # rather than done quietly at a binding.
+    if isinstance(value, UnitValue):
+        raise TypeError(
+            f"'{target_width}' carries no unit, but the value is "
+            f"{value.unit.display_name}; use @dropunit to part with it")
+
     # An array is coerced element by element further down, so a named
     # type here describes the elements rather than the array.
     scalar = not (isinstance(value, ObjectValue)

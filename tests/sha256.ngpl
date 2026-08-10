@@ -40,7 +40,9 @@ fn get_padded_byte(data : byte[], off ¤byte : usize, total_size ¤byte : usize)
     if off >= len_start:
         let bit_len := data.sizeof × 8
         let byte_idx := off - len_start
-        return (bit_len » ((7 - byte_idx) × 8)) & 255
+        // The length suffix is derived from the offsets, so it
+        // carries their unit; a byte of the message does not.
+        return @dropunit((bit_len » ((7 - byte_idx) × 8)) & 255)
     ∅
 
 fn get_padded_word(data : byte[], off ¤byte : usize, total_size ¤byte : usize) → u32?:
@@ -58,10 +60,10 @@ fn get_padded_word(data : byte[], off ¤byte : usize, total_size ¤byte : usize)
         let b3 : u32 = data[off + 3]
         return (b0 « 24) | (b1 « 16) | (b2 « 8) | b3
     if off >= total_size: return ∅
-    // u32 for the same reason as above, and for one more: the padding
-    // arithmetic derives from the offsets, so it carries the ¤byte unit,
-    // and a word built from it would poison the schedule.  The reads
-    // above come straight from the array and carry no unit.
+    // u32 for the same reason as above: these are shifted into place
+    // too.  The unit the padding arithmetic picks up from the offsets
+    // is parted with where it arises, inside get_padded_byte, rather
+    // than here.
     let b0 : u32 = get_padded_byte(data, off, total_size) ?? 0
     let b1 : u32 = get_padded_byte(data, off + 1, total_size) ?? 0
     let b2 : u32 = get_padded_byte(data, off + 2, total_size) ?? 0

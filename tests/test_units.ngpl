@@ -242,6 +242,30 @@ fn test_compound_unit_mul_spec():
   assert_true(area == 36¤meter×meter, "6m × 6m is 36 m×m")
   std.print(area)
 
+// --- @dropunit ---
+
+// A unit is part of a type, so parting with one is a real change and
+// is written down rather than happening quietly at a boundary.
+fn test_dropunit_parts_with_the_unit():
+  let v ¤meter := 7
+  let plain := @dropunit(v)
+  assert_true(plain == 7, "the number survives")
+  assert_true(@unitof(v) != @unitof(plain), "the unit does not")
+
+// The width is the value's own and is untouched.
+fn test_dropunit_keeps_the_width():
+  let v ¤byte : u32 = 7
+  let plain := @dropunit(v)
+  assert_true(@sizeof(plain) == 4 ¤byte, "still four bytes wide")
+
+// A return type states no unit, so a value carrying one is not what
+// was promised and has to say it is parting with it.
+fn measured(n ¤meter : i32) → i32:
+  @dropunit(n)
+
+fn test_dropunit_at_a_return():
+  assert_eq_int(measured(5 ¤meter), 5, "returns the bare number")
+
 // --- Spacing: ¤ immediately after variable name (no whitespace before) ---
 
 fn test_unit_no_space_before():
@@ -305,4 +329,7 @@ fn main():
   test_unit_space_after()
   test_unit_no_space_before_space_after()
   test_unit_expr_no_space()
+  test_dropunit_parts_with_the_unit()
+  test_dropunit_keeps_the_width()
+  test_dropunit_at_a_return()
   std.print("unit tests passed")

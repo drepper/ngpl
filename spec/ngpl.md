@@ -3828,6 +3828,8 @@ error: 'byte' names a type and cannot name a variable
 
 - `@typeof(expr)` — evaluates the expression and returns a `type` value representing its type.  The type name reflects the concrete type: `int`, `i32`, `u8`, `str`, `bool`, `\N{EMPTY SET}`, `array`, `tuple`, `fn`, `\N{GREEK SMALL LETTER LAMDA}`, or an enum name.
 
+- `@dropunit(expr)` — the value without the unit it carries.  See [Parting with a Unit](#parting-with-a-unit).
+
 - `@resultof(func)` — looks up a named function and returns a `type` value for its declared return type.
 
 - `@sizeof(expr)` — returns the number of elements in a container.  Works on array literals, tuple literals, string literals, and parameter packs.  Passing a non-container (e.g., an integer or boolean) is an error.  For runtime containers, use `.sizeof` instead.
@@ -4252,6 +4254,44 @@ enum SmallEnum : u8:
 ```
 
 When no underlying type is specified, the default is `int` (arbitrary precision).
+
+#### Parting with a Unit
+
+A unit is part of a type, so a type that states no unit is not the type of a value that carries one.  A binding and a return both refuse it:
+
+```
+let v ¤byte : u32 = 7
+let a : u32 = v
+
+error: 'u32' carries no unit, but the value is B; use @dropunit to part with it
+```
+
+```
+fn measured(n ¤meter : i32) → i32:
+    n
+
+error: return type is i32, but the body evaluates to m; use @dropunit
+to part with the unit
+```
+
+`@dropunit` is how a program says it means to:
+
+```
+fn measured(n ¤meter : i32) → i32:
+    @dropunit(n)
+```
+
+The value keeps its width — only the unit goes:
+
+```
+let v ¤byte : u32 = 7
+let plain := @dropunit(v)
+@sizeof(plain)           // 4 B, as before
+```
+
+Parting with a unit discards what the unit system exists to check, so the place to do it is where the reason is local.  A function that computes a count from byte offsets parts with the unit at its own boundary rather than leaving every caller to do it.
+
+A return type cannot state a unit, so a function that means to return one has no way to say so yet.
 
 #### An Enum as a Type
 

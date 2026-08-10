@@ -73,6 +73,7 @@ AT_KEYWORDS: dict[str, str] = {
     "resultof": "RESULTOF",
     "sizeof": "SIZEOF",
     "unitof": "UNITOF",
+    "dropunit": "DROPUNIT",
     "repr": "REPR",
     "likely": "LIKELY",
     "unlikely": "UNLIKELY",

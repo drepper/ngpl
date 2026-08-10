@@ -46,7 +46,7 @@ fn error_matrix_for_vector() → ∅:
 
 // Any number of rows, but each of them four wide.
 fn rows_of_four(m : i32[,4]) → i32:
-    m.shape[0]
+    @dropunit(m.shape[0])
 
 @test
 fn test_open_first_dimension() → ∅:
@@ -60,7 +60,7 @@ fn error_open_rows_wrong_width() → ∅:
 
 // Two rows, any width.
 fn two_rows(m : i32[2,]) → i32:
-    m.shape[1]
+    @dropunit(m.shape[1])
 
 @test
 fn test_open_second_dimension() → ∅:
@@ -132,7 +132,7 @@ fn cube_2x2x3(t : i32[2,2,3]) → i32:
     t[0, 0, 0]
 
 fn any_cube(t : i32[,,]) → i32:
-    t.shape[0] × t.shape[1] × t.shape[2]
+    @dropunit(t.shape[0] × t.shape[1] × t.shape[2])
 
 @test
 fn test_three_dimensions_fixed() → ∅:
@@ -145,7 +145,7 @@ fn test_three_dimensions_open() → ∅:
 
 // Mixed: the middle dimension is the one that is fixed.
 fn middle_two(t : i32[,2,]) → i32:
-    t.shape[0] + t.shape[2]
+    @dropunit(t.shape[0] + t.shape[2])
 
 @test
 fn test_three_dimensions_mixed() → ∅:
@@ -164,7 +164,7 @@ fn error_matrix_for_cube() → ∅:
 // ---------------------------------------------------------------------
 
 fn len_dyn(a : i32[]) → i32:
-    a.sizeof
+    @dropunit(a.sizeof)
 
 fn sum_fixed3(a : i32[3]) → i32:
     a[0] + a[1] + a[2]

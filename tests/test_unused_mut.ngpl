@@ -107,7 +107,7 @@ fn test_mut_borrow_counts() → ∅:
 // A mut parameter that is written to is not warned about.
 fn writes_its_copy(a : mut i32[]) → i32:
     a.push(9)
-    a.sizeof
+    @dropunit(a.sizeof)
 
 @test
 fn test_modified_parameter_is_quiet() → ∅:

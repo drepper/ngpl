@@ -21,7 +21,7 @@ fn sum_fixed3(a : i32[3]) → i32:
     a[0] + a[1] + a[2]
 
 fn len_dyn(a : i32[]) → i32:
-    a.sizeof
+    @dropunit(a.sizeof)
 
 // There is no parameter syntax for a second dimension, so a matrix
 // arrives either through a dynamic parameter -- whose length is the

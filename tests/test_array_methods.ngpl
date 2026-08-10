@@ -376,7 +376,7 @@ fn pushes_through(arr : &int[]) → ∅:
 
 fn grows_by_copy(a : mut i32[]) → i32:
     a.push(4)
-    a.sizeof
+    @dropunit(a.sizeof)
 
 @test
 fn test_fixed_into_mutable_dynamic_param_by_value() → ∅:
