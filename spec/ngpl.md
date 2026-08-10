@@ -3707,7 +3707,54 @@ It still refuses anything that is neither a name nor a constant, since answering
 @typeof(a[i])       // error: likewise
 ```
 
-`@sizeof` and `@unitof` keep the stricter rule, since those ask about the value rather than the type.
+`@unitof` follows, since a unit is part of a type.  `@sizeof` follows too, and answers a different question depending on what it is given.
+
+#### `@sizeof` of a Type
+
+Given a type, `@sizeof` reports the storage it occupies, in bytes, and matches what C reports for the same declaration:
+
+```
+@sizeof(i8)         // 1 B
+@sizeof(u32)        // 4 B
+@sizeof(f64)        // 8 B
+@sizeof(bool)       // 1 B
+@sizeof(byte)       // 1 B
+@sizeof(i32[4])     // 16 B
+@sizeof(i16[2,3])   // 12 B
+@sizeof(Point)      // a @repr(C) struct
+@sizeof(Shade)      // an enum, as the integer it is stored in
+```
+
+A type with no defined storage is refused, and says why:
+
+```
+@sizeof(int)        // error: arbitrary-precision; use a sized type such as i64
+@sizeof(str)        // error: no C representation; use a sized byte array
+```
+
+#### `@sizeof` of a Value
+
+Given a value, `@sizeof` reports how many elements it holds, as it always has.  The unit tells the two apart — bytes for a type, a count for a value:
+
+```
+let fixed : i32[4] = 0
+
+@sizeof(i32[4])     // 16 B        the type's storage
+@sizeof(fixed)      // 4 ptrdiff   the value's elements
+fixed.sizeof        // 4 ptrdiff
+```
+
+This is the same split `.sizeof` already draws: on a struct type it gives bytes, on an array value it gives a count.
+
+A value answers from its type, so a length is only available where the type states one.  A dynamically sized array has a length, but not one that is part of its type:
+
+```
+let dyn : i32[] = [1, 2, 3]
+@sizeof(dyn)
+
+error: 'dyn' is a dynamically sized array, whose length is not part of
+its type; use .sizeof to read it
+```
 
 #### Type Names as Values
 

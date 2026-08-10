@@ -102,21 +102,36 @@ fn test_typeof_runtime_var() → ∅:
     let y : mut = 0
     static_assert_eq(@typeof(x), @typeof(y))
 
-// --- error: @sizeof on runtime array variable ---
+// --- @sizeof on a name ---
+
+// A name answers from its type, and a length is only in the type when
+// the type states it.  A fixed-size array states one.
+@test
+fn test_sizeof_fixed_array_var() → ∅:
+    let arr : i32[3] = 0
+    assert_eq(@sizeof(arr), 3 ¤ptrdiff)
 
 @test
-@expect error "compile-time constant"
-fn test_sizeof_runtime_var() → ∅:
+fn test_sizeof_tuple_var() → ∅:
+    let t := (1, 2, 3)
+    assert_eq(@sizeof(t), 3 ¤ptrdiff)
+
+// A dynamically sized array has a length but not one that is part of
+// its type, so reading it is .sizeof rather than @sizeof.
+@test
+@expect error "not part of its type; use .sizeof"
+fn test_sizeof_dynamic_array_var() → ∅:
     let arr : mut = [1, 2, 3]
     @sizeof(arr)
 
-// --- error: @unitof on runtime variable ---
+// --- @unitof on a name ---
 
+// A unit is part of the type, so a name can be asked for it.
 @test
-@expect error "compile-time constant"
 fn test_unitof_runtime_var() → ∅:
     let d ¤meter : mut = 5
-    @unitof(d)
+    let e ¤meter : mut = 9
+    static_assert_eq(@unitof(d), @unitof(e))
 
 @start
 fn main() → ∅:

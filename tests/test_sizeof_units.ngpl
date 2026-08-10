@@ -121,6 +121,51 @@ fn test_at_sizeof_ptrdiff():
   let sz := @sizeof([1, 2, 3])
   assert_eq_int(sz, 3, "@sizeof literal is 3")
 
+// --- @sizeof of a type: the storage it occupies, in bytes ---
+
+// A type asks how much storage it takes; the answer is in bytes, and
+// matches what C reports for the same declaration.
+fn test_sizeof_of_scalar_types():
+  assert_eq_int(@sizeof(i8), 1 ¤byte, "i8 is 1 byte")
+  assert_eq_int(@sizeof(i16), 2 ¤byte, "i16 is 2 bytes")
+  assert_eq_int(@sizeof(u32), 4 ¤byte, "u32 is 4 bytes")
+  assert_eq_int(@sizeof(i64), 8 ¤byte, "i64 is 8 bytes")
+  assert_eq_int(@sizeof(bool), 1 ¤byte, "bool is 1 byte")
+  assert_eq_int(@sizeof(byte), 1 ¤byte, "byte is 1 byte")
+  assert_eq_int(@sizeof(f32), 4 ¤byte, "f32 is 4 bytes")
+  assert_eq_int(@sizeof(f64), 8 ¤byte, "f64 is 8 bytes")
+
+fn test_sizeof_of_fixed_arrays():
+  assert_eq_int(@sizeof(i32[4]), 16 ¤byte, "i32[4] is 16 bytes")
+  assert_eq_int(@sizeof(u8[16]), 16 ¤byte, "u8[16] is 16 bytes")
+  assert_eq_int(@sizeof(i16[2,3]), 12 ¤byte, "i16[2,3] is 12 bytes")
+
+@repr(C)
+struct SizedPoint:
+  x : i32
+  y : i64
+
+enum SizedShade:
+  light
+  dark
+
+enum TinyShade : u8:
+  a
+
+fn test_sizeof_of_named_types():
+  assert_eq_int(@sizeof(SizedPoint), 16 ¤byte, "struct is 16 bytes")
+  assert_eq_int(@sizeof(SizedPoint[2]), 32 ¤byte, "two of them is 32")
+  assert_eq_int(@sizeof(SizedShade), 4 ¤byte, "plain enum is C's int")
+  assert_eq_int(@sizeof(TinyShade), 1 ¤byte, "u8 enum is 1 byte")
+
+// A type asks for storage and a value asks for elements, which the
+// unit tells apart: bytes for the one, a count for the other.
+fn test_sizeof_type_versus_value():
+  let fixed : i32[4] = 0
+  assert_eq_int(@sizeof(i32[4]), 16 ¤byte, "the type is 16 bytes")
+  assert_eq_int(@sizeof(fixed), 4 ¤ptrdiff, "the value is 4 elements")
+  assert_eq_int(fixed.sizeof, 4 ¤ptrdiff, ".sizeof agrees")
+
 @start
 fn main():
   test_sizeof_array_ptrdiff()
@@ -138,4 +183,8 @@ fn main():
   test_cmp_unit_with_dimensionless()
   test_sizeof_in_arithmetic()
   test_at_sizeof_ptrdiff()
+  test_sizeof_of_scalar_types()
+  test_sizeof_of_fixed_arrays()
+  test_sizeof_of_named_types()
+  test_sizeof_type_versus_value()
   std.print("sizeof_units tests passed")

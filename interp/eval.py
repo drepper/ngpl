@@ -2002,18 +2002,41 @@ class Evaluator:
             cached = getattr(node, "_cached_value", None)
             if cached is not None:
                 return cached
-            if not _is_comptime_expr(node.expr, self._comptime_vars):
+            # A written type asks how much storage it occupies; a value
+            # asks how many elements it holds.
+            written = self._written_type(node.expr)
+            if written is not None:
+                result = self._type_byte_size(written)
+                node._cached_value = result
+                return result
+            named = self._names_a_binding(node.expr)
+            if not _is_comptime_expr(node.expr, self._comptime_vars) \
+                    and not named:
                 raise TypeError(
-                    "@sizeof requires a compile-time constant argument")
+                    "@sizeof requires a compile-time constant argument "
+                    "or a name")
             val = self.eval_expr(node.expr)
             unwrapped = unwrap_optional(val)
             if isinstance(unwrapped, TupleValue):
                 result = self._sizeof_result(len(unwrapped.elements))
             elif isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
+                # A name answers from its type, and a length is only in
+                # the type when the type states it.  A dynamically sized
+                # array has a length but not one @sizeof can claim.
+                if named and unwrapped.obj.fixed_size is None:
+                    raise TypeError(
+                        f"@sizeof: '{node.expr.name}' is a dynamically "
+                        f"sized array, whose length is not part of its "
+                        f"type; use .sizeof to read it")
                 result = self._sizeof_result(
                     unwrapped.obj.sizeof,
                     unwrapped.obj.element_type)
             elif isinstance(unwrapped, StrValue):
+                if named:
+                    raise TypeError(
+                        f"@sizeof: '{node.expr.name}' is a string, whose "
+                        f"length is not part of its type; use .sizeof to "
+                        f"read it")
                 result = self._sizeof_result(len(unwrapped.value))
             else:
                 raise TypeError(
@@ -2044,9 +2067,11 @@ class Evaluator:
             cached = getattr(node, "_cached_value", None)
             if cached is not None:
                 return cached
-            if not _is_comptime_expr(node.expr, self._comptime_vars):
+            if not _is_comptime_expr(node.expr, self._comptime_vars) \
+                    and not self._names_a_binding(node.expr):
                 raise TypeError(
-                    "@unitof requires a compile-time constant argument")
+                    "@unitof requires a compile-time constant argument "
+                    "or a name")
             val = self.eval_expr(node.expr)
             unwrapped = unwrap_optional(val)
             if isinstance(unwrapped, UnitValue):
@@ -2795,6 +2820,35 @@ class Evaluator:
         raise TypeError(
             f"match has no arm for {described}; add the missing pattern "
             f"or a _ arm")
+
+    @staticmethod
+    def _written_type(expr) -> str | None:
+        """The type an expression writes, or None if it writes a value.
+
+        `i32` and `i32[4]` name types; a variable of either does not,
+        even where the two are spelled alike.
+        """
+        if isinstance(expr, VarRef):
+            return expr.name if is_type_name(expr.name) else None
+        if isinstance(expr, Subscript) and isinstance(expr.obj, VarRef) \
+                and is_type_name(expr.obj.name):
+            dims = []
+            for index in expr.indices:
+                if not isinstance(index, IntLit):
+                    return None
+                dims.append(str(index.value))
+            return f"{expr.obj.name}[{','.join(dims)}]"
+        return None
+
+    def _type_byte_size(self, type_name: str):
+        """The storage a type occupies, in bytes."""
+        from interp.layout import LayoutError, struct_lookup, type_layout
+        from interp.units import BUILTIN_UNITS
+        try:
+            size, _ = type_layout(type_name, struct_lookup(self.env))
+        except LayoutError as e:
+            raise TypeError(f"@sizeof: {e}") from None
+        return UnitValue(mk_int(size), BUILTIN_UNITS["byte"])
 
     def _names_a_binding(self, expr) -> bool:
         """Whether an expression is a name that is bound in scope.
