@@ -473,14 +473,14 @@ The language provides IEEE 754 floating-point types at several precisions, plus 
 | Type    | Width  | Standard       | Significand | Exponent |
 |---------|--------|----------------|-------------|----------|
 | `f16`   | 16-bit | IEEE 754 half  | 11 bits     | 5 bits   |
-| `bfloat` | 16-bit | Brain float    | 8 bits      | 8 bits   |
+| `bfloat16` | 16-bit | Brain float    | 8 bits      | 8 bits   |
 | `f32`   | 32-bit | IEEE 754 single | 24 bits    | 8 bits   |
 | `f64`   | 64-bit | IEEE 754 double | 53 bits    | 11 bits  |
 | `float` | 64-bit | (default)      | 53 bits     | 11 bits  |
 
 `float` is the default floating-point type, equivalent to `f64` in precision.  It is the type inferred when a floating-point literal has no explicit width suffix.
 
-`bfloat` (Brain Floating Point) uses the same exponent range as `f32` but truncates the significand to 8 bits, making it suitable for machine learning workloads where dynamic range matters more than precision.
+`bfloat16` (Brain Floating Point) uses the same exponent range as `f32` but truncates the significand to 8 bits, making it suitable for machine learning workloads where dynamic range matters more than precision.
 
 #### Floating-Point Literals
 
@@ -508,7 +508,7 @@ Hexadecimal floating-point literals use `0x` prefix with `p`/`P` exponent (base-
 A number literal is interpreted as floating-point when any of the following are true:
 1. It contains a decimal point followed by digits (e.g., `3.14`)
 2. It contains an exponent (`e`/`E` for decimal, `p`/`P` for hex)
-3. It has a float type suffix (`f16`, `f32`, `f64`, `bfloat`)
+3. It has a float type suffix (`f16`, `f32`, `f64`, `bfloat16`)
 
 A suffix says what type the literal is, so `5i32` is an `i32` and `1.5f32` an `f32`, while a literal without one stays untyped and settles where it is used.  A whole number may take a float suffix, which is how a float is written without a fractional part:
 
@@ -612,7 +612,7 @@ exact, so compare them with the exact operator
 
 #### Arithmetic on Floating-Point Values
 
-All standard arithmetic operators (`+`, `-`, `×`, `/`, `%`) work on floating-point values.  When both operands are floats, the result uses the wider of the two types.  The width promotion order is: `f16`/`bfloat` < `f32` < `f64`/`float`.
+All standard arithmetic operators (`+`, `-`, `×`, `/`, `%`) work on floating-point values.  When both operands are floats, the result uses the wider of the two types.  The width promotion order is: `f16`/`bfloat16` < `f32` < `f64`/`float`.
 
 ```
 let a : mut = 3.0 + 2.0      // 5.0 (float)
@@ -668,7 +668,7 @@ square(3.14)             // ERROR: float cannot coerce to integer
 
 #### Precision Clamping
 
-When a value is stored in a fixed-width float type, it is rounded to that type's precision using IEEE 754 round-to-nearest semantics.  The `bfloat` type truncates the lower 16 bits of the `f32` representation:
+When a value is stored in a fixed-width float type, it is rounded to that type's precision using IEEE 754 round-to-nearest semantics.  The `bfloat16` type truncates the lower 16 bits of the `f32` representation:
 
 ```
 let x : mut f32 = 3.14      // stored as approximately 3.140000104904175
@@ -4576,7 +4576,7 @@ An integer becomes a float where one is asked for, but only when it comes throug
 
 | Type | Significand bits | Largest exact integer |
 |------|-----------------|----------------------|
-| `bfloat` | 8 | 256 |
+| `bfloat16` | 8 | 256 |
 | `f16` | 11 | 2048 |
 | `f32` | 24 | 16777216 |
 | `f64` | 53 | 9007199254740992 |
@@ -5453,7 +5453,7 @@ Every field of a `@repr(C)` struct must have a type with a C representation.  Th
 | Field type | Allowed | Reason |
 |------------|---------|--------|
 | `i8`…`i64`, `u8`…`u64`, `usize`, `byte`, `bool` | yes | fixed width |
-| `f16`, `f32`, `f64`, `bfloat` | yes | fixed width |
+| `f16`, `f32`, `f64`, `bfloat16` | yes | fixed width |
 | `i32fast` and other fast types | yes | width is platform-defined but concrete |
 | `T[N]` | yes, if `T` is | contiguous, `N × sizeof(T)` bytes |
 | another `@repr(C)` struct | yes | has a layout of its own |

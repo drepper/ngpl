@@ -4,7 +4,7 @@
 100u7
 1.5
 1.5f32
-1.5bfloat
+1.5bfloat16
 @max(u8)
 @min(i8)
 let a : u7 = 100

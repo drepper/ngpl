@@ -111,7 +111,7 @@ Completed
 
 [x] rewrite std.format with allocator parameter, C++ std::format-style {} fields, and array formatting.
 
-[x] floating-point types: f16, f32, f64, bfloat, float.  IEEE 754 semantics, arithmetic operators,
+[x] floating-point types: f16, f32, f64, bfloat16, float.  IEEE 754 semantics, arithmetic operators,
     literals with decimal/hex mantissa and exponent.
 
 

@@ -206,7 +206,7 @@ def _read_number(src, pos, line, col):
 
     Integers: decimal, binary (0b), hexadecimal (0x).
     Floats: decimal with '.' or exponent (e/E), hex with '.' or exponent (p/P).
-    Type suffixes: u8, i16, f32, f64, bfloat, etc.
+    Type suffixes: u8, i16, f32, f64, bfloat16, etc.
 
     Returns (Token, next_pos).
     """

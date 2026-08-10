@@ -16,7 +16,7 @@ BUILTIN_TYPES: set[str] = {
     "usize", "int", "bool", "∅", "byte", "str",
     "i8fast", "u8fast", "i16fast", "u16fast",
     "i32fast", "u32fast", "i64fast", "u64fast",
-    "f16", "f32", "f64", "bfloat", "float",
+    "f16", "f32", "f64", "bfloat16", "float",
 }
 
 # Platform-specific fast type mapping (x86_64: sub-32 → 32, 32/64 → 64).
@@ -217,18 +217,18 @@ class IntValue(Value):
         return self.value
 
 
-FLOAT_TYPES: frozenset[str] = frozenset({"f16", "f32", "f64", "bfloat", "float"})
+FLOAT_TYPES: frozenset[str] = frozenset({"f16", "f32", "f64", "bfloat16", "float"})
 
 _FLOAT_STRUCT_FMT: dict[str, str] = {
     "f16": "e",
     "f32": "f",
     "f64": "d",
-    "bfloat": "e",
+    "bfloat16": "e",
 }
 
 
 def _float_precision_bits(width: str) -> int:
-    return {"f16": 16, "bfloat": 16, "f32": 32, "f64": 64, "float": 64}[width]
+    return {"f16": 16, "bfloat16": 16, "f32": 32, "f64": 64, "float": 64}[width]
 
 
 def resolve_float_width(w1: str, w2: str) -> str:
@@ -244,7 +244,7 @@ def resolve_float_width(w1: str, w2: str) -> str:
 # Significand bits per float type, counting the implicit leading one.
 # An integer is exact in the type when it needs no more than these.
 _SIGNIFICAND_BITS: dict[str, int] = {
-    "f16": 11, "bfloat": 8, "f32": 24, "f64": 53,
+    "f16": 11, "bfloat16": 8, "f32": 24, "f64": 53,
 }
 
 
@@ -267,7 +267,7 @@ def _int_is_exact_in_float(value: int, width: str) -> bool:
 # Exponent and mantissa bits of each floating-point format, from which
 # the largest finite value it can hold follows.
 _FLOAT_FORMAT: dict[str, tuple[int, int]] = {
-    "f16": (5, 10), "bfloat": (8, 7), "f32": (8, 23), "f64": (11, 52),
+    "f16": (5, 10), "bfloat16": (8, 7), "f32": (8, 23), "f64": (11, 52),
 }
 
 
@@ -291,7 +291,7 @@ def _clamp_float(value: float, width: str) -> float:
     fmt = _FLOAT_STRUCT_FMT.get(width)
     if fmt is None:
         return float(value)
-    if width == "bfloat":
+    if width == "bfloat16":
         as_f32 = struct.pack("f", value)
         truncated = b"\x00\x00" + as_f32[2:]
         return struct.unpack("f", truncated)[0]
@@ -299,7 +299,7 @@ def _clamp_float(value: float, width: str) -> float:
 
 
 class FloatValue(Value):
-    """Floating-point value with a width annotation (f16, f32, f64, bfloat, float)."""
+    """Floating-point value with a width annotation (f16, f32, f64, bfloat16, float)."""
 
     __slots__ = ("value", "width")
 

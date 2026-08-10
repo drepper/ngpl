@@ -74,7 +74,7 @@ fn test_integer_suffix_applies() → ∅:
 fn test_float_suffix_applies() → ∅:
     static_assert_eq(@typeof(1.5f32), f32)
     static_assert_eq(@typeof(1.5f64), f64)
-    static_assert_eq(@typeof(1.5bfloat), bfloat)
+    static_assert_eq(@typeof(1.5bfloat16), bfloat16)
 
 // Without a suffix a literal stays untyped and settles where it is
 // used.

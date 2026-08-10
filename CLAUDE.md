@@ -25,10 +25,10 @@ Required features:
     - operations like multiplication and division create appropriately derived units
     - containers like arrays require all elements to have the same unit
 - Integer types with arbitrary bit count.  There should be at least support for 16, 32,
-  and 64-bit IEEE floating-point.  For specific targets the `bfloat` data type should be available as well.
+  and 64-bit IEEE floating-point.  For specific targets the `bfloat16` data type should be available as well.
   Additionally, there should be an arbitrary precision floating-point type and a data type for ratios.  The
   latter should automatically decay to a floating-point value in computations involving a floating-point
-  value. Names should be short, suggesting i1, i16, u32, f16, f32, f64.  Use bfloat and bool.
+  value. Names should be short, suggesting i1, i16, u32, f16, f32, f64.  Use bfloat16 and bool.
 - in addition to the arithmetic operation defined on all numbers, the language also defines binary logic
   and boolean operations on integers.  The latter are guaranteed to only create values 0 and 1.
 - expressions as in all languages with infix operators need grouping and `(` and `)` are used.

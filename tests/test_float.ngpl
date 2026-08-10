@@ -1,4 +1,4 @@
-// Floating-point type tests: f16, f32, f64, bfloat, float
+// Floating-point type tests: f16, f32, f64, bfloat16, float
 // Tests literals, arithmetic, comparisons, type coercion, and formatting.
 
 fn assert_true(cond:bool, msg:str):
@@ -152,12 +152,12 @@ fn test_integer_initializer_within_the_significand():
   let a : f32 = 16777216          // 2^24, exact
   let b : f32 = 17000002          // even, its odd part fits
   let c : f16 = 2048              // 2^11
-  let d : bfloat = 256            // 2^8
+  let d : bfloat16 = 256            // 2^8
   let e : f64 = 9007199254740992  // 2^53
   assert_true(a == 16777216.0, "2^24 is exact in f32")
   assert_true(b == 17000002.0, "an even number just past it is exact")
   assert_true(c == 2048.0, "2^11 is exact in f16")
-  assert_true(d == 256.0, "2^8 is exact in bfloat")
+  assert_true(d == 256.0, "2^8 is exact in bfloat16")
   assert_true(e == 9007199254740992.0, "2^53 is exact in f64")
 
 @start

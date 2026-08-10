@@ -314,9 +314,9 @@ fn error_integer_too_wide_for_f16() → ∅:
     let f : f16 = 2049
 
 @test
-@expect error "needs more significant bits than bfloat has .8."
-fn error_integer_too_wide_for_bfloat() → ∅:
-    let f : bfloat = 257
+@expect error "needs more significant bits than bfloat16 has .8."
+fn error_integer_too_wide_for_bfloat16() → ∅:
+    let f : bfloat16 = 257
 
 @test
 @expect error "needs more significant bits than f64 has .53."
