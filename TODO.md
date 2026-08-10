@@ -57,6 +57,13 @@ the sized types do not have.
 Completed
 ---------
 
+[x] a match reads a subject whose type is written down — a parameter, or a let that
+    states one — so a missing arm on an optional or a result is reported at the
+    definition.  A match on a parameter was left entirely to runtime before, which is
+    the commonest place one is written.  A wrong pattern for the type is caught with
+    it, and the hint naming what the subject does admit is only given where there is
+    one: a plain value has no failure to be written a different way.
+
 [x] a complaint about a struct field points at that field's type.  A field is a
     (name, type) pair with nowhere to hold a position, so the struct carries them
     alongside, as a function already did for its parameters, and a layout error names

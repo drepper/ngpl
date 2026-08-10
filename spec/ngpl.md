@@ -1821,12 +1821,24 @@ Two further mistakes need no knowledge of the subject at all, and are always rep
 
 Exhaustiveness needs the subject's type.  It is known for:
 
+* a name whose type is written down — a parameter, or a `let` that states one;
 * a call to a function with a declared return type;
 * division and remainder, which produce a result;
 * `∃(...)`, `∅`, and `∄(...)` written out;
 * the standard library's optional-returning methods — `next`, `get`, `pop` — unless a struct in scope defines a method of that name, in which case nothing is assumed.
 
-Where it is not known — most often a `match` on a variable, whose type the interpreter does not track through assignment — no static claim is made and the gap is found when the `match` runs, as before.  This is the weaker half of the check and will shrink as type inference grows; nothing is reported wrongly in the meantime, since an undetermined type produces no diagnostic rather than a guess.
+A written type is read whatever it says.  `T?` admits `∅`, `T!` admits a failure, and a type saying neither is a plain value with one shape:
+
+```
+fn describe(x : i64?) → str:
+    match x:
+        ∃(v): "present"
+
+error: in describe: match has no arm for ∅; add the missing pattern or
+a _ arm
+```
+
+Where it is not known — a name bound from an expression, or an untyped parameter — no static claim is made and the gap is found when the `match` runs.  A name declared twice with types that disagree is left alone too: which declaration a `match` meets depends on where it sits, and that is more than this reads.  This is the weaker half of the check and will shrink as type inference grows; nothing is reported wrongly in the meantime, since an undetermined type produces no diagnostic rather than a guess.
 
 #### Choosing Between `match`, `??`, and `while`
 
@@ -4641,7 +4653,7 @@ Tri(t):  …               // error: 'Tri' is not an alternative of 'Shape'
 ∅:       …               // error: ∅ cannot match 'Shape', which is Circle | Rect
 ```
 
-Exhaustiveness is checked where the subject's type is written down, which is a parameter.  A name bound from an expression carries the alternative's own type, and nothing is claimed about it.
+Exhaustiveness is checked where the subject's type is written down — a parameter, or a `let` that states one.  A name bound from an expression carries the alternative's own type, and nothing is claimed about it.
 
 #### What a Sum Type Admits
 

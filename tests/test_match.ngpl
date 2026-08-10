@@ -367,6 +367,105 @@ fn error_match_not_exhaustive():
         ∃(x):
             std.println("{}", x)
 
+// ---------------------------------------------------------------------
+// A subject whose type is written down
+// ---------------------------------------------------------------------
+//
+// A parameter is where a type is written, so `match p` on one declared
+// i32? is answerable before anything runs — the same answer a call to a
+// function returning i32? gives.  Until this was read, a match on a
+// parameter was left entirely to runtime and a missing arm went unsaid.
+
+@expect error "match has no arm for ∅"
+fn error_optional_parameter_missing_absent_arm(x : i64?):
+    match x:
+        ∃(v):
+            std.println("{}", v)
+
+@expect error "match has no arm for a failed result"
+fn error_result_parameter_missing_failure_arm(r : i64!):
+    match r:
+        ∃(v):
+            std.println("{}", v)
+
+// The wrong pattern for the declared type is caught too.
+@expect error "cannot match an optional, whose absence is"
+fn error_failure_pattern_on_an_optional_parameter(x : i64?):
+    match x:
+        ∃(v):
+            std.println("{}", v)
+        ∄(e):
+            std.println("err")
+
+@expect error "∅ cannot match a result"
+fn error_absent_pattern_on_a_result_parameter(r : i64!):
+    match r:
+        ∃(v):
+            std.println("{}", v)
+        ∅:
+            std.println("none")
+
+// A plain parameter has one shape, and a hint about failure would
+// misdirect: it has none to write a different way.
+@expect error "∅ cannot match a plain value"
+fn error_absent_pattern_on_a_plain_parameter(n : i64):
+    match n:
+        ∃(v):
+            std.println("{}", v)
+        ∅:
+            std.println("none")
+
+// A covered match on a parameter is left alone.
+fn describes(x : i64?) → str:
+    match x:
+        ∃(v):
+            "present"
+        ∅:
+            "absent"
+
+@test
+fn test_a_covered_parameter_match_runs():
+    assert_eq(describes(∃(1)), "present")
+    assert_eq(describes(∅), "absent")
+
+@test
+fn test_a_wildcard_covers_a_parameter_match():
+    let took : mut = 0
+    match_with_wildcard(∃(7))
+    assert_eq(took, 0)
+
+fn match_with_wildcard(x : i64?):
+    match x:
+        _:
+            std.println("anything")
+
+// An untyped parameter says nothing, so nothing is claimed about it and
+// the match is left to run.
+fn untyped_subject(x):
+    match x:
+        ∃(v):
+            std.println("{}", v)
+
+@test
+fn test_an_untyped_parameter_is_left_alone():
+    untyped_subject(1)
+
+// A let that writes a type says as much as a parameter does.
+@expect error "match has no arm for ∅"
+fn error_declared_local_missing_absent_arm():
+    let x : i64? = 5
+    match x:
+        ∃(v):
+            std.println("{}", v)
+
+// A let without a type says nothing about which shapes the value has.
+@test
+fn test_an_inferred_local_is_left_alone():
+    let x := 5
+    match x:
+        ∃(v):
+            assert_eq(v, 5)
+
 @start
 fn main():
     std.println("match tests passed")

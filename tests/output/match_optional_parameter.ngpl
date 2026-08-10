@@ -1,0 +1,10 @@
+// A parameter is where a type is written down, so a match on one is
+// answerable before anything runs.  Nothing calls describe.
+fn describe(x : i64?) → str:
+    match x:
+        ∃(v):
+            "present"
+
+@start
+fn main():
+    std.println("loaded")

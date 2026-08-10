@@ -627,25 +627,75 @@ _ARM_SUBJECT = {"some": "a present value", "none": "\N{EMPTY SET}",
 _SUBJECT_SHAPES = {"optional": {"some", "none"},
                    "expected": {"some", "err"},
                    "plain": {"some"}}
+# What to say when an arm meets a subject that does not admit it.  The
+# useful hint names the pattern that stands for the same idea in the
+# subject's own shape; where the subject has no such pattern there is
+# nothing helpful to add.
+_WRONG_ARM_HINT = {
+    ("optional", "err"): ", whose absence is \N{EMPTY SET}",
+    ("expected", "none"): ", whose failure is \N{THERE DOES NOT EXIST}(e)",
+}
+
 _SUBJECT_NAME = {"optional": "an optional", "expected": "a result",
                  "plain": "a plain value"}
 
 
-def _declared_sum_type(name: str, func_def) -> str | None:
-    """The sum type a parameter of this function was declared with.
+def _declared_param_type(name: str, func_def) -> str | None:
+    """The type a parameter of this function was declared with.
 
     A parameter is where a type is written down.  A name bound from an
-    expression carries the alternative's own type instead, and nothing
-    is claimed about it here.
+    expression carries whatever the expression produced instead, and
+    nothing is claimed about it here.
     """
+    if func_def is None:
+        return None
     for param in func_def.params:
         param_name = param[0] if isinstance(param, tuple) else param
         param_type = param[1] if isinstance(param, tuple) else None
-        if param_name != name or param_type is None:
-            continue
-        if sum_type_alternatives(param_type) is not None:
+        if param_name == name and param_type is not None:
             return param_type
+    pack = getattr(func_def, "pack_param", None)
+    if pack is not None and pack[0] == name:
+        # A pack is a list of arguments rather than one value, so its
+        # element type says nothing about matching the pack itself.
+        return None
     return None
+
+
+def _declared_local_type(name: str, func_def) -> str | None:
+    """The type a local binding of this name was declared with.
+
+    A `let` that writes a type says as much about the name as a
+    parameter does.  A name declared more than once with types that
+    disagree is left alone: which one a match meets would depend on
+    where it sits, and that is more than this reads.
+    """
+    if func_def is None:
+        return None
+    declared: set[str] = set()
+    for node in _iter_ast(func_def.body, stop_at=(_ast.LambdaExpr,)):
+        if isinstance(node, _ast.VarDef) and node.name == name \
+                and node.type_annotation is not None:
+            declared.add(node.type_annotation)
+    return declared.pop() if len(declared) == 1 else None
+
+
+def _kind_of_declared_type(type_name: str) -> str | None:
+    """Classify a written type as a match subject.
+
+    A sum type answers with its own name, since the arms name its
+    alternatives.  Everything else is told apart by what the type
+    says can be absent: `T?` admits ∅, `T!` admits a failure, and a
+    type saying neither is a plain value.
+    """
+    if type_name is None or is_generic_type(type_name):
+        return None
+    if sum_type_alternatives(type_name) is not None:
+        return type_name
+    _, opt_err = _split_optional_type(type_name)
+    if opt_err is None:
+        return "plain"
+    return "optional" if opt_err == "" else "expected"
 
 
 def _arm_pattern(arm) -> str:
@@ -671,12 +721,17 @@ def _match_subject_kind(expr, env, func_def=None) -> str | None:
     program, in which case no static claim is made and the check falls to
     the evaluator.
     """
-    # A name declared with a sum type is matched by alternative, and
-    # the type is what says which alternatives there are.
-    if isinstance(expr, _ast.VarRef) and func_def is not None:
-        declared = _declared_sum_type(expr.name, func_def)
+    # A name whose type is written down is classified by that type: a
+    # sum type by its alternatives, and everything else by what the
+    # type says can be absent.  This is what makes `match p` on a
+    # parameter declared `i32?` answerable before anything runs.
+    if isinstance(expr, _ast.VarRef):
+        declared = (_declared_param_type(expr.name, func_def)
+                    or _declared_local_type(expr.name, func_def))
         if declared is not None:
-            return declared
+            kind = _kind_of_declared_type(declared)
+            if kind is not None:
+                return kind
 
     if isinstance(expr, (_ast.OptSome, _ast.NoneLit)):
         return "optional"
@@ -765,8 +820,11 @@ def _check_one_match(node, env, func_def=None) -> str | None:
     for arm in node.arms:
         if arm.kind == "wildcard" or arm.kind in shapes:
             continue
-        hint = {"none": ", whose failure is \N{THERE DOES NOT EXIST}(e)",
-                "err": ", whose absence is \N{EMPTY SET}"}.get(arm.kind, "")
+        # The hint points at the pattern the subject does admit, so it
+        # is only worth giving where there is one.  A plain value
+        # admits neither absence nor failure, and saying it has a
+        # failure to be written some other way would misdirect.
+        hint = _WRONG_ARM_HINT.get((subject, arm.kind), "")
         return _Finding(f"{_arm_pattern(arm)} cannot match "
                         f"{_SUBJECT_NAME[subject]}{hint}", arm)
 
