@@ -1,0 +1,13 @@
+// The complaint is about the third field, so that is where the caret
+// points.  Naming the struct and showing its first line would leave a
+// reader counting fields to find the one meant.
+@repr(C)
+struct Packet:
+    magic : u32
+    length : u32
+    payload : str
+    checksum : u32
+
+@start
+fn main():
+    std.println("{}", @sizeof(Packet))

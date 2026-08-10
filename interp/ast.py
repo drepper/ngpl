@@ -603,6 +603,10 @@ class StructDef:
         self.name = name
         self.fields = fields
         self.repr_kind = repr_kind
+        # Where each field's type was written, by field name.  A
+        # complaint about a field is nearly always about its type, so
+        # that is what a diagnostic points at.
+        self.field_positions: dict[str, tuple[int, int, int | None]] = {}
 
 
 class ImplBlock:

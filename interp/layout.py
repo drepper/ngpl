@@ -48,7 +48,16 @@ KNOWN_REPRS = frozenset({REPR_C})
 
 
 class LayoutError(Exception):
-    """Raised when a layout cannot be computed for a type."""
+    """Raised when a layout cannot be computed for a type.
+
+    `field` names the struct field the complaint is about, where it is
+    about one, so a diagnostic can point at where that field was
+    written rather than at the struct as a whole.
+    """
+
+    def __init__(self, message, field: str | None = None):
+        super().__init__(message)
+        self.field = field
 
 
 class FieldLayout:
@@ -267,7 +276,7 @@ def struct_layout(struct_type, lookup, seen: frozenset[str] = frozenset()
         except LayoutError as e:
             raise LayoutError(
                 f"in @repr(C) struct '{struct_type.name}', field "
-                f"'{field_name}': {e}")
+                f"'{field_name}': {e}", field=field_name)
         offset = _align_up(offset, field_align)
         fields.append(FieldLayout(field_name, field_type, offset, size,
                                   field_align))

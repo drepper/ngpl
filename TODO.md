@@ -57,6 +57,13 @@ the sized types do not have.
 Completed
 ---------
 
+[x] a complaint about a struct field points at that field's type.  A field is a
+    (name, type) pair with nowhere to hold a position, so the struct carries them
+    alongside, as a function already did for its parameters, and a layout error names
+    the field it is about.  Before this the caret sat on the struct's first line and
+    the excerpt showed the first field, which for a complaint about the third left a
+    reader counting.
+
 [x] every signature the specification shows now parses.  Sixty-three were written without
     parentheses — `fn add a : int, b : int → int:` — which the parser stopped accepting
     long enough ago that no example carrying one had ever been run.  A check parses each
@@ -390,10 +397,6 @@ String and I/O
 
 Build System and Tooling
 -------------------------
-
-[ ] a struct field's diagnostic points at the struct rather than at the field, since a field
-    is a (name, type) pair with no position of its own.  Carrying one would change the shape
-    the layout and struct-type code reads.
 
 [ ] [FULL] built-in build system: @build-annotated comptime function provides build recipe.
     Recompiled when source changes.  SBOM generation in output binary.

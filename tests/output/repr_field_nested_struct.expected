@@ -1,0 +1,7 @@
+error: in @repr(C) struct 'Outer', field 'inner': struct 'Inner' has no defined layout; annotate it with @repr(C) to give it one
+  --> tests/output/repr_field_nested_struct.ngpl:10:13
+    |
+ 10 |     inner : Inner
+    |             ^^^^^
+ 11 | 
+    |

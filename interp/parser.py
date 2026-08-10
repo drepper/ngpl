@@ -625,6 +625,7 @@ class Parser:
             pass
 
         fields: list[tuple[str, str]] = []
+        field_positions: dict[str, tuple[int, int, int | None]] = {}
         if self._check("INDENT"):
             self._eat("INDENT")
             while True:
@@ -641,11 +642,18 @@ class Parser:
                     self.pos += 1
                     field_type += "?"
                 fields.append((field_name_tok.value, field_type))
+                # The span runs from the type's first token through the
+                # last one an array suffix or `?` added.
+                field_positions[field_name_tok.value] = (
+                    type_tok.line, type_tok.col,
+                    self.tokens[self.pos - 1].end_col)
                 self._try_eat("PUNCT", ",")
                 while self._try_eat("NEWLINE"):
                     pass
             self._eat("DEDENT")
-        return self._set_pos(StructDef(name, fields, repr_kind), kw_tok)
+        sdef = StructDef(name, fields, repr_kind)
+        sdef.field_positions = field_positions
+        return self._set_pos(sdef, kw_tok)
 
     def _parse_impl_block(self):
         """Parse: impl StructName: INDENT method_definitions DEDENT"""

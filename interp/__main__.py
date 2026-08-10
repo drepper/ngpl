@@ -514,6 +514,20 @@ def _node_pos(node) -> tuple[int, int, int | None] | None:
     return getattr(node, "pos", None)
 
 
+def _field_pos(struct_def, field_name):
+    """Where a struct field's type was written.
+
+    Falls back to the struct itself for a field the definition does not
+    place — one named by a complaint that came from somewhere other
+    than this struct's own text.
+    """
+    if field_name is not None:
+        placed = getattr(struct_def, "field_positions", {}).get(field_name)
+        if placed is not None:
+            return placed
+    return _node_pos(struct_def)
+
+
 def _iter_ast(node, stop_at=()):
     """Yield every AST node reachable from node, itself included.
 
@@ -1261,7 +1275,8 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                         field_type, f"struct '{defn.name}': field "
                                     f"'{field_name}'")
                 except TypeError as e:
-                    raise DefinitionError(str(e), _node_pos(defn)) from None
+                    raise DefinitionError(
+                        str(e), _field_pos(defn, field_name)) from None
             register_struct_type(defn.name)
             st = StructType(defn.name, defn.fields, repr_kind=defn.repr_kind)
             env.define(defn.name, st)
@@ -1329,7 +1344,7 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
             try:
                 struct_layout(env.lookup(defn.name), struct_lookup(env))
             except LayoutError as e:
-                raise DefinitionError(str(e), _node_pos(defn))
+                raise DefinitionError(str(e), _field_pos(defn, e.field))
 
     for defn in definitions:
         if isinstance(defn, ASTFuncDef):

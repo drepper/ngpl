@@ -1,0 +1,7 @@
+error: in @repr(C) struct 'Packet', field 'payload': type 'str' has no defined C representation; use a sized byte array such as u8[16]
+  --> tests/output/repr_field_beyond_the_first.ngpl:8:15
+    |
+  8 |     payload : str
+    |               ^^^
+  9 |     checksum : u32
+    |

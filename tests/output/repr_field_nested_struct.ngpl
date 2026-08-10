@@ -1,0 +1,14 @@
+// The field that cannot be laid out is the one naming a struct which
+// has no layout, so the caret points at that field rather than at
+// either struct's first line.
+struct Inner:
+    text : str
+
+@repr(C)
+struct Outer:
+    tag : u32
+    inner : Inner
+
+@start
+fn main():
+    std.println("{}", @sizeof(Outer))

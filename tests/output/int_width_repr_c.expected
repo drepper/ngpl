@@ -1,7 +1,7 @@
 error: in @repr(C) struct 'Packed', field 'flags': type 'u7' has no C counterpart: C has an integer type of 8, 16, 32, or 64 bits, not 7
-  --> tests/output/int_width_repr_c.ngpl:5:1
+  --> tests/output/int_width_repr_c.ngpl:6:13
     |
-  5 | struct Packed:
-    | ^^^^^^
   6 |     flags : u7
+    |             ^^
+  7 |     n : i32
     |
