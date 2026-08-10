@@ -1,0 +1,5 @@
+// A suffix says what the literal is, so a fractional number cannot be
+// spelled with an integer type.
+@start
+fn main() → ∅:
+    std.print(1.5i32)

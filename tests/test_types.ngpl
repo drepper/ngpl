@@ -59,6 +59,41 @@ fn test_expected_binding() → ∅:
     let e : i32! = 7
     assert_eq(e ?? 0, 7)
 
+// ---------------------------------------------------------------------
+// A literal's suffix says what type it is
+// ---------------------------------------------------------------------
+
+@test
+fn test_integer_suffix_applies() → ∅:
+    static_assert_eq(@typeof(5i32), i32)
+    static_assert_eq(@typeof(5u8), u8)
+    static_assert_eq(@typeof(5u7), u7)
+    static_assert_eq(@typeof(5i64), i64)
+
+@test
+fn test_float_suffix_applies() → ∅:
+    static_assert_eq(@typeof(1.5f32), f32)
+    static_assert_eq(@typeof(1.5f64), f64)
+    static_assert_eq(@typeof(1.5bfloat), bfloat)
+
+// Without a suffix a literal stays untyped and settles where it is
+// used.
+@test
+fn test_no_suffix_stays_untyped() → ∅:
+    static_assert_eq(@typeof(5), int)
+    static_assert_eq(@typeof(1.5), float)
+
+// A whole number may be spelled with a float type, which is how a
+// float is written without a fractional part.
+@test
+fn test_whole_number_with_a_float_suffix() → ∅:
+    static_assert_eq(@typeof(5f32), f32)
+    assert(5f32 == 5.0)
+
+// A suffix names a type, so one that names nothing is a mistake, and
+// a fractional number cannot take an integer type.  Those are output
+// tests, since a literal is read before anything runs.
+
 @start
 fn main() → ∅:
     std.print("type tests passed")

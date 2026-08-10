@@ -510,6 +510,23 @@ A number literal is interpreted as floating-point when any of the following are 
 2. It contains an exponent (`e`/`E` for decimal, `p`/`P` for hex)
 3. It has a float type suffix (`f16`, `f32`, `f64`, `bfloat`)
 
+A suffix says what type the literal is, so `5i32` is an `i32` and `1.5f32` an `f32`, while a literal without one stays untyped and settles where it is used.  A whole number may take a float suffix, which is how a float is written without a fractional part:
+
+```
+5i32        // i32
+5u7         // u7
+1.5f32      // f32
+5f32        // f32, the value 5.0
+5           // untyped
+```
+
+A suffix that names no type is refused, as is a fractional number given an integer type:
+
+```
+1.5b16      // error: 'b16' is not a type, so it cannot be the suffix of 1.5
+1.5i32      // error: 1.5 is a floating-point literal, so its suffix cannot be 'i32'
+```
+
 #### The Multiplication Operator
 
 Multiplication is written `×` (U+00D7 MULTIPLICATION SIGN).  `*` is not an operator, and using it is a lexical error:
@@ -5750,6 +5767,39 @@ The `¤` syntax keeps unit annotations visually distinct from type annotations (
 
 Chapter 12: The Interpreter — The Interactive Read-Eval-Print Loop
 ------------------------------------------------------------------
+
+### What the Prompt Shows
+
+A bare expression reports its value.  For a number the prompt also says what type it is, spelled as the suffix that would produce it, since a number's type is the thing hardest to see and easiest to be wrong about:
+
+```
+>>> 5i32
+5i32
+>>> 100u7
+100u7
+>>> 1.5f32
+1.5f32
+>>> @max(u8)
+255u8
+```
+
+A literal without a suffix is untyped and has none to name, so it appears as written:
+
+```
+>>> 5
+5
+>>> 1.5
+1.5
+```
+
+A value carrying a unit shows the unit as it always did, after the type:
+
+```
+>>> arr.sizeof
+3 ptrdiff
+>>> @sizeof(u32)
+4 B
+```
 
 ### Entering the REPL
 

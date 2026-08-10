@@ -110,6 +110,24 @@ def _needs_more_input(src: str) -> bool:
     return not items
 
 
+def _display_with_type(value) -> str:
+    """Render a value for the prompt, saying what type a number is.
+
+    A number's type is the thing hardest to see and easiest to be
+    wrong about, so the prompt says it, spelled as the suffix that
+    would produce it.  An untyped literal has no suffix to name and is
+    left as written.
+    """
+    from interp.value import IntValue, FloatValue, UnitValue
+    if isinstance(value, UnitValue):
+        return f"{_display_with_type(value.inner)} {value.unit.display_name}"
+    if isinstance(value, IntValue):
+        return value.display() if value.width == "int" else f"{value.display()}{value.width}"
+    if isinstance(value, FloatValue):
+        return value.display() if value.width == "float" else f"{value.display()}{value.width}"
+    return value.display()
+
+
 class Repl:
     """The interactive interpreter session.
 
@@ -217,7 +235,7 @@ class Repl:
             if not isinstance(result, NoneValue):
                 # std.print writes to fd 1 directly, so results must be
                 # flushed to keep them in order with a program's output.
-                print(result.display(), flush=True)
+                print(_display_with_type(result), flush=True)
 
     def _label_definition(self, item):
         """Record which entry defined a function, for later backtraces.

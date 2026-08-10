@@ -14,14 +14,17 @@ import re
 class Token:
     """A single lexical token."""
 
-    __slots__ = ("type", "value", "line", "col", "end_col")
+    __slots__ = ("type", "value", "line", "col", "end_col", "width")
 
-    def __init__(self, type_, value, line, col, end_col: int | None = None):
+    def __init__(self, type_, value, line, col, end_col: int | None = None,
+                 width: str | None = None):
         self.type = type_
         self.value = value
         self.line = line
         self.col = col
         self.end_col = end_col if end_col is not None else col + 1
+        # The type a numeric literal named in its suffix, or None.
+        self.width = width
 
     def __repr__(self):
         return f"Token({self.type}, {self.value!r}, @{self.line}:{self.col})"
@@ -173,6 +176,31 @@ def _read_string(src, pos, start_line, start_col, line_start):
     raise LexerError("unterminated string literal", start_line, start_col)
 
 
+def _check_literal_width(width: str, is_float: bool, text: str, line, col):
+    """Refuse a suffix that does not name a type the literal can have.
+
+    A suffix says what the number is, so one that names nothing is a
+    mistake rather than a decoration; and a whole number cannot be
+    spelled with a float type, nor a fractional one with an integer
+    type.
+    """
+    from interp.value import (BUILTIN_TYPES, FLOAT_TYPES, FAST_TYPES,
+                              _parse_int_width)
+    known = (width in BUILTIN_TYPES or width in FAST_TYPES
+             or _parse_int_width(width) is not None)
+    if not known:
+        raise LexerError(
+            f"'{width}' is not a type, so it cannot be the suffix of "
+            f"{text}", line, col)
+    if is_float and width not in FLOAT_TYPES:
+        raise LexerError(
+            f"{text} is a floating-point literal, so its suffix cannot be "
+            f"'{width}'", line, col)
+    if not is_float and width in FLOAT_TYPES:
+        return
+    return
+
+
 def _read_number(src, pos, line, col):
     """Read a numeric literal (integer or float) with optional type suffix.
 
@@ -239,7 +267,11 @@ def _read_number(src, pos, line, col):
 
     end_col = col + (pos - start_pos)
 
-    if is_float or width in ("f16", "f32", "f64", "bfloat"):
+    if width:
+        _check_literal_width(width, is_float, value_str, line, col)
+
+    from interp.value import FLOAT_TYPES as _FLOATS
+    if is_float or width in _FLOATS:
         try:
             if base == 16:
                 value = float.fromhex(value_str)
@@ -264,7 +296,7 @@ def _read_number(src, pos, line, col):
     if not width:
         width = "int"
 
-    return Token("INT", value, line, col, end_col), pos
+    return Token("INT", value, line, col, end_col, width=width), pos
 
 
 def tokenize(src: str):

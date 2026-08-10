@@ -1,8 +1,8 @@
-42
-120
+42i64
+120i64
 Point { x: 3, y: 4 }
-3
-7
+3i64
+7i64
 Color.green
-7
+7u8
 5 tick

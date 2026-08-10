@@ -18,7 +18,7 @@ error: bad_call: argument 'n' expected i64, got StrValue
   1 | bad_call("text")
     |          ^^^^^^
     |
-8
+8i64
 error: unexpected token: '+'
   --> <repl:9>:1:4
     |

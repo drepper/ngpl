@@ -1,0 +1,17 @@
+5
+5i32
+5u8
+100u7
+1.5
+1.5f32
+1.5bfloat
+@max(u8)
+@min(i8)
+let a : u7 = 100
+a
+let arr : i32[] = [1, 2, 3]
+arr.sizeof
+@sizeof(u32)
+5 ¤meter
+"text"
+true

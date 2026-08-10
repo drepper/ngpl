@@ -1776,7 +1776,7 @@ class Parser:
         # Literals.
         if tok.type == "INT":
             self.pos += 1
-            return self._set_pos(IntLit(tok.value), tok)
+            return self._set_pos(IntLit(tok.value, tok.width or "int"), tok)
 
         if tok.type == "FLOAT":
             self.pos += 1
