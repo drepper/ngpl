@@ -467,11 +467,17 @@ class Parser:
         self._eat("PUNCT", ")")
 
         ret_type = None
+        ret_unit = None
         if self._try_eat("OP", "->"):
             if self._check("IDENT", "NONE", "OPT"):
                 ret_tok = self._cur()
                 self.pos += 1
                 ret_type = ret_tok.value
+                # A return type may state a unit, as a parameter may,
+                # so a function can hand back a measured value.
+                if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+                    self.pos += 1
+                    ret_unit = self._parse_unit_spec()
                 if self._check("OP") and self._cur().value == "?":
                     self.pos += 1
                     ret_type += "?"
@@ -490,7 +496,8 @@ class Parser:
                                test_refs, expect_annotations, is_replaceable,
                                pack_param, param_units, is_impure,
                                param_refs=param_refs,
-                               param_muts=param_muts, hint=hint)
+                               param_muts=param_muts, hint=hint,
+                               ret_unit=ret_unit)
                 fdef.param_positions = param_positions
                 fdef._parse_error = str(e)
                 fdef._self_is_ref = self_is_ref
@@ -502,7 +509,8 @@ class Parser:
                        test_refs, expect_annotations, is_replaceable,
                        pack_param, param_units, is_impure,
                        param_refs=param_refs,
-                       param_muts=param_muts, hint=hint)
+                       param_muts=param_muts, hint=hint,
+                       ret_unit=ret_unit)
         fdef.param_positions = param_positions
         fdef._self_is_ref = self_is_ref
         return fdef

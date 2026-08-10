@@ -4,7 +4,9 @@ fn assert_true(cond:bool, msg:str):
   if not cond:
     std.print("FAIL: ", msg)
 
-fn assert_eq_int(a:i64, b:i64, msg:str):
+// Untyped, so a measured value reaches it with its unit intact
+// and the comparison below checks the unit as well as the number.
+fn assert_eq_int(a, b, msg:str):
   if a != b:
     std.print("FAIL: ", msg, " (got ", a, " expected ", b, ")")
 
@@ -266,6 +268,32 @@ fn measured(n ¤meter : i32) → i32:
 fn test_dropunit_at_a_return():
   assert_eq_int(measured(5 ¤meter), 5, "returns the bare number")
 
+// --- a return type that states a unit ---
+
+// A return type may state a unit, so a function can hand back a
+// measured value rather than parting with the unit on the way out.
+fn measured_bytes(n ¤byte : usize) → usize ¤byte:
+  n
+
+fn test_return_type_carrying_a_unit():
+  let r := measured_bytes(5 ¤byte)
+  assert_true(@unitof(r) == @unitof(5 ¤byte), "the unit comes back")
+  assert_eq_int(r, 5 ¤byte, "and so does the number")
+
+// A bare number takes the unit, as it would at a parameter stating one.
+fn bare_becomes_measured() → usize ¤byte:
+  7
+
+fn test_return_unit_adopts_a_bare_number():
+  assert_eq_int(bare_becomes_measured(), 7 ¤byte, "adopts the unit")
+
+// A compatible unit is converted to the one declared.
+fn in_bytes() → usize ¤byte:
+  2 ¤kilobyte
+
+fn test_return_unit_converts():
+  assert_eq_int(in_bytes(), 2000 ¤byte, "2 kB is 2000 B")
+
 // --- Spacing: ¤ immediately after variable name (no whitespace before) ---
 
 fn test_unit_no_space_before():
@@ -332,4 +360,7 @@ fn main():
   test_dropunit_parts_with_the_unit()
   test_dropunit_keeps_the_width()
   test_dropunit_at_a_return()
+  test_return_type_carrying_a_unit()
+  test_return_unit_adopts_a_bare_number()
+  test_return_unit_converts()
   std.print("unit tests passed")

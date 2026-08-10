@@ -1076,7 +1076,7 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,
                           defn.is_replaceable, defn.pack_param, defn.param_units,
                           defn.is_impure, param_refs=defn.param_refs,
-                          param_muts=defn.param_muts)
+                          param_muts=defn.param_muts, ret_unit=defn.ret_unit)
             env.define(defn.name, fv)
 
             if honor_start and defn.is_start:
@@ -1111,7 +1111,8 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                 fv = FuncValue(method_def.name, method_def.params,
                                method_def.body, env, method_def.ret_type,
                                is_impure=method_def.is_impure,
-                               param_muts=method_def.param_muts)
+                               param_muts=method_def.param_muts,
+                               ret_unit=method_def.ret_unit)
                 if method_def.name in st.methods:
                     raise DefinitionError(
                         f"duplicate method '{method_def.name}' "
@@ -1260,7 +1261,7 @@ def main():
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,
                           defn.is_replaceable, defn.pack_param, defn.param_units,
                           defn.is_impure, param_refs=defn.param_refs,
-                          param_muts=defn.param_muts)
+                          param_muts=defn.param_muts, ret_unit=defn.ret_unit)
             eval_inst = Evaluator(env)
             try:
                 eval_inst._call_user_func(fv, [])

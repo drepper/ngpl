@@ -154,7 +154,8 @@ class FuncDef:
                  is_impure: bool = False,
                  param_refs: set[str] | None = None,
                  param_muts: set[str] | None = None,
-                 hint: str | None = None):
+                 hint: str | None = None,
+                 ret_unit=None):
         self.name = name
         self.params = params
         # Where each parameter was written, for diagnostics about it.
@@ -175,6 +176,8 @@ class FuncDef:
         # function is expected to run.  A hint never changes what the
         # function computes.
         self.hint = hint
+        # The unit the return type states, or None where it states none.
+        self.ret_unit = ret_unit
 
 
 class VarDef:

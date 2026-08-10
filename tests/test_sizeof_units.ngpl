@@ -1,6 +1,8 @@
 // Tests for sizeof returning unit-bearing values and dimensionless arithmetic.
 
-fn assert_eq_int(a:i64, b:i64, msg:str):
+// Untyped, so a measured value reaches it with its unit intact
+// and the comparison below checks the unit as well as the number.
+fn assert_eq_int(a, b, msg:str):
   if a != b:
     std.print("FAIL: ", msg, " (got ", a, " expected ", b, ")")
 

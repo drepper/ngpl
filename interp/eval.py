@@ -3686,12 +3686,14 @@ class Evaluator:
             if has_pack:
                 self._comptime_vars.add(func.pack_param[0])
             result = self.eval_stmts(func.body)
-            self._check_return_type(result, resolved_ret_type, func.name)
+            result = self._check_return_type(
+                result, resolved_ret_type, func.name, func.ret_unit)
             returned = self._wrap_optional_return(result, resolved_ret_type)
             return returned
         except _ReturnSentinel as e:
-            self._check_return_type(e.value, resolved_ret_type, func.name)
-            returned = self._wrap_optional_return(e.value, resolved_ret_type)
+            checked = self._check_return_type(
+                e.value, resolved_ret_type, func.name, func.ret_unit)
+            returned = self._wrap_optional_return(checked, resolved_ret_type)
             return returned
         except _PropagatedError as pe:
             raise pe.original from pe
@@ -3818,10 +3820,45 @@ class Evaluator:
                 self._warnings.append(
                     f"destroying '{name}' at end of scope failed: {e}")
 
-    def _check_return_type(self, result: Value, ret_type: str | None, func_name: str) -> Value:
+    def _check_return_unit(self, result: Value, ret_type: str,
+                           func_name: str, ret_unit) -> Value:
+        """Verify a return value against a return type that states a unit.
+
+        A bare number takes the unit, as it would at a parameter that
+        states one.  A value already carrying a unit has to carry that
+        one, since a unit is part of the type rather than a label.
+        """
+        from interp.units import eval_unit_formula
+        want = eval_unit_formula(ret_unit)
+        inner = result
+        wrap = None
+        if isinstance(inner, SomeValue):
+            inner, wrap = inner.value, SomeValue
+        elif isinstance(inner, NoneValue):
+            return result
+        elif isinstance(inner, ExpectedValue):
+            if not inner.is_ok():
+                return result
+            inner, wrap = inner.ok_value, ExpectedValue.ok
+        if isinstance(inner, UnitValue):
+            if not inner.unit.same_dimension(want):
+                raise TypeError(
+                    f"{func_name}: return type is {ret_type} "
+                    f"\N{CURRENCY SIGN}{want.display_name}, but the body evaluates to "
+                    f"{inner.unit.display_name}")
+            settled = self._convert_unit_value(inner, want)
+        else:
+            settled = UnitValue(inner, want)
+        return wrap(settled) if wrap is not None else settled
+
+    def _check_return_type(self, result: Value, ret_type: str | None,
+                           func_name: str, ret_unit=None) -> Value:
         """Verify the return value matches the declared return type."""
         if ret_type is None or ret_type == "\N{EMPTY SET}":
             return result
+        if ret_unit is not None:
+            return self._check_return_unit(result, ret_type, func_name,
+                                           ret_unit)
         base, opt_err = _split_optional_type(ret_type)
         check = base if opt_err is not None else ret_type
         if not check or check == "\N{EMPTY SET}":

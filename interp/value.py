@@ -334,7 +334,7 @@ class FuncValue(Value):
 
     __slots__ = ("name", "params", "body", "env", "ret_type", "is_replaceable",
                  "pack_param", "param_units", "is_impure", "param_refs",
-                 "param_muts", "source_label")
+                 "param_muts", "source_label", "ret_unit")
 
     def __init__(self, name, params, body, env, ret_type=None,
                  is_replaceable: bool = False,
@@ -342,12 +342,15 @@ class FuncValue(Value):
                  param_units: dict[str, object] | None = None,
                  is_impure: bool = False,
                  param_refs: set[str] | None = None,
-                 param_muts: set[str] | None = None):
+                 param_muts: set[str] | None = None,
+                 ret_unit=None):
         self.name = name
         self.params = params
         self.body = body
         self.env = env
         self.ret_type = ret_type
+        # The unit the return type states, or None where it states none.
+        self.ret_unit = ret_unit
         self.is_replaceable = is_replaceable
         self.pack_param = pack_param
         self.param_units: dict[str, object] = param_units or {}
@@ -1219,10 +1222,18 @@ def validate_param_type(param_type: str, func_name: str, param_name: str):
 
 
 def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str) -> "Value":
-    """Coerce a runtime argument to match a declared parameter type."""
+    """Coerce a runtime argument to match a declared parameter type.
+
+    A parameter that states a unit has it applied before this runs, so
+    a value still carrying one here is meeting a parameter that states
+    none, and parting with it has to be said.
+    """
     param_type = resolve_type_alias(param_type)
     if isinstance(value, UnitValue):
-        value = value.inner
+        raise TypeError(
+            f"{func_name}: parameter '{param_name}' is {param_type}, which "
+            f"carries no unit, but the argument is "
+            f"{value.unit.display_name}; use @dropunit to part with it")
     base, opt_err = _split_optional_type(param_type)
     if opt_err is not None and opt_err == "":
         if isinstance(value, NoneValue):

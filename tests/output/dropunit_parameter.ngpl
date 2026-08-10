@@ -1,0 +1,7 @@
+fn plain(x : u32) → ∅:
+    std.print(x)
+
+@start
+fn main() → ∅:
+    let v ¤byte : u32 = 7
+    plain(v)

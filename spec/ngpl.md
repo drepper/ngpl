@@ -4289,9 +4289,44 @@ let plain := @dropunit(v)
 @sizeof(plain)           // 4 B, as before
 ```
 
-Parting with a unit discards what the unit system exists to check, so the place to do it is where the reason is local.  A function that computes a count from byte offsets parts with the unit at its own boundary rather than leaving every caller to do it.
+The same holds at a parameter.  One that states a unit has it applied on the way in; one that states none will not take a measured value quietly:
 
-A return type cannot state a unit, so a function that means to return one has no way to say so yet.
+```
+fn plain(x : u32) → ∅:
+    …
+
+plain(v)    // v is u32 ¤byte
+
+error: parameter 'x' is u32, which carries no unit, but the argument is B;
+use @dropunit to part with it
+```
+
+#### A Return Type That States a Unit
+
+A return type may state a unit, written after the type, so a function can hand back a measured value rather than parting with the unit on the way out:
+
+```
+fn remaining(total ¤byte : usize, used ¤byte : usize) → usize ¤byte:
+    total - used
+```
+
+A bare number takes the unit, as it would at a parameter that states one, and a compatible unit is converted to the one declared:
+
+```
+fn in_bytes() → usize ¤byte:
+    2 ¤kilobyte      // comes back as 2000 B
+```
+
+A unit of another dimension is refused:
+
+```
+fn wrong() → u8 ¤byte:
+    5 ¤meter
+
+error: return type is u8 ¤B, but the body evaluates to m
+```
+
+This is what decides where a unit is parted with.  A function whose result is genuinely measured says so and hands the unit on; the caller parts with it where the meaning changes.  `get_padded_byte` in the SHA-256 example returns `u8 ¤byte?` because its padding is worked out from byte offsets, and its caller drops the unit as it assembles a plain 32-bit word.
 
 #### An Enum as a Type
 
