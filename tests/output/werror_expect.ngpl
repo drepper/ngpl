@@ -1,0 +1,22 @@
+// An @expect accounts for a diagnostic whatever level it is reported
+// at, so a file that expects its warnings is checked under -Werror
+// without being rewritten: `@expect warning` is read as
+// `@expect error` there.
+
+// The function-level form.
+@expect warning "'unused' is declared mut but is never modified"
+fn warns_about_an_idle_mut():
+    let unused : mut = 5
+    assert_eq(unused, 5)
+
+// The statement-level form, inside a test that runs.
+@test
+fn test_statement_level_expect():
+    @expect warning "'here' is declared mut but is never modified"
+    let here : mut = 5
+    assert_eq(here, 5)
+
+@start
+@impure
+fn main():
+    std.println("checked under -Werror")

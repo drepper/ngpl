@@ -49,7 +49,7 @@ from interp.value import (
 )
 from interp.env import Env
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
-from interp.errors import attach_backtrace
+from interp.errors import attach_backtrace, diagnostic_level
 
 
 def _nth_root_exact(n: int, degree: int) -> int | None:
@@ -3015,7 +3015,10 @@ class Evaluator:
         remaining = list(node.expectations)
         for level, msg in diagnostics:
             for i, (exp_level, exp_pattern) in enumerate(remaining):
-                if level == exp_level and re.search(exp_pattern, msg):
+                # -Werror makes a warning an error, on both sides: an
+                # @expect written for one still accounts for it.
+                if (diagnostic_level(level) == diagnostic_level(exp_level)
+                        and re.search(exp_pattern, msg)):
                     remaining.pop(i)
                     break
 

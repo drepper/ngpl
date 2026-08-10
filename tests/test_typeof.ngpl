@@ -87,6 +87,10 @@ fn returns_int() → i64:
 fn test_typeof_of_a_runtime_binding():
     let x : mut = 42
     let y : mut = 7
+    // Both are written to, so the mut on each says something true and
+    // neither value is one a constant would have.
+    x ← x + 1
+    y ← x
     static_assert_eq(@typeof(x), @typeof(y))
 
 // ---------------------------------------------------------------------

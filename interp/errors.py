@@ -35,6 +35,36 @@ class ProgramAbort(BaseException):
         super().__init__(f"abort(signal {signal_number})")
 
 
+# Whether a warning is to be treated as an error, as -Werror asks.
+# Set once from the command line and read wherever a diagnostic's level
+# is decided, so the option reaches the @expect machinery as well as
+# the text that is printed.
+_warnings_are_errors = False
+
+
+def set_warnings_are_errors(on: bool) -> None:
+    """Make every warning an error, or stop doing so."""
+    global _warnings_are_errors
+    _warnings_are_errors = on
+
+
+def warnings_are_errors() -> bool:
+    """Whether warnings are being treated as errors."""
+    return _warnings_are_errors
+
+
+def diagnostic_level(level: str) -> str:
+    """The level a diagnostic is reported at.
+
+    Under -Werror a warning is an error, in what is printed and in what
+    an @expect has to say to match it: an annotation written
+    `@expect warning` is read as `@expect error`, so a source file that
+    accounts for its diagnostics needs no rewriting to be checked this
+    way.
+    """
+    return "error" if _warnings_are_errors and level == "warning" else level
+
+
 def attach_backtrace(exc: BaseException, call_stack: list) -> None:
     """Record the interpreted program's call stack on an exception.
 

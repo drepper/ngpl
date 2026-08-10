@@ -6,8 +6,10 @@ corresponding .expected files.  Each test is a pair:
     tests/output/test_name.ngpl     -- the source program
     tests/output/test_name.expected -- expected stderr output
 
-Three optional files control how the program is invoked and checked:
+Four optional files control how the program is invoked and checked:
 
+    tests/output/test_name.opts     -- one interpreter option per line,
+                                       passed before the source file
     tests/output/test_name.args     -- one program argument per line,
                                        passed after the -- separator
     tests/output/test_name.env      -- one NAME=VALUE per line, added to
@@ -81,7 +83,9 @@ def run_test(src_path: str, expected_path: str) -> tuple[bool, str]:
     rel_path = os.path.relpath(src_path, top_dir)
     base = src_path[:-len(SOURCE_EXT)]
 
-    cmd = [sys.executable, "-m", "interp", rel_path]
+    cmd = [sys.executable, "-m", "interp"]
+    cmd.extend(_read_lines(base + ".opts"))
+    cmd.append(rel_path)
     prog_args = _read_lines(base + ".args")
     if prog_args:
         cmd.append("--")

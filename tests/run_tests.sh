@@ -148,4 +148,26 @@ if (($# == 0)); then
     else
         exit 1
     fi
+
+    # Every test file accounts for its own diagnostics, so the suite
+    # passes with warnings treated as errors.  A new warning nothing
+    # expects shows up here rather than in the scroll-back.
+    echo
+    echo "checking ${#all_tests[@]} test files with -Werror"
+    werror_failures=()
+    for t in "${all_tests[@]}"; do
+        if ! python -m interp -Werror --test "$t" > /dev/null 2>&1; then
+            werror_failures+=("$t")
+        fi
+    done
+    echo
+    if ((${#werror_failures[@]} > 0)); then
+        echo "-Werror check: FAILED"
+        for f in "${werror_failures[@]}"; do
+            echo "  $f"
+            python -m interp -Werror --test "$f" 2>&1 | grep '^error:' | head -3
+        done
+        exit 1
+    fi
+    echo "-Werror check: ok. ${#all_tests[@]} files clean"
 fi

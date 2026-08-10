@@ -433,9 +433,10 @@ fn test_a_covered_parameter_match_runs():
 @test
 @impure
 fn test_a_wildcard_covers_a_parameter_match():
-    let took : mut = 0
+    // A wildcard covers every shape the parameter can take, so both
+    // reach the one arm.
     match_with_wildcard(∃(7))
-    assert_eq(took, 0)
+    match_with_wildcard(∅)
 
 @impure
 fn match_with_wildcard(x : i64?):

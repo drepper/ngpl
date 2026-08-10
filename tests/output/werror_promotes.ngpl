@@ -1,0 +1,10 @@
+// -Werror makes a warning an error, and an error stops the run: the
+// startup function below never runs, so nothing is printed.
+fn f():
+    1
+
+@start
+@impure
+fn main():
+    f()
+    std.println("main ran")

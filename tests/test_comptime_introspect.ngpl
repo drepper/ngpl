@@ -100,6 +100,10 @@ fn test_typeof_comptime_foreach():
 fn test_typeof_runtime_var():
     let x : mut = 42
     let y : mut = 0
+    // Both are written to, so neither mut is a claim the reader would
+    // be wrong about, and neither value is one a constant would have.
+    x ← x + 1
+    y ← x
     static_assert_eq(@typeof(x), @typeof(y))
 
 // --- @sizeof on a name ---
@@ -131,6 +135,8 @@ fn test_sizeof_dynamic_array_var():
 fn test_unitof_runtime_var():
     let d ¤meter : mut = 5
     let e ¤meter : mut = 9
+    d ← d + e
+    e ← d
     static_assert_eq(@unitof(d), @unitof(e))
 
 @start

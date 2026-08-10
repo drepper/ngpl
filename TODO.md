@@ -526,3 +526,10 @@ in the compiler.
     Both are checked at the definition, so a function that is never called is checked too.
     A lambda's body counts as part of the function that writes it, and a method carries the
     annotation and passes it to its callers the same way a function does.
+
+[x] -Werror: an interpreter option making every warning an error, so the program does not run
+    and the status says so.  It moves the @expect level with the diagnostic — an annotation
+    written @expect warning is read as @expect error — so a file that accounts for its own
+    diagnostics needs no rewriting.  A source file cannot ask for it: whether a warning is
+    worth stopping for is a property of the run, not of the code.  tests/run_tests.sh runs
+    every test file a second time under -Werror, so a new unaccounted warning fails the suite.

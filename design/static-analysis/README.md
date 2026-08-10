@@ -167,6 +167,27 @@ Anything else is unresolved, and both checks fall back to their
 conservative answers: the purity check says nothing, and the unused
 check treats the call as having an effect.
 
+## Warnings as Errors
+
+A warning is a diagnostic the language is not willing to refuse a
+program over, which is a judgement about programs in general rather
+than about this run of this one.  `-Werror` is where a run says
+otherwise: every warning becomes an error, and the program does not
+run.
+
+The part worth writing down is what it does to `@expect`.  An
+annotation names the level it expects, so promoting the diagnostic
+without promoting the annotation would break every file that accounts
+for its own warnings — exactly the files that have been careful.  So
+`-Werror` reads `@expect warning` as `@expect error`, on both sides of
+the match, and a file needs no rewriting to be checked this way.  The
+project's own test suite is run twice for this reason, once each way.
+
+The option is not something a source file can ask for.  Whether a
+warning is worth stopping for depends on what the run is for, and a
+file that could impose the answer on its readers would be making a
+decision that is not the author's to make.
+
 ## Status
 
 Implemented in the interpreter, at definition time:
@@ -176,6 +197,8 @@ Implemented in the interpreter, at definition time:
   at the function or at the statement;
 - a body ending in a value its signature does not hand back, as a
   warning, catchable the same two ways;
+- `-Werror`, which makes every warning an error and reads
+  `@expect warning` as `@expect error`;
 - `std.print` and `std.println` requiring `@impure`;
 - calling an `@impure` function or method requiring `@impure`.
 

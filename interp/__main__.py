@@ -31,6 +31,8 @@ from interp.eval import Evaluator, unwrap_optional, _ARRAY_MUTATORS
 from interp.layout import LayoutError, struct_layout, struct_lookup
 from interp.errors import (format_diagnostic, extract_position,
                            strip_position_prefix, format_backtrace,
+                           diagnostic_level, set_warnings_are_errors,
+                           warnings_are_errors,
                            ProgramExit, ProgramAbort)
 
 
@@ -250,6 +252,9 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--start", metavar="NAME",
                        help="use the named function as the startup function, "
                             "ignoring any @start annotations")
+    parser.add_argument("-Werror", dest="werror", action="store_true",
+                       help="treat every warning as an error, and read an "
+                            "@expect warning as @expect error")
     parser.add_argument("--interpreter-backtrace", action="store_true",
                        help="show the Python interpreter backtrace on errors")
     parser.add_argument("program_args", nargs=argparse.REMAINDER,
@@ -1616,21 +1621,26 @@ class DefinitionError(Exception):
             self.line, self.col, self.end_col = pos
 
 
-def _report_warnings(warnings, source: str, source_path: str):
+def _report_warnings(warnings, source: str, source_path: str) -> int:
     """Print warnings found while installing, in the order they were found.
 
     A position past the end of the text is shown as the message on its
     own: the REPL checks one entry at a time and numbers lines within
     it, so a warning from anywhere else has nothing here to point at.
+
+    Returns how many were reported, which under -Werror is how many
+    errors the program has.
     """
+    level = diagnostic_level("warning")
     for message, position in warnings:
         if position is not None and position[0] <= source.count("\n") + 1:
             line, col, end_col = position
             print(format_diagnostic(source, source_path, line, col, message,
-                                    end_col=end_col, level="warning"),
+                                    end_col=end_col, level=level),
                   file=sys.stderr)
         else:
-            print(f"warning: {message}", file=sys.stderr)
+            print(f"{level}: {message}", file=sys.stderr)
+    return len(warnings)
 
 
 class LoadedProgram:
@@ -1956,6 +1966,8 @@ def main():
     """Run the NGPL interpreter on a source file."""
     args = _parse_args()
 
+    set_warnings_are_errors(args.werror)
+
     source_path = args.source
     source = ""
     definitions = []
@@ -2008,7 +2020,10 @@ def main():
             print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    _report_warnings(program.warnings, source, source_path)
+    if _report_warnings(program.warnings, source, source_path) > 0 \
+            and warnings_are_errors():
+        # -Werror: what was reported are errors, and errors stop the run.
+        sys.exit(1)
 
     startup_func = program.startup_func
     standalone_tests = program.standalone_tests
@@ -2110,7 +2125,8 @@ def main():
         matched: list[tuple[str, str]] = []
         for level, msg in errors_produced:
             for i, (exp_level, exp_pattern) in enumerate(remaining):
-                if level == exp_level and re.search(exp_pattern, msg):
+                if (diagnostic_level(level) == diagnostic_level(exp_level)
+                        and re.search(exp_pattern, msg)):
                     matched.append(remaining.pop(i))
                     break
 
@@ -2228,11 +2244,14 @@ def _start_exit_code(result: object, func: FuncValue,
                 return v & 0xff
             return val.value & 0xff
         return 0
-    print(f"warning: @start function '{func.name}' has return type "
-          f"'{ret}' which is not u8, i8, or \N{EMPTY SET}; "
-          f"using exit code 0",
+    # Under -Werror the signature is refused rather than worked around,
+    # so the status says the run did not go through.
+    level = diagnostic_level("warning")
+    print(f"{level}: @start function '{func.name}' has return type "
+          f"'{ret}' which is not u8, i8, or \N{EMPTY SET}"
+          + ("" if level == "error" else "; using exit code 0"),
           file=sys.stderr)
-    return 0
+    return 1 if level == "error" else 0
 
 
 if __name__ == "__main__":

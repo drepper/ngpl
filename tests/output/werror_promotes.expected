@@ -1,0 +1,7 @@
+error: the value of this statement is not used; the signature hands nothing back, so the last statement is not a return value; name a return type, or write '_ ← …' to drop the value
+  --> tests/output/werror_promotes.ngpl:4:5
+    |
+  4 |     1
+    |     ^
+  5 | 
+    |

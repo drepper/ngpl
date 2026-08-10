@@ -4675,6 +4675,42 @@ fn warn_foreach_redef():
 
 This test verifies both that the warning is produced and that the redefined variable takes effect (each iteration uses 99, so the total is 297).
 
+#### Treating Warnings as Errors: `-Werror`
+
+The interpreter option `-Werror` makes every warning an error.  A warning is then printed as `error:` and stops the run before the startup function or any test executes, and the process exits with status 1:
+
+```
+$ ngpl program.ngpl
+warning: 'unused' is declared mut but is never modified
+  --> program.ngpl:3:5
+    |
+  3 |     let unused : mut = 5
+    |     ^^^
+    |
+$ ngpl -Werror program.ngpl
+error: 'unused' is declared mut but is never modified
+  --> program.ngpl:3:5
+    |
+  3 |     let unused : mut = 5
+    |     ^^^
+    |
+$ echo $?
+1
+```
+
+The option changes what an `@expect` has to say to match, in step with what it changes about the diagnostic.  Under `-Werror` an annotation written `@expect warning` is read as `@expect error`, so a file that already accounts for its diagnostics is checked this way without being rewritten:
+
+```
+@expect warning "'unused' is declared mut but is never modified"
+fn warns_about_an_idle_mut():
+    let unused : mut = 5
+    assert_eq(unused, 5)
+```
+
+This holds for both forms of the annotation, and an expected diagnostic is accounted for rather than reported, so it does not stop the run under `-Werror` any more than it does without it.  The reverse also holds: `@expect error` matches a diagnostic that `-Werror` promoted.
+
+A source file cannot ask for `-Werror`.  Whether a warning is worth stopping for is a property of the run — a first draft and a release build take different views of the same code — and the option is where such a choice belongs.
+
 #### Integration with Test Modes
 
 `@expect` tests are processed in both `--test` and normal mode:
@@ -6369,6 +6405,8 @@ return type, or write '_ ← …' to drop the value
 ```
 
 A definition that is refused reports what the checks found before the refusal, so an entry holding several definitions — an `impl` block, say — says everything that is wrong with it rather than only the first thing.
+
+`-Werror` reports these as errors here too, but the definition stays: a session is a place to write code that is not finished yet, and taking a definition back out from under the names that already refer to it would help nobody.  The option's other effect — refusing to run the program — has nothing to act on in a session, where there is no startup function to hold back.
 
 ### Non-Interactive Input
 
