@@ -3753,7 +3753,24 @@ static_assert(x)                       /* ERROR: not a compile-time constant */
 
 #### Type Introspection
 
-Built-in introspection functions use the `@` prefix and return values that can be compared for equality.  All `@` operations are compile-time: their arguments must be compile-time constant expressions (literals, constant arithmetic, other `@` expressions) or compile-time variables (parameter pack names, `comptime foreach` loop variables).  Passing a runtime variable is an error — use the equivalent runtime operation (e.g., `.sizeof`) instead.
+Built-in introspection functions use the `@` prefix and return values that can be compared for equality.  They ask about a type, not about a value, so what they accept is anything whose type follows without running the program: a constant, a name in scope, or an expression built from those with operators.
+
+```
+let v : u8 = 3
+@typeof(v « 2)     // u8 — a shift keeps the type it is given
+@sizeof(v « 2)     // 1 B
+@typeof(a[i])     // the element type, whatever i is
+@unitof(d + d)    // the unit the arithmetic yields
+```
+
+A call is where that stops.  Its type may well be static, but reaching it here would mean running the function, and a question about a type must not do that:
+
+```
+@typeof(f())
+
+error: @typeof requires a compile-time constant, a name, or an expression
+built from them
+```
 
 `@typeof` is the exception, because it asks a question the others do not.  A binding's *type* is known without knowing its value, so `@typeof` answers for any name in scope:
 
@@ -3853,7 +3870,7 @@ error: 'byte' names a type and cannot name a variable
 
 - `@resultof(func)` — looks up a named function and returns a `type` value for its declared return type.
 
-- `@sizeof(expr)` — returns the number of elements in a container.  Works on array literals, tuple literals, string literals, and parameter packs.  Passing a non-container (e.g., an integer or boolean) is an error.  For runtime containers, use `.sizeof` instead.
+- `@sizeof(expr)` — the storage a type occupies, or the number of elements a container holds.  See [`@sizeof` of a Type](#sizeof-of-a-type) and [`@sizeof` of a Value](#sizeof-of-a-value).
 
   The result carries a unit: for `u8[]` (byte arrays) the unit is `byte`; for all other containers the unit is `ptrdiff`.  Because dimensionless arithmetic is allowed with unit-bearing values, the sizeof result can be used directly in index computations, loop bounds, and arithmetic without explicit unit stripping.
 

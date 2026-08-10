@@ -151,17 +151,32 @@ fn test_type_name_cannot_be_a_loop_variable() → ∅:
 
 // What it still refuses is an expression that is neither a name nor a
 // constant, since answering would mean evaluating it.
+// A call is where it stops: the type may well be static, but reaching
+// it would mean running the function.
 @test
-@expect error "compile-time constant argument or a name"
+@expect error "a name, or an expression built from them"
 fn test_typeof_of_a_call() → ∅:
     let t : mut = @typeof(returns_int())
 
+// An expression built from names and operators is answerable, since
+// working it out changes nothing.
 @test
-@expect error "compile-time constant argument or a name"
+fn test_typeof_of_an_expression() → ∅:
+    let v : u8 = 3
+    static_assert_eq(@typeof(v « 2), u8)
+    static_assert_eq(@sizeof(v « 2), 1 ¤byte)
+    static_assert_eq(@typeof(~v), u8)
+
+@test
 fn test_typeof_of_a_subscript() → ∅:
     let a : i32[] = [1, 2, 3]
-    let i : mut = 0
-    let t : mut = @typeof(a[i])
+    let i := 0
+    static_assert_eq(@typeof(a[i]), i32)
+
+@test
+fn test_unitof_of_an_expression() → ∅:
+    let d ¤meter : i32 = 5
+    static_assert_eq(@unitof(d + d), @unitof(1 ¤meter))
 
 @start
 fn main() → ∅:

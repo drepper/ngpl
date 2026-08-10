@@ -2025,8 +2025,8 @@ class Evaluator:
             if not _is_comptime_expr(node.expr, self._comptime_vars) \
                     and not self._names_a_binding(node.expr):
                 raise TypeError(
-                    "@typeof requires a compile-time constant argument "
-                    "or a name")
+                    "@typeof requires a compile-time constant, a name, or "
+                    "an expression built from them")
             # Reading a name bound to a reference yields the referent, so
             # the binding itself is inspected to report the borrow.
             val = None
@@ -2067,8 +2067,8 @@ class Evaluator:
             if not _is_comptime_expr(node.expr, self._comptime_vars) \
                     and not named:
                 raise TypeError(
-                    "@sizeof requires a compile-time constant argument "
-                    "or a name")
+                    "@sizeof requires a compile-time constant, a name, or "
+                    "an expression built from them")
             val = self.eval_expr(node.expr)
             unwrapped = unwrap_optional(val)
             if isinstance(unwrapped, TupleValue):
@@ -2079,14 +2079,16 @@ class Evaluator:
                 # array has a length but not one @sizeof can claim.
                 if named and unwrapped.obj.fixed_size is None:
                     raise TypeError(
-                        f"@sizeof: '{node.expr.name}' is a dynamically "
-                        f"sized array, whose length is not part of its "
-                        f"type; use .sizeof to read it")
+                        f"@sizeof: {self._describe_operand(node.expr)} is a "
+                        f"dynamically sized array, whose length is not part "
+                        f"of its type; use .sizeof to read it")
                 result = self._sizeof_result(
                     unwrapped.obj.sizeof,
                     unwrapped.obj.element_type)
             elif isinstance(unwrapped, StrValue):
-                if named:
+                # A literal's length is written down and is the count it
+                # asks for; a name's is the value's, not the type's.
+                if isinstance(node.expr, VarRef):
                     raise TypeError(
                         f"@sizeof: '{node.expr.name}' is a string, whose "
                         f"length is not part of its type; use .sizeof to "
@@ -2128,8 +2130,8 @@ class Evaluator:
             if not _is_comptime_expr(node.expr, self._comptime_vars) \
                     and not self._names_a_binding(node.expr):
                 raise TypeError(
-                    "@unitof requires a compile-time constant argument "
-                    "or a name")
+                    "@unitof requires a compile-time constant, a name, or "
+                    "an expression built from them")
             val = self.eval_expr(node.expr)
             unwrapped = unwrap_optional(val)
             if isinstance(unwrapped, UnitValue):
@@ -2908,20 +2910,46 @@ class Evaluator:
             raise TypeError(f"@sizeof: {e}") from None
         return UnitValue(mk_int(size), BUILTIN_UNITS["byte"])
 
+    @staticmethod
+    def _describe_operand(expr) -> str:
+        """Name an operand for a diagnostic, however it was written."""
+        return f"'{expr.name}'" if isinstance(expr, VarRef) else "the operand"
+
     def _names_a_binding(self, expr) -> bool:
-        """Whether an expression is a name that is bound in scope.
+        """Whether an expression can be asked about its type.
 
         A binding's type is static information even where its value is
-        not, so `@typeof` can answer for one.  `@sizeof` and `@unitof`
-        keep the stricter test, since those ask about the value.
+        not, so `@typeof` can answer for one.  So can an expression
+        built from bindings and operators: working it out changes
+        nothing, and its type follows from theirs.
+
+        A call is where that stops.  Its type may well be static, but
+        reaching it here would mean running the function, and a
+        question about a type must not do that.
         """
-        if not isinstance(expr, VarRef):
-            return False
-        try:
-            self.env.lookup(expr.name)
-        except KeyError:
-            return False
-        return True
+        if isinstance(expr, VarRef):
+            try:
+                self.env.lookup(expr.name)
+            except KeyError:
+                return False
+            return True
+        if isinstance(expr, (IntLit, FloatLit, StrLit, BoolLit, NoneLit)):
+            return True
+        if isinstance(expr, BinOp):
+            return (self._names_a_binding(expr.left)
+                    and self._names_a_binding(expr.right))
+        if isinstance(expr, UnaryOp):
+            return self._names_a_binding(expr.operand)
+        if isinstance(expr, WrapExpr):
+            return self._names_a_binding(expr.expr)
+        if isinstance(expr, UnitExpr):
+            return self._names_a_binding(expr.expr)
+        if isinstance(expr, Subscript):
+            return (self._names_a_binding(expr.obj)
+                    and all(self._names_a_binding(i) for i in expr.indices))
+        if isinstance(expr, GetAttr):
+            return self._names_a_binding(expr.obj)
+        return False
 
     def _eval_match_by_type(self, node: MatchStmt, subject: Value):
         """Run the arm naming the alternative the value actually is."""

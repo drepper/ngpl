@@ -183,16 +183,17 @@ fn sizeof_both(args… : int) → int:
 fn test_sizeof_pack_matches_dot() → ∅:
     assert_eq(sizeof_both(5, 6), 2)
 
-// @sizeof rejects non-containers.
+// A scalar holds no elements to count, so @sizeof answers with what
+// its type occupies.  An untyped integer is unbounded and occupies
+// nothing definite.
 @test
-@expect error "@sizeof.*expected"
-fn test_sizeof_rejects_int() → ∅:
+@expect error "arbitrary-precision"
+fn test_sizeof_of_an_untyped_int() → ∅:
     @sizeof(42)
 
 @test
-@expect error "@sizeof.*expected"
-fn test_sizeof_rejects_bool() → ∅:
-    @sizeof(true)
+fn test_sizeof_of_a_bool() → ∅:
+    static_assert_eq(@sizeof(true), 1 ¤byte)
 
 @start
 fn main() → ∅:
