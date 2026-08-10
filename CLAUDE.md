@@ -488,7 +488,7 @@ How to Proceed
    the next feature to be designed and implemented
 3. in the new subdir create first a document detailing the question to be answered when designing the
    solution
-4. in the `newlang.md` file at the toplevel add a reference to the newly created design document at the
+4. in the `ngpl.md` file at the toplevel add a reference to the newly created design document at the
    end of the list at the end of the file.  Preserve the order.
 5. create one or more experimental implementations.  the basis of the implementation is the result of the
    previous step, if it applies
