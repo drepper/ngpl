@@ -9,7 +9,7 @@
 fn error_i8_too_large() → ∅:
     let x : mut i8 = 128
 
-@expect error "integer overflow.*does not fit in i8"
+@expect error "integer underflow.*does not fit in i8"
 fn error_i8_too_small() → ∅:
     let x : mut i8 = ⁻129
 
@@ -25,22 +25,22 @@ fn error_i32_too_large() → ∅:
 fn error_i64_too_large() → ∅:
     let x : mut i64 = 9223372036854775808
 
-// ---- static: unsigned assignment wraps -----------------------------------
+// ---- static: an unsigned type refuses what it cannot hold ---------------
 
 @test
-fn test_u8_wraps_on_assign() → ∅:
+@expect error "integer overflow.*does not fit in u8"
+fn error_u8_too_large_on_assign() → ∅:
     let x : u8 = 256
-    assert_eq(x, 0)
 
 @test
-fn test_u8_wraps_negative() → ∅:
+@expect error "integer underflow.*does not fit in u8"
+fn error_u8_negative_on_assign() → ∅:
     let x : u8 = ⁻1
-    assert_eq(x, 255)
 
 @test
-fn test_u32_wraps_on_assign() → ∅:
+@expect error "integer overflow.*does not fit in u32"
+fn error_u32_too_large_on_assign() → ∅:
     let x : u32 = 4294967296
-    assert_eq(x, 0)
 
 // ---- dynamic: signed arithmetic overflow ---------------------------------
 
@@ -50,7 +50,7 @@ fn error_i8_add_overflow() → ∅:
     let y : mut i8 = 1
     let z : mut = x + y
 
-@expect error "integer overflow"
+@expect error "integer underflow"
 fn error_i8_sub_underflow() → ∅:
     let x : mut i8 = ⁻128
     let y : mut i8 = 1
@@ -73,35 +73,63 @@ fn error_i32_negate_min() → ∅:
     let x : mut i32 = ⁻2147483648
     let z : mut = ⁻x
 
-// ---- dynamic: unsigned arithmetic wraps ----------------------------------
+// ---- dynamic: unsigned arithmetic leaves its range -----------------------
+//
+// A width is what a program says a value stays inside, so leaving that
+// range is reported for an unsigned type as much as a signed one.
+// Going below zero is the way an unsigned type is usually left, and
+// the diagnostic says "underflow" so that reads at once.
 
 @test
-fn test_u8_add_wraps() → ∅:
+@expect error "integer overflow.*does not fit in u8"
+fn error_u8_add_overflow() → ∅:
     let x : u8 = 255
     let y : u8 = 1
     let z := x + y
-    assert_eq(z, 0)
 
 @test
-fn test_u8_sub_wraps() → ∅:
+@expect error "integer underflow.*does not fit in u8"
+fn error_u8_sub_underflow() → ∅:
     let x : u8 = 0
     let y : u8 = 1
     let z := x - y
-    assert_eq(z, 255)
 
 @test
-fn test_u32_add_wraps() → ∅:
+@expect error "integer overflow.*does not fit in u32"
+fn error_u32_add_overflow() → ∅:
     let x : u32 = 4294967295
     let y : u32 = 1
     let z := x + y
-    assert_eq(z, 0)
 
 @test
-fn test_u32_mul_wraps() → ∅:
+@expect error "integer overflow.*does not fit in u32"
+fn error_u32_mul_overflow() → ∅:
     let x : u32 = 65536
     let y : u32 = 65536
     let z := x × y
-    assert_eq(z, 0)
+
+// ---- @wrap is how wrapping is asked for ----------------------------------
+//
+// Modular arithmetic is still available, and now says so where it is
+// meant.  SHA-256 is written this way.
+
+@test
+fn test_wrap_gives_modular_addition() → ∅:
+    let x : u8 = 255
+    let y : u8 = 1
+    assert_eq(@wrap(x + y), 0)
+
+@test
+fn test_wrap_gives_modular_subtraction() → ∅:
+    let x : u8 = 0
+    let y : u8 = 1
+    assert_eq(@wrap(x - y), 255)
+
+@test
+fn test_wrap_gives_modular_multiplication() → ∅:
+    let x : u32 = 65536
+    let y : u32 = 65536
+    assert_eq(@wrap(x × y), 0)
 
 // ---- boundary values: signed types ---------------------------------------
 

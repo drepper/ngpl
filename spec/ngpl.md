@@ -156,7 +156,7 @@ let d : i127 = 85070591730234615865843651857942052863
 
 Everything about the type follows from the width, so nothing is special-cased for the familiar ones:
 
-- **Range.**  A signed type spends a bit on the sign, so `i7` holds −64 to 63 while `u7` holds 0 to 127.  A signed type overflowing is an error; an unsigned one wraps, as described above.
+- **Range.**  A signed type spends a bit on the sign, so `i7` holds −64 to 63 while `u7` holds 0 to 127.  Leaving that range is an error either way, as described above.
 - **Arithmetic.**  The wider type wins: `u7 + u13` is a `u13`.
 - **Shifts.**  The bound is the value bits, so `u7` takes a count up to 6 and `i7` up to 5.
 - **Storage.**  `@sizeof` gives the whole bytes the width takes: 1 byte for `u7`, 2 for `u13`, 16 for `i128`.
@@ -243,17 +243,17 @@ For each fixed-width integer type, a corresponding **fast** variant exists that 
 
 The primary use case is **loop indices and local counters** where the exact width is unimportant but performance matters.  On some 64-bit platforms, 32-bit operations are fastest (due to shorter instruction encodings and implicit zero-extension); on others, native 64-bit operations are faster.  Fast types let the compiler choose the optimal width for the target.
 
-#### Wrapping Behavior
+#### Range
 
-Fast types wrap at the width of their underlying type, not the minimum width.  For example, `u8fast` on x86_64 wraps at 2³² (not 2⁸):
+A fast type's range is that of the width chosen for it, not of the minimum width asked for.  On x86_64 `u8fast` is 32 bits, so it holds values a `u8` would not:
 
 ```
 let x : mut u8fast = 255
 x ← x + 1
-/* x is 256, not 0 — because u8fast is 32-bit on this platform */
+/* x is 256, not an error — because u8fast is 32-bit on this platform */
 ```
 
-This means code using fast types must not rely on narrow wrapping behavior.  If wrap-at-8-bit semantics are needed, use `u8` explicitly.
+This means code using fast types must not rely on a narrow range, for its bound or for what `@wrap` comes round at.  Where 8-bit behaviour is needed, use `u8` explicitly.
 
 #### Restriction: No Fast Types in Data Structures
 
@@ -285,45 +285,64 @@ This design mirrors C's `uint_fast8_t` family from `<stdint.h>` but with a clean
 
 The `byte` type is an 8-bit unsigned integer (semantically identical to `u8`) used specifically for raw data and I/O operations.  It occupies the range 0 to 255.
 
-While `byte` and `u8` have the same representation and coercion rules, `byte` signals intent: the value represents raw data rather than a numeric quantity.  Arithmetic on `byte` values follows the same wrapping rules as `u8`.
+While `byte` and `u8` have the same representation and coercion rules, `byte` signals intent: the value represents raw data rather than a numeric quantity.  Arithmetic on `byte` values follows the same range rules as `u8`.
 
 
 ### Integer Overflow Semantics
 
-Integer overflow behavior depends on whether the type is **signed** or **unsigned**:
-
-#### Unsigned Types: Modular Arithmetic
-
-Unsigned types (`u8`, `u16`, `u32`, `u64`, `usize`, `byte`, and all unsigned fast variants) use **modular arithmetic**.  Operations that exceed the type's range silently wrap:
-
-```
-let x : mut u8 = 255
-let y : mut u8 = 1
-let z : mut = x + y          /* z is 0 (wrapped modulo 256) */
-
-let a : mut u32 = 4294967295
-let b : mut u32 = 1
-let c : mut = a + b           /* c is 0 (wrapped modulo 2³²) */
-
-let d : mut u8 = -1          /* d is 255 (modular representation) */
-```
-
-This matches C's unsigned semantics and Rust's `Wrapping<T>`.  Algorithms like SHA-256 depend on this behavior.
-
-#### Signed Types: Overflow Aborts
-
-Signed types (`i8`, `i16`, `i32`, `i64`, and all signed fast variants) **abort on overflow**.  Any arithmetic operation that produces a result outside the type's range raises an `OverflowError`:
+A width is what a program says a value stays inside.  A result outside that range is therefore a mistake to report, not a number to adjust — for an unsigned type as much as a signed one:
 
 ```
 let x : mut i8 = 127
 let y : mut i8 = 1
 let z : mut = x + y           /* ERROR: integer overflow */
 
-let a : mut i32 = -2147483648
-let b : mut = -a              /* ERROR: integer overflow (negation) */
+let a : mut u8 = 0
+let b : mut u8 = 1
+let c : mut = a - b           /* ERROR: integer underflow */
+
+let d : mut i32 = -2147483648
+let e : mut = -d              /* ERROR: integer overflow (negation) */
 ```
 
-This is the default strict mode behavior, as mandated by the language design: "in strict mode arithmetic overflow/underflow must be reported or lead to termination."
+This is the default strict mode behavior, as mandated by the language design: "in strict mode arithmetic overflow/underflow must be reported or lead to termination."  Nothing in that mandate turns on signedness, and treating an unsigned type as modular would exempt exactly the types most often used for sizes and indices, where going below zero is the mistake worth catching.
+
+The diagnostic names the direction, because for an unsigned type the range is nearly always left from below and "underflow" says so at once:
+
+```
+error: integer underflow: -1 does not fit in u8 (range 0..255)
+```
+
+Two differences from the languages this could have followed.  C's unsigned arithmetic is modular and its signed overflow is undefined; both are choices this language declines.  Rust checks in debug builds and wraps in release, so a program means different things depending on how it was built; here it means one thing, and the wrapping is asked for rather than configured.
+
+#### Modular Arithmetic: `@wrap`
+
+Wrapping is available where it is meant, and written down where it is used.  `@wrap` gives modular arithmetic over the width of the operands:
+
+```
+let x : mut u8 = 255
+let y : mut u8 = 1
+@wrap(x + y)                  /* 0 — modulo 256 */
+
+let a : mut u8 = 0
+@wrap(a - 1)                  /* 255 */
+```
+
+Algorithms that depend on modular arithmetic say so this way.  SHA-256, whose round function is defined over `u32` addition modulo 2³², is written with `@wrap` at each of its additions, and reads as the specification does.
+
+Bitwise operations are a separate matter: they work on the bit representation rather than the value, so they produce wrapped results without `@wrap`.  See below.
+
+#### Coercion
+
+A value that does not fit the type it is being given is refused for the same reason and with the same message:
+
+```
+let x : mut i8 = 128         /* ERROR: 128 does not fit in i8 (range -128..127) */
+let y : mut u8 = 256         /* ERROR: 256 does not fit in u8 (range 0..255) */
+let z : mut u8 = -1          /* ERROR: -1 does not fit in u8 (range 0..255) */
+```
+
+Answering differently here would mean `let y : u8 = 256` and `y + 1` on a `u8` of 255 disagreeing about the same number and the same type.
 
 #### Untyped `int`: Arbitrary Precision
 
@@ -350,15 +369,6 @@ n + p                /* int — an accumulator is not narrowed by what is added 
 ```
 
 A value is untyped only while it is being computed with.  Naming it settles it: `let n := 0` is an `int` from that point on, as property 4 above says.
-
-#### Coercion Overflow
-
-Assigning an untyped integer literal to a signed typed variable checks that the value fits:
-
-```
-let x : mut i8 = 128         /* ERROR: 128 does not fit in i8 (range -128..127) */
-let y : mut u8 = 256         /* y is 0 (unsigned wraps) */
-```
 
 #### Bitwise Operations
 
@@ -907,11 +917,12 @@ let t1 := @wrap(v[7] + s1 + ch + K[t] + W[t])
 | Feature | C | Rust | Zig | NGPL |
 |---------|---|------|-----|---------------|
 | Signed overflow | UB | panic (debug) / wrap (release) | UB / `@addWithOverflow` | abort |
-| Unsigned overflow | wraps | wraps | wraps | wraps |
+| Unsigned overflow | wraps | wraps | wraps | abort |
+| Asking for wrapping | cast | `Wrapping<T>` | `+%` | `@wrap` |
 | Compile-time check | sometimes | yes | yes | yes |
 | Arbitrary precision fallback | no | no | `comptime_int` | `int` type |
 
-The split between unsigned (wraps) and signed (aborts) reflects a fundamental semantic difference: unsigned types represent bit patterns and modular counters, while signed types represent mathematical integers where overflow is a logic error.  This avoids the undefined behavior of C while being less surprising than Rust's debug/release split.
+NGPL is alone in the row that matters: an unsigned type is not a modular counter unless the program says so.  The three others inherited C's rule, and it costs them the case where an unsigned subtraction goes below zero — the most common way a size or an index goes wrong, and the one their arithmetic cannot see.  Wrapping is still available and is written where it is used, which is Zig's `+%` and Rust's `Wrapping<T>` reached by a different spelling.  This avoids the undefined behavior of C while being less surprising than Rust's debug/release split, where a program means different things depending on how it was built.
 
 
 ### Dynamic Arrays as Parameters
@@ -2034,7 +2045,7 @@ Using an unknown type name is a compile error (caught when the function definiti
 
 When an argument is passed to a typed parameter:
 
-1. **Integer types.**  The argument must be an `IntValue`.  It is coerced to the target width following the integer overflow semantics: unsigned types wrap (modular arithmetic), signed types check and abort on overflow.  An `int` (arbitrary-precision) argument passed to a `u32` parameter is wrapped to 32 bits; the same value passed to an `i32` parameter must fit in the signed range or an `OverflowError` is raised.
+1. **Integer types.**  The argument must be an `IntValue`.  It is coerced to the target width following the integer overflow semantics: a value outside the parameter's range is an error, whether the type is signed or unsigned.  An `int` (arbitrary-precision) argument passed to a `u32` parameter must fit in 0..2³²−1, and the same value passed to an `i32` parameter must fit the signed range, or an `OverflowError` is raised.
 
 2. **`bool`.**  The argument must be a `BoolValue`.  No implicit conversion from integers.
 

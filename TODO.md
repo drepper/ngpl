@@ -57,6 +57,15 @@ the sized types do not have.
 Completed
 ---------
 
+[x] an unsigned type reports a result outside its range rather than coming round to it.
+    The design mandate says arithmetic overflow/underflow must be reported and says nothing
+    about signedness, and treating unsigned as modular exempted exactly the types used for
+    sizes and indices, where going below zero is the mistake worth catching.  @wrap is how
+    modular arithmetic is asked for; SHA-256 already used it at every one of its additions.
+    Coercion answers the same way, so `let y : u8 = 256` is refused as `y + 1` on a u8 of
+    255 is.  The diagnostic names the direction, since an unsigned range is nearly always
+    left from below.
+
 [x] std.print writes what its template produced and nothing after it; std.println is the
     same call with a newline.  Splitting them keeps the common case the shorter thing to
     write and keeps the name saying what the call does, rather than a flag a reader has to

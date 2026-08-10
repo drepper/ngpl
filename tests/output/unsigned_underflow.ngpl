@@ -1,0 +1,12 @@
+// u16 is wider than i8, so v - u is a u16 subtraction.  Going below
+// zero leaves the range the type declared, which is reported rather
+// than come round to 65534.
+let u : i8 = 4
+let v : u16 = 2
+
+fn m() → u16:
+    v - u
+
+@start
+fn main() → ∅:
+    std.println("{}", m())

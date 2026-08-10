@@ -223,8 +223,12 @@ def check_int(value: int, width: str) -> int:
         return value
     lo, hi = r
     if value < lo or value > hi:
+        # Naming the direction is worth the word: an unsigned type is
+        # left below far more often than above, and "underflow" says
+        # at once that the subtraction went past zero.
+        which = "underflow" if value < lo else "overflow"
         raise OverflowError(
-            f"integer overflow: {value} does not fit in {width} "
+            f"integer {which}: {value} does not fit in {width} "
             f"(range {lo}..{hi})")
     return value
 
@@ -1080,13 +1084,15 @@ def _is_unsigned(width: str) -> bool:
 
 
 def mk_int(value: int, width: str = "int") -> IntValue:
-    """Create an IntValue with overflow semantics per type.
+    """Create an IntValue, reporting a result its type cannot hold.
 
-    Unsigned types wrap silently (modular arithmetic).
-    Signed types and untyped 'int' raise OverflowError on overflow.
+    A width is what a program says a value stays inside, so leaving
+    that range is a mistake to report rather than a number to adjust —
+    for an unsigned type as much as a signed one.  Wrapping is what
+    @wrap asks for, and mk_int_wrap is what it uses.
+
+    Untyped `int` has arbitrary precision and no range to leave.
     """
-    if _is_unsigned(width):
-        return IntValue(wrap_int(value, width), width)
     return IntValue(check_int(value, width), width)
 
 
@@ -1757,8 +1763,11 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
         if isinstance(value, FloatValue):
             return mk_float(value.value, target_width)
     if isinstance(value, IntValue):
-        if _is_unsigned(target_width):
-            return IntValue(wrap_int(value.value, target_width), target_width)
+        # A value that does not fit the type it is being given is the
+        # same mistake whichever side of the range it falls, and the
+        # same mistake arithmetic reports.  Wrapping it here would mean
+        # `let y : u8 = 256` and `y + 1` on a u8 of 255 answering
+        # differently about the same number and the same type.
         check_int(value.value, target_width)
         return IntValue(value.value, target_width)
     if isinstance(value, ObjectValue) and isinstance(value.obj, ArrayValue):

@@ -19,13 +19,22 @@ fn test_literal_takes_the_typed_width() → ∅:
     static_assert_eq(@typeof(1 + p), u8)
     static_assert_eq(@typeof(p × 2), u8)
 
-// Having taken the width, the result lives in it.  Unsigned wraps.
+// Having taken the width, the result lives in it, and leaving that
+// range is reported rather than adjusted.
+@test
+@expect error "integer overflow.*does not fit in u8"
+fn test_overflow_follows_the_width_taken() → ∅:
+    let p : u8 = 255
+    std.println("{}", p + 1)
+
+// @wrap is how the modular result is asked for, and it is the width
+// the literal took that the result comes round in.
 @test
 fn test_wrapping_follows_the_width_taken() → ∅:
     let p : u8 = 255
-    assert_eq(p + 1, 0)
+    assert_eq(@wrap(p + 1), 0)
     let q : u16 = 65535
-    assert_eq(q + 1, 0)
+    assert_eq(@wrap(q + 1), 0)
 
 // Signed overflow is reported rather than wrapped.
 @test
