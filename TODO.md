@@ -53,6 +53,9 @@ the sized types do not have.
 Completed
 ---------
 
+[x] integer types of any stated bit width (i7, u13, u1, i128), with the range, wrapping,
+    shift bound, and storage all following from the width.
+
 [x] sum types (tagged unions, equivalent to std::variant).  match construct to deconstruct.
 
 [x] allow lambda functions to have bodies of multiple statement.  Indicate using the usual syntax of

@@ -83,9 +83,10 @@ fn error_nested_fn() → ∅:
 
 // --- unknown types --------------------------------------------------------
 
-@expect error "unknown type 'i1'"
+@expect error "unknown type 'i0'"
 fn error_unknown_type_var() → ∅:
-    let x : mut i1 = 0
+    // A width of zero holds no values, so it names no type.
+    let x : mut i0 = 0
 
 // --- call-by-reference errors ----------------------------------------------
 

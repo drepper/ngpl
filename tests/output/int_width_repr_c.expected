@@ -1,0 +1,1 @@
+Error: in @repr(C) struct 'Packed', field 'flags': type 'u7' has no C counterpart: C has an integer type of 8, 16, 32, or 64 bits, not 7

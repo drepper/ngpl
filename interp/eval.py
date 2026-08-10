@@ -2937,7 +2937,10 @@ class Evaluator:
         from interp.layout import LayoutError, struct_lookup, type_layout
         from interp.units import BUILTIN_UNITS
         try:
-            size, _ = type_layout(type_name, struct_lookup(self.env))
+            # Asking what a type occupies, not for a C layout, so a
+            # width C has no type for still has an answer.
+            size, _ = type_layout(type_name, struct_lookup(self.env),
+                                  c_compatible=False)
         except LayoutError as e:
             raise TypeError(f"@sizeof: {e}") from None
         return UnitValue(mk_int(size), BUILTIN_UNITS["byte"])

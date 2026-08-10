@@ -128,8 +128,37 @@ def _fast_type_layout(type_name: str) -> tuple[int, int] | None:
     return bits // 8, bits // 8
 
 
-def type_layout(type_name: str, lookup, seen: frozenset[str] = frozenset()
-                ) -> tuple[int, int]:
+# The widths C has a type for.  A width outside these has no C
+# counterpart, so a @repr(C) struct cannot hold one.
+_C_INTEGER_WIDTHS = frozenset({8, 16, 32, 64})
+
+
+def _stated_width_layout(type_name: str, c_compatible: bool
+                         ) -> tuple[int, int] | None:
+    """Size and alignment of an integer type that states its width.
+
+    The storage is the whole bytes it takes to hold the width, and the
+    alignment is the largest power of two those bytes reach, capped at
+    the platform's own.  A width C has no type for is refused where a C
+    layout is what was asked for.
+    """
+    from interp.value import _parse_int_width
+    bits = _parse_int_width(type_name)
+    if bits is None:
+        return None
+    if c_compatible and bits not in _C_INTEGER_WIDTHS:
+        raise LayoutError(
+            f"type '{type_name}' has no C counterpart: C has an integer "
+            f"type of 8, 16, 32, or 64 bits, not {bits}")
+    size = (bits + 7) // 8
+    align = 1
+    while align * 2 <= size and align < 8:
+        align *= 2
+    return size, align
+
+
+def type_layout(type_name: str, lookup, seen: frozenset[str] = frozenset(),
+                c_compatible: bool = True) -> tuple[int, int]:
     """Compute the size and alignment in bytes of a field type.
 
     Args:
@@ -147,6 +176,10 @@ def type_layout(type_name: str, lookup, seen: frozenset[str] = frozenset()
 
     if resolved in _SCALAR_LAYOUT:
         return _SCALAR_LAYOUT[resolved]
+
+    stated = _stated_width_layout(resolved, c_compatible)
+    if stated is not None:
+        return stated
 
     fast = _fast_type_layout(resolved)
     if fast is not None:
@@ -178,7 +211,7 @@ def type_layout(type_name: str, lookup, seen: frozenset[str] = frozenset()
             raise LayoutError(
                 f"dynamically sized array '{type_name}' has no defined C "
                 f"representation; give it a fixed size")
-        size, align = type_layout(element, lookup, seen)
+        size, align = type_layout(element, lookup, seen, c_compatible)
         # A multi-dimensional array lays out as C's T[n][m]: the rows sit
         # one after another, so the alignment is still the element's.
         for count in dims:

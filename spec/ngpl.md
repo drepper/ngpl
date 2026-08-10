@@ -143,6 +143,39 @@ Additionally, `int` denotes an arbitrary-precision integer with no fixed width. 
 
 > **Full language.**  `int` and `float` are not available as declared types in the bootstrap implementation.  See [Arbitrary-Precision Numbers](#arbitrary-precision-numbers).
 
+#### Any Width
+
+The table above lists the widths that see the most use, not the widths that exist.  An integer type states its width in its name, and any width may be stated: `i7`, `u13`, `u1`, and `i128` are types in the same way `i32` is.
+
+```
+let a : u7 = 127
+let b : i7 = 63
+let c : u13 = 8191
+let d : i128 = 170141183460469231731687303715884105727
+```
+
+Everything about the type follows from the width, so nothing is special-cased for the familiar ones:
+
+- **Range.**  A signed type spends a bit on the sign, so `i7` holds −64 to 63 while `u7` holds 0 to 127.  A signed type overflowing is an error; an unsigned one wraps, as described above.
+- **Arithmetic.**  The wider type wins: `u7 + u13` is a `u13`.
+- **Shifts.**  The bound is the value bits, so `u7` takes a count up to 6 and `i7` up to 5.
+- **Storage.**  `@sizeof` gives the whole bytes the width takes: 1 byte for `u7`, 2 for `u13`, 16 for `i128`.
+
+A width of zero holds no values and names no type.  `byte`, `usize`, and the `fast` variants carry a name instead of stating a width, and are listed above.
+
+Under `@repr(C)` the width must be one C has a type for:
+
+```
+@repr(C)
+struct Packed:
+    flags : u7
+
+error: type 'u7' has no C counterpart: C has an integer type of 8, 16,
+32, or 64 bits, not 7
+```
+
+This is a restriction on matching a C layout, not on the type: `u7` is usable everywhere else, including in a struct without `@repr(C)`.
+
 ### Untyped Integer Constants
 
 Integer literals in source code are of type **`untyped int`**.  An untyped integer is not yet committed to any specific integer type — it is a compile-time value that can be implicitly coerced to any integer type whose range can represent the value.

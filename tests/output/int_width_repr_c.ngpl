@@ -1,0 +1,11 @@
+// C has integer types of 8, 16, 32, and 64 bits.  A width outside
+// those has no counterpart to match, so a @repr(C) struct cannot hold
+// one, even though the type itself is perfectly usable elsewhere.
+@repr(C)
+struct Packed:
+    flags : u7
+    n : i32
+
+@start
+fn main() → ∅:
+    std.print(Packed.sizeof)

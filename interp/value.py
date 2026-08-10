@@ -29,11 +29,10 @@ _FAST_TYPE_UNDERLYING: dict[str, str] = {
 
 FAST_TYPES: frozenset[str] = frozenset(_FAST_TYPE_UNDERLYING)
 
-_TYPE_BITS: dict[str, int] = {
-    "u8": 8, "i8": 8, "byte": 8,
-    "u16": 16, "i16": 16,
-    "u32": 32, "i32": 32,
-    "u64": 64, "i64": 64,
+# The integer types that carry a name of their own rather than stating
+# a width.  Every other iN or uN is read from the name itself.
+_NAMED_TYPE_BITS: dict[str, int] = {
+    "byte": 8,
     "usize": 64,
     "u8fast": 32, "i8fast": 32,
     "u16fast": 32, "i16fast": 32,
@@ -41,17 +40,76 @@ _TYPE_BITS: dict[str, int] = {
     "u64fast": 64, "i64fast": 64,
 }
 
-_TYPE_MASK: dict[str, int] = {
-    "u8": 0xFF, "i8": 0xFF, "byte": 0xFF,
-    "u16": 0xFFFF, "i16": 0xFFFF,
-    "u32": 0xFFFFFFFF, "i32": 0xFFFFFFFF,
-    "u64": 0xFFFFFFFFFFFFFFFF, "i64": 0xFFFFFFFFFFFFFFFF,
-    "usize": 0xFFFFFFFFFFFFFFFF,
-    "u8fast": 0xFFFFFFFF, "i8fast": 0xFFFFFFFF,
-    "u16fast": 0xFFFFFFFF, "i16fast": 0xFFFFFFFF,
-    "u32fast": 0xFFFFFFFFFFFFFFFF, "i32fast": 0xFFFFFFFFFFFFFFFF,
-    "u64fast": 0xFFFFFFFFFFFFFFFF, "i64fast": 0xFFFFFFFFFFFFFFFF,
-}
+# A width has to be written out, so there is a largest one that can be.
+# The bound is generous rather than meaningful: it exists to turn a
+# runaway name into a diagnostic instead of an allocation.
+MAX_INT_BITS = 1 << 16
+
+
+def _parse_int_width(name: str) -> int | None:
+    """The bit count an integer type name states, or None if it states none.
+
+    `i32` and `u7` state theirs; `byte` and `usize` carry names instead
+    and are looked up.  A width of zero holds no values and is not a
+    type, so it is not one of these.
+    """
+    if len(name) < 2 or name[0] not in "iu" or not name[1:].isdigit():
+        return None
+    bits = int(name[1:])
+    if bits < 1 or bits > MAX_INT_BITS:
+        return None
+    return bits
+
+
+class _IntWidths:
+    """The bit count of every integer type, named or written out.
+
+    Behaves as the mapping the rest of the code already expects, so a
+    width stated in a name needs no special case at the places that ask
+    for one.
+    """
+
+    __slots__ = ("_named",)
+
+    def __init__(self, named: dict[str, int]):
+        self._named = named
+
+    def get(self, name, default=None):
+        if name in self._named:
+            return self._named[name]
+        bits = _parse_int_width(name) if isinstance(name, str) else None
+        return default if bits is None else bits
+
+    def __getitem__(self, name):
+        bits = self.get(name)
+        if bits is None:
+            raise KeyError(name)
+        return bits
+
+    def __contains__(self, name):
+        return self.get(name) is not None
+
+    def __iter__(self):
+        return iter(self._named)
+
+
+_TYPE_BITS = _IntWidths(_NAMED_TYPE_BITS)
+
+
+class _IntMasks:
+    """The value mask of every integer type, derived from its width."""
+
+    __slots__ = ()
+
+    def get(self, name, default=None):
+        bits = _TYPE_BITS.get(name)
+        return default if bits is None else (1 << bits) - 1
+
+    def __contains__(self, name):
+        return name in _TYPE_BITS
+
+
+_TYPE_MASK = _IntMasks()
 
 
 def resolve_width(w1: str, w2: str) -> str:
@@ -1055,7 +1113,8 @@ def is_type_name(name: str) -> bool:
     function.
     """
     return (name in BUILTIN_TYPES or name in FAST_TYPES
-            or name in _USER_TYPES or name in _TYPE_ALIASES)
+            or name in _USER_TYPES or name in _TYPE_ALIASES
+            or _parse_int_width(name) is not None)
 
 
 def register_user_type(name: str):
@@ -1143,7 +1202,7 @@ def sum_type_settle(name: str, value: "Value") -> "Value":
     untyped_int = isinstance(value, IntValue) and value.width == "int"
     untyped_float = isinstance(value, FloatValue) and value.width == "float"
     if untyped_int or untyped_float:
-        family = FLOAT_TYPES if untyped_float else set(_TYPE_BITS)
+        family = FLOAT_TYPES if untyped_float else _TYPE_BITS
         candidates = []
         for alt in alternatives:
             if alt not in family:
@@ -1269,7 +1328,8 @@ def validate_type(type_name: str) -> bool:
     base = resolve_type_alias(base)
     if base in BUILTIN_TYPES or base in _USER_TYPES:
         return True
-    return False
+    # An integer type may state its width instead of carrying a name.
+    return _parse_int_width(base) is not None
 
 
 def validate_param_type(param_type: str, func_name: str, param_name: str):
