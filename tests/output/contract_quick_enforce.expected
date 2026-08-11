@@ -1,0 +1,4 @@
+aborted: SIGABRT
+backtrace (innermost call first):
+  #0 scaled at tests/output/contract_quick_enforce.ngpl:5:5
+  #1 main at tests/output/contract_quick_enforce.ngpl:18:32

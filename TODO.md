@@ -997,3 +997,17 @@ in the compiler.
 
 [ ] a value carried out of a loop by break, as Rust's `break v` does.  It waits on a loop
     being an expression rather than a statement, which is a separate question.
+
+[x] an interpreter option choosing what a @pre or a @post that does not hold does, following
+    C++26's four evaluation semantics: --contracts=ignore (the condition is not read at all),
+    observe (reported as a warning, the run carries on), enforce (reported as an error, the
+    run stops — the default), quick-enforce (the run stops at once, reporting nothing, which
+    is what makes it quick).  Both of C++26's detection modes go through it: a condition that
+    answers false, and one that could not be read at all.  A condition answering something
+    other than a truth value stays an error under every semantic, being a mistake in the
+    condition rather than a report about the program.  observe stays a warning under -Werror,
+    since a diagnostic saying error while the run carries on would say two things at once.
+
+[ ] a violation handler the program itself provides, as C++26 allows, reading a description
+    of what broke.  The four semantics are what a handler is called by, and they are in; who
+    gets called is a language feature of its own.
