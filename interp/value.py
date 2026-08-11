@@ -1184,13 +1184,7 @@ class ArrayValue(Value):
 
     def set(self, index: int, value: Value):
         """Set element at index; raises IndexError if out of range."""
-        if self.element_type is not None:
-            mismatch = _scalar_kind_mismatch(value, self.element_type)
-            if mismatch is not None:
-                raise TypeError(
-                    f"an array of {self.element_type} cannot hold {mismatch}")
-            if isinstance(value, IntValue):
-                value = mk_int(value.value, self.element_type)
+        value = self._checked(value)
         n = self.sizeof
         if index < 0 or index >= n:
             raise IndexError(
@@ -1200,11 +1194,42 @@ class ArrayValue(Value):
         else:
             self.elements[index] = value
 
-    def _coerced(self, value: Value) -> Value:
-        """Bring a value to the array's element type before storing it."""
-        if self.element_type is not None and isinstance(value, IntValue):
-            return mk_int(value.value, self.element_type)
-        return value
+    def _checked(self, value: Value) -> Value:
+        """Measure a value against what this array holds, before storing it.
+
+        An array says one type and one unit for everything in it, so
+        every way a value gets in -- a subscript, a push, an insert --
+        asks the same question.  Where nothing was declared the first
+        element answers instead: that is what the array in fact holds,
+        and it is the only thing a value can be measured against.
+        """
+        held = self.element_type
+        unit = self.element_unit
+        if held is None and unit is None and self.sizeof:
+            first = self.get(0)
+            inner = first.inner if isinstance(first, UnitValue) else first
+            unit = first.unit if isinstance(first, UnitValue) else None
+            if isinstance(inner, (IntValue, FloatValue, StrValue,
+                                  CharValue, BoolValue)):
+                held = runtime_type_of(inner)
+                if is_unwidthed(held):
+                    held = None
+        if unit is None and isinstance(value, UnitValue):
+            raise TypeError(
+                f"an array of {held or 'unmeasured numbers'} cannot hold "
+                f"{value.unit.display_name}; use @dropunit to part with it")
+        if unit is not None and not isinstance(value, UnitValue):
+            raise TypeError(
+                f"an array measured in {unit.display_name} cannot hold a "
+                f"number that measures nothing")
+        if held is None:
+            return apply_unit(value, unit) if unit is not None else value
+        mismatch = _scalar_kind_mismatch(
+            value.inner if isinstance(value, UnitValue) else value, held)
+        if mismatch is not None:
+            raise TypeError(
+                f"an array of {held} cannot hold {mismatch}")
+        return coerce_to_type(value, held, unit)
 
     def _check_resizable(self, op: str):
         """Reject an operation that would change the array's length.
@@ -1228,7 +1253,7 @@ class ArrayValue(Value):
     def push(self, value: Value):
         """Append a value to the end of the array."""
         self._check_resizable("push")
-        self.elements.append(self._coerced(value))
+        self.elements.append(self._checked(value))
 
     def pop(self) -> Value | None:
         """Remove and return the last element, or None when empty."""
@@ -1247,7 +1272,7 @@ class ArrayValue(Value):
         if index < 0 or index > n:
             raise IndexError(
                 f"insert index {index} out of range (length {n})")
-        self.elements.insert(index, self._coerced(value))
+        self.elements.insert(index, self._checked(value))
 
     def remove(self, index: int) -> Value:
         """Remove and return the element at index, shifting later ones left."""

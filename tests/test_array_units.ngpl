@@ -141,6 +141,81 @@ fn error_an_unmeasured_name_stays_unmeasured():
     x ← 3¤meter
 
 // ---------------------------------------------------------------------
+// Every way in asks the same question
+// ---------------------------------------------------------------------
+
+@test
+@expect error "an array of i32 cannot hold a string"
+fn error_pushing_the_wrong_kind():
+    let a : mut i32[] = [1, 2, 3]
+    a.push("smuggled")
+
+@test
+@expect error "an array of i32 cannot hold a boolean"
+fn error_inserting_the_wrong_kind():
+    let a : mut i32[] = [1, 2, 3]
+    a.insert(0, true)
+
+@test
+@expect error "use @dropunit to part with it"
+fn error_a_measured_value_in_an_unmeasured_array():
+    let a : mut i64[] = [1, 2]
+    let m ¤meter : i64 = 7
+    a[0] ← m
+
+@test
+@expect error "cannot hold a number that measures nothing"
+fn error_an_unmeasured_value_in_a_measured_array():
+    let d ¤meter : mut i64[] = [1, 2]
+    d.push(9)
+
+@test
+fn test_pushing_a_measured_value():
+    let d ¤meter : mut i64[] = [1, 2]
+    let x ¤meter : i64 = 9
+    d.push(x)
+    assert_eq(d[2], 9¤meter)
+
+// A width still converts, as it does at a definition, and a value that
+// does not fit is reported the way arithmetic reports it.
+@test
+fn test_a_width_still_converts():
+    let a : mut i32[] = [1, 2]
+    let x : i64 = 7
+    a.push(x)
+    assert_eq(a[2], 7)
+
+@test
+@expect error "does not fit in i32"
+fn error_a_value_the_element_type_cannot_hold():
+    let a : mut i32[] = [1, 2]
+    let x : i64 = 5000000000
+    a.push(x)
+
+// A row is one of the things a matrix holds, so it is measured the way
+// any element is -- kind and length together.
+@test
+@expect error "cannot hold a string"
+fn error_a_row_of_the_wrong_kind():
+    let m : mut i32[2, 2] = [[1, 2], [3, 4]]
+    let r : str[] = ["a", "b"]
+    m[0] ← r
+
+@test
+@expect error "array size mismatch"
+fn error_a_row_of_the_wrong_length():
+    let m : mut i32[2, 2] = [[1, 2], [3, 4]]
+    let r : i32[] = [9, 9, 9]
+    m[0] ← r
+
+@test
+fn test_a_row_that_fits():
+    let m : mut i32[2, 2] = [[1, 2], [3, 4]]
+    let r : i32[] = [9, 9]
+    m[0] ← r
+    assert_eq(m[0, 1], 9)
+
+// ---------------------------------------------------------------------
 // Where a unit cannot be said yet
 // ---------------------------------------------------------------------
 
