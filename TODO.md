@@ -342,7 +342,16 @@ Type System
     `+` was not extended: the reason ⧺ exists is that + should not be overloaded, and joining
     a character with + would read as arithmetic on one.  For the bulk case, .str() on a
     character and on an array of them; it asks for characters rather than bytes, since
-    decoding a byte[] is a fallible operation of its own.  Still open: taking a string apart
+    decoding a byte[] is a fallible operation of its own.
+
+[x] a string built from a vector of integers by folding ⧺ over it: ⧺⌿ ⟨104, 105, 33⟩ is
+    "hi!".  Two pieces meet here.  An operator may stand where a fold's function goes —
+    +⌿ nums is the sum, and the lambda repeating the operator is no longer needed — which is
+    APL's +/ and is read only directly before ⌿ or ⍀, the one place an operator could not
+    otherwise appear.  And ⧺ takes an integer operand as the character it numbers, checked
+    as .chr() checks it; that is the one place a number becomes a character without .chr()
+    being written, and it holds because an operand of ⧺ is being written into a string.  A
+    number's digits are still written with std.format.  Still open: taking a string apart
     other than by iterating it, decoding a byte[], classification, and .ord() at compile
     time.
 

@@ -511,6 +511,18 @@ class EnumerateExpr:
         self.expr = expr
 
 
+class OperatorRef:
+    """A binary operator written as a value: `⧺` in `⧺⌿ v`.
+
+    An operator names an operation the way a function name does, so it
+    may stand where a fold expects a function rather than having to be
+    wrapped in a lambda that says the same thing at greater length.
+    """
+
+    def __init__(self, op: str):
+        self.op = op
+
+
 class FoldExpr:
     """Fold expression: func ⌿ container or func ⌿ (container, init).
 

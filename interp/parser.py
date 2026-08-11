@@ -19,6 +19,7 @@ from interp.ast import (
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, TypeDef, EnumDef,
     LambdaExpr, ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
+    OperatorRef,
     UnitExpr, UnitDef, UnitName, UnitBinOp, UnitSqrt, UnitLit, SumTypeDef,
     UnitOfExpr, UnitRefExpr,
     StructDef, ImplBlock, StructLit,
@@ -66,6 +67,21 @@ _ADD_OPS = frozenset({"+", "-",
 _MUL_OPS = frozenset({"\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}", "%",
                       "\N{SQUARED TIMES}"})
 _MINMAX_OPS = frozenset({"\N{LEFT CEILING}", "\N{LEFT FLOOR}"})
+
+# The fold operators, and the operators that may be folded with.
+_FOLD_OPS = frozenset({"\N{APL FUNCTIONAL SYMBOL SLASH BAR}",
+                       "\N{APL FUNCTIONAL SYMBOL BACKSLASH BAR}"})
+_FOLDABLE_OPS = frozenset({
+    "+", "-", "\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}", "%",
+    "\N{SQUARED PLUS}", "\N{SQUARED MINUS}", "\N{SQUARED TIMES}",
+    "\N{LEFT CEILING}", "\N{LEFT FLOOR}",
+    "\N{DOUBLE PLUS}", "\N{UPWARDS ARROW}",
+    "&", "|", "^", "<<", ">>", "\N{LEFT-POINTING DOUBLE ANGLE QUOTATION MARK}",
+    "\N{RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK}",
+    "\N{ANTICLOCKWISE OPEN CIRCLE ARROW}", "\N{CLOCKWISE OPEN CIRCLE ARROW}",
+    "\N{LOGICAL AND}", "\N{LOGICAL OR}", "\N{CIRCLED PLUS}",
+    "\N{NAND}", "\N{NOR}",
+})
 
 
 def _as_names(names):
@@ -1863,7 +1879,19 @@ class Parser:
         When the right operand of ⌿/⍀ is a 2-tuple literal, the second
         element is the initial accumulator value.
         """
-        left = self._parse_negation()
+        # An operator may stand where the fold expects a function, so
+        # `⧺⌿ v` says what a lambda repeating the operator would.  It is
+        # one only when the fold glyph follows it directly; anywhere
+        # else an operator needs its operands.
+        if (self._check("OP") and self._cur().value in _FOLDABLE_OPS
+                and self.pos + 1 < len(self.tokens)
+                and self.tokens[self.pos + 1].type == "OP"
+                and self.tokens[self.pos + 1].value in _FOLD_OPS):
+            op_tok = self._cur()
+            self.pos += 1
+            left = self._set_pos(OperatorRef(op_tok.value), op_tok)
+        else:
+            left = self._parse_negation()
         if self._check("OP") and self._cur().value == "\N{APL FUNCTIONAL SYMBOL RHO}":
             self.pos += 1
             self._skip_nl()

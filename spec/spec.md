@@ -490,14 +490,23 @@ fn reversed(text : str) → str:
     out
 ```
 
-Anything that is not text is refused, since a sequence is joined with a sequence of the same kind:
+An integer joins text as the character it numbers, which is what builds a string out of a vector of code points:
 
 ```
-'a' ⧺ 5
+'a' ⧺ 98                        /* "ab" */
+"n=" ⧺ 65                       /* "n=A" */
+```
 
-error: ⧺: the right operand is i64, which does not go together with
+The number has to name a character, and says so when it does not — the same three refusals `.chr()` makes.  Anything else is not text and is refused, since a sequence joins with a sequence of the same kind:
+
+```
+'a' ⧺ 1.5
+
+error: ⧺: the right operand is f64, which does not go together with
 text; a number is written into a string with std.format
 ```
+
+Two arrays still join as arrays; that is the other thing `⧺` does, and an array is not text.
 
 A character says its string with `.str()`, and so does an array of characters:
 
@@ -509,6 +518,22 @@ chars.str()                     /* "hi!" */
 ```
 
 `.str()` asks for characters.  Bytes are an *encoding* of characters rather than characters, so a `byte[]` is not taken; decoding one is a separate operation the language does not yet have.
+
+#### Folding a Vector into a String
+
+Since `⧺` joins text and takes a number as the character it numbers, folding it over a vector builds a string from it:
+
+```
+let codes : u32[] = [104, 105, 33]
+⧺⌿ codes                        /* "hi!" */
+
+let chars : char[] = ['h', 'i', '!']
+⧺⌿ chars                        /* "hi!" */
+
+⧺⌿ (codes, "say ")              /* "say hi!" — with an initial value */
+```
+
+The operator stands where the fold's function goes; see [Fold Operators](#fold-operators--and-).
 
 #### A Character Is Its Own Kind of Value
 
@@ -4520,10 +4545,27 @@ func ⍀ container
 func ⍀ (container, init)
 ```
 
-- **func** (left operand): a binary function (named function, lambda, or any callable).
+- **func** (left operand): a binary function (named function, lambda, or any callable), or a binary **operator** written on its own.
 - **container** (right operand): an array or range to fold over.
 - When the right operand is a 2-tuple literal `(container, init)`, the second element provides the initial accumulator value.
 - When the right operand is not a 2-tuple literal, no initial value is provided: the leftmost element (for `⌿`) or rightmost element (for `⍀`) of the container is used as the initial accumulator.  In this case the container must not be empty.
+
+#### An Operator as the Function
+
+An operator names an operation the way a function name does, so it may stand where the function goes rather than being wrapped in a lambda that repeats it:
+
+```
++⌿ nums                 /* the sum */
+×⌿ nums                 /* the product */
+⌈⌿ nums                 /* the largest */
+⧺⌿ chars                /* the string those characters spell */
+-⍀ nums                 /* the alternating difference */
++⌿ (nums, 100)          /* with an initial value */
+```
+
+`+⌿ nums` and `(λa : i64, b : i64 → i64: a + b) ⌿ nums` are the same fold; the first says it once.
+
+An operator is a value only here.  It is read as one when the fold glyph follows it directly, which is where an operator could not otherwise appear — everywhere else an operator needs its operands, and nothing changes about how it is read.  The operators that may be written this way are the binary ones: `+ - × ÷ % ⊞ ⊟ ⊠ ⌈ ⌊ ⧺ ↑ & | ^ « » ↺ ↻ ∧ ∨ ⊕ ⊼ ⊽`.
 
 #### Precedence
 

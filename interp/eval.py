@@ -26,6 +26,7 @@ from interp.ast import (
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr, SumTypeDef,
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
+    OperatorRef,
     UnitExpr, UnitOfExpr, UnitRefExpr, RefExpr, BorrowExpr, TypeDef,
     MatchStmt, ExpErr,
     StructLit,
@@ -113,6 +114,17 @@ def _parameter_names(params) -> set[str]:
         else:
             names.add(pname)
     return names
+
+
+def _joins_as_text(value) -> bool:
+    """Whether ⧺ reads this operand as text.
+
+    A string and a character are text.  An integer is the character it
+    numbers, which is what a vector of code points is folded into a
+    string with; an array is not, since joining arrays is the other
+    thing ⧺ does.
+    """
+    return isinstance(value, (StrValue, CharValue, IntValue))
 
 
 def _names_display(names) -> str:
@@ -1248,6 +1260,23 @@ class Evaluator:
         ru = _unwrap_operand(right)
         return mk_bool(not (self._logic_bool(lu) or self._logic_bool(ru)))
 
+    def _apply_operator(self, op: str, left, right):
+        """Apply a binary operator to two values it has been given.
+
+        Shared by an operator written between its operands and one
+        written as a value, so `a ⧺ b` and `⧺⌿ v` mean the same thing
+        by construction rather than by two implementations agreeing.
+        """
+        if op == "\N{DOUBLE PLUS}":
+            return self._op_concat(left, right)
+        if op in self._APPROX_OPS:
+            return self._op_approx(op, left, right)
+        lu = unwrap_optional(left)
+        ru = unwrap_optional(right)
+        if isinstance(lu, UnitValue) or isinstance(ru, UnitValue):
+            return self._unit_binop(op, lu, ru)
+        return self._apply_binop(self._ops[op], left, right)
+
     def _op_concat(self, left, right):
         """Join two sequences: arrays at the outermost dimension, or text.
 
@@ -1258,12 +1287,20 @@ class Evaluator:
         """
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
-        if isinstance(lu, (StrValue, CharValue)) \
-                or isinstance(ru, (StrValue, CharValue)):
+        if _joins_as_text(lu) and _joins_as_text(ru):
             return mk_str(self._text_operand(lu, "left")
                           + self._text_operand(ru, "right"))
         la = self._as_array(lu)
         ra = self._as_array(ru)
+        if la is not None and ra is not None:
+            etype = la.element_type or ra.element_type
+            return ObjectValue(
+                ArrayValue(la.values() + ra.values(), element_type=etype))
+        if isinstance(lu, (StrValue, CharValue)) \
+                or isinstance(ru, (StrValue, CharValue)):
+            # One side is text, so the other was meant to be and is not.
+            self._text_operand(lu, "left")
+            self._text_operand(ru, "right")
         if la is None:
             raise TypeError(
                 f"\N{DOUBLE PLUS}: left operand must be an array, "
@@ -1279,11 +1316,20 @@ class Evaluator:
 
     @staticmethod
     def _text_operand(value, side: str) -> str:
-        """The text an operand of ⧺ stands for, where it is text."""
+        """The text an operand of ⧺ stands for.
+
+        A string is its text and a character is itself.  An integer is
+        the character it numbers, which is what lets a vector of code
+        points be folded into a string: ⧺⌿ ⟨104, 105⟩ is "hi".  The
+        number has to name a character, and says so when it does not.
+        """
         if isinstance(value, StrValue):
             return value.value
         if isinstance(value, CharValue):
             return value.char
+        if isinstance(value, IntValue):
+            return chr(check_code_point(value.value,
+                                        "\N{DOUBLE PLUS}"))
         raise TypeError(
             f"\N{DOUBLE PLUS}: the {side} operand is "
             f"{runtime_type_of(value)}, which does not go together with "
@@ -2063,15 +2109,7 @@ class Evaluator:
                 self._last_pos = binop_pos
                 if self._call_stack:
                     self._call_stack[-1][1] = binop_pos
-            if node.op == "\N{DOUBLE PLUS}":
-                return self._op_concat(left, right)
-            if node.op in self._APPROX_OPS:
-                return self._op_approx(node.op, left, right)
-            lu = unwrap_optional(left)
-            ru = unwrap_optional(right)
-            if isinstance(lu, UnitValue) or isinstance(ru, UnitValue):
-                return self._unit_binop(node.op, lu, ru)
-            return self._apply_binop(self._ops[node.op], left, right)
+            return self._apply_operator(node.op, left, right)
 
         if isinstance(node, UnitExpr):
             value = self.eval_expr(node.expr)
@@ -2521,6 +2559,14 @@ class Evaluator:
                 # rather than against the text of it.
                 return TypeValue("(" + ", ".join(e.name for e in elements) + ")")
             return TupleValue(elements)
+
+        if isinstance(node, OperatorRef):
+            # The operator as a value: a function of two arguments that
+            # does what the operator does between them.
+            return BuiltinFunc(
+                node.op, 2,
+                lambda args, op=node.op: self._apply_operator(op, args[0],
+                                                              args[1]))
 
         if isinstance(node, FoldExpr):
             return self._eval_fold(node)

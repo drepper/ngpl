@@ -24,3 +24,5 @@ what it is.
   tuple is, in the shape its values are written
 - [The Character Type](design/char/README.md) — what a string is made
   of, and why it is neither a byte nor a string of one
+- [An Operator Where a Function Goes](design/operator-as-value/README.md)
+  — writing `+⌿ v` rather than a lambda that repeats the operator

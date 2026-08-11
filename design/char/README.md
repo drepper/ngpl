@@ -161,6 +161,33 @@ The conversion is written at the value that has it, which is where
 a fallible operation with a different signature, which the language
 does not yet have.
 
+### A number joins text as its character
+
+`⧺` takes an integer operand as the character it numbers, so a vector
+of code points folds into a string:
+
+```
+let codes : u32[] = [104, 105, 33]
+⧺⌿ codes            // "hi!"
+```
+
+This is the one place a number becomes a character without `.chr()`
+being written, and it is worth being clear about why that is not the
+rule it looks like.  `⧺` builds text and nothing else — an operand of
+it is being written into a string, and a number written into a string
+one character at a time can only mean the character it numbers.  The
+number is checked as `.chr()` would check it, so `"x" ⧺ 1114112` is
+refused for the same reason `1114112.chr()` is.
+
+What it costs is that `"total: " ⧺ 5` is the string `"total: \u{5}"`
+rather than an error or `"total: 5"`.  A number's *digits* are written
+with `std.format`, which is where a program says it wants the
+decimal.
+
+The alternative — reading a number as its decimal here — would have
+made `⧺⌿ codes` answer `"10410533"`, which is the operation nobody
+wants a fold for.
+
 ## Status
 
 Implemented: the type, `foreach` over a string, `.ord()`, `.chr()` on
