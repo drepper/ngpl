@@ -58,7 +58,7 @@ fn test_over_a_matrix():
 fn test_nothing_to_take_apart():
     let e : i64[] = []
     let r := double(e)
-    assert_eq(r.sizeof, 0¤ptrdiff)
+    assert_eq(#r, 0¤ptrdiff)
 
 // ---------------------------------------------------------------------
 // More than one parameter

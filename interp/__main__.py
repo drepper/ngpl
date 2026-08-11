@@ -942,6 +942,13 @@ def _static_assert_check(func_def, env) -> str | None:
                                for p in func_def.params]}
     for node in _iter_ast(func_def.body):
         if isinstance(node, _ast.VarDef) and node.type_annotation is not None:
+            if isinstance(node.init_expr, _ast.ArrayAlloc):
+                # An allocation keeps its shape in the brackets rather
+                # than in the annotation, so the annotation alone names
+                # the element type.  Standing for the value with one
+                # element would answer what the array occupies with what
+                # one of its numbers does.
+                continue
             value = _placeholder_value(node.type_annotation, node.unit_spec, env)
             if value is not None:
                 known.define(node.name, value)

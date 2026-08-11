@@ -5,14 +5,14 @@
 @test
 fn test_reshape_scalar():
     let a : i64[] = 5 ⍴ 0
-    assert_eq(a.sizeof, 5)
+    assert_eq(#a, 5)
     assert_eq(a[0], 0)
     assert_eq(a[4], 0)
 
 @test
 fn test_reshape_scalar_nonzero():
     let a : i64[] = 3 ⍴ 42
-    assert_eq(a.sizeof, 3)
+    assert_eq(#a, 3)
     assert_eq(a[0], 42)
     assert_eq(a[1], 42)
     assert_eq(a[2], 42)
@@ -23,7 +23,7 @@ fn test_reshape_scalar_nonzero():
 fn test_reshape_cycle():
     let src : mut i64[] = [1, 2, 3]
     let a : i64[] = 7 ⍴ src
-    assert_eq(a.sizeof, 7)
+    assert_eq(#a, 7)
     assert_eq(a[0], 1)
     assert_eq(a[2], 3)
     assert_eq(a[3], 1)
@@ -33,7 +33,7 @@ fn test_reshape_cycle():
 fn test_reshape_extend():
     let src : mut i64[] = [10, 20, 30]
     let a : i64[] = 6 ⍴ src
-    assert_eq(a.sizeof, 6)
+    assert_eq(#a, 6)
     assert_eq(a[3], 10)
     assert_eq(a[5], 30)
 
@@ -41,7 +41,7 @@ fn test_reshape_extend():
 fn test_reshape_truncate():
     let src : mut i64[] = [1, 2, 3, 4, 5]
     let a : i64[] = 2 ⍴ src
-    assert_eq(a.sizeof, 2)
+    assert_eq(#a, 2)
     assert_eq(a[0], 1)
     assert_eq(a[1], 2)
 
@@ -49,14 +49,14 @@ fn test_reshape_truncate():
 fn test_reshape_identity():
     let src : mut i64[] = [5, 6, 7]
     let a : i64[] = 3 ⍴ src
-    assert_eq(a.sizeof, 3)
+    assert_eq(#a, 3)
     assert_eq(a[0], 5)
     assert_eq(a[2], 7)
 
 @test
 fn test_reshape_empty():
     let a : i64[] = 0 ⍴ 42
-    assert_eq(a.sizeof, 0)
+    assert_eq(#a, 0)
 
 // --- ⍴ with generate ---
 
@@ -64,7 +64,7 @@ fn test_reshape_empty():
 fn test_reshape_with_generate():
     let src : mut = generate(λx : i64 → i64: x × 10, 0…3)
     let a : i64[] = 8 ⍴ src
-    assert_eq(a.sizeof, 8)
+    assert_eq(#a, 8)
     assert_eq(a[0], 0)
     assert_eq(a[1], 10)
     assert_eq(a[4], 0)
@@ -75,7 +75,7 @@ fn test_reshape_with_generate():
 @test
 fn test_reshape_range():
     let a : i64[] = 5 ⍴ (1…3)
-    assert_eq(a.sizeof, 5)
+    assert_eq(#a, 5)
     assert_eq(a[0], 1)
     assert_eq(a[2], 3)
     assert_eq(a[3], 1)
@@ -87,7 +87,7 @@ fn test_reshape_range():
 fn test_reshape_variable_dim():
     let n : i64 = 4
     let a : i64[] = n ⍴ 99
-    assert_eq(a.sizeof, 4)
+    assert_eq(#a, 4)
     assert_eq(a[3], 99)
 
 // --- ⍴ creates matrix with tuple shape ---
@@ -95,8 +95,8 @@ fn test_reshape_variable_dim():
 @test
 fn test_reshape_matrix():
     let a : i64[,] = (2, 3) ⍴ 0
-    assert_eq(a.sizeof, 2)
-    assert_eq(a[0].sizeof, 3)
+    assert_eq(#a, 2)
+    assert_eq(#a[0], 3)
     assert_eq(a[0, 0], 0)
     assert_eq(a[1, 2], 0)
 

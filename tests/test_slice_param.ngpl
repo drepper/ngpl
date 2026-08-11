@@ -21,7 +21,7 @@ fn sum_fixed3(a : i32[3]) → i32:
     a[0] + a[1] + a[2]
 
 fn len_dyn(a : i32[]) → i32:
-    @dropunit(a.sizeof)
+    @dropunit(#a)
 
 // There is no parameter syntax for a second dimension, so a matrix
 // arrives either through a dynamic parameter -- whose length is the
@@ -34,7 +34,7 @@ fn sum_matrix(m : i32[,]) → i32:
     t
 
 fn rows_fixed2(m : i32[2]) → i32:
-    m.sizeof
+    #m
 
 // ---------------------------------------------------------------------
 // A vector, sliced along its one dimension
@@ -129,8 +129,8 @@ fn test_matrix_partial_column():
 fn test_matrix_row_range_stays_two_dimensional():
     let m : i64[,] = (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     let rows := m[0…1]
-    assert_eq(rows.sizeof, 2)
-    assert_eq(rows[0].sizeof, 4)
+    assert_eq(#rows, 2)
+    assert_eq(#rows[0], 4)
     assert_eq(sum_matrix(rows), 36)
 
 // A parameter naming one dimension does not take it, however many rows
@@ -161,8 +161,8 @@ fn error_whole_matrix_to_fixed():
 fn test_matrix_block():
     let m : i64[,] = (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     let b := m[0…1, 1…2]
-    assert_eq(b.sizeof, 2)
-    assert_eq(b[0].sizeof, 2)
+    assert_eq(#b, 2)
+    assert_eq(#b[0], 2)
     assert_eq(sum_matrix(b), 18)
     assert_eq(b[0, 0], 2)
     assert_eq(b[1, 1], 7)

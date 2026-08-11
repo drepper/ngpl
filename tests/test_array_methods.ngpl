@@ -11,21 +11,21 @@
 fn test_push_appends():
     let v : mut i64[] = [1, 2, 3]
     v.push(4)
-    assert_eq(v.sizeof, 4)
+    assert_eq(#v, 4)
     assert_eq(v[3], 4)
 
 @test
 fn test_push_onto_empty():
     let v : mut i64[] = []
     v.push(7)
-    assert_eq(v.sizeof, 1)
+    assert_eq(#v, 1)
     assert_eq(v[0], 7)
 
 @test
 fn test_pop_returns_last():
     let v : mut i64[] = [1, 2, 3]
     assert_eq(v.pop(), ∃(3))
-    assert_eq(v.sizeof, 2)
+    assert_eq(#v, 2)
     assert_eq(v[1], 2)
 
 // Popping an array that may be empty is an ordinary thing to do, so it
@@ -41,7 +41,7 @@ fn test_pop_until_empty():
     assert_eq(v.pop(), ∃(2))
     assert_eq(v.pop(), ∃(1))
     assert_eq(v.pop(), ∅)
-    assert_eq(v.sizeof, 0)
+    assert_eq(#v, 0)
 
 // push then pop leaves the array as it was.
 @test
@@ -49,7 +49,7 @@ fn test_push_pop_round_trip():
     let v : mut i64[] = [1, 2]
     v.push(3)
     assert_eq(v.pop(), ∃(3))
-    assert_eq(v.sizeof, 2)
+    assert_eq(#v, 2)
     assert_eq(v[0], 1)
     assert_eq(v[1], 2)
 
@@ -61,7 +61,7 @@ fn test_push_pop_round_trip():
 fn test_insert_at_front_shifts_right():
     let v : mut i64[] = [1, 2, 3]
     v.insert(0, 0)
-    assert_eq(v.sizeof, 4)
+    assert_eq(#v, 4)
     assert_eq(v[0], 0)
     assert_eq(v[1], 1)
     assert_eq(v[3], 3)
@@ -79,14 +79,14 @@ fn test_insert_in_middle():
 fn test_insert_at_length_appends():
     let v : mut i64[] = [1, 2]
     v.insert(2, 3)
-    assert_eq(v.sizeof, 3)
+    assert_eq(#v, 3)
     assert_eq(v[2], 3)
 
 @test
 fn test_remove_returns_element_and_shifts_left():
     let v : mut i64[] = [1, 2, 3]
     assert_eq(v.remove(1), 2)
-    assert_eq(v.sizeof, 2)
+    assert_eq(#v, 2)
     assert_eq(v[0], 1)
     assert_eq(v[1], 3)
 
@@ -100,7 +100,7 @@ fn test_remove_first():
 fn test_remove_last():
     let v : mut i64[] = [1, 2]
     assert_eq(v.remove(1), 2)
-    assert_eq(v.sizeof, 1)
+    assert_eq(#v, 1)
 
 // insert then remove at the same index leaves the array as it was.
 @test
@@ -108,7 +108,7 @@ fn test_insert_remove_round_trip():
     let v : mut i64[] = [1, 2, 3]
     v.insert(1, 9)
     assert_eq(v.remove(1), 9)
-    assert_eq(v.sizeof, 3)
+    assert_eq(#v, 3)
     assert_eq(v[1], 2)
 
 // ---------------------------------------------------------------------
@@ -215,7 +215,7 @@ fn error_insert_one_argument():
 fn test_push_coerces_to_element_type():
     let v : mut byte[] = std.bytes("ab")
     v.push(67)
-    assert_eq(v.sizeof, 3)
+    assert_eq(#v, 3)
     assert_eq(v.get(2¤byte), ∃(67))
 
 // An index carries the same unit rule as a subscript does.
@@ -239,7 +239,7 @@ fn test_push_in_a_loop():
     let v : mut i64[] = []
     foreach i := 1…4:
         v.push(i × i)
-    assert_eq(v.sizeof, 4)
+    assert_eq(#v, 4)
     assert_eq(v[0], 1)
     assert_eq(v[3], 16)
 
@@ -250,7 +250,7 @@ fn test_pop_into_another_array():
     let dst : mut = []
     foreach i := 1…3:
         dst.push(src.pop() ?? 0)
-    assert_eq(src.sizeof, 0)
+    assert_eq(#src, 0)
     assert_eq(dst[0], 3)
     assert_eq(dst[2], 1)
 
@@ -302,7 +302,7 @@ fn test_fixed_array_reads_and_writes_elements():
     assert_eq(v.get(9), ∅)
     v[0] ← 9
     assert_eq(v[0], 9)
-    assert_eq(v.sizeof, 3)
+    assert_eq(#v, 3)
 
 // An iterator over a fixed-size array works as any other.  The iterator
 // is bound once: calling iterate() in the condition would make a fresh
@@ -321,7 +321,7 @@ fn test_fixed_array_iterates():
 fn test_dynamic_array_still_resizes():
     let v : mut i32[] = [1, 2, 3]
     v.push(4)
-    assert_eq(v.sizeof, 4)
+    assert_eq(#v, 4)
     assert_eq(v.pop(), ∃(4))
 
 // A copy of a fixed-size array is still fixed-size: copying does not
@@ -342,8 +342,8 @@ fn test_fixed_to_dynamic_becomes_dynamic():
     let f : i32[3] = [1, 2, 3]
     let d : mut i32[] = f
     d.push(4)
-    assert_eq(d.sizeof, 4)
-    assert_eq(f.sizeof, 3)
+    assert_eq(#d, 4)
+    assert_eq(#f, 3)
 
 // ---------------------------------------------------------------------
 // Mutating methods obey the same rule as writing an element
@@ -377,14 +377,14 @@ fn pushes_through(arr : &i64[]):
 
 fn grows_by_copy(a : mut i32[]) → i32:
     a.push(4)
-    @dropunit(a.sizeof)
+    @dropunit(#a)
 
 @test
 fn test_fixed_into_mutable_dynamic_param_by_value():
     let f : i32[3] = [1, 2, 3]
     assert_eq(grows_by_copy(f), 4)
     // The caller's array is untouched, and still fixed.
-    assert_eq(f.sizeof, 3)
+    assert_eq(#f, 3)
 
 @expect error "cannot resize a fixed-size array"
 fn error_caller_array_is_still_fixed():
@@ -408,7 +408,7 @@ fn error_fixed_into_mutable_dynamic_ref_param():
 fn test_dynamic_into_mutable_dynamic_ref_param():
     let d : mut i32[] = [1, 2, 3]
     grows_by_reference(&d)
-    assert_eq(d.sizeof, 4)
+    assert_eq(#d, 4)
 
 // An immutable dynamic parameter is fine: the callee cannot resize it,
 // so nothing it may do depends on the length being open.
@@ -425,7 +425,7 @@ fn test_fixed_into_immutable_dynamic_param():
 fn test_dynamic_into_mutable_dynamic_param():
     let d : i32[] = [1, 2, 3]
     _ ← grows_by_copy(d)
-    assert_eq(d.sizeof, 3)
+    assert_eq(#d, 3)
 
 // A fixed parameter of the same length takes a fixed argument, and its
 // elements may still be written.

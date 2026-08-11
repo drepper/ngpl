@@ -180,7 +180,7 @@ fn test_an_impure_call_is_quiet():
 fn test_a_builtin_call_is_quiet():
     let v : mut i64[] = [1, 2]
     v.push(3)
-    assert_eq(v.sizeof, 3)
+    assert_eq(#v, 3)
 
 // A static assertion is checked for its own sake.
 @test

@@ -82,7 +82,7 @@ fn test_element_val_no_modify():
 
 fn sum_dynamic(arr : i32[]) → i32:
   let total : mut i64 = 0
-  foreach i := 0…(arr.sizeof - 1):
+  foreach i := 0…(#arr - 1):
     total ← total + arr[i]
   total
 

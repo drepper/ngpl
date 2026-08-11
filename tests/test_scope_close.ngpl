@@ -58,7 +58,7 @@ fn test_file_from_temporary_directory_works():
     let alloc := std.arena.allocator()
     let file := std.fs.cwd().open_file("CLAUDE.md")
     let data := file.read_file(alloc)
-    assert(data.sizeof > 0)
+    assert(#data > 0)
     alloc.deinit()
 
 // Repeating the pattern does not accumulate descriptors.
@@ -88,7 +88,7 @@ fn test_returned_file_survives():
     let file := make_file()
     assert(¬file.is_closed)
     let data := file.read_file(alloc)
-    assert(data.sizeof > 0)
+    assert(#data > 0)
     alloc.deinit()
 
 // ---------------------------------------------------------------------

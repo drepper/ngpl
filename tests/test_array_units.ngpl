@@ -44,7 +44,7 @@ fn error_the_unit_written_twice():
 fn test_a_measured_array_can_be_indexed():
     let d ¤meter : i64[] = [10, 20, 30]
     assert_eq(d[2], 30¤meter)
-    assert_eq(d.sizeof, 3¤ptrdiff)
+    assert_eq(#d, 3¤ptrdiff)
 
 @test
 fn test_a_measured_matrix_measures_its_numbers():
@@ -56,7 +56,7 @@ fn test_a_measured_matrix_measures_its_numbers():
 fn test_an_allocated_array_is_measured_too():
     let f : i64 ¤meter[3] = 0
     assert_eq(f[0], 0¤meter)
-    assert_eq(f.sizeof, 3¤ptrdiff)
+    assert_eq(#f, 3¤ptrdiff)
 
 @test
 fn test_measured_elements_do_arithmetic_as_numbers_do():
@@ -315,7 +315,7 @@ fn test_joining_arrays_that_agree():
     let b : i32[] = [3]
     let c := a ⧺ b
     assert_eq(c[2], 3)
-    assert_eq(c.sizeof, 3¤ptrdiff)
+    assert_eq(#c, 3¤ptrdiff)
 
 // ---------------------------------------------------------------------
 // Where a unit cannot be said yet

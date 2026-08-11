@@ -26,7 +26,7 @@ fn test_expression_is_re_evaluated():
     let seen : mut = []
     while e := it.next():
         seen.push(e)
-    assert_eq(seen.sizeof, 3)
+    assert_eq(#seen, 3)
     assert_eq(seen[0], 5)
     assert_eq(seen[2], 3)
 
@@ -83,7 +83,7 @@ fn test_unwraps_pop():
     while x := v.pop():
         sum ← sum + x
     assert_eq(sum, 6)
-    assert_eq(v.sizeof, 0)
+    assert_eq(#v, 0)
 
 @test
 fn test_unwraps_get():

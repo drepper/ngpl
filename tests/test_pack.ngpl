@@ -4,14 +4,14 @@
 fn sum_all(acc : i64, rest… : i64) → i64:
     let i ¤ptrdiff : mut i64 = 0
     let s : mut = acc
-    while i < rest.sizeof:
+    while i < #rest:
         s ← s + rest[i]
         i ← i + 1
     s
 
 // Count the number of pack elements.
 fn count_args(args… : T') → i64:
-    @dropunit(args.sizeof)
+    @dropunit(#args)
 
 // Return the first pack element.
 fn first_of(args… : T') → T':
@@ -21,7 +21,7 @@ fn first_of(args… : T') → T':
 fn apply_sum(f : F', args… : i64) → i64:
     let s : mut i64 = 0
     let i ¤ptrdiff : mut i64 = 0
-    while i < args.sizeof:
+    while i < #args:
         s ← s + f(args[i])
         i ← i + 1
     s
@@ -90,7 +90,7 @@ fn test_single_pack_element():
 
 // Untyped pack can also be empty.
 fn untyped_count(args… : T') → i64:
-    @dropunit(args.sizeof)
+    @dropunit(#args)
 
 @test
 fn test_empty_untyped_pack():
@@ -115,7 +115,7 @@ fn test_pack_index_access():
 fn int_sum(vals… : i64) → i64:
     let s : mut i64 = 0
     let i ¤ptrdiff : mut i64 = 0
-    while i < vals.sizeof:
+    while i < #vals:
         s ← s + vals[i]
         i ← i + 1
     s
@@ -130,7 +130,7 @@ fn test_int_sum():
 fn prepend_and_sum(base : i64, extra… : i64) → i64:
     let s : mut = base
     let i ¤ptrdiff : mut i64 = 0
-    while i < extra.sizeof:
+    while i < #extra:
         s ← s + extra[i]
         i ← i + 1
     s
@@ -147,9 +147,9 @@ fn test_prepend_and_sum_rejects_bad_pack():
 
 // --- @sizeof tests ------------------------------------------------
 
-// @sizeof on packs.
+// # on packs.
 fn sizeof_pack(args… : T') → i64:
-    @dropunit(@sizeof(args))
+    @dropunit(#args)
 
 @test
 fn test_sizeof_pack_empty():
@@ -159,25 +159,27 @@ fn test_sizeof_pack_empty():
 fn test_sizeof_pack_several():
     assert_eq(sizeof_pack(1, 2, 3), 3)
 
-// @sizeof on array literals.
+// # on array literals.
 @test
 fn test_sizeof_array():
-    assert_eq(@sizeof([10, 20, 30, 40]), 4)
+    assert_eq(#[10, 20, 30, 40], 4)
 
-// @sizeof on string literals.
+// # on string literals.
 @test
 fn test_sizeof_string():
-    assert_eq(@sizeof("hello"), 5)
-    assert_eq(@sizeof(""), 0)
+    assert_eq(#"hello", 5)
+    assert_eq(#"", 0)
 
 // @sizeof on tuple literal.
 @test
 fn test_sizeof_tuple():
-    assert_eq(@sizeof((1, 2, 3)), 3)
+    assert_eq(#(1, 2, 3), 3)
 
+// How many is # and how much memory is @sizeof: two questions, and a
+// pack of i64 answers 2 and 16 to them.
 fn sizeof_both(args… : i64) → i64:
-    assert_eq(@sizeof(args), args.sizeof)
-    @dropunit(@sizeof(args))
+    assert_eq(@sizeof(args), #args × 8¤byte)
+    @dropunit(#args)
 
 @test
 fn test_sizeof_pack_matches_dot():

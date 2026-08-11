@@ -72,7 +72,7 @@ fn test_unitof_foreach_stepped():
 // --- @sizeof on parameter packs ---
 
 fn sizeof_pack_param(args… : T') → i64:
-    @dropunit(@sizeof(args))
+    @dropunit(#args)
 
 @test
 fn test_sizeof_pack_param():
@@ -113,20 +113,22 @@ fn test_typeof_runtime_var():
 @test
 fn test_sizeof_fixed_array_var():
     let arr : i32[3] = 0
-    assert_eq(@sizeof(arr), 3 ¤ptrdiff)
+    assert_eq(#arr, 3 ¤ptrdiff)
 
 @test
 fn test_sizeof_tuple_var():
     let t := (1i64, 2i64, 3i64)
-    assert_eq(@sizeof(t), 3 ¤ptrdiff)
+    assert_eq(#t, 3 ¤ptrdiff)
 
-// A dynamically sized array has a length but not one that is part of
-// its type, so reading it is .sizeof rather than @sizeof.
+// A dynamically sized array has a length that is not part of its type,
+// which is why the length is # and not @sizeof; what @sizeof answers is
+// the memory it takes, and that is a question it can answer whether the
+// length was written down or not.
 @test
-@expect error "not part of its type; use .sizeof"
 fn test_sizeof_dynamic_array_var():
-    let arr : mut i64[] = [1, 2, 3]
-    @sizeof(arr)
+    let arr : i64[] = [1, 2, 3]
+    assert_eq(@sizeof(arr), 24¤byte)
+    assert_eq(#arr, 3¤ptrdiff)
 
 // --- @unitof on a name ---
 

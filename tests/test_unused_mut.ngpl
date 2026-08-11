@@ -77,13 +77,13 @@ fn test_field_assignment_counts():
 fn test_push_counts():
     let v : mut i64[] = [1]
     v.push(2)
-    assert_eq(v.sizeof, 2)
+    assert_eq(#v, 2)
 
 @test
 fn test_pop_counts():
     let v : mut i64[] = [1, 2]
     _ ← v.pop()
-    assert_eq(v.sizeof, 1)
+    assert_eq(#v, 1)
 
 // Passing by reference may modify, so it counts even though nothing
 // visible happens here.
@@ -94,7 +94,7 @@ fn might_write(a : &mut i32[]):
 fn test_reference_argument_counts():
     let v : mut i64[] = [1]
     might_write(&v)
-    assert_eq(v.sizeof, 2)
+    assert_eq(#v, 2)
 
 // A mutable borrow in a foreach writes through to the elements.
 @test
@@ -107,7 +107,7 @@ fn test_mut_borrow_counts():
 // A mut parameter that is written to is not warned about.
 fn writes_its_copy(a : mut i32[]) → i32:
     a.push(9)
-    @dropunit(a.sizeof)
+    @dropunit(#a)
 
 @test
 fn test_modified_parameter_is_quiet():

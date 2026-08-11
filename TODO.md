@@ -190,6 +190,21 @@ Completed
     definition's = -- let x : i64!= 10 -- is refused as it was before, != having been a single
     token then as well.
 
+[x] # is how many things are in a container and @sizeof is how much memory something takes.
+    .sizeof answered both in one word -- a count for an array, a size in bytes for a struct --
+    and the unit it carried was the only thing that said which; @sizeof was split down the
+    same middle, answering storage for a written type and a count for a value, and refusing a
+    dynamically sized array outright, which only makes sense if the question was about the
+    length.  A byte[] hid all of it, the two being the same number there.  # was free: the
+    language comments with // and /* */, so no glyph was displaced.  It takes an array, a
+    matrix, a string, or a tuple, and answers the outer dimension -- the one number every
+    container has, and the bound for the subscript that indexes it, as APL's ≢ does.  It is
+    not threaded, for the same reason: # asks for a container and a container of containers is
+    still one container, so nothing is deeper than what it asked for.  Marking it listable
+    would change nothing, which is the argument against marking it.  @sizeof now measures
+    memory for anything, a dynamic array included: the length is not in the type but the
+    memory is a fact about the value.
+
 [x] every function parameter states a type.  A signature is what a reader is given instead of
     the body, so a parameter that said nothing about what it takes left them the body to read.
     A generic covers what an omitted type used to cover and covers it better: T' in two

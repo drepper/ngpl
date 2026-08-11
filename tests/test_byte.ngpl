@@ -15,7 +15,7 @@ fn test_byte_array():
 @test
 fn test_byte_sizeof():
     let data := std.bytes("hello")
-    assert_eq(data.sizeof, 5)
+    assert_eq(#data, 5)
 
 @start
 @impure

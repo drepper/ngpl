@@ -477,21 +477,21 @@ fn test_building_the_string_that_is_wanted_instead():
 fn test_chars_gives_an_array_of_characters():
     let cs := "abc".chars()
     static_assert_eq(@typeof(cs[0]), char)
-    assert_eq(cs.sizeof, 3¤ptrdiff)
+    assert_eq(#cs, 3¤ptrdiff)
     assert(cs[0] = 'a')
     assert(cs[2] = 'c')
 
 @test
 fn test_chars_counts_characters():
     let cs := "héllo 🎉".chars()
-    assert_eq(cs.sizeof, 7¤ptrdiff)
+    assert_eq(#cs, 7¤ptrdiff)
     assert(cs[1] = 'é')
     assert(cs[6] = '🎉')
 
 @test
 fn test_chars_of_an_empty_string():
     let cs := "".chars()
-    assert_eq(cs.sizeof, 0¤ptrdiff)
+    assert_eq(#cs, 0¤ptrdiff)
 
 // Taking a string apart and joining it back up gives the string
 // again.
@@ -542,7 +542,7 @@ fn test_the_conversions_compose_at_compile_time():
 @test
 fn test_str_and_chars_at_compile_time():
     static_assert('a'.str() = "a")
-    static_assert_eq("ab".chars().sizeof, 2¤ptrdiff)
+    static_assert_eq(#"ab".chars(), 2¤ptrdiff)
 
 @test
 fn test_what_a_conversion_answers_is_known_too():

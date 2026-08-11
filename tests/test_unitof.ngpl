@@ -73,14 +73,14 @@ fn test_unitof_dimensionless_eq():
 @impure
 fn test_runtime_unitof_sizeof():
   let arr : i64[] = [1, 2, 3]
-  let sz ¤ptrdiff : i64 = arr.sizeof
+  let sz ¤ptrdiff : i64 = #arr
   assert_true(sz = 3, "sizeof is 3")
 
 @test
 @impure
 fn test_runtime_unitof_bytes():
   let buf: u8[4] = [1, 2, 3, 4]
-  let sz ¤byte : i64 = buf.sizeof
+  let sz ¤byte : i64 = #buf
   assert_true(sz = 4, "sizeof is 4")
 
 @start

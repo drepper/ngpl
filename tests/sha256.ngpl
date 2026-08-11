@@ -34,11 +34,11 @@ let K : u32[] = [
 
 fn get_padded_byte(data : byte[], off ¤byte : usize, total_size ¤byte : usize) → u8?:
     if off >= total_size: return ∅
-    if off < data.sizeof: return data[off]
-    if off = data.sizeof: return 128
+    if off < #data: return data[off]
+    if off = #data: return 128
     let len_start := total_size - 8
     if off >= len_start:
-        let bit_len ¤byte : i64 = data.sizeof × 8
+        let bit_len ¤byte : i64 = #data × 8
         let byte_idx ¤byte : i64 = off - len_start
         // The suffix is worked out from the offsets, so it comes out
         // measured; the byte it stands for is a number, not a quantity
@@ -47,7 +47,7 @@ fn get_padded_byte(data : byte[], off ¤byte : usize, total_size ¤byte : usize)
     ∅
 
 fn get_padded_word(data : byte[], off ¤byte : usize, total_size ¤byte : usize) → u32?:
-    if off + 4 <= data.sizeof:
+    if off + 4 <= #data:
         // u32, not byte, although the array holds bytes: a shift keeps
         // the type it is given, and moving a byte 24 places would put
         // every bit of it past the end.  The word being assembled is
@@ -89,9 +89,9 @@ fn expand_Σ₁(prev : u32) → u32:
 
 fn sha256(data : byte[]) → u32[8]?:
     // Compute padded message length per SHA-256 spec.
-    let rem ¤byte : i64 = data.sizeof % 64
+    let rem ¤byte : i64 = #data % 64
     let pad_len := (119 - rem) % 64
-    let total_size ¤byte : i64 = data.sizeof + 1 + pad_len + 8
+    let total_size ¤byte : i64 = #data + 1 + pad_len + 8
 
     // Initial hash values per FIPS 180-4 Section 5.3.3.
     let H : mut u32[8] = [

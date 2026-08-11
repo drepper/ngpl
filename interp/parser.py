@@ -2031,6 +2031,11 @@ class Parser:
             self.pos += 1
             operand = self._parse_unary()
             return self._set_pos(UnaryOp(op_tok.value, operand), op_tok)
+        if self._check("OP") and self._cur().value == "#":
+            op_tok = self._cur()
+            self.pos += 1
+            operand = self._parse_unary()
+            return self._set_pos(UnaryOp(op_tok.value, operand), op_tok)
         if self._check("OP") and self._cur().value == "~":
             op_tok = self._cur()
             self.pos += 1

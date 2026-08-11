@@ -551,7 +551,7 @@ A string is counted in characters, so a position in one is a count of them and w
 
 ```
 let s := "héllo"
-s.sizeof                        /* 5 ptrdiff */
+#s                        /* 5 ptrdiff */
 s[0]                            /* 'h' */
 s[1]                            /* 'é' — the character, not a byte of it */
 s[1…3]                          /* "éll", a string */
@@ -1428,11 +1428,11 @@ fn process(data : byte[]) → int:
     ...
 ```
 
-A dynamic array parameter carries its size implicitly.  The size is accessible via the `.sizeof` property:
+A dynamic array parameter carries its length implicitly.  The length is read with `#`:
 
 ```
 fn count_bytes(data : byte[]) → usize:
-    data.sizeof
+    #data
 ```
 
 #### Fixed-size vs. Dynamic Array Parameters
@@ -1440,7 +1440,7 @@ fn count_bytes(data : byte[]) → usize:
 | Syntax | Meaning |
 |--------|---------|
 | `data : byte[64]` | Fixed-size array of 64 bytes — a single value |
-| `data : byte[]` | Dynamic-size array — carries hidden size, queryable via `.sizeof` |
+| `data : byte[]` | Dynamic-size array — carries hidden length, read with `#` |
 
 Fixed-size array parameters behave as a single value of known extent.  Dynamic array parameters behave like a fat pointer: the array data and its length travel together.
 
@@ -1451,7 +1451,7 @@ A dynamic array parameter (`type[]`) accepts any array of the correct element ty
 ```
 fn sum(arr : i32[]) → i32:
     let total : mut = 0
-    foreach i := 0…(arr.sizeof - 1):
+    foreach i := 0…(#arr - 1):
         total ← total + arr[i]
     total
 
@@ -1494,11 +1494,11 @@ The loop iterates over each element of the array.  The loop variable is constant
 
 | Feature | C | Rust | Zig | Go | NGPL |
 |---------|---|------|-----|----|---------------|
-| Array + size | separate pointer and length | slice `&[u8]` | `[]const u8` | `[]byte` | `byte[]` with `.sizeof` |
-| Size access | manual tracking | `.len()` | `.len` | `len(s)` | `.sizeof` |
+| Array + size | separate pointer and length | slice `&[u8]` | `[]const u8` | `[]byte` | `byte[]` with `#` |
+| Length | manual tracking | `.len()` | `.len` | `len(s)` | `#` |
 | Bounds checking | none | runtime panic | optional | runtime panic | planned |
 
-The `.sizeof` property name is chosen to parallel the C/C++ `sizeof` operator while being a property of the array value rather than a compile-time operator.  It returns the number of elements, not the byte size (for `byte[]` these are identical, but for `u32[]` the element count and byte size differ).  The result carries unit `ptrdiff` for general arrays and unit `byte` for `u8[]` arrays.
+`#` is the length of anything that holds things — an array, a matrix, a string, a tuple — and `@sizeof` is how much memory something takes.  They used to be one word, `.sizeof`, which answered a count for an array and a size in bytes for a struct; two questions in one word, and the answer told you which one you had got by the unit it carried.  `#` counts and `@sizeof` measures, and `byte[]` is the one place the two agree.  The result of `#` carries unit `ptrdiff` for general arrays and unit `byte` for `u8[]` arrays.
 
 The dynamic array type is the natural parameter type for functions that operate on variable-length data: hash functions, encoders, search routines.  The implicit size avoids the error-prone pattern of passing separate data and length parameters.
 
@@ -1635,6 +1635,62 @@ v ⍳ n + 10                      /* what is looked for is the sum */
 | NGPL | `⍳` | `∅` |
 
 The glyph is APL's and the answer is Rust's.  One operator serves an array and a string, so a program that has learned it for one has learned it for the other; there is no separate `.find` for text.
+
+
+### How Many Things Are In It: `#`
+
+`#` answers how many things something holds:
+
+```
+let v : i64[] = [10, 20, 30]
+#v                              /* 3 */
+
+#"hello"                        /* 5 — counted in characters */
+#(1i64, "two", 'c')             /* 3 */
+```
+
+It is written in front of its operand, and takes an array, a matrix, a string, or a tuple.  Anything else is refused: how many things are in a number is not a question.
+
+#### The Outer Dimension
+
+A matrix answers how many *rows* it has rather than how wide they are.  That is the one number every container has, whatever it holds; a row's own length is a question for the row:
+
+```
+let m : i32[2, 3] = 0
+#m                              /* 2 */
+#m[0]                           /* 3 */
+
+let words : str[] = ["ab", "cde"]
+#words                          /* 2 — how many strings */
+#words[0]                       /* 2 — how long the first one is */
+```
+
+For the same reason `#` is not threaded over a container of containers: it asks for a container, and a container of containers is still one container, so there is nothing deeper than what it asked for and nothing to take apart.
+
+#### How Many, and How Much
+
+`#` counts and [`@sizeof`](#compile-time-introspection) measures memory.  They are two questions and they have two words:
+
+```
+let v : i32[] = [1, 2, 3]
+#v                              /* 3 ptrdiff */
+@sizeof(v)                      /* 12 B */
+```
+
+A `byte[]` is the one place the two agree, since one of the things it holds is one byte of memory.
+
+#### Comparison with Other Languages
+
+| Language | Length |
+|----------|--------|
+| C | `sizeof(a)/sizeof(a[0])`, or a separate length |
+| C++, Rust, Zig | `.size()`, `.len()`, `.len` |
+| Python | `len(x)` |
+| Go | `len(x)` |
+| APL, BQN | `≢` |
+| NGPL | `#` |
+
+One operator for every container, so a program that has learned it for an array has learned it for a string.  APL's `≢` is the same idea and the same answer for a matrix — the outer dimension.
 
 
 ### Whether Something Is There: `∊`
@@ -2708,7 +2764,7 @@ A function that may fail to produce a value declares an **optional return type**
 ```
 fn get_padded_byte(data : byte[], off ¤byte : usize, total_size ¤byte : usize) → u8?:
     if off >= total_size: return ∅
-    if off < data.sizeof: return data[off]
+    if off < #data: return data[off]
     ...
     0
 ```
@@ -3353,7 +3409,7 @@ fn total(arr : &i32[]) → i32:              // may read
     arr[0] + arr[1]
 
 fn fill_zeros(arr : &mut i32[]):     // may write
-    foreach i := 0…(arr.sizeof - 1):
+    foreach i := 0…(#arr - 1):
         arr[i] = 0
 ```
 
@@ -3824,7 +3880,7 @@ fn sum_bytes(data : byte[]) → int:
     total
 ```
 
-For dynamic arrays, `foreach` uses the array's `.sizeof` to determine the iteration count.
+For dynamic arrays, `foreach` uses the array's length to determine the iteration count.
 
 #### Constant Loop Variables
 
@@ -4425,12 +4481,12 @@ fn read_byte(data : byte[], off ¤byte : usize) → u8:
     data[off]                // OK — off carries byte from declaration
 ```
 
-The `.sizeof` property returns the appropriate unit automatically (`ptrdiff` for general arrays, `byte` for byte arrays), so loop bounds derived from `.sizeof` produce correctly-typed indices:
+`#` returns the appropriate unit automatically (`ptrdiff` for general arrays, `byte` for byte arrays), so loop bounds derived from it produce correctly-typed indices:
 
 ```
 let arr : mut = [1, 2, 3, 4]
 let total : mut = 0
-foreach i := 0…arr.sizeof - 1:       // i carries ptrdiff unit
+foreach i := 0…#arr - 1:       // i carries ptrdiff unit
     total ← total + arr[i]           // OK — i already has ptrdiff
 ```
 
@@ -4683,7 +4739,7 @@ A range keeps the dimensions it does not name, so slicing a matrix along one dim
 
 ```
 fn rows2(m : i32[2]) → i32:
-    m.sizeof
+    #m
 
 rows2(m[0…1])       // error: expected i32[2] (1 dimension), got a 2×4 array
 rows2(m[0…1, 1…2])  // error: got a 2×2 array
@@ -4742,7 +4798,7 @@ fn sum_matrix(m : i32[,]) → i32:
     t
 ```
 
-`m.shape.sizeof` is the rank, and `v.shape[0]` is `v.sizeof` for a one-dimensional array.  A slice reports the shape it was cut to rather than the one it came from, so `sum_matrix(m[0…1])` sees two rows.
+`#m.shape` is the rank, and `v.shape[0]` is `#v` for a one-dimensional array.  A slice reports the shape it was cut to rather than the one it came from, so `sum_matrix(m[0…1])` sees two rows.
 
 ##### Writing a Matrix Out
 
@@ -5363,13 +5419,13 @@ static_assert_eq(@sizeof(a), 1 ¤byte)
 static_assert_eq(@unitof(a), @unitof(1))
 ```
 
-A member that answers *about* a constant is constant too.  Those are the conversions between a number, a character, and a string — `.ord()`, `.chr()`, `.str()`, `.chars()` — and the queries `.sizeof` and `.alignof`.  Each says the same thing about the same value every time it is asked, so it can be asked before anything runs:
+A member that answers *about* a constant is constant too.  Those are the conversions between a number, a character, and a string — `.ord()`, `.chr()`, `.str()`, `.chars()` — and the query `.alignof`.  Each says the same thing about the same value every time it is asked, so it can be asked before anything runs:
 
 ```
 static_assert('a'.ord() = 97)
 static_assert((65).chr() = 'A')
 static_assert((97).chr().ord() = 97)
-static_assert_eq("ab".chars().sizeof, 2 ¤ptrdiff)
+static_assert_eq(#"ab".chars(), 2 ¤ptrdiff)
 static_assert_eq(@typeof('a'.ord()), u32)
 ```
 
@@ -5486,7 +5542,7 @@ A type with no defined storage is refused, and says why:
 
 @sizeof(i32[])
 error: 'i32[]' leaves a dimension open, so how much it occupies is not
-part of its type; give every dimension a size, or ask a value with .sizeof
+part of its type; give every dimension a size, or ask a value with #
 ```
 
 An open dimension is a property of the type, so `i32[,3]` is refused for the same reason.  An empty subscript has no reading as a value — `a[]` on an array is an error, not an index.
@@ -5500,10 +5556,10 @@ let fixed : i32[4] = 0
 
 @sizeof(i32[4])     // 16 B        the type's storage
 @sizeof(fixed)      // 4 ptrdiff   the value's elements
-fixed.sizeof        // 4 ptrdiff
+#fixed        // 4 ptrdiff
 ```
 
-This is the same split `.sizeof` already draws: on a struct type it gives bytes, on an array value it gives a count.
+`#` draws the other half of it: `@sizeof` measures memory and `#` counts what is held.
 
 A scalar holds no elements to count, so it answers with what its type occupies:
 
@@ -5519,7 +5575,7 @@ let dyn : i32[] = [1, 2, 3]
 @sizeof(dyn)
 
 error: 'dyn' is a dynamically sized array, whose length is not part of
-its type; use .sizeof to read it
+its type; use # to read it
 ```
 
 #### Type Names as Values
@@ -5557,9 +5613,9 @@ error: 'byte' names a type and cannot name a variable
   The result carries a unit: for `u8[]` (byte arrays) the unit is `byte`; for all other containers the unit is `ptrdiff`.  Because dimensionless arithmetic is allowed with unit-bearing values, the sizeof result can be used directly in index computations, loop bounds, and arithmetic without explicit unit stripping.
 
 ```
-// .sizeof is the runtime equivalent — use on variables
+// # is how many, @sizeof how much memory
 let arr : mut = [10, 20, 30]
-let sz : mut = arr.sizeof          // 3 ptrdiff
+let sz : mut = #arr          // 3 ptrdiff
 let last : mut = sz - 1            // 2 ptrdiff (dimensionless 1 adopts unit)
 
 // @sizeof works on compile-time constants
@@ -6618,13 +6674,13 @@ A pack parameter is declared by suffixing `…` to the parameter name.  An optio
 fn sum_all(acc : int, rest… : int) → int:
     let i : mut int = 0
     let s : mut = acc
-    while i < rest.sizeof:
+    while i < #rest:
         s ← s + rest[i]
         i ← i + 1
     s
 
 fn count_args(args…) → int:
-    args.sizeof
+    #args
 ```
 
 When no type is given, the pack accepts arguments of any type.  When a concrete type is given, each captured argument is coerced to that type.
@@ -6634,7 +6690,7 @@ When no type is given, the pack accepts arguments of any type.  When a concrete 
 Inside the function body, the pack parameter behaves as a tuple:
 
 - **Indexing**: `pack[i]` retrieves element `i` (zero-based).
-- **Size**: `pack.sizeof` returns the number of captured elements (an `int`).
+- **Length**: `#pack` returns the number of captured elements.
 - **Type**: In a `comptime foreach`, `@typeof(v)` returns the type of the current element.
 
 #### Generic Packs
@@ -6677,10 +6733,10 @@ g("Alice", "Bob")          /* names captures "Alice", "Bob" */
 | Syntax | `Args...` | none (macros) | `anytype` + comptime | `*args` | `name…` |
 | Type constraint | `template<typename... Args>` | N/A | comptime checks | none | `: type` annotation |
 | Access | fold expressions, `std::get<I>` | N/A | comptime for | `args[i]` | `name[i]` |
-| Size | `sizeof...(Args)` | N/A | `args.len` | `len(args)` | `name.sizeof` |
+| Length | `sizeof...(Args)` | N/A | `args.len` | `len(args)` | `#name` |
 | Heterogeneous | yes (each can differ) | N/A | yes | yes (untyped) | yes (with generic type) |
 
-The ellipsis suffix keeps pack declarations compact.  Unlike C++ which requires template parameter packs and fold expressions, pack elements are accessed with ordinary subscript syntax and the `.sizeof` property.
+The ellipsis suffix keeps pack declarations compact.  Unlike C++ which requires template parameter packs and fold expressions, pack elements are accessed with ordinary subscript syntax and counted with `#`.
 
 
 ### Comptime Foreach
@@ -6915,7 +6971,7 @@ fn main():
     let dir : mut = std.fs.cwd()
     let file : mut = dir.open_file("data.bin")
     let data : mut = file.read_file(alloc)
-    std.println("{}", data.sizeof)
+    std.println("{}", #data)
     // main's scope ends here: file is closed, then dir
 ```
 
@@ -7125,7 +7181,7 @@ A struct with a defined layout answers three questions, on the type itself or on
 
 | Query | Result | Description |
 |-------|--------|-------------|
-| `T.sizeof` | `int¤byte` | Size of the struct, including tail padding |
+| `@sizeof(T)` | `int¤byte` | Size of the struct, including tail padding |
 | `T.alignof` | `int¤byte` | Alignment of the struct |
 | `T.offsetof(name)` | `int¤byte` | Offset of the named field from the start |
 
@@ -7136,7 +7192,7 @@ struct Mixed:
     b : i32
     c : u8
 
-Mixed.sizeof            // 12 B — three bytes of tail padding
+@sizeof(Mixed)            // 12 B — three bytes of tail padding
 Mixed.alignof           // 4 B
 Mixed.offsetof("b")     // 4 B
 ```
@@ -7144,7 +7200,7 @@ Mixed.offsetof("b")     // 4 B
 Asking any of the three of a struct without `@repr(C)` is an error, not a guess:
 
 ```
-Loose.sizeof
+@sizeof(Loose)
 error: struct 'Loose' has no defined layout; annotate it with @repr(C) to give it one
 ```
 
@@ -7226,7 +7282,7 @@ fn main():
 | `get(i)` | `str` | Parameter at zero-based index `i` |
 | `all()` | `str[]` | All parameters, excluding the program name |
 
-The program name is deliberately *not* the first element of `all()`.  Treating it as parameter zero is a C convention that forces every caller to remember an off-by-one adjustment; here `count()` and `all().sizeof` are the number of things the user actually typed after the program name.
+The program name is deliberately *not* the first element of `all()`.  Treating it as parameter zero is a C convention that forces every caller to remember an off-by-one adjustment; here `count()` and `#all()` are the number of things the user actually typed after the program name.
 
 `get(i)` raises an error when `i` is not less than `count()`.  It does not return an empty string or `∅` for an out-of-range index, because a missing parameter is a mistake in the program's own logic rather than a condition it should silently absorb.  Programs that do not know whether a parameter is present should compare against `count()` first, or iterate `all()`.
 
@@ -7510,7 +7566,7 @@ A literal without a suffix is untyped and has none to name, so it appears as wri
 A value carrying a unit shows the unit as it always did, after the type:
 
 ```
->>> arr.sizeof
+>>> #arr
 3 ptrdiff
 >>> @sizeof(u32)
 4 B

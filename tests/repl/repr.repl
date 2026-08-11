@@ -4,12 +4,12 @@ struct Point:
     y : i64
 
 Point
-Point.sizeof
+@sizeof(Point)
 Point.alignof
 Point.offsetof("y")
 struct Loose:
     a : i32
 
 Loose
-Loose.sizeof
+@sizeof(Loose)
 "still alive"

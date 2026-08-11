@@ -121,7 +121,8 @@ fn test_generic_name_is_left_alone():
 @test
 fn test_array_local_is_left_alone():
     let a : i32[3] = 0
-    static_assert_eq(@sizeof(a), 3 ¤ptrdiff)
+    assert_eq(#a, 3 ¤ptrdiff)
+    assert_eq(@sizeof(a), 12 ¤byte)
 
 @start
 @impure

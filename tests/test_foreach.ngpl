@@ -71,7 +71,7 @@ fn test_foreach_brace():
 fn test_foreach_array():
     let data : i64[] = [10, 20, 30, 40]
     let total : mut i64 = 0
-    foreach idx := 0…data.sizeof - 1:
+    foreach idx := 0…#data - 1:
         total ← total + data[idx]
     assert_eq(total, 100)
 

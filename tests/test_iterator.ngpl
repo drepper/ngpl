@@ -158,7 +158,7 @@ fn test_directory_entries_have_names():
     let it := dir.iterate()
     let count : mut i64 = 0
     while e := it.next():
-        assert(e.name.sizeof > 0)
+        assert(#e.name > 0)
         count ← count + 1
     assert(count > 0)
 

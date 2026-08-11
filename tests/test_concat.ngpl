@@ -7,7 +7,7 @@ fn test_concat_two_arrays():
     let a : i64[] = [1, 2, 3]
     let b : i64[] = [4, 5]
     let c := a ⧺ b
-    assert_eq(c.sizeof, 5)
+    assert_eq(#c, 5)
     assert_eq(c[0], 1)
     assert_eq(c[4], 5)
 
@@ -18,7 +18,7 @@ fn test_concat_empty_left():
     let a := 0 ⍴ [0]
     let b : i64[] = [1, 2]
     let c := a ⧺ b
-    assert_eq(c.sizeof, 2)
+    assert_eq(#c, 2)
     assert_eq(c[0], 1)
 
 @test
@@ -26,7 +26,7 @@ fn test_concat_empty_right():
     let a : i64[] = [1, 2]
     let b := 0 ⍴ [0]
     let c := a ⧺ b
-    assert_eq(c.sizeof, 2)
+    assert_eq(#c, 2)
     assert_eq(c[1], 2)
 
 // --- Chained concatenation ---
@@ -34,7 +34,7 @@ fn test_concat_empty_right():
 @test
 fn test_concat_chain():
     let r : i64[] = [1] ⧺ [2] ⧺ [3]
-    assert_eq(r.sizeof, 3)
+    assert_eq(#r, 3)
     assert_eq(r[0], 1)
     assert_eq(r[1], 2)
     assert_eq(r[2], 3)
@@ -45,7 +45,7 @@ fn test_concat_chain():
 fn test_concat_with_reshape():
     let a : i64[] = [10, 20]
     let b := a ⧺ 3 ⍴ [0]
-    assert_eq(b.sizeof, 5)
+    assert_eq(#b, 5)
     assert_eq(b[0], 10)
     assert_eq(b[1], 20)
     assert_eq(b[2], 0)
@@ -76,7 +76,7 @@ fn test_concat_typed_arrays():
     a[1] ← 200
     b[0] ← 300
     let c := a ⧺ b
-    assert_eq(c.sizeof, 5)
+    assert_eq(#c, 5)
     assert_eq(c[0], 100)
     assert_eq(c[2], 300)
 
@@ -86,7 +86,7 @@ fn test_concat_typed_arrays():
 fn test_concat_in_assignment():
     let x : mut i64[] = [1, 2]
     x ← x ⧺ [3, 4]
-    assert_eq(x.sizeof, 4)
+    assert_eq(#x, 4)
     assert_eq(x[3], 4)
 
 @start

@@ -15,7 +15,7 @@ fn test_fixed_extent():
         1779033703, 3144134277, 1013904242, 2773480762,
         1359893119, 2600822924, 528734635,  1541459225,
     ]
-    assert_eq(h.sizeof, 8)
+    assert_eq(#h, 8)
     assert_eq(h[0], 1779033703)
     assert_eq(h[7], 1541459225)
 
@@ -23,14 +23,14 @@ fn test_fixed_extent():
 @test
 fn test_dynamic_extent():
     let a : i32[] = [1, 2, 3]
-    assert_eq(a.sizeof, 3)
+    assert_eq(#a, 3)
 
 // Two extents make a matrix, and the rows are arrays in their own right.
 @test
 fn test_two_dimensions():
     let m : i32[2,3] = [[1, 2, 3], [4, 5, 6]]
-    assert_eq(m.sizeof, 2)
-    assert_eq(m[0].sizeof, 3)
+    assert_eq(#m, 2)
+    assert_eq(#m[0], 3)
     assert_eq(m[1][2], 6)
 
 // A dimension left empty takes the extent the initializer had, whether
@@ -38,9 +38,9 @@ fn test_two_dimensions():
 @test
 fn test_open_dimensions():
     let rows : i32[,3] = [[1, 2, 3], [4, 5, 6]]
-    assert_eq(rows.sizeof, 2)
+    assert_eq(#rows, 2)
     let cols : i32[2,] = [[1, 2, 3], [4, 5, 6]]
-    assert_eq(cols[1].sizeof, 3)
+    assert_eq(#cols[1], 3)
 
 // Three extents, to show the shape is read as written rather than
 // only to a depth of two.
@@ -130,7 +130,7 @@ fn returns_three() → u32[3]:
 
 @test
 fn test_array_return_accepts_a_literal():
-    assert_eq(returns_three().sizeof, 3)
+    assert_eq(#returns_three(), 3)
 
 // --- The extent still has to match ----------------------------------
 

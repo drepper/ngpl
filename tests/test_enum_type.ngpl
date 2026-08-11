@@ -63,7 +63,7 @@ fn test_struct_field():
 fn test_array_of_enums():
     let arr : Color[3] = [Color.red, Color.green, Color.blue]
     assert_eq(arr[2], Color.blue)
-    assert_eq(arr.sizeof, 3)
+    assert_eq(#arr, 3)
 
 // A flag enum is a type in the same way, and a combination of its
 // members is still a value of it.
@@ -145,18 +145,18 @@ struct JustSmall:
 
 @test
 fn test_c_layout_of_a_plain_enum():
-    assert_eq(Plain.sizeof, 8)
+    assert_eq(@sizeof(Plain), 8)
     assert_eq(Plain.alignof, 4)
 
 // u8 leaves three bytes of padding before the i32.
 @test
 fn test_c_layout_of_a_sized_enum():
-    assert_eq(Sized.sizeof, 8)
+    assert_eq(@sizeof(Sized), 8)
     assert_eq(Sized.alignof, 4)
 
 @test
 fn test_c_layout_of_a_sized_enum_alone():
-    assert_eq(JustSmall.sizeof, 1)
+    assert_eq(@sizeof(JustSmall), 1)
     assert_eq(JustSmall.alignof, 1)
 
 // ---------------------------------------------------------------------

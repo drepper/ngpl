@@ -13,7 +13,7 @@
 @test
 fn test_args_count_matches_all():
     let params := std.args.all()
-    assert_eq(params.sizeof, std.args.count())
+    assert_eq(#params, std.args.count())
 
 // get(i) and all()[i] name the same parameter.
 @test
@@ -26,7 +26,7 @@ fn test_args_get_matches_all():
 @test
 fn test_args_program_present():
     let name := std.args.program()
-    assert(name.sizeof > 0)
+    assert(#name > 0)
 
 // Indexing past the last parameter is an error, not a silent empty string.
 @expect error "out of range"
@@ -42,7 +42,7 @@ fn error_args_get_out_of_range():
 @test
 fn test_env_count_matches_names():
     let names := std.env.names()
-    assert_eq(names.sizeof, std.env.count())
+    assert_eq(#names, std.env.count())
 
 // Every listed variable is present and has a value.
 @test
@@ -84,7 +84,7 @@ fn test_sys_cpu_counts_ordered():
 @test
 fn test_sys_affinity_matches_usable():
     let cpus : i64[] = std.sys.affinity_cpus()
-    assert_eq(cpus.sizeof, std.sys.usable_cpus())
+    assert_eq(#cpus, std.sys.usable_cpus())
 
 // Every CPU id listed is actually set in the mask, and the ids ascend.
 @test

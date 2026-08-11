@@ -10,7 +10,7 @@
 let a : u7 = 100
 a
 let arr : i32[] = [1, 2, 3]
-arr.sizeof
+#arr
 @sizeof(u32)
 5 ¤meter
 "text"

@@ -108,7 +108,7 @@ fn test_mut_borrow_empty_array():
     let nums : mut i64[] = []
     foreach x := &mut nums:
         x ← 1
-    assert_eq(nums.sizeof, 0)
+    assert_eq(#nums, 0)
 
 // Two arrays can be borrowed at once, one variable each.
 @test

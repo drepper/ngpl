@@ -1,0 +1,108 @@
+// Tests for #, which is how many things are in something.
+//
+// One question, one operator, whatever it is asked about: an array, a
+// matrix, a string, a tuple.  It answers the outer dimension, which is
+// the one number every container has -- a matrix says how many rows it
+// has, and a row is asked its own length.
+//
+// How much memory something takes is the other question, and @sizeof
+// is the other word for it.
+
+// ---------------------------------------------------------------------
+// A vector of strings
+// ---------------------------------------------------------------------
+
+// The case where the two readings differ: # of the vector counts the
+// strings, and # of one of them counts its characters.
+@test
+fn test_a_vector_of_strings():
+    let words : str[] = ["ab", "cde", ""]
+    assert_eq(#words, 3¤ptrdiff)
+    assert_eq(#words[0], 2¤ptrdiff)
+    assert_eq(#words[1], 3¤ptrdiff)
+    assert_eq(#words[2], 0¤ptrdiff)
+
+@test
+fn test_walking_a_vector_of_strings():
+    let words : str[] = ["a", "bb", "ccc"]
+    let total : mut i64 = 0
+    let i ¤ptrdiff : mut i64 = 0
+    while i < #words:
+        total ← total + @dropunit(#words[i])
+        i ← i + 1¤ptrdiff
+    assert_eq(total, 6)
+
+// ---------------------------------------------------------------------
+// Whatever it is asked about
+// ---------------------------------------------------------------------
+
+@test
+fn test_a_vector():
+    let v : i64[] = [10, 20, 30]
+    assert_eq(#v, 3¤ptrdiff)
+
+@test
+fn test_a_string():
+    assert_eq(#"hello", 5¤ptrdiff)
+    assert_eq(#"", 0¤ptrdiff)
+
+// Counted in characters, as everything about a string is.
+@test
+fn test_a_string_beyond_ascii():
+    assert_eq(#"héllo 🎉", 7¤ptrdiff)
+
+@test
+fn test_a_tuple():
+    let t := (1i64, "two", 'c')
+    assert_eq(#t, 3¤ptrdiff)
+
+// A matrix answers how many rows it has, not how wide they are.  That
+// is the one number every container has, and a row's own width is a
+// question for the row.
+@test
+fn test_a_matrix_answers_its_outer_dimension():
+    let m : i32[2, 3] = 0
+    assert_eq(#m, 2¤ptrdiff)
+    assert_eq(#m[0], 3¤ptrdiff)
+
+@test
+fn test_an_empty_array():
+    let e : i64[] = []
+    assert_eq(#e, 0¤ptrdiff)
+
+// ---------------------------------------------------------------------
+// How many, and how much
+// ---------------------------------------------------------------------
+
+// Two questions, two words.  A byte array counts in bytes either way,
+// which is the one place they agree.
+@test
+fn test_how_many_and_how_much():
+    let v : i32[] = [1, 2, 3]
+    assert_eq(#v, 3¤ptrdiff)
+    assert_eq(@sizeof(v), 12¤byte)
+    let b : byte[] = std.bytes("abc")
+    assert_eq(#b, 3¤byte)
+    assert_eq(@sizeof(b), 3¤byte)
+
+// ---------------------------------------------------------------------
+// What it refuses
+// ---------------------------------------------------------------------
+
+@test
+@expect error "is a question for an array, a string, or a tuple"
+fn error_how_many_things_are_in_a_number():
+    let n : mut = #5i64
+
+// The member is gone: the two questions it answered are not the same
+// question and no longer share a word.
+@test
+@expect error "is not a member"
+fn error_the_member_is_gone():
+    let v : i64[] = [1, 2, 3]
+    let n : mut = v.sizeof
+
+@start
+@impure
+fn main():
+    std.println("length tests passed")

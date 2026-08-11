@@ -63,6 +63,18 @@ from interp.errors import attach_backtrace, diagnostic_level, strip_position_pre
 _EMPTY_MEASURE = object()
 
 
+def _sizeof_is_gone(attr: str) -> str:
+    """Say where the two questions .sizeof used to answer went.
+
+    It answered how many things were in a container and how much memory
+    a struct took, which are not the same question and now are not the
+    same word: # counts, @sizeof measures.
+    """
+    return (f".{attr} is not a member; # is how many things are in a "
+            f"container -- an array, a string, a tuple -- and @sizeof is "
+            f"how much memory something takes")
+
+
 def _nth_root_exact(n: int, degree: int) -> int | None:
     if n < 0:
         return None
@@ -1534,6 +1546,32 @@ class Evaluator:
         ru = _unwrap_operand(right)
         return mk_bool(not (self._logic_bool(lu) or self._logic_bool(ru)))
 
+    def _op_length(self, operand):
+        """How many things are in it (#).
+
+        The outer dimension, whatever it is given: a matrix answers how
+        many rows it has rather than how wide they are, since that is
+        the one number every container has.  A row's own length is
+        asked of the row.
+
+        Not threaded, for the same reason.  # asks for a container, and
+        a container of containers is still one container -- there is
+        nothing deeper than what it asked for, so there is nothing to
+        take apart.
+        """
+        unwrapped = _unwrap_operand(operand)
+        if isinstance(unwrapped, StrValue):
+            return self._sizeof_result(len(unwrapped.value))
+        if isinstance(unwrapped, TupleValue):
+            return self._sizeof_result(len(unwrapped.elements))
+        array = self._as_array(unwrapped)
+        if array is not None:
+            return self._sizeof_result(array.sizeof, array.element_type)
+        raise TypeError(
+            f"#: how many things are in it is a question for an array, a "
+            f"string, or a tuple, and this is "
+            f"{self._value_type_name(unwrapped)}")
+
     def _apply_unary(self, op: str, operand):
         """Apply a unary operator to the value it was given.
 
@@ -1543,6 +1581,8 @@ class Evaluator:
         for one value, so anything deeper is a container of what
         it asks for.
         """
+        if op == "#":
+            return self._op_length(operand)
         if op in self._LISTABLE_UNOPS:
             threaded = self._thread_level(
                 op, ("the operand",), [operand], (0,),
@@ -2684,27 +2724,26 @@ class Evaluator:
                 inst = unwrapped.obj
                 if node.attr in inst.field_values:
                     return inst.field_values[node.attr]
-                if node.attr in ("sizeof", "alignof"):
+                if node.attr == "alignof":
                     return self._struct_layout_attr(inst.struct_type, node.attr)
+                if node.attr == "sizeof":
+                    raise AttributeError(_sizeof_is_gone(node.attr))
                 raise AttributeError(
                     f"struct '{inst.struct_type.name}' has no field '{node.attr}'")
             if isinstance(unwrapped, StructType):
-                if node.attr in ("sizeof", "alignof"):
+                if node.attr == "alignof":
                     return self._struct_layout_attr(unwrapped, node.attr)
+                if node.attr == "sizeof":
+                    raise AttributeError(_sizeof_is_gone(node.attr))
                 raise AttributeError(
                     f"struct type '{unwrapped.name}' has no attribute "
                     f"'{node.attr}'")
-            if isinstance(unwrapped, TupleValue):
+            if isinstance(unwrapped, (TupleValue, StrValue)):
                 if node.attr == "sizeof":
-                    return self._sizeof_result(len(unwrapped.elements))
-            if isinstance(unwrapped, StrValue):
-                if node.attr == "sizeof":
-                    return self._sizeof_result(len(unwrapped.value))
+                    raise AttributeError(_sizeof_is_gone(node.attr))
             if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
                 if node.attr == "sizeof":
-                    return self._sizeof_result(
-                        unwrapped.obj.sizeof,
-                        unwrapped.obj.element_type)
+                    raise AttributeError(_sizeof_is_gone(node.attr))
                 if node.attr == "shape":
                     # One extent per dimension, which is how a function
                     # reads the dimensions its parameter type left open.
@@ -2875,38 +2914,7 @@ class Evaluator:
                     "@sizeof requires a compile-time constant, a name, or "
                     "an expression built from them")
             val = self.eval_expr(node.expr)
-            unwrapped = unwrap_optional(val)
-            if isinstance(unwrapped, TupleValue):
-                result = self._sizeof_result(len(unwrapped.elements))
-            elif isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
-                # A name answers from its type, and a length is only in
-                # the type when the type states it.  A dynamically sized
-                # array has a length but not one @sizeof can claim.
-                if named and unwrapped.obj.fixed_size is None:
-                    raise TypeError(
-                        f"@sizeof: {self._describe_operand(node.expr)} is a "
-                        f"dynamically sized array, whose length is not part "
-                        f"of its type; use .sizeof to read it")
-                result = self._sizeof_result(
-                    unwrapped.obj.sizeof,
-                    unwrapped.obj.element_type)
-            elif isinstance(unwrapped, StrValue):
-                # A literal's length is written down and is the count it
-                # asks for; a name's is the value's, not the type's.
-                if isinstance(node.expr, VarRef):
-                    raise TypeError(
-                        f"@sizeof: '{node.expr.name}' is a string, whose "
-                        f"length is not part of its type; use .sizeof to "
-                        f"read it")
-                result = self._sizeof_result(len(unwrapped.value))
-            elif named:
-                # A scalar holds no elements to count, but its type
-                # says what it occupies, which is the only size it has.
-                result = self._type_byte_size(runtime_type_of(unwrapped))
-            else:
-                raise TypeError(
-                    f"@sizeof: expected array, tuple, or string, "
-                    f"got {type(unwrapped).__name__}")
+            result = self._memory_size(unwrap_optional(val))
             if _is_const_expr(node.expr):
                 node._cached_value = result
             return result
@@ -3984,6 +3992,42 @@ class Evaluator:
                 f"no {'smallest' if node.kind == 'min' else 'largest'} value")
         raise TypeError(
             f"@{node.kind}: '{type_name}' is not a numeric type")
+
+    def _memory_size(self, value):
+        """How much memory a value takes, in bytes.
+
+        One question with one answer, whatever it is asked about.  It
+        used to be two: a scalar answered what it occupied and a
+        container answered how many things were in it, in the same
+        word.  How many is # now, and this measures.
+        """
+        from interp.units import BUILTIN_UNITS
+        if isinstance(value, ObjectValue) and isinstance(value.obj, ArrayValue):
+            arr = value.obj
+            total = 0
+            for index in range(arr.sizeof):
+                inner = self._memory_size(unwrap_optional(arr.get(index)))
+                total += inner.inner.value
+            return UnitValue(mk_int(total), BUILTIN_UNITS["byte"])
+        if isinstance(value, TupleValue):
+            total = 0
+            for element in value.elements:
+                inner = self._memory_size(unwrap_optional(element))
+                total += inner.inner.value
+            return UnitValue(mk_int(total), BUILTIN_UNITS["byte"])
+        if isinstance(value, StrValue):
+            # What it takes to hold the text, which is what it is
+            # encoded as rather than how many characters that is.
+            return UnitValue(mk_int(len(value.value.encode("utf-8"))),
+                             BUILTIN_UNITS["byte"])
+        if isinstance(value, ObjectValue) \
+                and isinstance(value.obj, StructInstance):
+            return self._struct_layout_attr(value.obj.struct_type, "sizeof")
+        if isinstance(value, StructType):
+            return self._struct_layout_attr(value, "sizeof")
+        if isinstance(value, UnitValue):
+            return self._memory_size(value.inner)
+        return self._type_byte_size(runtime_type_of(value))
 
     def _type_byte_size(self, type_name: str):
         """The storage a type occupies, in bytes."""

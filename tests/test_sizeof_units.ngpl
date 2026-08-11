@@ -18,14 +18,14 @@ fn assert_true(cond:bool, msg:str):
 @impure
 fn test_sizeof_array_ptrdiff():
   let arr : i64[] = [10, 20, 30]
-  let sz ¤ptrdiff : i64 = arr.sizeof
+  let sz ¤ptrdiff : i64 = #arr
   assert_eq_int(sz, 3, "array sizeof is 3")
 
 @test
 @impure
 fn test_sizeof_string_ptrdiff():
   let s := "hello"
-  let sz ¤ptrdiff : i64 = s.sizeof
+  let sz ¤ptrdiff : i64 = #s
   assert_eq_int(sz, 5, "string sizeof is 5")
 
 // --- sizeof byte[] returns byte unit ---
@@ -34,7 +34,7 @@ fn test_sizeof_string_ptrdiff():
 @impure
 fn test_sizeof_byte_array():
   let buf: u8[4] = [1, 2, 3, 4]
-  let sz ¤byte : i64 = buf.sizeof
+  let sz ¤byte : i64 = #buf
   assert_eq_int(sz, 4, "byte array sizeof is 4")
 
 // --- dimensionless + unit-bearing: addition ---
@@ -126,7 +126,7 @@ fn test_cmp_unit_with_dimensionless():
 @impure
 fn test_sizeof_in_arithmetic():
   let arr : i64[] = [10, 20, 30, 40, 50]
-  let sz ¤ptrdiff : i64 = arr.sizeof
+  let sz ¤ptrdiff : i64 = #arr
   let doubled := sz × 2
   assert_eq_int(doubled, 10, "sizeof×2")
   let plus_one := sz + 1
@@ -137,8 +137,8 @@ fn test_sizeof_in_arithmetic():
 @test
 @impure
 fn test_at_sizeof_ptrdiff():
-  let sz ¤ptrdiff : i64 = @sizeof([1, 2, 3])
-  assert_eq_int(sz, 3, "@sizeof literal is 3")
+  let sz ¤ptrdiff : i64 = #[1, 2, 3]
+  assert_eq_int(sz, 3, "# of a literal is 3")
 
 // --- @sizeof of a type: the storage it occupies, in bytes ---
 
@@ -187,7 +187,7 @@ fn test_sizeof_type_versus_value():
   let fixed : i32[4] = 0
   assert_eq_int(@sizeof(i32[4]), 16 ¤byte, "the type is 16 bytes")
   assert_eq_int(@sizeof(fixed), 4 ¤ptrdiff, "the value is 4 elements")
-  assert_eq_int(fixed.sizeof, 4 ¤ptrdiff, ".sizeof agrees")
+  assert_eq_int(#fixed, 4 ¤ptrdiff, "# agrees")
 
 // A scalar holds no elements to count, so it answers with what its
 // type occupies.
