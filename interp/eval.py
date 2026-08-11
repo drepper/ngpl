@@ -17,7 +17,7 @@ import math
 import re
 
 from interp.ast import (
-    IntLit, FloatLit, StrLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
+    IntLit, FloatLit, StrLit, CharLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, DestructureDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
@@ -268,7 +268,7 @@ _STD_SETTINGS = frozenset({"comparison_tolerance"})
 
 def _is_const_expr(node) -> bool:
     """Check whether an AST node is a compile-time constant expression."""
-    if isinstance(node, (IntLit, FloatLit, StrLit, BoolLit, NoneLit)):
+    if isinstance(node, (IntLit, FloatLit, StrLit, CharLit, BoolLit, NoneLit)):
         return True
     if isinstance(node, BinOp):
         return _is_const_expr(node.left) and _is_const_expr(node.right)
@@ -1878,6 +1878,9 @@ class Evaluator:
 
         if isinstance(node, FloatLit):
             return mk_float(node.value, node.width)
+
+        if isinstance(node, CharLit):
+            return CharValue(node.code)
 
         if isinstance(node, StrLit):
             return mk_str(node.text)

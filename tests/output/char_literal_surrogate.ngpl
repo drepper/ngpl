@@ -1,0 +1,6 @@
+// A surrogate is not a character.
+@start
+@impure
+fn main():
+    let c : char = '\u{D800}'
+    std.println("{}", c)

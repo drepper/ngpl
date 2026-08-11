@@ -94,21 +94,55 @@ Two different jobs, and the type does them differently:
   written rather than the way a string of one would be, so a value read
   back says which it is.
 
+## Writing One Down
+
+`'a'`, between apostrophes, with the string keeping its double quotes.
+Both are what C, C++, Rust, and Java use, and the pairing is what makes
+`'a'` and `"a"` say which they are before they are read — which matters
+here more than in those languages, since the two are different types
+rather than a character and an array of one.
+
+The apostrophe was the question, because the language already uses one:
+a generic type name ends in a prime, `T'`.  There is no conflict in
+practice, and the reason is worth writing down.  An apostrophe that
+*continues* an identifier is taken by the identifier scanner, so one
+that reaches the literal scanner is at the start of a token, which is
+where a literal may begin and a type name may not.  `f(args… : T')` and
+`f('a', 'b')` both read, and so does the first followed by the second.
+
+A literal holds exactly one character.  `''` and `'ab'` are refused
+rather than being an empty character and a string, and each says what
+to write instead, since the mistake is nearly always a string written
+with the wrong quotes.
+
+The escapes are the string's, with `\'` in place of `\"` — and `\u{…}`,
+which is the same conversion `.chr()` performs and refuses the same
+three numbers.  A literal written that way is checked as it is read,
+so `'\u{D800}'` is a lexical error rather than a value.
+
+### A member call on a literal
+
+`'a'.ord()` had to work, which meant letting a postfix chain follow a
+literal.  It follows a string literal now too, so `"abc".sizeof`
+reads.  Numbers are still excluded, for a lexical reason rather than a
+principled one: `65.chr()` cannot be scanned, since `65.` begins a
+float.  `(65).chr()` is how a number literal says it.
+
 ## Status
 
 Implemented: the type, `foreach` over a string, `.ord()`, `.chr()` on
 every integer type, the three refusals, the definition-time check for a
-written negative, comparison by code point, and formatting.
+written negative, comparison by code point, formatting, and literals.
 
 Not implemented:
 
-- **A character literal.**  There is no way to write `'a'` in source; a
-  program says `97u32.chr()` or compares against a character taken from
-  a string.  This is the obvious next thing and needs a decision about
-  quoting, since `"` is the string's and the apostrophe appears in
-  prose.
 - **Characters and strings together**: no `⧺` between them, no way to
   build a string from characters, no indexing a string by position.
 - **Character classification** — whether a character is a digit, a
   letter, upper or lower case — which is a Unicode-table question
   rather than a language one.
+- **`.ord()` at compile time.**  `static_assert('a' < 'b')` holds,
+  since both sides are literals, but `static_assert('a'.ord() == 97)`
+  does not: a member call is not a constant expression, and deciding
+  which ones could be is a question about purity rather than about
+  characters.

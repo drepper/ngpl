@@ -56,6 +56,55 @@ fn test_an_empty_string_has_no_characters():
     assert_eq(count, 0)
 
 // ---------------------------------------------------------------------
+// Writing one down
+// ---------------------------------------------------------------------
+//
+// A character literal is written between apostrophes, and a string
+// between double quotes, so the two say which they are before they are
+// read.
+
+@test
+fn test_a_character_literal():
+    let c := 'a'
+    static_assert_eq(@typeof(c), char)
+    assert_eq(c.ord(), 97)
+
+@test
+fn test_a_literal_beyond_ascii():
+    assert_eq('λ'.ord(), 955)
+    assert_eq('🎉'.ord(), 127881)
+
+@test
+fn test_the_escapes_a_literal_takes():
+    assert_eq('\n'.ord(), 10)
+    assert_eq('\t'.ord(), 9)
+    assert_eq('\r'.ord(), 13)
+    assert_eq('\\'.ord(), 92)
+    assert_eq('\''.ord(), 39)
+    assert_eq('"'.ord(), 34)
+
+@test
+fn test_a_literal_by_code_point():
+    assert_eq('\u{41}'.ord(), 65)
+    assert_eq('\u{1F389}'.ord(), 127881)
+
+// A literal is a compile-time constant, as the other literals are.
+@test
+fn test_a_literal_is_constant():
+    static_assert('a' < 'b')
+    static_assert('a' == 'a')
+    static_assert('a' != 'b')
+
+// The apostrophe that ends a generic type name is not a literal
+// opening: the name takes it, and a literal after one still reads.
+fn first_of_pack(args… : T') → T':
+    args[0]
+
+@test
+fn test_a_generic_name_keeps_its_prime():
+    assert(first_of_pack('a', 'b') == 'a')
+
+// ---------------------------------------------------------------------
 // .ord() and .chr()
 // ---------------------------------------------------------------------
 
@@ -172,6 +221,32 @@ fn test_finding_a_character_in_a_string():
         if c == wanted.chr():
             found ← found + 1
     assert_eq(found, 2)
+
+// Which reads better written down.
+fn vowels(text : str) → i64:
+    let count : mut i64 = 0
+    foreach c := text:
+        if c == 'a' ∨ c == 'e' ∨ c == 'i' ∨ c == 'o' ∨ c == 'u':
+            count ← count + 1
+    count
+
+@test
+fn test_counting_with_literals():
+    assert_eq(vowels("hello world"), 3)
+
+// A character parameter takes a character and nothing else.
+fn is_digit(c : char) → bool:
+    c >= '0' ∧ c <= '9'
+
+@test
+fn test_a_character_parameter():
+    assert(is_digit('7'))
+    assert(not is_digit('x'))
+
+@test
+@expect error "expected char, got str"
+fn error_a_string_is_not_a_character_argument():
+    let b : mut = is_digit("7")
 
 // ---------------------------------------------------------------------
 // Writing one out

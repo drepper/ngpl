@@ -1,0 +1,7 @@
+error: character literal: 55296 is a surrogate, which encodes half of a character in UTF-16 rather than being one
+  --> tests/output/char_literal_surrogate.ngpl:5:20
+    |
+  5 |     let c : char = '\u{D800}'
+    |                    ^
+  6 |     std.println("{}", c)
+    |

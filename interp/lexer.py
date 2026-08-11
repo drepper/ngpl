@@ -252,6 +252,78 @@ def _check_float_literal_range(value: float, width: str, text: str, base: int,
         raise LexerError(float_underflow_message(text, width), line, col)
 
 
+def _read_char(src, pos, line, col, line_start):
+    """Read a character literal starting after the opening quote.
+
+    One character between apostrophes, which is what the value holds.
+    A string is written with double quotes, so the two say which they
+    are before anything is read: `\'a\'` is a character and `"a"` a
+    string of one.
+
+    Returns (Token, next_pos).
+    """
+    from interp.value import check_code_point
+    chars: list[str] = []
+    end_pos = pos
+
+    while end_pos < len(src) and src[end_pos] not in ("'", "\n"):
+        ch = src[end_pos]
+        if ch == "\\" and end_pos + 1 < len(src):
+            esc = src[end_pos + 1]
+            end_pos += 2
+            if esc == "n":
+                chars.append("\n")
+            elif esc == "t":
+                chars.append("\t")
+            elif esc == "r":
+                chars.append("\r")
+            elif esc == "\\":
+                chars.append("\\")
+            elif esc in ("'", '"'):
+                chars.append(esc)
+            elif esc == "u" and src[end_pos:end_pos + 1] == "{":
+                closing = src.find("}", end_pos + 1)
+                if closing < 0:
+                    raise LexerError(
+                        "\\u{ needs a closing brace", line, col)
+                digits = src[end_pos + 1:closing]
+                try:
+                    code = int(digits, 16)
+                except ValueError:
+                    raise LexerError(
+                        f"'{digits}' is not a hexadecimal number",
+                        line, col) from None
+                try:
+                    check_code_point(code, "character literal")
+                except TypeError as e:
+                    raise LexerError(str(e), line, col) from None
+                chars.append(chr(code))
+                end_pos = closing + 1
+            else:
+                raise LexerError(f"unknown escape '\\{esc}'", line, col)
+            continue
+        chars.append(ch)
+        end_pos += 1
+
+    if end_pos >= len(src) or src[end_pos] != "'":
+        raise LexerError(
+            "a character literal ends on the line it starts, with '",
+            line, col)
+    if len(chars) != 1:
+        written = "".join(chars)
+        if not chars:
+            raise LexerError(
+                "a character literal holds one character, and this one "
+                "holds none; a string of no characters is written \"\"",
+                line, col)
+        raise LexerError(
+            f"a character literal holds one character, and '{written}' "
+            f"holds {len(chars)}; a string is written with double quotes, "
+            f"as \"{written}\"", line, col)
+    end_col = end_pos + 1 - line_start
+    return (Token("CHAR", ord(chars[0]), line, col, end_col), end_pos + 1)
+
+
 def _read_number(src, pos, line, col):
     """Read a numeric literal (integer or float) with optional type suffix.
 
@@ -448,6 +520,14 @@ def tokenize(src: str):
         # String literal.
         if ch == '"':
             token, pos = _read_string(src, pos + 1, line, col, line_start)
+            tokens.append(token)
+            continue
+
+        # Character literal.  A ' that continues an identifier -- the
+        # prime of a generic type name -- is taken by the identifier
+        # scanner, so one reaching here opens a literal.
+        if ch == "'":
+            token, pos = _read_char(src, pos + 1, line, col, line_start)
             tokens.append(token)
             continue
 

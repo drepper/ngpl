@@ -326,8 +326,16 @@ Type System
     `c + 1` from being a character in disguise as it is in Go.  Beyond a negative number,
     .chr() also refuses one past 0x10FFFF and a surrogate — the latter is what keeps every
     character encodable as UTF-8, which the language requires of its strings.  Characters
-    compare by code point; one is written out as itself and displayed as 'a'.  Still open:
-    a character literal, building a string from characters, and classification.
+    compare by code point; one is written out as itself and displayed as 'a'.
+
+[x] character literals: 'a', with the string keeping its double quotes, so the two say which
+    they are before they are read.  The apostrophe that ends a generic type name is taken by
+    the name, so a literal after one still reads.  A literal holds exactly one character, and
+    '' and 'ab' each say what to write instead.  The escapes are the string's with \' in
+    place of \", and \u{…} is checked as it is read.  A member call may follow a character or
+    string literal, so 'a'.ord() and "abc".sizeof read; a number literal still cannot, since
+    65. begins a float.  Still open: building a string from characters, classification, and
+    .ord() at compile time.
 
 
 Data Structures

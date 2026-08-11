@@ -9,7 +9,7 @@ indentation (INDENT/DEDENT tokens).
 """
 
 from interp.ast import (
-    IntLit, FloatLit, StrLit, BoolLit, NoneLit, VarRef, RefExpr, BorrowExpr,
+    IntLit, FloatLit, StrLit, CharLit, BoolLit, NoneLit, VarRef, RefExpr, BorrowExpr,
     BinOp, UnaryOp,
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, DestructureDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
@@ -111,6 +111,8 @@ class Parser:
             return f"identifier '{tok.value}'"
         if tok.type == "INT":
             return f"integer {tok.value}"
+        if tok.type == "CHAR":
+            return f"character '{chr(tok.value)}'"
         if tok.type == "STR":
             return f"string \"{tok.value}\""
         if tok.type in ("PUNCT", "OP"):
@@ -2038,9 +2040,17 @@ class Parser:
             value, width = tok.value
             return self._set_pos(FloatLit(value, width), tok)
 
+        if tok.type == "CHAR":
+            self.pos += 1
+            # A member call may follow, as it may on a name: 'a'.ord()
+            # reads as one thing and has nothing to be ambiguous with.
+            return self._parse_postfix(
+                self._set_pos(CharLit(tok.value), tok))
+
         if tok.type == "STR":
             self.pos += 1
-            return self._set_pos(StrLit(tok.value), tok)
+            return self._parse_postfix(
+                self._set_pos(StrLit(tok.value), tok))
 
         if tok.type == "NONE":
             self.pos += 1

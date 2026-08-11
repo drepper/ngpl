@@ -30,6 +30,13 @@ class FloatLit:
         self.width = width
 
 
+class CharLit:
+    """Character literal: one Unicode scalar value, written 'a'."""
+
+    def __init__(self, code: int):
+        self.code = code
+
+
 class StrLit:
     """String literal with escape processing."""
 

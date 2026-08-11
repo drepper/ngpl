@@ -1,0 +1,6 @@
+// Two characters are a string, which is written with double quotes.
+@start
+@impure
+fn main():
+    let c : char = 'ab'
+    std.println("{}", c)

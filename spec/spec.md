@@ -398,6 +398,43 @@ foreach c := "héllo":
 
 That loop runs five times, not six: `é` is one character, whatever its encoding costs.
 
+#### Writing One Down
+
+A character literal is written between apostrophes:
+
+```
+let c : char = 'a'
+let greek := 'λ'
+let party := '🎉'
+```
+
+A string is written between double quotes, so the two say which they are before they are read: `'a'` is a character and `"a"` a string of one.  A literal holds exactly one character, and anything else says so:
+
+```
+''      error: a character literal holds one character, and this one
+        holds none; a string of no characters is written ""
+
+'ab'    error: a character literal holds one character, and 'ab' holds
+        2; a string is written with double quotes, as "ab"
+```
+
+It ends on the line it starts.
+
+The escapes are the string's, with the apostrophe escapable in place of the double quote — `'\n'`, `'\t'`, `'\r'`, `'\\'`, `'\''`, and `'"'` needing none.  A character may also be written by number, and the same three refusals apply as to `.chr()`:
+
+```
+'\u{41}'                        /* A */
+'\u{1F389}'                     /* 🎉 */
+'\u{D800}'
+
+error: character literal: 55296 is a surrogate, which encodes half of a
+character in UTF-16 rather than being one
+```
+
+A literal is a compile-time constant, so `static_assert('a' < 'b')` holds.
+
+The apostrophe that ends a generic type name — `T'` — is taken by the name, so a literal following one still reads as a literal.
+
 #### `.ord()` and `.chr()`
 
 A character says its number, and a number becomes a character:

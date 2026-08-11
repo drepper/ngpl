@@ -1,0 +1,7 @@
+error: a character literal holds one character, and 'ab' holds 2; a string is written with double quotes, as "ab"
+  --> tests/output/char_literal_two.ngpl:5:20
+    |
+  5 |     let c : char = 'ab'
+    |                    ^
+  6 |     std.println("{}", c)
+    |

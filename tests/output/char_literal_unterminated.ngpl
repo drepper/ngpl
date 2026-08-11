@@ -1,0 +1,6 @@
+// A character literal ends on the line it starts.
+@start
+@impure
+fn main():
+    let c : char = 'a
+    std.println("{}", c)

@@ -1,0 +1,7 @@
+error: a character literal holds one character, and this one holds none; a string of no characters is written ""
+  --> tests/output/char_literal_empty.ngpl:5:20
+    |
+  5 |     let c : char = ''
+    |                    ^
+  6 |     std.println("{}", c)
+    |

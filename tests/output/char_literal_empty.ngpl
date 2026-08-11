@@ -1,0 +1,6 @@
+// A character literal holds one character, and none is none.
+@start
+@impure
+fn main():
+    let c : char = ''
+    std.println("{}", c)

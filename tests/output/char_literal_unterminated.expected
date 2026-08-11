@@ -1,0 +1,7 @@
+error: a character literal ends on the line it starts, with '
+  --> tests/output/char_literal_unterminated.ngpl:5:20
+    |
+  5 |     let c : char = 'a
+    |                    ^
+  6 |     std.println("{}", c)
+    |
