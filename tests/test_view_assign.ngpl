@@ -3,7 +3,7 @@
 @test
 fn test_reshape_view_write():
   let a: mut i32[] = 16 ⍴ 0
-  ((4, 4) ⍴ a)[1…2,1…2] = (2, 2) ⍴ 1
+  ((4, 4) ⍴ a)[1…2,1…2] ← (2, 2) ⍴ 1
   let exp: i32[16] = [0,0,0,0,0,1,1,0,0,1,1,0,0,0,0,0]
   assert_eq(a, exp)
 
@@ -19,7 +19,7 @@ fn test_reshape_view_read():
 fn test_reshape_view_propagates():
   let a: mut i32[] = 4 ⍴ 0
   let m := (2, 2) ⍴ a
-  m[0, 1] = 42
+  m[0, 1] ← 42
   assert_eq(a[1], 42)
 
 // --- call-by-reference: reshape inside function modifies caller's array ---
@@ -28,7 +28,7 @@ fn test_reshape_view_propagates():
 // so the parameter has to be lent for writing, not just for reading.
 fn reshape_by_ref(arr : &mut i32[]):
   let m := (2, 2) ⍴ arr
-  m[0, 1] = 42
+  m[0, 1] ← 42
 
 @test
 fn test_reshape_ref_modifies_caller():
@@ -42,7 +42,7 @@ fn test_reshape_ref_modifies_caller():
 // function's own copy, so the caller is still unaffected.
 fn reshape_by_val(arr : mut i32[]):
   let m := (2, 2) ⍴ arr
-  m[0, 1] = 99
+  m[0, 1] ← 99
 
 @test
 fn test_reshape_val_no_modify():
@@ -56,7 +56,7 @@ fn test_reshape_val_no_modify():
 // the callee may change it.  This one does change it, and the caller
 // sees the change.
 fn set_element_ref(arr : &mut i32[], idx, val : i32):
-  arr[idx] = val
+  arr[idx] ← val
 
 @test
 fn test_element_ref_modifies_caller():
@@ -70,7 +70,7 @@ fn test_element_ref_modifies_caller():
 // parameter is immutable by default.  The copy is what is written, so
 // the caller is still unaffected -- which is what this tests.
 fn set_element_val(arr : mut i32[], idx, val : i32):
-  arr[idx] = val
+  arr[idx] ← val
 
 @test
 fn test_element_val_no_modify():

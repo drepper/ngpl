@@ -88,7 +88,7 @@ fn test_no_suffix_stays_untyped():
 @test
 fn test_whole_number_with_a_float_suffix():
     static_assert_eq(@typeof(5f32), f32)
-    assert(5f32 == 5.0)
+    assert(5f32 = 5.0)
 
 // A suffix names a type, so one that names nothing is a mistake, and
 // a fractional number cannot take an integer type.  Those are output
@@ -98,3 +98,42 @@ fn test_whole_number_with_a_float_suffix():
 @impure
 fn main():
     std.println("type tests passed")
+
+// ---------------------------------------------------------------------
+// Equality is =, and only ← stores
+// ---------------------------------------------------------------------
+
+// The same glyph separates a definition from its value.  Each consumes
+// its = before an expression begins, so an = reached while an
+// expression is being read is the operator.
+@test
+fn test_a_definition_initialized_with_a_comparison():
+    let x : i64 = 5
+    let b : bool = x = 5
+    assert(b)
+    assert(¬(x = 6))
+
+@test
+fn test_equality_in_a_condition():
+    let x : i64 = 5
+    let hit : mut = false
+    if x = 5:
+        hit ← true
+    assert(hit)
+
+// The old spelling is refused by name, since every program written
+// before the rename uses it.
+@test
+@expect error "'==' is not an operator; equality is written '='"
+fn error_the_old_spelling():
+    let x : i64 = 5
+    let b : mut = x == 5
+
+// Storing is ← and nothing else, so a statement that compares computes
+// something nothing reads.
+@test
+@expect error "the value of this statement is not used"
+fn error_comparing_where_a_store_was_meant():
+    let x : mut i64 = 1
+    x = 5
+    x ← 2

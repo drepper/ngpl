@@ -591,7 +591,7 @@ let n : i64 = a.chr()
 error: 'i64' cannot hold a character
 ```
 
-Characters compare with each other by code point, with `==`, `!=`, `<`, `>`, `<=`, and `>=`.
+Characters compare with each other by code point, with `=`, `!=`, `<`, `>`, `<=`, and `>=`.
 
 A character is written out as itself, the way a string is — `std.print("{}", c)` writes the character.  At the prompt it is *displayed* as `'a'`, quoted the way a character is written rather than the way a string of one would be, so the two are told apart when a value is read back.
 
@@ -1035,14 +1035,14 @@ let a : f64 = 0.1
 let b : f64 = 0.2
 let c : f64 = 0.3
 
-(a + b) == c        // false
+(a + b) = c        // false
 ```
 
 Six operators ask the same questions allowing for that error.  Each pairs with the exact one it resembles:
 
 | Tolerant | Exact | Reads as |
 |----------|-------|----------|
-| `≅` | `==` | alike |
+| `≅` | `=` | alike |
 | `≇` | `!=` | not alike |
 | `⪅` | `<=` | less than or alike |
 | `⪆` | `>=` | greater than or alike |
@@ -1123,11 +1123,11 @@ This promotion is implicit and always safe (integers have exact float representa
 
 #### Float Comparisons
 
-All comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) work on floats and mixed int-float pairs.  Integers are promoted to float before comparison:
+All comparison operators (`=`, `!=`, `<`, `>`, `<=`, `>=`) work on floats and mixed int-float pairs.  Integers are promoted to float before comparison:
 
 ```
 static_assert(1.0 < 2.0)
-static_assert(1.0 == 1)        // int promoted to float
+static_assert(1.0 = 1)        // int promoted to float
 static_assert(2 > 1.5)         // int promoted to float
 ```
 
@@ -1347,14 +1347,14 @@ The logic operators follow standard Boolean algebra precedence, all binding tigh
 
 | Tightest → Loosest | Operators |
 |---------------------|-----------|
-| comparison          | `==`, `!=`, `<`, `>`, `<=`, `>=` |
+| comparison          | `=`, `!=`, `<`, `>`, `<=`, `>=` |
 | logic AND/NAND      | `∧`, `⊼` |
 | logic XOR           | `⊕` |
 | logic OR/NOR        | `∨`, `⊽` |
 | short-circuit AND   | `and` |
 | short-circuit OR    | `or` |
 
-This means `a == 0 ∧ b != 0` parses as `(a == 0) ∧ (b != 0)`, and `x ∧ y ∨ z` parses as `(x ∧ y) ∨ z`.
+This means `a = 0 ∧ b != 0` parses as `(a = 0) ∧ (b != 0)`, and `x ∧ y ∨ z` parses as `(x ∧ y) ∨ z`.
 
 #### Element-wise on Arrays
 
@@ -1516,7 +1516,7 @@ s ⍳ 'w'                         /* 6 */
 s ⍳ "world"                     /* 6 — a run of characters is where it starts */
 ```
 
-The left operand is an array or a string; the right is what is looked for.  In an array that is an element, compared as `==` compares.  In a string it is a character or a string, and a position is counted in characters as everything about a string is.  The first of several is the one answered.
+The left operand is an array or a string; the right is what is looked for.  In an array that is an element, compared as `=` compares.  In a string it is a character or a string, and a position is counted in characters as everything about a string is.  The first of several is the one answered.
 
 A slice is a container in its own right, and a position in it is counted from its own beginning:
 
@@ -1580,7 +1580,7 @@ let f : f64[] = [1.0, 2.5]
 f ⍳ 1                           /* 0 — the number settles on f64 */
 ```
 
-Past the kinds, an element is compared the way `==` compares it, so a unit that does not belong to the container is refused where it is written rather than quietly matching nothing:
+Past the kinds, an element is compared the way `=` compares it, so a unit that does not belong to the container is refused where it is written rather than quietly matching nothing:
 
 ```
 v ⍳ 20¤byte
@@ -1702,7 +1702,7 @@ let f : f64[] = [1.0, 2.5]
 1 ∊ f                           /* true */
 ```
 
-Past that, an element is compared the way `==` compares it, so a unit that does not belong is refused where it is written:
+Past that, an element is compared the way `=` compares it, so a unit that does not belong is refused where it is written:
 
 ```
 20¤byte ∊ v
@@ -1781,7 +1781,7 @@ Note that `@max(T)` and `@min(T)` are a different thing: they name the extreme v
 
 ```
 2 + 3 ⌈ 10 - 4                /* 6 — the larger of the two sums */
-3 ⌈ 5 == 5                    /* true — (3 ⌈ 5) == 5 */
+3 ⌈ 5 = 5                    /* true — (3 ⌈ 5) = 5 */
 1…(2 ⌈ 3)                     /* 1…3 */
 ```
 
@@ -1841,7 +1841,7 @@ Written in front of an operand rather than between two, `⌈` and `⌊` are the 
 
 The glyphs point up and down, which between two numbers is the larger and the smaller and in front of text is the upper and the lower.  Where the glyph is written says which is meant, as it does for a minus sign, and a prefix binds as the other prefix operators do — tighter than what joins two things, so `⌈"ab" ⧺ ⌊"CD"` is `"ABcd"`.
 
-What has no case is unchanged, and the answer is known at compile time where the text is: `static_assert(⌈"a" == "A")`.
+What has no case is unchanged, and the answer is known at compile time where the text is: `static_assert(⌈"a" = "A")`.
 
 A character is asked through its string, since one character's upper case can be more than one character:
 
@@ -2176,7 +2176,46 @@ Both forms are always accepted.  The lexer normalizes the ASCII forms to their U
 The Unicode forms are preferred in source code for visual clarity and consistency with the other Unicode operators (`«`, `»`, `↺`, `↻`, `∧`, `∨`, `⊕`, `⍴`, `⧺`).  The ASCII forms exist to support environments where entering Unicode characters is inconvenient.
 
 
-### Optimization Hints
+### Equality Is `=`, and Only `←` Stores
+
+`=` is the equality operator:
+
+```
+if x = 5:
+    …
+
+let same : bool = a = b         /* the definition's =, then the operator */
+```
+
+Storing a value is `←` and nothing else.  The two are different operations and are written differently, so neither can be mistaken for the other:
+
+```
+x ← 5                           /* store */
+x = 5                           /* compare, and the answer is unused */
+
+error: the value of this statement is not used; it computes something
+and nothing reads it
+```
+
+This is the shape of bug C is known for — `if (x = 5)` where `==` was meant — and the language cannot express it.  C needs a second glyph for equality precisely because `=` already stores; here it does not, so the glyph mathematics uses for equality is free to mean equality.
+
+#### One Glyph, Two Places
+
+`=` also separates a definition from its value, in `let`, in an `enum` member, in a `type` or `unit` definition, and in the binding forms of `while` and `foreach`.  That is not an ambiguity: each of those consumes its `=` at a fixed point, before any expression begins, so an `=` reached while an expression is being read is the operator.  A definition may therefore be initialized with a comparison, and the two `=` do not interfere:
+
+```
+let b : bool = x = 5
+```
+
+#### `==` Is Not an Operator
+
+The old spelling is refused by name rather than by a parse error, since every program written before this change uses it:
+
+```
+x == 5
+
+error: '==' is not an operator; equality is written '='
+```
 
 Four annotations say how often something is expected to happen.  They exist for the compiler's benefit and never change what a program computes: a hinted branch is still taken when its condition holds, and a hinted function still returns what it returned before.  Removing every hint from a program leaves its behaviour identical.
 
@@ -2624,9 +2663,9 @@ When the unwrapped value has a narrower unsigned type than the target variable, 
 Comparing an optional with a plain value is an error:
 
 ```
-v.get(0) == 1
+v.get(0) = 1
 
-error: ==: cannot compare an optional with a plain value; write ∃(v) to
+error: =: cannot compare an optional with a plain value; write ∃(v) to
 compare against a present value, ∅ against an absent one, or ?? to
 supply a default
 ```
@@ -2648,8 +2687,8 @@ assert_eq(it.next() ?? 0, 97)  // 97, or nothing at all
 Two optionals are compared by shape first and contents second, so nesting survives:
 
 ```
-∃(∅) == ∅                 // false — one holds something, the other nothing
-∃(∃(1)) == ∃(∃(1))       // true
+∃(∅) = ∅                 // false — one holds something, the other nothing
+∃(∃(1)) = ∃(∃(1))       // true
 ```
 
 Arithmetic and the other operators still unwrap implicitly, as [Implicit Unwrapping](#implicit-unwrapping) describes.  Only equality is strict, because only equality can silently answer a different question than the one asked.
@@ -3347,7 +3386,7 @@ The rules are:
    if x < 0: return -x
    ```
 
-5. **Line continuation.**  A trailing binary operator (`+`, `-`, `×`, `÷`, `%`, `⊞`, `⊟`, `⊠`, `|`, `&`, `^`, `<<`, `>>`, `«`, `»`, `↺`, `↻`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `??`, `←`, `and`, `or`) or a trailing `=` (in variable definitions) signals that the expression continues on the next line.  The indentation of the continuation line does not create a new block:
+5. **Line continuation.**  A trailing binary operator (`+`, `-`, `×`, `÷`, `%`, `⊞`, `⊟`, `⊠`, `|`, `&`, `^`, `<<`, `>>`, `«`, `»`, `↺`, `↻`, `=`, `!=`, `<`, `>`, `<=`, `>=`, `??`, `←`, `and`, `or`) signals that the expression continues on the next line.  A trailing `=` does so whether it is the equality operator or the one that separates a definition from its value.  The indentation of the continuation line does not create a new block:
    ```
    W[j] ← W[j - 16] + expand_s0(W[j - 15]) +
            W[j - 7] + expand_s1(W[j - 2])
@@ -3495,12 +3534,14 @@ The value is tested with the ordinary rules, so an optional tests presence and a
 
 Both forms begin with an identifier followed by a colon, since `while e:` is a plain condition on `e` and `while e := ...` is a binding.  What comes after the colon decides: `=` means the untyped binding, and a type name followed by `=` means the typed one.
 
-An inline body that is itself an assignment — `while e: x = 5` — has the same shape as a typed binding and is rejected.  Written as an indented block it is unambiguous:
+An inline body that is itself a comparison — `while e: x = 5` — has the same shape as a typed binding and is rejected.  Written as an indented block it is unambiguous:
 
 ```
 while e:
     x = 5
 ```
+
+An assignment cannot be confused with either, since it is written `←`.
 
 #### Comparison with Other Languages
 
@@ -3514,7 +3555,7 @@ while e:
 | Python | `while (e := it.next()) is not None` |
 | NGPL | `while e := it.next():` |
 
-Rust and Zig bind and test in one construct, as this does.  C's idiom is the same shape but needs the assignment parenthesized and compared explicitly, which is the classic source of `=` written where `==` was meant.  Go has no binding `while` at all, so the call appears twice, which is the repetition this form removes.
+Rust and Zig bind and test in one construct, as this does.  C's idiom is the same shape but needs the assignment parenthesized and compared explicitly, which is the classic source of `=` written where `==` was meant — a mistake this language cannot make, since `=` compares and only `←` stores.  Go has no binding `while` at all, so the call appears twice, which is the repetition this form removes.
 
 
 ### Foreach Loop
@@ -4280,7 +4321,7 @@ Tuple indexing is not affected — tuples accept bare integer indices without un
 
 When one operand of a binary operation carries a unit and the other does not, the rules depend on the operation and the non-unit operand's type status:
 
-**Additive operations** (`+`, `-`) and **comparisons** (`==`, `!=`, `<`, `>`, `<=`, `>=`):
+**Additive operations** (`+`, `-`) and **comparisons** (`=`, `!=`, `<`, `>`, `<=`, `>=`):
 - **Untyped integer constants** are accepted — the result inherits the unit of the unit-bearing operand (for `+`/`-`) or produces a boolean (for comparisons).
 - **Typed integers** without a unit are rejected.  The programmer must attach the matching unit at the declaration site.
 
@@ -4290,7 +4331,7 @@ let b : mut i32 = 3
 
 let x : mut = a + 2         // OK — untyped constant, result is 7 ¤ptrdiff
 let y : mut = a + b         // error: cannot + unit ptrdiff with typed integer i32
-let z : mut = a == 5        // OK — untyped constant comparison
+let z : mut = a = 5        // OK — untyped constant comparison
 let w : mut = a < b         // error: cannot compare unit ptrdiff with typed integer i32
 ```
 
@@ -4761,7 +4802,7 @@ The iterator reads through the directory's descriptor, so it stops working once 
 | `unknown` | 0 | none |
 
 ```
-if e.type == std.filetype.dir:
+if e.type = std.filetype.dir:
     descend(e.name)
 ```
 
@@ -5133,7 +5174,7 @@ Two built-in assertion functions are available in all scopes:
 
 Two compile-time assertion functions verify conditions using only constant expressions.  If any argument is not a compile-time constant (i.e., it references a variable), a compilation error is raised immediately:
 
-- `static_assert(condition)` — fails at compile time if the condition is `false` or zero.  An optional second argument provides a custom error message: `static_assert(2 + 2 == 4)`, `static_assert(false, "unreachable")`.
+- `static_assert(condition)` — fails at compile time if the condition is `false` or zero.  An optional second argument provides a custom error message: `static_assert(2 + 2 = 4)`, `static_assert(false, "unreachable")`.
 
 - `static_assert_eq(expected, actual)` — fails at compile time if the two constant values differ: `static_assert_eq(120, 2 × 3 × 4 × 5)`.
 
@@ -5149,9 +5190,9 @@ static_assert_eq(@unitof(a), @unitof(1))
 A member that answers *about* a constant is constant too.  Those are the conversions between a number, a character, and a string — `.ord()`, `.chr()`, `.str()`, `.chars()` — and the queries `.sizeof` and `.alignof`.  Each says the same thing about the same value every time it is asked, so it can be asked before anything runs:
 
 ```
-static_assert('a'.ord() == 97)
-static_assert((65).chr() == 'A')
-static_assert((97).chr().ord() == 97)
+static_assert('a'.ord() = 97)
+static_assert((65).chr() = 'A')
+static_assert((97).chr().ord() = 97)
 static_assert_eq("ab".chars().sizeof, 2 ¤ptrdiff)
 static_assert_eq(@typeof('a'.ord()), u32)
 ```
@@ -5159,7 +5200,7 @@ static_assert_eq(@typeof('a'.ord()), u32)
 A conversion that cannot be made is a mistake known at the same time, and reported where it is written:
 
 ```
-static_assert((1114112).chr() == 'A')
+static_assert((1114112).chr() = 'A')
 
 error: chr: 1114112 is past the last code point, which is 1114111
 (0x10FFFF)
@@ -5358,7 +5399,7 @@ fn process(args… : T'):
         i ← i + 1
 ```
 
-Type and result-of values can be compared with `==` and used with `static_assert_eq`:
+Type and result-of values can be compared with `=` and used with `static_assert_eq`:
 
 ```
 fn example() → i32: 42
@@ -5369,7 +5410,7 @@ static_assert_eq(@typeof("a"), @typeof("b"))   // both are str
 static_assert_eq(@resultof(example), @resultof(example))
 ```
 
-- `@unitof(expr)` — returns the unit attached to a value as a `UnitOfValue`.  The argument must be a compile-time constant expression.  If the value has no unit (dimensionless), returns a dimensionless unit value.  Supports equality (`==`) and inequality (`!=`) comparison with other `@unitof` results and with standalone unit references (`¤meter`, `¤byte`, etc.).
+- `@unitof(expr)` — returns the unit attached to a value as a `UnitOfValue`.  The argument must be a compile-time constant expression.  If the value has no unit (dimensionless), returns a dimensionless unit value.  Supports equality (`=`) and inequality (`!=`) comparison with other `@unitof` results and with standalone unit references (`¤meter`, `¤byte`, etc.).
 
   A standalone unit reference `¤unit` (without a preceding expression) produces a `UnitOfValue` for comparison purposes:
 
@@ -5377,7 +5418,7 @@ static_assert_eq(@resultof(example), @resultof(example))
 // @unitof on compile-time unit expressions
 static_assert_eq(@unitof(5 ¤meter), ¤meter)
 assert_true(@unitof(42) != ¤meter)            // dimensionless
-assert_true(@unitof(100 ¤meter ÷ (10 ¤second)) == ¤meter÷second)
+assert_true(@unitof(100 ¤meter ÷ (10 ¤second)) = ¤meter÷second)
 ```
 
 | Feature | C++ | Rust | Zig | NGPL |
@@ -5386,7 +5427,7 @@ assert_true(@unitof(100 ¤meter ÷ (10 ¤second)) == ¤meter÷second)
 | Return type query | `decltype(f())` | — | `@typeInfo` | `@resultof(func)` |
 | Size query | `std::size(c)` | `c.len()` | `x.len` | `@sizeof(expr)` |
 | Unit query | — | — | — | `@unitof(expr)` |
-| Type equality | `std::is_same_v` | `TypeId` | `==` | `==` |
+| Type equality | `std::is_same_v` | `TypeId` | `==` | `=` |
 
 #### Test Output
 
@@ -5953,17 +5994,17 @@ let l : mut = Level.high
 
 #### Comparison
 
-Enum values of the same type can be compared with `==` and `!=`.  Comparing values from different enum types is a type error.  Enum values can also be compared with integer literals:
+Enum values of the same type can be compared with `=` and `!=`.  Comparing values from different enum types is a type error.  Enum values can also be compared with integer literals:
 
 ```
 let c : mut = Color.red
-assert_eq(c == Color.red, true)     /* same-type comparison */
-assert_eq(c == 0, true)             /* compare with integer */
+assert_eq(c = Color.red, true)     /* same-type comparison */
+assert_eq(c = 0, true)             /* compare with integer */
 ```
 
 ```
 /* ERROR: cannot compare enum 'Color' with enum 'Status' */
-let x : mut = Color.red == Status.ok
+let x : mut = Color.red = Status.ok
 ```
 
 #### Underlying Type
@@ -6275,8 +6316,8 @@ let toggled : mut = rw ^ Perms.write       /* toggle: Perms.read */
 let others : mut = ~rw                     /* complement: Perms.exec */
 
 /* Test membership */
-let has_read : mut = (rw & Perms.read) == Perms.read    /* true */
-let has_exec : mut = (rw & Perms.exec) == Perms.exec    /* false */
+let has_read : mut = (rw & Perms.read) = Perms.read    /* true */
+let has_exec : mut = (rw & Perms.exec) = Perms.exec    /* false */
 ```
 
 The complement operator `~` masks against the union of all defined member values, so `~Perms.read` yields `Perms.write | Perms.exec` rather than a full integer complement.
@@ -6293,7 +6334,7 @@ A built-in enum `std.errors` provides standardized error codes grouped by catego
 
 ```
 let err : mut = std.errors.division_by_zero
-assert_eq(err == 100, true)
+assert_eq(err = 100, true)
 ```
 
 The grouping by integer ranges allows category checks:  runtime errors are in 100-199, compile-time errors in 200-299, library errors in 300-399.
@@ -6499,7 +6540,7 @@ Each iteration binds `v` to one pack element.  When the pack has a generic type,
 fn hetero_count(args…) → int:
     let ints : mut int = 0
     comptime foreach v := args:
-        if @typeof(v) == @typeof(0):
+        if @typeof(v) = @typeof(0):
             ints ← ints + 1
     ints
 

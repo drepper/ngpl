@@ -32,3 +32,5 @@ what it is.
 - [Whether Something Is There: `∊`](design/element-of/README.md) —
   asking only whether, which a matrix can answer where a position
   cannot
+- [Equality Is `=`](design/equality/README.md) — taking the glyph back
+  from the assignment that never used it here

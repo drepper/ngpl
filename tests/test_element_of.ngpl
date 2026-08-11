@@ -165,7 +165,7 @@ fn error_looking_through_a_range():
     let r := 1…5
     let found : mut = 3 ∊ r
 
-// An element is compared the way == compares it, so a unit that does
+// An element is compared the way = compares it, so a unit that does
 // not belong is refused where it is written.
 @test
 @expect error "cannot compare"

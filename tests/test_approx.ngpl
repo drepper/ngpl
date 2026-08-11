@@ -1,7 +1,7 @@
 // test_approx.ngpl -- comparisons made to within a tolerance
 //
 // Six operators pair with the exact ones: ≅ ≇ ⪅ ⪆ ⪉ ⪊ against
-// == != <= >= < >.  They ask the same questions, allowing for the
+// = != <= >= < >.  They ask the same questions, allowing for the
 // error that floating-point arithmetic accumulates.
 //
 // The tolerance is std.comparison_tolerance, following APL's ⎕CT: two
@@ -19,7 +19,7 @@ fn test_accumulated_error_is_forgiven():
     let a : f64 = 0.1
     let b : f64 = 0.2
     let c : f64 = 0.3
-    assert(¬((a + b) == c))
+    assert(¬((a + b) = c))
     assert((a + b) ≅ c)
     assert(¬((a + b) ≇ c))
 

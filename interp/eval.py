@@ -684,7 +684,7 @@ class Evaluator:
             # The larger and the smaller of two numbers, as in APL.
             "\N{LEFT CEILING}": self._op_max,
             "\N{LEFT FLOOR}": self._op_min,
-            "==": self._op_eq,
+            "=": self._op_eq,
             "!=": self._op_neq,
             "<": self._op_lt,
             ">": self._op_gt,
@@ -844,7 +844,7 @@ class Evaluator:
             # door: a unit that does not belong to the container is
             # refused here as it would be between the two operands,
             # rather than quietly matching nothing.
-            same = self._apply_operator("==", element, right)
+            same = self._apply_operator("=", element, right)
             if not isinstance(unwrap_optional(same), BoolValue):
                 # The comparison answered element-wise, so the element
                 # is itself a container: a position in it is not one
@@ -951,7 +951,7 @@ class Evaluator:
         for element in self._leaves(array):
             # Compared the way == compares, as ⍳ compares, so a unit
             # that does not belong is refused rather than found missing.
-            if to_bool(self._apply_operator("==", element, left)):
+            if to_bool(self._apply_operator("=", element, left)):
                 return mk_bool(True)
         return mk_bool(False)
 
@@ -1147,7 +1147,7 @@ class Evaluator:
 
     def _op_eq(self, left, right):
         """Equality comparison."""
-        self._reject_mixed_optional(left, right, "==")
+        self._reject_mixed_optional(left, right, "=")
         # Two optionals are compared by shape first and contents second,
         # so that a present-but-empty optional and an absent one are
         # told apart: ∃(∅) is not ∅.
@@ -1451,7 +1451,7 @@ class Evaluator:
             return self._op_element_of(left, right)
         if op in self._APPROX_OPS:
             return self._op_approx(op, left, right)
-        if op in ("==", "!=") and (isinstance(left, (SomeValue, NoneValue))
+        if op in ("=", "!=") and (isinstance(left, (SomeValue, NoneValue))
                                    or isinstance(right, (SomeValue, NoneValue))):
             # Whether there is a value at all is settled before what it
             # is, so that an optional carrying a unit is not unwrapped
@@ -1771,7 +1771,7 @@ class Evaluator:
                 return result
             return UnitValue(result, new_unit)
 
-        if op in ("==", "!=", "<", ">", "<=", ">="):
+        if op in ("=", "!=", "<", ">", "<=", ">="):
             if l_is_unit and not r_is_unit:
                 if isinstance(r_inner, IntValue) \
                         and not is_unwidthed(r_inner.width):
@@ -2266,7 +2266,7 @@ class Evaluator:
             elif isinstance(eu, UnitValue) and isinstance(au, UnitValue):
                 # Through the arithmetic's own comparison, so that the
                 # units have to agree as well as the numbers.
-                eq = self._unit_binop("==", eu, au)
+                eq = self._unit_binop("=", eu, au)
                 if not eq.value:
                     raise TypeError(
                         f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")

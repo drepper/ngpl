@@ -261,13 +261,13 @@ fn test_arith_typed_times_unit():
     let x := a × b
     assert_eq(x, 12 ¤byte)
 
-// comparison: unit == typed int → error
+// comparison: unit = typed int → error
 @test
 @expect error "cannot compare unit .+ with typed integer"
 fn test_cmp_unit_eq_typed():
     let a ¤ptrdiff : mut i32 = 3
     let b : mut i32 = 3
-    let x : mut = a == b
+    let x : mut = a = b
 
 // comparison: typed int < unit → error
 @test
@@ -277,11 +277,11 @@ fn test_cmp_typed_lt_unit():
     let b ¤ptrdiff : mut i32 = 3
     let x : mut = a < b
 
-// comparison: unit == untyped let → ok
+// comparison: unit = untyped let → ok
 @test
 fn test_cmp_unit_eq_const():
     let a ¤ptrdiff : i32 = 3
-    assert_eq(a == 3, true)
+    assert_eq(a = 3, true)
 
 // comparison: unit < untyped let → ok
 @test

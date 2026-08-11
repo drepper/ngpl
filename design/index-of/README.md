@@ -68,7 +68,7 @@ The unit is on the answer and not on what is looked for.  An element
 of a `byte[]` is a byte and not a count of bytes, so `b ⍳ 98` is
 written without one; this is the same distinction the language already
 draws between a `byte` and `¤byte`, and it costs a reader nothing that
-`==` does not already cost them.
+`=` does not already cost them.
 
 ## Grouping
 
@@ -97,7 +97,7 @@ it refuses rather than answering something a program might believe.
   the language's own for whether two scalars are the same kind of
   thing, so a width still meets another width and an untyped number
   still settles on what the container holds.
-- **A unit that does not belong.**  An element is compared the way `==`
+- **A unit that does not belong.**  An element is compared the way `=`
   compares it, by going through the same door, so `v ⍳ 20¤byte` is
   refused where it is written rather than quietly matching nothing.
   An operator that did its own comparing would have been a second
@@ -112,13 +112,13 @@ it refuses rather than answering something a program might believe.
 ### The One That Was Argued About
 
 Looking for what the container cannot hold was *allowed* at first, on
-the grounds that `==` answers `false` between two values of unrelated
-types and a search is a series of `==`.  [`∊`](../element-of/README.md)
+the grounds that `=` answers `false` between two values of unrelated
+types and a search is a series of `=`.  [`∊`](../element-of/README.md)
 took the stricter line when it arrived, and two operators asking the
 same question of their operands cannot answer it two ways, so one of
 them had to give.
 
-The refusal is the one worth having.  `==` is asked about two values a
+The refusal is the one worth having.  `=` is asked about two values a
 program has in hand, and answering `false` is a fact about them.  A
 search is asked about a value and a *container*, and the container has
 a type: what could ever match is known before anything is compared, so

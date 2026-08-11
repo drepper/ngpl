@@ -15,17 +15,17 @@ fn test_enum_member_access():
 
 @test
 fn test_enum_sequential_values():
-    assert(Color.red == 0)
-    assert(Color.green == 1)
-    assert(Color.blue == 2)
+    assert(Color.red = 0)
+    assert(Color.green = 1)
+    assert(Color.blue = 2)
 
 @test
 fn test_enum_equality():
     let a := Color.red
     let b := Color.red
     let c := Color.blue
-    assert(a == b)
-    assert(not (a == c))
+    assert(a = b)
+    assert(not (a = c))
     assert(a != c)
 
 // ---- enum with explicit values -------------------------------------------
@@ -38,10 +38,10 @@ enum Status:
 
 @test
 fn test_enum_explicit_values():
-    assert(Status.ok == 0)
-    assert(Status.warning == 10)
-    assert(Status.error == 20)
-    assert(Status.fatal == 30)
+    assert(Status.ok = 0)
+    assert(Status.warning = 10)
+    assert(Status.error = 20)
+    assert(Status.fatal = 30)
 
 // ---- enum with mixed auto and explicit -----------------------------------
 
@@ -53,10 +53,10 @@ enum Level:
 
 @test
 fn test_enum_mixed_values():
-    assert(Level.low == 0)
-    assert(Level.medium == 1)
-    assert(Level.high == 10)
-    assert(Level.critical == 11)
+    assert(Level.low = 0)
+    assert(Level.medium = 1)
+    assert(Level.high = 10)
+    assert(Level.critical = 11)
 
 // ---- enum with underlying type -------------------------------------------
 
@@ -68,8 +68,8 @@ enum SmallEnum : u8:
 @test
 fn test_enum_underlying_type():
     let x := SmallEnum.a
-    assert(x == 0)
-    assert(x == SmallEnum.a)
+    assert(x = 0)
+    assert(x = SmallEnum.a)
 
 // ---- @flag enum: powers of two -------------------------------------------
 
@@ -81,23 +81,23 @@ enum Perms:
 
 @test
 fn test_flag_auto_values():
-    assert(Perms.read == 1)
-    assert(Perms.write == 2)
-    assert(Perms.exec == 4)
+    assert(Perms.read = 1)
+    assert(Perms.write = 2)
+    assert(Perms.exec = 4)
 
 @test
 fn test_flag_nil_auto_created():
-    assert(Perms.nil == 0)
+    assert(Perms.nil = 0)
 
 @test
 fn test_flag_combine_or():
     let rw := Perms.read | Perms.write
-    assert(rw == 3)
+    assert(rw = 3)
 
 @test
 fn test_flag_combine_all():
     let all := Perms.read | Perms.write | Perms.exec
-    assert(all == 7)
+    assert(all = 7)
 
 @test
 fn test_flag_and():
@@ -120,8 +120,8 @@ fn test_flag_not():
 @test
 fn test_flag_and_test_membership():
     let rw := Perms.read | Perms.write
-    let has_read := (rw & Perms.read) == Perms.read
-    let has_exec := (rw & Perms.exec) == Perms.exec
+    let has_read := (rw & Perms.read) = Perms.read
+    let has_exec := (rw & Perms.exec) = Perms.exec
     assert(has_read)
     assert(not has_exec)
 
@@ -136,10 +136,10 @@ enum Flags:
 
 @test
 fn test_flag_explicit_and_auto():
-    assert(Flags.a == 1)
-    assert(Flags.b == 4)
-    assert(Flags.c == 8)
-    assert(Flags.d == 16)
+    assert(Flags.a = 1)
+    assert(Flags.b = 4)
+    assert(Flags.c = 8)
+    assert(Flags.d = 16)
 
 // ---- @flag enum with explicit zero (no auto nil) -------------------------
 
@@ -151,40 +151,40 @@ enum Mode:
 
 @test
 fn test_flag_explicit_zero_no_nil():
-    assert(Mode.off == 0)
-    assert(Mode.read == 1)
+    assert(Mode.off = 0)
+    assert(Mode.read = 1)
 
 // ---- std.errors enum -----------------------------------------------------
 
 @test
 fn test_std_errors_runtime():
     let e := std.errors.division_by_zero
-    assert(e == 100)
+    assert(e = 100)
     assert_eq(e, std.errors.division_by_zero)
 
 @test
 fn test_std_errors_compile():
-    assert(std.errors.type_mismatch == 200)
-    assert(std.errors.unknown_type == 201)
-    assert(std.errors.syntax_error == 202)
+    assert(std.errors.type_mismatch = 200)
+    assert(std.errors.unknown_type = 201)
+    assert(std.errors.syntax_error = 202)
 
 @test
 fn test_std_errors_library():
-    assert(std.errors.file_not_found == 300)
-    assert(std.errors.permission_denied == 301)
-    assert(std.errors.io_error == 302)
+    assert(std.errors.file_not_found = 300)
+    assert(std.errors.permission_denied = 301)
+    assert(std.errors.io_error = 302)
 
 @test
 fn test_std_errors_grouping():
     // Runtime errors are in 100-199
     let div := std.errors.division_by_zero
-    assert(div == 100 ∧ 100 <= 199)
+    assert(div = 100 ∧ 100 <= 199)
     // Compile errors are in 200-299
     let typ := std.errors.type_mismatch
-    assert(typ == 200 ∧ 200 <= 299)
+    assert(typ = 200 ∧ 200 <= 299)
     // Library errors are in 300-399
     let fnf := std.errors.file_not_found
-    assert(fnf == 300 ∧ 300 <= 399)
+    assert(fnf = 300 ∧ 300 <= 399)
 
 // ---- invalid operations on non-flag enums --------------------------------
 
@@ -217,7 +217,7 @@ fn error_bitnot_non_flag():
 fn error_cross_enum_compare():
     let a : mut = Color.red
     let b : mut = Status.ok
-    let x : mut = a == b
+    let x : mut = a = b
 
 @expect error "cannot combine enum"
 fn error_cross_enum_bitor():

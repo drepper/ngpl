@@ -140,7 +140,7 @@ Completed
     is one of the operands, so it needs no range of its own and neither operator can
     overflow.  They bind looser than the arithmetic and bitwise operators and tighter than
     the comparisons and …, so `2 + 3 ⌈ 10 - 4` is the larger of the two sums and
-    `3 ⌈ 5 == 5` compares the answer.  Operands must be the same kind of number and, where
+    `3 ⌈ 5 = 5` compares the answer.  Operands must be the same kind of number and, where
     they carry units, measure the same thing; arrays are handled element-wise as they are
     for arithmetic.
 
@@ -169,11 +169,24 @@ Completed
     them is not one of them, and ⍳ says where a run starts.  What is looked for has to be
     the kind of thing the container holds — a program asking whether a string is among some
     numbers has made a mistake about one of the two — and past that an element is compared
-    the way == compares it.  It binds where ⍳ does.
+    the way = compares it.  It binds where ⍳ does.
+
+[x] equality is = rather than ==, and ← is the only assignment.  C spells equality == because
+    = was taken by assignment before equality needed a glyph; this language assigns with ←, so
+    the inherited spelling was paying for a conflict it does not have.  The one that did exist
+    was a second assignment spelling: x = 5 stored, which no document asked for -- the manual's
+    assignment table lists only ← and the brief says assignment uses ← -- so it went, and with
+    it the reason an inline while body could be confused with a typed binding.  A definition's
+    = is no conflict: it is consumed at a fixed point before an expression begins, so
+    `let b : bool = x = 5` reads without the parser doing anything clever.  What is bought is
+    that C's `if (x = 5)` cannot be written: = compares, ← stores, and a comparison in
+    statement position is caught by the unused-value rule.  == is refused by name rather than
+    as a parse error, every program written before this using it.  != keeps its spelling; ≠ is
+    a separate change.
 
 [x] ⍳ refuses what the container cannot hold, as ∊ does, both going through one check.  It
-    answered ∅ before, on the grounds that == answers false between two values of unrelated
-    types and a search is a series of ==.  But == is asked about two values a program has in
+    answered ∅ before, on the grounds that = answers false between two values of unrelated
+    types and a search is a series of =.  But = is asked about two values a program has in
     hand, where a search is asked about a value and a container, and the container has a
     type: what could ever match is known before anything is compared, so a search that cannot
     succeed is a question that should not have been asked rather than one whose answer is no.
@@ -181,10 +194,10 @@ Completed
     container holds.
 
 [x] comparing a found position with ∅ was a type error while comparing an absent one was
-    not, so (v ⍳ x) == ∅ answered or refused depending on which way the search went.  A
+    not, so (v ⍳ x) = ∅ answered or refused depending on which way the search went.  A
     position carries a unit and the operator dispatch unwrapped the optional to find the
     unit before anything had asked whether there was a value at all.  Whether there is one
-    is now settled first for == and !=, which is also what asks whether a run of characters
+    is now settled first for = and !=, which is also what asks whether a run of characters
     is in a string.
 
 [x] writing → ∅ on a function or a method draws a warning, since it says what
@@ -264,7 +277,7 @@ Completed
     division sign is what a unit formula uses and what a derived unit displays, so a
     speed is declared ¤meter÷second and prints as m÷s.
 
-[x] approximate comparisons for floating-point values: ≅ ≇ ⪅ ⪆ ⪉ ⪊ against == != <= >= < >,
+[x] approximate comparisons for floating-point values: ≅ ≇ ⪅ ⪆ ⪉ ⪊ against = != <= >= < >,
     to within std.comparison_tolerance, which follows APL's ⎕CT in being a fraction of the
     larger operand rather than an absolute epsilon.  Scoping the tolerance is still open.
 
@@ -412,7 +425,7 @@ Type System
     the three ways of taking a string apart — foreach, a position, and the whole array — are
     three shapes of one thing and agree about the count.
 
-[x] .ord() and the other conversions answer at compile time, so static_assert('a'.ord() == 97)
+[x] .ord() and the other conversions answer at compile time, so static_assert('a'.ord() = 97)
     holds.  A member is constant when it answers about the value rather than doing something
     with it: the conversions between a number, a character, and a string, and the queries
     .sizeof and .alignof.  A method of a struct literal is excluded whatever it is called,

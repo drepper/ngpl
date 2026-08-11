@@ -35,7 +35,7 @@ let K : u32[] = [
 fn get_padded_byte(data : byte[], off ¤byte : usize, total_size ¤byte : usize) → u8?:
     if off >= total_size: return ∅
     if off < data.sizeof: return data[off]
-    if off == data.sizeof: return 128
+    if off = data.sizeof: return 128
     let len_start := total_size - 8
     if off >= len_start:
         let bit_len ¤byte : i64 = data.sizeof × 8

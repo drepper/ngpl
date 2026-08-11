@@ -84,7 +84,7 @@ fn test_sizeof_pack_param():
 fn comptime_typeof(args…) → i64:
     let count : mut i64 = 0
     comptime foreach v := args:
-        if @typeof(v) == @typeof(0):
+        if @typeof(v) = @typeof(0):
             count ← count + 1
     count
 

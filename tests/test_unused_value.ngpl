@@ -13,7 +13,7 @@ fn doubled(n : i64) → i64:
     n × 2
 
 fn hands_nothing_back(n : i64):
-    assert(n == n)
+    assert(n = n)
 
 let ticks : mut i64 = 0
 
@@ -185,7 +185,7 @@ fn test_a_builtin_call_is_quiet():
 // A static assertion is checked for its own sake.
 @test
 fn test_a_static_assertion_is_quiet():
-    static_assert(1 + 1 == 2)
+    static_assert(1 + 1 = 2)
     static_assert_eq(@typeof(1), int)
 
 // ---------------------------------------------------------------------
@@ -200,7 +200,7 @@ impl Point:
         self.x
 
     fn describe(&self):
-        assert(self.x == self.x)
+        assert(self.x = self.x)
 
 @test
 @expect error "the result of 'x_value' is not used"

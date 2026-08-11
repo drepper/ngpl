@@ -242,7 +242,7 @@ what makes a string something a program can work on rather than only
 hold:
 
 ```
-s.chars().str() == s
+s.chars().str() = s
 ```
 
 Three ways of taking a string apart now exist, and they are three
@@ -254,7 +254,7 @@ all three count characters.
 
 ## Asking Before Anything Runs
 
-`static_assert('a'.ord() == 97)` had to work, and the question it
+`static_assert('a'.ord() = 97)` had to work, and the question it
 raised was not about characters: a member call was not a constant
 expression at all, and which ones could be is a question about purity.
 
@@ -272,7 +272,7 @@ evaluation of one would be running the program's code at a time the
 program did not ask for.
 
 A conversion that cannot be made is then a mistake known at the same
-time: `static_assert((1114112).chr() == 'A')` reports the code point
+time: `static_assert((1114112).chr() = 'A')` reports the code point
 rather than the assertion.
 
 ## Status

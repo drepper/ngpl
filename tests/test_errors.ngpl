@@ -92,7 +92,7 @@ fn error_unknown_type_var():
 // --- call-by-reference errors ----------------------------------------------
 
 fn takes_ref(x : &mut i32[]):
-    x[0] = 1
+    x[0] ← 1
 
 @expect error "is by-reference.*caller must pass"
 fn error_ref_missing_ampersand():
@@ -100,7 +100,7 @@ fn error_ref_missing_ampersand():
     takes_ref(a)
 
 fn takes_val(x : i32[]):
-    x[0] = 1
+    x[0] ← 1
 
 @expect error "is by-value.*must not pass a reference"
 fn error_val_with_ampersand():

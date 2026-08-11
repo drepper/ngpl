@@ -125,7 +125,7 @@ fn test_the_largest_value_is_accepted():
     let b : f16 = 65504.0
     let c : f64 = 1.7976931348623157e308
     assert(a > 3.4e38)
-    assert(b == 65504.0)
+    assert(b = 65504.0)
     assert(c > 1.7e308)
 
 // A value the format rounds to something it can hold is held: only
@@ -218,15 +218,15 @@ fn test_a_narrow_format_underflows():
 @test
 fn test_a_zero_from_subtraction_is_exact():
     let a := 1.0f64 - 1.0f64
-    assert(a == 0.0)
+    assert(a = 0.0)
 
 // A zero operand makes a zero result the exact answer.
 @test
 fn test_a_zero_operand_gives_an_exact_zero():
     let a := 0.0f64 × 5.0f64
-    assert(a == 0.0)
+    assert(a = 0.0)
     let b := 0.0f64 ÷ 5.0f64
-    assert(b == 0.0)
+    assert(b = 0.0)
 
 // A subnormal is a number the format holds, with fewer significant
 // bits than a normal value but not with none.
@@ -239,9 +239,9 @@ fn test_a_subnormal_result_is_kept():
 @test
 fn test_ordinary_arithmetic_is_untouched():
     let a := 1.5f64 ÷ 3.0f64
-    assert(a == 0.5)
+    assert(a = 0.5)
     let b := 2.0f64 ↑ 10.0f64
-    assert(b == 1024.0)
+    assert(b = 1024.0)
 
 @start
 @impure

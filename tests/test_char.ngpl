@@ -92,7 +92,7 @@ fn test_a_literal_by_code_point():
 @test
 fn test_a_literal_is_constant():
     static_assert('a' < 'b')
-    static_assert('a' == 'a')
+    static_assert('a' = 'a')
     static_assert('a' != 'b')
 
 // The apostrophe that ends a generic type name is not a literal
@@ -102,7 +102,7 @@ fn first_of_pack(args… : T') → T':
 
 @test
 fn test_a_generic_name_keeps_its_prime():
-    assert(first_of_pack('a', 'b') == 'a')
+    assert(first_of_pack('a', 'b') = 'a')
 
 // ---------------------------------------------------------------------
 // .ord() and .chr()
@@ -206,7 +206,7 @@ fn error_a_character_has_no_other_method():
 fn test_characters_compare_by_code_point():
     let a : u32 = 97
     let b : u32 = 98
-    assert(a.chr() == a.chr())
+    assert(a.chr() = a.chr())
     assert(a.chr() != b.chr())
     assert(a.chr() < b.chr())
     assert(b.chr() > a.chr())
@@ -218,7 +218,7 @@ fn test_finding_a_character_in_a_string():
     let wanted : u32 = 108
     let found : mut i64 = 0
     foreach c := "hello":
-        if c == wanted.chr():
+        if c = wanted.chr():
             found ← found + 1
     assert_eq(found, 2)
 
@@ -226,7 +226,7 @@ fn test_finding_a_character_in_a_string():
 fn vowels(text : str) → i64:
     let count : mut i64 = 0
     foreach c := text:
-        if c == 'a' ∨ c == 'e' ∨ c == 'i' ∨ c == 'o' ∨ c == 'u':
+        if c = 'a' ∨ c = 'e' ∨ c = 'i' ∨ c = 'o' ∨ c = 'u':
             count ← count + 1
     count
 
@@ -259,16 +259,16 @@ fn error_a_string_is_not_a_character_argument():
 fn test_two_characters_make_a_string():
     let s := 'a' ⧺ 'b'
     static_assert_eq(@typeof(s), str)
-    assert(s == "ab")
+    assert(s = "ab")
 
 @test
 fn test_a_character_joins_a_string():
-    assert(("ab" ⧺ 'c') == "abc")
-    assert(('c' ⧺ "ab") == "cab")
+    assert(("ab" ⧺ 'c') = "abc")
+    assert(('c' ⧺ "ab") = "cab")
 
 @test
 fn test_two_strings_join():
-    assert(("ab" ⧺ "cd") == "abcd")
+    assert(("ab" ⧺ "cd") = "abcd")
 
 // Which is what builds a string up one character at a time.
 @test
@@ -276,7 +276,7 @@ fn test_building_a_string_in_a_loop():
     let out : mut str = ""
     foreach c := "abc":
         out ← out ⧺ c ⧺ '.'
-    assert(out == "a.b.c.")
+    assert(out = "a.b.c.")
 
 fn reversed(text : str) → str:
     let out : mut str = ""
@@ -286,19 +286,19 @@ fn reversed(text : str) → str:
 
 @test
 fn test_reversing_a_string():
-    assert(reversed("abc") == "cba")
+    assert(reversed("abc") = "cba")
 
 // A character says its string, and characters say theirs.
 @test
 fn test_a_character_becomes_a_string_of_one():
     let s := 'x'.str()
     static_assert_eq(@typeof(s), str)
-    assert(s == "x")
+    assert(s = "x")
 
 @test
 fn test_an_array_of_characters_becomes_a_string():
     let chars : char[] = ['h', 'i', '!']
-    assert((⧺⌿ chars) == "hi!")
+    assert((⧺⌿ chars) = "hi!")
 
 // An array literal of characters says what it is made of.
 @test
@@ -311,7 +311,7 @@ fn test_an_array_of_characters_knows_its_element_type():
 @test
 fn test_an_empty_array_of_characters_makes_an_empty_string():
     let chars : char[] = []
-    assert((⧺⌿ (chars, "")) == "")
+    assert((⧺⌿ (chars, "")) = "")
 
 @test
 @expect error "an array does not answer str"
@@ -325,18 +325,18 @@ fn test_a_string_survives_the_round_trip():
     let out : mut str = ""
     foreach c := "héllo 🎉":
         out ← out ⧺ c
-    assert(out == "héllo 🎉")
+    assert(out = "héllo 🎉")
 
 // Folding ⧺ over a vector of characters spells the string they make.
 @test
 fn test_folding_characters_into_a_string():
     let chars : char[] = ['h', 'i', '!']
-    assert((⧺⌿ chars) == "hi!")
+    assert((⧺⌿ chars) = "hi!")
 
 @test
 fn test_folding_characters_onto_a_string():
     let chars : char[] = ['h', 'i']
-    assert((⧺⌿ (chars, "say ")) == "say hi")
+    assert((⧺⌿ (chars, "say ")) = "say hi")
 
 // A vector of code points is a vector of numbers, so the conversion is
 // written where it happens.
@@ -344,7 +344,7 @@ fn test_folding_characters_onto_a_string():
 fn test_folding_code_points_into_a_string():
     let codes : u32[] = [104, 105, 33]
     let text := (λa : str, b : u32 → str: a ⧺ b.chr()) ⌿ (codes, "")
-    assert(text == "hi!")
+    assert(text = "hi!")
 
 // --- what does not go together with text ---
 //
@@ -370,9 +370,9 @@ fn error_a_float_does_not_join_text():
 @test
 fn test_the_two_ways_a_number_joins_text():
     let n : u32 = 65
-    assert(("n=" ⧺ n.chr()) == "n=A")
+    assert(("n=" ⧺ n.chr()) = "n=A")
     let alloc := std.heap.allocator()
-    assert(("n=" ⧺ std.format(alloc, "{}", n)) == "n=65")
+    assert(("n=" ⧺ std.format(alloc, "{}", n)) = "n=65")
 
 @test
 @expect error "does not go together with text"
@@ -391,35 +391,35 @@ fn error_a_string_from_something_that_is_not_characters():
 fn test_indexing_a_string():
     let s := "hello"
     static_assert_eq(@typeof(s[0]), char)
-    assert(s[0] == 'h')
-    assert(s[4] == 'o')
+    assert(s[0] = 'h')
+    assert(s[4] = 'o')
 
 @test
 fn test_indexing_counts_characters_not_bytes():
     let s := "héllo"
-    assert(s[1] == 'é')
-    assert(s[2] == 'l')
+    assert(s[1] = 'é')
+    assert(s[2] = 'l')
 
 @test
 fn test_indexing_beyond_the_basic_plane():
     let s := "a🎉b"
-    assert(s[1] == '🎉')
-    assert(s[2] == 'b')
+    assert(s[1] = '🎉')
+    assert(s[2] = 'b')
 
 @test
 fn test_slicing_a_string():
     let s := "hello"
     let part := s[1…3]
     static_assert_eq(@typeof(part), str)
-    assert(part == "ell")
-    assert(s[0…0] == "h")
-    assert(s[0…4] == s)
+    assert(part = "ell")
+    assert(s[0…0] = "h")
+    assert(s[0…4] = s)
 
 @test
 fn test_slicing_counts_characters():
     let s := "héllo 🎉"
-    assert(s[0…4] == "héllo")
-    assert(s[6…6] == "🎉")
+    assert(s[0…4] = "héllo")
+    assert(s[6…6] = "🎉")
 
 // An index is a count of characters, so it carries ptrdiff as an
 // array index does.
@@ -427,7 +427,7 @@ fn test_slicing_counts_characters():
 fn test_an_index_may_be_a_measured_value():
     let s := "hello"
     let i ¤ptrdiff : i64 = 1
-    assert(s[i] == 'e')
+    assert(s[i] = 'e')
 
 @test
 @expect error "string index requires unit ptrdiff"
@@ -467,7 +467,7 @@ fn error_writing_through_a_string():
 fn test_building_the_string_that_is_wanted_instead():
     let s := "hello"
     let changed := 'j' ⧺ s[1…4]
-    assert(changed == "jello")
+    assert(changed = "jello")
 
 // ---------------------------------------------------------------------
 // The characters a string is made of, all at once
@@ -478,15 +478,15 @@ fn test_chars_gives_an_array_of_characters():
     let cs := "abc".chars()
     static_assert_eq(@typeof(cs[0]), char)
     assert_eq(cs.sizeof, 3¤ptrdiff)
-    assert(cs[0] == 'a')
-    assert(cs[2] == 'c')
+    assert(cs[0] = 'a')
+    assert(cs[2] = 'c')
 
 @test
 fn test_chars_counts_characters():
     let cs := "héllo 🎉".chars()
     assert_eq(cs.sizeof, 7¤ptrdiff)
-    assert(cs[1] == 'é')
-    assert(cs[6] == '🎉')
+    assert(cs[1] = 'é')
+    assert(cs[6] = '🎉')
 
 @test
 fn test_chars_of_an_empty_string():
@@ -498,18 +498,18 @@ fn test_chars_of_an_empty_string():
 @test
 fn test_chars_and_joining_are_inverse():
     let s := "héllo 🎉"
-    assert((⧺⌿ s.chars()) == s)
+    assert((⧺⌿ s.chars()) = s)
 
 @test
 fn test_folding_the_characters_of_a_string():
-    assert((⧺⌿ "abc".chars()) == "abc")
+    assert((⧺⌿ "abc".chars()) = "abc")
 
 // The array is an array, so everything an array answers it answers.
 @test
 fn test_the_characters_can_be_worked_on_as_an_array():
     let cs : mut char[] = "ab".chars()
     cs.push('c')
-    assert((⧺⌿ cs) == "abc")
+    assert((⧺⌿ cs) = "abc")
 
 @test
 @expect error "a string has no method 'nope'"
@@ -525,23 +525,23 @@ fn error_a_string_has_no_other_method():
 
 @test
 fn test_ord_at_compile_time():
-    static_assert('a'.ord() == 97)
-    static_assert('λ'.ord() == 955)
+    static_assert('a'.ord() = 97)
+    static_assert('λ'.ord() = 955)
     static_assert_eq('a'.ord(), 97)
 
 @test
 fn test_chr_at_compile_time():
-    static_assert((65).chr() == 'A')
-    static_assert((955).chr() == 'λ')
+    static_assert((65).chr() = 'A')
+    static_assert((955).chr() = 'λ')
 
 @test
 fn test_the_conversions_compose_at_compile_time():
-    static_assert((97).chr().ord() == 97)
-    static_assert('a'.ord() + 1 == 98)
+    static_assert((97).chr().ord() = 97)
+    static_assert('a'.ord() + 1 = 98)
 
 @test
 fn test_str_and_chars_at_compile_time():
-    static_assert('a'.str() == "a")
+    static_assert('a'.str() = "a")
     static_assert_eq("ab".chars().sizeof, 2¤ptrdiff)
 
 @test
@@ -553,7 +553,7 @@ fn test_what_a_conversion_answers_is_known_too():
 @test
 @expect error "is past the last code point"
 fn error_a_constant_conversion_that_cannot_be_made():
-    static_assert((1114112).chr() == 'A')
+    static_assert((1114112).chr() = 'A')
 
 // ---------------------------------------------------------------------
 // Writing one out
@@ -567,7 +567,7 @@ fn test_a_character_is_written_as_itself():
     let alloc := std.heap.allocator()
     let n : u32 = 955
     let s := std.format(alloc, "{}", n.chr())
-    assert(s == "λ")
+    assert(s = "λ")
 
 @start
 @impure

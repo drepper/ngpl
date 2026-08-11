@@ -13,7 +13,7 @@
 fn test_a_binding_states_a_tuple_type():
     let t : (i64, str) = (1, "two")
     assert_eq(t[0], 1)
-    assert(t[1] == "two")
+    assert(t[1] = "two")
 
 // The elements settle on what the type says, so a number that stated
 // no width takes the one written for it.
@@ -93,7 +93,7 @@ type Pair = (i64, str)
 fn test_a_type_alias():
     let t : Pair = (1, "two")
     assert_eq(t[0], 1)
-    assert(t[1] == "two")
+    assert(t[1] = "two")
 
 struct Holder:
     pair : (i64, str)
@@ -121,7 +121,7 @@ fn test_a_tuple_of_tuples():
 fn test_an_array_of_tuples():
     let pairs : (i64, str)[] = [(1, "a"), (2, "b")]
     assert_eq(pairs[1][0], 2)
-    assert(pairs[0][1] == "a")
+    assert(pairs[0][1] = "a")
 
 @test
 fn test_a_tuple_holding_an_array():
@@ -184,7 +184,7 @@ fn test_a_destructuring_binding():
     let pair : (i64, str) = (1, "two")
     let (a, b) := pair
     assert_eq(a, 1)
-    assert(b == "two")
+    assert(b = "two")
 
 // The names take the elements' types.
 @test
@@ -210,7 +210,7 @@ fn hands_back_a_pair_to_take_apart() → (i64, str):
 fn test_taking_apart_what_a_function_hands_back():
     let (a, b) := hands_back_a_pair_to_take_apart()
     assert_eq(a, 7)
-    assert(b == "seven")
+    assert(b = "seven")
 
 // mut reaches every name.
 @test
@@ -233,7 +233,7 @@ fn test_nested_destructuring():
     let nested : ((i64, i64), str) = ((1, 2), "x")
     let ((a, b), c) := nested
     assert_eq(a + b, 3)
-    assert(c == "x")
+    assert(c = "x")
 
 // --- what it refuses ---
 
@@ -359,7 +359,7 @@ fn test_the_arm_that_does_not_bind_still_runs():
     assert_eq(found, ⁻1)
 
 fn divided(a : i64, b : i64) → (i64, i64)!:
-    if b == 0:
+    if b = 0:
         return ∄(std.errors.division_by_zero)
     ∃((a ÷ b ?? 0, a % b ?? 0))
 
@@ -394,7 +394,7 @@ fn test_an_arm_may_discard_an_element():
             word ← c
         ∅:
             word ← "none"
-    assert(word == "x")
+    assert(word = "x")
 
 // The names an arm binds live for the arm, as a single name does.
 @test

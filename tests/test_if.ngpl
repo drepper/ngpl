@@ -83,11 +83,11 @@ fn test_else_after_failing_elif():
 // ---------------------------------------------------------------------
 
 fn pick(n : i64) → i64:
-    if n == 1:
+    if n = 1:
         return 10
-    elif n == 2:
+    elif n = 2:
         return 20
-    elif n == 3:
+    elif n = 3:
         return 30
     else:
         return 99

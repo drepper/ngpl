@@ -59,7 +59,7 @@ fn returns_str_ok() → str:
 @test
 @impure
 fn test_return_str_ok():
-  assert_true(returns_str_ok() == "hello")
+  assert_true(returns_str_ok() = "hello")
 
 fn returns_bool_ok() → bool:
   true
@@ -191,7 +191,7 @@ fn test_pow_int_float():
 @impure
 fn test_pow_float_int_ok():
   let r : f64 = 4.0 ↑ 2
-  assert_true(r == 16.0)
+  assert_true(r = 16.0)
 
 // Same-type arithmetic succeeds.
 
@@ -203,12 +203,12 @@ fn test_add_int_int():
 @test
 @impure
 fn test_add_float_float():
-  assert_true(5.0 == 2.0 + 3.0)
+  assert_true(5.0 = 2.0 + 3.0)
 
 @test
 @impure
 fn test_mul_float_float():
-  assert_true(6.0 == 2.0 × 3.0)
+  assert_true(6.0 = 2.0 × 3.0)
 
 // Mixed types through function call: co returns f32, foo adds int + f32.
 
@@ -251,9 +251,9 @@ fn test_conversions_within_a_kind_still_work():
     let b : bool = true
     // assert_eq in this file takes two ints, so the rest use assert.
     assert_eq(n, 5)
-    assert(x == 1.0)
-    assert(g == 2.5)
-    assert(s == "text")
+    assert(x = 1.0)
+    assert(g = 2.5)
+    assert(s = "text")
     assert(b)
 
 @test
@@ -293,7 +293,7 @@ fn error_assignment_changes_the_kind():
 @expect error "an array of i32 cannot hold a string"
 fn error_element_changes_the_kind():
     let a : mut i32[] = [1, 2, 3]
-    a[0] = "x"
+    a[0] ← "x"
 
 fn wants_a_number(x : i32):
     ∅

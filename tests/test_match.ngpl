@@ -18,7 +18,7 @@ fn test_exists_is_a_present_optional():
 // ∃ and the some keyword spell the same thing.
 @test
 fn test_exists_equals_some():
-    assert(∃(5) == some(5))
+    assert(∃(5) = some(5))
     assert(∃(5) != ∅)
 
 // It nests: an optional holding an optional is distinguishable.
@@ -31,14 +31,14 @@ fn test_exists_nests():
 // ---------------------------------------------------------------------
 //
 // The two are different things, and an equality that quietly looked
-// through the optional would make `it.next() == 97` read as a test of
+// through the optional would make `it.next() = 97` read as a test of
 // the element when it is really a test of the element and of there
 // being one at all.
 
 @expect error "cannot compare an optional with a plain value"
 fn error_compare_optional_with_plain():
     let v : mut i64[] = [1]
-    assert(v.get(0) == 1)
+    assert(v.get(0) = 1)
 
 @expect error "cannot compare an optional with a plain value"
 fn error_assert_eq_optional_with_plain():

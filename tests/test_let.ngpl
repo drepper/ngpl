@@ -143,7 +143,7 @@ fn test_shared_borrow_reads():
     assert_eq(reads_shared(&a), 30)
 
 fn writes_shared(arr : &i32[]):
-    arr[0] = 99
+    arr[0] ← 99
 
 @expect error "cannot assign to element of borrowed variable 'arr'"
 fn error_write_through_shared_borrow():
@@ -159,7 +159,7 @@ fn error_rebind_shared_borrow():
     rebinds_shared(&a)
 
 fn writes_exclusive(arr : &mut i32[], val : i32):
-    arr[0] = val
+    arr[0] ← val
 
 // &mut writes through to the caller's array, which is the point of it.
 @test
@@ -182,7 +182,7 @@ fn test_exclusive_borrow_writes():
 
 fn mut_view_of_shared(arr : &i32[]):
     let m : mut = (2, 2) ⍴ arr
-    m[0, 1] = 42
+    m[0, 1] ← 42
 
 @expect error "cannot take a mutable view of borrowed variable 'arr'"
 fn error_mut_view_of_shared_borrow():
@@ -191,7 +191,7 @@ fn error_mut_view_of_shared_borrow():
 
 fn mut_view_of_immutable_param(arr : i32[]):
     let m : mut = (2, 2) ⍴ arr
-    m[0, 1] = 42
+    m[0, 1] ← 42
 
 @expect error "cannot take a mutable view of let variable 'arr'"
 fn error_mut_view_of_immutable_parameter():
@@ -217,7 +217,7 @@ fn test_shared_view_of_shared_borrow():
 // the caller.
 fn writes_through_a_view(arr : &mut i32[]):
     let m := (2, 2) ⍴ arr
-    m[0, 1] = 42
+    m[0, 1] ← 42
 
 @test
 fn test_mut_view_of_exclusive_borrow():

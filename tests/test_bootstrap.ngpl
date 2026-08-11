@@ -29,7 +29,7 @@ fn test_sized_types_are_the_way_to_declare():
     let b : f64 = 1.5
     let c : u8 = 200
     assert_eq(a, 5)
-    assert(b == 1.5)
+    assert(b = 1.5)
     assert_eq(c, 200)
 
 // A computation may exceed a sized type while it stays untyped.
@@ -113,7 +113,7 @@ fn test_a_sized_value_settles_nothing():
     let d := 1.5f64
     assert_eq(b, 6)
     assert_eq(c, 5)
-    assert(d == 1.5)
+    assert(d = 1.5)
 
 // A global is a binding like any other.  The global case is an output
 // test, since it is reported while the definitions are installed.
@@ -194,7 +194,7 @@ fn test_elements_that_already_have_a_type():
 @test
 fn test_an_array_of_strings_settles_nothing():
     let words := ["one", "two"]
-    assert(words[0] == "one")
+    assert(words[0] = "one")
 
 // ---------------------------------------------------------------------
 // A tuple settles nothing between its elements
@@ -231,19 +231,19 @@ fn test_every_number_may_say_it():
     let t := (1i64, "two")
     let u := (1i64, 2.5f64, true)
     assert_eq(t[0], 1)
-    assert(u[1] == 2.5)
+    assert(u[1] = 2.5)
 
 @test
 fn test_the_binding_may_say_it_for_a_tuple():
     let t : (i64, str) = (1, "two")
     assert_eq(t[0], 1)
-    assert(t[1] == "two")
+    assert(t[1] = "two")
 
 // A tuple of things that are not numbers has nothing to settle.
 @test
 fn test_a_tuple_without_numbers_settles_nothing():
     let t := ("one", true)
-    assert(t[0] == "one")
+    assert(t[0] = "one")
 
 // The rule reaches a tuple inside an array, which is where a builtin
 // hands one back.
@@ -534,7 +534,7 @@ fn test_sized_float_operators():
     static_assert_eq(@typeof(a ↑ 2.0), f64)
     static_assert_eq(@typeof(⁻a), f64)
     let r : f64 = √4.0f64
-    assert(r == 2.0)
+    assert(r = 2.0)
 
 // --- what the operators answer with instead of a number ---
 //
@@ -544,7 +544,7 @@ fn test_sized_float_operators():
 @test
 fn test_comparisons_answer_with_a_bool():
     let lt := 1 < 2
-    let eq := 1 == 2
+    let eq := 1 = 2
     let ge := 2 >= 1
     assert(lt)
     assert(not eq)

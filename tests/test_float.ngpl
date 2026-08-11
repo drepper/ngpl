@@ -12,40 +12,40 @@ fn test_float_literals():
   static_assert(3.14 < 4.0)
 
   // Typed float literals with suffix
-  static_assert(1.0f32 == 1.0f32)
+  static_assert(1.0f32 = 1.0f32)
 
   // Exponent notation
-  static_assert(1e3 == 1000.0)
-  static_assert(1.5e2 == 150.0)
+  static_assert(1e3 = 1000.0)
+  static_assert(1.5e2 = 150.0)
 
   // Negative exponent
-  static_assert(2.5e-1 == 0.25)
+  static_assert(2.5e-1 = 0.25)
 
   // Integer with float suffix becomes float
-  static_assert(42f32 == 42.0f32)
+  static_assert(42f32 = 42.0f32)
 
 @impure
 fn test_float_arithmetic():
   // Addition
-  static_assert(3.0 + 2.0 == 5.0)
+  static_assert(3.0 + 2.0 = 5.0)
 
   // Subtraction
-  static_assert(3.0 - 2.0 == 1.0)
+  static_assert(3.0 - 2.0 = 1.0)
 
   // Multiplication
-  static_assert(3.0 × 2.0 == 6.0)
+  static_assert(3.0 × 2.0 = 6.0)
 
   // Division
   let quot := 3.0 ÷ 2.0
-  assert_true(quot == 1.5, "3.0 / 2.0 should be 1.5")
+  assert_true(quot = 1.5, "3.0 / 2.0 should be 1.5")
 
   // Modulus
   let rem := 7.0 % 3.0
-  assert_true(rem == 1.0, "7.0 % 3.0 should be 1.0")
+  assert_true(rem = 1.0, "7.0 % 3.0 should be 1.0")
 
   // Negation
-  static_assert(⁻3.0 == ⁻3.0)
-  static_assert(⁻3.0 + 3.0 == 0.0)
+  static_assert(⁻3.0 = ⁻3.0)
+  static_assert(⁻3.0 + 3.0 = 0.0)
 
 fn test_mixed_int_float_rejected():
   @expect error "matching types"
@@ -68,17 +68,17 @@ fn test_float_comparisons():
   static_assert(1.0 <= 2.0)
   static_assert(2.0 >= 1.0)
   static_assert(1.0 != 2.0)
-  static_assert(1.0 == 1.0)
+  static_assert(1.0 = 1.0)
 
   // Mixed int-float comparison
-  static_assert(1.0 == 1)
+  static_assert(1.0 = 1)
   static_assert(2 > 1.5)
   static_assert(1.5 < 2)
 
 fn test_typed_float_widths():
   // All should be equal in value
-  static_assert(1.5f16 == 1.5f32)
-  static_assert(1.5f32 == 1.5f64)
+  static_assert(1.5f16 = 1.5f32)
+  static_assert(1.5f32 = 1.5f64)
 
   // Verify type names
   static_assert_eq(@typeof(1.0f16), @typeof(0.0f16))
@@ -96,7 +96,7 @@ fn as_f32(x:f32) -> f32:
 fn test_float_coercion_in_functions():
   // Test int-to-float parameter coercion
   let r := add_floats(3, 4)
-  assert_true(r == 7.0, "add_floats(3, 4) should be 7.0")
+  assert_true(r = 7.0, "add_floats(3, 4) should be 7.0")
 
   // Test float-to-float coercion (narrowing)
   let s := as_f32(3.14)
@@ -117,29 +117,29 @@ fn test_float_in_conditionals():
 fn test_float_format():
   let alloc := std.heap.allocator()
   let s := std.format(alloc, "value: {}", 3.14)
-  assert_true(s == "value: 3.14", "format float failed")
+  assert_true(s = "value: 3.14", "format float failed")
 
   // Fixed-point format specifier
   let s2 := std.format(alloc, "{:.2f}", 3.14)
-  assert_true(s2 == "3.14", "format .2f failed")
+  assert_true(s2 = "3.14", "format .2f failed")
 
   // Scientific notation
   let s3 := std.format(alloc, "{:.2e}", 1500.0)
-  assert_true(s3 == "1.50e+03", "format .2e failed")
+  assert_true(s3 = "1.50e+03", "format .2e failed")
 
 @impure
 fn test_hex_float_literal():
   // Hex float: 0x1.8p1 = 1.5 * 2^1 = 3.0
   let a := 0x1.8p1
-  assert_true(a == 3.0, "0x1.8p1 should be 3.0")
+  assert_true(a = 3.0, "0x1.8p1 should be 3.0")
 
   // 0x1p0 = 1.0
   let b := 0x1p0
-  assert_true(b == 1.0, "0x1p0 should be 1.0")
+  assert_true(b = 1.0, "0x1p0 should be 1.0")
 
   // 0x1p-1 = 0.5
   let c := 0x1p-1
-  assert_true(c == 0.5, "0x1p-1 should be 0.5")
+  assert_true(c = 0.5, "0x1p-1 should be 0.5")
 
 fn reject_float(x:i32) -> i32:
   x
@@ -161,11 +161,11 @@ fn test_integer_initializer_within_the_significand():
   let c : f16 = 2048              // 2^11
   let d : bfloat16 = 256            // 2^8
   let e : f64 = 9007199254740992  // 2^53
-  assert_true(a == 16777216.0, "2^24 is exact in f32")
-  assert_true(b == 17000002.0, "an even number just past it is exact")
-  assert_true(c == 2048.0, "2^11 is exact in f16")
-  assert_true(d == 256.0, "2^8 is exact in bfloat16")
-  assert_true(e == 9007199254740992.0, "2^53 is exact in f64")
+  assert_true(a = 16777216.0, "2^24 is exact in f32")
+  assert_true(b = 17000002.0, "an even number just past it is exact")
+  assert_true(c = 2048.0, "2^11 is exact in f16")
+  assert_true(d = 256.0, "2^8 is exact in bfloat16")
+  assert_true(e = 9007199254740992.0, "2^53 is exact in f64")
 
 @start
 @impure

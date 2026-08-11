@@ -92,7 +92,7 @@ fn test_sys_affinity_cpus_consistent():
     let mask : u64 = std.sys.affinity()
     let previous : mut i64 = ⁻1
     foreach cpu := std.sys.affinity_cpus():
-        assert(((mask >> cpu) & 1) == 1)
+        assert(((mask >> cpu) & 1) = 1)
         assert(cpu > previous)
         previous ← cpu
 
@@ -101,7 +101,7 @@ fn test_sys_affinity_cpus_consistent():
 fn test_sys_memory():
     let page ¤byte : i64 = std.sys.page_size()
     assert(page > 0)
-    assert((page & (page - 1)) == 0)
+    assert((page & (page - 1)) = 0)
     assert(std.sys.total_memory() >= page)
 
 @start

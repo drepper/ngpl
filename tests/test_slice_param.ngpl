@@ -85,7 +85,7 @@ fn error_slice_past_end():
 // ---------------------------------------------------------------------
 
 fn writes_first(a : mut i32[]):
-    a[0] = 99
+    a[0] ← 99
 
 // Narrowing a vector builds a new one, so the callee writes into that
 // and the source is untouched.
@@ -191,7 +191,7 @@ fn test_whole_row_is_shared():
     let a : mut i32[] = 12 ⍴ 0
     let m := (3, 4) ⍴ a
     let r : mut = m[1]
-    r[0] = 55
+    r[0] ← 55
     assert_eq(a[4], 55)
 
 // A range of rows keeps those rows themselves, so they are shared too.
@@ -200,7 +200,7 @@ fn test_row_range_is_shared():
     let a : mut i32[] = 12 ⍴ 0
     let m := (3, 4) ⍴ a
     let rows : mut = m[0…1]
-    rows[0][1] = 66
+    rows[0][1] ← 66
     assert_eq(a[1], 66)
 
 // Narrowing a row cannot hand back the row itself, so a block is a
@@ -210,7 +210,7 @@ fn test_narrowed_block_is_a_copy():
     let a : mut i32[] = 12 ⍴ 0
     let m := (3, 4) ⍴ a
     let b : mut = m[0…1, 1…2]
-    b[0][0] = 77
+    b[0][0] ← 77
     assert_eq(a[1], 0)
 
 // Which is what a callee sees: a block parameter is the callee's own.
@@ -223,7 +223,7 @@ fn test_block_argument_is_a_copy():
 
 // A whole row passed by reference does reach the caller's array.
 fn writes_row_ref(r : &mut i32[]):
-    r[0] = 88
+    r[0] ← 88
 
 @test
 fn test_whole_row_by_reference():

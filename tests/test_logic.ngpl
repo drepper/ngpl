@@ -216,8 +216,8 @@ fn test_logic_with_comparison():
     let y : i32 = 20
     // (x < y) ∧ (y > 0)  =  true ∧ true  =  true
     assert(x < y ∧ y > 0)
-    // (x > y) ∨ (y == 20)  =  false ∨ true  =  true
-    assert(x > y ∨ y == 20)
+    // (x > y) ∨ (y = 20)  =  false ∨ true  =  true
+    assert(x > y ∨ y = 20)
 
 @start
 @impure

@@ -74,8 +74,8 @@ fn test_unit_div():
   let dist ¤meter := 100
   let time ¤second := 10
   let speed := dist ÷ time
-  assert_true(speed == 10¤meter÷second, "100m over 10s is 10 m÷s")
-  assert_true(@unitof(speed) == @unitof(1¤meter÷second), "and carries that unit")
+  assert_true(speed = 10¤meter÷second, "100m over 10s is 10 m÷s")
+  assert_true(@unitof(speed) = @unitof(1¤meter÷second), "and carries that unit")
   std.println("{}", speed)
 
 // --- Dimensionless result from division ---
@@ -86,7 +86,7 @@ fn test_dimensionless_div():
   let b ¤meter := 5
   let ratio := a ÷ b
   // same unit cancels, result is plain 2
-  assert_true(ratio == 2, "the unit divides out")
+  assert_true(ratio = 2, "the unit divides out")
   std.println("{}", ratio)
 
 // --- Unit conversion: compatible units ---
@@ -162,15 +162,15 @@ fn test_unit_comparison():
   let b ¤meter := 10
   assert_true(a < b, "5m < 10m")
   assert_true(b > a, "10m > 5m")
-  assert_true(a == a, "5m == 5m")
+  assert_true(a = a, "5m = 5m")
   assert_true(a != b, "5m != 10m")
 
 @impure
 fn test_unit_comparison_different():
   let a ¤kilometer := 1
   let b ¤meter := 1000
-  // 1 km == 1000 m (converted to base)
-  assert_true(a == b, "1 km == 1000 m")
+  // 1 km = 1000 m (converted to base)
+  assert_true(a = b, "1 km = 1000 m")
   assert_true(not (a < b), "1 km not < 1000 m")
 
 // --- Negation ---
@@ -225,7 +225,7 @@ fn test_format():
   let alloc := std.heap.allocator()
   let d ¤meter := 42
   let s := std.format(alloc, "distance: {}", d)
-  assert_true(s == "distance: 42 m", "format with unit")
+  assert_true(s = "distance: 42 m", "format with unit")
 
 // --- Count and distance units ---
 
@@ -270,7 +270,7 @@ fn test_compound_unit_spec():
 fn test_compound_unit_mul_spec():
   let side ¤meter := 6
   let area ¤meter×meter := side × side
-  assert_true(area == 36¤meter×meter, "6m × 6m is 36 m×m")
+  assert_true(area = 36¤meter×meter, "6m × 6m is 36 m×m")
   std.println("{}", area)
 
 // --- @dropunit ---
@@ -281,7 +281,7 @@ fn test_compound_unit_mul_spec():
 fn test_dropunit_parts_with_the_unit():
   let v ¤meter := 7
   let plain := @dropunit(v)
-  assert_true(plain == 7, "the number survives")
+  assert_true(plain = 7, "the number survives")
   assert_true(@unitof(v) != @unitof(plain), "the unit does not")
 
 // The width is the value's own and is untouched.
@@ -289,7 +289,7 @@ fn test_dropunit_parts_with_the_unit():
 fn test_dropunit_keeps_the_width():
   let v ¤byte : u32 = 7
   let plain := @dropunit(v)
-  assert_true(@sizeof(plain) == 4 ¤byte, "still four bytes wide")
+  assert_true(@sizeof(plain) = 4 ¤byte, "still four bytes wide")
 
 // A return type states no unit, so a value carrying one is not what
 // was promised and has to say it is parting with it.
@@ -310,7 +310,7 @@ fn measured_bytes(n ¤byte : usize) → usize ¤byte:
 @impure
 fn test_return_type_carrying_a_unit():
   let r := measured_bytes(5 ¤byte)
-  assert_true(@unitof(r) == @unitof(5 ¤byte), "the unit comes back")
+  assert_true(@unitof(r) = @unitof(5 ¤byte), "the unit comes back")
   assert_eq_int(r, 5 ¤byte, "and so does the number")
 
 // A bare number takes the unit, as it would at a parameter stating one.

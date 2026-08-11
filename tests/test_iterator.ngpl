@@ -169,7 +169,7 @@ fn test_directory_finds_regular_file():
     let it := dir.iterate()
     let found : mut = false
     while e := it.next():
-        if e.name == "CLAUDE.md":
+        if e.name = "CLAUDE.md":
             found ← true
             assert_eq(e.type, std.filetype.reg)
     assert(found)
@@ -181,7 +181,7 @@ fn test_directory_finds_subdirectory():
     let it := dir.iterate()
     let found : mut = false
     while e := it.next():
-        if e.name == "interp":
+        if e.name = "interp":
             found ← true
             assert_eq(e.type, std.filetype.dir)
     assert(found)
@@ -213,10 +213,10 @@ fn test_directory_types_are_known():
     let it := dir.iterate()
     while e := it.next():
         let t := e.type
-        assert(t == std.filetype.reg ∨ t == std.filetype.dir
-               ∨ t == std.filetype.lnk ∨ t == std.filetype.fifo
-               ∨ t == std.filetype.chr ∨ t == std.filetype.blk
-               ∨ t == std.filetype.sock ∨ t == std.filetype.unknown)
+        assert(t = std.filetype.reg ∨ t = std.filetype.dir
+               ∨ t = std.filetype.lnk ∨ t = std.filetype.fifo
+               ∨ t = std.filetype.chr ∨ t = std.filetype.blk
+               ∨ t = std.filetype.sock ∨ t = std.filetype.unknown)
 
 // The enum values are the S_IF* constants from <sys/stat.h>.  They are
 // written in hex here because the language has no octal literal, in

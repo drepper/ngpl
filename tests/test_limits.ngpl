@@ -74,8 +74,8 @@ fn test_limits_are_compile_time_constants():
 // @max rather than the smallest positive value.
 @test
 fn test_float_limits():
-    assert(@max(f16) == 65504.0)
-    assert(@min(f16) == ⁻65504.0)
+    assert(@max(f16) = 65504.0)
+    assert(@min(f16) = ⁻65504.0)
     assert(@min(f32) < 0.0)
     assert(@max(f32) > 0.0)
     assert(@min(f64) < @min(f32))

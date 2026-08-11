@@ -13,7 +13,7 @@ fn test_static_assert_int():
 // static_assert with computed constant.
 @test
 fn test_static_assert_computed():
-    static_assert(2 + 3 == 5)
+    static_assert(2 + 3 = 5)
 
 // static_assert_eq with equal integers.
 @test

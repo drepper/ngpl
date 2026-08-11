@@ -19,7 +19,7 @@ fn test_finding_an_element():
 @test
 fn test_what_is_not_there():
     let v : i64[] = [10, 20, 30]
-    assert((v ⍳ 99) == ∅)
+    assert((v ⍳ 99) = ∅)
 
 // Asking whether it is there at all is the same question whichever way
 // the search went: a position carries a unit, and the optional has to
@@ -28,9 +28,9 @@ fn test_what_is_not_there():
 @test
 fn test_asking_only_whether_there_was_one():
     let v : i64[] = [10, 20, 30]
-    assert(¬((v ⍳ 20) == ∅))
+    assert(¬((v ⍳ 20) = ∅))
     assert((v ⍳ 20) != ∅)
-    assert((v ⍳ 99) == ∅)
+    assert((v ⍳ 99) = ∅)
     assert(¬((v ⍳ 99) != ∅))
 
 // Which is how a run of characters is asked about, ∊ holding only what
@@ -48,13 +48,13 @@ fn test_the_first_of_several():
 @test
 fn test_searching_an_empty_array():
     let v : i64[] = []
-    assert((v ⍳ 1) == ∅)
+    assert((v ⍳ 1) = ∅)
 
 @test
 fn test_searching_for_something_other_than_a_number():
     let words : str[] = ["one", "two", "three"]
     assert_eq((words ⍳ "two") ?? ⁻1, 1)
-    assert((words ⍳ "four") == ∅)
+    assert((words ⍳ "four") = ∅)
 
 @test
 fn test_searching_an_array_of_characters():
@@ -70,7 +70,7 @@ fn test_finding_a_character_in_a_string():
     let s := "hello"
     assert_eq((s ⍳ 'h') ?? ⁻1, 0)
     assert_eq((s ⍳ 'l') ?? ⁻1, 2)
-    assert((s ⍳ 'z') == ∅)
+    assert((s ⍳ 'z') = ∅)
 
 // A run of characters is where it starts.
 @test
@@ -78,7 +78,7 @@ fn test_finding_a_string_in_a_string():
     let s := "hello world"
     assert_eq((s ⍳ "world") ?? ⁻1, 6)
     assert_eq((s ⍳ "o w") ?? ⁻1, 4)
-    assert((s ⍳ "worlds") == ∅)
+    assert((s ⍳ "worlds") = ∅)
 
 // Counted in characters, as everything about a string is.
 @test
@@ -191,7 +191,7 @@ fn error_searching_a_range():
     let r := 10…20
     let at : mut = r ⍳ 12
 
-// An element is compared the way == compares it, so a unit that does
+// An element is compared the way = compares it, so a unit that does
 // not belong is refused here as it would be between the two operands
 // rather than quietly matching nothing.
 @test
@@ -227,9 +227,9 @@ fn test_searching_the_characters_of_a_string():
 
 @test
 fn test_a_position_is_known_at_compile_time():
-    static_assert((([10, 20, 30] ⍳ 20) ?? ⁻1) == 1)
-    static_assert((("hello" ⍳ "ll") ?? ⁻1) == 2)
-    static_assert((("hello" ⍳ "zz") ?? ⁻1) == ⁻1)
+    static_assert((([10, 20, 30] ⍳ 20) ?? ⁻1) = 1)
+    static_assert((("hello" ⍳ "ll") ?? ⁻1) = 2)
+    static_assert((("hello" ⍳ "zz") ?? ⁻1) = ⁻1)
 
 // ---------------------------------------------------------------------
 // Grouping

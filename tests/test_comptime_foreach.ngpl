@@ -72,9 +72,9 @@ fn hetero_count(args…) → i64:
     let ints : mut i64 = 0
     let strs : mut i64 = 0
     comptime foreach v := args:
-        if @typeof(v) == @typeof(0):
+        if @typeof(v) = @typeof(0):
             ints ← ints + 1
-        if @typeof(v) == @typeof(""):
+        if @typeof(v) = @typeof(""):
             strs ← strs + 1
     ints × 10 + strs
 

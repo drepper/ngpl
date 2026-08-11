@@ -1209,7 +1209,10 @@ class Parser:
         if self._check("RETURN"):
             return self._parse_return_stmt()
 
-        # General assignment: LHS ← RHS  |  LHS = RHS.
+        # General assignment: LHS ← RHS.  `=` is equality and never
+        # stores, which is what lets the same glyph be the operator: a
+        # statement is an assignment when it holds a ←, and anything
+        # else beginning with a name is an expression.
         if self._check("IDENT") or (self._check("PUNCT") and self._cur().value == "("):
             saved_pos = self.pos
             bracket_depth = 0
@@ -1226,32 +1229,9 @@ class Parser:
                     break
                 saved_pos += 1
 
-            if not found_assign_op:
-                bp2 = self.pos
-                bd2 = 0
-                while bp2 < len(self.tokens):
-                    t2 = self.tokens[bp2]
-                    if t2.type in ("NEWLINE", "INDENT", "DEDENT") or (t2.type == "PUNCT" and t2.value == ";"):
-                        break
-                    if t2.type == "PUNCT":
-                        if t2.value == "[": bd2 += 1
-                        elif t2.value == "]": bd2 -= 1
-                    if t2.type == "PUNCT" and t2.value == "=" and bd2 == 0:
-                        if bp2 + 1 < len(self.tokens) and \
-                           self.tokens[bp2 + 1].type == "PUNCT" and \
-                           self.tokens[bp2 + 1].value == "=":
-                            pass  # skip ==
-                        else:
-                            found_assign_op = "="
-                            break
-                    bp2 += 1
-
             if found_assign_op:
                 lhs = self._parse_or_expr()
-                if found_assign_op == "←":
-                    self._eat("OP", "←")
-                else:
-                    self._eat("PUNCT", "=")
+                self._eat("OP", "←")
                 rhs = self._parse_or_expr()
                 self._try_eat("PUNCT", ";")
                 return ("assign_stmt", lhs, rhs)
@@ -1721,7 +1701,7 @@ class Parser:
             left = self._set_binop_pos(BinOp(op_tok.value, left, right), left, right, op_tok)
         return left
 
-    _CMP_OPS = ("==", "!=", "<", ">", "<=", ">=", "≅", "≇", "⪅", "⪆", "⪉", "⪊")
+    _CMP_OPS = ("!=", "<", ">", "<=", ">=", "≅", "≇", "⪅", "⪆", "⪉", "⪊")
 
     def _parse_cmp_expr(self):
         """cmp_expr → range_expr (comparison range_expr)*
@@ -1729,11 +1709,23 @@ class Parser:
         The tolerant comparisons sit at the same level as the exact
         ones they are paired with, since they answer the same question
         with a tolerance rather than a different question.
+
+        Equality is `=`, which the lexer hands over as punctuation
+        because the same glyph separates a definition from its value.
+        Which one is meant is settled by where it is written: a
+        definition consumes its `=` before an expression begins, so one
+        reached here is the operator.
         """
         left = self._parse_range_expr()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value in self._CMP_OPS):
+            if self._check("OP") and self._cur().value == "==":
+                raise ParseError(
+                    "'==' is not an operator; equality is written '='",
+                    self._cur())
+            is_eq = self._check("PUNCT") and self._cur().value == "="
+            if not (is_eq or (self._check("OP")
+                              and self._cur().value in self._CMP_OPS)):
                 break
             op_tok = self._cur()
             self.pos += 1

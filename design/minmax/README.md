@@ -45,7 +45,7 @@ so this is the grouping that needs no parentheses in either direction:
 
 ```
 2 + 3 ⌈ 10 - 4      // the larger of the two sums
-3 ⌈ 5 == 5          // compares the answer
+3 ⌈ 5 = 5          // compares the answer
 1…(2 ⌈ 3)           // a range bound
 ```
 

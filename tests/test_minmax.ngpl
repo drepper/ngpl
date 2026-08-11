@@ -62,35 +62,35 @@ fn test_clamping():
 
 @test
 fn test_upper_and_lower_case():
-    assert(⌈"hello" == "HELLO")
-    assert(⌊"HeLLo" == "hello")
+    assert(⌈"hello" = "HELLO")
+    assert(⌊"HeLLo" = "hello")
 
 @test
 fn test_case_reaches_beyond_ascii():
-    assert(⌈"héllo" == "HÉLLO")
-    assert(⌊"ÄÖÜ" == "äöü")
+    assert(⌈"héllo" = "HÉLLO")
+    assert(⌊"ÄÖÜ" = "äöü")
 
 // A character that has no upper case of its own is left alone.
 @test
 fn test_what_has_no_case_is_unchanged():
-    assert(⌈"1 🎉" == "1 🎉")
-    assert(⌊"" == "")
+    assert(⌈"1 🎉" = "1 🎉")
+    assert(⌊"" = "")
 
 // Upper case may be longer than what it came from.
 @test
 fn test_upper_case_may_grow():
-    assert(⌈"straße" == "STRASSE")
+    assert(⌈"straße" = "STRASSE")
 
 @test
 fn test_the_case_of_text_is_known_at_compile_time():
-    static_assert(⌈"a" == "A")
-    static_assert(⌊"A" == "a")
+    static_assert(⌈"a" = "A")
+    static_assert(⌊"A" = "a")
 
 // The prefix binds as the other prefix operators do, tighter than
 // what joins two things.
 @test
 fn test_the_prefix_binds_tighter_than_joining():
-    assert((⌈"ab" ⧺ ⌊"CD") == "ABcd")
+    assert((⌈"ab" ⧺ ⌊"CD") = "ABcd")
 
 // A number has no case, and its own reading of the glyph needs two
 // operands.
@@ -108,7 +108,7 @@ fn error_the_case_of_a_character():
 
 @test
 fn test_the_case_of_a_character_by_way_of_its_string():
-    assert(⌊'A'.str() == "a")
+    assert(⌊'A'.str() = "a")
 
 // ---------------------------------------------------------------------
 // Grouping
@@ -123,7 +123,7 @@ fn test_arithmetic_binds_tighter():
 // Tight enough that a comparison reads the answer, not an operand.
 @test
 fn test_comparison_binds_looser():
-    assert(3 ⌈ 5 == 5)
+    assert(3 ⌈ 5 = 5)
     assert(3 ⌈ 5 > 4)
 
 // A range reads the answer too.
@@ -245,9 +245,9 @@ fn test_folding_gives_the_extreme_of_a_vector():
 // Both operands are known, so the answer is too.
 @test
 fn test_settled_at_compile_time():
-    static_assert(3 ⌈ 5 == 5)
-    static_assert(3 ⌊ 5 == 3)
-    static_assert(2 + 3 ⌈ 10 - 4 == 6)
+    static_assert(3 ⌈ 5 = 5)
+    static_assert(3 ⌊ 5 = 3)
+    static_assert(2 + 3 ⌈ 10 - 4 = 6)
 
 @start
 @impure

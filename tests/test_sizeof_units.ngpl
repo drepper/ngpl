@@ -118,7 +118,7 @@ fn test_cmp_unit_with_dimensionless():
   let a ¤meter : i64 = 5
   assert_true(a > 3, "5m > 3")
   assert_true(2 < a, "2 < 5m")
-  assert_true(a == 5, "5m == 5")
+  assert_true(a = 5, "5m = 5")
 
 // --- sizeof result used in arithmetic ---
 

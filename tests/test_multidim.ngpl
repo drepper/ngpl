@@ -63,7 +63,7 @@ fn test_single_then_multi():
     assert_eq(row[0, 0], 13)
     assert_eq(row[2, 3], 24)
 
-// ---- equivalence: arr[i, j] == arr[i][j] -------------------------------
+// ---- equivalence: arr[i, j] = arr[i][j] -------------------------------
 
 @test
 fn test_equiv_chained():
