@@ -101,7 +101,9 @@ and a definition already did.
 
 What a hash holds is asked with an operator rather than a member:
 `⊃d` for its keys and `⊇d` for what it holds against them, written in
-front as `#` is and answering arrays.  Those two are asked of a
+front as `#` is and answering arrays.  The glyphs are TinyAPL's for the
+same two questions, so a reader coming from an array language finds
+them already spelled the way they know.  Those two are asked of a
 container often enough to be worth a glyph, and asking them the way `#`
 is asked keeps a container's questions in one shape rather than half
 operators and half members.  `⊇` asks a set for what is in it; `⊃` does

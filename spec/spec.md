@@ -1823,6 +1823,8 @@ let d : std.hash(str, i64) = ⸨"a": 1, "b": 2⸩
 
 `⊇` asks a **set** for what is in it.  `⊃` does not: a set holds values rather than holding them against keys, so it has none to ask for.
 
+These are the glyphs TinyAPL uses to ask a dictionary the same two questions, which is why they are the ones taken here: a reader coming from an array language finds the question already spelled the way they know it.
+
 Note that `⊂` and `⊆` are *infix* and ask whether one set is inside another, while `⊃` and `⊇` are *prefix* and ask what a hash holds.  A reader who expects the second pair to be the mirror of the first — supersets — will not find that here; a superset is `b ⊆ a` with the operands the other way round.
 
 #### Members
@@ -1837,14 +1839,15 @@ What `[]`, `∊`, `#`, `⊃` and `⊇` already say is not repeated as a member.
 
 #### Comparison with Other Languages
 
-| Language | Hash literal | Set literal | Missing key |
-|----------|--------------|-------------|-------------|
-| Python | `{"a": 1}` | `{1, 2}` / `set()` | raises; `.get` answers `None` |
-| Rust | `HashMap::from(…)` | `HashSet::from(…)` | `.get` answers `Option` |
-| Go | `map[string]int{…}` | a map to `struct{}` | the zero value, and a second result |
-| NGPL | `⸨"a": 1⸩` | `⸨1, 2⸩` | `∅` |
+| Language | Hash literal | Set literal | Missing key | Keys / values |
+|----------|--------------|-------------|-------------|---------------|
+| Python | `{"a": 1}` | `{1, 2}` / `set()` | raises; `.get` answers `None` | `.keys()` / `.values()` |
+| Rust | `HashMap::from(…)` | `HashSet::from(…)` | `.get` answers `Option` | `.keys()` / `.values()` |
+| Go | `map[string]int{…}` | a map to `struct{}` | the zero value, and a second result | a loop |
+| TinyAPL | | | | `⊃` / `⊇` |
+| NGPL | `⸨"a": 1⸩` | `⸨1, 2⸩` | `∅` | `⊃` / `⊇` |
 
-Python's `{}` shape is what these are written after, with different delimiters because `{` is taken.  Go's answer for a missing key is a value that was never put there, which is the invention this language avoids; Rust's is this one.
+Python's `{}` shape is what these are written after, with different delimiters because `{` is taken.  Go's answer for a missing key is a value that was never put there, which is the invention this language avoids; Rust's is this one.  The two glyphs are TinyAPL's, asking a dictionary the same two questions.
 
 
 ### How Many Things Are In It: `#`
