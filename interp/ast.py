@@ -127,7 +127,9 @@ class WhileStmt:
     """
 
     def __init__(self, cond, body, var_name: str | None = None,
-                 var_type: str | None = None, var_is_mut: bool = False):
+                 var_type: str | None = None, var_is_mut: bool = False,
+                 label: str | None = None):
+        self.label = label
         self.cond = cond
         self.body = body
         self.var_name = var_name
@@ -278,6 +280,26 @@ class ArrayLit:
         self.elements = elements  # list of expression AST nodes
 
 
+class BreakStmt:
+    """`break` or `break label` — leave a loop."""
+
+    __slots__ = ("label", "pos")
+
+    def __init__(self, label=None):
+        self.label = label
+        self.pos = None
+
+
+class ContinueStmt:
+    """`continue` or `continue label` — go round again."""
+
+    __slots__ = ("label", "pos")
+
+    def __init__(self, label=None):
+        self.label = label
+        self.pos = None
+
+
 class Condition:
     """A `@pre` or `@post` a function holds to.
 
@@ -408,7 +430,9 @@ class ForEachStmt:
     body:      list of statements
     """
 
-    def __init__(self, vars, iterables, body, is_comptime: bool = False):
+    def __init__(self, vars, iterables, body, is_comptime: bool = False,
+                 label: str | None = None):
+        self.label = label
         self.vars = vars
         self.iterables = iterables
         self.body = body

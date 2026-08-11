@@ -983,3 +983,15 @@ in the compiler.
     diagnostics needs no rewriting.  A source file cannot ask for it: whether a warning is
     worth stopping for is a property of the run, not of the code.  tests/run_tests.sh runs
     every test file a second time under -Werror, so a new unaccounted warning fails the suite.
+
+[x] break and continue, and a name attached to a loop so that one written inside a nested
+    loop can act on an outer one.  The name is an identifier and a colon on the line above
+    the loop, as in Java and Go; Rust's leading quote is unavailable, since a quote begins a
+    character literal.  A name is not a variable: it has no scope, and it can be read only by
+    a break or a continue inside the loop it names.  A statement outside every loop, or one
+    naming a loop it is not inside, is refused before anything runs, and a lambda body is a
+    boundary — a loop around a lambda is not one its body can leave.  Neither statement comes
+    back, so the unreachable-statement warning covers what follows one.
+
+[ ] a value carried out of a loop by break, as Rust's `break v` does.  It waits on a loop
+    being an expression rather than a statement, which is a separate question.

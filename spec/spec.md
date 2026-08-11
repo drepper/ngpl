@@ -4301,6 +4301,85 @@ foreach i, v := enumerate([10, 20, 30]):
 | Destructuring | `for i, v in enumerate(x)` | `for (i, v) in x.enumerate()` | N/A | `foreach i, v := enumerate(x)` |
 
 
+### Leaving a Loop (`break`, `continue`, and Loop Names)
+
+`break` leaves a loop and `continue` starts its next turn.  Both work in a `while` loop and in a `foreach` loop, and both act on the loop they are written directly inside:
+
+```
+foreach i := 1…10:
+    if i % 2 = 0:
+        continue                    // skip the even ones
+    if i > 7:
+        break                       // and stop past 7
+    std.println("{}", i)            // 1, 3, 5, 7
+```
+
+#### Naming a Loop
+
+An inner loop's `break` leaves only the inner loop, which is rarely what a search over two dimensions wants.  A loop may therefore be given a **name**, written as an identifier and a colon on the line above it:
+
+```
+outer:
+foreach i := 0…9:
+    foreach j := 0…9:
+        if grid[i, j] = target:
+            break outer
+```
+
+`break name` leaves the loop of that name and `continue name` takes it round again, whatever loops lie in between.  The name is not a variable and occupies no scope of its own: it can be read only by a `break` or a `continue` inside that loop, and the same name may be reused by an unrelated loop elsewhere.
+
+A name may also be written on a loop that nothing outside it names, where it reads as a note about what the loop is for:
+
+```
+search:
+while more():
+    ...
+    break search                    // the same as a bare break
+```
+
+#### What Is Refused
+
+A `break` or a `continue` written where no loop encloses it is refused, as is one naming a loop it is not inside:
+
+```
+fn f():
+    break                           // error: break is written outside any
+                                    // loop, so there is no loop for it to
+                                    // act on
+
+fn g():
+    outer:
+    foreach i := 1…3:
+        break inner                 // error: break names the loop 'inner',
+                                    // which is not one it is inside
+```
+
+Both are found before anything runs.  A lambda body is a function of its own, so a loop *around* a lambda is not one the lambda's body may leave; a `break` written there is outside any loop of its own and refused as such.
+
+Neither statement comes back, so a statement written after one in the same block cannot be reached, and the same warning that follows a `return` or a call to a `@noreturn` function follows these:
+
+```
+foreach i := 1…3:
+    break
+    n ← n + 1                       // warning: this statement cannot be
+                                    // reached
+```
+
+#### Comparison with Other Languages
+
+| Language | Leave | Next turn | Naming a loop |
+|----------|-------|-----------|---------------|
+| C, C++ | `break` | `continue` | none — `goto` past the loop |
+| Rust | `break` | `continue` | `'outer: loop { break 'outer }` |
+| Go | `break` | `continue` | `Outer: for { break Outer }` |
+| Java | `break` | `continue` | `outer: for(…) { break outer; }` |
+| Zig | `break` | `continue` | `outer: for (…) { break :outer; }` |
+| Python | `break` | `continue` | none |
+| NGPL | `break` | `continue` | `outer:` on the line above the loop |
+
+The shape is Java's and Go's: a bare identifier and a colon, and the plain name after `break`.  Rust's leading quote is unavailable — `'` begins a character literal — and a sigil was not needed for the parser, which tells a loop name from a statement by what follows it.  The name sits on a line of its own rather than in front of the loop keyword so that the loop reads as it does when it has no name.
+
+
 ### Borrowing in a Foreach Loop (`&` and `&mut`)
 
 Iterating an array ordinarily gives the loop a copy of each element, so the loop variable is frozen and assigning to it is rejected — writing to a copy that is about to be discarded is a mistake, not an intention.  Prefixing the container with `&` or `&mut` says what the loop wants to do with the elements instead.

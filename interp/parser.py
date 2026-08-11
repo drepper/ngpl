@@ -14,6 +14,7 @@ from interp.ast import (
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, DestructureDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, HashLit, SetLit, EmptyCollectionLit, Condition,
+    BreakStmt, ContinueStmt,
     Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
     DropUnitExpr,
     LimitExpr,
@@ -1388,6 +1389,26 @@ class Parser:
         if self._check("IF"):
             return self._parse_if_stmt()
 
+        if self._check("BREAK") or self._check("CONTINUE"):
+            kw_tok = self._cur()
+            is_break = kw_tok.type == "BREAK"
+            self.pos += 1
+            label = None
+            if self._check("IDENT"):
+                label = self._eat("IDENT").value
+            self._try_eat("PUNCT", ";")
+            node = BreakStmt(label) if is_break else ContinueStmt(label)
+            return self._set_pos(node, kw_tok)
+
+        # `outer:` on a line of its own names the loop below it.
+        if self._at_loop_label():
+            label_tok = self._eat("IDENT")
+            self._eat("PUNCT", ":")
+            self._skip_nl()
+            loop = self._parse_statement()
+            loop.label = label_tok.value
+            return loop
+
         if self._check("WHILE"):
             return self._parse_while_stmt()
 
@@ -1469,6 +1490,28 @@ class Parser:
                    else (clause_cond, clause_body, alt))
 
         return IfStmt(cond, cons_body, alt, hint=hint)
+
+    def _at_loop_label(self) -> bool:
+        """Whether a name and a colon here name the loop below.
+
+        A name followed by a colon is nothing else at statement level,
+        and what follows has to be a loop -- a label names something to
+        leave, and only a loop can be left.
+        """
+        if not (self._check("IDENT") and self.pos + 1 < len(self.tokens)
+                and self.tokens[self.pos + 1].type == "PUNCT"
+                and self.tokens[self.pos + 1].value == ":"):
+            return False
+        ahead = self.pos + 2
+        while ahead < len(self.tokens) \
+                and self.tokens[ahead].type == "NEWLINE":
+            ahead += 1
+        if ahead >= len(self.tokens):
+            return False
+        kind = self.tokens[ahead].type
+        if kind == "COMPTIME" and ahead + 1 < len(self.tokens):
+            kind = self.tokens[ahead + 1].type
+        return kind in ("WHILE", "FOREACH")
 
     def _parse_while_stmt(self):
         """Parse: while [var [: type]] ':=' expr block, or while expr block
