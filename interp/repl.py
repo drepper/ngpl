@@ -21,7 +21,7 @@ import sys
 from interp.env import Env
 from interp.errors import (extract_position, format_backtrace,
                            format_diagnostic, strip_position_prefix,
-                           ProgramAbort, ProgramExit)
+                           set_source, ProgramAbort, ProgramExit)
 from interp.eval import Evaluator
 from interp.lexer import LexerError, process_indentation, tokenize
 from interp.parser import ParseError, Parser
@@ -207,6 +207,9 @@ class Repl:
         """Parse and evaluate one complete entry, reporting any error."""
         self._entry += 1
         name = f"<repl:{self._entry}>"
+        # An entry is its own source, so a diagnostic raised while it
+        # runs points into the entry it was typed in.
+        set_source(src, name)
         try:
             items = Parser(process_indentation(tokenize(src))).parse_repl()
         except Exception as e:

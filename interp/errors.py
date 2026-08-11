@@ -53,6 +53,77 @@ def warnings_are_errors() -> bool:
     return _warnings_are_errors
 
 
+# What a @pre or a @post that does not hold does, named as C++26 names
+# the four evaluation semantics.  Set once from the command line and
+# read where a condition is checked.
+CONTRACT_SEMANTICS = ("ignore", "observe", "enforce", "quick-enforce")
+
+_contract_semantic = "enforce"
+
+
+def set_contract_semantic(name: str) -> None:
+    """Choose what a condition that does not hold does."""
+    global _contract_semantic
+    if name not in CONTRACT_SEMANTICS:
+        raise ValueError(f"unknown contract semantic: {name}")
+    _contract_semantic = name
+
+
+def contract_semantic() -> str:
+    """What a condition that does not hold does."""
+    return _contract_semantic
+
+
+# The text the program was loaded from, so that something reported
+# while it runs can show the line it happened on.  An error reaches the
+# top level and is formatted there against the source main() holds; a
+# diagnostic the run carries on past never reaches it, so the source is
+# left here for it to find.
+_source_text: str = ""
+_source_path: str = "<unknown>"
+
+
+def set_source(text: str, path: str) -> None:
+    """Register the source a diagnostic raised mid-run points into."""
+    global _source_text, _source_path
+    _source_text = text
+    _source_path = path
+
+
+class _StackHolder:
+    """Something to hang a call stack on, for the backtrace formatter.
+
+    A backtrace is ordinarily read off the exception that carried it up
+    to the top level.  A diagnostic the run carries on past has no
+    exception, so it borrows one of these.
+    """
+
+
+def report_runtime_diagnostic(message: str,
+                              pos: tuple[int, int, int | None] | None = None,
+                              *, level: str = "warning",
+                              call_stack=()) -> None:
+    """Print something found while the program runs, and carry on.
+
+    Points into the registered source where the position falls inside
+    it, and says the message on its own where it does not -- the same
+    fallback the install-time warnings use.
+    """
+    if _source_text and pos is not None \
+            and pos[0] <= _source_text.count("\n") + 1:
+        print(format_diagnostic(_source_text, _source_path, pos[0], pos[1],
+                                message, end_col=pos[2], level=level),
+              file=sys.stderr)
+    else:
+        print(f"{level}: {message}", file=sys.stderr)
+    if call_stack:
+        holder = _StackHolder()
+        attach_backtrace(holder, call_stack)
+        trace = format_backtrace(holder, _source_path)
+        if trace is not None:
+            print(trace, file=sys.stderr)
+
+
 def diagnostic_level(level: str) -> str:
     """The level a diagnostic is reported at.
 

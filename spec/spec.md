@@ -2409,6 +2409,60 @@ to what divide says it needs
 
 A precondition blames the caller and a postcondition blames the function, which is what each of them is about.  The backtrace shows which call it was.
 
+A condition that **cannot be read** is a violation of it too — what it claims is not known to hold — and is reported the same way, naming what went wrong:
+
+```
+@pre(v[3] = 0)
+fn first_of(v : i64[]) → i64:
+    v[0]
+
+error: first_of: a precondition could not be read, so what it claims is
+not known to hold: array index 3 out of range (length 2)
+```
+
+C++26 calls these two the **detection modes**: the condition answered false, or evaluating it exited early.
+
+A condition that answers something other than a `bool` is neither.  It is a mistake in the condition rather than a violation of it, so it is an error whatever the run was asked to do about violations.
+
+#### Choosing What a Violation Does: `--contracts`
+
+What a violated condition does is a property of the run, not of the source, so it is chosen on the command line.  The four choices are C++26's **evaluation semantics**:
+
+| `--contracts=` | The condition is read | On a violation | The run |
+|----------------|-----------------------|----------------|---------|
+| `ignore` | no | — | carries on |
+| `observe` | yes | reported as a warning | carries on |
+| `enforce` (default) | yes | reported as an error | stops, status 1 |
+| `quick-enforce` | yes | not reported at all | stops at once, aborted |
+
+```
+$ ngpli --contracts=observe program.ngpl
+warning: scaled: a precondition does not hold, so the caller did not
+keep to what scaled says it needs
+  --> program.ngpl:1:1
+    |
+  1 | @pre(b > 0)
+    | ^^^^
+    |
+backtrace (innermost call first):
+  #0 scaled at program.ngpl:1:5
+  #1 main at program.ngpl:9:22
+0
+the program ran to the end
+$ echo $?
+0
+```
+
+**`ignore`** does not read the condition at all.  Nothing it would have said is said — not that it does not hold, and not that it could not be read — and a condition with a side effect does not have it.  The body then runs on arguments the condition would have refused, which is the risk the choice buys speed with.
+
+**`observe`** reads the condition and reports a violation, and then goes on as though it held: the body runs, or the answer is handed back.  It is what a program is run under while the conditions are new and not yet trusted, since it finds every violation in one run instead of stopping at the first.  The diagnostic stays a warning under `-Werror`: asking to observe is asking for the run to carry on, and a diagnostic that said `error:` while the program kept going would be saying two things at once.  Asking for both is asking for `enforce`.
+
+**`enforce`** is the default and what the sections above describe: the violation is reported at the condition, with a backtrace, and the run stops with status 1 — the way every other error in this language ends a program, which is also what lets `@expect error` account for one in a test.
+
+**`quick-enforce`** stops the run without reporting the violation: nothing is said about which condition, nor that a condition was involved at all.  That is the whole of what makes it quick — the check costs a test and a trap, and no message to assemble.  The process is aborted, so a shell reports status 134, exactly as `std.abort()` does.
+
+The choice is made once for the whole run.  C++26 leaves it to the implementation whether the semantic may be chosen per assertion, and one setting for the run is what an interpreter has to say about it.
+
 #### Comparison with Other Languages
 
 | Language | Spelling | Where |
@@ -2418,6 +2472,14 @@ A precondition blames the caller and a postcondition blames the function, which 
 | Ada | `Pre =>`, `Post =>`, with `'Old` | an aspect on the declaration |
 | D | `in { }` / `out(r) { }` | in the body |
 | NGPL | `@pre(…)`, `@post(r: …)` | before the function, with the other annotations |
+
+| Language | Choosing what a violation does |
+|----------|-------------------------------|
+| C++26 | ignore, observe, enforce, quick-enforce, chosen at build time |
+| Eiffel | per assertion class, at compile time |
+| Ada | `Assertion_Policy` — `Check` or `Ignore` |
+| D | `-release` drops them |
+| NGPL | `--contracts=`, the same four as C++26 |
 
 The shape is C++26's, including naming the result in the postcondition.  It is written as an annotation rather than inside the signature because that is where this language already puts what is said *about* a function, and because a condition on its own line reads as the sentence it is.
 

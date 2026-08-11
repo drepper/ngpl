@@ -36,7 +36,8 @@ from interp.layout import LayoutError, struct_layout, struct_lookup
 from interp.errors import (format_diagnostic, extract_position,
                            strip_position_prefix, format_backtrace,
                            diagnostic_level, set_warnings_are_errors,
-                           warnings_are_errors,
+                           warnings_are_errors, set_contract_semantic,
+                           set_source, CONTRACT_SEMANTICS,
                            ProgramExit, ProgramAbort)
 
 
@@ -278,6 +279,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("-Werror", dest="werror", action="store_true",
                        help="treat every warning as an error, and read an "
                             "@expect warning as @expect error")
+    parser.add_argument("--contracts", metavar="SEMANTIC",
+                       choices=CONTRACT_SEMANTICS, default="enforce",
+                       help="what a @pre or @post that does not hold does: "
+                            "ignore (the condition is not read at all), "
+                            "observe (report it and carry on), enforce "
+                            "(report it and stop, the default), or "
+                            "quick-enforce (stop at once, reporting "
+                            "nothing).  The four are C++26's evaluation "
+                            "semantics")
     parser.add_argument("--interpreter-backtrace", action="store_true",
                        help="show the Python interpreter backtrace on errors")
     parser.add_argument("program_args", nargs=argparse.REMAINDER,
@@ -2461,6 +2471,7 @@ def main():
     args = _parse_args()
 
     set_warnings_are_errors(args.werror)
+    set_contract_semantic(args.contracts)
 
     source_path = args.source
     source = ""
@@ -2473,6 +2484,10 @@ def main():
 
         with open(source_path, "r", encoding="utf-8") as f:
             source = f.read()
+
+        # A diagnostic raised mid-run never reaches the top level, so it
+        # finds the text to point into here rather than being handed it.
+        set_source(source, source_path)
 
         try:
             tokens = process_indentation(tokenize(source))

@@ -1,0 +1,21 @@
+// What a condition that does not hold does is chosen for the run, not
+// written in the source.  This same file is run under each of the four
+// semantics; what differs is the output beside it.
+
+@pre(b > 0)
+fn scaled(a : i64, b : i64) → i64:
+    a × b
+
+// A condition that cannot be read at all is a violation of it too: what
+// it claims is not known to be true.
+@pre(v[3] = 0)
+fn first_of(v : i64[]) → i64:
+    v[0]
+
+@start
+@impure
+fn main():
+    std.println("{}", scaled(3, 0))
+    let v : i64[] = [7, 8]
+    std.println("{}", first_of(v))
+    std.println("the program ran to the end")

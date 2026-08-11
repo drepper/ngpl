@@ -56,9 +56,12 @@ from interp.value import (
     register_sum_type, sum_type_alternatives, sum_type_admits,
 )
 from interp.env import Env, Decl
-from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
+from interp.std import (std, DirFD, FileStream, Bytes, MmapAllocator,
+                       resolve_abort_signal)
 from interp.errors import (attach_backtrace, diagnostic_level,
-                          strip_position_prefix, ContractError)
+                          strip_position_prefix, ContractError,
+                          contract_semantic, report_runtime_diagnostic,
+                          ProgramAbort)
 
 
 # An empty array disagrees with no unit, so it stands in for whatever
@@ -1855,26 +1858,74 @@ class Evaluator:
         """
         if not conditions:
             return
+        semantic = contract_semantic()
+        # ignore does not read the condition at all, so nothing it
+        # would have said -- including that it could not be read -- is
+        # said.
+        if semantic == "ignore":
+            return
         for condition in conditions:
             if condition.name is not None:
                 self.env.define(condition.name, result)
-            held = self.eval_expr(condition.expr)
+            try:
+                held = self.eval_expr(condition.expr)
+            except Exception as e:
+                # The condition could not be read at all, which is a
+                # violation of it in its own right: what it claims is
+                # not known to be true.
+                self._contract_violation(func, condition, semantic,
+                                         strip_position_prefix(str(e)))
+                continue
             unwrapped = unwrap_optional(held)
             if not isinstance(unwrapped, BoolValue):
+                # Not a violation but a mistake in the condition, which
+                # no semantic makes true and none is asked about.
                 raise TypeError(
                     f"{func.name}: a @{condition.which} says what is true, "
                     f"so it answers a truth value, and this one answers "
                     f"{self._value_type_name(unwrapped)}")
             if unwrapped.value:
                 continue
-            which = ("a precondition" if condition.which == "pre"
-                     else "a postcondition")
+            self._contract_violation(func, condition, semantic, None)
+
+    def _contract_violation(self, func, condition, semantic: str,
+                            unreadable: str | None) -> None:
+        """Do what the chosen semantic says a broken condition does.
+
+        `unreadable` is what went wrong where the condition could not be
+        read, and None where it was read and answered false.  C++26
+        calls those two the detection modes, and both are violations:
+        a condition that cannot be read has not been kept to.
+
+        observe reports and the run carries on; enforce reports and the
+        run stops; quick-enforce stops without reporting, which is the
+        whole of what makes it quick.
+        """
+        which = ("a precondition" if condition.which == "pre"
+                 else "a postcondition")
+        if unreadable is not None:
+            message = (f"{func.name}: {which} could not be read, so what it "
+                       f"claims is not known to hold: {unreadable}")
+        else:
             blame = ("the caller did not" if condition.which == "pre"
                      else "the function did not")
-            raise ContractError(
-                f"{func.name}: {which} does not hold, so {blame} keep to "
-                f"what {func.name} says it needs",
-                condition.pos)
+            message = (f"{func.name}: {which} does not hold, so {blame} keep "
+                       f"to what {func.name} says it needs")
+        if semantic == "quick-enforce":
+            # Nothing is reported: the point of this one is that the
+            # check costs a test and a trap and nothing else.
+            raise ProgramAbort(resolve_abort_signal(0))
+        if semantic == "observe":
+            # Reported as a warning whatever -Werror says: asking to
+            # observe is asking for the run to carry on, and a
+            # diagnostic that said error while the program kept going
+            # would be saying two things.  Asking for both is asking
+            # for enforce, which is spelled by asking for enforce.
+            report_runtime_diagnostic(message, condition.pos,
+                                      level="warning",
+                                      call_stack=self._call_stack)
+            return
+        raise ContractError(message, condition.pos)
 
     def _op_length(self, operand):
         """How many things are in it (#).

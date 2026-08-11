@@ -64,6 +64,70 @@ A precondition blames the caller and a postcondition blames the
 function, since that is what each of them is about, and the two
 messages say so in those words.
 
+## Choosing What a Violation Does
+
+Whether a broken condition stops the program is not a property of the
+code.  The same source is run while the conditions are being written,
+when they are not yet trusted and every violation is worth seeing; and
+in production, where one is a reason to stop; and in a hot loop, where
+reading them at all may be more than the run can afford.  So the choice
+is made per run, on the command line, as `-Werror` is.
+
+C++26's four evaluation semantics are what `--contracts=` takes, and
+they are the four because they are the answers to two questions: is the
+condition read, and if it is read and does not hold, does the run go on?
+
+| | read | reported | run goes on |
+|-|------|----------|-------------|
+| `ignore` | no | — | yes |
+| `observe` | yes | yes | yes |
+| `enforce` | yes | yes | no |
+| `quick-enforce` | yes | no | no |
+
+The one that looks redundant is `quick-enforce`, and it is the one with
+the clearest reason to exist: reporting a violation means assembling a
+message, finding the source line and walking the call stack, and a
+build that wants the check without any of that gets the check and a
+trap.  Not reporting is not an omission — it is the feature.
+
+### What "Stops" Means Here
+
+C++26 terminates via `std::abort` for both enforcing semantics.  Here
+they part:
+
+- `enforce` raises the violation as an **error**, which is how every
+  other failure in this language ends a program: a diagnostic at the
+  condition, a backtrace, status 1.  It has to be an error rather than
+  an abort, because `@expect error` is how a test says a condition is
+  meant to be broken, and nothing can account for a signal.
+- `quick-enforce` **aborts**, which is the trap C++ means, and which is
+  also what makes the two visibly different: the abort says the program
+  stopped and nothing says why.
+
+### Reading the Condition Can Fail Too
+
+C++26 has two detection modes: the predicate answered false, or
+evaluating it exited via an exception.  The second is a violation as
+much as the first — a condition that cannot be read has not been shown
+to hold — and it goes through the same four semantics.  This came out
+of the change rather than being asked for: once a semantic decides what
+a violation does, an unreadable condition has to be one or the other,
+and calling it a plain error would have meant `ignore` still stopping
+the program.
+
+What is *not* a violation is a condition that answers something other
+than a truth value.  That is a mistake in the condition rather than a
+report about the program, no semantic makes it true, and none is asked:
+it stays an error.
+
+### Why `observe` Ignores `-Werror`
+
+A warning promoted to an error by `-Werror` stops the run.  An observed
+violation cannot, since carrying on is the whole of what `observe` was
+asked for.  Printing `error:` and continuing would say two things at
+once, so the diagnostic stays a warning; a run that wants both is
+asking for `enforce`, which is spelled that way.
+
 ## What Is Not Here Yet
 
 - **`old`.**  Eiffel's `old x` and Ada's `x'Old` let a postcondition
@@ -71,10 +135,11 @@ messages say so in those words.
   taken before the body runs and a name for it; worth having, and a
   separate piece.
 - **A condition on a type, rather than a function** — an invariant.
-- **Choosing what a violation does.**  C++26 has ignore, observe,
-  enforce and quick-enforce, chosen at build time.  Here a violation is
-  always an error.  The choice is worth having once there is a build
-  system to make it in.
+- **A violation handler the program provides.**  C++26 lets a program
+  replace the handler and read a `contract_violation` describing what
+  broke.  The four semantics are what the handler is called *by*, and
+  they are here; who gets called is a language feature and its own
+  piece of work.
 - **Checking a condition before anything runs.**  Where the arguments
   are known at compile time, a precondition could be settled then.  The
   machinery for that is `static_assert`'s, and joining them up is its
@@ -85,5 +150,7 @@ messages say so in those words.
 Implemented: `@pre` and `@post` on named functions and on `impl`
 methods, any number of each, with the result optionally named in a
 postcondition; conditions read against the parameters and the answer;
-a non-`bool` condition refused; and violations reported at the
-condition with a backtrace to the call.
+a non-`bool` condition refused; violations reported at the condition
+with a backtrace to the call; and `--contracts=` choosing between
+C++26's four evaluation semantics for the run, over both detection
+modes.

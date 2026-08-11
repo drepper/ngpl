@@ -1,0 +1,10 @@
+error: scaled: a precondition does not hold, so the caller did not keep to what scaled says it needs
+  --> tests/output/contract_enforce.ngpl:5:1
+    |
+  5 | @pre(b > 0)
+    | ^^^^
+  6 | fn scaled(a : i64, b : i64) → i64:
+    |
+backtrace (innermost call first):
+  #0 scaled at tests/output/contract_enforce.ngpl:5:5
+  #1 main at tests/output/contract_enforce.ngpl:18:32
