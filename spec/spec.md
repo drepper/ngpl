@@ -506,35 +506,35 @@ let n : u32 = 65
 
 Two arrays still join as arrays; that is the other thing `⧺` does, and an array is not text.
 
-A character says its string with `.str()`, and so does an array of characters:
+A character says its string with `.str()`:
 
 ```
 'x'.str()                       /* "x" */
-
-let chars : char[] = ['h', 'i', '!']
-chars.str()                     /* "hi!" */
 ```
 
-`.str()` asks for characters.  Bytes are an *encoding* of characters rather than characters, so a `byte[]` is not taken; decoding one is a separate operation the language does not yet have.
+An array of characters needs no such member: joining is what `⧺` does, and folding it over the array does it to all of them.
 
 A string says what it is made of with `.chars()`, which is the other direction:
 
 ```
 "héllo".chars()                 /* ['h', 'é', 'l', 'l', 'o'] */
-"héllo".chars().str()           /* "héllo" — the round trip */
+⧺⌿ "héllo".chars()              /* "héllo" — the round trip */
 ```
 
 What comes back is an ordinary `char[]`, so everything an array answers it answers.
 
 #### Folding a Vector into a String
 
-`⧺` joins text, so folding it over a vector of characters spells the string they make:
+`⧺` joins text, so folding it over a vector of characters spells the string they make.  This is how an array of characters becomes a string; there is no member function saying it a second way:
 
 ```
 let chars : char[] = ['h', 'i', '!']
 ⧺⌿ chars                        /* "hi!" */
 ⧺⌿ (chars, "say ")              /* "say hi!" — with an initial value */
+⧺⌿ (chars, "")                  /* the form that holds for an empty array */
 ```
+
+A fold with no initial value starts from the first element, so an array that may be empty says what an empty one comes to.
 
 A vector of *code points* is a vector of numbers, so the conversion is written where it happens:
 

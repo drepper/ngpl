@@ -152,14 +152,31 @@ This also gives `str ⧺ str`, which had been missing — `⧺` took arrays
 only, so the operator the specification called *the* concatenation
 could not concatenate the language's own text.
 
-For the bulk case, `.str()` on a character and on an array of them.
-The conversion is written at the value that has it, which is where
-`.ord()` and `.chr()` already are.
+A character says its string with `.str()`, the conversion written at
+the value that has it, where `.ord()` and `.chr()` already are.
 
-`.str()` asks for characters and not bytes.  A `byte[]` is an
-*encoding* of characters, and turning one back into text is decoding —
-a fallible operation with a different signature, which the language
-does not yet have.
+An array of characters had one too, briefly, and it was taken out
+again.  `⧺⌿ chars` already says it — joining is what `⧺` does, and
+folding is what does it to all of them — so the member function was a
+second spelling of an operation the language had, on a type that is
+not the character type at all.  Asking an array for `str()` now says
+where to look:
+
+```
+chars.str()
+
+error: an array does not answer str(); ⧺⌿ joins its characters into a
+string, and ⧺⌿ (chars, "") does so where the array may be empty
+```
+
+The fold form has something the member function did not, too: an
+initial value, which is what an array that may be empty needs in order
+to say what an empty one comes to.
+
+Decoding a `byte[]` is a different question from either.  A byte is an
+*encoding* of characters, and turning bytes back into text is a
+fallible operation with a signature of its own, which the language does
+not yet have.
 
 ### A number does not join text
 

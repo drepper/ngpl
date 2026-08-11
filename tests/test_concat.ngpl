@@ -54,15 +54,17 @@ fn test_concat_with_reshape():
 
 // --- Type errors ---
 
+// ⧺ joins two arrays or two pieces of text, so one of each is
+// neither of those.
 @test
-@expect error "left operand must be an array"
+@expect error "the left operand is int and the right one is an array"
 fn test_concat_left_not_array():
-    42 ⧺ [1]
+    _ ← 42 ⧺ [1]
 
 @test
-@expect error "right operand must be an array"
+@expect error "the left operand is an array and the right one is int"
 fn test_concat_right_not_array():
-    [1] ⧺ 42
+    _ ← [1] ⧺ 42
 
 // --- Preserves element type ---
 

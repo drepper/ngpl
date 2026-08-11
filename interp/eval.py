@@ -1316,23 +1316,20 @@ class Evaluator:
             etype = la.element_type or ra.element_type
             return ObjectValue(
                 ArrayValue(la.values() + ra.values(), element_type=etype))
-        if isinstance(lu, (StrValue, CharValue)) \
-                or isinstance(ru, (StrValue, CharValue)):
-            # One side is text, so the other was meant to be and is not.
+        if la is None and ra is None:
+            # Neither is an array, so text is what was meant, and the
+            # operand that is not text says so.
             self._text_operand(lu, "left")
             self._text_operand(ru, "right")
         if la is None:
             raise TypeError(
-                f"\N{DOUBLE PLUS}: left operand must be an array, "
-                f"got {type(lu).__name__}")
-        if ra is None:
-            raise TypeError(
-                f"\N{DOUBLE PLUS}: right operand must be an array, "
-                f"got {type(ru).__name__}")
-        etype = la.element_type or ra.element_type
-        return ObjectValue(
-            ArrayValue(la.values() + ra.values(),
-                       element_type=etype))
+                f"\N{DOUBLE PLUS}: the left operand is "
+                f"{runtime_type_of(lu)} and the right one is an array; "
+                f"an array joins an array, and text joins text")
+        raise TypeError(
+            f"\N{DOUBLE PLUS}: the left operand is an array and the right "
+            f"one is {runtime_type_of(ru)}; an array joins an array, and "
+            f"text joins text")
 
     @staticmethod
     def _text_operand(value, side: str) -> str:
@@ -1812,25 +1809,6 @@ class Evaluator:
     def _string_index(self, text: StrValue, index: Value):
         """The character at a position in a string."""
         return CharValue(ord(text.value[self._string_position(text, index)]))
-
-    @staticmethod
-    def _string_of_characters(array) -> str:
-        """The string an array of characters spells.
-
-        A string is made of characters, so that is what building one
-        asks for.  Bytes are a different question -- they are an
-        encoding of characters rather than characters -- and are not
-        taken here.
-        """
-        text: list[str] = []
-        for index, element in enumerate(array.values()):
-            inner = unwrap_optional(element)
-            if not isinstance(inner, CharValue):
-                raise TypeError(
-                    f"str: a string is made of characters, and element "
-                    f"{index} is {runtime_type_of(inner)}")
-            text.append(inner.char)
-        return "".join(text)
 
     def _callstack_value(self, args):
         """Return the interpreted program's call stack, innermost first.
@@ -4187,9 +4165,14 @@ class Evaluator:
         if (isinstance(unwrapped, ObjectValue)
                 and isinstance(unwrapped.obj, ArrayValue)
                 and method_name == "str"):
-            if args:
-                raise TypeError("str takes no arguments")
-            return mk_str(self._string_of_characters(unwrapped.obj))
+            # Joining is what ⧺ does, and folding it over an array is
+            # what does it to all of them, so an array needs no member
+            # function saying the same thing a second way.
+            fold = "\N{DOUBLE PLUS}\N{APL FUNCTIONAL SYMBOL SLASH BAR}"
+            raise AttributeError(
+                f"an array does not answer str(); {fold} joins its "
+                f"characters into a string, and {fold} (chars, \"\") does "
+                f"so where the array may be empty")
         if (isinstance(unwrapped, ObjectValue)
                 and isinstance(unwrapped.obj, ArrayValue)
                 and method_name in _ARRAY_METHODS):
