@@ -329,6 +329,104 @@ fn wants_three((a, b, c)) → i64:
 fn error_argument_has_the_wrong_number_of_elements():
     let n : i64 = wants_three((1i64, 2i64))
 
+// ---------------------------------------------------------------------
+// A match arm may name the elements too
+// ---------------------------------------------------------------------
+
+fn maybe_pair(want : bool) → (i64, str)?:
+    if want:
+        return ∃((1i64, "two"))
+    ∅
+
+@test
+fn test_a_destructured_match_arm():
+    let found : mut i64 = 0
+    match maybe_pair(true):
+        ∃((a, b)):
+            found ← a
+        ∅:
+            found ← ⁻1
+    assert_eq(found, 1)
+
+@test
+fn test_the_arm_that_does_not_bind_still_runs():
+    let found : mut i64 = 0
+    match maybe_pair(false):
+        ∃((a, b)):
+            found ← a
+        ∅:
+            found ← ⁻1
+    assert_eq(found, ⁻1)
+
+fn divided(a : i64, b : i64) → (i64, i64)!:
+    if b == 0:
+        return ∄(std.errors.division_by_zero)
+    ∃((a ÷ b ?? 0, a % b ?? 0))
+
+@test
+fn test_a_destructured_arm_on_a_result():
+    let total : mut i64 = 0
+    match divided(7, 2):
+        ∃((q, r)):
+            total ← q × 10 + r
+        ∄(e):
+            total ← ⁻1
+    assert_eq(total, 31)
+
+fn nested_pair() → ((i64, i64), str)?:
+    ∃(((1i64, 2i64), "x"))
+
+@test
+fn test_a_nested_destructured_arm():
+    let total : mut i64 = 0
+    match nested_pair():
+        ∃(((a, b), c)):
+            total ← a + b
+        ∅:
+            total ← ⁻1
+    assert_eq(total, 3)
+
+@test
+fn test_an_arm_may_discard_an_element():
+    let word : mut str = ""
+    match nested_pair():
+        ∃((_, c)):
+            word ← c
+        ∅:
+            word ← "none"
+    assert(word == "x")
+
+// The names an arm binds live for the arm, as a single name does.
+@test
+@expect error "cannot assign to match variable"
+fn error_assigning_to_a_destructured_arm_name():
+    match maybe_pair(true):
+        ∃((a, b)):
+            a ← 2
+        ∅:
+            assert(true)
+
+fn maybe_number() → i64?:
+    ∃(5i64)
+
+@test
+@expect error "the arm names the elements of a tuple, but the value matched is"
+fn error_arm_names_elements_of_something_that_is_not_a_tuple():
+    match maybe_number():
+        ∃((a, b)):
+            assert_eq(a, 5)
+        ∅:
+            assert(true)
+
+@test
+@expect error "the arm names 3 elements, but the value matched has 2"
+fn error_arm_names_the_wrong_number_of_elements():
+    match maybe_pair(true):
+        ∃((a, b, c)):
+            assert_eq(a, 1)
+        ∅:
+            assert(true)
+
 @start
 @impure
 fn main():

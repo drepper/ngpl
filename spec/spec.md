@@ -5178,6 +5178,42 @@ error: wants_three: parameter (a, b, c) names 3 elements, but the
 argument has 2
 ```
 
+#### Taking a Tuple Apart in a `match` Arm
+
+An arm that binds may name the elements instead of the value, in the same shape as everywhere else:
+
+```
+match maybe_pair():
+    ∃((a, b)):
+        a + b
+    ∅:
+        0
+
+match divided(7, 2):
+    ∃((q, r)):
+        q × 10 + r
+    ∄(e):
+        ⁻1
+```
+
+This holds for every pattern that binds — `∃(…)`, `∄(…)`, and `Type(…)` — and nests as the value does, with `_` where an element is not wanted:
+
+```
+∃(((a, b), c)):     /* the value is ((i64, i64), str) */
+∃((_, c)):          /* only the second element is wanted */
+```
+
+The names live for their arm and cannot be assigned to, as a single name cannot: they name what was matched, and writing to one would say nothing about the value that was matched.
+
+Where the value is not a tuple, or has a different number of elements, the arm says so:
+
+```
+error: the arm names the elements of a tuple, but the value matched is
+i64
+
+error: the arm names 3 elements, but the value matched has 2
+```
+
 #### Design Rationale
 
 The type is written the way the value is, which is the same principle behind `i64[]` for an array: a reader who can write the value can write its type.  Rust spells tuple types this way for the same reason.

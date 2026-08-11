@@ -100,7 +100,8 @@ Completed
     `_` where an element is not wanted — at a local and at a global alike.  mut reaches
     every name, a repeated name is refused, and a stated type is the tuple's.  A parameter
     may name the elements too, in the same shape, with or without a stated type; a lambda's
-    may as well.
+    may as well, and so may a match arm that binds — ∃((a, b)), ∄((a, b)), Type((a, b)) —
+    which is the same operation at the third of the three places a value gets names.
 
 [x] nothing in the bootstrap holds an arbitrary-precision value.  A binding with no type written
     down would settle on int or float, so it is refused and the sized type is asked for; that

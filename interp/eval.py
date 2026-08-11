@@ -3309,16 +3309,7 @@ class Evaluator:
             if arm.kind == "none":
                 return self.eval_stmts(arm.body)
             # ∃(name) or ∄(name), both of which bind.
-            old_frozen = self._frozen_vars.get(arm.name)
-            self.env.define(arm.name, inner)
-            self._frozen_vars[arm.name] = "match"
-            try:
-                return self.eval_stmts(arm.body)
-            finally:
-                if old_frozen is None:
-                    self._frozen_vars.pop(arm.name, None)
-                else:
-                    self._frozen_vars[arm.name] = old_frozen
+            return self._eval_bound_arm(arm, inner)
 
         described = {"some": "a present value",
                      "none": "\N{EMPTY SET}",
@@ -3454,22 +3445,46 @@ class Evaluator:
             f"or a _ arm")
 
     def _eval_bound_arm(self, arm, value: Value):
-        """Run an arm with its name bound to the matched value.
+        """Run an arm with what it names bound to the matched value.
 
-        The name exists only for its arm and cannot be assigned to: it
-        names the matched value, and writing to it would say nothing
-        about the value that was matched.
+        An arm may name the value or, where the value is a tuple, its
+        elements.  Either way the names exist only for their arm and
+        cannot be assigned to: they name what was matched, and writing
+        to one would say nothing about the value that was matched.
         """
-        old_frozen = self._frozen_vars.get(arm.name)
-        self.env.define(arm.name, value)
-        self._frozen_vars[arm.name] = "match"
+        bound: dict[str, Value] = {}
+        self._collect_arm_bindings(arm.name, value, bound, arm)
+        restore = {name: self._frozen_vars.get(name) for name in bound}
+        for name, bound_value in bound.items():
+            self.env.define(name, bound_value)
+            self._frozen_vars[name] = "match"
         try:
             return self.eval_stmts(arm.body)
         finally:
-            if old_frozen is None:
-                self._frozen_vars.pop(arm.name, None)
-            else:
-                self._frozen_vars[arm.name] = old_frozen
+            for name, old_frozen in restore.items():
+                if old_frozen is None:
+                    self._frozen_vars.pop(name, None)
+                else:
+                    self._frozen_vars[name] = old_frozen
+
+    def _collect_arm_bindings(self, names, value, bound: dict, arm):
+        """Work out what an arm's pattern binds, taking tuples apart."""
+        if not isinstance(names, tuple):
+            bound[names] = value
+            return
+        inner = unwrap_optional(value)
+        if not isinstance(inner, TupleValue):
+            raise TypeError(
+                f"the arm names the elements of a tuple, but the value "
+                f"matched is {runtime_type_of(inner)}")
+        if len(inner.elements) != len(names):
+            raise TypeError(
+                f"the arm names {len(names)} elements, but the value "
+                f"matched has {len(inner.elements)}")
+        for name, element in zip(names, inner.elements):
+            if name == DISCARD_NAME:
+                continue
+            self._collect_arm_bindings(name, element, bound, arm)
 
     @staticmethod
     def _match_shape(subject):

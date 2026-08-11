@@ -568,8 +568,9 @@ class Parser:
         arrow_tok = self._cur()
         if self._try_eat("OP", "->"):
             if self._at_tuple_type():
-                start_tok = self._cur()
-                ret_type = self._parse_tuple_type()
+                # Read as any type is, so a tuple return may be an
+                # array of tuples or an optional one.
+                ret_type = self._parse_type()
                 ret_type_pos = (arrow_tok.line, arrow_tok.col,
                                 self.tokens[self.pos - 1].end_col)
             elif self._check("IDENT", "NONE", "OPT"):
@@ -1400,6 +1401,22 @@ class Parser:
             raise ParseError("match requires at least one arm", kw_tok)
         return self._set_pos(MatchStmt(subject, arms), kw_tok)
 
+    def _parse_arm_binding(self):
+        """Parse what an arm binds: a name, or a tuple's elements.
+
+        `∃(v)` names the matched value and
+        `∃((a, b))` names the elements of it, in the
+        shape a definition or a parameter uses.
+        """
+        self._eat("PUNCT", "(")
+        if self._check("PUNCT") and self._cur().value == "(":
+            names = _as_names(self._parse_destructure_names(self._cur()))
+            self._eat("PUNCT", ")")
+            return names
+        name = self._eat("IDENT").value
+        self._eat("PUNCT", ")")
+        return name
+
     def _parse_match_arm(self) -> MatchArm:
         """Parse one arm: ∃(name) | ∅ | _  followed by ':' and a body."""
         kind: str
@@ -1407,15 +1424,11 @@ class Parser:
         pattern_tok = self._cur()
         if self._check("SOME"):
             self.pos += 1
-            self._eat("PUNCT", "(")
-            name = self._eat("IDENT").value
-            self._eat("PUNCT", ")")
+            name = self._parse_arm_binding()
             kind = "some"
         elif self._check("NOTEXISTS"):
             self.pos += 1
-            self._eat("PUNCT", "(")
-            name = self._eat("IDENT").value
-            self._eat("PUNCT", ")")
+            name = self._parse_arm_binding()
             kind = "err"
         elif self._check("NONE"):
             self.pos += 1
@@ -1428,9 +1441,7 @@ class Parser:
             # value under the type that says which alternative it is.
             type_tok = self._eat("IDENT")
             type_name = type_tok.value
-            self._eat("PUNCT", "(")
-            name = self._eat("IDENT").value
-            self._eat("PUNCT", ")")
+            name = self._parse_arm_binding()
             kind = "type"
             body = self._parse_block()
             return self._set_pos(
