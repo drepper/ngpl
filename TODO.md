@@ -190,6 +190,15 @@ Completed
     definition's = -- let x : i64!= 10 -- is refused as it was before, != having been a single
     token then as well.
 
+[x] @typeof answers an array's actual type rather than the word "array".  What an array is is
+    what it holds and the shape it holds it in, and both are written down in the type a
+    program would give it: i8[3], u8[2,3], u8[2,] where the rows disagree about an extent, as
+    a type leaves one open.  "array" said the same thing about every array, so two that hold
+    different things or hold them in different shapes compared equal -- @typeof([[1u8,2,3],
+    [2,3]]) ≠ @typeof([1i8,2,3]) was false.  An array holding nothing that was never told what
+    it would hold still answers "array", having nothing else to report.  Two tests asserted
+    that two different arrays had the same type, which was only true because every array did.
+
 [x] a number settles a nested literal however deep it sits: `let d := [[1u8,2,3],[2,3,4]]`
     has one element saying what it is and nothing contradicting, so every number in it is a
     u8.  Settling stopped at the outer level before, saw rows rather than numbers and gave up,

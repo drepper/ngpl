@@ -22,10 +22,43 @@ fn test_typeof_different():
     static_assert_eq(@typeof(42), @typeof(0))
     static_assert_eq(@typeof("a"), @typeof("b"))
 
-// @typeof on array literal.
+// @typeof on array literal.  What an array is is what it holds and the
+// shape it holds it in, so two of the same shape and element type are
+// the same type and two of different ones are not.
 @test
 fn test_typeof_array():
-    static_assert_eq(@typeof([1, 2, 3]), @typeof([4, 5]))
+    static_assert_eq(@typeof([1, 2, 3]), @typeof([4, 5, 6]))
+
+@test
+fn test_typeof_tells_arrays_apart():
+    let by_length := @typeof([1, 2, 3]) ≠ @typeof([4, 5])
+    let by_element := @typeof([1i8, 2, 3]) ≠ @typeof([1u8, 2, 3])
+    let by_shape := @typeof([[1u8, 2, 3], [2, 3, 4]]) ≠ @typeof([1u8, 2, 3])
+    assert(by_length)
+    assert(by_element)
+    assert(by_shape)
+
+// A ragged literal and a flat one are not the same type, and neither is
+// anything else that differs in what it holds or in the shape it holds
+// it in.
+@test
+fn test_a_nested_literal_is_not_a_flat_one():
+    let d := [[1u8, 2, 3], [2, 3]]
+    let e := [1i8, 2, 3]
+    assert(@typeof(d) ≠ @typeof(e))
+
+// The shape is written the way a type writes it: an extent the rows
+// disagree about is left open, as a type leaves one open.
+@test
+fn test_the_shape_is_part_of_the_type():
+    let flat := [1u8, 2, 3]
+    let square := [[1u8, 2, 3], [2, 3, 4]]
+    let ragged := [[1u8, 2, 3], [2, 3]]
+    assert(@typeof(flat) ≠ @typeof(square))
+    assert(@typeof(square) ≠ @typeof(ragged))
+    // Two written the same way are the same type, however they were
+    // built.
+    static_assert_eq(@typeof(square), @typeof([[9u8, 9, 9], [9, 9, 9]]))
 
 // @typeof on tuple literal.
 @test

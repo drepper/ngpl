@@ -4478,12 +4478,44 @@ class Evaluator:
         if isinstance(u, ObjectValue) and isinstance(u.obj, StructInstance):
             return u.obj.struct_type.name
         if isinstance(u, ObjectValue) and isinstance(u.obj, ArrayValue):
-            return "array"
+            return Evaluator._array_type_name_of(u.obj)
         if isinstance(u, RangeValue):
             return "range"
         if isinstance(u, TypeValue):
             return "type"
         return "unknown"
+
+    @staticmethod
+    def _array_type_name_of(arr) -> str:
+        """The type of an array, written the way a type is written.
+
+        "array" said the same thing about every one of them, which is
+        not enough to tell two apart: what an array is is what it holds
+        and what shape it holds it in, and both are written down in the
+        type a program would give it.
+        """
+        dims = array_shape(arr)
+        leaf = arr.element_type
+        parsed = _parse_array_type(leaf) if leaf is not None else None
+        while parsed is not None:
+            leaf = parsed[0]
+            parsed = _parse_array_type(leaf)
+        if leaf is None:
+            # Nothing was written down, so what it holds is what the
+            # first thing in it is.
+            probe = arr
+            while probe is not None and probe.sizeof:
+                first = unwrap_optional(probe.get(0))
+                inner = Evaluator._as_array(first)
+                if inner is None:
+                    leaf = Evaluator._value_type_name(first)
+                    break
+                probe = inner
+        if leaf is None:
+            # An empty array that was never told, which is the one case
+            # with nothing to report but its shape.
+            return "array"
+        return _array_type_name(leaf, dims)
 
     def _eval_lambda_expr(self, node: LambdaExpr):
         """Evaluate a lambda expression: validate captures and build LambdaValue.

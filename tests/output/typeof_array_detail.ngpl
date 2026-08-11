@@ -1,0 +1,12 @@
+@start
+@impure
+fn main():
+    let flat := [1u8, 2, 3]
+    let square := [[1u8, 2, 3], [2, 3, 4]]
+    let ragged := [[1u8, 2, 3], [2, 3]]
+    let strings : str[] = ["a", "b"]
+    std.println("{}", @typeof(flat))
+    std.println("{}", @typeof(square))
+    std.println("{}", @typeof(ragged))
+    std.println("{}", @typeof(strings))
+    std.println("{}", @typeof(flat[0]))

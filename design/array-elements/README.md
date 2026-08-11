@@ -118,6 +118,19 @@ is belongs to the shape, which a type states and which rows are allowed
 to disagree about here, so `[[1u8, 2, 3], [4]]` still settles on `u8`
 and is measured for its shape only where a type says one.
 
+## What an Array Says It Is
+
+`@typeof` answered `array` for every array, which is not enough to tell
+two apart — and telling two apart is what a type is for.  It now writes
+what a program would write: `i8[3]`, `u8[2,3]`, and `u8[2,]` where the
+rows disagree about an extent, which a type spells the same way.
+
+The element type and the shape are the two things an array *is*, and
+both are already known: the element type because a literal settles it
+and a declaration states it, and the shape because `array_shape` reads
+it off the value.  Nothing new had to be worked out; the answer was
+being thrown away.
+
 ## What Is Refused, and Where
 
 Every way into an array asks one routine, so the answers cannot drift:

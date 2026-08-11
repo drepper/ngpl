@@ -27,7 +27,7 @@ fn test_typeof_bool_param():
     typeof_bool_param(false)
 
 fn typeof_array_param(arr : i32[]):
-    static_assert_eq(@typeof(arr), @typeof([1]))
+    static_assert_eq(@typeof(arr), @typeof([1i32, 2, 3]))
 
 @test
 fn test_typeof_array_param():

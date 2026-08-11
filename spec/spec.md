@@ -5632,7 +5632,15 @@ let byte := 5
 error: 'byte' names a type and cannot name a variable
 ```
 
-- `@typeof(expr)` — evaluates the expression and returns a `type` value representing its type.  The type name reflects the concrete type: `int`, `i32`, `u8`, `str`, `bool`, `∅`, `array`, `fn`, `λ`, an enum name, or a tuple type written as a program would write it — `(i64, str)`.
+- `@typeof(expr)` — evaluates the expression and returns a `type` value representing its type.  The type name reflects the concrete type: `int`, `i32`, `u8`, `str`, `bool`, `∅`, `fn`, `λ`, an enum name, a tuple type written as a program would write it — `(i64, str)` — or an array type, likewise written as a program would write it:
+
+```
+@typeof([1i8, 2, 3])            /* i8[3] */
+@typeof([[1u8, 2, 3], [2, 3, 4]])   /* u8[2,3] */
+@typeof([[1u8, 2, 3], [2, 3]])      /* u8[2,] — the rows disagree, so that extent is open */
+```
+
+  What an array *is* is what it holds and the shape it holds it in, so two that differ in either are different types.  An extent the rows disagree about is left open, exactly as a type leaves one open.  An array that holds nothing and was never told what it would hold answers `array`, having nothing else to report.
 
 - `@dropunit(expr)` — the value without the unit it carries.  See [Parting with a Unit](#parting-with-a-unit).
 
