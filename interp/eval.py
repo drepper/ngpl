@@ -2172,6 +2172,26 @@ class Evaluator:
                 if isinstance(unwrapped, FloatValue):
                     return mk_float(-unwrapped.value, unwrapped.width)
                 raise TypeError(f"negation expected numeric type, got {type(unwrapped).__name__}")
+            if node.op in ("\N{LEFT CEILING}", "\N{LEFT FLOOR}"):
+                unwrapped = unwrap_optional(operand)
+                if isinstance(unwrapped, CharValue):
+                    # One character's upper case can be more than one
+                    # character -- ß is SS -- so what comes back is a
+                    # string, and the operand says so too.
+                    raise TypeError(
+                        f"{node.op} answers with a string, so it asks for "
+                        f"one: a character's case is written "
+                        f"{node.op}c.str(), since the upper case of one "
+                        f"character can be more than one character")
+                if not isinstance(unwrapped, StrValue):
+                    raise TypeError(
+                        f"{node.op} in front of an operand is the case of "
+                        f"text, and this one is "
+                        f"{runtime_type_of(unwrapped)}; the larger and the "
+                        f"smaller of two numbers are written between them")
+                return mk_str(unwrapped.value.upper()
+                              if node.op == "\N{LEFT CEILING}"
+                              else unwrapped.value.lower())
             if node.op == "~":
                 unwrapped = unwrap_optional(operand)
                 if isinstance(unwrapped, UnitValue):

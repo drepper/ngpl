@@ -142,8 +142,15 @@ Completed
     the comparisons and …, so `2 + 3 ⌈ 10 - 4` is the larger of the two sums and
     `3 ⌈ 5 == 5` compares the answer.  Operands must be the same kind of number and, where
     they carry units, measure the same thing; arrays are handled element-wise as they are
-    for arithmetic.  Only the dyadic meaning: APL's monadic ceiling and floor would make
-    the glyph's meaning depend on counting its operands first.
+    for arithmetic.
+
+[x] ⌈ and ⌊ in front of text are the upper and the lower case of it.  The glyphs point up and
+    down, which between two numbers is the larger and the smaller and in front of text is the
+    upper and the lower, so a reader who knows one reading can work out the other — not true
+    of APL's monadic ceiling and floor.  The two cannot be confused, since case is a property
+    of text and the extremes of numbers, and taking the monadic position for text keeps a
+    name free for rounding.  A character is asked through its string, since one character's
+    upper case can be more than one character.
 
 [x] writing → ∅ on a function or a method draws a warning, since it says what
     leaving the return type off says and having both spellings invites a reader to look

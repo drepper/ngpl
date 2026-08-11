@@ -67,6 +67,9 @@ _ADD_OPS = frozenset({"+", "-",
 _MUL_OPS = frozenset({"\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}", "%",
                       "\N{SQUARED TIMES}"})
 _MINMAX_OPS = frozenset({"\N{LEFT CEILING}", "\N{LEFT FLOOR}"})
+# The same glyphs in front of an operand, where they are the case of
+# text rather than the larger or smaller of two numbers.
+_CASE_OPS = _MINMAX_OPS
 
 # The fold operators, and the operators that may be folded with.
 _FOLD_OPS = frozenset({"\N{APL FUNCTIONAL SYMBOL SLASH BAR}",
@@ -1936,7 +1939,18 @@ class Parser:
         return left
 
     def _parse_unary(self):
-        """unary → ('~' | '¬' | 'not' | '√' | '∛' | '∜' | '@wrap') unary | primary"""
+        """unary → ('~' | '¬' | 'not' | '√' | '∛' | '∜' | '⌈' | '⌊' | '@wrap') unary | primary
+
+        `⌈` and `⌊` in front of an operand are the upper and lower case
+        of text.  Between two operands they are the larger and the
+        smaller of two numbers; which one is meant is settled by where
+        the glyph is written, as it is for a minus sign.
+        """
+        if self._check("OP") and self._cur().value in _CASE_OPS:
+            op_tok = self._cur()
+            self.pos += 1
+            operand = self._parse_unary()
+            return self._set_pos(UnaryOp(op_tok.value, operand), op_tok)
         if self._check("OP") and self._cur().value == "~":
             op_tok = self._cur()
             self.pos += 1

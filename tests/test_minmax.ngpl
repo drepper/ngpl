@@ -52,6 +52,65 @@ fn test_clamping():
     assert_eq(clamped(500), 100)
 
 // ---------------------------------------------------------------------
+// In front of text: the case of it
+// ---------------------------------------------------------------------
+//
+// The glyphs point up and down, which between two numbers is the
+// larger and the smaller and in front of text is the upper and the
+// lower case.  Where the glyph is written says which is meant, as it
+// does for a minus sign.
+
+@test
+fn test_upper_and_lower_case():
+    assert(⌈"hello" == "HELLO")
+    assert(⌊"HeLLo" == "hello")
+
+@test
+fn test_case_reaches_beyond_ascii():
+    assert(⌈"héllo" == "HÉLLO")
+    assert(⌊"ÄÖÜ" == "äöü")
+
+// A character that has no upper case of its own is left alone.
+@test
+fn test_what_has_no_case_is_unchanged():
+    assert(⌈"1 🎉" == "1 🎉")
+    assert(⌊"" == "")
+
+// Upper case may be longer than what it came from.
+@test
+fn test_upper_case_may_grow():
+    assert(⌈"straße" == "STRASSE")
+
+@test
+fn test_the_case_of_text_is_known_at_compile_time():
+    static_assert(⌈"a" == "A")
+    static_assert(⌊"A" == "a")
+
+// The prefix binds as the other prefix operators do, tighter than
+// what joins two things.
+@test
+fn test_the_prefix_binds_tighter_than_joining():
+    assert((⌈"ab" ⧺ ⌊"CD") == "ABcd")
+
+// A number has no case, and its own reading of the glyph needs two
+// operands.
+@test
+@expect error "in front of an operand is the case of text"
+fn error_the_case_of_a_number():
+    let n : mut = ⌈5i64
+
+// A character's case is asked for as its string, since one
+// character's upper case can be more than one character.
+@test
+@expect error "a character's case is written"
+fn error_the_case_of_a_character():
+    let s : mut = ⌈'a'
+
+@test
+fn test_the_case_of_a_character_by_way_of_its_string():
+    assert(⌊'A'.str() == "a")
+
+// ---------------------------------------------------------------------
 // Grouping
 // ---------------------------------------------------------------------
 

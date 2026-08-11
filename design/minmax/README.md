@@ -72,15 +72,38 @@ both.  That settles several questions at once:
 - **Element-wise on arrays**, like the arithmetic operators, between
   two arrays or an array and a scalar.
 
-## Only the Dyadic Meaning
+## The Monadic Position
 
 APL gives each glyph a monadic meaning too: `⌈x` is the ceiling of `x`
-and `⌊x` its floor.  Not provided here.
+and `⌊x` its floor.  That reading is not provided, and the position is
+used for something else: `⌈s` and `⌊s` are the upper and the lower case
+of text.
 
-A glyph whose meaning depends on how many operands it was given has to
-be read twice — once to count, once to understand — and the language
-has taken fixed arity elsewhere for the same reason.  Rounding a float
-will get a name of its own when it arrives.
+Two things had to be true for that to be worth doing.
+
+**The glyphs already mean it.**  They point up and down.  Between two
+numbers that is the larger and the smaller; in front of text it is the
+upper and the lower.  A reader who knows one reading can work out the
+other — which is not true of *maximum* and *ceiling*, whose shared
+glyph in APL makes sense only once you have been told why.
+
+**The two cannot be confused.**  Case is a property of text and the
+extremes are a property of numbers, so no value answers both.  `⌈5` is
+refused rather than quietly meaning the ceiling of five.  The original
+objection to arity-by-context was that a reader has to count operands
+to know what an operation does; here the operand's type says it as
+well, and the position settles it for the parser as it does for a minus
+sign.
+
+Rounding a number still gets a name of its own when it arrives, and
+taking this position for text is what keeps that free.
+
+### A character is asked through its string
+
+`⌈` and `⌊` answer with a string, so they ask for one.  A character's
+upper case can be more than one character — `ß` is `SS` — so character
+in, character out is not an operation that exists, and the refusal
+names the way round it: `⌊c.str()`.
 
 ## A Collision Worth Knowing About
 
@@ -93,7 +116,9 @@ directions, since a reader who meets one will wonder about the other.
 
 Implemented: both operators, at the precedence above, on integers and
 floats, with units, element-wise on arrays, and settled at compile time
-where both operands are.
+where both operands are; and in front of text, the upper and the lower
+case of it, which the bootstrap takes from what Python already knows
+about Unicode case.
 
 The extreme of a whole vector is the fold of the operator over it,
 written with a lambda:

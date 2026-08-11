@@ -1585,9 +1585,43 @@ The extreme value of a whole vector is the fold of the operator over it:
 (λa : i64, b : i64 → i64: a ⌈ b) ⌿ [3, 1, 4, 1, 5]    /* 5 */
 ```
 
-#### Only the Dyadic Meaning
+#### In Front of Text: the Case of It
 
-APL gives each glyph a monadic meaning as well: `⌈x` is the ceiling of `x` and `⌊x` its floor.  Those are not provided here.  A glyph whose meaning depends on how many operands it was given has to be read twice — once to count, once to understand — and the language has taken fixed arity elsewhere for the same reason.  Rounding a float will get a name of its own when it arrives.
+Written in front of an operand rather than between two, `⌈` and `⌊` are the upper and the lower case of text:
+
+```
+⌈"hello"                      /* "HELLO" */
+⌊"HeLLo"                      /* "hello" */
+⌈"héllo"                      /* "HÉLLO" */
+⌈"straße"                     /* "STRASSE" — upper case may be longer */
+```
+
+The glyphs point up and down, which between two numbers is the larger and the smaller and in front of text is the upper and the lower.  Where the glyph is written says which is meant, as it does for a minus sign, and a prefix binds as the other prefix operators do — tighter than what joins two things, so `⌈"ab" ⧺ ⌊"CD"` is `"ABcd"`.
+
+What has no case is unchanged, and the answer is known at compile time where the text is: `static_assert(⌈"a" == "A")`.
+
+A character is asked through its string, since one character's upper case can be more than one character:
+
+```
+⌊'A'
+
+error: ⌊ answers with a string, so it asks for one: a character's case
+is written ⌊c.str(), since the upper case of one character can be more
+than one character
+
+⌊'A'.str()                    /* "a" */
+```
+
+Case is a property of text and not of numbers, so `⌈5` is refused rather than meaning the ceiling of five:
+
+```
+⌈5
+
+error: ⌈ in front of an operand is the case of text, and this one is
+i64; the larger and the smaller of two numbers are written between them
+```
+
+APL gives these glyphs the monadic meanings *ceiling* and *floor*.  Those are not provided: rounding a number will get a name of its own, and taking the monadic position for text leaves the numeric reading of `⌈` and `⌊` the one thing it is between two operands.
 
 #### Comparison with Other Languages
 
