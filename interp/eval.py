@@ -57,7 +57,8 @@ from interp.value import (
 )
 from interp.env import Env, Decl
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
-from interp.errors import attach_backtrace, diagnostic_level, strip_position_prefix
+from interp.errors import (attach_backtrace, diagnostic_level,
+                          strip_position_prefix, ContractError)
 
 
 # An empty array disagrees with no unit, so it stands in for whatever
@@ -1837,6 +1838,42 @@ class Evaluator:
             f"{op}: what a hash holds is a question for a hash"
             f"{' or a set' if op == chr(0x2287) else ''}, and this is "
             f"{self._value_type_name(held)}")
+
+    def _check_conditions(self, func, conditions, result=None):
+        """Hold a function to what it said it holds to.
+
+        A precondition is read where the parameters are bound, so it
+        says what the caller has to have got right.  A postcondition is
+        read where the answer is, so it says what the function got
+        right, and may name the answer to say it about.
+
+        A condition that does not hold is reported at the condition,
+        which is the sentence the programmer wrote about what should be
+        true -- the reader is shown the claim rather than the arithmetic
+        that broke it.
+        """
+        if not conditions:
+            return
+        for condition in conditions:
+            if condition.name is not None:
+                self.env.define(condition.name, result)
+            held = self.eval_expr(condition.expr)
+            unwrapped = unwrap_optional(held)
+            if not isinstance(unwrapped, BoolValue):
+                raise TypeError(
+                    f"{func.name}: a @{condition.which} says what is true, "
+                    f"so it answers a truth value, and this one answers "
+                    f"{self._value_type_name(unwrapped)}")
+            if unwrapped.value:
+                continue
+            which = ("a precondition" if condition.which == "pre"
+                     else "a postcondition")
+            blame = ("the caller did not" if condition.which == "pre"
+                     else "the function did not")
+            raise ContractError(
+                f"{func.name}: {which} does not hold, so {blame} keep to "
+                f"what {func.name} says it needs",
+                condition.pos)
 
     def _op_length(self, operand):
         """How many things are in it (#).
@@ -5538,15 +5575,18 @@ class Evaluator:
             self._comptime_vars = {n for n, _ in func.params}
             if has_pack:
                 self._comptime_vars.add(func.pack_param[0])
+            self._check_conditions(func, func.preconditions)
             result = self.eval_stmts(func.body)
             result = self._check_return_type(
                 result, resolved_ret_type, func.name, func.ret_unit)
             returned = self._wrap_optional_return(result, resolved_ret_type)
+            self._check_conditions(func, func.postconditions, returned)
             return returned
         except _ReturnSentinel as e:
             checked = self._check_return_type(
                 e.value, resolved_ret_type, func.name, func.ret_unit)
             returned = self._wrap_optional_return(checked, resolved_ret_type)
+            self._check_conditions(func, func.postconditions, returned)
             return returned
         except _PropagatedError as pe:
             raise pe.original from pe

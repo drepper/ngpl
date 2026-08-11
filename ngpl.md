@@ -36,6 +36,8 @@ what it is.
   taking the glyphs back from the assignment that never used them here
 - [Threading a Function Over What It Is Handed](design/listable/README.md)
   — `@listable`, and why every operator is now marked with it
+- [Conditions a Function Holds To](design/contracts/README.md) —
+  `@pre` and `@post`, and why a violation is reported at the condition
 - [Functions That Do Not Come Back](design/noreturn/README.md) —
   `@noreturn`, and the statements it shows nothing can reach
 - [A Hash and a Set](design/hash-and-set/README.md) — ⸨…⸩, why not

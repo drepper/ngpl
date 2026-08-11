@@ -93,6 +93,7 @@ all_tests=(
     "$testdir"/test_length.ngpl
     "$testdir"/test_hash_set.ngpl
     "$testdir"/test_noreturn.ngpl
+    "$testdir"/test_contracts.ngpl
 )
 
 # Filter tests if command-line patterns are given.

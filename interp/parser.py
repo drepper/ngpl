@@ -13,7 +13,7 @@ from interp.ast import (
     BinOp, UnaryOp,
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, DestructureDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
-    ArrayLit, HashLit, SetLit, EmptyCollectionLit,
+    ArrayLit, HashLit, SetLit, EmptyCollectionLit, Condition,
     Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
     DropUnitExpr,
     LimitExpr,
@@ -34,7 +34,7 @@ from interp.lexer import Token, KEYWORDS
 # definition keyword itself or as an annotation preceding it.
 DEFINITION_STARTERS = frozenset({
     "START", "REPLACEABLE", "TEST", "FLAG", "IMPURE", "EXPECT", "REPR",
-    "HOT", "COLD", "LISTABLE", "NORETURN",
+    "HOT", "COLD", "LISTABLE", "NORETURN", "PRE", "POST",
     "ENUM", "STRUCT", "IMPL", "UNIT", "TYPE", "FN", "LET",
 })
 
@@ -323,6 +323,8 @@ class Parser:
         is_impure = False
         is_listable = False
         is_noreturn = False
+        preconditions: list = []
+        postconditions: list = []
         hint: str | None = None
         repr_kind: str | None = None
         test_refs: list[str] = []
@@ -364,6 +366,10 @@ class Parser:
                 self._eat("NORETURN")
                 is_noreturn = True
                 self._try_eat("NEWLINE")
+            elif self._check("PRE"):
+                preconditions.append(self._parse_condition("pre"))
+            elif self._check("POST"):
+                postconditions.append(self._parse_condition("post"))
             elif self._check("LIKELY") or self._check("UNLIKELY"):
                 tok = self._cur()
                 raise ParseError(
@@ -411,6 +417,11 @@ class Parser:
             raise ParseError(
                 "@noreturn applies to a function, but none follows",
                 self._cur())
+        if (preconditions or postconditions) and not self._check("FN"):
+            what = "@pre" if preconditions else "@post"
+            raise ParseError(
+                f"{what} states a condition a function holds to, but none "
+                f"follows", self._cur())
 
         if self._check("ENUM"):
             return self._parse_enum_def(is_flag)
@@ -436,7 +447,9 @@ class Parser:
             return self._parse_function_def(is_start, is_test, test_refs, expect_annotations,
                                             is_replaceable, is_impure, hint=hint,
                                             is_listable=is_listable,
-                                            is_noreturn=is_noreturn)
+                                            is_noreturn=is_noreturn,
+                                            preconditions=preconditions,
+                                            postconditions=postconditions)
         elif self._check("LET"):
             return self._parse_var_def()
         elif self._check("EOF"):
@@ -454,7 +467,9 @@ class Parser:
                             struct_name: str | None = None,
                             hint: str | None = None,
                             is_listable: bool = False,
-                            is_noreturn: bool = False):
+                            is_noreturn: bool = False,
+                            preconditions: list | None = None,
+                            postconditions: list | None = None):
         """Parse: fn name '(' [params] ')' ('->' ret_type)? block
 
         The parameter list is enclosed in parentheses.  An empty parameter
@@ -679,7 +694,9 @@ class Parser:
                                param_refs=param_refs,
                                param_muts=param_muts, hint=hint,
                                ret_unit=ret_unit, is_listable=is_listable,
-                               is_noreturn=is_noreturn)
+                               is_noreturn=is_noreturn,
+                               preconditions=preconditions,
+                               postconditions=postconditions)
                 fdef.param_positions = param_positions
                 fdef.ret_type_pos = ret_type_pos
                 fdef._parse_error = str(e)
@@ -695,7 +712,9 @@ class Parser:
                        param_refs=param_refs,
                        param_muts=param_muts, hint=hint,
                        ret_unit=ret_unit, is_listable=is_listable,
-                       is_noreturn=is_noreturn)
+                       is_noreturn=is_noreturn,
+                       preconditions=preconditions,
+                       postconditions=postconditions)
         fdef.param_positions = param_positions
         fdef.ret_type_pos = ret_type_pos
         fdef._self_is_ref = self_is_ref
@@ -710,6 +729,32 @@ class Parser:
             self.pos += 1
             name += "." + self._eat("IDENT").value
         return name
+
+    def _parse_condition(self, which: str):
+        """Read `@pre(cond)` or `@post([name:] cond)`.
+
+        A postcondition may name what comes back, so that the condition
+        can say something about it; one that names nothing is a
+        condition about what the function did rather than what it
+        answered.
+        """
+        kw_tok = self._eat("PRE" if which == "pre" else "POST")
+        self._eat("PUNCT", "(")
+        self._skip_nl()
+        name = None
+        if which == "post" and self._check("IDENT") \
+                and self.pos + 1 < len(self.tokens) \
+                and self.tokens[self.pos + 1].type == "PUNCT" \
+                and self.tokens[self.pos + 1].value == ":":
+            name = self._eat("IDENT").value
+            self._eat("PUNCT", ":")
+            self._skip_nl()
+        condition = self._parse_or_expr()
+        self._skip_nl()
+        self._eat("PUNCT", ")")
+        self._try_eat("NEWLINE")
+        return Condition(which, name, condition,
+                         (kw_tok.line, kw_tok.col, kw_tok.end_col))
 
     def _parse_base_type_name(self) -> str:
         """Read the name a type starts with, container types and all.
@@ -891,6 +936,8 @@ class Parser:
             is_impure = False
             is_listable = False
             is_noreturn = False
+            preconditions: list = []
+            postconditions: list = []
             hint: str | None = None
             while True:
                 if self._check("IMPURE"):
@@ -905,6 +952,10 @@ class Parser:
                     self._eat("NORETURN")
                     is_noreturn = True
                     self._try_eat("NEWLINE")
+                elif self._check("PRE"):
+                    preconditions.append(self._parse_condition("pre"))
+                elif self._check("POST"):
+                    postconditions.append(self._parse_condition("post"))
                 elif self._check("HOT") or self._check("COLD"):
                     tok = self._eat(self._cur().type)
                     other = "cold" if tok.type == "HOT" else "hot"
@@ -924,7 +975,8 @@ class Parser:
             method = self._parse_function_def(
                 is_start=False, struct_name=struct_name,
                 is_impure=is_impure, hint=hint, is_listable=is_listable,
-                is_noreturn=is_noreturn)
+                is_noreturn=is_noreturn, preconditions=preconditions,
+                postconditions=postconditions)
             methods.append(method)
         self._eat("DEDENT")
         return ImplBlock(struct_name, methods)

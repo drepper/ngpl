@@ -87,6 +87,8 @@ AT_KEYWORDS: dict[str, str] = {
     "cold": "COLD",
     "listable": "LISTABLE",
     "noreturn": "NORETURN",
+    "pre": "PRE",
+    "post": "POST",
 }
 
 # Double-character operators that must be checked before single ones.

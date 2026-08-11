@@ -226,6 +226,30 @@ Completed
     holds each value once, so joining two would keep nothing the second repeats, which is ∪
     spelled a second way, and a second spelling is what ⊃ and ⊇ were turned down for.
 
+[x] @pre and @post say what has to be true for a function to be asked and what it promises
+    about the answer, C++26's shape including naming the result -- @post(r: …).  Written as
+    annotations before the function rather than inside the signature: that is where the
+    language already puts what is said about a function, so no new grammar and no new place to
+    look, and a condition on its own line reads as the sentence it is where several folded
+    into a signature crowd the line a reader most needs.  Any number of each, each standing on
+    its own, which says what ∧ would say less legibly.  A precondition is read where the
+    parameters are bound and blames the caller; a postcondition where the answer is, seeing
+    the parameters too so it can relate the two, and blames the function.  A violation is
+    reported at the condition -- the sentence the programmer wrote about what should be true --
+    rather than at the arithmetic that broke it, with a backtrace to the call.  A condition
+    that does not answer a bool is refused.
+
+[ ] a postcondition cannot say what a parameter was on entry: Eiffel's `old` and Ada's 'Old.
+    Wants a copy taken before the body runs and a name for it.
+
+[ ] a condition on a type rather than on a function -- an invariant.
+
+[ ] what a violation does is always an error.  C++26 chooses between ignore, observe, enforce
+    and quick-enforce at build time, which wants a build system to choose in.
+
+[ ] a precondition whose arguments are known before anything runs could be settled then.  The
+    machinery is static_assert's; joining them up is its own piece of work.
+
 [x] @noreturn says control does not come back from a function, and what follows a call to one
     cannot be reached.  A return already says that for what follows it and needs no attribute,
     the statement being right there; a call does not, and the attribute is the only thing that

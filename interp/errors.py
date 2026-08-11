@@ -308,6 +308,21 @@ def format_diagnostic(
     return "\n".join(parts)
 
 
+class ContractError(Exception):
+    """A condition a function said it holds to did not hold.
+
+    Carries the position of the condition rather than of whatever the
+    function was doing when it broke, so the reader is shown the claim
+    that failed: the sentence they wrote about what should be true.
+    """
+
+    def __init__(self, message, pos=None):
+        super().__init__(message)
+        self.pos = pos
+        if pos is not None:
+            self.line, self.col, self.end_col = pos
+
+
 def extract_position(exc: BaseException) -> tuple[int, int, int | None] | None:
     """Extract (line, col, end_col) from an exception if it carries position.
 

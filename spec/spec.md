@@ -2353,6 +2353,75 @@ Purity by default encourages a functional style and makes functions easier to re
 Global access remains a runtime check in the interpreter because whether a name is a mutable global depends on values the interpreter settles as it runs; the compiler will move it to compile-time where possible.
 
 
+### Conditions a Function Holds To: `@pre` and `@post`
+
+A signature says what a function takes and what it hands back.  `@pre` says what has to be true for it to be asked at all, and `@post` what it promises about the answer:
+
+```
+@pre(b ≠ 0)
+@post(r: r × b = a)
+fn divide(a : i64, b : i64) → i64:
+    a ÷ b
+```
+
+Both are written before the function, where the other annotations are.  More than one of each is allowed, and each is a condition in its own right:
+
+```
+@pre(a > 0)
+@pre(b > 0)
+@post(r: r >= a)
+@post(r: r >= b)
+fn biggest(a : i64, b : i64) → i64:
+    a ⌈ b
+```
+
+#### What Each Is Read Against
+
+A **precondition** is read where the parameters are bound, so it sees them and says what the caller has to have got right.
+
+A **postcondition** is read where the answer is.  It may name what comes back — `post(r: …)` — and it sees the parameters too, which is what lets it say how the answer and the arguments are related.  A postcondition that names nothing says something about what the function *did* rather than about what it answered.
+
+A condition says what is true, so it answers a `bool`:
+
+```
+@pre(n)
+fn f(n : i64) → i64:
+    …
+
+error: f: a @pre says what is true, so it answers a truth value, and
+this one answers i64
+```
+
+#### When One Does Not Hold
+
+The violation is reported **at the condition** — the sentence the programmer wrote about what should be true — rather than at the arithmetic inside the body that broke it:
+
+```
+divide(8, 0)
+
+error: divide: a precondition does not hold, so the caller did not keep
+to what divide says it needs
+  --> contracts.ngpl:1:1
+    |
+  1 | @pre(b ≠ 0)
+    | ^^^^
+```
+
+A precondition blames the caller and a postcondition blames the function, which is what each of them is about.  The backtrace shows which call it was.
+
+#### Comparison with Other Languages
+
+| Language | Spelling | Where |
+|----------|----------|-------|
+| C++26 | `pre(x > 0)`, `post(r: r > x)` | in the signature |
+| Eiffel | `require` / `ensure`, with `old` | in the body |
+| Ada | `Pre =>`, `Post =>`, with `'Old` | an aspect on the declaration |
+| D | `in { }` / `out(r) { }` | in the body |
+| NGPL | `@pre(…)`, `@post(r: …)` | before the function, with the other annotations |
+
+The shape is C++26's, including naming the result in the postcondition.  It is written as an annotation rather than inside the signature because that is where this language already puts what is said *about* a function, and because a condition on its own line reads as the sentence it is.
+
+
 ### Functions That Do Not Come Back: `@noreturn`
 
 `@noreturn` says control does not come back from a function:

@@ -165,7 +165,9 @@ class FuncDef:
                  hint: str | None = None,
                  ret_unit=None,
                  is_listable: bool = False,
-                 is_noreturn: bool = False):
+                 is_noreturn: bool = False,
+                 preconditions: list | None = None,
+                 postconditions: list | None = None):
         self.name = name
         self.params = params
         # Where each parameter was written, for diagnostics about it.
@@ -190,6 +192,9 @@ class FuncDef:
         self.is_listable = is_listable
         # Whether the function hands control back at all.
         self.is_noreturn = is_noreturn
+        # What the function holds to on the way in and on the way out.
+        self.preconditions = preconditions or []
+        self.postconditions = postconditions or []
         # "hot" or "cold" from an annotation, saying how often the
         # function is expected to run.  A hint never changes what the
         # function computes.
@@ -271,6 +276,24 @@ class ArrayLit:
 
     def __init__(self, elements):
         self.elements = elements  # list of expression AST nodes
+
+
+class Condition:
+    """A `@pre` or `@post` a function holds to.
+
+    `name` is what a postcondition calls the value that comes back, or
+    None where it says nothing about it.  `pos` is where the keyword
+    was written, so a violation is reported at the condition rather
+    than at whatever the function was doing when it broke.
+    """
+
+    __slots__ = ("which", "name", "expr", "pos")
+
+    def __init__(self, which, name, expr, pos):
+        self.which = which
+        self.name = name
+        self.expr = expr
+        self.pos = pos
 
 
 class HashLit:

@@ -1,0 +1,122 @@
+// Tests for @pre and @post, the conditions a function holds to.
+//
+// A signature says what a function takes and what it hands back.  A
+// condition says what has to be true for it to be asked at all, and
+// what it promises about the answer -- which is the part a reader
+// otherwise has to work out from the body, or take on trust from a
+// comment nothing checks.
+
+@pre(b ≠ 0)
+@post(r: r × b = a)
+fn divide(a : i64, b : i64) → i64:
+    a ÷ b
+
+@test
+fn test_a_call_that_keeps_to_them():
+    assert_eq(divide(8, 2), 4)
+    assert_eq(divide(9, 3), 3)
+
+// ---------------------------------------------------------------------
+// More than one of each
+// ---------------------------------------------------------------------
+
+@pre(a > 0)
+@pre(b > 0)
+@post(r: r >= a)
+@post(r: r >= b)
+fn biggest(a : i64, b : i64) → i64:
+    a ⌈ b
+
+@test
+fn test_several_of_each():
+    assert_eq(biggest(3, 7), 7)
+    assert_eq(biggest(7, 3), 7)
+
+@test
+@expect error "a precondition does not hold"
+fn error_the_second_precondition():
+    let n : mut = biggest(1, 0)
+
+// ---------------------------------------------------------------------
+// What each of them is read against
+// ---------------------------------------------------------------------
+
+// A precondition is read where the parameters are bound, so it says
+// what the caller has to have got right.
+@test
+@expect error "the caller did not keep to what divide says it needs"
+fn error_a_precondition():
+    let n : mut = divide(8, 0)
+
+// A postcondition is read where the answer is, and may name it.
+@post(r: r > 100)
+fn claims_too_much(n : i64) → i64:
+    n
+
+@test
+@expect error "the function did not keep to what claims_too_much says it needs"
+fn error_a_postcondition():
+    let n : mut = claims_too_much(1)
+
+// A postcondition that names nothing says something about what the
+// function did rather than about what it answered.
+@post(true)
+fn names_nothing(n : i64) → i64:
+    n
+
+@test
+fn test_a_postcondition_that_names_nothing():
+    assert_eq(names_nothing(5), 5)
+
+// A postcondition sees the parameters as well as the answer, which is
+// what lets it say how the two are related.
+@post(r: r = n × 2)
+fn doubled(n : i64) → i64:
+    n × 2
+
+@test
+fn test_a_postcondition_sees_the_parameters():
+    assert_eq(doubled(21), 42)
+
+// ---------------------------------------------------------------------
+// On a method
+// ---------------------------------------------------------------------
+
+struct Counter:
+    base : i64
+
+impl Counter:
+    @pre(n > 0)
+    @post(r: r > self.base)
+    fn above(self, n : i64) → i64:
+        self.base + n
+
+@test
+fn test_a_method_holds_to_them():
+    let c := Counter{base: 10}
+    assert_eq(c.above(5), 15)
+
+@test
+@expect error "a precondition does not hold"
+fn error_a_method_precondition():
+    let c := Counter{base: 10}
+    let n : mut = c.above(0)
+
+// ---------------------------------------------------------------------
+// What it refuses
+// ---------------------------------------------------------------------
+
+// A condition says what is true, so it answers a truth value.
+@pre(n)
+fn not_a_condition(n : i64) → i64:
+    n
+
+@test
+@expect error "so it answers a truth value"
+fn error_a_condition_that_is_not_one():
+    let n : mut = not_a_condition(1)
+
+@start
+@impure
+fn main():
+    std.println("contract tests passed")

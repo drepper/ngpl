@@ -2183,7 +2183,9 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                           defn.is_impure, param_refs=defn.param_refs,
                           param_muts=defn.param_muts, ret_unit=defn.ret_unit,
                           is_listable=defn.is_listable,
-                          is_noreturn=defn.is_noreturn)
+                          is_noreturn=defn.is_noreturn,
+                          preconditions=defn.preconditions,
+                          postconditions=defn.postconditions)
             env.define(defn.name, fv)
 
             if honor_start and defn.is_start:
@@ -2236,7 +2238,9 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                                param_muts=method_def.param_muts,
                                ret_unit=method_def.ret_unit,
                                is_listable=method_def.is_listable,
-                               is_noreturn=method_def.is_noreturn)
+                               is_noreturn=method_def.is_noreturn,
+                               preconditions=method_def.preconditions,
+                               postconditions=method_def.postconditions)
                 if method_def.name in st.methods:
                     raise DefinitionError(
                         f"duplicate method '{method_def.name}' "
@@ -2490,7 +2494,9 @@ def main():
                           defn.is_impure, param_refs=defn.param_refs,
                           param_muts=defn.param_muts, ret_unit=defn.ret_unit,
                           is_listable=defn.is_listable,
-                          is_noreturn=defn.is_noreturn)
+                          is_noreturn=defn.is_noreturn,
+                          preconditions=defn.preconditions,
+                          postconditions=defn.postconditions)
             eval_inst = Evaluator(env)
             try:
                 eval_inst._call_user_func(fv, [])
