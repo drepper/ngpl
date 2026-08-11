@@ -360,8 +360,10 @@ Type System
     position in one.  A string is read at a position and not written at one — a character may
     take a different number of bytes than the one it would replace — so an assignment through
     a subscript says so and names what to do instead; before this it quietly did nothing.
-    Still open: .chars(), searching, decoding a byte[], classification, and .ord() at compile
-    time.
+    .chars() hands back what a string is made of, as a char[], and is inverse to .str(), so
+    the three ways of taking a string apart — foreach, a position, and the whole array — are
+    three shapes of one thing and agree about the count.  Still open: searching, decoding a
+    byte[], classification, and .ord() at compile time.
 
 
 Data Structures

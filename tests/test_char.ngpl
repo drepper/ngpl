@@ -462,6 +462,54 @@ fn test_building_the_string_that_is_wanted_instead():
     assert(changed == "jello")
 
 // ---------------------------------------------------------------------
+// The characters a string is made of, all at once
+// ---------------------------------------------------------------------
+
+@test
+fn test_chars_gives_an_array_of_characters():
+    let cs := "abc".chars()
+    static_assert_eq(@typeof(cs[0]), char)
+    assert_eq(cs.sizeof, 3¤ptrdiff)
+    assert(cs[0] == 'a')
+    assert(cs[2] == 'c')
+
+@test
+fn test_chars_counts_characters():
+    let cs := "héllo 🎉".chars()
+    assert_eq(cs.sizeof, 7¤ptrdiff)
+    assert(cs[1] == 'é')
+    assert(cs[6] == '🎉')
+
+@test
+fn test_chars_of_an_empty_string():
+    let cs := "".chars()
+    assert_eq(cs.sizeof, 0¤ptrdiff)
+
+// .chars() and .str() are inverse: what a string is made of makes it
+// again.
+@test
+fn test_chars_and_str_are_inverse():
+    let s := "héllo 🎉"
+    assert(s.chars().str() == s)
+
+// Which is what a fold over them says a second way.
+@test
+fn test_folding_the_characters_of_a_string():
+    assert((⧺⌿ "abc".chars()) == "abc")
+
+// The array is an array, so everything an array answers it answers.
+@test
+fn test_the_characters_can_be_worked_on_as_an_array():
+    let cs : mut char[] = "ab".chars()
+    cs.push('c')
+    assert(cs.str() == "abc")
+
+@test
+@expect error "a string has no method 'nope'"
+fn error_a_string_has_no_other_method():
+    let x : mut = "abc".nope()
+
+// ---------------------------------------------------------------------
 // Writing one out
 // ---------------------------------------------------------------------
 

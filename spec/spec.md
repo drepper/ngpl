@@ -517,6 +517,15 @@ chars.str()                     /* "hi!" */
 
 `.str()` asks for characters.  Bytes are an *encoding* of characters rather than characters, so a `byte[]` is not taken; decoding one is a separate operation the language does not yet have.
 
+A string says what it is made of with `.chars()`, which is the other direction:
+
+```
+"héllo".chars()                 /* ['h', 'é', 'l', 'l', 'o'] */
+"héllo".chars().str()           /* "héllo" — the round trip */
+```
+
+What comes back is an ordinary `char[]`, so everything an array answers it answers.
+
 #### Folding a Vector into a String
 
 `⧺` joins text, so folding it over a vector of characters spells the string they make:

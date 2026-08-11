@@ -224,18 +224,33 @@ wanted:
 let changed := 'j' ⧺ s[1…4]     // "jello"
 ```
 
+## Both Directions
+
+`.chars()` hands back what a string is made of, as an array, and
+`.str()` puts one back together.  The two are inverse, and the pair is
+what makes a string something a program can work on rather than only
+hold:
+
+```
+s.chars().str() == s
+```
+
+Three ways of taking a string apart now exist, and they are three
+shapes of the same thing rather than three ideas: `foreach` hands the
+characters over one at a time, `s[i]` names one of them, and `.chars()`
+gives all of them at once.  A program picks the shape that fits — a
+loop, a position, or an array to hand on — and the counts agree, since
+all three count characters.
+
 ## Status
 
 Implemented: the type, `foreach` over a string, `.ord()`, `.chr()` on
 every integer type, the three refusals, the definition-time check for a
 written negative, comparison by code point, formatting, literals,
-`⧺` between text, `.str()`, indexing, and slicing.
+`⧺` between text, `.str()`, `.chars()`, indexing, and slicing.
 
 Not implemented:
 
-- **`.chars()`**, handing back the characters as an array.  Iterating
-  gives them one at a time and a fold puts them back together, so what
-  this would add is the array itself.
 - **Searching** — no `.find()`, no `.contains()`, no splitting.
 - **Decoding a `byte[]`**, which is where UTF-8 stops being an
   implementation detail and becomes an operation that can fail.

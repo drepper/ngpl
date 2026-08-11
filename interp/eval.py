@@ -4119,6 +4119,19 @@ class Evaluator:
         unwrapped = unwrap_optional(obj)
         if method_name == "__call__":
             return self._do_call(unwrapped, args)
+        if isinstance(unwrapped, StrValue):
+            if method_name == "chars":
+                if args:
+                    raise TypeError("str.chars takes no arguments")
+                # The characters a string is made of, as an array, so
+                # what iterating hands over one at a time can be held
+                # and indexed and handed on.
+                return ObjectValue(ArrayValue(
+                    [CharValue(ord(c)) for c in unwrapped.value],
+                    element_type="char"))
+            raise AttributeError(
+                f"a string has no method '{method_name}'; it answers "
+                f"chars() with what it is made of")
         if isinstance(unwrapped, CharValue):
             if method_name == "str":
                 if args:
