@@ -1616,6 +1616,103 @@ v ⍳ n + 10                      /* what is looked for is the sum */
 The glyph is APL's and the answer is Rust's.  One operator serves an array and a string, so a program that has learned it for one has learned it for the other; there is no separate `.find` for text.
 
 
+### Whether Something Is There: `∊`
+
+`∊` (U+220A SMALL ELEMENT OF) asks whether what is on the left is somewhere in what is on the right:
+
+```
+let v : i64[] = [10, 20, 30]
+20 ∊ v                          /* true */
+99 ∊ v                          /* false */
+
+'e' ∊ "hello"                   /* true */
+"ell" ∊ "hello"                 /* true — a run of characters is one thing */
+```
+
+The right operand is a vector, a matrix, or a string.  Where `⍳` says *where* something is, this says only *whether*, which is a question a matrix can answer as well: it is looked through whole, however many dimensions it has.
+
+```
+let m : i64[2, 2] = [[1, 2], [3, 4]]
+3 ∊ m                           /* true */
+```
+
+#### The Answer Takes the Shape of the Left Operand
+
+A scalar asks one question and gets one answer.  An array asks the question of each of its elements and gets one answer for each, in the shape it was asked:
+
+```
+[10, 99] ∊ v                    /* [true, false] */
+m ∊ v                           /* a 2×2 of bools */
+```
+
+A string is text rather than an array of characters, so asking of each character on its own is asking of what `.chars()` gives:
+
+```
+"helz".chars() ∊ "hello"        /* [true, true, true, false] */
+```
+
+#### What Is Looked For
+
+It has to be the kind of thing the container holds.  A program that asks otherwise has made a mistake about one of the two, so the question is refused rather than answered `false`:
+
+```
+"x" ∊ v
+
+error: ∊: the container holds i64, and what is looked for is a string
+```
+
+A number that named no type settles on what the container holds, as it does everywhere else:
+
+```
+let f : f64[] = [1.0, 2.5]
+1 ∊ f                           /* true */
+```
+
+Past that, an element is compared the way `==` compares it, so a unit that does not belong is refused where it is written:
+
+```
+20¤byte ∊ v
+
+error: cannot compare typed integer i64 without unit with unit B
+```
+
+A string holds characters, so a number is not something that can be in one, and what is not a container at all is named as what it is:
+
+```
+5i64 ∊ "hello"
+
+error: ∊: a string holds characters, and what is looked for is i64; a
+character or a run of them is what can be in one
+
+3 ∊ (1…5)
+
+error: ∊: the right operand is range, and what is looked through is a
+vector, a matrix, or a string
+```
+
+#### Grouping
+
+`∊` binds where `⍳`, `⌈`, and `⌊` do: looser than every arithmetic operator, tighter than the comparisons, `…`, and the logic operators.  What is looked for is often computed, and the answer is a bool that feeds a condition or a logic operator:
+
+```
+n + 10 ∊ v                      /* what is looked for is the sum */
+20 ∊ v ∧ 30 ∊ v                 /* both questions, then both answers */
+```
+
+#### Comparison with Other Languages
+
+| Language | Whether something is there |
+|----------|----------------------------|
+| APL | `∊`, element-wise on both operands |
+| C++ | `.contains()` (C++20/23), `std::find(…) != end` |
+| Python | `x in xs` |
+| Rust | `.contains()` |
+| Julia | `x in xs`, `∈` |
+| NGPL | `∊` |
+
+The glyph is APL's.  APL is element-wise on the left operand and looks through the right one whole, which is what this does; unlike APL it answers a `bool` rather than a `0` or a `1`, since the language has the type and a condition asks for it.
+
+
 ### Integer Remainder
 
 The `%` operator computes the integer remainder with truncation toward zero, matching C, C++, and Rust semantics:

@@ -851,6 +851,88 @@ class Evaluator:
                 return some(self._sizeof_result(index, array.element_type))
         return none()
 
+    @classmethod
+    def _leaves(cls, array):
+        """Every element of a container, past any nesting.
+
+        A matrix holds rows and a row holds numbers, and what is in the
+        matrix is what is in one of its rows.  Membership has an answer
+        at any number of dimensions, which is why \N{SMALL ELEMENT OF}
+        looks through all of them where \N{APL FUNCTIONAL SYMBOL IOTA}
+        stops at one: a position has to say where, and this says only
+        whether.
+        """
+        for element in array.values():
+            inner = cls._as_array(element)
+            if inner is None:
+                yield element
+            else:
+                yield from cls._leaves(inner)
+
+    @classmethod
+    def _leaf_element_type(cls, array):
+        """What a container holds, past any nesting."""
+        while True:
+            values = array.values()
+            if not values:
+                return array.element_type
+            inner = cls._as_array(values[0])
+            if inner is None:
+                return array.element_type
+            array = inner
+
+    def _op_element_of(self, left, right):
+        """Whether what is on the left is somewhere on the right.
+
+        The answer takes the shape of the left operand: a scalar asks
+        one question and gets one answer, an array asks the question of
+        each of its elements and gets one answer for each.  The right
+        operand is looked through whole however many dimensions it has.
+        """
+        la = self._as_array(left)
+        if la is not None:
+            return ObjectValue(ArrayValue(
+                [self._op_element_of(element, right)
+                 for element in la.values()],
+                element_type="bool"))
+        wanted = _unwrap_operand(left)
+        container = _unwrap_operand(right)
+        if isinstance(container, StrValue):
+            if isinstance(wanted, CharValue):
+                return mk_bool(wanted.char in container.value)
+            if isinstance(wanted, StrValue):
+                # A run of characters is in a string as one thing, the
+                # way ⍳ finds one.  Asking of each character on its own
+                # is asking of an array, which is what .chars() gives.
+                return mk_bool(wanted.value in container.value)
+            raise TypeError(
+                f"\N{SMALL ELEMENT OF}: a string holds characters, and what "
+                f"is looked for is {self._value_type_name(wanted)}; a "
+                f"character or a run of them is what can be in one")
+        array = self._as_array(container)
+        if array is None:
+            raise TypeError(
+                f"\N{SMALL ELEMENT OF}: the right operand is "
+                f"{self._value_type_name(container)}, and what is looked "
+                f"through is a vector, a matrix, or a string")
+        element_type = self._leaf_element_type(array)
+        if element_type is not None:
+            # What is looked for has to be the kind of thing the
+            # container holds, whatever it holds at the moment: the
+            # question is refused rather than answered no, since a
+            # program asking it has made a mistake about one of the two.
+            mismatch = _scalar_kind_mismatch(wanted, element_type)
+            if mismatch is not None:
+                raise TypeError(
+                    f"\N{SMALL ELEMENT OF}: the container holds "
+                    f"{element_type}, and what is looked for is {mismatch}")
+        for element in self._leaves(array):
+            # Compared the way == compares, as ⍳ compares, so a unit
+            # that does not belong is refused rather than found missing.
+            if to_bool(self._apply_operator("==", element, left)):
+                return mk_bool(True)
+        return mk_bool(False)
+
     def _op_max(self, left, right):
         """The larger of two numbers (\N{LEFT CEILING})."""
         return self._op_extremum(left, right, "maximum (\N{LEFT CEILING})",
@@ -1341,6 +1423,10 @@ class Evaluator:
             # The container is the operand rather than a stand-in for
             # its elements, so this does not go element-wise.
             return self._op_index_of(left, right)
+        if op == "\N{SMALL ELEMENT OF}":
+            # Element-wise on the left operand only, which it does for
+            # itself: the right one is the container to look through.
+            return self._op_element_of(left, right)
         if op in self._APPROX_OPS:
             return self._op_approx(op, left, right)
         lu = unwrap_optional(left)

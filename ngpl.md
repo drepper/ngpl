@@ -29,3 +29,6 @@ what it is.
 - [Where Something Is: `⍳`](design/index-of/README.md) — looking for
   something in an array or a string, and what comes back when it is
   not there
+- [Whether Something Is There: `∊`](design/element-of/README.md) —
+  asking only whether, which a matrix can answer where a position
+  cannot

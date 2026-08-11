@@ -159,6 +159,15 @@ Completed
     past the end, and it carries the unit an index of that container carries so it can be
     used to look with.  It binds where ⌈ and ⌊ do.
 
+[x] ∊ asks only whether something is there, which a matrix can answer where a position
+    cannot: the right operand is a vector, a matrix, or a string, and is looked through
+    whole however many dimensions it has.  The answer takes the shape of the left operand,
+    so an array asks the question of each of its elements at once, and it is a bool rather
+    than APL's 0 or 1.  What is looked for has to be the kind of thing the container holds
+    — a program asking whether a string is among some numbers has made a mistake about one
+    of the two — and past that an element is compared the way == compares it.  It binds
+    where ⍳ does.  Whether ⍳ should be tightened to refuse the same way is still open.
+
 [x] writing → ∅ on a function or a method draws a warning, since it says what
     leaving the return type off says and having both spellings invites a reader to look
     for a difference that is not there.  A lambda is exempt, having to state a return

@@ -106,6 +106,8 @@ it refuses rather than answering something a program might believe.
 Searching for an element of a type the container does not hold is
 *not* refused: it answers `∅`, because that is what `==` answers
 between two values of unrelated types everywhere else in the language.
+[`∊`](../element-of/README.md) later took the stricter line and
+refuses; the two should probably agree, and this is the one to change.
 
 ## Comparison with Other Languages
 

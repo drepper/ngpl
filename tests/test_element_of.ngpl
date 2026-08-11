@@ -1,0 +1,225 @@
+// Tests for ∊, which asks whether something is there at all.
+//
+// Where ⍳ says where something is, this says only whether, which is a
+// question a matrix can answer as well as a vector: it is looked
+// through whole, however many dimensions it has.  The answer takes the
+// shape of the left operand.
+
+// ---------------------------------------------------------------------
+// In a vector
+// ---------------------------------------------------------------------
+
+@test
+fn test_what_is_there():
+    let v : i64[] = [10, 20, 30]
+    assert(20 ∊ v)
+    assert(10 ∊ v)
+    assert(30 ∊ v)
+
+@test
+fn test_what_is_not_there():
+    let v : i64[] = [10, 20, 30]
+    assert(¬(99 ∊ v))
+
+@test
+fn test_nothing_is_in_an_empty_vector():
+    let v : i64[] = []
+    assert(¬(1 ∊ v))
+
+// A slice is a container in its own right, and holds what is in it.
+@test
+fn test_in_a_slice():
+    let v : i64[] = [10, 20, 30, 40]
+    assert(30 ∊ v[1…3])
+    assert(¬(10 ∊ v[1…3]))
+
+// ---------------------------------------------------------------------
+// In a matrix
+// ---------------------------------------------------------------------
+
+// Whether has an answer where where does not: a matrix is looked
+// through to the numbers in it, which is why ⍳ stops at one dimension
+// and this one does not.
+@test
+fn test_a_matrix_is_looked_through_whole():
+    let m : i64[2, 2] = [[1, 2], [3, 4]]
+    assert(3 ∊ m)
+    assert(1 ∊ m)
+    assert(¬(9 ∊ m))
+
+// ---------------------------------------------------------------------
+// In a string
+// ---------------------------------------------------------------------
+
+@test
+fn test_a_character_of_a_string():
+    let s := "hello"
+    assert('e' ∊ s)
+    assert(¬('z' ∊ s))
+
+// A run of characters is in a string as one thing, the way ⍳ finds one.
+@test
+fn test_a_run_of_characters():
+    let s := "hello world"
+    assert("world" ∊ s)
+    assert("o w" ∊ s)
+    assert(¬("worlds" ∊ s))
+
+@test
+fn test_the_empty_string_is_in_every_string():
+    assert("" ∊ "abc")
+    assert("" ∊ "")
+
+@test
+fn test_beyond_ascii():
+    let s := "héllo 🎉"
+    assert('🎉' ∊ s)
+    assert('é' ∊ s)
+    assert(¬('e' ∊ s))
+
+// ---------------------------------------------------------------------
+// The answer takes the shape of the left operand
+// ---------------------------------------------------------------------
+
+@test
+fn test_asking_for_several_at_once():
+    let v : i64[] = [10, 20, 30]
+    let answers : bool[] = [10, 99] ∊ v
+    assert(answers[0])
+    assert(¬answers[1])
+
+@test
+fn test_asking_from_a_matrix():
+    let m : i64[2, 2] = [[1, 2], [3, 4]]
+    let v : i64[] = [2, 3]
+    let answers := m ∊ v
+    assert(¬answers[0, 0])
+    assert(answers[0, 1])
+    assert(answers[1, 0])
+    assert(¬answers[1, 1])
+
+// A string is text rather than an array of characters, so asking of
+// each character on its own is asking of what .chars() gives.
+@test
+fn test_each_character_on_its_own():
+    let answers := "helz".chars() ∊ "hello"
+    assert(answers[0])
+    assert(answers[1])
+    assert(answers[2])
+    assert(¬answers[3])
+
+// ---------------------------------------------------------------------
+// What a container holds
+// ---------------------------------------------------------------------
+
+@test
+fn test_text_and_characters_and_booleans():
+    let words : str[] = ["one", "two"]
+    assert("two" ∊ words)
+    assert(¬("three" ∊ words))
+    let cs : char[] = ['a', 'b']
+    assert('b' ∊ cs)
+    let bs : bool[] = [true, true]
+    assert(¬(false ∊ bs))
+
+@test
+fn test_bytes():
+    let b : byte[] = std.bytes("abc")
+    assert(98 ∊ b)
+    assert(¬(122 ∊ b))
+
+// A number that named no type settles on what the container holds.
+@test
+fn test_an_untyped_number_is_coerced():
+    let f : f64[] = [1.0, 2.5]
+    assert(1 ∊ f)
+    assert(2.5 ∊ f)
+    assert(¬(2 ∊ f))
+
+// ---------------------------------------------------------------------
+// Before anything runs
+// ---------------------------------------------------------------------
+
+@test
+fn test_the_answer_is_known_at_compile_time():
+    static_assert(20 ∊ [10, 20])
+    static_assert(¬(5 ∊ [10, 20]))
+    static_assert('e' ∊ "hello")
+    static_assert("ell" ∊ "hello")
+
+// ---------------------------------------------------------------------
+// What it refuses
+// ---------------------------------------------------------------------
+
+// What is looked for has to be the kind of thing the container holds.
+// A program asking otherwise has made a mistake about one of the two,
+// so the question is refused rather than answered no.
+@test
+@expect error "the container holds i64, and what is looked for is a string"
+fn error_looking_for_a_string_among_numbers():
+    let v : i64[] = [10, 20, 30]
+    let found : mut = "x" ∊ v
+
+@test
+@expect error "the container holds i64, and what is looked for is a character"
+fn error_looking_for_a_character_among_numbers():
+    let v : i64[] = [10, 20, 30]
+    let found : mut = 'c' ∊ v
+
+@test
+@expect error "a string holds characters"
+fn error_looking_for_a_number_in_a_string():
+    let found : mut = 5i64 ∊ "hello"
+
+@test
+@expect error "what is looked through is a vector, a matrix, or a string"
+fn error_looking_through_something_that_holds_nothing():
+    let found : mut = 20i64 ∊ 5i64
+
+// A range is a pair of ends rather than something to look through, and
+// the refusal names it rather than the type of its ends.
+@test
+@expect error "the right operand is range"
+fn error_looking_through_a_range():
+    let r := 1…5
+    let found : mut = 3 ∊ r
+
+// An element is compared the way == compares it, so a unit that does
+// not belong is refused where it is written.
+@test
+@expect error "cannot compare"
+fn error_a_unit_that_does_not_belong():
+    let v : i64[] = [10, 20, 30]
+    let found : mut = 20¤byte ∊ v
+
+// ---------------------------------------------------------------------
+// Grouping
+// ---------------------------------------------------------------------
+
+// What is looked for may be computed, so ∊ binds looser than
+// arithmetic.
+@test
+fn test_arithmetic_binds_tighter():
+    let v : i64[] = [10, 20, 30]
+    let n : i64 = 10
+    assert(n + 10 ∊ v)
+
+// The answer is a bool, and what is done with one binds looser.
+@test
+fn test_the_answer_reaches_the_logic_operators():
+    let v : i64[] = [10, 20, 30]
+    assert(20 ∊ v ∧ 30 ∊ v)
+    assert(¬(99 ∊ v) ∨ false)
+
+@test
+fn test_the_answer_reaches_a_condition():
+    let v : i64[] = [10, 20, 30]
+    let hit : mut = false
+    if 20 ∊ v:
+        hit ← true
+    assert(hit)
+
+@start
+@impure
+fn main():
+    std.println("element-of tests passed")
