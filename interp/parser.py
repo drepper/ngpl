@@ -65,6 +65,7 @@ _ADD_OPS = frozenset({"+", "-",
                       "\N{SQUARED PLUS}", "\N{SQUARED MINUS}"})
 _MUL_OPS = frozenset({"\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}", "%",
                       "\N{SQUARED TIMES}"})
+_MINMAX_OPS = frozenset({"\N{LEFT CEILING}", "\N{LEFT FLOOR}"})
 
 
 class Parser:
@@ -1525,16 +1526,37 @@ class Parser:
         return left
 
     def _parse_range_expr(self):
-        """range_expr → shift_expr ('…' shift_expr ('…' shift_expr)?)?"""
-        left = self._parse_shift_expr()
+        """range_expr → minmax_expr ('…' minmax_expr ('…' minmax_expr)?)?"""
+        left = self._parse_minmax_expr()
         if self._check("PUNCT") and self._cur().value == "…":
             self.pos += 1
-            second = self._parse_shift_expr()
+            second = self._parse_minmax_expr()
             if self._check("PUNCT") and self._cur().value == "…":
                 self.pos += 1
-                end = self._parse_shift_expr()
+                end = self._parse_minmax_expr()
                 return RangeExpr(left, end, step=second)
             return RangeExpr(left, second)
+        return left
+
+    def _parse_minmax_expr(self):
+        """minmax_expr → shift_expr (('⌈' | '⌊') shift_expr)*
+
+        Loose enough that the operands may be written as arithmetic --
+        `a + b ⌈ c - d` is the larger of the two sums, which is how one
+        says it -- and tight enough that a comparison or a range reads
+        the answer rather than an operand.
+        """
+        left = self._parse_shift_expr()
+        while True:
+            self._skip_nl()
+            if not (self._check("OP") and self._cur().value in _MINMAX_OPS):
+                break
+            op_tok = self._cur()
+            self.pos += 1
+            self._skip_nl()
+            right = self._parse_shift_expr()
+            left = self._set_binop_pos(BinOp(op_tok.value, left, right),
+                                       left, right, op_tok)
         return left
 
     def _parse_shift_expr(self):

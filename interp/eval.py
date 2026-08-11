@@ -595,6 +595,9 @@ class Evaluator:
             "\N{SQUARED PLUS}": self._op_sat_add,
             "\N{SQUARED MINUS}": self._op_sat_sub,
             "\N{SQUARED TIMES}": self._op_sat_mul,
+            # The larger and the smaller of two numbers, as in APL.
+            "\N{LEFT CEILING}": self._op_max,
+            "\N{LEFT FLOOR}": self._op_min,
             "==": self._op_eq,
             "!=": self._op_neq,
             "<": self._op_lt,
@@ -691,6 +694,49 @@ class Evaluator:
             f"{op_name} is for integers, which state the range it holds "
             f"a result inside; got "
             f"{runtime_type_of(lu)} and {runtime_type_of(ru)}")
+
+    def _op_max(self, left, right):
+        """The larger of two numbers (\N{LEFT CEILING})."""
+        return self._op_extremum(left, right, "maximum (\N{LEFT CEILING})",
+                                 larger=True)
+
+    def _op_min(self, left, right):
+        """The smaller of two numbers (\N{LEFT FLOOR})."""
+        return self._op_extremum(left, right, "minimum (\N{LEFT FLOOR})",
+                                 larger=False)
+
+    def _op_extremum(self, left, right, op_name: str, *, larger: bool):
+        """Answer with whichever operand the comparison picks.
+
+        The answer is one of the operands rather than something
+        computed from both, so it needs no range of its own: whatever
+        width the two settle on holds a value that already fitted in
+        one of them.
+
+        The operands must be the same kind of number, as they must for
+        addition.  The larger of a length and a count is not a question
+        with an answer, and an integer and a float are compared exactly
+        where a tolerant comparison is what a program usually wants.
+        """
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
+        if isinstance(lu, IntValue) and isinstance(ru, IntValue):
+            keep = lu.value if (lu.value >= ru.value) == larger else ru.value
+            return self._mk_int(keep, resolve_width(lu.width, ru.width))
+        ff = self._require_matching_numeric(lu, ru, op_name)
+        if ff is not None:
+            l_val, r_val, width = ff
+            # A NaN is not larger or smaller than anything, so it is
+            # the answer rather than something that depends on which
+            # side of the operator it was written -- IEEE 754-2019's
+            # maximum and minimum, not Python's max and min.
+            if l_val != l_val or r_val != r_val:
+                return mk_float(float("nan"), width)
+            return mk_float(l_val if (l_val >= r_val) == larger else r_val,
+                            width)
+        raise TypeError(
+            f"{op_name} expected numeric types, got "
+            f"{type(lu).__name__}+{type(ru).__name__}")
 
     def _op_sat_add(self, left, right):
         """Saturating addition."""
@@ -1255,8 +1301,11 @@ class Evaluator:
 
         # A saturating operator carries a unit the way the exact one it
         # answers to does: holding a length at the edge of its type
-        # leaves it a length.
-        if op in ("+", "-", "\N{SQUARED PLUS}", "\N{SQUARED MINUS}"):
+        # leaves it a length.  So does picking one of two lengths, which
+        # is why ⌈ and ⌊ ask for their operands on the same terms: the
+        # larger of a length and a duration is not a question.
+        if op in ("+", "-", "\N{SQUARED PLUS}", "\N{SQUARED MINUS}",
+                  "\N{LEFT CEILING}", "\N{LEFT FLOOR}"):
             if l_is_unit and not r_is_unit:
                 if isinstance(r_inner, IntValue) \
                         and not is_unwidthed(r_inner.width):

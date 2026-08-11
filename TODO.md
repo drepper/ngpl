@@ -57,6 +57,15 @@ the sized types do not have.
 Completed
 ---------
 
+[x] ⌈ and ⌊ give the larger and the smaller of two numbers, as they do in APL.  The answer
+    is one of the operands, so it needs no range of its own and neither operator can
+    overflow.  They bind looser than the arithmetic and bitwise operators and tighter than
+    the comparisons and …, so `2 + 3 ⌈ 10 - 4` is the larger of the two sums and
+    `3 ⌈ 5 == 5` compares the answer.  Operands must be the same kind of number and, where
+    they carry units, measure the same thing; arrays are handled element-wise as they are
+    for arithmetic.  Only the dyadic meaning: APL's monadic ceiling and floor would make
+    the glyph's meaning depend on counting its operands first.
+
 [x] writing → ∅ on a function or a method draws a warning, since it says what
     leaving the return type off says and having both spellings invites a reader to look
     for a difference that is not there.  A lambda is exempt, having to state a return

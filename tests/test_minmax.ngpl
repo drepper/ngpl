@@ -1,0 +1,196 @@
+// Tests for ⌈ and ⌊, the larger and the smaller of two numbers.
+//
+// The glyphs are APL's, where ⌈ is maximum and ⌊ minimum.  The answer
+// is one of the operands rather than something computed from both, so
+// it needs no range of its own and carries whatever the two operands
+// settle on.
+
+// ---------------------------------------------------------------------
+// What they answer
+// ---------------------------------------------------------------------
+
+@test
+fn test_the_larger_and_the_smaller():
+    assert_eq(3 ⌈ 5, 5)
+    assert_eq(3 ⌊ 5, 3)
+
+@test
+fn test_the_order_of_the_operands_does_not_matter():
+    assert_eq(5 ⌈ 3, 5)
+    assert_eq(5 ⌊ 3, 3)
+
+@test
+fn test_equal_operands():
+    assert_eq(4 ⌈ 4, 4)
+    assert_eq(4 ⌊ 4, 4)
+
+@test
+fn test_negative_numbers():
+    assert_eq(⁻2 ⌈ ⁻7, ⁻2)
+    assert_eq(⁻2 ⌊ ⁻7, ⁻7)
+    assert_eq(⁻2 ⌈ 1, 1)
+
+@test
+fn test_floats():
+    assert_eq(1.5 ⌈ 2.5, 2.5)
+    assert_eq(1.5 ⌊ 2.5, 1.5)
+    assert_eq(⁻1.5 ⌈ ⁻2.5, ⁻1.5)
+
+// Clamping is what the two are most often for.
+fn at_least_zero(n : i64) → i64:
+    n ⌈ 0
+
+fn clamped(n : i64) → i64:
+    (n ⌈ 0) ⌊ 100
+
+@test
+fn test_clamping():
+    assert_eq(at_least_zero(⁻5), 0)
+    assert_eq(at_least_zero(5), 5)
+    assert_eq(clamped(⁻5), 0)
+    assert_eq(clamped(50), 50)
+    assert_eq(clamped(500), 100)
+
+// ---------------------------------------------------------------------
+// Grouping
+// ---------------------------------------------------------------------
+
+// Loose enough that the operands may be written as arithmetic.
+@test
+fn test_arithmetic_binds_tighter():
+    assert_eq(2 + 3 ⌈ 10 - 4, 6)
+    assert_eq(2 × 3 ⌊ 10 ÷ 2, 5)
+
+// Tight enough that a comparison reads the answer, not an operand.
+@test
+fn test_comparison_binds_looser():
+    assert(3 ⌈ 5 == 5)
+    assert(3 ⌈ 5 > 4)
+
+// A range reads the answer too.
+@test
+fn test_a_range_bound_may_be_written_with_one():
+    let total : mut = 0
+    foreach i := 1…(2 ⌈ 3):
+        total ← total + i
+    assert_eq(total, 6)
+
+// Chained left to right, which for these two makes no difference.
+@test
+fn test_chaining():
+    assert_eq(3 ⌈ 5 ⌈ 4, 5)
+    assert_eq(3 ⌊ 5 ⌊ 4, 3)
+    assert_eq((3 ⌈ 5) ⌊ 4, 4)
+
+// ---------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------
+
+// The answer is one of the operands, so the width the two settle on
+// always holds it.
+@test
+fn test_width_is_the_one_the_operands_settle_on():
+    let a : u8 = 200
+    let b : u8 = 100
+    assert_eq(a ⌈ b, 200)
+    static_assert_eq(@typeof(a ⌈ b), u8)
+
+@test
+fn test_an_untyped_operand_takes_the_other_width():
+    let a : i32 = 7
+    static_assert_eq(@typeof(a ⌈ 9), i32)
+
+// Both operands must be the same kind of number, as they must be for
+// addition: an exact comparison of an integer and a float is rarely
+// the question a program means to ask.
+@expect error "maximum.*requires matching types"
+fn error_int_with_float():
+    let n : mut = 1 ⌈ 2.5
+
+@expect error "minimum.*requires matching types"
+fn error_float_with_int():
+    let n : mut = 2.5 ⌊ 1
+
+// Only numbers are ordered.
+@expect error "maximum.*expected numeric types"
+fn error_strings():
+    let s : mut = "a" ⌈ "b"
+
+// ---------------------------------------------------------------------
+// Units
+// ---------------------------------------------------------------------
+
+// The larger of two lengths is a length.
+@test
+fn test_the_unit_is_carried():
+    let a ¤meter := 5
+    let b ¤meter := 3
+    assert_eq(a ⌈ b, 5¤meter)
+    assert_eq(a ⌊ b, 3¤meter)
+    static_assert_eq(@unitof(a ⌈ b), ¤meter)
+
+// Operands of the same dimension are compared by what they measure,
+// not by the number written.
+@test
+fn test_a_converted_unit_is_compared_by_what_it_measures():
+    let m ¤meter := 5
+    let cm ¤centimeter := 300
+    assert_eq(m ⌈ cm, 5¤meter)
+    assert_eq(m ⌊ cm, 3¤meter)
+
+// An untyped number is taken to be in the other operand's unit, as it
+// is for addition.
+@test
+fn test_an_untyped_operand_takes_the_unit():
+    let d ¤meter := 5
+    assert_eq(d ⌊ 3, 3¤meter)
+
+// The larger of a length and a duration is not a question.
+@expect error "incompatible units for ⌈"
+fn error_different_dimensions():
+    let a ¤meter := 5
+    let b ¤second := 3
+    let c : mut = a ⌈ b
+
+// ---------------------------------------------------------------------
+// Arrays
+// ---------------------------------------------------------------------
+
+// Element-wise, as the arithmetic operators are.
+@test
+fn test_element_wise_between_two_arrays():
+    let v := [1, 5, 3] ⌈ [4, 2, 3]
+    assert_eq(v[0], 4)
+    assert_eq(v[1], 5)
+    assert_eq(v[2], 3)
+
+@test
+fn test_element_wise_against_a_scalar():
+    let v := [1, 5, 3] ⌊ 3
+    assert_eq(v[0], 1)
+    assert_eq(v[1], 3)
+    assert_eq(v[2], 3)
+
+// The largest element of a vector is the fold of the operator over it.
+@test
+fn test_folding_gives_the_extreme_of_a_vector():
+    let largest := (λa : i64, b : i64 → i64: a ⌈ b) ⌿ [3, 1, 4, 1, 5]
+    assert_eq(largest, 5)
+    let smallest := (λa : i64, b : i64 → i64: a ⌊ b) ⌿ [3, 1, 4, 1, 5]
+    assert_eq(smallest, 1)
+
+// ---------------------------------------------------------------------
+// Compile time
+// ---------------------------------------------------------------------
+
+// Both operands are known, so the answer is too.
+@test
+fn test_settled_at_compile_time():
+    static_assert(3 ⌈ 5 == 5)
+    static_assert(3 ⌊ 5 == 3)
+    static_assert(2 + 3 ⌈ 10 - 4 == 6)
+
+@start
+@impure
+fn main():
+    std.println("min/max tests passed")

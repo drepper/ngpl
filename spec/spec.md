@@ -1078,6 +1078,97 @@ The `%` operator computes the integer remainder with truncation toward zero, mat
 The result type follows the same rules as other arithmetic operators: `resolve_width` selects the wider operand's type.  For unsigned types, the result is always non-negative.
 
 
+### The Larger and the Smaller: `⌈` and `⌊`
+
+`⌈` (U+2308 LEFT CEILING) gives the larger of two numbers and `⌊` (U+230A LEFT FLOOR) the smaller:
+
+```
+3 ⌈ 5                         /* 5 */
+3 ⌊ 5                         /* 3 */
+⁻2 ⌈ ⁻7                       /* ⁻2 */
+1.5 ⌊ 2.5                     /* 1.5 */
+```
+
+The glyphs are APL's, where `⌈` is maximum and `⌊` minimum.  Writing them as operators rather than as `max(a, b)` and `min(a, b)` keeps an expression reading as arithmetic, and keeps clamping — which is what they are most often for — to one line without a temporary:
+
+```
+fn clamped(n : i64) → i64:
+    (n ⌈ 0) ⌊ 100
+```
+
+Note that `@max(T)` and `@min(T)` are a different thing: they name the extreme values a type can hold, and take a type rather than two numbers.  See [The Limits of a Numeric Type](#the-limits-of-a-numeric-type).
+
+#### Grouping
+
+`⌈` and `⌊` bind looser than every arithmetic and bitwise operator and tighter than the comparisons and `…`.  The operands may therefore be written as arithmetic, and a comparison reads the answer rather than an operand:
+
+```
+2 + 3 ⌈ 10 - 4                /* 6 — the larger of the two sums */
+3 ⌈ 5 == 5                    /* true — (3 ⌈ 5) == 5 */
+1…(2 ⌈ 3)                     /* 1…3 */
+```
+
+The two sit at the same level and associate to the left, which changes nothing: both are associative, and `a ⌈ b ⌊ c` is `(a ⌈ b) ⌊ c` either way one reads it.
+
+#### Semantics
+
+- **The answer is one of the operands.**  Nothing is computed from both, so the result needs no range of its own: whatever width the two settle on holds a value that already fitted in one of them.  Neither operator can overflow, and `@wrap` has nothing to do there.
+- **Both operands must be the same kind of number**, as they must be for addition.  An integer and a float are refused rather than compared exactly, which is rarely the question a program means to ask:
+
+```
+1 ⌈ 2.5
+
+error: maximum (⌈) requires matching types, got untyped and float
+```
+
+- **Only numbers are ordered.**  A string, a bool, or a struct has no larger and smaller, and is refused.
+- **Units travel as they do through `+` and `-`**: the operands must measure the same thing, the answer carries the unit, and operands written in different scales of it are compared by what they measure rather than by the number written.
+
+```
+let m ¤meter := 5
+let cm ¤centimeter := 300
+m ⌈ cm                        /* 5 m */
+m ⌊ cm                        /* 3 m */
+
+let s ¤second := 3
+m ⌈ s
+
+error: incompatible units for ⌈: m and s
+```
+
+- **Element-wise on arrays**, as the arithmetic operators are, between two arrays or an array and a scalar:
+
+```
+[1, 5, 3] ⌈ [4, 2, 3]         /* [4, 5, 3] */
+[1, 5, 3] ⌊ 3                 /* [1, 3, 3] */
+```
+
+- **Both operands are evaluated.**  Neither operator short-circuits; there is no answer to give without looking at both.
+
+The extreme value of a whole vector is the fold of the operator over it:
+
+```
+(λa : i64, b : i64 → i64: a ⌈ b) ⌿ [3, 1, 4, 1, 5]    /* 5 */
+```
+
+#### Only the Dyadic Meaning
+
+APL gives each glyph a monadic meaning as well: `⌈x` is the ceiling of `x` and `⌊x` its floor.  Those are not provided here.  A glyph whose meaning depends on how many operands it was given has to be read twice — once to count, once to understand — and the language has taken fixed arity elsewhere for the same reason.  Rounding a float will get a name of its own when it arrives.
+
+#### Comparison with Other Languages
+
+| Language | Larger of two | Smaller of two |
+|----------|---------------|----------------|
+| APL, BQN | `⌈` | `⌊` |
+| C, C++ | `std::max(a, b)` | `std::min(a, b)` |
+| Rust | `a.max(b)` | `a.min(b)` |
+| Python | `max(a, b)` | `min(a, b)` |
+| Zig | `@max(a, b)` | `@min(a, b)` |
+| NGPL | `a ⌈ b` | `a ⌊ b` |
+
+Zig's spelling is worth noting for the collision it avoids being the mirror of the one here: `@max` there takes two values, and here it takes a type.
+
+
 ### Function Definition Syntax
 
 Function definitions use the `fn` keyword followed by the function name, a parenthesized parameter list, an optional return type, and a block body.  An empty parameter list is written as `()`.  The ASCII form `->` is accepted as an alternative to `→`.

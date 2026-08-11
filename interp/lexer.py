@@ -102,12 +102,15 @@ _NORMALIZE_OPS = {
 SINGLE_OPS = set("+-%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ∃∄⍴⧺⌿⍀¤√∛∜↑⁻×÷"
                  "≅≇⪅⪆⪉⪊"
                  # The saturating arithmetic operators.
-                 "\N{SQUARED PLUS}\N{SQUARED MINUS}\N{SQUARED TIMES}")
+                 "\N{SQUARED PLUS}\N{SQUARED MINUS}\N{SQUARED TIMES}"
+                 # The larger and the smaller of two numbers.
+                 "\N{LEFT CEILING}\N{LEFT FLOOR}")
 
 # Binary operators that signal line continuation when trailing.
 _CONTINUATION_OPS = frozenset({
     "+", "-", "\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}", "%",
     "\N{SQUARED PLUS}", "\N{SQUARED MINUS}", "\N{SQUARED TIMES}",
+    "\N{LEFT CEILING}", "\N{LEFT FLOOR}",
     "|", "&", "^",
     "<<", ">>", "«", "»", "↺", "↻",
     "==", "!=", "<", ">", "<=", ">=",
@@ -436,7 +439,8 @@ def tokenize(src: str):
                         "\N{MULTIPLICATION SIGN}\N{DIVISION SIGN}"
                         "≅≇⪅⪆⪉⪊"
                         "\N{SQUARED PLUS}\N{SQUARED MINUS}"
-                        "\N{SQUARED TIMES}"):
+                        "\N{SQUARED TIMES}"
+                        "\N{LEFT CEILING}\N{LEFT FLOOR}"):
                 tokens.append(Token("OP", ch, line, col))
             else:
                 # Reaching here means the character was added to
