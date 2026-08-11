@@ -916,6 +916,8 @@ Runtime
 
 [ ] Add the natural logarithm function with the glyph ⍟.
 
+[ ] Add a way for the program to provide its own violation handler for pre- and post-conditions.
+
 
 Syntax Decisions Still Open
 ----------------------------
@@ -1011,3 +1013,16 @@ in the compiler.
 [ ] a violation handler the program itself provides, as C++26 allows, reading a description
     of what broke.  The four semantics are what a handler is called by, and they are in; who
     gets called is a language feature of its own.
+
+
+Macros and Reflection
+---------------------
+
+[ ] Add a macro system with hygenic macros.  The macros of the Rust language can server as
+    inspiration or more.  The funcitionality must allow to
+    - retrieve the parse tree for the parameter(s) of the macro
+    - deconstruct the tree in comptime code
+    - reconstruct code and insert it into the compilation unit/parsed program
+    - follow references to to type, function, or variable definitions
+    A set of operations which allow implementing both the C++26 as well as the Rust
+    functionality is required.
