@@ -211,6 +211,45 @@ This concept is similar to Go's untyped constants and Odin's untyped integers.  
 
 5. **Array initialization.**  In `let name : mut u32[64] = 0`, the `0` is an `untyped int` that coerces to the array's element type `u32`.
 
+#### A Literal Its Suffix's Type Cannot Hold
+
+A suffix commits a literal to a type, so a number that type cannot hold is a mistake in the literal.  It is reported where it is written, whether or not the code holding it ever runs:
+
+```
+300u8
+
+error: integer overflow: 300 does not fit in u8 (range 0..255)
+
+8u3
+
+error: integer overflow: 8 does not fit in u3 (range 0..7)
+
+0xffffu8
+
+error: integer overflow: 65535 does not fit in u8 (range 0..255)
+```
+
+The base a literal is written in does not change what it is worth, and neither does the code around it: a function nobody calls is checked with the rest.  This is what the same check on a float literal does, and the reason is the same — a number the type cannot hold is not a number the program can be using.
+
+A literal without a suffix has no such limit.  It is untyped and arbitrary-precision, and the check happens where it settles on a type instead: `let x : u8 = 300` is refused at the binding, not at the `300`.
+
+##### `⁻` Against a Literal Is Part of It
+
+A `⁻` written directly against a numeric literal belongs to the literal rather than being an operation on it, so `⁻128i8` is the `i8` whose value is `⁻128`:
+
+```
+let lowest := ⁻128i8            /* the lowest value an i8 holds */
+let below  := ⁻129i8            /* error: -129 does not fit in i8 */
+```
+
+Read the other way, `128i8` would have to be an `i8` on the way to being negated, and the lowest value of every signed type would be unwritable — an `i8` holds `⁻128` but not `128`.  C has this problem and works around it in the library, where `INT8_MIN` is written `(-127-1)`.
+
+Only a literal the `⁻` is written directly against is part of it.  Where something binds tighter, the `⁻` applies to what that produced:
+
+```
+⁻2↑2                            /* ⁻(2↑2), which is ⁻4 */
+```
+
 ### Examples
 
 ```

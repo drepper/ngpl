@@ -66,6 +66,14 @@ Completed
     produce an infinity or a NaN, which is what makes the check cheap — the full language
     will have to say how a program asks for them.
 
+[x] an integer literal the type its suffix names cannot hold is reported at the definition
+    rather than when the code holding it runs, so `300u8` in a function nobody calls is
+    found with the rest.  A ⁻ written directly against a literal is part of it, in the
+    check and in the evaluator alike, so ⁻128i8 is the i8 whose value is ⁻128; without
+    that the lowest value of every signed type was unwritable, as it is in C.  Only a
+    literal the ⁻ is written against: in ⁻2↑2 the ↑ takes the 2 first.  A global whose
+    initializer objects now says so as a diagnostic rather than a traceback.
+
 [x] a floating-point value a type cannot hold is refused rather than becoming an infinity
     or a zero.  A literal is caught where it is written — `3e400f64` and `1e-50f32`, and
     `3e400` too, since the bootstrap holds an untyped float in an f64 until the

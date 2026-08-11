@@ -1,0 +1,7 @@
+error: in never_called: integer overflow: 300 does not fit in u8 (range 0..255)
+  --> tests/output/integer_literal_uncalled.ngpl:5:5
+    |
+  5 |     300u8
+    |     ^^^^^
+  6 | 
+    |

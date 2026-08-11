@@ -17,6 +17,7 @@ from interp.ast import (
 )
 import interp.ast as _ast
 from interp.value import (
+    check_int,
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
     NoneValue, SomeValue, ExpectedValue, EnumType, EnumValue, StructType,
     coerce_to_type, validate_param_type, validate_type, none, FAST_TYPES,
@@ -1535,6 +1536,44 @@ def _trailing_value_warnings(func_def, env,
     return warnings
 
 
+def _negated_literals(body) -> set[int]:
+    """The integer literals a ⁻ is written against.
+
+    A ⁻ against a literal is part of the literal rather than an
+    operation on it, which is how the evaluator reads one, so the
+    number to check is the negative one.  Without that the lowest
+    value of every signed type would be unwritable: ⁻128i8 would have
+    to hold 128 in an i8 on the way to holding ⁻128.
+    """
+    return {id(node.operand) for node in _iter_ast(body)
+            if isinstance(node, _ast.UnaryOp) and node.op == "\N{SUPERSCRIPT MINUS}"
+            and isinstance(node.operand, _ast.IntLit)}
+
+
+def _static_literal_check(func_def) -> str | None:
+    """Refuse an integer literal the type its suffix names cannot hold.
+
+    A suffix says what type a number is, so one the type cannot hold is
+    a mistake in the literal, and the literal is where it is reported.
+    Answering at the definition means it is found whether or not the
+    code holding it ever runs, which is what the same check on a float
+    literal already does.
+
+    A literal without a suffix is untyped and arbitrary-precision, so
+    there is nothing for it to fail to fit.
+    """
+    negated = _negated_literals(func_def.body)
+    for node in _iter_ast(func_def.body):
+        if not isinstance(node, _ast.IntLit):
+            continue
+        value = -node.value if id(node) in negated else node.value
+        try:
+            check_int(value, node.width or "int")
+        except OverflowError as e:
+            return _Finding(str(e), node)
+    return None
+
+
 def _static_check_moves(stmts: list, env,
                          moved: set[str] | None = None,
                          struct_vars: dict[str, StructType] | None = None,
@@ -1775,9 +1814,17 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 raise DefinitionError(
                     f"fast type '{defn.type_annotation}' cannot be used in "
                     f"let definition '{defn.name}'", _node_pos(defn))
-            value = evaluator.eval_expr(defn.init_expr)
-            if defn.type_annotation is not None:
-                value = coerce_to_type(value, defn.type_annotation)
+            # A global is worked out while the definitions are being
+            # installed, so what it objects to is reported the way the
+            # checks around it are rather than as a bare traceback.
+            try:
+                value = evaluator.eval_expr(defn.init_expr)
+                if defn.type_annotation is not None:
+                    value = coerce_to_type(value, defn.type_annotation)
+            except (OverflowError, TypeError, ValueError) as e:
+                raise DefinitionError(
+                    f"in {defn.name}: {strip_position_prefix(str(e))}",
+                    extract_position(e) or _node_pos(defn)) from None
             env.define(defn.name, value)
             if defn.is_const:
                 env._const_globals.add(defn.name)
@@ -1930,6 +1977,10 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 if return_err is not None:
                     raise DefinitionError(f"in {defn.name}: {return_err}",
                                           _finding_pos(return_err) or _node_pos(defn))
+                literal_err = _static_literal_check(defn)
+                if literal_err is not None:
+                    raise DefinitionError(f"in {defn.name}: {literal_err}",
+                                          _finding_pos(literal_err) or _node_pos(defn))
                 struct_vars = _struct_vars_of(defn, env)
                 purity_err = _static_purity_check(defn, env, struct_vars)
                 if purity_err is not None:
@@ -1953,7 +2004,8 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
         st = env.lookup(defn.struct_name)
         for method_def in defn.methods:
             struct_vars = _struct_vars_of(method_def, env, self_type=st)
-            for finding in (_static_purity_check(method_def, env, struct_vars),
+            for finding in (_static_literal_check(method_def),
+                            _static_purity_check(method_def, env, struct_vars),
                             _static_unused_value_check(method_def, env,
                                                        struct_vars)):
                 if finding is not None:
@@ -2089,6 +2141,11 @@ def main():
             return_err = _static_return_check(defn)
             if return_err is not None:
                 errors_produced.append(("error", return_err))
+
+        if not errors_produced:
+            literal_err = _static_literal_check(defn)
+            if literal_err is not None:
+                errors_produced.append(("error", literal_err))
 
         if not errors_produced:
             struct_vars = _struct_vars_of(defn, env)

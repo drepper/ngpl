@@ -1974,6 +1974,14 @@ class Evaluator:
             return UnitValue(value, unit)
 
         if isinstance(node, UnaryOp):
+            if node.op == "⁻" and isinstance(node.operand, IntLit):
+                # A ⁻ written against an integer literal is part of the
+                # literal rather than an operation on it, so ⁻128i8 is
+                # the i8 whose value is ⁻128.  Read the other way the
+                # positive half would have to hold it first, and the
+                # lowest value of every signed type would be unwritable.
+                return self._mk_int(-node.operand.value,
+                                    node.operand.width or "int")
             operand = self.eval_expr(node.operand)
             if node.op == "⁻":
                 unwrapped = unwrap_optional(operand)

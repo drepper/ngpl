@@ -1,0 +1,9 @@
+// A global is worked out while the definitions are being installed, so
+// what its initializer objects to is reported the way the checks
+// around it are.
+let limit : u8 = 300
+
+@start
+@impure
+fn main():
+    std.println("{}", limit)

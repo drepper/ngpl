@@ -25,6 +25,82 @@ fn error_i32_too_large():
 fn error_i64_too_large():
     let x : mut i64 = 9223372036854775808
 
+// ---- a literal the type its suffix names cannot hold --------------------
+//
+// A suffix says what type the number is, so a number the type cannot
+// hold is a mistake in the literal.  It is reported at the definition,
+// whether or not the code holding it ever runs; the uncalled case is
+// tests/output/integer_literal_uncalled.ngpl, since a function that
+// draws an error cannot also be a test.
+
+@expect error "integer overflow.*300 does not fit in u8"
+fn error_u8_literal():
+    let x := 300u8
+
+@expect error "integer overflow.*128 does not fit in i8"
+fn error_i8_literal():
+    let x := 128i8
+
+@expect error "integer overflow.*65536 does not fit in u16"
+fn error_u16_literal():
+    let x := 65536u16
+
+// An arbitrary width answers the same way.
+@expect error "integer overflow.*8 does not fit in u3"
+fn error_u3_literal():
+    let x := 8u3
+
+// The base a literal is written in does not change what it is worth.
+@expect error "integer overflow.*65535 does not fit in u8"
+fn error_hex_literal():
+    let x := 0xffffu8
+
+@expect error "integer overflow.*256 does not fit in u8"
+fn error_binary_literal():
+    let x := 0b100000000u8
+
+// A literal without a suffix is untyped and arbitrary-precision, so
+// there is nothing for it to fail to fit.
+@test
+fn test_an_untyped_literal_has_no_range():
+    let big := 340282366920938463463374607431768211456
+    assert(big > 0)
+
+@test
+fn test_a_literal_the_type_holds_is_held():
+    let a := 255u8
+    let b := 127i8
+    let c := 7u3
+    assert_eq(a, 255)
+    assert_eq(b, 127)
+    assert_eq(c, 7)
+
+// ---- ⁻ against a literal is part of the literal -------------------------
+//
+// Read the other way, the positive half would have to hold the value
+// on the way to holding the negative one, and the lowest value of
+// every signed type would be unwritable.
+
+@test
+fn test_the_lowest_value_of_a_signed_type_can_be_written():
+    let a := ⁻128i8
+    let b := ⁻32768i16
+    let c := ⁻2147483648i32
+    assert_eq(a, ⁻128)
+    assert_eq(b, ⁻32768)
+    assert_eq(c, ⁻2147483648)
+
+// One past it is still one past it.
+@expect error "integer underflow.*-129 does not fit in i8"
+fn error_below_the_lowest_i8():
+    let x := ⁻129i8
+
+// Only a literal the ⁻ is written directly against is part of it.  In
+// ⁻2↑2 the ↑ takes the 2 first, so the ⁻ applies to the power.
+@test
+fn test_a_negation_of_an_expression_is_still_a_negation():
+    assert_eq(⁻2↑2, ⁻4)
+
 // ---- static: an unsigned type refuses what it cannot hold ---------------
 
 @test

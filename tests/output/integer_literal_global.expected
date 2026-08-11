@@ -1,0 +1,7 @@
+error: in limit: integer overflow: 300 does not fit in u8 (range 0..255)
+  --> tests/output/integer_literal_global.ngpl:4:1
+    |
+  4 | let limit : u8 = 300
+    | ^^^
+  5 | 
+    |

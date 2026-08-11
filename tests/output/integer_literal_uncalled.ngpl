@@ -1,0 +1,10 @@
+// A literal the type its suffix names cannot hold is a mistake in the
+// literal, so it is reported at the definition.  Nothing calls this
+// function, and the startup function below never runs.
+fn never_called() → u8:
+    300u8
+
+@start
+@impure
+fn main():
+    std.println("main ran")
