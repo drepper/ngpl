@@ -309,6 +309,10 @@ Type System
 [ ] [FULL] ratio type (arbitrary-precision numerator/denominator).  Automatic decay to float when mixed
     with floating-point values.  Untyped ratio preserved at compile time.
 
+[ ] [FULL] Complex numbers, the rational and imaginary part can be any numeric type as long as both
+    parts are the same type.  Use ℜ to access the real part, ℑ to access the imaginary part, ⅈ to
+    indicate the imaginary unit, used for parsing and printing.
+
 [x] unit system: attach units (meters, seconds, bytes, count, …) to numeric types.  Enforce
     dimensional consistency: addition requires same unit, multiplication/division derive units.
     Design derived units and attribute-based annotations (e.g., radius vs diameter).
