@@ -200,42 +200,41 @@ def check_bootstrap_argument(value: "Value", where: str):
         f"it to settle on")
 
 
-def unsettled_in_tuple(value: "Value") -> bool:
-    """Whether what settled on nothing is inside a tuple.
+def suggested_type(value: "Value") -> str:
+    """A type a binding of this value could state.
 
-    A tuple has no type to write down -- its elements are types of
-    their own, and the language has no syntax for the sequence -- so a
-    binding of one cannot answer for it and the element has to.
-    """
-    if isinstance(value, TupleValue):
-        return any(unsettled_kind(element) is not None
-                   for element in value.elements)
-    if isinstance(value, (UnitValue, SomeValue)):
-        inner = value.inner if isinstance(value, UnitValue) else value.value
-        return unsettled_in_tuple(inner)
-    if isinstance(value, ExpectedValue) and value.is_ok():
-        return unsettled_in_tuple(value.ok_value)
-    if isinstance(value, ObjectValue) and isinstance(value.obj, ArrayValue):
-        return any(unsettled_in_tuple(element)
-                   for element in value.obj.values())
-    return False
-
-
-def unsettled_shape(value: "Value") -> str:
-    """The brackets a sized type for this value would need.
+    What settled on nothing is suggested as the sized type it would
+    have taken, and everything else is named as what it already is, so
+    the answer reads as the program would write it: `i64`, `i64[]`,
+    `(i64, str)`, `(i64, str)[]`.
 
     A dimension is a comma inside one pair of brackets, so an array of
-    arrays reads `i64[,]` rather than `i64[][]`, and the type suggested
-    for a binding of one is the one the program would write.
+    arrays is `i64[,]` rather than `i64[][]`.
     """
+    if isinstance(value, TupleValue):
+        return "(" + ", ".join(suggested_type(e) for e in value.elements) + ")"
     dims = 0
     while isinstance(value, ObjectValue) and isinstance(value.obj, ArrayValue):
         dims += 1
         inner = value.obj.values()
         if not inner:
-            break
+            return "i64" + "[" + "," * dims_comma(dims) + "]"
         value = inner[0]
-    return "" if dims == 0 else "[" + "," * (dims - 1) + "]"
+    if dims:
+        return suggested_type(value) + "[" + "," * (dims - 1) + "]"
+    if isinstance(value, IntValue) and is_unwidthed(value.width):
+        return _FULL_LANGUAGE_TYPES["int"]
+    if isinstance(value, FloatValue) and value.width == "float":
+        return _FULL_LANGUAGE_TYPES["float"]
+    if isinstance(value, (UnitValue, SomeValue)):
+        return suggested_type(value.inner if isinstance(value, UnitValue)
+                              else value.value)
+    return runtime_type_of(value)
+
+
+def dims_comma(dims: int) -> int:
+    """The commas an array type of this many dimensions carries."""
+    return max(dims - 1, 0)
 
 
 def check_bootstrap_binding(value: "Value", name: str):
@@ -251,19 +250,12 @@ def check_bootstrap_binding(value: "Value", name: str):
     kind = unsettled_kind(value)
     if kind is None:
         return
-    if unsettled_in_tuple(value):
-        suffix = "1i64" if kind == "int" else "1.5f64"
-        raise TypeError(
-            f"'{name}': a tuple element settles on '{kind}', which is an "
-            f"arbitrary-precision type the bootstrap implementation does "
-            f"not provide; a tuple has no type to write down, so the "
-            f"number states its own, as '{suffix}'")
-    sized = _FULL_LANGUAGE_TYPES[kind] + unsettled_shape(value)
     raise TypeError(
         f"'{name}': a binding with no type written down settles on "
         f"'{kind}', which is an arbitrary-precision type the bootstrap "
         f"implementation does not provide; state a sized type, as "
-        f"'let {name} : {sized} = \N{HORIZONTAL ELLIPSIS}'")
+        f"'let {name} : {suggested_type(value)} = "
+        f"\N{HORIZONTAL ELLIPSIS}'")
 
 
 def settle_untyped(value: "Value") -> "Value":
@@ -1651,7 +1643,10 @@ def _parse_array_type(type_name: str) -> tuple[str, list[int | None]] | None:
     fixed ones, `i32[,3]` an open one over a fixed one.
     """
     import re
-    m = re.fullmatch(r"(\w+)\[(\d*(?:,\d*)*)\]", type_name)
+    # An element type is a name or a tuple, and a tuple carries commas
+    # and brackets of its own, so it is matched as a parenthesized run
+    # rather than as a word.
+    m = re.fullmatch(r"(\w+|\(.*\))\[(\d*(?:,\d*)*)\]", type_name)
     if m is None:
         return None
     return m.group(1), [int(d) if d else None for d in m.group(2).split(",")]
@@ -1740,6 +1735,11 @@ def check_bootstrap_type(type_name: str, where: str):
     # The written name, not what it resolves to.  A generic that infers
     # int was not a declaration of one, and an alias that names int is
     # refused where the alias is declared.
+    elements = parse_tuple_type(type_name)
+    if elements is not None:
+        for element in elements:
+            check_bootstrap_type(element, where)
+        return
     base, _ = _split_optional_type(type_name)
     arr = _parse_array_type(base)
     if arr is not None:
@@ -1753,16 +1753,52 @@ def check_bootstrap_type(type_name: str, where: str):
         f"such as {sized}")
 
 
+def parse_tuple_type(type_name: str) -> list[str] | None:
+    """The element types a tuple type names, or None for any other type.
+
+    Written as the values are -- `(i64, str)` for `(1i64, "two")` --
+    and read the same way, so an element may itself be a tuple, an
+    array, or an optional.
+    """
+    if not type_name or not type_name.startswith("(") or not type_name.endswith(")"):
+        return None
+    elements: list[str] = []
+    depth = 0
+    current = ""
+    for ch in type_name[1:-1]:
+        if ch == "," and depth == 0:
+            elements.append(current.strip())
+            current = ""
+            continue
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth -= 1
+            if depth < 0:
+                return None
+        current += ch
+    elements.append(current.strip())
+    if len(elements) < 2 or any(not e for e in elements):
+        return None
+    return elements
+
+
 def validate_type(type_name: str) -> bool:
     """Return True if type_name is a known builtin type (with optional/expected/array modifiers)."""
     type_name = resolve_type_alias(type_name)
     if is_generic_type(type_name):
         return True
+    tuple_elements = parse_tuple_type(type_name)
+    if tuple_elements is not None:
+        return all(validate_type(e) for e in tuple_elements)
     base, opt_err = _split_optional_type(type_name)
     arr = _parse_array_type(base)
     if arr is not None:
         base = arr[0]
     base = resolve_type_alias(base)
+    elements = parse_tuple_type(base)
+    if elements is not None:
+        return all(validate_type(e) for e in elements)
     if base in BUILTIN_TYPES or base in _USER_TYPES:
         return True
     # An integer type may state its width instead of carrying a name.
@@ -1806,6 +1842,15 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
         if isinstance(value, NoneValue):
             return value
         return ExpectedValue.ok(coerce_arg(value, base, func_name, param_name))
+
+    if parse_tuple_type(param_type) is not None:
+        # A tuple type says what each element is, and coerce_to_type
+        # measures the value against it element by element.
+        try:
+            return coerce_to_type(value, param_type)
+        except TypeError as e:
+            raise TypeError(
+                f"{func_name}: argument '{param_name}': {e}") from None
 
     if param_type == "bool":
         if not isinstance(value, BoolValue):
@@ -1994,6 +2039,23 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
         return settle_untyped(value)
     if not validate_type(target_width):
         raise TypeError(f"unknown type '{target_width}'")
+
+    elements = parse_tuple_type(target_width)
+    if elements is not None:
+        # A tuple type says what each element is, one by one: there is
+        # no width for the whole of it to settle on, only the elements'
+        # own.
+        inner = value.value if isinstance(value, SomeValue) else value
+        if not isinstance(inner, TupleValue):
+            raise TypeError(
+                f"'{target_width}' is a tuple type, but the value is "
+                f"{runtime_type_of(inner)}")
+        if len(inner.elements) != len(elements):
+            raise TypeError(
+                f"'{target_width}' has {len(elements)} elements, but the "
+                f"value has {len(inner.elements)}")
+        return TupleValue([coerce_to_type(v, t)
+                           for v, t in zip(inner.elements, elements)])
 
     # An optional or expected target says what a value has to be when
     # there is one; absence is what the ? or ! admits on its own.

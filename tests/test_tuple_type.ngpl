@@ -1,0 +1,141 @@
+// Tests for the tuple type.
+//
+// A tuple's type is written as its values are: `(i64, str)` is the
+// type of `(1i64, "two")`.  The elements are types in their own right,
+// so each may be anything a type may be, and the tuple type may go
+// wherever a type may go.
+
+// ---------------------------------------------------------------------
+// A binding
+// ---------------------------------------------------------------------
+
+@test
+fn test_a_binding_states_a_tuple_type():
+    let t : (i64, str) = (1, "two")
+    assert_eq(t[0], 1)
+    assert(t[1] == "two")
+
+// The elements settle on what the type says, so a number that stated
+// no width takes the one written for it.
+@test
+fn test_the_type_settles_the_elements():
+    let t : (u8, f64) = (200, 1.5)
+    static_assert_eq(@typeof(t[0]), u8)
+    static_assert_eq(@typeof(t[1]), f64)
+
+@test
+fn test_a_mutable_binding():
+    let t : mut (i64, str) = (1, "two")
+    t ← (2, "three")
+    assert_eq(t[0], 2)
+
+// ---------------------------------------------------------------------
+// What the type refuses
+// ---------------------------------------------------------------------
+
+@test
+@expect error "has 2 elements, but the value has 3"
+fn error_too_many_elements():
+    let t : (i64, str) = (1, "two", 3)
+
+@test
+@expect error "has 3 elements, but the value has 2"
+fn error_too_few_elements():
+    let t : (i64, str, bool) = (1, "two")
+
+@test
+@expect error "'str' cannot hold an integer"
+fn error_wrong_element_type():
+    let t : (i64, str) = (1, 2)
+
+@test
+@expect error "is a tuple type, but the value is"
+fn error_not_a_tuple():
+    let t : (i64, str) = 5
+
+// int and float are refused inside a tuple type as anywhere else.
+@test
+@expect error "'int' is an arbitrary-precision type"
+fn error_arbitrary_precision_element():
+    let t : (int, str) = (1, "two")
+
+// ---------------------------------------------------------------------
+// Everywhere a type may be written
+// ---------------------------------------------------------------------
+
+fn takes_a_pair(p : (i64, str)) → i64:
+    p[0]
+
+fn hands_back_a_pair() → (i64, str):
+    (1i64, "two")
+
+@test
+fn test_a_parameter():
+    assert_eq(takes_a_pair((7, "seven")), 7)
+
+@test
+fn test_a_return_type():
+    let t : (i64, str) = hands_back_a_pair()
+    assert_eq(t[0], 1)
+
+// A return type settles the elements the way a binding does.
+fn hands_back_a_sized_pair() → (u8, i64):
+    (200, 5)
+
+@test
+fn test_a_return_type_settles_the_elements():
+    let t : (u8, i64) = hands_back_a_sized_pair()
+    static_assert_eq(@typeof(t[0]), u8)
+
+type Pair = (i64, str)
+
+@test
+fn test_a_type_alias():
+    let t : Pair = (1, "two")
+    assert_eq(t[0], 1)
+    assert(t[1] == "two")
+
+struct Holder:
+    pair : (i64, str)
+
+@test
+fn test_a_struct_field():
+    let h := Holder{pair: (3, "three")}
+    assert_eq(h.pair[0], 3)
+
+@test
+fn test_a_lambda_parameter():
+    let f := λp : (i64, str) → i64: p[0]
+    assert_eq(f((9, "nine")), 9)
+
+// ---------------------------------------------------------------------
+// Types made of types
+// ---------------------------------------------------------------------
+
+@test
+fn test_a_tuple_of_tuples():
+    let t : ((i64, i64), str) = ((1, 2), "x")
+    assert_eq(t[0][1], 2)
+
+@test
+fn test_an_array_of_tuples():
+    let pairs : (i64, str)[] = [(1, "a"), (2, "b")]
+    assert_eq(pairs[1][0], 2)
+    assert(pairs[0][1] == "a")
+
+@test
+fn test_a_tuple_holding_an_array():
+    let t : (i64[], str) = ([1, 2, 3], "x")
+    assert_eq(t[0][2], 3)
+
+// One type in parentheses is that type, not a tuple of one.
+@test
+fn test_parentheses_around_one_type():
+    let n : (i64) = 5
+    static_assert_eq(@typeof(n), i64)
+    assert_eq(n, 5)
+
+@start
+@impure
+fn main():
+    std.println("tuple type tests passed")

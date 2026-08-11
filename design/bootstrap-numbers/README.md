@@ -89,12 +89,17 @@ The type it asks for is written the way a program would write it: a
 dimension is a comma inside one pair of brackets, so an array of arrays
 is `i64[,]` and not `i64[][]`.
 
-**A tuple** has only one answer.  Its elements are types of their own,
-so one of them stating a width says nothing about the others, and its
-type — written element by element — is not something the language has
-syntax for, so the binding cannot answer at all.  Each number states
-its own, and the diagnostic says that rather than naming a type nobody
-could write.
+**A tuple** answers the same two ways, with one difference: its
+elements are types of their own, so one of them stating a width says
+nothing about the others.  Either the binding states the tuple's type
+or every number states its own.
+
+There was no tuple type when this rule arrived, so for a while the
+diagnostic asked for the suffixes and said why: a tuple's type is
+written element by element, and the language had no syntax for the
+sequence.  Being unable to say what a value is turned out to be the
+larger gap, and the type was added -- `(i64, str)`, written the way the
+value is.  See [The Tuple Type](../tuple-type/README.md).
 
 The corollary is that a tuple the standard library hands back must
 arrive sized, since nothing the program could write would say what its
@@ -156,7 +161,5 @@ check had reached, are refused like any others.
 A global may now state a unit as a local could, which it has to be able
 to do once every binding must name a type.
 
-Not implemented: a tuple type, which would give a tuple binding a way
-to answer for its elements; and parameter types for the standard
-library, which would let an argument settle rather than merely be
-measured.
+Not implemented: parameter types for the standard library, which would
+let an argument settle rather than merely be measured.

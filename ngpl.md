@@ -20,3 +20,5 @@ what it is.
 - [No Arbitrary-Precision Value in the Bootstrap](design/bootstrap-numbers/README.md)
   — where a number can arrive without a type, and what has to be
   written down at each of them
+- [The Tuple Type](design/tuple-type/README.md) — writing down what a
+  tuple is, in the shape its values are written

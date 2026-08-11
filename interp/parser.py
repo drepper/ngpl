@@ -183,6 +183,48 @@ class Parser:
         self._eat("PUNCT", "]")
         return "[" + ",".join(dims) + "]"
 
+    def _at_tuple_type(self) -> bool:
+        """Whether a type starts here and is a tuple's."""
+        return self._check("PUNCT") and self._cur().value == "("
+
+    def _parse_tuple_type(self) -> str:
+        """Parse: '(' type (',' type)+ ')'
+
+        A tuple's type is written as its values are, so `(i64, str)` is
+        the type of `(1i64, "two")`.  One element is not a tuple --
+        `(i64)` is a type in parentheses and reads as that type -- and
+        the elements are types in their own right, so they may be
+        arrays, optionals, or tuples again.
+
+        The text is rebuilt rather than kept as written, so that two
+        spellings of one type are one string.
+        """
+        self._eat("PUNCT", "(")
+        elements = [self._parse_type()]
+        while self._try_eat("PUNCT", ","):
+            elements.append(self._parse_type())
+        self._eat("PUNCT", ")")
+        if len(elements) == 1:
+            return elements[0]
+        return "(" + ", ".join(elements) + ")"
+
+    def _parse_type(self) -> str:
+        """Parse a type: a name or a tuple, with array and optional suffixes."""
+        if self._at_tuple_type():
+            written = self._parse_tuple_type()
+        else:
+            written = self._eat("IDENT").value
+        written += self._parse_array_suffix()
+        if self._check("OP") and self._cur().value == "?":
+            self.pos += 1
+            written += "?"
+            if self._check("IDENT"):
+                written += self._parse_dotted_name()
+        elif self._check("OP") and self._cur().value == "!":
+            self.pos += 1
+            written += "?std.errors"
+        return written
+
     # ------------------------------------------------------------------
     # Top-level parsing
     # ------------------------------------------------------------------
@@ -443,15 +485,21 @@ class Parser:
                                self.tokens[next_idx].value == "&")
                 next_is_mut = (next_idx < len(self.tokens) and
                                self.tokens[next_idx].type == "MUT")
-                if next_is_type or next_is_ref or next_is_mut:
+                next_is_tuple = (next_idx < len(self.tokens) and
+                                 self.tokens[next_idx].type == "PUNCT" and
+                                 self.tokens[next_idx].value == "(")
+                if next_is_type or next_is_ref or next_is_mut or next_is_tuple:
                     self._eat("PUNCT", ":")
                     if self._check("OP") and self._cur().value == "&":
                         self.pos += 1
                         is_ref = True
                     if self._try_eat("MUT"):
                         is_mut = True
-                    type_tok = self._eat("IDENT")
-                    param_type = type_tok.value
+                    if self._at_tuple_type():
+                        param_type = self._parse_tuple_type()
+                    else:
+                        type_tok = self._eat("IDENT")
+                        param_type = type_tok.value
                 param_type += self._parse_array_suffix()
                 if self._check("OP") and self._cur().value == "?":
                     self.pos += 1
@@ -488,7 +536,12 @@ class Parser:
         ret_type_pos = None
         arrow_tok = self._cur()
         if self._try_eat("OP", "->"):
-            if self._check("IDENT", "NONE", "OPT"):
+            if self._at_tuple_type():
+                start_tok = self._cur()
+                ret_type = self._parse_tuple_type()
+                ret_type_pos = (arrow_tok.line, arrow_tok.col,
+                                self.tokens[self.pos - 1].end_col)
+            elif self._check("IDENT", "NONE", "OPT"):
                 ret_tok = self._cur()
                 self.pos += 1
                 ret_type = ret_tok.value
@@ -644,8 +697,12 @@ class Parser:
                     break
                 field_name_tok = self._eat("IDENT")
                 self._eat("PUNCT", ":")
-                type_tok = self._eat("IDENT")
-                field_type = type_tok.value
+                type_tok = self._cur()
+                if self._at_tuple_type():
+                    field_type = self._parse_tuple_type()
+                else:
+                    self.pos += 1
+                    field_type = type_tok.value
                 field_type += self._parse_array_suffix()
                 if self._check("OP") and self._cur().value == "?":
                     self.pos += 1
@@ -755,7 +812,19 @@ class Parser:
         if has_colon:
             if self._try_eat("MUT"):
                 is_const = False
-            if self._check("IDENT"):
+            if self._at_tuple_type():
+                # A tuple type is read whole, so what may follow it is
+                # what may follow any type: brackets making an array of
+                # it, and ? or ! making it optional.
+                type_annotation = self._parse_tuple_type()
+                type_annotation += self._parse_array_suffix()
+                if self._check("OP") and self._cur().value == "?":
+                    self.pos += 1
+                    type_annotation += "?"
+                elif self._check("OP") and self._cur().value == "!":
+                    self.pos += 1
+                    type_annotation += "?std.errors"
+            elif self._check("IDENT"):
                 type_annotation = self._eat("IDENT").value
                 if self._check("PUNCT") and self._cur().value == "[":
                     self.pos += 1
@@ -818,8 +887,12 @@ class Parser:
         self._eat("TYPE")
         name_tok = self._eat("IDENT")
         self._eat("PUNCT", "=")
-        type_tok = self._eat("IDENT")
-        target = type_tok.value
+        type_tok = self._cur()
+        if self._at_tuple_type():
+            target = self._parse_tuple_type()
+        else:
+            self.pos += 1
+            target = type_tok.value
         target += self._parse_array_suffix()
         if self._check("OP") and self._cur().value == "?":
             self.pos += 1
@@ -1351,13 +1424,20 @@ class Parser:
         while self._check("IDENT"):
             saved = self.pos
             name = self._eat("IDENT").value
-            if not (self._check("PUNCT") and self._cur().value == ":" and
-                    self.pos + 1 < len(self.tokens) and
-                    self.tokens[self.pos + 1].type == "IDENT"):
+            follows = (self.tokens[self.pos + 1]
+                       if self.pos + 1 < len(self.tokens) else None)
+            names_type = follows is not None and (
+                follows.type == "IDENT"
+                or (follows.type == "PUNCT" and follows.value == "("))
+            if not (self._check("PUNCT") and self._cur().value == ":"
+                    and names_type):
                 raise ParseError(
                     f"lambda parameter '{name}' requires a type annotation", self._cur())
             self._eat("PUNCT", ":")
-            ptype = self._eat("IDENT").value
+            if self._at_tuple_type():
+                ptype = self._parse_tuple_type()
+            else:
+                ptype = self._eat("IDENT").value
             ptype += self._parse_array_suffix()
             params.append((name, ptype))
             if not self._try_eat("PUNCT", ","):

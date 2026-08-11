@@ -1,7 +1,7 @@
-error: 't': a tuple element settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; a tuple has no type to write down, so the number states its own, as '1i64'
-  --> tests/output/untyped_tuple_binding.ngpl:7:18
+error: 't': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let t : (i64, str) = …'
+  --> tests/output/untyped_tuple_binding.ngpl:8:18
     |
-  7 |     let t := (1, "two")
+  8 |     let t := (1, "two")
     |                  ^^^^^
-  8 |     std.println("{}", t[0])
+  9 |     std.println("{}", t[0])
     |

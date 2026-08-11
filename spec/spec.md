@@ -104,17 +104,17 @@ let a := [1i64, 2, 3]       // one element says it, and the rest take it
 
 The second form is the rule for literals applied within the array: an element that states a width says what the array is made of, and the ones that state none take it.
 
-A tuple is asked the same question and has only one way to answer.  Its elements are types of their own, so one of them stating a width says nothing about the others, and its type — written element by element — is not something the language has syntax for, so the binding cannot answer either.  Each number states its own:
+A tuple is asked the same question and answered the same two ways, with one difference: its elements are types of their own, so one of them stating a width says nothing about the others.  Either the binding states the tuple's type or every number states its own:
 
 ```
 let t := (1, "two")
 
-error: 't': a tuple element settles on 'int', which is an
-arbitrary-precision type the bootstrap implementation does not provide;
-a tuple has no type to write down, so the number states its own, as
-'1i64'
+error: 't': a binding with no type written down settles on 'int', which
+is an arbitrary-precision type the bootstrap implementation does not
+provide; state a sized type, as 'let t : (i64, str) = …'
 
-let t := (1i64, "two")      // each number says what it is
+let t : (i64, str) = (1, "two")   // the binding says it
+let t := (1i64, "two")            // each number says what it is
 ```
 
 A tuple handed back by the standard library arrives with its numbers already sized, since nothing the program could write would say what they are: `std.callstack()` gives `(str, i64, i64)`.
@@ -5034,6 +5034,54 @@ A source file cannot ask for `-Werror`.  Whether a warning is worth stopping for
 | Integrated with test runner | Yes | Separate tool | Yes |
 
 The `@expect` annotation fills a gap that most languages handle with external test harnesses.  By integrating diagnostic-expectation testing into the language's test system, the entire test suite — positive tests (`@test`) and negative tests (`@expect`) — can live in the same source files and run with the same `--test` invocation.  The statement-level form is particularly powerful: it allows testing warnings and non-fatal diagnostics within otherwise-normal test functions, verifying both the diagnostic and the runtime behavior that follows.
+
+
+### The Tuple Type
+
+A tuple's type is written as its values are: `(i64, str)` is the type of `(1i64, "two")`.
+
+```
+let t : (i64, str) = (1, "two")
+
+fn takes_a_pair(p : (i64, str)) → i64:
+    p[0]
+
+fn hands_back_a_pair() → (i64, str):
+    (1i64, "two")
+
+type Pair = (i64, str)
+
+struct Holder:
+    pair : (i64, str)
+```
+
+The elements are types in their own right, so each may be anything a type may be, and the tuple type may go wherever a type may go — an array of tuples is `(i64, str)[]`, a tuple of tuples `((i64, i64), str)`, a tuple holding an array `(i64[], str)`.
+
+Stating the type settles the elements, as it does at any other binding: in `let t : (u8, f64) = (200, 1.5)` the `200` is a `u8` and the `1.5` an `f64`.
+
+A value is measured against the type element by element.  The count has to match, and each element has to be what its position says:
+
+```
+let t : (i64, str) = (1, "two", 3)
+
+error: '(i64, str)' has 2 elements, but the value has 3
+
+let t : (i64, str) = (1, 2)
+
+error: 'str' cannot hold an integer
+
+let t : (i64, str) = 5
+
+error: '(i64, str)' is a tuple type, but the value is int
+```
+
+One type in parentheses is that type rather than a tuple of one: `(i64)` is `i64`, since a tuple of one element is a value with nothing to distinguish it from the element.  A tuple therefore starts at two.
+
+#### Design Rationale
+
+The type is written the way the value is, which is the same principle behind `i64[]` for an array: a reader who can write the value can write its type.  Rust spells tuple types this way for the same reason.
+
+Until this existed, a tuple holding a number that had settled on nothing could not be given a sized type, because there was nowhere to write one — which in the bootstrap, where the arbitrary-precision types are not implemented, meant every number in a tuple had to carry a suffix.  See [Two Languages, One Specification](#two-languages-one-specification).
 
 
 ### Type Aliases

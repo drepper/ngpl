@@ -1,0 +1,97 @@
+# The Tuple Type
+
+## The Question
+
+Tuples were values without a type.  A program could build one, index
+it, take one apart in a `foreach`, and hand one back from the standard
+library — but nowhere could it write down what one *is*.  `@typeof`
+answered `tuple` and stopped there.
+
+That was liveable until the bootstrap stopped allowing values that had
+settled on nothing.  Every other place a number could arrive had an
+answer: a binding could state `i64`, an array `i64[]`.  A tuple had
+none, so the rule had to be spelled differently for it — every number
+inside carries a suffix — and the diagnostic had to explain that there
+was no type to write instead of naming one.
+
+A rule that cannot be satisfied the way the others are is a gap in the
+language, not a rule.  So: what does a tuple's type look like?
+
+## Considered
+
+### `(i64, str)` — chosen
+
+Written the way the value is.  `(1i64, "two")` has type `(i64, str)`.
+
+This is what Rust, Swift, Python's typing, and the ML family all do,
+for the reason that makes it obvious: a reader who can write the value
+can write its type.  It is also the principle the language already
+follows for arrays, where `[1, 2, 3]` has type `i64[]` — the brackets
+of the value, with the element type in front.
+
+### `tuple[i64, str]`
+
+A named constructor with the elements as parameters.  Against it: the
+name adds nothing a reader did not already know from the parentheses,
+and it stops the type reading like the value.
+
+### A named product type instead
+
+`struct Pair: a : i64; b : str` already exists, and one could argue
+that a tuple wanting a type is a struct that has not admitted it.
+
+Against: a tuple's elements are positional, and there are places —
+`std.callstack()`, `enumerate`, a fold's `(container, init)` — where
+the language itself produces them.  Those need a type whatever the
+advice to programmers is.
+
+## What Follows From the Choice
+
+- **Elements are types in their own right.**  Each may be anything a
+  type may be, so `((i64, i64), str)`, `(i64[], str)`, and
+  `(i64, str)[]` all mean what they look like.
+- **The type may go wherever a type may go**: a binding, a parameter,
+  a return type, a struct field, a type alias, a lambda parameter, an
+  array's element type.
+- **Stating the type settles the elements**, as it does at any other
+  binding: in `let t : (u8, f64) = (200, 1.5)` the `200` is a `u8`.
+- **A value is measured element by element.**  The count has to match,
+  and each element has to be what its position says.
+- **`int` and `float` are refused inside one**, as they are anywhere
+  else a type is written in the bootstrap.
+
+### One element is not a tuple
+
+`(i64)` is `i64` — parentheses around a type are grouping, as they are
+around an expression.  A tuple of one element would be a value with
+nothing to distinguish it from the element it holds, so tuples start at
+two.  Python needs `(x,)` to say otherwise because its parentheses are
+not part of the tuple syntax; here they are, and there is nothing to
+disambiguate.
+
+## The Canonical Form
+
+The type is rebuilt from what was parsed rather than kept as written,
+so `(i64,str)` and `(i64, str)` are one string and compare equal.  Type
+identity in this implementation is string identity — an alias resolves
+to the text it names — so two spellings of one type had to become one
+text.
+
+## Status
+
+Implemented: the type at every site a type is written, coercion element
+by element, arity and element-type diagnostics, nesting in both
+directions with arrays, and the bootstrap check reaching inside.
+
+The diagnostic that asks a binding to name a type now writes a tuple
+type out where the value is one, so the message that used to explain
+the absence names `(i64, str)` instead.
+
+Not implemented:
+
+- `@typeof` still answers `tuple` rather than the structural type.
+  Making it answer `(i64, str)` would need the type to be readable as
+  an expression, where the parentheses already mean a tuple literal of
+  two type values.
+- Destructuring a tuple in a binding — `let (a, b) := pair` — which is
+  a separate question about patterns rather than about types.

@@ -201,29 +201,28 @@ fn test_an_array_of_strings_settles_nothing():
 // ---------------------------------------------------------------------
 //
 // Each element of a tuple is its own type, so one of them stating a
-// width says nothing about the others.  Nor can the binding answer:
-// a tuple's type is written element by element, which the language has
-// no syntax for.  Each number states its own.
+// width says nothing about the others.  Either the binding states the
+// tuple's type or every number states its own.
 
 @test
-@expect error "a tuple element settles on 'int'"
+@expect error "settles on 'int'"
 fn error_untyped_tuple():
     let t := (1, "two")
 
 @test
-@expect error "a tuple element settles on 'float'"
+@expect error "settles on 'float'"
 fn error_untyped_float_tuple():
     let t := (1.5, "two")
 
 // One element saying what it is settles only itself.
 @test
-@expect error "a tuple element settles on 'int'"
+@expect error "settles on 'int'"
 fn error_partly_typed_tuple():
     let t := (1i64, 2)
 
-// The message says what to write, since there is no type to name.
+// The type it asks for is the tuple's, written as its values are.
 @test
-@expect error "the number states its own, as '1i64'"
+@expect error "state a sized type, as .let t : .i64, str. = "
 fn error_untyped_tuple_names_the_replacement():
     let t := (1, "two")
 
@@ -234,6 +233,12 @@ fn test_every_number_may_say_it():
     assert_eq(t[0], 1)
     assert(u[1] == 2.5)
 
+@test
+fn test_the_binding_may_say_it_for_a_tuple():
+    let t : (i64, str) = (1, "two")
+    assert_eq(t[0], 1)
+    assert(t[1] == "two")
+
 // A tuple of things that are not numbers has nothing to settle.
 @test
 fn test_a_tuple_without_numbers_settles_nothing():
@@ -243,7 +248,7 @@ fn test_a_tuple_without_numbers_settles_nothing():
 // The rule reaches a tuple inside an array, which is where a builtin
 // hands one back.
 @test
-@expect error "a tuple element settles on 'int'"
+@expect error "state a sized type, as .let pairs : .i64, i64... = "
 fn error_array_of_untyped_tuples():
     let pairs := [(1, 2), (3, 4)]
 

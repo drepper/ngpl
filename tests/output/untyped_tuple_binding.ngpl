@@ -1,6 +1,7 @@
-// A tuple settles nothing between its elements, and its type is not
-// something the language has syntax for, so the binding cannot answer
-// for it.  Each number states its own.
+// A tuple settles nothing between its elements: one of them stating a
+// width says nothing about the others.  Either the binding states the
+// tuple's type, which the diagnostic writes out, or every number
+// states its own.
 @start
 @impure
 fn main():

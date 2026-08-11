@@ -62,10 +62,11 @@ An array is asked the same question about its elements, and either side may answ
     let a : i64[] = [1, 2, 3]   // the binding says it
     let a := [1i64, 2, 3]       // one element says it, and the rest take it
 
-A tuple is asked it too, and has only one way to answer: its elements are types of their own, and
-there is no syntax for the sequence, so each number states its own.
+A tuple is asked it too, and answered the same two ways, except that one element stating a width
+says nothing about the others:
 
-    let t := (1i64, "two")
+    let t : (i64, str) = (1, "two")   // the binding says it
+    let t := (1i64, "two")            // each number says what it is
 
 An *untyped* literal is unaffected while it is being computed with.  It states no width, takes the
 one it meets, and is exact until then, so `let big : i64 = 1 « 40` and `static_assert(2 ↑ 200 > 0)`
@@ -84,6 +85,14 @@ Completed
     format holds; only reaching zero loses the value.  Nothing in the bootstrap can now
     produce an infinity or a NaN, which is what makes the check cheap — the full language
     will have to say how a program asks for them.
+
+[x] a tuple has a type: `(i64, str)`, written the way its values are, and usable wherever a
+    type may be written — a binding, a parameter, a return type, a field, an alias, a lambda
+    parameter, an array's element type.  The elements are types in their own right, so they
+    nest in both directions: `((i64, i64), str)`, `(i64[], str)`, `(i64, str)[]`.  Stating
+    the type settles the elements, and a value is measured against it element by element.
+    One type in parentheses is that type, so a tuple starts at two elements.  This was the
+    gap that made the bootstrap's rule about unsettled numbers unsatisfiable for tuples.
 
 [x] nothing in the bootstrap holds an arbitrary-precision value.  A binding with no type written
     down would settle on int or float, so it is refused and the sized type is asked for; that

@@ -84,6 +84,7 @@ all_tests=(
     "$testdir"/test_unused_value.ngpl
     "$testdir"/test_minmax.ngpl
     "$testdir"/test_float_overflow.ngpl
+    "$testdir"/test_tuple_type.ngpl
 )
 
 # Filter tests if command-line patterns are given.
