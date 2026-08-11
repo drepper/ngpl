@@ -5095,6 +5095,51 @@ static_assert_eq(@typeof(t), "(i64, str)")      /* the same, as text */
 
 This is what makes `(i64, str)` in an expression a type rather than a tuple of two type values.  A tuple whose elements are all types is the type they name; one with anything else in it is an ordinary tuple.
 
+#### Taking a Tuple Apart at a Binding
+
+A definition may name each element instead of the tuple, which binds one name per element in the order the tuple has them:
+
+```
+let pair : (i64, str) = (1, "two")
+let (a, b) := pair              /* a is 1, b is "two" */
+```
+
+What the definition looks like is what it takes apart, so an element that is itself a tuple is taken apart the same way, and `_` stands where an element is not wanted:
+
+```
+let ((a, b), c) := nested       /* ((i64, i64), str) */
+let (n, _) := pair              /* only the first is wanted */
+```
+
+The names take the elements' types.  A type may be stated, and it is the tuple's, so it settles the elements before they are named:
+
+```
+let (a, b) : (u8, str) = (200, "x")     /* a is a u8 */
+let (a, b) : mut (i64, i64) = (1, 2)    /* both are mutable */
+```
+
+`mut` reaches every name, since it says how the definition binds rather than what any one element is.
+
+The value has to be a tuple with as many elements as the definition names, and each name has to be a name of its own:
+
+```
+let (a, b) := 5
+
+error: a definition taking a tuple apart needs a tuple, but the value
+is int
+
+let (a, b, c) : (i64, str) = (1, "two")
+
+error: the definition names 3 elements, but the tuple has 2
+
+let (a, a) := (1i64, 2i64)
+
+error: the definition names 'a' twice; each element needs a name of its
+own
+```
+
+A name settles a value as any binding does, so the bootstrap asks the same question of each element that it asks of a whole binding: `let (a, b) := (1, "two")` is refused, and `let (a, b) : (i64, str) = (1, "two")` is not.
+
 #### Design Rationale
 
 The type is written the way the value is, which is the same principle behind `i64[]` for an array: a reader who can write the value can write its type.  Rust spells tuple types this way for the same reason.

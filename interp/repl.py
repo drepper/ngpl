@@ -26,6 +26,7 @@ from interp.eval import Evaluator
 from interp.lexer import LexerError, process_indentation, tokenize
 from interp.parser import ParseError, Parser
 from interp.ast import (
+    DestructureDef as ASTDestructureDef,
     EnumDef as ASTEnumDef,
     ExprStmt,
     FuncDef as ASTFuncDef,
@@ -40,8 +41,8 @@ from interp.value import NoneValue, Value, is_unwidthed
 PROMPT = ">>> "
 CONTINUATION_PROMPT = "... "
 
-_DEFINITION_NODES = (ASTFuncDef, ASTVarDef, ASTEnumDef, ASTStructDef,
-                     ASTImplBlock, ASTUnitDef, ASTTypeDef)
+_DEFINITION_NODES = (ASTFuncDef, ASTVarDef, ASTDestructureDef, ASTEnumDef,
+                     ASTStructDef, ASTImplBlock, ASTUnitDef, ASTTypeDef)
 
 
 def _error_message(exc: BaseException) -> str:

@@ -18,7 +18,7 @@ import re
 
 from interp.ast import (
     IntLit, FloatLit, StrLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
-    IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
+    IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, DestructureDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
     DropUnitExpr,
@@ -106,6 +106,8 @@ def _collect_refs_from_stmts(stmts) -> set[str]:
     refs: set[str] = set()
     for stmt in stmts:
         if isinstance(stmt, VarDef):
+            refs |= _collect_refs(stmt.init_expr)
+        elif isinstance(stmt, DestructureDef):
             refs |= _collect_refs(stmt.init_expr)
         elif isinstance(stmt, ExprStmt):
             refs |= _collect_refs(stmt.expr)
@@ -2762,6 +2764,9 @@ class Evaluator:
                     self._frozen_vars[stmt.name] = "let"
             return none()
 
+        if isinstance(stmt, DestructureDef):
+            return self._eval_destructure(stmt)
+
         if isinstance(stmt, SumTypeDef):
             register_sum_type(stmt.name, stmt.alternatives)
             return none()
@@ -3153,6 +3158,45 @@ class Evaluator:
             return list(val.elements)
         raise TypeError(
             f"foreach requires range or iterable, got {type(val).__name__}")
+
+    def _eval_destructure(self, stmt: DestructureDef):
+        """Bind one name to each element of a tuple.
+
+        The annotation, where there is one, is the tuple's, so it
+        settles the elements before they are named and each name takes
+        the type of its own position.
+        """
+        value = self.eval_expr(stmt.init_expr)
+        if stmt.type_annotation is not None:
+            value = coerce_to_type(value, stmt.type_annotation)
+        self._bind_destructured(stmt.names, value, stmt)
+        return none()
+
+    def _bind_destructured(self, names, value, stmt: DestructureDef):
+        """Bind each name to its element, taking nested tuples apart."""
+        inner = unwrap_optional(value)
+        if not isinstance(inner, TupleValue):
+            raise TypeError(
+                f"a definition taking a tuple apart needs a tuple, but the "
+                f"value is {runtime_type_of(inner)}")
+        if len(inner.elements) != len(names):
+            raise TypeError(
+                f"the definition names {len(names)} elements, but the "
+                f"tuple has {len(inner.elements)}")
+        for name, element in zip(names, inner.elements):
+            if isinstance(name, list):
+                self._bind_destructured(name, element, stmt)
+                continue
+            if name == DISCARD_NAME:
+                continue
+            if is_type_name(name):
+                raise TypeError(
+                    f"'{name}' names a type and cannot name a variable")
+            if stmt.type_annotation is None:
+                check_bootstrap_binding(element, name)
+            self.env.define(name, settle_untyped(element))
+            if stmt.is_const:
+                self._frozen_vars[name] = "let"
 
     def _eval_expect(self, node: ExpectStmt):
         """Evaluate a statement wrapped in @expect annotations.

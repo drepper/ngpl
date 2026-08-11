@@ -172,6 +172,101 @@ fn test_two_tuples_answer_alike():
     let b : (i64, str) = (2, "two")
     static_assert_eq(@typeof(a), @typeof(b))
 
+// ---------------------------------------------------------------------
+// Taking a tuple apart at a binding
+// ---------------------------------------------------------------------
+//
+// One name per element, in the order the tuple has them, so what the
+// definition looks like is what it takes apart.
+
+@test
+fn test_a_destructuring_binding():
+    let pair : (i64, str) = (1, "two")
+    let (a, b) := pair
+    assert_eq(a, 1)
+    assert(b == "two")
+
+// The names take the elements' types.
+@test
+fn test_the_names_take_the_element_types():
+    let pair : (u8, f64) = (200, 1.5)
+    let (a, b) := pair
+    static_assert_eq(@typeof(a), u8)
+    static_assert_eq(@typeof(b), f64)
+
+// A type may be stated, and it is the tuple's, so it settles the
+// elements before they are named.
+@test
+fn test_a_stated_type_settles_the_elements():
+    let (a, b) : (u8, str) = (200, "x")
+    static_assert_eq(@typeof(a), u8)
+    assert_eq(a, 200)
+
+// The value may be anything that is a tuple.
+fn hands_back_a_pair_to_take_apart() → (i64, str):
+    (7i64, "seven")
+
+@test
+fn test_taking_apart_what_a_function_hands_back():
+    let (a, b) := hands_back_a_pair_to_take_apart()
+    assert_eq(a, 7)
+    assert(b == "seven")
+
+// mut reaches every name.
+@test
+fn test_mutable_names():
+    let (a, b) : mut (i64, i64) = (1, 2)
+    a ← a + 1
+    b ← b + 1
+    assert_eq(a + b, 5)
+
+// The discard target stands where an element is not wanted.
+@test
+fn test_an_element_may_be_discarded():
+    let pair : (i64, str) = (1, "two")
+    let (a, _) := pair
+    assert_eq(a, 1)
+
+// An element that is itself a tuple may be taken apart with it.
+@test
+fn test_nested_destructuring():
+    let nested : ((i64, i64), str) = ((1, 2), "x")
+    let ((a, b), c) := nested
+    assert_eq(a + b, 3)
+    assert(c == "x")
+
+// --- what it refuses ---
+
+@test
+@expect error "needs a tuple, but the value is"
+fn error_destructuring_a_value_that_is_not_a_tuple():
+    let (a, b) := 5
+
+@test
+@expect error "names 3 elements, but the tuple has 2"
+fn error_destructuring_the_wrong_number_of_elements():
+    let (a, b, c) : (i64, str) = (1, "two")
+
+@test
+@expect error "names 'a' twice"
+fn error_destructuring_repeats_a_name():
+    let (a, a) := (1i64, 2i64)
+
+// A name still settles a value, so an element that settled on nothing
+// is refused as it would be at any other binding.
+@test
+@expect error "settles on 'int'"
+fn error_destructuring_an_unsettled_element():
+    let (a, b) := (1, "two")
+
+// A name that is never modified draws the same warning it would
+// elsewhere.
+@expect warning "'b' is declared mut but is never modified"
+fn warn_destructured_mut_is_never_modified():
+    let (a, b) : mut (i64, i64) = (1, 2)
+    a ← 3
+    assert_eq(a + b, 5)
+
 @start
 @impure
 fn main():

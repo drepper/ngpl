@@ -95,7 +95,10 @@ Completed
     gap that made the bootstrap's rule about unsettled numbers unsatisfiable for tuples.
     @typeof answers with the type rather than with the word `tuple`, and a parenthesized
     list of type names is the type they describe, so the answer compares against the type
-    as written: static_assert_eq(@typeof(t), (i64, str)).
+    as written: static_assert_eq(@typeof(t), (i64, str)).  A definition may name the
+    elements instead of the tuple — `let (a, b) := pair`, nesting as the value nests, with
+    `_` where an element is not wanted — at a local and at a global alike.  mut reaches
+    every name, a repeated name is refused, and a stated type is the tuple's.
 
 [x] nothing in the bootstrap holds an arbitrary-precision value.  A binding with no type written
     down would settle on int or float, so it is refused and the sized type is asked for; that

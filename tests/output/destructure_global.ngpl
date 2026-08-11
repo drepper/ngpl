@@ -1,0 +1,8 @@
+// A global may take a tuple apart as a local does, and what it binds
+// is global.
+let (width, name) : (i64, str) = (80, "terminal")
+
+@start
+@impure
+fn main():
+    std.println("{} {}", width, name)

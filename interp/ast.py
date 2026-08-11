@@ -196,6 +196,23 @@ class VarDef:
         self.unit_spec = unit_spec
 
 
+class DestructureDef:
+    """Definition taking a tuple apart: let (a, b) := expr.
+
+    names holds one name per element, in the order the tuple has them,
+    with the discard target where an element is not wanted.  The type
+    annotation, where there is one, is the tuple's, so each name takes
+    the type of its own position.
+    """
+
+    def __init__(self, names, type_annotation, init_expr,
+                 is_const: bool = True):
+        self.names = names
+        self.type_annotation = type_annotation
+        self.init_expr = init_expr
+        self.is_const = is_const
+
+
 class ExprStmt:
     """An expression used as a statement (discard result)."""
 

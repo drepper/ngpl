@@ -11,7 +11,7 @@ indentation (INDENT/DEDENT tokens).
 from interp.ast import (
     IntLit, FloatLit, StrLit, BoolLit, NoneLit, VarRef, RefExpr, BorrowExpr,
     BinOp, UnaryOp,
-    IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, ExprStmt,
+    IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, DestructureDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
     DropUnitExpr,
@@ -794,11 +794,70 @@ class Parser:
             else:
                 self.pos += 1
 
+    def _parse_destructure_names(self, kw_tok):
+        """Parse the parenthesized names a destructuring binds.
+
+        One entry per element, in the order the tuple has them, so what
+        the definition looks like is what it takes apart.  An entry may
+        be a parenthesized list of its own, which takes apart an
+        element that is itself a tuple.  The discard target stands
+        where an element is not wanted.
+        """
+        self._eat("PUNCT", "(")
+        names: list = []
+        while True:
+            if self._check("PUNCT") and self._cur().value == "(":
+                names.append(self._parse_destructure_names(kw_tok))
+            else:
+                names.append(self._eat("IDENT").value)
+            if not self._try_eat("PUNCT", ","):
+                break
+        self._eat("PUNCT", ")")
+        if len(names) < 2:
+            raise ParseError(
+                "a definition taking a tuple apart needs a name for each "
+                "element, and a tuple has at least two", kw_tok)
+        return names
+
+    def _parse_destructure_def(self, kw_tok):
+        """Parse: let '(' names ')' [: [mut] type] = expr"""
+        names = self._parse_destructure_names(kw_tok)
+        seen: set[str] = set()
+        pending = list(names)
+        while pending:
+            entry = pending.pop()
+            if isinstance(entry, list):
+                pending.extend(entry)
+                continue
+            if entry == "_":
+                continue
+            if entry in seen:
+                raise ParseError(
+                    f"the definition names '{entry}' twice; each element "
+                    f"needs a name of its own", kw_tok)
+            seen.add(entry)
+
+        type_annotation = None
+        is_const = True
+        if self._try_eat("PUNCT", ":"):
+            if self._try_eat("MUT"):
+                is_const = False
+            if not (self._check("PUNCT") and self._cur().value == "="):
+                type_annotation = self._parse_type()
+        self._eat("PUNCT", "=")
+        init_expr = self._parse_or_expr()
+        self._try_eat("PUNCT", ";")
+        return self._set_pos(
+            DestructureDef(names, type_annotation, init_expr, is_const),
+            kw_tok)
+
     def _parse_var_def(self):
         """Parse: let name [¤unit] := expr  |  let name [¤unit] : [mut] type = expr  |  let name : mut type[size] = init"""
         kw_tok = self._cur()
         self._eat("LET")
         keyword = "let"
+        if self._check("PUNCT") and self._cur().value == "(":
+            return self._parse_destructure_def(kw_tok)
         name_tok = self._eat("IDENT")
 
         unit_spec = None

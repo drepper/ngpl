@@ -107,5 +107,37 @@ is no longer constructible.  Nothing can use one — there is no type of
 types to hold it — and the thing it would have been written for is
 exactly the comparison this enables.
 
-Not implemented: destructuring a tuple in a binding — `let (a, b) :=
-pair` — which is a question about patterns rather than about types.
+## Taking One Apart
+
+A definition may name the elements instead of the tuple:
+
+```
+let (a, b) := pair
+let ((a, b), c) := nested
+let (n, _) := pair
+```
+
+The syntax is the value's again — parentheses and names where the tuple
+has parentheses and elements — so nesting needs no rule of its own, and
+`_` means at a definition what it means everywhere else.
+
+Three things were decided here rather than falling out:
+
+- **`mut` reaches every name.**  It says how the definition binds
+  rather than what any one element is, and a form that let each name
+  differ would need a syntax nobody has asked for.
+- **A repeated name is refused.**  `let (a, a) := pair` binds `a`
+  twice, which cannot be what it means; a plain `let` that repeated a
+  name would be refused too.
+- **A stated type is the tuple's**, not a list of the elements'.  It
+  settles the elements before they are named, so
+  `let (a, b) : (u8, str) = (200, "x")` gives `a` a `u8` — the same
+  thing the type does at a binding that names no elements.
+
+This is a pattern in the sense that `match` has patterns, but it is not
+the general one: a destructuring names elements and cannot ask about
+them.  The language will want the general form eventually, and when it
+arrives this should be a case of it rather than a separate feature.
+
+Not implemented: destructuring anywhere but a definition — a parameter,
+an assignment to names that already exist, a `match` arm.

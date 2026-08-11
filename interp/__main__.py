@@ -13,6 +13,7 @@ from interp.env import Env
 from interp.ast import (
     FuncDef as ASTFuncDef, EnumDef as ASTEnumDef, UnitDef as ASTUnitDef,
     VarDef as ASTVarDef, TypeDef as ASTTypeDef,
+    DestructureDef as ASTDestructureDef,
     StructDef as ASTStructDef, ImplBlock as ASTImplBlock,
 )
 import interp.ast as _ast
@@ -1175,6 +1176,17 @@ def _unused_mut_warnings(func_def) -> list[tuple[str, tuple | None]]:
               if isinstance(node, _ast.ExpectStmt)}
 
     for node in _iter_ast(func_def.body):
+        if isinstance(node, _ast.DestructureDef) and not node.is_const:
+            for name in _destructured_names(node.names):
+                if name == DISCARD_NAME or name in modified:
+                    continue
+                message = f"'{name}' is declared mut but is never modified"
+                if id(node) in marked:
+                    node.static_warnings = (
+                        list(getattr(node, "static_warnings", ())) + [message])
+                else:
+                    warnings.append((message, getattr(node, "pos", None)))
+            continue
         if not isinstance(node, _ast.VarDef) or node.is_const:
             continue
         if node.name == DISCARD_NAME:
@@ -1537,6 +1549,17 @@ def _trailing_value_warnings(func_def, env,
     return warnings
 
 
+def _destructured_names(names) -> list[str]:
+    """Every name a destructuring binds, nested ones included."""
+    flat: list[str] = []
+    for entry in names:
+        if isinstance(entry, list):
+            flat.extend(_destructured_names(entry))
+        else:
+            flat.append(entry)
+    return flat
+
+
 def _negated_literals(body) -> set[int]:
     """The integer literals a ⁻ is written against.
 
@@ -1850,6 +1873,25 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 env._const_globals.add(defn.name)
             else:
                 env._mutable_globals.add(defn.name)
+
+    for defn in definitions:
+        if isinstance(defn, ASTDestructureDef):
+            # A global may take a tuple apart as a local does; the
+            # evaluator knows how, and what it binds becomes global.
+            try:
+                evaluator._eval_destructure(defn)
+            except (OverflowError, TypeError, ValueError) as e:
+                raise DefinitionError(
+                    strip_position_prefix(str(e)),
+                    extract_position(e) or _node_pos(defn)) from None
+            for name in _destructured_names(defn.names):
+                if name == DISCARD_NAME:
+                    continue
+                env.define(name, evaluator.env.lookup(name))
+                if defn.is_const:
+                    env._const_globals.add(name)
+                else:
+                    env._mutable_globals.add(name)
 
     for defn in definitions:
         if isinstance(defn, ASTUnitDef):
