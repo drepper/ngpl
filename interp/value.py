@@ -173,6 +173,33 @@ def unsettled_kind(value: "Value") -> str | None:
     return None
 
 
+def check_bootstrap_argument(value: "Value", where: str):
+    """Refuse an argument no sized type could hold.
+
+    A parameter that states a type settles the value against it, and a
+    binding that states one settles it there.  What is left is a value
+    handed to something that states nothing -- a builtin, or an untyped
+    parameter -- where nothing says what type it should have.  A number
+    that would fit one is left alone: it is the arbitrary precision
+    that the bootstrap does not have, not the not-yet-settledness.
+    """
+    inner = value
+    while isinstance(inner, (UnitValue, SomeValue)):
+        inner = inner.inner if isinstance(inner, UnitValue) else inner.value
+    if not isinstance(inner, IntValue) or not is_unwidthed(inner.width):
+        return
+    # The widest sized types the language has: an unsigned one spends
+    # no bit on the sign, and a signed one spends the top bit.
+    if _int_range(f"i{MAX_INT_BITS - 1}")[0] <= inner.value \
+            <= _int_range(f"u{MAX_INT_BITS}")[1]:
+        return
+    raise TypeError(
+        f"{where}: {inner.value} needs more bits than any sized type "
+        f"has, and nothing here says which type it should have; the "
+        f"bootstrap implementation has no arbitrary-precision int for "
+        f"it to settle on")
+
+
 def unsettled_in_tuple(value: "Value") -> bool:
     """Whether what settled on nothing is inside a tuple.
 

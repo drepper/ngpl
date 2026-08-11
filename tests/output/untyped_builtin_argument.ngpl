@@ -1,0 +1,6 @@
+// A builtin states no parameter types, so nothing settles a number on
+// one.  What reaches it has to be a number some sized type could hold.
+@start
+@impure
+fn main():
+    std.println("{}", 2 ↑ 200)

@@ -42,7 +42,8 @@ from interp.value import (
     int_limits, float_limits, resolve_type_alias,
     format_shape, _array_type_name, array_type_mismatch,
     is_generic_type, runtime_type_of, is_type_name, _is_unsigned,
-    check_bootstrap_type, check_bootstrap_binding,
+    check_bootstrap_argument, check_bootstrap_type,
+    check_bootstrap_binding,
     UNTYPED, is_unwidthed, settle_untyped,
     _scalar_kind_mismatch,
     UnitValue, RefValue, Reference, ElementRef, Iterator, ArrayIterator,
@@ -3857,6 +3858,7 @@ class Evaluator:
         if (isinstance(unwrapped, ObjectValue)
                 and isinstance(unwrapped.obj, ArrayValue)
                 and method_name in _ARRAY_METHODS):
+            self._check_builtin_args(method_name, args)
             return self._call_array_method(unwrapped.obj, method_name, args)
         if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, StructInstance):
             inst = unwrapped.obj
@@ -3879,6 +3881,7 @@ class Evaluator:
             python_obj = unwrapped.obj
             meth = getattr(python_obj, method_name, None)
             if meth is not None and callable(meth):
+                self._check_builtin_args(method_name, args)
                 # Detect builtin-style method: takes exactly one "args" list.
                 try:
                     sig = inspect.signature(meth)
@@ -3969,8 +3972,10 @@ class Evaluator:
                 if expected != -1 and len(args) != expected:
                     raise TypeError(
                         f"{func.name} expects {expected} arguments, got {len(args)}")
+                self._check_builtin_args(func.name, args)
                 return func.func(args)
             if isinstance(func, BuiltinBoundMethod):
+                self._check_builtin_args(func.name, args)
                 return func(*args)
             raise TypeError(f"cannot call {type(func).__name__}")
         except (_ReturnSentinel, _PropagatedError):
@@ -3979,6 +3984,18 @@ class Evaluator:
             if self._catch_depth > 0:
                 raise _PropagatedError(e) from e
             raise
+
+    @staticmethod
+    def _check_builtin_args(name: str, args):
+        """Refuse an argument the interpreter would hold arbitrarily.
+
+        A builtin states no parameter types, so nothing here settles a
+        number on one; what reaches it has to be a number some sized
+        type could hold.
+        """
+        from interp.value import check_bootstrap_argument
+        for index, arg in enumerate(args):
+            check_bootstrap_argument(arg, f"{name}: argument {index + 1}")
 
     def _call_user_func(self, func: FuncValue, args):
         """Call a user-defined function with proper scoping."""
@@ -4088,6 +4105,12 @@ class Evaluator:
                 else:
                     arg_value = coerce_arg(arg_value, param_type,
                                            func.name, param_name)
+            else:
+                # A parameter that states no type settles nothing, so
+                # what arrives has to be a number some sized type could
+                # hold.
+                check_bootstrap_argument(
+                    arg_value, f"{func.name}: parameter '{param_name}'")
             call_env.define(param_name, arg_value)
 
         if has_pack:

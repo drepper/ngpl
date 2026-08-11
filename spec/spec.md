@@ -119,6 +119,19 @@ let t := (1i64, "two")      // each number says what it is
 
 A tuple handed back by the standard library arrives with its numbers already sized, since nothing the program could write would say what they are: `std.callstack()` gives `(str, i64, i64)`.
 
+The last place a number can arrive without anything to settle it is an argument to something that states no parameter type — a standard-library call, or a function with an untyped parameter.  There the value has to be one some sized type could hold:
+
+```
+std.println("{}", 2 ↑ 200)
+
+error: println: argument 2: 1606938044258990275541962092341162602522202993782792835301376
+needs more bits than any sized type has, and nothing here says which
+type it should have; the bootstrap implementation has no
+arbitrary-precision int for it to settle on
+```
+
+The widest sized types are `u128` and `i127`, so those are what a number is measured against.  A number that fits one is left alone — what the bootstrap lacks is the arbitrary precision, not the not-yet-settledness — so `std.println("{}", 1 « 40)` and `assert_eq(1 + 1, 2)` are unaffected.  Where the parameter does state a type, the argument settles on it and the question does not arise.
+
 ### The Compiler
 
 The compiler transforms source into efficient machine code:

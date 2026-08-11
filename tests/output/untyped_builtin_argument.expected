@@ -1,0 +1,6 @@
+error: println: argument 2: 1606938044258990275541962092341162602522202993782792835301376 needs more bits than any sized type has, and nothing here says which type it should have; the bootstrap implementation has no arbitrary-precision int for it to settle on
+  --> tests/output/untyped_builtin_argument.ngpl:6:23
+    |
+  6 |     std.println("{}", 2 ↑ 200)
+    |                       ^^^^^^^
+    |

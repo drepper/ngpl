@@ -97,8 +97,10 @@ Completed
     what the array is made of, and a binding of one whose elements state none is refused with
     the bracketed type it needs.  A tuple settles nothing between its elements, so each number
     states its own and the diagnostic says so rather than naming a type that cannot be written;
-    the tuples the standard library hands back arrive sized for the same reason.  Still open:
-    the arguments of a builtin, which settle nothing.
+    the tuples the standard library hands back arrive sized for the same reason.  An argument
+    to something that states no parameter type — a standard-library call, or an untyped
+    parameter — settles nothing either, so what arrives there has to be a number some sized
+    type could hold; u128 and i127 are the widest, and a number that fits one is left alone.
 
 [x] an integer literal the type its suffix names cannot hold is reported at the definition
     rather than when the code holding it runs, so `300u8` in a function nobody calls is
