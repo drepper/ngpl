@@ -152,6 +152,37 @@ fn error_searching_a_string_for_a_number():
 fn error_searching_something_that_is_not_a_container():
     let at : mut = 5i64 ⍳ 1i64
 
+// What is searched for has to be the kind of thing the container
+// holds, as ∊ asks it.  Answering "nowhere" would let a program that
+// has made a mistake about one of the two carry on believing both.
+@test
+@expect error "the container holds i64, and what is looked for is a string"
+fn error_searching_for_a_string_among_numbers():
+    let v : i64[] = [10, 20, 30]
+    let at : mut = v ⍳ "x"
+
+@test
+@expect error "the container holds i64, and what is looked for is a character"
+fn error_searching_for_a_character_among_numbers():
+    let v : i64[] = [10, 20, 30]
+    let at : mut = v ⍳ 'c'
+
+@test
+@expect error "the container holds str, and what is looked for is an integer"
+fn error_searching_for_a_number_among_strings():
+    let words : str[] = ["one", "two"]
+    let at : mut = words ⍳ 5i64
+
+// A width still meets another width, and a number that named no type
+// still settles on what the container holds.
+@test
+fn test_what_the_kinds_still_admit():
+    let f : f64[] = [1.0, 2.5]
+    assert_eq((f ⍳ 1) ?? ⁻1, 0)
+    let n : i32 = 20
+    let v : i64[] = [10, 20, 30]
+    assert_eq((v ⍳ n) ?? ⁻1, 1)
+
 // A range is a pair of ends rather than something to look in, and the
 // refusal names it rather than the type of its ends.
 @test

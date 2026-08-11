@@ -114,10 +114,13 @@ and a number meet a float, and stops a string meeting either.  Past
 that, an element is compared by going through `==`, which is where the
 unit rules already live.
 
-This is stricter than `⍳`, which answers `∅` when asked for something
-of an unrelated type because that is what `==` answers.  The two should
-probably agree; that `⍳` is the one to tighten is a decision for
-whoever gets there next.
+This was stricter than `⍳`, which answered `∅` when asked for
+something of an unrelated type because that is what `==` answers.  The
+two ask the same question of their operands, so `⍳` was tightened to
+match and both now go through one check.  What settled which way to
+close the gap: `==` is asked about two values a program has in hand,
+where a search is asked about a value and a *container*, whose type
+says what could ever match before anything is compared.
 
 ## Grouping
 

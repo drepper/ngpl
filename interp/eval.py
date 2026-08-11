@@ -833,6 +833,12 @@ class Evaluator:
                 f"\N{APL FUNCTIONAL SYMBOL IOTA}: the left operand is "
                 f"{self._value_type_name(container)}, and what is searched "
                 f"is an array or a string")
+        # What is searched for has to be the kind of thing the container
+        # holds, as ∊ asks it: answering "nowhere" would let a program
+        # that has made a mistake about one of the two carry on
+        # believing both.  A string container asks the same above.
+        self._check_looked_for(array, wanted,
+                               "\N{APL FUNCTIONAL SYMBOL IOTA}")
         for index, element in enumerate(array.values()):
             # Compared the way == compares, by going through the same
             # door: a unit that does not belong to the container is
@@ -868,6 +874,30 @@ class Evaluator:
                 yield element
             else:
                 yield from cls._leaves(inner)
+
+    def _check_looked_for(self, array, wanted, op: str):
+        """Refuse looking in a container for what it cannot hold.
+
+        Shared by ⍳ and ∊, which ask the same question of their
+        operands and so have to ask it the same way.  A program looking
+        for a string among some numbers has made a mistake about one of
+        the two, and an answer -- nowhere, or no -- would let it carry
+        on believing both.
+
+        The rule is the language's own for whether two scalars are the
+        same kind of thing, so a width still meets another width and an
+        untyped number still settles on what the container holds.  What
+        the kinds admit is then compared by going through ==, where the
+        unit rules already live.
+        """
+        element_type = self._leaf_element_type(array)
+        if element_type is None:
+            return
+        mismatch = _scalar_kind_mismatch(wanted, element_type)
+        if mismatch is not None:
+            raise TypeError(
+                f"{op}: the container holds {element_type}, and what is "
+                f"looked for is {mismatch}")
 
     @classmethod
     def _leaf_element_type(cls, array):
@@ -917,17 +947,7 @@ class Evaluator:
                 f"\N{SMALL ELEMENT OF}: the right operand is "
                 f"{self._value_type_name(container)}, and what is looked "
                 f"through is a vector, a matrix, or a string")
-        element_type = self._leaf_element_type(array)
-        if element_type is not None:
-            # What is looked for has to be the kind of thing the
-            # container holds, whatever it holds at the moment: the
-            # question is refused rather than answered no, since a
-            # program asking it has made a mistake about one of the two.
-            mismatch = _scalar_kind_mismatch(wanted, element_type)
-            if mismatch is not None:
-                raise TypeError(
-                    f"\N{SMALL ELEMENT OF}: the container holds "
-                    f"{element_type}, and what is looked for is {mismatch}")
+        self._check_looked_for(array, wanted, "\N{SMALL ELEMENT OF}")
         for element in self._leaves(array):
             # Compared the way == compares, as ⍳ compares, so a unit
             # that does not belong is refused rather than found missing.

@@ -169,8 +169,16 @@ Completed
     them is not one of them, and ⍳ says where a run starts.  What is looked for has to be
     the kind of thing the container holds — a program asking whether a string is among some
     numbers has made a mistake about one of the two — and past that an element is compared
-    the way == compares it.  It binds where ⍳ does.  Whether ⍳ should be tightened to refuse
-    the same way is still open.
+    the way == compares it.  It binds where ⍳ does.
+
+[x] ⍳ refuses what the container cannot hold, as ∊ does, both going through one check.  It
+    answered ∅ before, on the grounds that == answers false between two values of unrelated
+    types and a search is a series of ==.  But == is asked about two values a program has in
+    hand, where a search is asked about a value and a container, and the container has a
+    type: what could ever match is known before anything is compared, so a search that cannot
+    succeed is a question that should not have been asked rather than one whose answer is no.
+    A width still meets another width and an untyped number still settles on what the
+    container holds.
 
 [x] comparing a found position with ∅ was a type error while comparing an absent one was
     not, so (v ⍳ x) == ∅ answered or refused depending on which way the search went.  A

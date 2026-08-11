@@ -91,6 +91,12 @@ it refuses rather than answering something a program might believe.
 - **A container it cannot look in.**  A range is a pair of ends, not
   something to search, and the refusal names it as a range rather than
   as the type of its ends.
+- **What the container cannot hold.**  Searching for a string among
+  some numbers is a mistake about one of the two, and answering
+  "nowhere" would let a program carry on believing both.  The rule is
+  the language's own for whether two scalars are the same kind of
+  thing, so a width still meets another width and an untyped number
+  still settles on what the container holds.
 - **A unit that does not belong.**  An element is compared the way `==`
   compares it, by going through the same door, so `v ⍳ 20¤byte` is
   refused where it is written rather than quietly matching nothing.
@@ -103,11 +109,24 @@ it refuses rather than answering something a program might believe.
   one.  In a string what is looked for is a character or a run of
   them, and a run is where it starts.
 
-Searching for an element of a type the container does not hold is
-*not* refused: it answers `∅`, because that is what `==` answers
-between two values of unrelated types everywhere else in the language.
-[`∊`](../element-of/README.md) later took the stricter line and
-refuses; the two should probably agree, and this is the one to change.
+### The One That Was Argued About
+
+Looking for what the container cannot hold was *allowed* at first, on
+the grounds that `==` answers `false` between two values of unrelated
+types and a search is a series of `==`.  [`∊`](../element-of/README.md)
+took the stricter line when it arrived, and two operators asking the
+same question of their operands cannot answer it two ways, so one of
+them had to give.
+
+The refusal is the one worth having.  `==` is asked about two values a
+program has in hand, and answering `false` is a fact about them.  A
+search is asked about a value and a *container*, and the container has
+a type: what could ever match is known before anything is compared, so
+a search that cannot succeed is a question that should not have been
+asked rather than one whose answer is no.
+
+Both operators now go through one check, which is what keeps them from
+drifting apart again.
 
 ## Comparison with Other Languages
 

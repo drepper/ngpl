@@ -1565,7 +1565,22 @@ let at ¤byte : i64 = (b ⍳ 98) ?? ⁻1     /* 1¤byte */
 
 #### What It Refuses
 
-An element is compared the way `==` compares it, so a unit that does not belong to the container is refused where it is written rather than quietly matching nothing:
+What is searched for has to be the kind of thing the container holds, which is what `∊` asks of its operands and the same rule.  A program looking for a string among some numbers has made a mistake about one of the two, and answering "nowhere" would let it carry on believing both:
+
+```
+v ⍳ "x"
+
+error: ⍳: the container holds i64, and what is looked for is a string
+```
+
+A width still meets another width and a number that named no type still settles on what the container holds, so this refuses only what the kinds themselves rule out:
+
+```
+let f : f64[] = [1.0, 2.5]
+f ⍳ 1                           /* 0 — the number settles on f64 */
+```
+
+Past the kinds, an element is compared the way `==` compares it, so a unit that does not belong to the container is refused where it is written rather than quietly matching nothing:
 
 ```
 v ⍳ 20¤byte
