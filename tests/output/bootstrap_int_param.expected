@@ -1,7 +1,7 @@
 error: in f: parameter 'x': 'int' is an arbitrary-precision type, which the bootstrap implementation does not provide; use a sized type such as i64
-  --> tests/output/bootstrap_int_param.ngpl:2:1
+  --> tests/output/bootstrap_int_param.ngpl:2:6
     |
   2 | fn f(x : int):
-    | ^^
+    |      ^
   3 |     ∅
     |

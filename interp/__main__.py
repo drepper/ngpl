@@ -1678,6 +1678,16 @@ def _negated_literals(body) -> set[int]:
             and isinstance(node.operand, _ast.IntLit)}
 
 
+def _param_pos(func_def, param_name):
+    """Where a parameter was written, or the definition where it is not.
+
+    A complaint about a parameter belongs at the parameter.  The
+    definition's own position is the `fn`, which is where a reader
+    starts looking rather than where the answer is.
+    """
+    return func_def.param_positions.get(param_name) or _node_pos(func_def)
+
+
 def _needs_a_type(func_name: str, param_name: str) -> str:
     """Say that a parameter has to state what it takes.
 
@@ -2134,26 +2144,30 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                     if is_type_name(one):
                         raise DefinitionError(
                             f"in {defn.name}: '{one}' names a type and "
-                            f"cannot name a parameter", _node_pos(defn))
+                            f"cannot name a parameter",
+                            _param_pos(defn, param_name))
                 if param_type is None:
                     raise DefinitionError(
                         _needs_a_type(defn.name, _param_display(param_name)),
-                        _node_pos(defn))
+                        _param_pos(defn, param_name))
                 try:
                     validate_param_type(
                         param_type, defn.name,
                         _param_display(param_name))
                 except TypeError as e:
-                    raise DefinitionError(str(e), _node_pos(defn)) from None
+                    raise DefinitionError(
+                        str(e), _param_pos(defn, param_name)) from None
             if defn.pack_param is not None:
                 pp_name, pp_type = defn.pack_param
                 if pp_type is None:
                     raise DefinitionError(
-                        _needs_a_type(defn.name, pp_name), _node_pos(defn))
+                        _needs_a_type(defn.name, pp_name),
+                        _param_pos(defn, pp_name))
                 try:
                     validate_param_type(pp_type, defn.name, pp_name)
                 except TypeError as e:
-                    raise DefinitionError(str(e), _node_pos(defn)) from None
+                    raise DefinitionError(
+                        str(e), _param_pos(defn, pp_name)) from None
             if defn.ret_type is not None:
                 if not validate_type(defn.ret_type):
                     raise DefinitionError(
@@ -2209,7 +2223,7 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                             _needs_a_type(f"{defn.struct_name}."
                                           f"{method_def.name}",
                                           _param_display(param_name)),
-                            _node_pos(method_def))
+                            _param_pos(method_def, param_name))
                     if param_type is not None:
                         validate_param_type(param_type, method_def.name, param_name)
                 if method_def.ret_type is not None and not validate_type(method_def.ret_type):
