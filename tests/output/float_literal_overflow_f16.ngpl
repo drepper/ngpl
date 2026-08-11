@@ -1,0 +1,8 @@
+// A literal too large for its type would become an infinity,
+// which is a different number from the one written.  An exponent is not needed to leave f16 behind: 65504 is the
+// largest it holds.
+@start
+@impure
+fn main():
+    let a := 70000f16
+    std.println("{}", a)

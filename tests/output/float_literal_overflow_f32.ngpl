@@ -1,0 +1,7 @@
+// A literal too large for its type would become an infinity,
+// which is a different number from the one written.  Well within f64, and past the top of f32.
+@start
+@impure
+fn main():
+    let a := 1e39f32
+    std.println("{}", a)

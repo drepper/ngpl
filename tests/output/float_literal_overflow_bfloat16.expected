@@ -1,0 +1,7 @@
+error: float overflow: 1e39 does not fit in bfloat16 (largest is 3.3895313892515355e+38)
+  --> tests/output/float_literal_overflow_bfloat16.ngpl:7:14
+    |
+  7 |     let a := 1e39bfloat16
+    |              ^
+  8 |     std.println("{}", a)
+    |

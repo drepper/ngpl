@@ -1,0 +1,7 @@
+error: float overflow: 3e400 does not fit in f64 (largest is 1.7976931348623157e+308), which is what an untyped float is held in until the arbitrary-precision float arrives
+  --> tests/output/float_literal_overflow_untyped.ngpl:7:14
+    |
+  7 |     let a := 3e400
+    |              ^
+  8 |     std.println("{}", a)
+    |

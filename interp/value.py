@@ -5,6 +5,8 @@ operates on these values rather than raw Python objects to support
 type checking and proper error messages.
 """
 
+import math
+
 
 # The discard target.  Assigning to it evaluates the right-hand side and
 # throws the result away; it names no storage, so it never needs to be
@@ -337,15 +339,73 @@ def int_limits(width: str) -> tuple[int, int] | None:
 
 
 def _clamp_float(value: float, width: str) -> float:
+    """Round a value to what a float format can represent.
+
+    A value past the top of the format becomes an infinity, which is
+    what the format itself answers with.  Whether that is acceptable is
+    the caller's question: a sum has nowhere else to go, while a value
+    being written down is refused by check_float.
+    """
     import struct
     fmt = _FLOAT_STRUCT_FMT.get(width)
     if fmt is None:
         return float(value)
-    if width == "bfloat16":
-        as_f32 = struct.pack("f", value)
-        truncated = b"\x00\x00" + as_f32[2:]
-        return struct.unpack("f", truncated)[0]
-    return struct.unpack(fmt, struct.pack(fmt, value))[0]
+    try:
+        if width == "bfloat16":
+            as_f32 = struct.pack("f", value)
+            truncated = b"\x00\x00" + as_f32[2:]
+            return struct.unpack("f", truncated)[0]
+        return struct.unpack(fmt, struct.pack(fmt, value))[0]
+    except OverflowError:
+        return math.inf if value > 0 else -math.inf
+
+
+def float_overflows(value: float, width: str) -> bool:
+    """Whether a number would become an infinity in a float format.
+
+    An infinity that arrives as one is left alone: it is what a float
+    answers with when a sum overflows, and every format holds it.  What
+    this asks about is a finite number that would stop being one.
+    """
+    if not math.isfinite(value):
+        return False
+    return not math.isfinite(_clamp_float(value, _float_check_width(width)))
+
+
+def _float_check_width(width: str) -> str:
+    """The format a value of this width is actually held in.
+
+    An untyped float is arbitrary-precision in the full language.  The
+    bootstrap holds it in an f64, so that is what its range is until
+    the arbitrary-precision type arrives.
+    """
+    return "f64" if width == "float" else width
+
+
+def check_float(value: float, width: str) -> float:
+    """Check that a value stays a number in a float format.
+
+    Raises OverflowError when it does not.  Becoming an infinity is
+    not holding the value: it is a different number from the one being
+    written down, and finding that out quietly -- from a result of inf
+    much later -- is the outcome worth preventing.
+    """
+    if not float_overflows(value, width):
+        return value
+    raise OverflowError(float_overflow_message(repr(value), width))
+
+
+def float_overflow_message(written: str, width: str) -> str:
+    """What to say about a number a float format cannot hold."""
+    held_in = _float_check_width(width)
+    limits = float_limits(held_in)
+    largest = "" if limits is None else f" (largest is {limits[1]!r})"
+    if width == "float":
+        # Nothing in the source said f64; the bootstrap did.
+        return (f"float overflow: {written} does not fit in f64{largest}, "
+                f"which is what an untyped float is held in until the "
+                f"arbitrary-precision float arrives")
+    return f"float overflow: {written} does not fit in {width}{largest}"
 
 
 class FloatValue(Value):
@@ -1615,7 +1675,12 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
                     f"has ({_SIGNIFICAND_BITS[param_type]})")
             return mk_float(float(value.value), param_type)
         if isinstance(value, FloatValue):
-            return mk_float(value.value, param_type)
+            try:
+                checked = check_float(value.value, param_type)
+            except OverflowError as e:
+                raise TypeError(
+                    f"{func_name}: argument '{param_name}': {e}") from None
+            return mk_float(checked, param_type)
         raise TypeError(
             f"{func_name}: argument '{param_name}' expected {param_type}, "
             f"got {type(value).__name__}")
@@ -1761,7 +1826,8 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
                     f"so it would not survive the conversion")
             return mk_float(float(value.value), target_width)
         if isinstance(value, FloatValue):
-            return mk_float(value.value, target_width)
+            return mk_float(check_float(value.value, target_width),
+                            target_width)
     if isinstance(value, IntValue):
         # A value that does not fit the type it is being given is the
         # same mistake whichever side of the range it falls, and the

@@ -1,0 +1,7 @@
+error: float overflow: 1e39 does not fit in f32 (largest is 3.4028234663852886e+38)
+  --> tests/output/float_literal_overflow_f32.ngpl:6:14
+    |
+  6 |     let a := 1e39f32
+    |              ^
+  7 |     std.println("{}", a)
+    |

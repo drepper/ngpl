@@ -4232,6 +4232,16 @@ class Evaluator:
                 raise TypeError(
                     f"{func_name}: return type is {ret_type} "
                     f"but body evaluates to {self._value_type_name(inner)}")
+            if isinstance(inner, FloatValue):
+                # The signature decides the width, as it does for an
+                # integer: a value leaving through it is of the type it
+                # names, and one the type cannot hold is refused here
+                # rather than travelling as an infinity.
+                try:
+                    return (coerce_to_type(inner, check) if opt_err is None
+                            else result)
+                except OverflowError as e:
+                    raise TypeError(f"{func_name}: {e}") from None
         elif check == "str":
             if not isinstance(inner, StrValue):
                 raise TypeError(

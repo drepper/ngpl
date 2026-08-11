@@ -1,0 +1,135 @@
+// Tests for a floating-point value a type cannot hold.
+//
+// A number past the top of a float format becomes an infinity, which
+// is a different number from the one that was written.  Where the
+// value is being written down -- a literal, a binding, an argument, a
+// field, a return -- that is refused rather than done quietly.
+//
+// A literal is refused before the program runs, so those cases are in
+// tests/output/float_literal_overflow_*.ngpl, one to a file: the file
+// does not get as far as having a test in it.
+
+// ---------------------------------------------------------------------
+// A binding whose type cannot hold the value
+// ---------------------------------------------------------------------
+
+@test
+fn test_f32_binding():
+    @expect error "float overflow.*does not fit in f32"
+    let a : f32 = 1e39
+    assert(true)
+
+@test
+fn test_f16_binding():
+    @expect error "float overflow.*does not fit in f16"
+    let a : f16 = 70000.0
+    assert(true)
+
+@test
+fn test_bfloat16_binding():
+    @expect error "float overflow.*does not fit in bfloat16"
+    let a : bfloat16 = 1e39
+    assert(true)
+
+// The sign does not change the answer.
+@test
+fn test_a_negative_value():
+    @expect error "float overflow.*does not fit in f32"
+    let a : f32 = ⁻1e39
+    assert(true)
+
+// f64 is the widest format the bootstrap has, so a value that
+// overflows it cannot be reached from another float -- only written,
+// which the literal tests cover.
+
+// ---------------------------------------------------------------------
+// Every other place a value is written down
+// ---------------------------------------------------------------------
+
+fn takes_f32(v : f32) → f32:
+    v
+
+@test
+fn test_an_argument():
+    @expect error "float overflow.*does not fit in f32"
+    let a := takes_f32(1e39)
+    assert(true)
+
+fn hands_back_f32() → f32:
+    1e39
+
+@test
+fn test_a_return_value():
+    @expect error "float overflow.*does not fit in f32"
+    let a := hands_back_f32()
+    assert(true)
+
+struct Sized:
+    v : f32
+
+@test
+fn test_a_struct_field():
+    @expect error "float overflow.*does not fit in f32"
+    let s := Sized{v: 1e39}
+    assert(true)
+
+@test
+fn test_an_array_element():
+    @expect error "float overflow.*does not fit in f32"
+    let v : f32[] = [1.0, 1e39]
+    assert(true)
+
+// ---------------------------------------------------------------------
+// What is still allowed
+// ---------------------------------------------------------------------
+
+// The largest value each format holds is a value it holds.
+@test
+fn test_the_largest_value_is_accepted():
+    let a : f32 = 3.4028234663852886e38
+    let b : f16 = 65504.0
+    let c : f64 = 1.7976931348623157e308
+    assert(a > 3.4e38)
+    assert(b == 65504.0)
+    assert(c > 1.7e308)
+
+// A value the format rounds to something it can hold is held: only
+// becoming an infinity is refused.
+@test
+fn test_rounding_within_the_range_is_not_overflow():
+    let a : f32 = 3.4028234e38
+    assert(a > 3.4e38)
+
+// A signature that names a float width settles the value on it, so a
+// wider value is rounded on the way out rather than travelling as it
+// was written.
+fn rounded_to_f32() → f32:
+    0.1
+
+@test
+fn test_a_return_type_settles_the_width():
+    // 0.1 is not exact in either format, and the two are not the same
+    // number; what leaves the function is the f32 one.
+    assert(rounded_to_f32() != 0.1)
+    assert(rounded_to_f32() > 0.09999)
+    assert(rounded_to_f32() < 0.10001)
+
+// An infinity that arrives as one is not a value that stopped fitting:
+// it is what a float answers with when a sum overflows, and every
+// format holds it.
+@impure
+fn overflowing_sum() → f64:
+    let big : f64 = 1e308
+    big + big
+
+@test
+@impure
+fn test_an_infinity_from_arithmetic_is_kept():
+    let inf := overflowing_sum()
+    let narrowed : f32 = inf
+    assert(narrowed > 1e38)
+
+@start
+@impure
+fn main():
+    std.println("float overflow tests passed")

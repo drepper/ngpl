@@ -1,0 +1,8 @@
+// A literal too large for its type would become an infinity,
+// which is a different number from the one written.  bfloat16 has f32's exponent range and less of its significand,
+// so what leaves f32 leaves this too.
+@start
+@impure
+fn main():
+    let a := 1e39bfloat16
+    std.println("{}", a)

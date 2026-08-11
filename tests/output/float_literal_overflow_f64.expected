@@ -1,0 +1,7 @@
+error: float overflow: 3e400 does not fit in f64 (largest is 1.7976931348623157e+308)
+  --> tests/output/float_literal_overflow_f64.ngpl:6:14
+    |
+  6 |     let a := 3e400f64
+    |              ^
+  7 |     std.println("{}", a)
+    |

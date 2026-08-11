@@ -1,0 +1,8 @@
+// A literal too large for its type would become an infinity,
+// which is a different number from the one written.  No suffix, so the bootstrap holds it in an f64, which is the
+// range it has until the arbitrary-precision float arrives.
+@start
+@impure
+fn main():
+    let a := 3e400
+    std.println("{}", a)

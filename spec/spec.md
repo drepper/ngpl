@@ -634,6 +634,40 @@ A suffix that names no type is refused, as is a fractional number given an integ
 1.5i32      // error: 1.5 is a floating-point literal, so its suffix cannot be 'i32'
 ```
 
+##### A Literal Its Type Cannot Hold
+
+A number past the top of its format would become an infinity, which is a different number from the one that was written.  The literal is refused instead, before the program runs:
+
+```
+3e400f64
+
+error: float overflow: 3e400 does not fit in f64 (largest is
+1.7976931348623157e+308)
+
+1e39f32
+
+error: float overflow: 1e39 does not fit in f32 (largest is
+3.4028234663852886e+38)
+
+70000f16
+
+error: float overflow: 70000 does not fit in f16 (largest is 65504.0)
+```
+
+A literal without a suffix is refused on the same terms.  An untyped float is arbitrary-precision in the full language, so nothing said f64 here; the bootstrap implementation did, and it says so:
+
+```
+3e400
+
+error: float overflow: 3e400 does not fit in f64 (largest is
+1.7976931348623157e+308), which is what an untyped float is held in
+until the arbitrary-precision float arrives
+```
+
+This is the rule integer literals already follow, where `300u8` does not fit either.  What makes it worth stating separately for floats is that the format has somewhere to put such a value — an infinity — and using it would mean the program silently computing with a number the source does not contain.
+
+Rounding is not overflow.  A value the format rounds to something it can hold is held, and only becoming an infinity is refused; `3.4028235e38` is an `f32`, and so is every value below it that needs more significand than the format has.
+
 #### The Multiplication and Division Operators
 
 Multiplication is written `×` (U+00D7 MULTIPLICATION SIGN) and division `÷` (U+00F7 DIVISION SIGN).  `*` and `/` are not operators, and using either as one is a lexical error:
@@ -789,6 +823,33 @@ When a value is stored in a fixed-width float type, it is rounded to that type's
 let x : mut f32 = 3.14      // stored as approximately 3.140000104904175
 let y : mut f16 = 1.0       // exact in f16
 ```
+
+The width is decided by whatever the value is being given to, so it is settled at a binding that names one, at a parameter, at a struct field, at an array's element type, and at a return type:
+
+```
+fn rounded() → f32:
+    0.1                     // an f32 leaves the function, not the f64 written
+```
+
+#### A Value the Type Cannot Hold
+
+Rounding to the format is one thing; leaving it altogether is another.  A finite value too large for the type it is being given would become an infinity, and is refused wherever the value is written down — the same places the width is settled:
+
+```
+let a : f32 = 1e39
+
+error: float overflow: 1e39 does not fit in f32 (largest is
+3.4028234663852886e+38)
+```
+
+An infinity that arrives as an infinity is a different matter and is kept.  It is what a float answers with when a sum overflows, every format holds it, and nothing was lost on the way in:
+
+```
+let big : f64 = 1e308
+let sum : f32 = big + big   // inf, which is what the sum produced
+```
+
+The rule is therefore about a value that would stop being the number it is, not about infinities as such.  Whether an arithmetic overflow should itself be reported is a separate question the language has not settled; see the note on faulting for Inf and NaN.
 
 #### Root Operators
 

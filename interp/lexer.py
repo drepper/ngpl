@@ -8,6 +8,7 @@ After tokenization, `process_indentation` inserts INDENT/DEDENT tokens
 based on indentation changes, enabling layout-driven scoping.
 """
 
+import math
 import re
 
 
@@ -215,6 +216,21 @@ def _check_literal_width(width: str, is_float: bool, text: str, line, col):
     return
 
 
+def _check_float_literal_range(value: float, width: str, text: str, line, col):
+    """Refuse a literal whose value its type cannot hold.
+
+    A number too large for its format becomes an infinity, which is a
+    different number from the one that was written.  A sum that
+    overflows has nowhere else to go, but a literal is a mistake in the
+    source, and the source is where it is reported.
+    """
+    from interp.value import float_overflow_message, float_overflows
+    if math.isinf(value) or float_overflows(value, width):
+        # The value is an infinity because the text overflowed, so the
+        # text is what the complaint has to name.
+        raise LexerError(float_overflow_message(text, width), line, col)
+
+
 def _read_number(src, pos, line, col):
     """Read a numeric literal (integer or float) with optional type suffix.
 
@@ -293,8 +309,15 @@ def _read_number(src, pos, line, col):
                 value = float(value_str)
         except ValueError:
             raise LexerError(f"invalid float literal: {value_str}", line, col)
+        except OverflowError:
+            # float.fromhex says so rather than answering with one.
+            from interp.value import float_overflow_message
+            raise LexerError(
+                float_overflow_message(value_str, width or "float"),
+                line, col) from None
         if not width:
             width = "float"
+        _check_float_literal_range(value, width, value_str, line, col)
         return Token("FLOAT", (value, width), line, col, end_col), pos
 
     try:

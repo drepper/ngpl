@@ -1,0 +1,7 @@
+error: float overflow: 70000 does not fit in f16 (largest is 65504.0)
+  --> tests/output/float_literal_overflow_f16.ngpl:7:14
+    |
+  7 |     let a := 70000f16
+    |              ^
+  8 |     std.println("{}", a)
+    |
