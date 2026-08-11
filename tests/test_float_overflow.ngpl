@@ -1,9 +1,10 @@
 // Tests for a floating-point value a type cannot hold.
 //
-// A number past the top of a float format becomes an infinity, which
-// is a different number from the one that was written.  Where the
-// value is being written down -- a literal, a binding, an argument, a
-// field, a return -- that is refused rather than done quietly.
+// A number past the top of a float format becomes an infinity, and one
+// past the bottom becomes a zero.  Either way it is a different number
+// from the one meant, so it is reported rather than computed with --
+// where the value is written down (a literal, a binding, an argument,
+// a field, a return) and where an operation produces it.
 //
 // A literal is refused before the program runs, so those cases are in
 // tests/output/float_literal_overflow_*.ngpl, one to a file: the file
@@ -114,20 +115,99 @@ fn test_a_return_type_settles_the_width():
     assert(rounded_to_f32() > 0.09999)
     assert(rounded_to_f32() < 0.10001)
 
-// An infinity that arrives as one is not a value that stopped fitting:
-// it is what a float answers with when a sum overflows, and every
-// format holds it.
-@impure
-fn overflowing_sum() → f64:
-    let big : f64 = 1e308
-    big + big
+// ---------------------------------------------------------------------
+// An operation whose result the type cannot hold
+// ---------------------------------------------------------------------
+//
+// The same rule as for a value written down, and the rule integer
+// arithmetic already follows: a result that would be an infinity or a
+// vanished zero is reported rather than handed back.
 
 @test
-@impure
-fn test_an_infinity_from_arithmetic_is_kept():
-    let inf := overflowing_sum()
-    let narrowed : f32 = inf
-    assert(narrowed > 1e38)
+fn test_multiplication_overflows():
+    @expect error "float overflow.*does not fit in f64"
+    let a := 3e300f64 × 3e300f64
+    assert(true)
+
+@test
+fn test_addition_overflows():
+    @expect error "float overflow.*does not fit in f64"
+    let a := 1e308f64 + 1e308f64
+    assert(true)
+
+@test
+fn test_a_power_overflows():
+    @expect error "float overflow.*does not fit in f64"
+    let a := 1e300f64 ↑ 3.0f64
+    assert(true)
+
+// The narrower the format, the sooner it happens; the operands here
+// are values f64 holds without trouble.
+@test
+fn test_a_narrow_format_overflows():
+    @expect error "float overflow.*does not fit in f32"
+    let a := 3e38f32 × 3.0f32
+    assert(true)
+
+@test
+fn test_f16_overflows():
+    @expect error "float overflow.*does not fit in f16"
+    let a := 60000f16 + 60000f16
+    assert(true)
+
+// Underflow is the same mistake at the other end: the result is not
+// zero, and zero is what the format would hold.
+@test
+fn test_multiplication_underflows():
+    @expect error "float underflow.*too small for f64"
+    let a := 1e-300f64 × 1e-300f64
+    assert(true)
+
+@test
+fn test_division_underflows():
+    @expect error "float underflow.*too small for f64"
+    let a := 1e-300f64 ÷ 1e300f64
+    assert(true)
+
+@test
+fn test_a_narrow_format_underflows():
+    @expect error "float underflow.*too small for f32"
+    let a := 1e-45f32 × 0.001f32
+    assert(true)
+
+// ---------------------------------------------------------------------
+// What arithmetic is still allowed
+// ---------------------------------------------------------------------
+
+// A zero from a sum is exact: it says the two operands were equal.
+// Only a product or a quotient can lose a value to zero.
+@test
+fn test_a_zero_from_subtraction_is_exact():
+    let a := 1.0f64 - 1.0f64
+    assert(a == 0.0)
+
+// A zero operand makes a zero result the exact answer.
+@test
+fn test_a_zero_operand_gives_an_exact_zero():
+    let a := 0.0f64 × 5.0f64
+    assert(a == 0.0)
+    let b := 0.0f64 ÷ 5.0f64
+    assert(b == 0.0)
+
+// A subnormal is a number the format holds, with fewer significant
+// bits than a normal value but not with none.
+@test
+fn test_a_subnormal_result_is_kept():
+    let a := 1e-320f64 × 0.1f64
+    assert(a > 0.0)
+    assert(a < 1e-320)
+
+@test
+fn test_ordinary_arithmetic_is_untouched():
+    let a := 1.5f64 ÷ 3.0f64
+    assert(a == 0.5)
+    let b := 2.0f64 ↑ 10.0f64
+    assert(b == 1024.0)
 
 @start
 @impure

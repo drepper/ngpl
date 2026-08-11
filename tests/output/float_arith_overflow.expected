@@ -1,0 +1,6 @@
+error: float overflow: 3e+300 × 3e+300 does not fit in f64 (largest is 1.7976931348623157e+308)
+  --> tests/output/float_arith_overflow.ngpl:8:23
+    |
+  8 |     std.println("{}", big × big)
+    |                       ^^^^^^^^^
+    |

@@ -381,7 +381,7 @@ let a : mut u8 = 255
 @wrap(a ⊞ 1)                  /* 255 — the operator was already explicit */
 ```
 
-**Integers only.**  Saturation holds a result at the edge of a range the type states.  A float answers overflow with an infinity and has no such edge, and nothing else has one at all:
+**Integers only.**  Saturation holds a result at the edge of a range the type states, and answers the question of what to do about a result that will not fit.  A float already has an answer — the operation is reported, as [Arithmetic That Leaves the Range](#arithmetic-that-leaves-the-range) describes — and holding it at the largest value the format happens to have would be a rounding decision rather than a bound the program stated.  Nothing else has a range at all:
 
 ```
 1.5 ⊞ 2.5
@@ -842,14 +842,44 @@ error: float overflow: 1e39 does not fit in f32 (largest is
 3.4028234663852886e+38)
 ```
 
-An infinity that arrives as an infinity is a different matter and is kept.  It is what a float answers with when a sum overflows, every format holds it, and nothing was lost on the way in:
+An operation that would produce such a value is reported the same way, so an infinity does not arise from arithmetic either; see [Arithmetic That Leaves the Range](#arithmetic-that-leaves-the-range) below.
+
+#### Arithmetic That Leaves the Range
+
+A float operation whose result the format cannot hold is reported, as an integer one is.  There are two ways to leave the range and both are reported:
 
 ```
-let big : f64 = 1e308
-let sum : f32 = big + big   // inf, which is what the sum produced
+3e300f64 × 3e300f64
+
+error: float overflow: 3e+300 × 3e+300 does not fit in f64 (largest is
+1.7976931348623157e+308)
+
+1e-300f64 × 1e-300f64
+
+error: float underflow: 1e-300 × 1e-300 is not zero, but is too small
+for f64 to tell from zero (smallest is 5e-324)
 ```
 
-The rule is therefore about a value that would stop being the number it is, not about infinities as such.  Whether an arithmetic overflow should itself be reported is a separate question the language has not settled; see the note on faulting for Inf and NaN.
+Overflow would make the result an infinity and underflow would make it a zero.  Both are values the program would go on computing with as though they were the answer, and a program that has multiplied two numbers and been handed zero is worse off than one that has been stopped: the number is gone, and every later result is wrong without saying so.  This is the reason integer overflow is reported, and it does not become a different reason because the type is a float.
+
+The narrower the format the sooner it happens, and the operands need not be extreme:
+
+```
+3e38f32 × 3.0f32
+
+error: float overflow: 3.0000000054977558e+38 × 3.0 does not fit in f32
+(largest is 3.4028234663852886e+38)
+```
+
+**What is not underflow.**  A zero result is only reported where the operation had no zero operand and the exact answer is not zero:
+
+- A zero from `+` or `-` is exact — it says the two operands were equal — so those are never reported for underflow.  They are reported for overflow.
+- `0.0 × 5.0` is zero because an operand was, which is the answer.
+- A **subnormal** result is kept.  It is a number the format holds, with fewer significant bits than a normal value but not with none; only reaching zero is losing the value entirely.
+
+**What is not overflow.**  Rounding within the range is what a format does, and is not reported: `3.4028234e38` is an `f32`, and a division whose exact result needs more significand than the format has gives the nearest value it holds.
+
+This leaves the bootstrap with no way to produce an infinity or a NaN: literals cannot name one, arithmetic reports rather than producing one, and division by zero answers with an error value.  The full language will need both — a deferred check over a whole computation is one of the reasons to have them, as is a program that means to compute with infinities — and will say how they are asked for.  Until then, their absence is what makes reporting cheap: nothing has to distinguish an infinity that was intended from one that was an accident.
 
 #### Root Operators
 

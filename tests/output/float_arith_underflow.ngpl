@@ -1,0 +1,7 @@
+// The same at the other end: the result is not zero, and zero is what
+// the format would hold.
+@start
+@impure
+fn main():
+    let tiny : f64 = 1e-300
+    std.println("{}", tiny × tiny)

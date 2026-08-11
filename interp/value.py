@@ -382,6 +382,66 @@ def _float_check_width(width: str) -> str:
     return "f64" if width == "float" else width
 
 
+def float_smallest(width: str) -> float | None:
+    """The smallest value a float format can tell from zero.
+
+    The smallest subnormal, not the smallest normal one: a subnormal
+    is a number the format holds, with fewer significant bits than a
+    normal value but not with none.
+    """
+    fmt = _FLOAT_FORMAT.get(_float_check_width(width))
+    if fmt is None:
+        return None
+    exp_bits, mant_bits = fmt
+    return 2.0 ** (2 - 2 ** (exp_bits - 1)) * 2.0 ** -mant_bits
+
+
+def check_float_arith(value: float, width: str, symbol: str,
+                      left: float, right: float, *,
+                      may_underflow: bool) -> float:
+    """Check what an operation on floats produced against what it means.
+
+    Reported for the reason integer overflow is: the answer would be a
+    different number from the one the operation has.  Overflow makes it
+    an infinity and underflow makes it a zero, and both are numbers a
+    program will go on computing with as though they were the answer.
+
+    A zero from two operands that were not zero can only be a result
+    too small for the format to tell from zero, so the check needs no
+    knowledge of the exact result to know one was lost.  Addition and
+    subtraction ask with may_underflow false: a zero from those is
+    exact, since it means the two operands were equal.
+
+    An operand that is already an infinity is left alone.  Nothing was
+    lost in an operation whose input was that.
+    """
+    held = _clamp_float(value, _float_check_width(width))
+    if math.isinf(held) and math.isfinite(left) and math.isfinite(right):
+        raise OverflowError(
+            f"float overflow: {left!r} {symbol} {right!r} does not fit in "
+            f"{_float_named_width(width)}"
+            f"{_float_largest_note(width)}")
+    if may_underflow and held == 0.0 and left != 0.0 and right != 0.0:
+        smallest = float_smallest(width)
+        note = "" if smallest is None else f" (smallest is {smallest!r})"
+        raise OverflowError(
+            f"float underflow: {left!r} {symbol} {right!r} is not zero, but "
+            f"is too small for {_float_named_width(width)} to tell from "
+            f"zero{note}")
+    return value
+
+
+def _float_named_width(width: str) -> str:
+    """The width to name in a diagnostic about a value of this width."""
+    return "f64" if width == "float" else width
+
+
+def _float_largest_note(width: str) -> str:
+    """The parenthesis naming the largest value a format holds."""
+    limits = float_limits(_float_check_width(width))
+    return "" if limits is None else f" (largest is {limits[1]!r})"
+
+
 def check_float(value: float, width: str) -> float:
     """Check that a value stays a number in a float format.
 
@@ -397,15 +457,14 @@ def check_float(value: float, width: str) -> float:
 
 def float_overflow_message(written: str, width: str) -> str:
     """What to say about a number a float format cannot hold."""
-    held_in = _float_check_width(width)
-    limits = float_limits(held_in)
-    largest = "" if limits is None else f" (largest is {limits[1]!r})"
+    largest = _float_largest_note(width)
     if width == "float":
         # Nothing in the source said f64; the bootstrap did.
         return (f"float overflow: {written} does not fit in f64{largest}, "
                 f"which is what an untyped float is held in until the "
                 f"arbitrary-precision float arrives")
-    return f"float overflow: {written} does not fit in {width}{largest}"
+    return (f"float overflow: {written} does not fit in "
+            f"{_float_named_width(width)}{largest}")
 
 
 class FloatValue(Value):

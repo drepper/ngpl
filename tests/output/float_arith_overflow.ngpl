@@ -1,0 +1,8 @@
+// A float operation whose result the format cannot hold is reported,
+// as an integer one is.  The caret sits on the operation, since that
+// is where the number was lost.
+@start
+@impure
+fn main():
+    let big : f64 = 3e300
+    std.println("{}", big × big)

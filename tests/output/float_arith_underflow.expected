@@ -1,0 +1,6 @@
+error: float underflow: 1e-300 × 1e-300 is not zero, but is too small for f64 to tell from zero (smallest is 5e-324)
+  --> tests/output/float_arith_underflow.ngpl:7:23
+    |
+  7 |     std.println("{}", tiny × tiny)
+    |                       ^^^^^^^^^^^
+    |

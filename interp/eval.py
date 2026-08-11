@@ -13,6 +13,7 @@ Designed as a prototype interpreter: correctness takes priority over performance
 JIT compilation and optimization are future work.
 """
 
+import math
 import re
 
 from interp.ast import (
@@ -630,6 +631,23 @@ class Evaluator:
     # Binary operators
     # ------------------------------------------------------------------
 
+    def _float_arith(self, value: float, width: str, symbol: str,
+                     left: float, right: float, *,
+                     may_underflow: bool = True) -> FloatValue:
+        """The value of a float operation, once it is known to be one.
+
+        A result the format cannot hold would be an infinity, and one
+        too small for it to tell from zero would be a zero.  Either is
+        a different number from the one the operation has, which is
+        what integer overflow is reported for, so both are reported
+        here.
+        """
+        from interp.value import check_float_arith
+        return mk_float(
+            check_float_arith(value, width, symbol, left, right,
+                              may_underflow=may_underflow),
+            width)
+
     def _op_add(self, left, right):
         """Addition: integers, floats, and strings (concatenation)."""
         lu = _unwrap_operand(left)
@@ -638,7 +656,9 @@ class Evaluator:
             return self._mk_int(lu.value + ru.value, resolve_width(lu.width, ru.width))
         ff = self._require_matching_numeric(lu, ru, "addition")
         if ff is not None:
-            return mk_float(ff[0] + ff[1], ff[2])
+            # A zero from a sum is exact: it says the two were equal.
+            return self._float_arith(ff[0] + ff[1], ff[2], "+", ff[0], ff[1],
+                                     may_underflow=False)
         if isinstance(lu, StrValue) and isinstance(ru, StrValue):
             return mk_str(lu.value + ru.value)
         raise TypeError(f"addition expected int+int, float+float, or str+str, got {type(lu).__name__}+{type(ru).__name__}")
@@ -651,7 +671,8 @@ class Evaluator:
             return self._mk_int(lu.value - ru.value, resolve_width(lu.width, ru.width))
         ff = self._require_matching_numeric(lu, ru, "subtraction")
         if ff is not None:
-            return mk_float(ff[0] - ff[1], ff[2])
+            return self._float_arith(ff[0] - ff[1], ff[2], "-", ff[0], ff[1],
+                                     may_underflow=False)
         raise TypeError(f"subtraction expected int+int or float+float, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_mul(self, left, right):
@@ -662,7 +683,8 @@ class Evaluator:
             return self._mk_int(lu.value * ru.value, resolve_width(lu.width, ru.width))
         ff = self._require_matching_numeric(lu, ru, "multiplication")
         if ff is not None:
-            return mk_float(ff[0] * ff[1], ff[2])
+            return self._float_arith(ff[0] * ff[1], ff[2],
+                                     "\N{MULTIPLICATION SIGN}", ff[0], ff[1])
         raise TypeError(f"multiplication expected int+int or float+float, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _saturate(self, value: int, width: str, op_name: str) -> IntValue:
@@ -688,8 +710,9 @@ class Evaluator:
             width = resolve_width(lu.width, ru.width)
             return self._saturate(combine(lu.value, ru.value), width, op_name)
         # Saturation is about the edge of a stated range.  A float
-        # already answers overflow with an infinity, and nothing else
-        # has an edge at all, so neither has a saturating form.
+        # already has an answer for a result that will not fit -- the
+        # operation is reported -- and nothing else has a range at all,
+        # so neither has a saturating form.
         raise TypeError(
             f"{op_name} is for integers, which state the range it holds "
             f"a result inside; got "
@@ -767,7 +790,8 @@ class Evaluator:
         if ff is not None:
             if ff[1] == 0.0:
                 return self._division_error()
-            return mk_float(ff[0] / ff[1], ff[2])
+            return self._float_arith(ff[0] / ff[1], ff[2],
+                                     "\N{DIVISION SIGN}", ff[0], ff[1])
         raise TypeError(f"division expected int+int or float+float, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_mod(self, left, right):
@@ -787,6 +811,23 @@ class Evaluator:
             return mk_float(math.fmod(ff[0], ff[1]), ff[2])
         raise TypeError(f"remainder expected int+int or float+float, got {type(lu).__name__}+{type(ru).__name__}")
 
+    def _float_power(self, base: float, exponent, width: str) -> FloatValue:
+        """A power of floats, checked as the other operations are.
+
+        Python answers a power too large for a float by raising rather
+        than by producing an infinity, so the two ways of leaving the
+        range meet here and are reported alike.
+        """
+        from interp.value import check_float_arith
+        try:
+            value = base ** exponent
+        except OverflowError:
+            value = math.inf if base > 0 or int(exponent) % 2 == 0 else -math.inf
+        return mk_float(
+            check_float_arith(value, width, "\N{UPWARDS ARROW}", base,
+                              float(exponent), may_underflow=True),
+            width)
+
     def _op_pow(self, left, right):
         """Exponentiation: int↑int, float↑float, or float↑int."""
         lu = _unwrap_operand(left)
@@ -796,9 +837,10 @@ class Evaluator:
                 raise TypeError("integer exponentiation requires non-negative exponent")
             return self._mk_int(lu.value ** ru.value, lu.width)
         if isinstance(lu, FloatValue) and isinstance(ru, FloatValue):
-            return mk_float(lu.value ** ru.value, resolve_float_width(lu.width, ru.width))
+            return self._float_power(lu.value, ru.value,
+                                     resolve_float_width(lu.width, ru.width))
         if isinstance(lu, FloatValue) and isinstance(ru, IntValue):
-            return mk_float(lu.value ** ru.value, lu.width)
+            return self._float_power(lu.value, ru.value, lu.width)
         if isinstance(lu, IntValue) and isinstance(ru, FloatValue):
             raise TypeError(
                 f"exponentiation requires matching types, got {lu.width} and {ru.width}")

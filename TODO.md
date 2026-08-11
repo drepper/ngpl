@@ -57,6 +57,15 @@ the sized types do not have.
 Completed
 ---------
 
+[x] float arithmetic reports a result that leaves the range, as integer arithmetic does.
+    3e300f64 × 3e300f64 was an infinity and 1e-300f64 × 1e-300f64 a zero; both are
+    different numbers from the one the operation has, and a program handed one goes on
+    computing with it.  Underflow is reported for × ÷ ↑ only: a zero from + or - is exact,
+    since it says the operands were equal.  A subnormal result is kept, being a number the
+    format holds; only reaching zero loses the value.  Nothing in the bootstrap can now
+    produce an infinity or a NaN, which is what makes the check cheap — the full language
+    will have to say how a program asks for them.
+
 [x] a floating-point value a type cannot hold is refused rather than becoming an infinity.
     A literal is caught where it is written — `3e400f64`, and `3e400` too, since the
     bootstrap holds an untyped float in an f64 until the arbitrary-precision float arrives
