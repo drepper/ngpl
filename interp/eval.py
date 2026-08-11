@@ -1124,6 +1124,16 @@ class Evaluator:
     # What a threaded operand is called when the lengths disagree.
     _OPERAND_NAMES = ("the left operand", "the right operand")
 
+    # The unary operators that mean for a container what they mean for
+    # one of the things in it.  `not` is left out: the language keeps it
+    # apart from ¬ as the short-circuit one, and it answers a bool for
+    # whatever it is given rather than one of the same kind.
+    _LISTABLE_UNOPS = frozenset({
+        "\N{SUPERSCRIPT MINUS}", "~", "\N{NOT SIGN}",
+        "\N{SQUARE ROOT}", "\N{CUBE ROOT}", "\N{FOURTH ROOT}",
+        "\N{LEFT CEILING}", "\N{LEFT FLOOR}",
+    })
+
     def _approx_alike(self, a: float, b: float) -> bool:
         """Whether two numbers are alike to within the comparison tolerance.
 
@@ -1450,6 +1460,125 @@ class Evaluator:
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
         return mk_bool(not (self._logic_bool(lu) or self._logic_bool(ru)))
+
+    def _apply_unary(self, op: str, operand):
+        """Apply a unary operator to the value it was given.
+
+        Threaded over an operand deeper than the operator asks
+        for, as a binary operator is: what ⁻ means for a number it
+        means for each of a row of them.  Every one of these asks
+        for one value, so anything deeper is a container of what
+        it asks for.
+        """
+        if op in self._LISTABLE_UNOPS:
+            threaded = self._thread_level(
+                op, ("the operand",), [operand], (0,),
+                lambda sub: self._apply_unary(op, sub[0]),
+                noun="operands")
+            if threaded is not None:
+                return threaded
+        if op == "⁻":
+            unwrapped = unwrap_optional(operand)
+            if isinstance(unwrapped, UnitValue):
+                inner = unwrapped.inner
+                if isinstance(inner, IntValue):
+                    return UnitValue(self._mk_int(-inner.value, inner.width), unwrapped.unit)
+                if isinstance(inner, FloatValue):
+                    return UnitValue(mk_float(-inner.value, inner.width), unwrapped.unit)
+            if isinstance(unwrapped, IntValue):
+                return self._mk_int(-unwrapped.value, unwrapped.width)
+            if isinstance(unwrapped, FloatValue):
+                return mk_float(-unwrapped.value, unwrapped.width)
+            raise TypeError(f"negation expected numeric type, got {type(unwrapped).__name__}")
+        if op in ("\N{LEFT CEILING}", "\N{LEFT FLOOR}"):
+            unwrapped = unwrap_optional(operand)
+            if isinstance(unwrapped, CharValue):
+                # One character's upper case can be more than one
+                # character -- ß is SS -- so what comes back is a
+                # string, and the operand says so too.
+                raise TypeError(
+                    f"{op} answers with a string, so it asks for "
+                    f"one: a character's case is written "
+                    f"{op}c.str(), since the upper case of one "
+                    f"character can be more than one character")
+            if not isinstance(unwrapped, StrValue):
+                raise TypeError(
+                    f"{op} in front of an operand is the case of "
+                    f"text, and this one is "
+                    f"{runtime_type_of(unwrapped)}; the larger and the "
+                    f"smaller of two numbers are written between them")
+            return mk_str(unwrapped.value.upper()
+                          if op == "\N{LEFT CEILING}"
+                          else unwrapped.value.lower())
+        if op == "~":
+            unwrapped = unwrap_optional(operand)
+            if isinstance(unwrapped, UnitValue):
+                inner = unwrapped.inner
+                if isinstance(inner, IntValue):
+                    return UnitValue(mk_int_wrap(~inner.value, inner.width), unwrapped.unit)
+                raise TypeError(f"bitwise-not expected int, got {type(inner).__name__}")
+            if isinstance(unwrapped, EnumValue):
+                if not unwrapped.enum_type.is_flag:
+                    raise TypeError(
+                        f"bitwise-not requires @flag enum, got '{unwrapped.enum_type.name}'")
+                all_bits = 0
+                for v in unwrapped.enum_type.members.values():
+                    all_bits |= v
+                return EnumValue(unwrapped.enum_type, ~unwrapped.value & all_bits)
+            if isinstance(unwrapped, IntValue):
+                return mk_int_wrap(~unwrapped.value, unwrapped.width)
+            raise TypeError(f"bitwise-not expected int, got {type(unwrapped).__name__}")
+        if op == "¬":
+            unwrapped = unwrap_optional(operand)
+            return mk_bool(not self._logic_bool(unwrapped))
+        if op == "not":
+            return mk_bool(not to_bool(operand))
+        if op in ("\N{SQUARE ROOT}", "\N{CUBE ROOT}", "\N{FOURTH ROOT}"):
+            import math
+            degree = {"\N{SQUARE ROOT}": 2, "\N{CUBE ROOT}": 3, "\N{FOURTH ROOT}": 4}[op]
+            unwrapped = unwrap_optional(operand)
+            if isinstance(unwrapped, UnitValue):
+                inner = unwrapped.inner
+                if not isinstance(inner, FloatValue):
+                    raise TypeError(
+                        f"{op} requires floating-point operand, "
+                        f"got {type(inner).__name__}")
+                result_val = inner.value ** (1.0 / degree)
+                result_float = mk_float(result_val, inner.width)
+                unit = unwrapped.unit
+                for k, v in unit.components.items():
+                    if v != 0 and v % degree != 0:
+                        raise TypeError(
+                            f"cannot take {op} of unit "
+                            f"{unit.display_name}: dimension '{k}' "
+                            f"has exponent {v} not divisible by {degree}")
+                from fractions import Fraction
+                from interp.units import Unit
+                new_components = {k: v // degree
+                                 for k, v in unit.components.items()}
+                num_root = _nth_root_exact(unit.factor.numerator, degree)
+                den_root = _nth_root_exact(unit.factor.denominator, degree)
+                if num_root is None or den_root is None:
+                    raise TypeError(
+                        f"cannot take {op} of unit "
+                        f"{unit.display_name}: factor {unit.factor} "
+                        f"is not a perfect {degree}-th power")
+                new_factor = Fraction(num_root, den_root)
+                from interp.units import _display_from_components
+                new_unit = Unit(
+                    new_components, new_factor,
+                    _display_from_components(
+                        {k: v for k, v in new_components.items()
+                         if v != 0}))
+                if new_unit.is_dimensionless():
+                    return result_float
+                return UnitValue(result_float, new_unit)
+            if isinstance(unwrapped, FloatValue):
+                result_val = unwrapped.value ** (1.0 / degree)
+                return mk_float(result_val, unwrapped.width)
+            raise TypeError(
+                f"{op} requires floating-point operand, "
+                f"got {type(unwrapped).__name__}")
 
     def _apply_operator(self, op: str, left, right):
         """Apply a binary operator to two values it has been given.
@@ -2383,108 +2512,7 @@ class Evaluator:
                 return self._mk_int(-node.operand.value,
                                     node.operand.width or "int")
             operand = self.eval_expr(node.operand)
-            if node.op == "⁻":
-                unwrapped = unwrap_optional(operand)
-                if isinstance(unwrapped, UnitValue):
-                    inner = unwrapped.inner
-                    if isinstance(inner, IntValue):
-                        return UnitValue(self._mk_int(-inner.value, inner.width), unwrapped.unit)
-                    if isinstance(inner, FloatValue):
-                        return UnitValue(mk_float(-inner.value, inner.width), unwrapped.unit)
-                if isinstance(unwrapped, IntValue):
-                    return self._mk_int(-unwrapped.value, unwrapped.width)
-                if isinstance(unwrapped, FloatValue):
-                    return mk_float(-unwrapped.value, unwrapped.width)
-                raise TypeError(f"negation expected numeric type, got {type(unwrapped).__name__}")
-            if node.op in ("\N{LEFT CEILING}", "\N{LEFT FLOOR}"):
-                unwrapped = unwrap_optional(operand)
-                if isinstance(unwrapped, CharValue):
-                    # One character's upper case can be more than one
-                    # character -- ß is SS -- so what comes back is a
-                    # string, and the operand says so too.
-                    raise TypeError(
-                        f"{node.op} answers with a string, so it asks for "
-                        f"one: a character's case is written "
-                        f"{node.op}c.str(), since the upper case of one "
-                        f"character can be more than one character")
-                if not isinstance(unwrapped, StrValue):
-                    raise TypeError(
-                        f"{node.op} in front of an operand is the case of "
-                        f"text, and this one is "
-                        f"{runtime_type_of(unwrapped)}; the larger and the "
-                        f"smaller of two numbers are written between them")
-                return mk_str(unwrapped.value.upper()
-                              if node.op == "\N{LEFT CEILING}"
-                              else unwrapped.value.lower())
-            if node.op == "~":
-                unwrapped = unwrap_optional(operand)
-                if isinstance(unwrapped, UnitValue):
-                    inner = unwrapped.inner
-                    if isinstance(inner, IntValue):
-                        return UnitValue(mk_int_wrap(~inner.value, inner.width), unwrapped.unit)
-                    raise TypeError(f"bitwise-not expected int, got {type(inner).__name__}")
-                if isinstance(unwrapped, EnumValue):
-                    if not unwrapped.enum_type.is_flag:
-                        raise TypeError(
-                            f"bitwise-not requires @flag enum, got '{unwrapped.enum_type.name}'")
-                    all_bits = 0
-                    for v in unwrapped.enum_type.members.values():
-                        all_bits |= v
-                    return EnumValue(unwrapped.enum_type, ~unwrapped.value & all_bits)
-                if isinstance(unwrapped, IntValue):
-                    return mk_int_wrap(~unwrapped.value, unwrapped.width)
-                raise TypeError(f"bitwise-not expected int, got {type(unwrapped).__name__}")
-            if node.op == "¬":
-                unwrapped = unwrap_optional(operand)
-                return mk_bool(not self._logic_bool(unwrapped))
-            if node.op == "not":
-                return mk_bool(not to_bool(operand))
-            if node.op in ("\N{SQUARE ROOT}", "\N{CUBE ROOT}", "\N{FOURTH ROOT}"):
-                import math
-                degree = {"\N{SQUARE ROOT}": 2, "\N{CUBE ROOT}": 3, "\N{FOURTH ROOT}": 4}[node.op]
-                unwrapped = unwrap_optional(operand)
-                if isinstance(unwrapped, UnitValue):
-                    inner = unwrapped.inner
-                    if not isinstance(inner, FloatValue):
-                        raise TypeError(
-                            f"{node.op} requires floating-point operand, "
-                            f"got {type(inner).__name__}")
-                    result_val = inner.value ** (1.0 / degree)
-                    result_float = mk_float(result_val, inner.width)
-                    unit = unwrapped.unit
-                    for k, v in unit.components.items():
-                        if v != 0 and v % degree != 0:
-                            raise TypeError(
-                                f"cannot take {node.op} of unit "
-                                f"{unit.display_name}: dimension '{k}' "
-                                f"has exponent {v} not divisible by {degree}")
-                    from fractions import Fraction
-                    from interp.units import Unit
-                    new_components = {k: v // degree
-                                     for k, v in unit.components.items()}
-                    num_root = _nth_root_exact(unit.factor.numerator, degree)
-                    den_root = _nth_root_exact(unit.factor.denominator, degree)
-                    if num_root is None or den_root is None:
-                        raise TypeError(
-                            f"cannot take {node.op} of unit "
-                            f"{unit.display_name}: factor {unit.factor} "
-                            f"is not a perfect {degree}-th power")
-                    new_factor = Fraction(num_root, den_root)
-                    from interp.units import _display_from_components
-                    new_unit = Unit(
-                        new_components, new_factor,
-                        _display_from_components(
-                            {k: v for k, v in new_components.items()
-                             if v != 0}))
-                    if new_unit.is_dimensionless():
-                        return result_float
-                    return UnitValue(result_float, new_unit)
-                if isinstance(unwrapped, FloatValue):
-                    result_val = unwrapped.value ** (1.0 / degree)
-                    return mk_float(result_val, unwrapped.width)
-                raise TypeError(
-                    f"{node.op} requires floating-point operand, "
-                    f"got {type(unwrapped).__name__}")
+            return self._apply_unary(node.op, operand)
 
         if isinstance(node, OptSome):
             value = self.eval_expr(node.value)
