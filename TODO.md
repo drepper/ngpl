@@ -190,6 +190,41 @@ Completed
     definition's = -- let x : i64!= 10 -- is refused as it was before, != having been a single
     token then as well.
 
+[x] an array holds one type of value and one unit, both fixed where it is declared.  Nothing
+    remembered a declaration before: the environment stored values alone and the type and unit
+    a definition wrote down were used once and dropped, so every later check re-derived what a
+    name holds from whatever it held at that moment and a declaration lasted one statement.
+    An i32[] took a str[], an i32 took an i64 and became one, a binding with no unit acquired
+    one.  Env keeps what the definition said beside the value now, in step with the frame that
+    holds it, and an assignment is measured against that rather than against the last thing
+    stored.  A unit reaches the elements rather than wrapping the container -- a unit measures
+    a number and a container is not one -- so a measured array can be indexed at all, which it
+    could not before.  Two spellings, `let d ¤meter : i64[]` and `let d : i64 ¤meter[]`, which
+    parse into the same pair and so cannot drift.  A literal whose elements disagree is
+    refused, naming both; a width and a unit still settle from whichever element states one.
+    Every way in asks one routine -- subscript, push, insert, whole-array assignment, argument,
+    lent array, return -- so a row is measured for its length as well as its kind, and ⧺ joins
+    only arrays that hold the same thing rather than stamping the left operand's type on the
+    right operand's values.  A width still converts with the range check, as at a definition.
+
+[ ] a unit on a sum or product type used as an array's element type.  The unit attaches to the
+    element definition rather than to the variable, unless every member is numeric and none
+    carries one.  A unit written in a tuple element or a type alias is refused by name today,
+    which is where this starts.
+
+[ ] four test files call their tests from main rather than marking them @test -- test_units
+    (39), test_float (11), test_power (17), test_roots (16).  run_tests.sh runs a file with
+    --test, finds no tests, and reports it green, so 83 test functions do not run.
+    test_units.ngpl fails when it is actually run: `let x ¤meter := 5` has no type written
+    down, which the bootstrap refuses.
+
+[ ] a stated width must match exactly, rather than converting, when a value is stored into a
+    declared array or binding.  Arguably the truer reading of "one type", but it is a separate
+    question from homogeneity and changes scalar assignment as well.
+
+[ ] a ragged nested literal is a shape question and is left to the shape checks; whether
+    `[[1,2],[3]]` should be refused where no type states a shape is open.
+
 [x] @listable threads a function over what it is handed: a parameter given something deeper
     than it asked for is given a container of what it asked for, so the function is asked of
     each of the things in it.  Depth rather than "is it an array", so a parameter asking for

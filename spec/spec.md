@@ -4830,13 +4830,51 @@ Only a literal answers this before anything runs, since its brackets say the sha
 
 Reading the missing brackets as an element type would make `u32` and `u32[8]` two spellings of the same declaration, which costs the reader the one place the length was written down.  SHA-256's eight-word hash state was declared `u32` in this document's own example for a while, and nothing said so.
 
-The element type reaches every element however deep it sits, which is a separate matter from the shape:
+The element type reaches every element however deep it sits, which is a separate matter from the shape.  So does the unit, where the declaration states one — a unit measures a number and a container is not one:
 
 ```
 let m : i8[2,2] = [[1, 2], [3, 300]]
 
 error: integer overflow: 300 does not fit in i8 (range -128..127)
+
+let m : i64 ¤meter[2,2] = [[1, 2], [3, 4]]
+
+m[1, 1]                         /* 4 m — every number in it is a length */
 ```
+
+##### One Type for Everything In It
+
+An array's elements have to agree before there is anything for the array to be an array of, so a literal whose elements disagree is refused where it is written:
+
+```
+[1i64, "two"]
+
+error: an array holds one type of value, but element 0 is i64 and
+element 1 is a string
+```
+
+A width still settles from whichever element states one, and the elements that state none take it — as does a unit:
+
+```
+[1, 2, 3i64]                    /* i64[3] */
+[x, 2]                          /* where x is 1¤meter: [1 m, 2 m] */
+```
+
+The element type and unit are fixed where the array is declared, and every way a value gets in asks the same question: a subscript, a `push`, an `insert`, a whole-array assignment, an argument, and a return.  A row of a matrix is one of the things it holds, so a row is measured for its length as well as its kind.
+
+```
+let a : mut i32[] = [1, 2, 3]
+a.push("x")
+
+error: an array of i32 cannot hold a string
+
+let d ¤meter : mut i64[] = [1, 2]
+d.push(9)
+
+error: an array measured in m cannot hold a number that measures nothing
+```
+
+A width converts, as it does at a definition, and a value the element type cannot hold is reported the way arithmetic reports it.
 
 #### Comparison with Other Languages
 
@@ -4985,7 +5023,7 @@ This allows `⧺` and `⍴` to combine naturally without parentheses for common 
 #### Semantics
 
 - Both operands must be arrays; a non-array operand is a type error.
-- The result preserves the element type of the left operand (falling back to the right if the left has no explicit type).
+- Both operands must hold the same type of value, and measure the same thing.  A join makes one array, and an array holds one type of value, so joining an `i32[]` to a `str[]` is refused rather than producing an array whose type is a lie about half of it.
 - Concatenation with an empty array is the identity: `a ⧺ (0 ⍴ [0])` yields `a`.
 - `⧺` is left-associative: `a ⧺ b ⧺ c` is `(a ⧺ b) ⧺ c`.
 - `⧺` is a line-continuation operator: an expression can break after it.
@@ -7274,10 +7312,18 @@ let elapsed ¤second : mut = 10
 let speed ¤meter÷second : mut = distance ÷ elapsed
 ```
 
-The `¤` (U+00A4, CURRENCY SIGN) can appear in two positions:
+The `¤` (U+00A4, CURRENCY SIGN) can appear in three positions:
 
 1. **Variable definitions**: between the name and the colon/`:=`, declaring the variable's unit.
-2. **Expressions** (postfix): after a primary expression, annotating the value with a unit.
+2. **Against the element type**: between a type and any brackets that follow it, in a definition, a parameter, or a return type.
+3. **Expressions** (postfix): after a primary expression, annotating the value with a unit.
+
+The first two say the same thing and stating both is refused.  For a scalar they are plainly the same; for an array they are the same because a unit measures a number and a container is not one, so both mean what the *elements* measure:
+
+```
+let d ¤meter : i64[] = [1, 2]      // the unit written by the name
+let d : i64 ¤meter[] = [1, 2]      // and against the element type
+```
 
 Whitespace around `¤` is flexible: it can appear immediately after the preceding token (`x¤meter`, `42¤kilogram`) or separated by spaces (`x ¤ meter`).  This is a consequence of normal tokenization — `¤` is a single-character operator.
 
@@ -7285,6 +7331,8 @@ Whitespace around `¤` is flexible: it can appear immediately after the precedin
 let d ¤kilometer : mut = 5     // variable with unit kilometer
 d ← 3000¤meter           // expression with unit meter, converted to kilometer
 ```
+
+A unit written inside a tuple element or a type alias is refused: it would have to belong to the type itself rather than to a binding or to what an array holds, which is the question a sum or product type raises.
 
 #### Unit Names
 
