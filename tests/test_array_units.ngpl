@@ -1,0 +1,158 @@
+// Tests for what an array holds: one type, one unit, both fixed where
+// the array is declared.
+//
+// A unit measures a number, and a container is not one.  What a
+// declaration of an array measures is each of the things in it, however
+// deep they sit -- the same reach the element type has.
+
+// ---------------------------------------------------------------------
+// The two spellings
+// ---------------------------------------------------------------------
+
+// The unit may be written against the name or against the element
+// type.  They say the same thing, so they are the same declaration.
+@test
+fn test_the_unit_may_be_written_by_the_name():
+    let d ¤meter : i64[] = [1, 2]
+    assert_eq(d[0], 1¤meter)
+    assert_eq(@unitof(d[0]), ¤meter)
+
+@test
+fn test_or_against_the_element_type():
+    let d : i64 ¤meter[] = [1, 2]
+    assert_eq(d[0], 1¤meter)
+    assert_eq(@unitof(d[0]), ¤meter)
+
+@test
+fn test_a_scalar_reads_the_same_way():
+    let s : i64 ¤meter = 5
+    assert_eq(s, 5¤meter)
+
+// Saying it twice is saying it once, twice -- not saying two things.
+@test
+@expect error "states a unit twice"
+fn error_the_unit_written_twice():
+    let d ¤meter : i64 ¤meter[] = [1, 2]
+
+// ---------------------------------------------------------------------
+// The unit reaches the elements
+// ---------------------------------------------------------------------
+
+// A unit around the container is a value nothing can read an element
+// out of, so it goes to the elements instead.
+@test
+fn test_a_measured_array_can_be_indexed():
+    let d ¤meter : i64[] = [10, 20, 30]
+    assert_eq(d[2], 30¤meter)
+    assert_eq(d.sizeof, 3¤ptrdiff)
+
+@test
+fn test_a_measured_matrix_measures_its_numbers():
+    let m : i64 ¤meter[2, 2] = [[1, 2], [3, 4]]
+    assert_eq(m[1, 1], 4¤meter)
+    assert_eq(@unitof(m[0, 0]), ¤meter)
+
+@test
+fn test_an_allocated_array_is_measured_too():
+    let f : i64 ¤meter[3] = 0
+    assert_eq(f[0], 0¤meter)
+    assert_eq(f.sizeof, 3¤ptrdiff)
+
+@test
+fn test_measured_elements_do_arithmetic_as_numbers_do():
+    let d ¤meter : i64[] = [7, 8]
+    assert_eq(d[0] + d[1], 15¤meter)
+
+// ---------------------------------------------------------------------
+// A parameter and a return
+// ---------------------------------------------------------------------
+
+fn first_of(v : i64 ¤meter[]) → i64 ¤meter:
+    v[0]
+
+fn two_lengths() → i64 ¤meter[]:
+    let r : i64 ¤meter[] = [1, 2]
+    r
+
+@test
+fn test_a_measured_array_parameter():
+    let d : i64 ¤meter[] = [7, 8, 9]
+    assert_eq(first_of(d), 7¤meter)
+
+@test
+fn test_a_measured_array_return():
+    let r := two_lengths()
+    assert_eq(r[1], 2¤meter)
+    assert_eq(@unitof(r[0]), ¤meter)
+
+// ---------------------------------------------------------------------
+// What a definition says, a name holds to
+// ---------------------------------------------------------------------
+
+// A definition may measure a bare number: the definition is what says
+// what the number counts.
+@test
+fn test_a_definition_measures_bare_numbers():
+    let d ¤meter : i64[] = [1, 2]
+    assert_eq(d[0], 1¤meter)
+
+// An assignment says nothing, so what it stores has to arrive measured
+// or the measure would be invented for it.
+@test
+@expect error "cannot assign dimensionless value to 'd'"
+fn error_assigning_bare_numbers_to_a_measured_array():
+    let d ¤meter : mut i64[] = [1, 2]
+    d ← [5, 6]
+
+@test
+fn test_assigning_a_measured_array():
+    let d ¤meter : mut i64[] = [1, 2]
+    let e ¤meter : i64[] = [5, 6]
+    d ← e
+    assert_eq(d[0], 5¤meter)
+
+@test
+@expect error "incompatible units"
+fn error_assigning_the_wrong_measure():
+    let d ¤meter : mut i64[] = [1, 2]
+    let e ¤second : i64[] = [5, 6]
+    d ← e
+
+// What the definition said outlives the value: a name that has been
+// assigned once still holds to its declaration.
+@test
+@expect error "cannot take a string"
+fn error_the_declaration_outlives_the_first_assignment():
+    let a : mut i64 = 1
+    a ← 2
+    a ← "x"
+
+@test
+@expect error "cannot hold a string"
+fn error_an_array_holds_to_its_element_type():
+    let a : mut i32[] = [1, 2]
+    let s : str[] = ["x", "y"]
+    a ← s
+
+@test
+@expect error "carries no unit"
+fn error_an_unmeasured_name_stays_unmeasured():
+    let x : mut i64 = 5
+    x ← 3¤meter
+
+// ---------------------------------------------------------------------
+// Where a unit cannot be said yet
+// ---------------------------------------------------------------------
+
+// A unit belongs to a binding or to what an array holds.  Inside a
+// compound type it would have to belong to the type itself, which is
+// the question a sum or product type raises.
+@test
+@expect error "a type alias or a tuple element cannot state one yet"
+fn error_a_unit_in_a_tuple_element():
+    let t : (i64 ¤meter, str) = (1, "a")
+
+@start
+@impure
+fn main():
+    std.println("array unit tests passed")

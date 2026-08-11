@@ -257,6 +257,7 @@ class Parser:
             written = self._parse_tuple_type()
         else:
             written = self._eat("IDENT").value
+        self._reject_unit_here()
         written += self._parse_array_suffix()
         if self._check("OP") and self._cur().value == "?":
             self.pos += 1
@@ -545,7 +546,9 @@ class Parser:
                 param_name_tok.line, param_name_tok.col, param_name_tok.end_col)
             is_pack = self._try_eat("PUNCT", "\N{HORIZONTAL ELLIPSIS}")
             param_unit = None
+            unit_tok = None
             if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+                unit_tok = self._cur()
                 self.pos += 1
                 param_unit = self._parse_unit_spec()
             param_type = None
@@ -575,6 +578,7 @@ class Parser:
                     else:
                         type_tok = self._eat("IDENT")
                         param_type = type_tok.value
+                param_unit = self._unit_after_type(param_unit, unit_tok)
                 param_type += self._parse_array_suffix()
                 if self._check("OP") and self._cur().value == "?":
                     self.pos += 1
@@ -623,11 +627,20 @@ class Parser:
                 ret_type = ret_tok.value
                 ret_type_pos = (arrow_tok.line, arrow_tok.col,
                                 ret_tok.end_col)
+                # A return type may state a unit against the element
+                # type, as a binding does, so a function can hand back
+                # a measured value.
+                ret_unit = self._unit_after_type(ret_unit, None)
                 # A return type may name an array, as a parameter may.
                 ret_type += self._parse_array_suffix()
-                # A return type may state a unit, as a parameter may,
-                # so a function can hand back a measured value.
+                # And after the brackets, which is how it was first
+                # written and which says the same thing.
                 if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+                    if ret_unit is not None:
+                        raise ParseError(
+                            "the return type states a unit twice; write it "
+                            "once, either against the element type or after "
+                            "the brackets", self._cur())
                     self.pos += 1
                     ret_unit = self._parse_unit_spec()
                 if self._check("OP") and self._cur().value == "?":
@@ -942,7 +955,9 @@ class Parser:
         name_tok = self._eat("IDENT")
 
         unit_spec = None
+        unit_tok = None
         if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+            unit_tok = self._cur()
             self.pos += 1
             unit_spec = self._parse_unit_spec()
 
@@ -957,6 +972,7 @@ class Parser:
                 # what may follow any type: brackets making an array of
                 # it, and ? or ! making it optional.
                 type_annotation = self._parse_tuple_type()
+                unit_spec = self._unit_after_type(unit_spec, unit_tok)
                 type_annotation += self._parse_array_suffix()
                 if self._check("OP") and self._cur().value == "?":
                     self.pos += 1
@@ -966,6 +982,12 @@ class Parser:
                     type_annotation += "?std.errors"
             elif self._check("IDENT"):
                 type_annotation = self._eat("IDENT").value
+                # `i64 ¤meter[]` says what each element is and what it
+                # measures, in that order, which is the same thing
+                # `let d ¤meter : i64[]` says with the unit written by
+                # the name.  Read before the brackets, so the shape
+                # that follows is the array's rather than the unit's.
+                unit_spec = self._unit_after_type(unit_spec, unit_tok)
                 if self._check("PUNCT") and self._cur().value == "[":
                     self.pos += 1
                     if self._check("PUNCT") and self._cur().value == "]":
@@ -1033,6 +1055,7 @@ class Parser:
         else:
             self.pos += 1
             target = type_tok.value
+        self._reject_unit_here()
         target += self._parse_array_suffix()
         if self._check("OP") and self._cur().value == "?":
             self.pos += 1
@@ -1072,6 +1095,39 @@ class Parser:
             formula = self._parse_unit_formula()
         self._try_eat("PUNCT", ";")
         return self._set_pos(UnitDef(name_tok.value, formula), kw_tok)
+
+    def _reject_unit_here(self):
+        """Refuse a unit written where a unit cannot yet be said.
+
+        A unit belongs to a binding or to what an array holds.  Written
+        into a type alias or a tuple element it would have to belong to
+        the type itself, which is the question a sum or product type
+        raises and which is not answered yet.
+        """
+        if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+            raise ParseError(
+                "a unit belongs to a binding or to what an array holds; "
+                "a type alias or a tuple element cannot state one yet",
+                self._cur())
+
+    def _unit_after_type(self, unit_spec, unit_tok):
+        """Read a unit written against the element type, if one is there.
+
+        The two positions say the same thing -- what each of the
+        values counts -- so writing both would be saying it twice
+        rather than saying two things, and is refused.
+        """
+        if not (self._check("OP")
+                and self._cur().value == "\N{CURRENCY SIGN}"):
+            return unit_spec
+        tok = self._cur()
+        if unit_spec is not None:
+            raise ParseError(
+                "the definition states a unit twice; write it once, "
+                "either after the name or against the element type",
+                unit_tok or tok)
+        self.pos += 1
+        return self._parse_unit_spec()
 
     def _parse_unit_spec(self):
         """Parse a unit specification after ¤ (no numeric literals)."""

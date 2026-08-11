@@ -4796,24 +4796,23 @@ class Evaluator:
                 declared = _parse_array_type(param_type)
                 if declared is not None:
                     arg_value.obj.fixed_size = declared[1][0]
+            param_unit = None
             if param_name in func.param_units:
                 from interp.units import eval_unit_formula
-                unit = eval_unit_formula(func.param_units[param_name])
-                if isinstance(arg_value, UnitValue):
-                    arg_value = self._convert_unit_value(arg_value, unit)
-                elif isinstance(arg_value, IntValue) \
+                param_unit = eval_unit_formula(func.param_units[param_name])
+                if isinstance(arg_value, IntValue) \
                         and not is_unwidthed(arg_value.width):
                     raise TypeError(
                         f"{func.name}: parameter '{param_name}' requires unit "
-                        f"{unit.display_name}, got typed integer "
+                        f"{param_unit.display_name}, got typed integer "
                         f"{arg_value.width} without unit")
-                else:
-                    arg_value = UnitValue(arg_value, unit)
+                # An array is measured by its elements, so the unit
+                # reaches them rather than the argument as a whole.
+                arg_value = apply_unit(arg_value, param_unit, self._mk_int)
             if param_type is not None:
-                if isinstance(arg_value, UnitValue) and param_name in func.param_units:
-                    inner = coerce_arg(arg_value.inner, param_type,
-                                       func.name, param_name)
-                    arg_value = UnitValue(inner, arg_value.unit)
+                if param_unit is not None:
+                    arg_value = coerce_arg(arg_value, param_type, func.name,
+                                           param_name, unit=param_unit)
                 else:
                     arg_value = coerce_arg(arg_value, param_type,
                                            func.name, param_name)
@@ -5020,15 +5019,16 @@ class Evaluator:
             if not inner.is_ok():
                 return result
             inner, wrap = inner.ok_value, ExpectedValue.ok
-        if isinstance(inner, UnitValue):
-            if not inner.unit.same_dimension(want):
-                raise TypeError(
-                    f"{func_name}: return type is {ret_type} "
-                    f"\N{CURRENCY SIGN}{want.display_name}, but the body evaluates to "
-                    f"{inner.unit.display_name}")
-            settled = self._convert_unit_value(inner, want)
-        else:
-            settled = UnitValue(inner, want)
+        carried = self._carried_unit(inner)
+        if carried is not None and carried is not _EMPTY_MEASURE \
+                and not carried.same_dimension(want):
+            raise TypeError(
+                f"{func_name}: return type is {ret_type} "
+                f"\N{CURRENCY SIGN}{want.display_name}, but the body evaluates to "
+                f"{carried.display_name}")
+        # An array is measured by its elements, so the unit reaches
+        # them rather than the value as a whole.
+        settled = apply_unit(inner, want, self._mk_int)
         return wrap(settled) if wrap is not None else settled
 
     def _check_return_type(self, result: Value, ret_type: str | None,

@@ -1960,7 +1960,8 @@ def validate_param_type(param_type: str, func_name: str, param_name: str):
                          f"in {func_name}: parameter '{param_name}'")
 
 
-def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str) -> "Value":
+def coerce_arg(value: "Value", param_type: str, func_name: str,
+               param_name: str, unit=None) -> "Value":
     """Coerce a runtime argument to match a declared parameter type.
 
     A parameter that states a unit has it applied before this runs, so
@@ -1968,6 +1969,10 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
     none, and parting with it has to be said.
     """
     param_type = resolve_type_alias(param_type)
+    if unit is not None:
+        # The parameter states the unit, so what arrives measured is
+        # what it asked for; the type describes what holds the number.
+        return coerce_to_type(value, param_type, unit)
     if isinstance(value, UnitValue):
         raise TypeError(
             f"{func_name}: parameter '{param_name}' is {param_type}, which "
@@ -2245,14 +2250,29 @@ def apply_unit(value: Value, unit, mk=None) -> Value:
 
 
 def coerce_to_type(value: Value, target_width: str, unit=None, mk=None) -> Value:
-    """See _coerce_to_type; the unit is applied to what comes back."""
-    settled = _coerce_to_type(value, target_width, unit)
+    """Measure a value against a type, and against a unit where one is stated.
+
+    The unit is settled *before* the width: a value already measuring
+    something has to be carried to what is asked for, and carrying it
+    is what refuses a length where a duration was wanted.  Settling the
+    width first would strip the unit and then label the bare number
+    with the one asked for, which turns a mistake into a conversion
+    nobody wrote.
+    """
     if unit is None:
-        return settled
-    if isinstance(settled, ObjectValue) and isinstance(settled.obj, ArrayValue):
-        # The array branch has already reached the elements.
-        return settled
-    return apply_unit(settled, unit, mk)
+        return _coerce_to_type(value, target_width, None)
+    if isinstance(value, SomeValue):
+        return SomeValue(coerce_to_type(value.value, target_width, unit, mk))
+    inner = value
+    if isinstance(inner, ObjectValue) and isinstance(inner.obj, ArrayValue):
+        # An array is taken apart by the branch below, which carries the
+        # unit down to each element and records it on the way.
+        return _coerce_to_type(value, target_width, unit)
+    measured = apply_unit(value, unit, mk)
+    if not isinstance(measured, UnitValue):
+        return _coerce_to_type(measured, target_width, unit)
+    return UnitValue(_coerce_to_type(measured.inner, target_width, None),
+                     measured.unit)
 
 
 def _coerce_to_type(value: Value, target_width: str, unit=None) -> Value:
