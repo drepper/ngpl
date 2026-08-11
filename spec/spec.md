@@ -5640,6 +5640,12 @@ error: 'byte' names a type and cannot name a variable
 @typeof([[1u8, 2, 3], [2, 3]])      /* u8[2,] — the rows disagree, so that extent is open */
 ```
 
+  An array type may be written where a type is compared against, as a bare name and a tuple type already could — the spelling `@typeof` answers with is the spelling a program writes:
+
+```
+static_assert_eq(@typeof(e), i8[3])
+```
+
   What an array *is* is what it holds and the shape it holds it in, so two that differ in either are different types.  An extent the rows disagree about is left open, exactly as a type leaves one open.  An array that holds nothing and was never told what it would hold answers `array`, having nothing else to report — which a binding cannot be left in, since a name with no type is a name nothing can be checked against afterwards:
 
 ```

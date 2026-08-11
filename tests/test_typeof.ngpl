@@ -56,9 +56,22 @@ fn test_the_shape_is_part_of_the_type():
     let ragged := [[1u8, 2, 3], [2, 3]]
     assert(@typeof(flat) ≠ @typeof(square))
     assert(@typeof(square) ≠ @typeof(ragged))
-    // Two written the same way are the same type, however they were
-    // built.
-    static_assert_eq(@typeof(square), @typeof([[9u8, 9, 9], [9, 9, 9]]))
+    // And the type can be written down, which is the point of writing
+    // it the way a declaration does.
+    static_assert_eq(@typeof(flat), u8[3])
+    static_assert_eq(@typeof(square), u8[2,3])
+    static_assert_eq(@typeof(ragged), u8[2,])
+
+// An array type may be written where a type is compared against, as a
+// bare name and a tuple type already could.
+@test
+fn test_comparing_against_a_written_array_type():
+    let e := [1i8, 2, 3]
+    let dyn : i64[] = [1, 2]
+    static_assert_eq(@typeof(e), i8[3])
+    static_assert_eq(@typeof(dyn), i64[2])
+    assert(@typeof(e) ≠ i8[2])
+    assert(@typeof(e) ≠ u8[3])
 
 // @typeof on tuple literal.
 @test

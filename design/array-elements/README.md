@@ -125,6 +125,14 @@ two apart — and telling two apart is what a type is for.  It now writes
 what a program would write: `i8[3]`, `u8[2,3]`, and `u8[2,]` where the
 rows disagree about an extent, which a type spells the same way.
 
+An array type may also be *written* where a type is compared against —
+`static_assert_eq(@typeof(e), i8[3])` — as a bare name and a tuple type
+already could.  The answer and the way a program writes it are the same
+spelling, which is what makes the answer usable rather than only
+readable.  A type name with brackets after it is an array type rather
+than a subscript of anything, and that is asked before an empty index
+is refused as one, since an empty dimension is part of the spelling.
+
 The element type and the shape are the two things an array *is*, and
 both are already known: the element type because a literal settles it
 and a declaration states it, and the shape because `array_shape` reads

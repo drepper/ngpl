@@ -417,6 +417,12 @@ def _is_const_expr(node) -> bool:
     # A type name stands for its type, which is as constant as a literal.
     if isinstance(node, VarRef) and is_type_name(node.name):
         return True
+    if isinstance(node, Subscript) and isinstance(node.obj, VarRef) \
+            and is_type_name(node.obj.name):
+        # And so does one with brackets after it, which is an array
+        # type rather than a subscript of anything.
+        return all(index is None or isinstance(index, IntLit)
+                   for index in node.indices)
     if isinstance(node, UnitExpr):
         return _is_const_expr(node.expr)
     if isinstance(node, GetAttr):
@@ -2825,6 +2831,17 @@ class Evaluator:
                                           element_unit=unit))
 
         # Subscript read: arr[i] or arr[i, j, ...] or tuple[i].
+        if isinstance(node, Subscript):
+            # A type name with brackets after it is an array type, not
+            # a subscript of anything: `i8[3]` names the type the way a
+            # declaration writes it, which is what lets @typeof be
+            # compared against it as it already is against `i8`.  An
+            # empty dimension is part of that spelling, so this is
+            # asked before an empty one is refused as an index.
+            written = self._written_type(node)
+            if written is not None:
+                return TypeValue(written)
+
         if isinstance(node, Subscript) and any(i is None for i in node.indices):
             raise TypeError(
                 "a subscript needs an index; an empty one is how an array "

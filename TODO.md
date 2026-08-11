@@ -190,6 +190,13 @@ Completed
     definition's = -- let x : i64!= 10 -- is refused as it was before, != having been a single
     token then as well.
 
+[x] an array type may be written where a type is compared against: `static_assert_eq(@typeof(e),
+    i8[3])`.  A bare name and a tuple type already could, so the spelling @typeof answers with
+    was one a program could not write back.  A type name with brackets after it is an array
+    type rather than a subscript of anything, which is asked before an empty index is refused
+    as one -- an empty dimension being part of the spelling, `u8[2,]`.  A subscript of a value
+    with an empty index is still refused.
+
 [x] `let f := []` is refused: an empty array says nothing about what it would hold and a
     binding with no type written down says nothing either, so between them there is no type --
     and a name with no type is a name nothing can be checked against afterwards.  Rows of rows
