@@ -334,8 +334,17 @@ Type System
     '' and 'ab' each say what to write instead.  The escapes are the string's with \' in
     place of \", and \u{…} is checked as it is read.  A member call may follow a character or
     string literal, so 'a'.ord() and "abc".sizeof read; a number literal still cannot, since
-    65. begins a float.  Still open: building a string from characters, classification, and
-    .ord() at compile time.
+    65. begins a float.
+
+[x] building a string from characters: ⧺ joins two sequences, and a string and a character
+    are both text, so joining either with either gives a string — which also gives str ⧺ str,
+    missing until now even though ⧺ is the operator the specification calls the concatenation.
+    `+` was not extended: the reason ⧺ exists is that + should not be overloaded, and joining
+    a character with + would read as arithmetic on one.  For the bulk case, .str() on a
+    character and on an array of them; it asks for characters rather than bytes, since
+    decoding a byte[] is a fallible operation of its own.  Still open: taking a string apart
+    other than by iterating it, decoding a byte[], classification, and .ord() at compile
+    time.
 
 
 Data Structures

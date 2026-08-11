@@ -249,6 +249,90 @@ fn error_a_string_is_not_a_character_argument():
     let b : mut = is_digit("7")
 
 // ---------------------------------------------------------------------
+// Building a string from characters
+// ---------------------------------------------------------------------
+//
+// ⧺ joins two sequences, and a string and a character are both text,
+// so joining either with either gives a string.
+
+@test
+fn test_two_characters_make_a_string():
+    let s := 'a' ⧺ 'b'
+    static_assert_eq(@typeof(s), str)
+    assert(s == "ab")
+
+@test
+fn test_a_character_joins_a_string():
+    assert(("ab" ⧺ 'c') == "abc")
+    assert(('c' ⧺ "ab") == "cab")
+
+@test
+fn test_two_strings_join():
+    assert(("ab" ⧺ "cd") == "abcd")
+
+// Which is what builds a string up one character at a time.
+@test
+fn test_building_a_string_in_a_loop():
+    let out : mut str = ""
+    foreach c := "abc":
+        out ← out ⧺ c ⧺ '.'
+    assert(out == "a.b.c.")
+
+fn reversed(text : str) → str:
+    let out : mut str = ""
+    foreach c := text:
+        out ← c ⧺ out
+    out
+
+@test
+fn test_reversing_a_string():
+    assert(reversed("abc") == "cba")
+
+// A character says its string, and characters say theirs.
+@test
+fn test_a_character_becomes_a_string_of_one():
+    let s := 'x'.str()
+    static_assert_eq(@typeof(s), str)
+    assert(s == "x")
+
+@test
+fn test_an_array_of_characters_becomes_a_string():
+    let chars : char[] = ['h', 'i', '!']
+    assert(chars.str() == "hi!")
+
+// An array literal of characters says what it is made of.
+@test
+fn test_an_array_of_characters_knows_its_element_type():
+    let chars := ['a', 'b']
+    static_assert_eq(@typeof(chars[0]), char)
+
+@test
+fn test_an_empty_array_of_characters_makes_an_empty_string():
+    let chars : char[] = []
+    assert(chars.str() == "")
+
+// The round trip: a string taken apart and put back together.
+@test
+fn test_a_string_survives_the_round_trip():
+    let out : mut str = ""
+    foreach c := "héllo 🎉":
+        out ← out ⧺ c
+    assert(out == "héllo 🎉")
+
+// --- what does not go together with text ---
+
+@test
+@expect error "does not go together with text"
+fn error_a_number_does_not_join_text():
+    let s : mut = 'a' ⧺ 5i64
+
+@test
+@expect error "a string is made of characters, and element 0 is i64"
+fn error_a_string_from_something_that_is_not_characters():
+    let numbers : i64[] = [1, 2]
+    let s : mut = numbers.str()
+
+// ---------------------------------------------------------------------
 // Writing one out
 // ---------------------------------------------------------------------
 

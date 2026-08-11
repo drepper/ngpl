@@ -128,16 +128,52 @@ reads.  Numbers are still excluded, for a lexical reason rather than a
 principled one: `65.chr()` cannot be scanned, since `65.` begins a
 float.  `(65).chr()` is how a number literal says it.
 
+## Building One Back Up
+
+Taking a string apart wants a way to put one together, and the language
+had two candidates for it.
+
+`+` concatenates strings today.  It is not the one to extend: the
+specification's own reason for having `⧺` is that `+` should not be
+overloaded, since on arrays it is element-wise addition.  Joining a
+character with `+` would also read as arithmetic on a character, which
+is the thing the type exists to prevent.
+
+`⧺` is the one.  It joins two sequences, and a string and a character
+are both text, so joining either with either gives a string:
+
+```
+'a' ⧺ 'b'           // "ab"
+"ab" ⧺ 'c'          // "abc"
+out ← c ⧺ out       // reversing a string, one character at a time
+```
+
+This also gives `str ⧺ str`, which had been missing — `⧺` took arrays
+only, so the operator the specification called *the* concatenation
+could not concatenate the language's own text.
+
+For the bulk case, `.str()` on a character and on an array of them.
+The conversion is written at the value that has it, which is where
+`.ord()` and `.chr()` already are.
+
+`.str()` asks for characters and not bytes.  A `byte[]` is an
+*encoding* of characters, and turning one back into text is decoding —
+a fallible operation with a different signature, which the language
+does not yet have.
+
 ## Status
 
 Implemented: the type, `foreach` over a string, `.ord()`, `.chr()` on
 every integer type, the three refusals, the definition-time check for a
-written negative, comparison by code point, formatting, and literals.
+written negative, comparison by code point, formatting, literals,
+`⧺` between text, and `.str()`.
 
 Not implemented:
 
-- **Characters and strings together**: no `⧺` between them, no way to
-  build a string from characters, no indexing a string by position.
+- **Taking a string apart other than by iterating it**: no indexing by
+  position, no `.chars()` handing back an array, no slicing.
+- **Decoding a `byte[]`**, which is where UTF-8 stops being an
+  implementation detail and becomes an operation that can fail.
 - **Character classification** — whether a character is a digit, a
   letter, upper or lower case — which is a Unicode-table question
   rather than a language one.

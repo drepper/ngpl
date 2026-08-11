@@ -92,6 +92,8 @@ def _literal_element_type(elements) -> str | None:
             if element.width == "float":
                 continue
             found = element.width
+        elif isinstance(element, CharValue):
+            found = "char"
         else:
             return None
         if width is not None and width != found:
@@ -1247,9 +1249,19 @@ class Evaluator:
         return mk_bool(not (self._logic_bool(lu) or self._logic_bool(ru)))
 
     def _op_concat(self, left, right):
-        """Concatenate arrays at the outermost dimension."""
+        """Join two sequences: arrays at the outermost dimension, or text.
+
+        A string and a character are both text, so joining either with
+        either gives a string.  That is what builds one up a character
+        at a time, and it is the same operation joining arrays does --
+        the operands go together in the order they are written.
+        """
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
+        if isinstance(lu, (StrValue, CharValue)) \
+                or isinstance(ru, (StrValue, CharValue)):
+            return mk_str(self._text_operand(lu, "left")
+                          + self._text_operand(ru, "right"))
         la = self._as_array(lu)
         ra = self._as_array(ru)
         if la is None:
@@ -1264,6 +1276,18 @@ class Evaluator:
         return ObjectValue(
             ArrayValue(la.values() + ra.values(),
                        element_type=etype))
+
+    @staticmethod
+    def _text_operand(value, side: str) -> str:
+        """The text an operand of ⧺ stands for, where it is text."""
+        if isinstance(value, StrValue):
+            return value.value
+        if isinstance(value, CharValue):
+            return value.char
+        raise TypeError(
+            f"\N{DOUBLE PLUS}: the {side} operand is "
+            f"{runtime_type_of(value)}, which does not go together with "
+            f"text; a number is written into a string with std.format")
 
     def _mk_int(self, value: int, width: str) -> IntValue:
         if self._wrapping:
@@ -1690,6 +1714,25 @@ class Evaluator:
             return none()
 
         return array.remove(index.value)
+
+    @staticmethod
+    def _string_of_characters(array) -> str:
+        """The string an array of characters spells.
+
+        A string is made of characters, so that is what building one
+        asks for.  Bytes are a different question -- they are an
+        encoding of characters rather than characters -- and are not
+        taken here.
+        """
+        text: list[str] = []
+        for index, element in enumerate(array.values()):
+            inner = unwrap_optional(element)
+            if not isinstance(inner, CharValue):
+                raise TypeError(
+                    f"str: a string is made of characters, and element "
+                    f"{index} is {runtime_type_of(inner)}")
+            text.append(inner.char)
+        return "".join(text)
 
     def _callstack_value(self, args):
         """Return the interpreted program's call stack, innermost first.
@@ -3979,10 +4022,14 @@ class Evaluator:
         if method_name == "__call__":
             return self._do_call(unwrapped, args)
         if isinstance(unwrapped, CharValue):
+            if method_name == "str":
+                if args:
+                    raise TypeError("char.str takes no arguments")
+                return mk_str(unwrapped.char)
             if method_name != "ord":
                 raise AttributeError(
                     f"a character has no method '{method_name}'; it answers "
-                    f"ord() with its number")
+                    f"ord() with its number and str() with a string of one")
             if args:
                 raise TypeError("char.ord takes no arguments")
             return mk_int(unwrapped.code, "u32")
@@ -4004,6 +4051,12 @@ class Evaluator:
         if (method_name == "callstack" and isinstance(unwrapped, ObjectValue)
                 and unwrapped.obj is std):
             return self._callstack_value(args)
+        if (isinstance(unwrapped, ObjectValue)
+                and isinstance(unwrapped.obj, ArrayValue)
+                and method_name == "str"):
+            if args:
+                raise TypeError("str takes no arguments")
+            return mk_str(self._string_of_characters(unwrapped.obj))
         if (isinstance(unwrapped, ObjectValue)
                 and isinstance(unwrapped.obj, ArrayValue)
                 and method_name in _ARRAY_METHODS):

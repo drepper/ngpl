@@ -469,6 +469,47 @@ Where the number is written down rather than computed, the answer is known witho
 error: chr: -1 is not a code point; a character is numbered from 0
 ```
 
+#### Building a String
+
+`⧺` joins two sequences, and a string and a character are both text, so joining either with either gives a string:
+
+```
+'a' ⧺ 'b'                       /* "ab" */
+"ab" ⧺ 'c'                      /* "abc" */
+'c' ⧺ "ab"                      /* "cab" */
+"ab" ⧺ "cd"                     /* "abcd" */
+```
+
+That is what builds a string up one character at a time:
+
+```
+fn reversed(text : str) → str:
+    let out : mut str = ""
+    foreach c := text:
+        out ← c ⧺ out
+    out
+```
+
+Anything that is not text is refused, since a sequence is joined with a sequence of the same kind:
+
+```
+'a' ⧺ 5
+
+error: ⧺: the right operand is i64, which does not go together with
+text; a number is written into a string with std.format
+```
+
+A character says its string with `.str()`, and so does an array of characters:
+
+```
+'x'.str()                       /* "x" */
+
+let chars : char[] = ['h', 'i', '!']
+chars.str()                     /* "hi!" */
+```
+
+`.str()` asks for characters.  Bytes are an *encoding* of characters rather than characters, so a `byte[]` is not taken; decoding one is a separate operation the language does not yet have.
+
 #### A Character Is Its Own Kind of Value
 
 Not a number and not a string of one.  Nothing converts to it or from it implicitly; `.chr()` and `.ord()` are how a program crosses between:
