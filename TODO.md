@@ -161,12 +161,16 @@ Completed
 
 [x] ∊ asks only whether something is there, which a matrix can answer where a position
     cannot: the right operand is a vector, a matrix, or a string, and is looked through
-    whole however many dimensions it has.  The answer takes the shape of the left operand,
-    so an array asks the question of each of its elements at once, and it is a bool rather
-    than APL's 0 or 1.  What is looked for has to be the kind of thing the container holds
-    — a program asking whether a string is among some numbers has made a mistake about one
-    of the two — and past that an element is compared the way == compares it.  It binds
-    where ⍳ does.  Whether ⍳ should be tightened to refuse the same way is still open.
+    whole however many dimensions it has.  One thing is asked about at a time and the
+    answer is one bool, not APL's shape-of-the-left-operand: a predicate that sometimes
+    hands back an array is one a condition cannot be given, and an array on the left would
+    make a string on the left mean something -- either a substring test, which is not
+    membership, or its characters one at a time.  A string holds characters, so a run of
+    them is not one of them, and ⍳ says where a run starts.  What is looked for has to be
+    the kind of thing the container holds — a program asking whether a string is among some
+    numbers has made a mistake about one of the two — and past that an element is compared
+    the way == compares it.  It binds where ⍳ does.  Whether ⍳ should be tightened to refuse
+    the same way is still open.
 
 [x] comparing a found position with ∅ was a type error while comparing an absent one was
     not, so (v ⍳ x) == ∅ answered or refused depending on which way the search went.  A

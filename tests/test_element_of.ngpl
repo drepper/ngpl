@@ -2,8 +2,8 @@
 //
 // Where ⍳ says where something is, this says only whether, which is a
 // question a matrix can answer as well as a vector: it is looked
-// through whole, however many dimensions it has.  The answer takes the
-// shape of the left operand.
+// through whole, however many dimensions it has.  One thing is asked
+// about at a time, and the answer is one bool.
 
 // ---------------------------------------------------------------------
 // In a vector
@@ -57,56 +57,12 @@ fn test_a_character_of_a_string():
     assert('e' ∊ s)
     assert(¬('z' ∊ s))
 
-// A run of characters is in a string as one thing, the way ⍳ finds one.
-@test
-fn test_a_run_of_characters():
-    let s := "hello world"
-    assert("world" ∊ s)
-    assert("o w" ∊ s)
-    assert(¬("worlds" ∊ s))
-
-@test
-fn test_the_empty_string_is_in_every_string():
-    assert("" ∊ "abc")
-    assert("" ∊ "")
-
 @test
 fn test_beyond_ascii():
     let s := "héllo 🎉"
     assert('🎉' ∊ s)
     assert('é' ∊ s)
     assert(¬('e' ∊ s))
-
-// ---------------------------------------------------------------------
-// The answer takes the shape of the left operand
-// ---------------------------------------------------------------------
-
-@test
-fn test_asking_for_several_at_once():
-    let v : i64[] = [10, 20, 30]
-    let answers : bool[] = [10, 99] ∊ v
-    assert(answers[0])
-    assert(¬answers[1])
-
-@test
-fn test_asking_from_a_matrix():
-    let m : i64[2, 2] = [[1, 2], [3, 4]]
-    let v : i64[] = [2, 3]
-    let answers := m ∊ v
-    assert(¬answers[0, 0])
-    assert(answers[0, 1])
-    assert(answers[1, 0])
-    assert(¬answers[1, 1])
-
-// A string is text rather than an array of characters, so asking of
-// each character on its own is asking of what .chars() gives.
-@test
-fn test_each_character_on_its_own():
-    let answers := "helz".chars() ∊ "hello"
-    assert(answers[0])
-    assert(answers[1])
-    assert(answers[2])
-    assert(¬answers[3])
 
 // ---------------------------------------------------------------------
 // What a container holds
@@ -145,7 +101,6 @@ fn test_the_answer_is_known_at_compile_time():
     static_assert(20 ∊ [10, 20])
     static_assert(¬(5 ∊ [10, 20]))
     static_assert('e' ∊ "hello")
-    static_assert("ell" ∊ "hello")
 
 // ---------------------------------------------------------------------
 // What it refuses
@@ -170,6 +125,32 @@ fn error_looking_for_a_character_among_numbers():
 @expect error "a string holds characters"
 fn error_looking_for_a_number_in_a_string():
     let found : mut = 5i64 ∊ "hello"
+
+// A string holds characters, so a run of them is not one of the things
+// it holds.  Whether one is there is a question about where it starts,
+// which ⍳ answers.
+@test
+@expect error "a run of them is not one of them"
+fn error_looking_for_a_run_of_characters():
+    let found : mut = "ell" ∊ "hello"
+
+@test
+@expect error "a run of them is not one of them"
+fn error_looking_for_an_empty_run():
+    let found : mut = "" ∊ "hello"
+
+// One thing is asked about at a time.  A container on the left is not
+// one thing, whatever it holds.
+@test
+@expect error "the left operand is an array"
+fn error_asking_about_several_at_once():
+    let v : i64[] = [10, 20, 30]
+    let found : mut = [10, 99] ∊ v
+
+@test
+@expect error "the left operand is an array"
+fn error_asking_about_the_characters_of_a_string():
+    let found : mut = "helz".chars() ∊ "hello"
 
 @test
 @expect error "what is looked through is a vector, a matrix, or a string"

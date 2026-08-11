@@ -884,31 +884,33 @@ class Evaluator:
     def _op_element_of(self, left, right):
         """Whether what is on the left is somewhere on the right.
 
-        The answer takes the shape of the left operand: a scalar asks
-        one question and gets one answer, an array asks the question of
-        each of its elements and gets one answer for each.  The right
-        operand is looked through whole however many dimensions it has.
+        One thing is asked about at a time, and the answer is one bool.
+        The right operand is looked through whole however many
+        dimensions it has, which is the question ⍳ cannot answer for a
+        matrix: a position has to say where, and this says only
+        whether.
         """
-        la = self._as_array(left)
-        if la is not None:
-            return ObjectValue(ArrayValue(
-                [self._op_element_of(element, right)
-                 for element in la.values()],
-                element_type="bool"))
+        if self._as_array(left) is not None:
+            raise TypeError(
+                f"\N{SMALL ELEMENT OF}: the left operand is an array, and "
+                f"what is looked for is one thing; each of them is asked "
+                f"about on its own")
         wanted = _unwrap_operand(left)
         container = _unwrap_operand(right)
         if isinstance(container, StrValue):
             if isinstance(wanted, CharValue):
                 return mk_bool(wanted.char in container.value)
             if isinstance(wanted, StrValue):
-                # A run of characters is in a string as one thing, the
-                # way ⍳ finds one.  Asking of each character on its own
-                # is asking of an array, which is what .chars() gives.
-                return mk_bool(wanted.value in container.value)
+                # A string holds characters, so a run of them is not one
+                # of the things it holds.  Whether one is there is a
+                # question about where it starts, which ⍳ answers.
+                raise TypeError(
+                    f"\N{SMALL ELEMENT OF}: a string holds characters, and a "
+                    f"run of them is not one of them; "
+                    f"\N{APL FUNCTIONAL SYMBOL IOTA} says where a run starts")
             raise TypeError(
                 f"\N{SMALL ELEMENT OF}: a string holds characters, and what "
-                f"is looked for is {self._value_type_name(wanted)}; a "
-                f"character or a run of them is what can be in one")
+                f"is looked for is {self._value_type_name(wanted)}")
         array = self._as_array(container)
         if array is None:
             raise TypeError(

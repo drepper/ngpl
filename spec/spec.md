@@ -1632,7 +1632,6 @@ let v : i64[] = [10, 20, 30]
 99 ∊ v                          /* false */
 
 'e' ∊ "hello"                   /* true */
-"ell" ∊ "hello"                 /* true — a run of characters is one thing */
 ```
 
 The right operand is a vector, a matrix, or a string.  Where `⍳` says *where* something is, this says only *whether*, which is a question a matrix can answer as well: it is looked through whole, however many dimensions it has.
@@ -1642,19 +1641,33 @@ let m : i64[2, 2] = [[1, 2], [3, 4]]
 3 ∊ m                           /* true */
 ```
 
-#### The Answer Takes the Shape of the Left Operand
+#### One Thing at a Time
 
-A scalar asks one question and gets one answer.  An array asks the question of each of its elements and gets one answer for each, in the shape it was asked:
-
-```
-[10, 99] ∊ v                    /* [true, false] */
-m ∊ v                           /* a 2×2 of bools */
-```
-
-A string is text rather than an array of characters, so asking of each character on its own is asking of what `.chars()` gives:
+The left operand is a single value and the answer is a single `bool`.  A container on the left is not one thing, whatever it holds:
 
 ```
-"helz".chars() ∊ "hello"        /* [true, true, true, false] */
+[10, 99] ∊ v
+
+error: ∊: the left operand is an array, and what is looked for is one
+thing; each of them is asked about on its own
+```
+
+A string holds characters, so a run of them is not one of the things it holds.  Whether a run is there is a question about where it starts, which `⍳` answers:
+
+```
+"ell" ∊ "hello"
+
+error: ∊: a string holds characters, and a run of them is not one of
+them; ⍳ says where a run starts
+
+("hello" ⍳ "ell") != ∅          /* true — the question a run asks */
+```
+
+A string on the left is a single value where the container holds strings, since there it is one of the things the container holds rather than a run of characters:
+
+```
+let words : str[] = ["one", "two"]
+"two" ∊ words                   /* true */
 ```
 
 #### What Is Looked For
@@ -1687,8 +1700,7 @@ A string holds characters, so a number is not something that can be in one, and 
 ```
 5i64 ∊ "hello"
 
-error: ∊: a string holds characters, and what is looked for is i64; a
-character or a run of them is what can be in one
+error: ∊: a string holds characters, and what is looked for is i64
 
 3 ∊ (1…5)
 
@@ -1709,14 +1721,14 @@ n + 10 ∊ v                      /* what is looked for is the sum */
 
 | Language | Whether something is there |
 |----------|----------------------------|
-| APL | `∊`, element-wise on both operands |
+| APL | `∊`, element-wise on the left operand |
 | C++ | `.contains()` (C++20/23), `std::find(…) != end` |
 | Python | `x in xs` |
 | Rust | `.contains()` |
 | Julia | `x in xs`, `∈` |
 | NGPL | `∊` |
 
-The glyph is APL's.  APL is element-wise on the left operand and looks through the right one whole, which is what this does; unlike APL it answers a `bool` rather than a `0` or a `1`, since the language has the type and a condition asks for it.
+The glyph is APL's and the right operand is read as APL reads it, whole.  The left one is not: APL asks the question of each element of an array and answers in its shape, where here one thing is asked about at a time and the answer is one `bool` — a predicate that sometimes hands back an array is one a condition cannot be given.  Asking it of every element of an array is a map over the question rather than the question.
 
 
 ### Integer Remainder

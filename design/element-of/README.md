@@ -59,24 +59,44 @@ This is the one place the two operators deliberately differ in what
 they accept, and the reason is worth keeping in view: a position has to
 say *where*, and this says only *whether*.
 
-## The Shape of the Answer
+## One Thing at a Time
 
-The answer takes the shape of the *left* operand, which is APL's rule:
+The left operand is a single value and the answer is a single `bool`.
 
-- a scalar asks one question and gets one answer;
-- an array asks the question of each of its elements and gets one
-  answer for each, in the shape it was asked.
+APL's rule is the other one: there the answer takes the shape of the
+left operand, so an array on the left asks the question of each of its
+elements at once and gets one answer for each.  That was implemented
+first and then taken out.  Two reasons:
 
-So the two operands are read differently — the left one element by
-element, the right one as a whole — which is what makes `[10, 99] ∊ v`
-two questions and `20 ∊ m` one.
+**An operator that answers a bool is worth more than one that answers
+either.**  `∊` is a predicate, and a predicate that sometimes hands
+back an array is one a condition cannot be given without checking
+first.  Asking the question of every element of an array is a fold or a
+map over the question, not the question.
 
-A string is text rather than an array of characters, so `"ell" ∊
-"hello"` is one question about a run of characters, matching what `⍳`
-does with the same operands.  Asking of each character on its own is
-asking of an array, which is what `.chars()` gives.  Without that rule
-the same two operands would mean one thing under `⍳` and another under
-`∊`.
+**It made a run of characters mean something.**  If an array on the
+left asks its elements one at a time, a string on the left is the same
+shape of question — and then `"ell" ∊ "hello"` has to mean *something*.
+Either it is a substring test, which is not membership at all, or it is
+the characters of `"ell"` asked one at a time, which is a different
+answer to the same source.  Neither is worth having: a string holds
+characters, so a run of them is not one of the things it holds.
+
+Whether a run is in a string is a real question and it already has an
+answer — `⍳` says where a run starts, so `(s ⍳ "ell") != ∅` asks it.
+The refusal names that:
+
+```
+"ell" ∊ "hello"
+
+error: ∊: a string holds characters, and a run of them is not one of
+them; ⍳ says where a run starts
+```
+
+A string on the left *is* a single value where the container holds
+strings, since there it is one of the things the container holds:
+`"two" ∊ words` on a `str[]`.  What decides is the container, not the
+operand.
 
 Unlike APL the answer is a `bool` rather than a `0` or a `1`.  The
 language has the type, and a condition asks for it.
@@ -126,9 +146,22 @@ and self-contained addition when it is wanted.
 the operator it should answer to, and the mathematical reading of the
 glyph will be exactly what it means.
 
+## A Bug It Turned Up
+
+Writing the refusal for a run of characters meant writing what to do
+instead, and `(s ⍳ "ell") != ∅` did not work: comparing a *found*
+position with `∅` was a type error, while comparing an absent one was
+fine.  A position carries a unit, and the operator dispatch unwrapped
+the optional to find the unit before anything had asked whether there
+was a value at all.
+
+Whether there is one is now settled first for `==` and `!=`.  The
+`⍳` tests had only ever compared absent positions against `∅`, which is
+the case that worked; the ones that compare a found position are there
+now.
+
 ## Status
 
 Implemented: on vectors, on slices of them, on matrices to any depth,
-and on strings, for a scalar or an array on the left; answering a
-`bool` or an array of them in the shape of the left operand; settled at
-compile time where both operands are.
+and on strings, for a single value on the left; answering one `bool`;
+settled at compile time where both operands are.
