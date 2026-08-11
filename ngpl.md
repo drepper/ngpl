@@ -50,3 +50,6 @@ what it is.
 - [Leaving a Loop, and Which One](design/loop-labels/README.md) —
   `break`, `continue`, and a name on the line above a loop so an inner
   one can act on an outer
+- [Macros and Reflection](design/macros/README.md) — `f⟦x⟧`, why
+  expansion cannot happen before parsing, and two designs built on
+  branches of their own
