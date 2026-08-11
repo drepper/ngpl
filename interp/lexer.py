@@ -216,19 +216,40 @@ def _check_literal_width(width: str, is_float: bool, text: str, line, col):
     return
 
 
-def _check_float_literal_range(value: float, width: str, text: str, line, col):
+def _literal_digits_are_zero(text: str, base: int) -> bool:
+    """Whether the digits of a numeric literal spell zero.
+
+    Only the significand is read: an exponent scales a number and
+    cannot make a nonzero one zero.  This is what says whether `0.0`
+    was written or a number that reached zero on the way in, which the
+    parsed value can no longer tell -- float("1e-400") is 0.0 as
+    surely as float("0.0") is.
+    """
+    digits = text[2:] if base == 16 else text
+    for mark in ("e", "E", "p", "P"):
+        digits = digits.split(mark)[0]
+    return set(digits.replace(".", "")) <= {"0"}
+
+
+def _check_float_literal_range(value: float, width: str, text: str, base: int,
+                               line, col):
     """Refuse a literal whose value its type cannot hold.
 
-    A number too large for its format becomes an infinity, which is a
-    different number from the one that was written.  A sum that
-    overflows has nowhere else to go, but a literal is a mistake in the
-    source, and the source is where it is reported.
+    A number too large for its format becomes an infinity and one too
+    small becomes a zero.  Either way it is a different number from the
+    one that was written, and a literal is a mistake in the source, so
+    the source is where it is reported.
     """
-    from interp.value import float_overflow_message, float_overflows
+    from interp.value import (float_overflow_message, float_overflows,
+                              float_underflow_message, float_underflows)
     if math.isinf(value) or float_overflows(value, width):
         # The value is an infinity because the text overflowed, so the
         # text is what the complaint has to name.
         raise LexerError(float_overflow_message(text, width), line, col)
+    if _literal_digits_are_zero(text, base):
+        return
+    if value == 0.0 or float_underflows(value, width):
+        raise LexerError(float_underflow_message(text, width), line, col)
 
 
 def _read_number(src, pos, line, col):
@@ -317,7 +338,7 @@ def _read_number(src, pos, line, col):
                 line, col) from None
         if not width:
             width = "float"
-        _check_float_literal_range(value, width, value_str, line, col)
+        _check_float_literal_range(value, width, value_str, base, line, col)
         return Token("FLOAT", (value, width), line, col, end_col), pos
 
     try:

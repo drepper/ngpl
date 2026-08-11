@@ -1,0 +1,7 @@
+// A literal too small for its type would become a zero, which is
+// a different number from the one written.  Well within f64, and below everything f32 can tell from zero.
+@start
+@impure
+fn main():
+    let a := 1e-50f32
+    std.println("{}", a)

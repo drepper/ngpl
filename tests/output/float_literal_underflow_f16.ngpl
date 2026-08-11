@@ -1,0 +1,7 @@
+// A literal too small for its type would become a zero, which is
+// a different number from the one written.  f16 runs out of range early: 5.96e-8 is the smallest it holds.
+@start
+@impure
+fn main():
+    let a := 1e-8f16
+    std.println("{}", a)

@@ -418,16 +418,10 @@ def check_float_arith(value: float, width: str, symbol: str,
     held = _clamp_float(value, _float_check_width(width))
     if math.isinf(held) and math.isfinite(left) and math.isfinite(right):
         raise OverflowError(
-            f"float overflow: {left!r} {symbol} {right!r} does not fit in "
-            f"{_float_named_width(width)}"
-            f"{_float_largest_note(width)}")
+            float_overflow_message(f"{left!r} {symbol} {right!r}", width))
     if may_underflow and held == 0.0 and left != 0.0 and right != 0.0:
-        smallest = float_smallest(width)
-        note = "" if smallest is None else f" (smallest is {smallest!r})"
         raise OverflowError(
-            f"float underflow: {left!r} {symbol} {right!r} is not zero, but "
-            f"is too small for {_float_named_width(width)} to tell from "
-            f"zero{note}")
+            float_underflow_message(f"{left!r} {symbol} {right!r}", width))
     return value
 
 
@@ -442,29 +436,62 @@ def _float_largest_note(width: str) -> str:
     return "" if limits is None else f" (largest is {limits[1]!r})"
 
 
-def check_float(value: float, width: str) -> float:
-    """Check that a value stays a number in a float format.
+def float_underflows(value: float, width: str) -> bool:
+    """Whether a nonzero number would become a zero in a float format.
 
-    Raises OverflowError when it does not.  Becoming an infinity is
-    not holding the value: it is a different number from the one being
-    written down, and finding that out quietly -- from a result of inf
-    much later -- is the outcome worth preventing.
+    Reaching zero is losing the value; a subnormal is not, being a
+    number the format holds with fewer significant bits than a normal
+    one.  The caller says what "nonzero" means for what it has: a
+    value that is already zero passes, and a literal whose text
+    underflowed to zero before it got here is judged by its digits.
     """
-    if not float_overflows(value, width):
-        return value
-    raise OverflowError(float_overflow_message(repr(value), width))
+    if value == 0.0:
+        return False
+    return _clamp_float(value, _float_check_width(width)) == 0.0
+
+
+def check_float(value: float, width: str) -> float:
+    """Check that a value stays the number it is in a float format.
+
+    Raises OverflowError when it does not.  Becoming an infinity or a
+    zero is not holding the value: either is a different number from
+    the one being written down, and finding that out quietly -- from a
+    result of inf or 0 much later -- is the outcome worth preventing.
+    """
+    if float_overflows(value, width):
+        raise OverflowError(float_overflow_message(repr(value), width))
+    if float_underflows(value, width):
+        raise OverflowError(float_underflow_message(repr(value), width))
+    return value
+
+
+def _untyped_width_note(width: str) -> str:
+    """Why a diagnostic about an untyped float names f64.
+
+    Nothing in the source said f64.  The bootstrap did, holding an
+    untyped float in one until the arbitrary-precision float arrives,
+    so it says so rather than naming a type the program never wrote.
+    """
+    if width != "float":
+        return ""
+    return (", which is what an untyped float is held in until the "
+            "arbitrary-precision float arrives")
 
 
 def float_overflow_message(written: str, width: str) -> str:
     """What to say about a number a float format cannot hold."""
-    largest = _float_largest_note(width)
-    if width == "float":
-        # Nothing in the source said f64; the bootstrap did.
-        return (f"float overflow: {written} does not fit in f64{largest}, "
-                f"which is what an untyped float is held in until the "
-                f"arbitrary-precision float arrives")
     return (f"float overflow: {written} does not fit in "
-            f"{_float_named_width(width)}{largest}")
+            f"{_float_named_width(width)}{_float_largest_note(width)}"
+            f"{_untyped_width_note(width)}")
+
+
+def float_underflow_message(written: str, width: str) -> str:
+    """What to say about a number a float format cannot tell from zero."""
+    smallest = float_smallest(width)
+    note = "" if smallest is None else f" (smallest is {smallest!r})"
+    return (f"float underflow: {written} is not zero, but is too small for "
+            f"{_float_named_width(width)} to tell from zero{note}"
+            f"{_untyped_width_note(width)}")
 
 
 class FloatValue(Value):

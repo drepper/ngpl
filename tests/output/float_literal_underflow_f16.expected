@@ -1,0 +1,7 @@
+error: float underflow: 1e-8 is not zero, but is too small for f16 to tell from zero (smallest is 5.960464477539063e-08)
+  --> tests/output/float_literal_underflow_f16.ngpl:6:14
+    |
+  6 |     let a := 1e-8f16
+    |              ^
+  7 |     std.println("{}", a)
+    |

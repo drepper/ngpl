@@ -66,14 +66,14 @@ Completed
     produce an infinity or a NaN, which is what makes the check cheap — the full language
     will have to say how a program asks for them.
 
-[x] a floating-point value a type cannot hold is refused rather than becoming an infinity.
-    A literal is caught where it is written — `3e400f64`, and `3e400` too, since the
-    bootstrap holds an untyped float in an f64 until the arbitrary-precision float arrives
-    — and a value being given to a narrower type is caught at the binding, the argument,
-    the struct field, the array element, and the return.  A return type now settles a
-    float's width as it already settled an integer's.  An infinity that arrives as one is
-    kept: it is what a sum answers with, and every format holds it.  Whether an arithmetic
-    overflow should itself be reported is still open.
+[x] a floating-point value a type cannot hold is refused rather than becoming an infinity
+    or a zero.  A literal is caught where it is written — `3e400f64` and `1e-50f32`, and
+    `3e400` too, since the bootstrap holds an untyped float in an f64 until the
+    arbitrary-precision float arrives — and a value being given to a narrower type is
+    caught at the binding, the argument, the struct field, the array element, and the
+    return.  A return type now settles a float's width as it already settled an integer's.
+    A literal that spells zero is zero, which the digits say and the parsed value cannot;
+    a subnormal is a number the format holds and is kept.
 
 [x] ⌈ and ⌊ give the larger and the smaller of two numbers, as they do in APL.  The answer
     is one of the operands, so it needs no range of its own and neither operator can

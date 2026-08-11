@@ -39,6 +39,33 @@ fn test_a_negative_value():
     let a : f32 = ⁻1e39
     assert(true)
 
+// The other end of the range is the same mistake: the value is not
+// zero, and zero is what the narrower format would hold.
+@test
+fn test_f32_binding_underflows():
+    @expect error "float underflow.*too small for f32"
+    let a : f32 = 1e-50
+    assert(true)
+
+@test
+fn test_f16_binding_underflows():
+    @expect error "float underflow.*too small for f16"
+    let a : f16 = 1e-9
+    assert(true)
+
+@test
+fn test_bfloat16_binding_underflows():
+    @expect error "float underflow.*too small for bfloat16"
+    let a : bfloat16 = 1e-50
+    assert(true)
+
+// A value the narrower format still holds is held, subnormals
+// included: only reaching zero loses it.
+@test
+fn test_a_subnormal_is_narrow_enough():
+    let a : f32 = 1e-44
+    assert(a > 0.0)
+
 // f64 is the widest format the bootstrap has, so a value that
 // overflows it cannot be reached from another float -- only written,
 // which the literal tests cover.
@@ -78,6 +105,13 @@ fn test_a_struct_field():
 fn test_an_array_element():
     @expect error "float overflow.*does not fit in f32"
     let v : f32[] = [1.0, 1e39]
+    assert(true)
+
+// Underflow reaches every one of them too.
+@test
+fn test_an_argument_underflows():
+    @expect error "float underflow.*too small for f32"
+    let a := takes_f32(1e-50)
     assert(true)
 
 // ---------------------------------------------------------------------

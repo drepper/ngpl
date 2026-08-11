@@ -636,7 +636,7 @@ A suffix that names no type is refused, as is a fractional number given an integ
 
 ##### A Literal Its Type Cannot Hold
 
-A number past the top of its format would become an infinity, which is a different number from the one that was written.  The literal is refused instead, before the program runs:
+A number past the top of its format would become an infinity, and one past the bottom a zero.  Either is a different number from the one that was written, so the literal is refused instead, before the program runs:
 
 ```
 3e400f64
@@ -666,7 +666,24 @@ until the arbitrary-precision float arrives
 
 This is the rule integer literals already follow, where `300u8` does not fit either.  What makes it worth stating separately for floats is that the format has somewhere to put such a value — an infinity — and using it would mean the program silently computing with a number the source does not contain.
 
-Rounding is not overflow.  A value the format rounds to something it can hold is held, and only becoming an infinity is refused; `3.4028235e38` is an `f32`, and so is every value below it that needs more significand than the format has.
+A number too small for the format is refused for the same reason.  It would become a zero, which is a number a program will go on computing with as readily as any other:
+
+```
+1e-50f32
+
+error: float underflow: 1e-50 is not zero, but is too small for f32 to
+tell from zero (smallest is 1.401298464324817e-45)
+
+1e-400
+
+error: float underflow: 1e-400 is not zero, but is too small for f64 to
+tell from zero (smallest is 5e-324), which is what an untyped float is
+held in until the arbitrary-precision float arrives
+```
+
+A literal that spells zero is zero, in every way of spelling it — `0.0`, `0e0`, `0x0p0` — and is not a number that reached zero on the way in.  The two cannot be told apart from the parsed value, which is `0.0` either way, so the digits of the literal are what says which it is.
+
+Rounding is neither.  A value the format rounds to something it can hold is held, and only reaching an infinity or a zero is refused: `3.4028235e38` is an `f32`, and so is every value below it that needs more significand than the format has.  A **subnormal** literal is a value the format holds — `5e-324` is an `f64` and `1e-44` an `f32` — with fewer significant bits than a normal value but not with none.
 
 #### The Multiplication and Division Operators
 
@@ -833,14 +850,21 @@ fn rounded() → f32:
 
 #### A Value the Type Cannot Hold
 
-Rounding to the format is one thing; leaving it altogether is another.  A finite value too large for the type it is being given would become an infinity, and is refused wherever the value is written down — the same places the width is settled:
+Rounding to the format is one thing; leaving it altogether is another.  A value too large for the type it is being given would become an infinity, and one too small would become a zero.  Both are refused wherever the value is written down — the same places the width is settled:
 
 ```
 let a : f32 = 1e39
 
 error: float overflow: 1e39 does not fit in f32 (largest is
 3.4028234663852886e+38)
+
+let b : f32 = 1e-50
+
+error: float underflow: 1e-50 is not zero, but is too small for f32 to
+tell from zero (smallest is 1.401298464324817e-45)
 ```
+
+A narrowing that reaches a subnormal is not underflow: `let c : f32 = 1e-44` is a number `f32` holds.
 
 An operation that would produce such a value is reported the same way, so an infinity does not arise from arithmetic either; see [Arithmetic That Leaves the Range](#arithmetic-that-leaves-the-range) below.
 
