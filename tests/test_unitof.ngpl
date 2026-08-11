@@ -25,7 +25,7 @@ fn test_unitof_kilogram():
 @test
 @impure
 fn test_unitof_dimensionless():
-  assert_true(@unitof(42) != ¤meter, "dimensionless != meter")
+  assert_true(@unitof(42) ≠ ¤meter, "dimensionless ≠ meter")
 
 // --- @unitof equality of same unit ---
 
@@ -38,7 +38,7 @@ fn test_unitof_same_unit():
 @test
 @impure
 fn test_unitof_different_units():
-  assert_true(@unitof(5 ¤meter) != @unitof(3 ¤second), "meter != second")
+  assert_true(@unitof(5 ¤meter) ≠ @unitof(3 ¤second), "meter ≠ second")
 
 // --- @unitof on derived unit ---
 
@@ -52,7 +52,7 @@ fn test_unitof_derived():
 @impure
 fn test_unitof_kilometer():
   static_assert_eq(@unitof(5 ¤kilometer), ¤kilometer)
-  assert_true(@unitof(5 ¤kilometer) != ¤meter, "kilometer != meter")
+  assert_true(@unitof(5 ¤kilometer) ≠ ¤meter, "kilometer ≠ meter")
 
 // --- static_assert_eq with @unitof ---
 

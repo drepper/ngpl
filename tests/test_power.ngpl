@@ -7,7 +7,7 @@ fn assert_true(cond:bool, msg:str):
 
 @impure
 fn assert_eq_int(a:i64, b:i64, msg:str):
-  if a != b:
+  if a ≠ b:
     std.println("FAIL: {} (got {} expected {})", msg, a, b)
 
 @impure

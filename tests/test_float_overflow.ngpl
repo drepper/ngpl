@@ -145,7 +145,7 @@ fn rounded_to_f32() → f32:
 fn test_a_return_type_settles_the_width():
     // 0.1 is not exact in either format, and the two are not the same
     // number; what leaves the function is the f32 one.
-    assert(rounded_to_f32() != 0.1)
+    assert(rounded_to_f32() ≠ 0.1)
     assert(rounded_to_f32() > 0.09999)
     assert(rounded_to_f32() < 0.10001)
 

@@ -19,12 +19,12 @@ fn test_exists_is_a_present_optional():
 @test
 fn test_exists_equals_some():
     assert(∃(5) = some(5))
-    assert(∃(5) != ∅)
+    assert(∃(5) ≠ ∅)
 
 // It nests: an optional holding an optional is distinguishable.
 @test
 fn test_exists_nests():
-    assert(∃(∅) != ∅)
+    assert(∃(∅) ≠ ∅)
 
 // ---------------------------------------------------------------------
 // An optional may not be compared with a plain value

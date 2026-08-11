@@ -13,7 +13,7 @@ takes, and how much it insists on before it answers.
 
 ## Considered
 
-### Asking `⍳` — `(v ⍳ x) != ∅`
+### Asking `⍳` — `(v ⍳ x) ≠ ∅`
 
 Already possible, and it says the wrong thing at the point of use: the
 position appears in the source so that it can be thrown away, and a
@@ -83,7 +83,7 @@ answer to the same source.  Neither is worth having: a string holds
 characters, so a run of them is not one of the things it holds.
 
 Whether a run is in a string is a real question and it already has an
-answer — `⍳` says where a run starts, so `(s ⍳ "ell") != ∅` asks it.
+answer — `⍳` says where a run starts, so `(s ⍳ "ell") ≠ ∅` asks it.
 The refusal names that:
 
 ```
@@ -152,13 +152,13 @@ glyph will be exactly what it means.
 ## A Bug It Turned Up
 
 Writing the refusal for a run of characters meant writing what to do
-instead, and `(s ⍳ "ell") != ∅` did not work: comparing a *found*
+instead, and `(s ⍳ "ell") ≠ ∅` did not work: comparing a *found*
 position with `∅` was a type error, while comparing an absent one was
 fine.  A position carries a unit, and the operator dispatch unwrapped
 the optional to find the unit before anything had asked whether there
 was a value at all.
 
-Whether there is one is now settled first for `=` and `!=`.  The
+Whether there is one is now settled first for `=` and `≠`.  The
 `⍳` tests had only ever compared absent positions against `∅`, which is
 the case that worked; the ones that compare a found position are there
 now.

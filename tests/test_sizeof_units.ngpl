@@ -4,7 +4,7 @@
 // and the comparison below checks the unit as well as the number.
 @impure
 fn assert_eq_int(a, b, msg:str):
-  if a != b:
+  if a ≠ b:
     std.println("FAIL: {} (got {} expected {})", msg, a, b)
 
 @impure

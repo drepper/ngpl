@@ -227,7 +227,7 @@ fn test_mixed_via_call():
 
 @impure
 fn assert_eq(a: i64, b: i64):
-  if a != b:
+  if a ≠ b:
     std.println("FAIL: expected {} got {}", a, b)
 
 @impure

@@ -685,7 +685,7 @@ class Evaluator:
             "\N{LEFT CEILING}": self._op_max,
             "\N{LEFT FLOOR}": self._op_min,
             "=": self._op_eq,
-            "!=": self._op_neq,
+            "\N{NOT EQUAL TO}": self._op_neq,
             "<": self._op_lt,
             ">": self._op_gt,
             "<=": self._op_lte,
@@ -1451,7 +1451,7 @@ class Evaluator:
             return self._op_element_of(left, right)
         if op in self._APPROX_OPS:
             return self._op_approx(op, left, right)
-        if op in ("=", "!=") and (isinstance(left, (SomeValue, NoneValue))
+        if op in ("=", "\N{NOT EQUAL TO}") and (isinstance(left, (SomeValue, NoneValue))
                                    or isinstance(right, (SomeValue, NoneValue))):
             # Whether there is a value at all is settled before what it
             # is, so that an optional carrying a unit is not unwrapped
@@ -1771,7 +1771,7 @@ class Evaluator:
                 return result
             return UnitValue(result, new_unit)
 
-        if op in ("=", "!=", "<", ">", "<=", ">="):
+        if op in ("=", "\N{NOT EQUAL TO}", "<", ">", "<=", ">="):
             if l_is_unit and not r_is_unit:
                 if isinstance(r_inner, IntValue) \
                         and not is_unwidthed(r_inner.width):

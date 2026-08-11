@@ -130,7 +130,7 @@ fn test_comparison_with_none_still_works():
     let it := v.iterate()
     let count : mut i64 = 0
     let e : mut = it.next()
-    while e != ∅:
+    while e ≠ ∅:
         count ← count + 1
         e ← it.next()
     assert_eq(count, 2)
@@ -194,8 +194,8 @@ fn test_directory_omits_dot_entries():
     let dir := std.fs.cwd()
     let it := dir.iterate()
     while e := it.next():
-        assert(e.name != ".")
-        assert(e.name != "..")
+        assert(e.name ≠ ".")
+        assert(e.name ≠ "..")
 
 // Exhaustion is reported the same way as for an array.
 @test

@@ -93,7 +93,7 @@ fn test_a_literal_by_code_point():
 fn test_a_literal_is_constant():
     static_assert('a' < 'b')
     static_assert('a' = 'a')
-    static_assert('a' != 'b')
+    static_assert('a' ≠ 'b')
 
 // The apostrophe that ends a generic type name is not a literal
 // opening: the name takes it, and a literal after one still reads.
@@ -207,7 +207,7 @@ fn test_characters_compare_by_code_point():
     let a : u32 = 97
     let b : u32 = 98
     assert(a.chr() = a.chr())
-    assert(a.chr() != b.chr())
+    assert(a.chr() ≠ b.chr())
     assert(a.chr() < b.chr())
     assert(b.chr() > a.chr())
     assert(a.chr() <= a.chr())

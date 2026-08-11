@@ -49,7 +49,7 @@ fn test_env_count_matches_names():
 fn test_env_listed_names_resolve():
     foreach name := std.env.names():
         assert(std.env.has(name))
-        assert(std.env.get(name) != ∅)
+        assert(std.env.get(name) ≠ ∅)
 
 // A variable that is not set reads as ∅ rather than an empty string.
 @test

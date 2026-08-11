@@ -181,8 +181,14 @@ Completed
     `let b : bool = x = 5` reads without the parser doing anything clever.  What is bought is
     that C's `if (x = 5)` cannot be written: = compares, ← stores, and a comparison in
     statement position is caught by the unused-value rule.  == is refused by name rather than
-    as a parse error, every program written before this using it.  != keeps its spelling; ≠ is
-    a separate change.
+    as a parse error, every program written before this using it.
+
+[x] inequality is ≠ rather than !=, which followed the equality rename as a separable change.
+    != was not wrong, nothing else wanting the spelling; what decided it is that = and != do
+    not read as a pair, and ≠ is = with a stroke through it, which is the relation they stand
+    in.  != is refused by name as == is.  ! being a type suffix, a type written hard against a
+    definition's = -- let x : i64!= 10 -- is refused as it was before, != having been a single
+    token then as well.
 
 [x] ⍳ refuses what the container cannot hold, as ∊ does, both going through one check.  It
     answered ∅ before, on the grounds that = answers false between two values of unrelated

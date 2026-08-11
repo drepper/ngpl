@@ -591,7 +591,7 @@ let n : i64 = a.chr()
 error: 'i64' cannot hold a character
 ```
 
-Characters compare with each other by code point, with `=`, `!=`, `<`, `>`, `<=`, and `>=`.
+Characters compare with each other by code point, with `=`, `≠`, `<`, `>`, `<=`, and `>=`.
 
 A character is written out as itself, the way a string is — `std.print("{}", c)` writes the character.  At the prompt it is *displayed* as `'a'`, quoted the way a character is written rather than the way a string of one would be, so the two are told apart when a value is read back.
 
@@ -1043,7 +1043,7 @@ Six operators ask the same questions allowing for that error.  Each pairs with t
 | Tolerant | Exact | Reads as |
 |----------|-------|----------|
 | `≅` | `=` | alike |
-| `≇` | `!=` | not alike |
+| `≇` | `≠` | not alike |
 | `⪅` | `<=` | less than or alike |
 | `⪆` | `>=` | greater than or alike |
 | `⪉` | `<` | less than and not alike |
@@ -1123,7 +1123,7 @@ This promotion is implicit and always safe (integers have exact float representa
 
 #### Float Comparisons
 
-All comparison operators (`=`, `!=`, `<`, `>`, `<=`, `>=`) work on floats and mixed int-float pairs.  Integers are promoted to float before comparison:
+All comparison operators (`=`, `≠`, `<`, `>`, `<=`, `>=`) work on floats and mixed int-float pairs.  Integers are promoted to float before comparison:
 
 ```
 static_assert(1.0 < 2.0)
@@ -1347,14 +1347,14 @@ The logic operators follow standard Boolean algebra precedence, all binding tigh
 
 | Tightest → Loosest | Operators |
 |---------------------|-----------|
-| comparison          | `=`, `!=`, `<`, `>`, `<=`, `>=` |
+| comparison          | `=`, `≠`, `<`, `>`, `<=`, `>=` |
 | logic AND/NAND      | `∧`, `⊼` |
 | logic XOR           | `⊕` |
 | logic OR/NOR        | `∨`, `⊽` |
 | short-circuit AND   | `and` |
 | short-circuit OR    | `or` |
 
-This means `a = 0 ∧ b != 0` parses as `(a = 0) ∧ (b != 0)`, and `x ∧ y ∨ z` parses as `(x ∧ y) ∨ z`.
+This means `a = 0 ∧ b ≠ 0` parses as `(a = 0) ∧ (b ≠ 0)`, and `x ∧ y ∨ z` parses as `(x ∧ y) ∨ z`.
 
 #### Element-wise on Arrays
 
@@ -1544,7 +1544,7 @@ APL answers with the length of the container, which a program has to remember to
 Comparing against `∅` asks only whether there was one, which is how a run of characters is asked about — `∊` holds only what a string holds:
 
 ```
-(s ⍳ "world") != ∅              /* whether the run is there at all */
+(s ⍳ "world") ≠ ∅              /* whether the run is there at all */
 ```
 
 #### The Answer Is an Index
@@ -1675,7 +1675,7 @@ A string holds characters, so a run of them is not one of the things it holds.  
 error: ∊: a string holds characters, and a run of them is not one of
 them; ⍳ says where a run starts
 
-("hello" ⍳ "ell") != ∅          /* true — the question a run asks */
+("hello" ⍳ "ell") ≠ ∅          /* true — the question a run asks */
 ```
 
 A string on the left is a single value where the container holds strings, since there it is one of the things the container holds rather than a run of characters:
@@ -2176,16 +2176,19 @@ Both forms are always accepted.  The lexer normalizes the ASCII forms to their U
 The Unicode forms are preferred in source code for visual clarity and consistency with the other Unicode operators (`«`, `»`, `↺`, `↻`, `∧`, `∨`, `⊕`, `⍴`, `⧺`).  The ASCII forms exist to support environments where entering Unicode characters is inconvenient.
 
 
-### Equality Is `=`, and Only `←` Stores
+### Equality Is `=`, Inequality `≠`, and Only `←` Stores
 
-`=` is the equality operator:
+`=` is the equality operator and `≠` (U+2260 NOT EQUAL TO) its negation:
 
 ```
 if x = 5:
     …
 
 let same : bool = a = b         /* the definition's =, then the operator */
+let differ : bool = a ≠ b
 ```
+
+The two read as a pair, `≠` being `=` with a stroke through it, which is the relation they stand in.
 
 Storing a value is `←` and nothing else.  The two are different operations and are written differently, so neither can be mistaken for the other:
 
@@ -2207,15 +2210,21 @@ This is the shape of bug C is known for — `if (x = 5)` where `==` was meant �
 let b : bool = x = 5
 ```
 
-#### `==` Is Not an Operator
+#### `==` and `!=` Are Not Operators
 
-The old spelling is refused by name rather than by a parse error, since every program written before this change uses it:
+The old spellings are refused by name rather than by a parse error, since every program written before this change uses them:
 
 ```
 x == 5
 
 error: '==' is not an operator; equality is written '='
+
+x != 5
+
+error: '!=' is not an operator; inequality is written '≠'
 ```
+
+`!` is a type suffix, so a type written hard against a definition's `=` — `let x : i64!= 10` — is refused as it was before; a space separates them.
 
 Four annotations say how often something is expected to happen.  They exist for the compiler's benefit and never change what a program computes: a hinted branch is still taken when its condition holds, and a hinted function still returns what it returned before.  Removing every hint from a program leaves its behaviour identical.
 
@@ -2867,7 +2876,7 @@ if std.env.get("VERBOSE"):
     enable_logging()
 ```
 
-Writing `e != ∅` means the same thing and remains correct; the direct form is shorter and is the one to prefer.
+Writing `e ≠ ∅` means the same thing and remains correct; the direct form is shorter and is the one to prefer.
 
 #### Presence, Not Truth
 
@@ -3386,7 +3395,7 @@ The rules are:
    if x < 0: return -x
    ```
 
-5. **Line continuation.**  A trailing binary operator (`+`, `-`, `×`, `÷`, `%`, `⊞`, `⊟`, `⊠`, `|`, `&`, `^`, `<<`, `>>`, `«`, `»`, `↺`, `↻`, `=`, `!=`, `<`, `>`, `<=`, `>=`, `??`, `←`, `and`, `or`) signals that the expression continues on the next line.  A trailing `=` does so whether it is the equality operator or the one that separates a definition from its value.  The indentation of the continuation line does not create a new block:
+5. **Line continuation.**  A trailing binary operator (`+`, `-`, `×`, `÷`, `%`, `⊞`, `⊟`, `⊠`, `|`, `&`, `^`, `<<`, `>>`, `«`, `»`, `↺`, `↻`, `=`, `≠`, `<`, `>`, `<=`, `>=`, `??`, `←`, `and`, `or`) signals that the expression continues on the next line.  A trailing `=` does so whether it is the equality operator or the one that separates a definition from its value.  The indentation of the continuation line does not create a new block:
    ```
    W[j] ← W[j - 16] + expand_s0(W[j - 15]) +
            W[j - 7] + expand_s1(W[j - 2])
@@ -4321,7 +4330,7 @@ Tuple indexing is not affected — tuples accept bare integer indices without un
 
 When one operand of a binary operation carries a unit and the other does not, the rules depend on the operation and the non-unit operand's type status:
 
-**Additive operations** (`+`, `-`) and **comparisons** (`=`, `!=`, `<`, `>`, `<=`, `>=`):
+**Additive operations** (`+`, `-`) and **comparisons** (`=`, `≠`, `<`, `>`, `<=`, `>=`):
 - **Untyped integer constants** are accepted — the result inherits the unit of the unit-bearing operand (for `+`/`-`) or produces a boolean (for comparisons).
 - **Typed integers** without a unit are rejected.  The programmer must attach the matching unit at the declaration site.
 
@@ -5410,14 +5419,14 @@ static_assert_eq(@typeof("a"), @typeof("b"))   // both are str
 static_assert_eq(@resultof(example), @resultof(example))
 ```
 
-- `@unitof(expr)` — returns the unit attached to a value as a `UnitOfValue`.  The argument must be a compile-time constant expression.  If the value has no unit (dimensionless), returns a dimensionless unit value.  Supports equality (`=`) and inequality (`!=`) comparison with other `@unitof` results and with standalone unit references (`¤meter`, `¤byte`, etc.).
+- `@unitof(expr)` — returns the unit attached to a value as a `UnitOfValue`.  The argument must be a compile-time constant expression.  If the value has no unit (dimensionless), returns a dimensionless unit value.  Supports equality (`=`) and inequality (`≠`) comparison with other `@unitof` results and with standalone unit references (`¤meter`, `¤byte`, etc.).
 
   A standalone unit reference `¤unit` (without a preceding expression) produces a `UnitOfValue` for comparison purposes:
 
 ```
 // @unitof on compile-time unit expressions
 static_assert_eq(@unitof(5 ¤meter), ¤meter)
-assert_true(@unitof(42) != ¤meter)            // dimensionless
+assert_true(@unitof(42) ≠ ¤meter)            // dimensionless
 assert_true(@unitof(100 ¤meter ÷ (10 ¤second)) = ¤meter÷second)
 ```
 
@@ -5994,7 +6003,7 @@ let l : mut = Level.high
 
 #### Comparison
 
-Enum values of the same type can be compared with `=` and `!=`.  Comparing values from different enum types is a type error.  Enum values can also be compared with integer literals:
+Enum values of the same type can be compared with `=` and `≠`.  Comparing values from different enum types is a type error.  Enum values can also be compared with integer literals:
 
 ```
 let c : mut = Color.red

@@ -100,7 +100,7 @@ fn main():
     std.println("type tests passed")
 
 // ---------------------------------------------------------------------
-// Equality is =, and only ← stores
+// Equality is =, inequality ≠, and only ← stores
 // ---------------------------------------------------------------------
 
 // The same glyph separates a definition from its value.  Each consumes
@@ -128,6 +128,21 @@ fn test_equality_in_a_condition():
 fn error_the_old_spelling():
     let x : i64 = 5
     let b : mut = x == 5
+
+@test
+@expect error "'!=' is not an operator; inequality is written '≠'"
+fn error_the_old_spelling_of_inequality():
+    let x : i64 = 5
+    let b : mut = x != 5
+
+// The two read as a pair, ≠ being = with a stroke through it.
+@test
+fn test_inequality():
+    let x : i64 = 5
+    assert(x ≠ 6)
+    assert(¬(x ≠ 5))
+    let differ : bool = x ≠ 6
+    assert(differ)
 
 // Storing is ← and nothing else, so a statement that compares computes
 // something nothing reads.

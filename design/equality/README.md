@@ -1,4 +1,4 @@
-# Equality Is `=`
+# Equality Is `=`, Inequality `≠`
 
 ## The Question
 
@@ -69,42 +69,64 @@ error: the value of this statement is not used; it computes something
 and nothing reads it
 ```
 
-## What Was Left Alone
+## Inequality Followed
 
-`!=` keeps its spelling.  `≠` is the glyph that would match `=` the way
-`⌈` matches `⌊`, and taking it would be a second, separable change; the
-pairing `=` / `!=` is at least no worse than the `==` / `!=` it
-replaces.
+`!=` became `≠` (U+2260 NOT EQUAL TO) straight afterwards, as a
+separate change because it is a separable one.
 
-## The Old Spelling
+The argument is thinner than the one for `=`, since `!=` was not
+*wrong* — nothing else wanted the spelling.  What decided it is that
+`=` and `!=` do not read as a pair.  They ask one question and its
+negation, and the glyphs should show that as `⌈` and `⌊` do; `≠` is `=`
+with a stroke through it, which is exactly the relation.  Leaving the
+mixture would have meant one operator spelled the way mathematics
+spells it and its own negation spelled the way C spells it.
 
-`==` is refused by name rather than falling out as a parse error:
+One wrinkle is worth recording.  `!` is a type suffix — `i64!` is the
+expected type — so `!=` can arise from a type written hard against a
+definition's `=`.  `let x : i64!= 10` is refused, and it was refused
+before this change too, since `!=` was a single token then as well.
+Keeping `!=` lexed as one token for the sake of the migration
+diagnostic leaves that exactly as it was rather than making it worse,
+and a space is all it ever needed.
+
+## The Old Spellings
+
+Both are refused by name rather than falling out as a parse error:
 
 ```
 x == 5
 
 error: '==' is not an operator; equality is written '='
+
+x != 5
+
+error: '!=' is not an operator; inequality is written '≠'
 ```
 
-Every program written before this change uses `==`, so the diagnostic
-is worth more than the token is.  It can go once nothing reaches for it.
+Every program written before this change uses them, so the diagnostics
+are worth more than the tokens are.  They can go once nothing reaches
+for them.
 
 ## Comparison with Other Languages
 
-| Language | Equality | Assignment | Why |
-|----------|----------|------------|-----|
-| C, C++, Java, Python, Rust, Go | `==` | `=` | `=` was assignment first |
-| Fortran (early), COBOL | `.EQ.`, `=` | `=` | context tells them apart |
-| Pascal, Ada | `=` | `:=` | assignment took the second glyph |
-| ML, Haskell | `==` (or `=`) | — | `=` binds a definition |
-| APL, BQN | `=` | `←` | the same split as here |
-| NGPL | `=` | `←` | |
+| Language | Equality | Inequality | Assignment |
+|----------|----------|------------|------------|
+| C, C++, Java, Python, Rust, Go | `==` | `!=` | `=` |
+| Pascal, Ada | `=` | `<>` / `/=` | `:=` |
+| ML, Haskell | `=` / `==` | `<>` / `/=` | — |
+| APL, BQN | `=` | `≠` | `←` |
+| Julia | `==` | `!=`, `≠` | `=` |
+| NGPL | `=` | `≠` | `←` |
 
-Pascal and APL both reach this by the same route: give assignment its
-own spelling and equality is free.  APL's is `←`, which is the one
-already in use here.
+C and its descendants spell equality `==` for one reason: `=` was
+assignment first.  Pascal gave assignment `:=` and got `=` back.  APL
+gave it `←` and got both glyphs back, which is the route taken here.
+Julia accepts `≠` as a synonym for `!=` but keeps `==`, since its `=`
+is assignment.
 
 ## Status
 
-Implemented.  `=` is equality at the comparison level, `←` is the only
-assignment, and `==` reports the new spelling.
+Implemented.  `=` is equality and `≠` inequality, at the comparison
+level; `←` is the only assignment; `==` and `!=` report the new
+spellings.

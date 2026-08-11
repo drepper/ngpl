@@ -84,10 +84,10 @@ class BorrowExpr:
 
 
 class BinOp:
-    """Binary operator: + - × ÷ == != < > <= >= and or."""
+    """Binary operator: + - × ÷ = ≠ < > <= >= and or."""
 
     def __init__(self, op: str, left, right):
-        self.op = op  # one of "+", "-", "×", "÷", "=", "!=", "<", ">", "<=", ">=", "and", "or"
+        self.op = op  # one of "+", "-", "×", "÷", "=", "≠", "<", ">", "<=", ">=", "and", "or"
         self.left = left
         self.right = right
 

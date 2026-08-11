@@ -67,7 +67,7 @@ fn test_float_comparisons():
   static_assert(1.0 >= 1.0)
   static_assert(1.0 <= 2.0)
   static_assert(2.0 >= 1.0)
-  static_assert(1.0 != 2.0)
+  static_assert(1.0 ≠ 2.0)
   static_assert(1.0 = 1.0)
 
   // Mixed int-float comparison

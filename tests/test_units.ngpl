@@ -9,7 +9,7 @@ fn assert_true(cond:bool, msg:str):
 // and the comparison below checks the unit as well as the number.
 @impure
 fn assert_eq_int(a, b, msg:str):
-  if a != b:
+  if a ≠ b:
     std.println("FAIL: {} (got {} expected {})", msg, a, b)
 
 // --- Basic unit annotation on variables ---
@@ -163,7 +163,7 @@ fn test_unit_comparison():
   assert_true(a < b, "5m < 10m")
   assert_true(b > a, "10m > 5m")
   assert_true(a = a, "5m = 5m")
-  assert_true(a != b, "5m != 10m")
+  assert_true(a ≠ b, "5m ≠ 10m")
 
 @impure
 fn test_unit_comparison_different():
@@ -282,7 +282,7 @@ fn test_dropunit_parts_with_the_unit():
   let v ¤meter := 7
   let plain := @dropunit(v)
   assert_true(plain = 7, "the number survives")
-  assert_true(@unitof(v) != @unitof(plain), "the unit does not")
+  assert_true(@unitof(v) ≠ @unitof(plain), "the unit does not")
 
 // The width is the value's own and is untouched.
 @impure

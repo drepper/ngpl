@@ -67,6 +67,14 @@ _ADD_OPS = frozenset({"+", "-",
 _MUL_OPS = frozenset({"\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}", "%",
                       "\N{SQUARED TIMES}"})
 _MINMAX_OPS = frozenset({"\N{LEFT CEILING}", "\N{LEFT FLOOR}"})
+
+# What a program written before the comparison operators took their own
+# glyphs reaches for.  Named rather than left to fall out as a parse
+# error, every such program using them.
+_OLD_CMP_SPELLINGS = {
+    "==": "equality is written '='",
+    "!=": "inequality is written '\N{NOT EQUAL TO}'",
+}
 # The same glyphs in front of an operand, where they are the case of
 # text rather than the larger or smaller of two numbers.
 _CASE_OPS = _MINMAX_OPS
@@ -1701,7 +1709,8 @@ class Parser:
             left = self._set_binop_pos(BinOp(op_tok.value, left, right), left, right, op_tok)
         return left
 
-    _CMP_OPS = ("!=", "<", ">", "<=", ">=", "≅", "≇", "⪅", "⪆", "⪉", "⪊")
+    _CMP_OPS = ("\N{NOT EQUAL TO}", "<", ">", "<=", ">=",
+                "≅", "≇", "⪅", "⪆", "⪉", "⪊")
 
     def _parse_cmp_expr(self):
         """cmp_expr → range_expr (comparison range_expr)*
@@ -1719,10 +1728,11 @@ class Parser:
         left = self._parse_range_expr()
         while True:
             self._skip_nl()
-            if self._check("OP") and self._cur().value == "==":
+            if self._check("OP") and self._cur().value in _OLD_CMP_SPELLINGS:
+                old = self._cur().value
                 raise ParseError(
-                    "'==' is not an operator; equality is written '='",
-                    self._cur())
+                    f"'{old}' is not an operator; "
+                    f"{_OLD_CMP_SPELLINGS[old]}", self._cur())
             is_eq = self._check("PUNCT") and self._cur().value == "="
             if not (is_eq or (self._check("OP")
                               and self._cur().value in self._CMP_OPS)):

@@ -17,7 +17,7 @@ fn pick_second(a : T', b : U') → U':
 
 // Generic used only in parameters, concrete return type.
 fn to_bool(x : T') → bool:
-    x != 0
+    x ≠ 0
 
 // ------------------------------------------------------------------
 

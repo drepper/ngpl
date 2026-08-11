@@ -1,7 +1,7 @@
 // test_approx.ngpl -- comparisons made to within a tolerance
 //
 // Six operators pair with the exact ones: ≅ ≇ ⪅ ⪆ ⪉ ⪊ against
-// = != <= >= < >.  They ask the same questions, allowing for the
+// = ≠ <= >= < >.  They ask the same questions, allowing for the
 // error that floating-point arithmetic accumulates.
 //
 // The tolerance is std.comparison_tolerance, following APL's ⎕CT: two
