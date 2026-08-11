@@ -2,7 +2,7 @@
 // first, naming only the program's own functions.
 
 fn innermost(n ¤ptrdiff : i64) → i64:
-    let values := [1, 2]
+    let values : i64[] = [1, 2]
     values[n]
 
 fn middle(n ¤ptrdiff : i64) → i64:

@@ -147,7 +147,43 @@ def unsettled_kind(value: "Value") -> str | None:
         # A division answers with what it worked out or with why it
         # could not; the value inside is what the binding would keep.
         return unsettled_kind(value.ok_value)
+    if isinstance(value, ObjectValue) and isinstance(value.obj, ArrayValue):
+        # An array of numbers that have settled on nothing is an array
+        # of the type the bootstrap does not have.  An element type is
+        # what the array settled on, and one element saying what it is
+        # is enough to settle the rest; where nothing said, the
+        # elements are asked one at a time.
+        array = value.obj
+        if array.element_type is not None:
+            return ("int" if is_unwidthed(array.element_type)
+                    else "float" if array.element_type == "float"
+                    else None)
+        for element in array.values():
+            kind = unsettled_kind(element)
+            if kind is not None:
+                return kind
+        return None
+    # A tuple is not asked about.  Its type is written element by
+    # element, which the bootstrap has no syntax for, so a binding of
+    # one could not be given the type this would demand of it.
     return None
+
+
+def unsettled_shape(value: "Value") -> str:
+    """The brackets a sized type for this value would need.
+
+    A dimension is a comma inside one pair of brackets, so an array of
+    arrays reads `i64[,]` rather than `i64[][]`, and the type suggested
+    for a binding of one is the one the program would write.
+    """
+    dims = 0
+    while isinstance(value, ObjectValue) and isinstance(value.obj, ArrayValue):
+        dims += 1
+        inner = value.obj.values()
+        if not inner:
+            break
+        value = inner[0]
+    return "" if dims == 0 else "[" + "," * (dims - 1) + "]"
 
 
 def check_bootstrap_binding(value: "Value", name: str):
@@ -163,7 +199,7 @@ def check_bootstrap_binding(value: "Value", name: str):
     kind = unsettled_kind(value)
     if kind is None:
         return
-    sized = _FULL_LANGUAGE_TYPES[kind]
+    sized = _FULL_LANGUAGE_TYPES[kind] + unsettled_shape(value)
     raise TypeError(
         f"'{name}': a binding with no type written down settles on "
         f"'{kind}', which is an arbitrary-precision type the bootstrap "

@@ -83,7 +83,7 @@ fn test_sys_cpu_counts_ordered():
 // usable_cpus() is exactly the population count of the affinity mask.
 @test
 fn test_sys_affinity_matches_usable():
-    let cpus := std.sys.affinity_cpus()
+    let cpus : i64[] = std.sys.affinity_cpus()
     assert_eq(cpus.sizeof, std.sys.usable_cpus())
 
 // Every CPU id listed is actually set in the mask, and the ids ascend.

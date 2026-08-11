@@ -10,13 +10,13 @@
 
 @test
 fn test_read_bare_literal():
-    let arr := [10, 20, 30]
+    let arr : i64[] = [10, 20, 30]
     assert_eq(arr[0], 10)
     assert_eq(arr[2], 30)
 
 @test
 fn test_write_bare_literal():
-    let arr : mut = [0, 0, 0]
+    let arr : mut i64[] = [0, 0, 0]
     arr[1] ← 42
     assert_eq(arr[1], 42)
 
@@ -35,7 +35,7 @@ fn test_byte_write_bare_literal():
 
 @test
 fn test_slice_bare_literal():
-    let arr := [10, 20, 30, 40, 50]
+    let arr : i64[] = [10, 20, 30, 40, 50]
     let sub := arr[1…3]
     assert_eq(sub.sizeof, 3)
     assert_eq(sub[0], 20)
@@ -43,7 +43,7 @@ fn test_slice_bare_literal():
 
 @test
 fn test_slice_assign_bare_literal():
-    let arr : mut = [0, 0, 0, 0]
+    let arr : mut i64[] = [0, 0, 0, 0]
     arr[1…2] ← [88, 99]
     assert_eq(arr[1], 88)
     assert_eq(arr[2], 99)
@@ -52,13 +52,13 @@ fn test_slice_assign_bare_literal():
 
 @test
 fn test_sizeof_derived_index():
-    let arr := [5, 10, 15, 20]
+    let arr : i64[] = [5, 10, 15, 20]
     let last : i64 = arr[arr.sizeof - 1]
     assert_eq(last, 20)
 
 @test
 fn test_foreach_sizeof_index():
-    let arr := [1, 2, 3, 4]
+    let arr : i64[] = [1, 2, 3, 4]
     let total : mut i64 = 0
     foreach i := 0…arr.sizeof - 1:
         total ← total + arr[i]
@@ -77,28 +77,28 @@ fn test_byte_sizeof_index():
 @test
 @expect error "requires unit ptrdiff"
 fn test_reject_i32_index_read():
-    let arr : mut = [1, 2, 3]
+    let arr : mut i64[] = [1, 2, 3]
     let idx : mut i32 = 0
     let x : mut = arr[idx]
 
 @test
 @expect error "requires unit ptrdiff"
 fn test_reject_i32_index_write():
-    let arr : mut = [1, 2, 3]
+    let arr : mut i64[] = [1, 2, 3]
     let idx : mut i32 = 0
     arr[idx] ← 99
 
 @test
 @expect error "requires unit ptrdiff"
 fn test_reject_u32_index():
-    let arr : mut = [1, 2, 3]
+    let arr : mut i64[] = [1, 2, 3]
     let idx : mut u32 = 0
     let x : mut = arr[idx]
 
 @test
 @expect error "requires unit ptrdiff"
 fn test_reject_u32fast_index():
-    let arr : mut = [1, 2, 3]
+    let arr : mut i64[] = [1, 2, 3]
     let idx : mut u32fast = 0
     let x : mut = arr[idx]
 
@@ -119,7 +119,7 @@ fn test_reject_i32_byte_index_write():
 @test
 @expect error "requires unit ptrdiff"
 fn test_reject_foreach_typed_index():
-    let arr : mut = [10, 20, 30]
+    let arr : mut i64[] = [10, 20, 30]
     foreach i : i32 = 0…2:
         let x : mut = arr[i]
 
@@ -134,7 +134,7 @@ fn needs_byte(buf : byte[], off ¤byte : usize) → u8:
 @test
 @expect error "requires unit ptrdiff"
 fn test_reject_typed_int_param_ptrdiff():
-    let arr : mut = [1, 2, 3]
+    let arr : mut i64[] = [1, 2, 3]
     let idx : mut i32 = 0
     needs_ptrdiff(arr, idx)
 
@@ -149,13 +149,13 @@ fn test_reject_typed_int_param_byte():
 @test
 @expect error "requires unit ptrdiff"
 fn test_reject_u32_param():
-    let arr : mut = [1, 2, 3]
+    let arr : mut i64[] = [1, 2, 3]
     let idx : mut u32 = 1
     needs_ptrdiff(arr, idx)
 
 @test
 fn test_accept_untyped_const_param_ptrdiff():
-    let arr := [10, 20, 30]
+    let arr : i64[] = [10, 20, 30]
     assert_eq(needs_ptrdiff(arr, 1), 20)
 
 @test
@@ -166,7 +166,7 @@ fn test_accept_untyped_const_param_byte():
 
 @test
 fn test_accept_unit_value_param():
-    let arr := [10, 20, 30]
+    let arr : i64[] = [10, 20, 30]
     let idx ¤ptrdiff : i32 = 1
     assert_eq(needs_ptrdiff(arr, idx), 20)
 
@@ -174,7 +174,7 @@ fn test_accept_unit_value_param():
 
 @test
 fn test_typed_with_ptrdiff():
-    let arr := [10, 20, 30]
+    let arr : i64[] = [10, 20, 30]
     let idx ¤ptrdiff : i32 = 1
     assert_eq(arr[idx], 20)
 
@@ -190,7 +190,7 @@ fn test_typed_with_byte():
 @test
 @expect error "requires unit ptrdiff"
 fn test_reject_byte_for_general():
-    let arr : mut = [1, 2, 3]
+    let arr : mut i64[] = [1, 2, 3]
     let x : mut = arr[0 ¤byte]
 
 @test
@@ -202,7 +202,7 @@ fn test_reject_ptrdiff_for_byte():
 @test
 @expect error "requires unit ptrdiff"
 fn test_reject_meter_for_general():
-    let arr : mut = [1, 2, 3]
+    let arr : mut i64[] = [1, 2, 3]
     let x : mut = arr[0 ¤meter]
 
 // ---- arithmetic unit enforcement ----------------------------------------

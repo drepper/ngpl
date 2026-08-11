@@ -17,7 +17,7 @@
 
 @test
 fn test_array_iterate_in_order():
-    let v := [10, 20, 30]
+    let v : i64[] = [10, 20, 30]
     let it := v.iterate()
     assert_eq(it.next(), ∃(10))
     assert_eq(it.next(), ∃(20))
@@ -26,7 +26,7 @@ fn test_array_iterate_in_order():
 // Exhaustion is reported as ∅, and stays ∅ on further calls.
 @test
 fn test_array_iterate_ends_with_none():
-    let v := [1]
+    let v : i64[] = [1]
     let it := v.iterate()
     assert_eq(it.next(), ∃(1))
     assert_eq(it.next(), ∅)
@@ -34,14 +34,14 @@ fn test_array_iterate_ends_with_none():
 
 @test
 fn test_array_iterate_empty():
-    let v := []
+    let v : i64[] = []
     let it := v.iterate()
     assert_eq(it.next(), ∅)
 
 // The usual shape of a loop over an iterator.
 @test
 fn test_array_iterate_loop():
-    let v := [1, 2, 3, 4]
+    let v : i64[] = [1, 2, 3, 4]
     let it := v.iterate()
     let total : mut i64 = 0
     while e := it.next():
@@ -51,7 +51,7 @@ fn test_array_iterate_loop():
 // Two iterators over one array advance independently.
 @test
 fn test_array_iterators_are_independent():
-    let v := [1, 2, 3]
+    let v : i64[] = [1, 2, 3]
     let a := v.iterate()
     let b := v.iterate()
     assert_eq(a.next(), ∃(1))
@@ -61,7 +61,7 @@ fn test_array_iterators_are_independent():
 // An iterator reads the array as it is now, not as it was.
 @test
 fn test_array_iterator_sees_later_writes():
-    let v : mut = [1, 2]
+    let v : mut i64[] = [1, 2]
     let it := v.iterate()
     assert_eq(it.next(), ∃(1))
     v[1] ← 99
@@ -84,7 +84,7 @@ fn test_iterate_byte_array():
 // An element of 0 is a value, so it does not end the loop.
 @test
 fn test_falsy_elements_do_not_end_iteration():
-    let v := [0, 0, 0]
+    let v : i64[] = [0, 0, 0]
     let it := v.iterate()
     let count : mut i64 = 0
     while e := it.next():
@@ -105,7 +105,7 @@ fn test_other_falsy_elements():
 // carry ∅ without it being mistaken for the end.
 @test
 fn test_none_element_is_still_present():
-    let v := [∅, 1]
+    let v : i64[] = [∅, 1]
     let it := v.iterate()
     let count : mut i64 = 0
     while e := it.next():
@@ -126,7 +126,7 @@ fn test_bare_values_keep_their_truthiness():
 // Comparing with ∅ remains a correct way to write the same test.
 @test
 fn test_comparison_with_none_still_works():
-    let v := [1, 2]
+    let v : i64[] = [1, 2]
     let it := v.iterate()
     let count : mut i64 = 0
     let e : mut = it.next()
@@ -137,13 +137,13 @@ fn test_comparison_with_none_still_works():
 
 @expect error "iterator.next takes no arguments"
 fn error_next_with_argument():
-    let v : mut = [1]
+    let v : mut i64[] = [1]
     let it : mut = v.iterate()
     _ ← it.next(0)
 
 @expect error "answers only next"
 fn error_iterator_other_method():
-    let v : mut = [1]
+    let v : mut i64[] = [1]
     let it : mut = v.iterate()
     _ ← it.rewind()
 

@@ -72,7 +72,7 @@ fn test_format_array():
 @test
 fn test_format_empty_array():
     let alloc := std.arena.allocator()
-    let arr := [1]
+    let arr : i64[] = [1]
     // slice to empty not available; test single-element
     assert_eq(std.format(alloc, "{}", [42]), "[42]")
     alloc.deinit()

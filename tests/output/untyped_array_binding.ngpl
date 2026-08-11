@@ -1,0 +1,8 @@
+// An array of numbers that settled on nothing is an array of the type
+// the bootstrap does not have.  The type it asks for is the one the
+// program would write, brackets and all.
+@start
+@impure
+fn main():
+    let a := [1, 2, 3]
+    std.println("{}", a[0])

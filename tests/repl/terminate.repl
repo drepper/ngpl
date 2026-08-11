@@ -1,5 +1,5 @@
 fn inner() → i64:
-    let values := [1]
+    let values : i64[] = [1]
     values[5]
 
 fn outer() → i64:

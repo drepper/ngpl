@@ -18,7 +18,7 @@ fn test_ascii_arrow_assign():
 // <- in array element assignment
 @test
 fn test_ascii_arrow_array_assign():
-  let a : mut = [1, 2, 3]
+  let a : mut i64[] = [1, 2, 3]
   a[1] <- 99
   assert_eq(99, a[1])
 

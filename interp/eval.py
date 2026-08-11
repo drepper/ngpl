@@ -71,6 +71,35 @@ def _nth_root_exact(n: int, degree: int) -> int | None:
 # Free-variable collection for lambda validation
 # ---------------------------------------------------------------------------
 
+def _literal_element_type(elements) -> str | None:
+    """What the elements of an array literal settle on between them.
+
+    An element that states a width says what the array is made of, and
+    the ones that state none take it, as they would meeting the same
+    width anywhere else.  Where none of them states one there is
+    nothing to settle on, and the array stays uncommitted -- which a
+    binding then has to say something about.
+    """
+    width = None
+    for element in elements:
+        if isinstance(element, IntValue):
+            if is_unwidthed(element.width):
+                continue
+            found = element.width
+        elif isinstance(element, FloatValue):
+            if element.width == "float":
+                continue
+            found = element.width
+        else:
+            return None
+        if width is not None and width != found:
+            # Two widths that disagree are settled where the array is
+            # measured against a type, not here.
+            return None
+        width = found
+    return width
+
+
 def _collect_refs_from_stmts(stmts) -> set[str]:
     """Collect all variable/function references from a list of statements."""
     refs: set[str] = set()
@@ -2195,7 +2224,10 @@ class Evaluator:
         # Array literal [expr, expr, ...].
         if isinstance(node, ArrayLit):
             elements = [self.eval_expr(e) for e in node.elements]
-            return ObjectValue(ArrayValue(elements))
+            settled = _literal_element_type(elements)
+            if settled is not None:
+                elements = [coerce_to_type(e, settled) for e in elements]
+            return ObjectValue(ArrayValue(elements, element_type=settled))
 
         # Subscript read: arr[i] or arr[i, j, ...] or tuple[i].
         if isinstance(node, Subscript) and any(i is None for i in node.indices):

@@ -43,9 +43,9 @@ fn test_typeof_foreach_range():
 
 @test
 fn test_typeof_foreach_array():
-    let arr := [10, 20, 30]
+    let arr : i64[] = [10, 20, 30]
     foreach v := arr:
-        static_assert_eq(@typeof(v), @typeof(0))
+        static_assert_eq(@typeof(v), i64)
 
 // --- @unitof on function parameters ---
 
@@ -125,7 +125,7 @@ fn test_sizeof_tuple_var():
 @test
 @expect error "not part of its type; use .sizeof"
 fn test_sizeof_dynamic_array_var():
-    let arr : mut = [1, 2, 3]
+    let arr : mut i64[] = [1, 2, 3]
     @sizeof(arr)
 
 // --- @unitof on a name ---

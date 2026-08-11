@@ -119,6 +119,84 @@ fn test_a_sized_value_settles_nothing():
 // test, since it is reported while the definitions are installed.
 
 // ---------------------------------------------------------------------
+// An array settles element by element
+// ---------------------------------------------------------------------
+//
+// An array of numbers that settled on nothing is an array of the type
+// the bootstrap does not have, so a binding of one is refused the same
+// way.  There are two ways to answer: say what the array is, or let
+// one element say what its numbers are.
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_array():
+    let a := [1, 2, 3]
+
+@test
+@expect error "settles on 'float'"
+fn error_untyped_float_array():
+    let a := [1.5, 2.5]
+
+// The type it asks for is the one the program would write, brackets
+// and all.
+@test
+@expect error "state a sized type, as .let a : i64.. = "
+fn error_untyped_array_names_the_replacement():
+    let a := [1, 2, 3]
+
+// A dimension is a comma inside one pair of brackets, so an array of
+// arrays is asked for as i64[,].
+@test
+@expect error "state a sized type, as .let m : i64.,. = "
+fn error_untyped_nested_array_names_the_replacement():
+    let m := [[1, 2], [3, 4]]
+
+// --- the two ways to answer ---
+
+@test
+fn test_the_binding_may_say_it():
+    let a : i64[] = [1, 2, 3]
+    static_assert_eq(@typeof(a[0]), i64)
+    assert_eq(a[0], 1)
+
+// One element saying what it is settles the rest, as a literal takes
+// the width of what it is combined with anywhere else.
+@test
+fn test_one_element_may_say_it():
+    let a := [1i64, 2, 3]
+    static_assert_eq(@typeof(a[0]), i64)
+    static_assert_eq(@typeof(a[1]), i64)
+    static_assert_eq(@typeof(a[2]), i64)
+    assert_eq(a[2], 3)
+
+@test
+fn test_a_later_element_may_be_the_one_that_says_it():
+    let a := [1, 2, 3u8]
+    static_assert_eq(@typeof(a[0]), u8)
+    assert_eq(a[0], 1)
+
+@test
+fn test_one_element_may_say_it_for_floats():
+    let a := [1.5f32, 2.5]
+    static_assert_eq(@typeof(a[0]), f32)
+    static_assert_eq(@typeof(a[1]), f32)
+
+// An array whose elements are values that already have a type needs
+// nothing said.
+@test
+fn test_elements_that_already_have_a_type():
+    let n : u8 = 7
+    let a := [n, 8, 9]
+    static_assert_eq(@typeof(a[1]), u8)
+    assert_eq(a[2], 9)
+
+// An array of something other than numbers has nothing to settle.
+@test
+fn test_an_array_of_strings_settles_nothing():
+    let words := ["one", "two"]
+    assert(words[0] == "one")
+
+// ---------------------------------------------------------------------
 // Every operator that produces a number
 // ---------------------------------------------------------------------
 //

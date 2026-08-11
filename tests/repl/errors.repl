@@ -1,6 +1,6 @@
 undefined_thing
 1 + 2
-let a := [1, 2]
+let a : i64[] = [1, 2]
 a[9]
 "still alive"
 fn bad_call(n : i64) → i64:

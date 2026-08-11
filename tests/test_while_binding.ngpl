@@ -11,7 +11,7 @@
 
 @test
 fn test_binds_each_iteration():
-    let v := [1, 2, 3]
+    let v : i64[] = [1, 2, 3]
     let it := v.iterate()
     let total : mut i64 = 0
     while e := it.next():
@@ -21,7 +21,7 @@ fn test_binds_each_iteration():
 // The expression runs once per iteration, not once for the whole loop.
 @test
 fn test_expression_is_re_evaluated():
-    let source := [5, 4, 3]
+    let source : i64[] = [5, 4, 3]
     let it := source.iterate()
     let seen : mut = []
     while e := it.next():
@@ -33,7 +33,7 @@ fn test_expression_is_re_evaluated():
 // A loop whose first value is absent runs its body no times.
 @test
 fn test_empty_runs_body_never():
-    let v := []
+    let v : i64[] = []
     let it := v.iterate()
     let ran : mut i64 = 0
     while e := it.next():
@@ -43,7 +43,7 @@ fn test_empty_runs_body_never():
 // The test is on the bound value, so a falsy element does not stop it.
 @test
 fn test_falsy_values_continue():
-    let v := [0, 0]
+    let v : i64[] = [0, 0]
     let it := v.iterate()
     let ran : mut i64 = 0
     while e := it.next():
@@ -78,7 +78,7 @@ fn test_bound_to_the_value_itself():
 // The same holds for every operation that answers with an optional.
 @test
 fn test_unwraps_pop():
-    let v : mut = [1, 2, 3]
+    let v : mut i64[] = [1, 2, 3]
     let sum : mut i64 = 0
     while x := v.pop():
         sum ← sum + x
@@ -87,7 +87,7 @@ fn test_unwraps_pop():
 
 @test
 fn test_unwraps_get():
-    let v : mut = [42]
+    let v : mut i64[] = [42]
     let seen : mut i64 = 0
     while x := v.get(0):
         seen ← x
@@ -148,7 +148,7 @@ fn test_plain_binding_does_not_write_back():
 // write them back to.
 @expect error "declared mut, but the loop produces values"
 fn error_mut_on_a_plain_value():
-    let v : mut = [1, 2]
+    let v : mut i64[] = [1, 2]
     while x : mut = v.pop():
         x ← 0
 
@@ -158,7 +158,7 @@ fn error_mut_on_a_plain_value():
 
 @test
 fn test_typed_binding():
-    let v := [7, 8]
+    let v : i64[] = [7, 8]
     let it := v.iterate()
     let total : mut i64 = 0
     while e : i64 = it.next():
@@ -172,7 +172,7 @@ fn test_typed_binding():
 // It is rebound every iteration, so assigning to it would be discarded.
 @expect error "cannot assign to while variable 'e'"
 fn error_assign_to_bound_variable():
-    let v : mut = [1, 2]
+    let v : mut i64[] = [1, 2]
     let it : mut = v.iterate()
     while e := it.next():
         e ← 99
@@ -180,10 +180,10 @@ fn error_assign_to_bound_variable():
 // Its type can be asked for inside the body.
 @test
 fn test_typeof_bound_variable():
-    let v := [1]
+    let v : i64[] = [1]
     let it := v.iterate()
     while e := it.next():
-        static_assert_eq(@typeof(e), "int")
+        static_assert_eq(@typeof(e), i64)
 
 // ---------------------------------------------------------------------
 // The plain form is unaffected
@@ -216,11 +216,11 @@ fn test_inline_body():
 // Nested loops each keep their own binding.
 @test
 fn test_nested_bindings():
-    let outer := [1, 2]
+    let outer : i64[] = [1, 2]
     let oit := outer.iterate()
     let total : mut i64 = 0
     while a := oit.next():
-        let inner := [10, 20]
+        let inner : i64[] = [10, 20]
         let iit := inner.iterate()
         while b := iit.next():
             total ← total + (a × b)

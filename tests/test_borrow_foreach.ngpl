@@ -15,10 +15,10 @@
 // Without a borrow the loop variable holds a copy of the element.
 @test
 fn test_plain_iteration_copies():
-    let nums := [1, 2, 3]
+    let nums : i64[] = [1, 2, 3]
     let total : mut i64 = 0
     foreach x := nums:
-        static_assert_eq(@typeof(x), "int")
+        static_assert_eq(@typeof(x), i64)
         total ← total + x
     assert_eq(total, 6)
     // The array is untouched: a copy has nowhere to write back to.
@@ -28,27 +28,27 @@ fn test_plain_iteration_copies():
 // A shared borrow refers to the element, but only for reading.
 @test
 fn test_shared_borrow_type():
-    let nums := [1, 2, 3]
+    let nums : i64[] = [1, 2, 3]
     foreach x := &nums:
-        static_assert_eq(@typeof(x), "&int")
+        static_assert_eq(@typeof(x), "&i64")
 
 // A mutable borrow refers to the element and may be written through.
 @test
 fn test_mut_borrow_type():
-    let nums : mut = [1, 2, 3]
+    let nums : mut i64[] = [1, 2, 3]
     foreach x := &mut nums:
-        static_assert_eq(@typeof(x), "&mut int")
+        static_assert_eq(@typeof(x), "&mut i64")
 
 // All three side by side over the same array.
 @test
 fn test_three_forms_differ():
-    let nums : mut = [1, 2, 3]
+    let nums : mut i64[] = [1, 2, 3]
     foreach a := nums:
-        static_assert_eq(@typeof(a), "int")
+        static_assert_eq(@typeof(a), i64)
     foreach b := &nums:
-        static_assert_eq(@typeof(b), "&int")
+        static_assert_eq(@typeof(b), "&i64")
     foreach c := &mut nums:
-        static_assert_eq(@typeof(c), "&mut int")
+        static_assert_eq(@typeof(c), "&mut i64")
 
 // The element type is carried through the borrow, not fixed at int.
 @test
@@ -65,7 +65,7 @@ fn test_borrow_type_follows_element_type():
 
 @test
 fn test_mut_borrow_updates_elements():
-    let nums : mut = [1, 2, 3]
+    let nums : mut i64[] = [1, 2, 3]
     foreach x := &mut nums:
         x ← x + 1
     assert_eq(nums[0], 2)
@@ -76,7 +76,7 @@ fn test_mut_borrow_updates_elements():
 // the array that changed and not a copy.
 @test
 fn test_mut_borrow_result_is_observable():
-    let nums : mut = [1, 2, 3]
+    let nums : mut i64[] = [1, 2, 3]
     foreach x := &mut nums:
         x ← x + 1
     let total : mut i64 = 0
@@ -87,7 +87,7 @@ fn test_mut_borrow_result_is_observable():
 // Reading the loop variable yields the element, not the reference.
 @test
 fn test_mut_borrow_reads_the_element():
-    let nums : mut = [10, 20]
+    let nums : mut i64[] = [10, 20]
     let seen : mut i64 = 0
     foreach x := &mut nums:
         seen ← seen + x
@@ -96,7 +96,7 @@ fn test_mut_borrow_reads_the_element():
 // Assigning something other than the old value works the same way.
 @test
 fn test_mut_borrow_plain_assignment():
-    let nums : mut = [1, 2, 3]
+    let nums : mut i64[] = [1, 2, 3]
     foreach x := &mut nums:
         x ← 7
     assert_eq(nums[0], 7)
@@ -105,7 +105,7 @@ fn test_mut_borrow_plain_assignment():
 // An empty array is simply not iterated.
 @test
 fn test_mut_borrow_empty_array():
-    let nums : mut = []
+    let nums : mut i64[] = []
     foreach x := &mut nums:
         x ← 1
     assert_eq(nums.sizeof, 0)
@@ -113,8 +113,8 @@ fn test_mut_borrow_empty_array():
 // Two arrays can be borrowed at once, one variable each.
 @test
 fn test_two_mut_borrows():
-    let a : mut = [1, 2]
-    let b : mut = [10, 20]
+    let a : mut i64[] = [1, 2]
+    let b : mut i64[] = [10, 20]
     foreach x, y := &mut a, &mut b:
         x ← x + 1
         y ← y + 1
@@ -129,7 +129,7 @@ fn test_two_mut_borrows():
 
 @test
 fn test_shared_borrow_reads():
-    let nums := [1, 2, 3]
+    let nums : i64[] = [1, 2, 3]
     let total : mut i64 = 0
     foreach x := &nums:
         total ← total + x
@@ -138,7 +138,7 @@ fn test_shared_borrow_reads():
 // The array is untouched by a shared borrow.
 @test
 fn test_shared_borrow_leaves_array_alone():
-    let nums := [1, 2, 3]
+    let nums : i64[] = [1, 2, 3]
     foreach x := &nums:
         assert(x > 0)
     assert_eq(nums[0], 1)
@@ -147,7 +147,7 @@ fn test_shared_borrow_leaves_array_alone():
 
 @expect error "cannot assign to borrowed variable 'x'"
 fn error_assign_through_shared_borrow():
-    let nums : mut = [1, 2, 3]
+    let nums : mut i64[] = [1, 2, 3]
     foreach x := &nums:
         x ← x + 1
 
@@ -158,7 +158,7 @@ fn error_assign_through_shared_borrow():
 // An immutable binding cannot be lent out for writing.
 @expect error "cannot mutably borrow let variable 'nums'"
 fn error_mut_borrow_of_let():
-    let nums := [1, 2, 3]
+    let nums : i64[] = [1, 2, 3]
     foreach x := &mut nums:
         x ← x + 1
 

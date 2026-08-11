@@ -9,21 +9,21 @@
 
 @test
 fn test_push_appends():
-    let v : mut = [1, 2, 3]
+    let v : mut i64[] = [1, 2, 3]
     v.push(4)
     assert_eq(v.sizeof, 4)
     assert_eq(v[3], 4)
 
 @test
 fn test_push_onto_empty():
-    let v : mut = []
+    let v : mut i64[] = []
     v.push(7)
     assert_eq(v.sizeof, 1)
     assert_eq(v[0], 7)
 
 @test
 fn test_pop_returns_last():
-    let v : mut = [1, 2, 3]
+    let v : mut i64[] = [1, 2, 3]
     assert_eq(v.pop(), ∃(3))
     assert_eq(v.sizeof, 2)
     assert_eq(v[1], 2)
@@ -32,12 +32,12 @@ fn test_pop_returns_last():
 // answers with an optional rather than failing.
 @test
 fn test_pop_empty_is_none():
-    let v : mut = []
+    let v : mut i64[] = []
     assert_eq(v.pop(), ∅)
 
 @test
 fn test_pop_until_empty():
-    let v : mut = [1, 2]
+    let v : mut i64[] = [1, 2]
     assert_eq(v.pop(), ∃(2))
     assert_eq(v.pop(), ∃(1))
     assert_eq(v.pop(), ∅)
@@ -46,7 +46,7 @@ fn test_pop_until_empty():
 // push then pop leaves the array as it was.
 @test
 fn test_push_pop_round_trip():
-    let v : mut = [1, 2]
+    let v : mut i64[] = [1, 2]
     v.push(3)
     assert_eq(v.pop(), ∃(3))
     assert_eq(v.sizeof, 2)
@@ -59,7 +59,7 @@ fn test_push_pop_round_trip():
 
 @test
 fn test_insert_at_front_shifts_right():
-    let v : mut = [1, 2, 3]
+    let v : mut i64[] = [1, 2, 3]
     v.insert(0, 0)
     assert_eq(v.sizeof, 4)
     assert_eq(v[0], 0)
@@ -68,7 +68,7 @@ fn test_insert_at_front_shifts_right():
 
 @test
 fn test_insert_in_middle():
-    let v : mut = [1, 3]
+    let v : mut i64[] = [1, 3]
     v.insert(1, 2)
     assert_eq(v[0], 1)
     assert_eq(v[1], 2)
@@ -77,14 +77,14 @@ fn test_insert_in_middle():
 // Inserting at the length appends, as in Rust.
 @test
 fn test_insert_at_length_appends():
-    let v : mut = [1, 2]
+    let v : mut i64[] = [1, 2]
     v.insert(2, 3)
     assert_eq(v.sizeof, 3)
     assert_eq(v[2], 3)
 
 @test
 fn test_remove_returns_element_and_shifts_left():
-    let v : mut = [1, 2, 3]
+    let v : mut i64[] = [1, 2, 3]
     assert_eq(v.remove(1), 2)
     assert_eq(v.sizeof, 2)
     assert_eq(v[0], 1)
@@ -92,20 +92,20 @@ fn test_remove_returns_element_and_shifts_left():
 
 @test
 fn test_remove_first():
-    let v : mut = [1, 2]
+    let v : mut i64[] = [1, 2]
     assert_eq(v.remove(0), 1)
     assert_eq(v[0], 2)
 
 @test
 fn test_remove_last():
-    let v : mut = [1, 2]
+    let v : mut i64[] = [1, 2]
     assert_eq(v.remove(1), 2)
     assert_eq(v.sizeof, 1)
 
 // insert then remove at the same index leaves the array as it was.
 @test
 fn test_insert_remove_round_trip():
-    let v : mut = [1, 2, 3]
+    let v : mut i64[] = [1, 2, 3]
     v.insert(1, 9)
     assert_eq(v.remove(1), 9)
     assert_eq(v.sizeof, 3)
@@ -117,25 +117,25 @@ fn test_insert_remove_round_trip():
 
 @test
 fn test_get_in_range():
-    let v := [10, 20, 30]
+    let v : i64[] = [10, 20, 30]
     assert_eq(v.get(0), ∃(10))
     assert_eq(v.get(2), ∃(30))
 
 @test
 fn test_get_out_of_range_is_none():
-    let v := [1, 2]
+    let v : i64[] = [1, 2]
     assert_eq(v.get(2), ∅)
     assert_eq(v.get(99), ∅)
 
 @test
 fn test_get_on_empty():
-    let v := []
+    let v : i64[] = []
     assert_eq(v.get(0), ∅)
 
 // The optional composes with ?? to supply a default.
 @test
 fn test_get_with_default():
-    let v := [1, 2]
+    let v : i64[] = [1, 2]
     assert_eq(v.get(0) ?? ⁻1, 1)
     assert_eq(v.get(9) ?? ⁻1, ⁻1)
 
@@ -143,7 +143,7 @@ fn test_get_with_default():
 // of 0 is a value that is there.
 @test
 fn test_get_presence_not_truth():
-    let v := [0]
+    let v : i64[] = [0]
     let present : mut = false
     if v.get(0):
         present ← true
@@ -155,7 +155,7 @@ fn test_get_presence_not_truth():
 
 @test
 fn test_pop_presence_not_truth():
-    let v : mut = [0]
+    let v : mut i64[] = [0]
     let present : mut = false
     if v.pop():
         present ← true
@@ -168,7 +168,7 @@ fn test_pop_presence_not_truth():
 // Unlike get, a subscript out of range is still an error.
 @expect error "out of range"
 fn error_subscript_still_checks():
-    let v : mut = [1, 2]
+    let v : mut i64[] = [1, 2]
     _ ← v[9]
 
 // ---------------------------------------------------------------------
@@ -177,17 +177,17 @@ fn error_subscript_still_checks():
 
 @expect error "insert index 5 out of range"
 fn error_insert_past_end():
-    let v : mut = [1, 2]
+    let v : mut i64[] = [1, 2]
     v.insert(5, 9)
 
 @expect error "remove index 5 out of range"
 fn error_remove_past_end():
-    let v : mut = [1, 2]
+    let v : mut i64[] = [1, 2]
     _ ← v.remove(5)
 
 @expect error "remove index 0 out of range"
 fn error_remove_from_empty():
-    let v : mut = []
+    let v : mut i64[] = []
     _ ← v.remove(0)
 
 // ---------------------------------------------------------------------
@@ -196,24 +196,24 @@ fn error_remove_from_empty():
 
 @expect error "array.push takes 1 argument"
 fn error_push_two_values():
-    let v : mut = [1]
+    let v : mut i64[] = [1]
     v.push(1, 2)
 
 @expect error "array.pop takes 0 arguments"
 fn error_pop_with_argument():
-    let v : mut = [1]
+    let v : mut i64[] = [1]
     _ ← v.pop(0)
 
 @expect error "array.insert takes 2 arguments"
 fn error_insert_one_argument():
-    let v : mut = [1]
+    let v : mut i64[] = [1]
     v.insert(0)
 
 // A pushed value takes the array's element type, so it can then be read
 // back with an index carrying that type's unit.
 @test
 fn test_push_coerces_to_element_type():
-    let v : mut = std.bytes("ab")
+    let v : mut byte[] = std.bytes("ab")
     v.push(67)
     assert_eq(v.sizeof, 3)
     assert_eq(v.get(2¤byte), ∃(67))
@@ -221,12 +221,12 @@ fn test_push_coerces_to_element_type():
 // An index carries the same unit rule as a subscript does.
 @test
 fn test_index_unit_is_accepted():
-    let v := std.bytes("abc")
+    let v : byte[] = std.bytes("abc")
     assert_eq(v.get(1¤byte), ∃(98))
 
 @expect error "array index requires unit"
 fn error_index_wrong_unit():
-    let v : mut = std.bytes("abc")
+    let v : mut byte[] = std.bytes("abc")
     _ ← v.get(1¤count)
 
 // ---------------------------------------------------------------------
@@ -236,7 +236,7 @@ fn error_index_wrong_unit():
 // Building an array by pushing in a loop.
 @test
 fn test_push_in_a_loop():
-    let v : mut = []
+    let v : mut i64[] = []
     foreach i := 1…4:
         v.push(i × i)
     assert_eq(v.sizeof, 4)
@@ -246,7 +246,7 @@ fn test_push_in_a_loop():
 // Draining one array into another.
 @test
 fn test_pop_into_another_array():
-    let src : mut = [1, 2, 3]
+    let src : mut i64[] = [1, 2, 3]
     let dst : mut = []
     foreach i := 1…3:
         dst.push(src.pop() ?? 0)
@@ -351,17 +351,17 @@ fn test_fixed_to_dynamic_becomes_dynamic():
 
 @expect error "push: cannot modify let variable 'v'"
 fn error_push_on_let_binding():
-    let v := [1, 2]
+    let v : i64[] = [1, 2]
     v.push(3)
 
 @expect error "pop: cannot modify let variable 'v'"
 fn error_pop_on_let_binding():
-    let v := [1, 2]
+    let v : i64[] = [1, 2]
     _ ← v.pop()
 
 @expect error "cannot modify borrowed variable 'arr'"
 fn error_push_through_shared_borrow():
-    let v : mut = [1, 2]
+    let v : mut i64[] = [1, 2]
     pushes_through(&v)
 
 fn pushes_through(arr : &i64[]):

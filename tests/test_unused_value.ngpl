@@ -178,7 +178,7 @@ fn test_an_impure_call_is_quiet():
 // claim is made about it either.
 @test
 fn test_a_builtin_call_is_quiet():
-    let v : mut = [1, 2]
+    let v : mut i64[] = [1, 2]
     v.push(3)
     assert_eq(v.sizeof, 3)
 

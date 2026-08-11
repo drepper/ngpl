@@ -89,6 +89,21 @@ static_assert(2 ↑ 200 > 0)  // fine, never a runtime value
 
 What the bootstrap does not provide is a *value* that stays arbitrary-precision, since that needs a runtime representation the sized types do not have.  Where such a value would be kept — which is to say, wherever one is named — a sized type has to be written down.  The full language settles an unannotated binding on `int` or `float`; the bootstrap has neither and says so.
 
+An array is asked the same question about its elements, and can be answered from either side — by the binding, or by one element saying what its numbers are:
+
+```
+let a := [1, 2, 3]
+
+error: 'a': a binding with no type written down settles on 'int', which
+is an arbitrary-precision type the bootstrap implementation does not
+provide; state a sized type, as 'let a : i64[] = …'
+
+let a : i64[] = [1, 2, 3]   // the binding says it
+let a := [1i64, 2, 3]       // one element says it, and the rest take it
+```
+
+The second form is the rule for literals applied within the array: an element that states a width says what the array is made of, and the ones that state none take it.
+
 ### The Compiler
 
 The compiler transforms source into efficient machine code:

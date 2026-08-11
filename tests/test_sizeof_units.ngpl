@@ -17,7 +17,7 @@ fn assert_true(cond:bool, msg:str):
 @test
 @impure
 fn test_sizeof_array_ptrdiff():
-  let arr := [10, 20, 30]
+  let arr : i64[] = [10, 20, 30]
   let sz ¤ptrdiff : i64 = arr.sizeof
   assert_eq_int(sz, 3, "array sizeof is 3")
 
@@ -125,7 +125,7 @@ fn test_cmp_unit_with_dimensionless():
 @test
 @impure
 fn test_sizeof_in_arithmetic():
-  let arr := [10, 20, 30, 40, 50]
+  let arr : i64[] = [10, 20, 30, 40, 50]
   let sz ¤ptrdiff : i64 = arr.sizeof
   let doubled := sz × 2
   assert_eq_int(doubled, 10, "sizeof×2")

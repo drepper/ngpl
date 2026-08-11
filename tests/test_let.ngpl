@@ -71,22 +71,22 @@ fn main():
 
 @expect error "cannot assign to element of let variable 'v'"
 fn error_element_of_let_array():
-    let v := [1, 2, 3]
+    let v : i64[] = [1, 2, 3]
     v[0] ← 9
 
 @expect error "cannot assign to element of let variable 'v'"
 fn error_slice_of_let_array():
-    let v := [1, 2, 3, 4]
+    let v : i64[] = [1, 2, 3, 4]
     v[1…2] ← [8, 9]
 
 // Reaching through more than one subscript changes nothing: the write
 // still lands in what the binding names.
 @expect error "cannot assign to element of let variable 'm'"
 fn error_nested_element_of_let_array():
-    let m := [[1, 2], [3, 4]]
+    let m : i64[,] = [[1, 2], [3, 4]]
     m[0][1] ← 9
 
-let LET_ARRAY := [1, 2, 3]
+let LET_ARRAY : i64[] = [1, 2, 3]
 
 @expect error "cannot assign to element of let variable 'LET_ARRAY'"
 fn error_element_of_let_global():
@@ -95,13 +95,13 @@ fn error_element_of_let_global():
 // A mutable binding is unaffected.
 @test
 fn test_element_of_mut_array():
-    let v : mut = [1, 2, 3]
+    let v : mut i64[] = [1, 2, 3]
     v[0] ← 9
     assert_eq(v[0], 9)
 
 @test
 fn test_nested_element_of_mut_array():
-    let m : mut = [[1, 2], [3, 4]]
+    let m : mut i64[,] = [[1, 2], [3, 4]]
     m[0][1] ← 9
     assert_eq(m[0][1], 9)
 
@@ -112,13 +112,13 @@ fn writes_to_parameter(arr):
 
 @expect error "cannot assign to element of let variable 'arr'"
 fn error_element_of_parameter():
-    let v : mut = [1, 2]
+    let v : mut i64[] = [1, 2]
     writes_to_parameter(v)
 
 // Reading an element is never affected.
 @test
 fn test_reading_a_let_element():
-    let v := [1, 2, 3]
+    let v : i64[] = [1, 2, 3]
     assert_eq(v[0], 1)
     assert_eq(v.get(2), ∃(3))
     let total : mut i64 = 0

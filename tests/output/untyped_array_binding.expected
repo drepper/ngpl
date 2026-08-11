@@ -1,0 +1,7 @@
+error: 'a': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let a : i64[] = …'
+  --> tests/output/untyped_array_binding.ngpl:7:21
+    |
+  7 |     let a := [1, 2, 3]
+    |                     ^
+  8 |     std.println("{}", a[0])
+    |

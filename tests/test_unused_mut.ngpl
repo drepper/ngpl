@@ -54,13 +54,13 @@ fn test_assignment_counts():
 
 @test
 fn test_element_assignment_counts():
-    let v : mut = [1, 2]
+    let v : mut i64[] = [1, 2]
     v[0] ← 9
     assert_eq(v[0], 9)
 
 @test
 fn test_nested_element_assignment_counts():
-    let m : mut = [[1, 2]]
+    let m : mut i64[,] = [[1, 2]]
     m[0][1] ← 9
     assert_eq(m[0][1], 9)
 
@@ -75,13 +75,13 @@ fn test_field_assignment_counts():
 
 @test
 fn test_push_counts():
-    let v : mut = [1]
+    let v : mut i64[] = [1]
     v.push(2)
     assert_eq(v.sizeof, 2)
 
 @test
 fn test_pop_counts():
-    let v : mut = [1, 2]
+    let v : mut i64[] = [1, 2]
     _ ← v.pop()
     assert_eq(v.sizeof, 1)
 
@@ -92,14 +92,14 @@ fn might_write(a : &mut i32[]):
 
 @test
 fn test_reference_argument_counts():
-    let v : mut = [1]
+    let v : mut i64[] = [1]
     might_write(&v)
     assert_eq(v.sizeof, 2)
 
 // A mutable borrow in a foreach writes through to the elements.
 @test
 fn test_mut_borrow_counts():
-    let v : mut = [1, 2]
+    let v : mut i64[] = [1, 2]
     foreach e := &mut v:
         e ← e + 1
     assert_eq(v[0], 2)
