@@ -47,3 +47,6 @@ what it is.
 - [One Type and One Unit for Everything an Array Holds](design/array-elements/README.md)
   — what a declaration says, and why a unit measures elements rather
   than the container
+- [Leaving a Loop, and Which One](design/loop-labels/README.md) —
+  `break`, `continue`, and a name on the line above a loop so an inner
+  one can act on an outer

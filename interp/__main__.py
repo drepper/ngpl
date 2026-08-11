@@ -572,8 +572,15 @@ def _iter_ast(node, stop_at=()):
     yield node
     if stop_at and isinstance(node, stop_at):
         return
-    for value in vars(node).values():
-        yield from _iter_ast(value, stop_at)
+    for name in _fields_of(node):
+        yield from _iter_ast(getattr(node, name, None), stop_at)
+
+
+def _fields_of(node) -> tuple[str, ...]:
+    """The names of what a node holds, however the node stores them."""
+    if hasattr(node, "__dict__"):
+        return tuple(vars(node))
+    return tuple(getattr(type(node), "__slots__", ()))
 
 
 def _propagated_error_type(expr, env) -> str | None:
@@ -1095,8 +1102,8 @@ def _modified_names(body) -> set[str]:
         if type(node).__module__ != "interp.ast":
             return
         yield node
-        for value in vars(node).values():
-            yield from walk(value)
+        for name in _fields_of(node):
+            yield from walk(getattr(node, name, None))
 
     def base_of(expr):
         while isinstance(expr, (_ast.Subscript, _ast.SliceAccess,
@@ -1193,7 +1200,8 @@ def _never_returns(node, env) -> bool:
     @noreturn leaves it too -- that is the whole of what the attribute
     says, and the whole of what makes what follows unreachable.
     """
-    if isinstance(node, _ast.ReturnStmt):
+    if isinstance(node, (_ast.ReturnStmt, _ast.BreakStmt,
+                         _ast.ContinueStmt)):
         return True
     expr = node.expr if isinstance(node, _ast.ExprStmt) else node
     if isinstance(expr, _ast.MethodCall):
@@ -1237,6 +1245,56 @@ def _unreachable_warnings(func_def, env) -> list[tuple[str, tuple | None]]:
             for arm in getattr(stmt, "arms", ()) or ():
                 walk(getattr(arm, "body", None))
     walk(func_def.body)
+    return warnings
+
+
+def _unused_loop_label_warnings(func_def) -> list[tuple[str, tuple | None]]:
+    """Find loop names nothing inside the loop takes.
+
+    A name exists to be written after a break or a continue.  One that
+    nothing takes says the loop is left from within when it is not,
+    which is a reader's mistake waiting to happen -- and it is usually
+    a leftover from a statement that was moved or deleted.  Reported as
+    a warning: the program is well-formed and may be mid-edit.
+
+    A lambda body is a boundary here as it is everywhere else: a break
+    written inside one cannot leave a loop outside it, so it does not
+    count as taking the name.
+    """
+    warnings: list[tuple[str, tuple | None]] = []
+
+    def takers(body) -> set[str]:
+        """The names break and continue take anywhere within a body."""
+        taken: set[str] = set()
+        for node in _iter_ast(body, stop_at=(_ast.LambdaExpr,)):
+            if isinstance(node, (_ast.BreakStmt, _ast.ContinueStmt)) \
+                    and node.label is not None:
+                taken.add(node.label)
+        return taken
+
+    def walk(body):
+        if not isinstance(body, list):
+            return
+        for stmt in body:
+            if isinstance(stmt, (_ast.WhileStmt, _ast.ForEachStmt)) \
+                    and stmt.label is not None \
+                    and stmt.label not in takers(stmt.body):
+                warnings.append((
+                    f"the loop is named '{stmt.label}' and nothing inside "
+                    f"it takes the name; a break or a continue reaches an "
+                    f"outer loop by naming it",
+                    stmt.label_pos))
+            for attr in ("body", "cons", "alt"):
+                walk(getattr(stmt, attr, None))
+            for arm in getattr(stmt, "arms", ()) or ():
+                walk(getattr(arm, "body", None))
+
+    walk(func_def.body)
+    # A lambda at any depth is walked on its own, since walk descends
+    # statements and a lambda is written inside an expression.
+    for node in _iter_ast(func_def.body):
+        if isinstance(node, _ast.LambdaExpr) and isinstance(node.body, list):
+            walk(node.body)
     return warnings
 
 
@@ -1715,6 +1773,66 @@ def _static_noreturn_check(func_def) -> str | None:
             and func_def.ret_type != "\N{EMPTY SET}":
         return (f"{func_def.name} is @noreturn, so nothing comes back from "
                 f"it, but its return type says {func_def.ret_type} does")
+    return None
+
+
+def _static_loop_check(func_def) -> str | None:
+    """Refuse a break or a continue that names no loop it is in.
+
+    Both say where execution goes, and where there is no such loop the
+    statement says nothing -- so it is refused where it is written
+    rather than left to be a jump to nowhere at the first run.  A
+    lambda is a boundary: its body is a separate function, and a loop
+    outside it is not one it can leave.
+    """
+    def walk(body, labels: tuple[str | None, ...]) -> str | None:
+        if not isinstance(body, list):
+            return None
+        for stmt in body:
+            found = visit(stmt, labels)
+            if found is not None:
+                return found
+        return None
+
+    def visit(stmt, labels: tuple[str | None, ...]) -> str | None:
+        if isinstance(stmt, (_ast.BreakStmt, _ast.ContinueStmt)):
+            word = "break" if isinstance(stmt, _ast.BreakStmt) else "continue"
+            if not labels:
+                return _Finding(f"{word} is written outside any loop, so "
+                                f"there is no loop for it to act on", stmt)
+            if stmt.label is not None and stmt.label not in labels:
+                named = ", ".join(sorted(l for l in labels if l is not None))
+                where = (f"the loops here are named {named}" if named
+                         else "no loop here is named")
+                return _Finding(f"{word} names the loop '{stmt.label}', "
+                                f"which is not one it is inside; {where}",
+                                stmt)
+            return None
+        if isinstance(stmt, (_ast.WhileStmt, _ast.ForEachStmt)):
+            return walk(stmt.body, labels + (stmt.label,))
+        for attr in ("body", "cons", "alt"):
+            inner = getattr(stmt, attr, None)
+            if isinstance(inner, list):
+                found = walk(inner, labels)
+                if found is not None:
+                    return found
+        for arm in getattr(stmt, "arms", ()) or ():
+            found = walk(getattr(arm, "body", None), labels)
+            if found is not None:
+                return found
+        return None
+
+    found = walk(func_def.body, ())
+    if found is not None:
+        return found
+    # A lambda body is a function of its own: a loop around the lambda
+    # is not one its body can leave, so it starts with no loops in hand.
+    for node in _iter_ast(func_def.body):
+        if isinstance(node, _ast.LambdaExpr) \
+                and isinstance(node.body, list):
+            found = walk(node.body, ())
+            if found is not None:
+                return found
     return None
 
 
@@ -2288,6 +2406,10 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 listable_err = _static_listable_check(defn)
                 if listable_err is not None:
                     raise DefinitionError(listable_err, _node_pos(defn))
+                loop_err = _static_loop_check(defn)
+                if loop_err is not None:
+                    raise DefinitionError(f"in {defn.name}: {loop_err}",
+                                          _finding_pos(loop_err) or _node_pos(defn))
                 literal_err = _static_literal_check(defn)
                 if literal_err is not None:
                     raise DefinitionError(f"in {defn.name}: {literal_err}",
@@ -2308,6 +2430,7 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 program.warnings.extend(
                     _redundant_return_type_warning(defn))
                 program.warnings.extend(_unused_mut_warnings(defn))
+                program.warnings.extend(_unused_loop_label_warnings(defn))
                 program.warnings.extend(_unreachable_warnings(defn, env))
                 program.warnings.extend(
                     _trailing_value_warnings(defn, env, struct_vars))
@@ -2467,6 +2590,9 @@ def main():
             listable_err = _static_listable_check(defn)
             if listable_err is not None:
                 raise DefinitionError(listable_err, _node_pos(defn))
+            loop_err = _static_loop_check(defn)
+            if loop_err is not None:
+                errors_produced.append(("error", loop_err))
             literal_err = _static_literal_check(defn)
             if literal_err is not None:
                 errors_produced.append(("error", literal_err))
@@ -2510,6 +2636,7 @@ def main():
             ("warning", message)
             for message, _ in (_redundant_return_type_warning(defn)
                                + _unused_mut_warnings(defn)
+                               + _unused_loop_label_warnings(defn)
                                + _unreachable_warnings(defn, env)
                                + _trailing_value_warnings(
                                    defn, env, _struct_vars_of(defn, env))))

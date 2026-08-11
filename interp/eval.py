@@ -25,7 +25,7 @@ from interp.ast import (
     LimitExpr,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr, SumTypeDef,
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
-    HashLit, SetLit, EmptyCollectionLit,
+    HashLit, SetLit, EmptyCollectionLit, BreakStmt, ContinueStmt,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
     OperatorRef,
     UnitExpr, UnitOfExpr, UnitRefExpr, RefExpr, BorrowExpr, TypeDef,
@@ -809,6 +809,7 @@ class Evaluator:
         self._warnings: list[str] = []
         self._wrapping: bool = False
         self._catch_depth: int = 0
+        self._loops: list[str | None] = []
         self._pure_func_name: str | None = None
         self._generic_map: dict[str, str] = {}
         self._comptime_vars: set[str] = set()
@@ -3830,6 +3831,22 @@ class Evaluator:
         if isinstance(stmt, ForEachStmt):
             return self._eval_foreach(stmt)
 
+        if isinstance(stmt, (BreakStmt, ContinueStmt)):
+            word = "break" if isinstance(stmt, BreakStmt) else "continue"
+            # The static checks catch this in a function; what reaches
+            # here is written somewhere they do not read, such as a
+            # statement typed at the prompt.
+            if not self._loops:
+                raise TypeError(f"{word} is written outside any loop, so "
+                                f"there is no loop for it to act on")
+            if stmt.label is not None and stmt.label not in self._loops:
+                raise TypeError(f"{word} names the loop "
+                                f"'{stmt.label}', which is not one it is "
+                                f"inside")
+            if isinstance(stmt, BreakStmt):
+                raise _BreakSignal(stmt.label)
+            raise _ContinueSignal(stmt.label)
+
         if isinstance(stmt, MatchStmt):
             return self._eval_match(stmt)
 
@@ -4049,11 +4066,38 @@ class Evaluator:
             raise TypeError(
                 f"cannot assign to {part} of let variable '{name}'")
 
+    @staticmethod
+    def _is_mine(signal, node) -> bool:
+        """Whether a loop signal is for this loop.
+
+        One with no label belongs to the loop it sits directly inside;
+        one with a label belongs to the loop of that name, and travels
+        outward through the loops in between.
+        """
+        return signal.label is None or signal.label == node.label
+
+    def _run_loop_body(self, body, node) -> bool:
+        """Run one turn of a loop.  False where the loop should stop."""
+        self._loops.append(node.label)
+        try:
+            self.eval_stmts(body)
+        except _ContinueSignal as signal:
+            if not self._is_mine(signal, node):
+                raise
+        except _BreakSignal as signal:
+            if not self._is_mine(signal, node):
+                raise
+            return False
+        finally:
+            self._loops.pop()
+        return True
+
     def _eval_while(self, node: WhileStmt):
         """Evaluate a while loop, with or without a bound variable."""
         if node.var_name is None:
             while to_bool(self.eval_expr(node.cond)):
-                self.eval_stmts(node.body)
+                if not self._run_loop_body(node.body, node):
+                    break
             return none()
 
         name = node.var_name
@@ -4089,7 +4133,8 @@ class Evaluator:
                 if node.var_type is not None and not isinstance(bound, Reference):
                     bound = coerce_to_type(bound, node.var_type)
                 self.env.define(name, bound)
-                self.eval_stmts(node.body)
+                if not self._run_loop_body(node.body, node):
+                    break
         finally:
             self._frozen_vars.pop(name, None)
             self._comptime_vars = self._comptime_vars - {name}
@@ -4235,7 +4280,8 @@ class Evaluator:
                         if var_type is not None and not isinstance(val, Reference):
                             val = coerce_to_type(val, var_type)
                         self.env.define(var_name, val)
-                self.eval_stmts(node.body)
+                if not self._run_loop_body(node.body, node):
+                    break
         finally:
             for name in flat_names:
                 self._frozen_vars.pop(name, None)
@@ -5865,6 +5911,30 @@ class Evaluator:
         if isinstance(result, IntValue) and base not in ("int", ""):
             result = mk_int(result.value, base)
         return some(result)
+
+
+class _LoopSignal(BaseException):
+    """Leaving a loop, or going round it again.
+
+    Carries the label the statement named, or None for the loop it
+    sits directly inside.  A loop catches the signals that are its own
+    and lets the rest travel outward, which is how a label reaches a
+    loop that is not the innermost.
+    """
+
+    __slots__ = ("label",)
+
+    def __init__(self, label=None):
+        super().__init__(label)
+        self.label = label
+
+
+class _BreakSignal(_LoopSignal):
+    """`break`."""
+
+
+class _ContinueSignal(_LoopSignal):
+    """`continue`."""
 
 
 class _ReturnSentinel(BaseException):

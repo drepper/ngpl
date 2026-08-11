@@ -52,6 +52,8 @@ KEYWORDS = {
     "or": "OR",
     "not": "NOT",
     "some": "SOME",
+    "break": "BREAK",
+    "continue": "CONTINUE",
     "start": "START",
     "test": "TEST",
     "foreach": "FOREACH",
