@@ -36,6 +36,8 @@ what it is.
   taking the glyphs back from the assignment that never used them here
 - [Threading a Function Over What It Is Handed](design/listable/README.md)
   — `@listable`, and why every operator is now marked with it
+- [A Hash and a Set](design/hash-and-set/README.md) — ⸨…⸩, why not
+  `{ }`, and what a lookup answers when there is nothing there
 - [How Many, and How Much](design/length/README.md) — `#` counts what a
   container holds and `@sizeof` measures memory, which used to be one word
 - [One Type and One Unit for Everything an Array Holds](design/array-elements/README.md)

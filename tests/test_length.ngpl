@@ -90,7 +90,7 @@ fn test_how_many_and_how_much():
 // ---------------------------------------------------------------------
 
 @test
-@expect error "is a question for an array, a string, or a tuple"
+@expect error "is a question for an array, a string, a tuple"
 fn error_how_many_things_are_in_a_number():
     let n : mut = #5i64
 

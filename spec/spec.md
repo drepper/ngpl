@@ -1637,6 +1637,114 @@ v ⍳ n + 10                      /* what is looked for is the sum */
 The glyph is APL's and the answer is Rust's.  One operator serves an array and a string, so a program that has learned it for one has learned it for the other; there is no separate `.find` for text.
 
 
+### Hashes and Sets
+
+A **hash** maps keys to values and a **set** holds values, each once.  Both are written between `⸨` (U+2E28) and `⸩` (U+2E29), and a colon after the first entry is what says the entries have two halves:
+
+```
+let d : std.hash(str, i64) = ⸨"a": 1, "b": 2⸩
+let s : std.set(i64) = ⸨1, 2, 3⸩
+```
+
+The types are written `std.hash(K, V)` and `std.set(V)`.
+
+The delimiters are not `{ }` because those are taken: `{` begins a struct literal and a braced block, so a value written with them could not be told from either.
+
+#### One Type of Key, One Type of Value
+
+A hash holds one type of key and one type of value, and a set one type of value — what a container holds is what its type says, as for an array, and the entries have to agree before there is anything for the type to say:
+
+```
+⸨"a": 1i64, 2i64: 3⸩
+
+error: an array holds one type of value, but element 0 is str and
+element 1 is i64
+```
+
+A key is remembered by *what it is*, so it has to be one of the things the language compares exactly — a number, a character, a string, a truth value, an enum.  A measured number is remembered by what it measures as well as by how much, since a metre and a second are not the same key.  Anything else is refused:
+
+```
+⸨[1i64, 2]: 1i64⸩
+
+error: i64[2] cannot be a key: a key is remembered by what it is, so it
+has to be one of the things the language compares exactly — a number, a
+character, a string, a truth value, an enum
+```
+
+#### The Empty One
+
+`⸨⸩` says neither what it holds nor which of the two it is, so a type says both.  Being empty is not the objection — a hash and a set are allowed to hold nothing:
+
+```
+let d : std.hash(str, i64) = ⸨⸩     /* holds nothing of that type */
+
+let e := ⸨⸩
+
+error: 'e': ⸨⸩ is empty, so it says neither what it holds nor whether it
+is a hash or a set, and the binding says nothing either; state a type,
+as 'let e : std.hash(str, i64) = ⸨⸩'
+```
+
+#### Reading, Writing, Asking
+
+A key that is not there is not a value to invent, so a read says whether there was one — the answer is `V?`, as `⍳` answers a position:
+
+```
+d["a"] ?? 0                     /* 1 */
+d["z"] ?? 0                     /* 0 */
+
+match d["a"]:
+    ∃(v): …
+    ∅: …
+```
+
+Writing at a key puts it there whether or not it was there before; a hash has no length to run past and nothing to be out of range of.  `∊` asks whether something is in one — a hash is looked through by its **keys**, which is what it is asked about, and what it holds against them is read with `[]`.  `#` counts the entries.
+
+```
+d["c"] ← 3
+"a" ∊ d                         /* true */
+2 ∊ s                           /* true */
+#d                              /* 2 */
+```
+
+#### Walking One
+
+The entries keep the order they arrived in.  A hash has no order of its own, and walking one in whatever order the implementation happened to use would make a program's output depend on something nobody wrote down.
+
+An entry is its key and what is held against it, which is a pair, so both halves are named the way any tuple is taken apart:
+
+```
+foreach (k, v) := d:
+    std.println("{} = {}", k, v)
+
+foreach v := s:
+    …
+```
+
+#### Members
+
+| Member | On | Answers |
+|--------|-----|---------|
+| `.keys()` | a hash | its keys, in order |
+| `.values()` | both | its values, in order |
+| `.insert(v)` | a set | ∅ — puts one in |
+| `.remove(k)` | both | whether there was one to remove |
+| `.clear()` | both | ∅ — empties it |
+
+What `[]`, `∊` and `#` already say is not repeated as a member.
+
+#### Comparison with Other Languages
+
+| Language | Hash literal | Set literal | Missing key |
+|----------|--------------|-------------|-------------|
+| Python | `{"a": 1}` | `{1, 2}` / `set()` | raises; `.get` answers `None` |
+| Rust | `HashMap::from(…)` | `HashSet::from(…)` | `.get` answers `Option` |
+| Go | `map[string]int{…}` | a map to `struct{}` | the zero value, and a second result |
+| NGPL | `⸨"a": 1⸩` | `⸨1, 2⸩` | `∅` |
+
+Python's `{}` shape is what these are written after, with different delimiters because `{` is taken.  Go's answer for a missing key is a value that was never put there, which is the invention this language avoids; Rust's is this one.
+
+
 ### How Many Things Are In It: `#`
 
 `#` answers how many things something holds:

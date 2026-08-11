@@ -13,7 +13,8 @@ from interp.ast import (
     BinOp, UnaryOp,
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, DestructureDef, ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
-    ArrayLit, Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
+    ArrayLit, HashLit, SetLit, EmptyCollectionLit,
+    Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
     DropUnitExpr,
     LimitExpr,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, TypeDef, EnumDef,
@@ -256,7 +257,7 @@ class Parser:
         if self._at_tuple_type():
             written = self._parse_tuple_type()
         else:
-            written = self._eat("IDENT").value
+            written = self._parse_base_type_name()
         self._reject_unit_here()
         written += self._parse_array_suffix()
         if self._check("OP") and self._cur().value == "?":
@@ -576,8 +577,8 @@ class Parser:
                     if self._at_tuple_type():
                         param_type = self._parse_tuple_type()
                     else:
-                        type_tok = self._eat("IDENT")
-                        param_type = type_tok.value
+                        type_tok = self._cur()
+                        param_type = self._parse_base_type_name()
                 param_unit = self._unit_after_type(param_unit, unit_tok)
                 param_type += self._parse_array_suffix()
                 if self._check("OP") and self._cur().value == "?":
@@ -623,8 +624,11 @@ class Parser:
                                 self.tokens[self.pos - 1].end_col)
             elif self._check("IDENT", "NONE", "OPT"):
                 ret_tok = self._cur()
-                self.pos += 1
-                ret_type = ret_tok.value
+                if ret_tok.type == "IDENT":
+                    ret_type = self._parse_base_type_name()
+                else:
+                    self.pos += 1
+                    ret_type = ret_tok.value
                 ret_type_pos = (arrow_tok.line, arrow_tok.col,
                                 ret_tok.end_col)
                 # A return type may state a unit against the element
@@ -692,6 +696,50 @@ class Parser:
             self.pos += 1
             name += "." + self._eat("IDENT").value
         return name
+
+    def _parse_base_type_name(self) -> str:
+        """Read the name a type starts with, container types and all.
+
+        Only std.hash and std.set take the dot: every other type is one
+        name, and a dot after one means something else.
+        """
+        name = self._eat("IDENT").value
+        if (self._check("PUNCT") and self._cur().value == "."
+                and self.pos + 1 < len(self.tokens)
+                and self.tokens[self.pos + 1].type == "IDENT"
+                and f"{name}.{self.tokens[self.pos + 1].value}"
+                in ("std.hash", "std.set")):
+            self.pos += 1
+            name += "." + self._eat("IDENT").value
+            return self._parse_type_arguments(name)
+        return name
+
+    def _parse_type_arguments(self, name: str) -> str:
+        """Read the types a container type is written with.
+
+        `std.hash(K, V)` and `std.set(V)` say what they hold the way a
+        program writes any other type, and what they hold are types, so
+        they are read as types.
+        """
+        if name not in ("std.hash", "std.set"):
+            return name
+        if not (self._check("PUNCT") and self._cur().value == "("):
+            raise ParseError(
+                f"'{name}' says what it holds: write "
+                f"{'std.hash(K, V)' if name == 'std.hash' else 'std.set(V)'}",
+                self._cur())
+        self._eat("PUNCT", "(")
+        args = [self._parse_type()]
+        while self._try_eat("PUNCT", ","):
+            args.append(self._parse_type())
+        self._eat("PUNCT", ")")
+        want = 2 if name == "std.hash" else 1
+        if len(args) != want:
+            raise ParseError(
+                f"'{name}' is written with {want} type"
+                f"{'' if want == 1 else 's'}, and this one has {len(args)}",
+                self._cur())
+        return f"{name}({','.join(args)})"
 
     def _parse_enum_def(self, is_flag: bool = False):
         """Parse: enum Name [: underlying_type] : INDENT members DEDENT
@@ -981,7 +1029,7 @@ class Parser:
                     self.pos += 1
                     type_annotation += "?std.errors"
             elif self._check("IDENT"):
-                type_annotation = self._eat("IDENT").value
+                type_annotation = self._parse_base_type_name()
                 # `i64 ¤meter[]` says what each element is and what it
                 # measures, in that order, which is the same thing
                 # `let d ¤meter : i64[]` says with the unit written by
@@ -1411,6 +1459,16 @@ class Parser:
         vars_list: list[tuple[str, str | None]] = []
         last_has_type = False
         while True:
+            if self._check("PUNCT") and self._cur().value == "(":
+                # `foreach (k, v) := d` names the halves of what it is
+                # handed, as a parameter and a definition already do.
+                open_tok = self._cur()
+                names = _as_names(self._parse_destructure_names(open_tok))
+                vars_list.append((names, None))
+                last_has_type = False
+                if not self._try_eat("PUNCT", ","):
+                    break
+                continue
             name_tok = self._eat("IDENT")
             var_type = None
             last_has_type = False
@@ -2206,6 +2264,49 @@ class Parser:
             value = self._parse_or_expr()
             self._eat("PUNCT", ")")
             return OptSome(value)
+
+        # A hash or a set: ⸨k: v, …⸩ or ⸨v, …⸩.  Which one it is is
+        # decided by the first entry, a colon after it saying that the
+        # entries have two halves; ⸨⸩ says neither and a type has to.
+        if tok.type == "PUNCT" and tok.value == "\N{LEFT DOUBLE PARENTHESIS}":
+            self.pos += 1
+            self._skip_nl()
+            if self._check("PUNCT") and \
+                    self._cur().value == "\N{RIGHT DOUBLE PARENTHESIS}":
+                close = self._eat("PUNCT", "\N{RIGHT DOUBLE PARENTHESIS}")
+                end = (close.end_col if close.line == tok.line
+                       and close.end_col is not None else None)
+                return set_pos(EmptyCollectionLit(), tok.line, tok.col, end)
+            first = self._parse_or_expr()
+            self._skip_nl()
+            is_hash = self._check("PUNCT") and self._cur().value == ":"
+            pairs, elements = [], []
+            if is_hash:
+                self._eat("PUNCT", ":")
+                self._skip_nl()
+                pairs.append((first, self._parse_or_expr()))
+            else:
+                elements.append(first)
+            self._skip_nl()
+            while self._try_eat("PUNCT", ","):
+                self._skip_nl()
+                if self._check("PUNCT") and \
+                        self._cur().value == "\N{RIGHT DOUBLE PARENTHESIS}":
+                    break
+                key = self._parse_or_expr()
+                self._skip_nl()
+                if is_hash:
+                    self._eat("PUNCT", ":")
+                    self._skip_nl()
+                    pairs.append((key, self._parse_or_expr()))
+                else:
+                    elements.append(key)
+                self._skip_nl()
+            close = self._eat("PUNCT", "\N{RIGHT DOUBLE PARENTHESIS}")
+            end = (close.end_col if close.line == tok.line
+                   and close.end_col is not None else None)
+            node = HashLit(pairs) if is_hash else SetLit(elements)
+            return set_pos(node, tok.line, tok.col, end)
 
         # Array literal [...].
         if tok.type == "PUNCT" and tok.value == "[":

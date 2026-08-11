@@ -190,6 +190,24 @@ Completed
     definition's = -- let x : i64!= 10 -- is refused as it was before, != having been a single
     token then as well.
 
+[x] a hash and a set, written ⸨…⸩ with a colon after the first entry saying whether the entries
+    have two halves, and typed std.hash(K,V) and std.set(V).  Not { }: that begins a struct
+    literal, which is the same shape keys and colons and all, and a braced block -- a parser
+    could be taught to guess and a reader could not.  A lookup answers V? rather than raising,
+    because a key that is not there is not a value to invent and because ⍳ already answers
+    this exact question this exact way.  One type of key and one type of value, settled by the
+    same routine an array literal uses, so the diagnostics and the widths-settle-from-one
+    behaviour come for free; a key also has to be rememberable, which is to say one of the
+    things the language compares exactly.  ⸨⸩ is empty of which of the two it is as well, so a
+    type says both and a binding without one is refused, as `let f := []` is.  Entries keep
+    the order they arrived in, a hash having no order of its own to expose.  #, ∊, [], ← and
+    foreach do for these what they do for an array rather than bringing new spellings; only
+    what those cannot say is a member -- keys, values, insert, remove, clear.  foreach learned
+    to take a destructuring pattern, which a parameter and a definition already took.
+
+[ ] a set has no union, intersection or difference yet; ∪, ∩ and ∖ are free.  Nor can two
+    hashes or sets be joined with ⧺ or compared with =, and neither can be a key.
+
 [x] an array type may be written where a type is compared against: `static_assert_eq(@typeof(e),
     i8[3])`.  A bare name and a tuple type already could, so the spelling @typeof answers with
     was one a program could not write back.  A type name with brackets after it is an array

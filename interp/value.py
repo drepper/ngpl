@@ -249,8 +249,15 @@ def _holds_nothing(value: "Value") -> bool:
     settling.
     """
     inner = value.value if isinstance(value, SomeValue) else value
-    if not (isinstance(inner, ObjectValue)
-            and isinstance(inner.obj, ArrayValue)):
+    if not isinstance(inner, ObjectValue):
+        return False
+    if isinstance(inner.obj, HashValue):
+        held = inner.obj
+        return (held.key_type is None and held.value_type is None
+                and held.sizeof == 0)
+    if isinstance(inner.obj, SetValue):
+        return inner.obj.value_type is None and inner.obj.sizeof == 0
+    if not isinstance(inner.obj, ArrayValue):
         return False
     arr = inner.obj
     if arr.element_type is not None:
@@ -270,6 +277,15 @@ def check_binding_settles(value: "Value", name: str):
     """
     if not _holds_nothing(value):
         return
+    inner = value.value if isinstance(value, SomeValue) else value
+    if isinstance(inner, ObjectValue) and isinstance(inner.obj, (HashValue,
+                                                                 SetValue)):
+        raise TypeError(
+            f"'{name}': \N{LEFT DOUBLE PARENTHESIS}\N{RIGHT DOUBLE PARENTHESIS} "
+            f"is empty, so it says neither what it holds nor whether it is a "
+            f"hash or a set, and the binding says nothing either; state a "
+            f"type, as 'let {name} : std.hash(str, i64) = "
+            f"\N{LEFT DOUBLE PARENTHESIS}\N{RIGHT DOUBLE PARENTHESIS}'")
     raise TypeError(
         f"'{name}': an empty array says nothing about what it would "
         f"hold, and the binding says nothing either; state a type, as "
@@ -1152,6 +1168,158 @@ class RangeValue(Value):
 MAX_TENSOR_RANK: int = 8
 
 
+def parse_container_type(type_name: str):
+    """Take `std.hash(K,V)` or `std.set(V)` apart, or answer None.
+
+    The inverse of how a program writes them, and the one place the
+    spelling is read, so nothing else has to know it.
+    """
+    if not isinstance(type_name, str) or not type_name.endswith(")"):
+        return None
+    for kind, want in (("std.hash", 2), ("std.set", 1)):
+        head = kind + "("
+        if not type_name.startswith(head):
+            continue
+        inside = type_name[len(head):-1]
+        args, depth, current = [], 0, ""
+        for ch in inside:
+            if ch == "," and depth == 0:
+                args.append(current.strip())
+                current = ""
+                continue
+            if ch in "([":
+                depth += 1
+            elif ch in ")]":
+                depth -= 1
+            current += ch
+        if current.strip():
+            args.append(current.strip())
+        if len(args) != want:
+            return None
+        return (kind, args)
+    return None
+
+
+def hash_key(value: "Value"):
+    """What a value is remembered by, or None where it cannot be one.
+
+    A key has to be a thing that is the same thing every time it is
+    asked about, so what may be one is what the language compares
+    exactly: a number, a character, a string, a truth value.  A
+    measured number is remembered by what it measures as well as by how
+    much, since a metre and a second are not the same key.
+    """
+    inner = value.value if isinstance(value, SomeValue) else value
+    unit = None
+    if isinstance(inner, UnitValue):
+        unit, inner = inner.unit.display_name, inner.inner
+    if isinstance(inner, IntValue):
+        return ("int", inner.value, unit)
+    if isinstance(inner, StrValue):
+        return ("str", inner.value, unit)
+    if isinstance(inner, CharValue):
+        return ("char", inner.char, unit)
+    if isinstance(inner, BoolValue):
+        return ("bool", inner.value, unit)
+    if isinstance(inner, EnumValue):
+        return ("enum", inner.enum_type.name, inner.value)
+    return None
+
+
+class HashValue:
+    """A mapping from keys to values, kept in the order they arrived.
+
+    One type of key and one type of value, as an array holds one type
+    of element: what a container holds is what its type says, and a
+    type that said "some of these and some of those" would say nothing.
+
+    The order is the order things were put in.  A hash has no order of
+    its own, and walking one in whatever order the implementation
+    happens to use makes a program's output depend on something nobody
+    wrote down.
+    """
+
+    __slots__ = ("entries", "key_type", "value_type")
+
+    def __init__(self, entries=None, key_type=None, value_type=None):
+        # key -> (key value, value), keyed by what hash_key answers.
+        self.entries: dict = dict(entries) if entries else {}
+        self.key_type = key_type
+        self.value_type = value_type
+
+    @property
+    def sizeof(self) -> int:
+        return len(self.entries)
+
+    def get(self, key: "Value"):
+        found = self.entries.get(hash_key(key))
+        return None if found is None else found[1]
+
+    def has(self, key: "Value") -> bool:
+        return hash_key(key) in self.entries
+
+    def put(self, key: "Value", value: "Value"):
+        self.entries[hash_key(key)] = (key, value)
+
+    def drop(self, key: "Value") -> bool:
+        return self.entries.pop(hash_key(key), None) is not None
+
+    def keys(self) -> list:
+        return [k for k, _ in self.entries.values()]
+
+    def values(self) -> list:
+        return [v for _, v in self.entries.values()]
+
+    def pairs(self) -> list:
+        return list(self.entries.values())
+
+    def display(self) -> str:
+        if not self.entries:
+            return "\N{LEFT DOUBLE PARENTHESIS}\N{RIGHT DOUBLE PARENTHESIS}"
+        inside = ", ".join(f"{k.display()}: {v.display()}"
+                           for k, v in self.entries.values())
+        return (f"\N{LEFT DOUBLE PARENTHESIS}{inside}"
+                f"\N{RIGHT DOUBLE PARENTHESIS}")
+
+
+class SetValue:
+    """The values that are in it, kept in the order they arrived.
+
+    One type of value, and each of them once.  Everything said about a
+    hash's keys is said about these, a set being a hash that answers
+    only whether.
+    """
+
+    __slots__ = ("entries", "value_type")
+
+    def __init__(self, entries=None, value_type=None):
+        self.entries: dict = dict(entries) if entries else {}
+        self.value_type = value_type
+
+    @property
+    def sizeof(self) -> int:
+        return len(self.entries)
+
+    def has(self, value: "Value") -> bool:
+        return hash_key(value) in self.entries
+
+    def put(self, value: "Value"):
+        self.entries[hash_key(value)] = value
+
+    def drop(self, value: "Value") -> bool:
+        return self.entries.pop(hash_key(value), None) is not None
+
+    def values(self) -> list:
+        return list(self.entries.values())
+
+    def display(self) -> str:
+        if not self.entries:
+            return "\N{LEFT DOUBLE PARENTHESIS}\N{RIGHT DOUBLE PARENTHESIS}"
+        inside = ", ".join(v.display() for v in self.entries.values())
+        return (f"\N{LEFT DOUBLE PARENTHESIS}{inside}"
+                f"\N{RIGHT DOUBLE PARENTHESIS}")
+
+
 class ArrayValue(Value):
     """A mutable array of runtime Values with bounds checking.
 
@@ -1603,6 +1771,12 @@ def runtime_type_of(value: "Value") -> str:
         if isinstance(value.obj, ArrayValue):
             et = value.obj.element_type or "int"
             return et + "[]"
+        if isinstance(value.obj, HashValue):
+            held = value.obj
+            return (f"std.hash({held.key_type or '?'},"
+                    f"{held.value_type or '?'})")
+        if isinstance(value.obj, SetValue):
+            return f"std.set({value.obj.value_type or '?'})"
         # Something the runtime holds that a program cannot write a
         # type for -- a file, a directory, an arena.  It answers with
         # what it is rather than with "int", which was a lie wherever
@@ -2017,6 +2191,9 @@ def validate_type(type_name: str) -> bool:
     elements = parse_tuple_type(base)
     if elements is not None:
         return all(validate_type(e) for e in elements)
+    if parse_container_type(base) is not None:
+        kind, args = parse_container_type(base)
+        return all(validate_type(a) for a in args)
     if base in BUILTIN_TYPES or base in _USER_TYPES:
         return True
     # An integer type may state its width instead of carrying a name.
@@ -2346,6 +2523,42 @@ def apply_unit(value: Value, unit, mk=None) -> Value:
     return UnitValue(value, unit)
 
 
+def _coerce_container(value: Value, target_width: str, container) -> Value:
+    """Measure a hash or a set against the type that says what it holds.
+
+    An empty one takes the type and holds nothing of it, which is what
+    lets ⸨⸩ be written at all: it says neither what it holds nor which
+    of the two it is, and the type says both.
+    """
+    kind, args = container
+    inner = value.value if isinstance(value, SomeValue) else value
+    want = HashValue if kind == "std.hash" else SetValue
+    other = "a set" if kind == "std.hash" else "a hash"
+    if isinstance(inner, ObjectValue) and isinstance(inner.obj, (HashValue,
+                                                                 SetValue)):
+        held = inner.obj
+        if not isinstance(held, want):
+            if held.sizeof == 0:
+                held = want()
+            else:
+                raise TypeError(
+                    f"'{target_width}' is {'a hash' if want is HashValue else 'a set'}, "
+                    f"but the value is {other}")
+        if kind == "std.hash":
+            built = HashValue(key_type=args[0], value_type=args[1])
+            for key, held_value in held.pairs():
+                built.put(coerce_to_type(key, args[0]),
+                          coerce_to_type(held_value, args[1]))
+        else:
+            built = SetValue(value_type=args[0])
+            for held_value in held.values():
+                built.put(coerce_to_type(held_value, args[0]))
+        return ObjectValue(built)
+    raise TypeError(
+        f"'{target_width}' is {'a hash' if want is HashValue else 'a set'}, "
+        f"but the value is {runtime_type_of(inner)}")
+
+
 def coerce_to_type(value: Value, target_width: str, unit=None, mk=None) -> Value:
     """Measure a value against a type, and against a unit where one is stated.
 
@@ -2387,6 +2600,10 @@ def _coerce_to_type(value: Value, target_width: str, unit=None) -> Value:
         return settle_untyped(value)
     if not validate_type(target_width):
         raise TypeError(f"unknown type '{target_width}'")
+
+    container = parse_container_type(target_width)
+    if container is not None:
+        return _coerce_container(value, target_width, container)
 
     elements = parse_tuple_type(target_width)
     if elements is not None:

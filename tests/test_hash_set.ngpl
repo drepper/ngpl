@@ -1,0 +1,234 @@
+// Tests for a hash and a set, written ⸨…⸩.
+//
+// A hash holds one type of key and one type of value; a set holds one
+// type of value, each of them once.  What a container holds is what its
+// type says, as it is for an array.
+//
+// The entries keep the order they arrived in.  A hash has no order of
+// its own, and walking one in whatever order the implementation happens
+// to use would make a program's output depend on something nobody
+// wrote down.
+
+// ---------------------------------------------------------------------
+// Writing one down
+// ---------------------------------------------------------------------
+
+// A colon after the first entry says the entries have two halves.
+@test
+fn test_a_hash_literal():
+    let d := ⸨"a": 1i64, "b": 2⸩
+    assert_eq(#d, 2¤ptrdiff)
+    assert_eq(d["a"] ?? 0, 1)
+    assert_eq(d["b"] ?? 0, 2)
+
+@test
+fn test_a_set_literal():
+    let s := ⸨1i64, 2, 3⸩
+    assert_eq(#s, 3¤ptrdiff)
+    assert(2 ∊ s)
+
+// Each value once: a set is what is in it, not how often.
+@test
+fn test_a_set_holds_each_value_once():
+    let s := ⸨1i64, 2, 2, 1⸩
+    assert_eq(#s, 2¤ptrdiff)
+
+// The last one written is what the key holds, as a second assignment
+// would leave it.
+@test
+fn test_a_repeated_key_keeps_the_last():
+    let d := ⸨"a": 1i64, "a": 2⸩
+    assert_eq(#d, 1¤ptrdiff)
+    assert_eq(d["a"] ?? 0, 2)
+
+@test
+fn test_the_type_may_be_written_down():
+    let d : std.hash(str, i64) = ⸨"a": 1, "b": 2⸩
+    let s : std.set(i64) = ⸨1, 2⸩
+    assert_eq(d["b"] ?? 0, 2)
+    assert(1 ∊ s)
+
+// ⸨⸩ says neither what it holds nor which of the two it is, so the
+// type says both.  Being empty is not the objection.
+@test
+fn test_an_empty_one_takes_its_type():
+    let d : std.hash(str, i64) = ⸨⸩
+    let s : std.set(i64) = ⸨⸩
+    assert_eq(#d, 0¤ptrdiff)
+    assert_eq(#s, 0¤ptrdiff)
+
+@test
+@expect error "it says neither what it holds nor whether it is a hash or a set"
+fn error_an_empty_one_with_no_type():
+    let e : mut = ⸨⸩
+
+// ---------------------------------------------------------------------
+// Reading and writing
+// ---------------------------------------------------------------------
+
+// What is not there is not a value to invent, so a read says whether
+// there was one, as ⍳ does.
+@test
+fn test_reading_a_key_that_is_not_there():
+    let d := ⸨"a": 1i64⸩
+    assert((d["z"]) = ∅)
+    assert_eq(d["z"] ?? ⁻1, ⁻1)
+
+@test
+fn test_matching_on_a_read():
+    let d := ⸨"a": 1i64⸩
+    let seen : mut i64 = 0
+    match d["a"]:
+        ∃(v):
+            seen ← v
+        ∅:
+            seen ← ⁻1
+    assert_eq(seen, 1)
+
+// Writing at a key puts it there, whether or not it was there before:
+// a hash has nothing to be out of range of.
+@test
+fn test_writing_at_a_key():
+    let d : mut std.hash(str, i64) = ⸨"a": 1⸩
+    d["b"] ← 2
+    d["a"] ← 9
+    assert_eq(#d, 2¤ptrdiff)
+    assert_eq(d["a"] ?? 0, 9)
+    assert_eq(d["b"] ?? 0, 2)
+
+// ---------------------------------------------------------------------
+// Asking about it
+// ---------------------------------------------------------------------
+
+// A hash is looked through by its keys, which is what it is asked
+// about; what it holds against them is read with [].
+@test
+fn test_whether_a_key_is_there():
+    let d := ⸨"a": 1i64⸩
+    assert("a" ∊ d)
+    assert(¬("z" ∊ d))
+
+@test
+fn test_whether_a_value_is_in_a_set():
+    let s := ⸨1i64, 2⸩
+    assert(1 ∊ s)
+    assert(¬(9 ∊ s))
+
+@test
+fn test_how_many_are_in_it():
+    let d := ⸨"a": 1i64, "b": 2, "c": 3⸩
+    let s := ⸨1i64, 2⸩
+    assert_eq(#d, 3¤ptrdiff)
+    assert_eq(#s, 2¤ptrdiff)
+
+// ---------------------------------------------------------------------
+// Walking one
+// ---------------------------------------------------------------------
+
+// An entry is its key and what is held against it, which is a pair, so
+// both halves are named the way any tuple is taken apart.
+@test
+fn test_walking_a_hash():
+    let d := ⸨"a": 1i64, "b": 2, "c": 3⸩
+    let total : mut i64 = 0
+    let names : mut str[] = []
+    foreach (k, v) := d:
+        total ← total + v
+        names.push(k)
+    assert_eq(total, 6)
+    assert_eq(#names, 3¤ptrdiff)
+    // In the order they were written.
+    assert_eq(names[0], "a")
+    assert_eq(names[2], "c")
+
+@test
+fn test_walking_a_set():
+    let s := ⸨1i64, 2, 3⸩
+    let total : mut i64 = 0
+    foreach v := s:
+        total ← total + v
+    assert_eq(total, 6)
+
+@test
+fn test_the_keys_and_the_values():
+    let d := ⸨"a": 1i64, "b": 2⸩
+    assert_eq(#d.keys(), 2¤ptrdiff)
+    assert_eq(d.keys()[0], "a")
+    assert_eq(d.values()[1], 2)
+
+// ---------------------------------------------------------------------
+// Taking things out and putting them in
+// ---------------------------------------------------------------------
+
+@test
+fn test_removing_from_a_hash():
+    let d : mut std.hash(str, i64) = ⸨"a": 1, "b": 2⸩
+    assert(d.remove("a"))
+    assert_eq(#d, 1¤ptrdiff)
+    // Answering whether there was one to remove.
+    assert(¬d.remove("a"))
+
+@test
+fn test_inserting_into_a_set():
+    let s : mut std.set(i64) = ⸨1⸩
+    s.insert(2)
+    s.insert(1)
+    assert_eq(#s, 2¤ptrdiff)
+    assert(s.remove(1))
+    assert_eq(#s, 1¤ptrdiff)
+
+@test
+fn test_clearing_one():
+    let d : mut std.hash(str, i64) = ⸨"a": 1⸩
+    d.clear()
+    assert_eq(#d, 0¤ptrdiff)
+
+// ---------------------------------------------------------------------
+// One type of key and one type of value
+// ---------------------------------------------------------------------
+
+@test
+@expect error "an array holds one type of value"
+fn error_keys_of_two_types():
+    let d : mut = ⸨"a": 1i64, 2i64: 3⸩
+
+@test
+@expect error "an array holds one type of value"
+fn error_values_of_two_types():
+    let d : mut = ⸨"a": 1i64, "b": "two"⸩
+
+@test
+@expect error "an array holds one type of value"
+fn error_a_set_of_two_types():
+    let s : mut = ⸨1i64, "two"⸩
+
+// A key is remembered by what it is, so it has to be one of the things
+// the language compares exactly.
+@test
+@expect error "cannot be a key"
+fn error_a_key_that_cannot_be_remembered():
+    let d : mut = ⸨[1i64, 2]: 1i64⸩
+
+@test
+@expect error "cannot hold a string"
+fn error_writing_a_value_of_the_wrong_type():
+    let d : mut std.hash(str, i64) = ⸨"a": 1⸩
+    d["b"] ← "two"
+
+// A set holds values rather than answering about them by key.
+@test
+@expect error "a set holds values rather than answering about them by key"
+fn error_reading_a_set_by_key():
+    let s := ⸨1i64, 2⸩
+    let v : mut = s[0]
+
+@test
+@expect error "has no member"
+fn error_a_member_neither_of_them_has():
+    let s : mut std.set(i64) = ⸨1⸩
+    let v : mut = s.push(2)
+
+@start
+@impure
+fn main():
+    std.println("hash and set tests passed")

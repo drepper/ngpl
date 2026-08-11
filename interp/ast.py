@@ -270,6 +270,27 @@ class ArrayLit:
         self.elements = elements  # list of expression AST nodes
 
 
+class HashLit:
+    """Hash literal: ⸨key: value, …⸩."""
+
+    def __init__(self, pairs):
+        self.pairs = pairs  # list of (key expr, value expr)
+
+
+class SetLit:
+    """Set literal: ⸨value, …⸩."""
+
+    def __init__(self, elements):
+        self.elements = elements
+
+
+class EmptyCollectionLit:
+    """⸨⸩ — which of the two it is, only a type can say."""
+
+    def __init__(self):
+        pass
+
+
 class Subscript:
     """Subscript access: obj[i] or multi-dimensional obj[i, j, ...]."""
 

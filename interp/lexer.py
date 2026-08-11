@@ -101,7 +101,7 @@ _NORMALIZE_OPS = {
 
 # Single-character operators.
 # The last six are the tolerant comparisons, paired with the exact ones.
-SINGLE_OPS = set("+-%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ∃∄⍴⧺⌿⍀¤√∛∜↑⁻×÷⍳∊≠#"
+SINGLE_OPS = set("+-%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ∃∄⍴⧺⌿⍀¤√∛∜↑⁻×÷⍳∊≠#⸨⸩"
                  "≅≇⪅⪆⪉⪊"
                  # The saturating arithmetic operators.
                  "\N{SQUARED PLUS}\N{SQUARED MINUS}\N{SQUARED TIMES}"
@@ -558,7 +558,7 @@ def tokenize(src: str):
                 # ∃(v) is the present optional; the same token as the
                 # `some` keyword it spells more briefly.
                 tokens.append(Token("SOME", ch, line, col))
-            elif ch == "=" or ch in ",.;:(){}[]…":
+            elif ch == "=" or ch in ",.;:(){}[]…⸨⸩":
                 tokens.append(Token("PUNCT", ch, line, col))
             elif ch == "\N{RIGHTWARDS ARROW}":
                 tokens.append(Token("OP", "->", line, col))

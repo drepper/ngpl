@@ -25,6 +25,7 @@ from interp.ast import (
     LimitExpr,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr, SumTypeDef,
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
+    HashLit, SetLit, EmptyCollectionLit,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
     OperatorRef,
     UnitExpr, UnitOfExpr, UnitRefExpr, RefExpr, BorrowExpr, TypeDef,
@@ -34,7 +35,8 @@ from interp.ast import (
 from interp.value import (
     Value, IntValue, FloatValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
     FuncValue, LambdaValue, BuiltinFunc, ObjectValue, BuiltinBoundMethod,
-    ArrayValue, TupleValue, EnumType, EnumValue, RangeValue, TypeValue, UnitOfValue,
+    ArrayValue, HashValue, SetValue, hash_key,
+    TupleValue, EnumType, EnumValue, RangeValue, TypeValue, UnitOfValue,
     StructType, StructInstance,
     mk_int, mk_int_wrap, mk_str, mk_bool, mk_float, none, some, is_none, is_some,
     resolve_width, resolve_float_width, wrap_int, coerce_to_type, coerce_arg,
@@ -61,6 +63,16 @@ from interp.errors import attach_backtrace, diagnostic_level, strip_position_pre
 # An empty array disagrees with no unit, so it stands in for whatever
 # one is asked of it.
 _EMPTY_MEASURE = object()
+
+
+def _flatten_names(name):
+    """Every name a loop variable binds, a pattern holding several."""
+    if isinstance(name, tuple):
+        out = []
+        for one in name:
+            out.extend(_flatten_names(one))
+        return out
+    return [name]
 
 
 def _sizeof_is_gone(attr: str) -> str:
@@ -762,7 +774,7 @@ def _substitute_generics(type_str: str, generic_map: dict[str, str]) -> str:
 # Modelled on Rust's Vec: push/pop at the end, insert/remove at an index,
 # and get for a bounds-checked read.
 # The array methods that change the array rather than only reading it.
-_ARRAY_MUTATORS = frozenset({"push", "pop", "insert", "remove"})
+_ARRAY_MUTATORS = frozenset({"push", "pop", "insert", "remove", "clear"})
 
 _ARRAY_METHODS: dict[str, int] = {
     "push": 1,
@@ -1074,12 +1086,20 @@ class Evaluator:
             raise TypeError(
                 f"\N{SMALL ELEMENT OF}: a string holds characters, and what "
                 f"is looked for is {self._value_type_name(wanted)}")
+        if isinstance(container, ObjectValue) \
+                and isinstance(container.obj, HashValue):
+            # A hash is looked through by its keys, which is what it is
+            # asked about: what it holds against them is read with [].
+            return mk_bool(container.obj.has(wanted))
+        if isinstance(container, ObjectValue) \
+                and isinstance(container.obj, SetValue):
+            return mk_bool(container.obj.has(wanted))
         array = self._as_array(container)
         if array is None:
             raise TypeError(
                 f"\N{SMALL ELEMENT OF}: the right operand is "
                 f"{self._value_type_name(container)}, and what is looked "
-                f"through is a vector, a matrix, or a string")
+                f"through is a vector, a matrix, a string, a hash or a set")
         self._check_looked_for(array, wanted, "\N{SMALL ELEMENT OF}")
         for element in self._leaves(array):
             # Compared the way == compares, as ⍳ compares, so a unit
@@ -1593,6 +1613,19 @@ class Evaluator:
         ru = _unwrap_operand(right)
         return mk_bool(not (self._logic_bool(lu) or self._logic_bool(ru)))
 
+    def _checked_key(self, key, key_type, key_unit):
+        """Measure a key against what the others were, and refuse one
+        that cannot be remembered at all."""
+        if hash_key(key) is None:
+            raise TypeError(
+                f"{self._value_type_name(key)} cannot be a key: a key is "
+                f"remembered by what it is, so it has to be one of the "
+                f"things the language compares exactly -- a number, a "
+                f"character, a string, a truth value, an enum")
+        if key_type is not None:
+            return coerce_to_type(key, key_type, key_unit, self._mk_int)
+        return key
+
     def _op_length(self, operand):
         """How many things are in it (#).
 
@@ -1611,12 +1644,15 @@ class Evaluator:
             return self._sizeof_result(len(unwrapped.value))
         if isinstance(unwrapped, TupleValue):
             return self._sizeof_result(len(unwrapped.elements))
+        if isinstance(unwrapped, ObjectValue) \
+                and isinstance(unwrapped.obj, (HashValue, SetValue)):
+            return self._sizeof_result(unwrapped.obj.sizeof)
         array = self._as_array(unwrapped)
         if array is not None:
             return self._sizeof_result(array.sizeof, array.element_type)
         raise TypeError(
             f"#: how many things are in it is a question for an array, a "
-            f"string, or a tuple, and this is "
+            f"string, a tuple, a hash or a set, and this is "
             f"{self._value_type_name(unwrapped)}")
 
     def _apply_unary(self, op: str, operand):
@@ -2267,6 +2303,49 @@ class Evaluator:
             raise TypeError(
                 f"{node.method}: cannot modify let variable '{name}'")
 
+    def _call_container_method(self, held, name: str, args):
+        """The members of a hash and of a set.
+
+        What is read with [] and asked with ∊ is not repeated here: a
+        member is for what those cannot say -- the keys, the values,
+        and taking something out.
+        """
+        is_hash = isinstance(held, HashValue)
+        what = "hash" if is_hash else "set"
+        arities = {"keys": 0, "values": 0, "remove": 1, "insert": 1,
+                   "clear": 0}
+        if name not in arities or (name == "keys" and not is_hash) \
+                or (name == "insert" and is_hash):
+            known = ("keys, values, remove, clear" if is_hash
+                     else "values, insert, remove, clear")
+            raise AttributeError(
+                f"a {what} has no member '{name}'; it has {known}, is read "
+                f"with [] where it is a hash, asked with "
+                f"\N{SMALL ELEMENT OF} whether something is in it, and "
+                f"counted with #")
+        if len(args) != arities[name]:
+            raise TypeError(
+                f"{what}.{name} takes {arities[name]} argument"
+                f"{'' if arities[name] == 1 else 's'}, got {len(args)}")
+        if name == "keys":
+            return ObjectValue(ArrayValue(held.keys(),
+                                          element_type=held.key_type))
+        if name == "values":
+            return ObjectValue(ArrayValue(
+                held.values(),
+                element_type=held.value_type if is_hash else held.value_type))
+        if name == "clear":
+            held.entries.clear()
+            return none()
+        wanted = unwrap_optional(args[0])
+        if name == "insert":
+            held.put(self._checked_key(wanted, held.value_type, None))
+            return none()
+        # remove: answers whether there was one to remove.
+        self._checked_key(wanted, held.key_type if is_hash
+                          else held.value_type, None)
+        return mk_bool(held.drop(wanted))
+
     def _call_array_method(self, array: ArrayValue, name: str, args):
         """Call one of the array's built-in member functions.
 
@@ -2830,6 +2909,34 @@ class Evaluator:
             return ObjectValue(ArrayValue(elements, element_type=settled,
                                           element_unit=unit))
 
+        if isinstance(node, HashLit):
+            keys = [self.eval_expr(k) for k, _ in node.pairs]
+            values = [self.eval_expr(v) for _, v in node.pairs]
+            key_type, key_unit = _literal_element_type(keys)
+            value_type, value_unit = _literal_element_type(values)
+            hash_value = HashValue(key_type=key_type, value_type=value_type)
+            for key, value in zip(keys, values):
+                key = self._checked_key(key, key_type, key_unit)
+                if value_type is not None:
+                    value = coerce_to_type(value, value_type, value_unit,
+                                           self._mk_int)
+                hash_value.put(key, value)
+            return ObjectValue(hash_value)
+
+        if isinstance(node, SetLit):
+            values = [self.eval_expr(v) for v in node.elements]
+            value_type, value_unit = _literal_element_type(values)
+            set_value = SetValue(value_type=value_type)
+            for value in values:
+                set_value.put(self._checked_key(value, value_type, value_unit))
+            return ObjectValue(set_value)
+
+        if isinstance(node, EmptyCollectionLit):
+            # Empty of everything, including of which of the two it is.
+            # A type says both; a binding with no type is refused where
+            # bindings are settled, as an empty array is.
+            return ObjectValue(SetValue())
+
         # Subscript read: arr[i] or arr[i, j, ...] or tuple[i].
         if isinstance(node, Subscript):
             # A type name with brackets after it is an array type, not
@@ -2851,6 +2958,21 @@ class Evaluator:
             val = self.eval_expr(node.obj)
             for idx_node in node.indices:
                 unwrapped = unwrap_optional(val)
+                if isinstance(unwrapped, ObjectValue) \
+                        and isinstance(unwrapped.obj, HashValue):
+                    # What is not there is not a value to invent, so
+                    # the answer says whether there was one, as ⍳ does.
+                    key = self.eval_expr(idx_node)
+                    self._checked_key(key, unwrapped.obj.key_type, None)
+                    found = unwrapped.obj.get(key)
+                    val = none() if found is None else some(found)
+                    continue
+                if isinstance(unwrapped, ObjectValue) \
+                        and isinstance(unwrapped.obj, SetValue):
+                    raise TypeError(
+                        "a set holds values rather than answering about "
+                        "them by key; \N{SMALL ELEMENT OF} asks whether one "
+                        "is in it")
                 idx_val = self.eval_expr(idx_node)
                 iu = unwrap_optional(idx_val)
                 if isinstance(unwrapped, TupleValue):
@@ -3244,7 +3366,25 @@ class Evaluator:
                     raise TypeError(
                         "a string cannot be written through; build the "
                         "string that is wanted, joining with \N{DOUBLE PLUS}")
-                if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
+                if isinstance(unwrapped, ObjectValue) \
+                        and isinstance(unwrapped.obj, HashValue):
+                    # Writing at a key puts it there, whether or not it
+                    # was there before: a hash has no length to run past
+                    # and nothing to be out of range of.
+                    hv = unwrapped.obj
+                    key = self._checked_key(
+                        self.eval_expr(last_idx_node), hv.key_type, None)
+                    value = rhs
+                    if hv.value_type is not None:
+                        value = coerce_to_type(value, hv.value_type)
+                    elif hv.sizeof:
+                        held = runtime_type_of(hv.values()[0])
+                        mismatch = _scalar_kind_mismatch(value, held)
+                        if mismatch is not None:
+                            raise TypeError(
+                                f"a hash of {held} cannot hold {mismatch}")
+                    hv.put(key, value)
+                elif isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
                     idx_val = self.eval_expr(last_idx_node)
                     iu = unwrap_optional(idx_val)
                     iu = self._check_index_unit(iu, unwrapped.obj)
@@ -3785,10 +3925,14 @@ class Evaluator:
             else:
                 freeze_kinds.append("foreach")
 
+        flat_names = []
+        for name in var_names:
+            flat_names.extend(_flatten_names(name))
         for name, kind in zip(var_names, freeze_kinds):
             if kind is not None:
-                self._frozen_vars[name] = kind
-        self._comptime_vars |= set(var_names)
+                for one in _flatten_names(name):
+                    self._frozen_vars[one] = kind
+        self._comptime_vars |= set(flat_names)
         try:
             for idx in range(max_len):
                 if num_vars == 1 and num_iters > 1:
@@ -3806,6 +3950,12 @@ class Evaluator:
                 else:
                     for (var_name, var_type), seq in zip(node.vars, sequences):
                         val = seq[idx % len(seq)]
+                        if isinstance(var_name, tuple):
+                            # The name is a pattern, so what arrives is
+                            # taken apart into the names it holds.
+                            self._bind_parameter_names(
+                                var_name, val, self.env, "foreach")
+                            continue
                         # A reference is bound as-is; coercing it would
                         # replace it with a copy of the element.
                         if var_type is not None and not isinstance(val, Reference):
@@ -3813,9 +3963,9 @@ class Evaluator:
                         self.env.define(var_name, val)
                 self.eval_stmts(node.body)
         finally:
-            for name in var_names:
+            for name in flat_names:
                 self._frozen_vars.pop(name, None)
-            self._comptime_vars -= set(var_names)
+            self._comptime_vars -= set(flat_names)
         return none()
 
     def _resolve_borrow(self, expr: BorrowExpr) -> list[Value]:
@@ -3855,6 +4005,13 @@ class Evaluator:
         if isinstance(val, RangeValue):
             return [mk_int(i) for i in val.to_list()]
         if isinstance(val, ObjectValue) and isinstance(val.obj, ArrayValue):
+            return val.obj.values()
+        if isinstance(val, ObjectValue) and isinstance(val.obj, HashValue):
+            # An entry is its key and what is held against it, which is
+            # a pair -- so `foreach (k, v) := d` names both halves the
+            # way any tuple is taken apart.
+            return [TupleValue([k, v]) for k, v in val.obj.pairs()]
+        if isinstance(val, ObjectValue) and isinstance(val.obj, SetValue):
             return val.obj.values()
         if isinstance(val, StrValue):
             # A string is made of characters, so that is what iterating
@@ -4497,6 +4654,9 @@ class Evaluator:
             return u.obj.struct_type.name
         if isinstance(u, ObjectValue) and isinstance(u.obj, ArrayValue):
             return Evaluator._array_type_name_of(u.obj)
+        if isinstance(u, ObjectValue) and isinstance(u.obj, (HashValue,
+                                                             SetValue)):
+            return runtime_type_of(u)
         if isinstance(u, RangeValue):
             return "range"
         if isinstance(u, TypeValue):
@@ -4771,6 +4931,10 @@ class Evaluator:
                 f"an array does not answer str(); {fold} joins its "
                 f"characters into a string, and {fold} (chars, \"\") does "
                 f"so where the array may be empty")
+        if isinstance(unwrapped, ObjectValue) \
+                and isinstance(unwrapped.obj, (HashValue, SetValue)):
+            return self._call_container_method(
+                unwrapped.obj, method_name, args)
         if (isinstance(unwrapped, ObjectValue)
                 and isinstance(unwrapped.obj, ArrayValue)
                 and method_name in _ARRAY_METHODS):

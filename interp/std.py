@@ -771,7 +771,8 @@ def _render_template(fmt: str, args, where: str) -> str:
     from interp.eval import unwrap_optional
     from interp.value import (IntValue, FloatValue, BoolValue, StrValue,
                               CharValue,
-                              ObjectValue, ArrayValue, TupleValue,
+                              ObjectValue, ArrayValue, HashValue, SetValue,
+                              TupleValue,
                               EnumValue, ExpectedValue, NoneValue,
                               TypeValue, FuncValue, LambdaValue, UnitValue)
     def _fmt_value(v, spec: str = "") -> str:
@@ -829,8 +830,17 @@ def _render_template(fmt: str, args, where: str) -> str:
         if isinstance(uv, ObjectValue):
             obj = uv.obj
             if isinstance(obj, ArrayValue):
-                inner = ", ".join(_fmt_value(e) for e in obj.elements)
+                # Through values(): a view has no elements list of its
+                # own, and reading the attribute crashes on one.
+                inner = ", ".join(_fmt_value(e) for e in obj.values())
                 return "[" + inner + "]"
+            if isinstance(obj, HashValue):
+                inner = ", ".join(f"{_fmt_value(k)}: {_fmt_value(v)}"
+                                  for k, v in obj.pairs())
+                return f"\N{LEFT DOUBLE PARENTHESIS}{inner}\N{RIGHT DOUBLE PARENTHESIS}"
+            if isinstance(obj, SetValue):
+                inner = ", ".join(_fmt_value(v) for v in obj.values())
+                return f"\N{LEFT DOUBLE PARENTHESIS}{inner}\N{RIGHT DOUBLE PARENTHESIS}"
             if isinstance(obj, Bytes):
                 return "[" + ", ".join(str(b) for b in obj.data) + "]"
             return f"<{type(obj).__name__}>"
