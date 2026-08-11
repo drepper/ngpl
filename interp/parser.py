@@ -33,7 +33,7 @@ from interp.lexer import Token, KEYWORDS
 # definition keyword itself or as an annotation preceding it.
 DEFINITION_STARTERS = frozenset({
     "START", "REPLACEABLE", "TEST", "FLAG", "IMPURE", "EXPECT", "REPR",
-    "HOT", "COLD",
+    "HOT", "COLD", "LISTABLE",
     "ENUM", "STRUCT", "IMPL", "UNIT", "TYPE", "FN", "LET",
 })
 
@@ -318,6 +318,7 @@ class Parser:
         is_flag = False
         is_replaceable = False
         is_impure = False
+        is_listable = False
         hint: str | None = None
         repr_kind: str | None = None
         test_refs: list[str] = []
@@ -350,6 +351,10 @@ class Parser:
             elif self._check("IMPURE"):
                 self._eat("IMPURE")
                 is_impure = True
+                self._try_eat("NEWLINE")
+            elif self._check("LISTABLE"):
+                self._eat("LISTABLE")
+                is_listable = True
                 self._try_eat("NEWLINE")
             elif self._check("LIKELY") or self._check("UNLIKELY"):
                 tok = self._cur()
@@ -390,6 +395,10 @@ class Parser:
             raise ParseError(
                 f"@{hint} applies to a function, but none follows",
                 self._cur())
+        if is_listable and not self._check("FN"):
+            raise ParseError(
+                "@listable applies to a function, but none follows",
+                self._cur())
 
         if self._check("ENUM"):
             return self._parse_enum_def(is_flag)
@@ -413,7 +422,8 @@ class Parser:
 
         if self._check("FN"):
             return self._parse_function_def(is_start, is_test, test_refs, expect_annotations,
-                                            is_replaceable, is_impure, hint=hint)
+                                            is_replaceable, is_impure, hint=hint,
+                                            is_listable=is_listable)
         elif self._check("LET"):
             return self._parse_var_def()
         elif self._check("EOF"):
@@ -429,7 +439,8 @@ class Parser:
                             is_replaceable: bool = False,
                             is_impure: bool = False,
                             struct_name: str | None = None,
-                            hint: str | None = None):
+                            hint: str | None = None,
+                            is_listable: bool = False):
         """Parse: fn name '(' [params] ')' ('->' ret_type)? block
 
         The parameter list is enclosed in parentheses.  An empty parameter
@@ -638,7 +649,7 @@ class Parser:
                                pack_param, param_units, is_impure,
                                param_refs=param_refs,
                                param_muts=param_muts, hint=hint,
-                               ret_unit=ret_unit)
+                               ret_unit=ret_unit, is_listable=is_listable)
                 fdef.param_positions = param_positions
                 fdef.ret_type_pos = ret_type_pos
                 fdef._parse_error = str(e)
@@ -653,7 +664,7 @@ class Parser:
                        pack_param, param_units, is_impure,
                        param_refs=param_refs,
                        param_muts=param_muts, hint=hint,
-                       ret_unit=ret_unit)
+                       ret_unit=ret_unit, is_listable=is_listable)
         fdef.param_positions = param_positions
         fdef.ret_type_pos = ret_type_pos
         fdef._self_is_ref = self_is_ref
@@ -803,11 +814,16 @@ class Parser:
             if self._check("DEDENT", "EOF"):
                 break
             is_impure = False
+            is_listable = False
             hint: str | None = None
             while True:
                 if self._check("IMPURE"):
                     self._eat("IMPURE")
                     is_impure = True
+                    self._try_eat("NEWLINE")
+                elif self._check("LISTABLE"):
+                    self._eat("LISTABLE")
+                    is_listable = True
                     self._try_eat("NEWLINE")
                 elif self._check("HOT") or self._check("COLD"):
                     tok = self._eat(self._cur().type)
@@ -827,7 +843,7 @@ class Parser:
                     self._cur())
             method = self._parse_function_def(
                 is_start=False, struct_name=struct_name,
-                is_impure=is_impure, hint=hint)
+                is_impure=is_impure, hint=hint, is_listable=is_listable)
             methods.append(method)
         self._eat("DEDENT")
         return ImplBlock(struct_name, methods)

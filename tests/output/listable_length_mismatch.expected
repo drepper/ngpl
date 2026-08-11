@@ -1,0 +1,6 @@
+error: +: the operands it threads over are taken apart together, so they must be the same length, but the left operand has 3 elements and the right operand has 2
+  --> tests/output/listable_length_mismatch.ngpl:6:23
+    |
+  6 |     std.println("{}", a + b)
+    |                       ^^^^^
+    |

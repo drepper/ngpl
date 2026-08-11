@@ -1,0 +1,7 @@
+error: f is @listable, but parameter 'v' is taken by reference; threading hands the function one element of what the caller holds, which is not a place it can write back to
+  --> tests/output/listable_by_ref_param.ngpl:2:1
+    |
+  2 | fn f(v : &mut i64[]) → i64:
+    | ^^
+  3 |     v[0]
+    |

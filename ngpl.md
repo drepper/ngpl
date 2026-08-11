@@ -34,3 +34,5 @@ what it is.
   cannot
 - [Equality Is `=`, Inequality `≠`](design/equality/README.md) —
   taking the glyphs back from the assignment that never used them here
+- [Threading a Function Over What It Is Handed](design/listable/README.md)
+  — `@listable`, and why every operator is now marked with it

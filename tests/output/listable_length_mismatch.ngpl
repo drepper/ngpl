@@ -1,0 +1,6 @@
+@start
+@impure
+fn main():
+    let a : i64[] = [1, 2, 3]
+    let b : i64[] = [10, 20]
+    std.println("{}", a + b)

@@ -1,0 +1,7 @@
+error: @listable applies to a function, but none follows
+  --> tests/output/listable_no_function.ngpl:2:1
+    |
+  2 | struct S:
+    | ^^^^^^
+  3 |     a : i32
+    |

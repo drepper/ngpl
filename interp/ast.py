@@ -163,7 +163,8 @@ class FuncDef:
                  param_refs: set[str] | None = None,
                  param_muts: set[str] | None = None,
                  hint: str | None = None,
-                 ret_unit=None):
+                 ret_unit=None,
+                 is_listable: bool = False):
         self.name = name
         self.params = params
         # Where each parameter was written, for diagnostics about it.
@@ -183,6 +184,9 @@ class FuncDef:
         self.pack_param = pack_param
         self.param_units: dict[str, object] = param_units or {}
         self.is_impure = is_impure
+        # Unlike a hint, this changes what the function computes for an
+        # argument it did not ask for, so it has to reach the runtime.
+        self.is_listable = is_listable
         # "hot" or "cold" from an annotation, saying how often the
         # function is expected to run.  A hint never changes what the
         # function computes.

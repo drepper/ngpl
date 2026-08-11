@@ -842,7 +842,7 @@ class FuncValue(Value):
 
     __slots__ = ("name", "params", "body", "env", "ret_type", "is_replaceable",
                  "pack_param", "param_units", "is_impure", "param_refs",
-                 "param_muts", "source_label", "ret_unit")
+                 "param_muts", "source_label", "ret_unit", "is_listable")
 
     def __init__(self, name, params, body, env, ret_type=None,
                  is_replaceable: bool = False,
@@ -851,7 +851,8 @@ class FuncValue(Value):
                  is_impure: bool = False,
                  param_refs: set[str] | None = None,
                  param_muts: set[str] | None = None,
-                 ret_unit=None):
+                 ret_unit=None,
+                 is_listable: bool = False):
         self.name = name
         self.params = params
         self.body = body
@@ -865,6 +866,9 @@ class FuncValue(Value):
         self.is_impure = is_impure
         self.param_refs: set[str] = param_refs or set()
         self.param_muts: set[str] = param_muts or set()
+        # Whether the function is threaded over an argument that is
+        # deeper than the parameter asks for.
+        self.is_listable = is_listable
         # Where the body was written.  None means the file the program
         # was loaded from; the REPL sets it to the entry that defined the
         # function, since each entry has its own line numbering.

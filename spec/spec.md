@@ -1358,7 +1358,7 @@ This means `a = 0 ∧ b ≠ 0` parses as `(a = 0) ∧ (b ≠ 0)`, and `x ∧ y �
 
 #### Element-wise on Arrays
 
-Like arithmetic operators, the logic operators iterate element-wise over arrays and vectors:
+The logic operators are `@listable`, as the arithmetic operators are, so each is asked of the things in an array rather than of the array:
 
 ```
 let a : mut i32[3] = 0
@@ -2082,6 +2082,120 @@ Haskell enforces purity through the type system — impure computations have a d
 Purity by default encourages a functional style and makes functions easier to reason about, test, and parallelize.  The `@impure` annotation makes side effects visible at the definition site rather than requiring the reader to trace through the function body — which is only true if the annotation is required wherever the effect can be reached, and that is what rules 3 and 4 provide.  An annotation a caller could omit would tell a reader nothing, since the function below it might still print.
 
 Global access remains a runtime check in the interpreter because whether a name is a mutable global depends on values the interpreter settles as it runs; the compiler will move it to compile-time where possible.
+
+
+### Threading Over Containers: `@listable`
+
+A `@listable` function handed something *deeper* than a parameter asked for is handed a container of what it asked for, so it is asked of each of the things in the container instead:
+
+```
+@listable
+fn double(n : i64) → i64:
+    n × 2
+
+double(21)                      /* 42 */
+double([1, 2, 3])               /* [2, 4, 6] */
+```
+
+Every arithmetic, comparison, and logic operator is listable, which is what makes them element-wise; `⧺`, `⍳`, and `∊` are not, since each takes a container *as* its operand rather than as a stand-in for the things in it.
+
+#### How Deep Is Deep Enough
+
+What decides is the depth the parameter's type states, not whether the argument happens to be an array.  A parameter stating `i64` is threaded over an `i64[]`; a parameter stating `i64[]` is handed one as it is, and threaded only over something deeper still:
+
+```
+@listable
+fn total(v : i64[]) → i64:
+    …
+
+total([1, 2, 3])                /* 6 — the parameter asked for this */
+total([[1, 2], [3, 4]])         /* [3, 7] — a container of what it asked for */
+```
+
+#### One Level at a Time
+
+Threading takes off one level and asks the same question again, so a container of containers is taken apart as many times as it has levels:
+
+```
+double([[1, 2], [3, 4]])        /* [[2, 4], [6, 8]] */
+```
+
+Arguments that are *not* deeper than their parameter asked for are held still while the others vary, and several that are deeper are taken apart together:
+
+```
+@listable
+fn add(a : i64, b : i64) → i64: a + b
+
+add([1, 2, 3], 10)              /* [11, 12, 13] */
+add([1, 2, 3], [10, 20, 30])    /* [11, 22, 33] */
+```
+
+Because the question is asked afresh at each level, a matrix and a vector pair **rows against elements**:
+
+```
+add([[1, 2], [3, 4]], [10, 20]) /* [[11, 12], [23, 24]] */
+```
+
+#### Lengths Must Agree
+
+What is taken apart together is taken apart in step, so there must be as much of one as of the other.  There is no element to pair a leftover with, and answering the shorter of the two would answer a question that was not asked:
+
+```
+[1, 2, 3] + [10, 20]
+
+error: +: the operands it threads over are taken apart together, so they
+must be the same length, but the left operand has 3 elements and the
+right operand has 2
+```
+
+#### What Comes Back
+
+The structure is what was taken apart.  What the result *holds* is what the function answered, which need not be what it was given:
+
+```
+let v : i64[] = [1, 2, 3]
+
+double(v)                       /* i64[3] */
+between(0, v, 2)                /* bool[3] */
+letter(v)                       /* char[3] */
+```
+
+A `@listable` function's return type describes **one element's** result. Each element's call is checked against it on its own, and what the caller receives is a container of them.
+
+#### What Is Refused
+
+Threading compares what a parameter asks for with what it is handed, so a function that cannot answer that comparison is refused where it is written rather than at the first call that goes wrong:
+
+| Refused | Why |
+|---------|-----|
+| an untyped parameter | the depth the type asks for is what decides; none is stated |
+| a by-reference parameter | an element handed to the function is not a place it can write back to |
+| a parameter pack | threading decides one position at a time, and a pack has no fixed positions |
+| no parameters at all | there is nothing to thread over |
+
+```
+@listable
+fn f(x) → i64: x
+
+error: f is @listable, but parameter 'x' states no type; what threading
+takes apart is decided by the depth the type asks for, and this one asks
+for none
+```
+
+A lambda cannot be `@listable` — there is no place to write an annotation on one — but a `@listable` function that has been partly applied still threads when the rest of its arguments arrive. Builtins are not listable either.
+
+#### Comparison with Other Languages
+
+| Language | How a function reaches the elements |
+|----------|-------------------------------------|
+| Wolfram | `Listable` attribute, threading one level at a time |
+| APL, BQN | implicit: a scalar function applies through any array |
+| NumPy | broadcasting: shapes are padded and stretched to conform |
+| Julia | explicit, at the call: `f.(v)` |
+| Haskell, Rust | explicit, as a function: `map f v` |
+| NGPL | `@listable` attribute |
+
+The attribute is Wolfram's, and so is the rule. NGPL does **not** broadcast the way NumPy does: nothing is stretched to fit, so lengths that disagree are an error rather than a shape to reconcile. The decision sits at the definition, where a reader meets it, rather than at each call as Julia's `.` does — and putting it there is what lets the operators be marked with it rather than each carrying an element-wise loop of its own.
 
 
 ### A Statement Whose Value Nothing Reads

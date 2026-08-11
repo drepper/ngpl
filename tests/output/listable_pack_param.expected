@@ -1,0 +1,7 @@
+error: f is @listable, but it takes a parameter pack; threading decides one position at a time, and a pack has no fixed positions
+  --> tests/output/listable_pack_param.ngpl:2:1
+    |
+  2 | fn f(a : i64, rest… : i64) → i64:
+    | ^^
+  3 |     a
+    |

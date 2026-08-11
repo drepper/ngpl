@@ -1581,6 +1581,39 @@ def _negated_literals(body) -> set[int]:
             and isinstance(node.operand, _ast.IntLit)}
 
 
+def _static_listable_check(func_def) -> str | None:
+    """Refuse a @listable function that cannot be threaded.
+
+    Threading compares what a parameter asks for with what it is
+    handed, so every parameter has to say what it asks for, and the
+    positions have to be fixed for there to be anything to compare.
+    Where either is missing the attribute is refused where it is
+    written rather than at the first call that goes wrong.
+    """
+    if not func_def.is_listable:
+        return None
+    name = func_def.name
+    if not func_def.params and func_def.pack_param is None:
+        return (f"{name} is @listable but takes no arguments; there is "
+                f"nothing to thread over")
+    if func_def.pack_param is not None:
+        return (f"{name} is @listable, but it takes a parameter pack; "
+                f"threading decides one position at a time, and a pack has "
+                f"no fixed positions")
+    for param_name, param_type in func_def.params:
+        display = _param_display(param_name)
+        if param_type is None:
+            return (f"{name} is @listable, but parameter '{display}' states "
+                    f"no type; what threading takes apart is decided by the "
+                    f"depth the type asks for, and this one asks for none")
+        if display in func_def.param_refs:
+            return (f"{name} is @listable, but parameter '{display}' is "
+                    f"taken by reference; threading hands the function one "
+                    f"element of what the caller holds, which is not a place "
+                    f"it can write back to")
+    return None
+
+
 def _static_chr_check(func_def) -> str | None:
     """Refuse .chr() on a number that is written down and negative.
 
@@ -1998,7 +2031,8 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,
                           defn.is_replaceable, defn.pack_param, defn.param_units,
                           defn.is_impure, param_refs=defn.param_refs,
-                          param_muts=defn.param_muts, ret_unit=defn.ret_unit)
+                          param_muts=defn.param_muts, ret_unit=defn.ret_unit,
+                          is_listable=defn.is_listable)
             env.define(defn.name, fv)
 
             if honor_start and defn.is_start:
@@ -2040,7 +2074,8 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                                method_def.body, env, method_def.ret_type,
                                is_impure=method_def.is_impure,
                                param_muts=method_def.param_muts,
-                               ret_unit=method_def.ret_unit)
+                               ret_unit=method_def.ret_unit,
+                               is_listable=method_def.is_listable)
                 if method_def.name in st.methods:
                     raise DefinitionError(
                         f"duplicate method '{method_def.name}' "
@@ -2082,6 +2117,9 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 if return_err is not None:
                     raise DefinitionError(f"in {defn.name}: {return_err}",
                                           _finding_pos(return_err) or _node_pos(defn))
+                listable_err = _static_listable_check(defn)
+                if listable_err is not None:
+                    raise DefinitionError(listable_err, _node_pos(defn))
                 literal_err = _static_literal_check(defn)
                 if literal_err is not None:
                     raise DefinitionError(f"in {defn.name}: {literal_err}",
@@ -2254,6 +2292,9 @@ def main():
                 errors_produced.append(("error", return_err))
 
         if not errors_produced:
+            listable_err = _static_listable_check(defn)
+            if listable_err is not None:
+                raise DefinitionError(listable_err, _node_pos(defn))
             literal_err = _static_literal_check(defn)
             if literal_err is not None:
                 errors_produced.append(("error", literal_err))
@@ -2279,7 +2320,8 @@ def main():
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,
                           defn.is_replaceable, defn.pack_param, defn.param_units,
                           defn.is_impure, param_refs=defn.param_refs,
-                          param_muts=defn.param_muts, ret_unit=defn.ret_unit)
+                          param_muts=defn.param_muts, ret_unit=defn.ret_unit,
+                          is_listable=defn.is_listable)
             eval_inst = Evaluator(env)
             try:
                 eval_inst._call_user_func(fv, [])

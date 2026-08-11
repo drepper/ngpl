@@ -88,6 +88,7 @@ all_tests=(
     "$testdir"/test_char.ngpl
     "$testdir"/test_index_of.ngpl
     "$testdir"/test_element_of.ngpl
+    "$testdir"/test_listable.ngpl
 )
 
 # Filter tests if command-line patterns are given.

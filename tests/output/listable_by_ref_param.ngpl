@@ -1,0 +1,7 @@
+@listable
+fn f(v : &mut i64[]) → i64:
+    v[0]
+
+@start
+fn main():
+    ∅

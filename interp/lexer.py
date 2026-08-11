@@ -85,6 +85,7 @@ AT_KEYWORDS: dict[str, str] = {
     "unlikely": "UNLIKELY",
     "hot": "HOT",
     "cold": "COLD",
+    "listable": "LISTABLE",
 }
 
 # Double-character operators that must be checked before single ones.

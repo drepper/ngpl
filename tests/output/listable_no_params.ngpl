@@ -1,0 +1,7 @@
+@listable
+fn f() → i64:
+    1
+
+@start
+fn main():
+    ∅

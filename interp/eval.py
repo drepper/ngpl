@@ -4607,6 +4607,25 @@ class Evaluator:
             raise TypeError(
                 f"{func.name} expects {n_regular} arguments, got {len(args)}")
 
+        if func.is_listable:
+            # Threading is decided once the call is known to be one --
+            # after too few arguments have had their chance to curry,
+            # and before anything is bound, so that each element meets
+            # the parameter for itself: its own coercion, its own unit,
+            # its own return check.  What the return type states is
+            # what one element answers.
+            threaded = self._thread_level(
+                func.name,
+                [f"'{_names_display(name) if isinstance(name, tuple) else name}'"
+                 for name, _ in func.params],
+                list(args),
+                [declared_rank(ptype) for _, ptype in func.params],
+                lambda sub: self._call_user_func(func, sub),
+                collect=func.ret_type != "\N{EMPTY SET}",
+                fallback_type=func.ret_type)
+            if threaded is not None:
+                return threaded
+
         regular_args = args[:n_regular]
         pack_args = args[n_regular:] if has_pack else []
 

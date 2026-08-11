@@ -1,0 +1,7 @@
+error: f is @listable but takes no arguments; there is nothing to thread over
+  --> tests/output/listable_no_params.ngpl:2:1
+    |
+  2 | fn f() → i64:
+    | ^^
+  3 |     1
+    |

@@ -190,6 +190,30 @@ Completed
     definition's = -- let x : i64!= 10 -- is refused as it was before, != having been a single
     token then as well.
 
+[x] @listable threads a function over what it is handed: a parameter given something deeper
+    than it asked for is given a container of what it asked for, so the function is asked of
+    each of the things in it.  Depth rather than "is it an array", so a parameter asking for
+    a vector is handed one as it is and threaded only over a matrix.  One level is taken off
+    and the same question asked again, which is the whole of the recursion -- the dispatcher
+    re-enters itself, so every check the ordinary path makes is made again per element, and a
+    matrix and a vector pair rows against elements.  What is taken apart together must be the
+    same length; nothing is stretched to fit as NumPy stretches it.  The answer has the
+    structure of what was taken apart and holds what the function answered, which need not be
+    what it was given.  The return type describes one element's result.  Refused at the
+    definition for an untyped parameter (the depth the type asks for is what decides), a
+    by-reference parameter, a parameter pack, and no parameters at all.  Every arithmetic,
+    comparison, logic, shift and saturating operator is marked with it, unary and binary
+    alike, which replaced the seventeen lines of element-wise handling that ran once, zipped
+    silently, tagged its answer with the operands' type, and sat below the unit rules.  ⧺, ⍳
+    and ∊ are not listable, each taking a container as its operand.
+
+[ ] a builtin cannot be @listable: BuiltinFunc has no field for it and the standard library
+    reaches Python methods by another path.  std.sqrt over an array would want it.
+
+[ ] a lambda cannot be @listable, there being nowhere to write an annotation on one.  A
+    partly applied listable function still threads, since the named function is what is
+    called in the end.
+
 [x] ⍳ refuses what the container cannot hold, as ∊ does, both going through one check.  It
     answered ∅ before, on the grounds that = answers false between two values of unrelated
     types and a search is a series of =.  But = is asked about two values a program has in
@@ -487,9 +511,6 @@ Functions and Combinators
 
 [ ] [FULL] purity enforcement: functions pure by default, impure annotation required for global
     variable access.  Strict mode disallows impure functions.
-
-[ ] [FULL] Listable/threadable attribute: functions auto-map over array/vector arguments
-    (like Wolfram's Listable or APL's implicit mapping).
 
 [ ] [FULL] combinator glyphs for function composition and pipelines (APL/BQN/UIUA-inspired).
     Ranges-library equivalent for container operations.
