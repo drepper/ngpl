@@ -373,6 +373,95 @@ fn error_a_string_from_something_that_is_not_characters():
     let s : mut = numbers.str()
 
 // ---------------------------------------------------------------------
+// Reading a string by position
+// ---------------------------------------------------------------------
+//
+// A string is counted in characters, so a position in one is a count
+// of them and what it names is a character.
+
+@test
+fn test_indexing_a_string():
+    let s := "hello"
+    static_assert_eq(@typeof(s[0]), char)
+    assert(s[0] == 'h')
+    assert(s[4] == 'o')
+
+@test
+fn test_indexing_counts_characters_not_bytes():
+    let s := "héllo"
+    assert(s[1] == 'é')
+    assert(s[2] == 'l')
+
+@test
+fn test_indexing_beyond_the_basic_plane():
+    let s := "a🎉b"
+    assert(s[1] == '🎉')
+    assert(s[2] == 'b')
+
+@test
+fn test_slicing_a_string():
+    let s := "hello"
+    let part := s[1…3]
+    static_assert_eq(@typeof(part), str)
+    assert(part == "ell")
+    assert(s[0…0] == "h")
+    assert(s[0…4] == s)
+
+@test
+fn test_slicing_counts_characters():
+    let s := "héllo 🎉"
+    assert(s[0…4] == "héllo")
+    assert(s[6…6] == "🎉")
+
+// An index is a count of characters, so it carries ptrdiff as an
+// array index does.
+@test
+fn test_an_index_may_be_a_measured_value():
+    let s := "hello"
+    let i ¤ptrdiff : i64 = 1
+    assert(s[i] == 'e')
+
+@test
+@expect error "string index requires unit ptrdiff"
+fn error_an_index_without_a_unit():
+    let s := "hello"
+    let i : i64 = 1
+    let c : mut = s[i]
+
+@test
+@expect error "string index 9 out of range .length 5."
+fn error_an_index_past_the_end():
+    let s := "hello"
+    let c : mut = s[9]
+
+@test
+@expect error "string index -1 out of range"
+fn error_a_negative_index():
+    let s := "hello"
+    let c : mut = s[⁻1]
+
+@test
+@expect error "string index 9 out of range"
+fn error_a_slice_past_the_end():
+    let s := "hello"
+    let sub : mut = s[1…9]
+
+// A string is read at a position and not written at one: a character
+// may take a different number of bytes than the one it replaces, so
+// there is no writing in place to be had.
+@test
+@expect error "a string cannot be written through"
+fn error_writing_through_a_string():
+    let s : mut str = "hello"
+    s[0] ← 'x'
+
+@test
+fn test_building_the_string_that_is_wanted_instead():
+    let s := "hello"
+    let changed := 'j' ⧺ s[1…4]
+    assert(changed == "jello")
+
+// ---------------------------------------------------------------------
 // Writing one out
 // ---------------------------------------------------------------------
 

@@ -1758,6 +1758,40 @@ class Evaluator:
         return array.remove(index.value)
 
     @staticmethod
+    def _string_position(text: StrValue, index: Value) -> int:
+        """Where in a string an index points, checked against its length.
+
+        A string is counted in characters, so an index is a count of
+        them and carries ptrdiff as an array index does -- the same
+        rule, since a string is a sequence and this is a position in
+        one.
+        """
+        from interp.units import BUILTIN_UNITS
+        required = BUILTIN_UNITS["ptrdiff"]
+        if isinstance(index, UnitValue):
+            if not index.unit.same_dimension(required):
+                raise TypeError(
+                    f"string index requires unit {required.display_name}, "
+                    f"got {index.unit.display_name}")
+            index = index.inner
+        elif isinstance(index, IntValue) and not is_unwidthed(index.width):
+            raise TypeError(
+                f"string index requires unit {required.display_name}, "
+                f"got typed integer {index.width} without unit")
+        if not isinstance(index, IntValue):
+            raise TypeError("string index must be an integer")
+        length = len(text.value)
+        if index.value < 0 or index.value >= length:
+            raise IndexError(
+                f"string index {index.value} out of range "
+                f"(length {length})")
+        return index.value
+
+    def _string_index(self, text: StrValue, index: Value):
+        """The character at a position in a string."""
+        return CharValue(ord(text.value[self._string_position(text, index)]))
+
+    @staticmethod
     def _string_of_characters(array) -> str:
         """The string an array of characters spells.
 
@@ -2363,6 +2397,8 @@ class Evaluator:
                 elif isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
                     iu = self._check_index_unit(iu, unwrapped.obj)
                     val = unwrapped.obj.get(iu.value)
+                elif isinstance(unwrapped, StrValue):
+                    val = self._string_index(unwrapped, iu)
                 else:
                     raise TypeError("multi-dimensional subscript requires nested arrays or tuples")
             return val
@@ -2371,6 +2407,13 @@ class Evaluator:
         if isinstance(node, SliceAccess):
             arr_val = self.eval_expr(node.obj)
             unwrapped = unwrap_optional(arr_val)
+            if isinstance(unwrapped, StrValue):
+                start = self._string_position(
+                    unwrapped, unwrap_optional(self.eval_expr(node.start)))
+                end = self._string_position(
+                    unwrapped, unwrap_optional(self.eval_expr(node.end)))
+                # Inclusive at both ends, as an array slice is.
+                return mk_str(unwrapped.value[start:end + 1])
             if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
                 s = unwrap_optional(self.eval_expr(node.start))
                 e = unwrap_optional(self.eval_expr(node.end))
@@ -2746,11 +2789,24 @@ class Evaluator:
                         raise TypeError("multi-dimensional subscript requires nested arrays")
                 last_idx_node = target_ast.indices[-1]
                 unwrapped = unwrap_optional(val)
+                if isinstance(unwrapped, StrValue):
+                    # A string is read at a position, not written at
+                    # one: a character may be a different width in
+                    # UTF-8 than the one it replaces, so there is no
+                    # writing in place to be had.  A new string is
+                    # built instead.
+                    raise TypeError(
+                        "a string cannot be written through; build the "
+                        "string that is wanted, joining with \N{DOUBLE PLUS}")
                 if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
                     idx_val = self.eval_expr(last_idx_node)
                     iu = unwrap_optional(idx_val)
                     iu = self._check_index_unit(iu, unwrapped.obj)
                     unwrapped.obj.set(iu.value, rhs)
+                else:
+                    raise TypeError(
+                        f"cannot write through a subscript of "
+                        f"{runtime_type_of(unwrapped)}")
             elif isinstance(target_ast, GetAttr):
                 obj_val = self.eval_expr(target_ast.obj)
                 au = unwrap_optional(obj_val)

@@ -536,6 +536,37 @@ let codes : u32[] = [104, 105, 33]
 
 The operator stands where the fold's function goes; see [Fold Operators](#fold-operators--and-).
 
+#### Reading a String by Position
+
+A string is counted in characters, so a position in one is a count of them and what it names is a character:
+
+```
+let s := "héllo"
+s.sizeof                        /* 5 ptrdiff */
+s[0]                            /* 'h' */
+s[1]                            /* 'é' — the character, not a byte of it */
+s[1…3]                          /* "éll", a string */
+```
+
+An index carries `ptrdiff`, as an array index does, and an untyped literal needs none.  Both ends of a slice are included, as they are for an array.  An index outside the string says so:
+
+```
+s[9]
+
+error: string index 9 out of range (length 5)
+```
+
+A string is read at a position and not written at one.  A character may take a different number of bytes than the one it would replace, so there is no writing in place to be had; the string that is wanted is built instead:
+
+```
+s[0] ← 'j'
+
+error: a string cannot be written through; build the string that is
+wanted, joining with ⧺
+
+let changed := 'j' ⧺ s[1…4]
+```
+
 #### A Character Is Its Own Kind of Value
 
 Not a number and not a string of one.  Nothing converts to it or from it implicitly; `.chr()` and `.ord()` are how a program crosses between:

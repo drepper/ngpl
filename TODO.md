@@ -352,8 +352,15 @@ Type System
     code points says the conversion where it happens, since ⧺ refuses a number.  Letting ⧺
     read a number as the character it numbers was tried and taken out again: it would have
     made "total: " ⧺ 5 a control character rather than "total: 5" or an error, and which of
-    the two a number means is not something the operator can decide.  Still open: taking a string apart
-    other than by iterating it, decoding a byte[], classification, and .ord() at compile
+    the two a number means is not something the operator can decide.
+
+[x] string indexing and slicing: s[i] is the character at a position and s[i…j] the string
+    between two, both counted in characters as .sizeof already counts them.  An index carries
+    ptrdiff, which is what an array index carries, since a string is a sequence and this is a
+    position in one.  A string is read at a position and not written at one — a character may
+    take a different number of bytes than the one it would replace — so an assignment through
+    a subscript says so and names what to do instead; before this it quietly did nothing.
+    Still open: .chars(), searching, decoding a byte[], classification, and .ord() at compile
     time.
 
 

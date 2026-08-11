@@ -202,10 +202,41 @@ every integer type, the three refusals, the definition-time check for a
 written negative, comparison by code point, formatting, literals,
 `⧺` between text, and `.str()`.
 
+## Reading One by Position
+
+`s[i]` is the character at a position and `s[i…j]` the string between
+two, both counted in characters — the same count `.sizeof` answers, so
+the three agree about what a string is made of.
+
+An index carries `ptrdiff`, which is what an array index carries: a
+string is a sequence and this is a position in one, so it is the same
+rule rather than a second one to learn.
+
+A string is read at a position and **not written at one**.  The reason
+is UTF-8 rather than a decision about mutability: a character may take
+a different number of bytes than the one it would replace, so there is
+no writing in place to be had.  Rather than let a subscript on the left
+of an assignment quietly do nothing, which is what it did before this,
+it says so and names what to do instead — build the string that is
+wanted:
+
+```
+let changed := 'j' ⧺ s[1…4]     // "jello"
+```
+
+## Status
+
+Implemented: the type, `foreach` over a string, `.ord()`, `.chr()` on
+every integer type, the three refusals, the definition-time check for a
+written negative, comparison by code point, formatting, literals,
+`⧺` between text, `.str()`, indexing, and slicing.
+
 Not implemented:
 
-- **Taking a string apart other than by iterating it**: no indexing by
-  position, no `.chars()` handing back an array, no slicing.
+- **`.chars()`**, handing back the characters as an array.  Iterating
+  gives them one at a time and a fold puts them back together, so what
+  this would add is the array itself.
+- **Searching** — no `.find()`, no `.contains()`, no splitting.
 - **Decoding a `byte[]`**, which is where UTF-8 stops being an
   implementation detail and becomes an operation that can fail.
 - **Character classification** — whether a character is a digit, a
