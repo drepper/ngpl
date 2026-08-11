@@ -1541,6 +1541,12 @@ match s ⍳ 'z':
 
 APL answers with the length of the container, which a program has to remember to compare against.  An optional says it in the type, so a program that forgets to ask is refused rather than reading past the end.
 
+Comparing against `∅` asks only whether there was one, which is how a run of characters is asked about — `∊` holds only what a string holds:
+
+```
+(s ⍳ "world") != ∅              /* whether the run is there at all */
+```
+
 #### The Answer Is an Index
 
 It carries the unit an index of that container carries — `ptrdiff`, or `byte` for a `byte[]` — so what comes back can be used to look with:

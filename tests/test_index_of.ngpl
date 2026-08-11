@@ -21,6 +21,25 @@ fn test_what_is_not_there():
     let v : i64[] = [10, 20, 30]
     assert((v ⍳ 99) == ∅)
 
+// Asking whether it is there at all is the same question whichever way
+// the search went: a position carries a unit, and the optional has to
+// be settled before the unit is, or a found position is compared as
+// though the optional had never been there.
+@test
+fn test_asking_only_whether_there_was_one():
+    let v : i64[] = [10, 20, 30]
+    assert(¬((v ⍳ 20) == ∅))
+    assert((v ⍳ 20) != ∅)
+    assert((v ⍳ 99) == ∅)
+    assert(¬((v ⍳ 99) != ∅))
+
+// Which is how a run of characters is asked about, ∊ holding only what
+// a string holds.
+@test
+fn test_whether_a_run_of_characters_is_there():
+    assert(("hello" ⍳ "ell") != ∅)
+    assert(¬(("hello" ⍳ "zz") != ∅))
+
 @test
 fn test_the_first_of_several():
     let v : i64[] = [1, 2, 1, 2]

@@ -1429,6 +1429,14 @@ class Evaluator:
             return self._op_element_of(left, right)
         if op in self._APPROX_OPS:
             return self._op_approx(op, left, right)
+        if op in ("==", "!=") and (isinstance(left, (SomeValue, NoneValue))
+                                   or isinstance(right, (SomeValue, NoneValue))):
+            # Whether there is a value at all is settled before what it
+            # is, so that an optional carrying a unit is not unwrapped
+            # into its unit by the dispatch below and compared as though
+            # the optional had never been there.  `(v ⍳ x) == ∅` asks
+            # the same question whichever way the search went.
+            return self._ops[op](left, right)
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
         if isinstance(lu, UnitValue) or isinstance(ru, UnitValue):

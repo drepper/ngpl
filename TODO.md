@@ -168,6 +168,13 @@ Completed
     of the two — and past that an element is compared the way == compares it.  It binds
     where ⍳ does.  Whether ⍳ should be tightened to refuse the same way is still open.
 
+[x] comparing a found position with ∅ was a type error while comparing an absent one was
+    not, so (v ⍳ x) == ∅ answered or refused depending on which way the search went.  A
+    position carries a unit and the operator dispatch unwrapped the optional to find the
+    unit before anything had asked whether there was a value at all.  Whether there is one
+    is now settled first for == and !=, which is also what asks whether a run of characters
+    is in a string.
+
 [x] writing → ∅ on a function or a method draws a warning, since it says what
     leaving the return type off says and having both spellings invites a reader to look
     for a difference that is not there.  A lambda is exempt, having to state a return
