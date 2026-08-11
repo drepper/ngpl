@@ -477,8 +477,8 @@ Floating-Point
     in specification for units.
 
 [ ] Add floating-point constants ⅇ and π for the Euler number and Pi.  Accept them with f16, f32, f64,
-    bfloat16 suffix.  Handle them like untyped floats.  In the bootstrap implementation the
-    value has to be coerced to a finite type.
+    bfloat16 suffix.  Handle them like untyped floats unless a suffix is used.  In the bootstrap
+    implementation the value has to be coerced to a finite type.
 
 
 String and I/O
@@ -557,6 +557,12 @@ Runtime
     at any time.  Frames carry the position execution had reached, the stack travels with the
     failure so it cannot be reported against the wrong error, and std.callstack() returns
     (name, line, column) tuples innermost first.
+
+[ ] [FULL] Add more math functions.  std.sin, std.cos, std.tan, std.cot, std.sec, std.csc, the reverse
+    with names like std.asin etc, the variants which implicit multiply the parameter with Pi such
+    as std.sinpi and their reverse std.asinpi etc.
+
+[ ] Add the natural logarithm function with the glyph ⍟.
 
 
 Syntax Decisions Still Open
