@@ -104,6 +104,21 @@ let a := [1i64, 2, 3]       // one element says it, and the rest take it
 
 The second form is the rule for literals applied within the array: an element that states a width says what the array is made of, and the ones that state none take it.
 
+A tuple is asked the same question and has only one way to answer.  Its elements are types of their own, so one of them stating a width says nothing about the others, and its type — written element by element — is not something the language has syntax for, so the binding cannot answer either.  Each number states its own:
+
+```
+let t := (1, "two")
+
+error: 't': a tuple element settles on 'int', which is an
+arbitrary-precision type the bootstrap implementation does not provide;
+a tuple has no type to write down, so the number states its own, as
+'1i64'
+
+let t := (1i64, "two")      // each number says what it is
+```
+
+A tuple handed back by the standard library arrives with its numbers already sized, since nothing the program could write would say what they are: `std.callstack()` gives `(str, i64, i64)`.
+
 ### The Compiler
 
 The compiler transforms source into efficient machine code:

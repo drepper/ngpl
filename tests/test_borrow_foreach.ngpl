@@ -178,7 +178,7 @@ fn error_shared_borrow_of_non_array():
 // whether the parts or the whole would be lent.
 @expect error "one variable per borrowed container"
 fn error_borrow_with_destructuring():
-    let pairs : mut = [(1, 2), (3, 4)]
+    let pairs : mut = [(1i64, 2i64), (3i64, 4i64)]
     foreach a, b := &mut pairs:
         assert(a > 0)
 

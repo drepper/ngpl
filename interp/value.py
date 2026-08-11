@@ -163,10 +163,35 @@ def unsettled_kind(value: "Value") -> str | None:
             if kind is not None:
                 return kind
         return None
-    # A tuple is not asked about.  Its type is written element by
-    # element, which the bootstrap has no syntax for, so a binding of
-    # one could not be given the type this would demand of it.
+    if isinstance(value, TupleValue):
+        # A tuple settles nothing between its elements: each is its own
+        # type, so each number states its own width or states none.
+        for element in value.elements:
+            kind = unsettled_kind(element)
+            if kind is not None:
+                return kind
     return None
+
+
+def unsettled_in_tuple(value: "Value") -> bool:
+    """Whether what settled on nothing is inside a tuple.
+
+    A tuple has no type to write down -- its elements are types of
+    their own, and the language has no syntax for the sequence -- so a
+    binding of one cannot answer for it and the element has to.
+    """
+    if isinstance(value, TupleValue):
+        return any(unsettled_kind(element) is not None
+                   for element in value.elements)
+    if isinstance(value, (UnitValue, SomeValue)):
+        inner = value.inner if isinstance(value, UnitValue) else value.value
+        return unsettled_in_tuple(inner)
+    if isinstance(value, ExpectedValue) and value.is_ok():
+        return unsettled_in_tuple(value.ok_value)
+    if isinstance(value, ObjectValue) and isinstance(value.obj, ArrayValue):
+        return any(unsettled_in_tuple(element)
+                   for element in value.obj.values())
+    return False
 
 
 def unsettled_shape(value: "Value") -> str:
@@ -199,6 +224,13 @@ def check_bootstrap_binding(value: "Value", name: str):
     kind = unsettled_kind(value)
     if kind is None:
         return
+    if unsettled_in_tuple(value):
+        suffix = "1i64" if kind == "int" else "1.5f64"
+        raise TypeError(
+            f"'{name}': a tuple element settles on '{kind}', which is an "
+            f"arbitrary-precision type the bootstrap implementation does "
+            f"not provide; a tuple has no type to write down, so the "
+            f"number states its own, as '{suffix}'")
     sized = _FULL_LANGUAGE_TYPES[kind] + unsettled_shape(value)
     raise TypeError(
         f"'{name}': a binding with no type written down settles on "

@@ -1,0 +1,8 @@
+// A tuple settles nothing between its elements, and its type is not
+// something the language has syntax for, so the binding cannot answer
+// for it.  Each number states its own.
+@start
+@impure
+fn main():
+    let t := (1, "two")
+    std.println("{}", t[0])

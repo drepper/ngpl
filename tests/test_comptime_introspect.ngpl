@@ -117,7 +117,7 @@ fn test_sizeof_fixed_array_var():
 
 @test
 fn test_sizeof_tuple_var():
-    let t := (1, 2, 3)
+    let t := (1i64, 2i64, 3i64)
     assert_eq(@sizeof(t), 3 ¤ptrdiff)
 
 // A dynamically sized array has a length but not one that is part of

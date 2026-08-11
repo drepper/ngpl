@@ -293,7 +293,7 @@ fn test_cmp_unit_lt_const():
 
 @test
 fn test_tuple_bare_int():
-    let t := (10, 20, 30)
+    let t := (10i64, 20i64, 30i64)
     assert_eq(t[0], 10)
     assert_eq(t[2], 30)
 

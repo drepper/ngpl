@@ -62,6 +62,11 @@ An array is asked the same question about its elements, and either side may answ
     let a : i64[] = [1, 2, 3]   // the binding says it
     let a := [1i64, 2, 3]       // one element says it, and the rest take it
 
+A tuple is asked it too, and has only one way to answer: its elements are types of their own, and
+there is no syntax for the sequence, so each number states its own.
+
+    let t := (1i64, "two")
+
 An *untyped* literal is unaffected while it is being computed with.  It states no width, takes the
 one it meets, and is exact until then, so `let big : i64 = 1 « 40` and `static_assert(2 ↑ 200 > 0)`
 are both fine.  What the bootstrap does not provide is a *value* that stays arbitrary-precision,
@@ -90,9 +95,10 @@ Completed
     bounds is uncommitted rather than an int, so it settles at the first typed thing it meets
     and still indexes.  An array literal settles the same way: one element stating a width says
     what the array is made of, and a binding of one whose elements state none is refused with
-    the bracketed type it needs.  Still open: a tuple of untyped numbers, which cannot be
-    refused until a tuple type can be written down; and the arguments of a builtin, which
-    settle nothing.
+    the bracketed type it needs.  A tuple settles nothing between its elements, so each number
+    states its own and the diagnostic says so rather than naming a type that cannot be written;
+    the tuples the standard library hands back arrive sized for the same reason.  Still open:
+    the arguments of a builtin, which settle nothing.
 
 [x] an integer literal the type its suffix names cannot hold is reported at the definition
     rather than when the code holding it runs, so `300u8` in a function nobody calls is

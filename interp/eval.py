@@ -1673,7 +1673,8 @@ class Evaluator:
         for frame in reversed(self._call_stack):
             name, pos = frame[0], frame[1]
             line, col = (pos[0], pos[1]) if pos is not None else (0, 0)
-            frames.append(TupleValue([mk_str(name), mk_int(line), mk_int(col)]))
+            frames.append(TupleValue([mk_str(name), mk_int(line, "i64"),
+                                      mk_int(col, "i64")]))
         return ObjectValue(ArrayValue(frames))
 
     def _struct_offsetof(self, struct_type, args):
@@ -2979,7 +2980,8 @@ class Evaluator:
             if isinstance(expr, EnumerateExpr):
                 inner = self._resolve_iterable(expr.expr, node.is_comptime)
                 sequences.append([
-                    TupleValue([mk_int(i), v]) for i, v in enumerate(inner)
+                    TupleValue([mk_int(i, "i64"), v])
+                    for i, v in enumerate(inner)
                 ])
             elif isinstance(expr, RangeExpr):
                 s = unwrap_optional(self.eval_expr(expr.start))
