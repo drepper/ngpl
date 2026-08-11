@@ -9,6 +9,8 @@ from collections import defaultdict
 
 from interp.lexer import tokenize, process_indentation
 from interp.parser import Parser
+from interp.macros import (collect as macro_collect,
+                           expand_definitions as macro_expand, MacroError)
 from interp.env import Env, Decl
 from interp.ast import (
     FuncDef as ASTFuncDef, EnumDef as ASTEnumDef, UnitDef as ASTUnitDef,
@@ -2063,6 +2065,12 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
     """
     program = LoadedProgram()
     try:
+        # Macros first and on their own: what the checks read is the
+        # program with no macro left in it.
+        try:
+            macro_expand(definitions, macro_collect(definitions))
+        except MacroError as e:
+            raise DefinitionError(str(e), getattr(e, "pos", None)) from e
         _install_definitions(definitions, env, evaluator, program,
                              honor_start=honor_start)
     except DefinitionError as e:

@@ -305,6 +305,57 @@ class ContinueStmt:
         self.pos = None
 
 
+class MacroDef:
+    """A macro: a name and the rules that say what it rewrites to.
+
+    Each rule is a MacroRule.  They are tried in order and the first
+    one whose pattern matches decides the expansion, which is why a
+    catch-all rule is written last.
+    """
+
+    def __init__(self, name: str, rules: list):
+        self.name = name
+        self.rules = rules
+        self.pos = None
+
+
+class MacroRule:
+    """One rewrite: what the arguments have to look like, and what for.
+
+    `patterns` is one pattern per macro argument, and `template` is the
+    expression that replaces the invocation.  Both are ordinary
+    expression trees, with MetaVar standing where a name is written
+    with a $ in front of it.
+    """
+
+    def __init__(self, patterns: list, template, pos=None):
+        self.patterns = patterns
+        self.template = template
+        self.pos = pos
+
+
+class MetaVar:
+    """`$a` -- a hole in a pattern, and what fills it in a template."""
+
+    def __init__(self, name: str):
+        self.name = name
+        self.pos = None
+
+
+class MacroCall:
+    """`name⟦args⟧` -- an invocation replaced by what the macro says.
+
+    Nothing evaluates one of these: the expansion pass replaces it
+    before anything runs, and reaching the evaluator means the pass did
+    not run.
+    """
+
+    def __init__(self, name: str, args: list):
+        self.name = name
+        self.args = args
+        self.pos = None
+
+
 class Condition:
     """A `@pre` or `@post` a function holds to.
 

@@ -1,0 +1,6 @@
+error: pair has rules for 2 arguments and is written here with 1
+  --> tests/output/macro_arity.ngpl:8:23
+    |
+  8 |     std.println("{}", pair⟦1i64⟧)
+    |                       ^^^^
+    |

@@ -1,0 +1,8 @@
+// Every rule takes two arguments and the invocation writes one.
+macro pair:
+    ⟪$a, $b⟫ → ⟪$a + $b⟫
+
+@start
+@impure
+fn main():
+    std.println("{}", pair⟦1i64⟧)

@@ -26,6 +26,7 @@ from interp.ast import (
     UnitOfExpr, UnitRefExpr,
     StructDef, ImplBlock, StructLit,
     MatchStmt, MatchArm, ExpErr,
+    MacroDef, MacroRule, MetaVar, MacroCall,
     set_pos,
 )
 from interp.lexer import Token, KEYWORDS
@@ -36,7 +37,7 @@ from interp.lexer import Token, KEYWORDS
 DEFINITION_STARTERS = frozenset({
     "START", "REPLACEABLE", "TEST", "FLAG", "IMPURE", "EXPECT", "REPR",
     "HOT", "COLD", "LISTABLE", "NORETURN", "PRE", "POST",
-    "ENUM", "STRUCT", "IMPL", "UNIT", "TYPE", "FN", "LET",
+    "ENUM", "STRUCT", "IMPL", "UNIT", "TYPE", "FN", "LET", "MACRO",
 })
 
 
@@ -118,6 +119,9 @@ class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
         self.pos = 0
+        # Whether what is being parsed is written down rather than run,
+        # which is the only place a $ hole may appear.
+        self._in_quote = False
 
     def _set_pos(self, node, tok):
         """Attach source position from a token to an AST node."""
@@ -438,6 +442,9 @@ class Parser:
         if self._check("IMPL"):
             return self._parse_impl_block()
 
+        if self._check("MACRO"):
+            return self._parse_macro_def()
+
         if self._check("UNIT"):
             return self._parse_unit_def()
 
@@ -460,6 +467,84 @@ class Parser:
                 f"expected function or variable definition, "
                 f"got {self._tok_display(self._cur())}",
                 self._cur())
+
+    def _parse_macro_def(self):
+        """Parse `macro NAME:` and the rewrite rules indented under it.
+
+        Each rule is a quoted pattern, an arrow, and a quoted template:
+
+            macro sin:
+                \u27ea$a \u00d7 \u03c0\u27eb \u2192 \u27eastd.sinpi($a)\u27eb
+                \u27ea$x\u27eb        \u2192 \u27eastd.cos($x)\u27eb
+        """
+        macro_tok = self._eat("MACRO")
+        name = self._eat("IDENT").value
+        self._eat("PUNCT", ":")
+        self._skip_nl()
+        self._eat("INDENT")
+        rules = []
+        while not self._check("DEDENT", "EOF"):
+            if self._try_eat("NEWLINE"):
+                continue
+            rule_tok = self._cur()
+            patterns = self._parse_quote(as_pattern=True)
+            self._eat("OP", "->")
+            template = self._parse_quote(as_pattern=False)
+            rules.append(MacroRule(
+                patterns, template,
+                (rule_tok.line, rule_tok.col, rule_tok.end_col)))
+            self._try_eat("NEWLINE")
+        self._try_eat("DEDENT")
+        if not rules:
+            raise ParseError(
+                f"macro {name} states no rules, so there is nothing it "
+                f"rewrites to", macro_tok)
+        return self._set_pos(MacroDef(name, rules), macro_tok)
+
+    def _parse_quote(self, *, as_pattern: bool):
+        """Parse `\u27ea \u2026 \u27eb` -- a piece of program written down rather than run.
+
+        A pattern holds one expression per macro argument, so it is read
+        as a comma-separated list.  What a rule rewrites to is either
+        one expression, written on the same line, or a block of
+        statements, written indented under the opening bracket.  Inside
+        either, `$a` is a hole.
+        """
+        open_tok = self._cur()
+        self._eat("PUNCT", "\u27ea")
+        saved = self._in_quote
+        self._in_quote = True
+        try:
+            if not as_pattern and self._check("NEWLINE"):
+                body = self._parse_quoted_block()
+                self._eat("PUNCT", "\u27eb")
+                return body
+            items = [self._parse_or_expr()]
+            while self._try_eat("PUNCT", ","):
+                items.append(self._parse_or_expr())
+        finally:
+            self._in_quote = saved
+        self._eat("PUNCT", "\u27eb")
+        if as_pattern:
+            return items
+        if len(items) != 1:
+            raise ParseError(
+                "what a macro rewrites to is one expression, or a block of "
+                "statements written under the bracket", open_tok)
+        return items[0]
+
+    def _parse_quoted_block(self):
+        """Parse the statements written under an opening \u27ea."""
+        self._skip_nl()
+        self._eat("INDENT")
+        body = []
+        while not self._check("DEDENT", "EOF"):
+            if self._try_eat("NEWLINE"):
+                continue
+            body.append(self._parse_statement())
+        self._try_eat("DEDENT")
+        self._skip_nl()
+        return body
 
     def _parse_function_def(self, is_start, is_test=False, test_refs=None,
                             expect_annotations: list[tuple[str, str]] | None = None,
@@ -1436,7 +1521,8 @@ class Parser:
         # stores, which is what lets the same glyph be the operator: a
         # statement is an assignment when it holds a ←, and anything
         # else beginning with a name is an expression.
-        if self._check("IDENT") or (self._check("PUNCT") and self._cur().value == "("):
+        if self._check("IDENT") or (self._check("PUNCT")
+                                    and self._cur().value in ("(", "$")):
             saved_pos = self.pos
             bracket_depth = 0
             found_assign_op = None
@@ -2488,10 +2574,34 @@ class Parser:
                 raise ParseError("static_assert_eq requires exactly 2 arguments", tok)
             return self._set_pos(StaticAssertEq(args[0], args[1]), tok)
 
+        # $a -- a hole, which only a quoted piece of program has.
+        if tok.type == "PUNCT" and tok.value == "$":
+            if not self._in_quote:
+                raise ParseError(
+                    "$ names a hole in a piece of program written down, so "
+                    "it is written inside \u27ea \u2026 \u27eb", tok)
+            self.pos += 1
+            return self._set_pos(MetaVar(self._eat("IDENT").value), tok)
+
         # Identifier (possibly function call, possibly followed by dotted chain).
         if tok.type == "IDENT":
             self.pos += 1
             name = tok.value
+
+            # name\u27e6\u2026\u27e7 -- a macro, which is not a call: what is written
+            # between the brackets is handed over as it is written.
+            if self._check("PUNCT") and self._cur().value == "\u27e6":
+                self.pos += 1
+                args = []
+                self._skip_nl()
+                if not (self._check("PUNCT") and self._cur().value == "\u27e7"):
+                    args.append(self._parse_or_expr())
+                    while self._try_eat("PUNCT", ","):
+                        self._skip_nl()
+                        args.append(self._parse_or_expr())
+                self._skip_nl()
+                self._eat("PUNCT", "\u27e7")
+                return self._set_pos(MacroCall(name, args), tok)
 
             # Check for function call: name(...)
             if (self._cur().type == "PUNCT" and self._cur().value == "("):

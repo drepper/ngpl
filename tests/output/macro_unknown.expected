@@ -1,0 +1,6 @@
+error: no macro named nosuch is defined; ⟦ … ⟧ invokes a macro and ( … ) calls a function
+  --> tests/output/macro_unknown.ngpl:5:23
+    |
+  5 |     std.println("{}", nosuch⟦1i64⟧)
+    |                       ^^^^^^
+    |

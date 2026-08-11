@@ -1,0 +1,8 @@
+// A macro invocation that no rule of the macro matches.
+macro only_pairs:
+    ⟪$a × $b⟫ → ⟪$a + $b⟫
+
+@start
+@impure
+fn main():
+    std.println("{}", only_pairs⟦1i64⟧)

@@ -1,0 +1,6 @@
+// $ names a hole in a piece of program written down, and there is no
+// piece of program written down here.
+@start
+@impure
+fn main():
+    std.println("{}", $x)
