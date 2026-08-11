@@ -11,7 +11,7 @@ fn test_ascii_arrow_return():
 // <- works for assignment (ASCII form of ←)
 @test
 fn test_ascii_arrow_assign():
-  let x : mut = 10
+  let x : mut i64 = 10
   x <- 20
   assert_eq(20, x)
 
@@ -31,7 +31,7 @@ fn test_ascii_arrow_lambda():
 // Mix: ASCII -> for return, Unicode ← for assignment
 @test
 fn test_mixed_arrows():
-  let x : mut = 0
+  let x : mut i64 = 0
   x ← add_ascii(1, 2)
   assert_eq(3, x)
 

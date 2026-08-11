@@ -73,7 +73,7 @@ fn error_two_rows_wrong_count():
 
 // Both open: a matrix of any shape, and nothing to check but the rank.
 fn sum_matrix(m : i32[,]) → i32:
-    let t : mut = 0
+    let t : mut i64 = 0
     foreach r := 0…(m.shape[0] - 1):
         foreach c := 0…(m.shape[1] - 1):
             t ← t + m[r, c]

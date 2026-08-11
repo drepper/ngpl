@@ -1,6 +1,6 @@
-let x := 42
+let x : i64 = 42
 x
-let total : mut = 0
+let total : mut i64 = 0
 foreach i := 1…4:
     total ← total + i
 

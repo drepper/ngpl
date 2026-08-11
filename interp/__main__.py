@@ -17,13 +17,14 @@ from interp.ast import (
 )
 import interp.ast as _ast
 from interp.value import (
-    check_int,
+    check_bootstrap_binding, check_int,
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
     NoneValue, SomeValue, ExpectedValue, EnumType, EnumValue, StructType,
     coerce_to_type, validate_param_type, validate_type, none, FAST_TYPES,
     register_type_alias, register_sum_type, register_enum_type,
     sum_type_alternatives, register_user_type, DISCARD_NAME, is_type_name,
     register_struct_type,
+    UnitValue,
     _split_optional_type, _TYPE_BITS, FLOAT_TYPES, resolve_type_alias,
     check_bootstrap_type,
     _parse_array_type, format_shape, is_generic_type,
@@ -1819,8 +1820,27 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
             # checks around it are rather than as a bare traceback.
             try:
                 value = evaluator.eval_expr(defn.init_expr)
-                if defn.type_annotation is not None:
+                unit = None
+                if defn.unit_spec is not None:
+                    from interp.units import eval_unit_formula
+                    unit = eval_unit_formula(defn.unit_spec)
+                if defn.type_annotation is None:
+                    # A global is a binding like any other: without a
+                    # type written down a number settles on int or
+                    # float, and the bootstrap has neither.
+                    check_bootstrap_binding(value, defn.name)
+                elif unit is not None and isinstance(value, UnitValue):
+                    # The type says what the number is held in and the
+                    # unit says what it counts, as at a local binding.
+                    value = UnitValue(
+                        coerce_to_type(value.inner, defn.type_annotation),
+                        value.unit)
+                else:
                     value = coerce_to_type(value, defn.type_annotation)
+                if unit is not None:
+                    value = (evaluator._convert_unit_value(value, unit)
+                             if isinstance(value, UnitValue)
+                             else UnitValue(value, unit))
             except (OverflowError, TypeError, ValueError) as e:
                 raise DefinitionError(
                     f"in {defn.name}: {strip_position_prefix(str(e))}",

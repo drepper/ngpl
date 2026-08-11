@@ -21,15 +21,15 @@ fn test_lambda_multi_param():
 // Lambda with capture
 @test
 fn test_lambda_capture():
-  let offset := 10
+  let offset : i64 = 10
   let f := λx : i64 |offset| → i64: x + offset
   assert_eq(15, f(5))
 
 // Lambda with multiple captures
 @test
 fn test_lambda_multi_capture():
-  let a := 3
-  let b := 7
+  let a : i64 = 3
+  let b : i64 = 7
   let f := λx : i64 |a, b| → i64: x + a + b
   assert_eq(20, f(10))
 
@@ -98,7 +98,7 @@ fn test_lambda_partial():
 @test
 @expect error "no capture list"
 fn test_lambda_no_capture_list():
-  let val : mut = 10
+  let val : mut i64 = 10
   let f : mut = λx : i64 → i64: x + val
 
 // Undefined capture causes error
@@ -232,7 +232,7 @@ fn test_lambda_multi_stmt_return():
 // Multi-statement lambda with capture
 @test
 fn test_lambda_multi_stmt_capture():
-  let base := 100
+  let base : i64 = 100
   let f := λx : i64 |base| → i64:
     let doubled := x × 2
     base + doubled
@@ -242,7 +242,7 @@ fn test_lambda_multi_stmt_capture():
 @test
 fn test_lambda_multi_stmt_loop():
   let f := λn : i64 → i64:
-    let sum : mut = 0
+    let sum : mut i64 = 0
     foreach i := 1…n:
       sum ← sum + i
     sum

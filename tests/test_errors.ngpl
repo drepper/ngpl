@@ -7,18 +7,18 @@
 // inside a function body; diagnostics from that single statement are
 // captured and matched.
 
-let GLOBAL_C := 42
+let GLOBAL_C : i64 = 42
 
 // --- let immutability ---------------------------------------------------
 
 @expect error "cannot assign to let variable 'x'"
 fn error_const_assign():
-    let x := 42
+    let x : i64 = 42
     x ← 99
 
 @expect error "cannot redefine let variable 'x'"
 fn error_const_redef():
-    let x := 42
+    let x : i64 = 42
     let x : mut = 99
 
 @expect error "cannot assign to let variable 'GLOBAL_C'"
@@ -36,10 +36,10 @@ fn error_foreach_assign():
 // The new variable shadows the loop variable after the redefinition.
 @test
 fn warn_foreach_redef():
-    let total : mut = 0
+    let total : mut i64 = 0
     foreach i := 1…3:
         @expect warning "redefinition of foreach variable 'i'"
-        let i : mut = 99
+        let i : mut i64 = 99
         total ← total + i
     assert_eq(total, 297)
 

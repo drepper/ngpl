@@ -1,0 +1,9 @@
+// A global is a binding like any other: without a type written down a
+// number settles on int, which the bootstrap does not have.  It is
+// reported while the definitions are installed, before anything runs.
+let limit := 100
+
+@start
+@impure
+fn main():
+    std.println("{}", limit)

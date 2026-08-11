@@ -15,7 +15,7 @@ fn doubled(n : i64) → i64:
 fn hands_nothing_back(n : i64):
     assert(n == n)
 
-let ticks : mut = 0
+let ticks : mut i64 = 0
 
 @impure
 fn bump() → i64:

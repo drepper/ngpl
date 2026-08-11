@@ -29,7 +29,7 @@ fn warn_parameter_never_modified(n : mut i32):
 @test
 fn test_statement_level_expect():
     @expect warning "'here' is declared mut but is never modified"
-    let here : mut = 5
+    let here : mut i64 = 5
     assert_eq(here, 5)
 
 // Only the marked statement is covered.  `changed` is modified, so it
@@ -37,8 +37,8 @@ fn test_statement_level_expect():
 @test
 fn test_statement_level_expect_is_local():
     @expect warning "'marked' is declared mut but is never modified"
-    let marked : mut = 1
-    let changed : mut = 2
+    let marked : mut i64 = 1
+    let changed : mut i64 = 2
     changed ← 3
     assert_eq(marked + changed, 4)
 
@@ -48,7 +48,7 @@ fn test_statement_level_expect_is_local():
 
 @test
 fn test_assignment_counts():
-    let x : mut = 1
+    let x : mut i64 = 1
     x ← 2
     assert_eq(x, 2)
 
@@ -119,13 +119,13 @@ fn test_modified_parameter_is_quiet():
 
 @test
 fn test_immutable_binding_is_quiet():
-    let fixed := 5
+    let fixed : i64 = 5
     assert_eq(fixed, 5)
 
 // Nor is a loop or match binding, which are not declared mut.
 @test
 fn test_loop_bindings_are_quiet():
-    let total : mut = 0
+    let total : mut i64 = 0
     foreach i := 1…3:
         total ← total + i
     assert_eq(total, 6)

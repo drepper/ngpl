@@ -8,7 +8,7 @@ warning: the value of this statement is not used; the signature hands nothing ba
 warning: 'step' is declared mut but is never modified
   --> <repl:3>:2:5
     |
-  2 |     let step : mut = 2
+  2 |     let step : mut i64 = 2
     |     ^^^
   3 |     n × step
     |

@@ -6,8 +6,11 @@
 // declaration naming one is refused rather than quietly given a
 // different meaning.
 //
-// An untyped literal is unaffected: it is arbitrary-precision while it
-// is computed with and settles on the type it is used at.
+// An untyped literal is unaffected while it is being computed with: it
+// is what it says until it meets a type, and settles on that one.
+// What it may not do is stay uncommitted once it is named.  A binding
+// with no type written down would settle on int or float, so it is
+// refused and the type is asked for.
 
 // ---------------------------------------------------------------------
 // What is still allowed
@@ -15,8 +18,8 @@
 
 @test
 fn test_untyped_literals_are_unaffected():
-    let n := 5
-    let big := 1 « 40
+    let n : i64 = 5
+    let big : i64 = 1 « 40
     assert_eq(n, 5)
     assert_eq(big, 1099511627776)
 
@@ -32,7 +35,7 @@ fn test_sized_types_are_the_way_to_declare():
 // A computation may exceed a sized type while it stays untyped.
 @test
 fn test_untyped_arithmetic_keeps_its_precision():
-    let wide := (1 « 40) + 1
+    let wide : i64 = (1 « 40) + 1
     assert_eq(wide, 1099511627777)
 
 // ---------------------------------------------------------------------
@@ -62,6 +65,315 @@ fn error_float_binding_names_the_replacement():
 // The refusal reaches every place a type is declared; the parameter,
 // return, field, and alias cases are output tests, since those are
 // reported before any function runs.
+
+// A lambda declares types the same way, and is refused the same way.
+
+@test
+@expect error "λ: parameter 'x'.*arbitrary-precision"
+fn error_lambda_parameter():
+    let f := λx : int → i64: 5
+
+@test
+@expect error "λ: return type.*arbitrary-precision"
+fn error_lambda_return():
+    let f := λx : i64 → int: 5
+
+// ---------------------------------------------------------------------
+// A binding settles a value, and there is nothing for it to settle on
+// ---------------------------------------------------------------------
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_binding():
+    let n := 5
+
+@test
+@expect error "settles on 'float'"
+fn error_untyped_float_binding():
+    let f := 1.5
+
+// mut changes nothing: the question is what type the value has.
+@test
+@expect error "settles on 'int'"
+fn error_untyped_mut_binding():
+    let n : mut = 5
+
+// The message names the type to write instead.
+@test
+@expect error "state a sized type, as 'let n : i64 = "
+fn error_untyped_binding_names_the_replacement():
+    let n := 5
+
+// A value that already has a sized type needs nothing added.
+@test
+fn test_a_sized_value_settles_nothing():
+    let a : i64 = 5
+    let b := a + 1
+    let c := 5i64
+    let d := 1.5f64
+    assert_eq(b, 6)
+    assert_eq(c, 5)
+    assert(d == 1.5)
+
+// A global is a binding like any other.  The global case is an output
+// test, since it is reported while the definitions are installed.
+
+// ---------------------------------------------------------------------
+// Every operator that produces a number
+// ---------------------------------------------------------------------
+//
+// Each one below is written twice: once with untyped operands, whose
+// result has nothing to settle on and cannot be named, and once with
+// a sized operand, which the result takes.  The rule is the operator's
+// only involvement -- it is the binding that settles a value -- so the
+// point of doing all of them is that none is an exception.
+
+// --- shared by integers and floats ---
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_add():
+    let x := 1 + 2
+
+@test
+fn test_sized_add():
+    let a : i64 = 1
+    static_assert_eq(@typeof(a + 2), i64)
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_subtract():
+    let x := 3 - 1
+
+@test
+fn test_sized_subtract():
+    let a : i64 = 3
+    static_assert_eq(@typeof(a - 1), i64)
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_multiply():
+    let x := 2 × 3
+
+@test
+fn test_sized_multiply():
+    let a : i64 = 2
+    static_assert_eq(@typeof(a × 3), i64)
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_divide():
+    let x := 6 ÷ 3
+
+@test
+fn test_sized_divide():
+    let a : i64 = 6
+    let q : i64! = a ÷ 3
+    assert_eq(q ?? ⁻1, 2)
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_remainder():
+    let x := 7 % 3
+
+@test
+fn test_sized_remainder():
+    let a : i64 = 7
+    let r : i64! = a % 3
+    assert_eq(r ?? ⁻1, 1)
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_power():
+    let x := 2 ↑ 3
+
+@test
+fn test_sized_power():
+    let a : i64 = 2
+    static_assert_eq(@typeof(a ↑ 3), i64)
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_max():
+    let x := 3 ⌈ 5
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_min():
+    let x := 3 ⌊ 5
+
+@test
+fn test_sized_max_and_min():
+    let a : i64 = 3
+    static_assert_eq(@typeof(a ⌈ 5), i64)
+    static_assert_eq(@typeof(a ⌊ 5), i64)
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_negation():
+    let x := ⁻5
+
+@test
+fn test_sized_negation():
+    let a : i64 = 5
+    static_assert_eq(@typeof(⁻a), i64)
+
+// --- integers only ---
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_saturating_add():
+    let x := 1 ⊞ 2
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_saturating_subtract():
+    let x := 3 ⊟ 1
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_saturating_multiply():
+    let x := 2 ⊠ 3
+
+@test
+fn test_sized_saturating():
+    let a : u8 = 255
+    static_assert_eq(@typeof(a ⊞ 1), u8)
+    assert_eq(a ⊞ 1, 255)
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_shift_left():
+    let x := 1 « 4
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_shift_right():
+    let x := 16 » 2
+
+@test
+fn test_sized_shifts():
+    let a : u32 = 1
+    static_assert_eq(@typeof(a « 4), u32)
+    static_assert_eq(@typeof(a » 1), u32)
+
+@test
+fn test_sized_rotations():
+    let a : u8 = 1
+    static_assert_eq(@typeof(a ↻ 1), u8)
+    static_assert_eq(@typeof(a ↺ 1), u8)
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_bitand():
+    let x := 5 & 3
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_bitor():
+    let x := 5 | 3
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_bitxor():
+    let x := 5 ^ 3
+
+@test
+@expect error "settles on 'int'"
+fn error_untyped_bitnot():
+    let x := ~5
+
+@test
+fn test_sized_bitwise():
+    let a : u8 = 5
+    static_assert_eq(@typeof(a & 3), u8)
+    static_assert_eq(@typeof(a | 3), u8)
+    static_assert_eq(@typeof(a ^ 3), u8)
+    static_assert_eq(@typeof(~a), u8)
+
+// --- floats only ---
+
+@test
+@expect error "settles on 'float'"
+fn error_untyped_float_add():
+    let x := 1.5 + 2.5
+
+@test
+@expect error "settles on 'float'"
+fn error_untyped_float_multiply():
+    let x := 1.5 × 2.0
+
+@test
+@expect error "settles on 'float'"
+fn error_untyped_float_divide():
+    let x := 3.0 ÷ 2.0
+
+@test
+@expect error "settles on 'float'"
+fn error_untyped_float_power():
+    let x := 2.0 ↑ 3.0
+
+@test
+@expect error "settles on 'float'"
+fn error_untyped_square_root():
+    let x := √4.0
+
+@test
+@expect error "settles on 'float'"
+fn error_untyped_cube_root():
+    let x := ∛8.0
+
+@test
+@expect error "settles on 'float'"
+fn error_untyped_fourth_root():
+    let x := ∜16.0
+
+@test
+fn test_sized_float_operators():
+    let a : f64 = 1.5
+    static_assert_eq(@typeof(a + 2.5), f64)
+    static_assert_eq(@typeof(a × 2.0), f64)
+    static_assert_eq(@typeof(a ÷ 2.0), f64)
+    static_assert_eq(@typeof(a ↑ 2.0), f64)
+    static_assert_eq(@typeof(⁻a), f64)
+    let r : f64 = √4.0f64
+    assert(r == 2.0)
+
+// --- what the operators answer with instead of a number ---
+//
+// A comparison and a logic operator answer with a bool, which is a
+// sized type, so a binding taking one needs nothing said.
+
+@test
+fn test_comparisons_answer_with_a_bool():
+    let lt := 1 < 2
+    let eq := 1 == 2
+    let ge := 2 >= 1
+    assert(lt)
+    assert(not eq)
+    assert(ge)
+
+@test
+fn test_logic_operators_answer_with_a_bool():
+    let and_ := 5 ∧ 3
+    let or_ := 5 ∨ 3
+    let xor := 5 ⊕ 3
+    let nand := 5 ⊼ 3
+    let nor := 5 ⊽ 3
+    let not_ := ¬5
+    assert(and_)
+    assert(or_)
+    assert(not xor)
+    assert(not nand)
+    assert(not nor)
+    assert(not not_)
+
+@test
+fn test_tolerant_comparisons_answer_with_a_bool():
+    let alike := 1.0 ≅ 1.0
+    let unlike := 1.0 ≇ 2.0
+    assert(alike)
+    assert(unlike)
 
 @start
 @impure

@@ -41,17 +41,26 @@ bootstrap does not have says so.
 ### Already Refused
 
 `int` and `float`, the arbitrary-precision types, are full-language only.  A variable, parameter,
-return type, struct field, or type alias naming one is an error in the bootstrap:
+return type, struct field, type alias, or lambda parameter naming one is an error in the bootstrap:
 
     let n : int = 5
 
     error: 'n': 'int' is an arbitrary-precision type, which the bootstrap
     implementation does not provide; use a sized type such as i64
 
-An *untyped* literal is unaffected.  It is arbitrary-precision while it is being computed with and
-settles on the type it is used at, so `let n := 5` and `1 « 40` are both fine.  What the bootstrap
-does not provide is a variable that stays arbitrary-precision, since that needs a representation
-the sized types do not have.
+Nor can a value reach one without being named.  A binding with no type written down would settle
+on int or float, so it is refused and the type is asked for:
+
+    let n := 5
+
+    error: 'n': a binding with no type written down settles on 'int', which is an
+    arbitrary-precision type the bootstrap implementation does not provide; state
+    a sized type, as 'let n : i64 = …'
+
+An *untyped* literal is unaffected while it is being computed with.  It states no width, takes the
+one it meets, and is exact until then, so `let big : i64 = 1 « 40` and `static_assert(2 ↑ 200 > 0)`
+are both fine.  What the bootstrap does not provide is a *value* that stays arbitrary-precision,
+since that needs a representation the sized types do not have.
 
 
 Completed
@@ -65,6 +74,17 @@ Completed
     format holds; only reaching zero loses the value.  Nothing in the bootstrap can now
     produce an infinity or a NaN, which is what makes the check cheap — the full language
     will have to say how a program asks for them.
+
+[x] nothing in the bootstrap holds an arbitrary-precision value.  A binding with no type written
+    down would settle on int or float, so it is refused and the sized type is asked for; that
+    reaches a local, a global, and the value of every operator, since it is the binding that
+    settles a value rather than the operator that made it.  A lambda's parameters and return
+    type were the one declaration site the type check had not reached.  A float literal now
+    gives way to a sized operand as an integer literal already did — f64 + a literal was
+    answering `float`, the type the bootstrap does not have.  A loop variable over untyped
+    bounds is uncommitted rather than an int, so it settles at the first typed thing it meets
+    and still indexes.  Still open: an array of untyped elements, `let a := [1, 2, 3]`, whose
+    element type is int; and the arguments of a builtin, which settle nothing.
 
 [x] an integer literal the type its suffix names cannot hold is reported at the definition
     rather than when the code holding it runs, so `300u8` in a function nobody calls is

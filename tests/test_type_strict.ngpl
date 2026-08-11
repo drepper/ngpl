@@ -190,7 +190,7 @@ fn test_pow_int_float():
 @test
 @impure
 fn test_pow_float_int_ok():
-  let r := 4.0 ↑ 2
+  let r : f64 = 4.0 ↑ 2
   assert_true(r == 16.0)
 
 // Same-type arithmetic succeeds.

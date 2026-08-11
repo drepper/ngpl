@@ -49,7 +49,7 @@ fn test_likely_branch_still_skipped():
 // unaffected and still reached.
 @test
 fn test_hint_with_elif_and_else():
-    let which : mut = 0
+    let which : mut i64 = 0
     @unlikely
     if false:
         which ← 1
@@ -61,7 +61,7 @@ fn test_hint_with_elif_and_else():
 
 @test
 fn test_hint_with_else():
-    let which : mut = 0
+    let which : mut i64 = 0
     @likely
     if false:
         which ← 1
@@ -72,7 +72,7 @@ fn test_hint_with_else():
 // A hint on a nested condition applies to that one.
 @test
 fn test_nested_hints():
-    let reached : mut = 0
+    let reached : mut i64 = 0
     @likely
     if true:
         @unlikely
@@ -105,7 +105,7 @@ fn test_function_hints_do_not_change_results():
 fn hinted_and_impure() → i64:
     hint_counter
 
-let hint_counter : mut = 5
+let hint_counter : mut i64 = 5
 
 @test
 @impure
@@ -139,10 +139,10 @@ fn test_method_hints():
 // words for its own bindings.
 @test
 fn test_names_remain_usable():
-    let hot := 1
-    let cold := 2
-    let likely := 3
-    let unlikely := 4
+    let hot : i64 = 1
+    let cold : i64 = 2
+    let likely : i64 = 3
+    let unlikely : i64 = 4
     assert_eq(hot + cold + likely + unlikely, 10)
 
 // A hint that names nothing it can apply to is a parse error, so

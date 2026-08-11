@@ -5,10 +5,11 @@
 // untyped constant does in Go.  The result then lives in that type,
 // and can overflow or wrap where a value of it would.
 //
-// `int` is a different thing.  A binding written `let n := 0` is an
-// int — arbitrary precision — and stays one; only a literal is
-// uncommitted.  Where the two meet a fixed width, they answer
-// differently, which is what these tests are about.
+// A binding is a different thing.  It states a sized type — the
+// bootstrap has no arbitrary-precision `int` for one to settle on —
+// and keeps it; only a literal is uncommitted.  Where the two meet a
+// fixed width, they answer differently, which is what these tests are
+// about.
 
 // --- A literal takes the width it meets --------------------------
 
@@ -55,20 +56,20 @@ fn test_literals_together_stay_untyped():
 
 // --- A name settles what it was given ------------------------------
 
-// `int` is arbitrary precision, which is wider than any fixed width,
-// so it wins where a literal would have given way.
+// A binding states its type, so it wins where a literal would have
+// given way: the wider of the two is what the result lives in.
 @test
-fn test_an_int_binding_is_not_a_literal():
-    let n := 0
-    static_assert_eq(@typeof(n), int)
+fn test_a_binding_is_not_a_literal():
+    let n : i64 = 0
+    static_assert_eq(@typeof(n), i64)
     let p : u8 = 200
-    static_assert_eq(@typeof(n + p), int)
+    static_assert_eq(@typeof(n + p), i64)
 
 // The distinction is what keeps an accumulator from being truncated
 // by the first typed value added to it.
 @test
 fn test_an_accumulator_is_not_narrowed():
-    let total : mut = 0
+    let total : mut i64 = 0
     let a : u8 = 200
     let b : u8 = 200
     total ← total + a
@@ -90,11 +91,18 @@ fn test_shift_bounded_by_the_width_taken():
 fn test_untyped_shift_is_unbounded():
     assert_eq(1 « 40, 1099511627776)
 
-// An int binding is arbitrary precision, so it is unbounded too.
+// A binding is bounded by the width it states, which for an i64
+// leaves room for this one.
 @test
-fn test_int_shift_is_unbounded():
-    let n := 1
+fn test_a_shift_is_bounded_by_the_binding():
+    let n : i64 = 1
     assert_eq(n « 40, 1099511627776)
+
+@test
+@expect error "shift"
+fn test_a_shift_past_the_bindings_width():
+    let n : i64 = 1
+    _ ← n « 64
 
 // --- Units still take an uncommitted number ------------------------
 

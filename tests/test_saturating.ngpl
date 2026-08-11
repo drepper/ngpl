@@ -93,7 +93,7 @@ fn test_a_literal_is_held_by_the_width_it_took():
 @test
 fn test_untyped_has_no_edge():
     assert_eq(100000 ⊞ 1, 100001)
-    let n := 1000000000000
+    let n : i64 = 1000000000000
     assert_eq(n ⊠ 1000000, 1000000000000000000)
 
 // --- Grouping ------------------------------------------------------

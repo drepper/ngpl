@@ -47,13 +47,13 @@ fn test_right_fold_concat():
 // Left fold with init over empty array returns init.
 @test
 fn test_left_fold_empty_with_init():
-    let result := (λa : i64, b : i64 → i64: a + b) ⌿ ([], 42)
+    let result : i64 = (λa : i64, b : i64 → i64: a + b) ⌿ ([], 42)
     assert_eq(result, 42)
 
 // Right fold with init over empty array returns init.
 @test
 fn test_right_fold_empty_with_init():
-    let result := (λa : i64, b : i64 → i64: a + b) ⍀ ([], 42)
+    let result : i64 = (λa : i64, b : i64 → i64: a + b) ⍀ ([], 42)
     assert_eq(result, 42)
 
 // Left fold over a range without init.
@@ -92,7 +92,7 @@ fn test_left_fold_named_fn_init():
 // Left fold: single element array, no init.
 @test
 fn test_left_fold_single():
-    let result := (λa : i64, b : i64 → i64: a + b) ⌿ [7]
+    let result : i64 = (λa : i64, b : i64 → i64: a + b) ⌿ [7]
     assert_eq(result, 7)
 
 // Right fold: accumulator from right with non-trivial init.

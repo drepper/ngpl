@@ -59,12 +59,14 @@ fn error_hex_literal():
 fn error_binary_literal():
     let x := 0b100000000u8
 
-// A literal without a suffix is untyped and arbitrary-precision, so
-// there is nothing for it to fail to fit.
+// A literal without a suffix is untyped, so it has no range of its
+// own to leave: it is exact while it is being computed with, and the
+// type it is used at is what it has to fit.
 @test
-fn test_an_untyped_literal_has_no_range():
-    let big := 340282366920938463463374607431768211456
-    assert(big > 0)
+fn test_an_untyped_literal_has_no_range_of_its_own():
+    static_assert(340282366920938463463374607431768211456 > 0)
+    static_assert(340282366920938463463374607431768211455
+                  < 340282366920938463463374607431768211456)
 
 @test
 fn test_a_literal_the_type_holds_is_held():
@@ -302,7 +304,7 @@ fn test_runtime_count_reports_when_it_runs():
 // An untyped integer has no width for a count to pass.
 @test
 fn test_shift_of_an_untyped_integer():
-    let n := 1
+    let n : i64 = 1
     assert_eq(n « 40, 1099511627776)
 
 // The error can be recovered from, as division by zero can.
@@ -382,8 +384,9 @@ fn test_rotation_of_a_signed_type():
 @test
 @expect error "has no width to turn within"
 fn error_rotation_without_a_width():
-    let n := 1
-    _ ← n ↻ 1
+    // A literal has not settled on a width, and a rotation is about
+    // the bits of one.
+    _ ← 1 ↻ 1
 
 // ---------------------------------------------------------------------
 // A signed type has one value bit fewer

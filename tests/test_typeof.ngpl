@@ -85,8 +85,8 @@ fn returns_int() → i64:
 // answers for any name in scope.
 @test
 fn test_typeof_of_a_runtime_binding():
-    let x : mut = 42
-    let y : mut = 7
+    let x : mut i64 = 42
+    let y : mut i64 = 7
     // Both are written to, so the mut on each says something true and
     // neither value is one a constant would have.
     x ← x + 1
@@ -176,7 +176,7 @@ fn test_typeof_of_an_expression():
 @test
 fn test_typeof_of_a_subscript():
     let a : i32[] = [1, 2, 3]
-    let i := 0
+    let i ¤ptrdiff : i64 = 0
     static_assert_eq(@typeof(a[i]), i32)
 
 @test

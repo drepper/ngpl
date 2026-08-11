@@ -59,7 +59,7 @@ fn test_default_still_compares_plainly():
 @test
 fn test_match_present_binds_the_value():
     let v := [42]
-    let seen : mut = 0
+    let seen : mut i64 = 0
     match v.get(0):
         ∃(x):
             seen ← x
@@ -70,7 +70,7 @@ fn test_match_present_binds_the_value():
 @test
 fn test_match_absent():
     let v := []
-    let seen : mut = 0
+    let seen : mut i64 = 0
     match v.get(0):
         ∃(x):
             seen ← x
@@ -94,7 +94,7 @@ fn test_match_present_but_falsy():
 @test
 fn test_match_arm_order():
     let v := [7]
-    let seen : mut = 0
+    let seen : mut i64 = 0
     match v.get(0):
         ∅:
             seen ← ⁻1
@@ -106,7 +106,7 @@ fn test_match_arm_order():
 @test
 fn test_match_inline_arms():
     let v := [3]
-    let seen : mut = 0
+    let seen : mut i64 = 0
     match v.get(0):
         ∃(x): seen ← x
         ∅: seen ← ⁻1
@@ -129,7 +129,7 @@ fn test_match_wildcard():
 fn test_match_over_an_iterator():
     let v := [1, 2, 3]
     let it := v.iterate()
-    let total : mut = 0
+    let total : mut i64 = 0
     let running : mut = true
     while running:
         match it.next():
@@ -149,7 +149,7 @@ fn test_match_over_an_iterator():
 
 @test
 fn test_match_result_ok():
-    let seen : mut = 0
+    let seen : mut i64 = 0
     match 10 ÷ 2:
         ∃(v):
             seen ← v
@@ -176,7 +176,7 @@ fn checked(n : i64) → i64!:
 
 @test
 fn test_explicit_error_return_ok_path():
-    let seen : mut = 0
+    let seen : mut i64 = 0
     match checked(5):
         ∃(v):
             seen ← v
@@ -283,7 +283,7 @@ fn returns_plain(n : i64) → i64:
 
 @test
 fn test_plain_subject_needs_one_arm():
-    let seen : mut = 0
+    let seen : mut i64 = 0
     match returns_plain(3):
         ∃(x):
             seen ← x
@@ -468,7 +468,7 @@ fn error_declared_local_missing_absent_arm():
 // A let without a type says nothing about which shapes the value has.
 @test
 fn test_an_inferred_local_is_left_alone():
-    let x := 5
+    let x : i64 = 5
     match x:
         ∃(v):
             assert_eq(v, 5)

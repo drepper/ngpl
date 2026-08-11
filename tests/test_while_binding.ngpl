@@ -13,7 +13,7 @@
 fn test_binds_each_iteration():
     let v := [1, 2, 3]
     let it := v.iterate()
-    let total : mut = 0
+    let total : mut i64 = 0
     while e := it.next():
         total ← total + e
     assert_eq(total, 6)
@@ -35,7 +35,7 @@ fn test_expression_is_re_evaluated():
 fn test_empty_runs_body_never():
     let v := []
     let it := v.iterate()
-    let ran : mut = 0
+    let ran : mut i64 = 0
     while e := it.next():
         ran ← ran + 1
     assert_eq(ran, 0)
@@ -45,7 +45,7 @@ fn test_empty_runs_body_never():
 fn test_falsy_values_continue():
     let v := [0, 0]
     let it := v.iterate()
-    let ran : mut = 0
+    let ran : mut i64 = 0
     while e := it.next():
         ran ← ran + 1
     assert_eq(ran, 2)
@@ -53,8 +53,8 @@ fn test_falsy_values_continue():
 // A plain expression works too, not only an optional.
 @test
 fn test_binding_a_plain_value():
-    let n : mut = 3
-    let steps : mut = 0
+    let n : mut i64 = 3
+    let steps : mut i64 = 0
     while remaining := n:
         steps ← steps + 1
         n ← n - 1
@@ -79,7 +79,7 @@ fn test_bound_to_the_value_itself():
 @test
 fn test_unwraps_pop():
     let v : mut = [1, 2, 3]
-    let sum : mut = 0
+    let sum : mut i64 = 0
     while x := v.pop():
         sum ← sum + x
     assert_eq(sum, 6)
@@ -88,7 +88,7 @@ fn test_unwraps_pop():
 @test
 fn test_unwraps_get():
     let v : mut = [42]
-    let seen : mut = 0
+    let seen : mut i64 = 0
     while x := v.get(0):
         seen ← x
         _ ← v.pop()
@@ -118,7 +118,7 @@ fn test_mut_binding_result_is_observable():
     let it := v.iterate()
     while e : mut = it.next():
         e ← e + 1
-    let total : mut = 0
+    let total : mut i64 = 0
     foreach x := v:
         total ← total + x
     assert_eq(total, 32)
@@ -136,7 +136,7 @@ fn test_mut_binding_type():
 fn test_plain_binding_does_not_write_back():
     let v : i32[] = [1, 2, 3]
     let it := v.iterate()
-    let seen : mut = 0
+    let seen : mut i64 = 0
     while e := it.next():
         seen ← seen + e
     assert_eq(seen, 6)
@@ -160,7 +160,7 @@ fn error_mut_on_a_plain_value():
 fn test_typed_binding():
     let v := [7, 8]
     let it := v.iterate()
-    let total : mut = 0
+    let total : mut i64 = 0
     while e : i64 = it.next():
         total ← total + e
     assert_eq(total, 15)
@@ -191,7 +191,7 @@ fn test_typeof_bound_variable():
 
 @test
 fn test_plain_condition_still_works():
-    let n : mut = 0
+    let n : mut i64 = 0
     while n < 4:
         n ← n + 1
     assert_eq(n, 4)
@@ -199,8 +199,8 @@ fn test_plain_condition_still_works():
 // A bare name as the condition is still a condition, not a binding.
 @test
 fn test_bare_name_condition():
-    let ticks : mut = 3
-    let ran : mut = 0
+    let ticks : mut i64 = 3
+    let ran : mut i64 = 0
     while ticks:
         ran ← ran + 1
         ticks ← ticks - 1
@@ -209,7 +209,7 @@ fn test_bare_name_condition():
 // A body on the same line as the colon still parses.
 @test
 fn test_inline_body():
-    let k : mut = 2
+    let k : mut i64 = 2
     while k > 0: k ← k - 1
     assert_eq(k, 0)
 
@@ -218,7 +218,7 @@ fn test_inline_body():
 fn test_nested_bindings():
     let outer := [1, 2]
     let oit := outer.iterate()
-    let total : mut = 0
+    let total : mut i64 = 0
     while a := oit.next():
         let inner := [10, 20]
         let iit := inner.iterate()

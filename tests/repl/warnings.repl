@@ -3,7 +3,7 @@ fn f():
 
 f()
 fn g(n : i64) → i64:
-    let step : mut = 2
+    let step : mut i64 = 2
     n × step
 
 g(4)

@@ -81,7 +81,7 @@ fn test_element_val_no_modify():
 // --- dynamic param accepts fixed-size array --------------------------------
 
 fn sum_dynamic(arr : i32[]) → i32:
-  let total : mut = 0
+  let total : mut i64 = 0
   foreach i := 0…(arr.sizeof - 1):
     total ← total + arr[i]
   total

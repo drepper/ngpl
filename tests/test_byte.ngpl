@@ -1,5 +1,5 @@
 fn sum_bytes(data : byte[]) → i64:
-    let total : mut = 0
+    let total : mut i64 = 0
     foreach b := data:
         total ← total + b
     total

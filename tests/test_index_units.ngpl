@@ -53,13 +53,13 @@ fn test_slice_assign_bare_literal():
 @test
 fn test_sizeof_derived_index():
     let arr := [5, 10, 15, 20]
-    let last := arr[arr.sizeof - 1]
+    let last : i64 = arr[arr.sizeof - 1]
     assert_eq(last, 20)
 
 @test
 fn test_foreach_sizeof_index():
     let arr := [1, 2, 3, 4]
-    let total : mut = 0
+    let total : mut i64 = 0
     foreach i := 0…arr.sizeof - 1:
         total ← total + arr[i]
     assert_eq(total, 10)

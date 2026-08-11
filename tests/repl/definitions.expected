@@ -5,4 +5,4 @@ Point { x: 3, y: 4 }
 7i64
 Color.green
 7u8
-5 tick
+5i64 tick

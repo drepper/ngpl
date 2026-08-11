@@ -58,7 +58,7 @@ fn test_ct_foreach_array():
 fn indexed_sum(args… : i64) → i64:
     let s : mut i64 = 0
     comptime foreach pair := enumerate(args):
-        let idx := pair[0]
+        let idx : i64 = pair[0]
         let val := pair[1]
         s ← s + val × (idx + 1)
     s

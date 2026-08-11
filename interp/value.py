@@ -128,6 +128,49 @@ def is_unwidthed(width: str) -> bool:
     return width in ("int", UNTYPED)
 
 
+def unsettled_kind(value: "Value") -> str | None:
+    """What a value would have to settle on, where that is not provided.
+
+    Answers "int" or "float" for a value still carrying no width, and
+    None for anything the bootstrap can hold.  A binding without a
+    stated type would commit such a value to the arbitrary-precision
+    type, which the bootstrap does not implement.
+    """
+    if isinstance(value, IntValue) and is_unwidthed(value.width):
+        return "int"
+    if isinstance(value, FloatValue) and value.width == "float":
+        return "float"
+    if isinstance(value, (UnitValue, SomeValue)):
+        inner = value.inner if isinstance(value, UnitValue) else value.value
+        return unsettled_kind(inner)
+    if isinstance(value, ExpectedValue) and value.is_ok():
+        # A division answers with what it worked out or with why it
+        # could not; the value inside is what the binding would keep.
+        return unsettled_kind(value.ok_value)
+    return None
+
+
+def check_bootstrap_binding(value: "Value", name: str):
+    """Refuse a binding that would hold an arbitrary-precision value.
+
+    A type written down is what asks for a representation, and without
+    one a number settles on `int` or `float` -- the two types the
+    bootstrap does not provide.  The literal itself is not the problem
+    and is left alone: it is arbitrary-precision only while it is being
+    computed with, and settles on the type it is used at.  Naming it is
+    what asks for it to be kept.
+    """
+    kind = unsettled_kind(value)
+    if kind is None:
+        return
+    sized = _FULL_LANGUAGE_TYPES[kind]
+    raise TypeError(
+        f"'{name}': a binding with no type written down settles on "
+        f"'{kind}', which is an arbitrary-precision type the bootstrap "
+        f"implementation does not provide; state a sized type, as "
+        f"'let {name} : {sized} = \N{HORIZONTAL ELLIPSIS}'")
+
+
 def settle_untyped(value: "Value") -> "Value":
     """Commit an untyped integer to `int`, as a binding does.
 
@@ -284,10 +327,19 @@ def _float_precision_bits(width: str) -> int:
 
 
 def resolve_float_width(w1: str, w2: str) -> str:
+    """The width two floating-point operands settle on.
+
+    A literal states no width, which is recorded as `float` -- the
+    arbitrary-precision type it would settle on where nothing else
+    says otherwise.  Meeting a sized operand is something else saying
+    otherwise, so the literal gives way, as an untyped integer does.
+    """
     if w1 == w2:
         return w1
-    if w1 == "float" or w2 == "float":
-        return "float"
+    if w1 == "float":
+        return w2
+    if w2 == "float":
+        return w1
     b1 = _float_precision_bits(w1)
     b2 = _float_precision_bits(w2)
     return w1 if b1 >= b2 else w2

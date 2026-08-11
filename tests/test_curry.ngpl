@@ -72,7 +72,7 @@ fn test_curry_lambda_staged():
 // Curry a lambda with captures.
 @test
 fn test_curry_lambda_with_capture():
-    let offset := 100
+    let offset : i64 = 100
     let add_offset := λx : i64, y : i64 |offset| → i64: x + y + offset
     let f := add_offset(50)
     assert_eq(f(10), 160)
@@ -81,7 +81,7 @@ fn test_curry_lambda_with_capture():
 
 // Pass a curried function to another function.
 fn apply_and_sum(f, arr : i64[]) → i64:
-    let total : mut = 0
+    let total : mut i64 = 0
     foreach v := arr:
         total ← total + f(v)
     total

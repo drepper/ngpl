@@ -57,7 +57,7 @@ Sections describing a feature outside the bootstrap subset are marked:
 
 #### Arbitrary-Precision Numbers
 
-`int` and `float` are the arbitrary-precision types, and are **full language** only.  A variable, parameter, or return type naming one is refused by the bootstrap:
+`int` and `float` are the arbitrary-precision types, and are **full language** only.  A variable, parameter, return type, field, alias, or lambda parameter naming one is refused by the bootstrap:
 
 ```
 let n : int = 5
@@ -66,15 +66,28 @@ error: 'int' is an arbitrary-precision type, which the bootstrap
 implementation does not provide; use a sized type such as i64
 ```
 
-This is the one place where the subset is visible in ordinary code, so it is worth being precise about what is and is not affected.  An *untyped* integer literal is unaffected — it is arbitrary-precision while it is being computed with, and settles on the type it is used at:
+Nor can a value reach one without being named: a binding with no type written down would settle on `int` or `float`, and is refused with the type it needs:
 
 ```
-let n := 5              // fine, settles as needed
-let n : i64 = 5         // fine
-let big := 1 « 40           // fine, computed at full precision
+let n := 5
+
+error: 'n': a binding with no type written down settles on 'int', which
+is an arbitrary-precision type the bootstrap implementation does not
+provide; state a sized type, as 'let n : i64 = …'
 ```
 
-What the bootstrap does not provide is a *variable* that stays arbitrary-precision, since that needs a runtime representation the sized types do not.
+This is the one place where the subset is visible in ordinary code, so it is worth being precise about what is and is not affected.  A literal is unaffected *while it is being computed with*: it states no width, takes the one it meets, and is exact until then:
+
+```
+let n : i64 = 5             // fine
+let big : i64 = 1 « 40      // fine, computed at full precision
+let p : u8 = 200
+let q : u8 = p + 1 - 1      // the literals take u8
+
+static_assert(2 ↑ 200 > 0)  // fine, never a runtime value
+```
+
+What the bootstrap does not provide is a *value* that stays arbitrary-precision, since that needs a runtime representation the sized types do not have.  Where such a value would be kept — which is to say, wherever one is named — a sized type has to be written down.  The full language settles an unannotated binding on `int` or `float`; the bootstrap has neither and says so.
 
 ### The Compiler
 
@@ -207,7 +220,7 @@ This concept is similar to Go's untyped constants and Odin's untyped integers.  
 
 3. **Arithmetic on untyped integers.**  When two `untyped int` values are combined with an arithmetic operator, the result is also `untyped int` with arbitrary precision — no overflow occurs.  This allows compile-time constant expressions to compute exact results regardless of magnitude.
 
-4. **Type inference with `let name := expr`.**  When a binding is defined with `:=` (no explicit type) and the initializer is an `untyped int`, the binding's type is `int` (arbitrary-precision).  To get a fixed-width type, use the explicit form: `let name : u32 = expr`.  The inferred form stays available in the bootstrap; only *writing* `int` is refused there.
+4. **Type inference with `let name := expr`.**  When a binding is defined with `:=` (no explicit type) and the initializer is an `untyped int`, the binding's type is `int` (arbitrary-precision).  To get a fixed-width type, use the explicit form: `let name : u32 = expr`.  The bootstrap has no `int` for such a binding to settle on and refuses it, so the explicit form is the only one there; see [Two Languages, One Specification](#two-languages-one-specification).  A binding whose initializer already has a sized type — `let m := n + 1` where `n` is an `i64`, or `let c := 5i64` — states nothing and needs nothing.
 
 5. **Array initialization.**  In `let name : mut u32[64] = 0`, the `0` is an `untyped int` that coerces to the array's element type `u32`.
 

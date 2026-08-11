@@ -38,8 +38,8 @@ fn get_padded_byte(data : byte[], off ¤byte : usize, total_size ¤byte : usize)
     if off == data.sizeof: return 128
     let len_start := total_size - 8
     if off >= len_start:
-        let bit_len := data.sizeof × 8
-        let byte_idx := off - len_start
+        let bit_len ¤byte : i64 = data.sizeof × 8
+        let byte_idx ¤byte : i64 = off - len_start
         // The suffix is worked out from the offsets, so it comes out
         // measured; the byte it stands for is a number, not a quantity
         // of bytes, so the unit is parted with here.
@@ -89,9 +89,9 @@ fn expand_Σ₁(prev : u32) → u32:
 
 fn sha256(data : byte[]) → u32[8]?:
     // Compute padded message length per SHA-256 spec.
-    let rem := data.sizeof % 64
+    let rem ¤byte : i64 = data.sizeof % 64
     let pad_len := (119 - rem) % 64
-    let total_size := data.sizeof + 1 + pad_len + 8
+    let total_size ¤byte : i64 = data.sizeof + 1 + pad_len + 8
 
     // Initial hash values per FIPS 180-4 Section 5.3.3.
     let H : mut u32[8] = [

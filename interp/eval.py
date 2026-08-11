@@ -42,7 +42,8 @@ from interp.value import (
     int_limits, float_limits, resolve_type_alias,
     format_shape, _array_type_name, array_type_mismatch,
     is_generic_type, runtime_type_of, is_type_name, _is_unsigned,
-    check_bootstrap_type, UNTYPED, is_unwidthed, settle_untyped,
+    check_bootstrap_type, check_bootstrap_binding,
+    UNTYPED, is_unwidthed, settle_untyped,
     _scalar_kind_mismatch,
     UnitValue, RefValue, Reference, ElementRef, Iterator, ArrayIterator,
     deep_copy_value, register_type_alias, DISCARD_NAME,
@@ -2682,8 +2683,10 @@ class Evaluator:
                         f"cannot redefine {kind} variable '{stmt.name}'")
             value = self.eval_expr(stmt.init_expr)
             if stmt.type_annotation is None:
-                # Naming a value settles it.  Without a type written
-                # down, what an untyped literal settles on is `int`.
+                # Naming a value settles it, and without a type written
+                # down a number settles on `int` or `float` -- neither
+                # of which the bootstrap provides.
+                check_bootstrap_binding(value, stmt.name)
                 value = settle_untyped(value)
             if stmt.type_annotation is not None \
                     and not isinstance(stmt.init_expr, ArrayAlloc):
@@ -2695,7 +2698,16 @@ class Evaluator:
                 ann = stmt.type_annotation
                 if self._generic_map and is_generic_type(ann):
                     ann = _substitute_generics(ann, self._generic_map)
-                value = coerce_to_type(value, ann)
+                if stmt.unit_spec is not None and isinstance(value, UnitValue):
+                    # The binding states a unit as well as a type, so
+                    # the type is what the number is held in and the
+                    # unit is what it counts.  Measuring the whole
+                    # value against the type would read the unit as
+                    # something being parted with.
+                    value = UnitValue(coerce_to_type(value.inner, ann),
+                                      value.unit)
+                else:
+                    value = coerce_to_type(value, ann)
             if stmt.unit_spec is not None:
                 from interp.units import eval_unit_formula
                 unit = eval_unit_formula(stmt.unit_spec)
@@ -2951,7 +2963,18 @@ class Evaluator:
                 if not isinstance(s, IntValue) or not isinstance(e, IntValue):
                     raise TypeError("range bounds must be integers")
                 sv, ev = s.value, e.value
-                mk_val = (lambda i: UnitValue(mk_int(i), range_unit)) if range_unit is not None else mk_int
+                # The loop variable is held in what the bounds settle
+                # on.  Where they settle on nothing it is uncommitted,
+                # as a literal is, rather than the arbitrary-precision
+                # int the bootstrap does not have: it settles at the
+                # first typed thing it meets, and an index is one of
+                # the places that reads it.
+                elem_width = resolve_width(s.width, e.width)
+                if is_unwidthed(elem_width):
+                    elem_width = UNTYPED
+                mk_val = ((lambda i: UnitValue(mk_int(i, elem_width), range_unit))
+                          if range_unit is not None
+                          else (lambda i: mk_int(i, elem_width)))
                 if expr.step is not None:
                     st = unwrap_optional(self.eval_expr(expr.step))
                     if isinstance(st, UnitValue):
@@ -3610,7 +3633,22 @@ class Evaluator:
         return "unknown"
 
     def _eval_lambda_expr(self, node: LambdaExpr):
-        """Evaluate a lambda expression: validate captures and build LambdaValue."""
+        """Evaluate a lambda expression: validate captures and build LambdaValue.
+
+        A lambda's parameters and return type are declarations like any
+        others, so a type the bootstrap does not provide is refused
+        here as it is at a function.
+        """
+        for param_name, param_type in node.params:
+            if param_type is not None:
+                check_bootstrap_type(
+                    param_type,
+                    f"\N{GREEK SMALL LETTER LAMDA}: parameter "
+                    f"'{param_name}'")
+        if node.ret_type:
+            check_bootstrap_type(
+                node.ret_type, "\N{GREEK SMALL LETTER LAMDA}: return type")
+
         refs = _collect_refs(node.body)
         refs -= {p[0] for p in node.params}
 

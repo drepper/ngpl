@@ -3,7 +3,7 @@
 fn triple(n : i64) → i64:
     n × 3
 
-let LIMIT := 99
+let LIMIT : i64 = 99
 
 @start
 @impure

@@ -85,7 +85,7 @@ fn test_reshape_range():
 
 @test
 fn test_reshape_variable_dim():
-    let n := 4
+    let n : i64 = 4
     let a := n ⍴ 99
     assert_eq(a.sizeof, 4)
     assert_eq(a[3], 99)

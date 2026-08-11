@@ -43,7 +43,7 @@ fn test_array_iterate_empty():
 fn test_array_iterate_loop():
     let v := [1, 2, 3, 4]
     let it := v.iterate()
-    let total : mut = 0
+    let total : mut i64 = 0
     while e := it.next():
         total ← total + e
     assert_eq(total, 10)
@@ -86,7 +86,7 @@ fn test_iterate_byte_array():
 fn test_falsy_elements_do_not_end_iteration():
     let v := [0, 0, 0]
     let it := v.iterate()
-    let count : mut = 0
+    let count : mut i64 = 0
     while e := it.next():
         count ← count + 1
     assert_eq(count, 3)
@@ -96,7 +96,7 @@ fn test_falsy_elements_do_not_end_iteration():
 fn test_other_falsy_elements():
     let s := ["", "x"]
     let it := s.iterate()
-    let count : mut = 0
+    let count : mut i64 = 0
     while e := it.next():
         count ← count + 1
     assert_eq(count, 2)
@@ -107,7 +107,7 @@ fn test_other_falsy_elements():
 fn test_none_element_is_still_present():
     let v := [∅, 1]
     let it := v.iterate()
-    let count : mut = 0
+    let count : mut i64 = 0
     while e := it.next():
         count ← count + 1
     assert_eq(count, 2)
@@ -115,7 +115,7 @@ fn test_none_element_is_still_present():
 // A bare value keeps its own truthiness: only an optional tests presence.
 @test
 fn test_bare_values_keep_their_truthiness():
-    let taken : mut = 0
+    let taken : mut i64 = 0
     if 0:
         taken ← 1
     assert_eq(taken, 0)
@@ -128,7 +128,7 @@ fn test_bare_values_keep_their_truthiness():
 fn test_comparison_with_none_still_works():
     let v := [1, 2]
     let it := v.iterate()
-    let count : mut = 0
+    let count : mut i64 = 0
     let e : mut = it.next()
     while e != ∅:
         count ← count + 1
@@ -156,7 +156,7 @@ fn error_iterator_other_method():
 fn test_directory_entries_have_names():
     let dir := std.fs.cwd()
     let it := dir.iterate()
-    let count : mut = 0
+    let count : mut i64 = 0
     while e := it.next():
         assert(e.name.sizeof > 0)
         count ← count + 1

@@ -3,7 +3,7 @@
 // Basic let definition.
 @test
 fn test_let_basic():
-    let x := 42
+    let x : i64 = 42
     assert_eq(x, 42)
 
 // Typed let definition.
@@ -15,17 +15,17 @@ fn test_let_typed():
 // Let binding used in expressions.
 @test
 fn test_let_in_expr():
-    let a := 10
-    let b := 20
+    let a : i64 = 10
+    let b : i64 = 20
     let c := a + b
     assert_eq(c, 30)
 
 // Let re-binding across loop iterations.
 @test
 fn test_let_in_loop():
-    let sum : mut = 0
+    let sum : mut i64 = 0
     foreach i := 1…5:
-        let doubled := i × 2
+        let doubled : i64 = i × 2
         sum ← sum + doubled
     assert_eq(sum, 30)
 
@@ -44,7 +44,7 @@ fn double_val(x : i32) → i32:
 
 @test
 fn test_immutable_param():
-    let v := 5
+    let v : i64 = 5
     assert_eq(double_val(v), 10)
     assert_eq(v, 5)
 
@@ -121,7 +121,7 @@ fn test_reading_a_let_element():
     let v := [1, 2, 3]
     assert_eq(v[0], 1)
     assert_eq(v.get(2), ∃(3))
-    let total : mut = 0
+    let total : mut i64 = 0
     foreach x := v:
         total ← total + x
     assert_eq(total, 6)

@@ -3,7 +3,7 @@ fn double(n : i64) → i64:
 
 double(21)
 fn fact(n : i64) → i64:
-    let acc : mut = 1
+    let acc : mut i64 = 1
     foreach i := 1…n:
         acc ← acc × i
     acc
@@ -30,5 +30,5 @@ type Small = u8
 let b : Small = 7
 b
 unit tick
-let t := 5¤tick
+let t ¤tick : i64 = 5
 t

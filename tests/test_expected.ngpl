@@ -22,26 +22,26 @@ fn test_optional_postfix_none():
 
 @test
 fn test_div_success_unwrap():
-    let x := 10 ÷ 3
-    let v := x ?? ⁻1
+    let x : i64! = 10 ÷ 3
+    let v : i64 = x ?? ⁻1
     assert_eq(v, 3)
 
 @test
 fn test_div_zero_recovery():
-    let x := 10 ÷ 0
-    let v := x ?? ⁻1
+    let x : i64! = 10 ÷ 0
+    let v : i64 = x ?? ⁻1
     assert_eq(v, ⁻1)
 
 @test
 fn test_mod_success_unwrap():
-    let x := 10 % 3
-    let v := x ?? ⁻1
+    let x : i64! = 10 % 3
+    let v : i64 = x ?? ⁻1
     assert_eq(v, 1)
 
 @test
 fn test_mod_zero_recovery():
-    let x := 10 % 0
-    let v := x ?? ⁻1
+    let x : i64! = 10 % 0
+    let v : i64 = x ?? ⁻1
     assert_eq(v, ⁻1)
 
 // ---- ? propagation for expected values -----------------------------------
@@ -63,13 +63,13 @@ fn test_expected_propagate_err():
 
 @test
 fn test_div_chain_recovery():
-    let a := (100 ÷ 10) ?? 0
+    let a : i64 = (100 ÷ 10) ?? 0
     let b := (a ÷ 2) ?? 0
     assert_eq(b, 5)
 
 @test
 fn test_div_chain_zero():
-    let a := (100 ÷ 0) ?? 0
+    let a : i64 = (100 ÷ 0) ?? 0
     let b := (a ÷ 2) ?? 0
     assert_eq(b, 0)
 
@@ -81,14 +81,14 @@ fn div_or_err(a : i64, b : i64) → i64!:
 @test
 fn test_expected_err_is_std_errors():
     let r := div_or_err(1, 0)
-    let fallback := r ?? ⁻1
+    let fallback : i64 = r ?? ⁻1
     assert_eq(fallback, ⁻1)
 
 // ---- using unwrapped expected in arithmetic ------------------------------
 
 @test
 fn test_unwrapped_expected_arithmetic():
-    let x := (20 ÷ 4) ?? 0
+    let x : i64 = (20 ÷ 4) ?? 0
     let y := x + 10
     assert_eq(y, 15)
 
@@ -140,7 +140,7 @@ fn bang_param(x : i64!) → i64:
 
 @test
 fn test_bang_param_ok():
-    let v := 10 ÷ 2
+    let v : i64! = 10 ÷ 2
     assert_eq(bang_param(v), 5)
 
 @test

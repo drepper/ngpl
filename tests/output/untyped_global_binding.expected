@@ -1,0 +1,7 @@
+error: in limit: 'limit': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let limit : i64 = …'
+  --> tests/output/untyped_global_binding.ngpl:4:1
+    |
+  4 | let limit := 100
+    | ^^^
+  5 | 
+    |

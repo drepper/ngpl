@@ -31,7 +31,7 @@ fn test_alias_fixed_array():
 // --- alias for dynamic array in parameter ---------------------------------
 
 fn sum_row(r : Row) → i32:
-  let total : mut = 0
+  let total : mut i64 = 0
   foreach i := 0…(r.sizeof - 1):
     total ← total + r[i]
   total

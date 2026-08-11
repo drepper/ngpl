@@ -8,13 +8,13 @@
 // function that calls an impure one has that function's side effect,
 // so it says @impure itself.
 
-let counter : mut = 0
-let LIMIT := 100
+let counter : mut i64 = 0
+let LIMIT : i64 = 100
 
 // Pure function assigning to a local variable is fine.
 @test
 fn test_pure_local_assign():
-    let x : mut = 0
+    let x : mut i64 = 0
     x ← 42
     assert_eq(x, 42)
 

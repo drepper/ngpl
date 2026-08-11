@@ -16,7 +16,7 @@
 @test
 fn test_plain_iteration_copies():
     let nums := [1, 2, 3]
-    let total : mut = 0
+    let total : mut i64 = 0
     foreach x := nums:
         static_assert_eq(@typeof(x), "int")
         total ← total + x
@@ -79,7 +79,7 @@ fn test_mut_borrow_result_is_observable():
     let nums : mut = [1, 2, 3]
     foreach x := &mut nums:
         x ← x + 1
-    let total : mut = 0
+    let total : mut i64 = 0
     foreach v := nums:
         total ← total + v
     assert_eq(total, 9)
@@ -88,7 +88,7 @@ fn test_mut_borrow_result_is_observable():
 @test
 fn test_mut_borrow_reads_the_element():
     let nums : mut = [10, 20]
-    let seen : mut = 0
+    let seen : mut i64 = 0
     foreach x := &mut nums:
         seen ← seen + x
     assert_eq(seen, 30)
@@ -130,7 +130,7 @@ fn test_two_mut_borrows():
 @test
 fn test_shared_borrow_reads():
     let nums := [1, 2, 3]
-    let total : mut = 0
+    let total : mut i64 = 0
     foreach x := &nums:
         total ← total + x
     assert_eq(total, 6)
@@ -164,13 +164,13 @@ fn error_mut_borrow_of_let():
 
 @expect error "foreach over &mut requires an array"
 fn error_mut_borrow_of_non_array():
-    let n : mut = 5
+    let n : mut i64 = 5
     foreach x := &mut n:
         x ← x + 1
 
 @expect error "foreach over & requires an array"
 fn error_shared_borrow_of_non_array():
-    let n : mut = 5
+    let n : mut i64 = 5
     foreach x := &n:
         assert(x > 0)
 

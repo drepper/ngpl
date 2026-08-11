@@ -16,7 +16,7 @@ fn counted(n : i64) → i64:
 // The right-hand side still runs; only its value is dropped.
 @test
 fn test_side_effect_still_happens():
-    let total : mut = 0
+    let total : mut i64 = 0
     foreach i := 1…3:
         total ← total + i
         _ ← counted(i)
@@ -75,7 +75,7 @@ fn test_let_form_discards():
 // A loop that only needs to run a number of times.
 @test
 fn test_foreach_discard():
-    let ticks : mut = 0
+    let ticks : mut i64 = 0
     foreach _ := 1…4:
         ticks ← ticks + 1
     assert_eq(ticks, 4)
@@ -83,7 +83,7 @@ fn test_foreach_discard():
 // Only one of the two loop variables is wanted.
 @test
 fn test_foreach_pair_discard():
-    let total : mut = 0
+    let total : mut i64 = 0
     foreach i, _ := enumerate([10, 20, 30]):
         total ← total + i
     assert_eq(total, 3)

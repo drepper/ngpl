@@ -31,7 +31,7 @@ fn test_args_program_present():
 // Indexing past the last parameter is an error, not a silent empty string.
 @expect error "out of range"
 fn error_args_get_out_of_range():
-    let past_end : mut = std.args.count()
+    let past_end ¤count : mut i64 = std.args.count()
     let bad : mut = std.args.get(past_end)
 
 // ---------------------------------------------------------------------
@@ -89,8 +89,8 @@ fn test_sys_affinity_matches_usable():
 // Every CPU id listed is actually set in the mask, and the ids ascend.
 @test
 fn test_sys_affinity_cpus_consistent():
-    let mask := std.sys.affinity()
-    let previous : mut = ⁻1
+    let mask : u64 = std.sys.affinity()
+    let previous : mut i64 = ⁻1
     foreach cpu := std.sys.affinity_cpus():
         assert(((mask >> cpu) & 1) == 1)
         assert(cpu > previous)
@@ -99,7 +99,7 @@ fn test_sys_affinity_cpus_consistent():
 // Memory sizes are positive and the page size is a power of two.
 @test
 fn test_sys_memory():
-    let page := std.sys.page_size()
+    let page ¤byte : i64 = std.sys.page_size()
     assert(page > 0)
     assert((page & (page - 1)) == 0)
     assert(std.sys.total_memory() >= page)
