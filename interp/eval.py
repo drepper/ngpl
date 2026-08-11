@@ -1699,6 +1699,44 @@ class Evaluator:
                     built.put(value)
         return ObjectValue(built)
 
+    def _concat_hashes(self, lu, ru):
+        """Join two hashes, the right-hand value winning a shared key.
+
+        That is the one thing joining two hashes says: ∪ answers what
+        two sets hold between them and never has to choose, because a
+        set holds no more about a value than that it is there.  A hash
+        does, so where both hold the same key one of the two values has
+        to be the answer -- and it is the right-hand one, which makes
+        `defaults ⧺ overrides` read the way it is meant.
+
+        A key keeps the place it first had.  What the right operand
+        says is what the key holds, not where it sits.
+        """
+        sides = []
+        for side, value in (("left", lu), ("right", ru)):
+            if isinstance(value, ObjectValue) \
+                    and isinstance(value.obj, HashValue):
+                sides.append(value.obj)
+                continue
+            raise TypeError(
+                f"\N{DOUBLE PLUS}: the {side} operand is "
+                f"{self._value_type_name(value)}, and a hash joins a hash")
+        first, second = sides
+        for name, attr in (("key", "key_type"), ("value", "value_type")):
+            one, other = getattr(first, attr), getattr(second, attr)
+            if one is not None and other is not None and one != other:
+                raise TypeError(
+                    f"\N{DOUBLE PLUS}: a hash holds one type of {name}, so "
+                    f"two joined hold the same one, but the left holds "
+                    f"{one} and the right holds {other}")
+        built = HashValue(key_type=first.key_type or second.key_type,
+                          value_type=first.value_type or second.value_type)
+        for key, value in first.pairs():
+            built.put(key, value)
+        for key, value in second.pairs():
+            built.put(key, value)
+        return ObjectValue(built)
+
     def _op_length(self, operand):
         """How many things are in it (#).
 
@@ -1907,9 +1945,24 @@ class Evaluator:
         either gives a string.  That is what builds one up a character
         at a time, and it is the same operation joining arrays does --
         the operands go together in the order they are written.
+
+        Two hashes join as well, which is the one thing joining says
+        that ∪ does not: what happens where both hold the same key.
         """
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
+        if isinstance(lu, ObjectValue) and isinstance(lu.obj, HashValue) \
+                or isinstance(ru, ObjectValue) \
+                and isinstance(ru.obj, HashValue):
+            return self._concat_hashes(lu, ru)
+        for side, value in (("left", lu), ("right", ru)):
+            if isinstance(value, ObjectValue) \
+                    and isinstance(value.obj, SetValue):
+                raise TypeError(
+                    f"\N{DOUBLE PLUS}: the {side} operand is a set, and a set "
+                    f"holds each value once -- joining two would keep "
+                    f"nothing the second one repeats, which is what "
+                    f"\N{UNION} answers")
         if _joins_as_text(lu) and _joins_as_text(ru):
             return mk_str(self._text_operand(lu, "left")
                           + self._text_operand(ru, "right"))

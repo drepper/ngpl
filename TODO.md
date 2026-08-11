@@ -219,7 +219,14 @@ Completed
     things, which is the whole of what "proper" means and the only reason to have two glyphs.
     No ⊃ or ⊇: a superset is the same question with the operands the other way round.
 
-[ ] two hashes or sets cannot be joined with ⧺ or compared with =, and neither can be a key.
+[x] ⧺ joins two hashes, the right-hand value winning a shared key, which makes
+    `defaults ⧺ overrides` read the way it is written; a key keeps the place it first had.
+    Choosing is the one thing joining says that ∪ does not -- ∪ never has to choose, a set
+    holding no more about a value than that it is there.  A set is therefore not joined: it
+    holds each value once, so joining two would keep nothing the second repeats, which is ∪
+    spelled a second way, and a second spelling is what ⊃ and ⊇ were turned down for.
+
+[ ] two hashes or sets cannot be compared with =, and neither can be a key.
 
 [x] an array type may be written where a type is compared against: `static_assert_eq(@typeof(e),
     i8[3])`.  A bare name and a tuple type already could, so the spelling @typeof answers with

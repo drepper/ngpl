@@ -1721,6 +1721,30 @@ foreach v := s:
     …
 ```
 
+#### Joining Two Hashes
+
+`⧺` joins two hashes, and where both hold the same key the **right-hand** value is the answer:
+
+```
+⸨"a": 1, "b": 2⸩ ⧺ ⸨"b": 9, "c": 3⸩     /* ⸨"a": 1, "b": 9, "c": 3⸩ */
+
+defaults ⧺ overrides                    /* which is what the order is for */
+```
+
+A key keeps the place it first had: what the right operand says is what the key holds, not where it sits.  Two hashes join only where they hold the same type of key and the same type of value.
+
+Choosing is the one thing joining says that `∪` does not.  `∪` answers what two sets hold between them and never has to choose, because a set holds no more about a value than that it is there; a hash does, so one of the two values has to be the answer.
+
+For that reason a **set** is not joined with `⧺`.  A set holds each value once, so joining two would keep nothing the second one repeats — which is `∪`, spelled a second way:
+
+```
+s ⧺ t
+
+error: ⧺: the left operand is a set, and a set holds each value once —
+joining two would keep nothing the second one repeats, which is what ∪
+answers
+```
+
 #### What Two Sets Make
 
 | Operator | Answers |

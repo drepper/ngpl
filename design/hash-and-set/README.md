@@ -137,6 +137,34 @@ No `⊃` or `⊇`.  A superset is the same question with the operands the
 other way round, and a second spelling for it would be a second thing
 to learn that says nothing new.
 
+## Joining, and Why Only a Hash
+
+`⧺` joins two hashes; a set is refused.
+
+For two *sets* there is nothing for joining to say.  `⧺` on arrays
+keeps everything — `[1,2] ⧺ [2,3]` is four elements with the `2` twice,
+in order — and that is its meaning.  A set has no room for it: it holds
+each value once, so a join would have to drop the repeat, and having
+dropped it has computed everything from both, each once, left first,
+which is `∪` exactly.  Not equal by coincidence but by construction,
+since that is the only thing either could mean.  A second spelling of
+`∪` is the thing `⊃` and `⊇` were turned down for.
+
+The two ways to make them differ are both worse.  Answering an *array*
+would mean joining two of a kind and getting a third, which no other
+use of `⧺` does.  Counting the repeats would mean a multiset, which is
+a container the language does not have and which a set is precisely the
+one that is not.
+
+A hash is the opposite case.  Two of them joined raise a question that
+has a real answer and that nothing else answers: where both hold the
+same key, which value survives?  `∪` never faces it, because a set
+holds no more about a value than that it is there.  The right-hand one
+wins, which is Python's answer for `{**a, **b}` and which makes
+`defaults ⧺ overrides` read the way it is written.  A key keeps the
+place it first had — what the right operand says is what the key holds,
+not where it sits.
+
 ## Status
 
 Implemented: literals, `std.hash(K, V)` and `std.set(V)` as types in a
@@ -145,6 +173,5 @@ binding, a parameter and a return; homogeneous keys and values;
 and the empty one, which a type completes.
 
 Left for later: a hash or a set as a *key* (they are not rememberable,
-which is the same question a struct raises); joining two with `⧺`;
-comparing two with `=`; and whether one set contains another, for which
-`⊂` and `⊆` are free.
+which is the same question a struct raises), and comparing two with
+`=`.

@@ -267,6 +267,62 @@ fn error_sets_of_two_types():
     let u : mut = a ∪ b
 
 // ---------------------------------------------------------------------
+// Joining two hashes
+// ---------------------------------------------------------------------
+
+// Joining says the one thing ∪ does not: what happens where both hold
+// the same key.  The right-hand value is the answer, which makes
+// `defaults ⧺ overrides` read the way it is meant.
+@test
+fn test_joining_two_hashes():
+    let a : std.hash(str, i64) = ⸨"a": 1, "b": 2⸩
+    let b : std.hash(str, i64) = ⸨"b": 9, "c": 3⸩
+    let j := a ⧺ b
+    assert_eq(#j, 3¤ptrdiff)
+    assert_eq(j["a"] ?? 0, 1)
+    assert_eq(j["b"] ?? 0, 9)
+    assert_eq(j["c"] ?? 0, 3)
+
+@test
+fn test_the_other_way_round_answers_the_other_value():
+    let a : std.hash(str, i64) = ⸨"a": 1, "b": 2⸩
+    let b : std.hash(str, i64) = ⸨"b": 9, "c": 3⸩
+    assert_eq((b ⧺ a)["b"] ?? 0, 2)
+
+// A key keeps the place it first had: what the right operand says is
+// what the key holds, not where it sits.
+@test
+fn test_a_shared_key_keeps_its_place():
+    let a : std.hash(str, i64) = ⸨"a": 1, "b": 2⸩
+    let b : std.hash(str, i64) = ⸨"b": 9, "c": 3⸩
+    let j := a ⧺ b
+    assert_eq(j.keys()[0], "a")
+    assert_eq(j.keys()[1], "b")
+    assert_eq(j.keys()[2], "c")
+
+// A set holds each value once, so joining two would keep nothing the
+// second one repeats -- which is what ∪ already answers.
+@test
+@expect error "which is what ∪ answers"
+fn error_joining_two_sets():
+    let s : std.set(i64) = ⸨1⸩
+    let u : mut = s ⧺ s
+
+@test
+@expect error "a hash joins a hash"
+fn error_joining_a_hash_and_an_array():
+    let a : std.hash(str, i64) = ⸨"a": 1⸩
+    let v : i64[] = [1]
+    let j : mut = a ⧺ v
+
+@test
+@expect error "a hash holds one type of value"
+fn error_joining_hashes_of_two_value_types():
+    let a : std.hash(str, i64) = ⸨"a": 1⸩
+    let b : std.hash(str, str) = ⸨"a": "x"⸩
+    let j : mut = a ⧺ b
+
+// ---------------------------------------------------------------------
 // Whether one set is held inside another
 // ---------------------------------------------------------------------
 
