@@ -190,11 +190,14 @@ fn test_elements_that_already_have_a_type():
     static_assert_eq(@typeof(a[1]), u8)
     assert_eq(a[2], 9)
 
-// An array of something other than numbers has nothing to settle.
+// An array of something other than numbers settles on what it holds
+// just as one of numbers does -- there is no width to argue about, but
+// there is still one type, and the array says which.
 @test
-fn test_an_array_of_strings_settles_nothing():
+fn test_an_array_of_strings_settles_on_str():
     let words := ["one", "two"]
     assert(words[0] = "one")
+    static_assert_eq(@typeof(words[0]), str)
 
 // ---------------------------------------------------------------------
 // A tuple settles nothing between its elements

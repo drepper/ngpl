@@ -80,35 +80,97 @@ def _nth_root_exact(n: int, degree: int) -> int | None:
 # Free-variable collection for lambda validation
 # ---------------------------------------------------------------------------
 
-def _literal_element_type(elements) -> str | None:
+def _element_kind(value) -> str:
+    """How an element of an array literal reads in a diagnostic."""
+    inner = value.inner if isinstance(value, UnitValue) else value
+    if isinstance(inner, IntValue):
+        return "an untyped number" if is_unwidthed(inner.width) else inner.width
+    if isinstance(inner, FloatValue):
+        return "an untyped number" if inner.width == "float" else inner.width
+    if isinstance(inner, CharValue):
+        return "a character"
+    if isinstance(inner, StrValue):
+        return "a string"
+    if isinstance(inner, BoolValue):
+        return "a boolean"
+    if isinstance(inner, ObjectValue) and isinstance(inner.obj, ArrayValue):
+        return "an array"
+    return runtime_type_of(inner)
+
+
+def _literal_element_type(elements):
     """What the elements of an array literal settle on between them.
 
-    An element that states a width says what the array is made of, and
-    the ones that state none take it, as they would meeting the same
-    width anywhere else.  Where none of them states one there is
-    nothing to settle on, and the array stays uncommitted -- which a
-    binding then has to say something about.
+    An array holds one type of value, so the elements have to agree
+    before there is anything for the array to be an array of.  An
+    element that states a width says what the array is made of and the
+    ones that state none take it, as they would meeting the same width
+    anywhere else; where none of them states one there is nothing to
+    settle on and a binding has to say.
+
+    Two that disagree are refused here rather than left for a type to
+    sort out, since without a type nothing would ever sort them out and
+    the array would hold whatever it was handed.
     """
     width = None
-    for element in elements:
-        if isinstance(element, IntValue):
-            if is_unwidthed(element.width):
-                continue
-            found = element.width
-        elif isinstance(element, FloatValue):
-            if element.width == "float":
-                continue
-            found = element.width
-        elif isinstance(element, CharValue):
-            found = "char"
+    said_by = 0
+    kind = None
+    kind_by = 0
+    unit = None
+    unit_by = 0
+    for index, element in enumerate(elements):
+        if isinstance(element, UnitValue):
+            # A unit settles the way a width does: one element states
+            # it and the bare ones take it, wherever in the literal it
+            # is written.
+            if unit is None:
+                unit, unit_by = element.unit, index
+            elif not unit.same_dimension(element.unit):
+                raise TypeError(
+                    f"an array holds one unit, but element {unit_by} is "
+                    f"{unit.display_name} and element {index} is "
+                    f"{element.unit.display_name}")
+        inner = element.inner if isinstance(element, UnitValue) else element
+        if isinstance(inner, (IntValue, FloatValue)):
+            found_kind = "number"
+        elif isinstance(inner, CharValue):
+            found_kind = "char"
+        elif isinstance(inner, StrValue):
+            found_kind = "str"
+        elif isinstance(inner, BoolValue):
+            found_kind = "bool"
         else:
-            return None
+            # A struct, an enum, a tuple or an array of its own: what
+            # those hold in common is a question their own types
+            # answer, and a binding is where they are measured.
+            return None, None
+        if kind is None:
+            kind, kind_by = found_kind, index
+        elif kind != found_kind:
+            raise TypeError(
+                f"an array holds one type of value, but element {kind_by} is "
+                f"{_element_kind(elements[kind_by])} and element {index} is "
+                f"{_element_kind(element)}")
+        if isinstance(inner, IntValue):
+            if is_unwidthed(inner.width):
+                continue
+            found = inner.width
+        elif isinstance(inner, FloatValue):
+            if inner.width == "float":
+                continue
+            found = inner.width
+        elif isinstance(inner, CharValue):
+            found = "char"
+        elif isinstance(inner, StrValue):
+            found = "str"
+        else:
+            found = "bool"
         if width is not None and width != found:
-            # Two widths that disagree are settled where the array is
-            # measured against a type, not here.
-            return None
-        width = found
-    return width
+            raise TypeError(
+                f"an array holds one type of value, but element {said_by} is "
+                f"{width} and element {index} is {found}")
+        width, said_by = found, index
+    return width, unit
 
 
 def _parameter_names(params) -> set[str]:
@@ -2647,10 +2709,12 @@ class Evaluator:
         # Array literal [expr, expr, ...].
         if isinstance(node, ArrayLit):
             elements = [self.eval_expr(e) for e in node.elements]
-            settled = _literal_element_type(elements)
+            settled, unit = _literal_element_type(elements)
             if settled is not None:
-                elements = [coerce_to_type(e, settled) for e in elements]
-            return ObjectValue(ArrayValue(elements, element_type=settled))
+                elements = [coerce_to_type(e, settled, unit, self._mk_int)
+                            for e in elements]
+            return ObjectValue(ArrayValue(elements, element_type=settled,
+                                          element_unit=unit))
 
         # Subscript read: arr[i] or arr[i, j, ...] or tuple[i].
         if isinstance(node, Subscript) and any(i is None for i in node.indices):

@@ -216,6 +216,52 @@ fn test_a_row_that_fits():
     assert_eq(m[0, 1], 9)
 
 // ---------------------------------------------------------------------
+// A literal holds one type of value
+// ---------------------------------------------------------------------
+
+// An array holds one type of value, so the elements have to agree
+// before there is anything for the array to be an array of.  Two that
+// disagree are refused here rather than left for a type to sort out:
+// without a type nothing would ever sort them out.
+@test
+@expect error "element 0 is i64 and element 1 is a string"
+fn error_a_literal_of_two_kinds():
+    let a : mut = [1i64, "two"]
+
+@test
+@expect error "element 0 is i64 and element 1 is i32"
+fn error_a_literal_of_two_widths():
+    let a : mut = [1i64, 2i32]
+
+@test
+@expect error "element 0 is i64 and element 1 is a boolean"
+fn error_a_number_and_a_boolean():
+    let a : mut = [1i64, true]
+
+// A width still settles from whichever element states one, and the
+// ones that state none take it.
+@test
+fn test_one_element_still_says_it():
+    let a := [1, 2, 3i64]
+    static_assert_eq(@typeof(a[0]), i64)
+
+// A unit settles the same way, wherever it is written.
+@test
+fn test_a_unit_settles_like_a_width():
+    let m ¤meter : i64 = 1
+    let a := [m, 2]
+    let b := [2, m]
+    assert_eq(a[1], 2¤meter)
+    assert_eq(b[0], 2¤meter)
+
+@test
+@expect error "an array holds one unit"
+fn error_a_literal_of_two_units():
+    let m ¤meter : i64 = 1
+    let s ¤second : i64 = 2
+    let a : mut = [m, s]
+
+// ---------------------------------------------------------------------
 // Where a unit cannot be said yet
 // ---------------------------------------------------------------------
 
