@@ -134,10 +134,25 @@ Three things were decided here rather than falling out:
   `let (a, b) : (u8, str) = (200, "x")` gives `a` a `u8` — the same
   thing the type does at a binding that names no elements.
 
+A parameter takes one apart the same way, in the same shape:
+
+```
+fn first((a, b) : (i64, str)) → i64:
+    a
+
+fn sum_of_pair((a, b)) → i64:          // the type may be left off
+    a + b
+```
+
+The argument is measured against the stated type before it is taken
+apart, so the two failures a parameter can have — not a tuple, and the
+wrong number of elements — are reported against the parameter rather
+than against something inside the body.
+
 This is a pattern in the sense that `match` has patterns, but it is not
 the general one: a destructuring names elements and cannot ask about
 them.  The language will want the general form eventually, and when it
 arrives this should be a case of it rather than a separate feature.
 
-Not implemented: destructuring anywhere but a definition — a parameter,
-an assignment to names that already exist, a `match` arm.
+Not implemented: destructuring in an assignment to names that already
+exist, and in a `match` arm.

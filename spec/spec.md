@@ -5140,6 +5140,44 @@ own
 
 A name settles a value as any binding does, so the bootstrap asks the same question of each element that it asks of a whole binding: `let (a, b) := (1, "two")` is refused, and `let (a, b) : (i64, str) = (1, "two")` is not.
 
+#### Taking a Tuple Apart at a Parameter
+
+A parameter may name the elements instead of the tuple, in the same shape and with the same rules:
+
+```
+fn first((a, b) : (i64, str)) → i64:
+    a
+
+fn inner_sum(((a, b), c) : ((i64, i64), str)) → i64:
+    a + b
+
+fn keeps_the_first((a, _) : (i64, str)) → i64:
+    a
+```
+
+The type may be left off, as it may at any other parameter, and then whatever arrives has to be a tuple of the right size:
+
+```
+fn sum_of_pair((a, b)) → i64:
+    a + b
+```
+
+A lambda takes one the same way: `λ(a, b) : (i64, i64) → i64: a + b`.
+
+The argument is measured before it is taken apart, so a stated type settles the elements and a value of the wrong shape is refused:
+
+```
+sum_of_pair(5)
+
+error: sum_of_pair: parameter (a, b) names the elements of a tuple, but
+the argument is i64
+
+wants_three((1i64, 2i64))
+
+error: wants_three: parameter (a, b, c) names 3 elements, but the
+argument has 2
+```
+
 #### Design Rationale
 
 The type is written the way the value is, which is the same principle behind `i64[]` for an array: a reader who can write the value can write its type.  Rust spells tuple types this way for the same reason.

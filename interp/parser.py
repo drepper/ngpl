@@ -68,6 +68,16 @@ _MUL_OPS = frozenset({"\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}", "%",
 _MINMAX_OPS = frozenset({"\N{LEFT CEILING}", "\N{LEFT FLOOR}"})
 
 
+def _as_names(names):
+    """The names a destructuring binds, as something hashable.
+
+    A parameter's name slot is looked up in sets and dictionaries, so
+    the names a destructured one holds are kept in tuples rather than
+    lists.
+    """
+    return tuple(_as_names(n) if isinstance(n, list) else n for n in names)
+
+
 class Parser:
     """Recursive descent parser."""
 
@@ -463,6 +473,27 @@ class Parser:
                 pass
             if self._check("PUNCT") and self._cur().value == ")":
                 break
+            if self._check("PUNCT") and self._cur().value == "(":
+                # A parameter may name the elements of a tuple instead
+                # of the tuple, as a definition may.
+                open_tok = self._cur()
+                names = _as_names(self._parse_destructure_names(open_tok))
+                param_type = None
+                is_mut = False
+                if self._try_eat("PUNCT", ":"):
+                    if self._try_eat("MUT"):
+                        is_mut = True
+                    param_type = self._parse_type()
+                params.append((names, param_type))
+                if is_mut:
+                    param_muts.add(names)
+                param_positions[names] = (
+                    open_tok.line, open_tok.col,
+                    self.tokens[self.pos - 1].end_col)
+                self._try_eat("NEWLINE")
+                if not self._try_eat("PUNCT", ","):
+                    break
+                continue
             if not self._check("IDENT"):
                 break
             param_name_tok = self._eat("IDENT")
@@ -1480,8 +1511,19 @@ class Parser:
         lambda_tok = self._cur()
         self._eat("LAMBDA")
         params: list[tuple[str, str]] = []
-        while self._check("IDENT"):
+        while (self._check("IDENT")
+               or (self._check("PUNCT") and self._cur().value == "(")):
             saved = self.pos
+            if self._check("PUNCT") and self._cur().value == "(":
+                open_tok = self._cur()
+                names = _as_names(self._parse_destructure_names(open_tok))
+                ptype = None
+                if self._try_eat("PUNCT", ":"):
+                    ptype = self._parse_type()
+                params.append((names, ptype))
+                if not self._try_eat("PUNCT", ","):
+                    break
+                continue
             name = self._eat("IDENT").value
             follows = (self.tokens[self.pos + 1]
                        if self.pos + 1 < len(self.tokens) else None)

@@ -101,6 +101,23 @@ def _literal_element_type(elements) -> str | None:
     return width
 
 
+def _parameter_names(params) -> set[str]:
+    """Every name a parameter list binds, destructured ones included."""
+    names: set[str] = set()
+    for pname, _ptype in params:
+        if isinstance(pname, tuple):
+            names |= _parameter_names([(n, None) for n in pname])
+        else:
+            names.add(pname)
+    return names
+
+
+def _names_display(names) -> str:
+    """How a destructured parameter's names read in a diagnostic."""
+    return "(" + ", ".join(_names_display(n) if isinstance(n, tuple) else n
+                           for n in names) + ")"
+
+
 def _collect_refs_from_stmts(stmts) -> set[str]:
     """Collect all variable/function references from a list of statements."""
     refs: set[str] = set()
@@ -197,7 +214,7 @@ def _collect_refs(node) -> set[str]:
             inner = _collect_refs_from_stmts(node.body)
         else:
             inner = _collect_refs(node.body)
-        inner -= {p[0] for p in node.params}
+        inner -= _parameter_names(node.params)
         if node.captures:
             inner -= set(node.captures)
         refs |= inner
@@ -3172,6 +3189,27 @@ class Evaluator:
         self._bind_destructured(stmt.names, value, stmt)
         return none()
 
+    def _bind_parameter_names(self, names, value, call_env, func_name: str):
+        """Bind each name of a destructured parameter to its element."""
+        inner = unwrap_optional(value)
+        if not isinstance(inner, TupleValue):
+            raise TypeError(
+                f"{func_name}: parameter {_names_display(names)} names the "
+                f"elements of a tuple, but the argument is "
+                f"{runtime_type_of(inner)}")
+        if len(inner.elements) != len(names):
+            raise TypeError(
+                f"{func_name}: parameter {_names_display(names)} names "
+                f"{len(names)} elements, but the argument has "
+                f"{len(inner.elements)}")
+        for name, element in zip(names, inner.elements):
+            if isinstance(name, tuple):
+                self._bind_parameter_names(name, element, call_env, func_name)
+                continue
+            if name == DISCARD_NAME:
+                continue
+            call_env.define(name, settle_untyped(element))
+
     def _bind_destructured(self, names, value, stmt: DestructureDef):
         """Bind each name to its element, taking nested tuples apart."""
         inner = unwrap_optional(value)
@@ -3740,7 +3778,7 @@ class Evaluator:
                 node.ret_type, "\N{GREEK SMALL LETTER LAMDA}: return type")
 
         refs = _collect_refs(node.body)
-        refs -= {p[0] for p in node.params}
+        refs -= _parameter_names(node.params)
 
         lambda_env = Env()
         capture_set = set(node.captures) if node.captures else set()
@@ -3795,8 +3833,15 @@ class Evaluator:
 
         call_env = Env(parent=lam.env)
         for (pname, ptype), arg in zip(lam.params, args):
+            display = (_names_display(pname) if isinstance(pname, tuple)
+                       else pname)
             if ptype is not None:
-                arg = coerce_arg(arg, ptype, "\N{GREEK SMALL LETTER LAMDA}", pname)
+                arg = coerce_arg(arg, ptype, "\N{GREEK SMALL LETTER LAMDA}",
+                                 display)
+            if isinstance(pname, tuple):
+                self._bind_parameter_names(
+                    pname, arg, call_env, "\N{GREEK SMALL LETTER LAMDA}")
+                continue
             call_env.define(pname, arg)
 
         old_env = self.env
@@ -4116,6 +4161,16 @@ class Evaluator:
 
         call_env = func.env.copy_for_call()
         for (param_name, param_type), arg_value in zip(resolved_params, regular_args):
+            if isinstance(param_name, tuple):
+                # The parameter names the elements of a tuple rather
+                # than the tuple, so the argument is taken apart into
+                # the call's own environment.
+                if param_type is not None:
+                    arg_value = coerce_arg(arg_value, param_type, func.name,
+                                           _names_display(param_name))
+                self._bind_parameter_names(param_name, arg_value, call_env,
+                                           func.name)
+                continue
             self._check_resizable_argument(func, param_name, param_type,
                                            arg_value)
             is_ref_param = param_name in func.param_refs

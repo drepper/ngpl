@@ -98,7 +98,9 @@ Completed
     as written: static_assert_eq(@typeof(t), (i64, str)).  A definition may name the
     elements instead of the tuple — `let (a, b) := pair`, nesting as the value nests, with
     `_` where an element is not wanted — at a local and at a global alike.  mut reaches
-    every name, a repeated name is refused, and a stated type is the tuple's.
+    every name, a repeated name is refused, and a stated type is the tuple's.  A parameter
+    may name the elements too, in the same shape, with or without a stated type; a lambda's
+    may as well.
 
 [x] nothing in the bootstrap holds an arbitrary-precision value.  A binding with no type written
     down would settle on int or float, so it is refused and the sized type is asked for; that

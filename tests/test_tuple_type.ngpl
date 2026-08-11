@@ -267,6 +267,68 @@ fn warn_destructured_mut_is_never_modified():
     a ← 3
     assert_eq(a + b, 5)
 
+// ---------------------------------------------------------------------
+// A parameter may name the elements too
+// ---------------------------------------------------------------------
+
+fn first_of_pair((a, b) : (i64, str)) → i64:
+    a
+
+@test
+fn test_a_destructured_parameter():
+    assert_eq(first_of_pair((1, "two")), 1)
+
+// The type may be left off, as at any other parameter; what arrives
+// then has to be a tuple of the right size.
+fn sum_of_pair((a, b)) → i64:
+    a + b
+
+@test
+fn test_an_untyped_destructured_parameter():
+    assert_eq(sum_of_pair((3i64, 4i64)), 7)
+
+// The stated type settles the elements before they are named.
+fn as_byte((a, b) : (u8, str)) → u8:
+    a
+
+@test
+fn test_a_parameter_type_settles_the_elements():
+    assert_eq(as_byte((200, "x")), 200)
+
+fn inner_sum(((a, b), c) : ((i64, i64), str)) → i64:
+    a + b
+
+@test
+fn test_a_nested_destructured_parameter():
+    assert_eq(inner_sum(((1, 2), "x")), 3)
+
+fn keeps_the_first((a, _) : (i64, str)) → i64:
+    a
+
+@test
+fn test_a_discarded_element_in_a_parameter():
+    assert_eq(keeps_the_first((9, "x")), 9)
+
+@test
+fn test_a_destructured_lambda_parameter():
+    let f := λ(a, b) : (i64, i64) → i64: a + b
+    assert_eq(f((3, 4)), 7)
+
+// --- what a destructured parameter refuses ---
+
+@test
+@expect error "names the elements of a tuple, but the argument is"
+fn error_argument_is_not_a_tuple():
+    let n : i64 = sum_of_pair(5i64)
+
+fn wants_three((a, b, c)) → i64:
+    a
+
+@test
+@expect error "names 3 elements, but the argument has 2"
+fn error_argument_has_the_wrong_number_of_elements():
+    let n : i64 = wants_three((1i64, 2i64))
+
 @start
 @impure
 fn main():

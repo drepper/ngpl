@@ -1553,11 +1553,18 @@ def _destructured_names(names) -> list[str]:
     """Every name a destructuring binds, nested ones included."""
     flat: list[str] = []
     for entry in names:
-        if isinstance(entry, list):
+        if isinstance(entry, (list, tuple)):
             flat.extend(_destructured_names(entry))
         else:
             flat.append(entry)
     return flat
+
+
+def _param_display(param_name) -> str:
+    """How a parameter's name reads in a diagnostic."""
+    if not isinstance(param_name, tuple):
+        return param_name
+    return "(" + ", ".join(_param_display(n) for n in param_name) + ")"
 
 
 def _negated_literals(body) -> set[int]:
@@ -1926,13 +1933,20 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                     f"'{defn.name}' names a type and cannot name a function",
                     _node_pos(defn))
             for param_name, param_type in defn.params:
-                if is_type_name(param_name):
-                    raise DefinitionError(
-                        f"in {defn.name}: '{param_name}' names a type and "
-                        f"cannot name a parameter", _node_pos(defn))
+                # A parameter naming a tuple's elements holds the names
+                # in a tuple of its own, and each is checked as a name.
+                for one in (_destructured_names(param_name)
+                            if isinstance(param_name, tuple)
+                            else [param_name]):
+                    if is_type_name(one):
+                        raise DefinitionError(
+                            f"in {defn.name}: '{one}' names a type and "
+                            f"cannot name a parameter", _node_pos(defn))
                 if param_type is not None:
                     try:
-                        validate_param_type(param_type, defn.name, param_name)
+                        validate_param_type(
+                            param_type, defn.name,
+                            _param_display(param_name))
                     except TypeError as e:
                         raise DefinitionError(str(e), _node_pos(defn)) from None
             if defn.pack_param is not None:
@@ -2175,7 +2189,8 @@ def main():
             try:
                 for param_name, param_type in defn.params:
                     if param_type is not None:
-                        validate_param_type(param_type, defn.name, param_name)
+                        validate_param_type(param_type, defn.name,
+                                            _param_display(param_name))
             except (TypeError, ValueError) as e:
                 errors_produced.append(("error", str(e)))
 
