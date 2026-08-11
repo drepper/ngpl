@@ -113,6 +113,24 @@ thing the language has no way to talk about.
 The runtime keeps the same two checks anyway, because there is one
 place the static ones do not read: a statement typed at the prompt.
 
+## A Name Nothing Takes
+
+The reverse mistake is quieter: a loop named `outer` that nothing
+inside it names back.  The loop reads as though something leaves it
+from within, and nothing does.  It is almost always a leftover — the
+`break outer` was moved into a function, or replaced by a condition, or
+deleted — and what is left behind is a claim about the code that is no
+longer true.
+
+A warning rather than an error, on the same grounds as the unused `mut`
+it sits next to: the program is well-formed and may be mid-edit.  The
+name is where the diagnostic points, which is why the parser records
+where it was written rather than only what it said.
+
+A `break` inside a lambda written in the loop does not count as taking
+the name.  That falls out of the boundary above rather than being a
+second rule: what cannot leave the loop cannot be what the name is for.
+
 ## Unreachable, For Free
 
 Neither statement comes back, which is exactly what `@noreturn` says
@@ -165,8 +183,9 @@ Implemented: `break` and `continue`, with and without a name, in
 `while` and `foreach` loops including `comptime foreach`; names on any
 loop at any depth, reaching outward past however many loops lie
 between; refusal of a statement outside every loop or naming a loop it
-is not inside, statically and at the prompt; the lambda boundary; and
-the unreachable warning for what follows either.
+is not inside, statically and at the prompt; the lambda boundary; a
+warning for a name nothing inside the loop takes; and the unreachable
+warning for what follows either.
 
 Left for later: a value carried out by `break`, which waits on a loop
 being an expression.

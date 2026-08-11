@@ -4356,6 +4356,17 @@ fn g():
 
 Both are found before anything runs.  A lambda body is a function of its own, so a loop *around* a lambda is not one the lambda's body may leave; a `break` written there is outside any loop of its own and refused as such.
 
+A name that nothing inside the loop takes draws a warning, since the loop then says it is left from within when it is not:
+
+```
+outer:
+foreach i := 1…3:                   // warning: the loop is named 'outer'
+    foreach j := 1…3:               // and nothing inside it takes the name
+        break                       // leaves only the inner loop
+```
+
+Being a warning rather than an error, it is what a name is usually left behind by — a `break outer` that was moved or deleted — and the program still runs.  A `break` inside a *lambda* written in the loop does not count as taking the name, for the same reason it is refused there.
+
 Neither statement comes back, so a statement written after one in the same block cannot be reached, and the same warning that follows a `return` or a call to a `@noreturn` function follows these:
 
 ```

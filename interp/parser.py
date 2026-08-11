@@ -1407,6 +1407,8 @@ class Parser:
             self._skip_nl()
             loop = self._parse_statement()
             loop.label = label_tok.value
+            loop.label_pos = (label_tok.line, label_tok.col,
+                              label_tok.end_col)
             return loop
 
         if self._check("WHILE"):

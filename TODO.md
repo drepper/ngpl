@@ -990,8 +990,10 @@ in the compiler.
     character literal.  A name is not a variable: it has no scope, and it can be read only by
     a break or a continue inside the loop it names.  A statement outside every loop, or one
     naming a loop it is not inside, is refused before anything runs, and a lambda body is a
-    boundary — a loop around a lambda is not one its body can leave.  Neither statement comes
-    back, so the unreachable-statement warning covers what follows one.
+    boundary — a loop around a lambda is not one its body can leave.  A name that nothing
+    inside the loop takes draws a warning, since the loop then claims it is left from within
+    when it is not.  Neither statement comes back, so the unreachable-statement warning
+    covers what follows one.
 
 [ ] a value carried out of a loop by break, as Rust's `break v` does.  It waits on a loop
     being an expression rather than a statement, which is a separate question.

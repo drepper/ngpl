@@ -124,12 +124,17 @@ class WhileStmt:
     var_name, when set, names a variable bound to the condition's value
     at the start of every iteration, as `while e := next()` does.  The
     bound value is then what decides whether the body runs.
+
+    label, when set, is the name written on the line above the loop,
+    which a break or a continue inside it may take; label_pos is where
+    that name was written.
     """
 
     def __init__(self, cond, body, var_name: str | None = None,
                  var_type: str | None = None, var_is_mut: bool = False,
                  label: str | None = None):
         self.label = label
+        self.label_pos = None
         self.cond = cond
         self.body = body
         self.var_name = var_name
@@ -428,11 +433,14 @@ class ForEachStmt:
     vars:      list of (name, type_or_None) tuples
     iterables: list of expressions (RangeExpr or container)
     body:      list of statements
+    label:     the name written on the line above the loop, if any,
+               with label_pos saying where it was written
     """
 
     def __init__(self, vars, iterables, body, is_comptime: bool = False,
                  label: str | None = None):
         self.label = label
+        self.label_pos = None
         self.vars = vars
         self.iterables = iterables
         self.body = body

@@ -189,6 +189,47 @@ fn error_break_inside_a_lambda():
             break
             x
 
+// A name exists to be taken by a break or a continue.  One that
+// nothing takes says the loop is left from within when it is not.
+@test
+@expect warning "nothing inside it takes the name"
+fn warn_a_name_nothing_takes():
+    let count : mut i64 = 0
+    outer:
+    foreach i := 1…3:
+        foreach j := 1…3:
+            if j = 2:
+                break
+            count ← count + 1
+    assert_eq(count, 3)
+
+// A lambda body cannot leave a loop outside it, so a break written
+// there does not count as taking the name.
+@test
+@expect warning "nothing inside it takes the name"
+fn warn_a_name_only_a_lambda_would_take():
+    let count : mut i64 = 0
+    outer:
+    foreach i := 1…3:
+        let f := λx : i64 → i64:
+            x + 1
+        count ← count + f(i)
+    assert_eq(count, 9)
+
+// Naming both and taking only the outer leaves the inner one unused.
+@test
+@expect warning "nothing inside it takes the name"
+fn warn_only_one_of_two_names_is_taken():
+    let count : mut i64 = 0
+    outer:
+    foreach i := 1…3:
+        inner:
+        foreach j := 1…3:
+            if j = 2:
+                break outer
+            count ← count + 1
+    assert_eq(count, 1)
+
 // Neither comes back, so what follows one is written to be run and
 // never will be.
 @test

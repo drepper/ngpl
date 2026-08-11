@@ -1248,6 +1248,56 @@ def _unreachable_warnings(func_def, env) -> list[tuple[str, tuple | None]]:
     return warnings
 
 
+def _unused_loop_label_warnings(func_def) -> list[tuple[str, tuple | None]]:
+    """Find loop names nothing inside the loop takes.
+
+    A name exists to be written after a break or a continue.  One that
+    nothing takes says the loop is left from within when it is not,
+    which is a reader's mistake waiting to happen -- and it is usually
+    a leftover from a statement that was moved or deleted.  Reported as
+    a warning: the program is well-formed and may be mid-edit.
+
+    A lambda body is a boundary here as it is everywhere else: a break
+    written inside one cannot leave a loop outside it, so it does not
+    count as taking the name.
+    """
+    warnings: list[tuple[str, tuple | None]] = []
+
+    def takers(body) -> set[str]:
+        """The names break and continue take anywhere within a body."""
+        taken: set[str] = set()
+        for node in _iter_ast(body, stop_at=(_ast.LambdaExpr,)):
+            if isinstance(node, (_ast.BreakStmt, _ast.ContinueStmt)) \
+                    and node.label is not None:
+                taken.add(node.label)
+        return taken
+
+    def walk(body):
+        if not isinstance(body, list):
+            return
+        for stmt in body:
+            if isinstance(stmt, (_ast.WhileStmt, _ast.ForEachStmt)) \
+                    and stmt.label is not None \
+                    and stmt.label not in takers(stmt.body):
+                warnings.append((
+                    f"the loop is named '{stmt.label}' and nothing inside "
+                    f"it takes the name; a break or a continue reaches an "
+                    f"outer loop by naming it",
+                    stmt.label_pos))
+            for attr in ("body", "cons", "alt"):
+                walk(getattr(stmt, attr, None))
+            for arm in getattr(stmt, "arms", ()) or ():
+                walk(getattr(arm, "body", None))
+
+    walk(func_def.body)
+    # A lambda at any depth is walked on its own, since walk descends
+    # statements and a lambda is written inside an expression.
+    for node in _iter_ast(func_def.body):
+        if isinstance(node, _ast.LambdaExpr) and isinstance(node.body, list):
+            walk(node.body)
+    return warnings
+
+
 def _unused_mut_warnings(func_def) -> list[tuple[str, tuple | None]]:
     """Find mut bindings and parameters the function never modifies.
 
@@ -2380,6 +2430,7 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 program.warnings.extend(
                     _redundant_return_type_warning(defn))
                 program.warnings.extend(_unused_mut_warnings(defn))
+                program.warnings.extend(_unused_loop_label_warnings(defn))
                 program.warnings.extend(_unreachable_warnings(defn, env))
                 program.warnings.extend(
                     _trailing_value_warnings(defn, env, struct_vars))
@@ -2585,6 +2636,7 @@ def main():
             ("warning", message)
             for message, _ in (_redundant_return_type_warning(defn)
                                + _unused_mut_warnings(defn)
+                               + _unused_loop_label_warnings(defn)
                                + _unreachable_warnings(defn, env)
                                + _trailing_value_warnings(
                                    defn, env, _struct_vars_of(defn, env))))
