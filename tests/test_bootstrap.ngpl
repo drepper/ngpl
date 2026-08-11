@@ -190,6 +190,45 @@ fn test_elements_that_already_have_a_type():
     static_assert_eq(@typeof(a[1]), u8)
     assert_eq(a[2], 9)
 
+// A number settles what is around it however deep it sits: one element
+// of one row says what every number in the literal is, since there is
+// only one type for all of them to be.
+@test
+fn test_a_nested_literal_settles_from_one_element():
+    let d := [[1u8, 2, 3], [2, 3, 4]]
+    static_assert_eq(@typeof(d[0, 0]), u8)
+    static_assert_eq(@typeof(d[1, 2]), u8)
+    assert_eq(d[1, 2], 4)
+
+// Wherever in the literal it is written.
+@test
+fn test_a_later_row_may_be_the_one_that_says_it():
+    let d := [[1, 2], [3, 4u16]]
+    static_assert_eq(@typeof(d[0, 0]), u16)
+
+@test
+fn test_it_reaches_as_deep_as_the_literal_goes():
+    let d := [[[1i64, 2], [3, 4]], [[5, 6], [7, 8]]]
+    static_assert_eq(@typeof(d[1, 1, 1]), i64)
+    assert_eq(d[1, 1, 1], 8)
+
+// Rows of different lengths are a question about the shape, not about
+// the type, so the numbers still settle.
+@test
+fn test_rows_of_different_lengths_still_settle():
+    let d := [[1u8, 2, 3], [4]]
+    static_assert_eq(@typeof(d[1][0]), u8)
+
+@test
+@expect error "element 0 is u8 and element 1 is i64"
+fn error_two_rows_that_disagree():
+    let d : mut = [[1u8, 2], [3, 4i64]]
+
+@test
+@expect error "element 0 is u8 and element 1 is an array"
+fn error_a_number_beside_a_row():
+    let d : mut = [1u8, [2, 3]]
+
 // An array of something other than numbers settles on what it holds
 // just as one of numbers does -- there is no width to argue about, but
 // there is still one type, and the array says which.

@@ -190,6 +190,15 @@ Completed
     definition's = -- let x : i64!= 10 -- is refused as it was before, != having been a single
     token then as well.
 
+[x] a number settles a nested literal however deep it sits: `let d := [[1u8,2,3],[2,3,4]]`
+    has one element saying what it is and nothing contradicting, so every number in it is a
+    u8.  Settling stopped at the outer level before, saw rows rather than numbers and gave up,
+    so a nested literal could only be written with a type stated for it however clearly one of
+    its numbers had said what it was -- at either scope.  A row is settled by what is in it
+    and by what is in every other row, which is the same sentence one level down.  Only what
+    is at the bottom is compared between rows: how long each row is belongs to the shape,
+    which a type states, so rows of different lengths still settle.
+
 [x] an array is not made from one value.  `let f : i32[4] = 0` filled the array at a
     function's scope and was refused at a global one, and the refusal was about `i32` not
     being an array type: the global path measured the allocated array against the annotation,

@@ -97,6 +97,27 @@ otherwise the measure would be invented for it.  That rule already
 existed for a scalar; it now holds for an array, and it is the reason a
 declaration has to be remembered rather than inferred from the value.
 
+## Settling Reaches As Deep As the Literal Goes
+
+There is one type for every number in a nested literal to be, so one
+element of one row settles all of them:
+
+```
+let d := [[1u8, 2, 3], [2, 3, 4]]       // u8[2,3]
+```
+
+This did not work when the homogeneity check was written: settling
+stopped at the outer level, saw rows rather than numbers, and gave up —
+so a nested literal could only be written with a type stated for it,
+even though one of its numbers had said what it was.  A row is settled
+by what is in it *and* by what is in every other row, which is the same
+sentence one level down.
+
+Only what is at the bottom is compared between rows.  How long each row
+is belongs to the shape, which a type states and which rows are allowed
+to disagree about here, so `[[1u8, 2, 3], [4]]` still settles on `u8`
+and is measured for its shape only where a type says one.
+
 ## What Is Refused, and Where
 
 Every way into an array asks one routine, so the answers cannot drift:

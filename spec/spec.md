@@ -4944,6 +4944,23 @@ A width still settles from whichever element states one, and the elements that s
 [x, 2]                          /* where x is 1¤meter: [1 m, 2 m] */
 ```
 
+It reaches as deep as the literal goes.  There is one type for every number in a nested literal to be, so one element of one row settles all of them, wherever it is written:
+
+```
+[[1u8, 2, 3], [2, 3, 4]]        /* u8[2,3] */
+[[1, 2], [3, 4u16]]             /* u16[2,2] — a later row said it */
+[[1u8, 2, 3], [4]]              /* rows of different lengths still settle */
+```
+
+Rows of different lengths are a question about the *shape*, which a type states, rather than about the type, so they settle the same way.  Two that state different widths do not:
+
+```
+[[1u8, 2], [3, 4i64]]
+
+error: an array holds one type of value, but element 0 is u8 and
+element 1 is i64
+```
+
 The element type and unit are fixed where the array is declared, and every way a value gets in asks the same question: a subscript, a `push`, an `insert`, a whole-array assignment, an argument, and a return.  A row of a matrix is one of the things it holds, so a row is measured for its length as well as its kind.
 
 ```

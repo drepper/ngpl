@@ -130,6 +130,7 @@ def _literal_element_type(elements):
     kind_by = 0
     unit = None
     unit_by = 0
+    rows: list[tuple[int, list | None]] = []
     for index, element in enumerate(elements):
         if isinstance(element, UnitValue):
             # A unit settles the way a width does: one element states
@@ -151,10 +152,13 @@ def _literal_element_type(elements):
             found_kind = "str"
         elif isinstance(inner, BoolValue):
             found_kind = "bool"
+        elif isinstance(inner, ObjectValue) \
+                and isinstance(inner.obj, ArrayValue):
+            found_kind = "array"
         else:
-            # A struct, an enum, a tuple or an array of its own: what
-            # those hold in common is a question their own types
-            # answer, and a binding is where they are measured.
+            # A struct, an enum or a tuple: what those hold in common
+            # is a question their own types answer, and a binding is
+            # where they are measured.
             return None, None
         if kind is None:
             kind, kind_by = found_kind, index
@@ -163,7 +167,32 @@ def _literal_element_type(elements):
                 f"an array holds one type of value, but element {kind_by} is "
                 f"{_element_kind(elements[kind_by])} and element {index} is "
                 f"{_element_kind(element)}")
-        if isinstance(inner, IntValue):
+        if isinstance(inner, ObjectValue):
+            # A row is settled by what is in it, and by what is in
+            # every other row: one number saying what it is says it for
+            # all of them, however deep in the literal it was written.
+            row = inner.obj
+            row_elem, row_unit = _literal_element_type(
+                [row.get(i) for i in range(row.sizeof)])
+            if row_unit is not None:
+                if unit is None:
+                    unit, unit_by = row_unit, index
+                elif not unit.same_dimension(row_unit):
+                    raise TypeError(
+                        f"an array holds one unit, but element {unit_by} is "
+                        f"{unit.display_name} and element {index} is "
+                        f"{row_unit.display_name}")
+            # Only what is at the bottom is compared between rows: how
+            # long each row is belongs to the shape, which a type says
+            # and which rows are allowed to disagree about here.
+            if row_elem is None:
+                rows.append((row.sizeof, None))
+                continue
+            parsed = _parse_array_type(row_elem)
+            base, inner_dims = parsed if parsed else (row_elem, [])
+            rows.append((row.sizeof, inner_dims))
+            found = base
+        elif isinstance(inner, IntValue):
             if is_unwidthed(inner.width):
                 continue
             found = inner.width
@@ -182,6 +211,18 @@ def _literal_element_type(elements):
                 f"an array holds one type of value, but element {said_by} is "
                 f"{width} and element {index} is {found}")
         width, said_by = found, index
+    if kind == "array" and width is not None:
+        # What one element of this array is: a row of what the bottom
+        # settled on, as long as the rows agree on it.  Rows of
+        # different lengths leave the extent open, raggedness being a
+        # question about the shape rather than about the type.
+        lengths = {length for length, _ in rows}
+        shapes = {tuple(dims) for _, dims in rows if dims is not None}
+        if len(shapes) > 1:
+            return None, unit
+        tail = list(shapes.pop()) if shapes else []
+        first = lengths.pop() if len(lengths) == 1 else None
+        return _array_type_name(width, [first, *tail]), unit
     return width, unit
 
 
