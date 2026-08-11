@@ -246,25 +246,84 @@ fn test_with_an_empty_set():
     assert_eq(#(a ∖ e), 2¤ptrdiff)
 
 @test
-@expect error "is what two sets make between them"
+@expect error "is asked of two sets"
 fn error_a_set_and_a_hash():
     let a : std.set(i64) = ⸨1⸩
     let h : std.hash(str, i64) = ⸨"x": 1⸩
     let u : mut = a ∪ h
 
 @test
-@expect error "is what two sets make between them"
+@expect error "is asked of two sets"
 fn error_a_set_and_an_array():
     let a : std.set(i64) = ⸨1⸩
     let v : i64[] = [1, 2]
     let u : mut = a ∪ v
 
 @test
-@expect error "two of them make one only where they hold the same"
+@expect error "only where they hold the same"
 fn error_sets_of_two_types():
     let a : std.set(i64) = ⸨1⸩
     let b : std.set(str) = ⸨"x"⸩
     let u : mut = a ∪ b
+
+// ---------------------------------------------------------------------
+// Whether one set is held inside another
+// ---------------------------------------------------------------------
+
+// ⊆ asks that everything in the one is in the other and no more.
+@test
+fn test_subset_or_equal():
+    let a : std.set(i64) = ⸨1, 2⸩
+    let b : std.set(i64) = ⸨1, 2, 3⸩
+    let c : std.set(i64) = ⸨1, 2⸩
+    assert(a ⊆ b)
+    assert(a ⊆ c)
+    assert(¬(b ⊆ a))
+
+// ⊂ asks it of a set that is not the whole of the other, which is what
+// "proper" means -- so two holding the same things are not one.
+@test
+fn test_a_proper_subset():
+    let a : std.set(i64) = ⸨1, 2⸩
+    let b : std.set(i64) = ⸨1, 2, 3⸩
+    let c : std.set(i64) = ⸨1, 2⸩
+    assert(a ⊂ b)
+    assert(¬(a ⊂ c))
+    assert(a ⊆ c)
+
+// Nothing is inside everything, and inside itself.
+@test
+fn test_the_empty_set_is_inside_them_all():
+    let a : std.set(i64) = ⸨1⸩
+    let e : std.set(i64) = ⸨⸩
+    assert(e ⊆ a)
+    assert(e ⊂ a)
+    assert(e ⊆ e)
+    assert(¬(e ⊂ e))
+
+// Answering a bool, so they sit where the comparisons do: what makes a
+// set binds tighter, and what combines the answer binds looser.
+@test
+fn test_what_binds_tighter():
+    let a : std.set(i64) = ⸨1, 2⸩
+    let b : std.set(i64) = ⸨1, 2, 3⸩
+    // (a ∪ ⸨3⸩) ⊆ b, not a ∪ (⸨3⸩ ⊆ b)
+    assert(a ∪ ⸨3i64⸩ ⊆ b)
+    assert(a ⊆ b ∧ a ⊂ b)
+
+@test
+@expect error "is asked of two sets"
+fn error_a_subset_of_an_array():
+    let a : std.set(i64) = ⸨1⸩
+    let v : i64[] = [1]
+    let r : mut = a ⊆ v
+
+@test
+@expect error "only where they hold the same"
+fn error_subsets_of_two_types():
+    let a : std.set(i64) = ⸨1⸩
+    let b : std.set(str) = ⸨"x"⸩
+    let r : mut = a ⊆ b
 
 // ---------------------------------------------------------------------
 // One type of key and one type of value

@@ -1264,6 +1264,12 @@ class Evaluator:
     _SET_OPS = frozenset({"\N{UNION}", "\N{INTERSECTION}",
                           "\N{SET MINUS}"})
 
+    # Whether one set is held inside another.  Both operands are the
+    # container here too, so these are dispatched with the ones above
+    # rather than threaded.
+    _SUBSET_OPS = frozenset({"\N{SUBSET OF}",
+                             "\N{SUBSET OF OR EQUAL TO}"})
+
     # Every operator that means for a container what it means for one of
     # the things in it, and so is threaded over one that it is handed.
     # ⧺, ⍳ and ∊ take a container as the operand rather than as a
@@ -1632,6 +1638,42 @@ class Evaluator:
             return coerce_to_type(key, key_type, key_unit, self._mk_int)
         return key
 
+    def _op_subset(self, op: str, left, right):
+        """Whether everything in the one is in the other.
+
+        ⊆ asks that and no more; ⊂ asks it of a set that is not the
+        whole of the other, which is what "proper" means and what
+        makes ⊂ false where the two hold the same things.
+        """
+        first, second = self._two_sets(op, left, right)
+        inside = all(second.has(value) for value in first.values())
+        if op == "\N{SUBSET OF OR EQUAL TO}":
+            return mk_bool(inside)
+        return mk_bool(inside and first.sizeof < second.sizeof)
+
+    def _two_sets(self, op: str, left, right):
+        """The two sets an operator between sets was given."""
+        sets = []
+        for side, value in (("left", _unwrap_operand(left)),
+                            ("right", _unwrap_operand(right))):
+            if isinstance(value, ObjectValue) \
+                    and isinstance(value.obj, SetValue):
+                sets.append(value.obj)
+                continue
+            raise TypeError(
+                f"{op}: the {side} operand is "
+                f"{self._value_type_name(value)}, and {op} is asked of two "
+                f"sets")
+        first, second = sets
+        if first.value_type is not None and second.value_type is not None \
+                and first.value_type != second.value_type:
+            raise TypeError(
+                f"{op}: a set holds one type of value, so two are asked "
+                f"about together only where they hold the same, but the "
+                f"left holds {first.value_type} and the right holds "
+                f"{second.value_type}")
+        return first, second
+
     def _op_set(self, op: str, left, right):
         """What two sets make between them.
 
@@ -1640,27 +1682,8 @@ class Evaluator:
         else these are walked: what came from the left comes first, in
         the order it was in.
         """
-        lu = _unwrap_operand(left)
-        ru = _unwrap_operand(right)
-        sets = []
-        for side, value in (("left", lu), ("right", ru)):
-            if isinstance(value, ObjectValue) \
-                    and isinstance(value.obj, SetValue):
-                sets.append(value.obj)
-                continue
-            raise TypeError(
-                f"{op}: the {side} operand is "
-                f"{self._value_type_name(value)}, and {op} is what two sets "
-                f"make between them")
-        first, second = sets
-        held = first.value_type or second.value_type
-        if first.value_type is not None and second.value_type is not None \
-                and first.value_type != second.value_type:
-            raise TypeError(
-                f"{op}: a set holds one type of value, so two of them make "
-                f"one only where they hold the same, but the left holds "
-                f"{first.value_type} and the right holds {second.value_type}")
-        built = SetValue(value_type=held)
+        first, second = self._two_sets(op, left, right)
+        built = SetValue(value_type=first.value_type or second.value_type)
         if op == "\N{UNION}":
             for value in first.values():
                 built.put(value)
@@ -1839,6 +1862,8 @@ class Evaluator:
             # The container is the operand rather than a stand-in for
             # its elements, so this does not go element-wise.
             return self._op_index_of(left, right)
+        if op in self._SUBSET_OPS:
+            return self._op_subset(op, left, right)
         if op in self._SET_OPS:
             # Both operands are the container, as they are for ⧺, so
             # this is dispatched before anything is threaded over one.

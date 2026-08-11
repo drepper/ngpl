@@ -213,8 +213,13 @@ Completed
     arrays; an empty set has no type to disagree with and takes the other's.  The order is
     kept, a union that reordered its result being the same argument the entries lost.
 
-[ ] two hashes or sets cannot be joined with ⧺ or compared with =, neither can be a key, and
-    whether one set contains another is unasked; ⊂ and ⊆ are free.
+[x] ⊆ and ⊂ ask whether one set is held inside another.  They answer a bool, so they sit with
+    the comparisons: what makes a set binds tighter and what combines the answer binds looser,
+    which is the shape < sits in.  ⊂ is the proper one, false where the two hold the same
+    things, which is the whole of what "proper" means and the only reason to have two glyphs.
+    No ⊃ or ⊇: a superset is the same question with the operands the other way round.
+
+[ ] two hashes or sets cannot be joined with ⧺ or compared with =, and neither can be a key.
 
 [x] an array type may be written where a type is compared against: `static_assert_eq(@typeof(e),
     i8[3])`.  A bare name and a tuple type already could, so the spelling @typeof answers with

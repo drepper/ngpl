@@ -1739,6 +1739,26 @@ a ∖ b                           /* ⸨1⸩ */
 b ∖ a                           /* ⸨4⸩ — not the same question */
 ```
 
+#### Whether One Set Is Held Inside Another
+
+| Operator | Answers |
+|----------|---------|
+| `a ⊆ b` (U+2286) | whether everything in `a` is in `b` |
+| `a ⊂ b` (U+2282) | that, of an `a` that is not the whole of `b` |
+
+```
+let a : std.set(i64) = ⸨1, 2⸩
+let b : std.set(i64) = ⸨1, 2, 3⸩
+let c : std.set(i64) = ⸨1, 2⸩
+
+a ⊆ b                           /* true */
+a ⊂ b                           /* true */
+a ⊆ c                           /* true */
+a ⊂ c                           /* false — c is no more than a */
+```
+
+They answer a `bool`, so they sit where the comparisons do: what *makes* a set binds tighter and what combines the answer binds looser, so `a ∪ ⸨3⸩ ⊆ b` is `(a ∪ ⸨3⸩) ⊆ b` and `a ⊆ b ∧ a ⊂ b` is two questions and then both answers.  A superset is the same question with the operands the other way round.
+
 `∩` binds tighter than `∪`, as `×` does than `+`, so `a ∪ b ∩ c` is `a ∪ (b ∩ c)`.  Both operands are the container rather than a stand-in for what is in it, so these are not threaded, as `⧺` and `∊` are not.
 
 A set holds one type of value, so two of them make one only where they hold the same; and what these make is a set, so a hash or an array on either side is refused.  The order is kept — what came from the left comes first, in the order it was in.

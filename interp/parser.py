@@ -1841,6 +1841,7 @@ class Parser:
         return left
 
     _CMP_OPS = ("\N{NOT EQUAL TO}", "<", ">", "<=", ">=",
+                "\N{SUBSET OF}", "\N{SUBSET OF OR EQUAL TO}",
                 "≅", "≇", "⪅", "⪆", "⪉", "⪊")
 
     def _parse_cmp_expr(self):

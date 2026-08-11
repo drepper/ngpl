@@ -125,6 +125,18 @@ The order is kept, as it is everywhere else a set is walked.  A union
 that reordered its result would be the same argument the entries lost:
 output that depends on something nobody wrote down.
 
+`⊆` and `⊂` ask whether one is held inside another.  They answer a
+`bool`, so they sit with the comparisons rather than with the three
+above — what *makes* a set binds tighter than what asks about one, and
+what combines the answer binds looser, which is the same shape `<` sits
+in.  `⊂` is the proper one: it is false where the two hold the same
+things, which is the whole of what "proper" means and the only reason
+to have two glyphs rather than one.
+
+No `⊃` or `⊇`.  A superset is the same question with the operands the
+other way round, and a second spelling for it would be a second thing
+to learn that says nothing new.
+
 ## Status
 
 Implemented: literals, `std.hash(K, V)` and `std.set(V)` as types in a
