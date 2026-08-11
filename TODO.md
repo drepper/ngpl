@@ -362,8 +362,15 @@ Type System
     a subscript says so and names what to do instead; before this it quietly did nothing.
     .chars() hands back what a string is made of, as a char[], and is inverse to .str(), so
     the three ways of taking a string apart — foreach, a position, and the whole array — are
-    three shapes of one thing and agree about the count.  Still open: searching, decoding a
-    byte[], classification, and .ord() at compile time.
+    three shapes of one thing and agree about the count.
+
+[x] .ord() and the other conversions answer at compile time, so static_assert('a'.ord() == 97)
+    holds.  A member is constant when it answers about the value rather than doing something
+    with it: the conversions between a number, a character, and a string, and the queries
+    .sizeof and .alignof.  A method of a struct literal is excluded whatever it is called,
+    since what a function the program wrote does is not something the check knows.  A
+    conversion that cannot be made is then reported where it is written.  Still open:
+    searching, decoding a byte[], and classification.
 
 
 Data Structures

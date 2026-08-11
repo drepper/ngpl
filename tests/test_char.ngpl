@@ -510,6 +510,45 @@ fn error_a_string_has_no_other_method():
     let x : mut = "abc".nope()
 
 // ---------------------------------------------------------------------
+// What is known before anything runs
+// ---------------------------------------------------------------------
+//
+// The conversions say the same thing about the same value every time
+// they are asked, so on a constant they are constant.
+
+@test
+fn test_ord_at_compile_time():
+    static_assert('a'.ord() == 97)
+    static_assert('λ'.ord() == 955)
+    static_assert_eq('a'.ord(), 97)
+
+@test
+fn test_chr_at_compile_time():
+    static_assert((65).chr() == 'A')
+    static_assert((955).chr() == 'λ')
+
+@test
+fn test_the_conversions_compose_at_compile_time():
+    static_assert((97).chr().ord() == 97)
+    static_assert('a'.ord() + 1 == 98)
+
+@test
+fn test_str_and_chars_at_compile_time():
+    static_assert('a'.str() == "a")
+    static_assert_eq("ab".chars().sizeof, 2¤ptrdiff)
+
+@test
+fn test_what_a_conversion_answers_is_known_too():
+    static_assert_eq(@typeof('a'.ord()), u32)
+
+// A conversion that cannot be made is a mistake known at the same
+// time, so it is reported where it is written.
+@test
+@expect error "is past the last code point"
+fn error_a_constant_conversion_that_cannot_be_made():
+    static_assert((1114112).chr() == 'A')
+
+// ---------------------------------------------------------------------
 // Writing one out
 // ---------------------------------------------------------------------
 

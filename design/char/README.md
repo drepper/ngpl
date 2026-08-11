@@ -195,13 +195,6 @@ conversion where it happens:
 
 which is longer than `⧺⌿ codes` and says a thing that is true.
 
-## Status
-
-Implemented: the type, `foreach` over a string, `.ord()`, `.chr()` on
-every integer type, the three refusals, the definition-time check for a
-written negative, comparison by code point, formatting, literals,
-`⧺` between text, and `.str()`.
-
 ## Reading One by Position
 
 `s[i]` is the character at a position and `s[i…j]` the string between
@@ -242,12 +235,36 @@ gives all of them at once.  A program picks the shape that fits — a
 loop, a position, or an array to hand on — and the counts agree, since
 all three count characters.
 
+## Asking Before Anything Runs
+
+`static_assert('a'.ord() == 97)` had to work, and the question it
+raised was not about characters: a member call was not a constant
+expression at all, and which ones could be is a question about purity.
+
+The answer taken is narrow and stated as a property rather than a list
+of names.  A member is constant when it *answers about* the value
+rather than doing something with it — the conversions between a number,
+a character, and a string, and the queries `.sizeof` and `.alignof`.
+Each says the same thing about the same value every time it is asked,
+which is what a constant is.
+
+A method of a **struct literal** is excluded whatever it is called.  It
+is a function the program wrote; what it reads and whether it says the
+same thing twice are not things the check knows, and a compile-time
+evaluation of one would be running the program's code at a time the
+program did not ask for.
+
+A conversion that cannot be made is then a mistake known at the same
+time: `static_assert((1114112).chr() == 'A')` reports the code point
+rather than the assertion.
+
 ## Status
 
 Implemented: the type, `foreach` over a string, `.ord()`, `.chr()` on
 every integer type, the three refusals, the definition-time check for a
 written negative, comparison by code point, formatting, literals,
-`⧺` between text, `.str()`, `.chars()`, indexing, and slicing.
+`⧺` between text, `.str()`, `.chars()`, indexing, slicing, and the
+conversions at compile time.
 
 Not implemented:
 
@@ -257,8 +274,4 @@ Not implemented:
 - **Character classification** — whether a character is a digit, a
   letter, upper or lower case — which is a Unicode-table question
   rather than a language one.
-- **`.ord()` at compile time.**  `static_assert('a' < 'b')` holds,
-  since both sides are literals, but `static_assert('a'.ord() == 97)`
-  does not: a member call is not a constant expression, and deciding
-  which ones could be is a question about purity rather than about
-  characters.
+

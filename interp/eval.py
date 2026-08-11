@@ -298,7 +298,29 @@ def _is_const_expr(node) -> bool:
         return True
     if isinstance(node, UnitExpr):
         return _is_const_expr(node.expr)
+    if isinstance(node, GetAttr):
+        # A member that answers about the value rather than holding
+        # part of it: how many elements it has, and how it is laid out.
+        return (node.attr in _CONST_ATTRIBUTES
+                and not isinstance(node.obj, StructLit)
+                and _is_const_expr(node.obj))
+    if isinstance(node, MethodCall):
+        # A member function is constant where it says the same thing
+        # about the same value every time it is asked.  The conversions
+        # between a number, a character, and a string are those: each
+        # is total on what it accepts and reads nothing else.  A struct
+        # literal is excluded, since a method of one is a function the
+        # program wrote and may do anything.
+        return (node.method in _CONST_METHODS
+                and not isinstance(node.obj, StructLit)
+                and _is_const_expr(node.obj)
+                and all(_is_const_expr(a) for a in node.args))
     return False
+
+
+# Members a constant value answers constantly.
+_CONST_METHODS = frozenset({"ord", "chr", "str", "chars"})
+_CONST_ATTRIBUTES = frozenset({"sizeof", "alignof"})
 
 
 def _is_comptime_expr(node, comptime_vars: set[str]) -> bool:

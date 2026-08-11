@@ -4869,6 +4869,27 @@ static_assert_eq(@sizeof(a), 1 ¤byte)
 static_assert_eq(@unitof(a), @unitof(1))
 ```
 
+A member that answers *about* a constant is constant too.  Those are the conversions between a number, a character, and a string — `.ord()`, `.chr()`, `.str()`, `.chars()` — and the queries `.sizeof` and `.alignof`.  Each says the same thing about the same value every time it is asked, so it can be asked before anything runs:
+
+```
+static_assert('a'.ord() == 97)
+static_assert((65).chr() == 'A')
+static_assert((97).chr().ord() == 97)
+static_assert_eq("ab".chars().sizeof, 2 ¤ptrdiff)
+static_assert_eq(@typeof('a'.ord()), u32)
+```
+
+A conversion that cannot be made is a mistake known at the same time, and reported where it is written:
+
+```
+static_assert((1114112).chr() == 'A')
+
+error: chr: 1114112 is past the last code point, which is 1114111
+(0x10FFFF)
+```
+
+A method of a *struct literal* is not constant, whatever it is called: it is a function the program wrote, and what it does is not something the check knows.
+
 Because a declaration settles these, they are decided where they are written rather than when the code runs.  A wrong one is reported even in a function nothing calls:
 
 ```
