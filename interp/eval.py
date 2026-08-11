@@ -4621,7 +4621,12 @@ class Evaluator:
                 list(args),
                 [declared_rank(ptype) for _, ptype in func.params],
                 lambda sub: self._call_user_func(func, sub),
-                collect=func.ret_type != "\N{EMPTY SET}",
+                # A signature that states no return type hands nothing
+                # back -- which is what → ∅ says, and why writing it
+                # draws a warning.  There is nothing to collect either
+                # way, so nothing comes back rather than a row of ∅.
+                collect=(func.ret_type is not None
+                         and func.ret_type != "\N{EMPTY SET}"),
                 fallback_type=func.ret_type)
             if threaded is not None:
                 return threaded

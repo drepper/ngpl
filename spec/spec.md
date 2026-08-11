@@ -2162,6 +2162,8 @@ letter(v)                       /* char[3] */
 
 A `@listable` function's return type describes **one element's** result. Each element's call is checked against it on its own, and what the caller receives is a container of them.
 
+A signature stating no return type hands nothing back, which is what `→ ∅` says.  There is nothing to collect, so nothing comes back rather than a container of `∅`.
+
 #### What Is Refused
 
 Threading compares what a parameter asks for with what it is handed, so a function that cannot answer that comparison is refused where it is written rather than at the first call that goes wrong:

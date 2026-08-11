@@ -198,6 +198,20 @@ fn test_a_method():
     assert_eq(r[0], 101)
     assert_eq(r[2], 103)
 
+// A signature stating no return type hands nothing back, which is what
+// → ∅ says.  There is nothing to collect, so nothing comes back rather
+// than a row of ∅.
+@listable
+@impure
+fn note(n : i64):
+    std.print("")
+
+@test
+@impure
+fn test_a_function_that_hands_nothing_back():
+    let v : i64[] = [1, 2, 3]
+    assert(note(v) = ∅)
+
 // ---------------------------------------------------------------------
 // What it refuses
 // ---------------------------------------------------------------------
