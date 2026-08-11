@@ -1581,6 +1581,20 @@ def _negated_literals(body) -> set[int]:
             and isinstance(node.operand, _ast.IntLit)}
 
 
+def _needs_a_type(func_name: str, param_name: str) -> str:
+    """Say that a parameter has to state what it takes.
+
+    A signature is what a reader is given instead of the body, so a
+    parameter that says nothing about what it takes leaves them the
+    body to read.  Where the function genuinely takes whatever it is
+    handed, a generic says that -- and says it once, so the type
+    checker can hold the caller to it.
+    """
+    return (f"in {func_name}: parameter '{param_name}' states no type; "
+            f"every parameter states one, and a generic such as T\N{APOSTROPHE} "
+            f"says the function takes whatever it is handed")
+
+
 def _static_listable_check(func_def) -> str | None:
     """Refuse a @listable function that cannot be threaded.
 
@@ -1602,10 +1616,8 @@ def _static_listable_check(func_def) -> str | None:
                 f"no fixed positions")
     for param_name, param_type in func_def.params:
         display = _param_display(param_name)
-        if param_type is None:
-            return (f"{name} is @listable, but parameter '{display}' states "
-                    f"no type; what threading takes apart is decided by the "
-                    f"depth the type asks for, and this one asks for none")
+        # A parameter states a type wherever it is written, so there is
+        # no untyped one left for threading to be unable to measure.
         if display in func_def.param_refs:
             return (f"{name} is @listable, but parameter '{display}' is "
                     f"taken by reference; threading hands the function one "
@@ -1999,20 +2011,25 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                         raise DefinitionError(
                             f"in {defn.name}: '{one}' names a type and "
                             f"cannot name a parameter", _node_pos(defn))
-                if param_type is not None:
-                    try:
-                        validate_param_type(
-                            param_type, defn.name,
-                            _param_display(param_name))
-                    except TypeError as e:
-                        raise DefinitionError(str(e), _node_pos(defn)) from None
+                if param_type is None:
+                    raise DefinitionError(
+                        _needs_a_type(defn.name, _param_display(param_name)),
+                        _node_pos(defn))
+                try:
+                    validate_param_type(
+                        param_type, defn.name,
+                        _param_display(param_name))
+                except TypeError as e:
+                    raise DefinitionError(str(e), _node_pos(defn)) from None
             if defn.pack_param is not None:
                 pp_name, pp_type = defn.pack_param
-                if pp_type is not None:
-                    try:
-                        validate_param_type(pp_type, defn.name, pp_name)
-                    except TypeError as e:
-                        raise DefinitionError(str(e), _node_pos(defn)) from None
+                if pp_type is None:
+                    raise DefinitionError(
+                        _needs_a_type(defn.name, pp_name), _node_pos(defn))
+                try:
+                    validate_param_type(pp_type, defn.name, pp_name)
+                except TypeError as e:
+                    raise DefinitionError(str(e), _node_pos(defn)) from None
             if defn.ret_type is not None:
                 if not validate_type(defn.ret_type):
                     raise DefinitionError(
@@ -2059,6 +2076,15 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 program.warnings.extend(
                     _redundant_return_type_warning(method_def))
                 for param_name, param_type in method_def.params:
+                    # `self` names the receiver rather than stating what
+                    # it takes, so it is the one parameter with nothing
+                    # to say.
+                    if param_type is None and param_name != "self":
+                        raise DefinitionError(
+                            _needs_a_type(f"{defn.struct_name}."
+                                          f"{method_def.name}",
+                                          _param_display(param_name)),
+                            _node_pos(method_def))
                     if param_type is not None:
                         validate_param_type(param_type, method_def.name, param_name)
                 if method_def.ret_type is not None and not validate_type(method_def.ret_type):

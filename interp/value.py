@@ -19,6 +19,10 @@ BUILTIN_TYPES: set[str] = {
     "i8fast", "u8fast", "i16fast", "u16fast",
     "i32fast", "u32fast", "i64fast", "u64fast",
     "f16", "f32", "f64", "bfloat16", "float",
+    # Everything that can be called answers to one name, so a generic
+    # that meets a named function in one place and a lambda in another
+    # is not told they are two different types.
+    "fn",
 }
 
 # Platform-specific fast type mapping (x86_64: sub-32 → 32, 32/64 → 64).
@@ -1564,6 +1568,11 @@ def runtime_type_of(value: "Value") -> str:
         if isinstance(value.obj, ArrayValue):
             et = value.obj.element_type or "int"
             return et + "[]"
+        # Something the runtime holds that a program cannot write a
+        # type for -- a file, a directory, an arena.  It answers with
+        # what it is rather than with "int", which was a lie wherever
+        # this reached a diagnostic.
+        return type(value.obj).__name__
     if isinstance(value, EnumValue):
         return value.enum_type.name
     if isinstance(value, TupleValue):
@@ -1573,6 +1582,9 @@ def runtime_type_of(value: "Value") -> str:
                                for e in value.elements) + ")"
     if isinstance(value, TypeValue):
         return "type"
+    if isinstance(value, (FuncValue, LambdaValue, BuiltinFunc,
+                          BuiltinBoundMethod)):
+        return "fn"
     return "int"
 
 
@@ -1994,6 +2006,13 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
     none, and parting with it has to be said.
     """
     param_type = resolve_type_alias(param_type)
+    if is_generic_type(param_type) and _parse_array_type(param_type) is None \
+            and parse_tuple_type(param_type) is None:
+        # A parameter that is nothing but a generic takes the value as
+        # it is, unit and all: what it says about the argument is that
+        # every position naming the same generic sees the same type,
+        # which is settled before this.
+        return value
     if unit is not None:
         # The parameter states the unit, so what arrives measured is
         # what it asked for; the type describes what holds the number.
@@ -2027,6 +2046,14 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
         except TypeError as e:
             raise TypeError(
                 f"{func_name}: argument '{param_name}': {e}") from None
+
+    if param_type == "fn":
+        if not isinstance(value, (FuncValue, LambdaValue, BuiltinFunc,
+                                  BuiltinBoundMethod)):
+            raise TypeError(
+                f"{func_name}: argument '{param_name}' expected a function, "
+                f"got {runtime_type_of(value)}")
+        return value
 
     if param_type == "bool":
         if not isinstance(value, BoolValue):

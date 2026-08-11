@@ -95,7 +95,7 @@ fn test_returned_file_survives():
 // A parameter is borrowed, not owned
 // ---------------------------------------------------------------------
 
-fn borrows(f) → bool:
+fn borrows(f : F') → bool:
     f.is_closed
 
 // The callee's scope ending must not close the caller's file.

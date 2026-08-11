@@ -114,8 +114,8 @@ fn test_scalar_parameter_refuses_an_array():
 // the signature and the brackets settle it between them and it is
 // reported at the definition, so that case is in
 // tests/output/array_return_type_static.ngpl rather than here.  What
-// is left to run is a value whose shape is not written down:
-fn hands_back_what_it_was_given(a) → u32:
+// is left to run is a value whose shape the parameter does not fix:
+fn hands_back_what_it_was_given(a : T') → u32:
     a
 
 @test

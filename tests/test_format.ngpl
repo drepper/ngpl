@@ -1,4 +1,4 @@
-// Tests for std.format(allocator, fmt_str, args…) and the format
+// Tests for std.format(allocator, fmt_str, args… : T') and the format
 // specifiers it reads.  std.print reads the same specifiers, so what
 // is checked here holds for the printed form too.
 

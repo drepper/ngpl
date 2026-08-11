@@ -108,11 +108,15 @@ fn test_measured_local_keeps_its_unit():
     static_assert_eq(@unitof(d), @unitof(1 ¤meter))
     static_assert_eq(@sizeof(d), 4 ¤byte)
 
-// A name whose type cannot be stood for is left to run, so nothing is
-// claimed about it here.
-@test
-fn test_untyped_name_is_left_alone(x):
+// A name whose type is not known until the call is left to run, so
+// nothing is claimed about it here.
+fn generic_name_is_left_alone(x : T') → bool:
     static_assert_eq(@typeof(x), @typeof(x))
+    true
+
+@test
+fn test_generic_name_is_left_alone():
+    assert(generic_name_is_left_alone(1i64))
 
 @test
 fn test_array_local_is_left_alone():

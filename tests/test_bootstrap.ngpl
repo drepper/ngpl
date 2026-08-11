@@ -289,7 +289,7 @@ fn error_untyped_argument_to_a_builtin():
 fn error_untyped_argument_to_an_assertion():
     assert_eq(2 ↑ 200, 0)
 
-fn takes_anything(x) → i64:
+fn takes_anything(x : T') → i64:
     1i64
 
 @test

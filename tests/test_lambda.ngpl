@@ -40,7 +40,7 @@ fn test_lambda_builtin_access():
   assert_eq(10, f(4, 6))
 
 // Lambda as argument to another function
-fn apply(f, x: i32) → i32:
+fn apply(f : F', x: i32) → i32:
   f(x)
 
 @test

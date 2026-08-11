@@ -1,7 +1,0 @@
-@listable
-fn f(x) → i64:
-    x
-
-@start
-fn main():
-    ∅

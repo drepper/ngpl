@@ -444,10 +444,10 @@ fn match_with_wildcard(x : i64?):
         _:
             std.println("anything")
 
-// An untyped parameter says nothing, so nothing is claimed about it and
-// the match is left to run.
+// A generic says only that the function takes whatever it is handed,
+// so nothing is claimed about the subject and the match is left to run.
 @impure
-fn untyped_subject(x):
+fn untyped_subject(x : T'):
     match x:
         ∃(v):
             std.println("{}", v)

@@ -1,0 +1,6 @@
+fn twice(x) → i64:
+    x × 2
+
+@start
+fn main():
+    ∅

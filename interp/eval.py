@@ -42,7 +42,7 @@ from interp.value import (
     _split_optional_type, _parse_array_type, MAX_TENSOR_RANK, array_shape,
     int_limits, float_limits, resolve_type_alias,
     format_shape, _array_type_name, array_type_mismatch,
-    is_generic_type, runtime_type_of, is_type_name, _is_unsigned,
+    is_generic_type, runtime_type_of, is_type_name, _is_unsigned, validate_type,
     declared_rank, value_rank, threaded_array,
     check_bootstrap_argument, check_bootstrap_type,
     check_bootstrap_binding,
@@ -654,6 +654,12 @@ def _extract_generic_name(type_str: str) -> str | None:
     if base.endswith("\N{APOSTROPHE}") and len(base) > 1:
         return base
     return None
+
+
+def _is_bare_generic(type_name: str) -> bool:
+    """Whether a type is nothing but a generic name, as T' is."""
+    import re
+    return re.fullmatch(r"\w+'", type_name) is not None
 
 
 def _resolve_concrete_for_generic(param_type: str, arg: Value) -> str:
@@ -4838,14 +4844,37 @@ class Evaluator:
                 else:
                     generic_map[gname] = concrete
 
+            # A generic binds to whatever it was handed, and some of
+            # what a program can hold has no type that can be written
+            # down -- a file, a directory, an arena.  The binding still
+            # holds the generic to one of them across every position,
+            # which is what a generic promises; what it cannot do is
+            # put the name in place of the generic, since there is no
+            # such name to write.  So only a type a program could have
+            # written is substituted, and the rest stay generic, which
+            # is what a generic parameter accepts anyway.
+            written = {g: c for g, c in generic_map.items() if validate_type(c)}
+            # A parameter that is nothing but a generic keeps it.
+            # Saying T' is saying "whatever this is", so putting
+            # the bound type in its place would have the argument
+            # measured against a type nobody wrote -- and refused for
+            # carrying a unit, or for being a file, or for being any of
+            # the things whose type cannot be written down.  A type
+            # built *around* a generic, T'[], does state something of
+            # its own, so it is filled in and the shape is checked.
             resolved_params = [
-                (n, _substitute_generics(t, generic_map) if t else t)
+                (n, t if t is not None and _is_bare_generic(t)
+                    else (_substitute_generics(t, written) if t else t))
                 for n, t in func.params
             ]
-            if func.ret_type is not None:
-                resolved_ret_type = _substitute_generics(func.ret_type, generic_map)
+            if func.ret_type is not None \
+                    and not _is_bare_generic(func.ret_type):
+                # A return type that is nothing but a generic says the
+                # function hands back what it was given, so it is left
+                # alone for the same reason the parameter is.
+                resolved_ret_type = _substitute_generics(func.ret_type, written)
             if resolved_pack_type is not None:
-                resolved_pack_type = _substitute_generics(resolved_pack_type, generic_map)
+                resolved_pack_type = _substitute_generics(resolved_pack_type, written)
 
         call_env = func.env.copy_for_call()
         for (param_name, param_type), arg_value in zip(resolved_params, regular_args):
@@ -4914,10 +4943,10 @@ class Evaluator:
                 else:
                     arg_value = coerce_arg(arg_value, param_type,
                                            func.name, param_name)
-            else:
-                # A parameter that states no type settles nothing, so
-                # what arrives has to be a number some sized type could
-                # hold.
+            if param_type is None or _is_bare_generic(param_type):
+                # A generic settles nothing either -- it takes the value
+                # as it is -- so what arrives still has to be a number
+                # some sized type could hold.
                 check_bootstrap_argument(
                     arg_value, f"{func.name}: parameter '{param_name}'")
             call_env.define(param_name, arg_value)
@@ -5140,6 +5169,10 @@ class Evaluator:
         base, opt_err = _split_optional_type(ret_type)
         check = base if opt_err is not None else ret_type
         if not check or check == "\N{EMPTY SET}":
+            return result
+        if _is_bare_generic(check):
+            # The type says the function hands back what it was given,
+            # so what came back is what was promised, unit and all.
             return result
         inner = result
         rewrap = None

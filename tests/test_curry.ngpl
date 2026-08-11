@@ -80,7 +80,7 @@ fn test_curry_lambda_with_capture():
 // --- Curried functions as first-class values ---
 
 // Pass a curried function to another function.
-fn apply_and_sum(f, arr : i64[]) → i64:
+fn apply_and_sum(f : F', arr : i64[]) → i64:
     let total : mut i64 = 0
     foreach v := arr:
         total ← total + f(v)

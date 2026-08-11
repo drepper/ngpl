@@ -8,14 +8,14 @@ fn ct_sum(args… : i64) → i64:
     s
 
 // Count elements via comptime foreach.
-fn ct_count(args…) → i64:
+fn ct_count(args… : T') → i64:
     let n : mut i64 = 0
     comptime foreach v := args:
         n ← n + 1
     n
 
 // Apply a function to each pack element.
-fn apply_each(f, args… : i64) → i64:
+fn apply_each(f : F', args… : i64) → i64:
     let s : mut i64 = 0
     comptime foreach v := args:
         s ← s + f(v)
@@ -68,7 +68,7 @@ fn test_ct_enumerate():
     assert_eq(indexed_sum(10, 20, 30), 10 × 1 + 20 × 2 + 30 × 3)
 
 // Heterogeneous pack: each iteration sees a different type.
-fn hetero_count(args…) → i64:
+fn hetero_count(args… : T') → i64:
     let ints : mut i64 = 0
     let strs : mut i64 = 0
     comptime foreach v := args:
@@ -83,7 +83,7 @@ fn test_ct_hetero_types():
     assert_eq(hetero_count(1, "a", 2, "b", "c"), 20 + 3)
 
 // Empty pack produces zero iterations.
-fn ct_empty(args…) → i64:
+fn ct_empty(args… : T') → i64:
     let ran : mut i64 = 0
     comptime foreach v := args:
         ran ← 1

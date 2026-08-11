@@ -71,7 +71,7 @@ fn test_unitof_foreach_stepped():
 
 // --- @sizeof on parameter packs ---
 
-fn sizeof_pack_param(args…) → i64:
+fn sizeof_pack_param(args… : T') → i64:
     @dropunit(@sizeof(args))
 
 @test
@@ -81,7 +81,7 @@ fn test_sizeof_pack_param():
 
 // --- @typeof in comptime foreach ---
 
-fn comptime_typeof(args…) → i64:
+fn comptime_typeof(args… : T') → i64:
     let count : mut i64 = 0
     comptime foreach v := args:
         if @typeof(v) = @typeof(0):

@@ -137,3 +137,59 @@ fn test_local_type_alias_generic_array():
 @impure
 fn main():
     std.println("generic tests passed")
+
+// ---------------------------------------------------------------------
+// Every parameter states what it takes
+// ---------------------------------------------------------------------
+//
+// A signature is what a reader is given instead of the body, so a
+// parameter that says nothing about what it takes leaves them the body
+// to read.  Where a function genuinely takes whatever it is handed, a
+// generic says that -- and says it once, so the caller can be held to
+// it.
+
+// A generic takes the value as it is, which is the whole of what it
+// says: a measured number keeps its unit, and a function is a value
+// like any other.
+fn given_back(x : T') → T':
+    x
+
+@test
+fn test_a_generic_takes_a_measured_number():
+    let d ¤meter : i64 = 5
+    let back := given_back(d)
+    assert_eq(back, 5¤meter)
+    assert_eq(@unitof(back), ¤meter)
+
+fn calls_it(f : F', n : i32) → i32:
+    f(n)
+
+@test
+fn test_a_generic_takes_a_function():
+    let double := λa : i32 → i32: a × 2
+    assert_eq(calls_it(double, 21), 42)
+
+// One generic in two places is a promise that both are the same type.
+fn both(a : T', b : T') → T':
+    a
+
+@test
+@expect error "generic type T' resolved to"
+fn error_one_generic_two_types():
+    let n : mut = both(1i64, "two")
+
+// Two generics say nothing about each other.
+fn either(a : A', b : B') → A':
+    a
+
+@test
+fn test_two_generics_need_not_agree():
+    assert_eq(either(1i64, "two"), 1)
+
+// A pack states what it takes as any parameter does.
+fn how_many(args… : T') → i64:
+    @dropunit(args.sizeof)
+
+@test
+fn test_a_pack_states_a_type():
+    assert_eq(how_many(1, 2, 3), 3)

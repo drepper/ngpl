@@ -26,7 +26,7 @@ fn len_dyn(a : i32[]) → i32:
 // There is no parameter syntax for a second dimension, so a matrix
 // arrives either through a dynamic parameter -- whose length is the
 // number of rows -- or through an untyped one.
-fn sum_matrix(m) → i32:
+fn sum_matrix(m : i32[,]) → i32:
     let t : mut i64 = 0
     foreach r := m:
         foreach x := r:

@@ -49,7 +49,7 @@ fn test_immutable_param():
     assert_eq(v, 5)
 
 // Untyped parameter is also immutable.
-fn identity(x) → i32:
+fn identity(x : i32) → i32:
     x
 
 @test
@@ -107,7 +107,7 @@ fn test_nested_element_of_mut_array():
 
 // A parameter is an immutable binding too, so its elements are
 // protected until it is declared mut.
-fn writes_to_parameter(arr):
+fn writes_to_parameter(arr : i32[]):
     arr[0] ← 9
 
 @expect error "cannot assign to element of let variable 'arr'"

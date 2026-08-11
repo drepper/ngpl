@@ -3,7 +3,7 @@
 // Untyped, so a measured value reaches it with its unit intact
 // and the comparison below checks the unit as well as the number.
 @impure
-fn assert_eq_int(a, b, msg:str):
+fn assert_eq_int(a : A', b : B', msg:str):
   if a ≠ b:
     std.println("FAIL: {} (got {} expected {})", msg, a, b)
 

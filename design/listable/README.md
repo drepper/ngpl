@@ -133,10 +133,6 @@ Threading compares what a parameter asks for with what it is handed, so
 a function that cannot answer that comparison is refused at its
 definition rather than at the first call that goes wrong:
 
-- **an untyped parameter** — the depth the type asks for is what
-  decides, and none is stated.  The permissive reading, treating it as
-  wanting one element, was considered and dropped: it leaves a function
-  that genuinely means to take a whole array no way to say so.
 - **a by-reference parameter** — an element handed to the function is
   not a place it can write back to.
 - **a parameter pack** — threading decides one position at a time, and

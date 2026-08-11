@@ -119,7 +119,7 @@ let t := (1i64, "two")            // each number says what it is
 
 A tuple handed back by the standard library arrives with its numbers already sized, since nothing the program could write would say what they are: `std.callstack()` gives `(str, i64, i64)`.
 
-The last place a number can arrive without anything to settle it is an argument to something that states no parameter type — a standard-library call, or a function with an untyped parameter.  There the value has to be one some sized type could hold:
+The last place a number can arrive without anything to settle it is an argument to something that settles nothing — a standard-library call, or a parameter whose type is a bare generic.  There the value has to be one some sized type could hold:
 
 ```
 std.println("{}", 2 ↑ 200)
@@ -1943,7 +1943,7 @@ fn main():                               /* no parameters */
 fn add(a : int, b : int) → int:              /* two typed parameters */
     a + b
 
-fn identity(x) → int:                        /* untyped parameter */
+fn identity(x : T') → int:                  /* takes whatever it is handed */
     x
 
 fn sha256(data : byte[]) → int?:             /* dynamic array parameter */
@@ -2170,7 +2170,6 @@ Threading compares what a parameter asks for with what it is handed, so a functi
 
 | Refused | Why |
 |---------|-----|
-| an untyped parameter | the depth the type asks for is what decides; none is stated |
 | a by-reference parameter | an element handed to the function is not a place it can write back to |
 | a parameter pack | threading decides one position at a time, and a pack has no fixed positions |
 | no parameters at all | there is nothing to thread over |
@@ -3225,7 +3224,21 @@ Division returning an expected value rather than panicking reflects the language
 
 ### Function Parameter Types
 
-Function parameters can be annotated with a type using the `name : type` syntax.  When a type annotation is present, the interpreter enforces type compatibility at each call site: arguments are coerced to the declared type, and a type mismatch is a runtime error.  Parameters without type annotations accept any value.
+Every function parameter states a type, written `name : type`.  Arguments are measured against it at each call site: they are coerced to the declared type where the type admits them, and refused where it does not.
+
+A signature is what a reader is given instead of the body, so a parameter that said nothing about what it takes left them the body to read.  Where a function genuinely takes whatever it is handed, a generic says so — and says it once, so the caller can be held to it:
+
+```
+fn twice(x) → i64:
+
+error: in twice: parameter 'x' states no type; every parameter states
+one, and a generic such as T' says the function takes whatever it is
+handed
+```
+
+`self` is the exception, naming the receiver rather than stating what it takes.  A parameter pack states a type as any other parameter does.
+
+A parameter that is *nothing but* a generic takes the value as it is: a measured number keeps its unit, a function is a value like any other, and so is anything the runtime holds whose type cannot be written down.  What the generic promises is that every position naming it sees the same type.  A type built *around* a generic — `T'[]` — does state something of its own, so the shape is still checked.
 
 #### Valid Parameter Types
 
@@ -3279,7 +3292,7 @@ In `get_padded_byte`, the `data` parameter is typed as `byte[]` (a dynamic byte 
 
 #### Design Rationale
 
-Parameter type enforcement catches type errors early and enables the interpreter to coerce values to the correct width automatically.  Leaving the type annotation optional preserves the scripting-mode flexibility: untyped parameters accept any value, which is useful for generic functions and for parameters whose types are not yet part of the built-in set (such as user-defined structs or standard library objects like `Bytes`).
+Parameter type enforcement catches type errors early and lets the interpreter coerce values to the correct width automatically.  Requiring the annotation is what makes a signature answer the question a reader brings to it; a generic covers what an omitted type used to cover, and covers it better, since `T'` in two positions says the two agree where two omissions said nothing at all.
 
 | Feature | Rust | Zig | Python | NGPL |
 |---------|------|-----|--------|---------------|
@@ -3307,7 +3320,7 @@ fn increment(x : mut i32) → i32:
     x
 ```
 
-Parameters without a type annotation are also immutable — there is no way to mark an untyped parameter as mutable (add a type annotation if mutation is needed).
+A parameter whose type is a bare generic is immutable: `mut` is written against a stated type.
 
 Immutability covers what the parameter names, not only the name, so writing to an element of an array parameter needs `mut` as much as reassigning it does:
 

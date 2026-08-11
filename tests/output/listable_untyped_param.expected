@@ -1,7 +1,0 @@
-error: f is @listable, but parameter 'x' states no type; what threading takes apart is decided by the depth the type asks for, and this one asks for none
-  --> tests/output/listable_untyped_param.ngpl:2:1
-    |
-  2 | fn f(x) → i64:
-    | ^^
-  3 |     x
-    |

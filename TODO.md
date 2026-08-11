@@ -190,6 +190,23 @@ Completed
     definition's = -- let x : i64!= 10 -- is refused as it was before, != having been a single
     token then as well.
 
+[x] every function parameter states a type.  A signature is what a reader is given instead of
+    the body, so a parameter that said nothing about what it takes left them the body to read.
+    A generic covers what an omitted type used to cover and covers it better: T' in two
+    positions says the two agree, where two omissions said nothing at all.  `self` is the
+    exception, naming the receiver rather than stating what it takes; a pack states a type as
+    any parameter does.  A lambda already required one, so this brings named functions and
+    methods into line with them rather than inventing a rule.
+
+    A generic had to be made able to hold what an untyped parameter used to hold, which it
+    could not: it resolved through runtime_type_of, whose fallback answered "int" for anything
+    it did not recognise, so a function, a file or an arena bound the generic to i64 and was
+    then refused for not being one.  A parameter that is nothing but a generic now takes the
+    value as it is -- unit and all -- and only a type built around a generic, T'[], is filled
+    in, since that one states something of its own.  Everything callable answers to one name,
+    fn, so a generic meeting a named function in one place and a lambda in another is not told
+    they are two types.
+
 [x] an array holds one type of value and one unit, both fixed where it is declared.  Nothing
     remembered a declaration before: the environment stored values alone and the type and unit
     a definition wrote down were used once and dropped, so every later check re-derived what a

@@ -278,13 +278,13 @@ fn first_of_pair((a, b) : (i64, str)) → i64:
 fn test_a_destructured_parameter():
     assert_eq(first_of_pair((1, "two")), 1)
 
-// The type may be left off, as at any other parameter; what arrives
-// then has to be a tuple of the right size.
-fn sum_of_pair((a, b)) → i64:
+// A parameter that names the elements states its type as any other
+// parameter does, and the type is the tuple's.
+fn sum_of_pair((a, b) : (i64, i64)) → i64:
     a + b
 
 @test
-fn test_an_untyped_destructured_parameter():
+fn test_a_destructured_parameter_states_its_type():
     assert_eq(sum_of_pair((3i64, 4i64)), 7)
 
 // The stated type settles the elements before they are named.
@@ -317,15 +317,15 @@ fn test_a_destructured_lambda_parameter():
 // --- what a destructured parameter refuses ---
 
 @test
-@expect error "names the elements of a tuple, but the argument is"
+@expect error "is a tuple type, but the value is"
 fn error_argument_is_not_a_tuple():
     let n : i64 = sum_of_pair(5i64)
 
-fn wants_three((a, b, c)) → i64:
+fn wants_three((a, b, c) : (i64, i64, i64)) → i64:
     a
 
 @test
-@expect error "names 3 elements, but the argument has 2"
+@expect error "has 3 elements, but the value has 2"
 fn error_argument_has_the_wrong_number_of_elements():
     let n : i64 = wants_three((1i64, 2i64))
 
