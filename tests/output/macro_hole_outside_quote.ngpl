@@ -1,0 +1,7 @@
+// $ puts a value into a piece of program held between ⟪ and ⟫, and
+// there is no piece of program here.
+@start
+@impure
+fn main():
+    let x : i64 = 1
+    std.println("{}", $x)

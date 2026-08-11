@@ -1,0 +1,8 @@
+// The macro takes two pieces of the program and is invoked with one.
+macro pair(a : syntax, b : syntax) → syntax:
+    ⟪$a + $b⟫
+
+@start
+@impure
+fn main():
+    std.println("{}", pair⟦1i64⟧)

@@ -9,6 +9,8 @@ from collections import defaultdict
 
 from interp.lexer import tokenize, process_indentation
 from interp.parser import Parser
+from interp.macros import (collect as macro_collect,
+                           expand_definitions as macro_expand, MacroError)
 from interp.env import Env, Decl
 from interp.ast import (
     FuncDef as ASTFuncDef, EnumDef as ASTEnumDef, UnitDef as ASTUnitDef,
@@ -2063,12 +2065,57 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
     """
     program = LoadedProgram()
     try:
+        # Macros first and on their own: what the checks read is the
+        # program with no macro left in it.
+        try:
+            macros = macro_collect(definitions)
+            macro_expand(definitions, macros,
+                         _macro_runner(macros, env, evaluator))
+        except MacroError as e:
+            raise DefinitionError(str(e), getattr(e, "pos", None)) from e
         _install_definitions(definitions, env, evaluator, program,
                              honor_start=honor_start)
     except DefinitionError as e:
         e.warnings = program.warnings
         raise
     return program
+
+
+def _macro_runner(macros: dict, env: Env, evaluator: Evaluator):
+    """A way to run one macro, for the expansion pass to call.
+
+    The macros are installed in an environment of their own, above the
+    global one, so a macro can call another macro's function and can
+    reach std, and so nothing it defines lands among the program's own
+    names.  The program's functions are not there: they are installed
+    after expansion, because expansion is what decides what they say.
+    """
+    macro_env = Env(parent=env)
+    made: dict[str, FuncValue] = {}
+    for name, defn in macros.items():
+        func = defn.func
+        made[name] = FuncValue(
+            func.name, func.params, func.body, macro_env, func.ret_type,
+            func.is_replaceable, func.pack_param, func.param_units,
+            func.is_impure, param_refs=func.param_refs,
+            param_muts=func.param_muts, ret_unit=func.ret_unit,
+            is_listable=func.is_listable, is_noreturn=func.is_noreturn,
+            preconditions=func.preconditions,
+            postconditions=func.postconditions)
+        macro_env.define(name, made[name])
+
+    def run(macro, args, call):
+        try:
+            return evaluator._call_user_func(made[macro.name], args)
+        except MacroError:
+            raise
+        except Exception as e:
+            raise MacroError(
+                f"{macro.name} could not be run: "
+                f"{strip_position_prefix(str(e))}",
+                getattr(call, "pos", None)) from e
+
+    return run
 
 
 def _install_definitions(definitions, env: Env, evaluator: Evaluator,

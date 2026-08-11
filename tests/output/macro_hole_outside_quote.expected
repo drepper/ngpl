@@ -1,0 +1,6 @@
+error: $ puts a value into a piece of program held between ⟪ and ⟫, and there is none here
+  --> tests/output/macro_hole_outside_quote.ngpl:7:23
+    |
+  7 |     std.println("{}", $x)
+    |                       ^
+    |

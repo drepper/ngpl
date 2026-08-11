@@ -26,6 +26,7 @@ from interp.ast import (
     UnitOfExpr, UnitRefExpr,
     StructDef, ImplBlock, StructLit,
     MatchStmt, MatchArm, ExpErr,
+    MacroDef, MacroCall, Quote, Splice,
     set_pos,
 )
 from interp.lexer import Token, KEYWORDS
@@ -36,7 +37,7 @@ from interp.lexer import Token, KEYWORDS
 DEFINITION_STARTERS = frozenset({
     "START", "REPLACEABLE", "TEST", "FLAG", "IMPURE", "EXPECT", "REPR",
     "HOT", "COLD", "LISTABLE", "NORETURN", "PRE", "POST",
-    "ENUM", "STRUCT", "IMPL", "UNIT", "TYPE", "FN", "LET",
+    "ENUM", "STRUCT", "IMPL", "UNIT", "TYPE", "FN", "LET", "MACRO",
 })
 
 
@@ -118,6 +119,9 @@ class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
         self.pos = 0
+        # Whether what is being parsed is held rather than run, which
+        # is the only place a $ may put a value back.
+        self._in_quote = False
 
     def _set_pos(self, node, tok):
         """Attach source position from a token to an AST node."""
@@ -438,6 +442,9 @@ class Parser:
         if self._check("IMPL"):
             return self._parse_impl_block()
 
+        if self._check("MACRO"):
+            return self._parse_macro_def()
+
         if self._check("UNIT"):
             return self._parse_unit_def()
 
@@ -461,6 +468,46 @@ class Parser:
                 f"got {self._tok_display(self._cur())}",
                 self._cur())
 
+    def _parse_macro_def(self):
+        """Parse `macro NAME(params) \u2192 syntax:` and its body.
+
+        A macro is written as a function is, because it is one: what
+        differs is when it runs and what it is handed, not how it is
+        read.
+        """
+        macro_tok = self._cur()
+        func = self._parse_function_def(False, keyword="MACRO")
+        return self._set_pos(MacroDef(func.name, func), macro_tok)
+
+    def _parse_quote(self):
+        """Parse `\u27ea \u2026 \u27eb` -- a piece of program held rather than run.
+
+        Written on one line it holds an expression; written with its
+        contents indented under the opening bracket it holds
+        statements, which is what a macro that writes a block answers.
+        """
+        open_tok = self._eat("PUNCT", "\u27ea")
+        saved = self._in_quote
+        self._in_quote = True
+        try:
+            if self._check("NEWLINE"):
+                self._skip_nl()
+                self._eat("INDENT")
+                body = []
+                while not self._check("DEDENT", "EOF"):
+                    if self._try_eat("NEWLINE"):
+                        continue
+                    body.append(self._parse_statement())
+                self._try_eat("DEDENT")
+                self._skip_nl()
+                self._eat("PUNCT", "\u27eb")
+                return self._set_pos(Quote(body, is_block=True), open_tok)
+            tree = self._parse_or_expr()
+        finally:
+            self._in_quote = saved
+        self._eat("PUNCT", "\u27eb")
+        return self._set_pos(Quote(tree), open_tok)
+
     def _parse_function_def(self, is_start, is_test=False, test_refs=None,
                             expect_annotations: list[tuple[str, str]] | None = None,
                             is_replaceable: bool = False,
@@ -470,7 +517,8 @@ class Parser:
                             is_listable: bool = False,
                             is_noreturn: bool = False,
                             preconditions: list | None = None,
-                            postconditions: list | None = None):
+                            postconditions: list | None = None,
+                            keyword: str = "FN"):
         """Parse: fn name '(' [params] ')' ('->' ret_type)? block
 
         The parameter list is enclosed in parentheses.  An empty parameter
@@ -482,7 +530,7 @@ class Parser:
 
         When struct_name is set, handles self / mut self as the first parameter.
         """
-        kw_tok = self._eat("FN")
+        kw_tok = self._eat(keyword)
         name_tok = self._eat("IDENT")
         name = name_tok.value
 
@@ -1436,7 +1484,8 @@ class Parser:
         # stores, which is what lets the same glyph be the operator: a
         # statement is an assignment when it holds a ←, and anything
         # else beginning with a name is an expression.
-        if self._check("IDENT") or (self._check("PUNCT") and self._cur().value == "("):
+        if self._check("IDENT") or (self._check("PUNCT")
+                                    and self._cur().value in ("(", "$")):
             saved_pos = self.pos
             bracket_depth = 0
             found_assign_op = None
@@ -2488,10 +2537,50 @@ class Parser:
                 raise ParseError("static_assert_eq requires exactly 2 arguments", tok)
             return self._set_pos(StaticAssertEq(args[0], args[1]), tok)
 
+        # \u27ea \u2026 \u27eb -- a piece of program held rather than run.
+        if tok.type == "PUNCT" and tok.value == "\u27ea":
+            return self._parse_postfix(self._parse_quote())
+
+        # $e inside one -- put what e answers into the tree here.
+        if tok.type == "PUNCT" and tok.value == "$":
+            if not self._in_quote:
+                raise ParseError(
+                    "$ puts a value into a piece of program held between "
+                    "\u27ea and \u27eb, and there is none here", tok)
+            self.pos += 1
+            saved = self._in_quote
+            self._in_quote = False
+            try:
+                if self._check("PUNCT") and self._cur().value == "(":
+                    self._eat("PUNCT", "(")
+                    inner = self._parse_or_expr()
+                    self._eat("PUNCT", ")")
+                else:
+                    inner = self._set_pos(VarRef(self._eat("IDENT").value),
+                                          tok)
+            finally:
+                self._in_quote = saved
+            return self._set_pos(Splice(inner), tok)
+
         # Identifier (possibly function call, possibly followed by dotted chain).
         if tok.type == "IDENT":
             self.pos += 1
             name = tok.value
+
+            # name\u27e6\u2026\u27e7 -- a macro, which is not a call: what is written
+            # between the brackets is handed over as it is written.
+            if self._check("PUNCT") and self._cur().value == "\u27e6":
+                self.pos += 1
+                args = []
+                self._skip_nl()
+                if not (self._check("PUNCT") and self._cur().value == "\u27e7"):
+                    args.append(self._parse_or_expr())
+                    while self._try_eat("PUNCT", ","):
+                        self._skip_nl()
+                        args.append(self._parse_or_expr())
+                self._skip_nl()
+                self._eat("PUNCT", "\u27e7")
+                return self._set_pos(MacroCall(name, args), tok)
 
             # Check for function call: name(...)
             if (self._cur().type == "PUNCT" and self._cur().value == "("):

@@ -1,0 +1,10 @@
+// A macro that writes statements, written where a value is wanted.
+macro note(x : syntax) → syntax:
+    ⟪
+        let seen : i64 = $x
+    ⟫
+
+@start
+@impure
+fn main():
+    std.println("{}", note⟦1i64⟧)

@@ -1,0 +1,5 @@
+// ⟦ … ⟧ invokes a macro, and no macro of this name is defined.
+@start
+@impure
+fn main():
+    std.println("{}", nosuch⟦1i64⟧)

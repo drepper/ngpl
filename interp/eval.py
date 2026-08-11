@@ -26,6 +26,7 @@ from interp.ast import (
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr, SumTypeDef,
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     HashLit, SetLit, EmptyCollectionLit, BreakStmt, ContinueStmt,
+    Quote, Splice,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
     OperatorRef,
     UnitExpr, UnitOfExpr, UnitRefExpr, RefExpr, BorrowExpr, TypeDef,
@@ -54,6 +55,7 @@ from interp.value import (
     UnitValue, RefValue, Reference, ElementRef, Iterator, ArrayIterator,
     deep_copy_value, register_type_alias, DISCARD_NAME,
     register_sum_type, sum_type_alternatives, sum_type_admits,
+    SyntaxValue,
 )
 from interp.env import Env, Decl
 from interp.std import (std, DirFD, FileStream, Bytes, MmapAllocator,
@@ -62,6 +64,31 @@ from interp.errors import (attach_backtrace, diagnostic_level,
                           strip_position_prefix, ContractError,
                           contract_semantic, report_runtime_diagnostic,
                           ProgramAbort)
+
+
+# What a piece of the program says it is.  The parse tree's own class
+# names are an implementation detail; these are what a program reads.
+_SYNTAX_KINDS = {
+    "IntLit": "number", "FloatLit": "number", "StrLit": "string",
+    "CharLit": "character", "BoolLit": "truth", "NoneLit": "nothing",
+    "VarRef": "name", "GetAttr": "name", "BinOp": "operator",
+    "UnaryOp": "operator", "FuncCall": "call", "MethodCall": "call",
+    "ArrayLit": "array", "TupleLit": "tuple", "LambdaExpr": "function",
+}
+
+
+def _factors_of(node) -> list:
+    """The factors of a product, flattened however the parser nested them.
+
+    `a × b × c` is read as `(a × b) × c`, and what a reader means by
+    "the factors" is the three of them.  Anything that is not a product
+    is one factor, which is itself.
+    """
+    from interp.ast import BinOp as _BinOp
+
+    if isinstance(node, _BinOp) and node.op == "\N{MULTIPLICATION SIGN}":
+        return _factors_of(node.left) + _factors_of(node.right)
+    return [node]
 
 
 # An empty array disagrees with no unit, so it stands in for whatever
@@ -1927,6 +1954,106 @@ class Evaluator:
             return
         raise ContractError(message, condition.pos)
 
+    @staticmethod
+    def _ast_fields(node) -> tuple[str, ...]:
+        """The names of what a node holds, however the node stores them."""
+        if hasattr(node, "__dict__"):
+            names = tuple(vars(node))
+        else:
+            names = tuple(getattr(type(node), "__slots__", ()))
+        return tuple(n for n in names if n != "pos")
+
+    def _call_syntax_method(self, piece: SyntaxValue, name: str, args):
+        """What a piece of the program answers about itself.
+
+        Enough to take apart what a macro is handed: what kind of thing
+        it is, the name it reads where it is one, and the factors of a
+        product however deeply the parser nested them.
+        """
+        if name == "kind":
+            if args:
+                raise TypeError("syntax.kind takes no arguments")
+            if piece.is_block:
+                return mk_str("block")
+            return mk_str(_SYNTAX_KINDS.get(type(piece.node).__name__,
+                                            type(piece.node).__name__))
+        if name == "name":
+            if args:
+                raise TypeError("syntax.name takes no arguments")
+            node = piece.node
+            if isinstance(node, VarRef):
+                return some(mk_str(node.name))
+            if isinstance(node, GetAttr) and isinstance(node.obj, VarRef):
+                return some(mk_str(f"{node.obj.name}.{node.attr}"))
+            return none()
+        if name == "factors":
+            if args:
+                raise TypeError("syntax.factors takes no arguments")
+            return ObjectValue(ArrayValue(
+                [SyntaxValue(node=f) for f in _factors_of(piece.node)],
+                element_type="syntax"))
+        raise AttributeError(
+            f"a piece of the program has no method '{name}'; it answers "
+            f"kind(), name() and factors()")
+
+    def _eval_quote(self, node: Quote):
+        """Answer the tree a quote holds, with the $ parts put in.
+
+        The tree is copied, so two evaluations of the same quote answer
+        two pieces of program that can be taken apart without either
+        being changed by what happens to the other.
+        """
+        import copy as _copy
+
+        made = _copy.deepcopy(node.tree)
+        made = self._fill_splices(made)
+        if node.is_block:
+            return SyntaxValue(body=made if isinstance(made, list) else [made])
+        return SyntaxValue(node=made)
+
+    def _fill_splices(self, node):
+        """Replace every $ in a copied tree with what it answers."""
+        if isinstance(node, Splice):
+            return self._spliced_tree(self.eval_expr(node.expr))
+        if isinstance(node, list):
+            made = []
+            for item in node:
+                filled = self._fill_splices(item)
+                if isinstance(filled, list):
+                    made.extend(filled)
+                else:
+                    made.append(filled)
+            return made
+        if isinstance(node, tuple):
+            return tuple(self._fill_splices(item) for item in node)
+        if type(node).__module__ != "interp.ast":
+            return node
+        for name in self._ast_fields(node):
+            setattr(node, name, self._fill_splices(getattr(node, name, None)))
+        return node
+
+    def _spliced_tree(self, value):
+        """The tree a value stands for where it is put into a program.
+
+        A piece of program is itself; a number, a string or a truth
+        value is what a program would have to write to mean it, which
+        is what lets a macro compute a constant and put it back.
+        """
+        value = unwrap_optional(value)
+        if isinstance(value, SyntaxValue):
+            return value.body if value.is_block else value.node
+        if isinstance(value, IntValue):
+            return IntLit(value.value, value.width)
+        if isinstance(value, FloatValue):
+            return FloatLit(value.value, value.width)
+        if isinstance(value, StrValue):
+            return StrLit(value.value)
+        if isinstance(value, BoolValue):
+            return BoolLit(value.value)
+        raise TypeError(
+            f"$ puts a piece of program or a number, a string or a truth "
+            f"value into one, and this is {self._value_type_name(value)}")
+
     def _op_length(self, operand):
         """How many things are in it (#).
 
@@ -3393,6 +3520,14 @@ class Evaluator:
 
         if isinstance(node, LimitExpr):
             return self._eval_limit(node)
+
+        if isinstance(node, Quote):
+            return self._eval_quote(node)
+
+        if isinstance(node, Splice):
+            raise TypeError(
+                "$ puts a value into a piece of program, and there is no "
+                "piece of program here")
 
         if isinstance(node, DropUnitExpr):
             val = self.eval_expr(node.expr)
@@ -5261,6 +5396,8 @@ class Evaluator:
             raise AttributeError(
                 f"a string has no method '{method_name}'; it answers "
                 f"chars() with what it is made of")
+        if isinstance(unwrapped, SyntaxValue):
+            return self._call_syntax_method(unwrapped, method_name, args)
         if isinstance(unwrapped, CharValue):
             if method_name == "str":
                 if args:

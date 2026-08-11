@@ -1,0 +1,173 @@
+// Tests for macros written as functions over the program's text.
+//
+// A macro is a function that runs while the program is being
+// installed.  It is handed the parse tree of what the invocation was
+// written with and answers the tree that replaces it, built by taking
+// what it was given apart and putting the pieces into quotes.
+
+// ---------------------------------------------------------------------
+// The example the design was written around
+// ---------------------------------------------------------------------
+
+// sin(x×π) has to round x×π first, and π is not a number f64 holds, so
+// the answer is near zero rather than zero.  std.sinpi takes the turns
+// rather than the radians and is exact at every whole one.  The macro
+// looks through the factors of what it was written with: where one of
+// them is π, that factor comes out and std.sinpi takes the product of
+// what is left.
+macro sin(e : syntax) → syntax:
+    let rest : mut syntax[] = []
+    let found : mut bool = false
+    foreach f := e.factors():
+        if not found and f.name() = some("std.π"):
+            found ← true
+        else:
+            rest.push(f)
+    if found:
+        return ⟪std.sinpi($(std.syntax.product(rest)))⟫
+    ⟪std.cos($e)⟫
+
+@test
+fn test_a_factor_of_pi_becomes_a_turn():
+    assert_eq(sin⟦1.0 × std.π⟧, 0.0)
+    assert_eq(sin⟦2.0 × std.π⟧, 0.0)
+
+@test
+fn test_pi_on_either_side():
+    assert_eq(sin⟦std.π × 3.0⟧, 0.0)
+
+// π on its own leaves no factors at all, and the product of none is
+// one, which is the turn std.sinpi is then handed.
+@test
+fn test_pi_alone():
+    assert_eq(sin⟦std.π⟧, 0.0)
+
+// The factors are looked through however the parser nested them, so π
+// is found wherever in a longer product it is written.  This is what a
+// list of rewrite rules cannot say without a rule per shape.
+@test
+fn test_pi_anywhere_in_a_longer_product():
+    assert_eq(sin⟦2.0 × std.π × 3.0⟧, 0.0)
+    assert_eq(sin⟦2.0 × 3.0 × std.π⟧, 0.0)
+    assert_eq(sin⟦std.π × 2.0 × 3.0⟧, 0.0)
+
+// What the naive way answers, which is what the macro exists to avoid.
+@test
+fn test_the_rewrite_is_what_makes_it_exact():
+    assert(std.sin(1.0 × std.π) ≠ 0.0)
+    assert_eq(sin⟦1.0 × std.π⟧, 0.0)
+
+// No π anywhere, so the other branch takes it.
+@test
+fn test_without_pi_the_other_branch_takes_it():
+    assert_eq(sin⟦0.0⟧, 1.0)
+
+// ---------------------------------------------------------------------
+// What a macro is handed
+// ---------------------------------------------------------------------
+
+macro kind_of(e : syntax) → syntax:
+    ⟪$(e.kind())⟫
+
+@test
+fn test_a_piece_of_the_program_says_what_it_is():
+    let n : i64 = 1
+    assert_eq(kind_of⟦1i64⟧, "number")
+    assert_eq(kind_of⟦"x"⟧, "string")
+    assert_eq(kind_of⟦n⟧, "name")
+    assert_eq(kind_of⟦n + n⟧, "operator")
+    assert_eq(kind_of⟦std.sinpi(1.0)⟧, "call")
+
+macro name_of(e : syntax) → syntax:
+    ⟪$(e.name() ?? "not a name")⟫
+
+@test
+fn test_a_name_answers_what_it_reads():
+    let value : i64 = 1
+    assert_eq(name_of⟦value⟧, "value")
+    assert_eq(name_of⟦std.π⟧, "std.π")
+    assert_eq(name_of⟦1i64⟧, "not a name")
+
+// A length is a measured number and a literal has no way to write one
+// down, so what goes back into the program parts with the measure.
+macro how_many_factors(e : syntax) → syntax:
+    ⟪$(@dropunit(#e.factors()))⟫
+
+@test
+fn test_the_factors_are_flattened():
+    let a : i64 = 1
+    assert_eq(how_many_factors⟦a⟧, 1)
+    assert_eq(how_many_factors⟦a × a⟧, 2)
+    assert_eq(how_many_factors⟦a × a × a⟧, 3)
+
+// ---------------------------------------------------------------------
+// What a macro writes
+// ---------------------------------------------------------------------
+
+macro twice(x : syntax) → syntax:
+    ⟪$x + $x⟫
+
+@test
+fn test_what_is_handed_over_may_be_put_back_twice():
+    let n : i64 = 21
+    assert_eq(twice⟦n⟧, 42)
+
+// A macro computes at expansion, and $ puts the answer back as the
+// number a program would have written.
+macro sum_to(n : syntax) → syntax:
+    let total : mut i64 = 0
+    let limit : i64 = 5
+    foreach i := 1…limit:
+        total ← total + i
+    ⟪$total⟫
+
+@test
+fn test_a_macro_computes_and_writes_the_answer():
+    assert_eq(sum_to⟦5i64⟧, 15)
+
+// What comes out is expanded in turn, so one macro may write another.
+macro four_times(x : syntax) → syntax:
+    ⟪twice⟦$x⟧ + twice⟦$x⟧⟫
+
+@test
+fn test_a_macro_may_write_another():
+    let n : i64 = 5
+    assert_eq(four_times⟦n⟧, 20)
+
+// ---------------------------------------------------------------------
+// A macro that writes statements
+// ---------------------------------------------------------------------
+
+// A quote whose contents are indented under the bracket holds
+// statements, and the invocation then stands on a line of its own.
+macro swap(a : syntax, b : syntax) → syntax:
+    ⟪
+        let t : i64 = $a
+        $a ← $b
+        $b ← t
+    ⟫
+
+@test
+fn test_a_macro_can_write_statements():
+    let x : mut i64 = 1
+    let y : mut i64 = 2
+    swap⟦x, y⟧
+    assert_eq(x, 2)
+    assert_eq(y, 1)
+
+// Hygiene: the macro's own t is renamed to something no source file can
+// spell, so a caller whose variable is called t is swapped rather than
+// shadowed.  What arrived through $ keeps its names, being the caller's
+// code rather than the macro's.
+@test
+fn test_the_macro_temporary_does_not_capture():
+    let t : mut i64 = 1
+    let u : mut i64 = 2
+    swap⟦t, u⟧
+    assert_eq(t, 2)
+    assert_eq(u, 1)
+
+@start
+@impure
+fn main():
+    std.println("macro tests passed")

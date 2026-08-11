@@ -1,0 +1,7 @@
+error: expanding forever did not settle after 64 rewrites; a macro writes something that reaches it again
+  --> tests/output/macro_runaway.ngpl:3:6
+    |
+  3 |     ⟪forever⟦$x⟧⟫
+    |      ^^^^^^^
+  4 | 
+    |

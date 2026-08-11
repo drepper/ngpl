@@ -1,0 +1,6 @@
+error: wrong answers a piece of the program, and this one answered int
+  --> tests/output/macro_answers_a_value.ngpl:8:23
+    |
+  8 |     std.println("{}", wrong⟦1i64⟧)
+    |                       ^^^^^
+    |

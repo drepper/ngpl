@@ -305,6 +305,55 @@ class ContinueStmt:
         self.pos = None
 
 
+class MacroDef:
+    """A macro: a function from the program's text to more of it.
+
+    `func` is an ordinary FuncDef whose parameters are handed the parse
+    trees of what the invocation was written with, and whose answer is
+    the tree that replaces the invocation.  It runs while the program
+    is being installed, not while it runs.
+    """
+
+    def __init__(self, name: str, func):
+        self.name = name
+        self.func = func
+        self.pos = None
+
+
+class Quote:
+    """`⟪ … ⟫` -- a piece of program held rather than run.
+
+    Evaluating one answers the tree written inside it, with whatever
+    `$` puts back into it already in place.
+    """
+
+    def __init__(self, tree, is_block: bool = False):
+        self.tree = tree
+        self.is_block = is_block
+        self.pos = None
+
+
+class Splice:
+    """`$e` inside a quote -- put what e answers into the tree here."""
+
+    def __init__(self, expr):
+        self.expr = expr
+        self.pos = None
+
+
+class MacroCall:
+    """`name⟦args⟧` -- an invocation replaced by what the macro answers.
+
+    Nothing evaluates one of these: expansion replaces it before
+    anything runs, and reaching the evaluator means expansion did not.
+    """
+
+    def __init__(self, name: str, args: list):
+        self.name = name
+        self.args = args
+        self.pos = None
+
+
 class Condition:
     """A `@pre` or `@post` a function holds to.
 

@@ -1,0 +1,9 @@
+// The macro itself fails while it is being run.
+macro pick(e : syntax) → syntax:
+    let parts := e.factors()
+    ⟪$(parts[7])⟫
+
+@start
+@impure
+fn main():
+    std.println("{}", pick⟦1i64⟧)
