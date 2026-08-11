@@ -87,11 +87,25 @@ The diagnostic that asks a binding to name a type now writes a tuple
 type out where the value is one, so the message that used to explain
 the absence names `(i64, str)` instead.
 
-Not implemented:
+`@typeof` answers with the type rather than with the word `tuple`, so a
+value says about itself something a program could write down:
 
-- `@typeof` still answers `tuple` rather than the structural type.
-  Making it answer `(i64, str)` would need the type to be readable as
-  an expression, where the parentheses already mean a tuple literal of
-  two type values.
-- Destructuring a tuple in a binding — `let (a, b) := pair` — which is
-  a separate question about patterns rather than about types.
+```
+let t : (i64, str) = (1, "two")
+@typeof(t)                      // (i64, str)
+```
+
+Comparing that against a type as *written* meant deciding what
+`(i64, str)` is in an expression, where the parentheses already look
+like a tuple literal.  It is the type: a name that names a type is that
+type wherever it appears, and a parenthesized list of them is the tuple
+type they describe.  A tuple with anything else in it is an ordinary
+tuple, so the rule only takes over where every element is a type.
+
+What that costs is a tuple *value* whose elements are all types, which
+is no longer constructible.  Nothing can use one — there is no type of
+types to hold it — and the thing it would have been written for is
+exactly the comparison this enables.
+
+Not implemented: destructuring a tuple in a binding — `let (a, b) :=
+pair` — which is a question about patterns rather than about types.

@@ -4788,7 +4788,7 @@ let byte := 5
 error: 'byte' names a type and cannot name a variable
 ```
 
-- `@typeof(expr)` — evaluates the expression and returns a `type` value representing its type.  The type name reflects the concrete type: `int`, `i32`, `u8`, `str`, `bool`, `∅`, `array`, `tuple`, `fn`, `λ`, or an enum name.
+- `@typeof(expr)` — evaluates the expression and returns a `type` value representing its type.  The type name reflects the concrete type: `int`, `i32`, `u8`, `str`, `bool`, `∅`, `array`, `fn`, `λ`, an enum name, or a tuple type written as a program would write it — `(i64, str)`.
 
 - `@dropunit(expr)` — the value without the unit it carries.  See [Parting with a Unit](#parting-with-a-unit).
 
@@ -5076,6 +5076,24 @@ error: '(i64, str)' is a tuple type, but the value is int
 ```
 
 One type in parentheses is that type rather than a tuple of one: `(i64)` is `i64`, since a tuple of one element is a value with nothing to distinguish it from the element.  A tuple therefore starts at two.
+
+#### What a Tuple Answers About Itself
+
+`@typeof` answers with the type, written as a program would write it:
+
+```
+let t : (i64, str) = (1, "two")
+@typeof(t)                      /* (i64, str) */
+```
+
+A name that names a type is that type wherever it is written, and a parenthesized list of them is the tuple type they describe, so the answer can be compared against the type as written rather than against its text:
+
+```
+static_assert_eq(@typeof(t), (i64, str))
+static_assert_eq(@typeof(t), "(i64, str)")      /* the same, as text */
+```
+
+This is what makes `(i64, str)` in an expression a type rather than a tuple of two type values.  A tuple whose elements are all types is the type they name; one with anything else in it is an ordinary tuple.
 
 #### Design Rationale
 

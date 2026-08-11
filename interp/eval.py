@@ -2437,6 +2437,13 @@ class Evaluator:
 
         if isinstance(node, TupleLit):
             elements = [self.eval_expr(e) for e in node.elements]
+            if len(elements) > 1 and all(isinstance(e, TypeValue)
+                                         for e in elements):
+                # A name that names a type is that type wherever it is
+                # written, and a tuple of them is the tuple type they
+                # describe, so a program compares against `(i64, str)`
+                # rather than against the text of it.
+                return TypeValue("(" + ", ".join(e.name for e in elements) + ")")
             return TupleValue(elements)
 
         if isinstance(node, FoldExpr):
@@ -3654,7 +3661,11 @@ class Evaluator:
         if isinstance(u, BuiltinFunc):
             return "builtin"
         if isinstance(u, TupleValue):
-            return "tuple"
+            # A tuple says what it is the way its type is written, so
+            # @typeof answers with something a program could put in a
+            # signature rather than with the word "tuple".
+            return "(" + ", ".join(
+                Evaluator._value_type_name(e) for e in u.elements) + ")"
         if isinstance(u, EnumValue):
             return u.enum_type.name
         if isinstance(u, ObjectValue) and isinstance(u.obj, StructInstance):

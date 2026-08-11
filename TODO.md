@@ -93,6 +93,9 @@ Completed
     the type settles the elements, and a value is measured against it element by element.
     One type in parentheses is that type, so a tuple starts at two elements.  This was the
     gap that made the bootstrap's rule about unsettled numbers unsatisfiable for tuples.
+    @typeof answers with the type rather than with the word `tuple`, and a parenthesized
+    list of type names is the type they describe, so the answer compares against the type
+    as written: static_assert_eq(@typeof(t), (i64, str)).
 
 [x] nothing in the bootstrap holds an arbitrary-precision value.  A binding with no type written
     down would settle on int or float, so it is refused and the sized type is asked for; that

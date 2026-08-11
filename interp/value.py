@@ -1468,6 +1468,11 @@ def runtime_type_of(value: "Value") -> str:
             return et + "[]"
     if isinstance(value, EnumValue):
         return value.enum_type.name
+    if isinstance(value, TupleValue):
+        # Written the way the type is, so a value that answers about
+        # itself answers something a program could write down.
+        return "(" + ", ".join(runtime_type_of(e)
+                               for e in value.elements) + ")"
     if isinstance(value, TypeValue):
         return "type"
     return "int"

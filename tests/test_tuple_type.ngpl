@@ -135,6 +135,43 @@ fn test_parentheses_around_one_type():
     static_assert_eq(@typeof(n), i64)
     assert_eq(n, 5)
 
+// ---------------------------------------------------------------------
+// What a tuple answers about itself
+// ---------------------------------------------------------------------
+//
+// @typeof answers with the type, written as a program would write it,
+// rather than with the word "tuple".
+
+@test
+fn test_typeof_answers_the_structural_type():
+    let t : (i64, str) = (1, "two")
+    static_assert_eq(@typeof(t), "(i64, str)")
+
+// A tuple of type names is the type they describe, so the answer can
+// be compared against the type as written rather than against its text.
+@test
+fn test_typeof_compares_against_a_written_tuple_type():
+    let t : (i64, str) = (1, "two")
+    static_assert_eq(@typeof(t), (i64, str))
+
+@test
+fn test_typeof_of_a_nested_tuple():
+    let t : ((i64, i64), str) = ((1, 2), "x")
+    static_assert_eq(@typeof(t), ((i64, i64), str))
+
+@test
+fn test_typeof_reads_the_elements_settled_types():
+    let t : (u8, f64) = (200, 1.5)
+    static_assert_eq(@typeof(t), (u8, f64))
+
+// Two tuples of the same shape answer alike, and of different shapes
+// do not.
+@test
+fn test_two_tuples_answer_alike():
+    let a : (i64, str) = (1, "one")
+    let b : (i64, str) = (2, "two")
+    static_assert_eq(@typeof(a), @typeof(b))
+
 @start
 @impure
 fn main():
