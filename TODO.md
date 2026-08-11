@@ -100,8 +100,7 @@ Completed
     `_` where an element is not wanted — at a local and at a global alike.  mut reaches
     every name, a repeated name is refused, and a stated type is the tuple's.  A parameter
     may name the elements too, in the same shape, with or without a stated type; a lambda's
-    may as well, and so may a match arm that binds — ∃((a, b)), ∄((a, b)), Type((a, b)) —
-    which is the same operation at the third of the three places a value gets names.
+    may as well.
 
 [x] nothing in the bootstrap holds an arbitrary-precision value.  A binding with no type written
     down would settle on int or float, so it is refused and the sized type is asked for; that
@@ -476,6 +475,10 @@ Floating-Point
 
 [x] add the root functions using unary √, ∛, ∜.  only allowed for floating-point values.  Allowed
     in specification for units.
+
+[ ] Add floating-point constants ⅇ and π for the Euler number and Pi.  Accept them with f16, f32, f64,
+    bfloat16 suffix.  Handle them like untyped floats.  In the bootstrap implementation the
+    value has to be coerced to a finite type.
 
 
 String and I/O
