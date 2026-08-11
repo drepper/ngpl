@@ -43,6 +43,7 @@ from interp.value import (
     int_limits, float_limits, resolve_type_alias,
     format_shape, _array_type_name, array_type_mismatch,
     is_generic_type, runtime_type_of, is_type_name, _is_unsigned,
+    declared_rank, value_rank, threaded_array,
     check_bootstrap_argument, check_bootstrap_type,
     check_bootstrap_binding,
     UNTYPED, is_unwidthed, settle_untyped,
@@ -1105,6 +1106,24 @@ class Evaluator:
 
     _APPROX_OPS = frozenset("≅≇⪅⪆⪉⪊")
 
+    # Every operator that means for a container what it means for one of
+    # the things in it, and so is threaded over one that it is handed.
+    # ⧺, ⍳ and ∊ take a container as the operand rather than as a
+    # stand-in for its elements; they are dispatched before threading
+    # can see them, so the two statements cannot drift apart.
+    _LISTABLE_BINOPS = frozenset({
+        "+", "-", "\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}", "%",
+        "\N{SQUARED PLUS}", "\N{SQUARED MINUS}", "\N{SQUARED TIMES}",
+        "\N{LEFT CEILING}", "\N{LEFT FLOOR}",
+        "=", "\N{NOT EQUAL TO}", "<", ">", "<=", ">=",
+        "and", "or",
+        "<<", ">>", "&", "^", "|", "«", "»", "↻", "↺",
+        "∧", "∨", "⊕", "⊼", "⊽", "\N{UPWARDS ARROW}",
+    }) | _APPROX_OPS
+
+    # What a threaded operand is called when the lengths disagree.
+    _OPERAND_NAMES = ("the left operand", "the right operand")
+
     def _approx_alike(self, a: float, b: float) -> bool:
         """Whether two numbers are alike to within the comparison tolerance.
 
@@ -1449,8 +1468,6 @@ class Evaluator:
             # Element-wise on the left operand only, which it does for
             # itself: the right one is the container to look through.
             return self._op_element_of(left, right)
-        if op in self._APPROX_OPS:
-            return self._op_approx(op, left, right)
         if op in ("=", "\N{NOT EQUAL TO}") and (isinstance(left, (SomeValue, NoneValue))
                                    or isinstance(right, (SomeValue, NoneValue))):
             # Whether there is a value at all is settled before what it
@@ -1459,11 +1476,25 @@ class Evaluator:
             # the optional had never been there.  `(v ⍳ x) == ∅` asks
             # the same question whichever way the search went.
             return self._ops[op](left, right)
+        if op in self._LISTABLE_BINOPS:
+            # An operand deeper than the operator asks for is taken
+            # apart and the operator asked again of each of its
+            # elements.  This sits above the unit handling below, which
+            # therefore only ever meets one value at a time and keeps
+            # the unit it is given.
+            threaded = self._thread_level(
+                op, self._OPERAND_NAMES, [left, right], (0, 0),
+                lambda sub: self._apply_operator(op, sub[0], sub[1]),
+                noun="operands")
+            if threaded is not None:
+                return threaded
+        if op in self._APPROX_OPS:
+            return self._op_approx(op, left, right)
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
         if isinstance(lu, UnitValue) or isinstance(ru, UnitValue):
             return self._unit_binop(op, lu, ru)
-        return self._apply_binop(self._ops[op], left, right)
+        return self._ops[op](left, right)
 
     def _op_concat(self, left, right):
         """Join two sequences: arrays at the outermost dimension, or text.
@@ -1623,23 +1654,48 @@ class Evaluator:
             return u.obj
         return None
 
-    def _apply_binop(self, op_fn, left, right):
-        la = self._as_array(left)
-        ra = self._as_array(right)
-        if la is not None and ra is not None:
-            etype = la.element_type or ra.element_type
-            return ObjectValue(ArrayValue(
-                [op_fn(l, r) for l, r in zip(la.values(), ra.values())],
-                element_type=etype))
-        if la is not None:
-            return ObjectValue(ArrayValue(
-                [op_fn(l, right) for l in la.values()],
-                element_type=la.element_type))
-        if ra is not None:
-            return ObjectValue(ArrayValue(
-                [op_fn(left, r) for r in ra.values()],
-                element_type=ra.element_type))
-        return op_fn(left, right)
+    def _thread_level(self, where: str, names, args, wants, invoke, *,
+                      noun: str = "arguments", collect: bool = True,
+                      fallback_type: str | None = None):
+        """Take one level off whatever was handed a container.
+
+        A position is threaded when the value is deeper than the type
+        asked for: a parameter wanting one number and handed a row of
+        them is handed a container of what it asked for.  What is not
+        deeper is held still, so one operand may vary while the other
+        does not.
+
+        One level only.  What each element needs is decided by calling
+        back into whatever called here, so a matrix is met by the same
+        question its rows are and every check the caller makes is made
+        again for each element rather than once for the container.
+
+        Answers None where nothing threads, which is the ordinary case
+        and costs one measurement per argument.
+        """
+        mapped = [i for i, arg in enumerate(args) if value_rank(arg) > wants[i]]
+        if not mapped:
+            return None
+        arrays = {i: self._as_array(args[i]) for i in mapped}
+        count = arrays[mapped[0]].sizeof
+        for i in mapped[1:]:
+            if arrays[i].sizeof != count:
+                raise TypeError(
+                    f"{where}: the {noun} it threads over are taken apart "
+                    f"together, so they must be the same length, but "
+                    f"{names[mapped[0]]} has {count} element"
+                    f"{'' if count == 1 else 's'} and {names[i]} has "
+                    f"{arrays[i].sizeof}")
+        results = []
+        for index in range(count):
+            sub = list(args)
+            for i in mapped:
+                sub[i] = arrays[i].get(index)
+            results.append(invoke(sub))
+        if not collect:
+            # Nothing was answered to collect, so nothing comes back.
+            return none()
+        return threaded_array(results, fallback_type)
 
     # ------------------------------------------------------------------
     # Unit-aware arithmetic

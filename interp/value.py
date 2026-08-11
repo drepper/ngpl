@@ -1782,6 +1782,74 @@ def format_shape(dims: list[int | None]) -> str:
         "?" if d is None else str(d) for d in dims)
 
 
+def declared_rank(type_name: str | None) -> int:
+    """How many containers deep the type says a value written with it is.
+
+    `i64` is 0, `i64[]` is 1, `i64[2,3]` is 2.  This is one half of
+    what decides threading: a parameter asking for this many and handed
+    more is handed a container of what it asked for.
+
+    Not `_parse_array_type`, whose element-type pattern is a word or a
+    parenthesized run: a generic array `T'[]` matches neither, and
+    reading it as no array at all would quietly make every generic
+    array parameter unthreadable.
+    """
+    import re
+    if type_name is None:
+        return 0
+    name = resolve_type_alias(type_name)
+    base, _ = _split_optional_type(name)
+    base = base.strip()
+    rank = 0
+    while True:
+        # A tuple is one value written with brackets of its own, so the
+        # walk stops at it rather than counting its commas.
+        if parse_tuple_type(base) is not None:
+            return rank
+        m = re.search(r"\[(\d*(?:,\d*)*)\]$", base)
+        if m is None:
+            return rank
+        rank += len(m.group(1).split(","))
+        base = base[:m.start()]
+
+
+def value_rank(value: "Value") -> int:
+    """How many containers deep a value is.
+
+    Measured down the first element of each level rather than across
+    every element: a walk of the whole value would cost what the
+    operation itself costs, and a ragged value would answer with the
+    depth its shallowest branch reaches rather than the depth it has.
+    An element that does not match what that says is met by the
+    parameter it is handed to, which names it.
+    """
+    v = value.value if isinstance(value, SomeValue) else value
+    if not isinstance(v, ObjectValue) or not isinstance(v.obj, ArrayValue):
+        return 0
+    if v.obj.sizeof == 0:
+        return 1
+    return 1 + value_rank(v.obj.get(0))
+
+
+def threaded_array(results: list["Value"],
+                   fallback_type: str | None = None) -> "ObjectValue":
+    """Collect one level of a threaded call into an array.
+
+    The structure is what was taken apart; the element type is what
+    came back.  Comparing numbers answers with truth values, and an
+    array that says it holds numbers refuses to hold those -- which is
+    what an element type copied from the operands would say.
+
+    A length is not carried over: what a computed value is bound to
+    says whether it is fixed, and coerce_to_type settles that where it
+    is bound.
+    """
+    kinds = {runtime_type_of(r) for r in results}
+    element_type = (kinds.pop() if len(kinds) == 1
+                    else None if kinds else fallback_type)
+    return ObjectValue(ArrayValue(results, element_type=element_type))
+
+
 # The arbitrary-precision types.  A value of one has no fixed width, so
 # holding it needs a representation the bootstrap does not carry; they
 # belong to the full language.  See spec/spec.md, "Two Languages, One
