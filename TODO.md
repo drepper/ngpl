@@ -226,6 +226,22 @@ Completed
     holds each value once, so joining two would keep nothing the second repeats, which is ∪
     spelled a second way, and a second spelling is what ⊃ and ⊇ were turned down for.
 
+[x] @noreturn says control does not come back from a function, and what follows a call to one
+    cannot be reached.  A return already says that for what follows it and needs no attribute,
+    the statement being right there; a call does not, and the attribute is the only thing that
+    can -- said once at the definition, it says it at every call site.  std.exit and std.abort
+    are treated as having it: they are not functions the language declares, so they are named
+    in the checker, which is a stand-in for an annotation the library cannot yet write.  A
+    warning rather than an error, the program being well-formed and possibly mid-edit, and
+    only the first of a run is reported.  Stating a return type as well is refused, being a
+    contradiction.  What is not checked is whether a @noreturn body really never comes back:
+    that is the halting problem in a hat, so the attribute is taken on trust, as C takes it.
+    Rust's ! and Zig's noreturn are types the compiler verifies, which is the answer to move
+    to when the type system can carry it.
+
+[ ] a @noreturn function whose body falls off the end is not reported.  It wants the flow
+    analysis that would also tell an if-with-both-arms-dying from a body that simply forgot.
+
 [x] ⊃ and ⊇ ask a hash for its keys and for what it holds against them, replacing .keys and
     .values.  Prefix, where # is, and answering arrays: those two are asked often enough to be
     worth a glyph, and asking them the way # is asked keeps a container's questions in one

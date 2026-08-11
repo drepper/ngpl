@@ -164,7 +164,8 @@ class FuncDef:
                  param_muts: set[str] | None = None,
                  hint: str | None = None,
                  ret_unit=None,
-                 is_listable: bool = False):
+                 is_listable: bool = False,
+                 is_noreturn: bool = False):
         self.name = name
         self.params = params
         # Where each parameter was written, for diagnostics about it.
@@ -187,6 +188,8 @@ class FuncDef:
         # Unlike a hint, this changes what the function computes for an
         # argument it did not ask for, so it has to reach the runtime.
         self.is_listable = is_listable
+        # Whether the function hands control back at all.
+        self.is_noreturn = is_noreturn
         # "hot" or "cold" from an annotation, saying how often the
         # function is expected to run.  A hint never changes what the
         # function computes.

@@ -1,0 +1,7 @@
+error: die is @noreturn, so nothing comes back from it, but its return type says i64 does
+  --> tests/output/noreturn_return_type.ngpl:3:1
+    |
+  3 | fn die() → i64:
+    | ^^
+  4 |     std.exit(1)
+    |

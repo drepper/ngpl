@@ -1,0 +1,40 @@
+// Tests for @noreturn.
+//
+// The attribute says control does not come back, which a caller cannot
+// see from the signature and which nothing else in the language says.
+// What it buys is that a statement written after such a call is known
+// to be one nothing can reach -- which is a diagnostic rather than a
+// value, so it is tested in tests/output/noreturn_unreachable.ngpl,
+// where a warning can be read without the program having to die to
+// produce it.
+
+@noreturn
+@impure
+fn die(msg : str):
+    std.println("{}", msg)
+    std.exit(1)
+
+// The call is the last thing in its block, so nothing is unreachable
+// and the rest of the function runs as it reads.
+@impure
+fn guarded(n : i64) → i64:
+    if n < 0:
+        die("negative")
+    n × 2
+
+@test
+@impure
+fn test_a_noreturn_function_is_called_like_any_other():
+    assert_eq(guarded(3), 6)
+
+@test
+@impure
+fn test_what_follows_a_call_that_comes_back_is_reached():
+    let seen : mut i64 = 0
+    seen ← guarded(2)
+    assert_eq(seen, 4)
+
+@start
+@impure
+fn main():
+    std.println("noreturn tests passed")

@@ -1,1 +1,8 @@
+warning: this statement cannot be reached: the one above it does not come back
+  --> tests/output/exit_code.ngpl:8:8
+    |
+  8 |     std.println("unreachable")
+    |        ^
+  9 | 
+    |
 quitting

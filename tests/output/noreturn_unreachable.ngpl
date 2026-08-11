@@ -1,0 +1,51 @@
+@noreturn
+@impure
+fn die(msg : str):
+    std.println("{}", msg)
+    std.exit(1)
+
+// After a call to a @noreturn function.
+@impure
+fn after_a_noreturn_call():
+    die("stop")
+    std.println("never")
+
+// The standard library cannot carry the attribute, so the two it
+// applies to are named instead.
+@impure
+fn after_std_exit():
+    std.exit(0)
+    std.println("never")
+
+@impure
+fn after_std_abort():
+    std.abort(6)
+    std.println("never")
+
+// A return leaves the function for the same reason.
+@impure
+fn after_a_return() → i64:
+    return 1
+    std.println("never")
+    2
+
+// Inside a block, which is where a guard clause puts it.
+@impure
+fn inside_a_block(n : i64) → i64:
+    if n < 0:
+        die("negative")
+        std.println("never")
+    n
+
+// Only the first of a run is reported: the rest are unreachable for the
+// same reason, and saying so once says it.
+@impure
+fn a_run_of_them():
+    die("stop")
+    std.println("never")
+    std.println("nor this")
+
+@start
+@impure
+fn main():
+    std.println("the warnings above are the point")

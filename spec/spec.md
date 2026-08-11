@@ -2353,6 +2353,60 @@ Purity by default encourages a functional style and makes functions easier to re
 Global access remains a runtime check in the interpreter because whether a name is a mutable global depends on values the interpreter settles as it runs; the compiler will move it to compile-time where possible.
 
 
+### Functions That Do Not Come Back: `@noreturn`
+
+`@noreturn` says control does not come back from a function:
+
+```
+@noreturn
+@impure
+fn die(msg : str):
+    std.println("{}", msg)
+    std.exit(1)
+```
+
+A caller cannot see that from a signature, and nothing else in the language says it.  What it buys is that a statement written after such a call is known to be one nothing can reach:
+
+```
+die("stop")
+std.println("never")
+
+warning: this statement cannot be reached: the one above it does not
+come back
+```
+
+A `return` leaves the function for the same reason, so what follows one is unreachable too.  Only the first statement of a run is reported — the rest are unreachable for the same reason, and saying so once says it.  It is a warning rather than an error: the program is well-formed and may be mid-edit.
+
+`std.exit` and `std.abort` are treated as `@noreturn`.  They are not functions the language declares, so they cannot carry the attribute; they are named in the checker instead.
+
+#### What Is Refused
+
+Stating a return type says what the caller receives, and `@noreturn` says the caller receives nothing because it is never reached again.  A function cannot say both:
+
+```
+@noreturn
+fn die() → i64:
+    …
+
+error: die is @noreturn, so nothing comes back from it, but its return
+type says i64 does
+```
+
+The attribute is a claim the checker takes on trust: a `@noreturn` function whose body does in fact fall off the end is not reported, since knowing that in general is the halting problem wearing a hat.  What the attribute buys is at the *call* site, where it is the only thing that could say what it says.
+
+#### Comparison with Other Languages
+
+| Language | Spelling |
+|----------|----------|
+| C23 | `[[noreturn]]` |
+| C++ | `[[noreturn]]` |
+| Rust | the `!` return type, which the type system checks |
+| Zig | the `noreturn` type, likewise checked |
+| NGPL | `@noreturn` |
+
+Rust and Zig make it a *type*, which lets the compiler verify the claim rather than trust it; that is the better answer and the one to move to when the type system can carry it.  C's is an attribute taken on trust, as this is.
+
+
 ### Threading Over Containers: `@listable`
 
 A `@listable` function handed something *deeper* than a parameter asked for is handed a container of what it asked for, so it is asked of each of the things in the container instead:

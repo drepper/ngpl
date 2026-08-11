@@ -1,0 +1,43 @@
+warning: this statement cannot be reached: the one above it does not come back
+  --> tests/output/noreturn_unreachable.ngpl:11:8
+    |
+ 11 |     std.println("never")
+    |        ^
+ 12 | 
+    |
+warning: this statement cannot be reached: the one above it does not come back
+  --> tests/output/noreturn_unreachable.ngpl:18:8
+    |
+ 18 |     std.println("never")
+    |        ^
+ 19 | 
+    |
+warning: this statement cannot be reached: the one above it does not come back
+  --> tests/output/noreturn_unreachable.ngpl:23:8
+    |
+ 23 |     std.println("never")
+    |        ^
+ 24 | 
+    |
+warning: this statement cannot be reached: the one above it does not come back
+  --> tests/output/noreturn_unreachable.ngpl:29:8
+    |
+ 29 |     std.println("never")
+    |        ^
+ 30 |     2
+    |
+warning: this statement cannot be reached: the one above it does not come back
+  --> tests/output/noreturn_unreachable.ngpl:37:12
+    |
+ 37 |         std.println("never")
+    |            ^
+ 38 |     n
+    |
+warning: this statement cannot be reached: the one above it does not come back
+  --> tests/output/noreturn_unreachable.ngpl:45:8
+    |
+ 45 |     std.println("never")
+    |        ^
+ 46 |     std.println("nor this")
+    |
+the warnings above are the point

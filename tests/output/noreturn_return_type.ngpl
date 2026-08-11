@@ -1,0 +1,8 @@
+@noreturn
+@impure
+fn die() → i64:
+    std.exit(1)
+
+@start
+fn main():
+    ∅

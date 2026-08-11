@@ -1168,6 +1168,78 @@ def _redundant_return_type_warning(func_def) -> list[tuple[str, tuple | None]]:
              func_def.ret_type_pos)]
 
 
+# What the standard library never comes back from.  These are not
+# functions the language declares, so they cannot carry the attribute;
+# naming them here is what stands in for it.
+_NORETURN_STD = frozenset({"exit", "abort"})
+
+
+def _stmt_pos(stmt):
+    """Where a statement was written.
+
+    A statement that only holds an expression takes the expression's
+    place, since that is the text the reader sees.
+    """
+    pos = _node_pos(stmt)
+    if pos is None and isinstance(stmt, _ast.ExprStmt):
+        return _node_pos(stmt.expr)
+    return pos
+
+
+def _never_returns(node, env) -> bool:
+    """Whether a statement is one control does not come back from.
+
+    A return leaves the function, and a call to something marked
+    @noreturn leaves it too -- that is the whole of what the attribute
+    says, and the whole of what makes what follows unreachable.
+    """
+    if isinstance(node, _ast.ReturnStmt):
+        return True
+    expr = node.expr if isinstance(node, _ast.ExprStmt) else node
+    if isinstance(expr, _ast.MethodCall):
+        # std.exit and std.abort, which the library cannot annotate.
+        return (isinstance(expr.obj, _ast.VarRef) and expr.obj.name == "std"
+                and expr.method in _NORETURN_STD)
+    if isinstance(expr, _ast.FuncCall):
+        try:
+            called = env.lookup(expr.name)
+        except KeyError:
+            return False
+        return bool(getattr(called, "is_noreturn", False))
+    return False
+
+
+def _unreachable_warnings(func_def, env) -> list[tuple[str, tuple | None]]:
+    """Find statements nothing can reach.
+
+    A statement after one that does not come back is written to be run
+    and never will be, which is either a leftover or a mistake about
+    what the line above does.  Reported as a warning: the program is
+    well-formed, and it may be mid-edit.
+
+    Only the first of a run is reported -- the rest are unreachable for
+    the same reason, and saying so once says it.
+    """
+    warnings: list[tuple[str, tuple | None]] = []
+
+    def walk(body):
+        if not isinstance(body, list):
+            return
+        for index, stmt in enumerate(body):
+            if _never_returns(stmt, env) and index + 1 < len(body):
+                after = body[index + 1]
+                warnings.append((
+                    "this statement cannot be reached: the one above it "
+                    "does not come back",
+                    _stmt_pos(after)))
+            for attr in ("body", "cons", "alt"):
+                walk(getattr(stmt, attr, None))
+            for arm in getattr(stmt, "arms", ()) or ():
+                walk(getattr(arm, "body", None))
+    walk(func_def.body)
+    return warnings
+
+
 def _unused_mut_warnings(func_def) -> list[tuple[str, tuple | None]]:
     """Find mut bindings and parameters the function never modifies.
 
@@ -1618,6 +1690,22 @@ def _needs_a_type(func_name: str, param_name: str) -> str:
     return (f"in {func_name}: parameter '{param_name}' states no type; "
             f"every parameter states one, and a generic such as T\N{APOSTROPHE} "
             f"says the function takes whatever it is handed")
+
+
+def _static_noreturn_check(func_def) -> str | None:
+    """Refuse a @noreturn function that says it hands something back.
+
+    Stating a return type says what the caller receives, and @noreturn
+    says the caller receives nothing because it is never reached again.
+    A function cannot say both.
+    """
+    if not func_def.is_noreturn:
+        return None
+    if func_def.ret_type is not None \
+            and func_def.ret_type != "\N{EMPTY SET}":
+        return (f"{func_def.name} is @noreturn, so nothing comes back from "
+                f"it, but its return type says {func_def.ret_type} does")
+    return None
 
 
 def _static_listable_check(func_def) -> str | None:
@@ -2080,7 +2168,8 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                           defn.is_replaceable, defn.pack_param, defn.param_units,
                           defn.is_impure, param_refs=defn.param_refs,
                           param_muts=defn.param_muts, ret_unit=defn.ret_unit,
-                          is_listable=defn.is_listable)
+                          is_listable=defn.is_listable,
+                          is_noreturn=defn.is_noreturn)
             env.define(defn.name, fv)
 
             if honor_start and defn.is_start:
@@ -2132,7 +2221,8 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                                is_impure=method_def.is_impure,
                                param_muts=method_def.param_muts,
                                ret_unit=method_def.ret_unit,
-                               is_listable=method_def.is_listable)
+                               is_listable=method_def.is_listable,
+                               is_noreturn=method_def.is_noreturn)
                 if method_def.name in st.methods:
                     raise DefinitionError(
                         f"duplicate method '{method_def.name}' "
@@ -2174,6 +2264,9 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 if return_err is not None:
                     raise DefinitionError(f"in {defn.name}: {return_err}",
                                           _finding_pos(return_err) or _node_pos(defn))
+                noreturn_err = _static_noreturn_check(defn)
+                if noreturn_err is not None:
+                    raise DefinitionError(noreturn_err, _node_pos(defn))
                 listable_err = _static_listable_check(defn)
                 if listable_err is not None:
                     raise DefinitionError(listable_err, _node_pos(defn))
@@ -2197,6 +2290,7 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 program.warnings.extend(
                     _redundant_return_type_warning(defn))
                 program.warnings.extend(_unused_mut_warnings(defn))
+                program.warnings.extend(_unreachable_warnings(defn, env))
                 program.warnings.extend(
                     _trailing_value_warnings(defn, env, struct_vars))
 
@@ -2349,6 +2443,9 @@ def main():
                 errors_produced.append(("error", return_err))
 
         if not errors_produced:
+            noreturn_err = _static_noreturn_check(defn)
+            if noreturn_err is not None:
+                raise DefinitionError(noreturn_err, _node_pos(defn))
             listable_err = _static_listable_check(defn)
             if listable_err is not None:
                 raise DefinitionError(listable_err, _node_pos(defn))
@@ -2378,7 +2475,8 @@ def main():
                           defn.is_replaceable, defn.pack_param, defn.param_units,
                           defn.is_impure, param_refs=defn.param_refs,
                           param_muts=defn.param_muts, ret_unit=defn.ret_unit,
-                          is_listable=defn.is_listable)
+                          is_listable=defn.is_listable,
+                          is_noreturn=defn.is_noreturn)
             eval_inst = Evaluator(env)
             try:
                 eval_inst._call_user_func(fv, [])
@@ -2392,6 +2490,7 @@ def main():
             ("warning", message)
             for message, _ in (_redundant_return_type_warning(defn)
                                + _unused_mut_warnings(defn)
+                               + _unreachable_warnings(defn, env)
                                + _trailing_value_warnings(
                                    defn, env, _struct_vars_of(defn, env))))
 
