@@ -188,6 +188,19 @@ warning is worth stopping for depends on what the run is for, and a
 file that could impose the answer on its readers would be making a
 decision that is not the author's to make.
 
+## Where a Diagnostic Is Reported
+
+At the definition, and in whatever is running: a file prints its
+warnings before the program starts, and the REPL prints them against
+the entry they were typed in.  The prompt is where a definition is most
+likely to be half-written, so it was the worst place for the checks to
+be silent, which they were until they were wired up there.
+
+A definition that is refused reports what the checks found before the
+refusal.  Warnings travel out with the error rather than being lost to
+it, so an entry holding several definitions says everything that is
+wrong with it rather than only the first thing.
+
 ## Status
 
 Implemented in the interpreter, at definition time:
@@ -199,6 +212,7 @@ Implemented in the interpreter, at definition time:
   warning, catchable the same two ways;
 - `-Werror`, which makes every warning an error and reads
   `@expect warning` as `@expect error`;
+- the same diagnostics at the prompt, reported against the entry;
 - `std.print` and `std.println` requiring `@impure`;
 - calling an `@impure` function or method requiring `@impure`.
 

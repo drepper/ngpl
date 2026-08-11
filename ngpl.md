@@ -12,3 +12,11 @@ what it is.
 - [Static Analysis: Effects and Unused Values](design/static-analysis/README.md)
   — what a program has to say about its side effects, and what happens
   to a value nothing reads
+- [The Larger and the Smaller: `⌈` and `⌊`](design/minmax/README.md) —
+  taking one of two numbers, as an operator rather than a function
+- [A Number Outside the Range Its Type Can Hold](design/number-range/README.md)
+  — why a float that overflows or vanishes is reported rather than
+  turned into an infinity or a zero
+- [No Arbitrary-Precision Value in the Bootstrap](design/bootstrap-numbers/README.md)
+  — where a number can arrive without a type, and what has to be
+  written down at each of them
