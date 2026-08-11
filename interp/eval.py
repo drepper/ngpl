@@ -55,7 +55,7 @@ from interp.value import (
 )
 from interp.env import Env, Decl
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
-from interp.errors import attach_backtrace, diagnostic_level
+from interp.errors import attach_backtrace, diagnostic_level, strip_position_prefix
 
 
 # An empty array disagrees with no unit, so it stands in for whatever
@@ -1708,9 +1708,31 @@ class Evaluator:
         la = self._as_array(lu)
         ra = self._as_array(ru)
         if la is not None and ra is not None:
+            # Two arrays join into one array, which holds one type of
+            # value -- so they have to hold the same one.  Taking the
+            # left operand's label and the right operand's values built
+            # an array whose type was a lie about half of it.
+            if (la.element_type is not None and ra.element_type is not None
+                    and la.element_type != ra.element_type):
+                raise TypeError(
+                    f"\N{DOUBLE PLUS}: an array holds one type of value, so "
+                    f"two joined hold the same one, but the left operand "
+                    f"holds {la.element_type} and the right holds "
+                    f"{ra.element_type}")
+            lunit = la.element_unit
+            runit = ra.element_unit
+            if (lunit is None) != (runit is None) or (
+                    lunit is not None and not lunit.same_dimension(runit)):
+                raise TypeError(
+                    f"\N{DOUBLE PLUS}: an array holds one unit, so two "
+                    f"joined hold the same one, but the left operand is "
+                    f"{lunit.display_name if lunit else 'unmeasured'} and "
+                    f"the right is "
+                    f"{runit.display_name if runit else 'unmeasured'}")
             etype = la.element_type or ra.element_type
             return ObjectValue(
-                ArrayValue(la.values() + ra.values(), element_type=etype))
+                ArrayValue(la.values() + ra.values(), element_type=etype,
+                           element_unit=lunit))
         if la is None and ra is None:
             # Neither is an array, so text is what was meant, and the
             # operand that is not text says so.
@@ -4845,6 +4867,18 @@ class Evaluator:
                     raise TypeError(
                         f"{func.name}: parameter '{param_name}' is by-reference, "
                         f"caller must pass &{param_name}")
+                # Lent rather than given, so nothing is coerced -- what
+                # the callee writes goes into the caller's own array.
+                # That is the reason to measure it here: the type has
+                # to be the caller's already.
+                if param_type is not None:
+                    lent = unwrap_optional(arg_value.get())
+                    if isinstance(lent, ObjectValue) \
+                            and isinstance(lent.obj, ArrayValue):
+                        try:
+                            coerce_arg(lent, param_type, func.name, param_name)
+                        except (TypeError, OverflowError) as e:
+                            raise TypeError(strip_position_prefix(str(e))) from None
                 call_env.define(param_name, arg_value)
                 continue
             if isinstance(arg_value, RefValue):
@@ -5108,11 +5142,12 @@ class Evaluator:
         if not check or check == "\N{EMPTY SET}":
             return result
         inner = result
+        rewrap = None
         if isinstance(inner, SomeValue):
-            inner = inner.value
+            inner, rewrap = inner.value, SomeValue
         elif isinstance(inner, ExpectedValue):
             if inner.is_ok():
-                inner = inner.ok_value
+                inner, rewrap = inner.ok_value, ExpectedValue.ok
             else:
                 return result
         elif isinstance(inner, NoneValue):
@@ -5131,6 +5166,17 @@ class Evaluator:
         mismatch = array_type_mismatch(inner, check)
         if mismatch is not None:
             raise TypeError(f"{func_name}: {mismatch}")
+        if _parse_array_type(check) is not None:
+            # And what the array holds is measured too, as it is at a
+            # parameter: a return type naming an array of numbers is
+            # not answered by an array of something else.
+            try:
+                settled = coerce_to_type(inner, check)
+            except (TypeError, OverflowError) as e:
+                raise TypeError(
+                    f"{func_name}: return type is {ret_type}, but "
+                    f"{strip_position_prefix(str(e))}") from None
+            return rewrap(settled) if rewrap is not None else settled
         if check in _TYPE_BITS or check == "int":
             if isinstance(inner, FloatValue):
                 raise TypeError(

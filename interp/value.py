@@ -2107,7 +2107,17 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
                     f"{func_name}: argument '{param_name}' expected "
                     f"{param_type} (dimension {axis + 1} is {want}), "
                     f"got a {format_shape(actual)} array")
-            return unwrapped
+            # The shape is right; what it holds still has to be.  A
+            # parameter states an element type the way a binding does,
+            # and until now only the shape was ever measured -- so a
+            # str[] met an i32[] parameter and the body read strings
+            # out of what it had been told were numbers.
+            try:
+                return coerce_to_type(unwrapped, param_type)
+            except (TypeError, OverflowError) as e:
+                raise TypeError(
+                    f"{func_name}: argument '{param_name}': "
+                    f"{e}") from None
         if isinstance(unwrapped, ObjectValue) and hasattr(unwrapped.obj, "data"):
             raw = bytes(unwrapped.obj.data)
             elements = [mk_int(b, elem_type) for b in raw]

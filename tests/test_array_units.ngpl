@@ -262,6 +262,62 @@ fn error_a_literal_of_two_units():
     let a : mut = [m, s]
 
 // ---------------------------------------------------------------------
+// The four places a value meets a type
+// ---------------------------------------------------------------------
+
+fn takes_numbers(a : i32[]) → i32:
+    a[0]
+
+fn lends(a : &mut i32[]):
+    a[0] ← 9
+
+fn hands_back_numbers() → i32[]:
+    let s : str[] = ["a"]
+    s
+
+@test
+@expect error "argument 'a': 'i32' cannot hold a string"
+fn error_an_argument_of_the_wrong_element_type():
+    let s : str[] = ["a", "b"]
+    let n : mut = takes_numbers(s)
+
+// A lent array is written into where the caller holds it, so its type
+// has to be the caller's already.
+@test
+@expect error "argument 'a': 'i32' cannot hold a string"
+fn error_lending_an_array_of_the_wrong_element_type():
+    let s : mut str[] = ["a", "b"]
+    lends(&s)
+
+@test
+@expect error "return type is i32"
+fn error_a_return_of_the_wrong_element_type():
+    let r : mut = hands_back_numbers()
+
+// Two arrays join into one, which holds one type of value.
+@test
+@expect error "the left operand holds i32 and the right holds str"
+fn error_joining_arrays_of_two_types():
+    let a : i32[] = [1, 2]
+    let b : str[] = ["q"]
+    let c : mut = a ⧺ b
+
+@test
+@expect error "an array holds one unit"
+fn error_joining_a_measured_array_to_a_bare_one():
+    let d ¤meter : i64[] = [1, 2]
+    let e : i64[] = [3]
+    let c : mut = d ⧺ e
+
+@test
+fn test_joining_arrays_that_agree():
+    let a : i32[] = [1, 2]
+    let b : i32[] = [3]
+    let c := a ⧺ b
+    assert_eq(c[2], 3)
+    assert_eq(c.sizeof, 3¤ptrdiff)
+
+// ---------------------------------------------------------------------
 // Where a unit cannot be said yet
 // ---------------------------------------------------------------------
 
