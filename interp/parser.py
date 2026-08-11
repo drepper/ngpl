@@ -2275,13 +2275,15 @@ class Parser:
         """Chain .attr, [idx], and (args) postfix operators onto node."""
         while True:
             if self._check("PUNCT") and self._cur().value == ".":
+                dot_tok = self._cur()
                 self.pos += 1
                 attr_name = self._eat_member_name()
                 if self._check("PUNCT") and self._cur().value == "(":
                     args = self._parse_call_args()
-                    node = MethodCall(node, attr_name, args)
+                    node = self._set_pos(MethodCall(node, attr_name, args),
+                                         dot_tok)
                 else:
-                    node = GetAttr(node, attr_name)
+                    node = self._set_pos(GetAttr(node, attr_name), dot_tok)
             elif self._check("PUNCT") and self._cur().value == "[":
                 self.pos += 1
                 node = self._parse_bracket_access(node)

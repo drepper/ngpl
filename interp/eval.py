@@ -46,6 +46,7 @@ from interp.value import (
     check_bootstrap_binding,
     UNTYPED, is_unwidthed, settle_untyped,
     _scalar_kind_mismatch,
+    CharValue, check_code_point,
     UnitValue, RefValue, Reference, ElementRef, Iterator, ArrayIterator,
     deep_copy_value, register_type_alias, DISCARD_NAME,
     register_sum_type, sum_type_alternatives, sum_type_admits,
@@ -999,6 +1000,8 @@ class Evaluator:
             return mk_bool(lv == rv)
         if isinstance(lu, StrValue) and isinstance(ru, StrValue):
             return mk_bool(lu.value == ru.value)
+        if isinstance(lu, CharValue) and isinstance(ru, CharValue):
+            return mk_bool(lu.code == ru.code)
         if isinstance(lu, BoolValue) and isinstance(ru, BoolValue):
             return mk_bool(lu.value == ru.value)
         if isinstance(lu, TypeValue) and isinstance(ru, TypeValue):
@@ -1025,6 +1028,8 @@ class Evaluator:
         """Less-than comparison."""
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
+        if isinstance(lu, CharValue) and isinstance(ru, CharValue):
+            return mk_bool(lu.code < ru.code)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_bool(lu.value < ru.value)
         lf, rf, _ = self._promote_to_float(lu, ru)
@@ -1036,6 +1041,8 @@ class Evaluator:
         """Greater-than comparison."""
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
+        if isinstance(lu, CharValue) and isinstance(ru, CharValue):
+            return mk_bool(lu.code > ru.code)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_bool(lu.value > ru.value)
         lf, rf, _ = self._promote_to_float(lu, ru)
@@ -1047,6 +1054,8 @@ class Evaluator:
         """Less-than-or-equal comparison."""
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
+        if isinstance(lu, CharValue) and isinstance(ru, CharValue):
+            return mk_bool(lu.code <= ru.code)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_bool(lu.value <= ru.value)
         lf, rf, _ = self._promote_to_float(lu, ru)
@@ -1058,6 +1067,8 @@ class Evaluator:
         """Greater-than-or-equal comparison."""
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
+        if isinstance(lu, CharValue) and isinstance(ru, CharValue):
+            return mk_bool(lu.code >= ru.code)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_bool(lu.value >= ru.value)
         lf, rf, _ = self._promote_to_float(lu, ru)
@@ -3171,6 +3182,11 @@ class Evaluator:
             return [mk_int(i) for i in val.to_list()]
         if isinstance(val, ObjectValue) and isinstance(val.obj, ArrayValue):
             return val.obj.values()
+        if isinstance(val, StrValue):
+            # A string is made of characters, so that is what iterating
+            # one hands over -- not strings of one, which would make
+            # every element a container of itself.
+            return [CharValue(ord(c)) for c in val.value]
         if is_comptime and isinstance(val, TupleValue):
             return list(val.elements)
         raise TypeError(
@@ -3741,6 +3757,8 @@ class Evaluator:
             return u.width
         if isinstance(u, StrValue):
             return "str"
+        if isinstance(u, CharValue):
+            return "char"
         if isinstance(u, BoolValue):
             return "bool"
         if isinstance(u, NoneValue):
@@ -3957,6 +3975,19 @@ class Evaluator:
         unwrapped = unwrap_optional(obj)
         if method_name == "__call__":
             return self._do_call(unwrapped, args)
+        if isinstance(unwrapped, CharValue):
+            if method_name != "ord":
+                raise AttributeError(
+                    f"a character has no method '{method_name}'; it answers "
+                    f"ord() with its number")
+            if args:
+                raise TypeError("char.ord takes no arguments")
+            return mk_int(unwrapped.code, "u32")
+        if isinstance(unwrapped, IntValue) and method_name == "chr":
+            if args:
+                raise TypeError("chr takes no arguments")
+            return CharValue(
+                check_code_point(unwrapped.value, "chr"))
         if isinstance(unwrapped, Iterator):
             if method_name != "next":
                 raise AttributeError(

@@ -770,6 +770,7 @@ def _render_template(fmt: str, args, where: str) -> str:
     """
     from interp.eval import unwrap_optional
     from interp.value import (IntValue, FloatValue, BoolValue, StrValue,
+                              CharValue,
                               ObjectValue, ArrayValue, TupleValue,
                               EnumValue, ExpectedValue, NoneValue,
                               TypeValue, FuncValue, LambdaValue, UnitValue)
@@ -795,6 +796,11 @@ def _render_template(fmt: str, args, where: str) -> str:
             return format(text, spec) if spec else text
         if isinstance(uv, StrValue):
             return format(uv.value, spec) if spec else uv.value
+        if isinstance(uv, CharValue):
+            # Written out as itself, the way a string is: the quotes a
+            # character is displayed with are for reading a value back,
+            # not for putting one in a line of output.
+            return format(uv.char, spec) if spec else uv.char
         if isinstance(uv, EnumValue):
             return uv.display()
         if isinstance(uv, TypeValue):

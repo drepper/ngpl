@@ -15,7 +15,7 @@ DISCARD_NAME = "_"
 
 BUILTIN_TYPES: set[str] = {
     "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64",
-    "usize", "int", "bool", "∅", "byte", "str",
+    "usize", "int", "bool", "∅", "byte", "str", "char",
     "i8fast", "u8fast", "i16fast", "u16fast",
     "i32fast", "u32fast", "i64fast", "u64fast",
     "f16", "f32", "f64", "bfloat16", "float",
@@ -690,6 +690,63 @@ class StrValue(Value):
 
     def to_python(self):
         return self.value
+
+
+# What a character may hold: a Unicode scalar value.  The surrogates
+# are excluded because they are not characters -- they exist to encode
+# others in UTF-16, and no UTF-8 text contains one.
+MAX_CODE_POINT = 0x10FFFF
+_SURROGATES = range(0xD800, 0xE000)
+
+
+def check_code_point(value: int, where: str) -> int:
+    """Check that a number names a character, or say why it does not."""
+    if value < 0:
+        raise TypeError(
+            f"{where}: {value} is not a code point; a character is "
+            f"numbered from 0")
+    if value > MAX_CODE_POINT:
+        raise TypeError(
+            f"{where}: {value} is past the last code point, which is "
+            f"{MAX_CODE_POINT} (0x10FFFF)")
+    if value in _SURROGATES:
+        raise TypeError(
+            f"{where}: {value} is a surrogate, which encodes half of a "
+            f"character in UTF-16 rather than being one")
+    return value
+
+
+class CharValue(Value):
+    """A single character: one Unicode scalar value, held as UCS-4.
+
+    A character is not a string of one, and not a number: it is what a
+    string is made of, and what iterating one hands over.  It says its
+    number with .ord() and an integer makes one with .chr().
+    """
+
+    __slots__ = ("code",)
+
+    def __init__(self, code: int):
+        self.code = code
+
+    @property
+    def char(self) -> str:
+        """The character itself, as text."""
+        return chr(self.code)
+
+    def display(self):
+        # Quoted as a character is written, which is not how a string
+        # of one is written: the two are different values.
+        body = _CHAR_ESCAPES.get(self.char, self.char)
+        return f"'{body}'"
+
+    def to_python(self):
+        return self.char
+
+
+_CHAR_ESCAPES = {
+    "\\": "\\\\", "'": "\\'", "\n": "\\n", "\t": "\\t", "\r": "\\r",
+}
 
 
 class BoolValue(Value):
@@ -1456,6 +1513,8 @@ def runtime_type_of(value: "Value") -> str:
         return value.width
     if isinstance(value, StrValue):
         return "str"
+    if isinstance(value, CharValue):
+        return "char"
     if isinstance(value, BoolValue):
         return "bool"
     if isinstance(value, NoneValue):
@@ -2000,7 +2059,7 @@ def coerce_arg(value: "Value", param_type: str, func_name: str, param_name: str)
         f"{func_name}: argument '{param_name}' has unknown type '{param_type}'")
 
 
-_SCALAR_TARGETS = {"str", "bool", "int"}
+_SCALAR_TARGETS = {"str", "bool", "int", "char"}
 
 
 def _scalar_kind_mismatch(value: "Value", target: str) -> str | None:
@@ -2016,6 +2075,18 @@ def _scalar_kind_mismatch(value: "Value", target: str) -> str | None:
         return None
     if isinstance(value, StrValue):
         return None if target == "str" else "a string"
+    # A character is what a string is made of rather than a number or a
+    # string of one, so it converts to neither, and a number becomes
+    # one only where the program says .chr().
+    if isinstance(value, CharValue):
+        return None if target == "char" else "a character"
+    if target == "char":
+        kind = {BoolValue: "a boolean", IntValue: "an integer",
+                FloatValue: "a number", StrValue: "a string"}.get(type(value))
+        if kind is None:
+            return None
+        return (f"{kind}; a number becomes a character with .chr()"
+                if kind in ("an integer", "a number") else kind)
     if target == "str":
         kind = {BoolValue: "a boolean", IntValue: "an integer",
                 FloatValue: "a number"}.get(type(value))

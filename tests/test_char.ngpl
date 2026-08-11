@@ -1,0 +1,193 @@
+// Tests for the character type.
+//
+// A character holds one Unicode scalar value — UCS-4, so any code
+// point, not a byte.  It is what a string is made of, which is what
+// iterating a string hands over.  It is not a string of one and not a
+// number: it says its number with .ord(), and a number becomes one
+// with .chr().
+
+// ---------------------------------------------------------------------
+// Iterating a string
+// ---------------------------------------------------------------------
+
+@test
+fn test_iterating_a_string_gives_characters():
+    let count : mut i64 = 0
+    foreach c := "abc":
+        count ← count + 1
+    assert_eq(count, 3)
+
+@test
+fn test_the_loop_variable_is_a_character():
+    foreach c := "a":
+        static_assert_eq(@typeof(c), char)
+
+@test
+fn test_the_characters_come_in_order():
+    let total : mut u32 = 0
+    foreach c := "abc":
+        total ← total + c.ord()
+    assert_eq(total, 294)
+
+// A character is a code point, not a byte, so a string of one
+// non-ASCII character is one element rather than its UTF-8 length.
+@test
+fn test_a_string_is_counted_in_characters():
+    let count : mut i64 = 0
+    foreach c := "héllo":
+        count ← count + 1
+    assert_eq(count, 5)
+
+@test
+fn test_a_character_beyond_the_basic_plane():
+    let count : mut i64 = 0
+    let found : mut u32 = 0
+    foreach c := "🎉":
+        count ← count + 1
+        found ← c.ord()
+    assert_eq(count, 1)
+    assert_eq(found, 127881)
+
+@test
+fn test_an_empty_string_has_no_characters():
+    let count : mut i64 = 0
+    foreach c := "":
+        count ← count + 1
+    assert_eq(count, 0)
+
+// ---------------------------------------------------------------------
+// .ord() and .chr()
+// ---------------------------------------------------------------------
+
+@test
+fn test_ord_gives_the_code_point():
+    let a : u32 = 97
+    assert_eq(a.chr().ord(), 97)
+
+@test
+fn test_ord_answers_a_u32():
+    let a : u32 = 97
+    let n := a.chr().ord()
+    static_assert_eq(@typeof(n), u32)
+
+@test
+fn test_chr_makes_a_character():
+    let a : u32 = 97
+    let c := a.chr()
+    static_assert_eq(@typeof(c), char)
+
+// Every integer type has it, since every one of them can hold a code
+// point that fits.
+@test
+fn test_chr_is_on_every_integer_type():
+    let a : u8 = 65
+    let b : i32 = 955
+    let c : i64 = 127881
+    assert_eq(a.chr().ord(), 65)
+    assert_eq(b.chr().ord(), 955)
+    assert_eq(c.chr().ord(), 127881)
+
+@test
+fn test_chr_and_ord_are_inverse():
+    let n : u32 = 955
+    assert_eq(n.chr().ord(), n)
+
+// ---------------------------------------------------------------------
+// What is not a code point
+// ---------------------------------------------------------------------
+
+// A character is numbered from zero, so a negative number names none.
+// Where the number is written down this is known before anything runs,
+// which is what tests/output/chr_negative_constant.ngpl shows.
+@test
+@expect error "chr: -1 is not a code point"
+fn error_chr_of_a_negative_number():
+    let n : i64 = ⁻1
+    let c : char = n.chr()
+
+@test
+@expect error "is past the last code point"
+fn error_chr_past_the_last_code_point():
+    let n : i64 = 1114112
+    let c : char = n.chr()
+
+@test
+@expect error "is a surrogate"
+fn error_chr_of_a_surrogate():
+    let n : i64 = 55296
+    let c : char = n.chr()
+
+// The last code point itself is one.
+@test
+fn test_the_last_code_point():
+    let n : i64 = 1114111
+    assert_eq(n.chr().ord(), 1114111)
+
+// ---------------------------------------------------------------------
+// A character is its own kind of value
+// ---------------------------------------------------------------------
+
+@test
+@expect error "'char' cannot hold an integer; a number becomes a character with .chr"
+fn error_a_number_is_not_a_character():
+    let c : char = 5
+
+@test
+@expect error "'char' cannot hold a string"
+fn error_a_string_is_not_a_character():
+    let c : char = "a"
+
+@test
+@expect error "'i64' cannot hold a character"
+fn error_a_character_is_not_a_number():
+    let a : u32 = 97
+    let n : i64 = a.chr()
+
+@test
+@expect error "has no method 'nope'"
+fn error_a_character_has_no_other_method():
+    let a : u32 = 97
+    let n : mut = a.chr().nope()
+
+// ---------------------------------------------------------------------
+// Comparing characters
+// ---------------------------------------------------------------------
+
+@test
+fn test_characters_compare_by_code_point():
+    let a : u32 = 97
+    let b : u32 = 98
+    assert(a.chr() == a.chr())
+    assert(a.chr() != b.chr())
+    assert(a.chr() < b.chr())
+    assert(b.chr() > a.chr())
+    assert(a.chr() <= a.chr())
+    assert(b.chr() >= a.chr())
+
+@test
+fn test_finding_a_character_in_a_string():
+    let wanted : u32 = 108
+    let found : mut i64 = 0
+    foreach c := "hello":
+        if c == wanted.chr():
+            found ← found + 1
+    assert_eq(found, 2)
+
+// ---------------------------------------------------------------------
+// Writing one out
+// ---------------------------------------------------------------------
+
+// A character is written as itself, the way a string is: the quotes it
+// is displayed with at the prompt are for reading a value back.
+@test
+@impure
+fn test_a_character_is_written_as_itself():
+    let alloc := std.heap.allocator()
+    let n : u32 = 955
+    let s := std.format(alloc, "{}", n.chr())
+    assert(s == "λ")
+
+@start
+@impure
+fn main():
+    std.println("char tests passed")

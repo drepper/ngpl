@@ -316,11 +316,18 @@ Type System
 [x] to index multi-dimensional objects (matrices etc) support using multiple comma-separated
     expressions within the square brackets instead of using multiple subsequent square brackets
 
-[ ] Add a character type.  It must hold UCS4.  Implement foreach on strings by assigning the
+[x] Add a character type.  It must hold UCS4.  Implement foreach on strings by assigning the
     individual values to a variable of the character type.  The character type has a member
     function .ord() (no parameter) to convert to an u32.  The integer types have a .chr() member
     function (no parameter) which creates a character value.  Negative integers produce an error.
     Applying .chr() to a negative constant integer must be recognized at parse/compile-time.
+    `char` is its own kind of value: nothing converts to or from it implicitly, so a number
+    becomes one only with .chr() and says its number only with .ord(), which is what keeps
+    `c + 1` from being a character in disguise as it is in Go.  Beyond a negative number,
+    .chr() also refuses one past 0x10FFFF and a surrogate — the latter is what keeps every
+    character encodable as UTF-8, which the language requires of its strings.  Characters
+    compare by code point; one is written out as itself and displayed as 'a'.  Still open:
+    a character literal, building a string from characters, and classification.
 
 
 Data Structures

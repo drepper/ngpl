@@ -22,3 +22,5 @@ what it is.
   written down at each of them
 - [The Tuple Type](design/tuple-type/README.md) — writing down what a
   tuple is, in the shape its values are written
+- [The Character Type](design/char/README.md) — what a string is made
+  of, and why it is neither a byte nor a string of one

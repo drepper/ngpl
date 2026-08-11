@@ -1,0 +1,7 @@
+error: in never_called: chr: -1 is not a code point; a character is numbered from 0
+  --> tests/output/chr_negative_constant.ngpl:5:6
+    |
+  5 |     (⁻1).chr()
+    |      ^^^^^^^
+  6 | 
+    |

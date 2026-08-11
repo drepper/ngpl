@@ -385,6 +385,86 @@ The `byte` type is an 8-bit unsigned integer (semantically identical to `u8`) us
 While `byte` and `u8` have the same representation and coercion rules, `byte` signals intent: the value represents raw data rather than a numeric quantity.  Arithmetic on `byte` values follows the same range rules as `u8`.
 
 
+### The `char` Type
+
+A `char` holds one character: a Unicode scalar value, as UCS-4.  Any code point fits, not only the ones a byte could hold, and every character is one value however many bytes its UTF-8 encoding takes.
+
+A character is what a string is made of, so iterating a string hands over characters:
+
+```
+foreach c := "héllo":
+    std.print("[{}]", c)        /* [h][é][l][l][o] */
+```
+
+That loop runs five times, not six: `é` is one character, whatever its encoding costs.
+
+#### `.ord()` and `.chr()`
+
+A character says its number, and a number becomes a character:
+
+```
+let a : u32 = 955
+let g := a.chr()                /* λ */
+g.ord()                         /* 955, a u32 */
+```
+
+`.ord()` is a member function of `char` and answers a `u32`.  `.chr()` is a member function of every integer type and answers a `char`.  Each takes no arguments, and the two are inverse where the number is a code point.
+
+#### What Is Not a Code Point
+
+A character is numbered from 0 up to 0x10FFFF, and the surrogates in 0xD800…0xDFFF are not characters — they exist to encode others in UTF-16, and no UTF-8 text contains one.  `.chr()` refuses all three cases:
+
+```
+n.chr()     /* n is ⁻1     */  error: chr: -1 is not a code point; a
+                                character is numbered from 0
+n.chr()     /* n is 1114112 */ error: chr: 1114112 is past the last code
+                                point, which is 1114111 (0x10FFFF)
+n.chr()     /* n is 55296   */ error: chr: 55296 is a surrogate, which
+                                encodes half of a character in UTF-16
+                                rather than being one
+```
+
+Where the number is written down rather than computed, the answer is known without running anything, and the mistake is reported at the definition — in a function nobody calls as much as in one that runs:
+
+```
+(⁻1).chr()
+
+error: chr: -1 is not a code point; a character is numbered from 0
+```
+
+#### A Character Is Its Own Kind of Value
+
+Not a number and not a string of one.  Nothing converts to it or from it implicitly; `.chr()` and `.ord()` are how a program crosses between:
+
+```
+let c : char = 5
+
+error: 'char' cannot hold an integer; a number becomes a character with
+.chr()
+
+let n : i64 = a.chr()
+
+error: 'i64' cannot hold a character
+```
+
+Characters compare with each other by code point, with `==`, `!=`, `<`, `>`, `<=`, and `>=`.
+
+A character is written out as itself, the way a string is — `std.print("{}", c)` writes the character.  At the prompt it is *displayed* as `'a'`, quoted the way a character is written rather than the way a string of one would be, so the two are told apart when a value is read back.
+
+#### Comparison with Other Languages
+
+| Language | Character type | What a string iterates |
+|----------|----------------|------------------------|
+| C | `char`, an 8-bit integer | bytes |
+| C++ | `char`, `char8_t`, `char16_t`, `char32_t` | code units of the chosen width |
+| Rust | `char`, a Unicode scalar value | bytes; `.chars()` for characters |
+| Go | `rune`, an alias for `int32` | runes in `range`, bytes by index |
+| Python | none; a string of length 1 | one-character strings |
+| NGPL | `char`, a Unicode scalar value | characters |
+
+Rust's `char` is the closest: a scalar value, distinct from the integer that numbers it, with an explicit conversion each way.  Go's `rune` is an alias for `int32`, which makes arithmetic on characters silently possible; making the type distinct is what stops `c + 1` from being a character in disguise.
+
+
 ### Integer Overflow Semantics
 
 A width is what a program says a value stays inside.  A result outside that range is therefore a mistake to report, not a number to adjust — for an unsigned type as much as a signed one:

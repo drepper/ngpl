@@ -1,0 +1,10 @@
+// A character is numbered from zero, so a negative number names none.
+// Where the number is written down that is known before anything runs,
+// and this function is never called.
+fn never_called() → char:
+    (⁻1).chr()
+
+@start
+@impure
+fn main():
+    std.println("main ran")

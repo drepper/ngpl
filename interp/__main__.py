@@ -1581,6 +1581,35 @@ def _negated_literals(body) -> set[int]:
             and isinstance(node.operand, _ast.IntLit)}
 
 
+def _static_chr_check(func_def) -> str | None:
+    """Refuse .chr() on a number that is written down and negative.
+
+    A character is numbered from zero, so a negative one names none.
+    Where the number is a literal the answer is known without running
+    anything, and a mistake known at the definition is reported there.
+    """
+    negated = _negated_literals(func_def.body)
+    for node in _iter_ast(func_def.body):
+        if not isinstance(node, _ast.MethodCall) or node.method != "chr":
+            continue
+        target = node.obj
+        if isinstance(target, _ast.UnaryOp) and target.op == "\N{SUPERSCRIPT MINUS}":
+            target = target.operand
+            if not isinstance(target, _ast.IntLit):
+                continue
+            value = -target.value
+        elif isinstance(target, _ast.IntLit):
+            value = (-target.value if id(target) in negated
+                     else target.value)
+        else:
+            continue
+        if value < 0:
+            return _Finding(
+                f"chr: {value} is not a code point; a character is "
+                f"numbered from 0", _call_site(node))
+    return None
+
+
 def _static_literal_check(func_def) -> str | None:
     """Refuse an integer literal the type its suffix names cannot hold.
 
@@ -2057,6 +2086,10 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 if literal_err is not None:
                     raise DefinitionError(f"in {defn.name}: {literal_err}",
                                           _finding_pos(literal_err) or _node_pos(defn))
+                chr_err = _static_chr_check(defn)
+                if chr_err is not None:
+                    raise DefinitionError(f"in {defn.name}: {chr_err}",
+                                          _finding_pos(chr_err) or _node_pos(defn))
                 struct_vars = _struct_vars_of(defn, env)
                 purity_err = _static_purity_check(defn, env, struct_vars)
                 if purity_err is not None:
@@ -2081,6 +2114,7 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
         for method_def in defn.methods:
             struct_vars = _struct_vars_of(method_def, env, self_type=st)
             for finding in (_static_literal_check(method_def),
+                            _static_chr_check(method_def),
                             _static_purity_check(method_def, env, struct_vars),
                             _static_unused_value_check(method_def, env,
                                                        struct_vars)):
@@ -2223,6 +2257,11 @@ def main():
             literal_err = _static_literal_check(defn)
             if literal_err is not None:
                 errors_produced.append(("error", literal_err))
+
+        if not errors_produced:
+            chr_err = _static_chr_check(defn)
+            if chr_err is not None:
+                errors_produced.append(("error", chr_err))
 
         if not errors_produced:
             struct_vars = _struct_vars_of(defn, env)
