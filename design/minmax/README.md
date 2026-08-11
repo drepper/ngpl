@@ -120,6 +120,11 @@ where both operands are; and in front of text, the upper and the lower
 case of it, which the bootstrap takes from what Python already knows
 about Unicode case.
 
+[`⍳`](../index-of/README.md) was later given the same precedence
+level, for the same reasons — what it is asked about is often
+computed, and what it answers is usually asked about rather than
+combined.
+
 The extreme of a whole vector is the fold of the operator over it,
 written with a lambda:
 

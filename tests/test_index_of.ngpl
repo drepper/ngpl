@@ -1,0 +1,199 @@
+// Tests for ⍳, which says where something is.
+//
+// The answer is counted from zero and is optional, since what is
+// looked for may not be there: ∅ says so where a sentinel would have
+// to be remembered.  It carries the unit an index of that container
+// carries, so what comes back can be used to look with.
+
+// ---------------------------------------------------------------------
+// In an array
+// ---------------------------------------------------------------------
+
+@test
+fn test_finding_an_element():
+    let v : i64[] = [10, 20, 30]
+    assert_eq((v ⍳ 10) ?? ⁻1, 0)
+    assert_eq((v ⍳ 20) ?? ⁻1, 1)
+    assert_eq((v ⍳ 30) ?? ⁻1, 2)
+
+@test
+fn test_what_is_not_there():
+    let v : i64[] = [10, 20, 30]
+    assert((v ⍳ 99) == ∅)
+
+@test
+fn test_the_first_of_several():
+    let v : i64[] = [1, 2, 1, 2]
+    assert_eq((v ⍳ 2) ?? ⁻1, 1)
+
+@test
+fn test_searching_an_empty_array():
+    let v : i64[] = []
+    assert((v ⍳ 1) == ∅)
+
+@test
+fn test_searching_for_something_other_than_a_number():
+    let words : str[] = ["one", "two", "three"]
+    assert_eq((words ⍳ "two") ?? ⁻1, 1)
+    assert((words ⍳ "four") == ∅)
+
+@test
+fn test_searching_an_array_of_characters():
+    let cs : char[] = ['a', 'b', 'c']
+    assert_eq((cs ⍳ 'c') ?? ⁻1, 2)
+
+// ---------------------------------------------------------------------
+// In a string
+// ---------------------------------------------------------------------
+
+@test
+fn test_finding_a_character_in_a_string():
+    let s := "hello"
+    assert_eq((s ⍳ 'h') ?? ⁻1, 0)
+    assert_eq((s ⍳ 'l') ?? ⁻1, 2)
+    assert((s ⍳ 'z') == ∅)
+
+// A run of characters is where it starts.
+@test
+fn test_finding_a_string_in_a_string():
+    let s := "hello world"
+    assert_eq((s ⍳ "world") ?? ⁻1, 6)
+    assert_eq((s ⍳ "o w") ?? ⁻1, 4)
+    assert((s ⍳ "worlds") == ∅)
+
+// Counted in characters, as everything about a string is.
+@test
+fn test_a_position_is_counted_in_characters():
+    let s := "héllo 🎉!"
+    assert_eq((s ⍳ '🎉') ?? ⁻1, 6)
+    assert_eq((s ⍳ 'l') ?? ⁻1, 2)
+
+@test
+fn test_the_empty_string_is_at_the_beginning():
+    let s := "abc"
+    assert_eq((s ⍳ "") ?? ⁻1, 0)
+
+// ---------------------------------------------------------------------
+// What comes back
+// ---------------------------------------------------------------------
+
+// The position carries the unit an index carries, so it can be used to
+// look with.
+@test
+fn test_the_answer_is_an_index():
+    let v : i64[] = [10, 20, 30]
+    let i ¤ptrdiff : i64 = (v ⍳ 20) ?? 0
+    assert_eq(v[i], 20)
+
+// What is looked for is an element, which carries no unit of its own;
+// what comes back is a position, which carries the one an index of
+// that container carries.
+@test
+fn test_the_answer_of_a_byte_array_is_counted_in_bytes():
+    let b : byte[] = std.bytes("abc")
+    let at ¤byte : i64 = (b ⍳ 98) ?? ⁻1
+    assert_eq(at, 1¤byte)
+    assert_eq(@unitof(at), ¤byte)
+
+// It is an optional, so a match reads both ways it can go.
+@test
+fn test_matching_on_the_answer():
+    let s := "hello world"
+    let where : mut i64 = ⁻1
+    match s ⍳ 'w':
+        ∃(at):
+            where ← @dropunit(at)
+        ∅:
+            where ← ⁻2
+    assert_eq(where, 6)
+
+@test
+fn test_matching_on_what_is_not_there():
+    let s := "hello"
+    let where : mut i64 = 0
+    match s ⍳ 'z':
+        ∃(at):
+            where ← @dropunit(at)
+        ∅:
+            where ← ⁻2
+    assert_eq(where, ⁻2)
+
+// ---------------------------------------------------------------------
+// What it refuses
+// ---------------------------------------------------------------------
+
+@test
+@expect error "a string is searched for a character or a string"
+fn error_searching_a_string_for_a_number():
+    let s := "hello"
+    let at : mut = s ⍳ 5i64
+
+@test
+@expect error "what is searched is an array or a string"
+fn error_searching_something_that_is_not_a_container():
+    let at : mut = 5i64 ⍳ 1i64
+
+// A range is a pair of ends rather than something to look in, and the
+// refusal names it rather than the type of its ends.
+@test
+@expect error "the left operand is range"
+fn error_searching_a_range():
+    let r := 10…20
+    let at : mut = r ⍳ 12
+
+// An element is compared the way == compares it, so a unit that does
+// not belong is refused here as it would be between the two operands
+// rather than quietly matching nothing.
+@test
+@expect error "cannot compare"
+fn error_searching_for_a_unit_that_does_not_belong():
+    let v : i64[] = [10, 20, 30]
+    let at : mut = v ⍳ 20¤byte
+
+// A position in something with more than one dimension is not one
+// number, so there is nothing honest to answer.
+@test
+@expect error "more than one dimension"
+fn error_searching_a_matrix():
+    let m : i64[2, 2] = [[1, 2], [3, 4]]
+    let at : mut = m ⍳ 3
+
+// A slice is a container in its own right, and a position in it is
+// counted from its own beginning.
+@test
+fn test_searching_a_slice():
+    let v : i64[] = [10, 20, 30, 40]
+    assert_eq((v[1…3] ⍳ 30) ?? ⁻1, 1)
+
+// What a string is made of can be searched as the array it is.
+@test
+fn test_searching_the_characters_of_a_string():
+    let s := "hello"
+    assert_eq((s.chars() ⍳ 'e') ?? ⁻1, 1)
+
+// ---------------------------------------------------------------------
+// Before anything runs
+// ---------------------------------------------------------------------
+
+@test
+fn test_a_position_is_known_at_compile_time():
+    static_assert((([10, 20, 30] ⍳ 20) ?? ⁻1) == 1)
+    static_assert((("hello" ⍳ "ll") ?? ⁻1) == 2)
+    static_assert((("hello" ⍳ "zz") ?? ⁻1) == ⁻1)
+
+// ---------------------------------------------------------------------
+// Grouping
+// ---------------------------------------------------------------------
+
+// What is looked for may be computed, so ⍳ binds looser than
+// arithmetic.
+@test
+fn test_arithmetic_binds_tighter():
+    let v : i64[] = [10, 20, 30]
+    let n : i64 = 10
+    assert_eq((v ⍳ n + 10) ?? ⁻1, 1)
+
+@start
+@impure
+fn main():
+    std.println("index-of tests passed")

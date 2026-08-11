@@ -152,6 +152,13 @@ Completed
     name free for rounding.  A character is asked through its string, since one character's
     upper case can be more than one character.
 
+[x] ⍳ says where something is in a container, counted from zero, which is the .find a string
+    wanted as well: the left operand is an array or a string, the right an element, a
+    character, or a run of characters.  The answer is optional rather than APL's
+    length-of-the-container, so a program that forgets to ask is refused rather than reading
+    past the end, and it carries the unit an index of that container carries so it can be
+    used to look with.  It binds where ⌈ and ⌊ do.
+
 [x] writing → ∅ on a function or a method draws a warning, since it says what
     leaving the return type off says and having both spellings invites a reader to look
     for a difference that is not there.  A lambda is exempt, having to state a return

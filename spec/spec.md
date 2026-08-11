@@ -1503,6 +1503,119 @@ The `.sizeof` property name is chosen to parallel the C/C++ `sizeof` operator wh
 The dynamic array type is the natural parameter type for functions that operate on variable-length data: hash functions, encoders, search routines.  The implicit size avoids the error-prone pattern of passing separate data and length parameters.
 
 
+### Where Something Is: `⍳`
+
+`⍳` (U+2373 APL FUNCTIONAL SYMBOL IOTA) answers where in a container something is, counted from zero:
+
+```
+let v : i64[] = [10, 20, 30]
+v ⍳ 20                          /* 1 */
+
+let s := "hello world"
+s ⍳ 'w'                         /* 6 */
+s ⍳ "world"                     /* 6 — a run of characters is where it starts */
+```
+
+The left operand is an array or a string; the right is what is looked for.  In an array that is an element, compared as `==` compares.  In a string it is a character or a string, and a position is counted in characters as everything about a string is.  The first of several is the one answered.
+
+A slice is a container in its own right, and a position in it is counted from its own beginning:
+
+```
+v[1…3] ⍳ 30                     /* 1 */
+```
+
+#### The Answer Is Optional
+
+What is looked for may not be there, and a position that is not in the container is not a number to invent:
+
+```
+v ⍳ 99                          /* ∅ */
+(v ⍳ 99) ?? ⁻1                  /* ⁻1, where a sentinel is wanted */
+
+match s ⍳ 'z':
+    ∃(at):
+        …
+    ∅:
+        …
+```
+
+APL answers with the length of the container, which a program has to remember to compare against.  An optional says it in the type, so a program that forgets to ask is refused rather than reading past the end.
+
+#### The Answer Is an Index
+
+It carries the unit an index of that container carries — `ptrdiff`, or `byte` for a `byte[]` — so what comes back can be used to look with:
+
+```
+let i ¤ptrdiff : i64 = (v ⍳ 20) ?? 0
+v[i]                            /* 20 */
+```
+
+The unit is on the answer and not on what is looked for.  An element of a `byte[]` is a byte, not a count of bytes, so it is written without one:
+
+```
+let b : byte[] = std.bytes("abc")
+let at ¤byte : i64 = (b ⍳ 98) ?? ⁻1     /* 1¤byte */
+```
+
+#### What It Refuses
+
+An element is compared the way `==` compares it, so a unit that does not belong to the container is refused where it is written rather than quietly matching nothing:
+
+```
+v ⍳ 20¤byte
+
+error: cannot compare typed integer i64 without unit with unit B
+```
+
+A position in something with more than one dimension is not one number, so there is nothing to answer:
+
+```
+let m : i64[2, 2] = [[1, 2], [3, 4]]
+m ⍳ 3
+
+error: ⍳: the left operand has more than one dimension, and a position
+in it is not one number; a row of it is searched on its own
+```
+
+What is not looked in at all is named as what it is — a range is a pair of ends rather than something to search:
+
+```
+(10…20) ⍳ 12
+
+error: ⍳: the left operand is range, and what is searched is an array
+or a string
+```
+
+A string is searched for text, since a number is not a part of one:
+
+```
+"hello" ⍳ 5i64
+
+error: ⍳: a string is searched for a character or a string, not for i64
+```
+
+#### Grouping
+
+`⍳` binds where `⌈` and `⌊` do: looser than every arithmetic and bitwise operator, tighter than the comparisons and `…`.  What is looked for is often computed, and what comes back is usually asked about rather than combined.
+
+```
+v ⍳ n + 10                      /* what is looked for is the sum */
+```
+
+#### Comparison with Other Languages
+
+| Language | Where something is | When it is not there |
+|----------|--------------------|----------------------|
+| APL | `⍳` | the length of the container |
+| C | `strchr`, `memchr` | a null pointer |
+| C++ | `.find()` | `npos` |
+| Python | `.index()` / `.find()` | an exception / `-1` |
+| Rust | `.position()`, `.find()` | `None` |
+| NGPL | `⍳` | `∅` |
+
+The glyph is APL's and the answer is Rust's.  One operator serves an array and a string, so a program that has learned it for one has learned it for the other; there is no separate `.find` for text.
+
+
 ### Integer Remainder
 
 The `%` operator computes the integer remainder with truncation toward zero, matching C, C++, and Rust semantics:

@@ -803,6 +803,54 @@ class Evaluator:
             f"a result inside; got "
             f"{runtime_type_of(lu)} and {runtime_type_of(ru)}")
 
+    def _op_index_of(self, left, right):
+        """Where in a container something is, counted from zero.
+
+        The answer is optional because it may not be there at all: a
+        position that is not in the container is not a number to
+        invent, and ∅ says so where a sentinel would have to be
+        remembered.  It carries the unit an index of that container
+        carries, so what comes back can be used to look with.
+        """
+        container = _unwrap_operand(left)
+        wanted = _unwrap_operand(right)
+        if isinstance(container, StrValue):
+            if isinstance(wanted, CharValue):
+                found = container.value.find(wanted.char)
+            elif isinstance(wanted, StrValue):
+                # A run of characters is where it starts.
+                found = container.value.find(wanted.value)
+            else:
+                raise TypeError(
+                    f"\N{APL FUNCTIONAL SYMBOL IOTA}: a string is searched "
+                    f"for a character or a string, not for "
+                    f"{runtime_type_of(wanted)}")
+            return (none() if found < 0
+                    else some(self._sizeof_result(found)))
+        array = self._as_array(container)
+        if array is None:
+            raise TypeError(
+                f"\N{APL FUNCTIONAL SYMBOL IOTA}: the left operand is "
+                f"{self._value_type_name(container)}, and what is searched "
+                f"is an array or a string")
+        for index, element in enumerate(array.values()):
+            # Compared the way == compares, by going through the same
+            # door: a unit that does not belong to the container is
+            # refused here as it would be between the two operands,
+            # rather than quietly matching nothing.
+            same = self._apply_operator("==", element, right)
+            if not isinstance(unwrap_optional(same), BoolValue):
+                # The comparison answered element-wise, so the element
+                # is itself a container: a position in it is not one
+                # number, and there is nothing honest to answer.
+                raise TypeError(
+                    f"\N{APL FUNCTIONAL SYMBOL IOTA}: the left operand has "
+                    f"more than one dimension, and a position in it is not "
+                    f"one number; a row of it is searched on its own")
+            if to_bool(same):
+                return some(self._sizeof_result(index, array.element_type))
+        return none()
+
     def _op_max(self, left, right):
         """The larger of two numbers (\N{LEFT CEILING})."""
         return self._op_extremum(left, right, "maximum (\N{LEFT CEILING})",
@@ -1289,6 +1337,10 @@ class Evaluator:
         """
         if op == "\N{DOUBLE PLUS}":
             return self._op_concat(left, right)
+        if op == "\N{APL FUNCTIONAL SYMBOL IOTA}":
+            # The container is the operand rather than a stand-in for
+            # its elements, so this does not go element-wise.
+            return self._op_index_of(left, right)
         if op in self._APPROX_OPS:
             return self._op_approx(op, left, right)
         lu = unwrap_optional(left)

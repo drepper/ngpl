@@ -26,3 +26,6 @@ what it is.
   of, and why it is neither a byte nor a string of one
 - [An Operator Where a Function Goes](design/operator-as-value/README.md)
   — writing `+⌿ v` rather than a lambda that repeats the operator
+- [Where Something Is: `⍳`](design/index-of/README.md) — looking for
+  something in an array or a string, and what comes back when it is
+  not there

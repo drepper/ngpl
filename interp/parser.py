@@ -70,6 +70,8 @@ _MINMAX_OPS = frozenset({"\N{LEFT CEILING}", "\N{LEFT FLOOR}"})
 # The same glyphs in front of an operand, where they are the case of
 # text rather than the larger or smaller of two numbers.
 _CASE_OPS = _MINMAX_OPS
+# What binds at that level: the two above, and finding a position.
+_PICK_OPS = _MINMAX_OPS | {"\N{APL FUNCTIONAL SYMBOL IOTA}"}
 
 # The fold operators, and the operators that may be folded with.
 _FOLD_OPS = frozenset({"\N{APL FUNCTIONAL SYMBOL SLASH BAR}",
@@ -1752,17 +1754,19 @@ class Parser:
         return left
 
     def _parse_minmax_expr(self):
-        """minmax_expr → shift_expr (('⌈' | '⌊') shift_expr)*
+        """minmax_expr → shift_expr (('⌈' | '⌊' | '⍳') shift_expr)*
 
         Loose enough that the operands may be written as arithmetic --
         `a + b ⌈ c - d` is the larger of the two sums, which is how one
         says it -- and tight enough that a comparison or a range reads
-        the answer rather than an operand.
+        the answer rather than an operand.  ⍳ sits here for the same
+        reason: what is looked for is often computed, and what comes
+        back is usually asked about rather than combined.
         """
         left = self._parse_shift_expr()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value in _MINMAX_OPS):
+            if not (self._check("OP") and self._cur().value in _PICK_OPS):
                 break
             op_tok = self._cur()
             self.pos += 1
