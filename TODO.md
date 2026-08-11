@@ -348,10 +348,11 @@ Type System
     "hi!".  Two pieces meet here.  An operator may stand where a fold's function goes —
     +⌿ nums is the sum, and the lambda repeating the operator is no longer needed — which is
     APL's +/ and is read only directly before ⌿ or ⍀, the one place an operator could not
-    otherwise appear.  And ⧺ takes an integer operand as the character it numbers, checked
-    as .chr() checks it; that is the one place a number becomes a character without .chr()
-    being written, and it holds because an operand of ⧺ is being written into a string.  A
-    number's digits are still written with std.format.  Still open: taking a string apart
+    otherwise appear.  ⧺ over a vector of characters spells the string they make; a vector of
+    code points says the conversion where it happens, since ⧺ refuses a number.  Letting ⧺
+    read a number as the character it numbers was tried and taken out again: it would have
+    made "total: " ⧺ 5 a control character rather than "total: 5" or an error, and which of
+    the two a number means is not something the operator can decide.  Still open: taking a string apart
     other than by iterating it, decoding a byte[], classification, and .ord() at compile
     time.
 

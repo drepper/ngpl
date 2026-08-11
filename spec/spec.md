@@ -490,20 +490,18 @@ fn reversed(text : str) → str:
     out
 ```
 
-An integer joins text as the character it numbers, which is what builds a string out of a vector of code points:
+A number is not text, and is refused.  Which of the two things it might have meant — the character it numbers, or its digits — is not something the operator can decide, so the program says which:
 
 ```
-'a' ⧺ 98                        /* "ab" */
-"n=" ⧺ 65                       /* "n=A" */
-```
+"n=" ⧺ 65
 
-The number has to name a character, and says so when it does not — the same three refusals `.chr()` makes.  Anything else is not text and is refused, since a sequence joins with a sequence of the same kind:
+error: ⧺: the right operand is int, which does not go together with
+text; a number becomes the character it numbers with .chr(), and its
+digits with std.format
 
-```
-'a' ⧺ 1.5
-
-error: ⧺: the right operand is f64, which does not go together with
-text; a number is written into a string with std.format
+let n : u32 = 65
+"n=" ⧺ n.chr()                           /* "n=A" */
+"n=" ⧺ std.format(alloc, "{}", n)        /* "n=65" */
 ```
 
 Two arrays still join as arrays; that is the other thing `⧺` does, and an array is not text.
@@ -521,16 +519,19 @@ chars.str()                     /* "hi!" */
 
 #### Folding a Vector into a String
 
-Since `⧺` joins text and takes a number as the character it numbers, folding it over a vector builds a string from it:
+`⧺` joins text, so folding it over a vector of characters spells the string they make:
+
+```
+let chars : char[] = ['h', 'i', '!']
+⧺⌿ chars                        /* "hi!" */
+⧺⌿ (chars, "say ")              /* "say hi!" — with an initial value */
+```
+
+A vector of *code points* is a vector of numbers, so the conversion is written where it happens:
 
 ```
 let codes : u32[] = [104, 105, 33]
-⧺⌿ codes                        /* "hi!" */
-
-let chars : char[] = ['h', 'i', '!']
-⧺⌿ chars                        /* "hi!" */
-
-⧺⌿ (codes, "say ")              /* "say hi!" — with an initial value */
+(λa : str, b : u32 → str: a ⧺ b.chr()) ⌿ (codes, "")    /* "hi!" */
 ```
 
 The operator stands where the fold's function goes; see [Fold Operators](#fold-operators--and-).

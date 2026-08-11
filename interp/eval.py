@@ -119,12 +119,10 @@ def _parameter_names(params) -> set[str]:
 def _joins_as_text(value) -> bool:
     """Whether ⧺ reads this operand as text.
 
-    A string and a character are text.  An integer is the character it
-    numbers, which is what a vector of code points is folded into a
-    string with; an array is not, since joining arrays is the other
-    thing ⧺ does.
+    A string and a character, and nothing else.  A number is not text,
+    and an array is the other thing ⧺ joins.
     """
-    return isinstance(value, (StrValue, CharValue, IntValue))
+    return isinstance(value, (StrValue, CharValue))
 
 
 def _names_display(names) -> str:
@@ -1318,22 +1316,20 @@ class Evaluator:
     def _text_operand(value, side: str) -> str:
         """The text an operand of ⧺ stands for.
 
-        A string is its text and a character is itself.  An integer is
-        the character it numbers, which is what lets a vector of code
-        points be folded into a string: ⧺⌿ ⟨104, 105⟩ is "hi".  The
-        number has to name a character, and says so when it does not.
+        A string is its text and a character is itself.  A number is
+        neither: which of the two it was meant as -- the character it
+        numbers, or its digits -- is not something the operator can
+        decide, so the program says which.
         """
         if isinstance(value, StrValue):
             return value.value
         if isinstance(value, CharValue):
             return value.char
-        if isinstance(value, IntValue):
-            return chr(check_code_point(value.value,
-                                        "\N{DOUBLE PLUS}"))
         raise TypeError(
             f"\N{DOUBLE PLUS}: the {side} operand is "
             f"{runtime_type_of(value)}, which does not go together with "
-            f"text; a number is written into a string with std.format")
+            f"text; a number becomes the character it numbers with "
+            f".chr(), and its digits with std.format")
 
     def _mk_int(self, value: int, width: str) -> IntValue:
         if self._wrapping:

@@ -161,32 +161,39 @@ The conversion is written at the value that has it, which is where
 a fallible operation with a different signature, which the language
 does not yet have.
 
-### A number joins text as its character
+### A number does not join text
 
-`⧺` takes an integer operand as the character it numbers, so a vector
-of code points folds into a string:
+Considered and rejected: letting `⧺` take an integer as the character
+it numbers, so that a vector of code points could be folded straight
+into a string with `⧺⌿ codes`.
+
+It is tempting because an operand of `⧺` is being written into a
+string, and a number written into a string one character at a time can
+only mean the character it numbers.  It was tried, and the reason it
+came out again is what it does to the other reading:
+`"total: " ⧺ 5` becomes `"total: \u{5}"` — a control character in the
+output — where a reader expects `"total: 5"` or an error.
+
+A number is not text, and which of the two it was meant as is not
+something the operator can decide.  So it is refused, and the message
+names both ways across:
 
 ```
-let codes : u32[] = [104, 105, 33]
-⧺⌿ codes            // "hi!"
+"n=" ⧺ 65
+
+error: ⧺: the right operand is int, which does not go together with
+text; a number becomes the character it numbers with .chr(), and its
+digits with std.format
 ```
 
-This is the one place a number becomes a character without `.chr()`
-being written, and it is worth being clear about why that is not the
-rule it looks like.  `⧺` builds text and nothing else — an operand of
-it is being written into a string, and a number written into a string
-one character at a time can only mean the character it numbers.  The
-number is checked as `.chr()` would check it, so `"x" ⧺ 1114112` is
-refused for the same reason `1114112.chr()` is.
+A vector of code points is folded into a string by saying the
+conversion where it happens:
 
-What it costs is that `"total: " ⧺ 5` is the string `"total: \u{5}"`
-rather than an error or `"total: 5"`.  A number's *digits* are written
-with `std.format`, which is where a program says it wants the
-decimal.
+```
+(λa : str, b : u32 → str: a ⧺ b.chr()) ⌿ (codes, "")
+```
 
-The alternative — reading a number as its decimal here — would have
-made `⧺⌿ codes` answer `"10410533"`, which is the operation nobody
-wants a fold for.
+which is longer than `⧺⌿ codes` and says a thing that is true.
 
 ## Status
 
