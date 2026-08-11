@@ -65,6 +65,12 @@ from interp.errors import attach_backtrace, diagnostic_level, strip_position_pre
 _EMPTY_MEASURE = object()
 
 
+def _is_keyed_container(value) -> bool:
+    """Whether a value is a hash or a set."""
+    return (isinstance(value, ObjectValue)
+            and isinstance(value.obj, (HashValue, SetValue)))
+
+
 def _flatten_names(name):
     """Every name a loop variable binds, a pattern holding several."""
     if isinstance(name, tuple):
@@ -1638,6 +1644,74 @@ class Evaluator:
             return coerce_to_type(key, key_type, key_unit, self._mk_int)
         return key
 
+    def _op_container_eq(self, op: str, left, right):
+        """Whether two hashes or two sets hold the same things.
+
+        Order is not part of it.  A hash and a set have no order of
+        their own -- what they keep is the order things arrived in, so
+        that walking one is repeatable -- and two that hold the same
+        things are the same whichever way each was built up.
+        """
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
+        same = self._same_value(lu, ru, strict=True)
+        return mk_bool(same if op == "=" else not same)
+
+    def _same_value(self, one, other, strict: bool = False) -> bool:
+        """Whether two values hold the same thing, however deep it sits.
+
+        Used where a container is compared whole, which is the one
+        place equality has to reach through an array rather than being
+        asked of each of its elements.
+        """
+        one = _unwrap_operand(one)
+        other = _unwrap_operand(other)
+        for kind in (HashValue, SetValue):
+            first = (one.obj if isinstance(one, ObjectValue)
+                     and isinstance(one.obj, kind) else None)
+            second = (other.obj if isinstance(other, ObjectValue)
+                      and isinstance(other.obj, kind) else None)
+            if first is None and second is None:
+                continue
+            if first is None or second is None:
+                if strict:
+                    raise TypeError(
+                        f"{self._value_type_name(one)} and "
+                        f"{self._value_type_name(other)} are not compared "
+                        f"with each other: they hold different kinds of "
+                        f"thing, so neither could be the other")
+                return False
+            if strict:
+                self._same_held(kind, first, second)
+            if first.sizeof != second.sizeof:
+                return False
+            if kind is SetValue:
+                return all(second.has(v) for v in first.values())
+            return all(second.has(k)
+                       and self._same_value(second.get(k), v)
+                       for k, v in first.pairs())
+        first = self._as_array(one)
+        second = self._as_array(other)
+        if first is not None or second is not None:
+            if first is None or second is None or first.sizeof != second.sizeof:
+                return False
+            return all(self._same_value(first.get(i), second.get(i))
+                       for i in range(first.sizeof))
+        return to_bool(self._op_eq(one, other))
+
+    def _same_held(self, kind, first, second):
+        """Refuse comparing two containers that cannot hold the same."""
+        attrs = ((("key", "key_type"), ("value", "value_type"))
+                 if kind is HashValue else (("value", "value_type"),))
+        what = "hash" if kind is HashValue else "set"
+        for name, attr in attrs:
+            one, other = getattr(first, attr), getattr(second, attr)
+            if one is not None and other is not None and one != other:
+                raise TypeError(
+                    f"a {what} holds one type of {name}, so two are compared "
+                    f"only where they hold the same, but the left holds "
+                    f"{one} and the right holds {other}")
+
     def _op_subset(self, op: str, left, right):
         """Whether everything in the one is in the other.
 
@@ -1918,6 +1992,13 @@ class Evaluator:
             # the optional had never been there.  `(v ⍳ x) == ∅` asks
             # the same question whichever way the search went.
             return self._ops[op](left, right)
+        if op in ("=", "\N{NOT EQUAL TO}") \
+                and (_is_keyed_container(_unwrap_operand(left))
+                     or _is_keyed_container(_unwrap_operand(right))):
+            # A hash and a set are the operand rather than a stand-in
+            # for what is in them, so they are compared whole and answer
+            # one truth value rather than one for each thing in them.
+            return self._op_container_eq(op, left, right)
         if op in self._LISTABLE_BINOPS:
             # An operand deeper than the operator asks for is taken
             # apart and the operator asked again of each of its

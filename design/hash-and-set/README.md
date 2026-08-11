@@ -165,6 +165,27 @@ wins, which is Python's answer for `{**a, **b}` and which makes
 place it first had — what the right operand says is what the key holds,
 not where it sits.
 
+## Comparing Two
+
+Order is not part of it.  This is the one place the insertion order
+kept for walking has to be *un*-kept: it exists so that a walk is
+repeatable, not because a hash has an order, and two that hold the same
+things are the same whichever way each was built up.  Making `=` order-
+sensitive would have made it answer a question about how the value was
+constructed rather than about what it is.
+
+The answer is one truth value for the whole of it.  Two *arrays*
+compared with `=` answer element by element, because an array is
+threaded over and a comparison is a listable operator; a hash and a set
+are the operand rather than a stand-in for what is in them, so they are
+dispatched before threading, where `⧺`, `∪` and `∊` already are.
+
+It reaches as deep as what is held, which needed a structural equality
+that arrays do not have: `a = b` on two arrays is element-wise and
+never answers one bool, so comparing a hash *of* arrays could not be
+built out of it.  `assert_eq` had its own deep comparison already and
+now knows these too.
+
 ## Status
 
 Implemented: literals, `std.hash(K, V)` and `std.set(V)` as types in a

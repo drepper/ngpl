@@ -226,7 +226,17 @@ Completed
     holds each value once, so joining two would keep nothing the second repeats, which is ∪
     spelled a second way, and a second spelling is what ⊃ and ⊇ were turned down for.
 
-[ ] two hashes or sets cannot be compared with =, and neither can be a key.
+[x] = and ≠ compare two hashes or two sets, order aside.  That is the one place the insertion
+    order has to be un-kept: it exists so a walk is repeatable, not because a hash has an
+    order, and two holding the same things are the same however each was built up.  The answer
+    is one truth value for the whole of it -- two arrays compared with = answer element by
+    element, an array being threaded over, but these are the operand rather than a stand-in
+    for what is in them, so they are dispatched before threading where ⧺, ∪ and ∊ are.  It
+    reaches as deep as what is held, which needed a structural equality arrays do not have,
+    since = on two arrays never answers one bool.  assert_eq knows them too.
+
+[ ] a hash or a set cannot be a key: neither is rememberable, which is the question a struct
+    raises as well.
 
 [x] an array type may be written where a type is compared against: `static_assert_eq(@typeof(e),
     i8[3])`.  A bare name and a tuple type already could, so the spelling @typeof answers with

@@ -1721,6 +1721,27 @@ foreach v := s:
     …
 ```
 
+#### Whether Two Hold the Same Things
+
+`=` and `≠` compare two hashes or two sets, and **order is not part of it**.  What a hash and a set keep is the order things arrived in, so that walking one is repeatable; two that hold the same things are the same whichever way each was built up:
+
+```
+⸨1, 2⸩ = ⸨2, 1⸩                          /* true */
+⸨"a": 1, "b": 2⸩ = ⸨"b": 2, "a": 1⸩     /* true */
+⸨"a": 1⸩ = ⸨"a": 9⸩                      /* false */
+```
+
+The answer is **one** truth value for the whole of it, not one for each thing in it: a hash and a set are the operand rather than a stand-in for what is in them, so they are not threaded — where two arrays compared with `=` answer element by element, these answer once.  The comparison reaches as deep as what is held, so a hash of arrays compares the arrays.
+
+Two are compared only where they could hold the same, so a hash against a set, or a set against an array, or two sets holding different types, are all refused:
+
+```
+a = h
+
+error: std.set(i64) and std.hash(str,i64) are not compared with each
+other: they hold different kinds of thing, so neither could be the other
+```
+
 #### Joining Two Hashes
 
 `⧺` joins two hashes, and where both hold the same key the **right-hand** value is the answer:

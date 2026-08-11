@@ -20,6 +20,7 @@ import interp.ast as _ast
 from interp.value import (
     check_bootstrap_binding, check_binding_settles, check_int,
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
+    HashValue, SetValue,
     NoneValue, SomeValue, ExpectedValue, EnumType, EnumValue, StructType,
     coerce_to_type, apply_unit, validate_param_type, validate_type, none, FAST_TYPES,
     register_type_alias, register_sum_type, register_enum_type,
@@ -124,6 +125,16 @@ def _values_equal(a, b) -> bool:
         aa, ba = a.obj, b.obj
         return (aa.sizeof == ba.sizeof
                 and all(_values_equal(aa.get(i), ba.get(i)) for i in range(aa.sizeof)))
+    if (isinstance(a, ObjectValue) and isinstance(a.obj, SetValue)
+            and isinstance(b, ObjectValue) and isinstance(b.obj, SetValue)):
+        # Order is not part of it, as it is not for = between two.
+        return (a.obj.sizeof == b.obj.sizeof
+                and all(b.obj.has(v) for v in a.obj.values()))
+    if (isinstance(a, ObjectValue) and isinstance(a.obj, HashValue)
+            and isinstance(b, ObjectValue) and isinstance(b.obj, HashValue)):
+        return (a.obj.sizeof == b.obj.sizeof
+                and all(b.obj.has(k) and _values_equal(b.obj.get(k), v)
+                        for k, v in a.obj.pairs()))
     try:
         return a.to_python() == b.to_python()
     except Exception:
@@ -177,6 +188,13 @@ def _builtin_assert_eq(args):
         ea, aa = expected.obj, actual.obj
         if ea.sizeof != aa.sizeof or any(
                 not _values_equal(ea.get(i), aa.get(i)) for i in range(ea.sizeof)):
+            raise AssertionError(
+                f"assert_eq failed:\n  expected: {_format_value(expected)}\n  actual:   {_format_value(actual)}")
+    elif (isinstance(expected, ObjectValue)
+          and isinstance(expected.obj, (HashValue, SetValue))) \
+            or (isinstance(actual, ObjectValue)
+                and isinstance(actual.obj, (HashValue, SetValue))):
+        if not _values_equal(expected, actual):
             raise AssertionError(
                 f"assert_eq failed:\n  expected: {_format_value(expected)}\n  actual:   {_format_value(actual)}")
     elif expected.to_python() != actual.to_python():
