@@ -1124,12 +1124,13 @@ class ArrayValue(Value):
     at the given offset/length.  Reads and writes go through the backing.
     """
 
-    __slots__ = ("elements", "element_type", "fixed_size",
+    __slots__ = ("elements", "element_type", "element_unit", "fixed_size",
                  "_backing", "_offset", "_length")
 
     def __init__(self, elements=None, element_type: str | None = None,
                  *, backing: list | None = None, offset: int = 0,
-                 length: int | None = None, fixed_size: int | None = None):
+                 length: int | None = None, fixed_size: int | None = None,
+                 element_unit=None):
         if backing is not None:
             self._backing = backing
             self._offset = offset
@@ -1141,6 +1142,15 @@ class ArrayValue(Value):
             self._length = 0
             self.elements = list(elements) if elements else []
         self.element_type = element_type
+        # What each element measures.  Read off the first element where
+        # it is not stated, so an array built by slicing, joining or
+        # threading answers for what it actually holds without every
+        # one of those places having to say so.
+        if element_unit is None:
+            first = self.get(0) if self.sizeof else None
+            if isinstance(first, UnitValue):
+                element_unit = first.unit
+        self.element_unit = element_unit
         # Set when the array's type names a length, as in i32[4].  Such
         # an array has that many elements for as long as it exists.
         self.fixed_size = fixed_size
@@ -2179,7 +2189,73 @@ def _scalar_kind_mismatch(value: "Value", target: str) -> str | None:
     return None
 
 
-def coerce_to_type(value: Value, target_width: str) -> Value:
+def convert_unit_value(value: "UnitValue", target_unit, mk=None) -> "UnitValue":
+    """Carry a measured value to another scale of what it measures.
+
+    `mk` builds the integer, so a caller that wraps on overflow keeps
+    wrapping and one that reports keeps reporting.
+    """
+    from fractions import Fraction
+    if mk is None:
+        mk = mk_int
+    if not value.unit.same_dimension(target_unit):
+        raise TypeError(
+            f"incompatible units: {value.unit.display_name} "
+            f"and {target_unit.display_name}")
+    ratio = value.unit.factor / target_unit.factor
+    inner = value.inner
+    if isinstance(inner, IntValue):
+        result = Fraction(inner.value) * ratio
+        if result.denominator != 1:
+            raise TypeError(
+                f"cannot convert {inner.value} {value.unit.display_name} to "
+                f"{target_unit.display_name} without loss "
+                f"(result is {float(result)})")
+        return UnitValue(mk(int(result), inner.width), target_unit)
+    if isinstance(inner, FloatValue):
+        return UnitValue(
+            mk_float(float(Fraction(inner.value) * ratio), inner.width),
+            target_unit)
+    raise TypeError(f"cannot convert {type(inner).__name__} with units")
+
+
+def apply_unit(value: Value, unit, mk=None) -> Value:
+    """Give a value the unit a definition states for it.
+
+    A unit measures a number, and a container is not one: what a
+    declaration of an array measures is each of the things in it,
+    however deep they sit.  So this reaches through an array rather
+    than wrapping it, which is what keeps a measured array indexable --
+    a unit wrapped around the container is a value nothing can read an
+    element out of.
+    """
+    if unit is None:
+        return value
+    if isinstance(value, SomeValue):
+        return SomeValue(apply_unit(value.value, unit, mk))
+    if isinstance(value, ObjectValue) and isinstance(value.obj, ArrayValue):
+        arr = value.obj
+        return ObjectValue(ArrayValue(
+            [apply_unit(arr.get(i), unit, mk) for i in range(arr.sizeof)],
+            element_type=arr.element_type, element_unit=unit,
+            fixed_size=arr.fixed_size))
+    if isinstance(value, UnitValue):
+        return convert_unit_value(value, unit, mk)
+    return UnitValue(value, unit)
+
+
+def coerce_to_type(value: Value, target_width: str, unit=None, mk=None) -> Value:
+    """See _coerce_to_type; the unit is applied to what comes back."""
+    settled = _coerce_to_type(value, target_width, unit)
+    if unit is None:
+        return settled
+    if isinstance(settled, ObjectValue) and isinstance(settled.obj, ArrayValue):
+        # The array branch has already reached the elements.
+        return settled
+    return apply_unit(settled, unit, mk)
+
+
+def _coerce_to_type(value: Value, target_width: str, unit=None) -> Value:
     """Coerce a value to a target integer type.
 
     For scalar IntValue, checks that the value fits the target type.
@@ -2233,7 +2309,7 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
     # A type states no unit, so a value carrying one is not that type.
     # Parting with a unit is a real change and is said with @dropunit
     # rather than done quietly at a binding.
-    if isinstance(value, UnitValue):
+    if unit is None and isinstance(value, UnitValue):
         raise TypeError(
             f"'{target_width}' carries no unit, but the value is "
             f"{value.unit.display_name}; use @dropunit to part with it")
@@ -2303,7 +2379,9 @@ def coerce_to_type(value: Value, target_width: str) -> Value:
         # each element is measured against is the type with that one
         # dimension taken off.
         elem_target = _array_type_name(elem_type, dims[1:])
-        coerced = [coerce_to_type(arr.get(i), elem_target) for i in range(arr.sizeof)]
+        coerced = [coerce_to_type(arr.get(i), elem_target, unit)
+                   for i in range(arr.sizeof)]
         return ObjectValue(ArrayValue(coerced, element_type=elem_target,
+                                      element_unit=unit,
                                       fixed_size=declared))
     return value

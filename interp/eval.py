@@ -46,16 +46,21 @@ from interp.value import (
     declared_rank, value_rank, threaded_array,
     check_bootstrap_argument, check_bootstrap_type,
     check_bootstrap_binding,
-    UNTYPED, is_unwidthed, settle_untyped,
+    UNTYPED, is_unwidthed, settle_untyped, apply_unit, convert_unit_value,
     _scalar_kind_mismatch,
     CharValue, check_code_point,
     UnitValue, RefValue, Reference, ElementRef, Iterator, ArrayIterator,
     deep_copy_value, register_type_alias, DISCARD_NAME,
     register_sum_type, sum_type_alternatives, sum_type_admits,
 )
-from interp.env import Env
+from interp.env import Env, Decl
 from interp.std import std, DirFD, FileStream, Bytes, MmapAllocator
 from interp.errors import attach_backtrace, diagnostic_level
+
+
+# An empty array disagrees with no unit, so it stands in for whatever
+# one is asked of it.
+_EMPTY_MEASURE = object()
 
 
 def _nth_root_exact(n: int, degree: int) -> int | None:
@@ -3134,7 +3139,12 @@ class Evaluator:
                 if isinstance(current, Reference):
                     current.set(rhs)
                     return none()
-                if isinstance(current, UnitValue):
+                decl = self.env.declaration(target_ast.name)
+                if decl is not None and not decl.says_nothing():
+                    rhs = self._coerce_declared(rhs, decl, target_ast.name)
+                elif isinstance(current, UnitValue):
+                    # Nothing was written down, so what the name holds
+                    # is all there is to go on.
                     if isinstance(rhs, UnitValue):
                         rhs = self._convert_unit_value(rhs, current.unit)
                     else:
@@ -3142,9 +3152,9 @@ class Evaluator:
                             f"cannot assign dimensionless value to "
                             f"'{target_ast.name}' which has unit "
                             f"{current.unit.display_name}")
-                if not self.env.has_local(target_ast.name):
-                    self.env.assign(target_ast.name, rhs)
-                else:
+                # The value is stored on its own: what the definition
+                # said outlives it.
+                if not self.env.update(target_ast.name, rhs):
                     self.env.define(target_ast.name, rhs)
             return none()
 
@@ -3175,6 +3185,10 @@ class Evaluator:
                 # of which the bootstrap provides.
                 check_bootstrap_binding(value, stmt.name)
                 value = settle_untyped(value)
+            unit = None
+            if stmt.unit_spec is not None:
+                from interp.units import eval_unit_formula
+                unit = eval_unit_formula(stmt.unit_spec)
             if stmt.type_annotation is not None \
                     and not isinstance(stmt.init_expr, ArrayAlloc):
                 # An array declaration writes its shape in brackets that
@@ -3185,24 +3199,18 @@ class Evaluator:
                 ann = stmt.type_annotation
                 if self._generic_map and is_generic_type(ann):
                     ann = _substitute_generics(ann, self._generic_map)
-                if stmt.unit_spec is not None and isinstance(value, UnitValue):
-                    # The binding states a unit as well as a type, so
-                    # the type is what the number is held in and the
-                    # unit is what it counts.  Measuring the whole
-                    # value against the type would read the unit as
-                    # something being parted with.
-                    value = UnitValue(coerce_to_type(value.inner, ann),
-                                      value.unit)
-                else:
-                    value = coerce_to_type(value, ann)
-            if stmt.unit_spec is not None:
-                from interp.units import eval_unit_formula
-                unit = eval_unit_formula(stmt.unit_spec)
-                if isinstance(value, UnitValue):
-                    value = self._convert_unit_value(value, unit)
-                else:
-                    value = UnitValue(value, unit)
-            self.env.define(stmt.name, value)
+                # The binding states a unit as well as a type, so the
+                # type is what each number is held in and the unit is
+                # what it counts.  For an array that means the
+                # elements: a unit around the container is a value
+                # nothing can read an element out of.
+                value = coerce_to_type(value, ann, unit, self._mk_int)
+            else:
+                # An allocation has already measured the value against
+                # the whole of its type, so only the unit is left.
+                value = apply_unit(value, unit, self._mk_int)
+            self.env.define(stmt.name, value,
+                            Decl(self._declared_type_of(stmt, value), unit))
             if not self._bind_reshape_access(stmt):
                 if stmt.is_const:
                     self._frozen_vars[stmt.name] = "let"
@@ -3339,6 +3347,86 @@ class Evaluator:
         mismatch = _scalar_kind_mismatch(unwrap_optional(rhs), held)
         if mismatch is not None:
             raise TypeError(f"'{name}' holds {held} and cannot take {mismatch}")
+
+    @staticmethod
+    def _declared_type_of(stmt, value) -> str | None:
+        """The type a definition stated, brackets and all.
+
+        An allocation keeps its shape in the brackets rather than in
+        the annotation -- `let h : u32[8]` states `u32` and allocates 8
+        -- so the two halves are put back together here.  A dimension
+        the definition left for the initializer to decide stays open,
+        since what it settled on is this value's length rather than
+        something the name holds to.
+        """
+        ann = stmt.type_annotation
+        if ann is None or not isinstance(stmt.init_expr, ArrayAlloc):
+            return ann
+        alloc = stmt.init_expr
+        written = [alloc.size_expr, *alloc.rest_dims]
+        inner = unwrap_optional(value)
+        if not (isinstance(inner, ObjectValue)
+                and isinstance(inner.obj, ArrayValue)):
+            return ann
+        extents = array_shape(inner.obj)
+        dims = [None if written[i] is None else extents[i]
+                for i in range(min(len(written), len(extents)))]
+        return _array_type_name(ann, dims)
+
+    @staticmethod
+    def _carried_unit(value: Value):
+        """What a value measures, or None where it measures nothing.
+
+        An array answers for its elements, since that is where a unit
+        sits.  An empty one answers for the declaration rather than
+        against it: there is nothing in it to disagree.
+        """
+        inner = unwrap_optional(value)
+        if isinstance(inner, UnitValue):
+            return inner.unit
+        if isinstance(inner, ObjectValue) and isinstance(inner.obj, ArrayValue):
+            if inner.obj.sizeof == 0:
+                return inner.obj.element_unit or _EMPTY_MEASURE
+            return Evaluator._carried_unit(inner.obj.get(0))
+        return None
+
+    def _coerce_declared(self, value: Value, decl, name: str) -> Value:
+        """Measure an assigned value against what the definition said.
+
+        The definition is what a name holds to, not the value it holds
+        at the moment: a binding that has been assigned once would
+        otherwise answer for what it was last given rather than for
+        what it was declared, and a declaration would last exactly one
+        statement.
+        """
+        if decl.type_name is not None:
+            # Said first and in the definition's own words, since a
+            # kind that does not fit is a plainer thing to be told than
+            # whatever the conversion below would say about it.
+            held = resolve_type_alias(decl.type_name)
+            mismatch = _scalar_kind_mismatch(unwrap_optional(value), held)
+            if mismatch is not None:
+                raise TypeError(
+                    f"'{name}' holds {held} and cannot take {mismatch}")
+        if decl.unit is None and isinstance(unwrap_optional(value), UnitValue):
+            raise TypeError(
+                f"'{name}' carries no unit, but the value is "
+                f"{unwrap_optional(value).unit.display_name}; "
+                f"use @dropunit to part with it")
+        if decl.unit is not None and self._carried_unit(value) is None:
+            # A definition may measure a bare number, since it is the
+            # definition that says what the number counts.  An
+            # assignment says nothing, so what it stores has to arrive
+            # measured or the measure would be invented for it.
+            raise TypeError(
+                f"cannot assign dimensionless value to '{name}' which has "
+                f"unit {decl.unit.display_name}")
+        if decl.type_name is None:
+            return apply_unit(value, decl.unit)
+        ann = decl.type_name
+        if self._generic_map and is_generic_type(ann):
+            ann = _substitute_generics(ann, self._generic_map)
+        return coerce_to_type(value, ann, unit=decl.unit)
 
     def _check_assignable(self, target_ast):
         """Reject a write reaching an immutable binding.

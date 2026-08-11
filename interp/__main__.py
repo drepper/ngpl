@@ -9,7 +9,7 @@ from collections import defaultdict
 
 from interp.lexer import tokenize, process_indentation
 from interp.parser import Parser
-from interp.env import Env
+from interp.env import Env, Decl
 from interp.ast import (
     FuncDef as ASTFuncDef, EnumDef as ASTEnumDef, UnitDef as ASTUnitDef,
     VarDef as ASTVarDef, TypeDef as ASTTypeDef,
@@ -21,7 +21,7 @@ from interp.value import (
     check_bootstrap_binding, check_int,
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
     NoneValue, SomeValue, ExpectedValue, EnumType, EnumValue, StructType,
-    coerce_to_type, validate_param_type, validate_type, none, FAST_TYPES,
+    coerce_to_type, apply_unit, validate_param_type, validate_type, none, FAST_TYPES,
     register_type_alias, register_sum_type, register_enum_type,
     sum_type_alternatives, register_user_type, DISCARD_NAME, is_type_name,
     register_struct_type,
@@ -1921,23 +1921,18 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                     # type written down a number settles on int or
                     # float, and the bootstrap has neither.
                     check_bootstrap_binding(value, defn.name)
-                elif unit is not None and isinstance(value, UnitValue):
-                    # The type says what the number is held in and the
-                    # unit says what it counts, as at a local binding.
-                    value = UnitValue(
-                        coerce_to_type(value.inner, defn.type_annotation),
-                        value.unit)
+                    value = apply_unit(value, unit, evaluator._mk_int)
                 else:
-                    value = coerce_to_type(value, defn.type_annotation)
-                if unit is not None:
-                    value = (evaluator._convert_unit_value(value, unit)
-                             if isinstance(value, UnitValue)
-                             else UnitValue(value, unit))
+                    # The type says what each number is held in and the
+                    # unit says what it counts, as at a local binding:
+                    # for an array that means the elements.
+                    value = coerce_to_type(value, defn.type_annotation, unit,
+                                           evaluator._mk_int)
             except (OverflowError, TypeError, ValueError) as e:
                 raise DefinitionError(
                     f"in {defn.name}: {strip_position_prefix(str(e))}",
                     extract_position(e) or _node_pos(defn)) from None
-            env.define(defn.name, value)
+            env.define(defn.name, value, Decl(defn.type_annotation, unit))
             if defn.is_const:
                 env._const_globals.add(defn.name)
             else:
