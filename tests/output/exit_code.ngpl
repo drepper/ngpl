@@ -1,6 +1,11 @@
 // std.exit terminates at once with the given status: the line after it
 // never runs, and the @start function's own return value is not used.
+//
+// quit_early is @noreturn, which is what lets the line after the *call*
+// be reported as well -- nothing about the call itself could say that
+// control does not come back from it.
 
+@noreturn
 @impure
 fn quit_early():
     std.println("quitting")
