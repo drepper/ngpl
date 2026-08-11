@@ -3035,17 +3035,28 @@ class Evaluator:
                     elements = [arr.get(i) for i in range(arr.sizeof)]
                     return ObjectValue(ArrayValue(elements, element_type=etype,
                                                   fixed_size=sizes[0]))
+                # One value is not an array, whatever the type says
+                # the array should be, and a definition that reads as a
+                # type error is one wherever it is written.  Making
+                # many of one thing is what ⍴ is for, and saying so
+                # leaves the making visible at the definition.
+                shape = format_shape(sizes)
                 if any(d is None for d in sizes):
+                    # An extent the type leaves open takes its length
+                    # from the initializer, and one value has none to
+                    # give.
                     raise TypeError(
-                        f"array size mismatch: declared {format_shape(sizes)}, "
-                        f"but a fill value gives no extent for the empty "
-                        f"dimension")
-                if etype:
-                    # Through coerce_to_type rather than mk_int, which
-                    # would take any element type for an integer width
-                    # and build a value whose width is a type name.
-                    init_val = coerce_to_type(init_val, etype)
-                return self._alloc_nested(sizes, init_val, etype)
+                        f"an array of {shape} is not made from one value, "
+                        f"and the open dimension has nothing to take its "
+                        f"extent from; write the elements out")
+                made = (f"{sizes[0]} \N{APL FUNCTIONAL SYMBOL RHO} "
+                        if len(sizes) == 1
+                        else f"({', '.join(str(d) for d in sizes)}) "
+                             f"\N{APL FUNCTIONAL SYMBOL RHO} ")
+                raise TypeError(
+                    f"an array of {shape} is not made from one value; "
+                    f"write the elements out, or make them with "
+                    f"{made}<value>")
 
         raise TypeError(f"unexpected expression: {type(node).__name__}")
 

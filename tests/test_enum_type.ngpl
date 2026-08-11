@@ -185,7 +185,7 @@ fn test_alias_of_a_later_enum():
 // what it was rather than naming the element type back.
 @expect error "'Color' is an enum, but the value is int"
 fn error_array_fill_is_not_a_member():
-    let a : Color[3] = 0
+    let a : Color[3] = 3 ⍴ 0
     _ ← a
 
 @start

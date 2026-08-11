@@ -22,14 +22,14 @@ fn test_write_bare_literal():
 
 @test
 fn test_byte_read_bare_literal():
-    let buf : mut u8[3] = 0
+    let buf : mut u8[3] = 3 ⍴ 0
     buf[0] ← 10; buf[1] ← 20; buf[2] ← 30
     assert_eq(buf[0], 10)
     assert_eq(buf[2], 30)
 
 @test
 fn test_byte_write_bare_literal():
-    let buf : mut u8[4] = 0
+    let buf : mut u8[4] = 4 ⍴ 0
     buf[1] ← 255
     assert_eq(buf[1], 255)
 
@@ -66,7 +66,7 @@ fn test_foreach_sizeof_index():
 
 @test
 fn test_byte_sizeof_index():
-    let buf : mut u8[5] = 0
+    let buf : mut u8[5] = 5 ⍴ 0
     buf[0] ← 1; buf[1] ← 2; buf[2] ← 3
     buf[3] ← 4; buf[4] ← 5
     let last := buf[#buf - 1]
@@ -105,14 +105,14 @@ fn test_reject_u32fast_index():
 @test
 @expect error "requires unit B"
 fn test_reject_i32_byte_index_read():
-    let buf : mut u8[3] = 0
+    let buf : mut u8[3] = 3 ⍴ 0
     let idx : mut i32 = 0
     let x : mut = buf[idx]
 
 @test
 @expect error "requires unit B"
 fn test_reject_i32_byte_index_write():
-    let buf : mut u8[3] = 0
+    let buf : mut u8[3] = 3 ⍴ 0
     let idx : mut i32 = 0
     buf[idx] ← 99
 
@@ -141,7 +141,7 @@ fn test_reject_typed_int_param_ptrdiff():
 @test
 @expect error "requires unit B"
 fn test_reject_typed_int_param_byte():
-    let buf : mut u8[3] = 0
+    let buf : mut u8[3] = 3 ⍴ 0
     buf[0] ← 10
     let off : mut usize = 0
     needs_byte(buf, off)
@@ -160,7 +160,7 @@ fn test_accept_untyped_const_param_ptrdiff():
 
 @test
 fn test_accept_untyped_const_param_byte():
-    let buf : mut u8[3] = 0
+    let buf : mut u8[3] = 3 ⍴ 0
     buf[0] ← 10; buf[1] ← 20; buf[2] ← 30
     assert_eq(needs_byte(buf, 2), 30)
 
@@ -180,7 +180,7 @@ fn test_typed_with_ptrdiff():
 
 @test
 fn test_typed_with_byte():
-    let buf : mut u8[3] = 0
+    let buf : mut u8[3] = 3 ⍴ 0
     buf[0] ← 10; buf[1] ← 20; buf[2] ← 30
     let idx ¤byte : i32 = 2
     assert_eq(buf[idx], 30)
@@ -196,7 +196,7 @@ fn test_reject_byte_for_general():
 @test
 @expect error "requires unit B"
 fn test_reject_ptrdiff_for_byte():
-    let buf : mut u8[3] = 0
+    let buf : mut u8[3] = 3 ⍴ 0
     let x : mut = buf[0 ¤ptrdiff]
 
 @test

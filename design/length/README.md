@@ -93,6 +93,26 @@ the new one they agree in units and disagree in value, which would have
 been a wrong answer rather than no answer.  So an allocation is now
 left alone by the checker, which is what it always meant to be.
 
+## An Array Is Not Made From One Value
+
+Found while writing this and fixed with it, since it is the same
+question about the same declarations.
+
+`let f : i32[4] = 0` filled the array at a function's scope and was
+refused at a global one, with a message about `i32` not being an array
+type — the global path measured the allocated array against the
+annotation, and a fixed array's annotation is only its *element* type,
+the shape being in the brackets.  So no fixed-size array could be
+declared at global scope at all, not even from a literal.
+
+Both halves are settled the same way.  A scalar where an array goes is
+a type error, whatever the type says the array should be, so the fill
+is refused at both scopes; making many of one thing is what `⍴` is for,
+and writing it leaves the making visible at the definition.  And the
+global path now skips the coercion for an allocation exactly as the
+local one does, so every form that works in a function works at the top
+level.
+
 ## Comparison with Other Languages
 
 | Language | Length | Memory |

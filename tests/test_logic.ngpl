@@ -177,9 +177,9 @@ fn test_precedence_xor():
 
 @test
 fn test_and_array():
-    let a : mut i32[3] = 0
+    let a : mut i32[3] = 3 ⍴ 0
     a[0] ← 1; a[1] ← 0; a[2] ← 5
-    let b : mut i32[3] = 0
+    let b : mut i32[3] = 3 ⍴ 0
     b[0] ← 3; b[1] ← 0; b[2] ← 0
     let r := a ∧ b
     assert(r[0])
@@ -188,9 +188,9 @@ fn test_and_array():
 
 @test
 fn test_or_array():
-    let a : mut i32[3] = 0
+    let a : mut i32[3] = 3 ⍴ 0
     a[0] ← 1; a[1] ← 0; a[2] ← 0
-    let b : mut i32[3] = 0
+    let b : mut i32[3] = 3 ⍴ 0
     b[0] ← 0; b[1] ← 0; b[2] ← 7
     let r := a ∨ b
     assert(r[0])
@@ -199,9 +199,9 @@ fn test_or_array():
 
 @test
 fn test_xor_array():
-    let a : mut i32[3] = 0
+    let a : mut i32[3] = 3 ⍴ 0
     a[0] ← 1; a[1] ← 0; a[2] ← 5
-    let b : mut i32[3] = 0
+    let b : mut i32[3] = 3 ⍴ 0
     b[0] ← 3; b[1] ← 0; b[2] ← 0
     let r := a ⊕ b
     assert(not r[0])

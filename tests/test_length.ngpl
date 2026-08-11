@@ -61,7 +61,7 @@ fn test_a_tuple():
 // question for the row.
 @test
 fn test_a_matrix_answers_its_outer_dimension():
-    let m : i32[2, 3] = 0
+    let m : i32[2, 3] = (2, 3) ⍴ 0
     assert_eq(#m, 2¤ptrdiff)
     assert_eq(#m[0], 3¤ptrdiff)
 
@@ -101,6 +101,35 @@ fn error_how_many_things_are_in_a_number():
 fn error_the_member_is_gone():
     let v : i64[] = [1, 2, 3]
     let n : mut = v.sizeof
+
+// ---------------------------------------------------------------------
+// An array is not made from one value
+// ---------------------------------------------------------------------
+
+// A scalar where an array goes reads as a type error, and did so at a
+// global definition while a local one filled the array quietly.  Making
+// many of one thing is what ⍴ is for, and saying so leaves the making
+// visible at the definition.
+@test
+@expect error "is not made from one value"
+fn error_an_array_from_one_value():
+    let f : i32[4] = 0
+    _ ← f[0]
+
+@test
+@expect error "the open dimension has nothing to take its extent from"
+fn error_an_open_extent_from_one_value():
+    let z : i32[,3] = 0
+    _ ← z[0, 0]
+
+@test
+fn test_the_ways_that_do_make_one():
+    let written : i32[4] = [1, 2, 3, 4]
+    let made : i32[4] = 4 ⍴ 7
+    let m : i32[2, 2] = (2, 2) ⍴ 0
+    assert_eq(#written, 4¤ptrdiff)
+    assert_eq(made[3], 7)
+    assert_eq(#m, 2¤ptrdiff)
 
 @start
 @impure

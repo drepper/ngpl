@@ -112,7 +112,7 @@ fn test_typeof_runtime_var():
 // the type states it.  A fixed-size array states one.
 @test
 fn test_sizeof_fixed_array_var():
-    let arr : i32[3] = 0
+    let arr : i32[3] = 3 ⍴ 0
     assert_eq(#arr, 3 ¤ptrdiff)
 
 @test

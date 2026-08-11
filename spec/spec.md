@@ -314,7 +314,7 @@ let blk_off : mut usize = 0;                       /* mutable usize binding for 
 let rem : mut usize = data_size % 64;              /* remainder operator, result coerced to usize */
 let i : mut u32 = 0;                               /* mutable u32 loop counter */
 let hash := 0;                                     /* int (arbitrary-precision), inferred from untyped int */
-let W : mut i32[64] = 0;                           /* array of 64 i32 elements, each initialized to 0 */
+let W : mut i32[64] = 64 ⍴ 0;                           /* array of 64 i32 elements, each initialized to 0 */
 ```
 
 ### Design Rationale
@@ -1361,9 +1361,9 @@ This means `a = 0 ∧ b ≠ 0` parses as `(a = 0) ∧ (b ≠ 0)`, and `x ∧ y �
 The logic operators are `@listable`, as the arithmetic operators are, so each is asked of the things in an array rather than of the array:
 
 ```
-let a : mut i32[3] = 0
+let a : mut i32[3] = 3 ⍴ 0
 a[0] ← 1; a[1] ← 0; a[2] ← 5
-let b : mut i32[3] = 0
+let b : mut i32[3] = 3 ⍴ 0
 b[0] ← 3; b[1] ← 0; b[2] ← 0
 let r : mut = a ∧ b              /* [true, false, false] */
 ```
@@ -1656,7 +1656,7 @@ It is written in front of its operand, and takes an array, a matrix, a string, o
 A matrix answers how many *rows* it has rather than how wide they are.  That is the one number every container has, whatever it holds; a row's own length is a question for the row:
 
 ```
-let m : i32[2, 3] = 0
+let m : i32[2, 3] = (2, 3) ⍴ 0
 #m                              /* 2 */
 #m[0]                           /* 3 */
 
@@ -4466,7 +4466,7 @@ let z : mut = arr[idx]              // error: typed integer without unit
 let idx2 ¤ptrdiff : mut i32 = 1
 let w : mut = arr[idx2]             // OK — variable carries ptrdiff unit
 
-let buf : mut u8[4] = 0
+let buf : mut u8[4] = 4 ⍴ 0
 let b : mut = buf[0]                // OK — untyped integer constant
 ```
 
@@ -4829,11 +4829,11 @@ whose rows differ in length
 
 ##### Elsewhere a Type Is Written
 
-The same syntax spells a variable's type, a type alias, and a struct field.  A variable annotation checks the initializer's shape, and a scalar initializer fills every element as it does for one dimension:
+The same syntax spells a variable's type, a type alias, and a struct field.  A variable annotation checks the initializer's shape:
 
 ```
 let m : i32[2,3] = [[1, 2, 3], [4, 5, 6]]   // checked
-let z : i32[2,3] = 0                        // 2×3 of zeros
+let z : i32[2,3] = (2, 3) ⍴ 0                        // 2×3 of zeros
 let bad : i32[2,3] = (3, 2) ⍴ (1…6)        // error: declared 2×3, got 3×2
 
 type Grid = i32[2,3]
@@ -4846,12 +4846,27 @@ let b : i32[,3] = [[1, 2, 3], [4, 5, 6]]    // two rows, checked three wide
 let b : i32[,3] = [[1, 2], [3, 4]]          // error: declared ?×3, got 2×2
 ```
 
-A fill value has no extent to give, so it cannot stand in for one that was left empty:
+##### An Array Is Not Made From One Value
+
+A scalar where an array goes is a type error, whatever the type says the array should be.  Making many of one thing is what `⍴` is for, and writing it leaves the making visible at the definition:
+
+```
+let f : i32[4] = 0
+
+error: an array of 4 is not made from one value; write the elements
+out, or make them with 4 ⍴ <value>
+
+let f : i32[4] = 4 ⍴ 0          /* made */
+let f : i32[4] = [0, 0, 0, 0]   /* written out */
+```
+
+A dimension the type leaves open takes its extent from the initializer, and one value has none to give:
 
 ```
 let z : i32[,3] = 0
 
-error: declared ?×3, but a fill value gives no extent for the empty dimension
+error: an array of ?×3 is not made from one value, and the open
+dimension has nothing to take its extent from; write the elements out
 ```
 
 Under `@repr(C)` a multi-dimensional field lays out as C's `T[n][m]`: the rows sit one after another, so `i32[2,3]` is 24 bytes and the alignment is still the element's.  Every dimension has to be fixed, since a dynamic one has no C representation.
@@ -5552,7 +5567,7 @@ An open dimension is a property of the type, so `i32[,3]` is refused for the sam
 Given a value, `@sizeof` reports how many elements it holds, as it always has.  The unit tells the two apart — bytes for a type, a count for a value:
 
 ```
-let fixed : i32[4] = 0
+let fixed : i32[4] = 4 ⍴ 0
 
 @sizeof(i32[4])     // 16 B        the type's storage
 @sizeof(fixed)      // 4 ptrdiff   the value's elements

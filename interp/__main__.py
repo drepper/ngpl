@@ -1941,6 +1941,15 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                     # float, and the bootstrap has neither.
                     check_bootstrap_binding(value, defn.name)
                     value = apply_unit(value, unit, evaluator._mk_int)
+                elif isinstance(defn.init_expr, _ast.ArrayAlloc):
+                    # An array declaration writes its shape in brackets
+                    # that the annotation does not carry, and the
+                    # allocation has already measured the value against
+                    # the whole of it.  Coercing again here would meet
+                    # the element type alone and take an array for it,
+                    # which is what made a global fixed-size array
+                    # impossible to write at all.
+                    value = apply_unit(value, unit, evaluator._mk_int)
                 else:
                     # The type says what each number is held in and the
                     # unit says what it counts, as at a local binding:
@@ -1951,7 +1960,8 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 raise DefinitionError(
                     f"in {defn.name}: {strip_position_prefix(str(e))}",
                     extract_position(e) or _node_pos(defn)) from None
-            env.define(defn.name, value, Decl(defn.type_annotation, unit))
+            env.define(defn.name, value,
+                        Decl(evaluator._declared_type_of(defn, value), unit))
             if defn.is_const:
                 env._const_globals.add(defn.name)
             else:

@@ -184,7 +184,7 @@ fn test_sizeof_of_named_types():
 // unit tells apart: bytes for the one, a count for the other.
 @impure
 fn test_sizeof_type_versus_value():
-  let fixed : i32[4] = 0
+  let fixed : i32[4] = 4 ⍴ 0
   assert_eq_int(@sizeof(i32[4]), 16 ¤byte, "the type is 16 bytes")
   assert_eq_int(@sizeof(fixed), 4 ¤ptrdiff, "the value is 4 elements")
   assert_eq_int(#fixed, 4 ¤ptrdiff, "# agrees")

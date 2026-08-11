@@ -59,7 +59,7 @@ fn error_let_bare_eq():
 @expect error "fast type.*cannot be used as array element"
 @impure
 fn error_fast_array():
-    let arr : mut u8fast[10] = 0
+    let arr : mut u8fast[10] = 10 ⍴ 0
     std.println("{}", arr[0])
 
 // --- type mismatch --------------------------------------------------------

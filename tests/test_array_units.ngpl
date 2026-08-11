@@ -54,7 +54,7 @@ fn test_a_measured_matrix_measures_its_numbers():
 
 @test
 fn test_an_allocated_array_is_measured_too():
-    let f : i64 ¤meter[3] = 0
+    let f : i64 ¤meter[3] = 3 ⍴ 0
     assert_eq(f[0], 0¤meter)
     assert_eq(#f, 3¤ptrdiff)
 

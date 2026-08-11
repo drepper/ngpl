@@ -1,0 +1,7 @@
+error: in g: an array of 3 is not made from one value; write the elements out, or make them with 3 ⍴ <value>
+  --> tests/output/array_from_one_value.ngpl:1:1
+    |
+  1 | let g : i32[3] = 0
+    | ^^^
+  2 | 
+    |

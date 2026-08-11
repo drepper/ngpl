@@ -190,6 +190,17 @@ Completed
     definition's = -- let x : i64!= 10 -- is refused as it was before, != having been a single
     token then as well.
 
+[x] an array is not made from one value.  `let f : i32[4] = 0` filled the array at a
+    function's scope and was refused at a global one, and the refusal was about `i32` not
+    being an array type: the global path measured the allocated array against the annotation,
+    which for a fixed array is only the element type, the shape being in the brackets.  No
+    fixed-size array could be declared at global scope at all, not even from a literal.  A
+    scalar where an array goes is a type error whatever the type says, so the fill is refused
+    at both scopes now -- making many of one thing is what ⍴ is for, and writing `4 ⍴ 0`
+    leaves the making visible at the definition.  The global path skips the coercion for an
+    allocation as the local one does, so every form that works in a function works at the top
+    level.
+
 [x] # is how many things are in a container and @sizeof is how much memory something takes.
     .sizeof answered both in one word -- a count for an array, a size in bytes for a struct --
     and the unit it carried was the only thing that said which; @sizeof was split down the

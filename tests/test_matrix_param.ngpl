@@ -206,11 +206,11 @@ fn error_annotation_rank_mismatch():
 // dimension.
 @test
 fn test_allocation_fills():
-    let z : i32[2,3] = 0
+    let z : i32[2,3] = (2, 3) ⍴ 0
     assert_eq(z.shape[0], 2)
     assert_eq(z.shape[1], 3)
     assert_eq(z[1, 2], 0)
-    let c : i32[2,2,3] = 7
+    let c : i32[2,2,3] = (2, 2, 3) ⍴ 7
     assert_eq(#c.shape, 3)
     assert_eq(c[1, 1, 2], 7)
 
@@ -319,9 +319,9 @@ fn error_let_ragged():
     let r : i32[,] = [[1, 2, 3], [4, 5]]
     _ ← r[0, 0]
 
-// A fill value has no extent to give, so an empty one cannot be
-// filled.
-@expect error "gives no extent for the empty dimension"
+// One value is not an array, and an open extent has nothing to take
+// its length from either.
+@expect error "the open dimension has nothing to take its extent from"
 fn error_fill_with_open_extent():
     let z : i32[,3] = 0
     _ ← z[0, 0]

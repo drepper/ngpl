@@ -70,8 +70,8 @@ fn test_concat_right_not_array():
 
 @test
 fn test_concat_typed_arrays():
-    let a : mut u32[2] = 0
-    let b : mut u32[3] = 0
+    let a : mut u32[2] = 2 ⍴ 0
+    let b : mut u32[3] = 3 ⍴ 0
     a[0] ← 100
     a[1] ← 200
     b[0] ← 300
