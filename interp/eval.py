@@ -1258,6 +1258,12 @@ class Evaluator:
 
     _APPROX_OPS = frozenset("≅≇⪅⪆⪉⪊")
 
+    # What two sets make between them.  Both operands are the container
+    # rather than a stand-in for what is in it, so these are not
+    # threaded, as ⧺ and ∊ are not.
+    _SET_OPS = frozenset({"\N{UNION}", "\N{INTERSECTION}",
+                          "\N{SET MINUS}"})
+
     # Every operator that means for a container what it means for one of
     # the things in it, and so is threaded over one that it is handed.
     # ⧺, ⍳ and ∊ take a container as the operand rather than as a
@@ -1626,6 +1632,50 @@ class Evaluator:
             return coerce_to_type(key, key_type, key_unit, self._mk_int)
         return key
 
+    def _op_set(self, op: str, left, right):
+        """What two sets make between them.
+
+        ∪ is what is in either, ∩ what is in both, ∖ what is in the
+        first and not the second.  Order is kept, as it is everywhere
+        else these are walked: what came from the left comes first, in
+        the order it was in.
+        """
+        lu = _unwrap_operand(left)
+        ru = _unwrap_operand(right)
+        sets = []
+        for side, value in (("left", lu), ("right", ru)):
+            if isinstance(value, ObjectValue) \
+                    and isinstance(value.obj, SetValue):
+                sets.append(value.obj)
+                continue
+            raise TypeError(
+                f"{op}: the {side} operand is "
+                f"{self._value_type_name(value)}, and {op} is what two sets "
+                f"make between them")
+        first, second = sets
+        held = first.value_type or second.value_type
+        if first.value_type is not None and second.value_type is not None \
+                and first.value_type != second.value_type:
+            raise TypeError(
+                f"{op}: a set holds one type of value, so two of them make "
+                f"one only where they hold the same, but the left holds "
+                f"{first.value_type} and the right holds {second.value_type}")
+        built = SetValue(value_type=held)
+        if op == "\N{UNION}":
+            for value in first.values():
+                built.put(value)
+            for value in second.values():
+                built.put(value)
+        elif op == "\N{INTERSECTION}":
+            for value in first.values():
+                if second.has(value):
+                    built.put(value)
+        else:
+            for value in first.values():
+                if not second.has(value):
+                    built.put(value)
+        return ObjectValue(built)
+
     def _op_length(self, operand):
         """How many things are in it (#).
 
@@ -1789,6 +1839,10 @@ class Evaluator:
             # The container is the operand rather than a stand-in for
             # its elements, so this does not go element-wise.
             return self._op_index_of(left, right)
+        if op in self._SET_OPS:
+            # Both operands are the container, as they are for ⧺, so
+            # this is dispatched before anything is threaded over one.
+            return self._op_set(op, left, right)
         if op == "\N{SMALL ELEMENT OF}":
             # Element-wise on the left operand only, which it does for
             # itself: the right one is the container to look through.

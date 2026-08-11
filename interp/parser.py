@@ -63,9 +63,10 @@ _TYPE_TO_KEYWORD: dict[str, str] = {v: k for k, v in KEYWORDS.items()}
 
 # The operators of each precedence level.  A saturating operator sits
 # with the exact one it answers to, so the two group alike.
-_ADD_OPS = frozenset({"+", "-",
+_ADD_OPS = frozenset({"+", "-", "\N{UNION}", "\N{SET MINUS}",
                       "\N{SQUARED PLUS}", "\N{SQUARED MINUS}"})
 _MUL_OPS = frozenset({"\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}", "%",
+                      "\N{INTERSECTION}",
                       "\N{SQUARED TIMES}"})
 _MINMAX_OPS = frozenset({"\N{LEFT CEILING}", "\N{LEFT FLOOR}"})
 

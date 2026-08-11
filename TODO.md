@@ -205,8 +205,16 @@ Completed
     what those cannot say is a member -- keys, values, insert, remove, clear.  foreach learned
     to take a destructuring pattern, which a parameter and a definition already took.
 
-[ ] a set has no union, intersection or difference yet; ∪, ∩ and ∖ are free.  Nor can two
-    hashes or sets be joined with ⧺ or compared with =, and neither can be a key.
+[x] ∪, ∩ and ∖ make one set from two.  They sit where the arithmetic they resemble sits: ∪
+    and ∖ where + and - do, ∩ where × does, so `a ∪ b ∩ c` reads as mathematics reads it and a
+    reader who knows one precedence knows the other.  Both operands are the container rather
+    than a stand-in for what is in it, so they are dispatched before threading, where ⧺ and ∊
+    are.  Two sets make one only where they hold the same type, which is what ⧺ asks of two
+    arrays; an empty set has no type to disagree with and takes the other's.  The order is
+    kept, a union that reordered its result being the same argument the entries lost.
+
+[ ] two hashes or sets cannot be joined with ⧺ or compared with =, neither can be a key, and
+    whether one set contains another is unasked; ⊂ and ⊆ are free.
 
 [x] an array type may be written where a type is compared against: `static_assert_eq(@typeof(e),
     i8[3])`.  A bare name and a tuple type already could, so the spelling @typeof answers with

@@ -1721,6 +1721,28 @@ foreach v := s:
     …
 ```
 
+#### What Two Sets Make
+
+| Operator | Answers |
+|----------|---------|
+| `a ∪ b` (U+222A) | what is in either |
+| `a ∩ b` (U+2229) | what is in both |
+| `a ∖ b` (U+2216) | what is in `a` and not in `b` |
+
+```
+let a : std.set(i64) = ⸨1, 2, 3⸩
+let b : std.set(i64) = ⸨2, 3, 4⸩
+
+a ∪ b                           /* ⸨1, 2, 3, 4⸩ */
+a ∩ b                           /* ⸨2, 3⸩ */
+a ∖ b                           /* ⸨1⸩ */
+b ∖ a                           /* ⸨4⸩ — not the same question */
+```
+
+`∩` binds tighter than `∪`, as `×` does than `+`, so `a ∪ b ∩ c` is `a ∪ (b ∩ c)`.  Both operands are the container rather than a stand-in for what is in it, so these are not threaded, as `⧺` and `∊` are not.
+
+A set holds one type of value, so two of them make one only where they hold the same; and what these make is a set, so a hash or an array on either side is refused.  The order is kept — what came from the left comes first, in the order it was in.
+
 #### Members
 
 | Member | On | Answers |

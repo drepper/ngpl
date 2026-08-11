@@ -102,6 +102,29 @@ and a definition already did.
 Only what those cannot say is a member: `.keys()`, `.values()`,
 `.insert()`, `.remove()`, `.clear()`.
 
+## What Two Sets Make
+
+`∪`, `∩` and `∖` — the glyphs mathematics uses, all three free.
+
+They sit where the arithmetic they resemble sits: `∪` and `∖` where `+`
+and `-` do, and `∩` where `×` does.  That is not decoration.  It makes
+`a ∪ b ∩ c` mean `a ∪ (b ∩ c)`, which is the reading mathematics gives
+it, and it means a reader who knows the arithmetic precedence already
+knows this one.
+
+Both operands are the container rather than a stand-in for what is in
+it, so they are dispatched before anything can be threaded over one —
+the same place `⧺` and `∊` are, and for the same reason.
+
+Two sets make one only where they hold the same type, which is the rule
+`⧺` follows for two arrays: what comes out holds one type of value, so
+what goes in has to agree on which.  An empty set has no type to
+disagree with and takes the other's.
+
+The order is kept, as it is everywhere else a set is walked.  A union
+that reordered its result would be the same argument the entries lost:
+output that depends on something nobody wrote down.
+
 ## Status
 
 Implemented: literals, `std.hash(K, V)` and `std.set(V)` as types in a
@@ -111,6 +134,5 @@ and the empty one, which a type completes.
 
 Left for later: a hash or a set as a *key* (they are not rememberable,
 which is the same question a struct raises); joining two with `⧺`;
-comparing two with `=`; and whether a set should have the operators a
-set has in mathematics — union, intersection, difference — for which
-`∪`, `∩` and `∖` are free.
+comparing two with `=`; and whether one set contains another, for which
+`⊂` and `⊆` are free.

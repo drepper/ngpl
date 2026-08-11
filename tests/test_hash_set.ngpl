@@ -184,6 +184,89 @@ fn test_clearing_one():
     assert_eq(#d, 0¤ptrdiff)
 
 // ---------------------------------------------------------------------
+// What two sets make between them
+// ---------------------------------------------------------------------
+
+@test
+fn test_union():
+    let a : std.set(i64) = ⸨1, 2, 3⸩
+    let b : std.set(i64) = ⸨2, 3, 4⸩
+    let u := a ∪ b
+    assert_eq(#u, 4¤ptrdiff)
+    assert(1 ∊ u)
+    assert(4 ∊ u)
+
+@test
+fn test_intersection():
+    let a : std.set(i64) = ⸨1, 2, 3⸩
+    let b : std.set(i64) = ⸨2, 3, 4⸩
+    let i := a ∩ b
+    assert_eq(#i, 2¤ptrdiff)
+    assert(2 ∊ i)
+    assert(¬(1 ∊ i))
+
+// What is in the first and not in the second, which is not the same
+// question the other way round.
+@test
+fn test_difference():
+    let a : std.set(i64) = ⸨1, 2, 3⸩
+    let b : std.set(i64) = ⸨2, 3, 4⸩
+    assert_eq(#(a ∖ b), 1¤ptrdiff)
+    assert(1 ∊ (a ∖ b))
+    assert_eq(#(b ∖ a), 1¤ptrdiff)
+    assert(4 ∊ (b ∖ a))
+
+// ∩ binds tighter than ∪, as × does than +, which is the order they
+// are read in.
+@test
+fn test_intersection_binds_tighter():
+    let a : std.set(i64) = ⸨1, 2⸩
+    let b : std.set(i64) = ⸨2, 3⸩
+    let c : std.set(i64) = ⸨3⸩
+    // a ∪ (b ∩ c) is ⸨1, 2, 3⸩; (a ∪ b) ∩ c would be ⸨3⸩.
+    assert_eq(#(a ∪ b ∩ c), 3¤ptrdiff)
+
+// The order is kept, as it is everywhere else these are walked.
+@test
+fn test_the_order_is_kept():
+    let a : std.set(i64) = ⸨3, 1⸩
+    let b : std.set(i64) = ⸨2⸩
+    let u := a ∪ b
+    assert_eq(u.values()[0], 3)
+    assert_eq(u.values()[1], 1)
+    assert_eq(u.values()[2], 2)
+
+// An empty set holds nothing to add or to take away.
+@test
+fn test_with_an_empty_set():
+    let a : std.set(i64) = ⸨1, 2⸩
+    let e : std.set(i64) = ⸨⸩
+    assert_eq(#(a ∪ e), 2¤ptrdiff)
+    assert_eq(#(a ∩ e), 0¤ptrdiff)
+    assert_eq(#(a ∖ e), 2¤ptrdiff)
+
+@test
+@expect error "is what two sets make between them"
+fn error_a_set_and_a_hash():
+    let a : std.set(i64) = ⸨1⸩
+    let h : std.hash(str, i64) = ⸨"x": 1⸩
+    let u : mut = a ∪ h
+
+@test
+@expect error "is what two sets make between them"
+fn error_a_set_and_an_array():
+    let a : std.set(i64) = ⸨1⸩
+    let v : i64[] = [1, 2]
+    let u : mut = a ∪ v
+
+@test
+@expect error "two of them make one only where they hold the same"
+fn error_sets_of_two_types():
+    let a : std.set(i64) = ⸨1⸩
+    let b : std.set(str) = ⸨"x"⸩
+    let u : mut = a ∪ b
+
+// ---------------------------------------------------------------------
 // One type of key and one type of value
 // ---------------------------------------------------------------------
 

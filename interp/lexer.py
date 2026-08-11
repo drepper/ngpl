@@ -101,7 +101,7 @@ _NORMALIZE_OPS = {
 
 # Single-character operators.
 # The last six are the tolerant comparisons, paired with the exact ones.
-SINGLE_OPS = set("+-%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ∃∄⍴⧺⌿⍀¤√∛∜↑⁻×÷⍳∊≠#⸨⸩"
+SINGLE_OPS = set("+-%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ∃∄⍴⧺⌿⍀¤√∛∜↑⁻×÷⍳∊≠#⸨⸩∪∩∖"
                  "≅≇⪅⪆⪉⪊"
                  # The saturating arithmetic operators.
                  "\N{SQUARED PLUS}\N{SQUARED MINUS}\N{SQUARED TIMES}"
@@ -127,6 +127,7 @@ _CONTINUATION_OPS = frozenset({
     "⍴",
     "⍳",
     "\N{SMALL ELEMENT OF}",
+    "\N{UNION}", "\N{INTERSECTION}", "\N{SET MINUS}",
     "⧺",
     "\N{APL FUNCTIONAL SYMBOL SLASH BAR}",
     "\N{APL FUNCTIONAL SYMBOL BACKSLASH BAR}",
@@ -562,7 +563,7 @@ def tokenize(src: str):
                 tokens.append(Token("PUNCT", ch, line, col))
             elif ch == "\N{RIGHTWARDS ARROW}":
                 tokens.append(Token("OP", "->", line, col))
-            elif ch in ("+-%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻⍳∊≠#"
+            elif ch in ("+-%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻⍳∊≠#∪∩∖"
                         "\N{MULTIPLICATION SIGN}\N{DIVISION SIGN}"
                         "≅≇⪅⪆⪉⪊"
                         "\N{SQUARED PLUS}\N{SQUARED MINUS}"
