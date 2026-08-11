@@ -18,7 +18,7 @@ from interp.ast import (
 )
 import interp.ast as _ast
 from interp.value import (
-    check_bootstrap_binding, check_int,
+    check_bootstrap_binding, check_binding_settles, check_int,
     FuncValue, BuiltinFunc, ObjectValue, IntValue, StrValue, BoolValue, ArrayValue,
     NoneValue, SomeValue, ExpectedValue, EnumType, EnumValue, StructType,
     coerce_to_type, apply_unit, validate_param_type, validate_type, none, FAST_TYPES,
@@ -1939,6 +1939,7 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                     # A global is a binding like any other: without a
                     # type written down a number settles on int or
                     # float, and the bootstrap has neither.
+                    check_binding_settles(value, defn.name)
                     check_bootstrap_binding(value, defn.name)
                     value = apply_unit(value, unit, evaluator._mk_int)
                 elif isinstance(defn.init_expr, _ast.ArrayAlloc):

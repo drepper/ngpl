@@ -5640,7 +5640,16 @@ error: 'byte' names a type and cannot name a variable
 @typeof([[1u8, 2, 3], [2, 3]])      /* u8[2,] — the rows disagree, so that extent is open */
 ```
 
-  What an array *is* is what it holds and the shape it holds it in, so two that differ in either are different types.  An extent the rows disagree about is left open, exactly as a type leaves one open.  An array that holds nothing and was never told what it would hold answers `array`, having nothing else to report.
+  What an array *is* is what it holds and the shape it holds it in, so two that differ in either are different types.  An extent the rows disagree about is left open, exactly as a type leaves one open.  An array that holds nothing and was never told what it would hold answers `array`, having nothing else to report — which a binding cannot be left in, since a name with no type is a name nothing can be checked against afterwards:
+
+```
+let f := []
+
+error: 'f': an empty array says nothing about what it would hold, and
+the binding says nothing either; state a type, as 'let f : i64[] = []'
+```
+
+  Being empty is not the objection.  A dynamic array is allowed to hold nothing, and one whose type is written down holds nothing *of that type*: `let f : i64[] = []` is an `i64[0]`, and `f.push(1)` puts an `i64` in it.  One row saying what it holds says it for the empty ones beside it, so `[[1u8], []]` settles too.
 
 - `@dropunit(expr)` — the value without the unit it carries.  See [Parting with a Unit](#parting-with-a-unit).
 

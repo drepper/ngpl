@@ -190,6 +190,37 @@ fn test_elements_that_already_have_a_type():
     static_assert_eq(@typeof(a[1]), u8)
     assert_eq(a[2], 9)
 
+// An empty array says nothing about what it would hold, so a binding
+// that says nothing either leaves the name with no type at all.  Being
+// empty is not the objection: a dynamic array is allowed to hold
+// nothing, and one whose type is written down holds nothing of that
+// type.
+@test
+@expect error "an empty array says nothing about what it would hold"
+fn error_an_untyped_empty_array():
+    let f : mut = []
+
+// Rows of rows of nothing are still nothing.
+@test
+@expect error "an empty array says nothing about what it would hold"
+fn error_untyped_rows_of_nothing():
+    let f : mut = [[], []]
+
+@test
+fn test_a_stated_type_holds_nothing_of_that_type():
+    let f : i64[] = []
+    assert_eq(#f, 0¤ptrdiff)
+    let more : mut i64[] = []
+    more.push(7)
+    assert_eq(more[0], 7)
+
+// One row saying what it holds says it for the empty ones too.
+@test
+fn test_one_row_settles_the_empty_ones():
+    let f := [[1u8], []]
+    static_assert_eq(@typeof(f[0][0]), u8)
+    assert_eq(#f[1], 0¤ptrdiff)
+
 // A number settles what is around it however deep it sits: one element
 // of one row says what every number in the literal is, since there is
 // only one type for all of them to be.

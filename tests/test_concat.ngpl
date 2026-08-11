@@ -15,7 +15,7 @@ fn test_concat_two_arrays():
 
 @test
 fn test_concat_empty_left():
-    let a := 0 ⍴ [0]
+    let a : i64[] = 0 ⍴ [0]
     let b : i64[] = [1, 2]
     let c := a ⧺ b
     assert_eq(#c, 2)
@@ -24,7 +24,7 @@ fn test_concat_empty_left():
 @test
 fn test_concat_empty_right():
     let a : i64[] = [1, 2]
-    let b := 0 ⍴ [0]
+    let b : i64[] = 0 ⍴ [0]
     let c := a ⧺ b
     assert_eq(#c, 2)
     assert_eq(c[1], 2)

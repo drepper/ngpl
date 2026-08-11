@@ -44,7 +44,7 @@ from interp.value import (
     format_shape, _array_type_name, array_type_mismatch,
     is_generic_type, runtime_type_of, is_type_name, _is_unsigned, validate_type,
     declared_rank, value_rank, threaded_array,
-    check_bootstrap_argument, check_bootstrap_type,
+    check_bootstrap_argument, check_bootstrap_type, check_binding_settles,
     check_bootstrap_binding,
     UNTYPED, is_unwidthed, settle_untyped, apply_unit, convert_unit_value,
     _scalar_kind_mismatch,
@@ -3335,6 +3335,7 @@ class Evaluator:
                 # Naming a value settles it, and without a type written
                 # down a number settles on `int` or `float` -- neither
                 # of which the bootstrap provides.
+                check_binding_settles(value, stmt.name)
                 check_bootstrap_binding(value, stmt.name)
                 value = settle_untyped(value)
             unit = None

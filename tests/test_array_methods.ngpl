@@ -247,7 +247,7 @@ fn test_push_in_a_loop():
 @test
 fn test_pop_into_another_array():
     let src : mut i64[] = [1, 2, 3]
-    let dst : mut = []
+    let dst : mut i64[] = []
     foreach i := 1…3:
         dst.push(src.pop() ?? 0)
     assert_eq(#src, 0)

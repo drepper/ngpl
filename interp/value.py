@@ -241,6 +241,41 @@ def dims_comma(dims: int) -> int:
     return max(dims - 1, 0)
 
 
+def _holds_nothing(value: "Value") -> bool:
+    """Whether an array has nothing in it at any depth.
+
+    Rows of rows of nothing are still nothing: what an array holds is
+    settled by something in it, and there is nothing in it to do the
+    settling.
+    """
+    inner = value.value if isinstance(value, SomeValue) else value
+    if not (isinstance(inner, ObjectValue)
+            and isinstance(inner.obj, ArrayValue)):
+        return False
+    arr = inner.obj
+    if arr.element_type is not None:
+        return False
+    return all(_holds_nothing(arr.get(i)) for i in range(arr.sizeof))
+
+
+def check_binding_settles(value: "Value", name: str):
+    """Refuse a binding that nothing could ever say the type of.
+
+    An empty array says nothing about what it would hold, and a binding
+    with no type written down says nothing either, so between them
+    there is no type -- and a name with no type is a name nothing can
+    be checked against afterwards.  Being empty is not the objection: a
+    dynamic array is allowed to hold nothing, and one whose type is
+    written down holds nothing of that type.
+    """
+    if not _holds_nothing(value):
+        return
+    raise TypeError(
+        f"'{name}': an empty array says nothing about what it would "
+        f"hold, and the binding says nothing either; state a type, as "
+        f"'let {name} : i64[] = []'")
+
+
 def check_bootstrap_binding(value: "Value", name: str):
     """Refuse a binding that would hold an arbitrary-precision value.
 

@@ -190,6 +190,14 @@ Completed
     definition's = -- let x : i64!= 10 -- is refused as it was before, != having been a single
     token then as well.
 
+[x] `let f := []` is refused: an empty array says nothing about what it would hold and a
+    binding with no type written down says nothing either, so between them there is no type --
+    and a name with no type is a name nothing can be checked against afterwards.  Rows of rows
+    of nothing are still nothing, so `[[], []]` is refused the same way.  Being empty is not
+    the objection: a dynamic array is allowed to hold nothing, and one whose type is written
+    down holds nothing of that type, so `let f : i64[] = []` is an i64[0] that push fills with
+    i64.  One row saying what it holds says it for the empty ones beside it.
+
 [x] @typeof answers an array's actual type rather than the word "array".  What an array is is
     what it holds and the shape it holds it in, and both are written down in the type a
     program would give it: i8[3], u8[2,3], u8[2,] where the rows disagree about an extent, as

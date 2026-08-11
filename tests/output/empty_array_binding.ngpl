@@ -1,0 +1,5 @@
+let g := []
+
+@start
+fn main():
+    ∅

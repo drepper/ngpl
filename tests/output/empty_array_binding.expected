@@ -1,0 +1,7 @@
+error: in g: 'g': an empty array says nothing about what it would hold, and the binding says nothing either; state a type, as 'let g : i64[] = []'
+  --> tests/output/empty_array_binding.ngpl:1:1
+    |
+  1 | let g := []
+    | ^^^
+  2 | 
+    |

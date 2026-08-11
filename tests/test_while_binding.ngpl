@@ -23,7 +23,7 @@ fn test_binds_each_iteration():
 fn test_expression_is_re_evaluated():
     let source : i64[] = [5, 4, 3]
     let it := source.iterate()
-    let seen : mut = []
+    let seen : mut i64[] = []
     while e := it.next():
         seen.push(e)
     assert_eq(#seen, 3)
