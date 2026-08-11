@@ -2091,7 +2091,8 @@ class Parser:
             self.pos += 1
             operand = self._parse_unary()
             return self._set_pos(UnaryOp(op_tok.value, operand), op_tok)
-        if self._check("OP") and self._cur().value == "#":
+        if self._check("OP") and self._cur().value in (
+                "#", "\N{SUPERSET OF}", "\N{SUPERSET OF OR EQUAL TO}"):
             op_tok = self._cur()
             self.pos += 1
             operand = self._parse_unary()

@@ -226,6 +226,15 @@ Completed
     holds each value once, so joining two would keep nothing the second repeats, which is ∪
     spelled a second way, and a second spelling is what ⊃ and ⊇ were turned down for.
 
+[x] ⊃ and ⊇ ask a hash for its keys and for what it holds against them, replacing .keys and
+    .values.  Prefix, where # is, and answering arrays: those two are asked often enough to be
+    worth a glyph, and asking them the way # is asked keeps a container's questions in one
+    shape rather than half operators and half members.  ⊇ asks a set for what is in it and ⊃
+    does not, a set having no keys.  The wrinkle: ⊂ and ⊆ are infix and ask whether one set is
+    inside another, so a reader who reads ⊃ and ⊇ as their mirror will be wrong.  What buys it
+    back is that a superset needs no spelling -- b ⊆ a is the same question -- so the glyphs
+    were going spare, and prefix keeps the two uses apart.
+
 [x] = and ≠ compare two hashes or two sets, order aside.  That is the one place the insertion
     order has to be un-kept: it exists so a walk is repeatable, not because a hash has an
     order, and two holding the same things are the same however each was built up.  The answer

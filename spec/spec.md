@@ -1808,17 +1808,32 @@ They answer a `bool`, so they sit where the comparisons do: what *makes* a set b
 
 A set holds one type of value, so two of them make one only where they hold the same; and what these make is a set, so a hash or an array on either side is refused.  The order is kept — what came from the left comes first, in the order it was in.
 
+#### What It Holds: `⊃` and `⊇`
+
+`⊃` (U+2283) asks a hash for its **keys** and `⊇` (U+2287) for what it holds **against** them.  Both are written in front of their operand, as `#` is, and both answer an array in the order the entries arrived:
+
+```
+let d : std.hash(str, i64) = ⸨"a": 1, "b": 2⸩
+
+⊃d                              /* ["a", "b"] */
+⊇d                              /* [1, 2] */
+#⊃d                             /* 2 */
+(⊃d)[0]                         /* "a" */
+```
+
+`⊇` asks a **set** for what is in it.  `⊃` does not: a set holds values rather than holding them against keys, so it has none to ask for.
+
+Note that `⊂` and `⊆` are *infix* and ask whether one set is inside another, while `⊃` and `⊇` are *prefix* and ask what a hash holds.  A reader who expects the second pair to be the mirror of the first — supersets — will not find that here; a superset is `b ⊆ a` with the operands the other way round.
+
 #### Members
 
 | Member | On | Answers |
 |--------|-----|---------|
-| `.keys()` | a hash | its keys, in order |
-| `.values()` | both | its values, in order |
 | `.insert(v)` | a set | ∅ — puts one in |
 | `.remove(k)` | both | whether there was one to remove |
 | `.clear()` | both | ∅ — empties it |
 
-What `[]`, `∊` and `#` already say is not repeated as a member.
+What `[]`, `∊`, `#`, `⊃` and `⊇` already say is not repeated as a member.
 
 #### Comparison with Other Languages
 

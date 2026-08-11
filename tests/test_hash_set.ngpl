@@ -149,12 +149,14 @@ fn test_walking_a_set():
         total ← total + v
     assert_eq(total, 6)
 
+// ⊃ asks a hash for its keys and ⊇ for what it holds against them,
+// each answering an array in the order the entries arrived.
 @test
 fn test_the_keys_and_the_values():
     let d := ⸨"a": 1i64, "b": 2⸩
-    assert_eq(#d.keys(), 2¤ptrdiff)
-    assert_eq(d.keys()[0], "a")
-    assert_eq(d.values()[1], 2)
+    assert_eq(#⊃d, 2¤ptrdiff)
+    assert_eq((⊃d)[0], "a")
+    assert_eq((⊇d)[1], 2)
 
 // ---------------------------------------------------------------------
 // Taking things out and putting them in
@@ -232,9 +234,9 @@ fn test_the_order_is_kept():
     let a : std.set(i64) = ⸨3, 1⸩
     let b : std.set(i64) = ⸨2⸩
     let u := a ∪ b
-    assert_eq(u.values()[0], 3)
-    assert_eq(u.values()[1], 1)
-    assert_eq(u.values()[2], 2)
+    assert_eq((⊇u)[0], 3)
+    assert_eq((⊇u)[1], 1)
+    assert_eq((⊇u)[2], 2)
 
 // An empty set holds nothing to add or to take away.
 @test
@@ -382,9 +384,9 @@ fn test_a_shared_key_keeps_its_place():
     let a : std.hash(str, i64) = ⸨"a": 1, "b": 2⸩
     let b : std.hash(str, i64) = ⸨"b": 9, "c": 3⸩
     let j := a ⧺ b
-    assert_eq(j.keys()[0], "a")
-    assert_eq(j.keys()[1], "b")
-    assert_eq(j.keys()[2], "c")
+    assert_eq((⊃j)[0], "a")
+    assert_eq((⊃j)[1], "b")
+    assert_eq((⊃j)[2], "c")
 
 // A set holds each value once, so joining two would keep nothing the
 // second one repeats -- which is what ∪ already answers.
@@ -505,6 +507,27 @@ fn error_writing_a_value_of_the_wrong_type():
 fn error_reading_a_set_by_key():
     let s := ⸨1i64, 2⸩
     let v : mut = s[0]
+
+// A set holds values rather than holding them against keys, so it has
+// no keys to ask for.
+@test
+@expect error "so it has none to ask for"
+fn error_asking_a_set_for_keys():
+    let s : std.set(i64) = ⸨1⸩
+    let k : mut = ⊃s
+
+@test
+@expect error "is a question for a hash"
+fn error_asking_an_array_for_keys():
+    let v : i64[] = [1]
+    let k : mut = ⊃v
+
+// The two that were members are operators now.
+@test
+@expect error "has no member"
+fn error_the_members_they_replaced():
+    let d : mut std.hash(str, i64) = ⸨"a": 1⸩
+    let k : mut = d.keys()
 
 @test
 @expect error "has no member"

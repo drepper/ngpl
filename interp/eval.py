@@ -1811,6 +1811,33 @@ class Evaluator:
             built.put(key, value)
         return ObjectValue(built)
 
+    def _op_halves(self, op: str, operand):
+        """What a hash holds: ⊃ its keys, ⊇ what it holds against them.
+
+        Both answer an array, in the order the entries arrived, so what
+        comes back is walked and indexed the way anything else is.
+        """
+        held = _unwrap_operand(operand)
+        if isinstance(held, ObjectValue) and isinstance(held.obj, HashValue):
+            hv = held.obj
+            if op == "\N{SUPERSET OF}":
+                return ObjectValue(ArrayValue(hv.keys(),
+                                              element_type=hv.key_type))
+            return ObjectValue(ArrayValue(hv.values(),
+                                          element_type=hv.value_type))
+        if isinstance(held, ObjectValue) and isinstance(held.obj, SetValue):
+            if op == "\N{SUPERSET OF}":
+                raise TypeError(
+                    "\N{SUPERSET OF}: a set holds values rather than holding "
+                    "them against keys, so it has none to ask for; "
+                    "\N{SUPERSET OF OR EQUAL TO} answers what is in it")
+            return ObjectValue(ArrayValue(held.obj.values(),
+                                          element_type=held.obj.value_type))
+        raise TypeError(
+            f"{op}: what a hash holds is a question for a hash"
+            f"{' or a set' if op == chr(0x2287) else ''}, and this is "
+            f"{self._value_type_name(held)}")
+
     def _op_length(self, operand):
         """How many things are in it (#).
 
@@ -1851,6 +1878,8 @@ class Evaluator:
         """
         if op == "#":
             return self._op_length(operand)
+        if op in ("\N{SUPERSET OF}", "\N{SUPERSET OF OR EQUAL TO}"):
+            return self._op_halves(op, operand)
         if op in self._LISTABLE_UNOPS:
             threaded = self._thread_level(
                 op, ("the operand",), [operand], (0,),
@@ -2525,28 +2554,23 @@ class Evaluator:
         """
         is_hash = isinstance(held, HashValue)
         what = "hash" if is_hash else "set"
-        arities = {"keys": 0, "values": 0, "remove": 1, "insert": 1,
-                   "clear": 0}
-        if name not in arities or (name == "keys" and not is_hash) \
-                or (name == "insert" and is_hash):
-            known = ("keys, values, remove, clear" if is_hash
-                     else "values, insert, remove, clear")
+        arities = {"remove": 1, "insert": 1, "clear": 0}
+        if name not in arities or (name == "insert" and is_hash):
+            known = ("remove, clear" if is_hash
+                     else "insert, remove, clear")
+            asked = ("\N{SUPERSET OF} for its keys and "
+                     "\N{SUPERSET OF OR EQUAL TO} for what it holds against "
+                     "them" if is_hash
+                     else "\N{SUPERSET OF OR EQUAL TO} for what is in it")
             raise AttributeError(
-                f"a {what} has no member '{name}'; it has {known}, is read "
-                f"with [] where it is a hash, asked with "
+                f"a {what} has no member '{name}'; it has {known}, {asked}, "
+                f"is read with [] where it is a hash, asked with "
                 f"\N{SMALL ELEMENT OF} whether something is in it, and "
                 f"counted with #")
         if len(args) != arities[name]:
             raise TypeError(
                 f"{what}.{name} takes {arities[name]} argument"
                 f"{'' if arities[name] == 1 else 's'}, got {len(args)}")
-        if name == "keys":
-            return ObjectValue(ArrayValue(held.keys(),
-                                          element_type=held.key_type))
-        if name == "values":
-            return ObjectValue(ArrayValue(
-                held.values(),
-                element_type=held.value_type if is_hash else held.value_type))
         if name == "clear":
             held.entries.clear()
             return none()

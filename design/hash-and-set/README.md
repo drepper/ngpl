@@ -99,8 +99,24 @@ halves the way any tuple is taken apart.  That last one needed the
 `foreach` variable to accept a destructuring pattern, which a parameter
 and a definition already did.
 
-Only what those cannot say is a member: `.keys()`, `.values()`,
-`.insert()`, `.remove()`, `.clear()`.
+What a hash holds is asked with an operator rather than a member:
+`⊃d` for its keys and `⊇d` for what it holds against them, written in
+front as `#` is and answering arrays.  Those two are asked of a
+container often enough to be worth a glyph, and asking them the way `#`
+is asked keeps a container's questions in one shape rather than half
+operators and half members.  `⊇` asks a set for what is in it; `⊃` does
+not, a set having no keys to ask for.
+
+There is a wrinkle worth stating: `⊂` and `⊆` are infix and ask whether
+one set is inside another, and `⊃` and `⊇` are prefix and ask something
+unrelated.  A reader who reads the second pair as the mirror of the
+first will be wrong.  What buys that back is that a superset needs no
+spelling of its own — `b ⊆ a` is the same question — so the glyphs were
+going spare, and being prefix is what keeps the two uses apart for the
+parser and, written out, for the eye.
+
+Only what none of those can say is a member: `.insert()`, `.remove()`,
+`.clear()`.
 
 ## What Two Sets Make
 
