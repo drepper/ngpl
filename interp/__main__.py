@@ -1098,15 +1098,16 @@ def _least_rank(expr, ranks: dict) -> int | None:
     return None
 
 
-def _parameter_ranks(func_def) -> dict:
+def _parameter_ranks(params) -> dict:
     """How deep each parameter's declared type says it is.
 
-    Every parameter states a type, so this is known for all of them --
-    except a generic, which stands for whatever it is handed and says
-    nothing about how deep that is.
+    Every parameter of a function states a type, so this is known for
+    all of them -- except a generic, which stands for whatever it is
+    handed and says nothing about how deep that is, and a lambda's,
+    which may leave the type off altogether.
     """
     ranks: dict[str, int] = {}
-    for name, param_type in func_def.params:
+    for name, param_type in params:
         if param_type is None or is_generic_type(param_type):
             continue
         base, _ = _split_optional_type(param_type)
@@ -1126,7 +1127,53 @@ def _static_return_check(func_def) -> str | None:
     Anything whose shape is not written down is left to run, where the
     same check meets the value itself.
     """
-    ret_type = getattr(func_def, "ret_type", None)
+    return _return_shape_finding(getattr(func_def, "ret_type", None),
+                                 func_def.params,
+                                 _returned_exprs(func_def))
+
+
+def _lambda_returns(lam):
+    """The expressions a lambda hands back.
+
+    A body that is one expression hands that one back; a body of
+    statements hands back its last where that is an expression, and any
+    return written inside it.  A lambda written inside a lambda is its
+    own, so the walk stops at one.
+    """
+    body = lam.body
+    if not isinstance(body, list):
+        yield body
+        return
+    for node in _iter_ast(body, stop_at=(_ast.LambdaExpr,)):
+        if isinstance(node, _ast.ReturnStmt) and node.value is not None:
+            yield node.value
+    if body and isinstance(body[-1], _ast.ExprStmt):
+        yield body[-1].expr
+
+
+def _static_lambda_return_check(definition) -> str | None:
+    """The same check for every lambda written inside a definition.
+
+    A lambda states its own parameters and its own return type, so the
+    question is the one a named function is asked and the answer is
+    reached the same way.  The whole definition is walked rather than
+    its body, so a lambda bound to a name, or written into a condition,
+    is asked it too.
+    """
+    for node in _iter_ast(definition):
+        if not isinstance(node, _ast.LambdaExpr):
+            continue
+        finding = _return_shape_finding(node.ret_type, node.params,
+                                        _lambda_returns(node),
+                                        subject="a lambda's return type")
+        if finding is not None:
+            return finding
+    return None
+
+
+def _return_shape_finding(ret_type, params, returned,
+                          subject: str = "return type") -> str | None:
+    """Whether what is handed back is an array where a scalar is promised."""
     if _says_nothing(ret_type):
         return None
     base, _ = _split_optional_type(ret_type)
@@ -1135,13 +1182,13 @@ def _static_return_check(func_def) -> str | None:
         return None
     if _parse_array_type(check) is not None:
         return None
-    ranks = _parameter_ranks(func_def)
-    for expr in _returned_exprs(func_def):
+    ranks = _parameter_ranks(params)
+    for expr in returned:
         dims = _literal_array_shape(expr)
         if dims is not None:
             written = ",".join("" if d is None else str(d) for d in dims)
             return _Finding(
-                f"return type is {ret_type}, which is not an array type, "
+                f"{subject} is {ret_type}, which is not an array type, "
                 f"but the body hands back {format_shape(dims)} elements; "
                 f"an array type says its shape, as "
                 f"'{check}[{written}]'", expr)
@@ -1151,7 +1198,7 @@ def _static_return_check(func_def) -> str | None:
             # comma for each dimension past the first.
             shape = "[" + "," * (deep - 1) + "]"
             return _Finding(
-                f"return type is {ret_type}, which is not an array type, "
+                f"{subject} is {ret_type}, which is not an array type, "
                 f"but the body hands back an array: an operator handed one "
                 f"answers one for each of what it holds, so this is "
                 f"'{check}{shape}'", expr)
@@ -2326,6 +2373,13 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
 
     for defn in definitions:
         if isinstance(defn, ASTVarDef):
+            # A lambda written here states its own signature, so it is
+            # asked what a function is asked.
+            lambda_err = _static_lambda_return_check(defn)
+            if lambda_err is not None:
+                raise DefinitionError(
+                    f"in '{defn.name}': {lambda_err}",
+                    _finding_pos(lambda_err) or _node_pos(defn))
             if defn.name == DISCARD_NAME:
                 # Evaluated for its effects, then dropped; nothing is bound.
                 evaluator.eval_expr(defn.init_expr)
@@ -2570,7 +2624,8 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 if assert_err is not None:
                     raise DefinitionError(f"in {defn.name}: {assert_err}",
                                           _finding_pos(assert_err) or _node_pos(defn))
-                return_err = _static_return_check(defn)
+                return_err = (_static_return_check(defn)
+                              or _static_lambda_return_check(defn))
                 if return_err is not None:
                     raise DefinitionError(f"in {defn.name}: {return_err}",
                                           _finding_pos(return_err) or _node_pos(defn))
@@ -2620,6 +2675,7 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
             for finding in (_static_literal_check(method_def),
                             _static_chr_check(method_def),
                             _static_return_check(method_def),
+                            _static_lambda_return_check(method_def),
                             _static_purity_check(method_def, env, struct_vars),
                             _static_unused_value_check(method_def, env,
                                                        struct_vars)):
@@ -2759,7 +2815,8 @@ def main():
                 errors_produced.append(("error", assert_err))
 
         if not errors_produced:
-            return_err = _static_return_check(defn)
+            return_err = (_static_return_check(defn)
+                          or _static_lambda_return_check(defn))
             if return_err is not None:
                 errors_produced.append(("error", return_err))
 

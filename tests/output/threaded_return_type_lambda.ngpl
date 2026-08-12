@@ -1,0 +1,9 @@
+// A lambda states its own parameters and its own return type, so it is
+// asked what a named function is asked: a comparison handed an array
+// answers one for each of what it holds, and bool does not hold those.
+// Nothing here calls it.
+let f := λx : i32[] → bool: x > 3
+
+@start
+fn main():
+    std.println("not reached")
