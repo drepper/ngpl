@@ -148,6 +148,25 @@ fn test_wrong_inner_extent():
     let m : i32[2,3] = [[1, 2, 3], [4, 5]]
     std.println("{}", m)
 
+// ---------------------------------------------------------------------
+// What threading hands back
+// ---------------------------------------------------------------------
+
+// A listable operator handed an array answers one for each of what it
+// holds, so a signature promising a scalar is refused at the
+// definition -- which, being a definition, is reported before anything
+// runs and is checked by tests/output/threaded_return_type_static.
+//
+// The ones that do not thread are left alone: a fold answers one
+// value, a length answers a number, and a subscript answers an
+// element.
+@test
+fn test_what_does_not_thread_is_not_refused():
+    let v : i64[] = [1, 2, 3]
+    assert_eq(+⌿ v, 6)
+    assert_eq(#v, 3¤ptrdiff)
+    assert_eq(v[0], 1)
+
 @start
 @impure
 fn main():

@@ -33,7 +33,7 @@ from interp.value import (
     UnitValue,
     _split_optional_type, _TYPE_BITS, FLOAT_TYPES, resolve_type_alias,
     check_bootstrap_type,
-    _parse_array_type, format_shape, is_generic_type,
+    _parse_array_type, format_shape, is_generic_type, declared_rank,
 )
 from interp.eval import Evaluator, unwrap_optional, _ARRAY_MUTATORS
 from interp.layout import LayoutError, struct_layout, struct_lookup
@@ -1049,6 +1049,72 @@ def _returned_exprs(func_def):
         yield body[-1].expr
 
 
+# What is always a container, whatever it is written over: joining two
+# of them, reshaping into one, and asking something of each.
+_ALWAYS_A_CONTAINER = (_ast.MapExpr, _ast.ReshapeExpr)
+
+
+def _least_rank(expr, ranks: dict) -> int | None:
+    """How many containers deep the expression is at least, where known.
+
+    Threading is what makes this answerable without running anything: a
+    listable operator handed a container answers a container, whatever
+    the other operand is.  So a lower bound is enough -- the question
+    being asked is only whether an array comes back where a scalar was
+    promised.
+
+    None where nothing about the expression says: a call to a function
+    whose answer is not known here, a name that is not a parameter, a
+    fold, anything else.  Saying nothing is what leaves a case to the
+    check that meets the value itself.
+    """
+    if isinstance(expr, _ast.VarRef):
+        return ranks.get(expr.name)
+    if isinstance(expr, _ALWAYS_A_CONTAINER):
+        return 1
+    if isinstance(expr, _ast.ArrayLit):
+        dims = _literal_array_shape(expr)
+        return None if dims is None else len(dims)
+    if isinstance(expr, _ast.BinOp) \
+            and (expr.op in Evaluator._LISTABLE_BINOPS
+                 or expr.op == "\N{DOUBLE PLUS}"):
+        # Either operand being a container makes the answer one.
+        sides = [_least_rank(expr.left, ranks), _least_rank(expr.right, ranks)]
+        deepest = [r for r in sides if r is not None and r >= 1]
+        if deepest:
+            return max(deepest)
+        return None if None in sides else 0
+    if isinstance(expr, _ast.UnaryOp) \
+            and expr.op in Evaluator._LISTABLE_UNOPS:
+        return _least_rank(expr.operand, ranks)
+    if isinstance(expr, _ast.IfExpr):
+        # Whichever branch runs is the answer, so only what both say is
+        # something this can say.
+        sides = [_least_rank(expr.then_expr, ranks),
+                 _least_rank(expr.else_expr, ranks)]
+        if None in sides:
+            return None
+        return min(sides)
+    return None
+
+
+def _parameter_ranks(func_def) -> dict:
+    """How deep each parameter's declared type says it is.
+
+    Every parameter states a type, so this is known for all of them --
+    except a generic, which stands for whatever it is handed and says
+    nothing about how deep that is.
+    """
+    ranks: dict[str, int] = {}
+    for name, param_type in func_def.params:
+        if param_type is None or is_generic_type(param_type):
+            continue
+        base, _ = _split_optional_type(param_type)
+        ranks[_param_display(name)] = declared_rank(
+            resolve_type_alias(base if base else param_type))
+    return ranks
+
+
 def _static_return_check(func_def) -> str | None:
     """Refuse an array handed back where the return type names a scalar.
 
@@ -1069,16 +1135,26 @@ def _static_return_check(func_def) -> str | None:
         return None
     if _parse_array_type(check) is not None:
         return None
+    ranks = _parameter_ranks(func_def)
     for expr in _returned_exprs(func_def):
         dims = _literal_array_shape(expr)
-        if dims is None:
-            continue
-        written = ",".join("" if d is None else str(d) for d in dims)
-        return _Finding(
-            f"return type is {ret_type}, which is not an array type, "
-            f"but the body hands back {format_shape(dims)} elements; "
-            f"an array type says its shape, as "
-            f"'{check}[{written}]'", expr)
+        if dims is not None:
+            written = ",".join("" if d is None else str(d) for d in dims)
+            return _Finding(
+                f"return type is {ret_type}, which is not an array type, "
+                f"but the body hands back {format_shape(dims)} elements; "
+                f"an array type says its shape, as "
+                f"'{check}[{written}]'", expr)
+        deep = _least_rank(expr, ranks)
+        if deep is not None and deep >= 1:
+            # An array type of no stated extent is written with a
+            # comma for each dimension past the first.
+            shape = "[" + "," * (deep - 1) + "]"
+            return _Finding(
+                f"return type is {ret_type}, which is not an array type, "
+                f"but the body hands back an array: an operator handed one "
+                f"answers one for each of what it holds, so this is "
+                f"'{check}{shape}'", expr)
     return None
 
 
@@ -2543,6 +2619,7 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
             struct_vars = _struct_vars_of(method_def, env, self_type=st)
             for finding in (_static_literal_check(method_def),
                             _static_chr_check(method_def),
+                            _static_return_check(method_def),
                             _static_purity_check(method_def, env, struct_vars),
                             _static_unused_value_check(method_def, env,
                                                        struct_vars)):

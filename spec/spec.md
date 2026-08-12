@@ -850,7 +850,7 @@ fail; the count is too far for the type shifted
   --> shift.ngpl:2:1
     |
   2 | i « 7
-    | ※※^
+    | ^^^^^
     |
 ```
 
@@ -2404,7 +2404,7 @@ to what divide says it needs
   --> contracts.ngpl:1:1
     |
   1 | @pre(b ≠ 0)
-    | ※※
+    | ^^^^
 ```
 
 A precondition blames the caller and a postcondition blames the function, which is what each of them is about.  The backtrace shows which call it was.
@@ -2442,7 +2442,7 @@ keep to what scaled says it needs
   --> program.ngpl:1:1
     |
   1 | @pre(b > 0)
-    | ※※
+    | ^^^^
     |
 backtrace (innermost call first):
   #0 scaled at program.ngpl:1:5
@@ -5480,11 +5480,26 @@ as 'u32[3]'
   --> hash.ngpl:2:5
     |
   2 |     [1, 2, 3]
-    |     ※※※※^
+    |     ^^^^^^^^^
     |
 ```
 
-Only a literal answers this before anything runs, since its brackets say the shape where it is written.  A value whose shape is not written down is left to the check at runtime.
+A literal is not the only thing that answers before anything runs.  A **listable operator handed an array answers an array**, and the parameter's declared type says it is one, so the two together settle the shape without running anything:
+
+```
+fn g3(x : i32[]) → bool:
+    x > 3
+
+error: in g3: return type is bool, which is not an array type, but the
+body hands back an array: an operator handed one answers one for each
+of what it holds, so this is 'bool[]'
+```
+
+This is the mistake the threading rules make easy to write: `x > 3` reads as one comparison and is one for each element.  The depth is counted through, so a matrix parameter reports `i32[,]` rather than `i32[]`, and it is counted through nested operators, `⧺`, `⍴`, `¨`, and both branches of a conditional where they agree.
+
+What is *not* threaded is left alone, since none of it answers an array: a fold reduces, `#` counts, and a subscript reads one element out.
+
+What nothing says about is left to the check at runtime — a call to another function, a name that is not a parameter, a generic. Saying nothing there is what keeps this from refusing what it merely cannot see.
 
 Reading the missing brackets as an element type would make `u32` and `u32[8]` two spellings of the same declaration, which costs the reader the one place the length was written down.  SHA-256's eight-word hash state was declared `u32` in this document's own example for a while, and nothing said so.
 
@@ -6129,7 +6144,7 @@ error: in never_called: static_assert_eq failed:
   --> sizes.ngpl:3:5
     |
   3 |     static_assert_eq(@sizeof(a), 99 ¤byte)
-    |     ※※※※※※※※
+    |     ^^^^^^^^^^^^^^^^
     |
 ```
 
