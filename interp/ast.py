@@ -602,6 +602,19 @@ class LambdaExpr:
         self.body = body
 
 
+class MapExpr:
+    """`f ¨ v` -- f applied to each of the things v holds.
+
+    The answer is an array of what f said, one for each, in the order
+    they were held.
+    """
+
+    def __init__(self, func, container):
+        self.func = func
+        self.container = container
+        self.pos = None
+
+
 class ReshapeExpr:
     """Reshape expression: shape ⍴ data."""
 

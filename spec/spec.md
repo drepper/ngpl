@@ -5873,6 +5873,76 @@ The initial value is optional.  When omitted, the first or last element of the c
 Both folds accept arrays and ranges as containers.  Using a non-iterable value (such as a scalar integer) is a type error.
 
 
+### The Map Operator (`¨`)
+
+`f ¨ v` asks `f` of each of the things `v` holds, and answers an array of what it said — one for each, in the order they were held.  APL writes it the same way and calls it *each*.
+
+```
+fn twice(n : i64) → i64:
+    n × 2
+
+let v : i64[] = [1, 2, 3]
+twice¨v                         // [2, 4, 6]
+twice¨(1…4)                     // [2, 4, 6, 8]
+```
+
+Anything that can be called may stand on the left: a named function, a lambda, a name that holds one.
+
+```
+(λx : i64 → i64: x + 100)¨v     // [101, 102, 103]
+```
+
+What comes back need not hold what went in.  The answers are what `f` said, whatever that is:
+
+```
+fn describe(n : i64) → str:
+    "even" if n % 2 = 0 else "odd"
+
+describe¨v                      // ["odd", "even", "odd"]
+```
+
+Arrays and ranges are what it takes, as they are for a fold.  Anything else is a type error.  An empty container answers an empty array — there is nothing to ask about, and that is an answer rather than a failure.
+
+A matrix holds rows, so each of them is a row:
+
+```
+let m : i64[2, 3] = [[1, 2, 3], [4, 5, 6]]
+(λr : i64[] → i64: @dropunit(#r))¨m         // [3, 3]
+```
+
+What follows `¨` is the container, as it is for a fold, so brackets are what stop it reaching further: `twice¨(a ⧺ b)` maps over the join, and `twice¨a ⧺ b` maps over `a ⧺ b` as well.
+
+#### Why It Is Not Needed for an Operator
+
+Every operator in the language already threads over what it is handed, and so does a function marked `@listable`:
+
+```
+⁻v                              // [⁻1, ⁻2, ⁻3] — no ¨ needed
+v × 2                           // [2, 4, 6]
+```
+
+`¨` is for the functions that do **not** — which is most of them, since `@listable` is a promise a function makes about every call and is not always one worth making.  Where a function is listable, `f(v)` and `f¨v` say the same thing, the first at the definition and the second at the call.
+
+Mapping and then folding is the shape most of this is for:
+
+```
++⌿ twice¨v                      // 12
+```
+
+#### Comparison with Other Languages
+
+| Language | Map |
+|----------|-----|
+| APL, BQN | `f¨v` |
+| Haskell | `map f v`, `fmap` |
+| Rust | `v.iter().map(f)` |
+| Python | `map(f, v)`, `[f(x) for x in v]` |
+| C++ | `std::views::transform` |
+| NGPL | `f ¨ v` |
+
+The glyph and the position are APL's, and they put the function where the fold already puts it: on the left, with the data on the right.  Where APL's `¨` is an *operator modifier* that makes a new function, this is a binary operator that answers the array directly — the same simplification the fold made, and for the same reason: a modifier would need the language to have a notion of a derived function, which it does not.
+
+
 ### The `catch` Statement
 
 The `catch` statement provides scoped error handling at the syntactic level.  Unlike exception systems in C++ or Java, `catch` blocks do **not** intercept errors from called functions.  Only errors that originate from operations directly written inside the `catch` block are caught.

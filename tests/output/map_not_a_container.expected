@@ -1,0 +1,6 @@
+error: ¨ asks something of each of an array or a range, and this is i64
+  --> tests/output/map_not_a_container.ngpl:10:29
+    |
+ 10 |     std.println("{}", twice¨n)
+    |                             ^
+    |
