@@ -1,0 +1,16 @@
+// A struct says what its fields are, and a name standing for an
+// instance says which struct, so `self.v > 3` is settled the way
+// `x > 3` on an array parameter is: the comparison answers one for
+// each of what v holds, and bool does not hold those.  Nothing here
+// calls it.
+struct Box:
+    v : i32[]
+
+impl Box:
+    fn any_big(self) → bool:
+        self.v > 3
+
+@start
+@impure
+fn main():
+    std.println("not reached")

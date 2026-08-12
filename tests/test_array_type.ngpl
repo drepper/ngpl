@@ -167,6 +167,30 @@ fn test_what_does_not_thread_is_not_refused():
     assert_eq(#v, 3¤ptrdiff)
     assert_eq(v[0], 1)
 
+// A struct says what its fields are, so a field standing where an
+// array parameter would stand is read the same way -- and the ones
+// that answer a scalar are left alone.
+struct Holder:
+    v : i64[]
+    n : i64
+
+impl Holder:
+    fn scalar_field(self) → bool:
+        self.n > 3
+    fn count(self) → i64:
+        @dropunit(#self.v)
+    fn first(self) → i64:
+        self.v[0]
+    fn doubled(self) → i64[]:
+        self.v × 2
+
+@test
+fn test_what_a_field_answers_is_read_from_the_struct():
+    assert(Holder { v: [1, 5], n: 9 }.scalar_field())
+    assert_eq(Holder { v: [1, 5], n: 9 }.count(), 2)
+    assert_eq(Holder { v: [1, 5], n: 9 }.first(), 1)
+    assert_eq(Holder { v: [1, 5], n: 9 }.doubled()[1], 10)
+
 // A lambda states its own parameters and its own return type, so it is
 // asked the same question, and the same answers are left alone.
 @test

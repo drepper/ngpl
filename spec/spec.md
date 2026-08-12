@@ -5497,6 +5497,23 @@ of what it holds, so this is 'bool[]'
 
 This is the mistake the threading rules make easy to write: `x > 3` reads as one comparison and is one for each element.  The depth is counted through, so a matrix parameter reports `i32[,]` rather than `i32[]`, and it is counted through nested operators, `⧺`, `⍴`, `¨`, and both branches of a conditional where they agree.
 
+A **struct field** is read the same way, since the struct says what its fields are and a name standing for an instance says which struct:
+
+```
+struct Box:
+    v : i32[]
+
+impl Box:
+    fn any_big(self) → bool:
+        self.v > 3
+
+error: in Box.any_big: return type is bool, which is not an array type,
+but the body hands back an array: an operator handed one answers one
+for each of what it holds, so this is 'bool[]'
+```
+
+`self` inside an impl block and a struct-typed parameter both name an instance, and both are read this way.
+
 A lambda states its own parameters and its own return type, so it is asked the same question wherever it is written — bound to a name, handed to something, written into a condition:
 
 ```
