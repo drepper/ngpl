@@ -1053,8 +1053,9 @@ Macros and Reflection
     The two are headed by different keywords so that both can be present at once, which is
     what the end state is: @macro_rules for the rules form and macro for the function form,
     following Rust, where macro_rules! and a procedural macro are the same two halves.
-    Neither word is reserved -- macro_rules is a keyword only after an @, and macro only
-    where a definition may start.
+    macro_rules is a keyword only after an @, so the word stays available as a name; macro
+    is a reserved word as fn and struct are, which is what heading a definition costs and is
+    why the longer name is the one written with an @.
 
     Both are wanted in the end, as they are in Scheme and in Rust.  Recommendation: merge
     the rules form first, the function form after, with the rules form as sugar.
