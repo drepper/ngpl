@@ -20,20 +20,22 @@
 
 // The factors of an expression, however deeply the parser nested them.
 // A product of a product is one product to a reader, so anything whose
-// head is × is taken apart into what it applies × to, and everything
-// else is a factor, itself.
+// head is × is taken apart into the factors of each of the things it
+// applies × to, joined; everything else is one factor, itself.
 //
-// Written as a comptime function so that the macro below can call it:
-// a macro runs before the program's own functions are installed, and
-// comptime is what puts a function on the other side of that line.
+// @listable is what makes factors(e.arguments()) answer the factors of
+// each of them, and ⧺⌿ joins those into one array.  Written out, the
+// last line is a loop that pushes each answer onto the end of an array
+// it carries.
+//
+// comptime is what lets the macro below call it -- and what lets it
+// call itself, a macro being one function and this walk having to
+// descend.
+@listable
 comptime fn factors(e : syntax) → syntax[]:
     if e.head() ≠ ※×:
         return [e]
-    let all : mut syntax[] = []
-    foreach part := e.arguments():
-        foreach f := factors(part):
-            all.push(f)
-    all
+    ⧺⌿ factors(e.arguments())
 
 // sin(x×π) has to round x×π first, and π is not a number f64 holds, so
 // the answer is near zero rather than zero.  std.sinpi takes the turns
@@ -484,6 +486,18 @@ macro three_times(e : syntax) → syntax:
 fn test_a_comptime_function_serves_both_sides():
     assert_eq(three_times⟦0i64⟧, 21)
     assert_eq(tripled(7), 21)
+
+// An annotation may be written on one, `comptime fn` being a function
+// definition like any other.
+@listable
+comptime fn halved(n : i64) → i64:
+    n ÷ 2
+
+@test
+fn test_a_comptime_function_takes_annotations():
+    let v : i64[] = [10, 20, 30]
+    assert_eq(halved(20), 10)
+    assert_eq(halved(v)[2], 15)
 
 @start
 @impure

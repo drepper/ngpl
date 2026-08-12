@@ -8547,14 +8547,11 @@ A macro is an ordinary function that runs while the program is being installed. 
 
 ```
 // The factors of an expression, however deeply the parser nested them.
+@listable
 comptime fn factors(e : syntax) → syntax[]:
     if e.head() ≠ ※×:                       // not a product: one factor
         return [e]
-    let all : mut syntax[] = []
-    foreach part := e.arguments():           // a product: each of them,
-        foreach f := factors(part):          // taken apart in turn
-            all.push(f)
-    all
+    ⧺⌿ factors(e.arguments())                // a product: each of them, joined
 
 macro sin(e : syntax) → syntax:
     let rest : mut syntax[] = []
@@ -8665,14 +8662,16 @@ as `comptime fn helper` to have it there in time
 `comptime fn` moves a function to the other side of that line.  It is installed before expansion, alongside the macros, so a macro may call it — and so may another comptime function, including itself:
 
 ```
+@listable
 comptime fn factors(e : syntax) → syntax[]:
     if e.head() ≠ ※×:
         return [e]
-    …
-    foreach f := factors(part):             // itself
+    ⧺⌿ factors(e.arguments())               // itself, over each of them
 ```
 
 This is what recursion over the program's text is written with.  A macro is one function and cannot be two, so a walk that has to descend either carries its own worklist or calls something that recurses; `comptime fn` is how the second is spelled.
+
+A `comptime fn` is a function definition like any other and takes the same annotations.  `@listable` above is what makes `factors(e.arguments())` answer the factors of *each* of them, and `⧺⌿` joins those into one array — the same thing a loop pushing each answer onto the end of an array would say at greater length.
 
 A comptime function is **one function on both sides**: it is installed before expansion for the macros to call, and installed again in the ordinary way for the program to call while it runs.  Nothing about it is special at the call — what the marker says is when it exists, not what it computes.
 

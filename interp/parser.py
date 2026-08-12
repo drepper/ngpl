@@ -417,6 +417,15 @@ class Parser:
             else:
                 break
 
+        # `comptime fn` -- a function that is there before the program
+        # runs, so a macro may call it.  Read before the checks below,
+        # since with it written a function does follow them.
+        is_comptime = False
+        if self._check("COMPTIME") and self.pos + 1 < len(self.tokens) \
+                and self.tokens[self.pos + 1].type == "FN":
+            self._eat("COMPTIME")
+            is_comptime = True
+
         if hint is not None and not self._check("FN"):
             raise ParseError(
                 f"@{hint} applies to a function, but none follows",
@@ -448,14 +457,6 @@ class Parser:
 
         if self._check("IMPL"):
             return self._parse_impl_block()
-
-        # `comptime fn` -- a function that is there before the program
-        # runs, so a macro may call it.
-        is_comptime = False
-        if self._check("COMPTIME") and self.pos + 1 < len(self.tokens) \
-                and self.tokens[self.pos + 1].type == "FN":
-            self._eat("COMPTIME")
-            is_comptime = True
 
         if self._check("MACRO_RULES"):
             return self._parse_macro_rules_def()

@@ -169,14 +169,11 @@ procedural macros, Julia's `macro`, and Nim:
 
 ```
 // The factors of an expression, however deeply the parser nested them.
+@listable
 comptime fn factors(e : syntax) → syntax[]:
     if e.head() ≠ ※×:                       // not a product: one factor
         return [e]
-    let all : mut syntax[] = []
-    foreach part := e.arguments():           // a product: each of them,
-        foreach f := factors(part):          // taken apart in turn
-            all.push(f)
-    all
+    ⧺⌿ factors(e.arguments())                // a product: each of them, joined
 
 macro sin(e : syntax) → syntax:
     let rest : mut syntax[] = []
@@ -274,9 +271,22 @@ avoid a recursion, and it read like one.
 
 `comptime fn` is what removed it.  A function marked that way is
 installed before expansion, alongside the macros, so a macro may call
-it and it may call itself.  The example is now four lines that say what
-"the factors of an expression" means, and the macro says only what it
-does with them.
+it and it may call itself.  The example is now three lines that say
+what "the factors of an expression" means, and the macro says only what
+it does with them.
+
+Those three lines are worth reading twice, because the last one is the
+language's own idiom rather than a loop: `@listable` makes
+`factors(e.arguments())` answer the factors of *each* of the things the
+product applies `×` to, and `⧺⌿` joins those into one array. Written
+out it is a loop that carries an array and pushes each answer onto the
+end of it, which is four lines saying what one says.
+
+The cost of the shorter spelling is honest and worth stating: marking
+`factors` listable changes what it does when a *caller* hands it an
+array, which is a promise about the signature made for the sake of the
+body. Here the threaded reading is the one anybody would want — the
+factors of each of them — so the promise is one worth making.
 
 It is one function on both sides: installed early for the macros, and
 again in the ordinary way for the program.  What the marker says is
