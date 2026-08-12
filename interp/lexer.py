@@ -70,7 +70,6 @@ KEYWORDS = {
     "enumerate": "ENUMERATE",
     "struct": "STRUCT",
     "impl": "IMPL",
-    "macro": "MACRO",
 }
 
 # Keywords recognized only after the @ prefix.  The @ is part of the
@@ -92,6 +91,7 @@ AT_KEYWORDS: dict[str, str] = {
     "noreturn": "NORETURN",
     "pre": "PRE",
     "post": "POST",
+    "macro_rules": "MACRO_RULES",
 }
 
 # Double-character operators that must be checked before single ones.

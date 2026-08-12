@@ -1,5 +1,5 @@
 // Every rule takes two arguments and the invocation writes one.
-macro pair:
+@macro_rules pair:
     ⟪$a, $b⟫ → ⟪$a + $b⟫
 
 @start

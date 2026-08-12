@@ -37,7 +37,7 @@ from interp.lexer import Token, KEYWORDS
 DEFINITION_STARTERS = frozenset({
     "START", "REPLACEABLE", "TEST", "FLAG", "IMPURE", "EXPECT", "REPR",
     "HOT", "COLD", "LISTABLE", "NORETURN", "PRE", "POST",
-    "ENUM", "STRUCT", "IMPL", "UNIT", "TYPE", "FN", "LET", "MACRO",
+    "ENUM", "STRUCT", "IMPL", "UNIT", "TYPE", "FN", "LET", "MACRO_RULES",
 })
 
 
@@ -442,7 +442,7 @@ class Parser:
         if self._check("IMPL"):
             return self._parse_impl_block()
 
-        if self._check("MACRO"):
+        if self._check("MACRO_RULES"):
             return self._parse_macro_def()
 
         if self._check("UNIT"):
@@ -469,15 +469,15 @@ class Parser:
                 self._cur())
 
     def _parse_macro_def(self):
-        """Parse `macro NAME:` and the rewrite rules indented under it.
+        """Parse `@macro_rules NAME:` and the rules indented under it.
 
         Each rule is a quoted pattern, an arrow, and a quoted template:
 
-            macro sin:
+            @macro_rules sin:
                 \u27ea$a \u00d7 \u03c0\u27eb \u2192 \u27eastd.sinpi($a)\u27eb
                 \u27ea$x\u27eb        \u2192 \u27eastd.cos($x)\u27eb
         """
-        macro_tok = self._eat("MACRO")
+        macro_tok = self._eat("MACRO_RULES")
         name = self._eat("IDENT").value
         self._eat("PUNCT", ":")
         self._skip_nl()
@@ -497,8 +497,8 @@ class Parser:
         self._try_eat("DEDENT")
         if not rules:
             raise ParseError(
-                f"macro {name} states no rules, so there is nothing it "
-                f"rewrites to", macro_tok)
+                f"@macro_rules {name} states no rules, so there is nothing "
+                f"it rewrites to", macro_tok)
         return self._set_pos(MacroDef(name, rules), macro_tok)
 
     def _parse_quote(self, *, as_pattern: bool):

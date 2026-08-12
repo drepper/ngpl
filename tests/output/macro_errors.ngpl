@@ -1,5 +1,5 @@
 // A macro invocation that no rule of the macro matches.
-macro only_pairs:
+@macro_rules only_pairs:
     ⟪$a × $b⟫ → ⟪$a + $b⟫
 
 @start

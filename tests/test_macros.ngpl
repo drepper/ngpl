@@ -15,7 +15,7 @@
 // rather than the radians and is exact at every whole one.  The macro
 // looks at the expression it is written with: where π is one factor of
 // it, that factor comes out and std.sinpi takes what is left.
-macro sin:
+@macro_rules sin:
     ⟪$a × std.π⟫ → ⟪std.sinpi($a)⟫
     ⟪std.π × $a⟫ → ⟪std.sinpi($a)⟫
     ⟪std.π⟫      → ⟪std.sinpi(1.0)⟫
@@ -52,7 +52,7 @@ fn test_without_pi_the_last_rule_takes_it():
 // What a rule can say
 // ---------------------------------------------------------------------
 
-macro twice:
+@macro_rules twice:
     ⟪$x⟫ → ⟪$x + $x⟫
 
 @test
@@ -62,7 +62,7 @@ fn test_a_hole_written_twice_is_filled_twice():
 
 // A hole named twice in one pattern matches only where the two are
 // written alike, which is how a rule says its arguments agree.
-macro same_or_not:
+@macro_rules same_or_not:
     ⟪$x, $x⟫ → ⟪1i64⟫
     ⟪$x, $y⟫ → ⟪0i64⟫
 
@@ -74,7 +74,7 @@ fn test_a_repeated_hole_matches_only_what_is_alike():
     assert_eq(same_or_not⟦a, b⟧, 0)
 
 // What comes out is expanded in turn, so one macro may write another.
-macro four_times:
+@macro_rules four_times:
     ⟪$x⟫ → ⟪twice⟦$x⟧ + twice⟦$x⟧⟫
 
 @test
@@ -83,7 +83,7 @@ fn test_a_macro_may_write_another():
     assert_eq(four_times⟦n⟧, 20)
 
 // A literal in a pattern matches only itself.
-macro classify:
+@macro_rules classify:
     ⟪0i64⟫ → ⟪"zero"⟫
     ⟪1i64⟫ → ⟪"one"⟫
     ⟪$x⟫   → ⟪"many"⟫
@@ -101,7 +101,7 @@ fn test_a_literal_matches_only_itself():
 
 // Written under the bracket rather than beside it, a rule writes
 // statements, and the invocation stands on a line of its own.
-macro swap:
+@macro_rules swap:
     ⟪$a, $b⟫ → ⟪
         let t : i64 = $a
         $a ← $b
@@ -127,6 +127,15 @@ fn test_the_macro_temporary_does_not_capture():
     swap⟦t, u⟧
     assert_eq(t, 2)
     assert_eq(u, 1)
+
+// The head of a rules macro is an annotation, so macro_rules is a
+// keyword only after an @ and the word is still a name a program may
+// use.
+@test
+fn test_the_word_is_still_a_name():
+    let macro_rules : i64 = 2
+    let macro : i64 = 3
+    assert_eq(macro_rules × macro, 6)
 
 @start
 @impure
