@@ -56,3 +56,5 @@ what it is.
 - [Choosing a Value](design/conditional-expression/README.md) —
   `a if c else b`, why the branch not taken is not read, and the line
   break that tells it from an `if` statement
+- [Asking Something of Each](design/map/README.md) — `f ¨ v`, and why
+  a function marked `@listable` does not make it unnecessary

@@ -1095,3 +1095,14 @@ Macros and Reflection
 [ ] check that the two branches of a conditional expression agree in type.  They need not
     today, and the value is whichever branch ran.  Closing it needs a pass that knows what
     type an arbitrary expression has, which is worth having for more than this.
+
+[x] a map operator, f ¨ v, spelled as APL spells each.  It asks f of each of the things v
+    holds and answers an array of what it said.  Arrays and ranges, as a fold takes; a matrix
+    is mapped by rows; an empty container answers an empty array.  It is not made unnecessary
+    by @listable: that is a promise the definition makes about every call, and ¨ says the same
+    thing at one call, which is where the choice usually belongs.  Unlike APL's, it is a
+    binary operator rather than an operator modifier, the fold having made the same
+    simplification for the same reason -- derived functions are not values yet.
+
+[ ] ¨ over a hash or a set, which needs an answer to what a map of a hash is -- its values or
+    its pairs -- and belongs with the rest of what those containers do.

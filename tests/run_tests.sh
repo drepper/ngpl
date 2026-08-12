@@ -97,6 +97,7 @@ all_tests=(
     "$testdir"/test_loop_labels.ngpl
     "$testdir"/test_macros.ngpl
     "$testdir"/test_conditional_expr.ngpl
+    "$testdir"/test_map.ngpl
 )
 
 # Filter tests if command-line patterns are given.

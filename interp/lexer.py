@@ -117,6 +117,8 @@ SINGLE_OPS = set("+-%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ�
                  # $ putting a value back into one, and ※ in front of a
                  # name for what the name refers to.
                  "⟦⟧⟪⟫$※"
+                 # f¨v -- f applied to each of them, as APL writes it.
+                 "\N{DIAERESIS}"
                  "≅≇⪅⪆⪉⪊"
                  # The saturating arithmetic operators.
                  "\N{SQUARED PLUS}\N{SQUARED MINUS}\N{SQUARED TIMES}"
@@ -579,7 +581,7 @@ def tokenize(src: str):
                 tokens.append(Token("PUNCT", ch, line, col))
             elif ch == "\N{RIGHTWARDS ARROW}":
                 tokens.append(Token("OP", "->", line, col))
-            elif ch in ("+-%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻⍳∊≠#∪∩∖⊂⊆⊃⊇※"
+            elif ch in ("+-%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻⍳∊≠#∪∩∖⊂⊆⊃⊇※\N{DIAERESIS}"
                         "\N{MULTIPLICATION SIGN}\N{DIVISION SIGN}"
                         "≅≇⪅⪆⪉⪊"
                         "\N{SQUARED PLUS}\N{SQUARED MINUS}"

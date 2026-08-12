@@ -25,7 +25,7 @@ from interp.ast import (
     DropUnitExpr,
     LimitExpr,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr, SumTypeDef,
-    ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
+    ReshapeExpr, MapExpr, TupleLit, CatchStmt, EnumerateExpr,
     HashLit, SetLit, EmptyCollectionLit, BreakStmt, ContinueStmt,
     Quote, Splice, Reflect,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
@@ -3777,6 +3777,9 @@ class Evaluator:
         if isinstance(node, FoldExpr):
             return self._eval_fold(node)
 
+        if isinstance(node, MapExpr):
+            return self._eval_map(node)
+
         if isinstance(node, ReshapeExpr):
             shape = self.eval_expr(node.shape)
             data = self.eval_expr(node.data)
@@ -5206,6 +5209,28 @@ class Evaluator:
     # ------------------------------------------------------------------
     # Fold operators
     # ------------------------------------------------------------------
+
+    def _eval_map(self, node: MapExpr) -> Value:
+        """Evaluate `f ¨ v` -- what f says of each of them.
+
+        Every operator in the language already threads over what it is
+        handed, so this is for the functions that do not: an ordinary
+        one, a lambda, anything that can be called.  What comes back is
+        an array of the answers, one for each, in the order they were
+        held.
+        """
+        func = self.eval_expr(node.func)
+        held = unwrap_optional(self.eval_expr(node.container))
+        if isinstance(held, RangeValue):
+            elements = [mk_int(i) for i in held.to_list()]
+        elif isinstance(held, ObjectValue) and isinstance(held.obj, ArrayValue):
+            elements = held.obj.values()
+        else:
+            raise TypeError(
+                f"\N{DIAERESIS} asks something of each of an array or a "
+                f"range, and this is {self._value_type_name(held)}")
+        return ObjectValue(ArrayValue([self._do_call(func, [e])
+                                       for e in elements]))
 
     def _eval_fold(self, node: FoldExpr) -> Value:
         """Evaluate a fold expression: left fold ⌿ or right fold ⍀."""

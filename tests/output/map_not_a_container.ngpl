@@ -1,0 +1,10 @@
+// ¨ asks something of each of an array or a range, and a number holds
+// nothing to ask about.
+fn twice(n : i64) → i64:
+    n × 2
+
+@start
+@impure
+fn main():
+    let n : i64 = 3
+    std.println("{}", twice¨n)

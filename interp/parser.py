@@ -19,7 +19,7 @@ from interp.ast import (
     DropUnitExpr,
     LimitExpr,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, TypeDef, EnumDef,
-    LambdaExpr, ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
+    LambdaExpr, ReshapeExpr, MapExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
     OperatorRef,
     UnitExpr, UnitDef, UnitName, UnitBinOp, UnitSqrt, UnitLit, SumTypeDef,
@@ -2383,6 +2383,14 @@ class Parser:
             self._skip_nl()
             right = self._parse_negation()
             return ReshapeExpr(left, right)
+        if self._check("OP") and self._cur().value == "\N{DIAERESIS}":
+            # f ¨ v -- what is on the left is asked of each of them.
+            # What follows is the container, as it is for a fold.
+            each_tok = self._cur()
+            self.pos += 1
+            self._skip_nl()
+            return self._set_pos(
+                MapExpr(left, self._parse_range_expr()), each_tok)
         if self._check("OP") and self._cur().value in (
                 "\N{APL FUNCTIONAL SYMBOL SLASH BAR}",
                 "\N{APL FUNCTIONAL SYMBOL BACKSLASH BAR}"):
