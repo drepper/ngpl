@@ -53,7 +53,8 @@ with:
 
 - where **π is one of the factors**, take that factor out and hand what
   is left to `std.sinpi`;
-- otherwise, fall back — here, to `std.cos`.
+- otherwise write the ordinary `std.sin` of the same argument,
+  unchanged.
 
 It is a good discriminator because it needs all four of the brief's
 verbs: retrieve the tree, take it apart (a *product* has factors),
@@ -110,7 +111,7 @@ rewrites to, in the tradition of Scheme's `syntax-rules`, Rust's
     ⟪$a × std.π⟫ → ⟪std.sinpi($a)⟫
     ⟪std.π × $a⟫ → ⟪std.sinpi($a)⟫
     ⟪std.π⟫      → ⟪std.sinpi(1.0)⟫
-    ⟪$x⟫         → ⟪std.cos($x)⟫
+    ⟪$x⟫         → ⟪std.sin($x)⟫
 ```
 
 Both halves of a rule are ordinary program text with `$a` where a hole
@@ -156,28 +157,90 @@ procedural macros, Julia's `macro`, and Nim:
 
 ```
 macro sin(e : syntax) → syntax:
+    let todo : mut syntax[] = [e]
+    let factors : mut syntax[] = []
+    let at : mut i64 ¤ptrdiff = 0
+    while at < #todo:
+        let part := todo[at]
+        at ← at + 1¤ptrdiff
+        if part.head() = some(^^×):          // does it apply × ?
+            foreach inner := part.arguments():
+                todo.push(inner)             // then take it apart
+        else:
+            factors.push(part)
+
     let rest : mut syntax[] = []
     let found : mut bool = false
-    foreach f := e.factors():
-        if not found and f.name() = some("std.π"):
+    foreach f := factors:
+        if not found and f = ^^std.π:        // is it π itself?
             found ← true
         else:
             rest.push(f)
-    if found:
-        return ⟪std.sinpi($(std.syntax.product(rest)))⟫
-    ⟪std.cos($e)⟫
+
+    if not found:
+        return ⟪std.sin($e)⟫
+    if #rest = 0¤ptrdiff:
+        return ⟪std.sinpi(1.0)⟫
+    if #rest = 1¤ptrdiff:
+        return ⟪std.sinpi($(rest[0]))⟫
+    ⟪std.sinpi($(std.syntax.funcall(^^×, rest)))⟫
 ```
 
 `syntax` is a piece of the program.  `⟪ ⟫` builds one; `$e` puts a
 value back into one — a piece of program as itself, a number or a
 string as what a program would write to mean it.
 
-**What is good.** `e.factors()` answers the factors of a product
-*flattened*, however the parser nested them, so all of `2 × π`,
-`π × 2`, `2 × π × 3`, `2 × 3 × π` and `π` are handled by one loop that
-was written once. The macro can also compute: `$total` writes back a
-number worked out at expansion. Everything the brief's list asks for is
-ordinary code.
+**What is good.** Everything the brief's list asks for is ordinary
+code, and the macro can compute as well as rewrite: `$total` writes
+back a number worked out at expansion.  Because the walk is the macro's
+own, `2 × π`, `π × 2`, `2 × π × 3`, `2 × 3 × π` and `π` are all handled
+by one loop that was written once.
+
+**Nothing about multiplication is in the language.**  That is the point
+of the shape.  `head()` answers what an expression *applies* and
+`arguments()` what it applies that to, and an operator is what its
+expression applies exactly as a function is what a call applies — so
+`a × b` and `f(a, b)` are taken apart by the same two questions.  An
+earlier version of this branch had a built-in `factors()` that
+flattened products, which put one piece of arithmetic into the
+interpreter and answered only that one question.  What replaced it
+answers every question of that shape and puts the arithmetic where it
+belongs, in the macro.
+
+**`^^` refers to what a name means.**  `^^std.π`, `^^×`, `^^std.sinpi`.
+C++26 spells reflection this way and it is the right spelling here for
+the same reason: what is wanted is *the entity*, not the text.  The
+first version compared `f.name() = some("std.π")` — a string, which
+would be defeated by any renaming and says nothing about what the name
+refers to.
+
+Where a quote holds whatever text is written in it, `^^` holds one
+entity, and that difference is the whole distinction between the two
+brackets:
+
+| | holds | written |
+|-|-------|---------|
+| `⟪ … ⟫` | any piece of program | `⟪std.sinpi($a)⟫` |
+| `^^` | one entity | `^^×`, `^^std.π` |
+
+**The check and the construction are the same expression.**  `^^×` says
+what the expression was and then says what to build:
+`std.syntax.funcall(^^×, rest)`.  So multiplication is named once, and
+`funcall` applies whatever it is handed — an operator, a function, a
+method — which is what `std.syntax.product` was replaced by.  A macro
+can even hand back the head it was given:
+
+```
+std.syntax.funcall(e.head() ?? ^^+, e.arguments())
+```
+
+rebuilds whatever it took apart without naming the operation at all.
+
+An operator handed more than two arguments is applied from the left, so
+one call puts back a product that has lost a factor.  It is not handed
+the empty case: what an empty product is belongs to the arithmetic the
+macro is doing, not to the builder — which is why the example writes
+out what "no factors left" and "one factor left" mean.
 
 **What is not.** The macro is a program, so reading it means running it
 in your head. It can loop forever (caught by a depth bound only when it
@@ -194,7 +257,7 @@ reader cannot see the shapes it accepts without reading all of it.
 | `π` | ✓ (third rule) | ✓ |
 | `2.0 × π × 3.0` | **✗** | ✓ |
 | `2.0 × 3.0 × π` | **✗** | ✓ |
-| lines to write it | 5 | 11 |
+| lines to write it | 5 | 28 |
 | lines of interpreter | ~250 | ~400, plus an evaluator at expansion time |
 | can be read without running | yes | no |
 
