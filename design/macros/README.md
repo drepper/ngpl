@@ -123,9 +123,11 @@ which kind of thing they are reading.  The name is Rust's, where
 `macro_rules!` and a procedural macro are the same two halves.  It is
 written as an annotation, which is a small stretch of what `@` usually
 means (something said *about* a definition, rather than the definition
-itself), and it buys something back: `macro_rules` is only a keyword
-after an `@`, so neither word is taken away from a program that wants
-it as a name.
+itself), and it buys something back: `macro_rules` is a keyword only
+after an `@`, so the word is still available to a program that wants it
+as a name.  `macro`, heading Design B, is a reserved word as `fn` and
+`struct` are — which is what heading a definition ordinarily costs, and
+the reason the longer of the two names is the one written with an `@`.
 
 **What is good.** The macro *is* its specification: there is no code to
 read, only the shapes it accepts and what each becomes. It cannot loop
