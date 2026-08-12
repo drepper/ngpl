@@ -14,12 +14,14 @@
 // the answer is near zero rather than zero.  std.sinpi takes the turns
 // rather than the radians and is exact at every whole one.  The macro
 // looks at the expression it is written with: where π is one factor of
-// it, that factor comes out and std.sinpi takes what is left.
+// it, that factor comes out and std.sinpi takes what is left.  Where
+// there is no π the last rule writes the ordinary sine of what it was
+// handed.
 @macro_rules sin:
     ⟪$a × std.π⟫ → ⟪std.sinpi($a)⟫
     ⟪std.π × $a⟫ → ⟪std.sinpi($a)⟫
     ⟪std.π⟫      → ⟪std.sinpi(1.0)⟫
-    ⟪$x⟫         → ⟪std.cos($x)⟫
+    ⟪$x⟫         → ⟪std.sin($x)⟫
 
 @test
 fn test_a_factor_of_pi_becomes_a_turn():
@@ -43,10 +45,27 @@ fn test_the_rewrite_is_what_makes_it_exact():
     assert(std.sin(1.0 × std.π) ≠ 0.0)
     assert_eq(sin⟦1.0 × std.π⟧, 0.0)
 
-// No π anywhere, so the last rule takes it.
+// No π anywhere, so the last rule takes it and writes the ordinary
+// sine of what was handed over, unchanged.
 @test
-fn test_without_pi_the_last_rule_takes_it():
-    assert_eq(sin⟦0.0⟧, 1.0)
+fn test_without_pi_the_last_rule_writes_the_ordinary_sine():
+    assert_eq(sin⟦1.0⟧, std.sin(1.0))
+    assert_eq(sin⟦0.0⟧, 0.0)
+
+// A quarter turn, where sinpi and sin agree and the rewrite is still
+// what was written.
+@test
+fn test_a_fraction_of_a_turn():
+    assert_eq(sin⟦0.5 × std.π⟧, 1.0)
+
+// The shape a list of rules cannot describe: a product of three, which
+// the parser reads as (2.0 × π) × 3.0.  No rule matches it, so the
+// last one takes it and the rewrite does not happen.  The function
+// form on the other branch handles it.
+@test
+fn test_a_longer_product_escapes_the_rules():
+    assert(sin⟦2.0 × std.π × 3.0⟧ ≠ 0.0)
+    assert_eq(sin⟦2.0 × std.π × 3.0⟧, std.sin(2.0 × std.π × 3.0))
 
 // ---------------------------------------------------------------------
 // What a rule can say
