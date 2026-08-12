@@ -8553,7 +8553,7 @@ macro sin(e : syntax) → syntax:
     while at < #todo:
         let part := todo[at]
         at ← at + 1¤ptrdiff
-        if part.head() = some(※×):          // does it apply × ?
+        if part.head() = ※×:                 // does it apply × ?
             foreach inner := part.arguments():
                 todo.push(inner)             // then take it apart
         else:
@@ -8582,10 +8582,30 @@ macro sin(e : syntax) → syntax:
 |---|---|
 | `kind()` | what it is, as a string: `number`, `string`, `character`, `truth`, `nothing`, `name`, `operator`, `call`, `array`, `tuple`, `function`, `block` |
 | `name()` | the name it reads, as `str?` — `some("std.π")` for `std.π`, and `∅` for anything that is not a name |
-| `head()` | what it **applies**, as `syntax?` — `※×` for `a × b`, `※std.sinpi` for `std.sinpi(x)`, and `∅` for anything that applies nothing |
-| `arguments()` | what it applies its head **to**, as `syntax[]` — `[a, b]` for `a × b`, and empty where there is no head |
+| `head()` | what it is **made by**, as `syntax` — see below |
+| `arguments()` | what it applies its head **to**, as `syntax[]` — `[a, b]` for `a × b`, and empty for what applies nothing |
 
 An operator is what its expression applies, exactly as a function is what a call applies, so `a × b` and `f(a, b)` are taken apart by the same two questions.  Nothing about any particular operator is built in: finding the factors of a product is a macro asking whether the head is `×` and walking into the arguments where it is, which is what the example above writes out.
+
+#### Every Piece Has a Head
+
+`head()` answers for everything, so there is never a question of whether there is one:
+
+| written | `head()` | |
+|---------|----------|---|
+| `a × b`, `⁻a` | `※×`, `※⁻` | the operator it applies |
+| `f(a, b)` | `※f` | the function it applies |
+| `o.m(a)` | `※o.m` | the method it applies |
+| `1i64`, `1u8` | `※i64`, `※u8` | the type the literal states |
+| `1`, `1.0` | `※int`, `※float` | what a literal that states no width is |
+| `"x"`, `'c'`, `true`, `∅` | `※str`, `※char`, `※bool`, `※∅` | |
+| `[1, 2]`, `(a, b)`, `⸨…⸩` | `※array`, `※tuple`, `※hash` | |
+| `λ…` | `※fn` | |
+| `a`, `std.π` | `※name` | see below |
+
+Something that applies nothing answers the most particular name the language has for what it is, which for a number written down is the type its literal states.  Wolfram's `Head` answers the same way — `Head[3]` is `Integer` — and for the same reason: a question every expression answers is worth more than one that first has to be asked whether it has an answer.  Were it otherwise, every use would read `head() = some(※×)`, with the reader unwrapping in their head at each one.
+
+A **name** is the case where the language cannot do better.  A macro runs before anything is checked, so the type of what `a` reads is not knowable yet; what a name answers is that it is a name.  Following it to its definition is the piece of reflection that waits on the two-pass install described below.
 
 Two pieces of the program are compared with `=` and are alike where the same thing is written in both, wherever each was written.
 
@@ -8619,7 +8639,7 @@ An operator handed more than two arguments is applied to them the way writing th
 Because the head an expression answers can be handed straight back, a macro can rebuild what it took apart without naming the operation at all:
 
 ```
-std.syntax.funcall(e.head() ?? ※+, e.arguments())
+std.syntax.funcall(e.head(), e.arguments())
 ```
 
 A macro that answers something other than a piece of the program is an error, as is one whose body fails while it runs; both are reported at the invocation.

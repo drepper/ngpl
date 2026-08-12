@@ -588,6 +588,13 @@ class Parser:
             return self._set_pos(
                 Reflect(self._set_pos(OperatorRef(op_tok.value), op_tok)),
                 caret)
+        if self._check("NONE"):
+            # ∅ names the type of what holds nothing, which is what a
+            # written ∅ answers for its head.
+            none_tok = self._eat("NONE")
+            return self._set_pos(
+                Reflect(self._set_pos(VarRef(none_tok.value), none_tok)),
+                caret)
         if not self._check("IDENT"):
             raise ParseError(
                 "※ is written in front of a name or an operator, which is "

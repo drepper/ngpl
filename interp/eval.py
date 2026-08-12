@@ -108,17 +108,41 @@ def _alike_trees(a, b) -> bool:
     return a == b
 
 
-def _head_of(node):
-    """What a piece of the program applies, or None where it applies nothing.
+# What a piece of the program that applies nothing is made of.  Every
+# piece has a head, so an atom answers the most particular name the
+# language has for what it is -- which for a written-down number is the
+# type the literal states.
+_HEAD_OF_KIND = {
+    "StrLit": "str", "CharLit": "char", "BoolLit": "bool",
+    "ArrayLit": "array", "TupleLit": "tuple", "HashLit": "hash",
+    "SetLit": "set", "EmptyCollectionLit": "collection",
+    "LambdaExpr": "fn", "RangeExpr": "range",
+    # A name's type is not knowable here: a macro runs before anything
+    # is checked, so what a name answers is that it is a name.
+    "VarRef": "name", "GetAttr": "name",
+}
 
-    An operator is what its expression applies, the same way a function
-    is what a call applies, so `a × b` and `f(a, b)` answer the same
-    kind of thing and can be taken apart the same way.
+
+def _head_of(node):
+    """What a piece of the program is made by.
+
+    Every piece has one.  For something that applies something else,
+    the head is what it applies: an operator is what its expression
+    applies exactly as a function is what a call applies, so `a × b`
+    and `f(a, b)` answer the same kind of thing and are taken apart the
+    same way.  For something that applies nothing, the head is the most
+    particular name the language has for what it is -- for a number
+    written down, the type its literal states.
+
+    Wolfram answers Head the same way, and for the same reason: a
+    question every expression answers is worth more than one that has
+    to be asked whether it has an answer.
     """
     from interp.ast import (BinOp as _BinOp, UnaryOp as _UnaryOp,
                             FuncCall as _FuncCall, MethodCall as _MethodCall,
                             OperatorRef as _OperatorRef, VarRef as _VarRef,
-                            GetAttr as _GetAttr)
+                            GetAttr as _GetAttr, IntLit as _IntLit,
+                            FloatLit as _FloatLit, NoneLit as _NoneLit)
 
     if isinstance(node, (_BinOp, _UnaryOp)):
         return _OperatorRef(node.op)
@@ -126,7 +150,14 @@ def _head_of(node):
         return _VarRef(node.name)
     if isinstance(node, _MethodCall):
         return _GetAttr(node.obj, node.method)
-    return None
+    if isinstance(node, (_IntLit, _FloatLit)):
+        # The width the literal states, which is what a program would
+        # write the type as.
+        return _VarRef(node.width)
+    if isinstance(node, _NoneLit):
+        return _VarRef("\N{EMPTY SET}")
+    named = _HEAD_OF_KIND.get(type(node).__name__)
+    return _VarRef(named if named is not None else "expression")
 
 
 def _arguments_of(node) -> list:
@@ -2066,12 +2097,17 @@ class Evaluator:
                 return some(mk_str(node.name))
             if isinstance(node, GetAttr) and isinstance(node.obj, VarRef):
                 return some(mk_str(f"{node.obj.name}.{node.attr}"))
+            if isinstance(node, OperatorRef):
+                # An operator is named by the glyph that performs it,
+                # which is what ※ in front of one refers to.
+                return some(mk_str(node.op))
             return none()
         if name == "head":
             if args:
                 raise TypeError("syntax.head takes no arguments")
-            applied = _head_of(piece.node)
-            return none() if applied is None else some(SyntaxValue(node=applied))
+            if piece.is_block:
+                return SyntaxValue(node=VarRef("block"))
+            return SyntaxValue(node=_head_of(piece.node))
         if name == "arguments":
             if args:
                 raise TypeError("syntax.arguments takes no arguments")

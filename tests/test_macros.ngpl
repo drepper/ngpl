@@ -31,7 +31,7 @@ macro sin(e : syntax) → syntax:
     while at < #todo:
         let part := todo[at]
         at ← at + 1¤ptrdiff
-        if part.head() = some(※×):
+        if part.head() = ※×:
             foreach inner := part.arguments():
                 todo.push(inner)
         else:
@@ -140,12 +140,10 @@ fn test_a_reference_is_compared_with_what_it_refers_to():
 // An operator is what its expression applies, the same way a function
 // is what a call applies, so both are asked the same question.
 macro head_kind(e : syntax) → syntax:
-    if e.head() = some(※×):
+    if e.head() = ※×:
         return ⟪"times"⟫
-    if e.head() = some(※std.sinpi):
+    if e.head() = ※std.sinpi:
         return ⟪"sinpi"⟫
-    if e.head() = ∅:
-        return ⟪"applies nothing"⟫
     ⟪"something else"⟫
 
 @test
@@ -154,7 +152,46 @@ fn test_what_an_expression_applies():
     assert_eq(head_kind⟦a × a⟧, "times")
     assert_eq(head_kind⟦std.sinpi(1.0)⟧, "sinpi")
     assert_eq(head_kind⟦a + a⟧, "something else")
-    assert_eq(head_kind⟦a⟧, "applies nothing")
+
+// Every piece has a head, so there is nothing to ask whether there is
+// one.  What applies nothing answers the most particular name the
+// language has for what it is, which for a number written down is the
+// type its literal states.
+macro head_of(e : syntax) → syntax:
+    ⟪$(e.head().name() ?? "?")⟫
+
+@test
+fn test_everything_has_a_head():
+    let a : i64 = 1
+    assert_eq(head_of⟦a × a⟧, "×")
+    assert_eq(head_of⟦⁻a⟧, "⁻")
+    assert_eq(head_of⟦std.sinpi(1.0)⟧, "std.sinpi")
+    assert_eq(head_of⟦1i64⟧, "i64")
+    assert_eq(head_of⟦1u8⟧, "u8")
+    assert_eq(head_of⟦1.0f64⟧, "f64")
+    assert_eq(head_of⟦"x"⟧, "str")
+    assert_eq(head_of⟦'c'⟧, "char")
+    assert_eq(head_of⟦true⟧, "bool")
+    assert_eq(head_of⟦∅⟧, "∅")
+    assert_eq(head_of⟦a⟧, "name")
+    assert_eq(head_of⟦std.π⟧, "name")
+
+// A literal that states no width answers what an unwidthed one is.
+@test
+fn test_a_literal_that_states_no_width():
+    assert_eq(head_of⟦1⟧, "int")
+    assert_eq(head_of⟦1.0⟧, "float")
+
+// The type a literal states is a name like any other, so a macro can
+// ask whether it was handed one written a particular way.
+macro is_i64(e : syntax) → syntax:
+    ⟪$(e.head() = ※i64)⟫
+
+@test
+fn test_a_head_may_be_a_type():
+    assert(is_i64⟦1i64⟧)
+    assert(not is_i64⟦1u8⟧)
+    assert(not is_i64⟦1.0⟧)
 
 macro how_many_arguments(e : syntax) → syntax:
     ⟪$(@dropunit(#e.arguments()))⟫
@@ -180,7 +217,7 @@ fn test_an_application_can_be_built_from_its_parts():
 // The head an expression answers can be handed straight back, which is
 // how a macro rebuilds what it took apart without naming it again.
 macro reapplied(e : syntax) → syntax:
-    ⟪$(std.syntax.funcall(e.head() ?? ※+, e.arguments()))⟫
+    ⟪$(std.syntax.funcall(e.head(), e.arguments()))⟫
 
 @test
 fn test_the_head_can_be_handed_back():

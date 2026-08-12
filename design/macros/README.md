@@ -175,7 +175,7 @@ macro sin(e : syntax) → syntax:
     while at < #todo:
         let part := todo[at]
         at ← at + 1¤ptrdiff
-        if part.head() = some(※×):          // does it apply × ?
+        if part.head() = ※×:                 // does it apply × ?
             foreach inner := part.arguments():
                 todo.push(inner)             // then take it apart
         else:
@@ -209,7 +209,7 @@ own, `2 × π`, `π × 2`, `2 × π × 3`, `2 × 3 × π` and `π` are all handl
 by one loop that was written once.
 
 **Nothing about multiplication is in the language.**  That is the point
-of the shape.  `head()` answers what an expression *applies* and
+of the shape.  `head()` answers what an expression is *made by* and
 `arguments()` what it applies that to, and an operator is what its
 expression applies exactly as a function is what a call applies — so
 `a × b` and `f(a, b)` are taken apart by the same two questions.  An
@@ -218,6 +218,20 @@ flattened products, which put one piece of arithmetic into the
 interpreter and answered only that one question.  What replaced it
 answers every question of that shape and puts the arithmetic where it
 belongs, in the macro.
+
+**Every piece has a head.**  The first version answered `syntax?` — the
+operator or function applied, and `∅` for anything that applies nothing
+— which made every use read `head() = some(※×)`, with the reader
+unwrapping at each one.  Wolfram does not: `Head[3]` is `Integer`, and
+every expression answers.  So a literal answers the type it states
+(`1i64` → `※i64`, `1` → `※int`), a string answers `※str`, an array
+`※array`, and the optional is gone along with the `some` at every use.
+
+The one case where the language cannot do better is a **name**: a macro
+runs before anything is checked, so the type of what `a` reads is not
+knowable yet, and what a name answers is that it is a name. Following a
+name to its definition is exactly the piece of reflection that waits on
+the two-pass install.
 
 **`※` refers to what a name means.**  `※std.π`, `※×`, `※std.sinpi`.
 C++26 spells reflection this way and it is the right spelling here for
@@ -243,7 +257,7 @@ method — which is what `std.syntax.product` was replaced by.  A macro
 can even hand back the head it was given:
 
 ```
-std.syntax.funcall(e.head() ?? ※+, e.arguments())
+std.syntax.funcall(e.head(), e.arguments())
 ```
 
 rebuilds whatever it took apart without naming the operation at all.
