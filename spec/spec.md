@@ -8512,7 +8512,7 @@ In a template, `$a` is filled with the tree the hole matched.  A template writte
     ⟪$x, $y⟫ → ⟪0i64⟫           // anything else
 ```
 
-**What this design cannot say.**  A rule matches a *shape*.  `a × b` and `b × a` are two shapes, which is why the example needs two rules for them — and `2.0 × std.π × 3.0` is a third shape, read as `(2.0 × std.π) × 3.0`, which none of the four rules describes.  Since a product nests arbitrarily deep, no finite list of rules covers it.  A design that can say "π is *among the factors*" is the next one.
+**What this design cannot say.**  A rule matches a *shape*.  `a × b` and `b × a` are two shapes, which is why the example needs two rules for them — and `2.0 × std.π × 3.0` is a third shape, read as `(2.0 × std.π) × 3.0`, which none of the four rules describes.  Since a product nests arbitrarily deep, no finite list of rules covers it: the invocation falls through to the last rule and the rewrite does not happen.  A design that can say "π is *among the factors*" is the next one.
 
 ### Design B: Functions Over the Program's Text (`macros-proc`)
 
@@ -8598,6 +8598,10 @@ std.syntax.funcall(e.head() ?? ^^+, e.arguments())
 ```
 
 A macro that answers something other than a piece of the program is an error, as is one whose body fails while it runs; both are reported at the invocation.
+
+#### Reflection Without Writing
+
+`kind()`, `name()`, `head()`, `arguments()`, `^^`, and `=` between two pieces of the program are the whole of what is available for looking at a program.  They are the same mechanism a macro writes with, seen from the other end.
 
 **What a macro can reach.**  A macro runs before the program's own definitions are installed, so it can use `std`, the builtins and other macros, and not the program's functions.  Lifting that means installing signatures in a pass of their own before expansion, which is where following a reference to a definition also becomes possible.
 

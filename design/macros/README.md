@@ -66,7 +66,7 @@ build a new tree from the pieces, and decide by what a name refers to.
 |------|---------|---------|
 | Characters | C preprocessor, m4 | No. Cannot find "a factor of a product" in a string without parsing it, and re-parsing is what the design is trying to avoid. |
 | Tokens | Rust `macro_rules!` | Nearly. Token trees are balanced, so a matcher can find `$a × $b`, but `2 × π × 3` is a flat run of five tokens and nesting has to be re-derived. |
-| **Parse tree** | Lisp, Wolfram, Julia, Scala 3, Nim | **Chosen.** The brief asks for it, the grammar allows it, and "the factors of a product" is a question about a tree. |
+| **Parse tree** | Lisp, Wolfram, Julia, Scala 3, Nim | **Chosen.** The brief asks for it, the grammar allows it, and "what does this expression apply, and to what" is a question about a tree. |
 | Typed tree | C++26 reflection, Zig `comptime` | Later. Knowing a name's *type* means expansion after checking, and a macro that writes a definition must run before the thing it writes is checked. This is what "follow references to definitions" will eventually need. |
 
 ## Axis 2: How an Invocation Is Marked
@@ -338,9 +338,9 @@ example needs, and it is worth being exact about the boundary.
 | The brief asks | Branch A | Branch B |
 |----------------|----------|----------|
 | retrieve the parse tree of the arguments | via a pattern | `syntax` values |
-| deconstruct the tree | pattern matching | `kind()`, `name()`, `factors()`, plus matching in ordinary code |
-| reconstruct and insert code | templates | `⟪ ⟫` and `$`, plus `std.syntax.product` |
-| follow references to definitions | no | `name()` reads what a reference *says*, not what it refers to |
+| deconstruct the tree | pattern matching | `kind()`, `name()`, `head()`, `arguments()`, `=`, `^^` |
+| reconstruct and insert code | templates | `⟪ ⟫` and `$`, plus `std.syntax.funcall` |
+| follow references to definitions | no | `^^` and `=` say whether two references are the same one; neither says what it *refers to* |
 
 The last row is the real gap, and it is one gap rather than four: a
 macro runs before the definitions of the compilation unit are
