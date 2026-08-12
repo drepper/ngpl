@@ -8516,7 +8516,7 @@ In a template, `$a` is filled with the tree the hole matched.  A template writte
 
 ### Design B: Functions Over the Program's Text (`macros-proc`)
 
-Headed by `macro`, where the rules form is headed by `@macro_rules`.  The names are Rust's, whose `macro_rules!` and procedural macros are these same two halves.  `@macro_rules` is written as an annotation, which is a small stretch of what `@` elsewhere means, and in exchange neither `macro_rules` nor `macro` is taken away from a program that wants it as an ordinary name — the first because it is a keyword only after an `@`, the second because a definition keyword is read only where a definition may start.
+Headed by `macro`, where the rules form is headed by `@macro_rules`.  The names are Rust's, whose `macro_rules!` and procedural macros are these same two halves.  `@macro_rules` is written as an annotation, which is a small stretch of what `@` elsewhere means, and in exchange `macro_rules` is a keyword only after an `@` and the word is still available to a program that wants it as an ordinary name.  `macro` is a reserved word, as `fn` and `struct` are; that is what heading a definition ordinarily costs, and it is the reason the longer name is the one written with an `@`.
 
 A macro is an ordinary function that runs while the program is being installed.  Its parameters are handed the parse trees of what the invocation was written with, and it answers the tree that replaces the invocation:
 
