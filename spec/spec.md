@@ -8405,3 +8405,241 @@ The stack describes only the interpreted program, matching what a backtrace woul
 Zig requires a `u8` for the exit status, which reaches the same end as rejecting out-of-range values here, one step earlier — through the type rather than a check.  Adopting that would mean `std.exit` could not accept an untyped integer constant without an annotation, which is why the check is at the call instead.
 
 Letting `abort` choose its signal has no counterpart in these languages, where abort means SIGABRT and nothing else.  It costs nothing to allow, and a program that wants to look to its parent as though it were terminated by SIGTERM has no other way to say so.
+
+
+Chapter 15: Macros and Reflection
+----------------------------------
+
+A macro is written where a function is called and is not a function call: what stands between its brackets is handed over **as it is written**, not as what it evaluates to.  That is the whole of what a macro is for — a function receives `6.283185307179586`, and a macro receives `2.0 × std.π`.
+
+This chapter is normative for two designs, developed on the branches `macros-rules` and `macros-proc`.  They share everything in *Invocation*, *When Expansion Happens* and *Hygiene*, and differ in how a macro is written — and in what heads the definition, `@macro_rules` for one and `macro` for the other, so that both can be present in one language and a reader can tell which kind a name was defined as.  The reasoning behind each choice is in `design/macros/README.md`; the alternatives that were rejected are summarised at the end of this chapter.
+
+### Invocation
+
+A macro is invoked by writing its arguments between `⟦` and `⟧`:
+
+```
+sin⟦2.0 × std.π⟧
+```
+
+The brackets are the mark.  Nothing about the name says the invocation is special, because nothing about the name *is* special — what differs is that the arguments are not evaluated, and the mark is therefore around the arguments.
+
+`( … )` calls a function and `⟦ … ⟧` invokes a macro.  Writing `⟦ … ⟧` where no macro of that name is defined is an error; so is writing a macro with a number of arguments it has no rule (or no parameter list) for.
+
+A macro that writes **statements** stands on a line of its own, and what it writes replaces that line.  Writing one where a value is wanted is an error:
+
+```
+swap⟦x, y⟧                      // a line of its own
+std.println("{}", swap⟦x, y⟧)   // error: swap writes statements
+```
+
+### Quoting
+
+`⟪` and `⟫` hold a piece of the program rather than running it:
+
+```
+⟪std.sinpi(1.0)⟫                // an expression
+⟪
+    let t : i64 = 1             // a run of statements
+    std.println("{}", t)
+⟫
+```
+
+Written on one line a quote holds one expression.  Written with its contents indented under the opening bracket it holds statements, which is what a macro that writes a block answers.
+
+Inside a quote, `$` marks the place where something else goes.  What `$` means is the one place the two designs differ, and it is described under each below.
+
+### When Expansion Happens
+
+Expansion runs **after parsing and before any check**.  What the static checks, the type rules and the evaluator see is a program with no macro left in it, so a macro cannot produce a program that would not otherwise be legal, and every diagnostic the language gives is given about what the macro wrote.
+
+An invocation is expanded before what is written inside it, so a macro is handed its argument as the caller wrote it — including any macro invocation nested in it. What comes out is expanded in turn, so a macro may write another one. A macro that writes something reaching itself again is stopped after 64 rewrites.
+
+Expansion does not run between scanning and parsing, as the C preprocessor does. It cannot: a macro is defined to receive the *parse tree* of its arguments, and there is no parse tree at that point. Parsing first is available here and is not in C, because this grammar is context-free and an invocation is marked — the text around a macro can be read without knowing what the macro is.
+
+### Positions and Diagnostics
+
+Each piece of an expansion keeps the position it was written at. What came from the caller points at the caller's text, and what came from the macro points into the macro's definition. An error in an expanded program therefore names the place the offending text was actually written, which is either the invocation or the macro, and those are the only two answers that can be right.
+
+### Hygiene
+
+> A name a macro **binds** is renamed to something no source file can spell.  A name that arrives **from the caller** keeps its own.
+
+The renaming appends `#` and a number.  `#` is an operator glyph, so no identifier can contain one and the renamed name cannot collide with anything a program writes.
+
+```
+@macro_rules swap:                  // or: macro swap(a : syntax, b : syntax) → syntax:
+    ⟪$a, $b⟫ → ⟪
+        let t : i64 = $a
+        $a ← $b
+        $b ← t
+    ⟫
+
+let t : mut i64 = 1
+let u : mut i64 = 2
+swap⟦t, u⟧                      // t is 2, u is 1
+```
+
+The caller's variable is called `t` and so is the macro's temporary.  Without the renaming the macro's `t` would shadow the caller's and the swap would do nothing.
+
+The other half of hygiene — that a name a macro *reads* resolves where the macro was written rather than where it was invoked — is not distinguishable yet, there being one global namespace.  It becomes a real question with modules.
+
+### Design A: Rewrite Rules (`macros-rules`)
+
+A macro is a list of rules.  Each states what the arguments have to look like and what the invocation is replaced by:
+
+```
+@macro_rules sin:
+    ⟪$a × std.π⟫ → ⟪std.sinpi($a)⟫
+    ⟪std.π × $a⟫ → ⟪std.sinpi($a)⟫
+    ⟪std.π⟫      → ⟪std.sinpi(1.0)⟫
+    ⟪$x⟫         → ⟪std.sin($x)⟫
+```
+
+A pattern holds one expression per argument, separated by commas.  Within a pattern:
+
+- `$a` is a **hole**: it matches anything and remembers what it matched.
+- A name, a literal or an operator matches only itself, structurally.
+- A hole written twice in one pattern matches only where the two are written alike, which is how a rule says its arguments agree.
+
+Rules are tried in order and the first that matches decides, so a catch-all rule is written last.  Where none matches, the invocation is an error.
+
+In a template, `$a` is filled with the tree the hole matched.  A template written under the bracket rather than beside it holds statements.
+
+```
+@macro_rules same_or_not:
+    ⟪$x, $x⟫ → ⟪1i64⟫           // written alike
+    ⟪$x, $y⟫ → ⟪0i64⟫           // anything else
+```
+
+**What this design cannot say.**  A rule matches a *shape*.  `a × b` and `b × a` are two shapes, which is why the example needs two rules for them — and `2.0 × std.π × 3.0` is a third shape, read as `(2.0 × std.π) × 3.0`, which none of the four rules describes.  Since a product nests arbitrarily deep, no finite list of rules covers it: the invocation falls through to the last rule and the rewrite does not happen.  A design that can say "π is *among the factors*" is the next one.
+
+### Design B: Functions Over the Program's Text (`macros-proc`)
+
+Headed by `macro`, where the rules form is headed by `@macro_rules`.  The names are Rust's, whose `macro_rules!` and procedural macros are these same two halves.  `@macro_rules` is written as an annotation, which is a small stretch of what `@` elsewhere means, and in exchange `macro_rules` is a keyword only after an `@` and the word is still available to a program that wants it as an ordinary name.  `macro` is a reserved word, as `fn` and `struct` are; that is what heading a definition ordinarily costs, and it is the reason the longer name is the one written with an `@`.
+
+A macro is an ordinary function that runs while the program is being installed.  Its parameters are handed the parse trees of what the invocation was written with, and it answers the tree that replaces the invocation:
+
+```
+macro sin(e : syntax) → syntax:
+    let todo : mut syntax[] = [e]
+    let factors : mut syntax[] = []
+    let at : mut i64 ¤ptrdiff = 0
+    while at < #todo:
+        let part := todo[at]
+        at ← at + 1¤ptrdiff
+        if part.head() = some(^^×):          // does it apply × ?
+            foreach inner := part.arguments():
+                todo.push(inner)             // then take it apart
+        else:
+            factors.push(part)
+
+    let rest : mut syntax[] = []
+    let found : mut bool = false
+    foreach f := factors:
+        if not found and f = ^^std.π:        // is it π itself?
+            found ← true
+        else:
+            rest.push(f)
+
+    if not found:
+        return ⟪std.sin($e)⟫
+    if #rest = 0¤ptrdiff:
+        return ⟪std.sinpi(1.0)⟫
+    if #rest = 1¤ptrdiff:
+        return ⟪std.sinpi($(rest[0]))⟫
+    ⟪std.sinpi($(std.syntax.funcall(^^×, rest)))⟫
+```
+
+`syntax` is the type of a piece of the program.  It answers:
+
+| | |
+|---|---|
+| `kind()` | what it is, as a string: `number`, `string`, `character`, `truth`, `nothing`, `name`, `operator`, `call`, `array`, `tuple`, `function`, `block` |
+| `name()` | the name it reads, as `str?` — `some("std.π")` for `std.π`, and `∅` for anything that is not a name |
+| `head()` | what it **applies**, as `syntax?` — `^^×` for `a × b`, `^^std.sinpi` for `std.sinpi(x)`, and `∅` for anything that applies nothing |
+| `arguments()` | what it applies its head **to**, as `syntax[]` — `[a, b]` for `a × b`, and empty where there is no head |
+
+An operator is what its expression applies, exactly as a function is what a call applies, so `a × b` and `f(a, b)` are taken apart by the same two questions.  Nothing about any particular operator is built in: finding the factors of a product is a macro asking whether the head is `×` and walking into the arguments where it is, which is what the example above writes out.
+
+Two pieces of the program are compared with `=` and are alike where the same thing is written in both, wherever each was written.
+
+#### Referring to What a Name Means: `^^`
+
+`^^` is written in front of a name or an operator and answers what it refers to, as a `syntax`:
+
+```
+^^×                             // the operator
+^^std.π                         // the constant
+^^std.sinpi                     // the function
+```
+
+Where a quote holds whatever text is written in it, `^^` holds one entity.  That is the whole difference between them, and it is why `^^` is written in front of a *reference* rather than an expression: there is nothing to work out, only something to point at.  C++26 spells reflection the same way.
+
+Comparing against `^^` asks about the thing rather than about how it is spelled, which is what `f = ^^std.π` says and what a comparison against the string `"std.π"` would not.
+
+#### Putting Values Back: `$`
+
+Inside a quote, `$e` puts what `e` answers into the tree, and `$(expr)` does the same for an expression that is more than a name:
+
+- a `syntax` value is put in as itself;
+- a number, a string or a truth value is put in as what a program would have written to mean it, which is what lets a macro compute at expansion and write the answer.
+
+#### Building an Application: `std.syntax.funcall`
+
+`std.syntax.funcall(head, arguments)` applies one thing to the others.  `head` is what to apply — as `^^` writes it, or as `head()` answered it — and what comes back is the piece of the program that applies it.
+
+An operator handed more than two arguments is applied to them the way writing them out would be, from the left: three arguments to `^^×` answer `(a × b) × c`.  That is what makes one call able to put back a product that has lost a factor, whatever it had before.  An operator handed one argument is applied to it as a unary operator; handed none, it is an error — what an empty product is belongs to the arithmetic a macro is doing rather than to the builder.
+
+Because the head an expression answers can be handed straight back, a macro can rebuild what it took apart without naming the operation at all:
+
+```
+std.syntax.funcall(e.head() ?? ^^+, e.arguments())
+```
+
+A macro that answers something other than a piece of the program is an error, as is one whose body fails while it runs; both are reported at the invocation.
+
+#### Reflection Without Writing
+
+`kind()`, `name()`, `head()`, `arguments()`, `^^`, and `=` between two pieces of the program are the whole of what is available for looking at a program.  They are the same mechanism a macro writes with, seen from the other end.
+
+**What a macro can reach.**  A macro runs before the program's own definitions are installed, so it can use `std`, the builtins and other macros, and not the program's functions.  Lifting that means installing signatures in a pass of their own before expansion, which is where following a reference to a definition also becomes possible.
+
+### Reflection
+
+A macro is reflection that also gets to write, so the two are one mechanism.  What is available is the table above (Design B) or a pattern (Design A).
+
+What is **not** available is following a reference to what it names — asking a `syntax` that reads `foo` for the definition of `foo`.  A macro runs before the compilation unit's definitions are installed, so there is nothing yet to follow a reference to.
+
+`@typeof`, `@sizeof` and `@unitof` are reflection of a narrow kind and are answered at check time, which is after expansion.  That order is deliberate: macros write the program, and questions about types are asked of what they wrote.
+
+### Designs Considered
+
+| Design | Where seen | Why not |
+|--------|-----------|---------|
+| Text substitution | C preprocessor, m4 | Nothing to take apart and nothing to be hygienic about. "The factors of a product" is not a question about a string. |
+| Token substitution | Rust `macro_rules!` | Token trees are balanced, so simple patterns work; but nesting has to be re-derived, and `2 × π × 3` is a flat run of five tokens. |
+| Expansion before parsing | the brief's own first line, following C | A macro is required to receive the parse tree of its arguments. C does it this way because its grammar is not context-free — `a * b;` needs to know whether `a` is a type — and that constraint does not exist here. |
+| `comptime` functions instead of macros | Zig | Cannot express the example. A `comptime fn sin(x : f64)` receives `6.283…`; the multiplication by π has already been rounded, and the information the macro needs is gone before the function is entered. |
+| Typed-tree reflection | C++26 | Needs expansion after checking, and a macro that writes a definition must run before what it writes is checked. Worth having later, alongside macros rather than instead of them. |
+| Reader macros | Common Lisp | A program that changes how text is scanned cannot be parsed without being run, which defeats parallel, context-free parsing. |
+| `name!(…)` for invocation | Rust | `!` is the unwrap-or-abort suffix, and `x!` is already an expression. |
+| `@macro name(…)` | — | `@` marks what the compiler is told *about a definition*; an invocation is not one. |
+| A sigil on the name | — | Marks the name, where what is unusual is the arguments. |
+
+### Comparison with Other Languages
+
+| Language | Macro sees | Written as | Invoked as | Hygienic |
+|----------|-----------|------------|------------|----------|
+| C | characters | `#define` | `f(x)` — indistinguishable | no |
+| Rust | tokens | `macro_rules!` and proc macros | `f!(x)` | mostly |
+| Scheme | parse tree | `syntax-rules`, `syntax-case` | `(f x)` — indistinguishable | yes |
+| Common Lisp | parse tree | `defmacro` | `(f x)` — indistinguishable | no (`gensym` by hand) |
+| Julia | parse tree | `macro` | `@f x` | mostly |
+| Nim | parse tree | `macro` | `f(x)` | yes |
+| Wolfram | expression | rewrite rules `:>` | `f[x]` | no |
+| Zig | — (no macros) | `comptime fn` | `f(x)` | n/a |
+| NGPL A | parse tree | `@macro_rules`, rewrite rules | `f⟦x⟧` | yes |
+| NGPL B | parse tree | `macro`, a function | `f⟦x⟧` | yes |
+
+The two designs are the two halves every mature system ends up with — Scheme has `syntax-rules` and `syntax-case`, Rust has `macro_rules!` and procedural macros — and are best read that way rather than as a fork.  What is unusual here is the invocation: the languages above either mark the name (Rust, Julia) or mark nothing (Lisp, Scheme, Nim), and marking the *arguments* says the thing that is actually true of them.

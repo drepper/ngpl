@@ -1,0 +1,162 @@
+// Tests for macros written as rewrite rules.
+//
+// A macro is a list of rules.  Each says what the arguments have to
+// look like and what the invocation is replaced by, and the first rule
+// that matches decides.  Expansion happens after parsing and before
+// anything is checked, so what runs is a program with no macro left in
+// it.
+
+// ---------------------------------------------------------------------
+// The example the design was written around
+// ---------------------------------------------------------------------
+
+// sin(x×π) has to round x×π first, and π is not a number f64 holds, so
+// the answer is near zero rather than zero.  std.sinpi takes the turns
+// rather than the radians and is exact at every whole one.  The macro
+// looks at the expression it is written with: where π is one factor of
+// it, that factor comes out and std.sinpi takes what is left.  Where
+// there is no π the last rule writes the ordinary sine of what it was
+// handed.
+@macro_rules sin:
+    ⟪$a × std.π⟫ → ⟪std.sinpi($a)⟫
+    ⟪std.π × $a⟫ → ⟪std.sinpi($a)⟫
+    ⟪std.π⟫      → ⟪std.sinpi(1.0)⟫
+    ⟪$x⟫         → ⟪std.sin($x)⟫
+
+@test
+fn test_a_factor_of_pi_becomes_a_turn():
+    assert_eq(sin⟦1.0 × std.π⟧, 0.0)
+    assert_eq(sin⟦2.0 × std.π⟧, 0.0)
+
+// The rule for the other order says the same thing about a product
+// written the other way round.
+@test
+fn test_pi_on_either_side():
+    assert_eq(sin⟦std.π × 3.0⟧, 0.0)
+
+// π on its own is one turn.
+@test
+fn test_pi_alone():
+    assert_eq(sin⟦std.π⟧, 0.0)
+
+// What the naive way answers, which is what the macro exists to avoid.
+@test
+fn test_the_rewrite_is_what_makes_it_exact():
+    assert(std.sin(1.0 × std.π) ≠ 0.0)
+    assert_eq(sin⟦1.0 × std.π⟧, 0.0)
+
+// No π anywhere, so the last rule takes it and writes the ordinary
+// sine of what was handed over, unchanged.
+@test
+fn test_without_pi_the_last_rule_writes_the_ordinary_sine():
+    assert_eq(sin⟦1.0⟧, std.sin(1.0))
+    assert_eq(sin⟦0.0⟧, 0.0)
+
+// A quarter turn, where sinpi and sin agree and the rewrite is still
+// what was written.
+@test
+fn test_a_fraction_of_a_turn():
+    assert_eq(sin⟦0.5 × std.π⟧, 1.0)
+
+// The shape a list of rules cannot describe: a product of three, which
+// the parser reads as (2.0 × π) × 3.0.  No rule matches it, so the
+// last one takes it and the rewrite does not happen.  The function
+// form on the other branch handles it.
+@test
+fn test_a_longer_product_escapes_the_rules():
+    assert(sin⟦2.0 × std.π × 3.0⟧ ≠ 0.0)
+    assert_eq(sin⟦2.0 × std.π × 3.0⟧, std.sin(2.0 × std.π × 3.0))
+
+// ---------------------------------------------------------------------
+// What a rule can say
+// ---------------------------------------------------------------------
+
+@macro_rules twice:
+    ⟪$x⟫ → ⟪$x + $x⟫
+
+@test
+fn test_a_hole_written_twice_is_filled_twice():
+    let n : i64 = 21
+    assert_eq(twice⟦n⟧, 42)
+
+// A hole named twice in one pattern matches only where the two are
+// written alike, which is how a rule says its arguments agree.
+@macro_rules same_or_not:
+    ⟪$x, $x⟫ → ⟪1i64⟫
+    ⟪$x, $y⟫ → ⟪0i64⟫
+
+@test
+fn test_a_repeated_hole_matches_only_what_is_alike():
+    let a : i64 = 1
+    let b : i64 = 2
+    assert_eq(same_or_not⟦a, a⟧, 1)
+    assert_eq(same_or_not⟦a, b⟧, 0)
+
+// What comes out is expanded in turn, so one macro may write another.
+@macro_rules four_times:
+    ⟪$x⟫ → ⟪twice⟦$x⟧ + twice⟦$x⟧⟫
+
+@test
+fn test_a_macro_may_write_another():
+    let n : i64 = 5
+    assert_eq(four_times⟦n⟧, 20)
+
+// A literal in a pattern matches only itself.
+@macro_rules classify:
+    ⟪0i64⟫ → ⟪"zero"⟫
+    ⟪1i64⟫ → ⟪"one"⟫
+    ⟪$x⟫   → ⟪"many"⟫
+
+@test
+fn test_a_literal_matches_only_itself():
+    let n : i64 = 7
+    assert_eq(classify⟦0i64⟧, "zero")
+    assert_eq(classify⟦1i64⟧, "one")
+    assert_eq(classify⟦n⟧, "many")
+
+// ---------------------------------------------------------------------
+// A macro that writes statements
+// ---------------------------------------------------------------------
+
+// Written under the bracket rather than beside it, a rule writes
+// statements, and the invocation stands on a line of its own.
+@macro_rules swap:
+    ⟪$a, $b⟫ → ⟪
+        let t : i64 = $a
+        $a ← $b
+        $b ← t
+    ⟫
+
+@test
+fn test_a_macro_can_write_statements():
+    let x : mut i64 = 1
+    let y : mut i64 = 2
+    swap⟦x, y⟧
+    assert_eq(x, 2)
+    assert_eq(y, 1)
+
+// Hygiene: the macro's own t is renamed to something no source file can
+// spell, so a caller whose variable is called t is swapped rather than
+// shadowed.  Without it the macro's t would take the caller's place and
+// the swap would answer 1 and 1.
+@test
+fn test_the_macro_temporary_does_not_capture():
+    let t : mut i64 = 1
+    let u : mut i64 = 2
+    swap⟦t, u⟧
+    assert_eq(t, 2)
+    assert_eq(u, 1)
+
+// The head of a rules macro is an annotation, so macro_rules is a
+// keyword only after an @ and the word is still a name a program may
+// use.  A definition keyword would have taken it, which is why the
+// longer of the two names is the one written with an @.
+@test
+fn test_the_word_is_still_a_name():
+    let macro_rules : i64 = 2
+    assert_eq(macro_rules × 3, 6)
+
+@start
+@impure
+fn main():
+    std.println("macro tests passed")

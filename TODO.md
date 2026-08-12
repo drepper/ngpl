@@ -1018,7 +1018,7 @@ in the compiler.
 Macros and Reflection
 ---------------------
 
-[ ] Add a macro system with hygenic macros.  The macros of the Rust language can server as
+[~] Add a macro system with hygenic macros.  The macros of the Rust language can server as
     inspiration or more.  The funcitionality must allow to
     - retrieve the parse tree for the parameter(s) of the macro
     - deconstruct the tree in comptime code
@@ -1026,3 +1026,45 @@ Macros and Reflection
     - follow references to to type, function, or variable definitions
     A set of operations which allow implementing both the C++26 as well as the Rust
     functionality is required.
+
+    Explored and implemented on two branches, neither merged; see design/macros/README.md
+    and chapter 15 of the spec.  Shared by both: invocation as f⟦x⟧, so the mark is around
+    the arguments (which are what is unusual) rather than on the name; ⟪ ⟫ quoting a piece
+    of the program and $ marking a hole in one; expansion over the parse tree, after parsing
+    and before every check; hygiene by renaming what a macro binds, with what arrives from
+    the caller keeping its own names.
+
+    Expansion cannot happen between scanning and parsing as this list asked, because the
+    first line of the same list requires the parse tree of the arguments.  C works that way
+    because its grammar is not context-free; this one is, and an invocation is marked, so
+    parsing first is available.
+
+    [x] macros-rules: a macro is a list of pattern → template rules under @macro_rules, as
+        syntax-rules and macro_rules! are.  Reads as its own specification and needs no evaluator at
+        expansion time.  Cannot say "π is among the factors", only "π is written here", so
+        2×π×3 needs a rule per shape and no finite list covers a product.
+    [x] macros-proc: a macro is a function from syntax to syntax under macro, as defmacro
+        is, with
+        kind(), name() and factors() to take a piece apart and ⟪ ⟫ with $ to build one.
+        factors() flattens a product however the parser nested it, which is what the
+        example needs.  Costs an evaluator at expansion time and cannot be read without
+        being run.
+
+    The two are headed by different keywords so that both can be present at once, which is
+    what the end state is: @macro_rules for the rules form and macro for the function form,
+    following Rust, where macro_rules! and a procedural macro are the same two halves.
+    macro_rules is a keyword only after an @, so the word stays available as a name; macro
+    is a reserved word as fn and struct are, which is what heading a definition costs and is
+    why the longer name is the one written with an @.
+
+    Both are wanted in the end, as they are in Scheme and in Rust.  Recommendation: merge
+    the rules form first, the function form after, with the rules form as sugar.
+
+[ ] install the program's definitions in two passes -- signatures before expansion, bodies
+    after -- so a macro can follow a reference to what a name means.  This is the one item
+    of the macro list above that neither branch implements, and it is also what attribute
+    macros and macros that write definitions rather than expressions wait on.
+
+[ ] the second half of hygiene: a name a macro's template reads should resolve where the
+    macro was written rather than where it was invoked.  With one global namespace the two
+    are the same place, so the question waits on modules.

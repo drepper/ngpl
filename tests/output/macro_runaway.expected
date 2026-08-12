@@ -1,0 +1,7 @@
+error: expanding forever did not settle after 64 rewrites; a rule rewrites to something it matches
+  --> tests/output/macro_runaway.ngpl:3:13
+    |
+  3 |     ⟪$x⟫ → ⟪forever⟦$x⟧⟫
+    |             ^^^^^^^
+  4 | 
+    |

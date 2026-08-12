@@ -21,6 +21,7 @@ operations that would bypass the kernel's directory-based interfaces.
 import ctypes
 import ctypes.util
 import hashlib
+import math as _math
 import mmap
 import os
 import sys
@@ -1110,6 +1111,60 @@ class StdModule:
             raise TypeError(f"sha256 expects byte[] or StrValue, got {type(data_arg).__name__}")
         h = self._sha256(data)
         return mk_int(h)
+
+    # ------------------------------------------------------------------
+    # Trigonometry
+    # ------------------------------------------------------------------
+
+    # The ratio a circle's circumference bears to its diameter, to as
+    # many places as f64 keeps.
+    π = 3.141592653589793
+
+    def _one_float(self, args, who: str) -> float:
+        """The single number a one-argument function was handed."""
+        from interp.eval import unwrap_optional
+        from interp.value import IntValue, FloatValue, UnitValue
+
+        if len(args) != 1:
+            raise TypeError(f"{who}(x) takes exactly 1 argument")
+        arg = unwrap_optional(args[0])
+        if isinstance(arg, UnitValue):
+            arg = arg.inner
+        if not isinstance(arg, (IntValue, FloatValue)):
+            raise TypeError(f"{who} expects a number, got "
+                            f"{type(arg).__name__}")
+        return float(arg.value)
+
+    def sin(self, args):
+        """sin(x) -- the sine of an angle in radians."""
+        from interp.value import FloatValue
+
+        return FloatValue(_math.sin(self._one_float(args, "sin")), "f64")
+
+    def cos(self, args):
+        """cos(x) -- the cosine of an angle in radians."""
+        from interp.value import FloatValue
+
+        return FloatValue(_math.cos(self._one_float(args, "cos")), "f64")
+
+    def sinpi(self, args):
+        """sinpi(x) -- the sine of x×π, which is exact at every whole x.
+
+        sin(x×π) has to round x×π first, and π is not a number f64
+        holds, so sin(1.0×π) is not zero.  Halving the argument's
+        turn before the sine is taken keeps the whole turns whole.
+        """
+        from interp.value import FloatValue
+
+        x = self._one_float(args, "sinpi")
+        whole = _math.floor(x)
+        frac = x - whole
+        # A whole number of half-turns is exactly zero, and the sign
+        # follows whether the turn is odd or even.
+        value = _math.sin(frac * _math.pi)
+        if int(whole) % 2:
+            value = -value
+        return FloatValue(0.0 + value, "f64")
 
     def bytes(self, args):
         """bytes(str) -- create a byte[] array from a UTF-8 string."""

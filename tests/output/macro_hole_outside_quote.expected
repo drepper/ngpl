@@ -1,0 +1,6 @@
+error: $ names a hole in a piece of program written down, so it is written inside ⟪ … ⟫
+  --> tests/output/macro_hole_outside_quote.ngpl:6:23
+    |
+  6 |     std.println("{}", $x)
+    |                       ^
+    |
