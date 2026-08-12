@@ -1,0 +1,6 @@
+error: sin is a macro -- it is written as a function over the program's text -- so it is invoked as sin⟦ … ⟧ rather than called as sin( … ); what a macro is handed is written rather than worked out
+  --> tests/output/macro_called_with_parens.ngpl:13:23
+    |
+ 13 |     std.println("{}", sin(1.0))
+    |                       ^^^
+    |

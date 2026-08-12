@@ -412,6 +412,24 @@ fn test_the_word_is_still_a_name_by_rules():
     let macro_rules : i64 = 2
     assert_eq(macro_rules × 3, 6)
 
+// =====================================================================
+// The two are not in the same namespace
+// =====================================================================
+
+// A macro and a function may share a name.  ( … ) calls the function
+// and ⟦ … ⟧ invokes the macro, which is the whole of what the two
+// spellings are for.
+@macro_rules doubled:
+    ⟪$x⟫ → ⟪$x + $x⟫
+
+fn doubled(n : i64) → i64:
+    n × 2
+
+@test
+fn test_a_macro_and_a_function_may_share_a_name():
+    assert_eq(doubled(21), 42)
+    assert_eq(doubled⟦21i64⟧, 42)
+
 @start
 @impure
 fn main():

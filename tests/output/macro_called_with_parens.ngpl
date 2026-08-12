@@ -1,0 +1,13 @@
+// A macro invoked the way a function is called.  What stands between
+// the brackets of a macro is handed over as it is written, which is
+// the difference the brackets are there to show.
+macro sin(e : syntax) → syntax:
+    ⟪std.sin($e)⟫
+
+@macro_rules twice:
+    ⟪$x⟫ → ⟪$x + $x⟫
+
+@start
+@impure
+fn main():
+    std.println("{}", sin(1.0))

@@ -1,0 +1,8 @@
+// The same mistake with a macro written as rules.
+@macro_rules twice:
+    ⟪$x⟫ → ⟪$x + $x⟫
+
+@start
+@impure
+fn main():
+    std.println("{}", twice(21i64))

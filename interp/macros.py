@@ -203,6 +203,11 @@ def make_hygienic(tree, spliced: set):
 # a name defined at the prompt does generally.
 REGISTRY: dict = {}
 
+# The functions defined alongside them.  A name may be both -- a macro
+# and a function are not in the same namespace -- and where it is, a
+# call of it is a call of the function and nothing to complain about.
+FUNCTIONS: set = set()
+
 
 class _Spliced:
     """Statements a macro wrote, on their way to the line they replace.
@@ -233,6 +238,8 @@ def collect(definitions) -> dict:
                                  getattr(defn, "pos", None))
             seen.add(defn.name)
             REGISTRY[defn.name] = defn
+        elif isinstance(defn, _ast.FuncDef):
+            FUNCTIONS.add(defn.name)
     return REGISTRY
 
 
@@ -254,6 +261,19 @@ def expand(node, macros: dict, runner, depth: int = 0):
             return _Spliced(expand(written.body, macros, runner, depth + 1),
                             written.call)
         return expand(written, macros, runner, depth + 1)
+    # A macro written the way a function is called is the mistake this
+    # language's marked invocation exists to catch, so it is said in
+    # those words rather than left to be an undefined name.
+    if isinstance(node, _ast.FuncCall) and node.name in macros \
+            and node.name not in FUNCTIONS:
+        kind = ("is written as rules"
+                if isinstance(macros[node.name], _ast.MacroRulesDef)
+                else "is written as a function over the program's text")
+        raise MacroError(
+            f"{node.name} is a macro -- it {kind} -- so it is invoked as "
+            f"{node.name}⟦ … ⟧ rather than called as {node.name}( … ); "
+            f"what a macro is handed is written rather than worked out",
+            getattr(node, "pos", None))
     # A macro on its own line writes what it says in place of the line.
     if isinstance(node, _ast.ExprStmt) \
             and isinstance(node.expr, _ast.MacroCall):

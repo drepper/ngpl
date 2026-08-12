@@ -1,0 +1,6 @@
+error: twice is a macro -- it is written as rules -- so it is invoked as twice⟦ … ⟧ rather than called as twice( … ); what a macro is handed is written rather than worked out
+  --> tests/output/macro_rules_called_with_parens.ngpl:8:23
+    |
+  8 |     std.println("{}", twice(21i64))
+    |                       ^^^^^
+    |

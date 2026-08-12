@@ -92,6 +92,19 @@ normally.
 It also follows Wolfram, where `f[x]` and `f(x)` differ in this same
 way, and it leaves `!` and `@` alone.
 
+A mark is only worth having if writing the other one is *caught*, and
+the first thing tried against the finished implementation was
+`sin(2.0 × std.π)` — which reported `undefined variable: sin`, pointing
+at the argument.  Every word of that was wrong: `sin` was defined, the
+argument was not the problem, and nothing said what to write instead.
+It now names the macro, says which of the two kinds it is, and says how
+one is invoked.
+
+That check has to know whether the name is *also* a function, because a
+macro and a function are not in the same namespace and a name may be
+both — in which case `( … )` calls the function and there is nothing to
+complain about.
+
 `⟪ ⟫` (U+27EA/U+27EB) is the matching pair for *quoting*: a piece of
 program written down rather than run.  `$` marks a hole in one.  Both
 were free.

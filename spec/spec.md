@@ -8428,6 +8428,29 @@ The brackets are the mark.  Nothing about the name says the invocation is specia
 
 `( … )` calls a function and `⟦ … ⟧` invokes a macro.  Writing `⟦ … ⟧` where no macro of that name is defined is an error; so is writing a macro with a number of arguments it has no rule (or no parameter list) for.
 
+A macro invoked the way a function is called is refused, and the refusal says which it is:
+
+```
+sin(2.0 × std.π)
+
+error: sin is a macro -- it is written as a function over the program's
+text -- so it is invoked as sin⟦ … ⟧ rather than called as sin( … );
+what a macro is handed is written rather than worked out
+```
+
+A macro and a function are not in the same namespace, so a name may be both.  Where it is, `( … )` calls the function and `⟦ … ⟧` invokes the macro, and neither is a mistake:
+
+```
+@macro_rules doubled:
+    ⟪$x⟫ → ⟪$x + $x⟫
+
+fn doubled(n : i64) → i64:
+    n × 2
+
+doubled(21)                     // 42, by the function
+doubled⟦21i64⟧                  // 42, by the macro
+```
+
 A macro that writes **statements** stands on a line of its own, and what it writes replaces that line.  Writing one where a value is wanted is an error:
 
 ```
