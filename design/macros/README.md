@@ -106,7 +106,7 @@ rewrites to, in the tradition of Scheme's `syntax-rules`, Rust's
 `macro_rules!`, and Wolfram's `:>`:
 
 ```
-macro sin:
+@macro_rules sin:
     ⟪$a × std.π⟫ → ⟪std.sinpi($a)⟫
     ⟪std.π × $a⟫ → ⟪std.sinpi($a)⟫
     ⟪std.π⟫      → ⟪std.sinpi(1.0)⟫
@@ -115,6 +115,17 @@ macro sin:
 
 Both halves of a rule are ordinary program text with `$a` where a hole
 goes.  The first rule that matches decides.
+
+The two designs are named apart on purpose — `@macro_rules` here and
+`macro` in Design B — because the end state is both of them in one
+language, and a reader at an invocation needs to be able to find out
+which kind of thing they are reading.  The name is Rust's, where
+`macro_rules!` and a procedural macro are the same two halves.  It is
+written as an annotation, which is a small stretch of what `@` usually
+means (something said *about* a definition, rather than the definition
+itself), and it buys something back: `macro_rules` is only a keyword
+after an `@`, so neither word is taken away from a program that wants
+it as a name.
 
 **What is good.** The macro *is* its specification: there is no code to
 read, only the shapes it accepts and what each becomes. It cannot loop
@@ -223,12 +234,15 @@ no identifier can contain one and no collision is possible.
 The test that proves it is the classic:
 
 ```
-macro swap(a, b):
-    ⟪
+@macro_rules swap:
+    ⟪$a, $b⟫ → ⟪
         let t : i64 = $a
         $a ← $b
         $b ← t
     ⟫
+
+// and, written the other way:
+//     macro swap(a : syntax, b : syntax) → syntax: ⟪ … ⟫
 
 let t : mut i64 = 1
 let u : mut i64 = 2
@@ -301,9 +315,10 @@ program, and the questions about types are asked of what they wrote.
 
 Two branches, each green on the full suite:
 
-- **`macros-rules`** — rewrite rules; 87 test files, 101 output tests.
-- **`macros-proc`** — functions over the program's text; 87 test files,
-  102 output tests.
+- **`macros-rules`** — rewrite rules under `@macro_rules`; 87 test
+  files, 101 output tests.
+- **`macros-proc`** — functions over the program's text under `macro`;
+  87 test files, 102 output tests.
 
 Neither is merged to `main`.  The recommendation is above.
 

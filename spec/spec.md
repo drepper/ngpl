@@ -8412,7 +8412,7 @@ Chapter 15: Macros and Reflection
 
 A macro is written where a function is called and is not a function call: what stands between its brackets is handed over **as it is written**, not as what it evaluates to.  That is the whole of what a macro is for — a function receives `6.283185307179586`, and a macro receives `2.0 × std.π`.
 
-This chapter is normative for two designs, developed on the branches `macros-rules` and `macros-proc`.  They share everything in *Invocation*, *When Expansion Happens* and *Hygiene*, and differ in how a macro is written.  The reasoning behind each choice is in `design/macros/README.md`; the alternatives that were rejected are summarised at the end of this chapter.
+This chapter is normative for two designs, developed on the branches `macros-rules` and `macros-proc`.  They share everything in *Invocation*, *When Expansion Happens* and *Hygiene*, and differ in how a macro is written — and in what heads the definition, `@macro_rules` for one and `macro` for the other, so that both can be present in one language and a reader can tell which kind a name was defined as.  The reasoning behind each choice is in `design/macros/README.md`; the alternatives that were rejected are summarised at the end of this chapter.
 
 ### Invocation
 
@@ -8468,8 +8468,8 @@ Each piece of an expansion keeps the position it was written at. What came from 
 The renaming appends `#` and a number.  `#` is an operator glyph, so no identifier can contain one and the renamed name cannot collide with anything a program writes.
 
 ```
-macro swap(a, b):
-    ⟪
+@macro_rules swap:                  // or: macro swap(a : syntax, b : syntax) → syntax:
+    ⟪$a, $b⟫ → ⟪
         let t : i64 = $a
         $a ← $b
         $b ← t
@@ -8489,7 +8489,7 @@ The other half of hygiene — that a name a macro *reads* resolves where the mac
 A macro is a list of rules.  Each states what the arguments have to look like and what the invocation is replaced by:
 
 ```
-macro sin:
+@macro_rules sin:
     ⟪$a × std.π⟫ → ⟪std.sinpi($a)⟫
     ⟪std.π × $a⟫ → ⟪std.sinpi($a)⟫
     ⟪std.π⟫      → ⟪std.sinpi(1.0)⟫
@@ -8507,7 +8507,7 @@ Rules are tried in order and the first that matches decides, so a catch-all rule
 In a template, `$a` is filled with the tree the hole matched.  A template written under the bracket rather than beside it holds statements.
 
 ```
-macro same_or_not:
+@macro_rules same_or_not:
     ⟪$x, $x⟫ → ⟪1i64⟫           // written alike
     ⟪$x, $y⟫ → ⟪0i64⟫           // anything else
 ```
@@ -8515,6 +8515,8 @@ macro same_or_not:
 **What this design cannot say.**  A rule matches a *shape*.  `a × b` and `b × a` are two shapes, which is why the example needs two rules for them — and `2.0 × std.π × 3.0` is a third shape, read as `(2.0 × std.π) × 3.0`, which none of the four rules describes.  Since a product nests arbitrarily deep, no finite list of rules covers it.  A design that can say "π is *among the factors*" is the next one.
 
 ### Design B: Functions Over the Program's Text (`macros-proc`)
+
+Headed by `macro`, where the rules form is headed by `@macro_rules`.  The names are Rust's, whose `macro_rules!` and procedural macros are these same two halves.  `@macro_rules` is written as an annotation, which is a small stretch of what `@` elsewhere means, and in exchange neither `macro_rules` nor `macro` is taken away from a program that wants it as an ordinary name — the first because it is a keyword only after an `@`, the second because a definition keyword is read only where a definition may start.
 
 A macro is an ordinary function that runs while the program is being installed.  Its parameters are handed the parse trees of what the invocation was written with, and it answers the tree that replaces the invocation:
 
@@ -8585,7 +8587,7 @@ What is **not** available is following a reference to what it names — asking a
 | Nim | parse tree | `macro` | `f(x)` | yes |
 | Wolfram | expression | rewrite rules `:>` | `f[x]` | no |
 | Zig | — (no macros) | `comptime fn` | `f(x)` | n/a |
-| NGPL A | parse tree | rewrite rules | `f⟦x⟧` | yes |
-| NGPL B | parse tree | a function | `f⟦x⟧` | yes |
+| NGPL A | parse tree | `@macro_rules`, rewrite rules | `f⟦x⟧` | yes |
+| NGPL B | parse tree | `macro`, a function | `f⟦x⟧` | yes |
 
 The two designs are the two halves every mature system ends up with — Scheme has `syntax-rules` and `syntax-case`, Rust has `macro_rules!` and procedural macros — and are best read that way rather than as a fork.  What is unusual here is the invocation: the languages above either mark the name (Rust, Julia) or mark nothing (Lisp, Scheme, Nim), and marking the *arguments* says the thing that is actually true of them.
