@@ -8493,7 +8493,7 @@ A macro is a list of rules.  Each states what the arguments have to look like an
     ⟪$a × std.π⟫ → ⟪std.sinpi($a)⟫
     ⟪std.π × $a⟫ → ⟪std.sinpi($a)⟫
     ⟪std.π⟫      → ⟪std.sinpi(1.0)⟫
-    ⟪$x⟫         → ⟪std.cos($x)⟫
+    ⟪$x⟫         → ⟪std.sin($x)⟫
 ```
 
 A pattern holds one expression per argument, separated by commas.  Within a pattern:
@@ -8512,7 +8512,7 @@ In a template, `$a` is filled with the tree the hole matched.  A template writte
     ⟪$x, $y⟫ → ⟪0i64⟫           // anything else
 ```
 
-**What this design cannot say.**  A rule matches a *shape*.  `a × b` and `b × a` are two shapes, which is why the example needs two rules for them — and `2.0 × std.π × 3.0` is a third shape, read as `(2.0 × std.π) × 3.0`, which none of the four rules describes.  Since a product nests arbitrarily deep, no finite list of rules covers it.  A design that can say "π is *among the factors*" is the next one.
+**What this design cannot say.**  A rule matches a *shape*.  `a × b` and `b × a` are two shapes, which is why the example needs two rules for them — and `2.0 × std.π × 3.0` is a third shape, read as `(2.0 × std.π) × 3.0`, which none of the four rules describes.  Since a product nests arbitrarily deep, no finite list of rules covers it: the invocation falls through to the last rule and the rewrite does not happen.  A design that can say "π is *among the factors*" is the next one.
 
 ### Design B: Functions Over the Program's Text (`macros-proc`)
 
@@ -8522,16 +8522,33 @@ A macro is an ordinary function that runs while the program is being installed. 
 
 ```
 macro sin(e : syntax) → syntax:
+    let todo : mut syntax[] = [e]
+    let factors : mut syntax[] = []
+    let at : mut i64 ¤ptrdiff = 0
+    while at < #todo:
+        let part := todo[at]
+        at ← at + 1¤ptrdiff
+        if part.head() = some(^^×):          // does it apply × ?
+            foreach inner := part.arguments():
+                todo.push(inner)             // then take it apart
+        else:
+            factors.push(part)
+
     let rest : mut syntax[] = []
     let found : mut bool = false
-    foreach f := e.factors():
-        if not found and f.name() = some("std.π"):
+    foreach f := factors:
+        if not found and f = ^^std.π:        // is it π itself?
             found ← true
         else:
             rest.push(f)
-    if found:
-        return ⟪std.sinpi($(std.syntax.product(rest)))⟫
-    ⟪std.cos($e)⟫
+
+    if not found:
+        return ⟪std.sin($e)⟫
+    if #rest = 0¤ptrdiff:
+        return ⟪std.sinpi(1.0)⟫
+    if #rest = 1¤ptrdiff:
+        return ⟪std.sinpi($(rest[0]))⟫
+    ⟪std.sinpi($(std.syntax.funcall(^^×, rest)))⟫
 ```
 
 `syntax` is the type of a piece of the program.  It answers:
@@ -8540,16 +8557,51 @@ macro sin(e : syntax) → syntax:
 |---|---|
 | `kind()` | what it is, as a string: `number`, `string`, `character`, `truth`, `nothing`, `name`, `operator`, `call`, `array`, `tuple`, `function`, `block` |
 | `name()` | the name it reads, as `str?` — `some("std.π")` for `std.π`, and `∅` for anything that is not a name |
-| `factors()` | the factors of a product, as `syntax[]`, **flattened** however the parser nested them; anything that is not a product is one factor, itself |
+| `head()` | what it **applies**, as `syntax?` — `^^×` for `a × b`, `^^std.sinpi` for `std.sinpi(x)`, and `∅` for anything that applies nothing |
+| `arguments()` | what it applies its head **to**, as `syntax[]` — `[a, b]` for `a × b`, and empty where there is no head |
+
+An operator is what its expression applies, exactly as a function is what a call applies, so `a × b` and `f(a, b)` are taken apart by the same two questions.  Nothing about any particular operator is built in: finding the factors of a product is a macro asking whether the head is `×` and walking into the arguments where it is, which is what the example above writes out.
+
+Two pieces of the program are compared with `=` and are alike where the same thing is written in both, wherever each was written.
+
+#### Referring to What a Name Means: `^^`
+
+`^^` is written in front of a name or an operator and answers what it refers to, as a `syntax`:
+
+```
+^^×                             // the operator
+^^std.π                         // the constant
+^^std.sinpi                     // the function
+```
+
+Where a quote holds whatever text is written in it, `^^` holds one entity.  That is the whole difference between them, and it is why `^^` is written in front of a *reference* rather than an expression: there is nothing to work out, only something to point at.  C++26 spells reflection the same way.
+
+Comparing against `^^` asks about the thing rather than about how it is spelled, which is what `f = ^^std.π` says and what a comparison against the string `"std.π"` would not.
+
+#### Putting Values Back: `$`
 
 Inside a quote, `$e` puts what `e` answers into the tree, and `$(expr)` does the same for an expression that is more than a name:
 
 - a `syntax` value is put in as itself;
 - a number, a string or a truth value is put in as what a program would have written to mean it, which is what lets a macro compute at expansion and write the answer.
 
-`std.syntax.product(pieces)` multiplies pieces back together — the one shape a quote cannot write, since how many factors are left is not known until the macro has run.  The product of no pieces is `1.0`.
+#### Building an Application: `std.syntax.funcall`
+
+`std.syntax.funcall(head, arguments)` applies one thing to the others.  `head` is what to apply — as `^^` writes it, or as `head()` answered it — and what comes back is the piece of the program that applies it.
+
+An operator handed more than two arguments is applied to them the way writing them out would be, from the left: three arguments to `^^×` answer `(a × b) × c`.  That is what makes one call able to put back a product that has lost a factor, whatever it had before.  An operator handed one argument is applied to it as a unary operator; handed none, it is an error — what an empty product is belongs to the arithmetic a macro is doing rather than to the builder.
+
+Because the head an expression answers can be handed straight back, a macro can rebuild what it took apart without naming the operation at all:
+
+```
+std.syntax.funcall(e.head() ?? ^^+, e.arguments())
+```
 
 A macro that answers something other than a piece of the program is an error, as is one whose body fails while it runs; both are reported at the invocation.
+
+#### Reflection Without Writing
+
+`kind()`, `name()`, `head()`, `arguments()`, `^^`, and `=` between two pieces of the program are the whole of what is available for looking at a program.  They are the same mechanism a macro writes with, seen from the other end.
 
 **What a macro can reach.**  A macro runs before the program's own definitions are installed, so it can use `std`, the builtins and other macros, and not the program's functions.  Lifting that means installing signatures in a pass of their own before expansion, which is where following a reference to a definition also becomes possible.
 
