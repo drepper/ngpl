@@ -12,20 +12,40 @@
 // sin(x×π) has to round x×π first, and π is not a number f64 holds, so
 // the answer is near zero rather than zero.  std.sinpi takes the turns
 // rather than the radians and is exact at every whole one.  The macro
-// looks through the factors of what it was written with: where one of
-// them is π, that factor comes out and std.sinpi takes the product of
-// what is left.
+// asks what the expression applies: where that is ×, it is taken apart
+// into what it applies × to, as far down as that goes.  Where π is one
+// of the factors it comes out, and std.sinpi takes what is left.
 macro sin(e : syntax) → syntax:
+    let todo : mut syntax[] = [e]
+    let factors : mut syntax[] = []
+    let at : mut i64 ¤ptrdiff = 0
+    while at < #todo:
+        let part := todo[at]
+        at ← at + 1¤ptrdiff
+        if part.head() = some(^^×):
+            foreach inner := part.arguments():
+                todo.push(inner)
+        else:
+            factors.push(part)
+
     let rest : mut syntax[] = []
     let found : mut bool = false
-    foreach f := e.factors():
-        if not found and f.name() = some("std.π"):
+    foreach f := factors:
+        if not found and f = ^^std.π:
             found ← true
         else:
             rest.push(f)
-    if found:
-        return ⟪std.sinpi($(std.syntax.product(rest)))⟫
-    ⟪std.cos($e)⟫
+
+    if not found:
+        return ⟪std.sin($e)⟫
+    // What is left of the product once π is out of it is the turns.
+    if #rest = 0¤ptrdiff:
+        return ⟪std.sinpi(1.0)⟫
+    if #rest = 1¤ptrdiff:
+        return ⟪std.sinpi($(rest[0]))⟫
+    // The same ^^× that said what the expression was says what to
+    // build, so nothing about multiplication is written twice.
+    ⟪std.sinpi($(std.syntax.funcall(^^×, rest)))⟫
 
 @test
 fn test_a_factor_of_pi_becomes_a_turn():
@@ -42,9 +62,9 @@ fn test_pi_on_either_side():
 fn test_pi_alone():
     assert_eq(sin⟦std.π⟧, 0.0)
 
-// The factors are looked through however the parser nested them, so π
-// is found wherever in a longer product it is written.  This is what a
-// list of rewrite rules cannot say without a rule per shape.
+// The walk takes a product apart as far down as it goes, so π is found
+// wherever in a longer product it is written.  This is what a list of
+// rewrite rules cannot say without a rule per shape.
 @test
 fn test_pi_anywhere_in_a_longer_product():
     assert_eq(sin⟦2.0 × std.π × 3.0⟧, 0.0)
@@ -57,10 +77,18 @@ fn test_the_rewrite_is_what_makes_it_exact():
     assert(std.sin(1.0 × std.π) ≠ 0.0)
     assert_eq(sin⟦1.0 × std.π⟧, 0.0)
 
-// No π anywhere, so the other branch takes it.
+// No π anywhere, so the macro writes the ordinary sine of what it was
+// handed, unchanged.
 @test
-fn test_without_pi_the_other_branch_takes_it():
-    assert_eq(sin⟦0.0⟧, 1.0)
+fn test_without_pi_the_ordinary_sine_is_written():
+    assert_eq(sin⟦1.0⟧, std.sin(1.0))
+    assert_eq(sin⟦0.0⟧, 0.0)
+
+// A quarter turn, where sinpi and sin agree and the rewrite is still
+// what was written.
+@test
+fn test_a_fraction_of_a_turn():
+    assert_eq(sin⟦0.5 × std.π⟧, 1.0)
 
 // ---------------------------------------------------------------------
 // What a macro is handed
@@ -88,17 +116,69 @@ fn test_a_name_answers_what_it_reads():
     assert_eq(name_of⟦std.π⟧, "std.π")
     assert_eq(name_of⟦1i64⟧, "not a name")
 
-// A length is a measured number and a literal has no way to write one
-// down, so what goes back into the program parts with the measure.
-macro how_many_factors(e : syntax) → syntax:
-    ⟪$(@dropunit(#e.factors()))⟫
+// ^^ refers to what a name means rather than to the text of it, and
+// two pieces of the program are alike where the same thing is written
+// in both, wherever each was written.
+macro is_pi(e : syntax) → syntax:
+    ⟪$(e = ^^std.π)⟫
 
 @test
-fn test_the_factors_are_flattened():
+fn test_a_reference_is_compared_with_what_it_refers_to():
+    assert(is_pi⟦std.π⟧)
+    assert(not is_pi⟦std.sinpi⟧)
+    assert(not is_pi⟦1.0⟧)
+
+// An operator is what its expression applies, the same way a function
+// is what a call applies, so both are asked the same question.
+macro head_kind(e : syntax) → syntax:
+    if e.head() = some(^^×):
+        return ⟪"times"⟫
+    if e.head() = some(^^std.sinpi):
+        return ⟪"sinpi"⟫
+    if e.head() = ∅:
+        return ⟪"applies nothing"⟫
+    ⟪"something else"⟫
+
+@test
+fn test_what_an_expression_applies():
     let a : i64 = 1
-    assert_eq(how_many_factors⟦a⟧, 1)
-    assert_eq(how_many_factors⟦a × a⟧, 2)
-    assert_eq(how_many_factors⟦a × a × a⟧, 3)
+    assert_eq(head_kind⟦a × a⟧, "times")
+    assert_eq(head_kind⟦std.sinpi(1.0)⟧, "sinpi")
+    assert_eq(head_kind⟦a + a⟧, "something else")
+    assert_eq(head_kind⟦a⟧, "applies nothing")
+
+macro how_many_arguments(e : syntax) → syntax:
+    ⟪$(@dropunit(#e.arguments()))⟫
+
+@test
+fn test_what_an_expression_applies_it_to():
+    let a : i64 = 1
+    assert_eq(how_many_arguments⟦a × a⟧, 2)
+    assert_eq(how_many_arguments⟦std.sinpi(1.0)⟧, 1)
+    assert_eq(how_many_arguments⟦a⟧, 0)
+
+// funcall builds an application of whatever it is handed, so the same
+// call puts back a product, a sum or a call to a named function.
+macro rebuilt(e : syntax) → syntax:
+    ⟪$(std.syntax.funcall(^^+, e.arguments()))⟫
+
+@test
+fn test_an_application_can_be_built_from_its_parts():
+    let a : i64 = 3
+    let b : i64 = 4
+    assert_eq(rebuilt⟦a × b⟧, 7)
+
+// The head an expression answers can be handed straight back, which is
+// how a macro rebuilds what it took apart without naming it again.
+macro reapplied(e : syntax) → syntax:
+    ⟪$(std.syntax.funcall(e.head() ?? ^^+, e.arguments()))⟫
+
+@test
+fn test_the_head_can_be_handed_back():
+    let a : i64 = 3
+    let b : i64 = 4
+    assert_eq(reapplied⟦a × b⟧, 12)
+    assert_eq(reapplied⟦std.sinpi(1.0)⟧, 0.0)
 
 // ---------------------------------------------------------------------
 // What a macro writes

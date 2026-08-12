@@ -333,6 +333,19 @@ class Quote:
         self.pos = None
 
 
+class Reflect:
+    """`^^name` -- what a name refers to, held as a piece of the program.
+
+    Where a quote holds whatever text is written in it, this holds one
+    entity: a function, an operator, a constant, a variable.  C++26
+    spells the same idea the same way.
+    """
+
+    def __init__(self, tree):
+        self.tree = tree
+        self.pos = None
+
+
 class Splice:
     """`$e` inside a quote -- put what e answers into the tree here."""
 

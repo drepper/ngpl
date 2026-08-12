@@ -754,8 +754,8 @@ class SyntaxValue(Value):
 
     def display(self):
         if self.body is not None:
-            return f"\u27ea{len(self.body)} statements\u27eb"
-        return f"\u27ea{type(self.node).__name__}\u27eb"
+            return f"⟪{len(self.body)} statements⟫"
+        return f"⟪{type(self.node).__name__}⟫"
 
     def to_python(self):
         return self.node if self.body is None else self.body

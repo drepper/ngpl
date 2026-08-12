@@ -1,0 +1,8 @@
+// ^^ refers to what a name means, so a name is what follows it.
+macro pick(e : syntax) → syntax:
+    ⟪$(e = ^^1)⟫
+
+@start
+@impure
+fn main():
+    std.println("{}", pick⟦1i64⟧)

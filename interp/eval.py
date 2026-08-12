@@ -26,7 +26,7 @@ from interp.ast import (
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr, SumTypeDef,
     ReshapeExpr, TupleLit, CatchStmt, EnumerateExpr,
     HashLit, SetLit, EmptyCollectionLit, BreakStmt, ContinueStmt,
-    Quote, Splice,
+    Quote, Splice, Reflect,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
     OperatorRef,
     UnitExpr, UnitOfExpr, UnitRefExpr, RefExpr, BorrowExpr, TypeDef,
@@ -77,18 +77,74 @@ _SYNTAX_KINDS = {
 }
 
 
-def _factors_of(node) -> list:
-    """The factors of a product, flattened however the parser nested them.
+# What a node holds that says where it was written rather than what it
+# is.  Two pieces of the program written alike are alike whatever these
+# say.
+_SYNTAX_POSITION_FIELDS = frozenset({"pos", "label_pos", "field_positions"})
 
-    `a × b × c` is read as `(a × b) × c`, and what a reader means by
-    "the factors" is the three of them.  Anything that is not a product
-    is one factor, which is itself.
+
+def _tree_fields(node) -> tuple:
+    """The names of what a node holds, however the node stores them."""
+    if hasattr(node, "__dict__"):
+        names = tuple(vars(node))
+    else:
+        names = tuple(getattr(type(node), "__slots__", ()))
+    return tuple(n for n in names if n not in _SYNTAX_POSITION_FIELDS)
+
+
+def _alike_trees(a, b) -> bool:
+    """Whether two pieces of parse tree say the same thing."""
+    a_is_node = type(a).__module__ == "interp.ast"
+    b_is_node = type(b).__module__ == "interp.ast"
+    if a_is_node or b_is_node:
+        if not (a_is_node and b_is_node) or type(a) is not type(b):
+            return False
+        return all(_alike_trees(getattr(a, f, None), getattr(b, f, None))
+                   for f in _tree_fields(a))
+    if isinstance(a, (list, tuple)) or isinstance(b, (list, tuple)):
+        return (isinstance(a, (list, tuple)) and isinstance(b, (list, tuple))
+                and len(a) == len(b)
+                and all(_alike_trees(x, y) for x, y in zip(a, b)))
+    return a == b
+
+
+def _head_of(node):
+    """What a piece of the program applies, or None where it applies nothing.
+
+    An operator is what its expression applies, the same way a function
+    is what a call applies, so `a × b` and `f(a, b)` answer the same
+    kind of thing and can be taken apart the same way.
     """
-    from interp.ast import BinOp as _BinOp
+    from interp.ast import (BinOp as _BinOp, UnaryOp as _UnaryOp,
+                            FuncCall as _FuncCall, MethodCall as _MethodCall,
+                            OperatorRef as _OperatorRef, VarRef as _VarRef,
+                            GetAttr as _GetAttr)
 
-    if isinstance(node, _BinOp) and node.op == "\N{MULTIPLICATION SIGN}":
-        return _factors_of(node.left) + _factors_of(node.right)
-    return [node]
+    if isinstance(node, (_BinOp, _UnaryOp)):
+        return _OperatorRef(node.op)
+    if isinstance(node, _FuncCall):
+        return _VarRef(node.name)
+    if isinstance(node, _MethodCall):
+        return _GetAttr(node.obj, node.method)
+    return None
+
+
+def _arguments_of(node) -> list:
+    """What a piece of the program applies its head to.
+
+    Empty where it applies nothing, so a caller that asked for the head
+    first and got nothing has nothing here either.
+    """
+    from interp.ast import (BinOp as _BinOp, UnaryOp as _UnaryOp,
+                            FuncCall as _FuncCall, MethodCall as _MethodCall)
+
+    if isinstance(node, _BinOp):
+        return [node.left, node.right]
+    if isinstance(node, _UnaryOp):
+        return [node.operand]
+    if isinstance(node, (_FuncCall, _MethodCall)):
+        return list(node.args)
+    return []
 
 
 # An empty array disagrees with no unit, so it stands in for whatever
@@ -1397,6 +1453,10 @@ class Evaluator:
         # ∅ == ∅, which makes `while e != ∅` loop for ever.
         if isinstance(lu, NoneValue) or isinstance(ru, NoneValue):
             return mk_bool(isinstance(lu, NoneValue) and isinstance(ru, NoneValue))
+        if isinstance(lu, SyntaxValue) or isinstance(ru, SyntaxValue):
+            # Reached through an optional, which is settled above
+            # before what it holds is looked at.
+            return self._op_syntax_eq("=", lu, ru)
         if isinstance(lu, EnumValue) and isinstance(ru, EnumValue):
             if lu.enum_type is not ru.enum_type:
                 raise TypeError(
@@ -1963,6 +2023,27 @@ class Evaluator:
             names = tuple(getattr(type(node), "__slots__", ()))
         return tuple(n for n in names if n != "pos")
 
+    def _op_syntax_eq(self, op: str, left, right):
+        """Whether two pieces of the program say the same thing.
+
+        Positions are not part of it: what is compared is what was
+        written, not where.  So `e.head() = ^^\N{MULTIPLICATION SIGN}` asks whether the
+        expression applies multiplication, whoever wrote it and
+        wherever.
+        """
+        if not (isinstance(left, SyntaxValue) and isinstance(right, SyntaxValue)):
+            other = right if isinstance(left, SyntaxValue) else left
+            raise TypeError(
+                f"a piece of the program can be compared with another "
+                f"piece of the program, and this is "
+                f"{self._value_type_name(other)}")
+        same = _alike_trees(
+            left.body if left.is_block else left.node,
+            right.body if right.is_block else right.node)
+        if left.is_block != right.is_block:
+            same = False
+        return mk_bool(same if op == "=" else not same)
+
     def _call_syntax_method(self, piece: SyntaxValue, name: str, args):
         """What a piece of the program answers about itself.
 
@@ -1986,15 +2067,20 @@ class Evaluator:
             if isinstance(node, GetAttr) and isinstance(node.obj, VarRef):
                 return some(mk_str(f"{node.obj.name}.{node.attr}"))
             return none()
-        if name == "factors":
+        if name == "head":
             if args:
-                raise TypeError("syntax.factors takes no arguments")
+                raise TypeError("syntax.head takes no arguments")
+            applied = _head_of(piece.node)
+            return none() if applied is None else some(SyntaxValue(node=applied))
+        if name == "arguments":
+            if args:
+                raise TypeError("syntax.arguments takes no arguments")
             return ObjectValue(ArrayValue(
-                [SyntaxValue(node=f) for f in _factors_of(piece.node)],
+                [SyntaxValue(node=a) for a in _arguments_of(piece.node)],
                 element_type="syntax"))
         raise AttributeError(
             f"a piece of the program has no method '{name}'; it answers "
-            f"kind(), name() and factors()")
+            f"kind(), name(), head() and arguments()")
 
     def _eval_quote(self, node: Quote):
         """Answer the tree a quote holds, with the $ parts put in.
@@ -2237,6 +2323,13 @@ class Evaluator:
             # the optional had never been there.  `(v ⍳ x) == ∅` asks
             # the same question whichever way the search went.
             return self._ops[op](left, right)
+        if op in ("=", "\N{NOT EQUAL TO}") \
+                and (isinstance(_unwrap_operand(left), SyntaxValue)
+                     or isinstance(_unwrap_operand(right), SyntaxValue)):
+            # Two pieces of the program are the same where the same
+            # thing is written in both, wherever each was written.
+            return self._op_syntax_eq(op, _unwrap_operand(left),
+                                      _unwrap_operand(right))
         if op in ("=", "\N{NOT EQUAL TO}") \
                 and (_is_keyed_container(_unwrap_operand(left))
                      or _is_keyed_container(_unwrap_operand(right))):
@@ -3523,6 +3616,12 @@ class Evaluator:
 
         if isinstance(node, Quote):
             return self._eval_quote(node)
+
+        if isinstance(node, Reflect):
+            # Nothing is worked out: what ^^ is written in front of is
+            # a reference, and the reference is the answer.
+            import copy as _copy
+            return SyntaxValue(node=_copy.deepcopy(node.tree))
 
         if isinstance(node, Splice):
             raise TypeError(

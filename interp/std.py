@@ -1490,40 +1490,68 @@ class SyntaxModule:
     """Building pieces of the program that no quote can spell.
 
     A quote writes what is written in it.  What it cannot write is a
-    piece whose shape depends on a value -- a product of however many
-    factors are left after one is taken out, say -- and that is what
-    this is for.
+    piece whose shape depends on a value -- an application of however
+    many arguments are left after one is taken out, say -- and that is
+    what this is for.
     """
 
-    def product(self, args):
-        """product(pieces) -- the factors multiplied back together.
+    def funcall(self, args):
+        """funcall(head, arguments) -- apply one thing to the others.
 
-        No factors is 1.0, which is what an empty product is, and what
-        makes taking the only factor out of a product answer something
-        rather than nothing.
+        `head` is what to apply, as `^^` writes it or as `head()`
+        answers it: an operator, a function name, a method.  What comes
+        back is the piece of the program that applies it.
+
+        An operator handed more than two arguments is applied to them
+        the way writing them out would be, from the left: three
+        arguments to ^^\N{MULTIPLICATION SIGN} answer (a \N{MULTIPLICATION SIGN} b) \N{MULTIPLICATION SIGN} c.  That is what
+        makes one call able to put back a product that has lost a
+        factor, whatever it had before.
         """
-        from interp.ast import BinOp, FloatLit
+        from interp.ast import BinOp, UnaryOp, FuncCall, MethodCall, \
+            OperatorRef, VarRef, GetAttr
         from interp.eval import unwrap_optional
         from interp.value import ArrayValue, ObjectValue, SyntaxValue
 
-        if len(args) != 1:
-            raise TypeError("product(pieces) takes exactly 1 argument")
-        held = unwrap_optional(args[0])
+        if len(args) != 2:
+            raise TypeError(
+                "funcall(head, arguments) takes exactly 2 arguments")
+        head = unwrap_optional(args[0])
+        held = unwrap_optional(args[1])
+        if not isinstance(head, SyntaxValue) or head.is_block:
+            raise TypeError(
+                "funcall applies a piece of the program, such as ^^\N{MULTIPLICATION SIGN} or "
+                "what head() answered")
         if not (isinstance(held, ObjectValue)
                 and isinstance(held.obj, ArrayValue)):
-            raise TypeError("product expects an array of syntax")
+            raise TypeError("funcall expects an array of syntax to apply to")
         pieces = [unwrap_optional(v) for v in held.obj.values()]
         for piece in pieces:
             if not isinstance(piece, SyntaxValue) or piece.is_block:
                 raise TypeError(
-                    "product multiplies pieces of the program that are "
-                    "expressions")
-        if not pieces:
-            return SyntaxValue(node=FloatLit(1.0, "f64"))
-        made = pieces[0].node
-        for piece in pieces[1:]:
-            made = BinOp("\N{MULTIPLICATION SIGN}", made, piece.node)
-        return SyntaxValue(node=made)
+                    "funcall applies something to expressions, and one of "
+                    "these is not one")
+        trees = [p.node for p in pieces]
+        applied = head.node
+        if isinstance(applied, OperatorRef):
+            if not trees:
+                raise TypeError(
+                    f"funcall was handed the operator {applied.op} and "
+                    f"nothing to apply it to")
+            if len(trees) == 1:
+                return SyntaxValue(node=UnaryOp(applied.op, trees[0]))
+            made = trees[0]
+            for tree in trees[1:]:
+                made = BinOp(applied.op, made, tree)
+            return SyntaxValue(node=made)
+        if isinstance(applied, VarRef):
+            return SyntaxValue(node=FuncCall(applied.name, trees))
+        if isinstance(applied, GetAttr):
+            return SyntaxValue(node=MethodCall(applied.obj, applied.attr,
+                                               trees))
+        raise TypeError(
+            "funcall applies an operator, a function or a method, and this "
+            "is none of those")
 
 
 class ArenaAllocator:

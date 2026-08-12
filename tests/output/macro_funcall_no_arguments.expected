@@ -1,0 +1,6 @@
+error: nothing_at_all could not be run: funcall was handed the operator × and nothing to apply it to
+  --> tests/output/macro_funcall_no_arguments.ngpl:9:23
+    |
+  9 |     std.println("{}", nothing_at_all⟦1i64⟧)
+    |                       ^^^^^^^^^^^^^^
+    |

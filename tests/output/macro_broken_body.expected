@@ -1,6 +1,6 @@
-error: pick could not be run: array index 7 out of range (length 1)
+error: pick could not be run: array index 7 out of range (length 2)
   --> tests/output/macro_broken_body.ngpl:9:23
     |
-  9 |     std.println("{}", pick⟦1i64⟧)
+  9 |     std.println("{}", pick⟦1i64 × 2i64⟧)
     |                       ^^^^
     |

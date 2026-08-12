@@ -26,7 +26,7 @@ from interp.ast import (
     UnitOfExpr, UnitRefExpr,
     StructDef, ImplBlock, StructLit,
     MatchStmt, MatchArm, ExpErr,
-    MacroDef, MacroCall, Quote, Splice,
+    MacroDef, MacroCall, Quote, Splice, Reflect,
     set_pos,
 )
 from interp.lexer import Token, KEYWORDS
@@ -469,7 +469,7 @@ class Parser:
                 self._cur())
 
     def _parse_macro_def(self):
-        """Parse `macro NAME(params) \u2192 syntax:` and its body.
+        """Parse `macro NAME(params) → syntax:` and its body.
 
         A macro is written as a function is, because it is one: what
         differs is when it runs and what it is handed, not how it is
@@ -479,14 +479,40 @@ class Parser:
         func = self._parse_function_def(False, keyword="MACRO")
         return self._set_pos(MacroDef(func.name, func), macro_tok)
 
+    def _parse_reflect(self):
+        """Parse `^^name` -- what one name refers to.
+
+        An operator glyph names the operation it performs, and a name,
+        dotted as deeply as it is written, names what it reads.  What
+        follows is a reference and not an expression: there is nothing
+        to work out, only something to point at.
+        """
+        caret = self._eat("OP", "^^")
+        if self._check("OP"):
+            op_tok = self._eat("OP")
+            return self._set_pos(
+                Reflect(self._set_pos(OperatorRef(op_tok.value), op_tok)),
+                caret)
+        if not self._check("IDENT"):
+            raise ParseError(
+                "^^ is written in front of a name or an operator, which is "
+                "what it refers to", self._cur())
+        name_tok = self._eat("IDENT")
+        tree = self._set_pos(VarRef(name_tok.value), name_tok)
+        while self._check("PUNCT") and self._cur().value == ".":
+            dot = self._cur()
+            self.pos += 1
+            tree = self._set_pos(GetAttr(tree, self._eat_member_name()), dot)
+        return self._set_pos(Reflect(tree), caret)
+
     def _parse_quote(self):
-        """Parse `\u27ea \u2026 \u27eb` -- a piece of program held rather than run.
+        """Parse `⟪ … ⟫` -- a piece of program held rather than run.
 
         Written on one line it holds an expression; written with its
         contents indented under the opening bracket it holds
         statements, which is what a macro that writes a block answers.
         """
-        open_tok = self._eat("PUNCT", "\u27ea")
+        open_tok = self._eat("PUNCT", "⟪")
         saved = self._in_quote
         self._in_quote = True
         try:
@@ -500,12 +526,12 @@ class Parser:
                     body.append(self._parse_statement())
                 self._try_eat("DEDENT")
                 self._skip_nl()
-                self._eat("PUNCT", "\u27eb")
+                self._eat("PUNCT", "⟫")
                 return self._set_pos(Quote(body, is_block=True), open_tok)
             tree = self._parse_or_expr()
         finally:
             self._in_quote = saved
-        self._eat("PUNCT", "\u27eb")
+        self._eat("PUNCT", "⟫")
         return self._set_pos(Quote(tree), open_tok)
 
     def _parse_function_def(self, is_start, is_test=False, test_refs=None,
@@ -2537,16 +2563,20 @@ class Parser:
                 raise ParseError("static_assert_eq requires exactly 2 arguments", tok)
             return self._set_pos(StaticAssertEq(args[0], args[1]), tok)
 
-        # \u27ea \u2026 \u27eb -- a piece of program held rather than run.
-        if tok.type == "PUNCT" and tok.value == "\u27ea":
+        # ⟪ … ⟫ -- a piece of program held rather than run.
+        if tok.type == "PUNCT" and tok.value == "⟪":
             return self._parse_postfix(self._parse_quote())
+
+        # ^^name -- what a name refers to.
+        if tok.type == "OP" and tok.value == "^^":
+            return self._parse_reflect()
 
         # $e inside one -- put what e answers into the tree here.
         if tok.type == "PUNCT" and tok.value == "$":
             if not self._in_quote:
                 raise ParseError(
                     "$ puts a value into a piece of program held between "
-                    "\u27ea and \u27eb, and there is none here", tok)
+                    "⟪ and ⟫, and there is none here", tok)
             self.pos += 1
             saved = self._in_quote
             self._in_quote = False
@@ -2567,19 +2597,19 @@ class Parser:
             self.pos += 1
             name = tok.value
 
-            # name\u27e6\u2026\u27e7 -- a macro, which is not a call: what is written
+            # name⟦…⟧ -- a macro, which is not a call: what is written
             # between the brackets is handed over as it is written.
-            if self._check("PUNCT") and self._cur().value == "\u27e6":
+            if self._check("PUNCT") and self._cur().value == "⟦":
                 self.pos += 1
                 args = []
                 self._skip_nl()
-                if not (self._check("PUNCT") and self._cur().value == "\u27e7"):
+                if not (self._check("PUNCT") and self._cur().value == "⟧"):
                     args.append(self._parse_or_expr())
                     while self._try_eat("PUNCT", ","):
                         self._skip_nl()
                         args.append(self._parse_or_expr())
                 self._skip_nl()
-                self._eat("PUNCT", "\u27e7")
+                self._eat("PUNCT", "⟧")
                 return self._set_pos(MacroCall(name, args), tok)
 
             # Check for function call: name(...)

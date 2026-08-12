@@ -97,6 +97,8 @@ AT_KEYWORDS: dict[str, str] = {
 # Double-character operators that must be checked before single ones.
 DOUBLE_OPS = {
     "==", "!=", "<=", ">=", "->", "<-", "<<", ">>", "??",
+    # ^^name is what a name refers to, as C++26 writes it.
+    "^^",
 }
 
 # Multi-character ASCII operators normalized to their Unicode equivalents.
@@ -662,7 +664,16 @@ def process_indentation(tokens: list[Token]) -> list[Token]:
             if result[k].type not in ("NEWLINE", "INDENT", "DEDENT"):
                 prev = result[k]
                 break
-        if prev and (
+        # An operator right after ^^ is a name rather than an operation,
+        # so a line ending in one is finished rather than continued.
+        before = None
+        for k in range(len(result) - 3, -1, -1):
+            if result[k].type not in ("NEWLINE", "INDENT", "DEDENT"):
+                before = result[k]
+                break
+        names_an_operator = (before is not None and before.type == "OP"
+                             and before.value == "^^")
+        if prev and not names_an_operator and (
             (prev.type == "OP" and prev.value in _CONTINUATION_OPS)
             or prev.type in ("AND", "OR")
             or (prev.type == "PUNCT" and prev.value == "=")
