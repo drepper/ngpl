@@ -1,0 +1,11 @@
+// A comparison handed an array answers one for each of what it holds,
+// so this function's body hands back bool[] where its signature says
+// bool.  The parameter's declared type is what settles it, so it is
+// settled before anything runs and reported whether or not the
+// function is ever called — nothing here calls it.
+fn g3(x : i32[]) → bool:
+    x > 3
+
+@start
+fn main():
+    std.println("not reached")

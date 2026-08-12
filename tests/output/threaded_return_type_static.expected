@@ -1,0 +1,7 @@
+error: in g3: return type is bool, which is not an array type, but the body hands back an array: an operator handed one answers one for each of what it holds, so this is 'bool[]'
+  --> tests/output/threaded_return_type_static.ngpl:7:5
+    |
+  7 |     x > 3
+    |     ^^^^^
+  8 | 
+    |

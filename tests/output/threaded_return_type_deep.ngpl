@@ -1,0 +1,8 @@
+// The same where the parameter is a matrix: what comes back is one
+// answer for each of what it holds, at the depth it holds them.
+fn raised(m : i32[2, 3]) → i32:
+    m + 1
+
+@start
+fn main():
+    std.println("not reached")

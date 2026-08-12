@@ -1,0 +1,7 @@
+error: in raised: return type is i32, which is not an array type, but the body hands back an array: an operator handed one answers one for each of what it holds, so this is 'i32[,]'
+  --> tests/output/threaded_return_type_deep.ngpl:4:5
+    |
+  4 |     m + 1
+    |     ^^^^^
+  5 | 
+    |

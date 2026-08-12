@@ -1106,3 +1106,20 @@ Macros and Reflection
 
 [ ] ¨ over a hash or a set, which needs an answer to what a map of a hash is -- its values or
     its pairs -- and belongs with the rest of what those containers do.
+
+[x] refuse at the definition a function whose body threads over an array parameter while its
+    return type names a scalar -- `fn g3(x : i32[]) -> bool: x > 3`, whose body hands back
+    bool[].  A listable operator handed an array answers an array, and the parameter's
+    declared type says it is one, so the two settle the shape without running anything.  The
+    depth is counted through nested operators, ⧺, ⍴, ¨ and both branches of a conditional
+    where they agree; a fold, # and a subscript are left alone, none of them answering an
+    array.  What nothing says about -- a call to another function, a name that is not a
+    parameter, a generic -- is left to the check that meets the value itself.  Impl methods
+    are checked too, which they were not before: _static_return_check was never run on one.
+
+[ ] the same check through a struct field: `self.v > 3` where v is declared i32[] is the same
+    mistake and is not caught, the field's type not being looked up.  It wants the struct
+    type in hand where the check runs, which the impl path has.
+
+[ ] the same check on a lambda.  _static_return_check reads a function's own returns and
+    stops at a lambda, so a lambda that promises a scalar and threads is left to run.
