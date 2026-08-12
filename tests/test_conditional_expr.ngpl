@@ -1,0 +1,198 @@
+// Tests for the conditional expression, `a if c else b`.
+//
+// The value is a where c holds and b where it does not.  It is an
+// expression, so it stands wherever a value is wanted; and only the
+// branch taken is read, which is what makes it usable as a guard.
+
+// ---------------------------------------------------------------------
+// Both branches
+// ---------------------------------------------------------------------
+
+fn absolute(x : i64) → i64:
+    x if x > 0 else ⁻x
+
+@test
+fn test_the_value_is_the_branch_the_condition_chooses():
+    assert_eq(absolute(5), 5)
+    assert_eq(absolute(⁻5), 5)
+    assert_eq(absolute(0), 0)
+
+@test
+fn test_either_branch_may_be_any_expression():
+    let a : i64 = 3
+    let b : i64 = 4
+    assert_eq(a + b if true else a × b, 7)
+    assert_eq(a + b if false else a × b, 12)
+
+// ---------------------------------------------------------------------
+// Only the branch taken is read
+// ---------------------------------------------------------------------
+
+// The other side is an index no array of two has.  Reading it would
+// stop the program, so the test passing is the whole claim.
+@test
+fn test_the_branch_not_taken_is_not_read():
+    let v : i64[] = [7, 8]
+    assert_eq(v[0] if true else v[9], 7)
+    assert_eq(v[9] if false else v[1], 8)
+
+// Which is what lets a conditional stand in front of the thing it
+// guards against.
+@test
+fn test_a_conditional_guards_what_follows_it():
+    let v : i64[] = [1, 2, 3]
+    let n : i64 ¤ptrdiff = 5¤ptrdiff
+    assert_eq(0 if n >= #v else v[n], 0)
+
+// ---------------------------------------------------------------------
+// How it groups
+// ---------------------------------------------------------------------
+
+// It binds loosest of everything, so the arithmetic on either side is
+// gathered up before the choice is made.
+@test
+fn test_it_binds_looser_than_the_arithmetic():
+    assert_eq(1 + 2 if false else 3, 3)
+    assert_eq(1 + 2 if true else 3, 3)
+    assert_eq(2 × 3 if true else 0, 6)
+
+// A chain groups to the right, so the second condition is asked only
+// where the first does not hold.
+@test
+fn test_a_chain_groups_to_the_right():
+    let n : i64 = 2
+    assert_eq("one" if n = 1 else "two" if n = 2 else "many", "two")
+    assert_eq("one" if n = 1 else ("two" if n = 2 else "many"), "two")
+
+@test
+fn test_a_chain_reaches_its_last_branch():
+    let n : i64 = 7
+    assert_eq("one" if n = 1 else "two" if n = 2 else "many", "many")
+
+// Written inside an operator it needs brackets, since the conditional
+// would otherwise take the whole of what surrounds it.
+@test
+fn test_brackets_put_one_inside_an_operator():
+    assert_eq(1 + (2 if true else 30), 3)
+    assert_eq(1 + (2 if false else 30), 31)
+
+// ---------------------------------------------------------------------
+// Everywhere a value is wanted
+// ---------------------------------------------------------------------
+
+fn twice(n : i64) → i64:
+    n × 2
+
+@test
+fn test_as_an_argument():
+    assert_eq(twice(4 if true else 5), 8)
+
+@test
+fn test_in_an_array():
+    let v : i64[] = [1 if true else 9, 2 if false else 9]
+    assert_eq(v[0], 1)
+    assert_eq(v[1], 9)
+
+@test
+fn test_as_a_binding_with_a_type_stated():
+    let n : i64 = 4 if true else 5
+    assert_eq(n, 4)
+
+@test
+fn test_as_what_an_assignment_stores():
+    let n : mut i64 = 0
+    n ← 4 if true else 5
+    assert_eq(n, 4)
+
+fn signum(x : i64) → i64:
+    return 0 if x = 0 else (1 if x > 0 else ⁻1)
+
+@test
+fn test_as_what_a_return_hands_back():
+    assert_eq(signum(9), 1)
+    assert_eq(signum(⁻9), ⁻1)
+    assert_eq(signum(0), 0)
+
+@test
+fn test_as_what_a_loop_walks():
+    let a : i64[] = [1, 2]
+    let b : i64[] = [10, 20, 30]
+    let total : mut i64 = 0
+    foreach x := a if false else b:
+        total ← total + x
+    assert_eq(total, 60)
+
+// ---------------------------------------------------------------------
+// What the condition may be
+// ---------------------------------------------------------------------
+
+// The same truth an if statement asks of its condition: a number is
+// true where it is not zero, and an optional where it holds something.
+@test
+fn test_a_number_as_the_condition():
+    let n : i64 = 3
+    assert_eq("some" if n else "none", "some")
+    let z : i64 = 0
+    assert_eq("some" if z else "none", "none")
+
+@test
+fn test_an_optional_as_the_condition():
+    let v : i64[] = [4, 5]
+    assert_eq("found" if v ⍳ 5 else "missing", "found")
+    assert_eq("found" if v ⍳ 6 else "missing", "missing")
+
+// The two branches are not required to be alike, and the value is
+// whichever one the condition chose.
+@test
+fn test_the_branches_need_not_agree():
+    assert_eq(@typeof(1i64 if true else "x"), i64)
+    assert_eq(@typeof(1i64 if false else "x"), str)
+
+// ---------------------------------------------------------------------
+// An if statement is still an if statement
+// ---------------------------------------------------------------------
+
+// An expression that ends a line is finished, so the if on the line
+// below it opens a statement rather than going on with the expression.
+@test
+fn test_an_if_statement_after_an_expression_statement():
+    let seen : mut i64 = 0
+    _ ← twice(1)
+    if true:
+        seen ← 1
+    assert_eq(seen, 1)
+
+@test
+fn test_an_if_statement_after_a_blank_line():
+    let seen : mut i64 = 0
+    _ ← twice(1)
+
+    if true:
+        seen ← 2
+    assert_eq(seen, 2)
+
+// The same where the expression is the last thing in a block.
+@test
+fn test_an_if_statement_after_a_nested_block():
+    let seen : mut i64 = 0
+    if true:
+        _ ← twice(1)
+    if true:
+        seen ← 3
+    assert_eq(seen, 3)
+
+// And an if statement whose condition is itself a conditional, which
+// is unusual to write and unambiguous to read.
+@test
+fn test_a_statement_condition_that_is_a_conditional():
+    let seen : mut i64 = 0
+    if true if false else false:
+        seen ← 1
+    else:
+        seen ← 2
+    assert_eq(seen, 2)
+
+@start
+@impure
+fn main():
+    std.println("conditional expression tests passed")

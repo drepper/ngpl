@@ -26,6 +26,7 @@ from interp.ast import (
     UnitOfExpr, UnitRefExpr,
     StructDef, ImplBlock, StructLit,
     MatchStmt, MatchArm, ExpErr,
+    IfExpr,
     MacroRulesDef, MacroRule, MetaVar, MacroFuncDef,
     MacroCall, Quote, Splice, Reflect,
     set_pos,
@@ -557,9 +558,9 @@ class Parser:
                 body = self._parse_quoted_block()
                 self._eat("PUNCT", "⟫")
                 return body
-            items = [self._parse_or_expr()]
+            items = [self._parse_expr()]
             while self._try_eat("PUNCT", ","):
-                items.append(self._parse_or_expr())
+                items.append(self._parse_expr())
         finally:
             self._in_quote = saved
         self._eat("PUNCT", "⟫")
@@ -640,7 +641,7 @@ class Parser:
                 self._skip_nl()
                 self._eat("PUNCT", "⟫")
                 return self._set_pos(Quote(body, is_block=True), open_tok)
-            tree = self._parse_or_expr()
+            tree = self._parse_expr()
         finally:
             self._in_quote = saved
         self._eat("PUNCT", "⟫")
@@ -939,7 +940,7 @@ class Parser:
             name = self._eat("IDENT").value
             self._eat("PUNCT", ":")
             self._skip_nl()
-        condition = self._parse_or_expr()
+        condition = self._parse_expr()
         self._skip_nl()
         self._eat("PUNCT", ")")
         self._try_eat("NEWLINE")
@@ -1249,7 +1250,7 @@ class Parser:
             if not (self._check("PUNCT") and self._cur().value == "="):
                 type_annotation = self._parse_type()
         self._eat("PUNCT", "=")
-        init_expr = self._parse_or_expr()
+        init_expr = self._parse_expr()
         self._try_eat("PUNCT", ";")
         return self._set_pos(
             DestructureDef(names, type_annotation, init_expr, is_const),
@@ -1311,14 +1312,14 @@ class Parser:
                         def extent():
                             if self._check("PUNCT") and self._cur().value in (",", "]"):
                                 return None
-                            return self._parse_or_expr()
+                            return self._parse_expr()
 
                         dims = [extent()]
                         while self._try_eat("PUNCT", ","):
                             dims.append(extent())
                         self._eat("PUNCT", "]")
                         self._eat("PUNCT", "=")
-                        init_expr = self._parse_or_expr()
+                        init_expr = self._parse_expr()
                         self._try_eat("PUNCT", ";")
                         return self._set_pos(VarDef(name_tok.value, type_annotation,
                                       ArrayAlloc(type_annotation, dims[0], init_expr,
@@ -1343,7 +1344,7 @@ class Parser:
                     self._cur())
             self._eat("PUNCT", ":")
         self._eat("PUNCT", "=")
-        init_expr = self._parse_or_expr()
+        init_expr = self._parse_expr()
         self._try_eat("PUNCT", ";")
 
         return self._set_pos(VarDef(name_tok.value, type_annotation, init_expr, is_const,
@@ -1643,20 +1644,20 @@ class Parser:
                 saved_pos += 1
 
             if found_assign_op:
-                lhs = self._parse_or_expr()
+                lhs = self._parse_expr()
                 self._eat("OP", "←")
-                rhs = self._parse_or_expr()
+                rhs = self._parse_expr()
                 self._try_eat("PUNCT", ";")
                 return ("assign_stmt", lhs, rhs)
 
-        expr = self._parse_or_expr()
+        expr = self._parse_expr()
         self._try_eat("PUNCT", ";")
         return ExprStmt(expr)
 
     def _parse_if_stmt(self, hint: str | None = None):
         """Parse: if expr block (elif expr block)* (else block)?"""
         self._eat("IF")
-        cond = self._parse_or_expr()
+        cond = self._parse_expr()
         cons_body = self._parse_block()
 
         # Collected in source order, then nested so that the first
@@ -1668,7 +1669,7 @@ class Parser:
             self._skip_nl()
             if self._check("ELIF"):
                 self._eat("ELIF")
-                elif_cond = self._parse_or_expr()
+                elif_cond = self._parse_expr()
                 clauses.append((elif_cond, self._parse_block()))
             elif self._check("ELSE"):
                 self._eat("ELSE")
@@ -1727,7 +1728,7 @@ class Parser:
                     self.pos += 1
                     var_type += "?"
             self._eat("PUNCT", "=")
-        cond = self._parse_or_expr()
+        cond = self._parse_expr()
         body = self._parse_block()
         return WhileStmt(cond, body, var_name, var_type, var_is_mut)
 
@@ -1819,9 +1820,9 @@ class Parser:
         if self._check("OP") and self._cur().value == "&":
             amp_tok = self._eat("OP", "&")
             is_mut = self._try_eat("MUT") is not None
-            return self._set_pos(BorrowExpr(self._parse_or_expr(), is_mut),
+            return self._set_pos(BorrowExpr(self._parse_expr(), is_mut),
                                  amp_tok)
-        return self._parse_or_expr()
+        return self._parse_expr()
 
     def _parse_match_stmt(self):
         """Parse: match expr: INDENT arm+ DEDENT
@@ -1830,7 +1831,7 @@ class Parser:
         on the same line or an indented block, as elsewhere.
         """
         kw_tok = self._eat("MATCH")
-        subject = self._parse_or_expr()
+        subject = self._parse_expr()
         self._eat("PUNCT", ":")
         while self._try_eat("NEWLINE"):
             pass
@@ -1918,7 +1919,7 @@ class Parser:
         value = None
         if not self._check("EOF", "NEWLINE", "DEDENT") and \
            not (self._cur().type == "PUNCT" and self._cur().value == "}"):
-            value = self._parse_or_expr()
+            value = self._parse_expr()
         self._try_eat("PUNCT", ";")
         return ReturnStmt(value)
 
@@ -2057,9 +2058,9 @@ class Parser:
                 self._eat("DEDENT")
                 body = stmts
             else:
-                body = self._parse_or_expr()
+                body = self._parse_expr()
         else:
-            body = self._parse_or_expr()
+            body = self._parse_expr()
         return self._set_pos(
             LambdaExpr(params, captures, ret_type, body), lambda_tok)
 
@@ -2071,6 +2072,42 @@ class Parser:
         """Skip any NEWLINE tokens (for multi-line expressions)."""
         while self._check("NEWLINE"):
             self.pos += 1
+
+    def _parse_expr(self):
+        """expr → or_expr ['if' or_expr 'else' expr]
+
+        The conditional binds loosest of everything, so `1 + 2 if c
+        else 3` chooses between `1 + 2` and `3`.  What follows `else`
+        is another expression rather than an operand, so a chain of
+        them groups to the right: `a if b else c if d else e` is
+        `a if b else (c if d else e)`.
+        """
+        left = self._parse_or_expr()
+        if not self._at_conditional_if():
+            return left
+        if_tok = self._eat("IF")
+        cond = self._parse_or_expr()
+        if not self._check("ELSE"):
+            raise ParseError(
+                "a conditional expression says what the value is either "
+                "way, so else and a second value follow", self._cur())
+        self._eat("ELSE")
+        return self._set_pos(
+            IfExpr(cond, left, self._parse_expr()), if_tok)
+
+    def _at_conditional_if(self) -> bool:
+        """Whether an `if` here goes on with the expression.
+
+        An expression that ends a line leaves the parser past the
+        newline, since the levels below skip newlines looking for an
+        operator and do not put them back.  So the `if` of the next
+        statement would be found sitting here, and what tells the two
+        apart is that one has a newline in front of it and the other
+        does not.  Inside brackets there are no newlines at all, which
+        is what lets a conditional be written across lines there.
+        """
+        return (self._check("IF") and self.pos > 0
+                and self.tokens[self.pos - 1].type != "NEWLINE")
 
     def _parse_or_expr(self):
         """or_expr → and_expr ('or' and_expr | '??' and_expr)*"""
@@ -2436,21 +2473,21 @@ class Parser:
         if self._check("WRAP"):
             self._eat("WRAP")
             self._eat("PUNCT", "(")
-            expr = self._parse_or_expr()
+            expr = self._parse_expr()
             self._skip_nl()
             self._eat("PUNCT", ")")
             return WrapExpr(expr)
         if self._check("ENUMERATE"):
             self._eat("ENUMERATE")
             self._eat("PUNCT", "(")
-            expr = self._parse_or_expr()
+            expr = self._parse_expr()
             self._skip_nl()
             self._eat("PUNCT", ")")
             return EnumerateExpr(expr)
         if self._check("TYPEOF"):
             self._eat("TYPEOF")
             self._eat("PUNCT", "(")
-            expr = self._parse_or_expr()
+            expr = self._parse_expr()
             self._skip_nl()
             self._eat("PUNCT", ")")
             node = TypeOfExpr(expr)
@@ -2466,7 +2503,7 @@ class Parser:
         if self._check("SIZEOF"):
             self._eat("SIZEOF")
             self._eat("PUNCT", "(")
-            expr = self._parse_or_expr()
+            expr = self._parse_expr()
             self._skip_nl()
             self._eat("PUNCT", ")")
             node = SizeOfExpr(expr)
@@ -2475,14 +2512,14 @@ class Parser:
             kind = "min" if self._check("MIN") else "max"
             self.pos += 1
             self._eat("PUNCT", "(")
-            expr = self._parse_or_expr()
+            expr = self._parse_expr()
             self._skip_nl()
             self._eat("PUNCT", ")")
             return self._parse_postfix(LimitExpr(kind, expr))
         if self._check("DROPUNIT"):
             self._eat("DROPUNIT")
             self._eat("PUNCT", "(")
-            expr = self._parse_or_expr()
+            expr = self._parse_expr()
             self._skip_nl()
             self._eat("PUNCT", ")")
             node = DropUnitExpr(expr)
@@ -2490,7 +2527,7 @@ class Parser:
         if self._check("UNITOF"):
             self._eat("UNITOF")
             self._eat("PUNCT", "(")
-            expr = self._parse_or_expr()
+            expr = self._parse_expr()
             self._skip_nl()
             self._eat("PUNCT", ")")
             node = UnitOfExpr(expr)
@@ -2562,7 +2599,7 @@ class Parser:
         if tok.type == "NOTEXISTS":
             self.pos += 1
             self._eat("PUNCT", "(")
-            value = self._parse_or_expr()
+            value = self._parse_expr()
             self._eat("PUNCT", ")")
             return self._set_pos(ExpErr(value), tok)
 
@@ -2570,7 +2607,7 @@ class Parser:
         if tok.type == "SOME":
             self.pos += 1
             self._eat("PUNCT", "(")
-            value = self._parse_or_expr()
+            value = self._parse_expr()
             self._eat("PUNCT", ")")
             return OptSome(value)
 
@@ -2586,14 +2623,14 @@ class Parser:
                 end = (close.end_col if close.line == tok.line
                        and close.end_col is not None else None)
                 return set_pos(EmptyCollectionLit(), tok.line, tok.col, end)
-            first = self._parse_or_expr()
+            first = self._parse_expr()
             self._skip_nl()
             is_hash = self._check("PUNCT") and self._cur().value == ":"
             pairs, elements = [], []
             if is_hash:
                 self._eat("PUNCT", ":")
                 self._skip_nl()
-                pairs.append((first, self._parse_or_expr()))
+                pairs.append((first, self._parse_expr()))
             else:
                 elements.append(first)
             self._skip_nl()
@@ -2602,12 +2639,12 @@ class Parser:
                 if self._check("PUNCT") and \
                         self._cur().value == "\N{RIGHT DOUBLE PARENTHESIS}":
                     break
-                key = self._parse_or_expr()
+                key = self._parse_expr()
                 self._skip_nl()
                 if is_hash:
                     self._eat("PUNCT", ":")
                     self._skip_nl()
-                    pairs.append((key, self._parse_or_expr()))
+                    pairs.append((key, self._parse_expr()))
                 else:
                     elements.append(key)
                 self._skip_nl()
@@ -2625,7 +2662,7 @@ class Parser:
                 self._skip_nl()
                 if self._check("PUNCT") and self._cur().value == "]":
                     break
-                expr = self._parse_or_expr()
+                expr = self._parse_expr()
                 elements.append(expr)
                 self._skip_nl()
                 if not self._try_eat("PUNCT", ","):
@@ -2642,7 +2679,7 @@ class Parser:
             self.pos += 1  # eat "new"
             type_tok = self._eat("IDENT")
             self._eat("PUNCT", "[")
-            size_expr = self._parse_or_expr()
+            size_expr = self._parse_expr()
             self._skip_nl()
             self._eat("PUNCT", "]")
             return ArrayAlloc(type_tok.value, size_expr)
@@ -2650,14 +2687,14 @@ class Parser:
         # Parenthesized expression or tuple literal.
         if tok.type == "PUNCT" and tok.value == "(":
             self.pos += 1
-            first = self._parse_or_expr()
+            first = self._parse_expr()
             if self._check("PUNCT") and self._cur().value == ",":
                 elements = [first]
                 while self._try_eat("PUNCT", ","):
                     self._skip_nl()
                     if self._check("PUNCT") and self._cur().value == ")":
                         break
-                    elements.append(self._parse_or_expr())
+                    elements.append(self._parse_expr())
                 self._skip_nl()
                 self._eat("PUNCT", ")")
                 return TupleLit(elements)
@@ -2702,7 +2739,7 @@ class Parser:
             try:
                 if self._check("PUNCT") and self._cur().value == "(":
                     self._eat("PUNCT", "(")
-                    inner = self._parse_or_expr()
+                    inner = self._parse_expr()
                     self._eat("PUNCT", ")")
                 else:
                     inner = self._set_pos(VarRef(self._eat("IDENT").value),
@@ -2723,10 +2760,10 @@ class Parser:
                 args = []
                 self._skip_nl()
                 if not (self._check("PUNCT") and self._cur().value == "⟧"):
-                    args.append(self._parse_or_expr())
+                    args.append(self._parse_expr())
                     while self._try_eat("PUNCT", ","):
                         self._skip_nl()
-                        args.append(self._parse_or_expr())
+                        args.append(self._parse_expr())
                 self._skip_nl()
                 self._eat("PUNCT", "⟧")
                 return self._set_pos(MacroCall(name, args), tok)
@@ -2801,7 +2838,7 @@ class Parser:
                 break
             field_name_tok = self._eat("IDENT")
             self._eat("PUNCT", ":")
-            value_expr = self._parse_or_expr()
+            value_expr = self._parse_expr()
             field_inits.append((field_name_tok.value, value_expr))
             while not self._check("EOF") and self._cur().type in ("NEWLINE", "INDENT", "DEDENT"):
                 self.pos += 1
@@ -2824,7 +2861,7 @@ class Parser:
         def entry():
             if self._check("PUNCT") and self._cur().value in (",", "]"):
                 return None
-            return self._parse_or_expr()
+            return self._parse_expr()
 
         idx_expr = entry()
         indices = [idx_expr]
@@ -2910,7 +2947,7 @@ class Parser:
                 name_tok = self._eat("IDENT")
                 arg = self._set_pos(RefExpr(name_tok.value), ref_tok)
             else:
-                arg = self._parse_or_expr()
+                arg = self._parse_expr()
             args.append(arg)
             while self._try_eat("NEWLINE"):
                 pass

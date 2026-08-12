@@ -18,7 +18,8 @@ import re
 
 from interp.ast import (
     IntLit, FloatLit, StrLit, CharLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
-    IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, DestructureDef, ExprStmt,
+    IfStmt, IfExpr, WhileStmt, ReturnStmt, FuncDef, VarDef, DestructureDef,
+    ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
     DropUnitExpr,
@@ -543,6 +544,11 @@ def _is_const_expr(node) -> bool:
         return _is_const_expr(node.left) and _is_const_expr(node.right)
     if isinstance(node, UnaryOp):
         return _is_const_expr(node.operand)
+    # A choice between two constants, made by a constant, is one too --
+    # which is what lets @typeof answer for one.
+    if isinstance(node, IfExpr):
+        return (_is_const_expr(node.cond) and _is_const_expr(node.then_expr)
+                and _is_const_expr(node.else_expr))
     if isinstance(node, ArrayLit):
         return all(_is_const_expr(e) for e in node.elements)
     if isinstance(node, TupleLit):
@@ -3649,6 +3655,14 @@ class Evaluator:
 
         if isinstance(node, LimitExpr):
             return self._eval_limit(node)
+
+        if isinstance(node, IfExpr):
+            # Only the branch taken is read, which is what makes a
+            # conditional usable as a guard: the other side may be
+            # something that could not be run.
+            if to_bool(self.eval_expr(node.cond)):
+                return self.eval_expr(node.then_expr)
+            return self.eval_expr(node.else_expr)
 
         if isinstance(node, Quote):
             return self._eval_quote(node)

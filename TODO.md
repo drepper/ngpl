@@ -1083,3 +1083,15 @@ Macros and Reflection
 [ ] the second half of hygiene: a name a macro's template reads should resolve where the
     macro was written rather than where it was invoked.  With one global namespace the two
     are the same place, so the question waits on modules.
+
+[x] a conditional expression, `a if c else b`, in Python's order.  The value is the first
+    where the condition holds and the third where it does not, and only the branch taken is
+    read -- which is what lets one stand in front of the thing it guards against.  It binds
+    looser than every operator, a chain groups to the right, and else is required, an
+    expression that produced no value being no expression.  What tells it from an if
+    statement is the line break: an if goes on with an expression only where the token in
+    front of it is not one.
+
+[ ] check that the two branches of a conditional expression agree in type.  They need not
+    today, and the value is whichever branch ran.  Closing it needs a pass that knows what
+    type an arbitrary expression has, which is worth having for more than this.

@@ -53,3 +53,6 @@ what it is.
 - [Macros and Reflection](design/macros/README.md) — `f⟦x⟧`, why
   expansion cannot happen before parsing, and two designs built on
   branches of their own
+- [Choosing a Value](design/conditional-expression/README.md) —
+  `a if c else b`, why the branch not taken is not read, and the line
+  break that tells it from an `if` statement
