@@ -1039,15 +1039,22 @@ Macros and Reflection
     because its grammar is not context-free; this one is, and an invocation is marked, so
     parsing first is available.
 
-    [x] macros-rules: a macro is a list of pattern → template rules, as syntax-rules and
-        macro_rules! are.  Reads as its own specification and needs no evaluator at
+    [x] macros-rules: a macro is a list of pattern → template rules under @macro_rules, as
+        syntax-rules and macro_rules! are.  Reads as its own specification and needs no evaluator at
         expansion time.  Cannot say "π is among the factors", only "π is written here", so
         2×π×3 needs a rule per shape and no finite list covers a product.
-    [x] macros-proc: a macro is a function from syntax to syntax, as defmacro is, with
+    [x] macros-proc: a macro is a function from syntax to syntax under macro, as defmacro
+        is, with
         kind(), name() and factors() to take a piece apart and ⟪ ⟫ with $ to build one.
         factors() flattens a product however the parser nested it, which is what the
         example needs.  Costs an evaluator at expansion time and cannot be read without
         being run.
+
+    The two are headed by different keywords so that both can be present at once, which is
+    what the end state is: @macro_rules for the rules form and macro for the function form,
+    following Rust, where macro_rules! and a procedural macro are the same two halves.
+    Neither word is reserved -- macro_rules is a keyword only after an @, and macro only
+    where a definition may start.
 
     Both are wanted in the end, as they are in Scheme and in Rust.  Recommendation: merge
     the rules form first, the function form after, with the rules form as sugar.
