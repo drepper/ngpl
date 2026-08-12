@@ -130,12 +130,12 @@ fn test_the_macro_temporary_does_not_capture():
 
 // The head of a rules macro is an annotation, so macro_rules is a
 // keyword only after an @ and the word is still a name a program may
-// use.
+// use.  A definition keyword would have taken it, which is why the
+// longer of the two names is the one written with an @.
 @test
 fn test_the_word_is_still_a_name():
     let macro_rules : i64 = 2
-    let macro : i64 = 3
-    assert_eq(macro_rules × macro, 6)
+    assert_eq(macro_rules × 3, 6)
 
 @start
 @impure
