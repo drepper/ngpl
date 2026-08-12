@@ -1,0 +1,8 @@
+// A rule that rewrites to something it matches never settles.
+@macro_rules forever:
+    ⟪$x⟫ → ⟪forever⟦$x⟧⟫
+
+@start
+@impure
+fn main():
+    std.println("{}", forever⟦1i64⟧)

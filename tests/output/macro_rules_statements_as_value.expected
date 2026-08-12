@@ -1,0 +1,6 @@
+error: note writes statements, so it is written on a line of its own rather than where a value is wanted
+  --> tests/output/macro_rules_statements_as_value.ngpl:10:23
+    |
+ 10 |     std.println("{}", note⟦1i64⟧)
+    |                       ^^^^
+    |

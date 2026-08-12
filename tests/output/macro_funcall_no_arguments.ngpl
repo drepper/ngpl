@@ -1,0 +1,9 @@
+// An operator applied to nothing has nothing to be.
+macro nothing_at_all(e : syntax) → syntax:
+    let none_of_them : syntax[] = []
+    ⟪$(std.syntax.funcall(※×, none_of_them))⟫
+
+@start
+@impure
+fn main():
+    std.println("{}", nothing_at_all⟦1i64⟧)

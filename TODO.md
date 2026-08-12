@@ -1018,7 +1018,7 @@ in the compiler.
 Macros and Reflection
 ---------------------
 
-[~] Add a macro system with hygenic macros.  The macros of the Rust language can server as
+[x] Add a macro system with hygenic macros.  The macros of the Rust language can server as
     inspiration or more.  The funcitionality must allow to
     - retrieve the parse tree for the parameter(s) of the macro
     - deconstruct the tree in comptime code
@@ -1027,8 +1027,8 @@ Macros and Reflection
     A set of operations which allow implementing both the C++26 as well as the Rust
     functionality is required.
 
-    Explored and implemented on two branches, neither merged; see design/macros/README.md
-    and chapter 15 of the spec.  Shared by both: invocation as f⟦x⟧, so the mark is around
+    Explored on two branches and both merged; see design/macros/README.md and chapter 15
+    of the spec.  Shared by both: invocation as f⟦x⟧, so the mark is around
     the arguments (which are what is unusual) rather than on the name; ⟪ ⟫ quoting a piece
     of the program and $ marking a hole in one; expansion over the parse tree, after parsing
     and before every check; hygiene by renaming what a macro binds, with what arrives from
@@ -1039,26 +1039,32 @@ Macros and Reflection
     because its grammar is not context-free; this one is, and an invocation is marked, so
     parsing first is available.
 
-    [x] macros-rules: a macro is a list of pattern → template rules under @macro_rules, as
-        syntax-rules and macro_rules! are.  Reads as its own specification and needs no evaluator at
+    [x] @macro_rules: a macro is a list of pattern → template rules, as syntax-rules and
+        macro_rules! are.  Reads as its own specification and needs no evaluator at
         expansion time.  Cannot say "π is among the factors", only "π is written here", so
         2×π×3 needs a rule per shape and no finite list covers a product.
-    [x] macros-proc: a macro is a function from syntax to syntax under macro, as defmacro
-        is, with
-        kind(), name() and factors() to take a piece apart and ⟪ ⟫ with $ to build one.
-        factors() flattens a product however the parser nested it, which is what the
-        example needs.  Costs an evaluator at expansion time and cannot be read without
-        being run.
+    [x] macro: a macro is a function from syntax to syntax, as defmacro is, with
+        kind(), name(), head() and arguments() to take a piece apart, ※ for what a name
+        refers to, and ⟪ ⟫ with $ to build one.  Nothing about any operator is built in: a
+        macro asks what an expression applies and walks into what it applies it to, which is
+        what the example needs and what a list of rules cannot say.  Costs an evaluator at
+        expansion time and cannot be read without being run.
 
-    The two are headed by different keywords so that both can be present at once, which is
-    what the end state is: @macro_rules for the rules form and macro for the function form,
+    The two are headed by different keywords so that both can be present at once:
+    @macro_rules for the rules form and macro for the function form,
     following Rust, where macro_rules! and a procedural macro are the same two halves.
     macro_rules is a keyword only after an @, so the word stays available as a name; macro
     is a reserved word as fn and struct are, which is what heading a definition costs and is
     why the longer name is the one written with an @.
 
-    Both are wanted in the end, as they are in Scheme and in Rust.  Recommendation: merge
-    the rules form first, the function form after, with the rules form as sugar.
+    Both are wanted, as they are in Scheme and in Rust, and both are in.  What each is for:
+    the rules form for the majority of macros, which are shorthand -- a shape and what it
+    becomes -- and the function form for the minority that have to look at what they were
+    handed, which is the case that makes a macro worth having over a function at all.
+
+    ※name is what a name refers to, which C++26 writes as ^^name.  The caret is an ASCII
+    constraint this language does not have; ※ is what Unicode calls a reference mark.  ⇑ was
+    the other candidate and lost to ↑ already being exponentiation.
 
 [ ] install the program's definitions in two passes -- signatures before expansion, bodies
     after -- so a macro can follow a reference to what a name means.  This is the one item

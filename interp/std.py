@@ -917,6 +917,7 @@ class StdModule:
         self._env = None  # lazy-initialized env submodule
         self._sys = None  # lazy-initialized sys submodule
         self._stdout_file = StdoutFile()
+        self._syntax = None  # lazy-initialized syntax submodule
         self.args = ArgsModule()
 
     @property
@@ -1151,20 +1152,24 @@ class StdModule:
         """sinpi(x) -- the sine of x×π, which is exact at every whole x.
 
         sin(x×π) has to round x×π first, and π is not a number f64
-        holds, so sin(1.0×π) is not zero.  Halving the argument's
-        turn before the sine is taken keeps the whole turns whole.
+        holds, so sin(1.0×π) is not zero.  Taking the turns rather than
+        the radians keeps the whole ones whole.
         """
         from interp.value import FloatValue
 
         x = self._one_float(args, "sinpi")
         whole = _math.floor(x)
-        frac = x - whole
-        # A whole number of half-turns is exactly zero, and the sign
-        # follows whether the turn is odd or even.
-        value = _math.sin(frac * _math.pi)
+        value = _math.sin((x - whole) * _math.pi)
         if int(whole) % 2:
             value = -value
         return FloatValue(0.0 + value, "f64")
+
+    @property
+    def syntax(self):
+        """Lazy-access to the submodule that builds program text."""
+        if self._syntax is None:
+            self._syntax = SyntaxModule()
+        return self._syntax
 
     def bytes(self, args):
         """bytes(str) -- create a byte[] array from a UTF-8 string."""
@@ -1479,6 +1484,74 @@ class StdModule:
             packed |= w[i] << (i * 32)
 
         return mk_int(packed)
+
+
+class SyntaxModule:
+    """Building pieces of the program that no quote can spell.
+
+    A quote writes what is written in it.  What it cannot write is a
+    piece whose shape depends on a value -- an application of however
+    many arguments are left after one is taken out, say -- and that is
+    what this is for.
+    """
+
+    def funcall(self, args):
+        """funcall(head, arguments) -- apply one thing to the others.
+
+        `head` is what to apply, as `※` writes it or as `head()`
+        answers it: an operator, a function name, a method.  What comes
+        back is the piece of the program that applies it.
+
+        An operator handed more than two arguments is applied to them
+        the way writing them out would be, from the left: three
+        arguments to ※\N{MULTIPLICATION SIGN} answer (a \N{MULTIPLICATION SIGN} b) \N{MULTIPLICATION SIGN} c.  That is what
+        makes one call able to put back a product that has lost a
+        factor, whatever it had before.
+        """
+        from interp.ast import BinOp, UnaryOp, FuncCall, MethodCall, \
+            OperatorRef, VarRef, GetAttr
+        from interp.eval import unwrap_optional
+        from interp.value import ArrayValue, ObjectValue, SyntaxValue
+
+        if len(args) != 2:
+            raise TypeError(
+                "funcall(head, arguments) takes exactly 2 arguments")
+        head = unwrap_optional(args[0])
+        held = unwrap_optional(args[1])
+        if not isinstance(head, SyntaxValue) or head.is_block:
+            raise TypeError(
+                "funcall applies a piece of the program, such as ※\N{MULTIPLICATION SIGN} or "
+                "what head() answered")
+        if not (isinstance(held, ObjectValue)
+                and isinstance(held.obj, ArrayValue)):
+            raise TypeError("funcall expects an array of syntax to apply to")
+        pieces = [unwrap_optional(v) for v in held.obj.values()]
+        for piece in pieces:
+            if not isinstance(piece, SyntaxValue) or piece.is_block:
+                raise TypeError(
+                    "funcall applies something to expressions, and one of "
+                    "these is not one")
+        trees = [p.node for p in pieces]
+        applied = head.node
+        if isinstance(applied, OperatorRef):
+            if not trees:
+                raise TypeError(
+                    f"funcall was handed the operator {applied.op} and "
+                    f"nothing to apply it to")
+            if len(trees) == 1:
+                return SyntaxValue(node=UnaryOp(applied.op, trees[0]))
+            made = trees[0]
+            for tree in trees[1:]:
+                made = BinOp(applied.op, made, tree)
+            return SyntaxValue(node=made)
+        if isinstance(applied, VarRef):
+            return SyntaxValue(node=FuncCall(applied.name, trees))
+        if isinstance(applied, GetAttr):
+            return SyntaxValue(node=MethodCall(applied.obj, applied.attr,
+                                               trees))
+        raise TypeError(
+            "funcall applies an operator, a function or a method, and this "
+            "is none of those")
 
 
 class ArenaAllocator:

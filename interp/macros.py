@@ -1,9 +1,15 @@
 """Expanding macros over the parse tree.
 
-A macro is a set of rewrite rules.  Each rule says what the arguments
-of an invocation have to look like and what the invocation is replaced
-by, and both halves are ordinary expression trees with MetaVar standing
-where a hole is written.
+A macro comes in two forms.  One is a list of rewrite rules, each
+saying what the arguments have to look like and what the invocation is
+replaced by.  The other is a function that runs while the program is
+being installed, is handed the parse tree of each thing the invocation
+was written with, and answers the tree that replaces it.
+
+Both are expanded here, and everything but the step that decides what
+one invocation becomes is shared: where expansion happens, what an
+invocation may stand for, and the renaming that keeps a macro's own
+names out of the caller's way.
 
 Expansion runs after parsing and before anything is checked, so what
 the rest of the interpreter sees is a program with no macros left in
@@ -15,32 +21,14 @@ about a name to read the text around it.
 import copy
 
 from interp import ast as _ast
+from interp.value import SyntaxValue
 
 
 # How many times an expansion may produce another one before the
-# interpreter decides the rules do not settle.  A macro that rewrites
-# to itself is the usual way to reach this.
+# interpreter decides the macros do not settle.
 MAX_DEPTH = 64
 
-# Fields that say where a node was written rather than what it is.
-# Two trees are the same shape whatever their positions, so matching
-# passes over these.
 _POSITION_FIELDS = frozenset({"pos", "label_pos", "field_positions"})
-
-
-class _Spliced:
-    """Statements a macro wrote, on their way to the line they replace.
-
-    Kept apart from a plain list so that statements arriving where a
-    value is wanted are refused rather than quietly taken into whatever
-    list they landed in -- an argument list is a list too.
-    """
-
-    __slots__ = ("body", "call")
-
-    def __init__(self, body: list, call):
-        self.body = body
-        self.call = call
 
 
 class MacroError(Exception):
@@ -67,8 +55,17 @@ def _is_node(value) -> bool:
     return type(value).__module__ == "interp.ast"
 
 
+def _subtrees(value):
+    """Every tree directly inside a value, which may be a list or a tuple."""
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            yield from _subtrees(item)
+    elif _is_node(value):
+        yield value
+
+
 # ----------------------------------------------------------------------
-# Matching
+# Matching, for a macro written as rules
 # ----------------------------------------------------------------------
 
 def _match(pattern, node, binds: dict) -> bool:
@@ -118,7 +115,7 @@ class _NoBinds(dict):
 
 
 # ----------------------------------------------------------------------
-# Filling in
+# Filling in, for a macro written as rules
 # ----------------------------------------------------------------------
 
 def _fill(node, binds: dict):
@@ -148,23 +145,30 @@ def _fill(node, binds: dict):
     return made
 
 
+# ----------------------------------------------------------------------
+# Hygiene, for both
+# ----------------------------------------------------------------------
+
 _hygiene_counter = 0
 
 
-def _make_hygienic(template):
-    """Rename what the template binds, so it cannot shadow the caller's.
+def make_hygienic(tree, spliced: set):
+    """Rename what a macro's own quotes bind, in place.
 
     A name a macro introduces belongs to the macro.  Renaming it to
     something no source file can spell means an argument that mentions
     the same name still reads the caller's, which is what hygiene is.
+
+    `spliced` holds the trees that came from the caller by way of `$`.
+    Those keep their names: they are the caller's code, and the macro
+    does not get to rename it.
     """
+    global _hygiene_counter
     bound: dict[str, str] = {}
 
     def collect(value):
         for node in _subtrees(value):
-            # A hole holds the caller's code, which the macro does not
-            # get to rename.
-            if isinstance(node, _ast.MetaVar):
+            if id(node) in spliced:
                 continue
             if isinstance(node, _ast.VarDef) and isinstance(node.name, str) \
                     and node.name not in bound:
@@ -176,7 +180,7 @@ def _make_hygienic(template):
 
     def rename(value):
         for node in _subtrees(value):
-            if isinstance(node, _ast.MetaVar):
+            if id(node) in spliced:
                 continue
             if isinstance(node, (_ast.VarDef, _ast.VarRef)) \
                     and getattr(node, "name", None) in bound:
@@ -184,27 +188,10 @@ def _make_hygienic(template):
             for name in _fields(node):
                 rename(getattr(node, name, None))
 
-    collect(template)
-    if not bound:
-        return template
-    renamed = copy.deepcopy(template)
-    rename(renamed)
-    return renamed
-
-
-def _subtrees(value):
-    """Every tree directly inside a value, which may be a list or a tuple."""
-    if isinstance(value, (list, tuple)):
-        for item in value:
-            yield from _subtrees(item)
-    elif _is_node(value):
-        yield value
-
-
-def _child_trees(node):
-    """Every tree directly under a node."""
-    for name in _fields(node):
-        yield from _subtrees(getattr(node, name, None))
+    collect(tree)
+    if bound:
+        rename(tree)
+    return tree
 
 
 # ----------------------------------------------------------------------
@@ -217,6 +204,21 @@ def _child_trees(node):
 REGISTRY: dict = {}
 
 
+class _Spliced:
+    """Statements a macro wrote, on their way to the line they replace.
+
+    Kept apart from a plain list so that statements arriving where a
+    value is wanted are refused rather than quietly taken into whatever
+    list they landed in -- an argument list is a list too.
+    """
+
+    __slots__ = ("body", "call")
+
+    def __init__(self, body: list, call):
+        self.body = body
+        self.call = call
+
+
 def collect(definitions) -> dict:
     """Add the macros a batch of definitions defines, and answer them all.
 
@@ -225,43 +227,37 @@ def collect(definitions) -> dict:
     """
     seen: set[str] = set()
     for defn in definitions:
-        if isinstance(defn, _ast.MacroDef):
+        if isinstance(defn, (_ast.MacroRulesDef, _ast.MacroFuncDef)):
             if defn.name in seen:
-                raise MacroError(
-                    f"macro {defn.name} is defined twice",
-                    getattr(defn, "pos", None))
+                raise MacroError(f"macro {defn.name} is defined twice",
+                                 getattr(defn, "pos", None))
             seen.add(defn.name)
             REGISTRY[defn.name] = defn
     return REGISTRY
 
 
-def expand(node, macros: dict, depth: int = 0):
-    """Replace every macro invocation in a tree with what it says.
+def expand(node, macros: dict, runner, depth: int = 0):
+    """Replace every macro invocation in a tree with what it answers.
 
     An invocation is expanded before what is written inside it, so a
     macro is handed the argument as the caller wrote it; what comes out
-    is expanded in turn, so a macro may rewrite to another one.
-
-    A macro that writes statements answers a list, which the list it
-    was written in takes into itself.  One that writes an expression
-    answers a tree, and standing where a value is wanted is the only
-    place it may.
+    is expanded in turn, so a macro may write another one.
     """
     if isinstance(node, _ast.MacroCall):
         if depth >= MAX_DEPTH:
             raise MacroError(
                 f"expanding {node.name} did not settle after {MAX_DEPTH} "
-                f"rewrites; a rule rewrites to something it matches",
+                f"rewrites; a macro writes something that reaches it again",
                 getattr(node, "pos", None))
-        written = _apply(macros, node)
+        written = _apply(macros, node, runner)
         if isinstance(written, _Spliced):
-            return _Spliced(expand(written.body, macros, depth + 1),
+            return _Spliced(expand(written.body, macros, runner, depth + 1),
                             written.call)
-        return expand(written, macros, depth + 1)
+        return expand(written, macros, runner, depth + 1)
     # A macro on its own line writes what it says in place of the line.
     if isinstance(node, _ast.ExprStmt) \
             and isinstance(node.expr, _ast.MacroCall):
-        written = expand(node.expr, macros, depth)
+        written = expand(node.expr, macros, runner, depth)
         if isinstance(written, _Spliced):
             return written.body
         node.expr = written
@@ -269,25 +265,25 @@ def expand(node, macros: dict, depth: int = 0):
     if isinstance(node, list):
         made = []
         for item in node:
-            written = expand(item, macros, depth)
+            written = expand(item, macros, runner, depth)
             if isinstance(written, list) and not isinstance(item, list):
                 made.extend(written)
             else:
-                made.append(_one(written, item))
+                made.append(_one(written))
         return made
     if isinstance(node, tuple):
-        return tuple(_one(expand(item, macros, depth), item)
+        return tuple(_one(expand(item, macros, runner, depth))
                      for item in node)
     if not _is_node(node):
         return node
     for name in _fields(node):
         setattr(node, name,
-                _one(expand(getattr(node, name, None), macros, depth),
-                     getattr(node, name, None)))
+                _one(expand(getattr(node, name, None), macros, runner,
+                            depth)))
     return node
 
 
-def _one(written, before):
+def _one(written):
     """Refuse a macro that writes statements where a value is wanted."""
     if isinstance(written, _Spliced):
         raise MacroError(
@@ -297,24 +293,35 @@ def _one(written, before):
     return written
 
 
-def _apply(macros: dict, call):
-    """The tree one invocation is replaced by."""
+def _apply(macros: dict, call, runner):
+    """The tree one invocation is replaced by, whichever kind it is."""
     macro = macros.get(call.name)
     if macro is None:
         raise MacroError(
             f"no macro named {call.name} is defined; ⟦ … ⟧ "
             f"invokes a macro and ( … ) calls a function",
             getattr(call, "pos", None))
+    if isinstance(macro, _ast.MacroRulesDef):
+        return _apply_rules(macro, call)
+    return _apply_func(macro, call, runner)
+
+
+def _apply_rules(macro, call):
+    """Rewrite an invocation by the first rule whose pattern matches."""
     for rule in macro.rules:
         if len(rule.patterns) != len(call.args):
             continue
         binds: dict = {}
         if all(_match(p, a, binds)
                for p, a in zip(rule.patterns, call.args)):
-            written = _fill(_make_hygienic(rule.template), binds)
-            if isinstance(written, list):
-                return _Spliced(written, call)
-            return written
+            # The template is renamed before the holes are filled, so
+            # what the rule binds is renamed and what came from the
+            # caller -- which is not in the template yet -- is not.
+            template = make_hygienic(copy.deepcopy(rule.template), set())
+            filled = _fill(template, binds)
+            if isinstance(filled, list):
+                return _Spliced(filled, call)
+            return filled
     counts = sorted({len(r.patterns) for r in macro.rules})
     if len(call.args) not in counts:
         wanted = " or ".join(str(c) for c in counts)
@@ -327,13 +334,44 @@ def _apply(macros: dict, call):
         getattr(call, "pos", None))
 
 
-def expand_definitions(definitions, macros: dict) -> None:
+def _apply_func(macro, call, runner):
+    """Run one macro and answer the tree it wrote."""
+    wanted = len(macro.func.params)
+    if len(call.args) != wanted:
+        raise MacroError(
+            f"{macro.name} is written with {wanted} argument"
+            f"{'' if wanted == 1 else 's'} and is invoked here with "
+            f"{len(call.args)}", getattr(call, "pos", None))
+    handed = [SyntaxValue(node=copy.deepcopy(a)) for a in call.args]
+    spliced = {id(t) for a in handed for t in _every_tree(a.node)}
+    answer = runner(macro, handed, call)
+    if not isinstance(answer, SyntaxValue):
+        raise MacroError(
+            f"{macro.name} answers a piece of the program, and this one "
+            f"answered {type(answer).__name__.replace('Value', '').lower()}",
+            getattr(call, "pos", None))
+    if answer.is_block:
+        return _Spliced(make_hygienic(answer.body, spliced), call)
+    return make_hygienic(answer.node, spliced)
+
+
+def _every_tree(node):
+    """Every tree at any depth under a node, the node included."""
+    if node is None:
+        return
+    yield node
+    for name in _fields(node):
+        for child in _subtrees(getattr(node, name, None)):
+            yield from _every_tree(child)
+
+
+def expand_definitions(definitions, macros: dict, runner) -> None:
     """Expand every macro in every definition, in place.
 
-    A macro definition is left alone: its rules are what expansion
-    reads, not something to expand.
+    A macro definition is left alone: what it writes is decided when it
+    runs, not now.
     """
     for defn in definitions:
-        if isinstance(defn, _ast.MacroDef):
+        if isinstance(defn, (_ast.MacroRulesDef, _ast.MacroFuncDef)):
             continue
-        expand(defn, macros)
+        expand(defn, macros, runner)

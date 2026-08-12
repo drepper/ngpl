@@ -1,6 +1,6 @@
 // A macro that writes statements, written where a value is wanted.
-macro note(x : syntax) → syntax:
-    ⟪
+@macro_rules note:
+    ⟪$x⟫ → ⟪
         let seen : i64 = $x
     ⟫
 

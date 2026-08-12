@@ -1,0 +1,8 @@
+// A macro answers a piece of the program, and this one answers a number.
+macro wrong(x : syntax) → i64:
+    1i64
+
+@start
+@impure
+fn main():
+    std.println("{}", wrong⟦1i64⟧)

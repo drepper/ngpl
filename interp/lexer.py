@@ -70,6 +70,7 @@ KEYWORDS = {
     "enumerate": "ENUMERATE",
     "struct": "STRUCT",
     "impl": "IMPL",
+    "macro": "MACRO",
 }
 
 # Keywords recognized only after the @ prefix.  The @ is part of the
@@ -91,6 +92,9 @@ AT_KEYWORDS: dict[str, str] = {
     "noreturn": "NORETURN",
     "pre": "PRE",
     "post": "POST",
+    # @macro_rules heads a macro written as a list of rewrite rules.
+    # An annotation rather than a keyword of its own, so the word stays
+    # available to a program that wants it as a name.
     "macro_rules": "MACRO_RULES",
 }
 
@@ -108,11 +112,11 @@ _NORMALIZE_OPS = {
 # Single-character operators.
 # The last six are the tolerant comparisons, paired with the exact ones.
 SINGLE_OPS = set("+-%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ∃∄⍴⧺⌿⍀¤√∛∜↑⁻×÷⍳∊≠#⸨⸩∪∩∖⊂⊆⊃⊇"
-                 # Written code handed to a macro: ⟦…⟧ around what a
-                 # macro is invoked on, ⟪…⟫ around a piece of program
-                 # written down rather than run, and $ naming a hole in
-                 # one.
-                 "⟦⟧⟪⟫$"
+                 # Written code: ⟦…⟧ around what a macro is invoked on,
+                 # ⟪…⟫ around a piece of program held rather than run,
+                 # $ putting a value back into one, and ※ in front of a
+                 # name for what the name refers to.
+                 "⟦⟧⟪⟫$※"
                  "≅≇⪅⪆⪉⪊"
                  # The saturating arithmetic operators.
                  "\N{SQUARED PLUS}\N{SQUARED MINUS}\N{SQUARED TIMES}"
@@ -575,7 +579,7 @@ def tokenize(src: str):
                 tokens.append(Token("PUNCT", ch, line, col))
             elif ch == "\N{RIGHTWARDS ARROW}":
                 tokens.append(Token("OP", "->", line, col))
-            elif ch in ("+-%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻⍳∊≠#∪∩∖⊂⊆⊃⊇"
+            elif ch in ("+-%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻⍳∊≠#∪∩∖⊂⊆⊃⊇※"
                         "\N{MULTIPLICATION SIGN}\N{DIVISION SIGN}"
                         "≅≇⪅⪆⪉⪊"
                         "\N{SQUARED PLUS}\N{SQUARED MINUS}"
@@ -663,7 +667,16 @@ def process_indentation(tokens: list[Token]) -> list[Token]:
             if result[k].type not in ("NEWLINE", "INDENT", "DEDENT"):
                 prev = result[k]
                 break
-        if prev and (
+        # An operator right after ※ is a name rather than an operation,
+        # so a line ending in one is finished rather than continued.
+        before = None
+        for k in range(len(result) - 3, -1, -1):
+            if result[k].type not in ("NEWLINE", "INDENT", "DEDENT"):
+                before = result[k]
+                break
+        names_an_operator = (before is not None and before.type == "OP"
+                             and before.value == "※")
+        if prev and not names_an_operator and (
             (prev.type == "OP" and prev.value in _CONTINUATION_OPS)
             or prev.type in ("AND", "OR")
             or (prev.type == "PUNCT" and prev.value == "=")

@@ -305,8 +305,8 @@ class ContinueStmt:
         self.pos = None
 
 
-class MacroDef:
-    """A macro: a name and the rules that say what it rewrites to.
+class MacroRulesDef:
+    """`@macro_rules` -- a macro written as a list of rewrite rules.
 
     Each rule is a MacroRule.  They are tried in order and the first
     one whose pattern matches decides the expansion, which is why a
@@ -322,10 +322,10 @@ class MacroDef:
 class MacroRule:
     """One rewrite: what the arguments have to look like, and what for.
 
-    `patterns` is one pattern per macro argument, and `template` is the
-    expression that replaces the invocation.  Both are ordinary
-    expression trees, with MetaVar standing where a name is written
-    with a $ in front of it.
+    `patterns` is one pattern per macro argument, and `template` is
+    what replaces the invocation -- an expression, or a list of
+    statements where the rule writes a block.  Both are ordinary
+    expression trees, with MetaVar standing where a hole is written.
     """
 
     def __init__(self, patterns: list, template, pos=None):
@@ -335,19 +335,68 @@ class MacroRule:
 
 
 class MetaVar:
-    """`$a` -- a hole in a pattern, and what fills it in a template."""
+    """`$a` in a rule -- what a pattern captures and a template fills."""
 
     def __init__(self, name: str):
         self.name = name
         self.pos = None
 
 
-class MacroCall:
-    """`name⟦args⟧` -- an invocation replaced by what the macro says.
+class MacroFuncDef:
+    """`macro` -- a macro written as a function over the program's text.
 
-    Nothing evaluates one of these: the expansion pass replaces it
-    before anything runs, and reaching the evaluator means the pass did
-    not run.
+    `func` is an ordinary FuncDef whose parameters are handed the parse
+    trees of what the invocation was written with, and whose answer is
+    the tree that replaces the invocation.  It runs while the program
+    is being installed, not while it runs.
+    """
+
+    def __init__(self, name: str, func):
+        self.name = name
+        self.func = func
+        self.pos = None
+
+
+class Quote:
+    """`⟪ … ⟫` -- a piece of program held rather than run.
+
+    Evaluating one answers the tree written inside it, with whatever
+    `$` puts back into it already in place.
+    """
+
+    def __init__(self, tree, is_block: bool = False):
+        self.tree = tree
+        self.is_block = is_block
+        self.pos = None
+
+
+class Reflect:
+    """`※name` -- what a name refers to, held as a piece of the program.
+
+    Where a quote holds whatever text is written in it, this holds one
+    entity: a function, an operator, a constant, a variable.  C++26
+    says the same thing with ^^; the glyph here is the one Unicode
+    calls a reference mark, which is what this is.
+    """
+
+    def __init__(self, tree):
+        self.tree = tree
+        self.pos = None
+
+
+class Splice:
+    """`$e` inside a quote -- put what e answers into the tree here."""
+
+    def __init__(self, expr):
+        self.expr = expr
+        self.pos = None
+
+
+class MacroCall:
+    """`name⟦args⟧` -- an invocation replaced by what the macro answers.
+
+    Nothing evaluates one of these: expansion replaces it before
+    anything runs, and reaching the evaluator means expansion did not.
     """
 
     def __init__(self, name: str, args: list):

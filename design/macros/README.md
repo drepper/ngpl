@@ -102,8 +102,8 @@ This is where two answers are both good, so both were built.
 
 ### Design A — Rewrite rules
 
-Branch **`macros-rules`**.  A macro is a list of patterns and what each
-rewrites to, in the tradition of Scheme's `syntax-rules`, Rust's
+Headed by **`@macro_rules`**.  A macro is a list of patterns and what
+each rewrites to, in the tradition of Scheme's `syntax-rules`, Rust's
 `macro_rules!`, and Wolfram's `:>`:
 
 ```
@@ -118,9 +118,8 @@ Both halves of a rule are ordinary program text with `$a` where a hole
 goes.  The first rule that matches decides.
 
 The two designs are named apart on purpose — `@macro_rules` here and
-`macro` in Design B — because the end state is both of them in one
-language, and a reader at an invocation needs to be able to find out
-which kind of thing they are reading.  The name is Rust's, where
+`macro` in Design B — because both are in the language, and a reader
+at a definition needs to be able to tell which kind it is.  The name is Rust's, where
 `macro_rules!` and a procedural macro are the same two halves.  It is
 written as an annotation, which is a small stretch of what `@` usually
 means (something said *about* a definition, rather than the definition
@@ -151,7 +150,7 @@ The design cannot say *"π is among the factors"*. It can only say
 
 ### Design B — Functions over the program's text
 
-Branch **`macros-proc`**.  A macro is an ordinary function that runs at
+Headed by **`macro`**.  A macro is an ordinary function that runs at
 expansion time, in the tradition of Lisp's `defmacro`, Rust's
 procedural macros, Julia's `macro`, and Nim:
 
@@ -163,7 +162,7 @@ macro sin(e : syntax) → syntax:
     while at < #todo:
         let part := todo[at]
         at ← at + 1¤ptrdiff
-        if part.head() = some(^^×):          // does it apply × ?
+        if part.head() = some(※×):          // does it apply × ?
             foreach inner := part.arguments():
                 todo.push(inner)             // then take it apart
         else:
@@ -172,7 +171,7 @@ macro sin(e : syntax) → syntax:
     let rest : mut syntax[] = []
     let found : mut bool = false
     foreach f := factors:
-        if not found and f = ^^std.π:        // is it π itself?
+        if not found and f = ※std.π:        // is it π itself?
             found ← true
         else:
             rest.push(f)
@@ -183,7 +182,7 @@ macro sin(e : syntax) → syntax:
         return ⟪std.sinpi(1.0)⟫
     if #rest = 1¤ptrdiff:
         return ⟪std.sinpi($(rest[0]))⟫
-    ⟪std.sinpi($(std.syntax.funcall(^^×, rest)))⟫
+    ⟪std.sinpi($(std.syntax.funcall(※×, rest)))⟫
 ```
 
 `syntax` is a piece of the program.  `⟪ ⟫` builds one; `$e` puts a
@@ -201,37 +200,37 @@ of the shape.  `head()` answers what an expression *applies* and
 `arguments()` what it applies that to, and an operator is what its
 expression applies exactly as a function is what a call applies — so
 `a × b` and `f(a, b)` are taken apart by the same two questions.  An
-earlier version of this branch had a built-in `factors()` that
+earlier version had a built-in `factors()` that
 flattened products, which put one piece of arithmetic into the
 interpreter and answered only that one question.  What replaced it
 answers every question of that shape and puts the arithmetic where it
 belongs, in the macro.
 
-**`^^` refers to what a name means.**  `^^std.π`, `^^×`, `^^std.sinpi`.
+**`※` refers to what a name means.**  `※std.π`, `※×`, `※std.sinpi`.
 C++26 spells reflection this way and it is the right spelling here for
 the same reason: what is wanted is *the entity*, not the text.  The
 first version compared `f.name() = some("std.π")` — a string, which
 would be defeated by any renaming and says nothing about what the name
 refers to.
 
-Where a quote holds whatever text is written in it, `^^` holds one
+Where a quote holds whatever text is written in it, `※` holds one
 entity, and that difference is the whole distinction between the two
 brackets:
 
 | | holds | written |
 |-|-------|---------|
 | `⟪ … ⟫` | any piece of program | `⟪std.sinpi($a)⟫` |
-| `^^` | one entity | `^^×`, `^^std.π` |
+| `※` | one entity | `※×`, `※std.π` |
 
-**The check and the construction are the same expression.**  `^^×` says
+**The check and the construction are the same expression.**  `※×` says
 what the expression was and then says what to build:
-`std.syntax.funcall(^^×, rest)`.  So multiplication is named once, and
+`std.syntax.funcall(※×, rest)`.  So multiplication is named once, and
 `funcall` applies whatever it is handed — an operator, a function, a
 method — which is what `std.syntax.product` was replaced by.  A macro
 can even hand back the head it was given:
 
 ```
-std.syntax.funcall(e.head() ?? ^^+, e.arguments())
+std.syntax.funcall(e.head() ?? ※+, e.arguments())
 ```
 
 rebuilds whatever it took apart without naming the operation at all.
@@ -261,10 +260,10 @@ reader cannot see the shapes it accepts without reading all of it.
 | lines of interpreter | ~250 | ~400, plus an evaluator at expansion time |
 | can be read without running | yes | no |
 
-Both branches carry the same test file name with the same test names
-where the tests are the same, so the two can be diffed directly.
+`tests/test_macros.ngpl` writes the same example both ways, one half
+after the other, so the two can be read against each other.
 
-## Why Not Only One
+## Both, Which Is Why Both Are In
 
 The honest reading of the table is that the two are not competitors at
 the same job.
@@ -279,15 +278,23 @@ were given — which is exactly the case the brief chose to name, and
 exactly the case that makes a macro worth having over a function.
 
 Every mature system ends up with both. Scheme has `syntax-rules` and
-`syntax-case`. Rust has `macro_rules!` and procedural macros. The two
-branches are therefore best read as *the two halves of one system*
-rather than as a fork, and the recommendation is to merge A first
-(smaller, safer, no evaluator at expansion time) and B second, with
-the rules form as sugar that the function form could itself provide.
+`syntax-case`. Rust has `macro_rules!` and procedural macros. They were
+built on branches of their own so that each could be judged on its own,
+and both are now in the language, which is what that judgement came to.
+
+They are headed by different keywords — `@macro_rules` and `macro` —
+so that a reader at a definition can tell which kind it is. The longer
+name is the one written as an annotation, which costs nothing: it is a
+keyword only after an `@`, so `macro_rules` is still a name a program
+may use, where `macro` is reserved as `fn` and `struct` are.
+
+Everything else they share: the invocation, the quoting, when
+expansion happens, what an invocation may stand for, and the renaming
+that keeps a macro's own names out of the caller's way.
 
 ## Hygiene
 
-Both branches implement the same rule, which is the reason it is worth
+Both forms follow the same rule, which is the reason it is worth
 stating once:
 
 > A name the macro **binds** is renamed to something no source file can
@@ -335,12 +342,12 @@ The two are the same machinery seen from two ends: a macro is
 reflection that also gets to write. What is implemented is what the
 example needs, and it is worth being exact about the boundary.
 
-| The brief asks | Branch A | Branch B |
-|----------------|----------|----------|
+| The brief asks | `@macro_rules` | `macro` |
+|----------------|----------------|--------|
 | retrieve the parse tree of the arguments | via a pattern | `syntax` values |
-| deconstruct the tree | pattern matching | `kind()`, `name()`, `head()`, `arguments()`, `=`, `^^` |
+| deconstruct the tree | pattern matching | `kind()`, `name()`, `head()`, `arguments()`, `=`, `※` |
 | reconstruct and insert code | templates | `⟪ ⟫` and `$`, plus `std.syntax.funcall` |
-| follow references to definitions | no | `^^` and `=` say whether two references are the same one; neither says what it *refers to* |
+| follow references to definitions | no | `※` and `=` say whether two references are the same one; neither says what it *refers to* |
 
 The last row is the real gap, and it is one gap rather than four: a
 macro runs before the definitions of the compilation unit are
@@ -376,19 +383,25 @@ program, and the questions about types are asked of what they wrote.
   whole language is built around: that any file can be parsed, in
   parallel, without running anything in it.
 
+## The Glyph for a Reference
+
+`※` (U+203B) is what Unicode calls a **reference mark**, which is what
+this is.  C++26 writes `^^`, and the caret was worth keeping only as
+long as ASCII was the constraint; it is not one here.
+
+The other candidate was `⇑`, which keeps C++26's upward intuition and
+whose doubling echoes the doubled caret.  It lost because `↑` is
+already the exponentiation operator, and a reader meeting `⇑` beside it
+would reasonably read the two as related. `※` resembles nothing else in
+the language and says what it is.
+
 ## Status
 
-Two branches, each green on the full suite:
-
-- **`macros-rules`** — rewrite rules under `@macro_rules`; 87 test
-  files, 101 output tests.
-- **`macros-proc`** — functions over the program's text under `macro`;
-  87 test files, 102 output tests.
-
-Neither is merged to `main`.  The recommendation is above.
+Both forms are in `main` and the full suite is green: 87 test files,
+108 output tests, `-Werror` clean.
 
 Left for later, in the order the work suggests: the two-pass install
 that lets a macro see definitions; macros that write definitions rather
 than expressions; the module question hygiene's second half waits on;
-and expansion in the interpreter's `--test` and REPL paths reusing one
-registry rather than two entry points into the same one.
+and expansion in the interpreter's file and REPL paths reusing one
+entry point rather than two into the same registry.

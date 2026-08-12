@@ -1,6 +1,6 @@
-// A rule that rewrites to something it matches never settles.
-@macro_rules forever:
-    ⟪$x⟫ → ⟪forever⟦$x⟧⟫
+// A macro that writes an invocation of itself never settles.
+macro forever(x : syntax) → syntax:
+    ⟪forever⟦$x⟧⟫
 
 @start
 @impure

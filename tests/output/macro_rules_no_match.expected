@@ -1,5 +1,5 @@
 error: no rule of only_pairs matches what it is written with here
-  --> tests/output/macro_errors.ngpl:8:23
+  --> tests/output/macro_rules_no_match.ngpl:8:23
     |
   8 |     std.println("{}", only_pairs⟦1i64⟧)
     |                       ^^^^^^^^^^

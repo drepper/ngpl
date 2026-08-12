@@ -23,6 +23,9 @@ BUILTIN_TYPES: set[str] = {
     # that meets a named function in one place and a lambda in another
     # is not told they are two different types.
     "fn",
+    # A piece of the program, which is what a macro is handed and what
+    # it answers.
+    "syntax",
 }
 
 # Platform-specific fast type mapping (x86_64: sub-32 → 32, 32/64 → 64).
@@ -727,6 +730,35 @@ class UnitValue(Value):
 _STR_ESCAPES = {
     "\\": "\\\\", '"': '\\"', "\n": "\\n", "\t": "\\t", "\r": "\\r",
 }
+
+
+class SyntaxValue(Value):
+    """A piece of the program, held rather than run.
+
+    What a macro is handed for each of its arguments and what it
+    answers.  `node` is the parse tree; `body` is set instead where the
+    piece is a run of statements rather than one expression, since
+    those are the two shapes a piece of program comes in.
+    """
+
+    __slots__ = ("node", "body")
+
+    def __init__(self, node=None, body=None):
+        self.node = node
+        self.body = body
+
+    @property
+    def is_block(self) -> bool:
+        """Whether this is a run of statements rather than an expression."""
+        return self.body is not None
+
+    def display(self):
+        if self.body is not None:
+            return f"⟪{len(self.body)} statements⟫"
+        return f"⟪{type(self.node).__name__}⟫"
+
+    def to_python(self):
+        return self.node if self.body is None else self.body
 
 
 class StrValue(Value):
@@ -2274,6 +2306,13 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
             raise TypeError(
                 f"{func_name}: argument '{param_name}' expected a function, "
                 f"got {runtime_type_of(value)}")
+        return value
+
+    if param_type == "syntax":
+        if not isinstance(value, SyntaxValue):
+            raise TypeError(
+                f"{func_name}: argument '{param_name}' expected a piece of "
+                f"the program, got {runtime_type_of(value)}")
         return value
 
     if param_type == "bool":

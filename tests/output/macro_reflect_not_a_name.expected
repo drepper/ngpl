@@ -1,0 +1,7 @@
+error: ※ is written in front of a name or an operator, which is what it refers to
+  --> tests/output/macro_reflect_not_a_name.ngpl:3:13
+    |
+  3 |     ⟪$(e = ※1)⟫
+    |             ^
+  4 | 
+    |

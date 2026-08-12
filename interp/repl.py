@@ -31,7 +31,8 @@ from interp.ast import (
     ExprStmt,
     FuncDef as ASTFuncDef,
     ImplBlock as ASTImplBlock,
-    MacroDef as ASTMacroDef,
+    MacroFuncDef as ASTMacroFuncDef,
+    MacroRulesDef as ASTMacroRulesDef,
     StructDef as ASTStructDef,
     TypeDef as ASTTypeDef,
     UnitDef as ASTUnitDef,
@@ -44,7 +45,7 @@ CONTINUATION_PROMPT = "... "
 
 _DEFINITION_NODES = (ASTFuncDef, ASTVarDef, ASTDestructureDef, ASTEnumDef,
                      ASTStructDef, ASTImplBlock, ASTUnitDef, ASTTypeDef,
-                     ASTMacroDef)
+                     ASTMacroFuncDef, ASTMacroRulesDef)
 
 
 def _error_message(exc: BaseException) -> str:
@@ -247,9 +248,12 @@ class Repl:
 
         # A statement typed at the prompt is expanded the way one in a
         # file is; the macros of earlier entries are still defined.
+        from interp.__main__ import _macro_runner
         from interp.macros import REGISTRY, expand as macro_expand
         if REGISTRY:
-            item = macro_expand(item, REGISTRY)
+            item = macro_expand(item, REGISTRY,
+                                _macro_runner(REGISTRY, self.env,
+                                              self.evaluator))
 
         result = self.evaluator.eval_stmt(item)
         # Only a bare expression reports a value; a statement that happens

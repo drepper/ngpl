@@ -1,6 +1,6 @@
-// Every rule takes two arguments and the invocation writes one.
-@macro_rules pair:
-    ⟪$a, $b⟫ → ⟪$a + $b⟫
+// The macro takes two pieces of the program and is invoked with one.
+macro pair(a : syntax, b : syntax) → syntax:
+    ⟪$a + $b⟫
 
 @start
 @impure
