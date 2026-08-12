@@ -1,0 +1,7 @@
+// A conditional expression says what the value is either way, so
+// leaving the second value off leaves the expression unfinished.
+@start
+@impure
+fn main():
+    let n : i64 = 1
+    std.println("{}", "positive" if n > 0)

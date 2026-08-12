@@ -118,6 +118,20 @@ class IfStmt:
         self.hint = hint
 
 
+class IfExpr:
+    """`a if c else b` -- the value a where c holds and b where it does not.
+
+    Only the branch taken is evaluated, which is what makes it usable
+    as a guard: the other side may be something that could not be run.
+    """
+
+    def __init__(self, cond, then_expr, else_expr):
+        self.cond = cond
+        self.then_expr = then_expr
+        self.else_expr = else_expr
+        self.pos = None
+
+
 class WhileStmt:
     """While loop.
 

@@ -1,0 +1,6 @@
+error: a conditional expression says what the value is either way, so else and a second value follow
+  --> tests/output/conditional_no_else.ngpl:7:42
+    |
+  7 |     std.println("{}", "positive" if n > 0)
+    |                                          ^
+    |

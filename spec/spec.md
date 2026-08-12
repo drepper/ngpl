@@ -4019,6 +4019,92 @@ This flexibility allows programmers to choose the style that best fits each situ
 The dual-mode approach draws from Haskell's optional layout rule while using Python's `:` syntax for familiarity.  The key advantage over Python is that braces remain available — useful for single-line blocks, machine-generated code, and situations where explicit delimiters reduce ambiguity.  The key advantage over Rust is that the common case of simple, sequential blocks needs no closing delimiter.
 
 
+### Choosing a Value: `a if c else b`
+
+An `if` statement branches; a conditional expression **chooses a value**:
+
+```
+let n : i64 = x if x > 0 else ⁻x
+```
+
+The value is the first expression where the condition holds and the third where it does not.  The spelling is Python's, condition in the middle.
+
+#### Only the Branch Taken Is Read
+
+The other side is not evaluated at all, which is what lets a conditional stand in front of the thing it guards against:
+
+```
+let v : i64[] = [1, 2, 3]
+0 if n >= #v else v[n]          // v[n] is never read where n is past the end
+```
+
+#### How It Groups
+
+It binds looser than every operator, so what is written on either side is gathered up before the choice is made:
+
+```
+1 + 2 if c else 3               // (1 + 2) if c else 3
+1 + (2 if c else 30)            // brackets put one inside an operator
+```
+
+What follows `else` is another expression rather than an operand, so a chain groups to the right and reads as a list of cases:
+
+```
+"one" if n = 1 else "two" if n = 2 else "many"
+```
+
+The condition itself is *not* a conditional unless it is bracketed, which is Python's rule and keeps `a if b if c else d else e` from being written by accident.
+
+#### The Condition, and the Two Branches
+
+The condition is read for truth the same way an `if` statement reads its own: a number is true where it is not zero, a string where it is not empty, an optional where it holds something.
+
+The two branches need not be of one type.  The value is whichever branch the condition chose, and its type is that branch's:
+
+```
+@typeof(1i64 if true else "x")      // i64
+@typeof(1i64 if false else "x")     // str
+```
+
+Nothing yet checks that the two agree, which a stricter pass over what an expression's type is known to be would do.
+
+`else` is required.  A conditional says what the value is either way, and leaving the second value off leaves the expression unfinished:
+
+```
+"positive" if n > 0
+
+error: a conditional expression says what the value is either way, so
+else and a second value follow
+```
+
+#### A Statement's `if` Is Still a Statement
+
+A statement that begins with `if` is an `if` statement; a conditional has its `if` in the middle.  The two are told apart by the line break, so an expression that ends a line is finished and the `if` below it opens a statement:
+
+```
+foo()
+if bar:                         // a statement, not a continuation of foo()
+    …
+```
+
+Inside `( … )` there are no line breaks to speak of, so a conditional may be written across lines there.
+
+`@likely` and `@unlikely` apply to an `if` statement and not to a conditional expression; there is no branch here for a reader to be told about, only a value.
+
+#### Comparison with Other Languages
+
+| Language | Spelling |
+|----------|----------|
+| C, C++ | `c ? a : b` |
+| Rust | `if c { a } else { b }` — every block is an expression |
+| Haskell, ML | `if c then a else b` |
+| Python | `a if c else b` |
+| APL, BQN | `c⊃b‿a`, or a guard |
+| NGPL | `a if c else b` |
+
+Python's order is the one adopted.  C's `?:` would spend two glyphs, and `?` is already the optional suffix.  Rust's answer is the more general one — make every block an expression and the statement form disappears — but it is a much larger question than choosing between two values, and it would change what every `if` in the language means.  Reaching for that later is not foreclosed by this: `a if c else b` would remain the short way to write the common case, as it does in Python beside its own `if` statement.
+
+
 ### While Loop
 
 The plain form tests an expression each time round:
