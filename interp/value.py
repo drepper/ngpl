@@ -1934,6 +1934,18 @@ def sum_type_alternatives(name: str) -> list[str] | None:
     return _SUM_TYPES.get(name)
 
 
+def a_sum_holds_both(one: str, other: str) -> bool:
+    """Whether some declared sum type has both of these among its own.
+
+    Two types that disagree are a mistake wherever one value is wanted
+    -- unless a sum type says the two belong together, which is what a
+    sum type is for.  Asked of every one declared, since what is being
+    looked at is a value whose written type is not in hand.
+    """
+    return any(one in alternatives and other in alternatives
+               for alternatives in _SUM_TYPES.values())
+
+
 def sum_type_admits(name: str, value: "Value") -> bool:
     """Whether a value is one of a sum type's alternatives."""
     alternatives = _SUM_TYPES.get(name)

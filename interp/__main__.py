@@ -34,6 +34,7 @@ from interp.value import (
     _split_optional_type, _TYPE_BITS, FLOAT_TYPES, resolve_type_alias,
     check_bootstrap_type,
     _parse_array_type, format_shape, is_generic_type, declared_rank,
+    a_sum_holds_both,
 )
 from interp.eval import Evaluator, unwrap_optional, _ARRAY_MUTATORS
 from interp.layout import LayoutError, struct_layout, struct_lookup
@@ -1052,6 +1053,137 @@ def _returned_exprs(func_def):
 # What is always a container, whatever it is written over: joining two
 # of them, reshaping into one, and asking something of each.
 _ALWAYS_A_CONTAINER = (_ast.MapExpr, _ast.ReshapeExpr)
+
+
+# What a written-down value is, where the writing says it.  A number
+# with no width stated settles on whatever is asked of it, so `int` and
+# `float` are answers that agree with any other number.
+_LITERAL_TYPES = {
+    "StrLit": "str", "CharLit": "char", "BoolLit": "bool",
+    "NoneLit": "\N{EMPTY SET}",
+}
+
+# The operators that answer a truth value whatever they are given.
+_ANSWERS_A_TRUTH = frozenset({
+    "=", "\N{NOT EQUAL TO}", "<", ">", "<=", ">=", "and", "or",
+    "\N{ELEMENT OF}", "\N{SUBSET OF OR EQUAL TO}", "\N{SUBSET OF}",
+    "\N{ALMOST EQUAL TO}", "\N{NOT ALMOST EQUAL TO}",
+})
+
+_UNWIDTHED = frozenset({"int", "float"})
+
+
+def _static_type_of(expr, types: dict, structs: dict) -> str | None:
+    """What an expression is, where the program says so.
+
+    Enough to compare the two sides of a conditional: what is written
+    down says what it is, a name says what its declaration said, and a
+    comparison answers a truth value however it is reached.  Anything
+    else answers None, which is what leaves a pair unjudged.
+    """
+    named = _LITERAL_TYPES.get(type(expr).__name__)
+    if named is not None:
+        return named
+    if isinstance(expr, (_ast.IntLit, _ast.FloatLit)):
+        return expr.width
+    if isinstance(expr, _ast.VarRef):
+        return types.get(expr.name)
+    if isinstance(expr, _ast.GetAttr):
+        return _field_type(expr, structs)
+    if isinstance(expr, _ast.BinOp) and expr.op in _ANSWERS_A_TRUTH:
+        return "bool"
+    if isinstance(expr, _ast.UnaryOp) and expr.op in ("not",
+                                                      "\N{NOT SIGN}"):
+        return "bool"
+    if isinstance(expr, _ast.IfExpr):
+        one = _static_type_of(expr.then_expr, types, structs)
+        other = _static_type_of(expr.else_expr, types, structs)
+        return one if one == other else None
+    return None
+
+
+def _field_type(expr, structs: dict) -> str | None:
+    """What a struct says one of its fields is."""
+    if not (isinstance(expr, _ast.GetAttr)
+            and isinstance(expr.obj, _ast.VarRef)):
+        return None
+    struct = structs.get(expr.obj.name)
+    if struct is None:
+        return None
+    for field_name, field_type in struct.fields:
+        if field_name == expr.attr:
+            return field_type or None
+    return None
+
+
+def _types_agree(one: str, other: str) -> bool:
+    """Whether two written types can be the one value a conditional is.
+
+    A number with no width settles on what it is asked for, so it
+    agrees with any other number.  Nothing agrees with an absent value
+    but an absent value, since an optional is what holds both.  And two
+    that disagree are still fine where a sum type says the two belong
+    together, which is the whole of what a sum type is for.
+    """
+    if one == other:
+        return True
+    if is_generic_type(one) or is_generic_type(other):
+        return True
+    if "\N{EMPTY SET}" in (one, other) or one.endswith("?") \
+            or other.endswith("?"):
+        return True
+    numeric = {"int", "float"} | set(_TYPE_BITS) | set(FLOAT_TYPES)
+    if one in numeric and other in numeric \
+            and (one in _UNWIDTHED or other in _UNWIDTHED):
+        return True
+    return a_sum_holds_both(one, other)
+
+
+def _local_types(definition) -> dict:
+    """What each local says it is, for the names that say it once.
+
+    A name written twice with two types is two names to a reader and
+    one to this walk, which has no scopes; leaving both out is what
+    keeps it from reading one declaration against the other's use.
+    """
+    seen: dict[str, str | None] = {}
+    twice: set[str] = set()
+    for node in _iter_ast(definition):
+        if not isinstance(node, _ast.VarDef) or not isinstance(node.name, str):
+            continue
+        if node.name in seen:
+            twice.add(node.name)
+        seen[node.name] = node.type_annotation
+    return {name: written for name, written in seen.items()
+            if written and name not in twice
+            and not written.startswith("mut ")}
+
+
+def _static_conditional_check(definition, structs: dict | None = None) -> str | None:
+    """Refuse a conditional whose two sides cannot be the one value.
+
+    Only what the program writes down is read, so a pair is judged only
+    where both sides say what they are.  Where either says nothing the
+    conditional is left alone -- it is one value at runtime whatever
+    this could not work out.
+    """
+    structs = structs or {}
+    types = _local_types(definition)
+    for name, param_type in getattr(definition, "params", ()) or ():
+        if param_type:
+            types[_param_display(name)] = param_type
+    for node in _iter_ast(definition):
+        if not isinstance(node, _ast.IfExpr):
+            continue
+        one = _static_type_of(node.then_expr, types, structs)
+        other = _static_type_of(node.else_expr, types, structs)
+        if one is None or other is None or _types_agree(one, other):
+            continue
+        return _Finding(
+            f"a conditional is one value, so its two sides say one type "
+            f"between them; this one says {one} where the condition holds "
+            f"and {other} where it does not", node)
+    return None
 
 
 def _field_rank(expr, structs: dict) -> int | None:
@@ -2416,7 +2548,8 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
         if isinstance(defn, ASTVarDef):
             # A lambda written here states its own signature, so it is
             # asked what a function is asked.
-            lambda_err = _static_lambda_return_check(defn, env)
+            lambda_err = (_static_lambda_return_check(defn, env)
+                          or _static_conditional_check(defn))
             if lambda_err is not None:
                 raise DefinitionError(
                     f"in '{defn.name}': {lambda_err}",
@@ -2668,7 +2801,8 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 named_structs = _struct_vars_of(defn, env)
                 return_err = (
                     _static_return_check(defn, named_structs)
-                    or _static_lambda_return_check(defn, env, named_structs))
+                    or _static_lambda_return_check(defn, env, named_structs)
+                    or _static_conditional_check(defn, named_structs))
                 if return_err is not None:
                     raise DefinitionError(f"in {defn.name}: {return_err}",
                                           _finding_pos(return_err) or _node_pos(defn))
@@ -2720,6 +2854,7 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                             _static_return_check(method_def, struct_vars),
                             _static_lambda_return_check(method_def, env,
                                                         struct_vars),
+                            _static_conditional_check(method_def, struct_vars),
                             _static_purity_check(method_def, env, struct_vars),
                             _static_unused_value_check(method_def, env,
                                                        struct_vars)):
@@ -2862,7 +2997,8 @@ def main():
             named_structs = _struct_vars_of(defn, env)
             return_err = (
                 _static_return_check(defn, named_structs)
-                or _static_lambda_return_check(defn, env, named_structs))
+                or _static_lambda_return_check(defn, env, named_structs)
+                or _static_conditional_check(defn, named_structs))
             if return_err is not None:
                 errors_produced.append(("error", return_err))
 

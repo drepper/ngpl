@@ -141,12 +141,45 @@ fn test_an_optional_as_the_condition():
     assert_eq("found" if v ⍳ 5 else "missing", "found")
     assert_eq("found" if v ⍳ 6 else "missing", "missing")
 
-// The two branches are not required to be alike, and the value is
-// whichever one the condition chose.
+// A conditional is one value, so its two sides have to say one type
+// between them.  Two that cannot be the same value are refused at the
+// definition, which tests/output/conditional_branches_disagree checks.
+// What agrees:
 @test
-fn test_the_branches_need_not_agree():
-    assert_eq(@typeof(1i64 if true else "x"), i64)
-    assert_eq(@typeof(1i64 if false else "x"), str)
+fn test_the_branches_agree():
+    let n : i64 = 1
+    let m : i64 = 2
+    let chosen := n if true else m
+    assert_eq(chosen, 1)
+    assert_eq(@typeof(chosen), i64)
+
+// A number with no width stated settles on what it is asked for, so it
+// agrees with any other number.
+@test
+fn test_a_number_with_no_width_settles():
+    let d : f64 = 1 if false else 2.5
+    assert_eq(d, 2.5)
+    let i : i64 = 1 if true else 2
+    assert_eq(i, 1)
+
+// Nothing agrees with an absent value but an absent value, since an
+// optional is what holds both.
+@test
+fn test_an_absent_value_agrees_with_what_holds_it():
+    let found : i64? = 7 if true else ∅
+    assert_eq(found ?? 0, 7)
+
+// A sum type says two types belong together, which is the whole of
+// what one is for, so a conditional over its alternatives is one
+// value.
+type Width = i32 | i64
+
+@test
+fn test_a_sum_type_says_the_two_belong_together():
+    let a : i32 = 1
+    let b : i64 = 2
+    let w : Width = a if true else b
+    assert_eq(@typeof(w), i32)
 
 // ---------------------------------------------------------------------
 // An if statement is still an if statement

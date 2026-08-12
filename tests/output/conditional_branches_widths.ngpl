@@ -1,0 +1,9 @@
+// Two widths are two types.  Where a sum type says they belong
+// together this is one value; nothing here says so.
+@start
+@impure
+fn main():
+    let a : i32 = 1
+    let b : i64 = 2
+    let chosen := a if true else b
+    std.println("{}", chosen)

@@ -1092,9 +1092,19 @@ Macros and Reflection
     statement is the line break: an if goes on with an expression only where the token in
     front of it is not one.
 
-[ ] check that the two branches of a conditional expression agree in type.  They need not
-    today, and the value is whichever branch ran.  Closing it needs a pass that knows what
-    type an arbitrary expression has, which is worth having for more than this.
+[x] check that the two branches of a conditional expression agree in type.  Only what the
+    program writes down is read -- a literal, a name's declaration, a struct field, a
+    comparison -- so a pair is judged only where both sides say what they are, and a pair
+    where either says nothing is left alone.  What agrees: a number with no width stated,
+    which settles on what it is asked for; an absent value, which an optional holds along
+    with the other side; and two types a declared sum type says belong together, that being
+    the whole of what a sum type is for.  Without such a declaration the same pair is
+    refused, which is the honest answer -- the two are one value only because something said
+    so.
+
+[ ] a fuller pass over what type an expression has.  What is there answers literals, names,
+    struct fields and comparisons, which is what the conditional check needed; arithmetic
+    answers nothing, width unification between two stated widths being its own question.
 
 [x] a map operator, f ¨ v, spelled as APL spells each.  It asks f of each of the things v
     holds and answers an array of what it said.  Arrays and ranges, as a fold takes; a matrix

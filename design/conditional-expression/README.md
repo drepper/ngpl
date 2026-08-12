@@ -97,20 +97,48 @@ nothing is a thing.  An expression that produced no value would not be,
 so the second value is not optional, and the refusal says so rather
 than reporting a syntax error at whatever followed.
 
-## What Is Not Checked
+## The Two Sides Say One Type
 
-That the two branches agree in type.  They need not, and the value is
-whichever branch ran:
+A conditional is one value, so its two sides have to say one type
+between them, and a pair that cannot be the same value is refused at
+the definition.
 
-```
-@typeof(1i64 if true else "x")      // i64
-@typeof(1i64 if false else "x")     // str
-```
+The hard part was not the comparison but knowing when *not* to make it.
+Three kinds of pair look like a disagreement and are not:
 
-For a language that means to catch what it can before anything runs,
-this is a gap rather than a decision.  Closing it needs a pass that
-knows what type an arbitrary expression has, which does not exist yet
-and is worth having for more than this.
+- **A number with no width stated.**  `1 if c else 2.5` is an int and a
+  float on the page and one `f64` in a binding that asks for one, since
+  an unwidthed literal settles on what it is asked for.
+- **An absent value.**  `7 if c else ∅` is not a disagreement between
+  `i64` and nothing; it is an `i64?`, which is the type that holds
+  both.
+- **Two types a sum type joins.**  `type Width = i32 | i64` says those
+  two belong together — that is the whole of what a sum type is for —
+  so `a if c else b` over them is one `Width`.
+
+The last one is the interesting case, because the check cannot see the
+type the value is going *to*.  What it can see is every sum type the
+program declared, and asking whether any of them holds both is exactly
+the question: the two are one value only if something said so.  Without
+such a declaration the same line is refused, which is the honest
+answer rather than a guess in either direction.
+
+The consequence is worth stating plainly: **declaring a sum type
+elsewhere makes a conditional legal here.**  That reads as action at a
+distance, and it is — but the alternative is refusing a program that is
+right, or accepting every pair and checking nothing.
+
+## What It Reads, and What It Leaves Alone
+
+Only what the program writes down: a literal, a name's declaration, a
+struct field, a comparison.  Both sides have to say what they are for
+the pair to be judged at all, so anything reached through a call, a
+subscript or arithmetic leaves the conditional alone.
+
+Arithmetic is the deliberate omission.  `a + b` where both are stated
+widths raises width unification, which is a question worth answering
+properly and separately rather than half-answering here to catch one
+more case.
 
 ## Status
 
@@ -118,4 +146,5 @@ Implemented: the expression in every position a value is wanted;
 right-grouping chains; the condition read for truth as an `if`
 statement reads its own; `else` required; a conditional built from
 constants counted as a constant, so `@typeof` and the other
-compile-time forms answer for one.
+compile-time forms answer for one; and the two sides refused at the
+definition where they cannot be one value.
