@@ -171,9 +171,7 @@ procedural macros, Julia's `macro`, and Nim:
 // The factors of an expression, however deeply the parser nested them.
 @listable
 comptime fn factors(e : syntax) → syntax[]:
-    if e.head() ≠ ※×:                       // not a product: one factor
-        return [e]
-    ⧺⌿ factors(e.arguments())                // a product: each of them, joined
+    [e] if e.head() ≠ ※× else ⧺⌿ factors(e.arguments())
 
 macro sin(e : syntax) → syntax:
     let rest : mut syntax[] = []
@@ -271,16 +269,28 @@ avoid a recursion, and it read like one.
 
 `comptime fn` is what removed it.  A function marked that way is
 installed before expansion, alongside the macros, so a macro may call
-it and it may call itself.  The example is now three lines that say
+it and it may call itself.  The example is now **one line** that says
 what "the factors of an expression" means, and the macro says only what
 it does with them.
 
-Those three lines are worth reading twice, because the last one is the
-language's own idiom rather than a loop: `@listable` makes
+That line is worth reading twice, because every part of it is the
+language saying something rather than a loop spelling it out.
+`a if c else b` chooses without branching; `@listable` makes
 `factors(e.arguments())` answer the factors of *each* of the things the
-product applies `×` to, and `⧺⌿` joins those into one array. Written
-out it is a loop that carries an array and pushes each answer onto the
-end of it, which is four lines saying what one says.
+product applies `×` to; and `⧺⌿` joins those into one array.  Written
+the plain way — a guard clause, an array carried along, and a loop
+pushing each answer onto the end of it — it is seven lines saying what
+one says:
+
+```
+comptime fn factors(e : syntax) → syntax[]:
+    if e.head() ≠ ※×:
+        return [e]
+    let all : mut syntax[] = []
+    foreach part := e.arguments():
+        all ← all ⧺ factors(part)
+    all
+```
 
 The cost of the shorter spelling is honest and worth stating: marking
 `factors` listable changes what it does when a *caller* hands it an

@@ -8635,9 +8635,7 @@ A macro is an ordinary function that runs while the program is being installed. 
 // The factors of an expression, however deeply the parser nested them.
 @listable
 comptime fn factors(e : syntax) → syntax[]:
-    if e.head() ≠ ※×:                       // not a product: one factor
-        return [e]
-    ⧺⌿ factors(e.arguments())                // a product: each of them, joined
+    [e] if e.head() ≠ ※× else ⧺⌿ factors(e.arguments())
 
 macro sin(e : syntax) → syntax:
     let rest : mut syntax[] = []
@@ -8750,9 +8748,7 @@ as `comptime fn helper` to have it there in time
 ```
 @listable
 comptime fn factors(e : syntax) → syntax[]:
-    if e.head() ≠ ※×:
-        return [e]
-    ⧺⌿ factors(e.arguments())               // itself, over each of them
+    [e] if e.head() ≠ ※× else ⧺⌿ factors(e.arguments())      // itself
 ```
 
 This is what recursion over the program's text is written with.  A macro is one function and cannot be two, so a walk that has to descend either carries its own worklist or calls something that recurses; `comptime fn` is how the second is spelled.
