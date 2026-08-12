@@ -5497,6 +5497,16 @@ of what it holds, so this is 'bool[]'
 
 This is the mistake the threading rules make easy to write: `x > 3` reads as one comparison and is one for each element.  The depth is counted through, so a matrix parameter reports `i32[,]` rather than `i32[]`, and it is counted through nested operators, `⧺`, `⍴`, `¨`, and both branches of a conditional where they agree.
 
+A lambda states its own parameters and its own return type, so it is asked the same question wherever it is written — bound to a name, handed to something, written into a condition:
+
+```
+let f := λx : i32[] → bool: x > 3
+
+error: in 'f': a lambda's return type is bool, which is not an array
+type, but the body hands back an array: an operator handed one answers
+one for each of what it holds, so this is 'bool[]'
+```
+
 What is *not* threaded is left alone, since none of it answers an array: a fold reduces, `#` counts, and a subscript reads one element out.
 
 What nothing says about is left to the check at runtime — a call to another function, a name that is not a parameter, a generic. Saying nothing there is what keeps this from refusing what it merely cannot see.

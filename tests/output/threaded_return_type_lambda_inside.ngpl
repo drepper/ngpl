@@ -1,0 +1,6 @@
+// The same for a lambda written inside a function.
+@start
+@impure
+fn main():
+    let g := λy : i32[] → bool: y > 3
+    std.println("not reached")

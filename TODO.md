@@ -1121,5 +1121,7 @@ Macros and Reflection
     mistake and is not caught, the field's type not being looked up.  It wants the struct
     type in hand where the check runs, which the impl path has.
 
-[ ] the same check on a lambda.  _static_return_check reads a function's own returns and
-    stops at a lambda, so a lambda that promises a scalar and threads is left to run.
+[x] the same check on a lambda, which states its own parameters and its own return type and
+    so is asked the same question.  Every definition is walked rather than every function
+    body, so a lambda bound to a global name, bound inside a function, or written into a
+    condition is all reached the same way.

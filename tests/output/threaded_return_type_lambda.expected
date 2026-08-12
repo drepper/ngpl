@@ -1,0 +1,7 @@
+error: in 'f': a lambda's return type is bool, which is not an array type, but the body hands back an array: an operator handed one answers one for each of what it holds, so this is 'bool[]'
+  --> tests/output/threaded_return_type_lambda.ngpl:5:29
+    |
+  5 | let f := λx : i32[] → bool: x > 3
+    |                             ^^^^^
+  6 | 
+    |
