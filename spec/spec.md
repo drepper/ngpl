@@ -4059,14 +4059,27 @@ The condition itself is *not* a conditional unless it is bracketed, which is Pyt
 
 The condition is read for truth the same way an `if` statement reads its own: a number is true where it is not zero, a string where it is not empty, an optional where it holds something.
 
-The two branches need not be of one type.  The value is whichever branch the condition chose, and its type is that branch's:
+A conditional is **one value**, so its two sides have to say one type between them.  Two that cannot be the same value are refused at the definition, whether or not the line is ever reached:
 
 ```
-@typeof(1i64 if true else "x")      // i64
-@typeof(1i64 if false else "x")     // str
+1i64 if c else "x"
+
+error: a conditional is one value, so its two sides say one type between
+them; this one says i64 where the condition holds and str where it does
+not
 ```
 
-Nothing yet checks that the two agree, which a stricter pass over what an expression's type is known to be would do.
+Three things count as agreeing.  A number with **no width stated** settles on what it is asked for, so it agrees with any other number — `1 if c else 2.5` is fine, and a `f64` binding makes both `f64`.  An **absent value** agrees with what holds it, since an optional is the type that holds both: `7 if c else ∅` is an `i64?`.  And two types that otherwise disagree are one value where a **sum type says they belong together**, which is the whole of what a sum type is for:
+
+```
+type Width = i32 | i64
+
+let w : Width = a if c else b       // an i32 and an i64: one Width
+```
+
+Without that declaration the same line is refused, which is the honest answer: the two are one value only because something said so.
+
+Only what the program writes down is read — a literal, a name's declaration, a struct field, a comparison — so a pair is judged only where **both** sides say what they are.  Where either says nothing, the conditional is left alone; it is one value at runtime whatever this could not work out.
 
 `else` is required.  A conditional says what the value is either way, and leaving the second value off leaves the expression unfinished:
 

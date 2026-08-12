@@ -1,0 +1,7 @@
+error: in main: a conditional is one value, so its two sides say one type between them; this one says i32 where the condition holds and i64 where it does not
+  --> tests/output/conditional_branches_widths.ngpl:8:21
+    |
+  8 |     let chosen := a if true else b
+    |                     ^^
+  9 |     std.println("{}", chosen)
+    |
