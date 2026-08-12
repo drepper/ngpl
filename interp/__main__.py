@@ -10,7 +10,9 @@ from collections import defaultdict
 from interp.lexer import tokenize, process_indentation
 from interp.parser import Parser
 from interp.macros import (collect as macro_collect,
-                           expand_definitions as macro_expand, MacroError)
+                           expand_definitions as macro_expand, MacroError,
+                           COMPTIME as MACRO_COMPTIME,
+                           FUNCTIONS as MACRO_SEEN_FUNCTIONS)
 from interp.env import Env, Decl
 from interp.ast import (
     FuncDef as ASTFuncDef, EnumDef as ASTEnumDef, UnitDef as ASTUnitDef,
@@ -2084,20 +2086,31 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
 def _macro_runner(macros: dict, env: Env, evaluator: Evaluator):
     """A way to run one macro, for the expansion pass to call.
 
-    The macros written as functions are installed in an environment of
-    their own, above the global one, so one can call another and all
-    can reach std, and so nothing they define lands among the
-    program's own names.  The program's functions are not there: they
-    are installed after expansion, because expansion is what decides
-    what they say.
+    The macros written as functions, and the functions marked comptime,
+    are installed in an environment of their own above the global one.
+    So a macro can call another, and either can call a comptime
+    function, and all of them can reach std, while nothing they define
+    lands among the program's own names.
+
+    The program's other functions are not there: they are installed
+    after expansion, because expansion is what decides what they say.
+    Marking a function comptime is what moves it to this side of that
+    line.
 
     A macro written as rules needs none of this -- what it writes is
     decided by matching -- so the runner never sees one.
     """
     macro_env = Env(parent=env)
     made: dict[str, FuncValue] = {}
-    for name, defn in macros.items():
-        func = getattr(defn, "func", None)
+    # A comptime function is there before the program runs, which is
+    # the whole of what the marker says and what lets a macro call it
+    # -- including one that calls itself, since it is installed before
+    # any of them is run.
+    installed = [(name, defn) for name, defn in MACRO_COMPTIME.items()]
+    installed += [(name, defn) for name, defn in macros.items()]
+    for name, defn in installed:
+        func = getattr(defn, "func", defn if isinstance(defn, ASTFuncDef)
+                       else None)
         if func is None:
             # A macro written as rules has no function to install: what
             # it writes is decided by matching rather than by running.
@@ -2120,10 +2133,30 @@ def _macro_runner(macros: dict, env: Env, evaluator: Evaluator):
         except Exception as e:
             raise MacroError(
                 f"{macro.name} could not be run: "
-                f"{strip_position_prefix(str(e))}",
+                f"{_macro_reach(strip_position_prefix(str(e)))}",
                 getattr(call, "pos", None)) from e
 
     return run
+
+
+def _macro_reach(message: str) -> str:
+    """Say why a name a macro reached for is not there, where that is why.
+
+    A function the program defines is installed after expansion,
+    because expansion is what decides what it says.  Reaching for one
+    from a macro therefore finds nothing, and "undefined" is true but
+    unhelpful: the name is defined, on the other side of a line the
+    reader has to be told about.
+    """
+    found = re.search(r"undefined variable: '?([^'\s]+)'?", message)
+    if found is None:
+        return message
+    name = found.group(1)
+    if name not in MACRO_SEEN_FUNCTIONS or name in MACRO_COMPTIME:
+        return message
+    return (f"{name} is a function of the program, and a macro runs before "
+            f"the program's functions are installed; write it as "
+            f"`comptime fn {name}` to have it there in time")
 
 
 def _install_definitions(definitions, env: Env, evaluator: Evaluator,

@@ -733,8 +733,14 @@ Functions and Combinators
 Compile-Time and Metaprogramming
 ---------------------------------
 
-[ ] [FULL] comptime functions: attribute to mark functions as evaluable at compile time when all
+[~] [FULL] comptime functions: attribute to mark functions as evaluable at compile time when all
     arguments are constant.  if constexpr equivalent for conditional compilation.
+    Half of this is in: `comptime fn` marks a function as being there before the program runs,
+    which is what lets a macro call it -- and what lets it call itself, since a macro is one
+    function and a walk over the program's text has to descend.  It is one function on both
+    sides: installed early for the macros, and again in the ordinary way for the program.
+    Still open: evaluating an ordinary call at compile time when its arguments are all known,
+    and the if-constexpr equivalent.
 
 [ ] [FULL] hygienic macro system: expansion after scanning, before parsing.  Distinct invocation
     syntax from function calls.  Reference Rust and Common Lisp macro systems.
@@ -1068,8 +1074,11 @@ Macros and Reflection
 
 [ ] install the program's definitions in two passes -- signatures before expansion, bodies
     after -- so a macro can follow a reference to what a name means.  This is the one item
-    of the macro list above that neither branch implements, and it is also what attribute
-    macros and macros that write definitions rather than expressions wait on.
+    of the macro list above that is not implemented, and it is also what attribute macros
+    and macros that write definitions rather than expressions wait on.  `comptime fn` covers
+    the part of it that is about calling: a function marked that way is installed before
+    expansion.  What is left is reading a name the macro was handed and finding what it
+    refers to.
 
 [ ] the second half of hygiene: a name a macro's template reads should resolve where the
     macro was written rather than where it was invoked.  With one global namespace the two

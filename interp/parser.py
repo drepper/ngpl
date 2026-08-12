@@ -39,7 +39,7 @@ DEFINITION_STARTERS = frozenset({
     "START", "REPLACEABLE", "TEST", "FLAG", "IMPURE", "EXPECT", "REPR",
     "HOT", "COLD", "LISTABLE", "NORETURN", "PRE", "POST",
     "ENUM", "STRUCT", "IMPL", "UNIT", "TYPE", "FN", "LET",
-    "MACRO", "MACRO_RULES",
+    "MACRO", "MACRO_RULES", "COMPTIME",
 })
 
 
@@ -449,6 +449,14 @@ class Parser:
         if self._check("IMPL"):
             return self._parse_impl_block()
 
+        # `comptime fn` -- a function that is there before the program
+        # runs, so a macro may call it.
+        is_comptime = False
+        if self._check("COMPTIME") and self.pos + 1 < len(self.tokens) \
+                and self.tokens[self.pos + 1].type == "FN":
+            self._eat("COMPTIME")
+            is_comptime = True
+
         if self._check("MACRO_RULES"):
             return self._parse_macro_rules_def()
 
@@ -467,7 +475,8 @@ class Parser:
                                             is_listable=is_listable,
                                             is_noreturn=is_noreturn,
                                             preconditions=preconditions,
-                                            postconditions=postconditions)
+                                            postconditions=postconditions,
+                                            is_comptime=is_comptime)
         elif self._check("LET"):
             return self._parse_var_def()
         elif self._check("EOF"):
@@ -646,7 +655,8 @@ class Parser:
                             is_noreturn: bool = False,
                             preconditions: list | None = None,
                             postconditions: list | None = None,
-                            keyword: str = "FN"):
+                            keyword: str = "FN",
+                            is_comptime: bool = False):
         """Parse: fn name '(' [params] ')' ('->' ret_type)? block
 
         The parameter list is enclosed in parentheses.  An empty parameter
@@ -873,7 +883,8 @@ class Parser:
                                ret_unit=ret_unit, is_listable=is_listable,
                                is_noreturn=is_noreturn,
                                preconditions=preconditions,
-                               postconditions=postconditions)
+                               postconditions=postconditions,
+                               is_comptime=is_comptime)
                 fdef.param_positions = param_positions
                 fdef.ret_type_pos = ret_type_pos
                 fdef._parse_error = str(e)
@@ -891,7 +902,8 @@ class Parser:
                        ret_unit=ret_unit, is_listable=is_listable,
                        is_noreturn=is_noreturn,
                        preconditions=preconditions,
-                       postconditions=postconditions)
+                       postconditions=postconditions,
+                       is_comptime=is_comptime)
         fdef.param_positions = param_positions
         fdef.ret_type_pos = ret_type_pos
         fdef._self_is_ref = self_is_ref

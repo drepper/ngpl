@@ -208,6 +208,10 @@ REGISTRY: dict = {}
 # call of it is a call of the function and nothing to complain about.
 FUNCTIONS: set = set()
 
+# The functions marked comptime, which are there before the program
+# runs and so are the ones a macro may call.
+COMPTIME: dict = {}
+
 
 class _Spliced:
     """Statements a macro wrote, on their way to the line they replace.
@@ -240,6 +244,8 @@ def collect(definitions) -> dict:
             REGISTRY[defn.name] = defn
         elif isinstance(defn, _ast.FuncDef):
             FUNCTIONS.add(defn.name)
+            if defn.is_comptime:
+                COMPTIME[defn.name] = defn
     return REGISTRY
 
 

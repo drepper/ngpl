@@ -8546,22 +8546,20 @@ The names are Rust's, whose `macro_rules!` and procedural macros are these same 
 A macro is an ordinary function that runs while the program is being installed.  Its parameters are handed the parse trees of what the invocation was written with, and it answers the tree that replaces the invocation:
 
 ```
-macro sin(e : syntax) → syntax:
-    let todo : mut syntax[] = [e]
-    let factors : mut syntax[] = []
-    let at : mut i64 ¤ptrdiff = 0
-    while at < #todo:
-        let part := todo[at]
-        at ← at + 1¤ptrdiff
-        if part.head() = ※×:                 // does it apply × ?
-            foreach inner := part.arguments():
-                todo.push(inner)             // then take it apart
-        else:
-            factors.push(part)
+// The factors of an expression, however deeply the parser nested them.
+comptime fn factors(e : syntax) → syntax[]:
+    if e.head() ≠ ※×:                       // not a product: one factor
+        return [e]
+    let all : mut syntax[] = []
+    foreach part := e.arguments():           // a product: each of them,
+        foreach f := factors(part):          // taken apart in turn
+            all.push(f)
+    all
 
+macro sin(e : syntax) → syntax:
     let rest : mut syntax[] = []
     let found : mut bool = false
-    foreach f := factors:
+    foreach f := factors(e):
         if not found and f = ※std.π:        // is it π itself?
             found ← true
         else:
@@ -8648,7 +8646,39 @@ A macro that answers something other than a piece of the program is an error, as
 
 `kind()`, `name()`, `head()`, `arguments()`, `※`, and `=` between two pieces of the program are the whole of what is available for looking at a program.  They are the same mechanism a macro writes with, seen from the other end.
 
-**What a macro can reach.**  A macro runs before the program's own definitions are installed, so it can use `std`, the builtins and other macros, and not the program's functions.  Lifting that means installing signatures in a pass of their own before expansion, which is where following a reference to a definition also becomes possible.
+#### What a Macro Can Reach: `comptime fn`
+
+A macro runs before the program's own definitions are installed, because expansion is what decides what they say.  So a macro can use `std`, the builtins, other macros — and **not** the program's functions:
+
+```
+fn helper(e : syntax) → syntax:
+    e
+
+macro doubled(e : syntax) → syntax:
+    ⟪$(helper(e)) + $(helper(e))⟫
+
+error: doubled could not be run: helper is a function of the program,
+and a macro runs before the program's functions are installed; write it
+as `comptime fn helper` to have it there in time
+```
+
+`comptime fn` moves a function to the other side of that line.  It is installed before expansion, alongside the macros, so a macro may call it — and so may another comptime function, including itself:
+
+```
+comptime fn factors(e : syntax) → syntax[]:
+    if e.head() ≠ ※×:
+        return [e]
+    …
+    foreach f := factors(part):             // itself
+```
+
+This is what recursion over the program's text is written with.  A macro is one function and cannot be two, so a walk that has to descend either carries its own worklist or calls something that recurses; `comptime fn` is how the second is spelled.
+
+A comptime function is **one function on both sides**: it is installed before expansion for the macros to call, and installed again in the ordinary way for the program to call while it runs.  Nothing about it is special at the call — what the marker says is when it exists, not what it computes.
+
+What a comptime function may reach is what a macro may reach: `std`, the builtins, the macros, and the other comptime functions.
+
+Following a *reference* to a definition — asking a `syntax` that reads `foo` what `foo` is — remains out of reach, and waits on installing signatures in a pass of their own before expansion.
 
 ### Reflection
 

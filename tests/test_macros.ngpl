@@ -18,28 +18,31 @@
 // The example the design was written around
 // ---------------------------------------------------------------------
 
+// The factors of an expression, however deeply the parser nested them.
+// A product of a product is one product to a reader, so anything whose
+// head is × is taken apart into what it applies × to, and everything
+// else is a factor, itself.
+//
+// Written as a comptime function so that the macro below can call it:
+// a macro runs before the program's own functions are installed, and
+// comptime is what puts a function on the other side of that line.
+comptime fn factors(e : syntax) → syntax[]:
+    if e.head() ≠ ※×:
+        return [e]
+    let all : mut syntax[] = []
+    foreach part := e.arguments():
+        foreach f := factors(part):
+            all.push(f)
+    all
+
 // sin(x×π) has to round x×π first, and π is not a number f64 holds, so
 // the answer is near zero rather than zero.  std.sinpi takes the turns
-// rather than the radians and is exact at every whole one.  The macro
-// asks what the expression applies: where that is ×, it is taken apart
-// into what it applies × to, as far down as that goes.  Where π is one
-// of the factors it comes out, and std.sinpi takes what is left.
+// rather than the radians and is exact at every whole one.  Where π is
+// one of the factors it comes out, and std.sinpi takes what is left.
 macro sin(e : syntax) → syntax:
-    let todo : mut syntax[] = [e]
-    let factors : mut syntax[] = []
-    let at : mut i64 ¤ptrdiff = 0
-    while at < #todo:
-        let part := todo[at]
-        at ← at + 1¤ptrdiff
-        if part.head() = ※×:
-            foreach inner := part.arguments():
-                todo.push(inner)
-        else:
-            factors.push(part)
-
     let rest : mut syntax[] = []
     let found : mut bool = false
-    foreach f := factors:
+    foreach f := factors(e):
         if not found and f = ※std.π:
             found ← true
         else:
@@ -71,14 +74,15 @@ fn test_pi_on_either_side():
 fn test_pi_alone():
     assert_eq(sin⟦std.π⟧, 0.0)
 
-// The walk takes a product apart as far down as it goes, so π is found
-// wherever in a longer product it is written.  This is what a list of
+// factors recurses, so π is found wherever in a longer product it is
+// written and however the parser nested it.  This is what a list of
 // rewrite rules cannot say without a rule per shape.
 @test
 fn test_pi_anywhere_in_a_longer_product():
     assert_eq(sin⟦2.0 × std.π × 3.0⟧, 0.0)
     assert_eq(sin⟦2.0 × 3.0 × std.π⟧, 0.0)
     assert_eq(sin⟦std.π × 2.0 × 3.0⟧, 0.0)
+    assert_eq(sin⟦2.0 × (3.0 × std.π)⟧, 0.0)
 
 // What the naive way answers, which is what the macro exists to avoid.
 @test
@@ -466,6 +470,20 @@ fn doubled(n : i64) → i64:
 fn test_a_macro_and_a_function_may_share_a_name():
     assert_eq(doubled(21), 42)
     assert_eq(doubled⟦21i64⟧, 42)
+
+// A comptime function is one function on both sides of the line: the
+// macro calls it while the program is being installed, and the program
+// calls it while it runs.
+comptime fn tripled(n : i64) → i64:
+    n × 3
+
+macro three_times(e : syntax) → syntax:
+    ⟪$(tripled(7i64))⟫
+
+@test
+fn test_a_comptime_function_serves_both_sides():
+    assert_eq(three_times⟦0i64⟧, 21)
+    assert_eq(tripled(7), 21)
 
 @start
 @impure

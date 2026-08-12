@@ -1,0 +1,13 @@
+// A macro may call a comptime function and not an ordinary one: the
+// program's own functions are installed after expansion, because
+// expansion is what decides what they say.
+fn helper(e : syntax) → syntax:
+    e
+
+macro doubled(e : syntax) → syntax:
+    ⟪$(helper(e)) + $(helper(e))⟫
+
+@start
+@impure
+fn main():
+    std.println("{}", doubled⟦21i64⟧)

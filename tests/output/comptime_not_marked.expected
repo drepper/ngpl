@@ -1,0 +1,6 @@
+error: doubled could not be run: helper is a function of the program, and a macro runs before the program's functions are installed; write it as `comptime fn helper` to have it there in time
+  --> tests/output/comptime_not_marked.ngpl:13:23
+    |
+ 13 |     std.println("{}", doubled⟦21i64⟧)
+    |                       ^^^^^^^
+    |

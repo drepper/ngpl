@@ -168,22 +168,20 @@ expansion time, in the tradition of Lisp's `defmacro`, Rust's
 procedural macros, Julia's `macro`, and Nim:
 
 ```
-macro sin(e : syntax) → syntax:
-    let todo : mut syntax[] = [e]
-    let factors : mut syntax[] = []
-    let at : mut i64 ¤ptrdiff = 0
-    while at < #todo:
-        let part := todo[at]
-        at ← at + 1¤ptrdiff
-        if part.head() = ※×:                 // does it apply × ?
-            foreach inner := part.arguments():
-                todo.push(inner)             // then take it apart
-        else:
-            factors.push(part)
+// The factors of an expression, however deeply the parser nested them.
+comptime fn factors(e : syntax) → syntax[]:
+    if e.head() ≠ ※×:                       // not a product: one factor
+        return [e]
+    let all : mut syntax[] = []
+    foreach part := e.arguments():           // a product: each of them,
+        foreach f := factors(part):          // taken apart in turn
+            all.push(f)
+    all
 
+macro sin(e : syntax) → syntax:
     let rest : mut syntax[] = []
     let found : mut bool = false
-    foreach f := factors:
+    foreach f := factors(e):
         if not found and f = ※std.π:        // is it π itself?
             found ← true
         else:
@@ -267,6 +265,22 @@ one call puts back a product that has lost a factor.  It is not handed
 the empty case: what an empty product is belongs to the arithmetic the
 macro is doing, not to the builder — which is why the example writes
 out what "no factors left" and "one factor left" mean.
+
+**A macro cannot recurse, so something else must.**  The first version
+of the example carried its own worklist — an array of pieces still to
+look at and an index into it — because a macro is one function and the
+walk over a nested product needs to descend.  That is a loop written to
+avoid a recursion, and it read like one.
+
+`comptime fn` is what removed it.  A function marked that way is
+installed before expansion, alongside the macros, so a macro may call
+it and it may call itself.  The example is now four lines that say what
+"the factors of an expression" means, and the macro says only what it
+does with them.
+
+It is one function on both sides: installed early for the macros, and
+again in the ordinary way for the program.  What the marker says is
+when the function exists, not what it computes.
 
 **What is not.** The macro is a program, so reading it means running it
 in your head. It can loop forever (caught by a depth bound only when it

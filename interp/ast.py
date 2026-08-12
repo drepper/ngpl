@@ -174,7 +174,8 @@ class FuncDef:
                  is_listable: bool = False,
                  is_noreturn: bool = False,
                  preconditions: list | None = None,
-                 postconditions: list | None = None):
+                 postconditions: list | None = None,
+                 is_comptime: bool = False):
         self.name = name
         self.params = params
         # Where each parameter was written, for diagnostics about it.
@@ -208,6 +209,9 @@ class FuncDef:
         self.hint = hint
         # The unit the return type states, or None where it states none.
         self.ret_unit = ret_unit
+        # Whether the function is there before the program runs, which
+        # is what lets a macro call it.
+        self.is_comptime = is_comptime
 
 
 class VarDef:
