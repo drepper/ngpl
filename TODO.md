@@ -1117,9 +1117,10 @@ Macros and Reflection
     parameter, a generic -- is left to the check that meets the value itself.  Impl methods
     are checked too, which they were not before: _static_return_check was never run on one.
 
-[ ] the same check through a struct field: `self.v > 3` where v is declared i32[] is the same
-    mistake and is not caught, the field's type not being looked up.  It wants the struct
-    type in hand where the check runs, which the impl path has.
+[x] the same check through a struct field: `self.v > 3` where v is declared i32[].  A struct
+    says what its fields are and a name standing for an instance says which struct, which
+    _struct_vars_of already worked out for the purity checks -- self inside an impl block, a
+    struct-typed parameter, and a lambda's own struct-typed parameter all name one.
 
 [x] the same check on a lambda, which states its own parameters and its own return type and
     so is asked the same question.  Every definition is walked rather than every function

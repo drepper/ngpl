@@ -1,0 +1,10 @@
+// The same through a struct-typed parameter rather than self.
+struct Box:
+    v : i32[]
+
+fn any_big(b : Box) → bool:
+    b.v > 3
+
+@start
+fn main():
+    std.println("not reached")

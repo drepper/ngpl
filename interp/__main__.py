@@ -1054,7 +1054,31 @@ def _returned_exprs(func_def):
 _ALWAYS_A_CONTAINER = (_ast.MapExpr, _ast.ReshapeExpr)
 
 
-def _least_rank(expr, ranks: dict) -> int | None:
+def _field_rank(expr, structs: dict) -> int | None:
+    """How deep a field's declared type says it is, where the struct is known.
+
+    `self.v` is the case this exists for: the struct says what v is,
+    and a name standing for a struct instance is what says which
+    struct.  A name that stands for none, or a field the struct does
+    not declare, says nothing.
+    """
+    if not (isinstance(expr, _ast.GetAttr)
+            and isinstance(expr.obj, _ast.VarRef)):
+        return None
+    struct = structs.get(expr.obj.name)
+    if struct is None:
+        return None
+    for field_name, field_type in struct.fields:
+        if field_name == expr.attr:
+            if not field_type or is_generic_type(field_type):
+                return None
+            base, _ = _split_optional_type(field_type)
+            return declared_rank(resolve_type_alias(base if base
+                                                    else field_type))
+    return None
+
+
+def _least_rank(expr, ranks: dict, structs: dict | None = None) -> int | None:
     """How many containers deep the expression is at least, where known.
 
     Threading is what makes this answerable without running anything: a
@@ -1068,8 +1092,11 @@ def _least_rank(expr, ranks: dict) -> int | None:
     fold, anything else.  Saying nothing is what leaves a case to the
     check that meets the value itself.
     """
+    structs = structs or {}
     if isinstance(expr, _ast.VarRef):
         return ranks.get(expr.name)
+    if isinstance(expr, _ast.GetAttr):
+        return _field_rank(expr, structs)
     if isinstance(expr, _ALWAYS_A_CONTAINER):
         return 1
     if isinstance(expr, _ast.ArrayLit):
@@ -1079,19 +1106,20 @@ def _least_rank(expr, ranks: dict) -> int | None:
             and (expr.op in Evaluator._LISTABLE_BINOPS
                  or expr.op == "\N{DOUBLE PLUS}"):
         # Either operand being a container makes the answer one.
-        sides = [_least_rank(expr.left, ranks), _least_rank(expr.right, ranks)]
+        sides = [_least_rank(expr.left, ranks, structs),
+                 _least_rank(expr.right, ranks, structs)]
         deepest = [r for r in sides if r is not None and r >= 1]
         if deepest:
             return max(deepest)
         return None if None in sides else 0
     if isinstance(expr, _ast.UnaryOp) \
             and expr.op in Evaluator._LISTABLE_UNOPS:
-        return _least_rank(expr.operand, ranks)
+        return _least_rank(expr.operand, ranks, structs)
     if isinstance(expr, _ast.IfExpr):
         # Whichever branch runs is the answer, so only what both say is
         # something this can say.
-        sides = [_least_rank(expr.then_expr, ranks),
-                 _least_rank(expr.else_expr, ranks)]
+        sides = [_least_rank(expr.then_expr, ranks, structs),
+                 _least_rank(expr.else_expr, ranks, structs)]
         if None in sides:
             return None
         return min(sides)
@@ -1116,7 +1144,7 @@ def _parameter_ranks(params) -> dict:
     return ranks
 
 
-def _static_return_check(func_def) -> str | None:
+def _static_return_check(func_def, structs: dict | None = None) -> str | None:
     """Refuse an array handed back where the return type names a scalar.
 
     A literal says its shape where it is written, and the signature
@@ -1129,7 +1157,8 @@ def _static_return_check(func_def) -> str | None:
     """
     return _return_shape_finding(getattr(func_def, "ret_type", None),
                                  func_def.params,
-                                 _returned_exprs(func_def))
+                                 _returned_exprs(func_def),
+                                 structs=structs or {})
 
 
 def _lambda_returns(lam):
@@ -1151,7 +1180,8 @@ def _lambda_returns(lam):
         yield body[-1].expr
 
 
-def _static_lambda_return_check(definition) -> str | None:
+def _static_lambda_return_check(definition, env=None,
+                                structs: dict | None = None) -> str | None:
     """The same check for every lambda written inside a definition.
 
     A lambda states its own parameters and its own return type, so the
@@ -1160,19 +1190,30 @@ def _static_lambda_return_check(definition) -> str | None:
     its body, so a lambda bound to a name, or written into a condition,
     is asked it too.
     """
+    outer = structs or {}
     for node in _iter_ast(definition):
         if not isinstance(node, _ast.LambdaExpr):
             continue
+        # A lambda's own struct-typed parameters stand for instances
+        # too, alongside whatever the definition around it named.
+        seen = dict(outer)
+        if env is not None:
+            for name, param_type in node.params:
+                struct = _struct_type_named(param_type, env)
+                if struct is not None:
+                    seen[name] = struct
         finding = _return_shape_finding(node.ret_type, node.params,
                                         _lambda_returns(node),
-                                        subject="a lambda's return type")
+                                        subject="a lambda's return type",
+                                        structs=seen)
         if finding is not None:
             return finding
     return None
 
 
 def _return_shape_finding(ret_type, params, returned,
-                          subject: str = "return type") -> str | None:
+                          subject: str = "return type",
+                          structs: dict | None = None) -> str | None:
     """Whether what is handed back is an array where a scalar is promised."""
     if _says_nothing(ret_type):
         return None
@@ -1192,7 +1233,7 @@ def _return_shape_finding(ret_type, params, returned,
                 f"but the body hands back {format_shape(dims)} elements; "
                 f"an array type says its shape, as "
                 f"'{check}[{written}]'", expr)
-        deep = _least_rank(expr, ranks)
+        deep = _least_rank(expr, ranks, structs)
         if deep is not None and deep >= 1:
             # An array type of no stated extent is written with a
             # comma for each dimension past the first.
@@ -2375,7 +2416,7 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
         if isinstance(defn, ASTVarDef):
             # A lambda written here states its own signature, so it is
             # asked what a function is asked.
-            lambda_err = _static_lambda_return_check(defn)
+            lambda_err = _static_lambda_return_check(defn, env)
             if lambda_err is not None:
                 raise DefinitionError(
                     f"in '{defn.name}': {lambda_err}",
@@ -2624,8 +2665,10 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 if assert_err is not None:
                     raise DefinitionError(f"in {defn.name}: {assert_err}",
                                           _finding_pos(assert_err) or _node_pos(defn))
-                return_err = (_static_return_check(defn)
-                              or _static_lambda_return_check(defn))
+                named_structs = _struct_vars_of(defn, env)
+                return_err = (
+                    _static_return_check(defn, named_structs)
+                    or _static_lambda_return_check(defn, env, named_structs))
                 if return_err is not None:
                     raise DefinitionError(f"in {defn.name}: {return_err}",
                                           _finding_pos(return_err) or _node_pos(defn))
@@ -2674,8 +2717,9 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
             struct_vars = _struct_vars_of(method_def, env, self_type=st)
             for finding in (_static_literal_check(method_def),
                             _static_chr_check(method_def),
-                            _static_return_check(method_def),
-                            _static_lambda_return_check(method_def),
+                            _static_return_check(method_def, struct_vars),
+                            _static_lambda_return_check(method_def, env,
+                                                        struct_vars),
                             _static_purity_check(method_def, env, struct_vars),
                             _static_unused_value_check(method_def, env,
                                                        struct_vars)):
@@ -2815,8 +2859,10 @@ def main():
                 errors_produced.append(("error", assert_err))
 
         if not errors_produced:
-            return_err = (_static_return_check(defn)
-                          or _static_lambda_return_check(defn))
+            named_structs = _struct_vars_of(defn, env)
+            return_err = (
+                _static_return_check(defn, named_structs)
+                or _static_lambda_return_check(defn, env, named_structs))
             if return_err is not None:
                 errors_produced.append(("error", return_err))
 
