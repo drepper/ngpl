@@ -53,7 +53,7 @@ Sections describing a feature outside the bootstrap subset are marked:
 
 > **Full language.**  Not available in the bootstrap implementation.
 
-[TODO.md](../TODO.md) tracks the same boundary from the other side, tagging each unimplemented item with `[FULL]`.
+[TODO-language.md](../TODO-language.md) tracks the same boundary from the other side, tagging each unimplemented item with `[FULL]`; [TODO-bootstrap.md](../TODO-bootstrap.md) describes the boundary itself and the interpreter's own outstanding work.
 
 #### Arbitrary-Precision Numbers
 

@@ -1,77 +1,151 @@
-To Do List
-==========
+To Do List: The Language
+========================
 
 Work on all the issues without the checkmark.  Implement them on separate git branches.  Always
 add test cases and adjust the language specification.  Once a to do item is complete add the
 checkmark, commit the change, and change back to main.
 
+This list holds the language itself: what a program may say and what it means.  The work on the
+implementations is kept beside it — the Python interpreter in
+[TODO-bootstrap.md](TODO-bootstrap.md), and the compiler, the runtime and the tooling in
+[TODO-compiler.md](TODO-compiler.md).
 
-The Bootstrap Language and the Full Language
---------------------------------------------
+A feature the bootstrap interpreter does not have yet is tagged `[FULL]`, one that is half in
+`[~]`.  What that boundary is and how it moves is in [TODO-bootstrap.md](TODO-bootstrap.md).
 
-The Python interpreter in `interp/` is the **bootstrap implementation**.  What it accepts is the
-**bootstrap language**, which is a strict subset of the full language that `spec/spec.md`
-specifies.  The subset is defined by the implementation: a feature is in the bootstrap language
-when `interp/` implements it, and belongs to the full language until then.
 
-A bootstrap exists to be small enough to write by hand and to carry a self-hosting compiler far
-enough to take over.  It does not need every feature, and paying for the ones it does not need
-would defeat the point of having one.
+Foundations
+-----------
 
-Two rules hold:
+What the language rests on, recorded here because the completed list below was started after
+these were already in place.  Each has a chapter in `spec/spec.md` except where an item says
+otherwise.
 
-- The subset is strict.  A program the bootstrap accepts means the same thing in the full
-  language.  The bootstrap never accepts what the full language rejects, and never gives an
-  accepted program a different meaning.
-- A feature outside the subset is refused rather than ignored.  Using one is an error naming the
-  feature, so a program that runs is one the full language would run the same way.
+[x] a definition and an assignment are two different things and are written differently.  A
+    definition is headed by `let`, names the thing, may state a type after a colon -- `mut` in
+    front of the type where the binding is to be writable -- and gives the value after `=`; an
+    assignment writes `←` between the name and the value.  A reader can tell which they are
+    looking at from the first token, and a definition cannot be mistaken for a test, `=`
+    comparing and `←` storing.
 
-An outstanding item tagged `[FULL]` is part of the full language and not yet part of the
-bootstrap.  When it is implemented the tag goes with the checkmark, and the feature has crossed
-into the bootstrap language.  The boundary only moves that way; nothing leaves the bootstrap once
-it is in.
+[x] parentheses group an expression and do nothing else; `[` and `]` subscript a container, with
+    the comma-separated form for more than one dimension; a call writes its arguments in
+    parentheses after the name.  Whether a call needs a delimiter at all is still open, and is in
+    Syntax Decisions Still Open below.
 
-An outstanding item with no tag is not a missing feature but a gap in one the bootstrap already
-has: something it accepts that it should refuse, or reports less well than it should.  Those are
-corrections rather than crossings, so no tag travels with the checkmark.
+[x] a block is either braced or laid out by indentation, both headed by a colon, and the two may
+    be mixed.  A body's last statement is its value where the signature hands one back, so
+    `return` is written only to leave early.
 
-`spec/spec.md` marks the same boundary from the other side, so a section describing a feature the
-bootstrap does not have says so.
+[x] comments run `//` to the end of the line and `/* … */` across lines, which is why `/` is not
+    an operator and division is written `÷`.
 
-### Already Refused
+[x] a string literal is double-quoted and reads the escapes `\n`, `\t`, `\\`, `\"` and
+    `\u{…}`, the last checked where it is written.  A character literal is single-quoted and
+    holds exactly one character.  Two pieces are missing: the rule that a simple string ends
+    before the end of the line, which is the next item, and the multi-line form, in String and
+    I/O below.
 
-`int` and `float`, the arbitrary-precision types, are full-language only.  A variable, parameter,
-return type, struct field, type alias, or lambda parameter naming one is an error in the bootstrap:
+[ ] the specification has no chapter on the string literal, so what the scanner does is all
+    there is to read.  The brief asks that a simple string cannot hold a newline and must end
+    before the end of the line -- an unterminated string is then a mistake on one line rather
+    than a run of the file read as text -- and neither the rule nor the escapes are written
+    down.  The bootstrap does not enforce it either; that is an item of its own in
+    TODO-bootstrap.md.
 
-    let n : int = 5
+[x] integer literals are written in decimal, in binary with `0b`, and in hexadecimal with `0x`;
+    a float literal is decimal with an `e` exponent or hexadecimal with a `p` exponent, so a
+    mantissa and an exponent may use different bases.  The `₂` and `ₕ` suffixes the brief asks
+    for are a second spelling and are still open, in String and I/O below.
 
-    error: 'n': 'int' is an arbitrary-precision type, which the bootstrap
-    implementation does not provide; use a sized type such as i64
+[x] nothing is written outside a function.  A source file holds definitions -- functions,
+    globals, types, macros -- and what runs is what the `@start` function reaches.  The REPL is
+    the one place a statement stands on its own.
 
-Nor can a value reach one without being named.  A binding with no type written down would settle
-on int or float, so it is refused and the type is asked for:
+[x] enumeration types, whose members are reached through the enum's name rather than sitting in
+    the global namespace, with the underlying integer type stateable as C++'s `enum class`
+    allows, auto-numbering from zero, and `@flag` numbering by powers of two, adding a `nil`
+    member where nothing else takes the value zero and admitting the bitwise operations to
+    combine, test and remove flags.
 
-    let n := 5
+[x] binary logic operations on integers, written `∧ ∨ ⊕ ⊼ ⊽ ¬`, element-wise over arrays, with
+    `@wrap` where a complement leaves the range.  What is missing beside them is the boolean
+    pair, in Operators and Notation below.
 
-    error: 'n': a binding with no type written down settles on 'int', which is an
-    arbitrary-precision type the bootstrap implementation does not provide; state
-    a sized type, as 'let n : i64 = …'
+[x] the integer remainder, `%`, truncating toward zero as C, C++ and Rust do, with the result
+    type resolved as the other arithmetic operators resolve it.  The glyph is the last ASCII
+    arithmetic operator and is asked about in Operators and Notation below.
 
-An array is asked the same question about its elements, and either side may answer:
+[x] the built-in test system: `@test` marks a test and may name the functions it covers.  A
+    standalone test runs before the `@start` function, a test naming functions runs once on the
+    first call to any of them as `pthread_once` does, `--test` runs all of them and does not run
+    `@start`, and `--skip-tests` suppresses them for a production run.  `assert` and `assert_eq`
+    are available everywhere.
 
-    let a : i64[] = [1, 2, 3]   // the binding says it
-    let a := [1i64, 2, 3]       // one element says it, and the rest take it
+[x] exactly one function is the program's entry point, marked `@start`, and `--start NAME` on the
+    command line overrides the annotation -- the precedence the brief asks for.  The return type
+    settles the exit status: `∅` exits 0, `u8` and `i8` hand their value out.
 
-A tuple is asked it too, and answered the same two ways, except that one element stating a width
-says nothing about the others:
 
-    let t : (i64, str) = (1, "two")   // the binding says it
-    let t := (1i64, "two")            // each number says what it is
+Execution Modes
+---------------
 
-An *untyped* literal is unaffected while it is being computed with.  It states no width, takes the
-one it meets, and is exact until then, so `let big : i64 = 1 « 40` and `static_assert(2 ↑ 200 > 0)`
-are both fine.  What the bootstrap does not provide is a *value* that stays arbitrary-precision,
-since that needs a representation the sized types do not have.
+[ ] [FULL] strict mode, where every type is discoverable before the program runs -- Hindley-Milner
+    or an equivalent.  A sum type is an answer rather than a failure: where a value's alternative
+    is not resolved statically, a dispatcher is instantiated, possibly inlined, that calls the
+    version for the type the value turns out to have.  Strict mode is also where an impure
+    function is refused outright and where a measured value must carry its unit.
+
+[ ] [FULL] a scripting mode at the other end, where little has to be known in advance: a value
+    nothing describes is boxed and carries its type with it, so a program can be written without
+    any of the annotations and still run.  What the programmer does write down -- a type, a unit,
+    an attribute -- is what buys the efficient execution back, and the two ends are one language
+    rather than two dialects.
+
+Insecure mode is a third setting of this kind and is listed under Control Flow and Expressions,
+where the block form belongs.
+
+
+Source Text
+-----------
+
+[x] the source is UTF-8.  Every glyph the language uses -- the operators, the arrows, the
+    quantifiers -- assumes it, and the scanner reads nothing else.
+
+[ ] a file that is not UTF-8 or a UCS variant is refused with a diagnostic saying so, and running
+    the interpreter or the compiler under a locale is a fatal error at startup, before a byte of
+    source is read: a locale would make what a program means depend on the environment it was
+    read in, which is the one thing a language that fixes its encoding is buying.
+
+[ ] [FULL] a compilation unit may define its own spellings by macro: an ASCII stand-in for a
+    glyph that is awkward to type, `[…]` or `⟦…⟧` for a hash literal, `?` and `!` for the
+    optional's glyphs.  The definition reaches that unit and no further, so a file says which
+    spellings it uses and a reader of another file is not affected.
+
+[ ] [FULL] `⍰` and `⚠` for asking an optional for its value and for taking it or failing, with
+    `?` and `!` as the per-unit replacements above rather than as the language's own spelling.
+    Today `?`, `??` and `!` are what is written, which is Rust's and Zig's ASCII and not the
+    glyph the brief asks for.
+
+
+Operators and Notation
+----------------------
+
+[ ] boolean operations beside the binary ones, spelled with a `₁` after the glyph -- `∧₁ ∨₁ ⊕₁
+    ⊼₁ ⊽₁ ¬₁` -- answering 0 or 1 whatever the width of the operands, where the binary ones
+    answer bit by bit.  The two have the same range of operations, which is what the subscript
+    says: the same question asked of the value rather than of every bit of it.
+
+[ ] a flag enum's operations are written `|`, `&`, `^` and `~`, which are C's spellings in a
+    language whose binary logic is written `∧ ∨ ⊕ ¬`.  Two spellings for one operation is what
+    `==` was taken out for; the glyphs should reach the flag enums, and whether the ASCII forms
+    stay as operators at all is the question this raises.
+
+[ ] the remainder is written `%`, the last of the ASCII arithmetic operators, in a language that
+    writes multiplication `×` and division `÷` because a program is read more often than it is
+    typed.  Decide the glyph.  It cannot be `mod` written as a word without deciding the wider
+    question of named operators, and it should read as a relative of `÷`, which is what the
+    integer-division question below is also about.
 
 
 Completed
@@ -101,23 +175,6 @@ Completed
     every name, a repeated name is refused, and a stated type is the tuple's.  A parameter
     may name the elements too, in the same shape, with or without a stated type; a lambda's
     may as well.
-
-[x] nothing in the bootstrap holds an arbitrary-precision value.  A binding with no type written
-    down would settle on int or float, so it is refused and the sized type is asked for; that
-    reaches a local, a global, and the value of every operator, since it is the binding that
-    settles a value rather than the operator that made it.  A lambda's parameters and return
-    type were the one declaration site the type check had not reached.  A float literal now
-    gives way to a sized operand as an integer literal already did — f64 + a literal was
-    answering `float`, the type the bootstrap does not have.  A loop variable over untyped
-    bounds is uncommitted rather than an int, so it settles at the first typed thing it meets
-    and still indexes.  An array literal settles the same way: one element stating a width says
-    what the array is made of, and a binding of one whose elements state none is refused with
-    the bracketed type it needs.  A tuple settles nothing between its elements, so each number
-    states its own and the diagnostic says so rather than naming a type that cannot be written;
-    the tuples the standard library hands back arrive sized for the same reason.  An argument
-    to something that states no parameter type — a standard-library call, or an untyped
-    parameter — settles nothing either, so what arrives there has to be a number some sized
-    type could hold; u128 and i127 are the widest, and a number that fits one is left alone.
 
 [x] an integer literal the type its suffix names cannot hold is reported at the definition
     rather than when the code holding it runs, so `300u8` in a function nobody calls is
@@ -243,9 +300,6 @@ Completed
     Wants a copy taken before the body runs and a name for it.
 
 [ ] a condition on a type rather than on a function -- an invariant.
-
-[ ] what a violation does is always an error.  C++26 chooses between ignore, observe, enforce
-    and quick-enforce at build time, which wants a build system to choose in.
 
 [ ] a precondition whose arguments are known before anything runs could be settled then.  The
     machinery is static_assert's; joining them up is its own piece of work.
@@ -385,12 +439,6 @@ Completed
     carries one.  A unit written in a tuple element or a type alias is refused by name today,
     which is where this starts.
 
-[ ] four test files call their tests from main rather than marking them @test -- test_units
-    (39), test_float (11), test_power (17), test_roots (16).  run_tests.sh runs a file with
-    --test, finds no tests, and reports it green, so 83 test functions do not run.
-    test_units.ngpl fails when it is actually run: `let x ¤meter := 5` has no type written
-    down, which the bootstrap refuses.
-
 [ ] a stated width must match exactly, rather than converting, when a value is stored into a
     declared array or binding.  Arguably the truer reading of "one type", but it is a separate
     question from homogeneity and changes scalar assignment as well.
@@ -414,9 +462,6 @@ Completed
     alike, which replaced the seventeen lines of element-wise handling that ran once, zipped
     silently, tagged its answer with the operands' type, and sat below the unit rules.  ⧺, ⍳
     and ∊ are not listable, each taking a container as its operand.
-
-[ ] a builtin cannot be @listable: BuiltinFunc has no field for it and the standard library
-    reaches Python methods by another path.  std.sqrt over an array would want it.
 
 [ ] a lambda cannot be @listable, there being nowhere to write an annotation on one.  A
     partly applied listable function still threads, since the named function is what is
@@ -451,18 +496,6 @@ Completed
     it, and the hint naming what the subject does admit is only given where there is
     one: a plain value has no failure to be written a different way.
 
-[x] a complaint about a struct field points at that field's type.  A field is a
-    (name, type) pair with nowhere to hold a position, so the struct carries them
-    alongside, as a function already did for its parameters, and a layout error names
-    the field it is about.  Before this the caret sat on the struct's first line and
-    the excerpt showed the first field, which for a complaint about the third left a
-    reader counting.
-
-[x] every signature the specification shows now parses.  Sixty-three were written without
-    parentheses — `fn add a : int, b : int → int:` — which the parser stopped accepting
-    long enough ago that no example carrying one had ever been run.  A check parses each
-    one, so the next such drift is caught rather than accumulated.
-
 [x] a function definition may leave the return type off, which says what → ∅ says.
     ∅ is what a function returns when it returns nothing, so naming it repeats what the
     absence already said, and the functions that return nothing are most of what a program
@@ -495,12 +528,6 @@ Completed
     which is what makes (p + 1) « 8 on a u8 parameter an error the definition settles.  `int`
     is a separate thing and still wins against a fixed width, so an accumulator written
     `let total := 0` is not narrowed by the first typed value added to it.
-
-[x] a static diagnostic points at what it objected to.  A check answers with the node it
-    found as well as the message, DefinitionError carries the position, and the result is
-    rendered with the same excerpt and caret a runtime error gets — in a file and at the
-    prompt alike.  Definitions that had no position now carry one, so the errors raised
-    while installing them are located too.
 
 [x] a type without brackets names a scalar, so an array meeting one is refused rather
     than read as a shorthand for what its elements are.  The rule holds at a binding, a
@@ -596,7 +623,6 @@ Type System
     dimensional consistency: addition requires same unit, multiplication/division derive units.
     Design derived units and attribute-based annotations (e.g., radius vs diameter).
 
-
 [x] product types (structs) with unspecified layout by default.  Attributes to force layout.
     @repr(C) gives a struct the platform C layout and makes .sizeof, .alignof, and
     .offsetof(name) available; without it those queries are an error rather than a guess.
@@ -605,7 +631,14 @@ Type System
 [ ] [FULL] further @repr kinds beyond C: packed (no padding at all), and possibly a transparent
     single-field form.  Decide whether alignment can be raised as well as suppressed.
 
-[ ] [FULL] type aliases and user-defined cast functions (comptime, invoked in preference to builtins).
+[x] type aliases.  A name for a type, resolved through a chain of them, and interacting with
+    coercion the way the type it names does.  This was half of an item that also asked for
+    user-defined casts; that half is next.
+
+[ ] [FULL] user-defined cast functions, declared `comptime` and preferred over the built-in cast
+    for the same pair of types, with a cast for which neither exists an error rather than a
+    guess.  The syntax has to be concise and context-free, which is the constraint Zig's `@as`
+    and `@intCast` answer.
 
 [x] add binary power operator ↑.  for integers on the left only allow integers on the right.  Ensure
     overflow and underflow are detected.
@@ -675,11 +708,20 @@ Type System
 Data Structures
 ---------------
 
-[ ] [FULL] map type with literal syntax for initialized variables and member-function operations
+[x] map type with literal syntax for initialized variables and member-function operations
     (insert, lookup, delete, iterate).
 
-[ ] [FULL] set type with opaque representation (bitmask, array/vector, or tree depending on attributes).
+    The hash is in, written `⸨…⸩` and typed `std.hash(K,V)` -- see the completed item above.
+    What is left of this entry is the alternative literal syntax a compilation unit may define
+    for itself, which is listed under Source Text.
+
+[~] [FULL] set type with opaque representation (bitmask, array/vector, or tree depending on attributes).
     Sets on enumerations restrict to defined values.
+
+    The set is in, written `⸨…⸩` and typed `std.set(V)`, with `∪ ∩ ∖ ⊆ ⊂ ⊇` -- see the completed
+    items above.  What is left is the representation: a bitmask where the values are dense
+    enough, an array or a tree where they are not, an attribute hinting at the element count to
+    choose between them, and a set over an enum admitting only that enum's values.
 
 [ ] [FULL] matrix type: 2D+ built-in data structure with arithmetic operations (multiply, transpose,
     element-wise ops).  Attributes: diagonal, upper/lower triangle, sparse.
@@ -690,6 +732,12 @@ Data Structures
     tree-backed (O(log n) access).
 
 [ ] [FULL] slice/view types for arrays, matrices, and strings following Rust ownership model.
+
+[ ] [FULL] operations that name the whole container rather than a loop over it -- a matrix
+    multiplied by a matrix, a vector added to a vector, a reduction over a tensor -- since a loop
+    has to be recognised before it can be offloaded and an operator does not.  This is what makes
+    the Vulkan target reachable, and it is what `@listable`, `⌿`, `⍀` and `¨` are the beginning
+    of.
 
 
 Control Flow and Expressions
@@ -704,7 +752,10 @@ Control Flow and Expressions
     division, a written-out ∃/∅/∄, or a builtin optional-returning method -- and at run
     time otherwise; it will reach further as type inference grows.
 
-[ ] [FULL] loop break/continue statements.  Non-local exits from nested loops.
+[x] loop break/continue statements.  Non-local exits from nested loops.  Both are in,
+    together with a name on the loop so that a statement in an inner one can act on an outer --
+    see the item under Static Analysis below.  What a `break` cannot do yet is carry a value
+    out, which is listed there too.
 
 [ ] [FULL] multiple statements on one line with semicolon separator.
 
@@ -717,8 +768,11 @@ Control Flow and Expressions
 Functions and Combinators
 -------------------------
 
-[ ] [FULL] purity enforcement: functions pure by default, impure annotation required for global
+[~] [FULL] purity enforcement: functions pure by default, impure annotation required for global
     variable access.  Strict mode disallows impure functions.
+    The annotation is in and travels up the call chain -- see the two items under Static
+    Analysis below -- so what is left is strict mode refusing an impure function outright,
+    which waits on strict mode.
 
 [ ] [FULL] combinator glyphs for function composition and pipelines (APL/BQN/UIUA-inspired).
     Ranges-library equivalent for container operations.
@@ -742,15 +796,31 @@ Compile-Time and Metaprogramming
     Still open: evaluating an ordinary call at compile time when its arguments are all known,
     and the if-constexpr equivalent.
 
-[ ] [FULL] hygienic macro system: expansion after scanning, before parsing.  Distinct invocation
+[x] hygienic macro system: expansion after scanning, before parsing.  Distinct invocation
     syntax from function calls.  Reference Rust and Common Lisp macro systems.
+    In, in both of the forms Rust has -- see Macros and Reflection below.  Expansion happens
+    after parsing rather than before it, for the reason recorded there: the arguments arrive as
+    a parse tree because that is what a macro was asked to take apart.
 
-[ ] [FULL] reflection/introspection: access to parse tree in comptime functions.  Create derived
+[~] [FULL] reflection/introspection: access to parse tree in comptime functions.  Create derived
     types and functions.  Match C++26, Rust, and Zig reflection capabilities.
+    A macro is reflection that also writes, so what a macro can ask -- kind, name, head,
+    arguments, and `※` for what a name refers to -- is what reflection can ask today.  What is
+    missing is following a reference to a definition, which waits on the two-pass installation
+    item under Macros and Reflection.
 
-[ ] [FULL] function replacement: runtime replacement of @replaceable functions via compiled blobs
+[~] [FULL] function replacement: runtime replacement of @replaceable functions via compiled blobs
     with matching type signatures.  Concurrent execution support.  REPL command to override
     replaceability attribute.  (Partially implemented: @replaceable attribute exists.)
+
+[ ] [FULL] string operations at compile time answer a compile-time string: a concatenation, a
+    slice, or a formatted value built from constants is itself a constant and may be used where
+    one is required -- a name a macro builds, a message a contract carries, a table an
+    initializer holds.
+
+[ ] [FULL] a lambda taken apart by reflection and installed under a name in the global namespace,
+    which is the other half of the function-replacement item above and what makes an anonymous
+    function a first-class object of the language rather than only of the runtime.
 
 
 Module System
@@ -759,15 +829,20 @@ Module System
 [ ] [FULL] module system for composable programs and code reuse.  Name mangling with module prefix.
     Import/export declarations.  Visibility control.
 
-[ ] [FULL] multi-file compilation: compiler accepts multiple source files, build function determines
-    compilation strategy.
+    The brief says the opposite of the mangling sentence above: since the language starts from
+    scratch there is no reason to mangle, and a name in an object file can be the normalized,
+    compact spelling of the module, the name, and the signature.  Decide which, and record it
+    with the object-file encoding in TODO-compiler.md.
 
 
 Contract System
 ---------------
 
-[ ] [FULL] contracts/assertions with human-understandable descriptions.  Inspired by C++26 contracts.
+[~] [FULL] contracts/assertions with human-understandable descriptions.  Inspired by C++26 contracts.
     Pre/post conditions on functions.  Violations can log, terminate, or trigger debugger.
+    `@pre` and `@post` are in, and `--contracts` chooses what a violation does -- see the
+    completed items above and under Static Analysis below.  What is left is the description a
+    condition carries in words, the handler the program provides, and the debugger.
 
 [ ] [FULL] logging facility integrated into the runtime.  Callable from comptime and runtime code.
     Logging functions can terminate the program.
@@ -776,7 +851,7 @@ Contract System
 Memory and Lifetime Management
 -------------------------------
 
-[ ] [FULL] lifetime system akin to Rust: borrow checker, ownership, move semantics.
+[~] [FULL] lifetime system akin to Rust: borrow checker, ownership, move semantics.
     Stack allocation preferred for local lifetimes.  Partially started: foreach can borrow an
     array with & (read) or &mut (write through to the elements), and a mutable borrow of an
     immutable binding is rejected.  Still missing: borrows anywhere other than a foreach
@@ -858,43 +933,8 @@ String and I/O
     source position, so the check can move without losing the caret.
 
 
-Build System and Tooling
--------------------------
-
-[ ] [FULL] built-in build system: @build-annotated comptime function provides build recipe.
-    Recompiled when source changes.  SBOM generation in output binary.
-
-[ ] [FULL] JIT compilation in interpreter: background compilation of hot functions, transparent
-    switchover.  REPL commands to inspect generated code, machine code, and parse trees.
-
-[ ] [FULL] language server protocol (LSP) mode: expose type information, optimization decisions,
-    diagnostics, and code navigation.
-
-[x] REPL: interactive read-eval-print loop when no startup function is defined or on request.
-    Define functions/variables, call functions, inspect values.  Entered via --repl, when no
-    source file is given, or when the source defines no @start function.  Accepts definitions,
-    statements, and bare expressions; layout blocks are terminated by an empty line.  A
-    definition draws the same warnings it would in a file, pointed at the entry it was typed
-    in, and one that is refused still reports what the checks found before the refusal.
-
-[ ] [FULL] compiler mode: ahead-of-time compilation to native code.  Startup function designation
-    via command line or attribute.
-
-
-Runtime
--------
-
-[ ] [FULL] native runtime using kernel interfaces directly (no libc dependency).  io_uring-based
-    async I/O on Linux.
-
-[ ] [FULL] concurrency via clone3 and futex on Linux.
-
-[ ] [FULL] Vulkan code generation for GPU offloading of vector/matrix/tensor operations.
-
-[ ] [FULL] minimal runtime initialization: only pull in code for features actually used.
-
-[ ] [FULL] object file format: possibly custom format supporting partial recompilation.
-    Dynamic linking support for system libraries (e.g., Vulkan shared objects).
+Standard Library
+----------------
 
 [x] do not use camelcase for identifiers.  Change all functions in the std module to use
     underscores.  openFile was the last one; it is now open_file, with no alias kept.
@@ -924,25 +964,6 @@ Runtime
 
 [ ] Add a way for the program to provide its own violation handler for pre- and post-conditions.
 
-
-Syntax Decisions Still Open
-----------------------------
-
-[ ] [FULL] operator precedence model: traditional precedence, APL-style right-to-left,
-    or hybrid (precedence for arithmetic, flat for others).
-
-[ ] [FULL] function call delimiter: parentheses, brackets (Wolfram-style), or no delimiters (Haskell).
-
-[ ] [FULL] integer division semantics: a second operator alongside ÷ (as Python has //),
-    an explicit cast requirement, or a modifier on ÷ saying which rounding is meant.
-
-[ ] [FULL] binary/boolean operation semantics on mixed-width integers: reject, zero-extend,
-    or repeat.
-
-[ ] [FULL] attribute syntax for variables, functions, statements, blocks, and scopes.
-
-[ ] [FULL] macro invocation syntax: distinguish from function calls (Rust #[...] style, name
-    annotation, or different parameter delimiters).
 
 System Environment
 ------------------
@@ -985,13 +1006,6 @@ in the compiler.
     A lambda's body counts as part of the function that writes it, and a method carries the
     annotation and passes it to its callers the same way a function does.
 
-[x] -Werror: an interpreter option making every warning an error, so the program does not run
-    and the status says so.  It moves the @expect level with the diagnostic — an annotation
-    written @expect warning is read as @expect error — so a file that accounts for its own
-    diagnostics needs no rewriting.  A source file cannot ask for it: whether a warning is
-    worth stopping for is a property of the run, not of the code.  tests/run_tests.sh runs
-    every test file a second time under -Werror, so a new unaccounted warning fails the suite.
-
 [x] break and continue, and a name attached to a loop so that one written inside a nested
     loop can act on an outer one.  The name is an identifier and a colon on the line above
     the loop, as in Java and Go; Rust's leading quote is unavailable, since a quote begins a
@@ -1005,16 +1019,6 @@ in the compiler.
 
 [ ] a value carried out of a loop by break, as Rust's `break v` does.  It waits on a loop
     being an expression rather than a statement, which is a separate question.
-
-[x] an interpreter option choosing what a @pre or a @post that does not hold does, following
-    C++26's four evaluation semantics: --contracts=ignore (the condition is not read at all),
-    observe (reported as a warning, the run carries on), enforce (reported as an error, the
-    run stops — the default), quick-enforce (the run stops at once, reporting nothing, which
-    is what makes it quick).  Both of C++26's detection modes go through it: a condition that
-    answers false, and one that could not be read at all.  A condition answering something
-    other than a truth value stays an error under every semantic, being a mistake in the
-    condition rather than a report about the program.  observe stays a warning under -Werror,
-    since a diagnostic saying error while the run carries on would say two things at once.
 
 [ ] a violation handler the program itself provides, as C++26 allows, reading a description
     of what broke.  The four semantics are what a handler is called by, and they are in; who
@@ -1136,3 +1140,36 @@ Macros and Reflection
     so is asked the same question.  Every definition is walked rather than every function
     body, so a lambda bound to a global name, bound inside a function, or written into a
     condition is all reached the same way.
+
+
+Syntax Decisions Still Open
+----------------------------
+
+[ ] [FULL] operator precedence model: traditional precedence, APL-style right-to-left,
+    or hybrid (precedence for arithmetic, flat for others).
+
+[ ] [FULL] function call delimiter: parentheses, brackets (Wolfram-style), or no delimiters (Haskell).
+
+[ ] [FULL] integer division semantics: a second operator alongside ÷ (as Python has //),
+    an explicit cast requirement, or a modifier on ÷ saying which rounding is meant.
+
+[ ] [FULL] binary/boolean operation semantics on mixed-width integers: reject, zero-extend,
+    or repeat.
+
+[ ] [FULL] attribute syntax for variables, functions, statements, blocks, and scopes.
+
+[x] macro invocation syntax: distinguish from function calls (Rust #[...] style, name
+    annotation, or different parameter delimiters).
+    Answered: the arguments carry the mark rather than the name, `f⟦x⟧`, since the arguments are
+    what is unusual about a macro call.  A definition is headed by `macro` or by `@macro_rules`
+    -- see Macros and Reflection below.
+
+[ ] [FULL] whether a name says what kind of thing it names.  Requiring a type to start with an
+    uppercase letter or with a fixed glyph would let the syntax drop separators, since the parser
+    would know a type where it sees one; requiring uppercase shuts out the scripts that have no
+    case, which a customary `T` prefix works around.  Decide from the Unicode character classes
+    what may begin a name, an operator, and a type.
+
+[ ] [FULL] whether one glyph may mean one thing before a value and another between two, as APL's
+    do and as `⌈`, `⌊` and `⧺` already do here, or whether every glyph has a fixed arity as the
+    newer array languages settled on.  Run both and record what each costs a reader and a parser.
