@@ -1,0 +1,70 @@
+// core-1: dispatch ladders.  A dense one becomes a jump table, a
+// sparse one stays a ladder; the answers cannot tell the difference.
+
+fn dense(x : i64) → i64:
+    if x = 0:
+        return 100
+    elif x = 1:
+        return 101
+    elif x = 2:
+        return 102
+    elif x = 3:
+        return 103
+    elif x = 5:
+        return 105
+    elif x = 7:
+        return 107
+    ⁻1
+
+fn signed_span(x : i64) → i64:
+    if x = ⁻3:
+        return 30
+    elif x = ⁻2:
+        return 20
+    elif x = ⁻1:
+        return 10
+    elif x = 0:
+        return 0
+    elif x = 1:
+        return 1
+    99
+
+fn sparse(x : i64) → i64:
+    if x = 1:
+        return 1
+    elif x = 100:
+        return 2
+    elif x = 1000:
+        return 3
+    elif x = 10000:
+        return 4
+    0
+
+fn no_default(x : i64, acc : &mut i64[]):
+    if x = 10:
+        acc.push(1)
+    elif x = 11:
+        acc.push(2)
+    elif x = 12:
+        acc.push(3)
+    elif x = 13:
+        acc.push(4)
+
+@start
+@impure
+fn main():
+    foreach x := ⁻2…9:
+        std.println("dense {} {}", x, dense(x))
+    foreach x := ⁻5…3:
+        std.println("span {} {}", x, signed_span(x))
+    std.println("sparse {}", sparse(1))
+    std.println("sparse {}", sparse(1000))
+    std.println("sparse {}", sparse(9999))
+    std.println("sparse {}", sparse(10000))
+    let hits : mut i64[] = []
+    foreach x := 9…14:
+        no_default(x, &hits)
+    let total : mut i64 = 0
+    foreach h := hits:
+        total ← total + h
+    std.println("hits {} {}", #hits, total)

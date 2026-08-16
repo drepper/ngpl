@@ -2793,6 +2793,7 @@ let IR_SCCAT : i64 = 61    // d ← a ⧺ b
 let IR_SEQV : i64 = 62     // d ← a = b, for strings
 let IR_SLENV : i64 = 63    // d ← how many characters a holds
 let IR_PRINTSV : i64 = 64  // a = vreg holding a string
+let IR_JTAB : i64 = 65     // a = vreg, b = extra [min, span, Ldef, L…]
 
 struct IrFn:
     op : i64[]
@@ -3332,6 +3333,8 @@ impl Lower:
                 let v : i64 = self.lower_expr(na)
                 self.lower_ret(v)
         elif k = NK_IF:
+            if self.try_jtab(sid, ret_ty):
+                return
             let lelse : i64 = self.label()
             let cv : i64 = self.lower_expr(na)
             self.ir(IR_JZ, cv, lelse, 0, 0, 0)
@@ -3365,6 +3368,107 @@ impl Lower:
             self.ir(IR_JMP, self.breaks[#self.breaks - 1], 0, 0, 0, 0)
         elif k = NK_CONTINUE:
             self.ir(IR_JMP, self.conts[#self.conts - 1], 0, 0, 0, 0)
+
+    // ------------------------------------------------------------------
+    // Dense dispatch becomes a jump table.  An if/elif ladder testing
+    // one variable against integer constants is one decision, not
+    // many; with at least four cases and a span within three times
+    // their count (the profitability window real compilers use), the
+    // ladder lowers to a bounds check and one indirect jump through a
+    // table of code addresses in rodata.
+    // ------------------------------------------------------------------
+
+    fn try_jtab(&mut self, sid : i64, ret_ty : i64) → bool:
+        let ks : mut i64[] = []
+        let blks : mut i64[] = []
+        let xslot : mut i64 = ⁻1
+        let default_blk : mut i64 = ⁻1
+        let cur : mut i64 = sid
+        let good : mut bool = true
+        while true:
+            let cond : i64 = self.a.na[cur × 1¤ptrdiff]
+            if self.kof(cond) ≠ NK_EQ:
+                good ← false
+                break
+            let l : i64 = self.a.na[cond × 1¤ptrdiff]
+            let r : i64 = self.a.nb[cond × 1¤ptrdiff]
+            let vn : mut i64 = ⁻1
+            let kn : mut i64 = ⁻1
+            if self.kof(l) = NK_VAR and self.kof(r) = NK_INT:
+                vn ← l
+                kn ← r
+            elif self.kof(r) = NK_VAR and self.kof(l) = NK_INT:
+                vn ← r
+                kn ← l
+            else:
+                good ← false
+                break
+            let slot : i64 = self.nslot[vn × 1¤ptrdiff]
+            if slot < 0 or self.a.nb[kn × 1¤ptrdiff] ≠ 0:
+                // a global, or a constant past i64: leave it a ladder
+                good ← false
+                break
+            if xslot = ⁻1:
+                xslot ← slot
+            elif slot ≠ xslot:
+                good ← false
+                break
+            ks.push(self.a.na[kn × 1¤ptrdiff])
+            blks.push(self.a.nb[cur × 1¤ptrdiff])
+            let els : i64 = self.a.nc[cur × 1¤ptrdiff]
+            if els = ⁻1:
+                break
+            // an elif chain is an else block holding exactly one if
+            let off : i64 = self.a.na[els × 1¤ptrdiff]
+            if self.a.extra[off × 1¤ptrdiff] = 1 and self.kof(self.a.extra[(off + 1) × 1¤ptrdiff]) = NK_IF:
+                cur ← self.a.extra[(off + 1) × 1¤ptrdiff]
+            else:
+                default_blk ← els
+                break
+        if not good or #ks < 4:
+            return false
+        let lo : mut i64 = ks[0]
+        let hi : mut i64 = ks[0]
+        foreach k := ks:
+            lo ← lo ⌊ k
+            hi ← hi ⌈ k
+        let span : i64 = hi - lo + 1
+        if span > 3 × @dropunit(#ks) or span > 1024:
+            return false
+        // distinct cases; a repeat would silently shadow, so leave a
+        // repeat to the ladder the checker saw
+        foreach i := 0…#ks - 1:
+            foreach j := 0…#ks - 1:
+                if j > i and ks[i] = ks[j]:
+                    return false
+        // labels: one per case, the default, the join
+        let ldef : i64 = self.label()
+        let lend : i64 = self.label()
+        let case_labels : mut i64[] = []
+        foreach _ := 0…#ks - 1:
+            case_labels.push(self.label())
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(lo)
+        self.extra.push(span)
+        self.extra.push(ldef)
+        let s : mut i64 = 0
+        while s < span:
+            let target : mut i64 = ldef
+            foreach i := 0…#ks - 1:
+                if ks[i] = lo + s:
+                    target ← case_labels[i]
+            self.extra.push(target)
+            s ← s + 1
+        self.ir(IR_JTAB, xslot, off, 0, 0, 0)
+        foreach i := 0…#ks - 1:
+            self.ir(IR_LABEL, case_labels[i], 0, 0, 0, 0)
+            self.lower_block(blks[i], false, ret_ty)
+            self.ir(IR_JMP, lend, 0, 0, 0, 0)
+        self.ir(IR_LABEL, ldef, 0, 0, 0, 0)
+        if default_blk ≠ ⁻1:
+            self.lower_block(default_blk, false, ret_ty)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        true
 
     fn lower_foreach(&mut self, sid : i64, tok : i64, na : i64, body : i64,
                      ret_ty : i64):
@@ -3595,6 +3699,17 @@ struct Emit:
     lf_label : i64[]
     fn_off : i64[]
     rt_off : i64[]
+    // jump tables: abs64 fixups, and the resolved code offsets the
+    // tables hold, flattened with a start index per table
+    jt_pos : i64[]
+    jt_id : i64[]
+    jt_count : i64
+    jt_starts : i64[]
+    jt_entries : i64[]
+    pj_id : i64[]
+    pj_start : i64[]
+    pj_len : i64[]
+    pj_labels : i64[]
 
 impl Emit:
     fn here(&self) → i64:
@@ -3707,6 +3822,30 @@ impl Emit:
         self.sd_pos.push(self.here())
         self.sd_str.push(stridx)
         self.w64(0)
+
+    fn jtref(&mut self, reg : i64, id : i64):
+        self.b1(72 + (1 if reg >= 8 else 0))
+        self.b1(184 + (reg & 7))
+        self.jt_pos.push(self.here())
+        self.jt_id.push(id)
+        self.w64(0)
+
+    fn resolve_jtabs(&mut self):
+        if #self.pj_id > 0:
+            foreach i := 0…#self.pj_id - 1:
+                self.jt_starts.push(@dropunit(#self.jt_entries))
+                let st : i64 = self.pj_start[i]
+                let n : i64 = self.pj_len[i]
+                let j : mut i64 = 0
+                while j < n:
+                    self.jt_entries.push(self.labels[self.pj_labels[(st + j) × 1¤ptrdiff] × 1¤ptrdiff])
+                    j ← j + 1
+        while #self.pj_id > 0:
+            _ ← self.pj_id.pop()
+            _ ← self.pj_start.pop()
+            _ ← self.pj_len.pop()
+        while #self.pj_labels > 0:
+            _ ← self.pj_labels.pop()
 
     fn dref(&mut self, reg : i64, off : i64):
         self.b1(72 + (1 if reg >= 8 else 0))
@@ -4076,8 +4215,30 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
         elif o = IR_PRINTSV:
             em.load(R_DI, a)
             em.jglobal(232, ⁻1, RT_PRINTSTR)
+        elif o = IR_JTAB:
+            let jmin : i64 = ir.extra[b × 1¤ptrdiff]
+            let span : i64 = ir.extra[(b + 1) × 1¤ptrdiff]
+            let ldef : i64 = ir.extra[(b + 2) × 1¤ptrdiff]
+            em.load(R_AX, a)
+            em.movimm(R_R10, jmin)
+            em.b3(76, 41, 208)               // sub rax, r10
+            em.movimm(R_R11, span)
+            em.b3(76, 57, 216)               // cmp rax, r11
+            em.jlocal(131, ldef)             // jae: outside the table
+            let id : i64 = em.jt_count
+            em.jt_count ← em.jt_count + 1
+            em.jtref(R_R10, id)
+            em.b4(65, 255, 36, 194)          // jmp [r10 + rax*8]
+            em.pj_id.push(id)
+            em.pj_start.push(@dropunit(#em.pj_labels))
+            em.pj_len.push(span)
+            let e : mut i64 = 0
+            while e < span:
+                em.pj_labels.push(ir.extra[(b + 3 + e) × 1¤ptrdiff])
+                e ← e + 1
         i ← i + 1
     em.resolve_locals()
+    em.resolve_jtabs()
 
 // ---------------------------------------------------------------------------
 // The runtime: routines over raw syscalls, no libc
@@ -4507,7 +4668,9 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → u8[]:
                               sf_pos: [], sf_str: [], sd_pos: [], sd_str: [],
                               df_pos: [], df_off: [], labels: [],
                               lf_pos: [], lf_label: [], fn_off: [],
-                              rt_off: []})
+                              rt_off: [], jt_pos: [], jt_id: [], jt_count: 0,
+                              jt_starts: [], jt_entries: [], pj_id: [],
+                              pj_start: [], pj_len: [], pj_labels: []})
     let nglobals : i64 = @dropunit(#a.globals)
     let alloc_off : i64 = 8 × nglobals
     // _start: call the @start function, then exit 0
@@ -4542,12 +4705,16 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → u8[]:
         stroffs.push(acc)
         acc ← acc + str_len(s)
     let descbase : i64 = align_up(acc, 8)
+    let jt_base : i64 = descbase + 16 × @dropunit(#lw.strs)
     if #em.sf_pos > 0:
         foreach i := 0…#em.sf_pos - 1:
             em.patch64(em.sf_pos[i], ro_vaddr + stroffs[em.sf_str[i] × 1¤ptrdiff])
     if #em.sd_pos > 0:
         foreach i := 0…#em.sd_pos - 1:
             em.patch64(em.sd_pos[i], ro_vaddr + descbase + 16 × em.sd_str[i])
+    if #em.jt_pos > 0:
+        foreach i := 0…#em.jt_pos - 1:
+            em.patch64(em.jt_pos[i], ro_vaddr + jt_base + 8 × em.jt_starts[em.jt_id[i] × 1¤ptrdiff])
     let rodata : mut u8[] = []
     foreach s := lw.strs:
         foreach c := s:
@@ -4557,6 +4724,10 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → u8[]:
     foreach i := 0…#lw.strs - 1:
         push64(&rodata, ro_vaddr + stroffs[i])
         push64(&rodata, str_len(lw.strs[i]))
+    // the jump tables hold code addresses
+    if #em.jt_entries > 0:
+        foreach i := 0…#em.jt_entries - 1:
+            push64(&rodata, IMAGE_BASE + PAGE + em.jt_entries[i])
     // data: the globals' first values, then the allocator's state
     let d_vaddr : i64 = IMAGE_BASE + align_up(align_up(PAGE + text_size, PAGE) + @dropunit(#rodata), PAGE)
     if #em.df_pos > 0:

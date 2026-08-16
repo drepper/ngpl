@@ -22,12 +22,15 @@ The Compiler
 [ ] [FULL] compiler mode: ahead-of-time compilation to native code.  Startup function designation
     via command line or attribute.
 
-    Attempt 1 of the self-hosted compiler lives in src/ (src/DESIGN.md, src/ngplc.ngpl,
-    src/ANALYSIS.md): it compiles the core-0 subset (i64, bool, functions, control flow,
-    contracts, checked arithmetic, println/exit/assert) to static syscall-only x86-64 ELF
-    executables, with @start as the startup designation; tests/compile/ runs each program
-    through the interpreter and the binary and diffs.  What is missing for self-hosting is
-    laid out in src/ANALYSIS.md.
+    Attempt 2 of the self-hosted compiler lives in src/ (src/DESIGN.md, src/ngplc.ngpl,
+    src/ANALYSIS.md; attempt 1 archived under old/attempt1/): it compiles the core-1
+    subset -- the sized integer family with faithful overflow/wrap semantics, ¤ptrdiff and
+    ¤byte units, arrays with borrows, strings, globals, contracts, std.implementation --
+    to static syscall-only x86-64 ELF executables, under the control-flow policy: cmov
+    selection, eager and/or where speculation is legal, jump tables for dense dispatch,
+    aborts as cold out-of-line exits.  tests/run_tests.sh is the one suite; its shared
+    phase runs each program through the interpreter and the binary and diffs.  What is
+    missing for self-hosting is laid out in src/ANALYSIS.md.
 
 [ ] [FULL] multi-file compilation: compiler accepts multiple source files, build function determines
     compilation strategy.
