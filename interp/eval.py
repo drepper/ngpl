@@ -15,6 +15,55 @@ JIT compilation and optimization are future work.
 
 import math
 import re
+import sys as _sys
+import time as _time
+
+# ---------------------------------------------------------------------------
+# Forward-progress watchdog.
+#
+# Long runs -- the compiler compiling itself under this interpreter --
+# need two assurances: that a hang produces a diagnostic instead of
+# silence, and that a slow run can be seen to be moving.  Armed from
+# the command line (--timeout, --heartbeat) or the NGPLI_TIMEOUT /
+# NGPLI_HEARTBEAT environment variables; checked at statement
+# boundaries, with the clock read only every few thousand statements
+# so an unarmed or quiet watchdog costs almost nothing.
+# ---------------------------------------------------------------------------
+
+_WATCHDOG_CHECK_EVERY = 4096
+_watchdog_armed: bool = False
+_watchdog_deadline: float | None = None
+_watchdog_started: float = 0.0
+_watchdog_beat_every: float = 0.0
+_watchdog_next_beat: float = 0.0
+_watchdog_steps: int = 0
+_watchdog_countdown: int = _WATCHDOG_CHECK_EVERY
+
+
+def arm_watchdog(timeout: float | None, heartbeat: float | None) -> None:
+    """Arm the forward-progress watchdog for this process.
+
+    timeout: seconds after which the run is stopped with a backtrace,
+        or None for no limit.
+    heartbeat: seconds between progress reports on stderr, or None for
+        no reports.
+    """
+    global _watchdog_armed, _watchdog_deadline, _watchdog_started
+    global _watchdog_beat_every, _watchdog_next_beat
+    now = _time.monotonic()
+    _watchdog_started = now
+    if timeout is not None and timeout > 0:
+        _watchdog_deadline = now + timeout
+        _watchdog_armed = True
+    if heartbeat is not None and heartbeat > 0:
+        _watchdog_beat_every = heartbeat
+        _watchdog_next_beat = now + heartbeat
+        _watchdog_armed = True
+
+
+class NoForwardProgress(RuntimeError):
+    """The armed time limit passed before the program finished."""
+
 
 from interp.ast import (
     IntLit, FloatLit, StrLit, CharLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
@@ -3933,12 +3982,42 @@ class Evaluator:
         finally:
             self._temporaries = outer
 
+    def _watchdog_tick(self):
+        """Count a statement; every few thousand, look at the clock."""
+        global _watchdog_steps, _watchdog_countdown, _watchdog_next_beat
+        _watchdog_steps += 1
+        _watchdog_countdown -= 1
+        if _watchdog_countdown > 0:
+            return
+        _watchdog_countdown = _WATCHDOG_CHECK_EVERY
+        now = _time.monotonic()
+        if _watchdog_beat_every and now >= _watchdog_next_beat:
+            _watchdog_next_beat = now + _watchdog_beat_every
+            where = ""
+            if self._call_stack:
+                name, pos = self._call_stack[-1][0], self._call_stack[-1][1]
+                if pos is not None:
+                    where = f", in {name} at line {pos[0]}"
+                else:
+                    where = f", in {name}"
+            print(f"interp: {now - _watchdog_started:.0f}s, "
+                  f"{_watchdog_steps:,} statements{where}",
+                  file=_sys.stderr, flush=True)
+        if _watchdog_deadline is not None and now >= _watchdog_deadline:
+            raise NoForwardProgress(
+                f"no result within the time limit: "
+                f"{_watchdog_steps:,} statements over "
+                f"{now - _watchdog_started:.0f}s; the run was stopped "
+                f"where it stood (raise --timeout if it was only slow)")
+
     def _eval_stmt(self, stmt):
         """Evaluate a single statement.
 
         Returns:
             The last computed value, or a _ReturnSentinel for return statements.
         """
+        if _watchdog_armed:
+            self._watchdog_tick()
         pos = getattr(stmt, "pos", None)
         if pos is not None:
             self._last_pos = pos

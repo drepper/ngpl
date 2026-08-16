@@ -11,6 +11,11 @@
 #             printing the same successful prefix on stdout.
 
 topdir=$(cd "$(dirname "$(realpath "$0")")/../.." && pwd) || exit 1
+
+# Forward progress, guaranteed: any single interpreter invocation that
+# has not finished in this many seconds is stopped with a backtrace
+# rather than hanging the suite.  Override by exporting NGPLI_TIMEOUT.
+export NGPLI_TIMEOUT=${NGPLI_TIMEOUT:-900}
 cd "$topdir" || exit 1
 testdir=$topdir/tests/compile
 workdir=$(mktemp -d) || exit 1

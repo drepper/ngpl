@@ -301,6 +301,19 @@ def _parse_args() -> argparse.Namespace:
                             "semantics")
     parser.add_argument("--interpreter-backtrace", action="store_true",
                        help="show the Python interpreter backtrace on errors")
+    parser.add_argument("--timeout", metavar="SECONDS", type=float,
+                       default=None,
+                       help="stop the program with a backtrace when it has "
+                            "not finished after this many seconds; the "
+                            "NGPLI_TIMEOUT environment variable sets the "
+                            "same limit for every run")
+    parser.add_argument("--heartbeat", metavar="SECONDS", type=float,
+                       nargs="?", const=10.0, default=None,
+                       help="report progress on stderr (elapsed time, "
+                            "statements run, where the program is) every "
+                            "SECONDS seconds, 10 without a value; the "
+                            "NGPLI_HEARTBEAT environment variable does "
+                            "the same")
     parser.add_argument("program_args", nargs=argparse.REMAINDER,
                        help="arguments passed to the interpreted program; "
                             "separate them from the interpreter's own options "
@@ -2991,6 +3004,19 @@ def main():
 
     set_warnings_are_errors(args.werror)
     set_contract_semantic(args.contracts)
+
+    # The forward-progress watchdog covers everything from here on --
+    # loading, static checking, tests and the program itself -- so a
+    # hang anywhere still ends in a diagnostic.
+    timeout = args.timeout
+    if timeout is None and os.environ.get("NGPLI_TIMEOUT"):
+        timeout = float(os.environ["NGPLI_TIMEOUT"])
+    heartbeat = args.heartbeat
+    if heartbeat is None and os.environ.get("NGPLI_HEARTBEAT"):
+        heartbeat = float(os.environ["NGPLI_HEARTBEAT"])
+    if timeout is not None or heartbeat is not None:
+        from interp.eval import arm_watchdog
+        arm_watchdog(timeout, heartbeat)
 
     source_path = args.source
     source = ""
