@@ -18,9 +18,10 @@ runtime table (murmur3-finalizer and FNV-1a hashing, doubling growth)
 whose reads answer optionals, tuples returned and destructured on the
 struct representation with interned shapes, width-suffixed literals,
 and characters with UTF-8 string positions, `.chars()`, `.chr()`
-and `.ord()`, and struct values that travel — by parameter, return
-and binding — on the reference semantics both implementations share.
-Nineteen shared programs run identically interpreted and compiled,
+and `.ord()`, struct values that travel — by parameter, return and
+binding — on the reference semantics both implementations share, and
+`:=` inference from a right side that states its type.
+Twenty shared programs run identically interpreted and compiled,
 inside the one integrated test suite; the bootstrap suite stays
 green with `-Werror`.
 
@@ -47,9 +48,9 @@ past i64.
    positions, `.chars()`, `.chr()` and `.ord()`, and struct values
    that travel by parameter, return and binding.  The compiler's own
    source is now written almost entirely inside the subset; what
-   remains outside: `:=` inference where the right side already
-   states its type, string slices `s[a…b]`, and lambdas/combinators
-   in a few helpers.  The struct probes settled a fact worth
+   remains outside: string slices `s[a…b]` and lambdas/combinators
+   in a few helpers.  The next attempt is the self-hosting one:
+   compile ngplc with ngplc.  The struct probes settled a fact worth
    recording: the bootstrap's struct values are references — one
    struct behind however many names — so the compiled pointer
    representation conforms by construction, and the subset's

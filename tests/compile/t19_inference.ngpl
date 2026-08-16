@@ -1,0 +1,71 @@
+// core-2: := takes the binding's type from a right side that states
+// it -- calls, literals with their own widths, and every settled
+// expression; what states nothing is refused with the cure spelled.
+
+struct Tok:
+    kind : i64
+    off : i64
+
+fn two() → (i64, str):
+    (7i64, "seven")
+
+fn count() → i64:
+    41
+
+fn label(t : Tok) → str:
+    "tok" ⧺ (48 + t.kind).chr()
+
+@start
+@impure
+fn main():
+    // scalars from calls and self-stating literals
+    let n := count()
+    std.println("{}", n)
+    let s := "hi"
+    std.println("{}", s)
+    let c := 'x'
+    std.println("{}", c)
+    let b := true
+    std.println("{}", b)
+    let w := 5i64
+    std.println("{}", w)
+
+    // : mut = changes like any stated mut binding
+    let m : mut = count()
+    m ← m + 1
+    std.println("{}", m)
+    let vm : mut = [10i64]
+    vm.push(11)
+    std.println("{}", #vm)
+
+    // containers and shapes flow through
+    let v := [1i64, 2, 3]
+    std.println("{}", #v)
+    let cs := "héllo".chars()
+    std.println("{} {}", #cs, cs[1])
+    let t := two()
+    std.println("{} {}", t[0], t[1])
+    let (q, r) := two()
+    std.println("{} {}", q, r)
+
+    // structs infer and alias as reference values
+    let tk : mut Tok = Tok{kind: 3, off: 30}
+    let alias := tk
+    tk.kind ← 4
+    std.println("{} {}", alias.kind, tk.kind)
+    let fresh := Tok{kind: 5, off: 50}
+    std.println("{}", label(fresh))
+
+    // an optional infers from ∃ and settles through ??
+    let o := ∃(5i64)
+    std.println("{}", o ?? 0)
+    let picked := o ?? ⁻1
+    std.println("{}", picked)
+
+    // expressions state their type through their parts
+    let sum := count() + 1
+    std.println("{}", sum)
+    let ch := cs[0]
+    std.println("{}", ch)
+    let ord := 'a'.ord()
+    std.println("{}", ord)

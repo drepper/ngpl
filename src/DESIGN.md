@@ -126,6 +126,14 @@ Attempt 3 grows core-1 to **core-2** with structs:
   mutable alias; `&mut` stays the way to change what is shared.  (A
   call may still answer a shared struct — the reference semantics
   make that identical in both implementations.)
+- **`:=` inference**: `let x := e` and `let x : mut = e` take the
+  binding's type from a right side that states it — a call, a
+  suffixed or self-stating literal, any settled expression — while
+  what states nothing is refused with the stated-form cure spelled
+  out (`settles on 'int'; state a sized type, as 'let x : i64 = …'`).
+  The per-kind birth rules ride along unchanged: hashes and arrays
+  are still born from their literals, a mut struct binding still
+  born fresh.
 
 ## Pipeline and Data Flow
 
@@ -312,7 +320,7 @@ One suite (`tests/run_tests.sh`): bootstrap-language tests run under
 the interpreter; the shared programs in `tests/compile/` run under
 the interpreter **and** compiled, outputs and exit codes diffed — the
 strict-subset rule made executable.  `--impl=` selects a side.
-Nineteen shared programs cover the whole core-2 surface including the
+Twenty shared programs cover the whole core-2 surface including the
 stopping paths; `std.implementation` conditionalizes where
 implementations may differ.  The diff has caught real bugs on both
 sides, including the interpreter's float-precision division.

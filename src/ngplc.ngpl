@@ -1670,13 +1670,28 @@ impl Parser:
         _ ← self.eat_name("the name the let binds")
         let u : i64 = self.parse_name_unit()
         if self.peek() = TK_DEFINE:
-            self.err("core-1 asks for the type: 'let x : i64 = …'")
-            return 0
+            // := takes the type from the right side, which must state it
+            if u ≠ UNIT_NONE:
+                self.err("a unit measures a stated type; write 'let x ¤ptrdiff : i64 = …'")
+                return 0
+            self.pos ← self.pos + 1
+            let init0 : i64 = self.parse_expr()
+            self.end_stmt()
+            return self.mknode(NK_LET, name_tok, init0, 0, ⁻1)
         _ ← self.eat(TK_COLON, "':' and the type of the binding")
         let is_mut : mut i64 = 0
         if self.peek() = TK_MUT:
             is_mut ← 1
             self.pos ← self.pos + 1
+            if self.peek() = TK_EQ:
+                // let x : mut = e -- mut, the type still inferred
+                if u ≠ UNIT_NONE:
+                    self.err("a unit measures a stated type; write 'let x ¤ptrdiff : mut i64 = …'")
+                    return 0
+                self.pos ← self.pos + 1
+                let init1 : i64 = self.parse_expr()
+                self.end_stmt()
+                return self.mknode(NK_LET, name_tok, init1, 1, ⁻1)
         let ty0 : i64 = self.parse_type(false)
         let ty : mut i64 = ty0
         if u ≠ UNIT_NONE:
@@ -3540,6 +3555,36 @@ impl Checker:
         let nb : i64 = self.a.nb[id × 1¤ptrdiff]
         let nc : i64 = self.a.nc[id × 1¤ptrdiff]
         if k = NK_LET:
+            if nc = ⁻1:
+                // := and : mut =: the right side says the type; what
+                // it does not say is refused with the stated-form cure
+                self.check_expr(na, TY_UNIT)
+                let it : i64 = self.ty_of(na)
+                if it = TY_UNT:
+                    self.derr(tok, "a binding with no type written down settles on 'int'; state a sized type, as 'let " ⧺ self.text(tok) ⧺ " : i64 = …'")
+                    _ ← self.declare(tok, TY_I64, nb)
+                    return
+                if it = TY_EMPTY:
+                    self.derr(tok, "∅ alone says no type; state the optional, as 'let " ⧺ self.text(tok) ⧺ " : i64? = ∅'")
+                    _ ← self.declare(tok, mk_oty(TY_I64), nb)
+                    return
+                if it = TY_UNIT:
+                    self.derr(tok, "the right side answers nothing; there is nothing to bind")
+                    _ ← self.declare(tok, TY_I64, nb)
+                    return
+                if ty_is_hash(it):
+                    self.derr(tok, "a core-2 hash is born from its literal; borrow with & to share one")
+                    _ ← self.declare(tok, it, nb)
+                    return
+                if ty_is_arr(it) and self.kind_of(na) ≠ NK_ARRLIT and self.kind_of(na) ≠ NK_MCALL:
+                    self.derr(tok, "a core-1 array is born from its literal")
+                    _ ← self.declare(tok, it, nb)
+                    return
+                if ty_is_struct(it) and nb = 1 and not self.is_fresh_struct(na):
+                    self.derr(tok, "a mut struct binding is born fresh, from its literal or a call; borrow with &mut to change a shared one")
+                let islot : i64 = self.declare(tok, it, nb)
+                self.nslot[id × 1¤ptrdiff] ← islot
+                return
             if ty_is_hash(nc):
                 if self.kind_of(na) ≠ NK_HLIT:
                     self.derr(tok, "a core-2 hash is born from its literal; borrow with & to share one")
