@@ -1,0 +1,24 @@
+// std.implementation, read from a program that runs under both
+// implementations.  The output is the same either way -- what differs
+// is which branch produces it -- so the conformance diff still holds.
+
+fn mode_count() → i64:
+    let n : mut i64 = 0
+    if std.implementation.interpreter:
+        n ← n + 1
+    if std.implementation.compiled:
+        n ← n + 1
+    n
+
+@start
+@impure
+fn main():
+    // exactly one way of running, whichever it is
+    assert(std.implementation.interpreter or std.implementation.compiled)
+    assert(not (std.implementation.interpreter and std.implementation.compiled))
+    assert_eq(mode_count(), 1)
+    if std.implementation.interpreter:
+        std.println("one mode")
+    if std.implementation.compiled:
+        std.println("one mode")
+    std.println("agreed")

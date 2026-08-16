@@ -1,0 +1,43 @@
+// core-1: strings -- joining, comparing, counting characters, passing.
+
+fn greet(who : str) → str:
+    "hello, " ⧺ who
+
+fn shout(s : str) → str:
+    s ⧺ "!"
+
+@start
+@impure
+fn main():
+    let name : str = "world"
+    let msg : str = greet(name)
+    std.println("{}", msg)
+    std.println("{}", shout(shout(msg)))
+
+    // equality is by content
+    assert(msg = "hello, world")
+    assert(msg ≠ "hello, World")
+    let other : str = "hello, " ⧺ "world"
+    assert(msg = other)
+    assert("" = "")
+    assert("a" ≠ "")
+
+    // # counts characters, not bytes
+    let plain : str = "hello"
+    assert(#plain = 5)
+    let accented : str = "héllo wörld"
+    assert(#accented = 11)
+    std.println("chars {}", #accented)
+    std.println("empty {}", #"")
+
+    // a built string prints like a literal one
+    let joined : mut str = ""
+    joined ← joined ⧺ "a"
+    joined ← joined ⧺ "b"
+    joined ← joined ⧺ "c"
+    std.println("{}", joined)
+    assert(#joined = 3)
+
+    // a string chooses like any other value
+    let mode : str = "yes" if #joined > 2 else "no"
+    std.println("{}", mode)

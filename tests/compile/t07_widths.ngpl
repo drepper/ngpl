@@ -1,0 +1,77 @@
+// core-1: the sized integer family -- widths, signedness, wrapping,
+// shifts, division, ordering, and the selections that become cmov.
+
+fn clamp(v : i64, lo : i64, hi : i64) → i64:
+    (v ⌈ lo) ⌊ hi
+
+fn pick_u(c : bool, a : u64, b : u64) → u64:
+    a if c else b
+
+@start
+@impure
+fn main():
+    // narrow arithmetic stays in range
+    let a : u8 = 200
+    let b : u8 = 55
+    std.println("u8 {}", a + b)
+    let c : i8 = ⁻100
+    let d : i8 = 27
+    std.println("i8 {}", c - d)
+    let e : u16 = 60000
+    std.println("u16 {}", e + 5535)
+    let f : i16 = ⁻30000
+    std.println("i16 {}", f - 2768)
+    let g : u32 = 4000000000
+    std.println("u32 {}", g + 294967295)
+    let h : i32 = ⁻2000000000
+    std.println("i32 {}", h - 147483648)
+
+    // wrapping asked for by name
+    std.println("wrapu8 {}", @wrap(a + 100))
+    std.println("wrapi8 {}", @wrap(c - 100))
+    std.println("wrapu16 {}", @wrap(e × 3))
+    std.println("wrapi32 {}", @wrap(h - h - h))
+
+    // a literal takes the width of what it meets
+    let w : i32 = 100000
+    std.println("adopt {}", w × 21474)
+
+    // the widest unsigned prints past the signed range
+    let big : u64 = 18446744073709551615
+    std.println("u64 {}", big)
+    std.println("wrapu64 {}", @wrap(big + 1))
+    std.println("u64div {}", (big ÷ 3) ?? 0)
+    std.println("u64rem {}", (big % 10) ?? 0)
+
+    // ordering is by value, signed and unsigned alike
+    let neg : i64 = ⁻5
+    assert(neg < 3)
+    assert(big > 9223372036854775807)
+    let small_u : u64 = 7
+    assert(small_u < big)
+
+    // shifts wrap within the type; » keeps the sign of a signed type
+    let sh : u8 = 240
+    std.println("shl {}", @wrap(sh « 2))
+    std.println("shru {}", sh » 2)
+    let si : i8 = ⁻16
+    std.println("shri {}", si » 2)
+    let one : i64 = 1
+    std.println("shl62 {}", one « 62)
+
+    // division truncates toward zero at every width
+    let p : i32 = ⁻7
+    std.println("divi {}", (p ÷ 2) ?? 0)
+    std.println("remi {}", (p % 2) ?? 0)
+
+    // ⌈ and ⌊ pick without branching, by signedness
+    std.println("clamp {}", clamp(99, ⁻10, 10))
+    std.println("clamp {}", clamp(⁻99, ⁻10, 10))
+    std.println("maxu {}", big ⌈ small_u)
+    std.println("minu {}", big ⌊ small_u)
+
+    // a conditional whose sides are safe to read is a select
+    std.println("sel {}", pick_u(true, big, small_u))
+    std.println("sel {}", pick_u(false, big, small_u))
+    let n : i64 = 42
+    std.println("abs {}", n if n >= 0 else ⁻n)

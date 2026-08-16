@@ -1,7 +1,10 @@
 #!/bin/bash
-# Conformance for the compiled core-0 subset: every program is run by the
-# bootstrap interpreter and compiled by ngplc and executed, and the two
-# runs must agree.  The interpreter is the semantic authority.
+# The shared phase of the one test suite (tests/run_tests.sh drives it;
+# it also runs on its own, and is what --impl=compiled selects): every
+# program here is run by the bootstrap interpreter and compiled by
+# ngplc and executed, and the two runs must agree.  The interpreter is
+# the semantic authority.  A test that must behave differently per
+# implementation conditionalizes on std.implementation.
 #
 # tNN_*.ngpl (NN < 90): outputs and exit codes must match exactly.
 # t9N_*.ngpl: programs that stop themselves; both runs must fail after

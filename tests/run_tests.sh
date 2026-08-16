@@ -1,8 +1,36 @@
 #!/bin/bash
-# Run NGPL test files and report a summary.
-# With no arguments, runs all tests.  With arguments, runs only tests
-# whose filename contains any of the given patterns.
+# The NGPL test suite -- one suite for every implementation.
+#
+#   tests/*.ngpl        bootstrap-language tests, run by the Python
+#                       interpreter (features the compiler does not
+#                       carry yet live here, as separate files)
+#   tests/compile/*     shared programs in the compiled subset; each is
+#                       run by the interpreter AND compiled by ngplc
+#                       and executed, and the two runs must agree.  A
+#                       test that must behave differently per
+#                       implementation conditionalizes on
+#                       std.implementation.
+#
+# Usage: run_tests.sh [--impl=bootstrap|compiled|both] [pattern...]
+#   --impl=bootstrap   only the interpreter's own tests
+#   --impl=compiled    only the shared conformance run
+#   --impl=both        everything (the default)
+# With patterns, runs only bootstrap tests whose filename matches.
 # Exit with non-zero status if any test fails.
+
+impl_mode=both
+patterns=()
+for arg in "$@"; do
+    case "$arg" in
+        --impl=bootstrap|--impl=compiled|--impl=both)
+            impl_mode=${arg#--impl=} ;;
+        --impl=*)
+            echo "unknown implementation '$arg'; bootstrap, compiled or both" >&2
+            exit 1 ;;
+        *)
+            patterns+=("$arg") ;;
+    esac
+done
 
 topdir=$(cd "$(dirname "$(realpath "$0")")/.." && pwd) || exit 1
 cd "$topdir" || exit 1
@@ -41,6 +69,7 @@ all_tests=(
     "$testdir"/test_short_circuit.ngpl
     "$testdir"/test_callee_scope.ngpl
     "$testdir"/test_file_write.ngpl
+    "$testdir"/test_implementation.ngpl
     "$testdir"/test_arena.ngpl
     "$testdir"/test_comptime_foreach.ngpl
     "$testdir"/test_comptime_introspect.ngpl
@@ -104,11 +133,11 @@ all_tests=(
 )
 
 # Filter tests if command-line patterns are given.
-if (($# > 0)); then
+if ((${#patterns[@]} > 0)); then
     tests=()
     for t in "${all_tests[@]}"; do
         name=$(basename "$t")
-        for pat in "$@"; do
+        for pat in "${patterns[@]}"; do
             if [[ $name == *"$pat"* ]]; then
                 tests+=("$t")
                 break
@@ -116,11 +145,15 @@ if (($# > 0)); then
         done
     done
     if ((${#tests[@]} == 0)); then
-        echo "No tests matched: $*"
+        echo "No tests matched: ${patterns[*]}"
         exit 1
     fi
 else
     tests=("${all_tests[@]}")
+fi
+
+if [[ $impl_mode == compiled ]]; then
+    exec "$testdir"/compile/run_compile_tests.sh
 fi
 
 passed=0
@@ -148,7 +181,7 @@ if ((failed > 0)); then
 fi
 
 # Run output-capture and REPL tests only when running all tests.
-if (($# == 0)); then
+if ((${#patterns[@]} == 0)); then
     echo
     if python "$testdir"/run_output_tests.py 2>&1; then
         :
@@ -189,4 +222,13 @@ if (($# == 0)); then
         exit 1
     fi
     echo "-Werror check: ok. ${#all_tests[@]} files clean"
+fi
+
+# The shared conformance run: every program under tests/compile/ goes
+# through the interpreter and through ngplc, and the runs must agree.
+if [[ $impl_mode == both ]] && ((${#patterns[@]} == 0)); then
+    echo
+    if ! "$testdir"/compile/run_compile_tests.sh; then
+        exit 1
+    fi
 fi

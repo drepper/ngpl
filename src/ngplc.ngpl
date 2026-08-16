@@ -906,17 +906,17 @@ impl Parser:
         if self.peek() ≠ TK_RPAR:
             while true:
                 if self.peek() = TK_BAND:
-                    // &x or &mut x hands the callee the array itself
+                    // &x hands the callee the array itself; whether it
+                    // may write is the parameter's declaration
                     let at : i64 = self.pos
                     self.pos ← self.pos + 1
-                    let rk : mut i64 = 1
                     if self.peek() = TK_MUT:
-                        self.pos ← self.pos + 1
-                        rk ← 2
+                        self.err("a borrow at a call is written &name; &mut is the parameter's side")
+                        return ⁻1
                     let vtok : i64 = self.pos
                     _ ← self.eat_name("the borrowed name")
                     let v : i64 = self.mknode(NK_VAR, vtok, 0, 0, 0)
-                    args.push(self.mknode(NK_REF, at, v, rk, 0))
+                    args.push(self.mknode(NK_REF, at, v, 1, 0))
                 else:
                     args.push(self.parse_expr())
                 if self.failed(): return ⁻1
@@ -1030,12 +1030,14 @@ impl Parser:
                 let mtok : i64 = self.pos
                 let m := self.ttext(mtok)
                 _ ← self.eat_word("the std member's name")
+                if m = "implementation":
+                    return self.parse_implementation(at)
                 let sb : mut i64 = ⁻1
                 if m = "println": sb ← SB_PRINTLN
                 elif m = "print": sb ← SB_PRINT
                 elif m = "exit": sb ← SB_EXIT
                 else:
-                    self.err("'std." ⧺ m ⧺ "' is not core-1; println, print and exit are")
+                    self.err("'std." ⧺ m ⧺ "' is not core-1; println, print, exit and implementation are")
                     return 0
                 let off : i64 = self.parse_args()
                 return self.mknode(NK_SCALL, at, sb, off, 0)
@@ -1053,6 +1055,34 @@ impl Parser:
 
     fn parse_unary_operand(&mut self) → i64:
         self.parse_primary()
+
+    // std.implementation says which implementation this is; ngplc
+    // answers about itself, folded to constants before anything runs,
+    // so a comptime check reads them for free
+    fn impl_str(&mut self, s : str) → i64:
+        if #self.toks.strs > 0:
+            foreach i := 0…#self.toks.strs - 1:
+                if self.toks.strs[i] = s:
+                    return @dropunit(i)
+        let idx : i64 = @dropunit(#self.toks.strs)
+        self.toks.strs.push(s)
+        idx
+
+    fn parse_implementation(&mut self, at : i64) → i64:
+        _ ← self.eat(TK_DOT, "'.' after std.implementation")
+        let mtok : i64 = self.pos
+        let m := self.ttext(mtok)
+        _ ← self.eat_word("the member's name")
+        if m = "interpreter":
+            return self.mknode(NK_BOOL, at, 0, 0, 0)
+        if m = "compiled":
+            return self.mknode(NK_BOOL, at, 1, 0, 0)
+        if m = "name":
+            return self.mknode(NK_STR, at, self.impl_str("ngplc"), 0, 0)
+        if m = "language":
+            return self.mknode(NK_STR, at, self.impl_str("core-1"), 0, 0)
+        self.err("'std.implementation." ⧺ m ⧺ "' is not a member; name, language, interpreter and compiled are")
+        0
 
     // binding power of a binary operator token; ⁻1 when it is none.
     // The numbers follow the bootstrap parser's ladder.
@@ -1954,7 +1984,7 @@ impl Checker:
                 self.derr(tok, "this operator works numbers; the sides are " ⧺ type_name(tl) ⧺ " and " ⧺ type_name(tr))
                 self.set_type(id, TY_I64)
                 return
-            if tl = TY_UNT and tr = TY_UNT and self.kind_of(na) = NK_INT and self.kind_of(nb) = NK_INT:
+            if tl = TY_UNT and tr = TY_UNT and self.kind_of(na) = NK_INT and self.kind_of(nb) = NK_INT and self.a.nb[na × 1¤ptrdiff] = 0 and self.a.nb[nb × 1¤ptrdiff] = 0:
                 self.fold_bin(id, k, tok, self.a.na[na × 1¤ptrdiff],
                               self.a.na[nb × 1¤ptrdiff])
                 return
@@ -2145,10 +2175,7 @@ impl Checker:
     fn check_ref_arg(&mut self, arg : i64, base : i64, rk : i64):
         let inner : i64 = self.a.na[arg × 1¤ptrdiff]
         let atok : i64 = self.a.ntok[arg × 1¤ptrdiff]
-        let ark : i64 = self.a.nb[arg × 1¤ptrdiff]
         self.check_expr(inner, TY_UNIT)
-        if ark ≠ rk:
-            self.derr(atok, "the parameter borrows " ⧺ ("&mut" if rk = 2 else "&") ⧺ ", but the argument says " ⧺ ("&mut" if ark = 2 else "&"))
         if self.ty_of(inner) ≠ base:
             self.derr(atok, "the borrow hands over " ⧺ type_name(self.ty_of(inner)) ⧺ ", but the parameter says " ⧺ type_name(base))
         if rk = 2:
@@ -4537,7 +4564,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → u8[]:
             em.patch64(em.df_pos[i], d_vaddr + em.df_off[i])
     let data : mut u8[] = []
     if nglobals > 0:
-        foreach i := 0…nglobals - 1:
+        foreach i := 0…#chk.gvals - 1:
             push64(&data, chk.gvals[i])
     foreach _ := 1…16:
         data.push(0)

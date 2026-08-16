@@ -1,0 +1,68 @@
+// core-1: arrays -- birth from a literal, growth, indexing, borrowing.
+
+fn fill_squares(v : &mut i64[], n : i64):
+    let i : mut i64 = 0
+    while i < n:
+        v.push(i × i)
+        i ← i + 1
+
+fn sum(v : &i64[]) → i64:
+    let total : mut i64 = 0
+    foreach x := v:
+        total ← total + x
+    total
+
+@start
+@impure
+fn main():
+    let v : mut i64[] = [10, 20, 30]
+    assert(#v = 3)
+    std.println("v0 {}", v[0])
+    std.println("v2 {}", v[2])
+    v[1] ← 25
+    std.println("v1 {}", v[1])
+
+    // growth well past the first capacity
+    let sq : mut i64[] = []
+    fill_squares(&sq, 40)
+    assert(#sq = 40)
+    std.println("sq39 {}", sq[39])
+    std.println("sum {}", sum(&sq))
+
+    // walking the elements
+    let total : mut i64 = 0
+    foreach x := v:
+        total ← total + x
+    std.println("walk {}", total)
+
+    // pop and get answer with the default when there is nothing
+    std.println("pop {}", v.pop() ?? ⁻1)
+    assert(#v = 2)
+    std.println("get0 {}", v.get(0) ?? ⁻1)
+    std.println("get9 {}", v.get(9) ?? ⁻1)
+    let empty : mut i64[] = []
+    std.println("pop0 {}", empty.pop() ?? ⁻7)
+
+    // an index that came from # carries the right measure
+    let i ¤ptrdiff : mut i64 = 0
+    let prod : mut i64 = 1
+    while i < #v:
+        prod ← prod × v[i]
+        i ← i + 1
+    std.println("prod {}", prod)
+
+    // a byte-elemented array is measured in bytes
+    let bs : mut u8[] = [1, 2, 3, 250]
+    std.println("blen {}", #bs)
+    let j ¤byte : mut i64 = 0
+    let bsum : mut u64 = 0
+    while j < #bs:
+        bsum ← bsum + bs[j]
+        j ← j + 1
+    std.println("bsum {}", bsum)
+
+    // narrow elements hold narrow values
+    let us : mut u16[] = [60000]
+    us.push(65535)
+    std.println("us {}", us[0] + 0)
+    std.println("us {}", us[1] + 0)

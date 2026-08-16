@@ -1,0 +1,9 @@
+// core-1: unasked-for overflow stops the run at a narrow width too.
+
+@start
+@impure
+fn main():
+    let a : mut u8 = 250
+    std.println("before")
+    a ← a + 10
+    std.println("never {}", a)

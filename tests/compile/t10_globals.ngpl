@@ -1,0 +1,31 @@
+// core-1: global bindings -- constants read anywhere, mutable state
+// behind @impure.
+
+let LIMIT : i64 = 100
+let SCALE : u32 = 3
+let ENABLED : bool = true
+let counter : mut i64 = 0
+
+fn scaled(v : u32) → u32:
+    // an immutable global reads like a constant, purely
+    v × SCALE
+
+@impure
+fn bump(by : i64) → i64:
+    counter ← counter + by
+    counter
+
+@start
+@impure
+fn main():
+    assert(LIMIT = 100)
+    std.println("limit {}", LIMIT)
+    std.println("scaled {}", scaled(14))
+    if ENABLED:
+        std.println("enabled")
+    std.println("c {}", bump(5))
+    std.println("c {}", bump(7))
+    counter ← counter × 2
+    std.println("c {}", counter)
+    let below : bool = counter < LIMIT
+    std.println("below {}", below)
