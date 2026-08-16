@@ -208,6 +208,19 @@ attempt 3+ can build toward it:
 5. **Keywords**: today one hash probe; natively, padded 8/16-byte
    images compared with one masked load + `cmov` of the token id.
 
+## Diagnostics and the Decision Log
+
+The parser recovers at line boundaries (a misparsed statement is
+dropped, its hanging block skipped whole, and parsing resumes on the
+next line — capped at twenty errors), so one run reports many
+mistakes.  Every diagnostic prints its source line with a
+character-aligned caret, decoded from UTF-8.  `--diag=json` renders
+the same records as JSON; `--log=json` emits the lowering's decisions
+— `value-table`, `jump-table`, `ladder-kept` (with cases and span),
+`select`/`branched-conditional`, `eager-logic`/`short-circuit` — one
+JSON object each with function and line, which is the edit-eval-check
+brief's requirement that a program never parse prose.
+
 ## Testing
 
 One suite (`tests/run_tests.sh`): bootstrap-language tests run under

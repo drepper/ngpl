@@ -54,10 +54,15 @@ past i64.
    cheap.  When calls become speculatable (pure, provably
    non-faulting via contracts — the language's own advantage), a cost
    model must arrive with them.
-5. **Diagnostics still stop at the first parse error**, and carry no
-   source excerpt; `--diag=json` exists but decision logging
-   (optimization choices, per the TODO's machine-readable brief) has
-   not begun.
+5. **Diagnostics recovered and started talking.**  The parser now
+   resynchronizes at line boundaries and reports up to twenty errors
+   per run, every diagnostic carries the source line and a caret
+   (UTF-8 decoded, character-aligned), and `--log=json` emits one
+   JSON object per code-shaping decision — value-table folded,
+   jump-table emitted, ladder kept and why, select versus branched
+   conditional, eager versus short-circuit logic — the first real
+   content of the machine-readable brief.  Still open: cascading
+   quality after recovery, and logging layout/width decisions.
 6. **The interpreter remains the only parallelism-free bottleneck**:
    compiling the 14-program suite takes minutes under the tree
    walker.  The per-function pass structure is ready for the
