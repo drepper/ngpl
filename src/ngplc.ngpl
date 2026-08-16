@@ -195,6 +195,8 @@ let TY_BOOL : i64 = 2
 let TY_STR : i64 = 3
 let TY_CHAR : i64 = 4       // one Unicode scalar value, UCS-4 in a slot
 let TY_U32 : i64 = 80       // what .ord() answers
+let TY_FILE : i64 = 5       // an open file, its descriptor inside
+let TY_ALLOC : i64 = 6      // std.arena.allocator(): a token, nothing more
 let TY_UNT : i64 = 8
 let TY_EMPTY : i64 = 9       // a bare ∅, not yet settled on its optional
 let TY_U64 : i64 = 144       // 16 + 0 + 2×64
@@ -321,6 +323,8 @@ fn type_name(t0 : i64) → str:
     if t = TY_BOOL: return prefix ⧺ "bool"
     if t = TY_STR: return prefix ⧺ "str"
     if t = TY_CHAR: return prefix ⧺ "char"
+    if t = TY_FILE: return prefix ⧺ "std.fs.File"
+    if t = TY_ALLOC: return prefix ⧺ "std.arena.Allocator"
     if t = TY_UNT: return "untyped integer"
     if t = TY_EMPTY: return "∅"
     if ty_is_struct(t): return prefix ⧺ "struct #" ⧺ i64_str(ty_sidx(t))
@@ -615,6 +619,7 @@ impl Lexer:
             if v < 0:
                 big ← 1
         let nb : i64 = self.peek(0)
+        let st : mut i64 = ⁻1
         if nb ≠ ⁻1 and self.cls[nb × 1¤ptrdiff] = CL_IDENT:
             // i8…i64, u8…u64: the suffix says the literal's type, and
             // it rides in the big field as big + 2 × the type's code
@@ -622,10 +627,29 @@ impl Lexer:
             while self.peek(0) ≠ ⁻1 and (self.cls[self.peek(0) × 1¤ptrdiff] = CL_IDENT or is_digit(self.peek(0))):
                 sfx ← sfx ⧺ (self.peek(0)).chr()
                 self.adv()
-            let st : i64 = TYNAMES[sfx] ?? ⁻1
+            st ← TYNAMES[sfx] ?? ⁻1
             if st = ⁻1 or not ty_is_int(st):
                 self.err("'" ⧺ sfx ⧺ "' is not a width; a literal's suffix is i8…i64 or u8…u64")
                 return
+        if self.peek(0) = 194 and self.peek(1) = 164:
+            // 1¤ptrdiff, 0¤byte: the literal states its measure, and
+            // an unstated width settles on i64
+            self.adv()
+            self.adv()
+            let usfx : mut str = ""
+            while self.peek(0) ≠ ⁻1 and self.cls[self.peek(0) × 1¤ptrdiff] = CL_IDENT:
+                usfx ← usfx ⧺ (self.peek(0)).chr()
+                self.adv()
+            let u : mut i64 = 0
+            if usfx = "ptrdiff":
+                u ← UNIT_PTRDIFF
+            elif usfx = "byte":
+                u ← UNIT_BYTE
+            else:
+                self.err("'¤" ⧺ usfx ⧺ "' is not a core-1 unit; ptrdiff and byte are")
+                return
+            st ← (st if st ≠ ⁻1 else TY_I64) + 256 × u
+        if st ≠ ⁻1:
             self.emit(TK_INT, spos, self.pos - spos, scol, v, big + st × 2)
             return
         self.emit(TK_INT, spos, self.pos - spos, scol, v, big)
@@ -973,12 +997,16 @@ let NK_STOREIDXP : i64 = 86 // path[i] ← v: na = base expr, nb = index, nc = v
 let SB_PRINTLN : i64 = 1
 let SB_PRINT : i64 = 2
 let SB_EXIT : i64 = 3
+let SB_ARGS : i64 = 4       // std.args.all() → str[]
+let SB_OPEN : i64 = 5       // std.fs.cwd().open_file(p) → File?
+let SB_CREATE : i64 = 6     // std.fs.cwd().create_file(p, mode) → File
+let SB_ALLOCATOR : i64 = 7  // std.arena.allocator()
 
 // the base type names, one probe instead of a ladder
 let TYNAMES : std.hash(str, i64) = (⸨
     "i8": 33, "i16": 49, "i32": 81, "i64": 145,
     "u8": 32, "u16": 48, "u32": 80, "u64": 144,
-    "bool": 2, "str": 3, "char": 4⸩)
+    "bool": 2, "str": 3, "char": 4, "byte": 32⸩)
 
 struct FnDef:
     name : str
@@ -1478,12 +1506,47 @@ impl Parser:
                 _ ← self.eat_word("the std member's name")
                 if m = "implementation":
                     return self.parse_implementation(at)
+                if m = "args":
+                    _ ← self.eat(TK_DOT, "'.' after std.args")
+                    if self.ttext(self.pos) ≠ "all":
+                        self.err("'std.args." ⧺ self.ttext(self.pos) ⧺ "' is not core-2; all() is")
+                        return 0
+                    self.pos ← self.pos + 1
+                    let aoff : i64 = self.parse_args()
+                    return self.mknode(NK_SCALL, at, SB_ARGS, aoff, 0)
+                if m = "arena":
+                    _ ← self.eat(TK_DOT, "'.' after std.arena")
+                    if self.ttext(self.pos) ≠ "allocator":
+                        self.err("'std.arena." ⧺ self.ttext(self.pos) ⧺ "' is not core-2; allocator() is")
+                        return 0
+                    self.pos ← self.pos + 1
+                    let loff : i64 = self.parse_args()
+                    return self.mknode(NK_SCALL, at, SB_ALLOCATOR, loff, 0)
+                if m = "fs":
+                    _ ← self.eat(TK_DOT, "'.' after std.fs")
+                    if self.ttext(self.pos) ≠ "cwd":
+                        self.err("'std.fs." ⧺ self.ttext(self.pos) ⧺ "' is not core-2; cwd() is")
+                        return 0
+                    self.pos ← self.pos + 1
+                    _ ← self.eat(TK_LPAR, "'(' after cwd")
+                    _ ← self.eat(TK_RPAR, "')' after cwd(")
+                    _ ← self.eat(TK_DOT, "'.' and what cwd() is asked")
+                    let fm := self.ttext(self.pos)
+                    self.pos ← self.pos + 1
+                    if fm = "open_file":
+                        let ooff : i64 = self.parse_args()
+                        return self.mknode(NK_SCALL, at, SB_OPEN, ooff, 0)
+                    if fm = "create_file":
+                        let coff : i64 = self.parse_args()
+                        return self.mknode(NK_SCALL, at, SB_CREATE, coff, 0)
+                    self.err("'" ⧺ fm ⧺ "' is not core-2; cwd() answers open_file and create_file")
+                    return 0
                 let sb : mut i64 = ⁻1
                 if m = "println": sb ← SB_PRINTLN
                 elif m = "print": sb ← SB_PRINT
                 elif m = "exit": sb ← SB_EXIT
                 else:
-                    self.err("'std." ⧺ m ⧺ "' is not core-1; println, print, exit and implementation are")
+                    self.err("'std." ⧺ m ⧺ "' is not core-2; println, print, exit, args, fs, arena and implementation are")
                     return 0
                 let off : i64 = self.parse_args()
                 return self.mknode(NK_SCALL, at, sb, off, 0)
@@ -2353,6 +2416,9 @@ let MID_GET : i64 = 3
 let MID_CHR : i64 = 4
 let MID_ORD : i64 = 5
 let MID_CHARS : i64 = 6
+let MID_READF : i64 = 7
+let MID_WRITEF : i64 = 8
+let MID_CLOSEF : i64 = 9
 
 struct Chk:
     ntype : i64[]
@@ -3312,6 +3378,47 @@ impl Checker:
                     self.derr(tok, "the exit code is a number")
             self.set_type(id, TY_UNIT)
             return
+        if sb = SB_ARGS:
+            if argc ≠ 0:
+                self.derr(tok, "std.args.all takes nothing")
+            if not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:
+                self.derr(tok, "reading the arguments is impure; the function wants @impure")
+            self.set_type(id, mk_aty(TY_STR))
+            return
+        if sb = SB_ALLOCATOR:
+            if argc ≠ 0:
+                self.derr(tok, "std.arena.allocator takes nothing")
+            self.set_type(id, TY_ALLOC)
+            return
+        if sb = SB_OPEN or sb = SB_CREATE:
+            if not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:
+                self.derr(tok, "touching files is impure; the function wants @impure")
+            if self.in_contract:
+                self.derr(tok, "a contract's condition is pure and touches nothing")
+            if argc < 1:
+                self.derr(tok, "the path comes first")
+                self.set_type(id, mk_oty(TY_FILE) if sb = SB_OPEN else TY_FILE)
+                return
+            let pth : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
+            self.check_expr(pth, TY_STR)
+            if self.ty_of(pth) ≠ TY_STR:
+                self.derr(tok, "the path is a string, not " ⧺ type_name(self.ty_of(pth)))
+            if sb = SB_OPEN:
+                if argc ≠ 1:
+                    self.derr(tok, "open_file takes the path alone")
+                self.set_type(id, mk_oty(TY_FILE))
+                return
+            if argc ≠ 2:
+                self.derr(tok, "create_file takes the path and the mode")
+            else:
+                let md : i64 = self.a.extra[(args_off + 2) × 1¤ptrdiff]
+                self.check_expr(md, TY_I64)
+                if self.ty_of(md) = TY_UNT:
+                    self.adopt(md, TY_I64)
+                elif not ty_is_int(self.ty_of(md)):
+                    self.derr(tok, "the mode is a number")
+            self.set_type(id, TY_FILE)
+            return
         if not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:
             self.derr(tok, "writing output is impure; the function wants @impure")
         if self.in_contract:
@@ -3392,6 +3499,36 @@ impl Checker:
                 return
             self.a.nc[id × 1¤ptrdiff] ← MID_ORD
             self.set_type(id, TY_U32)
+            return
+        if t = TY_FILE and (m = "read_file" or m = "write" or m = "close"):
+            if not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:
+                self.derr(tok, "touching files is impure; the function wants @impure")
+            if m = "read_file":
+                if argc0 ≠ 1:
+                    self.derr(tok, "read_file takes the allocator")
+                else:
+                    let al : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
+                    self.check_expr(al, TY_UNIT)
+                    if self.ty_of(al) ≠ TY_ALLOC:
+                        self.derr(tok, "read_file reads through an allocator; std.arena.allocator() answers one")
+                self.a.nc[id × 1¤ptrdiff] ← MID_READF
+                self.set_type(id, mk_aty(TY_U8))
+                return
+            if m = "write":
+                if argc0 ≠ 1:
+                    self.derr(tok, "write takes the bytes to put down")
+                else:
+                    let bs : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
+                    self.check_expr(bs, TY_UNIT)
+                    if self.ty_of(bs) ≠ mk_aty(TY_U8):
+                        self.derr(tok, "write puts down bytes, not " ⧺ type_name(self.ty_of(bs)))
+                self.a.nc[id × 1¤ptrdiff] ← MID_WRITEF
+                self.set_type(id, TY_UNIT)
+                return
+            if argc0 ≠ 0:
+                self.derr(tok, "close takes nothing")
+            self.a.nc[id × 1¤ptrdiff] ← MID_CLOSEF
+            self.set_type(id, TY_UNIT)
             return
         if t = TY_STR and m = "chars":
             if argc0 ≠ 0:
@@ -3480,6 +3617,10 @@ impl Checker:
         self.a.nc[id × 1¤ptrdiff] ← 1000 + 2 × f + (1 if instance else 0)
         self.set_type(id, callee.ret)
 
+    fn call_noreturn(&self, e : i64) → bool:
+        let f : i64 = self.fn_index(self.text(self.a.ntok[e × 1¤ptrdiff]))
+        f ≠ ⁻1 and self.a.fns[f × 1¤ptrdiff].is_noreturn
+
     fn require_mut_base(&mut self, base : i64, tok : i64):
         if self.kind_of(base) = NK_FIELD or self.kind_of(base) = NK_INDEX:
             self.require_mut_base(self.a.na[base × 1¤ptrdiff], tok)
@@ -3525,6 +3666,12 @@ impl Checker:
             self.check_expr(na, ow)
             if ty_is_opt(self.ty_of(na)):
                 let base : i64 = ty_opt_base(self.ty_of(na))
+                if self.kind_of(nb) = NK_CALL and self.call_noreturn(nb):
+                    // the default never answers; the held value's type
+                    // stands alone
+                    self.check_expr(nb, TY_UNIT)
+                    self.set_type(id, base)
+                    return
                 self.check_expr(nb, base)
                 if self.is_open(self.ty_of(nb)):
                     self.adopt(nb, base)
@@ -4102,8 +4249,8 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
             starts ← starts + 1
             if a.extra[f.params_off × 1¤ptrdiff] ≠ 0:
                 c.derr(f.tok, "the @start function takes no parameters")
-            if f.ret ≠ TY_UNIT:
-                c.derr(f.tok, "the @start function answers nothing in core-1")
+            if f.ret ≠ TY_UNIT and not (ty_is_int(f.ret) and ty_unit(f.ret) = 0):
+                c.derr(f.tok, "the @start function answers the exit status, a plain integer, or nothing")
             if not f.is_impure:
                 c.derr(f.tok, "the @start function is where effects begin; it wants @impure")
     if #a.globals > 0:
@@ -4198,6 +4345,12 @@ let IR_CHR : i64 = 75      // d ← a as a character, judged first
 let IR_SIDX : i64 = 76     // d ← string a's character at position b
 let IR_CHARS : i64 = 77    // d ← string a's characters, an array
 let IR_CHARSTR : i64 = 78  // d ← character a as a fresh string
+let IR_ARGS : i64 = 80     // d ← the program's arguments, a str[]
+let IR_FOPEN : i64 = 81    // d ← the file at path a, an optional
+let IR_FCREATE : i64 = 82  // d ← a fresh file at path a with mode b
+let IR_FREAD : i64 = 83    // d ← file a's bytes, a u8[]
+let IR_FWRITE : i64 = 84   // file a takes the bytes of array b
+let IR_FCLOSE : i64 = 85   // file a closes
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
 let IR_FLD : i64 = 67      // d ← field b of struct a
 let IR_FSTO : i64 = 68     // field b of struct a ← c
@@ -4456,6 +4609,25 @@ impl Lower:
         if k = NK_CALL:
             return self.lower_call(nid, tok, na)
         if k = NK_SCALL:
+            if na = SB_ARGS:
+                let d : i64 = self.tmp()
+                self.ir(IR_ARGS, 0, 0, 0, d, 0)
+                return d
+            if na = SB_OPEN:
+                let pv : i64 = self.lower_expr(self.a.extra[(nb + 1) × 1¤ptrdiff])
+                let d : i64 = self.tmp()
+                self.ir(IR_FOPEN, pv, 0, 0, d, 0)
+                return d
+            if na = SB_CREATE:
+                let pv : i64 = self.lower_expr(self.a.extra[(nb + 1) × 1¤ptrdiff])
+                let mv : i64 = self.lower_expr(self.a.extra[(nb + 2) × 1¤ptrdiff])
+                let d : i64 = self.tmp()
+                self.ir(IR_FCREATE, pv, mv, 0, d, 0)
+                return d
+            if na = SB_ALLOCATOR:
+                let d : i64 = self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, d, 0)
+                return d
             self.lower_scall(nid, tok, na, nb)
             return ⁻1
         if k = NK_MCALL:
@@ -4677,6 +4849,18 @@ impl Lower:
             let d : i64 = self.tmp()
             self.ir(IR_CHARS, av, 0, 0, d, 0)
             return d
+        if mid = MID_READF:
+            _ ← self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            let d : i64 = self.tmp()
+            self.ir(IR_FREAD, av, 0, 0, d, 0)
+            return d
+        if mid = MID_WRITEF:
+            let bv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            self.ir(IR_FWRITE, av, bv, 0, 0, 0)
+            return ⁻1
+        if mid = MID_CLOSEF:
+            self.ir(IR_FCLOSE, av, 0, 0, 0, 0)
+            return ⁻1
         if mid = MID_PUSH:
             let vv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
             self.ir(IR_APUSH, av, vv, 0, 0, 0)
@@ -5330,6 +5514,11 @@ let RT_BADCHAR : i64 = ⁻22
 let RT_STRIDX : i64 = ⁻23
 let RT_CHARS : i64 = ⁻24
 let RT_CHARSTR : i64 = ⁻25
+let RT_ARGS : i64 = ⁻26
+let RT_FOPEN : i64 = ⁻27
+let RT_FCREATE : i64 = ⁻28
+let RT_FREAD : i64 = ⁻29
+let RT_FWRITE : i64 = ⁻30
 
 struct Emit:
     code : u8[]
@@ -6006,6 +6195,33 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.load(R_DI, a)
             em.jglobal(232, ⁻1, RT_CHARSTR)
             em.store(R_AX, d)
+        elif o = IR_ARGS:
+            em.jglobal(232, ⁻1, RT_ARGS)
+            em.store(R_AX, d)
+        elif o = IR_FOPEN:
+            em.load(R_DI, a)
+            em.jglobal(232, ⁻1, RT_FOPEN)
+            em.store(R_AX, d)
+        elif o = IR_FCREATE:
+            em.load(R_DI, a)
+            em.load(R_SI, b)
+            em.jglobal(232, ⁻1, RT_FCREATE)
+            em.store(R_AX, d)
+        elif o = IR_FREAD:
+            em.load(R_DI, a)
+            em.jglobal(232, ⁻1, RT_FREAD)
+            em.store(R_AX, d)
+        elif o = IR_FWRITE:
+            em.load(R_DI, a)
+            em.load(R_SI, b)
+            em.jglobal(232, ⁻1, RT_FWRITE)
+        elif o = IR_FCLOSE:
+            em.load(R_DI, a)
+            em.b3(72, 137, 248)              // mov rax, rdi -- the fd
+            em.b3(72, 137, 199)              // mov rdi, rax
+            em.movimm(R_AX, 3)
+            em.b2(15, 5)                     // close
+            em.raxbar()
         elif o = IR_JTAB:
             let jmin : i64 = ir.extra[b × 1¤ptrdiff]
             let span : i64 = ir.extra[(b + 1) × 1¤ptrdiff]
@@ -6035,7 +6251,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
 // The runtime: routines over raw syscalls, no libc
 // ---------------------------------------------------------------------------
 
-fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64):
+fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64):
     // RT_PRINTI: rdi = signed value → decimal on fd 1
     em.rt_off.push(em.here())
     em.begin_fn(3)
@@ -6826,6 +7042,238 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64):
     em.b1(195)
     em.resolve_locals()
 
+    // RT_ARGS: → rax = a str[] of the program's arguments, argv[0]
+    // left out; each entry points straight at the kernel's bytes
+    em.rt_off.push(em.here())
+    em.begin_fn(5)
+    em.dref(R_R11, args_off)
+    em.b3(77, 139, 35)              // mov r12, [r11]: argc
+    em.b4(77, 139, 107, 8)          // mov r13, [r11+8]: argv
+    em.b3(73, 255, 204)             // dec r12
+    em.b3(77, 133, 228)             // test r12, r12
+    em.jlocal(137, 0)               // jns: the count stands
+    em.b3(69, 49, 228)              // xor r12d, r12d
+    em.set_label(0)
+    em.b3(76, 137, 231)             // mov rdi, r12
+    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.b3(72, 137, 195)             // mov rbx, rax
+    em.b3(77, 49, 246)              // xor r14, r14
+    em.set_label(1)                 // Lloop
+    em.b3(77, 57, 244)              // cmp r12, r14
+    em.jlocal(134, 2)               // jbe Ldone
+    em.b4(79, 139, 124, 245)
+    em.b1(8)                        // mov r15, [r13+r14*8+8]
+    em.b3(72, 49, 201)              // xor rcx, rcx
+    em.set_label(3)                 // Llen
+    em.b4(65, 128, 60, 15)
+    em.b1(0)                        // cmp byte [r15+rcx], 0
+    em.jlocal(132, 4)               // je Lgot
+    em.b3(72, 255, 193)             // inc rcx
+    em.jlocal(⁻1, 3)
+    em.set_label(4)                 // Lgot
+    em.b1(81)                       // push rcx
+    em.movimm(R_DI, 16)
+    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.b1(89)                       // pop rcx
+    em.b3(76, 137, 56)              // mov [rax], r15
+    em.b4(72, 137, 72, 8)           // mov [rax+8], rcx
+    em.b3(72, 139, 19)              // mov rdx, [rbx]
+    em.b4(74, 137, 4, 242)          // mov [rdx+r14*8], rax
+    em.b3(73, 255, 198)             // inc r14
+    em.jlocal(⁻1, 1)
+    em.set_label(2)                 // Ldone
+    em.b4(76, 137, 115, 8)          // mov [rbx+8], r14
+    em.b3(72, 137, 216)             // mov rax, rbx
+    em.b1(195)
+    em.resolve_locals()
+
+    // RT_FOPEN: rdi = the path → rax = an optional file descriptor;
+    // the path's bytes gain the NUL openat wants
+    em.rt_off.push(em.here())
+    em.begin_fn(3)
+    em.b3(73, 137, 252)             // mov r12, rdi
+    em.b4(73, 139, 124, 36)
+    em.b1(8)                        // mov rdi, [r12+8]
+    em.b3(72, 255, 199)             // inc rdi
+    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.b3(73, 137, 197)             // mov r13, rax
+    em.b3(73, 139, 52)
+    em.b1(36)                       // mov rsi, [r12]
+    em.b4(73, 139, 76, 36)
+    em.b1(8)                        // mov rcx, [r12+8]
+    em.b3(72, 49, 210)              // xor rdx, rdx
+    em.set_label(0)
+    em.b3(72, 57, 209)              // cmp rcx, rdx
+    em.jlocal(134, 1)               // jbe
+    em.b4(68, 138, 12, 22)          // mov r9b, [rsi+rdx]
+    em.b4(69, 136, 76, 21)
+    em.b1(0)                        // mov [r13+rdx], r9b
+    em.b3(72, 255, 194)             // inc rdx
+    em.jlocal(⁻1, 0)
+    em.set_label(1)
+    em.b4(65, 198, 68, 21)
+    em.b2(0, 0)                     // mov byte [r13+rdx], 0
+    em.movimm(R_DI, @wrap(0 - 100)) // AT_FDCWD
+    em.b3(76, 137, 238)             // mov rsi, r13
+    em.b2(49, 210)                  // xor edx, edx: O_RDONLY
+    em.b3(69, 49, 210)              // xor r10d, r10d
+    em.movimm(R_AX, 257)
+    em.b2(15, 5)                    // openat
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(136, 2)               // js Lnone
+    em.b3(73, 137, 196)             // mov r12, rax
+    em.movimm(R_DI, 8)
+    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.b3(76, 137, 32)              // mov [rax], r12
+    em.b1(195)
+    em.set_label(2)                 // Lnone
+    em.b2(49, 192)                  // xor eax, eax
+    em.b1(195)
+    em.resolve_locals()
+
+    // RT_FCREATE: rdi = the path, rsi = the mode → rax = a fresh
+    // file's descriptor; refusal is a stop, not an answer
+    em.rt_off.push(em.here())
+    em.begin_fn(3)
+    em.b3(73, 137, 252)             // mov r12, rdi
+    em.b3(73, 137, 246)             // mov r14, rsi
+    em.b4(73, 139, 124, 36)
+    em.b1(8)                        // mov rdi, [r12+8]
+    em.b3(72, 255, 199)             // inc rdi
+    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.b3(73, 137, 197)             // mov r13, rax
+    em.b3(73, 139, 52)
+    em.b1(36)                       // mov rsi, [r12]
+    em.b4(73, 139, 76, 36)
+    em.b1(8)                        // mov rcx, [r12+8]
+    em.b3(72, 49, 210)              // xor rdx, rdx
+    em.set_label(0)
+    em.b3(72, 57, 209)              // cmp rcx, rdx
+    em.jlocal(134, 1)
+    em.b4(68, 138, 12, 22)          // mov r9b, [rsi+rdx]
+    em.b4(69, 136, 76, 21)
+    em.b1(0)                        // mov [r13+rdx], r9b
+    em.b3(72, 255, 194)             // inc rdx
+    em.jlocal(⁻1, 0)
+    em.set_label(1)
+    em.b4(65, 198, 68, 21)
+    em.b2(0, 0)                     // mov byte [r13+rdx], 0
+    em.movimm(R_DI, @wrap(0 - 100))
+    em.b3(76, 137, 238)             // mov rsi, r13
+    em.movimm(R_DX, 577)            // O_WRONLY|O_CREAT|O_TRUNC
+    em.b3(77, 137, 242)             // mov r10, r14: the mode
+    em.movimm(R_AX, 257)
+    em.b2(15, 5)
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(137, 2)               // jns Lok
+    let ncm : i64 = lw.intern("ngplc: the output file cannot be created\n")
+    em.sref(R_SI, ncm)
+    em.movimm(R_DX, str_len(lw.strs[ncm × 1¤ptrdiff]))
+    em.jglobal(233, ⁻1, RT_ABORT)
+    em.set_label(2)
+    em.b1(195)
+    em.resolve_locals()
+
+    // RT_FREAD: rdi = a file's descriptor → rax = its bytes as a
+    // u8[]; the size from fstat, one read loop, one widening loop
+    em.rt_off.push(em.here())
+    em.begin_fn(5)
+    em.b3(73, 137, 252)             // mov r12, rdi
+    em.b3(72, 129, 236)
+    em.w32(144)                     // sub rsp, 144
+    em.b3(72, 137, 230)             // mov rsi, rsp
+    em.movimm(R_AX, 5)
+    em.b2(15, 5)                    // fstat
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(136, 4)               // js Lbad
+    em.b4(76, 139, 108, 36)
+    em.b1(48)                       // mov r13, [rsp+48]: the size
+    em.b3(72, 129, 196)
+    em.w32(144)                     // add rsp, 144
+    em.b3(76, 137, 239)             // mov rdi, r13
+    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.b3(73, 137, 198)             // mov r14, rax: the raw bytes
+    em.b3(77, 49, 255)              // xor r15, r15
+    em.set_label(0)                 // Lread
+    em.b3(77, 57, 253)              // cmp r13, r15
+    em.jlocal(134, 1)               // jbe Lwiden
+    em.b3(76, 137, 231)             // mov rdi, r12
+    em.b4(75, 141, 52, 62)          // lea rsi, [r14+r15]
+    em.b3(76, 137, 234)             // mov rdx, r13
+    em.b3(76, 41, 250)              // sub rdx, r15
+    em.b2(49, 192)                  // xor eax, eax: read
+    em.b2(15, 5)
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(142, 4)               // jle Lbad
+    em.b3(73, 1, 199)               // add r15, rax
+    em.jlocal(⁻1, 0)
+    em.set_label(1)                 // Lwiden
+    em.b3(76, 137, 239)             // mov rdi, r13
+    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.b3(72, 137, 195)             // mov rbx, rax
+    em.b3(72, 139, 19)              // mov rdx, [rbx]
+    em.b3(72, 49, 201)              // xor rcx, rcx
+    em.set_label(2)
+    em.b3(76, 57, 233)              // cmp rcx, r13
+    em.jlocal(131, 3)               // jae
+    em.b4(65, 15, 182, 4)
+    em.b1(14)                       // movzx eax, byte [r14+rcx]
+    em.b4(72, 137, 4, 202)          // mov [rdx+rcx*8], rax
+    em.b3(72, 255, 193)             // inc rcx
+    em.jlocal(⁻1, 2)
+    em.set_label(3)
+    em.b4(76, 137, 107, 8)          // mov [rbx+8], r13
+    em.b3(72, 137, 216)             // mov rax, rbx
+    em.b1(195)
+    em.set_label(4)                 // Lbad
+    let nrm : i64 = lw.intern("ngplc: the input cannot be read\n")
+    em.sref(R_SI, nrm)
+    em.movimm(R_DX, str_len(lw.strs[nrm × 1¤ptrdiff]))
+    em.jglobal(233, ⁻1, RT_ABORT)
+    em.resolve_locals()
+
+    // RT_FWRITE: rdi = a file's descriptor, rsi = a u8[]; the slots
+    // narrow to bytes and one write loop puts them down
+    em.rt_off.push(em.here())
+    em.begin_fn(5)
+    em.b3(73, 137, 252)             // mov r12, rdi
+    em.b4(76, 139, 110, 8)          // mov r13, [rsi+8]: how many
+    em.b3(76, 139, 54)              // mov r14, [rsi]: the slots
+    em.b3(76, 137, 239)             // mov rdi, r13
+    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.b3(72, 137, 195)             // mov rbx, rax: the raw bytes
+    em.b3(72, 49, 201)              // xor rcx, rcx
+    em.set_label(0)                 // Lnarrow
+    em.b3(76, 57, 233)              // cmp rcx, r13
+    em.jlocal(131, 1)               // jae
+    em.b4(73, 139, 4, 206)          // mov rax, [r14+rcx*8]
+    em.b3(136, 4, 11)               // mov [rbx+rcx], al
+    em.b3(72, 255, 193)             // inc rcx
+    em.jlocal(⁻1, 0)
+    em.set_label(1)
+    em.b3(77, 49, 255)              // xor r15, r15
+    em.set_label(2)                 // Lwrite
+    em.b3(77, 57, 253)              // cmp r13, r15
+    em.jlocal(134, 3)               // jbe Ldone
+    em.b3(76, 137, 231)             // mov rdi, r12
+    em.b4(74, 141, 52, 59)          // lea rsi, [rbx+r15]
+    em.b3(76, 137, 234)             // mov rdx, r13
+    em.b3(76, 41, 250)              // sub rdx, r15
+    em.movimm(R_AX, 1)
+    em.b2(15, 5)
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(142, 4)               // jle Lbad
+    em.b3(73, 1, 199)               // add r15, rax
+    em.jlocal(⁻1, 2)
+    em.set_label(3)
+    em.b1(195)
+    em.set_label(4)                 // Lbad
+    let nwm : i64 = lw.intern("ngplc: the output cannot be written\n")
+    em.sref(R_SI, nwm)
+    em.movimm(R_DX, str_len(lw.strs[nwm × 1¤ptrdiff]))
+    em.jglobal(233, ⁻1, RT_ABORT)
+    em.resolve_locals()
+
 // ---------------------------------------------------------------------------
 // The ELF executable: text R+X, rodata R, data R+W
 // ---------------------------------------------------------------------------
@@ -7001,20 +7449,35 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
                               pj_start: [], pj_len: [], pj_labels: []})
     let nglobals : i64 = @dropunit(#a.globals)
     let alloc_off : i64 = 8 × nglobals
+    let args_off : i64 = alloc_off + 16
     // _start: call the @start function, then exit 0
     let start_fn : mut i64 = 0
     foreach i := 0…#a.fns - 1:
         if a.fns[i].is_start:
             start_fn ← @dropunit(i)
+    // the kernel's argc and argv sit at the entry rsp; they are kept
+    // in the data segment before anything moves the stack
+    em.b3(72, 139, 4)
+    em.b1(36)                       // mov rax, [rsp]
+    em.dref(R_R11, args_off)
+    em.b3(73, 137, 3)               // mov [r11], rax: argc
+    em.b4(72, 141, 68, 36)
+    em.b1(8)                        // lea rax, [rsp+8]
+    em.b4(73, 137, 67, 8)           // mov [r11+8], rax: argv
     let ninit : i64 = @dropunit(#chk.ginit)
     if ninit > 0:
         // the init function sits one index past the user's functions
         em.jglobal(232, ⁻1, @dropunit(#a.fns))
     em.jglobal(232, ⁻1, start_fn)
+    // the start function's answer is the exit status; one that
+    // answers nothing exits 0
+    if a.fns[start_fn × 1¤ptrdiff].ret ≠ TY_UNIT:
+        em.b3(72, 137, 199)         // mov rdi, rax
+    else:
+        em.b3(72, 49, 255)          // xor rdi, rdi
     em.movimm(R_AX, 60)
-    em.b3(72, 49, 255)
     em.b2(15, 5)
-    emit_runtime(&em, &lw, alloc_off)
+    emit_runtime(&em, &lw, alloc_off, args_off)
     foreach i := 0…#a.fns - 1:
         let f : i64 = @dropunit(i)
         let ir := lower_fn(&lw, a, chk, f)
@@ -7027,7 +7490,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
         emit_fn(&em, gir, 0, lw.strs)
     // every function was emitted and left its offset behind
     assert(#em.fn_off = #a.fns + (1 if ninit > 0 else 0), "one code offset per function")
-    assert(#em.rt_off = 25, "every runtime routine in place")
+    assert(#em.rt_off = 30, "every runtime routine in place")
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:
         foreach i := 0…#em.cf_pos - 1:
@@ -7083,7 +7546,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
     if nglobals > 0:
         foreach i := 0…#chk.gvals - 1:
             push64(&data, chk.gvals[i])
-    foreach _ := 1…16:
+    foreach _ := 1…32:
         data.push(0)
     (Compiled{elf: build_elf(em.code, rodata, data), log: lw.dlog})
 

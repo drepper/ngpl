@@ -1,0 +1,43 @@
+// core-2: files -- create, write, close, open, read back; the bytes
+// round-trip and absence answers ∅.
+
+@noreturn
+@impure
+fn vanished(n : str):
+    std.println("'{}' vanished", n)
+    std.exit(3)
+
+@start
+@impure
+fn main() → u8:
+    let path : str = "/tmp/ngpl_t21_roundtrip.tmp"
+    let payload : mut u8[] = []
+    let x : mut u8 = 0
+    let i : mut i64 = 0
+    while i < 300:
+        payload.push(x)
+        x ← @wrap(x + 7)
+        i ← i + 1
+    let outf := std.fs.cwd().create_file(path, 420)
+    outf.write(payload)
+    outf.close()
+
+    let alloc := std.arena.allocator()
+    let f := std.fs.cwd().open_file(path) ?? vanished(path)
+    let back := f.read_file(alloc)
+    std.println("{}", #back)
+    let same : mut bool = true
+    let j ¤byte : mut i64 = 0
+    while j < #back:
+        same ← same and back[j] = payload[j]
+        j ← j + 1
+    std.println("{}", same)
+    std.println("{} {}", back[0¤byte], back[299¤byte])
+
+    match std.fs.cwd().open_file("/tmp/ngpl_t21_never_here.tmp"):
+        ∃(g):
+            g.close()
+            std.println("unexpectedly there")
+        ∅:
+            std.println("absent, as it should be")
+    0

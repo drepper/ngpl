@@ -50,9 +50,12 @@ past i64.
    source is now written almost entirely inside the subset.  The
    self-hosting sweep landed the rest of what the source needs:
    container parameters and returns, structs inside structs, stores
-   through arbitrary paths, `@dropunit`, and global hash tables
-   initialized before `@start`; the two `⍴` uses were rewritten as
-   loops.  The stage-1 compile of ngplc by ngplc is in progress.  The struct probes settled a fact worth
+   through arbitrary paths, `@dropunit`, global hash tables
+   initialized before `@start`, the OS surface `main` stands on
+   (args, open/create/read/write/close over raw syscalls), `@start`
+   answering the exit status, unit-suffixed literals, and the `byte`
+   name; the two `⍴` uses were rewritten as loops.  The stage-1
+   compile of ngplc by ngplc is in progress.  The struct probes settled a fact worth
    recording: the bootstrap's struct values are references — one
    struct behind however many names — so the compiled pointer
    representation conforms by construction, and the subset's

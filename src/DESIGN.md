@@ -146,6 +146,17 @@ Attempt 3 grows core-1 to **core-2** with structs:
   function the image runs before `@start` — the one runtime-
   initialized global kind, because the compiler's own keyword and
   glyph tables want exactly that.
+- **the OS surface `main` stands on**: `std.args.all()` (argv[1..] as
+  a `str[]`, the kernel's argc/argv captured at the entry rsp into
+  the data segment), `std.fs.cwd().open_file(p)` answering `File?` so
+  absence composes with `??` and a `@noreturn` default, `create_file`
+  aborting rather than answering, `read_file` (fstat + read loop +
+  widening into slots), `write` (narrowing + write loop), `close`,
+  and `std.arena.allocator()` as an accepted token — the bump
+  allocator is the arena.  `@start` may answer a plain integer, which
+  `_start` hands to `exit`.  Unit-suffixed literals (`1¤ptrdiff`,
+  `0¤byte`) close their type at the lexer like width suffixes, and
+  `byte` names `u8`.
 
 ## Pipeline and Data Flow
 
@@ -332,7 +343,7 @@ One suite (`tests/run_tests.sh`): bootstrap-language tests run under
 the interpreter; the shared programs in `tests/compile/` run under
 the interpreter **and** compiled, outputs and exit codes diffed — the
 strict-subset rule made executable.  `--impl=` selects a side.
-Twenty-one shared programs cover the whole core-2 surface including the
+Twenty-two shared programs cover the whole core-2 surface including the
 stopping paths; `std.implementation` conditionalizes where
 implementations may differ.  The diff has caught real bugs on both
 sides, including the interpreter's float-precision division.
