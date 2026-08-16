@@ -240,7 +240,8 @@ class Repl:
 
         if isinstance(item, _DEFINITION_NODES):
             program = install_definitions([item], self.env, self.evaluator,
-                                          honor_start=False)
+                                          honor_start=False,
+                                          redefine_vars=True)
             _report_warnings(program.warnings, src, name)
             self._label_definition(item)
             self._report_definition(item, program)

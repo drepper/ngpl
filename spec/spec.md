@@ -8418,6 +8418,15 @@ Only a bare expression reports a value.  A statement that happens to end in an e
 
 Definitions accumulate in one environment for the life of the session: a function defined in one entry is callable from the next, and a function may refer to names defined earlier.
 
+A definition may also be *replaced*: a second `let` of the same name overwrites the first, taking its own mutability and type with it, so a session can refine a value without inventing fresh names.  This is a property of the prompt alone.  In a file a second `let` of a name is an error — a file defines a name once, and a duplicate is a mistake rather than an update — and the compiler holds to the same rule:
+
+```
+>>> let limit : i64 = 10
+>>> let limit : i64 = 20     /* the prompt: replaced */
+>>> limit
+20i64
+```
+
 ### Multi-Line Input
 
 Input is read one line at a time and accumulated until it forms something complete.  Two rules decide when that is.

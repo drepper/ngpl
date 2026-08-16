@@ -1,0 +1,7 @@
+error: 'limit' is already defined; a file defines a name once (at the REPL a new let replaces the old)
+  --> tests/output/global_redefined.ngpl:6:1
+    |
+  6 | let limit : i64 = 20
+    | ^^^
+  7 | 
+    |

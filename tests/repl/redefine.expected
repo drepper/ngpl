@@ -1,0 +1,9 @@
+2i64
+9i64
+error: cannot assign to let variable 'w'
+  --> <repl:10>:1:5
+    |
+  1 | w ← 3
+    |     ^
+    |
+2i64

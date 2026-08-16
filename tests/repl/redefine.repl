@@ -1,0 +1,11 @@
+let x : i64 = 1
+let x : i64 = 2
+x
+let z : i64 = 5
+let z : mut i64 = 6
+z ← 9
+z
+let w : mut i64 = 1
+let w : i64 = 2
+w ← 3
+w

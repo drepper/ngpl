@@ -1,0 +1,11 @@
+// A file defines a name once: a second let of the same name is a
+// mistake rather than an update.  The REPL is the one place a
+// definition may be replaced, entry by entry.
+
+let limit : i64 = 10
+let limit : i64 = 20
+
+@start
+@impure
+fn main():
+    std.println("{}", limit)

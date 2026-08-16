@@ -2370,7 +2370,8 @@ def _int_type_range(type_name: str) -> tuple[int, int]:
 
 
 def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
-                        honor_start: bool = True) -> LoadedProgram:
+                        honor_start: bool = True,
+                        redefine_vars: bool = False) -> LoadedProgram:
     """Install top-level definitions, keeping the warnings found on the way.
 
     A definition that is not well-formed stops the installation, but
@@ -2389,7 +2390,8 @@ def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
         except MacroError as e:
             raise DefinitionError(str(e), getattr(e, "pos", None)) from e
         _install_definitions(definitions, env, evaluator, program,
-                             honor_start=honor_start)
+                             honor_start=honor_start,
+                             redefine_vars=redefine_vars)
     except DefinitionError as e:
         e.warnings = program.warnings
         raise
@@ -2474,7 +2476,8 @@ def _macro_reach(message: str) -> str:
 
 def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                          program: LoadedProgram, *,
-                         honor_start: bool = True) -> None:
+                         honor_start: bool = True,
+                         redefine_vars: bool = False) -> None:
     """Install top-level definitions into an environment.
 
     Definitions are installed in dependency order: type aliases, then
@@ -2595,6 +2598,14 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 raise DefinitionError(
                     f"fast type '{defn.type_annotation}' cannot be used in "
                     f"let definition '{defn.name}'", _node_pos(defn))
+            if not redefine_vars and defn.name in env._frames[0]:
+                # A file defines a name once; a second let is a mistake
+                # rather than an update.  The REPL is the one place a
+                # definition may be replaced, entry by entry.
+                raise DefinitionError(
+                    f"'{defn.name}' is already defined; a file defines a "
+                    f"name once (at the REPL a new let replaces the old)",
+                    _node_pos(defn))
             # A global is worked out while the definitions are being
             # installed, so what it objects to is reported the way the
             # checks around it are rather than as a bare traceback.
@@ -2630,6 +2641,8 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 raise DefinitionError(
                     f"in {defn.name}: {strip_position_prefix(str(e))}",
                     extract_position(e) or _node_pos(defn)) from None
+            env._const_globals.discard(defn.name)
+            env._mutable_globals.discard(defn.name)
             env.define(defn.name, value,
                         Decl(evaluator._declared_type_of(defn, value), unit))
             if defn.is_const:
@@ -2639,6 +2652,13 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
 
     for defn in definitions:
         if isinstance(defn, ASTDestructureDef):
+            if not redefine_vars:
+                for name in _destructured_names(defn.names):
+                    if name != DISCARD_NAME and name in env._frames[0]:
+                        raise DefinitionError(
+                            f"'{name}' is already defined; a file defines "
+                            f"a name once (at the REPL a new let replaces "
+                            f"the old)", _node_pos(defn))
             # A global may take a tuple apart as a local does; the
             # evaluator knows how, and what it binds becomes global.
             try:
@@ -2650,6 +2670,8 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
             for name in _destructured_names(defn.names):
                 if name == DISCARD_NAME:
                     continue
+                env._const_globals.discard(name)
+                env._mutable_globals.discard(name)
                 env.define(name, evaluator.env.lookup(name))
                 if defn.is_const:
                     env._const_globals.add(name)
