@@ -1,0 +1,14 @@
+// core-0: smallest program with arithmetic and printing.
+
+fn add(a : i64, b : i64) → i64:
+    a + b
+
+@start
+@impure
+fn main():
+    let x : i64 = add(2, 3)
+    std.println("x is {}", x)
+    if x > 4:
+        std.println("big")
+    else:
+        std.println("small")

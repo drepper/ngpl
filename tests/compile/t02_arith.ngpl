@@ -1,0 +1,28 @@
+// core-0: arithmetic, division defaults, wrap, bitwise, shifts, min/max.
+
+@start
+@impure
+fn main():
+    let a : i64 = 100
+    let b : i64 = 7
+    std.println("sum {}", a + b)
+    std.println("diff {}", a - b)
+    std.println("prod {}", a × b)
+    std.println("quot {}", (a ÷ b) ?? 0)
+    std.println("rem {}", (a % b) ?? 0)
+    std.println("div0 {}", (a ÷ 0) ?? 42)
+    std.println("neg {}", ⁻a)
+    std.println("negdiv {}", (⁻a ÷ b) ?? 0)
+    std.println("negrem {}", (⁻a % b) ?? 0)
+    let big : i64 = 9223372036854775807
+    std.println("wrap {}", @wrap(big + 1))
+    std.println("and {}", 12 & 10)
+    std.println("or {}", 12 | 10)
+    std.println("xor {}", 12 ^ 10)
+    std.println("not {}", ~0)
+    std.println("shl {}", 3 « 4)
+    std.println("shr {}", 256 » 3)
+    std.println("sar {}", ⁻16 » 2)
+    std.println("max {}", a ⌈ b)
+    std.println("min {}", a ⌊ b)
+    std.println("prec {}", 2 + 3 × 4)

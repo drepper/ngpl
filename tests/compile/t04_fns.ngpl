@@ -1,0 +1,39 @@
+// core-0: calls, recursion, bool functions, early return, trailing values.
+
+fn fib(n : i64) → i64:
+    if n < 2:
+        return n
+    fib(n - 1) + fib(n - 2)
+
+fn even(n : i64) → bool:
+    (n % 2 ?? 0) = 0
+
+fn collatz_len(n0 : i64) → i64:
+    let n : mut i64 = n0
+    let steps : mut i64 = 0
+    while n ≠ 1:
+        if even(n):
+            n ← (n ÷ 2) ?? 0
+        else:
+            n ← 3 × n + 1
+        steps ← steps + 1
+    steps
+
+fn gcd(a : i64, b : i64) → i64:
+    if b = 0:
+        return a
+    gcd(b, (a % b) ?? 0)
+
+fn pick(c : bool, a : i64, b : i64) → i64:
+    a if c else b
+
+@start
+@impure
+fn main():
+    std.println("fib {}", fib(20))
+    std.println("even {}", even(10))
+    std.println("odd {}", even(7))
+    std.println("collatz {}", collatz_len(27))
+    std.println("gcd {}", gcd(1071, 462))
+    std.println("pick {}", pick(true, 1, 2))
+    std.println("pick {}", pick(false, 1, 2))

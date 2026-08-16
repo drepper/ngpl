@@ -1,0 +1,21 @@
+// core-0: contracts and assertions on the passing path.
+
+@pre(b ≠ 0)
+@post(r: r × b + ((a % b) ?? 0) = a)
+fn divide(a : i64, b : i64) → i64:
+    (a ÷ b) ?? 0
+
+@pre(n >= 0)
+@post(r: r >= 1)
+fn factorial(n : i64) → i64:
+    if n <= 1:
+        return 1
+    n × factorial(n - 1)
+
+@start
+@impure
+fn main():
+    assert(divide(17, 5) = 3)
+    assert_eq(factorial(10), 3628800)
+    assert(true, "never printed")
+    std.println("contracts hold")

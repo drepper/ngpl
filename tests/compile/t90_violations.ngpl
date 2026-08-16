@@ -1,0 +1,13 @@
+// core-0: a precondition that does not hold stops the run.
+// The runner checks that both implementations refuse, not what they print.
+
+@pre(b ≠ 0)
+fn divide(a : i64, b : i64) → i64:
+    (a ÷ b) ?? 0
+
+@start
+@impure
+fn main():
+    std.println("before")
+    let x : i64 = divide(1, 0)
+    std.println("never {}", x)

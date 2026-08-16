@@ -1,0 +1,55 @@
+// core-0: loops, break and continue, nesting, conditions.
+
+@start
+@impure
+fn main():
+    let total : mut i64 = 0
+    foreach i := 1…10:
+        total ← total + i
+    std.println("asc {}", total)
+
+    total ← 0
+    foreach i := 5…1:
+        total ← total + i
+    std.println("desc {}", total)
+
+    total ← 0
+    foreach i := 1…2…9:
+        total ← total + i
+    std.println("step {}", total)
+
+    total ← 0
+    foreach i := 10…⁻2…0:
+        total ← total + i
+    std.println("down {}", total)
+
+    let n : mut i64 = 0
+    while n < 100:
+        n ← n + 1
+        if n = 7:
+            break
+    std.println("brk {}", n)
+
+    total ← 0
+    foreach i := 1…10:
+        if (i % 2 ?? 0) = 0:
+            continue
+        total ← total + i
+    std.println("odd {}", total)
+
+    total ← 0
+    foreach i := 1…3:
+        foreach j := 1…4:
+            total ← total + i × j
+    std.println("nest {}", total)
+
+    let yes : bool = true
+    if yes and total > 0:
+        std.println("both")
+    if yes or total < 0:
+        std.println("either")
+    if not (total = 0):
+        std.println("nonzero")
+    std.println("land {}", 1 ∧ 0)
+    std.println("lor {}", 1 ∨ 0)
+    std.println("cond {}", 5 if total > 10 else 6)

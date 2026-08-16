@@ -1,0 +1,9 @@
+// core-0: unasked-for overflow stops the run.
+
+@start
+@impure
+fn main():
+    let big : mut i64 = 9223372036854775807
+    std.println("before")
+    big ← big + 1
+    std.println("never {}", big)
