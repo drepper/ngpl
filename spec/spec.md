@@ -7007,7 +7007,20 @@ enum SmallEnum : u8:
     c
 ```
 
-When no underlying type is specified, the default is `int` (arbitrary precision).
+When no underlying type is specified, the default is `u64`.  The bootstrap language has no arbitrary-precision `int` for a default to fall back on, and a default that differed between the bootstrap and the full language would give one program two layouts, so the widest unsigned type serves both: it covers every auto-numbered and every `@flag` member.
+
+Every member has to fit the type the values are stored in.  Under the default that refuses a negative member, and the fix is to name a signed underlying type:
+
+```
+enum Delta:
+    down = ⁻1        /* ERROR: ⁻1 does not fit u64, the type the values
+                        are stored in when none is named */
+
+enum Delta : i8:
+    down = ⁻1        /* the type is named, and the member fits it */
+    hold = 0
+    up = 1
+```
 
 #### An Integer Has to Survive the Conversion
 
@@ -7238,14 +7251,14 @@ An enum may be declared below whatever names it, as a struct may.
 
 ##### Under `@repr(C)`
 
-An enum is stored as an integer and lays out as that integer.  An enum that names no underlying type is `int`, which is unbounded and has no layout; where one is needed, C's choice for an unfixed enum applies, which is `i32` on the platforms targeted here:
+An enum is stored as an integer and lays out as that integer: the underlying type it names, or `u64` when it names none.
 
 ```
 @repr(C)
 struct Plain:
-    e : Color        // 4 bytes, as C's `enum Color`
+    e : Color        // 8 bytes: no underlying type named, so u64
     n : i32
-                     // sizeof 8, alignof 4
+                     // sizeof 16, alignof 8 -- 4 bytes of tail padding
 
 @repr(C)
 struct Sized:
@@ -7253,6 +7266,8 @@ struct Sized:
     n : i32
                      // sizeof 8, alignof 4
 ```
+
+C would store an unfixed `enum Color` in its `int`; an enum meant to lay out against such a C definition names the width, as `enum Color : i32:`, which is the honest spelling of a layout contract in any case.
 
 #### Flag Enums (`@flag`)
 

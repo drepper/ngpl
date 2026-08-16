@@ -128,7 +128,7 @@ fn error_sum_rejects_other_enum():
 // ---------------------------------------------------------------------
 
 // An enum is stored as an integer and lays out as that integer.  An
-// enum that names no type is C's `int`, which is four bytes here.
+// enum that names no type stores its values in u64, eight bytes.
 @repr(C)
 struct Plain:
     e : Color
@@ -145,8 +145,8 @@ struct JustSmall:
 
 @test
 fn test_c_layout_of_a_plain_enum():
-    assert_eq(@sizeof(Plain), 8)
-    assert_eq(Plain.alignof, 4)
+    assert_eq(@sizeof(Plain), 16)
+    assert_eq(Plain.alignof, 8)
 
 // u8 leaves three bytes of padding before the i32.
 @test
@@ -158,6 +158,27 @@ fn test_c_layout_of_a_sized_enum():
 fn test_c_layout_of_a_sized_enum_alone():
     assert_eq(@sizeof(JustSmall), 1)
     assert_eq(JustSmall.alignof, 1)
+
+// ---------------------------------------------------------------------
+// Every member fits the type the values are stored in
+// ---------------------------------------------------------------------
+
+// Under the default u64 a negative member does not fit; naming a
+// signed underlying type is the fix.
+enum Delta : i8:
+    down = ⁻1
+    hold = 0
+    up = 1
+
+@test
+fn test_a_signed_underlying_type_holds_a_negative_member():
+    let d : Delta = Delta.down
+    assert_eq(d, Delta.down)
+    assert(Delta.down = ⁻1)
+
+// A member that does not fit is refused where the enum is defined,
+// which is before anything runs; tests/output/enum_member_range_* hold
+// the refusals.
 
 // ---------------------------------------------------------------------
 // A type may be declared below whatever names it

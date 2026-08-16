@@ -2361,6 +2361,14 @@ class LoadedProgram:
         self.warnings: list[tuple[str, tuple | None]] = []
 
 
+def _int_type_range(type_name: str) -> tuple[int, int]:
+    """The inclusive range of a sized integer type, by its name."""
+    bits = int(type_name[1:]) if type_name[1:].isdigit() else 64
+    if type_name.startswith("i"):
+        return -(1 << (bits - 1)), (1 << (bits - 1)) - 1
+    return 0, (1 << bits) - 1
+
+
 def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                         honor_start: bool = True) -> LoadedProgram:
     """Install top-level definitions, keeping the warnings found on the way.
@@ -2511,6 +2519,22 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                         next_val += 1
             if defn.is_flag and 0 not in members.values():
                 members["nil"] = 0
+            # Every member has to fit the type the values are stored
+            # in -- u64 when none is named, so a negative member wants
+            # a signed underlying type written down.
+            stored_as = defn.underlying_type or "u64"
+            lo, hi = _int_type_range(stored_as)
+            for member_name, value in members.items():
+                if not lo <= value <= hi:
+                    raise DefinitionError(
+                        f"enum '{defn.name}': member '{member_name}' is "
+                        f"{value}, which does not fit {stored_as}, the "
+                        f"type the values are stored in"
+                        + ("" if defn.underlying_type else
+                           " when none is named; a negative member wants "
+                           "a signed underlying type, as 'enum "
+                           f"{defn.name} : i64:'"),
+                        getattr(defn, "pos", None))
             et = EnumType(defn.name, defn.underlying_type, members, defn.is_flag)
             register_enum_type(defn.name, defn.underlying_type)
             env.define(defn.name, et)

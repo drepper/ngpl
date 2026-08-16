@@ -1,0 +1,7 @@
+error: enum 'Small': member 'big' is 256, which does not fit u8, the type the values are stored in
+  --> tests/output/enum_member_range_named.ngpl:3:1
+    |
+  3 | enum Small : u8:
+    | ^^^^
+  4 |     big = 256
+    |

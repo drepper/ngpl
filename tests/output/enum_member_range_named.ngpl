@@ -1,0 +1,9 @@
+// A member past the named underlying type is refused all the same.
+
+enum Small : u8:
+    big = 256
+
+@start
+@impure
+fn main():
+    std.println("{}", Small.big)

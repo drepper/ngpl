@@ -1909,13 +1909,15 @@ def is_enum_type(name: str) -> bool:
 def enum_underlying_type(name: str) -> str | None:
     """The integer type an enum's values are stored in.
 
-    An enum that names no type is `int`, which is unbounded and so has
-    no layout.  Where one is needed, C's choice of `int` for an
-    unfixed enum applies, which is i32 on the platforms targeted here.
+    An enum that names no type stores its values in u64: the widest
+    unsigned type covers every auto-numbered and flag member, and the
+    bootstrap has no `int` to fall back on, so one answer serves both
+    languages.  A member that wants to be negative names a signed
+    underlying type.
     """
     underlying = _ENUM_TYPES.get(name)
     if underlying is None or underlying == "int":
-        return "i32"
+        return "u64"
     return underlying
 
 

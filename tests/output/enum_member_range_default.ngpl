@@ -1,0 +1,10 @@
+// A negative member does not fit u64, the type an enum's values are
+// stored in when none is named.
+
+enum Delta:
+    down = ⁻1
+
+@start
+@impure
+fn main():
+    std.println("{}", Delta.down)
