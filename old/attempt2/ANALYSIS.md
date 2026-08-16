@@ -1,4 +1,4 @@
-# ngplc Attempts 2–3 — What Stands, What Fell Short, What Comes Next
+# ngplc Attempt 2 — What Stands, What Fell Short, What Attempt 3 Needs
 
 Per step 5 of the process in `CLAUDE.md`.  `DESIGN.md` says what was
 built; this says what it proved and where it stops.  Attempt 1's
@@ -32,14 +32,14 @@ past i64.
 
 ## What Fell Short
 
-1. **Self-hosting is closer but not closed.**  Attempt 3 landed
-   structs with methods — the largest single gap.  The compiler's own
-   source still uses optionals as values (`∃/∅`, `??` beyond
-   ÷/pop/get), `match`, hashes, tuples, `str.chars()`, arrays of
-   structs, and struct-typed by-value locals copied around.  The gap,
-   in dependency order: optionals + `match` → arrays of structs →
-   hashes (the Swiss-table runtime) → tuples → chars and string
-   indexing (the UTF-8 machinery DESIGN.md plans).
+1. **Self-hosting is still out of reach.**  The compiler's own source
+   uses structs, `impl` methods, hashes, optionals (`??` beyond
+   ÷/pop/get, `∃/∅`), `match`, `str.chars()`, multi-dimensional
+   indexing of struct fields, and `foreach` over hashes.  None of
+   that is core-1.  The gap, in dependency order: structs by value
+   (layout, fields, methods) → optionals as values + `match` →
+   hashes (the Swiss-table runtime) → chars and string indexing
+   (needs the UTF-8 machinery DESIGN.md plans).
 2. **No register allocation.**  Every value still lives in a stack
    slot.  The IR's width annotations and per-function isolation were
    designed so a linear-scan allocator drops between lower and emit;

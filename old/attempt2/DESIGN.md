@@ -1,4 +1,4 @@
-# ngplc — Attempts 2 and 3 of the Self-Hosted Compiler
+# ngplc — Attempt 2 of the Self-Hosted Compiler
 
 The design record for the second attempt, written in the bootstrap
 subset of NGPL and run by the Python interpreter.  Attempt 1 is
@@ -42,24 +42,6 @@ Over core-0, core-1 adds:
 - **`std.implementation`**: `name`/`language`/`interpreter`/`compiled`
   folded to constants about ngplc itself, so one test suite serves
   every implementation.
-
-Attempt 3 grows core-1 to **core-2** with structs:
-
-- **structs** with fields of every core scalar kind plus strings and
-  arrays; literals `Name{f: v, …}` checked complete; field reads and
-  `x.f ← v` stores; `impl` blocks whose methods take `&self` or
-  `&mut self` (a method is a function named `Name.m` with the receiver
-  first) or no receiver at all (a static, asked of the struct's name).
-  A struct value is a pointer to an allocated block of one slot per
-  field.  The subset keeps ownership trivial: a struct binding is born
-  from a literal or a call and rebound only to another fresh one,
-  travels by `&`/`&mut` borrow, and is returned only freshly built —
-  aliasing cannot arise, so value-versus-reference semantics cannot
-  diverge from the bootstrap's move-and-borrow rules.  A struct may be
-  declared below whatever names it (the parser pre-scans the token
-  stream for struct names in one sweep).  `&mut self` methods and
-  field stores demand a `mut` binding or `&mut` parameter, fields
-  inheriting their holder's mutability.
 
 ## Pipeline and Data Flow
 

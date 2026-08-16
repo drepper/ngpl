@@ -1,0 +1,79 @@
+// core-2: structs -- literals, fields, methods, borrows, rebinding.
+
+struct Point:
+    x : i64
+    y : i64
+
+impl Point:
+    fn new(x : i64, y : i64) → Point:
+        Point{x: x, y: y}
+
+    fn total(&self) → i64:
+        self.x + self.y
+
+    fn larger(&self) → i64:
+        self.x if self.x >= self.y else self.y
+
+    fn shift(&mut self, dx : i64, dy : i64):
+        self.x ← self.x + dx
+        self.y ← self.y + dy
+
+struct Tally:
+    label : str
+    hits : i64[]
+    active : bool
+    total : u32
+
+impl Tally:
+    fn fresh(label : str) → Tally:
+        Tally{label: label, hits: [], active: true, total: 0}
+
+    fn add(&mut self, v : i64):
+        self.hits.push(v)
+        self.total ← self.total + 1
+
+fn distance_apart(a : &Point, b : &Point) → i64:
+    let dx : i64 = (a.x - b.x) ⌈ (b.x - a.x)
+    let dy : i64 = (a.y - b.y) ⌈ (b.y - a.y)
+    dx + dy
+
+fn move_east(p : &mut Point, by : i64):
+    p.x ← p.x + by
+
+fn origin() → Point:
+    Point{x: 0, y: 0}
+
+@start
+@impure
+fn main():
+    let p : mut Point = Point.new(3, 4)
+    std.println("total {}", p.total())
+    std.println("larger {}", p.larger())
+    p.shift(10, 20)
+    std.println("shifted {} {}", p.x, p.y)
+
+    let q : Point = origin()
+    std.println("apart {}", distance_apart(&p, &q))
+    move_east(&p, 7)
+    std.println("east {}", p.x)
+
+    // a mut binding takes a fresh struct
+    p ← Point.new(1, 1)
+    std.println("rebound {} {}", p.x, p.y)
+
+    // fields of every core kind, changed through methods
+    let t : mut Tally = Tally.fresh("runs")
+    t.add(5)
+    t.add(6)
+    t.add(7)
+    std.println("{} {} {}", t.label, #t.hits, t.total)
+    let sum : mut i64 = 0
+    foreach h := t.hits:
+        sum ← sum + h
+    std.println("sum {}", sum)
+    std.println("active {}", t.active)
+    t.active ← false
+    std.println("active {}", t.active)
+
+    // a field read is safe to read on both sides of a choice
+    std.println("pick {}", p.x if t.total > 2 else p.y)
