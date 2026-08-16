@@ -995,8 +995,8 @@ impl Parser:
         if self.peek() = TK_LBRACK:
             self.pos ← self.pos + 1
             _ ← self.eat(TK_RBRACK, "']' closing the array type")
-            if not ty_is_int(base) or ty_unit(base) ≠ 0:
-                self.err("a core-2 array holds plain integers")
+            if not (ty_is_int(base) and ty_unit(base) = 0) and not ty_is_struct(base):
+                self.err("a core-2 array holds plain integers or structs")
                 return TY_I64
             base ← mk_aty(base)
         if self.peek() = TK_QMARK:
@@ -1519,8 +1519,8 @@ impl Parser:
             self.end_stmt()
             return self.mknode(NK_STOREFLD, ftok, base, v, 0)
         if k = TK_IDENT and self.peek2() = TK_LBRACK:
-            // a[i] ← v writes an element; anything else falls through
-            // to the expression path below
+            // a[i] ← v writes an element, a[i].f ← v a field of one;
+            // anything else falls through to the expression path below
             let save : i64 = self.pos
             self.pos ← self.pos + 2
             let idx : i64 = self.parse_expr()
@@ -1529,6 +1529,14 @@ impl Parser:
                 let v : i64 = self.parse_expr()
                 self.end_stmt()
                 return self.mknode(NK_STOREIDX, at, idx, v, 0)
+            if not self.failed() and self.peek() = TK_RBRACK and self.peek2() = TK_DOT and self.toks.kind[(self.pos + 2) × 1¤ptrdiff] = TK_IDENT and self.toks.kind[(self.pos + 3) × 1¤ptrdiff] = TK_ASSIGN:
+                let base : i64 = self.mknode(NK_VAR, at, 0, 0, 0)
+                let elem : i64 = self.mknode(NK_INDEX, at, base, idx, 0)
+                let ftok : i64 = self.pos + 2
+                self.pos ← self.pos + 4
+                let v : i64 = self.parse_expr()
+                self.end_stmt()
+                return self.mknode(NK_STOREFLD, ftok, elem, v, 0)
             self.pos ← save
         let e : i64 = self.parse_expr()
         self.end_stmt()
@@ -1648,7 +1656,7 @@ impl Parser:
             if ty_is_int(ty) and ty_unit(ty) ≠ 0:
                 self.err("a struct field carries no unit in the bootstrap")
             if ty_is_struct(ty):
-                self.err("a struct inside a struct is not core-2 yet")
+                self.err("a struct inside a struct is not core-2 yet; an array of them works")
             ftypes.push(ty)
             if self.peek() = TK_NL:
                 self.pos ← self.pos + 1
@@ -2555,8 +2563,8 @@ impl Checker:
                 self.derr(tok, "the elements state no type; the binding must say it")
             self.set_type(id, want if ty_is_arr(want) else mk_aty(TY_I64))
             return
-        if not ty_is_int(settled) or ty_unit(settled) ≠ 0:
-            self.derr(tok, "a core-1 array holds plain integers")
+        if not (ty_is_int(settled) and ty_unit(settled) = 0) and not ty_is_struct(settled):
+            self.derr(tok, "a core-2 array holds plain integers or structs")
             self.set_type(id, mk_aty(TY_I64))
             return
         // every element meets the settled type
@@ -2912,7 +2920,7 @@ impl Checker:
         self.set_type(id, callee.ret)
 
     fn require_mut_base(&mut self, base : i64, tok : i64):
-        if self.kind_of(base) = NK_FIELD:
+        if self.kind_of(base) = NK_FIELD or self.kind_of(base) = NK_INDEX:
             self.require_mut_base(self.a.na[base × 1¤ptrdiff], tok)
             return
         if self.kind_of(base) ≠ NK_VAR:
@@ -3297,6 +3305,8 @@ impl Checker:
             let pty : i64 = self.a.extra[(d.params_off + 2 + pi × 2) × 1¤ptrdiff]
             if ty_is_struct(pty):
                 self.derr(d.tok, "core-2 borrows structs; write &" ⧺ self.sname_of(pty) ⧺ " or &mut " ⧺ self.sname_of(pty))
+            if ty_is_arr(pty):
+                self.derr(d.tok, "core-2 borrows arrays; write &" ⧺ type_name(pty) ⧺ " or &mut " ⧺ type_name(pty))
             pi ← pi + 1
         if ty_is_arr(d.ret):
             self.derr(d.tok, "core-2 hands arrays around by borrow, not by return")

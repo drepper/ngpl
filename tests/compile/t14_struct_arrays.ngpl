@@ -1,0 +1,66 @@
+// core-2: arrays of structs -- the shape a compiler's tables take.
+
+struct Tok:
+    kind : i64
+    off : i64
+    wide : bool
+
+struct Bag:
+    items : i64[]
+    label : str
+
+fn count_kind(v : &Tok[], want : i64) → i64:
+    let n : mut i64 = 0
+    foreach t := v:
+        if t.kind = want:
+            n ← n + 1
+    n
+
+fn widen_all(v : &mut Tok[]):
+    let i ¤ptrdiff : mut i64 = 0
+    while i < #v:
+        v[i].wide ← true
+        i ← i + 1
+
+@start
+@impure
+fn main():
+    let toks : mut Tok[] = []
+    toks.push(Tok{kind: 1, off: 0, wide: false})
+    toks.push(Tok{kind: 2, off: 5, wide: false})
+    toks.push(Tok{kind: 1, off: 9, wide: false})
+    assert(#toks = 3)
+    std.println("kinds {} {}", count_kind(&toks, 1), count_kind(&toks, 2))
+
+    // fields of elements read and change in place
+    std.println("{} {}", toks[1].kind, toks[1].off)
+    toks[1].kind ← 4
+    toks[0].off ← toks[0].off + 100
+    std.println("{} {}", toks[1].kind, toks[0].off)
+
+    // a whole element is replaced by a fresh struct
+    toks[2] ← Tok{kind: 8, off: 44, wide: true}
+    std.println("{} {} {}", toks[2].kind, toks[2].off, toks[2].wide)
+
+    // borrowed mutation walks every element
+    widen_all(&toks)
+    std.println("{} {} {}", toks[0].wide, toks[1].wide, toks[2].wide)
+
+    // walking hands out the elements
+    let sum : mut i64 = 0
+    foreach t := toks:
+        sum ← sum + t.kind + t.off
+    std.println("sum {}", sum)
+
+    // an element's own array grows through the subscript's field
+    let bags : mut Bag[] = []
+    bags.push(Bag{items: [], label: "first"})
+    bags.push(Bag{items: [7], label: "second"})
+    bags[0].items.push(1)
+    bags[0].items.push(2)
+    std.println("{} {} {}", bags[0].label, #bags[0].items, #bags[1].items)
+    let inner : mut i64 = 0
+    foreach b := bags:
+        foreach x := b.items:
+            inner ← inner + x
+    std.println("inner {}", inner)
