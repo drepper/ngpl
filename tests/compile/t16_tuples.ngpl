@@ -1,0 +1,91 @@
+// core-2: tuples -- returned, taken apart, indexed by written-out
+// numbers, counted; width suffixes settle literals the binding cannot.
+
+struct Cursor:
+    line : i64
+    col : i64
+
+impl Cursor:
+    fn advance(&self, n : i64) → (i64, i64):
+        (self.line, self.col + n)
+
+fn two() → (i64, str):
+    (7i64, "seven")
+
+fn swap(a : i64, b : i64) → (i64, i64):
+    return (b, a)
+
+fn locate(ok : bool) → (Cursor, bool):
+    if ok:
+        return (Cursor{line: 1, col: 2}, true)
+    (Cursor{line: 0, col: 0}, false)
+
+fn find(ok : bool) → (i64?, str):
+    if ok:
+        return (∃(4i64), "found")
+    (∅, "nothing")
+
+fn divmod(a : i64, b : i64) → (i64, i64):
+    ((a ÷ b) ?? 0, (a % b) ?? 0)
+
+@start
+@impure
+fn main():
+    // a call's answer comes apart into names
+    let (n, s) := two()
+    std.println("{} {}", n, s)
+    let (x, y) := swap(3, 4)
+    std.println("{} {}", x, y)
+
+    // '_' takes the place of what is not wanted
+    let (m, _) := two()
+    let (_, tail) := two()
+    std.println("{} {}", m, tail)
+
+    // a stated type settles the literal's numbers
+    let t : (i64, str) = (1, "two")
+    std.println("{} {} {}", t[0], t[1], #t)
+
+    // a mut binding takes a fresh tuple whole
+    let w : mut (i64, str) = (1, "one")
+    w ← (2, "two")
+    std.println("{} {}", w[0], w[1])
+
+    // mut names from a destructure change like any binding
+    let (a, b) : mut (i64, i64) = (10, 20)
+    a ← a + b
+    b ← b × 2
+    std.println("{} {}", a, b)
+
+    // a struct rides inside a tuple
+    let (c, ok) := locate(true)
+    std.println("{} {} {}", c.line, c.col, ok)
+    let (c2, ok2) := locate(false)
+    std.println("{} {} {}", c2.line, c2.col, ok2)
+
+    // a method answers a tuple too
+    let cur : Cursor = Cursor{line: 3, col: 10}
+    let (ln, co) := cur.advance(5)
+    std.println("{} {}", ln, co)
+
+    // an optional element composes with ?? as anywhere else
+    let (v, how) := find(true)
+    std.println("{} {}", v ?? ⁻1, how)
+    let (v2, how2) := find(false)
+    std.println("{} {}", v2 ?? ⁻1, how2)
+
+    // three elements, indexed by each written-out number
+    let three : (i64, bool, str) = (9, true, "nine")
+    std.println("{} {} {} {}", three[0], three[1], three[2], #three)
+
+    // both halves of a division in one answer
+    let (q, r) := divmod(17, 5)
+    std.println("{} {}", q, r)
+
+    // width suffixes settle literals on their own
+    let big : u64 = 18446744073709551615u64
+    std.println("{}", big)
+    let small : i8 = 127i8
+    std.println("{}", small)
+    let neg : i64 = ⁻5i64
+    std.println("{}", neg)

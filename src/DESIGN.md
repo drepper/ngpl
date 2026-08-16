@@ -84,6 +84,24 @@ Attempt 3 grows core-1 to **core-2** with structs:
   encoding the key's width/signedness or str-ness — a band disjoint
   from the arrays' `4096 + elem` (elements stay below 4096), so each
   `ty_is_*` predicate answers alone, in any order.
+- **tuples** `(T1, T2, …)` of plain integers, truth values, strings,
+  structs and optionals: built by a literal whose type the binding or
+  the enclosing return states, handed back by functions and methods,
+  taken apart by `let (a, b) := …` (`_` discarding, `mut` naming
+  changeable parts, a stated `: (…) =` type welcome), asked by a
+  written-out index `t[0]` and counted by `#t` — both settled at
+  check time, so the index is a field load and the count a constant.
+  The representation is the struct's: a pointer to one slot per
+  element, `IR_SNEW`/`IR_FSTO`/`IR_FLD` reused whole, zero new IR ops
+  and zero new runtime code.  Shapes intern into a table in the Ast
+  (band `26624 + tidx`), so type equality stays one integer compare.
+  A tuple travels by value and never by parameter, borrow, global,
+  optional, array, hash or struct field — each refused by name.
+- **width suffixes** `7i64`, `200u8`: the lexer closes the literal's
+  type (the code rides in the token as `big + 2×type`), the checker
+  adopts it through the same range check as contextual settling.  The
+  bootstrap requires them inside tuple literals in return position,
+  so the shared subset now has them everywhere.
 
 ## Pipeline and Data Flow
 
@@ -264,7 +282,7 @@ One suite (`tests/run_tests.sh`): bootstrap-language tests run under
 the interpreter; the shared programs in `tests/compile/` run under
 the interpreter **and** compiled, outputs and exit codes diffed — the
 strict-subset rule made executable.  `--impl=` selects a side.
-Fifteen shared programs cover the whole core-2 surface including the
+Sixteen shared programs cover the whole core-2 surface including the
 stopping paths; `std.implementation` conditionalizes where
 implementations may differ.  The diff has caught real bugs on both
 sides, including the interpreter's float-precision division.

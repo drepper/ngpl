@@ -13,11 +13,13 @@ overflow/wrap/shift/division semantics at every width, units-lite
 arithmetic, growable arrays with borrows and bounds checks, strings
 with concatenation/equality/character counts, globals, contracts, and
 `std.implementation`.  Core-2 on top of that: structs with methods,
-optionals with `match`, arrays of structs, and hashes over a probing
+optionals with `match`, arrays of structs, hashes over a probing
 runtime table (murmur3-finalizer and FNV-1a hashing, doubling growth)
-whose reads answer optionals.  Fifteen shared programs run identically
-interpreted and compiled, inside the one integrated test suite; the
-bootstrap suite stays green with `-Werror`.
+whose reads answer optionals, tuples returned and destructured on the
+struct representation with interned shapes, and width-suffixed
+literals.  Sixteen shared programs run identically interpreted and
+compiled, inside the one integrated test suite; the bootstrap suite
+stays green with `-Werror`.
 
 The control-flow policy is real, not aspirational: comparisons
 materialize, `⌈ ⌊` and safe conditionals are `cmov`, `and`/`or` with
@@ -37,14 +39,15 @@ past i64.
 
 1. **Self-hosting is closer but not closed.**  Attempt 3 landed
    structs with methods, optionals with `match`, arrays of structs,
-   and hashes with their runtime table.  The compiler's own source
-   still uses tuples, `str.chars()`, string indexing, and
-   struct-typed by-value locals copied around.  The gap, in
-   dependency order: tuples → chars and string indexing (the UTF-8
-   machinery DESIGN.md plans) → the remaining by-value struct moves.
-   The hash runtime is linear probing, not yet the 16-wide
-   `pcmpeqb` Swiss-table probe the design planned; the descriptor
-   layout already accommodates that upgrade.
+   hashes with their runtime table, tuples with destructuring, and
+   width-suffixed literals.  The compiler's own source still uses
+   `str.chars()`, string indexing, and struct-typed by-value locals
+   copied around.  The gap, in dependency order: chars and string
+   indexing (the UTF-8 machinery DESIGN.md plans) → the remaining
+   by-value struct moves → `:=` inference where the right side
+   already states its type.  The hash runtime is linear probing, not
+   yet the 16-wide `pcmpeqb` Swiss-table probe the design planned;
+   the descriptor layout already accommodates that upgrade.
 2. **Register allocation is one register deep.**  The emitter's rax
    memo skips reloads (~3% of code) but every value still lives in a
    stack slot; the true linear-scan allocator over the width-annotated
