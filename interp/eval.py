@@ -1607,18 +1607,18 @@ class Evaluator:
     def _op_and(self, left, right):
         """Short-circuit boolean and."""
         lu = _unwrap_operand(left)
-        if not to_bool(lu):
+        if not self._logic_bool(lu):
             return mk_bool(False)
         ru = _unwrap_operand(right)
-        return mk_bool(to_bool(ru))
+        return mk_bool(self._logic_bool(ru))
 
     def _op_or(self, left, right):
         """Short-circuit boolean or."""
         lu = _unwrap_operand(left)
-        if to_bool(lu):
+        if self._logic_bool(lu):
             return mk_bool(True)
         ru = _unwrap_operand(right)
-        return mk_bool(to_bool(ru))
+        return mk_bool(self._logic_bool(ru))
 
     def _op_lshift(self, left, right):
         """Left shift: int << int."""
@@ -1737,17 +1737,19 @@ class Evaluator:
 
     @staticmethod
     def _logic_bool(val) -> bool:
-        """Convert a value to logical boolean for binary logic operations.
+        """The truth value a logic operator was handed.
 
-        Only integers and booleans are accepted; raises TypeError otherwise.
+        Only bool is accepted: a number is a quantity, not an answer,
+        and the program that means "is it nonzero" writes the
+        comparison.  Anything else is an error naming what arrived.
         """
         if isinstance(val, BoolValue):
             return val.value
-        if isinstance(val, IntValue):
-            return val.value != 0
+        from interp.value import runtime_type_of
         raise TypeError(
-            f"logic operations require integer or bool, "
-            f"got {type(val).__name__}")
+            f"a logic operator takes truth values, but this operand is "
+            f"{runtime_type_of(val)}; a number asks its question with a "
+            f"comparison, as 'x ≠ 0'")
 
     def _op_logic_and(self, left, right):
         lu = _unwrap_operand(left)
@@ -2300,7 +2302,7 @@ class Evaluator:
             unwrapped = unwrap_optional(operand)
             return mk_bool(not self._logic_bool(unwrapped))
         if op == "not":
-            return mk_bool(not to_bool(operand))
+            return mk_bool(not self._logic_bool(_unwrap_operand(operand)))
         if op in ("\N{SQUARE ROOT}", "\N{CUBE ROOT}", "\N{FOURTH ROOT}"):
             import math
             degree = {"\N{SQUARE ROOT}": 2, "\N{CUBE ROOT}": 3, "\N{FOURTH ROOT}": 4}[op]
@@ -3351,9 +3353,11 @@ class Evaluator:
                 return left
             if node.op in ("and", "or"):
                 # The spec's short-circuit pair: the right side is not
-                # read when the left side already answers.
+                # read when the left side already answers.  Both sides
+                # are held to the logic operators' rule -- truth
+                # values only.
                 left = self.eval_expr(node.left)
-                left_truth = to_bool(_unwrap_operand(left))
+                left_truth = self._logic_bool(_unwrap_operand(left))
                 if node.op == "and" and not left_truth:
                     return mk_bool(False)
                 if node.op == "or" and left_truth:
@@ -3363,7 +3367,7 @@ class Evaluator:
                     self._last_pos = binop_pos
                     if self._call_stack:
                         self._call_stack[-1][1] = binop_pos
-                return mk_bool(to_bool(_unwrap_operand(right)))
+                return mk_bool(self._logic_bool(_unwrap_operand(right)))
             left = self.eval_expr(node.left)
             right = self.eval_expr(node.right)
             if binop_pos is not None:

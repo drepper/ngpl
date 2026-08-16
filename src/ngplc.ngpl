@@ -1903,7 +1903,7 @@ impl Checker:
                 self.set_type(id, TY_I64)
         elif k = NK_NOT:
             self.check_expr(na, TY_UNIT)
-            self.want_truthy(na, "the operand")
+            self.want_bool(na, "¬")
             self.set_type(id, TY_BOOL)
         elif k = NK_COND:
             self.check_expr(nb, TY_UNIT)
@@ -1956,17 +1956,11 @@ impl Checker:
             self.check_expr(na, TY_UNIT)
             self.check_expr(nb, TY_UNIT)
             self.check_cmp_operands(id, tok, k, na, nb)
-        elif k = NK_AND or k = NK_OR:
+        elif k = NK_AND or k = NK_OR or k = NK_LAND or k = NK_LOR:
             self.check_expr(na, TY_UNIT)
             self.check_expr(nb, TY_UNIT)
-            self.want_truthy(na, "the left side")
-            self.want_truthy(nb, "the right side")
-            self.set_type(id, TY_BOOL)
-        elif k = NK_LAND or k = NK_LOR:
-            self.check_expr(na, TY_UNIT)
-            self.check_expr(nb, TY_UNIT)
-            self.want_truthy(na, "the left side")
-            self.want_truthy(nb, "the right side")
+            self.want_bool(na, "a logic operator")
+            self.want_bool(nb, "a logic operator")
             self.set_type(id, TY_BOOL)
         elif k = NK_CCAT:
             self.check_expr(na, TY_UNIT)
@@ -2028,6 +2022,11 @@ impl Checker:
         elif ty_unit(l) ≠ ty_unit(r):
             self.derr(tok, "a value measured " ⧺ type_name(l) ⧺ " does not meet one measured " ⧺ type_name(r))
         self.set_type(id, TY_BOOL)
+
+    fn want_bool(&mut self, id : i64, what : str):
+        if self.ty_of(id) ≠ TY_BOOL:
+            self.derr(self.a.ntok[id × 1¤ptrdiff],
+                      what ⧺ " takes truth values, but this operand is " ⧺ type_name(self.ty_of(id)) ⧺ "; a number asks its question with a comparison, as 'x ≠ 0'")
 
     fn want_truthy(&mut self, id : i64, what : str):
         let t : i64 = self.ty_of(id)
@@ -2988,11 +2987,12 @@ impl Lower:
             self.ir(IR_BNOTT, v, 0, 0, d, w)
             return d
         if k = NK_NOT:
+            // the operand is a bool, 0 or 1; flipping it is one xor
             let v : i64 = self.lower_expr(na)
-            let z : i64 = self.tmp()
-            self.ir(IR_CONST, 0, 0, 0, z, 64)
+            let one : i64 = self.tmp()
+            self.ir(IR_CONST, 1, 0, 0, one, 64)
             let d : i64 = self.tmp()
-            self.ir(IR_CEQ, v, z, 0, d, width_of(self.tof(na)))
+            self.ir(IR_BXORR, v, one, 0, d, 64)
             return d
         if k = NK_WRAP:
             self.in_wrap ← self.in_wrap + 1
@@ -3058,13 +3058,8 @@ impl Lower:
         elif k = NK_GE:
             self.ir(IR_CGE, av, bv, 0, d, ow)
         elif k = NK_LAND or k = NK_LOR:
-            let z1 : i64 = self.tmp()
-            self.ir(IR_CONST, 0, 0, 0, z1, 64)
-            let ba : i64 = self.tmp()
-            self.ir(IR_CNE, av, z1, 0, ba, width_of(self.tof(na)))
-            let bb : i64 = self.tmp()
-            self.ir(IR_CNE, bv, z1, 0, bb, width_of(self.tof(nb)))
-            self.ir(IR_BAND if k = NK_LAND else IR_BORR, ba, bb, 0, d, 64)
+            // both sides are bools already; one and or or does it
+            self.ir(IR_BAND if k = NK_LAND else IR_BORR, av, bv, 0, d, 64)
         elif k = NK_MAXOP:
             self.ir(IR_MAXX, av, bv, 0, d, w)
         elif k = NK_MINOP:
@@ -3100,14 +3095,8 @@ impl Lower:
         if self.speculatable(nb):
             let av : i64 = self.lower_expr(na)
             let bv : i64 = self.lower_expr(nb)
-            let z : i64 = self.tmp()
-            self.ir(IR_CONST, 0, 0, 0, z, 64)
-            let ba : i64 = self.tmp()
-            self.ir(IR_CNE, av, z, 0, ba, width_of(self.tof(na)))
-            let bb : i64 = self.tmp()
-            self.ir(IR_CNE, bv, z, 0, bb, width_of(self.tof(nb)))
             let d : i64 = self.tmp()
-            self.ir(IR_BAND if k = NK_AND else IR_BORR, ba, bb, 0, d, 64)
+            self.ir(IR_BAND if k = NK_AND else IR_BORR, av, bv, 0, d, 64)
             return d
         let d : i64 = self.tmp()
         let lend : i64 = self.label()
@@ -3115,9 +3104,7 @@ impl Lower:
         self.ir(IR_CONST, 0 if k = NK_AND else 1, 0, 0, d, 64)
         self.ir(IR_JZ if k = NK_AND else IR_JNZ, av, lend, 0, 0, 0)
         let bv : i64 = self.lower_expr(nb)
-        let z : i64 = self.tmp()
-        self.ir(IR_CONST, 0, 0, 0, z, 64)
-        self.ir(IR_CNE, bv, z, 0, d, width_of(self.tof(nb)))
+        self.ir(IR_MOV, bv, 0, 0, d, 0)
         self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         d
 

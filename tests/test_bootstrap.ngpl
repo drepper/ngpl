@@ -625,12 +625,12 @@ fn test_comparisons_answer_with_a_bool():
 
 @test
 fn test_logic_operators_answer_with_a_bool():
-    let and_ := 5 ∧ 3
-    let or_ := 5 ∨ 3
-    let xor := 5 ⊕ 3
-    let nand := 5 ⊼ 3
-    let nor := 5 ⊽ 3
-    let not_ := ¬5
+    let and_ := true ∧ true
+    let or_ := true ∨ true
+    let xor := true ⊕ true
+    let nand := true ⊼ true
+    let nor := true ⊽ true
+    let not_ := ¬true
     assert(and_)
     assert(or_)
     assert(not xor)

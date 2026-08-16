@@ -51,15 +51,23 @@ fn test_and_guards_an_index():
     let ok : bool = i < #v and v[i] > 0
     assert(¬ok)
 
-// The result is a truth value even when the operands are numbers.
-@test
-fn test_the_answer_is_a_truth_value():
+// A number is not an answer: the operands are truth values only, and
+// the question a number means is written as a comparison.
+@expect error "takes truth values"
+fn error_and_refuses_a_number():
     let r := 5 and 3
-    assert(r = true)
+    assert(r)
+
+@expect error "takes truth values"
+fn error_or_refuses_a_number():
     let s := 0 or 7
-    assert(s = true)
-    let t := 0 and 7
-    assert(t = false)
+    assert(s)
+
+@test
+fn test_the_comparison_asks_the_question():
+    let n : i64 = 5
+    let r := n ≠ 0 and n > 3
+    assert(r = true)
 
 // ∧ is not short-circuit: both sides are read.
 @test

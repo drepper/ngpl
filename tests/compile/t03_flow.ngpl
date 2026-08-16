@@ -50,6 +50,6 @@ fn main():
         std.println("either")
     if not (total = 0):
         std.println("nonzero")
-    std.println("land {}", 1 ∧ 0)
-    std.println("lor {}", 1 ∨ 0)
+    std.println("land {}", true ∧ false)
+    std.println("lor {}", true ∨ false)
     std.println("cond {}", 5 if total > 10 else 6)

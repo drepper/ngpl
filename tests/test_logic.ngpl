@@ -1,8 +1,8 @@
 // Tests for binary logic operations: ∧ ∨ ⊕ ⊼ ⊽ ¬
 //
-// These operate on logical truth values.  For bool operands the value
-// is used directly; for integers a nonzero test is applied first.
-// All results are bool (true/false).
+// These combine truth values: both operands must be bool, and the
+// result is bool.  Anything else -- a number first of all -- is an
+// error; the question a number means is written as a comparison.
 
 // ---- ∧ (logic AND) ------------------------------------------------------
 
@@ -88,72 +88,63 @@ fn test_not_true():
 fn test_not_false():
     assert(¬false)
 
-// ---- integer operands: nonzero test -------------------------------------
+// ---- a number is not an answer -------------------------------------------
+//
+// The operands are truth values only.  An integer is refused by name,
+// pointing the writer at the comparison that asks the question.
 
-@test
-fn test_and_int_nonzero():
+@expect error "takes truth values"
+fn error_and_refuses_an_integer():
     let a : i32 = 42
     let b : i32 = 7
     assert(a ∧ b)
 
-@test
-fn test_and_int_zero():
-    let a : i32 = 42
-    let b : i32 = 0
-    assert(not (a ∧ b))
-
-@test
-fn test_or_int_one_zero():
+@expect error "takes truth values"
+fn error_or_refuses_an_integer():
     let a : i32 = 0
     let b : i32 = 1
     assert(a ∨ b)
 
-@test
-fn test_xor_int_both_nonzero():
+@expect error "takes truth values"
+fn error_xor_refuses_an_integer():
     let a : i32 = 5
     let b : i32 = 3
     assert(not (a ⊕ b))
 
-@test
-fn test_xor_int_one_zero():
-    let a : i32 = 5
-    let b : i32 = 0
-    assert(a ⊕ b)
-
-@test
-fn test_not_int_nonzero():
-    let x : i32 = 100
-    assert(not (¬x))
-
-@test
-fn test_not_int_zero():
-    let x : i32 = 0
-    assert(¬x)
-
-@test
-fn test_nand_int():
+@expect error "takes truth values"
+fn error_nand_refuses_an_integer():
     let a : i32 = 1
     let b : i32 = 1
     assert(not (a ⊼ b))
-    let c : i32 = 0
-    assert(a ⊼ c)
 
-@test
-fn test_nor_int():
+@expect error "takes truth values"
+fn error_nor_refuses_an_integer():
     let a : i32 = 0
     let b : i32 = 0
     assert(a ⊽ b)
-    let c : i32 = 1
-    assert(not (a ⊽ c))
 
-// ---- unsigned integer operands ------------------------------------------
+@expect error "takes truth values"
+fn error_not_refuses_an_integer():
+    let x : i32 = 100
+    assert(not (¬x))
 
-@test
-fn test_and_u8():
+@expect error "takes truth values"
+fn error_not_keyword_refuses_an_integer():
+    let x : i32 = 100
+    assert(not x)
+
+@expect error "takes truth values"
+fn error_unsigned_is_refused_too():
     let a : u8 = 255
-    let b : u8 = 0
-    assert(not (a ∧ b))
     assert(a ∧ a)
+
+// The comparison asks the question the number was standing in for.
+@test
+fn test_the_comparison_asks_the_question():
+    let a : i32 = 42
+    let b : i32 = 0
+    assert(a ≠ 0 ∧ b = 0)
+    assert(a ≠ 0 ∨ b ≠ 0)
 
 // ---- precedence: ∧ binds tighter than ∨ --------------------------------
 
@@ -177,10 +168,8 @@ fn test_precedence_xor():
 
 @test
 fn test_and_array():
-    let a : mut i32[3] = 3 ⍴ 0
-    a[0] ← 1; a[1] ← 0; a[2] ← 5
-    let b : mut i32[3] = 3 ⍴ 0
-    b[0] ← 3; b[1] ← 0; b[2] ← 0
+    let a : bool[3] = [true, false, true]
+    let b : bool[3] = [true, false, false]
     let r := a ∧ b
     assert(r[0])
     assert(not r[1])
@@ -188,10 +177,8 @@ fn test_and_array():
 
 @test
 fn test_or_array():
-    let a : mut i32[3] = 3 ⍴ 0
-    a[0] ← 1; a[1] ← 0; a[2] ← 0
-    let b : mut i32[3] = 3 ⍴ 0
-    b[0] ← 0; b[1] ← 0; b[2] ← 7
+    let a : bool[3] = [true, false, false]
+    let b : bool[3] = [false, false, true]
     let r := a ∨ b
     assert(r[0])
     assert(not r[1])
@@ -199,14 +186,21 @@ fn test_or_array():
 
 @test
 fn test_xor_array():
-    let a : mut i32[3] = 3 ⍴ 0
-    a[0] ← 1; a[1] ← 0; a[2] ← 5
-    let b : mut i32[3] = 3 ⍴ 0
-    b[0] ← 3; b[1] ← 0; b[2] ← 0
+    let a : bool[3] = [true, false, true]
+    let b : bool[3] = [true, false, false]
     let r := a ⊕ b
     assert(not r[0])
     assert(not r[1])
     assert(r[2])
+
+// The elements are held to the same rule as scalars.
+@expect error "takes truth values"
+fn error_integer_elements_are_refused():
+    let a : mut i32[3] = 3 ⍴ 0
+    a[0] ← 1
+    let b : mut i32[3] = 3 ⍴ 0
+    let r := a ∧ b
+    assert(not r[1])
 
 // ---- logic ops combined with comparison ---------------------------------
 

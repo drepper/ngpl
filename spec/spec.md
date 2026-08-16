@@ -1319,30 +1319,32 @@ if 0.0:
 
 ### Binary Logic Operations
 
-Binary logic operations use Unicode glyphs and operate on logical truth values.  Unlike bitwise operations (which manipulate individual bits), these first reduce each operand to a boolean and then apply the logic function.  The result is always `bool`.
+Binary logic operations use Unicode glyphs and operate on logical truth values.  Unlike bitwise operations (which manipulate the individual bits of an integer), these combine answers to yes-or-no questions.  Both operands must be `bool`, and the result is `bool`.
 
 #### Operators
 
 | Glyph | Name | Arity  | Definition |
 |-------|------|--------|------------|
-| `∧`   | AND  | binary | true when both operands are truthy |
-| `∨`   | OR   | binary | true when at least one operand is truthy |
-| `⊕`   | XOR  | binary | true when exactly one operand is truthy |
-| `⊼`   | NAND | binary | true when not both operands are truthy |
-| `⊽`   | NOR  | binary | true when neither operand is truthy |
-| `¬`   | NOT  | unary  | true when the operand is falsy |
+| `∧`   | AND  | binary | true when both operands are true |
+| `∨`   | OR   | binary | true when at least one operand is true |
+| `⊕`   | XOR  | binary | true when exactly one operand is true |
+| `⊼`   | NAND | binary | true when not both operands are true |
+| `⊽`   | NOR  | binary | true when neither operand is true |
+| `¬`   | NOT  | unary  | true when the operand is false |
 
-#### Operand Conversion
+#### Only Truth Values
 
-For `bool` operands the value is used directly.  For integer operands (`i8`, `u32`, `int`, etc.) a nonzero test is applied: zero maps to `false`, any nonzero value maps to `true`.  Floating-point operands are not allowed and produce a type error.
+An operand that is not a `bool` is an error — an integer, a float, a string, anything else.  There is no implicit nonzero test: a number is a quantity, not an answer, and the program that means "is it nonzero" writes the comparison.  The same rule holds for the short-circuit keywords `and`, `or` and `not`.
 
 ```
 let a : mut i32 = 42
 let b : mut i32 = 0
-a ∧ b                       /* false — 42 is truthy, 0 is falsy */
-a ∨ b                       /* true  — at least one is truthy */
-¬b                           /* true  — 0 is falsy */
+a ∧ b                       /* error: ∧ takes truth values, but the left side is i32 */
+a ≠ 0 ∧ b ≠ 0               /* false — the questions are asked, then combined */
+¬(b = 0)                     /* false — b is zero */
 ```
+
+**Rationale.**  A nonzero test hidden inside a logic operator makes `a ∧ b` read as a claim about two facts while actually testing two magnitudes, and it makes the one-character difference between `a ∧ b` and `a & b` a change of meaning rather than a type error.  Requiring the comparison keeps the question the code asks visible — the reviewability the language exists for — and costs nothing in the generated code, where the comparison materializes into the same instruction the hidden test would have been.
 
 #### Precedence
 
@@ -1361,13 +1363,11 @@ This means `a = 0 ∧ b ≠ 0` parses as `(a = 0) ∧ (b ≠ 0)`, and `x ∧ y �
 
 #### Element-wise on Arrays
 
-The logic operators are `@listable`, as the arithmetic operators are, so each is asked of the things in an array rather than of the array:
+The logic operators are `@listable`, as the arithmetic operators are, so each is asked of the things in an array rather than of the array.  The elements are held to the same rule: they are truth values.
 
 ```
-let a : mut i32[3] = 3 ⍴ 0
-a[0] ← 1; a[1] ← 0; a[2] ← 5
-let b : mut i32[3] = 3 ⍴ 0
-b[0] ← 3; b[1] ← 0; b[2] ← 0
+let a : bool[3] = [true, false, true]
+let b : bool[3] = [true, false, false]
 let r : mut = a ∧ b              /* [true, false, false] */
 ```
 
@@ -1375,9 +1375,9 @@ let r : mut = a ∧ b              /* [true, false, false] */
 
 | Category | Operators | Semantics |
 |----------|-----------|-----------|
-| Bitwise  | `&`, `\|`, `^`, `~` | operate on individual bits, result is an integer of the same type |
-| Logic    | `∧`, `∨`, `⊕`, `⊼`, `⊽`, `¬` | nonzero test then logic function, result is `bool` |
-| Short-circuit | `and`, `or`, `not` | like logic but short-circuit evaluation, result is `bool` |
+| Bitwise  | `&`, `\|`, `^`, `~` | operate on the individual bits of an integer, result is an integer of the same type |
+| Logic    | `∧`, `∨`, `⊕`, `⊼`, `⊽`, `¬` | combine truth values, `bool` in and `bool` out |
+| Short-circuit | `and`, `or`, `not` | the same, but the right side is not read when the left already answers |
 
 
 #### Explicit Wrapping with `@wrap`
