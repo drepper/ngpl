@@ -40,6 +40,22 @@ fn sparse(x : i64) → i64:
         return 4
     0
 
+// every arm and the default return constants: the ladder is data,
+// one table load and one select, no control flow at all
+fn weekday_len(d : i64) → i64:
+    if d = 0:
+        return 6
+    elif d = 1:
+        return 7
+    elif d = 2:
+        return 9
+    elif d = 3:
+        return 8
+    elif d = 4:
+        return 6
+    else:
+        return 0
+
 fn no_default(x : i64, acc : &mut i64[]):
     if x = 10:
         acc.push(1)
@@ -61,6 +77,8 @@ fn main():
     std.println("sparse {}", sparse(1000))
     std.println("sparse {}", sparse(9999))
     std.println("sparse {}", sparse(10000))
+    foreach d := ⁻2…6:
+        std.println("wd {} {}", d, weekday_len(d))
     let hits : mut i64[] = []
     foreach x := 9…14:
         no_default(x, &hits)

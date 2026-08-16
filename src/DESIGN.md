@@ -120,8 +120,14 @@ lead-byte test `(b & 0xC0) ≠ 0x80`.
   three straight-line instructions instead of a branch; the
   short-circuit form remains only where the right side could be
   observed (effects or faults).
+- A dense ladder whose every arm **returns a constant** (default
+  included) is not control flow at all: it folds to a **value table**
+  — index clamp by `cmov`, one load from a table of data in rodata,
+  one `cmov` against the default — zero branches, GCC's
+  switch-conversion made policy.  Verified in the binary: the folded
+  function carries no indirect jump and two cmovs.
 - A dense if/elif ladder testing one variable against integer
-  constants lowers to a **jump table**: bounds check (`sub`; unsigned
+  constants (whose arms are real code) lowers to a **jump table**: bounds check (`sub`; unsigned
   `cmp`+`jae`, one never-taken branch to the default), then one
   indirect `jmp [table + idx*8]` through a table of code addresses in
   rodata.  Profitability follows the window real compilers use: at
@@ -140,6 +146,12 @@ lead-byte test `(b & 0xC0) ≠ 0x80`.
   planned lowering for the future vectorized/GPU profile, where it is
   the only sound branch-free form; its deferral window must close
   before a poisoned value feeds an address or a branch.
+
+- The emitter keeps a one-register memo: it knows which slot's value
+  `rax` holds, skips the reload when the next operand is that slot,
+  and forgets at labels, calls, and every join two paths reach — the
+  cheapest of register allocations, worth ~3% of code straight away;
+  the true linear-scan allocator remains on the plan.
 
 **What stays a branch, on purpose.**  Loop back-edges and loop-bound
 checks (predictable, and the loop-carried-dependence research is

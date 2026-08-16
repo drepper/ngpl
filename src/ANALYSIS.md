@@ -39,16 +39,15 @@ past i64.
    copied around.  The gap, in dependency order: arrays of structs →
    hashes (the Swiss-table runtime) → tuples → chars and string
    indexing (the UTF-8 machinery DESIGN.md plans).
-2. **No register allocation.**  Every value still lives in a stack
-   slot.  The IR's width annotations and per-function isolation were
-   designed so a linear-scan allocator drops between lower and emit;
-   attempt 3 should take it — compile speed of the *generated*
+2. **Register allocation is one register deep.**  The emitter's rax
+   memo skips reloads (~3% of code) but every value still lives in a
+   stack slot; the true linear-scan allocator over the width-annotated
+   IR remains the next backend step — compile speed of the *generated*
    compiler will matter once self-hosting closes.
-3. **Jump tables don't fold arms to value tables.**  A ladder whose
-   arms are plain constants should become a data table load (GCC's
-   switch-conversion — zero control flow), strictly better than a
-   jump table and GPU-portable.  The detection is a small extension
-   of `try_jtab`.
+3. **Value-table folding landed** for constant-returning ladders
+   (zero control flow, cmov-clamped index, verified branchless in the
+   binary); the assignment-armed form (`x ← const` per arm) and
+   trailing-expression arms still fall back to jump tables.
 4. **The eager-`and`/`or` and select conversions have no cost bound.**
    Legality is enforced; the research's other half (don't speculate
    an expensive arm) is not, because core-1's speculatable set is all

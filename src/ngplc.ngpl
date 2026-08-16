@@ -3380,6 +3380,7 @@ let IR_SEQV : i64 = 62     // d ← a = b, for strings
 let IR_SLENV : i64 = 63    // d ← how many characters a holds
 let IR_PRINTSV : i64 = 64  // a = vreg holding a string
 let IR_JTAB : i64 = 65     // a = vreg, b = extra [min, span, Ldef, L…]
+let IR_VTAB : i64 = 69     // d ← value table: a = vreg, b = extra [min, span, default, v…]
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
 let IR_FLD : i64 = 67      // d ← field b of struct a
 let IR_FSTO : i64 = 68     // field b of struct a ← c
@@ -4097,6 +4098,38 @@ impl Lower:
             foreach j := 0…#ks - 1:
                 if j > i and ks[i] = ks[j]:
                     return false
+        // a ladder whose every arm returns a constant, default
+        // included, is not control flow at all: it folds to one load
+        // from a table of values and one select against the default
+        if default_blk ≠ ⁻1 and self.post_label = ⁻1:
+            let vals : mut i64[] = []
+            let all_const : mut bool = true
+            foreach b := blks:
+                let cv : i64 = self.block_ret_const(b)
+                if cv = ⁻4611686018427387904:
+                    all_const ← false
+                vals.push(cv)
+            let defv : i64 = self.block_ret_const(default_blk)
+            if defv = ⁻4611686018427387904:
+                all_const ← false
+            if all_const:
+                let off0 : i64 = @dropunit(#self.extra)
+                self.extra.push(lo)
+                self.extra.push(span)
+                self.extra.push(defv)
+                let si : mut i64 = 0
+                while si < span:
+                    let entry : mut i64 = defv
+                    foreach i := 0…#ks - 1:
+                        if ks[i] = lo + si:
+                            entry ← vals[i]
+                    self.extra.push(entry)
+                    si ← si + 1
+                let xv0 : i64 = xslot
+                let d : i64 = self.tmp()
+                self.ir(IR_VTAB, xv0, off0, 0, d, 0)
+                self.ir(IR_RET, d, 0, 0, 0, 0)
+                return true
         // labels: one per case, the default, the join
         let ldef : i64 = self.label()
         let lend : i64 = self.label()
@@ -4125,6 +4158,24 @@ impl Lower:
             self.lower_block(default_blk, false, ret_ty)
         self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         true
+
+    // the constant a block returns, or the impossible sentinel
+    fn block_ret_const(&self, blk : i64) → i64:
+        let off : i64 = self.a.na[blk × 1¤ptrdiff]
+        if self.a.extra[off × 1¤ptrdiff] ≠ 1:
+            return ⁻4611686018427387904
+        let st : i64 = self.a.extra[(off + 1) × 1¤ptrdiff]
+        if self.kof(st) ≠ NK_RETURN:
+            return ⁻4611686018427387904
+        let e : i64 = self.a.na[st × 1¤ptrdiff]
+        if e = ⁻1:
+            return ⁻4611686018427387904
+        let ek : i64 = self.kof(e)
+        if ek ≠ NK_INT and ek ≠ NK_BOOL:
+            return ⁻4611686018427387904
+        // a constant that happens to be the sentinel itself simply
+        // does not fold; the jump table serves it instead
+        self.a.na[e × 1¤ptrdiff]
 
     fn lower_foreach(&mut self, sid : i64, tok : i64, na : i64, body : i64,
                      ret_ty : i64):
@@ -4355,12 +4406,16 @@ struct Emit:
     lf_label : i64[]
     fn_off : i64[]
     rt_off : i64[]
+    // which vreg's value rax is known to hold, ⁻1 for none: the
+    // cheapest of register allocations, one register deep
+    rax_slot : i64
     // jump tables: abs64 fixups, and the resolved code offsets the
     // tables hold, flattened with a start index per table
     jt_pos : i64[]
     jt_id : i64[]
     jt_count : i64
     jt_starts : i64[]
+    jt_is_code : i64[]
     jt_entries : i64[]
     pj_id : i64[]
     pj_start : i64[]
@@ -4410,18 +4465,33 @@ impl Emit:
         self.patch32(pos + 4, v » 32)
 
     fn load(&mut self, reg : i64, slot : i64):
+        if reg = 0:
+            if self.rax_slot = slot:
+                return
+            self.rax_slot ← slot
         self.b1(72 + (4 if reg >= 8 else 0))
         self.b1(139)
         self.b1(133 + ((reg & 7) « 3))
         self.w32(@wrap(0 - 8 × (slot + 1)))
 
     fn store(&mut self, reg : i64, slot : i64):
+        if reg = 0:
+            self.rax_slot ← slot
+        elif slot = self.rax_slot:
+            // another register overwrites the slot rax mirrors
+            self.rax_slot ← ⁻1
         self.b1(72 + (4 if reg >= 8 else 0))
         self.b1(137)
         self.b1(133 + ((reg & 7) « 3))
         self.w32(@wrap(0 - 8 × (slot + 1)))
 
+    // anything that may change rax or be jumped to forgets the memo
+    fn raxbar(&mut self):
+        self.rax_slot ← ⁻1
+
     fn movimm(&mut self, reg : i64, v : i64):
+        if reg = 0:
+            self.rax_slot ← ⁻1
         self.b1(72 + (1 if reg >= 8 else 0))
         self.b1(184 + (reg & 7))
         self.w64(v)
@@ -4436,6 +4506,9 @@ impl Emit:
         self.w32(0)
 
     fn jglobal(&mut self, opcode : i64, opcode2 : i64, target : i64):
+        if opcode2 = ⁻1 and opcode = 232:
+            // a call clobbers rax
+            self.raxbar()
         if opcode2 = ⁻1:
             self.b1(opcode)
         else:
@@ -4445,6 +4518,9 @@ impl Emit:
         self.w32(0)
 
     fn set_label(&mut self, l : i64):
+        // a label is a join point; what rax held on one way in says
+        // nothing about the others
+        self.raxbar()
         self.labels[l × 1¤ptrdiff] ← self.here()
 
     fn resolve_locals(&mut self):
@@ -4458,6 +4534,7 @@ impl Emit:
             _ ← self.lf_label.pop()
 
     fn begin_fn(&mut self, nlabels : i64):
+        self.raxbar()
         while #self.labels > 0:
             _ ← self.labels.pop()
         let i : mut i64 = 0
@@ -4466,6 +4543,8 @@ impl Emit:
             i ← i + 1
 
     fn sref(&mut self, reg : i64, stridx : i64):
+        if reg = 0:
+            self.rax_slot ← ⁻1
         self.b1(72 + (1 if reg >= 8 else 0))
         self.b1(184 + (reg & 7))
         self.sf_pos.push(self.here())
@@ -4473,6 +4552,8 @@ impl Emit:
         self.w64(0)
 
     fn sdref(&mut self, reg : i64, stridx : i64):
+        if reg = 0:
+            self.rax_slot ← ⁻1
         self.b1(72 + (1 if reg >= 8 else 0))
         self.b1(184 + (reg & 7))
         self.sd_pos.push(self.here())
@@ -4490,8 +4571,19 @@ impl Emit:
         if #self.pj_id > 0:
             foreach i := 0…#self.pj_id - 1:
                 self.jt_starts.push(@dropunit(#self.jt_entries))
+                let n0 : i64 = self.pj_len[i]
                 let st : i64 = self.pj_start[i]
-                let n : i64 = self.pj_len[i]
+                if n0 < 0:
+                    // a value table: the entries are the data itself
+                    let n : i64 = @wrap(0 - n0)
+                    self.jt_is_code.push(0)
+                    let j : mut i64 = 0
+                    while j < n:
+                        self.jt_entries.push(self.pj_labels[(st + j) × 1¤ptrdiff])
+                        j ← j + 1
+                    continue
+                self.jt_is_code.push(1)
+                let n : i64 = n0
                 let j : mut i64 = 0
                 while j < n:
                     self.jt_entries.push(self.labels[self.pj_labels[(st + j) × 1¤ptrdiff] × 1¤ptrdiff])
@@ -4741,6 +4833,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             if sgn = 1 and bits ≠ 64:
                 em.range_check(w)
             em.patch32(p2, em.here() - (p2 + 4))
+            em.raxbar()
             em.store(R_AX, d)
         elif o = IR_JMP:
             em.jlocal(⁻1, a)
@@ -4830,6 +4923,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.patch32(p1, em.here() - (p1 + 4))
             em.load(R_AX, b)
             em.patch32(p2, em.here() - (p2 + 4))
+            em.raxbar()
             em.store(R_AX, d)
         elif o = IR_AGET:
             em.load(R_AX, a)
@@ -4846,6 +4940,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.patch32(p1, em.here() - (p1 + 4))
             em.load(R_AX, c)
             em.patch32(p2, em.here() - (p2 + 4))
+            em.raxbar()
             em.store(R_AX, d)
         elif o = IR_ALEN:
             em.load(R_AX, a)
@@ -4871,6 +4966,34 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
         elif o = IR_PRINTSV:
             em.load(R_DI, a)
             em.jglobal(232, ⁻1, RT_PRINTSTR)
+        elif o = IR_VTAB:
+            let vmin : i64 = ir.extra[b × 1¤ptrdiff]
+            let span : i64 = ir.extra[(b + 1) × 1¤ptrdiff]
+            let defv : i64 = ir.extra[(b + 2) × 1¤ptrdiff]
+            em.load(R_AX, a)
+            em.movimm(R_R10, vmin)
+            em.b3(76, 41, 208)               // sub rax, r10
+            em.b3(72, 49, 201)               // xor rcx, rcx, before the flags matter
+            em.movimm(R_R11, span)
+            em.b3(76, 57, 216)               // cmp rax, r11
+            em.b4(65, 15, 146, 194)          // setb r10b: inside the table
+            em.b4(77, 15, 182, 210)          // movzx r10, r10b
+            em.b4(72, 15, 67, 193)           // cmovae rax, rcx: clamp the load
+            let id2 : i64 = em.jt_count
+            em.jt_count ← em.jt_count + 1
+            em.jtref(R_DX, id2)
+            em.b4(72, 139, 4, 194)           // mov rax, [rdx+rax*8]
+            em.movimm(R_CX, defv)
+            em.b3(77, 133, 210)              // test r10, r10
+            em.b4(72, 15, 68, 193)           // cmovz rax, rcx: outside answers the default
+            em.store(R_AX, d)
+            em.pj_id.push(id2)
+            em.pj_start.push(@dropunit(#em.pj_labels))
+            em.pj_len.push(@wrap(0 - span))  // negative: raw values, not labels
+            let e2 : mut i64 = 0
+            while e2 < span:
+                em.pj_labels.push(ir.extra[(b + 3 + e2) × 1¤ptrdiff])
+                e2 ← e2 + 1
         elif o = IR_SNEW:
             em.movimm(R_DI, 8 × a)
             em.jglobal(232, ⁻1, RT_ALLOC)
@@ -5338,8 +5461,10 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → u8[]:
                               sf_pos: [], sf_str: [], sd_pos: [], sd_str: [],
                               df_pos: [], df_off: [], labels: [],
                               lf_pos: [], lf_label: [], fn_off: [],
-                              rt_off: [], jt_pos: [], jt_id: [], jt_count: 0,
-                              jt_starts: [], jt_entries: [], pj_id: [],
+                              rt_off: [], rax_slot: ⁻1,
+                              jt_pos: [], jt_id: [], jt_count: 0,
+                              jt_starts: [], jt_is_code: [], jt_entries: [],
+                              pj_id: [],
                               pj_start: [], pj_len: [], pj_labels: []})
     let nglobals : i64 = @dropunit(#a.globals)
     let alloc_off : i64 = 8 × nglobals
@@ -5394,10 +5519,16 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → u8[]:
     foreach i := 0…#lw.strs - 1:
         push64(&rodata, ro_vaddr + stroffs[i])
         push64(&rodata, str_len(lw.strs[i]))
-    // the jump tables hold code addresses
-    if #em.jt_entries > 0:
-        foreach i := 0…#em.jt_entries - 1:
-            push64(&rodata, IMAGE_BASE + PAGE + em.jt_entries[i])
+    // a jump table holds code addresses, a value table its data
+    if #em.jt_starts > 0:
+        foreach t := 0…#em.jt_starts - 1:
+            let lo2 : i64 = em.jt_starts[t]
+            let hi2 : i64 = em.jt_starts[t + 1] if t + 1 < #em.jt_starts else @dropunit(#em.jt_entries)
+            let base2 : i64 = IMAGE_BASE + PAGE if em.jt_is_code[t] = 1 else 0
+            let e3 : mut i64 = lo2
+            while e3 < hi2:
+                push64(&rodata, base2 + em.jt_entries[e3 × 1¤ptrdiff])
+                e3 ← e3 + 1
     // data: the globals' first values, then the allocator's state
     let d_vaddr : i64 = IMAGE_BASE + align_up(align_up(PAGE + text_size, PAGE) + @dropunit(#rodata), PAGE)
     if #em.df_pos > 0:
