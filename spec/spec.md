@@ -6983,7 +6983,7 @@ let l : mut = Level.high
 
 #### Comparison
 
-Enum values of the same type can be compared with `=` and `≠`.  Comparing values from different enum types is a type error.  Enum values can also be compared with integer literals:
+Enum values of the same type can be compared with `=` and `≠`.  Comparing values from different enum types is a type error.  Enum values can also be compared with integers:
 
 ```
 let c : mut = Color.red
@@ -6994,6 +6994,13 @@ assert_eq(c = 0, true)             /* compare with integer */
 ```
 /* ERROR: cannot compare enum 'Color' with enum 'Status' */
 let x : mut = Color.red = Status.ok
+```
+
+A comparison with a number that is no member's value simply answers no match — `=` false, `≠` true, never an error.  Asking "is this that value" of a value the enum does not hold is a question whose answer is no:
+
+```
+assert_eq(c = 7, false)            /* 7 names no member of Color */
+assert_eq(c ≠ 7, true)
 ```
 
 #### Underlying Type
@@ -7238,14 +7245,15 @@ let arr : Color[2] = [Color.red, Color.green]
 type Paint = Color | Circle
 ```
 
-The type admits that enum and nothing else.  Another enum is not it, and neither is the integer a member compares equal to:
+The type admits that enum, and — because a normal enum is **exhaustive**, holding exactly the members its definition lists — a number that is one member's value, which becomes that member.  Another enum is not it, and a number naming no member is refused where it is assigned, whether at a binding, a parameter, or a return:
 
 ```
 paint(Size.small)   // error: expected Color, got Size
-paint(0)            // error: expected Color, got int
+paint(0)            // Color.red: 0 is red's value
+paint(7)            // error: 'Color' holds exactly its members, and 7 is not one of them
 ```
 
-That a member compares equal to its integer, as [Comparison](#comparison) describes, is a convenience of the comparison and not a claim that the two are the same thing.
+The two rules meet cleanly: *assigning* an outside number is an error, since a Color holding 7 would be a Color that is no color; *comparing* with one merely answers no match, as [Comparison](#comparison) describes, since asking is not storing.  A `@flag` enum is different on both counts — its values are combinations of members, which a bare number does not name, so a number is refused there regardless of its value.
 
 An enum may be declared below whatever names it, as a struct may.
 

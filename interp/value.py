@@ -1095,7 +1095,7 @@ class EnumType(Value):
     def __init__(self, name: str, underlying_type: str | None,
                  members: dict[str, int], is_flag: bool = False):
         self.name = name
-        self.underlying_type = underlying_type or "int"
+        self.underlying_type = underlying_type or "u64"
         self.is_flag = is_flag
         self.members = members
         self.values_to_names: dict[int, str] = {v: k for k, v in members.items()}
@@ -1895,10 +1895,35 @@ def register_type_alias(name: str, target: str):
 _ENUM_TYPES: dict[str, str | None] = {}
 
 
-def register_enum_type(name: str, underlying: str | None = None):
+def register_enum_type(name: str, underlying: str | None = None, obj=None):
     """Register an enum's name as a type that may be written down."""
     _ENUM_TYPES[name] = underlying
+    if obj is not None:
+        _ENUM_OBJECTS[name] = obj
     _USER_TYPES.add(name)
+
+
+def enum_admit(name: str, value: "Value") -> "Value":
+    """What an enum-typed target accepts.
+
+    A value of the enum passes.  A normal enum is exhaustive: it holds
+    exactly its members, so a number that is one member's value becomes
+    that member, and any other number is refused by name.  A @flag
+    enum's values are combinations of its members, which a bare number
+    does not name, so a number is refused there as it always was.
+    """
+    if isinstance(value, EnumValue) and value.enum_type.name == name:
+        return value
+    et = _ENUM_OBJECTS.get(name)
+    if (et is not None and not et.is_flag and isinstance(value, IntValue)
+            and not isinstance(value, UnitValue)):
+        if value.value in et.values_to_names:
+            return EnumValue(et, value.value)
+        raise TypeError(
+            f"'{name}' holds exactly its members, and {value.value} is "
+            f"not one of them")
+    raise TypeError(
+        f"'{name}' is an enum, but the value is {runtime_type_of(value)}")
 
 
 def is_enum_type(name: str) -> bool:
@@ -1920,6 +1945,10 @@ def enum_underlying_type(name: str) -> str | None:
         return "u64"
     return underlying
 
+
+# The enum type objects themselves, so a number meeting an enum-typed
+# target can be measured against the members.
+_ENUM_OBJECTS: dict[str, "EnumType"] = {}
 
 # Sum types, by name, each holding the alternatives it admits.
 _SUM_TYPES: dict[str, list[str]] = {}
@@ -2468,6 +2497,14 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
         return value
 
     if param_type in _ENUM_TYPES:
+        if isinstance(value, IntValue) and not isinstance(value, UnitValue):
+            # exhaustiveness speaks for itself; the argument's name is
+            # still worth adding
+            try:
+                return enum_admit(param_type, value)
+            except TypeError as e:
+                raise TypeError(
+                    f"{func_name}: argument '{param_name}': {e}") from None
         if not (isinstance(value, EnumValue)
                 and value.enum_type.name == param_type):
             raise TypeError(
@@ -2723,12 +2760,7 @@ def _coerce_to_type(value: Value, target_width: str, unit=None) -> Value:
         return value
 
     if scalar and target_width in _ENUM_TYPES:
-        if not (isinstance(value, EnumValue)
-                and value.enum_type.name == target_width):
-            raise TypeError(
-                f"'{target_width}' is an enum, "
-                f"but the value is {runtime_type_of(value)}")
-        return value
+        return enum_admit(target_width, value)
 
     if scalar and target_width in _SUM_TYPES:
         # A sum type admits its alternatives and nothing else.  The

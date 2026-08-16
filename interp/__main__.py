@@ -2536,7 +2536,7 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                            f"{defn.name} : i64:'"),
                         getattr(defn, "pos", None))
             et = EnumType(defn.name, defn.underlying_type, members, defn.is_flag)
-            register_enum_type(defn.name, defn.underlying_type)
+            register_enum_type(defn.name, defn.underlying_type, et)
             env.define(defn.name, et)
 
     for defn in definitions:

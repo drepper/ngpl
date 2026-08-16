@@ -83,11 +83,38 @@ fn test_flag_enum_as_a_type():
 fn error_other_enum_rejected():
     _ ← paint(Size.small)
 
-// A member compares equal to its integer, but the integer is not a
-// value of the type.
-@expect error "expected Color, got int"
-fn error_integer_rejected():
-    _ ← paint(0)
+// A normal enum is exhaustive: it holds exactly its members, so a
+// number that is one member's value becomes that member, and any
+// other number is refused by name.
+@test
+fn test_a_member_value_becomes_the_member():
+    assert_eq(paint(0), Color.red)
+    let c : Color = 1
+    assert_eq(c, Color.green)
+
+@expect error "holds exactly its members, and 7 is not one of them"
+fn error_outside_number_rejected():
+    _ ← paint(7)
+
+@expect error "holds exactly its members, and 3 is not one of them"
+fn error_outside_number_rejected_at_a_binding():
+    let c : Color = 3
+    _ ← paint(c)
+
+// Comparing with an outside number is not storing it: the answer is
+// simply no match, never an error.
+@test
+fn test_comparison_with_an_outside_number_answers_no():
+    let c : Color = Color.green
+    assert_eq(c = 7, false)
+    assert_eq(c ≠ 7, true)
+    assert(c = 1)
+
+// A @flag enum's values are combinations of members, which a bare
+// number does not name, so a number is refused there regardless.
+@expect error "'Perms' is an enum, but the value is"
+fn error_flag_enum_still_rejects_numbers():
+    _ ← count_perms(1)
 
 @expect error "'Color' is an enum, but the value is Size"
 fn error_binding_rejects_other_enum():
@@ -202,11 +229,17 @@ fn test_alias_of_a_later_enum():
     let x : AliasOfLater = Later.one
     assert_eq(x, Later.one)
 
-// An array's fill value has to be a member, and the diagnostic says
-// what it was rather than naming the element type back.
-@expect error "'Color' is an enum, but the value is int"
-fn error_array_fill_is_not_a_member():
+// An array's fill value follows the same exhaustiveness: a member's
+// value fills with that member, an outside number is refused.
+@test
+fn test_array_fill_with_a_member_value():
     let a : Color[3] = 3 ⍴ 0
+    assert_eq(a[0], Color.red)
+    assert_eq(a[2], Color.red)
+
+@expect error "holds exactly its members, and 9 is not one of them"
+fn error_array_fill_outside_the_members():
+    let a : Color[3] = 3 ⍴ 9
     _ ← a
 
 @start
