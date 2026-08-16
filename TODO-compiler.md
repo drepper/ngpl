@@ -121,3 +121,6 @@ Tooling
     beside the human-readable one: the diagnostics, the decisions taken during optimization and
     code generation, the estimates above.  The brief's reason is that the edit-eval-check loop
     may be driven by a program, and a program should not be parsing prose.
+
+[ ] all decision making and analysis details can be requested through log files.  In the final
+    compiler version these details are also available through services like LSP.
