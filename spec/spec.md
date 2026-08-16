@@ -7726,7 +7726,7 @@ A value that holds an operating system resource — an open file or directory, s
 @impure
 fn main():
     let dir : mut = std.fs.cwd()
-    let file : mut = dir.open_file("data.bin")
+    let file : mut = dir.open_file("data.bin") ?? std.exit(1)
     let data : mut = file.read_file(alloc)
     std.println("{}", #data)
     // main's scope ends here: file is closed, then dir
@@ -7735,6 +7735,26 @@ fn main():
 Nothing in the source says to close the file.  The scope in which `file` was defined ends at the end of `main`, and that is enough to know the descriptor is finished with.
 
 This is what a `defer` statement would express one call at a time, without needing the statement: the release is attached to the binding rather than written out at the point of acquisition, so it cannot be forgotten, cannot be written twice, and does not have to be repeated on every path out of the function.
+
+#### A File That Is Not There
+
+`open_file` answers an optional: `∃(file)` when the file opened, `∅` when it could not be.  A file that is missing, unreadable, or otherwise out of reach is an ordinary answer to asking for it — not a failure of the program — so the caller is made to decide what absence means and to say so in its own words, where a propagated operating system error would name a system call the program never wrote:
+
+```
+match std.fs.cwd().open_file(name):
+    ∃(file):
+        use(file)
+    ∅:
+        std.println("cannot open '{}'", name)
+```
+
+A program for which the file's absence is fatal writes the decision in one line, the default being a call that does not come back:
+
+```
+let file : mut = dir.open_file("data.bin") ?? std.exit(1)
+```
+
+`??` reads its right side only when the left answered `∅`, and a right side that never returns satisfies any type the left may have, so the binding holds the opened file on the only path that reaches it.
 
 #### Order
 
@@ -7758,7 +7778,7 @@ fn open_input():
     dir.open_file("input.txt")
 ```
 
-`dir` is closed as `open_input` returns; the file is not, because it is the value being handed over.  It is then owned by whatever binding receives it, and closed when *that* scope ends.
+`dir` is closed as `open_input` returns; the file is not, because it is the value being handed over — here still inside its optional, whose presence the caller has yet to decide about.  It is then owned by whatever binding receives it, and closed when *that* scope ends.
 
 **Parameters.**  An argument names a value the caller owns, so a function that takes a file does not close it:
 
@@ -7774,7 +7794,7 @@ The caller's file is still open after `read_all` returns.
 `close()` releases the resource before the scope ends, for a program that knows it is finished sooner:
 
 ```
-let file : mut = dir.open_file("data.bin")
+let file : mut = dir.open_file("data.bin") ?? std.exit(1)
 let data : mut = file.read_file(alloc)
 file.close()
 process_for_a_long_time(data)
@@ -7804,7 +7824,7 @@ The second `close` says the program has lost track of the descriptor's lifetime.
 A resource that is never assigned to anything has no binding to own it and no scope to end.  Such a temporary is released when the statement that produced it finishes:
 
 ```
-let file : mut = std.fs.cwd().open_file("data.bin")
+let file : mut = std.fs.cwd().open_file("data.bin") ?? std.exit(1)
 ```
 
 The directory exists only to reach the file.  Its descriptor is released as the statement ends, while the file it produced lives on in `file` and is released when *that* binding's scope ends.  Writing the directory into a binding of its own would instead hold it open for the whole scope, which is the reason to prefer the form above when the directory is not needed again.
@@ -7812,8 +7832,8 @@ The directory exists only to reach the file.  Its descriptor is released as the 
 The release is observable, because descriptors are handed out lowest-first:
 
 ```
-let file : mut = std.fs.cwd().open_file("data.bin")   // directory 4, file 5
-let later : mut = std.fs.cwd()                        // 4 again
+let file : mut = std.fs.cwd().open_file("data.bin") ?? std.exit(1)   // directory 4, file 5
+let later : mut = std.fs.cwd()                                       // 4 again
 ```
 
 A statement keeps what it binds to a name and what it produces as its own value; everything else it made was needed only while it ran.
@@ -7826,7 +7846,7 @@ Nor is a resource released when the binding holding it is overwritten:
 
 ```
 foreach i := 1…50:
-    let f : mut = std.fs.cwd().open_file("data.bin")
+    let f : mut = std.fs.cwd().open_file("data.bin") ?? std.exit(1)
     use(f)
 ```
 

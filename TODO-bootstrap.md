@@ -111,6 +111,14 @@ Completed
     not have a mut local spelled `i`.  The callee now starts from a clean slate and the
     caller's map is restored on return.  tests/test_callee_scope.ngpl.
 
+[x] `open_file` answers an optional: ∃(file) when the file opened, ∅ when it could not be.
+    A missing file is an ordinary answer, not a failure, so the caller decides what absence
+    means and says so in its own words -- the raw openat error that used to propagate named
+    a system call the program never wrote.  ngplc tests explicitly and reports
+    "ngplc: cannot open '<file>': no such file or it cannot be read".  A resource inside a
+    present optional is owned and released like a bare one: bound, returned, or left as a
+    temporary.  tests/test_file_write.ngpl holds the ∅ tests.
+
 [x] an NGPL program can write a file: `dir.create_file(name, mode?)` (creates or truncates,
     applies the stated mode in spite of the umask, so 0o755 means executable),
     `dir.create_dir(name, mode?)` (an existing directory is fine), `dir.open_dir(name)`,

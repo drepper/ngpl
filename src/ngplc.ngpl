@@ -4761,6 +4761,15 @@ fn report(diags : Diag[], file : str, as_json : bool):
         else:
             std.println("{}:{}:{}: error: {}", file, d.line, d.col, d.msg)
 
+// The named source could not be opened: say which file and why the
+// compiler stopped, in the compiler's own words rather than a raw
+// operating system error.
+@noreturn
+@impure
+fn missing_input(name : str):
+    std.println("ngplc: cannot open '{}': no such file or it cannot be read", name)
+    std.exit(1)
+
 @start
 @impure
 fn main() → u8:
@@ -4800,7 +4809,7 @@ fn main() → u8:
         return 1
 
     let alloc := std.arena.allocator()
-    let file := std.fs.cwd().open_file(input)
+    let file := std.fs.cwd().open_file(input) ?? missing_input(input)
     let src := file.read_file(alloc)
 
     let toks := lex(src)

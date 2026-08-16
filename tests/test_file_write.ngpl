@@ -16,7 +16,7 @@ fn test_write_bytes_and_read_them_back():
     out.close()
 
     let alloc := std.arena.allocator()
-    let back := std.fs.cwd().open_file("build/test_file_write.bin")
+    let back := std.fs.cwd().open_file("build/test_file_write.bin") ?? std.exit(1)
     let got := back.read_file(alloc)
     assert_eq(@dropunit(#got), 4)
     assert_eq(got[0¤byte], 127)
@@ -35,7 +35,7 @@ fn test_write_a_string():
     out.close()
 
     let alloc := std.arena.allocator()
-    let back := std.fs.cwd().open_file("build/test_file_write.txt")
+    let back := std.fs.cwd().open_file("build/test_file_write.txt") ?? std.exit(1)
     let got := back.read_file(alloc)
     assert_eq(@dropunit(#got), 13)
     assert_eq(got[0¤byte], 'o'.ord())
@@ -55,10 +55,33 @@ fn test_create_truncates():
     out2.close()
 
     let alloc := std.arena.allocator()
-    let back := std.fs.cwd().open_file("build/test_file_write.txt")
+    let back := std.fs.cwd().open_file("build/test_file_write.txt") ?? std.exit(1)
     let got := back.read_file(alloc)
     assert_eq(@dropunit(#got), 6)
     alloc.deinit()
+
+// A file that is not there is an ordinary answer, not a failure: the
+// open answers ∅ and the caller decides what absence means.
+@test
+fn test_open_of_a_missing_file_answers_nothing():
+    assert(std.fs.cwd().open_file("no_such_file_in_this_tree") = ∅)
+
+@test
+fn test_open_of_a_present_file_answers_the_file():
+    let opened := std.fs.cwd().open_file("CLAUDE.md")
+    assert(opened ≠ ∅)
+
+@test
+@impure
+fn test_absence_takes_the_stated_branch():
+    let took : mut str = ""
+    match std.fs.cwd().open_file("no_such_file_in_this_tree"):
+        ∃(f):
+            took ← "present"
+            f.close()
+        ∅:
+            took ← "absent"
+    assert_eq(took, "absent")
 
 @start
 @impure

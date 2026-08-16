@@ -374,8 +374,13 @@ class DirFD:
             flags: openat flags (default O_RDONLY | O_CLOEXEC).
 
         Returns:
-            FileStream wrapping the new file descriptor.
+            An optional: ∃(FileStream) when the file opened, ∅ when it
+            could not be -- a file that is not there being an ordinary
+            answer, not a failure of the program.  The caller decides
+            what its absence means and says so in its own words.
         """
+        from interp.value import ObjectValue, some, none
+
         self._check_open("open_file")
         if isinstance(name, str):
             name = name.encode("utf-8")
@@ -385,9 +390,8 @@ class DirFD:
             flags = O_RDONLY | O_CLOEXEC
         fd = _openat(self._fd, name, flags)
         if fd < 0:
-            errno = ctypes.get_errno()
-            raise OSError(f"openat({self._fd}, {name!r}): {os.strerror(errno)} (errno={errno})")
-        return FileStream(fd)
+            return none()
+        return some(ObjectValue(FileStream(fd)))
 
     def create_file(self, name, mode=None):
         """Create (or truncate) a file relative to this directory, for writing.

@@ -5707,10 +5707,11 @@ class Evaluator:
                             py_args.append(a)
                     result = meth(*py_args)
 
-                # Wrap non-Value results in ObjectValue.
+                # Wrap non-Value results in ObjectValue; a resource
+                # inside a present optional is tracked all the same.
                 if not isinstance(result, Value):
-                    return self._track_temporary(ObjectValue(result))
-                return result
+                    result = ObjectValue(result)
+                return self._track_temporary(result)
 
         # Fallback: try the original value's attribute.
         meth = getattr(obj, method_name, None)
@@ -6058,9 +6059,10 @@ class Evaluator:
         until the program exits.  `std.fs.cwd().open_file(name)` is the
         motivating case: the directory exists only to reach the file.
         """
-        if self._temporaries is not None and isinstance(value, ObjectValue):
-            if callable(getattr(value.obj, "destroy", None)):
-                self._temporaries.append(value.obj)
+        held = value.value if isinstance(value, SomeValue) else value
+        if self._temporaries is not None and isinstance(held, ObjectValue):
+            if callable(getattr(held.obj, "destroy", None)):
+                self._temporaries.append(held.obj)
         return value
 
     def _release_temporaries(self, result):
@@ -6086,6 +6088,8 @@ class Evaluator:
         # now, and is released when its scope ends instead.
         for frame in self.env._frames:
             for bound in frame.values():
+                if isinstance(bound, SomeValue):
+                    bound = bound.value
                 if isinstance(bound, ObjectValue):
                     kept.add(id(bound.obj))
 
@@ -6143,6 +6147,10 @@ class Evaluator:
             if name in borrowed:
                 continue
             value = frame[name]
+            # a resource may sit inside a present optional, as an
+            # open_file answer bound whole does
+            if isinstance(value, SomeValue):
+                value = value.value
             if not isinstance(value, ObjectValue):
                 continue
             destroy = getattr(value.obj, "destroy", None)
