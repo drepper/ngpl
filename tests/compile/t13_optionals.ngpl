@@ -1,0 +1,76 @@
+// core-2: optionals -- ∃ and ∅, match, ??, presence, absence.
+
+struct Reading:
+    value : i64
+    trusted : bool
+
+fn half_of_even(n : i64) → i64?:
+    if (n % 2 ?? 1) = 0:
+        return ∃((n ÷ 2) ?? 0)
+    ∅
+
+fn last_reading(ok : bool) → Reading?:
+    if ok:
+        return ∃(Reading{value: 42, trusted: true})
+    ∅
+
+fn describe(x : i64?) → str:
+    match x:
+        ∃(v):
+            "present" if v >= 0 else "negative"
+        ∅:
+            "absent"
+
+@start
+@impure
+fn main():
+    // presence and absence, asked three ways
+    let a : i64? = half_of_even(10)
+    let b : i64? = half_of_even(7)
+    std.println("a {}", a ?? ⁻1)
+    std.println("b {}", b ?? ⁻1)
+    assert(a ≠ ∅)
+    assert(b = ∅)
+    if a:
+        std.println("a holds")
+    if not (b ≠ ∅):
+        std.println("b does not")
+
+    // match binds the value in the present arm
+    match half_of_even(100):
+        ∃(v):
+            std.println("half {}", v)
+        ∅:
+            std.println("odd")
+    match half_of_even(3):
+        ∃(v):
+            std.println("half {}", v)
+        ∅:
+            std.println("odd")
+
+    // an optional in and out of a function
+    std.println("{}", describe(∃(5)))
+    std.println("{}", describe(∃(⁻5)))
+    std.println("{}", describe(∅))
+
+    // an optional struct
+    match last_reading(true):
+        ∃(r):
+            std.println("reading {} {}", r.value, r.trusted)
+        ∅:
+            std.println("no reading")
+    let missing : Reading? = last_reading(false)
+    assert(missing = ∅)
+    std.println("missing {}", missing = ∅)
+
+    // ?? reads its right side only on absence
+    let fallback : i64 = b ?? 99
+    std.println("fallback {}", fallback)
+    let taken : i64 = a ?? 99
+    std.println("taken {}", taken)
+
+    // an optional local settles a bare ∅ too
+    let c : mut i64? = ∅
+    std.println("c {}", c ?? ⁻7)
+    c ← ∃(8)
+    std.println("c {}", c ?? ⁻7)

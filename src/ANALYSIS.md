@@ -33,11 +33,10 @@ past i64.
 ## What Fell Short
 
 1. **Self-hosting is closer but not closed.**  Attempt 3 landed
-   structs with methods — the largest single gap.  The compiler's own
-   source still uses optionals as values (`∃/∅`, `??` beyond
-   ÷/pop/get), `match`, hashes, tuples, `str.chars()`, arrays of
-   structs, and struct-typed by-value locals copied around.  The gap,
-   in dependency order: optionals + `match` → arrays of structs →
+   structs with methods and optionals with `match` — the two largest
+   gaps.  The compiler's own source still uses hashes, tuples,
+   `str.chars()`, arrays of structs, and struct-typed by-value locals
+   copied around.  The gap, in dependency order: arrays of structs →
    hashes (the Swiss-table runtime) → tuples → chars and string
    indexing (the UTF-8 machinery DESIGN.md plans).
 2. **No register allocation.**  Every value still lives in a stack

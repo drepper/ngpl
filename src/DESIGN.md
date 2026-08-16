@@ -60,6 +60,16 @@ Attempt 3 grows core-1 to **core-2** with structs:
   stream for struct names in one sweep).  `&mut self` methods and
   field stores demand a `mut` binding or `&mut` parameter, fields
   inheriting their holder's mutability.
+- **optionals** `T?` of any scalar or struct, with `∃(v)`, `∅`,
+  `match` over the two shapes (the bound name scoped to the present
+  arm, a trailing match handing each arm's value on as the function's
+  answer), presence as truthiness, comparison with `∅` (and only ∅ —
+  content comparison waits), and `??` generalized to every optional.
+  The representation makes absence free: an optional is a pointer,
+  `∅` the null one and `∃(v)` a box holding the value, so a presence
+  test is one compare against zero, `= ∅` needs no special lowering
+  at all (∅ is the constant 0), and nested `∃(∅)` falls out naturally.
+  `∃` allocates, so it is not speculatable; `∅` is.
 
 ## Pipeline and Data Flow
 

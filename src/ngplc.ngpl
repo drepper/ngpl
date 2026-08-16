@@ -92,6 +92,10 @@ let TK_HASH : i64 = 77       // #
 let TK_CONCAT : i64 = 78     // ⧺
 let TK_LBRACE : i64 = 79
 let TK_RBRACE : i64 = 80
+let TK_QMARK : i64 = 81      // ? as a type's suffix
+let TK_EXISTS : i64 = 82     // ∃
+let TK_EMPTY : i64 = 83      // ∅
+let TK_MATCH : i64 = 38
 let TK_RESERVED : i64 = 99   // a word the bootstrap reserves and core-1 does not use
 
 // The keyword table: one hash probe replaces a comparison ladder.  A
@@ -102,8 +106,8 @@ let KEYWORDS : std.hash(str, i64) = (⸨
     "fn": 20, "let": 21, "mut": 22, "if": 23, "elif": 24, "else": 25,
     "while": 26, "foreach": 27, "return": 28, "break": 29, "continue": 30,
     "true": 31, "false": 32, "and": 33, "or": 34, "not": 35,
-    "struct": 36, "impl": 37,
-    "opt": 99, "is": 99, "import": 99, "match": 99, "some": 99,
+    "struct": 36, "impl": 37, "match": 38,
+    "opt": 99, "is": 99, "import": 99, "some": 99,
     "start": 99, "test": 99, "expect": 99, "wrap": 99, "enum": 99,
     "flag": 99, "replaceable": 99, "catch": 99, "comptime": 99,
     "type": 99, "unit": 99, "impure": 99, "enumerate": 99,
@@ -130,7 +134,9 @@ let GLYPHS3 : std.hash(i64, i64) = (⸨
     14846120: 69,   // ∨
     14847112: 71,   // ⌈
     14847114: 72,   // ⌊
-    14854074: 78⸩)  // ⧺
+    14854074: 78,   // ⧺
+    14846083: 82,   // ∃
+    14846085: 83⸩)  // ∅
 
 // ===========================================================================
 // Small helpers
@@ -170,6 +176,7 @@ fn run_str(src : byte[], off : i64, n : i64) → str:
 //   16 + s + 2b + 256u   an integer type: s = 1 when signed, b = bits,
 //                        u = 0 none, 1 ¤ptrdiff, 2 ¤byte
 //   1024 + i         the struct whose definition came i-th
+//   2048 + base      an optional holding a base-typed value, or ∅
 //   4096 + elem      an array whose elements are the integer type elem
 //
 // A parameter's type may add 65536×r: r = 1 for a & borrow, 2 for &mut.
@@ -178,6 +185,7 @@ let TY_UNIT : i64 = 0
 let TY_BOOL : i64 = 2
 let TY_STR : i64 = 3
 let TY_UNT : i64 = 8
+let TY_EMPTY : i64 = 9       // a bare ∅, not yet settled on its optional
 let TY_U64 : i64 = 144       // 16 + 0 + 2×64
 let TY_I64 : i64 = 145       // 16 + 1 + 2×64
 let TY_U8 : i64 = 32         // 16 + 0 + 2×8
@@ -194,6 +202,15 @@ fn ty_is_int(t : i64) → bool:
 
 fn ty_is_struct(t : i64) → bool:
     t >= 1024 and t < 2048
+
+fn ty_is_opt(t : i64) → bool:
+    t >= 2048 and t < 4096
+
+fn mk_oty(base : i64) → i64:
+    2048 + base
+
+fn ty_opt_base(t : i64) → i64:
+    t - 2048
 
 fn mk_sty(sidx : i64) → i64:
     1024 + sidx
@@ -240,7 +257,9 @@ fn type_name(t0 : i64) → str:
     if t = TY_BOOL: return prefix ⧺ "bool"
     if t = TY_STR: return prefix ⧺ "str"
     if t = TY_UNT: return "untyped integer"
+    if t = TY_EMPTY: return "∅"
     if ty_is_struct(t): return prefix ⧺ "struct #" ⧺ i64_str(ty_sidx(t))
+    if ty_is_opt(t): return prefix ⧺ type_name(ty_opt_base(t)) ⧺ "?"
     if ty_is_arr(t): return prefix ⧺ type_name(ty_elem(t)) ⧺ "[]"
     let base : str = ("i" if ty_sgn(t) = 1 else "u") ⧺ i64_str(ty_bits(t))
     let u : i64 = ty_unit(t)
@@ -575,12 +594,10 @@ impl Lexer:
                 k ← TK_ARROW
                 w ← 2
         else:
+            k ← TK_QMARK
             if b1 = 63:
                 k ← TK_COALESCE
                 w ← 2
-            else:
-                self.err("a lone '?' is not core-1; ?? takes a result's default")
-                return
         let i : mut i64 = 0
         while i < w:
             self.adv()
@@ -683,6 +700,8 @@ let NK_MCALL : i64 = 12     // na = base, nb = extra [argc, arg…]; method toke
 let NK_REF : i64 = 13       // na = inner, nb = 1 shared or 2 mut
 let NK_SLIT : i64 = 14      // na = extra [n, field-token, expr, …]; name token
 let NK_FIELD : i64 = 15     // na = base; field token
+let NK_SOME : i64 = 16      // na = the value ∃ carries
+let NK_EMPTYV : i64 = 17    // a bare ∅
 let NK_ADD : i64 = 20
 let NK_SUB : i64 = 21
 let NK_MUL : i64 = 22
@@ -727,6 +746,7 @@ let NK_EXPRSTMT : i64 = 80  // na = expr
 let NK_BLOCK : i64 = 81     // na = extra [count, stmt…]
 let NK_STOREIDX : i64 = 82  // na = index, nb = value; array name token
 let NK_STOREFLD : i64 = 83  // na = base var, nb = value; field token
+let NK_MATCH : i64 = 84     // na = subject, nb = extra [some-block, empty-block]; bind token
 
 // std builtins reachable from core-1
 let SB_PRINTLN : i64 = 1
@@ -909,6 +929,12 @@ impl Parser:
                 self.err("a core-2 array holds plain integers")
                 return TY_I64
             base ← mk_aty(base)
+        if self.peek() = TK_QMARK:
+            self.pos ← self.pos + 1
+            if ty_is_arr(base):
+                self.err("an optional array is not core-2 yet")
+                return TY_I64
+            base ← mk_oty(base)
         if refk ≠ 0 and not ty_is_arr(base) and not ty_is_struct(base):
             self.err("core-2 borrows arrays and structs; a scalar travels by value")
             return TY_I64
@@ -1027,6 +1053,15 @@ impl Parser:
             self.pos ← self.pos + 1
             let e : i64 = self.parse_unary_operand()
             return self.mknode(NK_NOT, at, e, 0, 0)
+        if k = TK_EXISTS:
+            self.pos ← self.pos + 1
+            _ ← self.eat(TK_LPAR, "'(' after ∃")
+            let e : i64 = self.parse_expr()
+            _ ← self.eat(TK_RPAR, "')' closing ∃")
+            return self.mknode(NK_SOME, at, e, 0, 0)
+        if k = TK_EMPTY:
+            self.pos ← self.pos + 1
+            return self.mknode(NK_EMPTYV, at, 0, 0, 0)
         if k = TK_HASH:
             self.pos ← self.pos + 1
             let e : i64 = self.parse_unary_operand()
@@ -1318,6 +1353,48 @@ impl Parser:
             self.extra.push(step)
             self.extra.push(hi)
             return self.mknode(NK_FOREACH, name_tok, off, body, 0)
+        if k = TK_MATCH:
+            self.pos ← self.pos + 1
+            let subject : i64 = self.parse_expr()
+            _ ← self.eat(TK_COLON, "':' after the subject")
+            _ ← self.eat(TK_NL, "the arms on their own lines")
+            _ ← self.eat(TK_INDENT, "an indented arm list")
+            let some_blk : mut i64 = ⁻1
+            let empty_blk : mut i64 = ⁻1
+            let bind_tok : mut i64 = ⁻1
+            while self.peek() ≠ TK_DEDENT and not self.failed():
+                if self.peek() = TK_EXISTS:
+                    if some_blk ≠ ⁻1:
+                        self.err("match repeats the ∃ pattern")
+                        return 0
+                    self.pos ← self.pos + 1
+                    _ ← self.eat(TK_LPAR, "'(' after ∃")
+                    bind_tok ← self.pos
+                    _ ← self.eat_name("the name ∃ binds")
+                    _ ← self.eat(TK_RPAR, "')' closing the pattern")
+                    some_blk ← self.parse_block()
+                elif self.peek() = TK_EMPTY:
+                    if empty_blk ≠ ⁻1:
+                        self.err("match repeats the ∅ pattern")
+                        return 0
+                    self.pos ← self.pos + 1
+                    empty_blk ← self.parse_block()
+                elif self.peek() = TK_NL:
+                    self.pos ← self.pos + 1
+                else:
+                    self.err("a core-2 match arm is ∃(name) or ∅")
+                    return 0
+            _ ← self.eat(TK_DEDENT, "the end of the match")
+            if some_blk = ⁻1:
+                self.err("match has no arm for ∃")
+                return 0
+            if empty_blk = ⁻1:
+                self.err("match has no arm for ∅")
+                return 0
+            let off : i64 = @dropunit(#self.extra)
+            self.extra.push(some_blk)
+            self.extra.push(empty_blk)
+            return self.mknode(NK_MATCH, bind_tok, subject, off, 0)
         if k = TK_RETURN:
             self.pos ← self.pos + 1
             let v : mut i64 = ⁻1
@@ -1924,6 +2001,9 @@ impl Checker:
             _ ← self.smut.pop()
             _ ← self.sslot.pop()
 
+    fn is_open(&self, t : i64) → bool:
+        t = TY_UNT or t = TY_EMPTY
+
     fn set_type(&mut self, id : i64, t : i64):
         self.ntype[id × 1¤ptrdiff] ← t
 
@@ -1953,6 +2033,13 @@ impl Checker:
 
     // give an untyped node the type its context settled on
     fn adopt(&mut self, id : i64, t : i64):
+        if self.ty_of(id) = TY_EMPTY:
+            if ty_is_opt(t):
+                self.set_type(id, t)
+            else:
+                self.derr(self.a.ntok[id × 1¤ptrdiff],
+                          "∅ is the absent optional; " ⧺ type_name(t) ⧺ " holds no absence")
+            return
         if self.ty_of(id) ≠ TY_UNT:
             return
         if not ty_is_int(t):
@@ -2096,6 +2183,23 @@ impl Checker:
             self.check_slit(id, tok, na)
         elif k = NK_FIELD:
             self.check_field(id, tok, na)
+        elif k = NK_SOME:
+            let iw : i64 = ty_opt_base(want) if ty_is_opt(want) else TY_UNIT
+            self.check_expr(na, iw)
+            if self.ty_of(na) = TY_UNT:
+                self.adopt(na, iw if iw ≠ TY_UNIT and ty_is_int(iw) else TY_I64)
+            let it : i64 = self.ty_of(na)
+            if ty_is_arr(it):
+                self.derr(tok, "an optional array is not core-2 yet")
+                self.set_type(id, mk_oty(TY_I64))
+                return
+            if ty_is_opt(it) or it = TY_EMPTY:
+                self.derr(tok, "an optional of an optional is not core-2 yet")
+                self.set_type(id, mk_oty(TY_I64))
+                return
+            self.set_type(id, mk_oty(it))
+        elif k = NK_EMPTYV:
+            self.set_type(id, want if ty_is_opt(want) else TY_EMPTY)
         elif k = NK_INDEX:
             self.check_index(id, tok, na, nb)
         elif k = NK_LEN:
@@ -2188,6 +2292,24 @@ impl Checker:
             self.check_expr(nb, TY_UNIT)
             let tl : i64 = self.ty_of(na)
             let tr : i64 = self.ty_of(nb)
+            if tl = TY_EMPTY or tr = TY_EMPTY:
+                if tl = TY_EMPTY and tr = TY_EMPTY:
+                    self.derr(tok, "∅ against ∅ says nothing; state which optional is asked")
+                elif tl = TY_EMPTY:
+                    if ty_is_opt(tr):
+                        self.adopt(na, tr)
+                    else:
+                        self.derr(tok, "only an optional is asked about ∅; this is " ⧺ type_name(tr))
+                elif ty_is_opt(tl):
+                    self.adopt(nb, tl)
+                else:
+                    self.derr(tok, "only an optional is asked about ∅; this is " ⧺ type_name(tl))
+                self.set_type(id, TY_BOOL)
+                return
+            if ty_is_opt(tl) or ty_is_opt(tr):
+                self.derr(tok, "core-2 compares an optional only with ∅; take the value out with ?? or match")
+                self.set_type(id, TY_BOOL)
+                return
             if tl = TY_STR and tr = TY_STR:
                 self.set_type(id, TY_BOOL)
                 return
@@ -2275,6 +2397,9 @@ impl Checker:
         let t : i64 = self.ty_of(id)
         if t = TY_UNT:
             self.adopt(id, TY_I64)
+            return
+        if ty_is_opt(t):
+            // an optional in a condition asks whether a value is there
             return
         if not ty_is_int(t) and t ≠ TY_BOOL:
             self.derr(self.a.ntok[id × 1¤ptrdiff],
@@ -2365,7 +2490,7 @@ impl Checker:
                     self.derr(ftok, "the literal names '" ⧺ self.text(ftok) ⧺ "' twice")
                 filled[fidx × 1¤ptrdiff] ← 1
                 self.check_expr(e, fty)
-                if self.ty_of(e) = TY_UNT:
+                if self.is_open(self.ty_of(e)):
                     self.adopt(e, fty)
                 elif self.ty_of(e) ≠ fty:
                     self.derr(ftok, "field '" ⧺ self.text(ftok) ⧺ "' holds " ⧺ type_name(fty) ⧺ ", not " ⧺ type_name(self.ty_of(e)))
@@ -2471,7 +2596,7 @@ impl Checker:
             else:
                 self.check_expr(arg, base)
                 let at : i64 = self.ty_of(arg)
-                if at = TY_UNT:
+                if self.is_open(at):
                     self.adopt(arg, base)
                 elif at ≠ base:
                     self.derr(tok, "argument " ⧺ i64_str(num) ⧺ " of '" ⧺ name ⧺ "' is " ⧺ type_name(at) ⧺ ", but the parameter says " ⧺ type_name(base))
@@ -2716,8 +2841,18 @@ impl Checker:
                              self.a.na[na × 1¤ptrdiff],
                              self.a.nb[na × 1¤ptrdiff], true)
         else:
-            self.derr(tok, "?? follows what answers a result: ÷, %, pop or get")
-            self.check_expr(na, want)
+            let ow : i64 = mk_oty(want) if want ≠ TY_UNIT and (ty_is_int(want) or want = TY_BOOL or want = TY_STR or ty_is_struct(want)) else TY_UNIT
+            self.check_expr(na, ow)
+            if ty_is_opt(self.ty_of(na)):
+                let base : i64 = ty_opt_base(self.ty_of(na))
+                self.check_expr(nb, base)
+                if self.is_open(self.ty_of(nb)):
+                    self.adopt(nb, base)
+                elif self.ty_of(nb) ≠ base:
+                    self.derr(tok, "the default answers for the value, so it is " ⧺ type_name(base) ⧺ ", not " ⧺ type_name(self.ty_of(nb)))
+                self.set_type(id, base)
+                return
+            self.derr(tok, "?? follows what answers a result or an optional")
         let t : i64 = self.ty_of(na)
         self.check_expr(nb, t)
         if self.ty_of(nb) = TY_UNT:
@@ -2770,7 +2905,7 @@ impl Checker:
                     self.set_type(na, nc)
             else:
                 self.check_expr(na, nc)
-                if self.ty_of(na) = TY_UNT:
+                if self.is_open(self.ty_of(na)):
                     self.adopt(na, nc)
                 elif self.ty_of(na) ≠ nc:
                     self.derr(tok, "the binding says " ⧺ type_name(nc) ⧺ " but the value is " ⧺ type_name(self.ty_of(na)))
@@ -2791,7 +2926,7 @@ impl Checker:
                 if not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:
                     self.derr(tok, "writing a global is an effect; the function wants @impure")
                 self.check_expr(na, gd.ty)
-                if self.ty_of(na) = TY_UNT:
+                if self.is_open(self.ty_of(na)):
                     self.adopt(na, gd.ty)
                 elif self.ty_of(na) ≠ gd.ty:
                     self.derr(tok, "'" ⧺ name ⧺ "' holds " ⧺ type_name(gd.ty) ⧺ ", not " ⧺ type_name(self.ty_of(na)))
@@ -2805,7 +2940,7 @@ impl Checker:
             if self.smut[s × 1¤ptrdiff] = 0:
                 self.derr(tok, "'" ⧺ name ⧺ "' is not mut, so nothing may be stored into it")
             self.check_expr(na, ty_strip_ref(st))
-            if self.ty_of(na) = TY_UNT:
+            if self.is_open(self.ty_of(na)):
                 self.adopt(na, ty_strip_ref(st))
             elif self.ty_of(na) ≠ ty_strip_ref(st):
                 self.derr(tok, "'" ⧺ name ⧺ "' holds " ⧺ type_name(ty_strip_ref(st)) ⧺ ", not " ⧺ type_name(self.ty_of(na)))
@@ -2847,7 +2982,7 @@ impl Checker:
                 return
             self.a.nc[id × 1¤ptrdiff] ← fidx
             self.check_expr(nb, fty)
-            if self.ty_of(nb) = TY_UNT:
+            if self.is_open(self.ty_of(nb)):
                 self.adopt(nb, fty)
             elif self.ty_of(nb) ≠ fty:
                 self.derr(tok, "field '" ⧺ self.text(tok) ⧺ "' holds " ⧺ type_name(fty) ⧺ ", not " ⧺ type_name(self.ty_of(nb)))
@@ -2867,6 +3002,27 @@ impl Checker:
             self.loop_depth ← self.loop_depth + 1
             self.check_block(nb, false)
             self.loop_depth ← self.loop_depth - 1
+        elif k = NK_MATCH:
+            self.check_expr(na, TY_UNIT)
+            let t : i64 = self.ty_of(na)
+            if not ty_is_opt(t):
+                self.derr(tok, "match asks an optional which it is; this is " ⧺ type_name(t))
+                return
+            let some_blk : i64 = self.a.extra[nb × 1¤ptrdiff]
+            let empty_blk : i64 = self.a.extra[(nb + 1) × 1¤ptrdiff]
+            self.push_scope()
+            let slot : i64 = self.declare(tok, ty_opt_base(t), 0)
+            self.nslot[id × 1¤ptrdiff] ← slot
+            // a trailing match hands each arm's value on as the
+            // function's answer
+            self.check_block(some_blk, trailing)
+            self.pop_scope()
+            self.check_block(empty_blk, trailing)
+            if trailing and self.a.fns[self.cur_fn × 1¤ptrdiff].ret ≠ TY_UNIT:
+                if not self.block_yields(some_blk):
+                    self.derr(tok, "the ∃ arm answers nothing on some path")
+                if not self.block_yields(empty_blk):
+                    self.derr(tok, "the ∅ arm answers nothing on some path")
         elif k = NK_FOREACH:
             self.check_foreach(id, tok, na, nb)
         elif k = NK_FOREACHA:
@@ -2891,7 +3047,7 @@ impl Checker:
                 self.check_expr(na, want)
                 if want = TY_UNIT:
                     self.derr(tok, "the function answers nothing, but this return carries a value")
-                elif self.ty_of(na) = TY_UNT:
+                elif self.is_open(self.ty_of(na)):
                     self.adopt(na, want)
                 elif self.ty_of(na) ≠ want:
                     self.derr(tok, "the function answers " ⧺ self.sname_of(want) ⧺ ", not " ⧺ self.sname_of(self.ty_of(na)))
@@ -2904,7 +3060,7 @@ impl Checker:
             let want : i64 = self.a.fns[self.cur_fn × 1¤ptrdiff].ret
             if trailing and want ≠ TY_UNIT:
                 self.check_expr(na, want)
-                if self.ty_of(na) = TY_UNT:
+                if self.is_open(self.ty_of(na)):
                     self.adopt(na, want)
                 elif self.ty_of(na) ≠ want:
                     self.derr(tok, "the function answers " ⧺ self.sname_of(want) ⧺ ", but its last expression is " ⧺ self.sname_of(self.ty_of(na)))
@@ -2978,9 +3134,21 @@ impl Checker:
             if nc = ⁻1:
                 return false
             return self.block_returns(self.a.nb[id × 1¤ptrdiff]) and self.block_returns(nc)
+        if k = NK_MATCH:
+            let nb : i64 = self.a.nb[id × 1¤ptrdiff]
+            return self.block_returns(self.a.extra[nb × 1¤ptrdiff]) and self.block_returns(self.a.extra[(nb + 1) × 1¤ptrdiff])
         if k = NK_BLOCK:
             return self.block_returns(id)
         false
+
+    // whether a block's last statement hands a value on or returns
+    fn block_yields(&self, blk : i64) → bool:
+        let off : i64 = self.a.na[blk × 1¤ptrdiff]
+        let n : i64 = self.a.extra[off × 1¤ptrdiff]
+        if n = 0:
+            return false
+        let last : i64 = self.a.extra[(off + n) × 1¤ptrdiff]
+        self.kind_of(last) = NK_EXPRSTMT or self.kind_of(last) = NK_MATCH or self.always_returns(last)
 
     fn block_returns(&self, blk : i64) → bool:
         let off : i64 = self.a.na[blk × 1¤ptrdiff]
@@ -3057,7 +3225,7 @@ impl Checker:
             let last_is_value : mut bool = false
             if n > 0:
                 let last : i64 = self.a.extra[(off + n) × 1¤ptrdiff]
-                if self.kind_of(last) = NK_EXPRSTMT:
+                if self.kind_of(last) = NK_EXPRSTMT or self.kind_of(last) = NK_MATCH:
                     last_is_value ← true
             if not last_is_value and not self.block_returns(d.body):
                 self.derr(d.tok, "'" ⧺ d.name ⧺ "' answers " ⧺ type_name(d.ret) ⧺ " but not on every path")
@@ -3322,7 +3490,7 @@ impl Lower:
         let na : i64 = self.a.na[id × 1¤ptrdiff]
         let nb : i64 = self.a.nb[id × 1¤ptrdiff]
         let nc : i64 = self.a.nc[id × 1¤ptrdiff]
-        if k = NK_INT or k = NK_BOOL or k = NK_STR or k = NK_VAR:
+        if k = NK_INT or k = NK_BOOL or k = NK_STR or k = NK_VAR or k = NK_EMPTYV:
             return true
         if k = NK_NOT or k = NK_BNOT:
             return self.speculatable(na)
@@ -3390,6 +3558,16 @@ impl Lower:
             let bv : i64 = self.lower_expr(na)
             let d : i64 = self.tmp()
             self.ir(IR_FLD, bv, nb, 0, d, 0)
+            return d
+        if k = NK_SOME:
+            let v : i64 = self.lower_expr(na)
+            let d : i64 = self.tmp()
+            self.ir(IR_SNEW, 1, 0, 0, d, 0)
+            self.ir(IR_FSTO, d, 0, v, 0, 0)
+            return d
+        if k = NK_EMPTYV:
+            let d : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, d, 0)
             return d
         if k = NK_INDEX:
             let av : i64 = self.lower_expr(na)
@@ -3556,7 +3734,21 @@ impl Lower:
             self.ir(IR_DIVV if ik = NK_DIV else IR_MODD, av, bv, dv, d,
                     width_of(self.tof(na)))
             return d
-        self.lower_mcall(na, nb)
+        if ik = NK_MCALL and self.a.nc[na × 1¤ptrdiff] < 1000:
+            return self.lower_mcall(na, nb)
+        // any optional: absent takes the default, present unwraps
+        let v : i64 = self.lower_expr(na)
+        let d : i64 = self.tmp()
+        let ldef : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(IR_JZ, v, ldef, 0, 0, 0)
+        self.ir(IR_FLD, v, 0, 0, d, 0)
+        self.ir(IR_JMP, lend, 0, 0, 0, 0)
+        self.ir(IR_LABEL, ldef, 0, 0, 0, 0)
+        let dv : i64 = self.lower_expr(nb)
+        self.ir(IR_MOV, dv, 0, 0, d, 0)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        d
 
     fn lower_mcall(&mut self, nid : i64, defnode : i64) → i64:
         let mid : i64 = self.a.nc[nid × 1¤ptrdiff]
@@ -3811,6 +4003,18 @@ impl Lower:
             _ ← self.breaks.pop()
             _ ← self.conts.pop()
             self.ir(IR_JMP, ltop, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        elif k = NK_MATCH:
+            let v : i64 = self.lower_expr(na)
+            let bind : i64 = self.nslot[sid × 1¤ptrdiff]
+            let lempty : i64 = self.label()
+            let lend : i64 = self.label()
+            self.ir(IR_JZ, v, lempty, 0, 0, 0)
+            self.ir(IR_FLD, v, 0, 0, bind, 0)
+            self.lower_block(self.a.extra[nb × 1¤ptrdiff], trailing, ret_ty)
+            self.ir(IR_JMP, lend, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lempty, 0, 0, 0, 0)
+            self.lower_block(self.a.extra[(nb + 1) × 1¤ptrdiff], trailing, ret_ty)
             self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         elif k = NK_FOREACH:
             self.lower_foreach(sid, tok, na, nb, ret_ty)
@@ -5220,7 +5424,7 @@ fn tok_name(k : i64) → str:
     if k = TK_INT: return "int"
     if k = TK_STR: return "str"
     if k = TK_RESERVED: return "reserved"
-    if k >= 20 and k <= 37: return "kw"
+    if k >= 20 and k <= 38: return "kw"
     "op"
 
 @impure
