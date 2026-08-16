@@ -70,6 +70,20 @@ Attempt 3 grows core-1 to **core-2** with structs:
   test is one compare against zero, `= ∅` needs no special lowering
   at all (∅ is the constant 0), and nested `∃(∅)` falls out naturally.
   `∃` allocates, so it is not speculatable; `∅` is.
+- **arrays of structs** `S[]`: the element is the struct's pointer, so
+  the array machinery carries over unchanged; `v[i].f` reads and
+  stores, whole-element replacement by a fresh literal, `&`-borrowed
+  walks, and an element's own array growing through `v[i].items.push`.
+- **hashes** `std.hash(K, V)` — K a plain integer type or `str`, V any
+  core scalar, `str`, or struct: born from a typed literal
+  `⸨k: v, …⸩`, read by `h[k]` answering `V?` (absence composes with
+  `??` and `match` for free), written by `h[k] ← v` on a `mut` binding
+  or `&mut` borrow, asked by `k ∊ h` and measured by `#h`; handed
+  around by borrow like the other containers, never copied, reassigned
+  or returned.  The type packs as `8192 + ki×2048 + V` with `ki`
+  encoding the key's width/signedness or str-ness — a band disjoint
+  from the arrays' `4096 + elem` (elements stay below 4096), so each
+  `ty_is_*` predicate answers alone, in any order.
 
 ## Pipeline and Data Flow
 
@@ -171,10 +185,18 @@ A few routines over raw syscalls, emitted before user code:
   test materialized with `setcc` — a branch-free body), signed and
   unsigned decimal printing, `write`, and the abort path
   (`write(2, …)`, then `kill(getpid(), SIGABRT)`).
-- Planned next (per the policy's "add them to the standard runtime"):
-  a Swiss-table hash — 1-byte tags probed 16 at a time with
-  `pcmpeqb`+`pmovmskb` — as the runtime shape for `std.hash` when
-  hashes reach the compiled subset.
+- the hash table behind `std.hash`: one allocation holding a
+  40-byte descriptor `{ctrl, kv, count, cap, keystr}`, one ctrl byte
+  per slot (0 empty, 1 held — mmap's virgin zero means a new table
+  needs no clearing), 16-byte key/value pairs, capacity a power of
+  two, linear probing, growth by doubling at 7/8 load with rehash.
+  Integer keys hash through the murmur3 finalizer, `str` keys through
+  FNV-1a with equality by `rt_streq`.  `rt_hfind` is the one probe
+  loop; get/put/membership/grow ride on it (it leaves the descriptor
+  and key in preserved registers for them).  A get boxes the value
+  into a fresh optional.  The full Swiss-table shape — tags probed 16
+  at a time with `pcmpeqb`+`pmovmskb` — remains the planned upgrade;
+  the descriptor already carries what it needs.
 
 The ELF carries three PT_LOADs: text R+X, rodata R (string bytes,
 string descriptors, jump tables), data R+W (globals' initial values
@@ -242,7 +264,7 @@ One suite (`tests/run_tests.sh`): bootstrap-language tests run under
 the interpreter; the shared programs in `tests/compile/` run under
 the interpreter **and** compiled, outputs and exit codes diffed — the
 strict-subset rule made executable.  `--impl=` selects a side.
-Fourteen shared programs cover the whole core-1 surface including the
+Fifteen shared programs cover the whole core-2 surface including the
 stopping paths; `std.implementation` conditionalizes where
 implementations may differ.  The diff has caught real bugs on both
 sides, including the interpreter's float-precision division.

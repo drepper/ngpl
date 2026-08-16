@@ -3,7 +3,7 @@
 Per step 5 of the process in `CLAUDE.md`.  `DESIGN.md` says what was
 built; this says what it proved and where it stops.  Attempt 1's
 analysis is `old/attempt1/ANALYSIS.md`; everything it listed as the
-frontier except structs/optionals/hashes has landed.
+frontier has now landed through structs, optionals and hashes.
 
 ## What Stands
 
@@ -12,9 +12,12 @@ overflow/wrap/shift/division semantics at every width, units-lite
 (`¤ptrdiff`/`¤byte`) enforced at subscripts and carried through
 arithmetic, growable arrays with borrows and bounds checks, strings
 with concatenation/equality/character counts, globals, contracts, and
-`std.implementation`.  Fourteen shared programs run identically
+`std.implementation`.  Core-2 on top of that: structs with methods,
+optionals with `match`, arrays of structs, and hashes over a probing
+runtime table (murmur3-finalizer and FNV-1a hashing, doubling growth)
+whose reads answer optionals.  Fifteen shared programs run identically
 interpreted and compiled, inside the one integrated test suite; the
-93-file bootstrap suite stays green with `-Werror`.
+bootstrap suite stays green with `-Werror`.
 
 The control-flow policy is real, not aspirational: comparisons
 materialize, `⌈ ⌊` and safe conditionals are `cmov`, `and`/`or` with
@@ -33,12 +36,15 @@ past i64.
 ## What Fell Short
 
 1. **Self-hosting is closer but not closed.**  Attempt 3 landed
-   structs with methods and optionals with `match` — the two largest
-   gaps.  The compiler's own source still uses hashes, tuples,
-   `str.chars()`, arrays of structs, and struct-typed by-value locals
-   copied around.  The gap, in dependency order: arrays of structs →
-   hashes (the Swiss-table runtime) → tuples → chars and string
-   indexing (the UTF-8 machinery DESIGN.md plans).
+   structs with methods, optionals with `match`, arrays of structs,
+   and hashes with their runtime table.  The compiler's own source
+   still uses tuples, `str.chars()`, string indexing, and
+   struct-typed by-value locals copied around.  The gap, in
+   dependency order: tuples → chars and string indexing (the UTF-8
+   machinery DESIGN.md plans) → the remaining by-value struct moves.
+   The hash runtime is linear probing, not yet the 16-wide
+   `pcmpeqb` Swiss-table probe the design planned; the descriptor
+   layout already accommodates that upgrade.
 2. **Register allocation is one register deep.**  The emitter's rax
    memo skips reloads (~3% of code) but every value still lives in a
    stack slot; the true linear-scan allocator over the width-annotated

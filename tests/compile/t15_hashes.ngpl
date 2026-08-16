@@ -1,0 +1,101 @@
+// core-2: hashes -- literals, reads as optionals, keyed stores,
+// membership, growth past the starting capacity, str and int keys.
+
+struct Sym:
+    kind : i64
+    off : i64
+
+fn score(m : &std.hash(str, i64)) → i64:
+    (m["alpha"] ?? 0) + (m["beta"] ?? 0) + (m["missing"] ?? 100)
+
+fn credit(m : &mut std.hash(str, i64), name : str):
+    m[name] ← (m[name] ?? 0) + 10
+
+fn spell(m : &std.hash(i64, str), k : i64) → str:
+    match m[k]:
+        ∃(s):
+            s
+        ∅:
+            "?"
+
+@start
+@impure
+fn main():
+    // a literal is born with its entries; a read answers an optional
+    let h : mut std.hash(str, i64) = ⸨"alpha": 1, "beta": 2, "gamma": 3⸩
+    std.println("count {}", #h)
+    std.println("score {}", score(&h))
+    std.println("gamma {}", h["gamma"] ?? ⁻1)
+    std.println("delta {}", h["delta"] ?? ⁻1)
+
+    // membership asks without touching
+    std.println("{} {}", "alpha" ∊ h, "delta" ∊ h)
+    assert("beta" ∊ h)
+    assert(not ("omega" ∊ h))
+
+    // a store overwrites a held key and admits a fresh one
+    h["alpha"] ← 11
+    h["delta"] ← 4
+    std.println("alpha {} delta {} count {}", h["alpha"] ?? ⁻1, h["delta"] ?? ⁻1, #h)
+
+    // a borrowed mutation lands in the caller's table
+    credit(&h, "alpha")
+    credit(&h, "fresh")
+    std.println("alpha {} fresh {}", h["alpha"] ?? ⁻1, h["fresh"] ?? ⁻1)
+
+    // match takes both answers of a read
+    match h["beta"]:
+        ∃(v):
+            std.println("beta holds {}", v)
+        ∅:
+            std.println("beta absent")
+    match h["nowhere"]:
+        ∃(v):
+            std.println("nowhere holds {}", v)
+        ∅:
+            std.println("nowhere absent")
+
+    // int keys, negative ones among them
+    let names : mut std.hash(i64, str) = ⸨1: "one", ⁻1: "minus"⸩
+    names[10] ← "ten"
+    std.println("{} {} {} {}", spell(&names, 1), spell(&names, ⁻1), spell(&names, 10), spell(&names, 5))
+
+    // growth: far past the starting capacity, every entry survives
+    let big : mut std.hash(i64, i64) = ⸨0: 0⸩
+    let i : mut i64 = 1
+    while i < 40:
+        big[i × 7] ← i
+        i ← i + 1
+    std.println("big count {}", #big)
+    let sum : mut i64 = 0
+    let j : mut i64 = 0
+    while j < 40:
+        sum ← sum + (big[j × 7] ?? ⁻1000)
+        j ← j + 1
+    std.println("big sum {}", sum)
+    assert(273 ∊ big)
+    assert(not (6 ∊ big))
+    std.println("probe {} {}", big[273] ?? ⁻1, big[6] ?? ⁻1)
+
+    // an overwrite during the grown life of the table
+    big[7] ← 700
+    std.println("rewrite {} count {}", big[7] ?? ⁻1, #big)
+
+    // an empty literal holds nothing of its stated type until fed
+    let late : mut std.hash(str, i64) = ⸨⸩
+    std.println("late count {}", #late)
+    late["only"] ← 77
+    std.println("late {} count {}", late["only"] ?? ⁻1, #late)
+
+    // a struct as the value; the read hands the struct back
+    let syms : std.hash(str, Sym) = ⸨"lparen": Sym{kind: 4, off: 12}⸩
+    match syms["lparen"]:
+        ∃(s):
+            std.println("sym {} {}", s.kind, s.off)
+        ∅:
+            std.println("sym absent")
+    match syms["rparen"]:
+        ∃(s):
+            std.println("sym {} {}", s.kind, s.off)
+        ∅:
+            std.println("sym absent")
