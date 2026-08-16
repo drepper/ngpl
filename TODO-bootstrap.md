@@ -86,6 +86,34 @@ since that needs a representation the sized types do not have.
 Completed
 ---------
 
+[x] `and` and `or` short-circuit, as the specification's operator table says: the right side
+    is not read when the left side already answers.  The glyph pair ∧ and ∨ still reads both.
+    Both operands are reduced to a truth value, so the result stays bool either way.
+    tests/test_short_circuit.ngpl holds the tests, including the guard idiom
+    `i < #v and v[i] > 0` that the pair exists for.
+
+[x] a name frozen in the caller is not frozen in the callee.  The evaluator kept one map of
+    frozen names for the whole run, so a function called from inside `foreach i := …` could
+    not have a mut local spelled `i`.  The callee now starts from a clean slate and the
+    caller's map is restored on return.  tests/test_callee_scope.ngpl.
+
+[x] an NGPL program can write a file: `dir.create_file(name, mode?)` (creates or truncates,
+    applies the stated mode in spite of the umask, so 0o755 means executable),
+    `dir.create_dir(name, mode?)` (an existing directory is fine), `dir.open_dir(name)`,
+    `file.write(bytes|str)` (writes in full), `file.chmod(mode)`.  The compiler needs to
+    emit an executable and no write path existed.  In the same area, `open_file`'s default
+    flags carried `O_NOATIME` (0o1000000) mislabelled as `O_CLOEXEC` (0o2000000), so reading
+    a file the user does not own failed with EPERM; fixed.  tests/test_file_write.ngpl.
+
+[x] the Python recursion limit is raised in the interpreter's main: the default capped an
+    NGPL program at roughly 120 frames of its own (about 8 Python frames per NGPL call),
+    too few for a recursive-descent parser over ordinary nesting.
+
+[x] the unused-mut analysis counts a method call as a possible modification: a method may
+    take `&mut self` and write through it, which the analysis cannot see from the call, so
+    per its own generous rule anything not known to only read counts.  Before this a `&mut`
+    struct parameter mutated only through its methods drew a false warning.
+
 [x] nothing in the bootstrap holds an arbitrary-precision value.  A binding with no type written
     down would settle on int or float, so it is refused and the sized type is asked for; that
     reaches a local, a global, and the value of every operator, since it is the binding that
@@ -174,6 +202,12 @@ Outstanding
 [ ] a check that `run_tests.sh` covers every file under `tests/` and that a file with no test in
     it is reported rather than counted green.  The four files above are one instance of a gap
     the harness cannot currently see.
+
+[ ] a call with too few arguments curries even when the declared use of its value could
+    never take a function, so the resulting lambda flows into an `i64` binding or an `i64`
+    parameter unrefused and surfaces far away as "expected i64, got LambdaValue".  Where a
+    call's result meets a non-function type, too few arguments should be an arity error at
+    the call.  (Found writing the compiler: a five-argument helper called with four.)
 
 [ ] a newline inside a string literal hangs the scanner: `_read_string` counts the line and
     advances nothing, so the loop never ends and the interpreter has to be killed.  The rule

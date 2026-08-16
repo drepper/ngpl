@@ -3335,6 +3335,21 @@ class Evaluator:
                 if isinstance(left, NoneValue):
                     return self.eval_expr(node.right)
                 return left
+            if node.op in ("and", "or"):
+                # The spec's short-circuit pair: the right side is not
+                # read when the left side already answers.
+                left = self.eval_expr(node.left)
+                left_truth = to_bool(_unwrap_operand(left))
+                if node.op == "and" and not left_truth:
+                    return mk_bool(False)
+                if node.op == "or" and left_truth:
+                    return mk_bool(True)
+                right = self.eval_expr(node.right)
+                if binop_pos is not None:
+                    self._last_pos = binop_pos
+                    if self._call_stack:
+                        self._call_stack[-1][1] = binop_pos
+                return mk_bool(to_bool(_unwrap_operand(right)))
             left = self.eval_expr(node.left)
             right = self.eval_expr(node.right)
             if binop_pos is not None:
@@ -5956,9 +5971,12 @@ class Evaluator:
         old_env = self.env
         old_ret_type = self._current_ret_type
         old_pure = self._pure_func_name
-        old_frozen = self._frozen_vars.copy()
+        old_frozen = self._frozen_vars
         old_generic_map = self._generic_map
         old_comptime_vars = self._comptime_vars
+        # The callee's frame starts fresh: a name the caller's loop or
+        # borrow froze is not the callee's name, however it is spelled.
+        self._frozen_vars = {}
         for param_name, _ in func.params:
             # Only `mut` grants the right to write, whether the value
             # came by value or by reference.  A plain `&T` is a shared

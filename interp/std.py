@@ -34,7 +34,11 @@ import sys
 libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
 AT_FDCWD = -100  # current working directory for openat
 O_RDONLY = 0
+O_WRONLY = 0o1
+O_CREAT = 0o100
+O_TRUNC = 0o1000
 O_DIRECTORY = 0o200000  # must be a directory
+O_CLOEXEC = 0o2000000
 S_IRUSR = 0o400       # user read
 S_IWUSR = 0o200       # user write
 EINVAL = 22           # invalid argument
@@ -378,12 +382,74 @@ class DirFD:
         if mode is None:
             mode = S_IRUSR | S_IWUSR
         if flags is None:
-            flags = O_RDONLY | 0o1000000  # O_CLOEXEC = 0o1000000
+            flags = O_RDONLY | O_CLOEXEC
         fd = _openat(self._fd, name, flags)
         if fd < 0:
             errno = ctypes.get_errno()
             raise OSError(f"openat({self._fd}, {name!r}): {os.strerror(errno)} (errno={errno})")
         return FileStream(fd)
+
+    def create_file(self, name, mode=None):
+        """Create (or truncate) a file relative to this directory, for writing.
+
+        Args:
+            name: filename (str or bytes).
+            mode: POSIX permission bits for a newly created file
+                  (default 0o644).  Pass 0o755 for an executable.
+
+        Returns:
+            FileStream wrapping the new descriptor, open for writing.
+        """
+        self._check_open("create_file")
+        if isinstance(name, str):
+            name = name.encode("utf-8")
+        if mode is None:
+            mode = 0o644
+        fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC,
+                     mode, dir_fd=self._fd)
+        # A creating open honors the umask; the program named the mode
+        # it wants, so it is applied rather than filtered.
+        os.fchmod(fd, mode)
+        return FileStream(fd)
+
+    def create_dir(self, name, mode=None):
+        """Create a directory relative to this one; one already there is fine.
+
+        Args:
+            name: directory name (str or bytes).
+            mode: POSIX permission bits (default 0o755).
+
+        Returns:
+            DirFD for the (possibly pre-existing) directory.
+        """
+        self._check_open("create_dir")
+        if isinstance(name, str):
+            name = name.encode("utf-8")
+        if mode is None:
+            mode = 0o755
+        try:
+            os.mkdir(name, mode, dir_fd=self._fd)
+        except FileExistsError:
+            pass
+        return self.open_dir(name)
+
+    def open_dir(self, name):
+        """Open a directory relative to this one.
+
+        Args:
+            name: directory name (str or bytes).
+
+        Returns:
+            DirFD wrapping the new directory descriptor.
+        """
+        self._check_open("open_dir")
+        if isinstance(name, str):
+            name = name.encode("utf-8")
+        fd = _openat(self._fd, name, O_RDONLY | O_DIRECTORY | O_CLOEXEC)
+        if fd < 0:
+            errno = ctypes.get_errno()
+            raise OSError(f"openat({self._fd}, {name!r}): {os.strerror(errno)} (errno={errno})")
+        return DirFD(fd)
 
 
 # ---------------------------------------------------------------------------
@@ -468,6 +534,55 @@ class FileStream:
         raw = bytes(buf_result.data[:total_read])
         elements = [mk_int(b, "byte") for b in raw]
         return ObjectValue(ArrayValue(elements, element_type="byte"))
+
+    def write(self, data):
+        """Write bytes to the file, in full.
+
+        Args:
+            data: a byte[]/u8[] ArrayValue, a Bytes buffer, a str, or
+                  raw Python bytes.
+
+        Writing is a statement rather than a value-producing
+        expression, so nothing is returned; a write that cannot
+        complete raises.
+        """
+        from interp.value import ArrayValue, IntValue, UnitValue, none
+
+        self._check_open("write")
+        raw = data
+        if isinstance(raw, ArrayValue):
+            out = bytearray()
+            for el in raw.elements:
+                inner = el.inner if isinstance(el, UnitValue) else el
+                if not isinstance(inner, IntValue):
+                    raise TypeError(
+                        "file.write: the array must hold bytes, but an "
+                        f"element is {type(inner).__name__}")
+                if inner.value < 0 or inner.value > 255:
+                    raise ValueError(
+                        f"file.write: {inner.value} does not fit a byte")
+                out.append(inner.value)
+            raw = bytes(out)
+        elif isinstance(raw, Bytes):
+            raw = bytes(raw.data)
+        elif isinstance(raw, str):
+            raw = raw.encode("utf-8")
+        if not isinstance(raw, (bytes, bytearray)):
+            raise TypeError(
+                f"file.write expects bytes, a byte array, or a string, "
+                f"got {type(data).__name__}")
+        view = memoryview(bytes(raw))
+        while view:
+            n = os.write(self._fd, view)
+            view = view[n:]
+        return none()
+
+    def chmod(self, mode):
+        """Set the file's permission bits, e.g. 0o755 for an executable."""
+        self._check_open("chmod")
+        os.fchmod(self._fd, mode)
+        from interp.value import none
+        return none()
 
     def close(self):
         """Close the file descriptor and make the file unavailable.

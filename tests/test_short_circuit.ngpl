@@ -1,0 +1,76 @@
+// The short-circuit pair: `and` and `or` read their right side only
+// when the left side has not already answered.  The glyph forms ∧ and
+// ∨ read both sides, which is what tells the two families apart.
+
+// A counter the conditions bump, so a test can see what was read.
+let calls : mut i64 = 0
+
+@impure
+fn bump(answer : bool) → bool:
+    calls ← calls + 1
+    answer
+
+@test
+@impure
+fn test_and_skips_the_right_side():
+    calls ← 0
+    let r : bool = false and bump(true)
+    assert(¬r)
+    assert_eq(calls, 0)
+
+@test
+@impure
+fn test_and_reads_a_needed_right_side():
+    calls ← 0
+    let r : bool = true and bump(true)
+    assert(r)
+    assert_eq(calls, 1)
+
+@test
+@impure
+fn test_or_skips_the_right_side():
+    calls ← 0
+    let r : bool = true or bump(false)
+    assert(r)
+    assert_eq(calls, 0)
+
+@test
+@impure
+fn test_or_reads_a_needed_right_side():
+    calls ← 0
+    let r : bool = false or bump(true)
+    assert(r)
+    assert_eq(calls, 1)
+
+// The guard idiom the pair exists for: the right side would be an
+// error if it were read, and it is not read.
+@test
+fn test_and_guards_an_index():
+    let v : i64[] = [1, 2, 3]
+    let i ¤ptrdiff : i64 = 3
+    let ok : bool = i < #v and v[i] > 0
+    assert(¬ok)
+
+// The result is a truth value even when the operands are numbers.
+@test
+fn test_the_answer_is_a_truth_value():
+    let r := 5 and 3
+    assert(r = true)
+    let s := 0 or 7
+    assert(s = true)
+    let t := 0 and 7
+    assert(t = false)
+
+// ∧ is not short-circuit: both sides are read.
+@test
+@impure
+fn test_the_glyph_reads_both_sides():
+    calls ← 0
+    let r : bool = false ∧ bump(true)
+    assert(¬r)
+    assert_eq(calls, 1)
+
+@start
+@impure
+fn main():
+    std.println("short-circuit tests passed")

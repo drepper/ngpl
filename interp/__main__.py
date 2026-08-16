@@ -37,6 +37,12 @@ from interp.value import (
     a_sum_holds_both,
 )
 from interp.eval import Evaluator, unwrap_optional, _ARRAY_MUTATORS
+
+# Methods that only look at their object, whatever its type turns out
+# to be.  Every other method may reach a &mut self and change it.
+_KNOWN_READONLY_METHODS = frozenset({
+    "get", "iterate", "next", "str", "ord", "chr", "chars", "shape",
+})
 from interp.layout import LayoutError, struct_layout, struct_lookup
 from interp.errors import (format_diagnostic, extract_position,
                            strip_position_prefix, format_backtrace,
@@ -1432,9 +1438,12 @@ def _modified_names(body) -> set[str]:
             elif len(node) == 4 and node[0] == "const_assign":
                 modified.add(node[1])
             continue
-        # x.push(...) and the other methods that change an array
+        # x.push(...) and the other methods that change an array; a
+        # method of a struct may take &mut self and write through it,
+        # which cannot be seen from here, so any method not known to
+        # only read counts as a modification -- generous, as above.
         if isinstance(node, _ast.MethodCall):
-            if node.method in _ARRAY_MUTATORS:
+            if node.method not in _KNOWN_READONLY_METHODS:
                 name = base_of(node.obj)
                 if name is not None:
                     modified.add(name)
@@ -2868,6 +2877,12 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
 
 def main():
     """Run the NGPL interpreter on a source file."""
+    # The evaluator spends several Python frames per NGPL call, so
+    # Python's default limit caps an NGPL program at roughly 120 frames
+    # of its own — too few for a recursive-descent parser over ordinary
+    # nesting.  The limit is a backstop against runaway recursion, not a
+    # resource budget, so it is raised rather than worked around.
+    sys.setrecursionlimit(200_000)
     args = _parse_args()
 
     set_warnings_are_errors(args.werror)

@@ -38,6 +38,9 @@ all_tests=(
     "$testdir"/test_type_strict.ngpl
     "$testdir"/test_index_units.ngpl
     "$testdir"/sha256.ngpl
+    "$testdir"/test_short_circuit.ngpl
+    "$testdir"/test_callee_scope.ngpl
+    "$testdir"/test_file_write.ngpl
     "$testdir"/test_arena.ngpl
     "$testdir"/test_comptime_foreach.ngpl
     "$testdir"/test_comptime_introspect.ngpl

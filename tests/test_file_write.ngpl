@@ -1,0 +1,66 @@
+// Writing a file: create_dir, create_file, write, chmod, and reading
+// back what was written.  Everything lands under build/, which is the
+// directory a build may write into.
+
+@test
+@impure
+fn test_write_bytes_and_read_them_back():
+    let bdir := std.fs.cwd().create_dir("build")
+    let out := bdir.create_file("test_file_write.bin", 420)
+    let data : mut u8[] = []
+    data.push(127)
+    data.push(0)
+    data.push(255)
+    data.push(10)
+    out.write(data)
+    out.close()
+
+    let alloc := std.arena.allocator()
+    let back := std.fs.cwd().open_file("build/test_file_write.bin")
+    let got := back.read_file(alloc)
+    assert_eq(@dropunit(#got), 4)
+    assert_eq(got[0¤byte], 127)
+    assert_eq(got[1¤byte], 0)
+    assert_eq(got[2¤byte], 255)
+    assert_eq(got[3¤byte], 10)
+    alloc.deinit()
+
+@test
+@impure
+fn test_write_a_string():
+    let bdir := std.fs.cwd().create_dir("build")
+    let out := bdir.create_file("test_file_write.txt", 420)
+    out.write("one line\n")
+    out.write("two\n")
+    out.close()
+
+    let alloc := std.arena.allocator()
+    let back := std.fs.cwd().open_file("build/test_file_write.txt")
+    let got := back.read_file(alloc)
+    assert_eq(@dropunit(#got), 13)
+    assert_eq(got[0¤byte], 'o'.ord())
+    assert_eq(got[12¤byte], 10)
+    alloc.deinit()
+
+// create_file truncates: writing less the second time leaves less.
+@test
+@impure
+fn test_create_truncates():
+    let bdir := std.fs.cwd().create_dir("build")
+    let out1 := bdir.create_file("test_file_write.txt", 420)
+    out1.write("a much longer first version\n")
+    out1.close()
+    let out2 := bdir.create_file("test_file_write.txt", 420)
+    out2.write("short\n")
+    out2.close()
+
+    let alloc := std.arena.allocator()
+    let back := std.fs.cwd().open_file("build/test_file_write.txt")
+    let got := back.read_file(alloc)
+    assert_eq(@dropunit(#got), 6)
+    alloc.deinit()
+
+@start
+@impure
+fn main():
+    std.println("file write tests passed")
