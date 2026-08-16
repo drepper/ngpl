@@ -920,6 +920,7 @@ let NK_SOME : i64 = 16      // na = the value ∃ carries
 let NK_EMPTYV : i64 = 17    // a bare ∅
 let NK_HLIT : i64 = 18      // na = extra [n, key, value, …]
 let NK_TUPLE : i64 = 19     // na = extra [n, expr…]
+let NK_DROPU : i64 = 45     // @dropunit: na = the measured value
 let NK_ELEMOF : i64 = 43    // key ∊ hash
 let NK_ADD : i64 = 20
 let NK_SUB : i64 = 21
@@ -963,10 +964,10 @@ let NK_BREAK : i64 = 78
 let NK_CONTINUE : i64 = 79
 let NK_EXPRSTMT : i64 = 80  // na = expr
 let NK_BLOCK : i64 = 81     // na = extra [count, stmt…]
-let NK_STOREIDX : i64 = 82  // na = index, nb = value; array name token
 let NK_STOREFLD : i64 = 83  // na = base var, nb = value; field token
 let NK_MATCH : i64 = 84     // na = subject, nb = extra [some-block, empty-block]; bind token
 let NK_LETT : i64 = 85      // let (a, b) …: na = init, nb = 1 when mut, nc = extra [n, type or ⁻1, name-token…]
+let NK_STOREIDXP : i64 = 86 // path[i] ← v: na = base expr, nb = index, nc = value
 
 // std builtins reachable from core-1
 let SB_PRINTLN : i64 = 1
@@ -1453,8 +1454,14 @@ impl Parser:
         if k = TK_AT:
             self.pos ← self.pos + 1
             let name := self.ttext(self.pos)
+            if name = "dropunit":
+                self.pos ← self.pos + 1
+                _ ← self.eat(TK_LPAR, "'(' after @dropunit")
+                let e0 : i64 = self.parse_expr()
+                _ ← self.eat(TK_RPAR, "')' closing @dropunit")
+                return self.mknode(NK_DROPU, at, e0, 0, 0)
             if name ≠ "wrap":
-                self.err("'@" ⧺ name ⧺ "' is not core-1; @wrap is the one expression annotation")
+                self.err("'@" ⧺ name ⧺ "' is not core-2; @wrap and @dropunit are the expression annotations")
                 return 0
             self.pos ← self.pos + 1
             _ ← self.eat(TK_LPAR, "'(' after @wrap")
@@ -1862,36 +1869,23 @@ impl Parser:
             if name = "_":
                 return self.mknode(NK_DISCARD, at, v, 0, 0)
             return self.mknode(NK_ASSIGN, at, v, 0, 0)
-        if k = TK_IDENT and self.peek2() = TK_DOT and self.toks.kind[(self.pos + 3) × 1¤ptrdiff] = TK_ASSIGN:
-            let base : i64 = self.mknode(NK_VAR, at, 0, 0, 0)
-            let ftok : i64 = self.pos + 2
-            self.pos ← self.pos + 2
-            _ ← self.eat_name("the field's name")
-            _ ← self.eat(TK_ASSIGN, "'←' after the field")
+        // any postfix path may be a store target: the expression is
+        // parsed first, and a following ← turns it into the store its
+        // shape names -- a field, an element, or nothing storable
+        let e : i64 = self.parse_expr()
+        if self.peek() = TK_ASSIGN:
+            self.pos ← self.pos + 1
             let v : i64 = self.parse_expr()
             self.end_stmt()
-            return self.mknode(NK_STOREFLD, ftok, base, v, 0)
-        if k = TK_IDENT and self.peek2() = TK_LBRACK:
-            // a[i] ← v writes an element, a[i].f ← v a field of one;
-            // anything else falls through to the expression path below
-            let save : i64 = self.pos
-            self.pos ← self.pos + 2
-            let idx : i64 = self.parse_expr()
-            if not self.failed() and self.peek() = TK_RBRACK and self.peek2() = TK_ASSIGN:
-                self.pos ← self.pos + 2
-                let v : i64 = self.parse_expr()
-                self.end_stmt()
-                return self.mknode(NK_STOREIDX, at, idx, v, 0)
-            if not self.failed() and self.peek() = TK_RBRACK and self.peek2() = TK_DOT and self.toks.kind[(self.pos + 2) × 1¤ptrdiff] = TK_IDENT and self.toks.kind[(self.pos + 3) × 1¤ptrdiff] = TK_ASSIGN:
-                let base : i64 = self.mknode(NK_VAR, at, 0, 0, 0)
-                let elem : i64 = self.mknode(NK_INDEX, at, base, idx, 0)
-                let ftok : i64 = self.pos + 2
-                self.pos ← self.pos + 4
-                let v : i64 = self.parse_expr()
-                self.end_stmt()
-                return self.mknode(NK_STOREFLD, ftok, elem, v, 0)
-            self.pos ← save
-        let e : i64 = self.parse_expr()
+            let ek : i64 = self.nkind[e × 1¤ptrdiff]
+            if ek = NK_FIELD:
+                return self.mknode(NK_STOREFLD, self.ntok[e × 1¤ptrdiff],
+                                   self.na[e × 1¤ptrdiff], v, 0)
+            if ek = NK_INDEX:
+                return self.mknode(NK_STOREIDXP, at, self.na[e × 1¤ptrdiff],
+                                   self.nb[e × 1¤ptrdiff], v)
+            self.err("this is not a place a value can be stored into")
+            return 0
         self.end_stmt()
         self.mknode(NK_EXPRSTMT, at, e, 0, 0)
 
@@ -2010,8 +2004,6 @@ impl Parser:
             let ty : i64 = self.parse_type(false)
             if ty_is_int(ty) and ty_unit(ty) ≠ 0:
                 self.err("a struct field carries no unit in the bootstrap")
-            if ty_is_struct(ty):
-                self.err("a struct inside a struct is not core-2 yet; an array of them works")
             if ty_is_tup(ty):
                 self.err("a tuple inside a struct is not core-2 yet")
             ftypes.push(ty)
@@ -2276,10 +2268,11 @@ fn dump_node(a : Ast, id : i64, depth : i64, src : byte[], toks : Toks):
     elif k = NK_ASSIGN:
         std.println("{}assign {}", pad, ttext)
         dump_node(a, na, depth + 1, src, toks)
-    elif k = NK_STOREIDX:
-        std.println("{}storeidx {}", pad, ttext)
+    elif k = NK_STOREIDXP:
+        std.println("{}storeidx", pad)
         dump_node(a, na, depth + 1, src, toks)
         dump_node(a, nb, depth + 1, src, toks)
+        dump_node(a, nc, depth + 1, src, toks)
     elif k = NK_DISCARD:
         std.println("{}discard", pad)
         dump_node(a, na, depth + 1, src, toks)
@@ -2366,6 +2359,7 @@ struct Chk:
     nslot : i64[]
     fslots : i64[]
     gvals : i64[]        // the folded initial value of every global
+    ginit : i64[]        // globals whose value is built as the run begins
     diags : Diag[]
 
 struct Checker:
@@ -2375,6 +2369,7 @@ struct Checker:
     fnames : str[]
     gnames : str[]
     gvals : i64[]
+    ginit : i64[]
     ntype : i64[]
     nslot : i64[]
     fslots : i64[]
@@ -2672,6 +2667,17 @@ impl Checker:
             self.check_hlit(id, tok, na, want)
         elif k = NK_TUPLE:
             self.check_tuple(id, tok, na, want)
+        elif k = NK_DROPU:
+            self.check_expr(na, TY_UNIT)
+            let dt : i64 = self.ty_of(na)
+            if dt = TY_UNT:
+                self.adopt(na, TY_I64)
+                self.set_type(id, TY_I64)
+            elif not ty_is_int(dt):
+                self.derr(tok, "@dropunit unmeasures a number, not " ⧺ type_name(dt))
+                self.set_type(id, TY_I64)
+            else:
+                self.set_type(id, ty_drop_unit(dt))
         elif k = NK_SLIT:
             self.check_slit(id, tok, na)
         elif k = NK_FIELD:
@@ -3484,6 +3490,9 @@ impl Checker:
         let name := self.text(self.a.ntok[base × 1¤ptrdiff])
         let s : i64 = self.lookup(name)
         if s = ⁻1:
+            let g : i64 = self.global_index(name)
+            if g ≠ ⁻1 and not self.a.globals[g × 1¤ptrdiff].is_mut:
+                self.derr(tok, "'" ⧺ name ⧺ "' is not mut, so nothing may change it")
             return
         let pt : i64 = self.stype[s × 1¤ptrdiff]
         if ty_ref_kind(pt) = 1:
@@ -3572,12 +3581,12 @@ impl Checker:
                     self.derr(tok, "the right side answers nothing; there is nothing to bind")
                     _ ← self.declare(tok, TY_I64, nb)
                     return
-                if ty_is_hash(it):
-                    self.derr(tok, "a core-2 hash is born from its literal; borrow with & to share one")
+                if ty_is_hash(it) and nb = 1 and self.kind_of(na) ≠ NK_HLIT:
+                    self.derr(tok, "a mut hash binding is born from its literal; borrow with &mut to change a shared one")
                     _ ← self.declare(tok, it, nb)
                     return
-                if ty_is_arr(it) and self.kind_of(na) ≠ NK_ARRLIT and self.kind_of(na) ≠ NK_MCALL:
-                    self.derr(tok, "a core-1 array is born from its literal")
+                if ty_is_arr(it) and nb = 1 and self.kind_of(na) ≠ NK_ARRLIT and self.kind_of(na) ≠ NK_CALL and self.kind_of(na) ≠ NK_MCALL:
+                    self.derr(tok, "a mut array binding is born fresh, from its literal or a call; borrow with &mut to change a shared one")
                     _ ← self.declare(tok, it, nb)
                     return
                 if ty_is_struct(it) and nb = 1 and not self.is_fresh_struct(na):
@@ -3586,9 +3595,11 @@ impl Checker:
                 self.nslot[id × 1¤ptrdiff] ← islot
                 return
             if ty_is_hash(nc):
-                if self.kind_of(na) ≠ NK_HLIT:
-                    self.derr(tok, "a core-2 hash is born from its literal; borrow with & to share one")
+                if nb = 1 and self.kind_of(na) ≠ NK_HLIT:
+                    self.derr(tok, "a mut hash binding is born from its literal; borrow with &mut to change a shared one")
                 self.check_expr(na, nc)
+                if self.kind_of(na) ≠ NK_HLIT and self.ty_of(na) ≠ nc:
+                    self.derr(tok, "the binding says " ⧺ type_name(nc) ⧺ " but the value is " ⧺ type_name(self.ty_of(na)))
                 let slot1 : i64 = self.declare(tok, nc, nb)
                 self.nslot[id × 1¤ptrdiff] ← slot1
                 return
@@ -3607,14 +3618,14 @@ impl Checker:
                 self.nslot[id × 1¤ptrdiff] ← slot0
                 return
             if ty_is_arr(nc):
-                if self.kind_of(na) = NK_MCALL:
-                    // .chars() answers a fresh array and may be the birth
+                if self.kind_of(na) ≠ NK_ARRLIT:
+                    // a call answers a fresh array; any other right side
+                    // names a shared one, which a mut binding may not
                     self.check_expr(na, nc)
+                    if nb = 1 and self.kind_of(na) ≠ NK_CALL and self.kind_of(na) ≠ NK_MCALL:
+                        self.derr(tok, "a mut array binding is born fresh, from its literal or a call; borrow with &mut to change a shared one")
                     if self.ty_of(na) ≠ nc:
                         self.derr(tok, "the binding says " ⧺ type_name(nc) ⧺ " but the value is " ⧺ type_name(self.ty_of(na)))
-                elif self.kind_of(na) ≠ NK_ARRLIT:
-                    self.derr(tok, "a core-1 array is born from its literal")
-                    self.set_type(na, nc)
                 else:
                     self.check_expr(na, nc)
                     if self.ty_of(na) ≠ nc and self.a.extra[self.a.na[na × 1¤ptrdiff] × 1¤ptrdiff] > 0:
@@ -3705,45 +3716,40 @@ impl Checker:
             elif self.ty_of(na) ≠ ty_strip_ref(st):
                 self.derr(tok, "'" ⧺ name ⧺ "' holds " ⧺ type_name(ty_strip_ref(st)) ⧺ ", not " ⧺ type_name(self.ty_of(na)))
             self.nslot[id × 1¤ptrdiff] ← self.sslot[s × 1¤ptrdiff]
-        elif k = NK_STOREIDX:
-            let name := self.text(tok)
-            let s : i64 = self.lookup(name)
-            if s = ⁻1:
-                self.derr(tok, "'" ⧺ name ⧺ "' is not defined here")
+        elif k = NK_STOREIDXP:
+            self.check_expr(na, TY_UNIT)
+            let bt0 : i64 = ty_strip_ref(self.ty_of(na))
+            if ty_is_hash(bt0):
+                self.require_mut_base(na, tok)
+                self.check_hash_key(tok, bt0, nb)
+                let vt : i64 = ty_hval(bt0)
+                self.check_expr(nc, vt)
+                if self.is_open(self.ty_of(nc)):
+                    self.adopt(nc, vt)
+                elif self.ty_of(nc) ≠ vt:
+                    self.derr(tok, "the hash holds " ⧺ type_name(vt) ⧺ ", not " ⧺ type_name(self.ty_of(nc)))
+                self.set_type(id, bt0)
                 return
-            let st : i64 = ty_strip_ref(self.stype[s × 1¤ptrdiff])
-            if ty_is_hash(st):
-                let rk2 : i64 = ty_ref_kind(self.stype[s × 1¤ptrdiff])
-                if rk2 = 1:
-                    self.derr(tok, "'" ⧺ name ⧺ "' is a shared borrow; & reads and &mut changes")
-                elif rk2 = 0 and self.smut[s × 1¤ptrdiff] = 0:
-                    self.derr(tok, "'" ⧺ name ⧺ "' is not mut, so nothing may change it")
-                self.check_hash_key(tok, st, na)
-                let vt : i64 = ty_hval(st)
-                self.check_expr(nb, vt)
-                if self.is_open(self.ty_of(nb)):
-                    self.adopt(nb, vt)
-                elif self.ty_of(nb) ≠ vt:
-                    self.derr(tok, "the hash holds " ⧺ type_name(vt) ⧺ ", not " ⧺ type_name(self.ty_of(nb)))
-                self.nslot[id × 1¤ptrdiff] ← self.sslot[s × 1¤ptrdiff]
-                self.set_type(id, st)
+            if ty_is_tup(bt0):
+                self.derr(tok, "a tuple's element is fixed at its birth")
+                self.check_expr(nc, TY_UNIT)
                 return
-            if not ty_is_arr(st):
-                self.derr(tok, "only an array is written by element; '" ⧺ name ⧺ "' is " ⧺ type_name(st))
+            if bt0 = TY_STR:
+                self.derr(tok, "a string cannot be written through; build the one that is wanted with ⧺")
+                self.check_expr(nc, TY_UNIT)
                 return
-            let rk : i64 = ty_ref_kind(self.stype[s × 1¤ptrdiff])
-            if rk = 1:
-                self.derr(tok, "'" ⧺ name ⧺ "' is a shared borrow; & reads and &mut changes")
-            elif rk = 0 and self.smut[s × 1¤ptrdiff] = 0:
-                self.derr(tok, "'" ⧺ name ⧺ "' is not mut, so nothing may change it")
-            self.check_index_expr(tok, st, na)
-            self.check_expr(nb, ty_elem(st))
-            if self.ty_of(nb) = TY_UNT:
-                self.adopt(nb, ty_elem(st))
-            elif self.ty_of(nb) ≠ ty_elem(st):
-                self.derr(tok, "the array holds " ⧺ type_name(ty_elem(st)) ⧺ ", not " ⧺ type_name(self.ty_of(nb)))
-            self.nslot[id × 1¤ptrdiff] ← self.sslot[s × 1¤ptrdiff]
-            self.set_type(id, st)
+            if not ty_is_arr(bt0):
+                self.derr(tok, "only an array or a hash is written by element; this is " ⧺ type_name(bt0))
+                self.check_expr(nc, TY_UNIT)
+                return
+            self.require_mut_base(na, tok)
+            self.check_index_expr(tok, bt0, nb)
+            self.check_expr(nc, ty_elem(bt0))
+            if self.ty_of(nc) = TY_UNT:
+                self.adopt(nc, ty_elem(bt0))
+            elif self.ty_of(nc) ≠ ty_elem(bt0):
+                self.derr(tok, "the array holds " ⧺ type_name(ty_elem(bt0)) ⧺ ", not " ⧺ type_name(self.ty_of(nc)))
+            self.set_type(id, bt0)
         elif k = NK_STOREFLD:
             self.check_expr(na, TY_UNIT)
             let bt : i64 = ty_strip_ref(self.ty_of(na))
@@ -3960,11 +3966,7 @@ impl Checker:
         let pi : mut i64 = 0
         while pi < np:
             let pty : i64 = self.a.extra[(d.params_off + 2 + pi × 2) × 1¤ptrdiff]
-            if ty_is_arr(pty) or ty_is_hash(pty):
-                self.derr(d.tok, "core-2 borrows arrays and hashes; write &" ⧺ type_name(pty) ⧺ " or &mut " ⧺ type_name(pty))
             pi ← pi + 1
-        if ty_is_arr(d.ret) or ty_is_hash(d.ret):
-            self.derr(d.tok, "core-2 hands arrays and hashes around by borrow, not by return")
         self.in_contract ← true
         if d.pre_off ≠ ⁻1:
             let n : i64 = self.a.extra[d.pre_off × 1¤ptrdiff]
@@ -4007,8 +4009,32 @@ impl Checker:
 
     fn check_global(&mut self, g : i64):
         let gd := self.a.globals[g × 1¤ptrdiff]
-        if ty_is_arr(gd.ty) or gd.ty = TY_STR or ty_is_hash(gd.ty) or ty_is_tup(gd.ty):
-            self.derr(gd.tok, "a core-2 global is a number or a truth value")
+        if ty_is_hash(gd.ty):
+            // an immutable hash global: its literal of constants is
+            // built by init code before the start function runs
+            if gd.is_mut:
+                self.derr(gd.tok, "a global hash is immutable; build a mut one where it is used")
+            if self.kind_of(gd.init) ≠ NK_HLIT:
+                self.derr(gd.tok, "a global hash is born from its literal")
+                self.gvals.push(0)
+                return
+            self.check_expr(gd.init, gd.ty)
+            let hoff : i64 = self.a.na[gd.init × 1¤ptrdiff]
+            let hn : i64 = self.a.extra[hoff × 1¤ptrdiff]
+            let hi : mut i64 = 0
+            while hi < hn:
+                let ke : i64 = self.a.extra[(hoff + 1 + hi × 2) × 1¤ptrdiff]
+                let ve : i64 = self.a.extra[(hoff + 2 + hi × 2) × 1¤ptrdiff]
+                if self.kind_of(ke) ≠ NK_INT and self.kind_of(ke) ≠ NK_STR:
+                    self.derr(gd.tok, "a global hash holds constants the compiler can see")
+                if self.kind_of(ve) ≠ NK_INT and self.kind_of(ve) ≠ NK_STR and self.kind_of(ve) ≠ NK_BOOL:
+                    self.derr(gd.tok, "a global hash holds constants the compiler can see")
+                hi ← hi + 1
+            self.gvals.push(0)
+            self.ginit.push(g)
+            return
+        if ty_is_arr(gd.ty) or gd.ty = TY_STR or ty_is_tup(gd.ty):
+            self.derr(gd.tok, "a core-2 global is a number, a truth value or a hash of constants")
             self.gvals.push(0)
             return
         // fold the initializer to the constant the image carries
@@ -4032,10 +4058,15 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     foreach g := a.globals:
         gnames.push(g.name)
     let nnodes : i64 = @dropunit(#a.nkind)
-    let ntype : i64[] = nnodes ⍴ [0i64]
-    let nslot : i64[] = nnodes ⍴ [⁻1i64]
+    let ntype : mut i64[] = []
+    let nslot : mut i64[] = []
+    let zi : mut i64 = 0
+    while zi < nnodes:
+        ntype.push(0)
+        nslot.push(⁻1)
+        zi ← zi + 1
     let c : mut Checker = (Checker{a: a, toks: toks, src: src, fnames: fnames,
-                                   gnames: gnames, gvals: [],
+                                   gnames: gnames, gvals: [], ginit: [],
                                    ntype: ntype, nslot: nslot, fslots: [],
                                    diags: [], snames: [], stype: [], smut: [],
                                    sslot: [], marks: [], nslots: 0,
@@ -4092,7 +4123,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
         assert(#c.fslots = #a.fns, "one slot count per function")
         assert(#c.gvals = #a.globals, "one folded value per global")
     (Chk{ntype: c.ntype, nslot: c.nslot, fslots: c.fslots, gvals: c.gvals,
-         diags: c.diags})
+         ginit: c.ginit, diags: c.diags})
 
 // ===========================================================================
 // The IR: linear three-address code over virtual registers
@@ -4352,6 +4383,8 @@ impl Lower:
                 self.ir(IR_HPUT, d, kv, vv, 0, 0)
                 i ← i + 1
             return d
+        if k = NK_DROPU:
+            return self.lower_expr(na)
         if k = NK_TUPLE:
             let n : i64 = self.a.extra[na × 1¤ptrdiff]
             let d : i64 = self.tmp()
@@ -4835,14 +4868,14 @@ impl Lower:
             let bv : i64 = self.lower_expr(na)
             let vv : i64 = self.lower_expr(nb)
             self.ir(IR_FSTO, bv, nc, vv, 0, 0)
-        elif k = NK_STOREIDX:
-            let slot : i64 = self.nslot[sid × 1¤ptrdiff]
-            let iv : i64 = self.lower_expr(na)
-            let vv : i64 = self.lower_expr(nb)
-            if ty_is_hash(self.storeidx_base_ty(sid)):
-                self.ir(IR_HPUT, slot, iv, vv, 0, 0)
+        elif k = NK_STOREIDXP:
+            let bv : i64 = self.lower_expr(na)
+            let iv : i64 = self.lower_expr(nb)
+            let vv : i64 = self.lower_expr(nc)
+            if ty_is_hash(self.tof(sid)):
+                self.ir(IR_HPUT, bv, iv, vv, 0, 0)
             else:
-                self.ir(IR_ASTO, slot, iv, vv, 0, 0)
+                self.ir(IR_ASTO, bv, iv, vv, 0, 0)
         elif k = NK_DISCARD:
             _ ← self.lower_expr(na)
         elif k = NK_EXPRSTMT:
@@ -5064,11 +5097,6 @@ impl Lower:
 
     fn tup_len(&self, t : i64) → i64:
         self.a.ttl[ty_tidx(t) × 1¤ptrdiff]
-
-    // the container behind a v[k] ← x statement; the checker records
-    // the base binding's type on the statement node itself
-    fn storeidx_base_ty(&self, sid : i64) → i64:
-        self.ntype[sid × 1¤ptrdiff]
 
     fn lower_foreach(&mut self, sid : i64, tok : i64, na : i64, body : i64,
                      ret_ty : i64):
@@ -6900,6 +6928,57 @@ struct Compiled:
     elf : u8[]
     log : str[]
 
+// the init function the image runs before @start: every marked
+// global's literal is built and stored where GLOAD reads it
+fn lower_ginit(lw : &mut Lower, a : Ast, chk : Chk) → IrFn:
+    while #lw.op > 0:
+        _ ← lw.op.pop()
+        _ ← lw.ia.pop()
+        _ ← lw.ib.pop()
+        _ ← lw.ic.pop()
+        _ ← lw.idd.pop()
+        _ ← lw.iww.pop()
+    while #lw.extra > 0:
+        _ ← lw.extra.pop()
+    lw.nlabels ← 0
+    lw.tbase ← 0
+    lw.tnext ← 0
+    lw.tmax ← 0
+    lw.in_wrap ← 0
+    lw.cur_ret ← TY_UNIT
+    lw.post_label ← ⁻1
+    lw.res_vreg ← ⁻1
+    lw.cur_fname ← "the global initializer"
+    foreach g := chk.ginit:
+        lw.tnext ← lw.tbase
+        let v : i64 = lw.lower_expr(a.globals[g × 1¤ptrdiff].init)
+        lw.ir(IR_GSTORE, g, v, 0, 0, 0)
+    lw.ir(IR_RET, ⁻1, 0, 0, 0, 0)
+    let opc : mut i64[] = []
+    let iac : mut i64[] = []
+    let ibc : mut i64[] = []
+    let icc : mut i64[] = []
+    let idc : mut i64[] = []
+    let iwc : mut i64[] = []
+    let exc : mut i64[] = []
+    foreach v := lw.op:
+        opc.push(v)
+    foreach v := lw.ia:
+        iac.push(v)
+    foreach v := lw.ib:
+        ibc.push(v)
+    foreach v := lw.ic:
+        icc.push(v)
+    foreach v := lw.idd:
+        idc.push(v)
+    foreach v := lw.iww:
+        iwc.push(v)
+    if #lw.extra > 0:
+        foreach v := lw.extra:
+            exc.push(v)
+    (IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
+          extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels})
+
 fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
     let strs0 : mut str[] = []
     foreach s := a.strs:
@@ -6927,6 +7006,10 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
     foreach i := 0…#a.fns - 1:
         if a.fns[i].is_start:
             start_fn ← @dropunit(i)
+    let ninit : i64 = @dropunit(#chk.ginit)
+    if ninit > 0:
+        // the init function sits one index past the user's functions
+        em.jglobal(232, ⁻1, @dropunit(#a.fns))
     em.jglobal(232, ⁻1, start_fn)
     em.movimm(R_AX, 60)
     em.b3(72, 49, 255)
@@ -6938,8 +7021,12 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
         em.fn_off.push(em.here())
         let np : i64 = a.extra[a.fns[i].params_off × 1¤ptrdiff]
         emit_fn(&em, ir, np, lw.strs)
+    if ninit > 0:
+        let gir := lower_ginit(&lw, a, chk)
+        em.fn_off.push(em.here())
+        emit_fn(&em, gir, 0, lw.strs)
     // every function was emitted and left its offset behind
-    assert(#em.fn_off = #a.fns, "one code offset per function")
+    assert(#em.fn_off = #a.fns + (1 if ninit > 0 else 0), "one code offset per function")
     assert(#em.rt_off = 25, "every runtime routine in place")
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:

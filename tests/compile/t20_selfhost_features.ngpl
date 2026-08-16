@@ -1,0 +1,46 @@
+// core-2: what self-hosting asked for -- global hashes built before
+// @start, structs inside structs with stores through their paths,
+// containers as parameters and returns, and @dropunit.
+
+let NAMES : std.hash(str, i64) = (⸨
+    "one": 1, "two": 2, "three": 3⸩)
+let CODES : std.hash(i64, str) = ⸨10: "ten", 20: "twenty"⸩
+
+struct Inner:
+    vals : i64[]
+    tag : i64
+
+struct Outer:
+    inn : Inner
+    label : str
+
+fn total(v : i64[]) → i64:
+    let s : mut i64 = 0
+    foreach x := v:
+        s ← s + x
+    s
+
+fn build(n : i64) → i64[]:
+    let v : mut i64[] = []
+    let i : mut i64 = 0
+    while i < n:
+        v.push(i × i)
+        i ← i + 1
+    return v
+
+@start
+@impure
+fn main():
+    std.println("{} {}", NAMES["two"] ?? 0, NAMES["nine"] ?? ⁻1)
+    std.println("{} {}", CODES[20] ?? "?", "three" ∊ NAMES)
+    let sq := build(5)
+    std.println("{} {}", total(sq), @dropunit(#sq))
+    let o : mut Outer = Outer{inn: Inner{vals: [1i64, 2], tag: 7}, label: "o"}
+    std.println("{} {}", o.inn.tag, o.inn.vals[1])
+    o.inn.tag ← 8
+    o.inn.vals[0] ← 100
+    o.inn.vals.push(3)
+    std.println("{} {} {}", o.inn.tag, o.inn.vals[0], total(o.inn.vals))
+    let sq2 : mut = build(3)
+    sq2[2] ← 40
+    std.println("{}", total(sq2))

@@ -47,10 +47,12 @@ past i64.
    width-suffixed literals, and characters with UTF-8 string
    positions, `.chars()`, `.chr()` and `.ord()`, and struct values
    that travel by parameter, return and binding.  The compiler's own
-   source is now written almost entirely inside the subset; what
-   remains outside: string slices `s[a…b]` and lambdas/combinators
-   in a few helpers.  The next attempt is the self-hosting one:
-   compile ngplc with ngplc.  The struct probes settled a fact worth
+   source is now written almost entirely inside the subset.  The
+   self-hosting sweep landed the rest of what the source needs:
+   container parameters and returns, structs inside structs, stores
+   through arbitrary paths, `@dropunit`, and global hash tables
+   initialized before `@start`; the two `⍴` uses were rewritten as
+   loops.  The stage-1 compile of ngplc by ngplc is in progress.  The struct probes settled a fact worth
    recording: the bootstrap's struct values are references — one
    struct behind however many names — so the compiled pointer
    representation conforms by construction, and the subset's

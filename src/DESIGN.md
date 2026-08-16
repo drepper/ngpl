@@ -134,6 +134,18 @@ Attempt 3 grows core-1 to **core-2** with structs:
   The per-kind birth rules ride along unchanged: hashes and arrays
   are still born from their literals, a mut struct binding still
   born fresh.
+- **what self-hosting asked for**: containers travel like structs do
+  (arrays and hashes as by-value parameters and returns — the same
+  reference-semantics argument, the same non-mut discipline on
+  bindings); structs may hold structs, and a store reaches through
+  any postfix path (`self.a.nkind[id] ← v` — the statement parser now
+  parses the expression first and turns a following `←` into the
+  store its shape names, retiring the old name-only target ladder);
+  `@dropunit` passes a measured number through unmeasured; and an
+  immutable global hash of constants is built by a synthesized init
+  function the image runs before `@start` — the one runtime-
+  initialized global kind, because the compiler's own keyword and
+  glyph tables want exactly that.
 
 ## Pipeline and Data Flow
 
@@ -320,7 +332,7 @@ One suite (`tests/run_tests.sh`): bootstrap-language tests run under
 the interpreter; the shared programs in `tests/compile/` run under
 the interpreter **and** compiled, outputs and exit codes diffed — the
 strict-subset rule made executable.  `--impl=` selects a side.
-Twenty shared programs cover the whole core-2 surface including the
+Twenty-one shared programs cover the whole core-2 surface including the
 stopping paths; `std.implementation` conditionalizes where
 implementations may differ.  The diff has caught real bugs on both
 sides, including the interpreter's float-precision division.
