@@ -6,6 +6,9 @@ Introduction
 
 This project documents the design and implementation of a new programming language built from the ground up. The language is conceived around a single guiding principle: **code should expose its intentions clearly enough to be understood, reviewed, and verified by humans, while remaining efficient enough for production use.**
 
+This also implies that whatever the program does has to be based on code the programmer wrote.  No code was added and the code that exists exactly matches the source code.
+There is no undefined behavior or unpredictable output except when concurrency comes into play.
+
 ### Goals
 
 The language pursues several interrelated goals:
