@@ -1,11 +1,6 @@
 // Power operator ↑ tests.
 
 @impure
-fn assert_true(cond:bool, msg:str):
-  if not cond:
-    std.println("FAIL: {}", msg)
-
-@impure
 fn assert_eq_int(a:i64, b:i64, msg:str):
   if a ≠ b:
     std.println("FAIL: {} (got {} expected {})", msg, a, b)
@@ -20,6 +15,7 @@ fn approx_eq(a:f64, b:f64, msg:str):
 
 // --- Integer exponentiation ---
 
+@test
 @impure
 fn test_int_pow_basic():
   assert_eq_int(2 ↑ 10, 1024, "2↑10")
@@ -27,44 +23,52 @@ fn test_int_pow_basic():
   assert_eq_int(5 ↑ 0, 1, "5↑0")
   assert_eq_int(7 ↑ 1, 7, "7↑1")
 
+@test
 @impure
 fn test_int_pow_zero_base():
   assert_eq_int(0 ↑ 5, 0, "0↑5")
   assert_eq_int(0 ↑ 0, 1, "0↑0")
 
+@test
 @impure
 fn test_int_pow_one():
   assert_eq_int(1 ↑ 100, 1, "1↑100")
 
+@test
 @impure
 fn test_int_pow_large():
   assert_eq_int(2 ↑ 20, 1048576, "2↑20")
 
 // --- Negative exponent rejected for integers ---
 
+@test
 fn test_int_pow_negative_exp():
   @expect error "non-negative"
   let r : mut = 2 ↑ ⁻1
 
 // --- Float exponentiation ---
 
+@test
 @impure
 fn test_float_pow_basic():
   approx_eq(2.0 ↑ 3.0, 8.0, "2.0↑3.0")
   approx_eq(4.0 ↑ 0.5, 2.0, "4.0↑0.5")
   approx_eq(27.0 ↑ (1.0 ÷ 3.0), 3.0, "27.0↑(1/3)")
 
+@test
 @impure
 fn test_float_pow_negative_exp():
   approx_eq(2.0 ↑ ⁻1.0, 0.5, "2.0↑⁻1.0")
   approx_eq(4.0 ↑ ⁻0.5, 0.5, "4.0↑⁻0.5")
 
+@test
 @impure
 fn test_float_pow_zero():
   approx_eq(5.0 ↑ 0.0, 1.0, "5.0↑0.0")
 
 // --- Mixed int base, float exponent is rejected ---
 
+@test
 fn test_mixed_pow_rejected():
   @expect error "matching types"
   let a : mut = 4 ↑ 0.5
@@ -74,6 +78,7 @@ fn test_mixed_pow_rejected():
 
 // --- Right associativity ---
 
+@test
 @impure
 fn test_right_assoc():
   // 2 ↑ 3 ↑ 2 = 2 ↑ (3 ↑ 2) = 2 ↑ 9 = 512
@@ -81,11 +86,13 @@ fn test_right_assoc():
 
 // --- Precedence: ↑ binds tighter than * ---
 
+@test
 @impure
 fn test_precedence_mul():
   // 2 * 3 ↑ 2 = 2 * 9 = 18
   assert_eq_int(2 × 3 ↑ 2, 18, "2*3↑2")
 
+@test
 @impure
 fn test_precedence_neg():
   // ⁻2 ↑ 2 = ⁻(2↑2) = ⁻4 (negation binds looser)
@@ -93,6 +100,7 @@ fn test_precedence_neg():
 
 // --- Overflow detected ---
 
+@test
 fn test_overflow():
   let x: i8 = 2
   @expect error "overflow"
@@ -100,52 +108,39 @@ fn test_overflow():
 
 // --- Power with units ---
 
+@test
 @impure
 fn test_unit_pow():
-  let d ¤meter := 3.0
+  let d ¤meter : f64 = 3.0
   let area := d ↑ 2
   // 3.0 m ^ 2 = 9.0 m^2
-  approx_eq(area, 9.0, "3.0m ↑ 2 value")
+  approx_eq(@dropunit(area), 9.0, "3.0m ↑ 2 value")
   std.println("{}", area)
 
+@test
 @impure
 fn test_unit_pow_cube():
-  let d ¤meter := 2.0
+  let d ¤meter : f64 = 2.0
   let vol := d ↑ 3
   // 2.0 m ^ 3 = 8.0 m^3
-  approx_eq(vol, 8.0, "2.0m ↑ 3 value")
+  approx_eq(@dropunit(vol), 8.0, "2.0m ↑ 3 value")
 
+@test
 @impure
 fn test_unit_pow_zero():
-  let d ¤meter := 5.0
+  let d ¤meter : f64 = 5.0
   let r := d ↑ 0
   // m^0 = dimensionless
   approx_eq(r, 1.0, "5.0m ↑ 0 dimensionless")
 
+@test
 fn test_unit_exp_rejected():
-  let d ¤meter := 5.0
-  let e ¤second := 2.0
+  let d ¤meter : f64 = 5.0
+  let e ¤second : f64 = 2.0
   @expect error "exponent cannot have a unit"
   let r : mut = d ↑ e
 
 @start
 @impure
 fn main():
-  test_int_pow_basic()
-  test_int_pow_zero_base()
-  test_int_pow_one()
-  test_int_pow_large()
-  test_int_pow_negative_exp()
-  test_float_pow_basic()
-  test_float_pow_negative_exp()
-  test_float_pow_zero()
-  test_mixed_pow_rejected()
-  test_right_assoc()
-  test_precedence_mul()
-  test_precedence_neg()
-  test_overflow()
-  test_unit_pow()
-  test_unit_pow_cube()
-  test_unit_pow_zero()
-  test_unit_exp_rejected()
   std.println("power tests passed")

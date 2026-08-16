@@ -3163,6 +3163,12 @@ def main():
                     all_tests.append(t)
 
         total_tests = len(all_tests) + expect_passed + expect_failed
+        if total_tests == 0:
+            # A file with nothing to run must not read as a file whose
+            # tests all passed; that is how 83 tests once went unrun.
+            print("error: no tests: nothing in this file is marked "
+                  "@test or @expect", file=sys.stderr)
+            sys.exit(1)
         print(f"\nrunning {total_tests} tests", file=sys.stderr)
         passed = expect_passed
         failed = expect_failed

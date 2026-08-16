@@ -199,11 +199,16 @@ Completed
 Outstanding
 -----------
 
-[ ] four test files call their tests from main rather than marking them @test -- test_units
-    (39), test_float (11), test_power (17), test_roots (16).  run_tests.sh runs a file with
-    --test, finds no tests, and reports it green, so 83 test functions do not run.
-    test_units.ngpl fails when it is actually run: `let x ¤meter := 5` has no type written
-    down, which the bootstrap refuses.
+[x] four test files called their tests from main rather than marking them @test -- test_units
+    (39), test_float (11), test_power (17), test_roots (16); --test found nothing and
+    reported them green, so 83 test functions never ran.  All four are @test-marked now,
+    their mains reduced to the announcement, and their print-on-failure assert_true helpers
+    replaced with the real assert, which fails loudly.  Actually running them surfaced 53
+    rotted tests: bindings with no type written down (`let x ¤meter := 5`, `let q := 3.0 ÷
+    2.0`, hex float literals), a float where the bool-only logic rule now asks for a
+    comparison, and measured values handed to unit-less parameters -- all fixed, all 83
+    green under -Werror.  --test on a file with nothing marked @test or @expect is now an
+    error rather than a green report, so the gap cannot reopen quietly.
 
 [ ] a builtin cannot be @listable: BuiltinFunc has no field for it and the standard library
     reaches Python methods by another path.  std.sqrt over an array would want it.
@@ -221,9 +226,10 @@ Outstanding
     startup.  The scanner assumes UTF-8 throughout and nothing checks that what it was handed is;
     the language mandate is recorded in TODO-language.md.
 
-[ ] a check that `run_tests.sh` covers every file under `tests/` and that a file with no test in
-    it is reported rather than counted green.  The four files above are one instance of a gap
-    the harness cannot currently see.
+[x] `run_tests.sh` refuses to run when a `tests/*.ngpl` file is not registered in its list,
+    naming the stragglers, and `--test` on a file with no @test and no @expect exits with
+    "no tests" instead of a green zero.  Both halves of the gap the four files fell through
+    are closed.
 
 [ ] a call with too few arguments curries even when the declared use of its value could
     never take a function, so the resulting lambda flows into an `i64` binding or an `i64`

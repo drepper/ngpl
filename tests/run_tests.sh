@@ -132,6 +132,29 @@ all_tests=(
     "$testdir"/test_map.ngpl
 )
 
+# Every test file under tests/ must be in the list above: a file the
+# runner does not know about is a test that silently never runs.
+missing=()
+for f in "$testdir"/*.ngpl; do
+    found=0
+    for t in "${all_tests[@]}"; do
+        if [[ $t == "$f" ]]; then
+            found=1
+            break
+        fi
+    done
+    if ((found == 0)); then
+        missing+=("$f")
+    fi
+done
+if ((${#missing[@]} > 0)); then
+    echo "error: test files not registered in run_tests.sh:"
+    for f in "${missing[@]}"; do
+        echo "  $f"
+    done
+    exit 1
+fi
+
 # Filter tests if command-line patterns are given.
 if ((${#patterns[@]} > 0)); then
     tests=()
