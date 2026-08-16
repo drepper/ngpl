@@ -1,3 +1,4 @@
 .claude
 build/
 __pycache__/
+a.out

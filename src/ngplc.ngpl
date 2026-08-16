@@ -10,7 +10,7 @@
 //
 // The pipeline is a chain of pure functions over flat arrays:
 //     bytes → lex → Toks → parse → Ast → check → lower → Ir
-//           → emit → code bytes → elf → build/<name>
+//           → emit → code bytes → elf → a.out (or the -o name)
 //
 // Control flow policy (CLAUDE.md): decisions are data.  The lexer runs
 // on a byte-class table and two glyph hashes rather than a branch
@@ -4761,26 +4761,6 @@ fn report(diags : Diag[], file : str, as_json : bool):
         else:
             std.println("{}:{}:{}: error: {}", file, d.line, d.col, d.msg)
 
-// the file's own name: directories and the .ngpl suffix taken off
-fn stem_of(path : str) → str:
-    let cs := path.chars()
-    let begin ¤ptrdiff : mut i64 = 0
-    let i ¤ptrdiff : mut i64 = 0
-    while i < #cs:
-        if cs[i] = '/':
-            begin ← i + 1
-        i ← i + 1
-    let stop ¤ptrdiff : mut i64 = #cs
-    if #cs >= begin + 5:
-        if cs[#cs - 5] = '.' and cs[#cs - 4] = 'n' and cs[#cs - 3] = 'g' and cs[#cs - 2] = 'p' and cs[#cs - 1] = 'l':
-            stop ← #cs - 5
-    let s : mut str = ""
-    let j ¤ptrdiff : mut i64 = begin
-    while j < stop:
-        s ← s ⧺ cs[j]
-        j ← j + 1
-    s
-
 @start
 @impure
 fn main() → u8:
@@ -4798,7 +4778,7 @@ fn main() → u8:
         let a := argv[i]
         if a = "-o":
             if i + 1 >= #argv:
-                std.println("ngplc: -o wants the output path after it")
+                std.println("ngplc: -o requires the output file name after it")
                 return 1
             output ← argv[i + 1]
             i ← i + 2
@@ -4846,10 +4826,8 @@ fn main() → u8:
 
     let elf := codegen(ast, toks, src, chk)
 
-    let outname : mut str = output
-    if outname = "":
-        _ ← std.fs.cwd().create_dir("build")
-        outname ← "build/" ⧺ stem_of(input)
+    // as every Unix compiler has it: a.out unless -o names the file
+    let outname : str = output if output ≠ "" else "a.out"
     let outf := std.fs.cwd().create_file(outname, 493)
     outf.write(elf)
     outf.close()

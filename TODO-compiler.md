@@ -95,9 +95,12 @@ Object Files and Linking
     first -- together with whatever simulated basic runtime that requires.  The object file
     format need not be the platform's; if it is, partial recompilation has to keep working.
 
-[ ] everything the compiler and the interpreter generate is written under a build directory, by
-    default `build/` in the current directory, so a source tree is not written into and a build
-    can be thrown away by removing one directory.
+[ ] everything the compiler and the interpreter generate *besides the linked executable* is
+    written under a build directory, by default `build/` in the current directory, so a source
+    tree is not written into and a build can be thrown away by removing one directory.  The
+    executable itself follows the Unix convention instead: `a.out` in the current directory
+    unless `-o` names the file -- decided and implemented; this item now covers the
+    intermediate artifacts (caches, logs, per-file objects) once they exist.
 
 
 Runtime
