@@ -216,32 +216,37 @@ Outstanding
     met by the question its rows are.  tests/test_listable.ngpl covers the vector, matrix
     and scalar cases; the spec's @listable section names the functions.
 
-[ ] a survey that every full-language feature the bootstrap does not have is refused by name
-    rather than misparsed or quietly given another meaning.  The rule is stated above and holds
-    for the arbitrary-precision types; nothing checks that it holds for the rest, and a `[FULL]`
-    item that lands without one is the way it would be lost.
+[x] the survey ran, found four violations, and pinned every refusal as an output test
+    (tests/output/refuse_*).  Found and fixed: an unknown annotation shed its @ and walked on
+    as a name (@lazy became the identifier lazy); the optional glyphs ⍰ and ⚠ lexed as
+    identifier characters and vanished into expressions; a fast element type slipped through
+    the empty-array-literal path (`let a : mut i32fast[] = []` ran); and a function whose
+    last expression carried a trailing ';' answered the value where the full language's
+    semicolon discards it -- one program, two meanings, now refused with both spellings
+    offered.  `import` and the glyphs are refused by name; @repr(packed) already was.
 
-[ ] the interpreter reads the build function for what it says about search paths and compiler
-    flags, as the brief describes, rather than only finding the `@start` function.  Running the
-    build recipe belongs to the compiler; reading it does not.
+[x] the interpreter reads the @build function before anything runs: search paths and
+    compiler flags declared through std.build.search_path and std.build.flag land in
+    std.build, answered back by paths() and flags().  At most one @build function, no
+    parameters; running any recipe stays the compiler's.  tests/test_build.ngpl; the spec's
+    interpreter chapter gained "Reading the Build Function".
 
-[ ] the source is refused where it is not UTF-8, and running under a locale is a fatal error at
-    startup.  The scanner assumes UTF-8 throughout and nothing checks that what it was handed is;
-    the language mandate is recorded in TODO-language.md.
+[x] the source is refused where it is not UTF-8, with the byte, its line and column, and the
+    decoder's reason; a locale that selects an encoding other than UTF-8 (C, POSIX and unset
+    pass -- they name no conflicting one) is fatal at startup, since honoring it halfway
+    would corrupt quietly.  tests/output/source_not_utf8 and locale_not_utf8.
 
 [x] `run_tests.sh` refuses to run when a `tests/*.ngpl` file is not registered in its list,
     naming the stragglers, and `--test` on a file with no @test and no @expect exits with
     "no tests" instead of a green zero.  Both halves of the gap the four files fell through
     are closed.
 
-[ ] a call with too few arguments curries even when the declared use of its value could
-    never take a function, so the resulting lambda flows into an `i64` binding or an `i64`
-    parameter unrefused and surfaces far away as "expected i64, got LambdaValue".  Where a
-    call's result meets a non-function type, too few arguments should be an arity error at
-    the call.  (Found writing the compiler: a five-argument helper called with four.)
+[x] an unfinished call that meets a declared type is an arity mistake, named: "'addup' was
+    called with 2 of its 3 arguments; a call this unfinished answers a function, not i64" --
+    at bindings and at parameters alike, since no type annotation names a function.
+    Currying whose result goes on to be called is untouched.  tests/test_curry.ngpl holds
+    both refusals.
 
-[ ] a newline inside a string literal hangs the scanner: `_read_string` counts the line and
-    advances nothing, so the loop never ends and the interpreter has to be killed.  The rule
-    the language wants is that a simple string ends before the end of the line, so the newline
-    is an error naming the unterminated string; the language side of it is in
-    TODO-language.md.
+[x] a newline inside a string literal is an error naming the unterminated string -- "string
+    literal is not closed before the end of the line" -- where it used to advance nothing
+    and hang the scanner until killed.  tests/output/string_newline.

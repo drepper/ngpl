@@ -2312,6 +2312,7 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
         # every position naming the same generic sees the same type,
         # which is settled before this.
         return value
+    refuse_partial_application(value, param_type)
     if unit is not None:
         # The parameter states the unit, so what arrives measured is
         # what it asked for; the type describes what holds the number.
@@ -2687,6 +2688,25 @@ def coerce_to_type(value: Value, target_width: str, unit=None, mk=None) -> Value
                      measured.unit)
 
 
+def refuse_partial_application(value: Value, target: str):
+    """An unfinished call meeting a type that is no function.
+
+    A call with too few arguments curries, which is right where the
+    result goes on to be called; where it meets a declared type instead
+    -- and no type annotation names a function -- the mistake is the
+    call's arity, so the error says which call and how short it was,
+    rather than surfacing far away as a lambda where a number was
+    wanted.
+    """
+    if (isinstance(value, LambdaValue) and value.partial_func is not None
+            and not is_generic_type(target)):
+        func = value.partial_func
+        raise TypeError(
+            f"'{func.name}' was called with {len(value.partial_args)} of "
+            f"its {len(func.params)} arguments; a call this unfinished "
+            f"answers a function, not {target}")
+
+
 def _coerce_to_type(value: Value, target_width: str, unit=None) -> Value:
     """Coerce a value to a target integer type.
 
@@ -2696,6 +2716,11 @@ def _coerce_to_type(value: Value, target_width: str, unit=None) -> Value:
     Raises OverflowError if the value does not fit.
     """
     target_width = resolve_type_alias(target_width)
+    refuse_partial_application(value, target_width)
+    arr_ty = _parse_array_type(target_width)
+    if arr_ty is not None and arr_ty[0] in FAST_TYPES:
+        raise TypeError(
+            f"fast type '{arr_ty[0]}' cannot be used as array element type")
     if target_width is None or target_width == "int":
         # `int` holds anything an untyped literal could be, so the
         # value settles on it rather than staying uncommitted.

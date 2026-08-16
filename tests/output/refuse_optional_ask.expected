@@ -1,0 +1,7 @@
+error: '⍰' asks an optional for its value, which the bootstrap does not provide yet; ?? and match serve meanwhile
+  --> tests/output/refuse_optional_ask.ngpl:5:22
+    |
+  5 |     let x := v.get(0)⍰
+    |                      ^
+  6 |     std.println("{}", x)
+    |

@@ -114,6 +114,30 @@ fn test_curry_too_many_args():
     let f : mut = multiply(2)
     f(3, 4)
 
+// ---------------------------------------------------------------------
+// An unfinished call that meets a type is an arity mistake, named
+// ---------------------------------------------------------------------
+//
+// Currying is right where the result goes on to be called; a declared
+// type names no function, so an unfinished call meeting one is the
+// call's arity gone wrong, and the error says which call and how
+// short it was rather than surfacing far away.
+
+fn addup3(a : i64, b : i64, c : i64) → i64:
+    a + b + c
+
+@expect error "'addup3' was called with 2 of its 3 arguments"
+fn error_partial_meets_a_binding():
+    let bad : i64 = addup3(1, 2)
+    _ ← bad
+
+fn takes_number(n : i64) → i64:
+    n + 1
+
+@expect error "'addup3' was called with 1 of its 3 arguments"
+fn error_partial_meets_a_parameter():
+    _ ← takes_number(addup3(1))
+
 @start
 @impure
 fn main():

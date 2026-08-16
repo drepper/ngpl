@@ -191,6 +191,7 @@ class FuncDef:
                  postconditions: list | None = None,
                  is_comptime: bool = False):
         self.name = name
+        self.is_build = False
         self.params = params
         # Where each parameter was written, for diagnostics about it.
         self.param_positions: dict[str, tuple[int, int, int | None]] = {}
@@ -260,8 +261,12 @@ class DestructureDef:
 class ExprStmt:
     """An expression used as a statement (discard result)."""
 
-    def __init__(self, expr):
+    def __init__(self, expr, had_semi=False):
         self.expr = expr
+        # Whether a ';' followed: the full language's semicolon
+        # discards the value, which matters when this is the last
+        # statement of a body.
+        self.had_semi = had_semi
 
 
 class FuncCall:

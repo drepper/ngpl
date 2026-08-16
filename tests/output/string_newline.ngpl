@@ -1,0 +1,5 @@
+@start
+@impure
+fn main():
+    let s : str = "unfinished
+    std.println("{}", s)

@@ -8372,6 +8372,19 @@ A value carrying a unit shows the unit as it always did, after the type:
 4 B
 ```
 
+### Reading the Build Function
+
+A program may carry one `@build` function.  It is the build recipe; the compiler will one day run it.  The interpreter *reads* it — evaluates it before anything else runs — for what it declares, and no more:
+
+```
+@build
+fn build():
+    std.build.search_path("vendor")
+    std.build.flag("contracts=enforce")
+```
+
+`std.build.search_path(p)` and `std.build.flag(f)` declare a search path and a compiler flag; `std.build.paths()` and `std.build.flags()` answer what was declared, in order.  The function takes no parameters, and a program carries at most one.
+
 ### Entering the REPL
 
 The interpreter starts an interactive session in three situations, in order of precedence:

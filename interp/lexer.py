@@ -92,6 +92,9 @@ AT_KEYWORDS: dict[str, str] = {
     "noreturn": "NORETURN",
     "pre": "PRE",
     "post": "POST",
+    # @build heads the build recipe the interpreter reads for search
+    # paths and flags; the bare word stays available as a name.
+    "build": "BUILD",
     # @macro_rules heads a macro written as a list of rewrite rules.
     # An annotation rather than a keyword of its own, so the word stays
     # available to a program that wants it as a name.
@@ -181,8 +184,12 @@ def _read_string(src, pos, start_line, start_col, line_start):
     while end_pos < len(src):
         ch = src[end_pos]
         if ch == "\n":
-            line += 1
-            cur_line_start = end_pos + 1
+            # A simple string ends before the line does; a newline
+            # inside one is an unterminated string, not a longer one.
+            # (This used to advance nothing and hang the scanner.)
+            raise LexerError(
+                "string literal is not closed before the end of the line",
+                start_line, start_col)
         elif ch == "\\" and end_pos + 1 < len(src):
             esc = src[end_pos + 1]
             end_pos += 2
@@ -535,9 +542,25 @@ def tokenize(src: str):
             while pos < length and (src[pos].isalpha() or src[pos] in "_'"):
                 pos += 1
             kw = src[name_start:pos]
-            token_type = AT_KEYWORDS.get(kw) or KEYWORDS.get(kw, "IDENT")
+            token_type = AT_KEYWORDS.get(kw) or KEYWORDS.get(kw)
+            if token_type is None:
+                # An unknown annotation must not shed its @ and walk on
+                # as a name; it is refused where it stands, by name.
+                raise LexerError(
+                    f"'@{kw}' is not an annotation the bootstrap "
+                    f"provides", line, at_col)
             tokens.append(Token(token_type, kw, line, at_col, pos - line_start))
             continue
+
+        # The full language's optional glyphs are refused by name
+        # rather than walking on as identifier characters.
+        if ch in "\N{APL FUNCTIONAL SYMBOL QUAD QUESTION}\N{WARNING SIGN}":
+            what = ("asks an optional for its value"
+                    if ch == "\N{APL FUNCTIONAL SYMBOL QUAD QUESTION}"
+                    else "takes an optional's value or fails")
+            raise LexerError(
+                f"'{ch}' {what}, which the bootstrap does not provide "
+                f"yet; ?? and match serve meanwhile", line, col)
 
         # String literal.
         if ch == '"':

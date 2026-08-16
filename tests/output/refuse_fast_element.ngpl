@@ -1,0 +1,5 @@
+@start
+@impure
+fn main():
+    let a : mut i32fast[] = []
+    a.push(1)

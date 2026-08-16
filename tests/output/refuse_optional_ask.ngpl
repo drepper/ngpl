@@ -1,0 +1,6 @@
+@start
+@impure
+fn main():
+    let v : i64[] = [1]
+    let x := v.get(0)⍰
+    std.println("{}", x)

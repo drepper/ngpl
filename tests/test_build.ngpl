@@ -1,0 +1,30 @@
+// The @build function is read for what it declares before anything
+// runs: search paths and compiler flags land in std.build.  Running a
+// build recipe belongs to the compiler; reading it does not.
+
+@build
+fn build():
+    std.build.search_path("vendor")
+    std.build.search_path("third_party/ngpl")
+    std.build.flag("O1")
+    std.build.flag("contracts=enforce")
+
+// What was declared has been read by the time anything else runs.
+@test
+fn test_search_paths_are_read():
+    let p := std.build.paths()
+    assert(#p = 2)
+    assert(p[0] = "vendor")
+    assert(p[1] = "third_party/ngpl")
+
+@test
+fn test_flags_are_read():
+    let f := std.build.flags()
+    assert(#f = 2)
+    assert(f[0] = "O1")
+    assert(f[1] = "contracts=enforce")
+
+@start
+@impure
+fn main():
+    std.println("build tests passed")

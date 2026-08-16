@@ -757,7 +757,10 @@ Control Flow and Expressions
     see the item under Static Analysis below.  What a `break` cannot do yet is carry a value
     out, which is listed there too.
 
-[ ] [FULL] multiple statements on one line with semicolon separator.
+[x] multiple statements on one line with semicolon separator -- the bootstrap has carried
+    this for some time; the checkmark records it.  The *trailing* semicolon's discard (the
+    spec's Rust-mirroring rule) remains full-only: a function whose promised answer the ';'
+    would discard is refused by the bootstrap rather than answered differently.
 
 [ ] [FULL] insecure mode scoping: per compilation-unit, function, or block (like Rust unsafe).
 

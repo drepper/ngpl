@@ -37,7 +37,7 @@ from interp.lexer import Token, KEYWORDS
 # Token types that can begin a top-level definition, either as the
 # definition keyword itself or as an annotation preceding it.
 DEFINITION_STARTERS = frozenset({
-    "START", "REPLACEABLE", "TEST", "FLAG", "IMPURE", "EXPECT", "REPR",
+    "START", "BUILD", "REPLACEABLE", "TEST", "FLAG", "IMPURE", "EXPECT", "REPR",
     "HOT", "COLD", "LISTABLE", "NORETURN", "PRE", "POST",
     "ENUM", "STRUCT", "IMPL", "UNIT", "TYPE", "FN", "LET",
     "MACRO", "MACRO_RULES", "COMPTIME",
@@ -330,6 +330,7 @@ class Parser:
     def _parse_definition(self):
         """Parse a single top-level definition (function, const, enum, or variable)."""
         is_start = False
+        is_build = False
         is_test = False
         is_flag = False
         is_replaceable = False
@@ -347,6 +348,10 @@ class Parser:
             if self._check("START"):
                 self._eat("START")
                 is_start = True
+                self._try_eat("NEWLINE")
+            elif self._check("BUILD"):
+                self._eat("BUILD")
+                is_build = True
                 self._try_eat("NEWLINE")
             elif self._check("REPLACEABLE"):
                 self._eat("REPLACEABLE")
@@ -472,15 +477,21 @@ class Parser:
             return self._parse_type_def()
 
         if self._check("FN"):
-            return self._parse_function_def(is_start, is_test, test_refs, expect_annotations,
+            fdef = self._parse_function_def(is_start, is_test, test_refs, expect_annotations,
                                             is_replaceable, is_impure, hint=hint,
                                             is_listable=is_listable,
                                             is_noreturn=is_noreturn,
                                             preconditions=preconditions,
                                             postconditions=postconditions,
                                             is_comptime=is_comptime)
+            fdef.is_build = is_build
+            return fdef
         elif self._check("LET"):
             return self._parse_var_def()
+        elif self._check("IMPORT"):
+            raise ParseError(
+                "'import' is a full-language feature the bootstrap does "
+                "not provide; a program is one file", self._cur())
         elif self._check("EOF"):
             return None  # end of file reached cleanly
         else:
@@ -1651,8 +1662,8 @@ class Parser:
                 return ("assign_stmt", lhs, rhs)
 
         expr = self._parse_expr()
-        self._try_eat("PUNCT", ";")
-        return ExprStmt(expr)
+        had_semi = self._try_eat("PUNCT", ";")
+        return ExprStmt(expr, had_semi=bool(had_semi))
 
     def _parse_if_stmt(self, hint: str | None = None):
         """Parse: if expr block (elif expr block)* (else block)?"""

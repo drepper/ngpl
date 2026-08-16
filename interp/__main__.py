@@ -2354,11 +2354,33 @@ class LoadedProgram:
 
     def __init__(self):
         self.startup_func: FuncValue | None = None
+        self.build_func: FuncValue | None = None
         self.standalone_tests: list[FuncValue] = []
         self.referenced_tests: dict[str, list[FuncValue]] = defaultdict(list)
         self.expect_funcs: list[ASTFuncDef] = []
         # (message, position) pairs found while installing definitions.
         self.warnings: list[tuple[str, tuple | None]] = []
+
+
+def _trailing_semi_check(func_def) -> str | None:
+    """A last expression with ';' where the function promises a value.
+
+    The full language's trailing semicolon discards the value, so this
+    function would answer ∅ there and the expression here -- the same
+    program with two meanings.  The bootstrap refuses it instead.
+    """
+    ret = getattr(func_def, "ret_type", None)
+    if ret in (None, "\N{EMPTY SET}"):
+        return None
+    body = func_def.body
+    if not body:
+        return None
+    last = body[-1]
+    if isinstance(last, _ast.ExprStmt) and getattr(last, "had_semi", False):
+        return (f"'{func_def.name}' answers {ret}, but the trailing ';' "
+                f"discards its last expression in the full language; drop "
+                f"the ';' so the value is the answer, or return it")
+    return None
 
 
 def _int_type_range(type_name: str) -> tuple[int, int]:
@@ -2769,6 +2791,16 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                                           _node_pos(defn))
                 program.startup_func = fv
 
+            if getattr(defn, "is_build", False):
+                if program.build_func is not None:
+                    raise DefinitionError("multiple @build functions defined",
+                                          _node_pos(defn))
+                if defn.params:
+                    raise DefinitionError(
+                        "the @build function takes no parameters",
+                        _node_pos(defn))
+                program.build_func = fv
+
             if defn.is_test:
                 if defn.test_refs:
                     for ref in defn.test_refs:
@@ -2879,6 +2911,9 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 if chr_err is not None:
                     raise DefinitionError(f"in {defn.name}: {chr_err}",
                                           _finding_pos(chr_err) or _node_pos(defn))
+                semi_err = _trailing_semi_check(defn)
+                if semi_err is not None:
+                    raise DefinitionError(semi_err, _node_pos(defn))
                 struct_vars = _struct_vars_of(defn, env)
                 purity_err = _static_purity_check(defn, env, struct_vars)
                 if purity_err is not None:
@@ -2921,6 +2956,28 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 _trailing_value_warnings(method_def, env, struct_vars))
 
 
+def _check_locale():
+    """A locale that selects an encoding other than UTF-8 is fatal.
+
+    The language's sources and I/O are UTF-8.  An environment whose
+    locale demands another encoding cannot be honored, and honoring it
+    halfway -- reading UTF-8 while the terminal expects Latin-1 --
+    would corrupt quietly.  The C and POSIX locales and an unset one
+    pass: they name no conflicting encoding.
+    """
+    value = (os.environ.get("LC_ALL") or os.environ.get("LC_CTYPE")
+             or os.environ.get("LANG") or "")
+    base = value.split("@")[0]
+    if base in ("", "C", "POSIX"):
+        return
+    encoding = base.split(".", 1)[1] if "." in base else ""
+    if encoding.lower().replace("-", "") != "utf8":
+        print(f"fatal: the locale '{value}' does not select UTF-8; NGPL "
+              f"sources and output are UTF-8, and a locale that says "
+              f"otherwise cannot be honored", file=sys.stderr)
+        sys.exit(1)
+
+
 def main():
     """Run the NGPL interpreter on a source file."""
     # The evaluator spends several Python frames per NGPL call, so
@@ -2929,6 +2986,7 @@ def main():
     # nesting.  The limit is a backstop against runaway recursion, not a
     # resource budget, so it is raised rather than worked around.
     sys.setrecursionlimit(200_000)
+    _check_locale()
     args = _parse_args()
 
     set_warnings_are_errors(args.werror)
@@ -2943,8 +3001,19 @@ def main():
             print(f"Error: file not found: {source_path}", file=sys.stderr)
             sys.exit(1)
 
-        with open(source_path, "r", encoding="utf-8") as f:
-            source = f.read()
+        with open(source_path, "rb") as f:
+            raw = f.read()
+        try:
+            source = raw.decode("utf-8")
+        except UnicodeDecodeError as e:
+            # The language mandates UTF-8; what is not is refused with
+            # its position rather than surfacing as a decoder traceback.
+            line = raw.count(b"\n", 0, e.start) + 1
+            col = e.start - (raw.rfind(b"\n", 0, e.start) + 1) + 1
+            print(f"error: {source_path}:{line}:{col}: the source is not "
+                  f"UTF-8: byte 0x{raw[e.start]:02X} {e.reason}",
+                  file=sys.stderr)
+            sys.exit(1)
 
         # A diagnostic raised mid-run never reaches the top level, so it
         # finds the text to point into here rather than being handed it.
@@ -2989,6 +3058,17 @@ def main():
         else:
             print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
+
+    if program.build_func is not None:
+        # The build function is read for what it declares -- search
+        # paths and compiler flags land in std.build -- before anything
+        # runs.  Running a build recipe belongs to the compiler.
+        try:
+            evaluator._call_user_func(program.build_func, [])
+        except Exception as e:
+            _show_error(e, source, source_path, evaluator,
+                        show_backtrace=args.interpreter_backtrace)
+            sys.exit(1)
 
     if _report_warnings(program.warnings, source, source_path) > 0 \
             and warnings_are_errors():

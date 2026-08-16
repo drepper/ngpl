@@ -1019,6 +1019,54 @@ class ImplementationInfo:
     compiled = False
 
 
+class BuildModule:
+    """What the build function said, kept for whoever asks.
+
+    The interpreter reads the @build function for the search paths and
+    compiler flags it declares; running any recipe belongs to the
+    compiler.  Declaring is calling `std.build.search_path(p)` and
+    `std.build.flag(f)`; what was declared answers from `paths()` and
+    `flags()`.
+    """
+
+    __slots__ = ("_paths", "_flags")
+
+    def __init__(self):
+        self._paths: list[str] = []
+        self._flags: list[str] = []
+
+    def _one_str(self, args, who):
+        from interp.eval import unwrap_optional
+        from interp.value import StrValue, runtime_type_of
+        if len(args) != 1:
+            raise TypeError(f"std.build.{who} takes the one string")
+        v = unwrap_optional(args[0])
+        if not isinstance(v, StrValue):
+            raise TypeError(
+                f"std.build.{who} takes a string, not {runtime_type_of(v)}")
+        return v.value
+
+    def search_path(self, args):
+        from interp.value import none
+        self._paths.append(self._one_str(args, "search_path"))
+        return none()
+
+    def flag(self, args):
+        from interp.value import none
+        self._flags.append(self._one_str(args, "flag"))
+        return none()
+
+    def paths(self, args):
+        if args:
+            raise TypeError("std.build.paths takes no arguments")
+        return _str_array(self._paths)
+
+    def flags(self, args):
+        if args:
+            raise TypeError("std.build.flags takes no arguments")
+        return _str_array(self._flags)
+
+
 class StdModule:
     """The std module providing built-in runtime services.
 
@@ -1057,6 +1105,7 @@ class StdModule:
         self._syntax = None  # lazy-initialized syntax submodule
         self.args = ArgsModule()
         self.implementation = ImplementationInfo()
+        self.build = BuildModule()
 
     @property
     def fs(self):

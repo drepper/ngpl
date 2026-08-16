@@ -1,0 +1,7 @@
+error: '@lazy' is not an annotation the bootstrap provides
+  --> tests/output/refuse_unknown_annotation.ngpl:1:1
+    |
+  1 | @lazy
+    | ^
+  2 | fn f() → i64:
+    |

@@ -1,0 +1,8 @@
+@lazy
+fn f() → i64:
+    5
+
+@start
+@impure
+fn main():
+    std.println("{}", f())

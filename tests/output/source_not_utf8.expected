@@ -1,0 +1,1 @@
+error: tests/output/source_not_utf8.ngpl:4:21: the source is not UTF-8: byte 0xE9 invalid continuation byte

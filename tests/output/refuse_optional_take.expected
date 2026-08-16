@@ -1,0 +1,7 @@
+error: '⚠' takes an optional's value or fails, which the bootstrap does not provide yet; ?? and match serve meanwhile
+  --> tests/output/refuse_optional_take.ngpl:5:22
+    |
+  5 |     let x := v.get(0)⚠
+    |                      ^
+  6 |     std.println("{}", x)
+    |

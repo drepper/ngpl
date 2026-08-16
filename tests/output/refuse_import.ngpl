@@ -1,0 +1,6 @@
+import foo
+
+@start
+@impure
+fn main():
+    std.println("never")

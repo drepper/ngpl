@@ -1,0 +1,1 @@
+fatal: the locale 'de_DE.ISO-8859-1' does not select UTF-8; NGPL sources and output are UTF-8, and a locale that says otherwise cannot be honored

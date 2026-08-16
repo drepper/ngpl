@@ -1,0 +1,7 @@
+fn discards() → i64:
+    5;
+
+@start
+@impure
+fn main():
+    std.println("{}", discards())
