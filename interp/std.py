@@ -997,6 +997,24 @@ def _render_template(fmt: str, args, where: str) -> str:
     return "".join(result)
 
 
+class ImplementationInfo:
+    """What `std.implementation` answers: which implementation this is.
+
+    A test conditionalizes on these members where the implementations
+    are allowed to differ, and a comptime check (static_assert) may
+    read them, since what they hold is settled before anything runs.
+    The compiler publishes the same members about itself, so one test
+    suite serves every implementation.
+    """
+
+    __slots__ = ()
+
+    name = "ngpli"              # the bootstrap interpreter
+    language = "bootstrap"      # the subset of NGPL it implements
+    interpreter = True
+    compiled = False
+
+
 class StdModule:
     """The std module providing built-in runtime services.
 
@@ -1034,6 +1052,7 @@ class StdModule:
         self._stdout_file = StdoutFile()
         self._syntax = None  # lazy-initialized syntax submodule
         self.args = ArgsModule()
+        self.implementation = ImplementationInfo()
 
     @property
     def fs(self):

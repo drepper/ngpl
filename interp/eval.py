@@ -568,6 +568,13 @@ def _is_const_expr(node) -> bool:
     if isinstance(node, UnitExpr):
         return _is_const_expr(node.expr)
     if isinstance(node, GetAttr):
+        # std.implementation.<member> says which implementation runs
+        # the program, which is settled before anything does.
+        if (isinstance(node.obj, GetAttr)
+                and node.obj.attr == "implementation"
+                and isinstance(node.obj.obj, VarRef)
+                and node.obj.obj.name == "std"):
+            return True
         # A member that answers about the value rather than holding
         # part of it: how many elements it has, and how it is laid out.
         return (node.attr in _CONST_ATTRIBUTES
@@ -1305,7 +1312,12 @@ class Evaluator:
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             if ru.value == 0:
                 return self._division_error()
-            result = int(lu.value / ru.value) if lu.value * ru.value >= 0 else -int(abs(lu.value) / abs(ru.value))
+            # Exact integer division, truncating toward zero.  Going
+            # through a float loses precision past 2^53 and answered
+            # wrongly for wide values.
+            result = lu.value // ru.value
+            if result < 0 and result * ru.value != lu.value:
+                result += 1
             return ExpectedValue.ok(self._mk_int(result, resolve_width(lu.width, ru.width)))
         ff = self._require_matching_numeric(lu, ru, "division")
         if ff is not None:
@@ -1322,7 +1334,9 @@ class Evaluator:
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             if ru.value == 0:
                 return self._division_error()
-            quot = int(lu.value / ru.value) if lu.value * ru.value >= 0 else -int(abs(lu.value) / abs(ru.value))
+            quot = lu.value // ru.value
+            if quot < 0 and quot * ru.value != lu.value:
+                quot += 1
             return ExpectedValue.ok(self._mk_int(lu.value - quot * ru.value, resolve_width(lu.width, ru.width)))
         ff = self._require_matching_numeric(lu, ru, "remainder")
         if ff is not None:

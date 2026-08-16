@@ -86,6 +86,20 @@ since that needs a representation the sized types do not have.
 Completed
 ---------
 
+[x] `std.implementation` says which implementation runs the program: `name` ("ngpli"),
+    `language` ("bootstrap"), `interpreter` (true), `compiled` (false).  The members are
+    compile-time constants, so `static_assert` reads them, and a test conditionalizes on
+    them where implementations are allowed to differ -- which is what lets one test suite
+    serve every implementation.  The compiler publishes the same members about itself
+    ("ngplc", "core-1", false, true), folded to constants.  tests/test_implementation.ngpl
+    and tests/compile/t06_implementation.ngpl.
+
+[x] `÷` and `%` answer exactly at every width.  The evaluator computed the quotient through
+    a Python float, which loses precision past 2^53: `(2^64-1) ÷ 3` was off by 341 and
+    `(2^64-1) % 10` answered ⁻1025, an impossible remainder.  Truncation toward zero is now
+    integer arithmetic throughout.  Found by the conformance suite disagreeing with the
+    compiled code, which divides exactly.
+
 [x] `and` and `or` short-circuit, as the specification's operator table says: the right side
     is not read when the left side already answers.  The glyph pair ∧ and ∨ still reads both.
     Both operands are reduced to a truth value, so the result stays bool either way.

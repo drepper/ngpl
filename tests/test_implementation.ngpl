@@ -1,0 +1,51 @@
+// std.implementation says which implementation is running the program:
+// its name, the language subset it implements, and whether it
+// interprets or compiled.  The members are settled before anything
+// runs, so a comptime check reads them; a test conditionalizes on them
+// where implementations are allowed to differ, which is what lets one
+// test suite serve every implementation.
+
+// The members are compile-time constants.
+fn comptime_readable() → bool:
+    static_assert(std.implementation.interpreter)
+    static_assert(¬std.implementation.compiled)
+    static_assert_eq(std.implementation.name, "ngpli")
+    static_assert_eq(std.implementation.language, "bootstrap")
+    true
+
+@test
+fn test_members_are_comptime():
+    assert(comptime_readable())
+
+// Exactly one way of running: an implementation interprets or it
+// compiled the program, never both and never neither.
+@test
+fn test_exactly_one_mode():
+    assert(std.implementation.interpreter or std.implementation.compiled)
+    assert(¬(std.implementation.interpreter ∧ std.implementation.compiled))
+
+// The members are ordinary values too.
+@test
+fn test_members_are_values():
+    let running_under : str = std.implementation.name
+    assert_eq(running_under, "ngpli")
+    let lang : str = std.implementation.language
+    assert_eq(lang, "bootstrap")
+    let interp : bool = std.implementation.interpreter
+    assert(interp)
+
+// Conditionalizing: the branch for the other implementation is not
+// taken here, and the same file would take it there.
+@test
+fn test_conditional_execution():
+    let took : mut str = ""
+    if std.implementation.interpreter:
+        took ← "interpreted"
+    if std.implementation.compiled:
+        took ← "compiled"
+    assert_eq(took, "interpreted")
+
+@start
+@impure
+fn main():
+    std.println("implementation tests passed")
