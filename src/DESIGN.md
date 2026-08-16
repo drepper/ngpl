@@ -208,6 +208,21 @@ attempt 3+ can build toward it:
 5. **Keywords**: today one hash probe; natively, padded 8/16-byte
    images compared with one masked load + `cmov` of the token id.
 
+## Contracts in the Compiler's Own Source
+
+Per the policy in CLAUDE.md, the compiler practices what it compiles:
+helpers carry `@pre`/`@post` — admissible ranges on the type
+constructors, alignment and coverage promises on `align_up` and
+`build_elf`, condition-code bounds on `cc_of` — and the larger
+functions assert their internal milestones: token, node and IR arrays
+still in step when a stage hands off, every parameter owning a slot,
+every jumped-to label placed before its fixup patches (the assertion
+that would have caught a real begin_fn miscount), every function
+leaving a code offset behind.  The one recorded exception: the `ty_*`
+accessors run for every node the checker touches, so their encoding
+invariants are enforced at the constructors rather than per read.
+The whole set costs ~3.5% under the interpreter, measured.
+
 ## Diagnostics and the Decision Log
 
 The parser recovers at line boundaries (a misparsed statement is

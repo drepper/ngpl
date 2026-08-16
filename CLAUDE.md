@@ -64,6 +64,20 @@ Higher optimization levels can add to compilation time, that is expected.
 The compiler must use parallelism as much as possible, both data parallelism
 as well as concurrency.
 
+Contract policy: the compiler's own code uses @pre and @post wherever
+possible -- a parameter's admissible range, an encoding invariant, a
+result's relation to the inputs -- so that every call is checked
+against what the function promises, under the interpreter today and by
+the compiler's own contract machinery once it is self-hosted.  Larger
+functions additionally carry assertions at their internal milestones,
+assuring the results of the code so far -- parallel arrays still in
+step, a resolved label no longer the sentinel, a computed offset
+aligned -- so a mistake is caught where it is made rather than where
+it finally crashes.  The hottest leaf helpers may prefer an assertion
+in their caller over a contract of their own when the measured cost
+under the interpreter demands it; the choice is recorded where it is
+made.
+
 Control flow policy: avoid if statements and other branching unless the
 branch can be converted into a conditional move or a no-op.  An if that
 requires a jump in the generated code should be the exception, both in the

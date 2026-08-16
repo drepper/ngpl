@@ -142,6 +142,7 @@ let GLYPHS3 : std.hash(i64, i64) = (⸨
 // Small helpers
 // ===========================================================================
 
+@post(r: #r > 0)
 fn i64_str(n : i64) → str:
     if n = 0: return "0"
     let neg : bool = n < 0
@@ -156,6 +157,7 @@ fn i64_str(n : i64) → str:
     ("-" ⧺ s) if neg else s
 
 // The text of a byte run, for identifiers, keywords and messages.
+@pre(off >= 0 and n >= 0)
 fn run_str(src : byte[], off : i64, n : i64) → str:
     let s : mut str = ""
     let i : mut i64 = 0
@@ -194,9 +196,16 @@ let UNIT_NONE : i64 = 0
 let UNIT_PTRDIFF : i64 = 1
 let UNIT_BYTE : i64 = 2
 
+@pre(sgn = 0 or sgn = 1)
+@pre(bits = 8 or bits = 16 or bits = 32 or bits = 64)
+@pre(u >= 0 and u <= 2)
 fn mk_ity(sgn : i64, bits : i64, u : i64) → i64:
     16 + sgn + 2 × bits + 256 × u
 
+// ty_is_int and the accessors below run for every node the checker
+// touches; the encoding invariants are enforced at mk_ity and the
+// other constructors instead of per read -- the recorded exception
+// the contract policy allows for measured hot paths.
 fn ty_is_int(t : i64) → bool:
     t >= 16 and t < 1024
 
@@ -249,6 +258,7 @@ fn ty_strip_ref(t : i64) → i64:
     t & 65535
 
 // the name of a type, as a diagnostic writes it
+@post(r: #r > 0)
 fn type_name(t0 : i64) → str:
     let r : i64 = ty_ref_kind(t0)
     let t : i64 = ty_strip_ref(t0)
@@ -275,6 +285,7 @@ struct Diag:
     msg : str
 
 // the text of source line n, decoded, for the excerpt under a diagnostic
+@pre(want >= 1)
 fn line_str(src : byte[], want : i64) → str:
     let n : i64 = @dropunit(#src)
     let line : mut i64 = 1
@@ -339,6 +350,7 @@ let CL_QMARK : i64 = 14      // ??
 
 // The class table, built once per run.  An entry of kind+100 is a
 // complete single-byte token.
+@post(t: #t = 256)
 fn mkcls() → i64[]:
     let t : mut i64[] = []
     foreach _ := 0…255:
@@ -385,6 +397,7 @@ fn mkcls() → i64[]:
 fn is_digit(b : i64) → bool:
     b >= 48 and b <= 57
 
+@post(r: r >= ⁻1 and r <= 15)
 fn hex_val(b : i64) → i64:
     if is_digit(b): return b - 48
     if b >= 97 and b <= 102: return b - 87
@@ -714,6 +727,11 @@ fn lex(src : byte[]) → Toks:
         _ ← lx.indents.pop()
         lx.emit(TK_DEDENT, lx.n, 0, 1, 0, 0)
     lx.emit(TK_EOF, lx.n, 0, 1, 0, 0)
+    // the token columns are parallel arrays; leaving out of step here
+    // would surface as nonsense positions far away
+    assert(#lx.kind = #lx.off and #lx.kind = #lx.len, "token arrays in step")
+    assert(#lx.kind = #lx.tline and #lx.kind = #lx.val and #lx.kind = #lx.big,
+           "token arrays in step")
     (Toks{kind: lx.kind, off: lx.off, len: lx.len, line: lx.tline,
           col: lx.tcol, val: lx.val, big: lx.big, strs: lx.strs,
           diags: lx.diags})
@@ -1790,6 +1808,12 @@ fn parse(toks : Toks, src : byte[]) → Ast:
                         break
                     else:
                         p.pos ← p.pos + 1
+    if #p.diags = 0:
+        // the type table was built from the pre-scan; a parse that
+        // succeeded must have seen the same structs in the same order
+        assert(#p.structs = #p.snames, "every pre-scanned struct parsed")
+        assert(#p.nkind = #p.ntok and #p.nkind = #p.na, "node arrays in step")
+        assert(#p.nkind = #p.nb and #p.nkind = #p.nc, "node arrays in step")
     (Ast{nkind: p.nkind, ntok: p.ntok, na: p.na, nb: p.nb, nc: p.nc,
          extra: p.extra, strs: p.toks.strs, fns: p.fns, globals: p.globals,
          structs: p.structs, diags: p.diags})
@@ -3265,6 +3289,7 @@ impl Checker:
             let pty : i64 = self.a.extra[(d.params_off + 2 + i × 2) × 1¤ptrdiff]
             _ ← self.declare(ptok, pty, 1 if ty_ref_kind(pty) = 2 else 0)
             i ← i + 1
+        assert(self.nslots >= np, "every parameter took a slot")
         if np > 6:
             self.derr(d.tok, "more than six parameters is not core-2 yet")
         let pi : mut i64 = 0
@@ -3398,6 +3423,9 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     if #a.fns > 0:
         foreach i := 0…#a.fns - 1:
             c.check_fn(@dropunit(i))
+    if #c.diags = 0:
+        assert(#c.fslots = #a.fns, "one slot count per function")
+        assert(#c.gvals = #a.globals, "one folded value per global")
     (Chk{ntype: c.ntype, nslot: c.nslot, fslots: c.fslots, gvals: c.gvals,
          diags: c.diags})
 
@@ -3511,6 +3539,7 @@ struct Lower:
     cur_fname : str
     dlog : str[]         // one JSON line per code-shaping decision
 
+@post(r: (r & 255) >= 8 and (r & 255) <= 64)
 fn width_of(t : i64) → i64:
     // the width an operation on this type runs at, bits + 256×sgn
     if t = TY_BOOL: return 64 + 256
@@ -4176,6 +4205,7 @@ impl Lower:
             else:
                 default_blk ← els
                 break
+        assert(#ks = #blks, "one arm per case")
         if not good or #ks < 4:
             return false
         let lo : mut i64 = ks[0]
@@ -4456,6 +4486,9 @@ fn lower_fn(lw : &mut Lower, a : Ast, chk : Chk, f : i64) → IrFn:
     if #lw.extra > 0:
         foreach v := lw.extra:
             exc.push(v)
+    assert(#opc = #iac and #opc = #ibc and #opc = #icc, "ir arrays in step")
+    assert(#opc = #idc and #opc = #iwc, "ir arrays in step")
+    assert(lw.tmax >= chk.fslots[f × 1¤ptrdiff], "the frame covers the locals")
     (IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc, extra: exc,
           nvregs: lw.tmax, nlabels: lw.nlabels})
 
@@ -4627,6 +4660,9 @@ impl Emit:
             foreach i := 0…#self.lf_pos - 1:
                 let pos : i64 = self.lf_pos[i]
                 let target : i64 = self.labels[self.lf_label[i] × 1¤ptrdiff]
+                // an unset label once escaped this path as begin_fn(1)
+                // against a routine that used two
+                assert(target ≠ ⁻1, "every jumped-to label was placed")
                 self.patch32(pos, target - (pos + 4))
         while #self.lf_pos > 0:
             _ ← self.lf_pos.pop()
@@ -4685,7 +4721,9 @@ impl Emit:
                 let n : i64 = n0
                 let j : mut i64 = 0
                 while j < n:
-                    self.jt_entries.push(self.labels[self.pj_labels[(st + j) × 1¤ptrdiff] × 1¤ptrdiff])
+                    let off2 : i64 = self.labels[self.pj_labels[(st + j) × 1¤ptrdiff] × 1¤ptrdiff]
+                    assert(off2 ≠ ⁻1, "every table target was placed")
+                    self.jt_entries.push(off2)
                     j ← j + 1
         while #self.pj_id > 0:
             _ ← self.pj_id.pop()
@@ -4741,6 +4779,7 @@ impl Emit:
             self.b3(76, 57, 218)             // cmp rdx, r11
             self.jglobal(0, 135, RT_OV)      // ja
 
+@pre(j >= 0 and j <= 5)
 fn arg_reg(j : i64) → i64:
     if j = 0: return R_DI
     if j = 1: return R_SI
@@ -4749,10 +4788,13 @@ fn arg_reg(j : i64) → i64:
     if j = 4: return R_R8
     R_R9
 
+@post(r: r >= 0)
 fn str_len(s : str) → i64:
     @dropunit(#s)
 
 // the setcc condition for a comparison at a signedness
+@pre(sgn = 0 or sgn = 1)
+@post(r: r >= 146 and r <= 159)
 fn cc_of(o : i64, sgn : i64) → i64:
     if o = IR_CEQ: return 148
     if o = IR_CNE: return 149
@@ -4767,6 +4809,7 @@ fn cc_of(o : i64, sgn : i64) → i64:
     147
 
 fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
+    assert(ir.nvregs >= np, "the frame covers the spilled arguments")
     em.begin_fn(ir.nlabels)
     em.b1(85)                       // push rbp
     em.b3(72, 137, 229)             // mov rbp, rsp
@@ -5458,6 +5501,8 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64):
 let IMAGE_BASE : i64 = 4194304
 let PAGE : i64 = 4096
 
+@pre(a > 0 and v >= 0)
+@post(r: r >= v and (r % a ?? 1) = 0)
 fn align_up(v : i64, a : i64) → i64:
     ((v + a - 1) ÷ a ?? 0) × a
 
@@ -5471,6 +5516,8 @@ fn push64(out : &mut u8[], v : i64):
     push32(&out, v)
     push32(&out, v » 32)
 
+@pre(#code > 0)
+@post(r: #r > 4096)
 fn build_elf(code : u8[], rodata : u8[], data : u8[]) → u8[]:
     let text_off : i64 = PAGE
     let text_vaddr : i64 = IMAGE_BASE + text_off
@@ -5587,6 +5634,9 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
         em.fn_off.push(em.here())
         let np : i64 = a.extra[a.fns[i].params_off × 1¤ptrdiff]
         emit_fn(&em, ir, np, lw.strs)
+    // every function was emitted and left its offset behind
+    assert(#em.fn_off = #a.fns, "one code offset per function")
+    assert(#em.rt_off = 15, "every runtime routine in place")
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:
         foreach i := 0…#em.cf_pos - 1:
@@ -5613,6 +5663,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
     if #em.jt_pos > 0:
         foreach i := 0…#em.jt_pos - 1:
             em.patch64(em.jt_pos[i], ro_vaddr + jt_base + 8 × em.jt_starts[em.jt_id[i] × 1¤ptrdiff])
+    assert(#stroffs = #lw.strs, "one offset per string")
     let rodata : mut u8[] = []
     foreach s := lw.strs:
         foreach c := s:
