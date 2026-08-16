@@ -913,6 +913,9 @@ def _substitute_generics(type_str: str, generic_map: dict[str, str]) -> str:
 # The array methods that change the array rather than only reading it.
 _ARRAY_MUTATORS = frozenset({"push", "pop", "insert", "remove", "clear"})
 
+# std methods that thread over containers, as @listable functions do.
+_LISTABLE_STD_METHODS = frozenset({"sin", "cos", "sinpi"})
+
 _ARRAY_METHODS: dict[str, int] = {
     "push": 1,
     "pop": 0,
@@ -5635,6 +5638,19 @@ class Evaluator:
         if (method_name == "callstack" and isinstance(unwrapped, ObjectValue)
                 and unwrapped.obj is std):
             return self._callstack_value(args)
+        # The numeric functions of the standard library are @listable,
+        # as the operators are: a container argument is taken apart and
+        # the question asked of each element.
+        if (isinstance(unwrapped, ObjectValue) and unwrapped.obj is std
+                and method_name in _LISTABLE_STD_METHODS):
+            threaded = self._thread_level(
+                f"std.{method_name}",
+                [f"argument {i + 1}" for i in range(len(args))],
+                list(args),
+                [0] * len(args),
+                lambda sub: self._call_method(obj, method_name, sub))
+            if threaded is not None:
+                return threaded
         if (isinstance(unwrapped, ObjectValue)
                 and isinstance(unwrapped.obj, ArrayValue)
                 and method_name == "str"):
@@ -5769,6 +5785,15 @@ class Evaluator:
                     raise TypeError(
                         f"{func.name} expects {expected} arguments, got {len(args)}")
                 self._check_builtin_args(func.name, args)
+                if func.is_listable:
+                    threaded = self._thread_level(
+                        func.name,
+                        [f"argument {i + 1}" for i in range(len(args))],
+                        list(args),
+                        [0] * len(args),
+                        lambda sub: self._do_call(func, sub))
+                    if threaded is not None:
+                        return threaded
                 return func.func(args)
             if isinstance(func, BuiltinBoundMethod):
                 self._check_builtin_args(func.name, args)

@@ -210,8 +210,11 @@ Outstanding
     green under -Werror.  --test on a file with nothing marked @test or @expect is now an
     error rather than a green report, so the gap cannot reopen quietly.
 
-[ ] a builtin cannot be @listable: BuiltinFunc has no field for it and the standard library
-    reaches Python methods by another path.  std.sqrt over an array would want it.
+[x] a builtin can be @listable: BuiltinFunc carries the flag and threads through the same
+    machinery a user function does, and the standard library's numeric functions --
+    std.sin, std.cos, std.sinpi -- thread over containers one level at a time, a matrix
+    met by the question its rows are.  tests/test_listable.ngpl covers the vector, matrix
+    and scalar cases; the spec's @listable section names the functions.
 
 [ ] a survey that every full-language feature the bootstrap does not have is refused by name
     rather than misparsed or quietly given another meaning.  The rule is stated above and holds

@@ -213,6 +213,42 @@ fn test_a_function_that_hands_nothing_back():
     assert(note(v) = ∅)
 
 // ---------------------------------------------------------------------
+// The standard library's numeric functions thread too
+// ---------------------------------------------------------------------
+
+// sinpi is exact at half-integers, so the answers compare without a
+// tolerance.
+@test
+fn test_std_sinpi_over_a_vector():
+    let xs : f64[] = [0.5, 1.5, 2.5]
+    let ys := std.sinpi(xs)
+    assert(ys[0] = 1.0)
+    assert(ys[1] = ⁻1.0)
+    assert(ys[2] = 1.0)
+
+@test
+fn test_std_cos_over_a_vector():
+    let zs : f64[] = [0.0, 0.0]
+    let cs := std.cos(zs)
+    assert(cs[0] = 1.0)
+    assert(cs[1] = 1.0)
+
+// A matrix is met one level at a time, as a user function is.
+@test
+fn test_std_sinpi_over_a_matrix():
+    let m : f64[2,2] = [[0.5, 1.0], [1.5, 2.0]]
+    let r := std.sinpi(m)
+    assert(r[0][0] = 1.0)
+    assert(r[0][1] = 0.0)
+    assert(r[1][0] = ⁻1.0)
+    assert(r[1][1] = 0.0)
+
+// A scalar is still a scalar.
+@test
+fn test_std_sin_scalar_unchanged():
+    assert(std.sin(0.0) = 0.0)
+
+// ---------------------------------------------------------------------
 // What it refuses
 // ---------------------------------------------------------------------
 

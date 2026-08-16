@@ -2543,7 +2543,7 @@ Rust and Zig make it a *type*, which lets the compiler verify the claim rather t
 
 ### Threading Over Containers: `@listable`
 
-A `@listable` function handed something *deeper* than a parameter asked for is handed a container of what it asked for, so it is asked of each of the things in the container instead:
+A `@listable` function handed something *deeper* than a parameter asked for is handed a container of what it asked for, so it is asked of each of the things in the container instead.  The operators are `@listable`, and so are the standard library's numeric functions — `std.sin`, `std.cos`, `std.sinpi` — so `std.sinpi(halves)` answers an array of sines the way `2 × halves` answers an array of doublings:
 
 ```
 @listable

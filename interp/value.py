@@ -1007,18 +1007,21 @@ class LambdaValue(Value):
 class BuiltinFunc(Value):
     """A built-in function implemented in Python."""
 
-    __slots__ = ("name", "arity", "func")
+    __slots__ = ("name", "arity", "func", "is_listable")
 
-    def __init__(self, name, arity, func):
+    def __init__(self, name, arity, func, is_listable=False):
         """
         Args:
             name: the function's name in the language namespace.
             arity: expected number of arguments (-1 for variadic).
             func: callable(values) -> Value where values is a list of Value args.
+            is_listable: whether a container argument is taken apart and
+                the function asked of each element, as @listable has it.
         """
         self.name = name
         self.arity = arity
         self.func = func
+        self.is_listable = is_listable
 
     def display(self):
         return f"<builtin {self.name}>"
