@@ -114,6 +114,18 @@ Attempt 3 grows core-1 to **core-2** with structs:
   comparisons order by code point through the ordinary signed path
   (code points stay below 2^21).  Character arrays and tuple elements
   ride the existing machinery; hashes of them wait.
+- **struct values travel**: the bootstrap's structs are references —
+  every probe shows one struct behind however many names — and the
+  compiled pointer representation is the same thing, so structs now
+  pass by value as parameters, return from any expression, and a
+  read-only binding may name a struct held in an array element, a
+  hash, a tuple, an optional or another binding, all with zero new
+  code.  The discipline that remains: a `mut` struct binding and a
+  struct reassignment must be born fresh (a literal or a call), so a
+  let whose right side visibly names shared data cannot create a
+  mutable alias; `&mut` stays the way to change what is shared.  (A
+  call may still answer a shared struct — the reference semantics
+  make that identical in both implementations.)
 
 ## Pipeline and Data Flow
 
@@ -300,7 +312,7 @@ One suite (`tests/run_tests.sh`): bootstrap-language tests run under
 the interpreter; the shared programs in `tests/compile/` run under
 the interpreter **and** compiled, outputs and exit codes diffed — the
 strict-subset rule made executable.  `--impl=` selects a side.
-Eighteen shared programs cover the whole core-2 surface including the
+Nineteen shared programs cover the whole core-2 surface including the
 stopping paths; `std.implementation` conditionalizes where
 implementations may differ.  The diff has caught real bugs on both
 sides, including the interpreter's float-precision division.

@@ -18,9 +18,11 @@ runtime table (murmur3-finalizer and FNV-1a hashing, doubling growth)
 whose reads answer optionals, tuples returned and destructured on the
 struct representation with interned shapes, width-suffixed literals,
 and characters with UTF-8 string positions, `.chars()`, `.chr()`
-and `.ord()`.  Eighteen shared programs run identically interpreted
-and compiled, inside the one integrated test suite; the bootstrap
-suite stays green with `-Werror`.
+and `.ord()`, and struct values that travel — by parameter, return
+and binding — on the reference semantics both implementations share.
+Nineteen shared programs run identically interpreted and compiled,
+inside the one integrated test suite; the bootstrap suite stays
+green with `-Werror`.
 
 The control-flow policy is real, not aspirational: comparisons
 materialize, `⌈ ⌊` and safe conditionals are `cmov`, `and`/`or` with
@@ -42,11 +44,17 @@ past i64.
    structs with methods, optionals with `match`, arrays of structs,
    hashes with their runtime table, tuples with destructuring,
    width-suffixed literals, and characters with UTF-8 string
-   positions, `.chars()`, `.chr()` and `.ord()`.  The compiler's own
+   positions, `.chars()`, `.chr()` and `.ord()`, and struct values
+   that travel by parameter, return and binding.  The compiler's own
    source is now written almost entirely inside the subset; what
-   remains outside: struct-typed by-value locals copied around, `:=`
-   inference where the right side already states its type, string
-   slices `s[a…b]`, and lambdas/combinators in a few helpers.  The
+   remains outside: `:=` inference where the right side already
+   states its type, string slices `s[a…b]`, and lambdas/combinators
+   in a few helpers.  The struct probes settled a fact worth
+   recording: the bootstrap's struct values are references — one
+   struct behind however many names — so the compiled pointer
+   representation conforms by construction, and the subset's
+   remaining freshness rules (mut bindings and reassignment) are
+   discipline, not representation.  The
    hash runtime is linear probing, not yet the 16-wide `pcmpeqb`
    Swiss-table probe the design planned, and the lexer still decodes
    UTF-8 a byte at a time rather than through the shift-DFA and mask

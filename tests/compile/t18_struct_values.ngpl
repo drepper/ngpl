@@ -1,0 +1,76 @@
+// core-2: struct values are references, as the bootstrap has them --
+// a read-only binding may name a struct held anywhere, and what
+// changes through the mut path shows through every name.
+
+struct Tok:
+    kind : i64
+    off : i64
+
+fn pick(v : &Tok[], i : i64 ¤ptrdiff) → Tok:
+    return v[i]
+
+fn brightest(a : Tok, b : Tok) → Tok:
+    return a if a.kind >= b.kind else b
+
+@start
+@impure
+fn main():
+    // a binding named from a binding: one struct, two names
+    let a : mut Tok = Tok{kind: 1, off: 10}
+    let b : Tok = a
+    a.kind ← 2
+    std.println("{} {}", a.kind, b.kind)
+
+    // a binding named from an element follows the element
+    let toks : mut Tok[] = []
+    toks.push(Tok{kind: 5, off: 0})
+    toks.push(Tok{kind: 6, off: 60})
+    let c : Tok = toks[0]
+    toks[0].kind ← 9
+    std.println("{} {}", toks[0].kind, c.kind)
+
+    // a stored binding and its element stay one struct
+    let d : mut Tok = Tok{kind: 7, off: 70}
+    toks[0] ← d
+    d.kind ← 8
+    std.println("{} {}", toks[0].kind, d.kind)
+    toks.push(d)
+    d.off ← 99
+    std.println("{} {}", toks[2].off, d.off)
+
+    // a function may hand back what it was shown
+    let e : Tok = pick(&toks, 1)
+    toks[1].off ← 61
+    std.println("{} {}", toks[1].off, e.off)
+    let f : Tok = brightest(Tok{kind: 3, off: 1}, Tok{kind: 4, off: 2})
+    std.println("{} {}", f.kind, f.off)
+
+    // an optional, a hash and a tuple hold the struct itself
+    let o : Tok? = ∃(d)
+    d.kind ← 1000
+    match o:
+        ∃(s):
+            std.println("{} {}", s.kind, d.kind)
+        ∅:
+            std.println("none")
+    let h : mut std.hash(str, Tok) = ⸨⸩
+    h["x"] ← d
+    d.off ← 1
+    match h["x"]:
+        ∃(s):
+            std.println("{} {}", s.off, d.off)
+        ∅:
+            std.println("none")
+    let t : (Tok, i64) = (d, 3)
+    d.kind ← 2000
+    std.println("{} {}", t[0].kind, d.kind)
+
+    // ?? hands the held struct through
+    let held : Tok = h["x"] ?? Tok{kind: 0, off: 0}
+    let absent : Tok = h["y"] ?? Tok{kind: ⁻1, off: ⁻1}
+    std.println("{} {}", held.kind, absent.kind)
+
+    // a fresh mut binding stays its own struct
+    let own : mut Tok = Tok{kind: 50, off: 51}
+    own.kind ← 52
+    std.println("{} {}", own.kind, toks[0].kind)

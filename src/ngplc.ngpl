@@ -3548,8 +3548,12 @@ impl Checker:
                 self.nslot[id × 1¤ptrdiff] ← slot1
                 return
             if ty_is_struct(nc):
-                if not self.is_fresh_struct(na):
-                    self.derr(tok, "a core-2 struct is born from its literal or a call; borrow with & to share one")
+                // a struct value is a reference, as the bootstrap has
+                // it: a read-only binding may name one held anywhere;
+                // only a mut binding must be born fresh, so a mutable
+                // alias cannot arise from a let
+                if nb = 1 and not self.is_fresh_struct(na):
+                    self.derr(tok, "a mut struct binding is born fresh, from its literal or a call; borrow with &mut to change a shared one")
                 self.check_expr(na, nc)
                 if self.ty_of(na) ≠ nc and not ty_is_arr(self.ty_of(na)):
                     if self.ty_of(na) ≠ TY_I64:
@@ -3779,8 +3783,6 @@ impl Checker:
                     self.adopt(na, want)
                 elif self.ty_of(na) ≠ want:
                     self.derr(tok, "the function answers " ⧺ self.sname_of(want) ⧺ ", not " ⧺ self.sname_of(self.ty_of(na)))
-                if ty_is_struct(want) and not self.is_fresh_struct(na):
-                    self.derr(tok, "core-2 returns a struct it just built; borrow with & to share one")
         elif k = NK_BREAK or k = NK_CONTINUE:
             if self.loop_depth = 0:
                 self.derr(tok, "there is no loop here to act on")
@@ -3792,8 +3794,6 @@ impl Checker:
                     self.adopt(na, want)
                 elif self.ty_of(na) ≠ want:
                     self.derr(tok, "the function answers " ⧺ self.sname_of(want) ⧺ ", but its last expression is " ⧺ self.sname_of(self.ty_of(na)))
-                if ty_is_struct(want) and not self.is_fresh_struct(na):
-                    self.derr(tok, "core-2 returns a struct it just built; borrow with & to share one")
             else:
                 self.check_expr(na, TY_UNIT)
                 let t : i64 = self.ty_of(na)
@@ -3915,8 +3915,6 @@ impl Checker:
         let pi : mut i64 = 0
         while pi < np:
             let pty : i64 = self.a.extra[(d.params_off + 2 + pi × 2) × 1¤ptrdiff]
-            if ty_is_struct(pty):
-                self.derr(d.tok, "core-2 borrows structs; write &" ⧺ self.sname_of(pty) ⧺ " or &mut " ⧺ self.sname_of(pty))
             if ty_is_arr(pty) or ty_is_hash(pty):
                 self.derr(d.tok, "core-2 borrows arrays and hashes; write &" ⧺ type_name(pty) ⧺ " or &mut " ⧺ type_name(pty))
             pi ← pi + 1
