@@ -4761,6 +4761,16 @@ fn report(diags : Diag[], file : str, as_json : bool):
         else:
             std.println("{}:{}:{}: error: {}", file, d.line, d.col, d.msg)
 
+// What a file is for is told by its name: a source file ends in
+// .ngpl, and other kinds of input -- objects, libraries -- will carry
+// names of their own.  A name the compiler cannot classify is refused
+// up front rather than read and misparsed.
+fn is_ngpl_source(path : str) → bool:
+    let cs := path.chars()
+    if #cs < 6:
+        return false
+    cs[#cs - 5] = '.' and cs[#cs - 4] = 'n' and cs[#cs - 3] = 'g' and cs[#cs - 2] = 'p' and cs[#cs - 1] = 'l'
+
 // The named source could not be opened: say which file and why the
 // compiler stopped, in the compiler's own words rather than a raw
 // operating system error.
@@ -4806,6 +4816,9 @@ fn main() → u8:
         i ← i + 1
     if input = "":
         std.println("ngplc: no source file named")
+        return 1
+    if not is_ngpl_source(input):
+        std.println("ngplc: cannot tell what '{}' is: an NGPL source file's name ends in '.ngpl'", input)
         return 1
 
     let alloc := std.arena.allocator()
