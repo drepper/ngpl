@@ -102,6 +102,18 @@ Attempt 3 grows core-1 to **core-2** with structs:
   adopts it through the same range check as contextual settling.  The
   bootstrap requires them inside tuple literals in return position,
   so the shared subset now has them everywhere.
+- **characters** `char`, a Unicode scalar value in a slot: literals
+  `'a'`/`'λ'`/`'\n'`/`'\u{1F389}'` lex as closed-type tokens on the
+  same `big + 2×type` ride as a suffix; `.chr()` crosses from any
+  integer (three refusals — negative, past 0x10FFFF, surrogate —
+  folded on literals, two cold never-taken branches at run time) and
+  `.ord()` crosses back to `u32` for free; `s[i]` answers the
+  character at a ¤ptrdiff position and `.chars()` lays a string out
+  as a `char[]`, both over real UTF-8 in the runtime; `foreach` walks
+  a string's characters; `⧺` joins characters into strings; the six
+  comparisons order by code point through the ordinary signed path
+  (code points stay below 2^21).  Character arrays and tuple elements
+  ride the existing machinery; hashes of them wait.
 
 ## Pipeline and Data Flow
 
@@ -215,6 +227,12 @@ A few routines over raw syscalls, emitted before user code:
   into a fresh optional.  The full Swiss-table shape — tags probed 16
   at a time with `pcmpeqb`+`pmovmskb` — remains the planned upgrade;
   the descriptor already carries what it needs.
+- the character quartet: `rt_stridx` (skip to the i-th lead byte —
+  each character's length from three materialized `setae` adds, no
+  branch — then decode), `rt_chars` (decode a whole string into a
+  fresh array, capacity bounded by the byte length), `rt_charstr`
+  (encode one scalar as 1–4 UTF-8 bytes in a fresh string), and the
+  `rt_badchar` abort stub behind `.chr()`'s two cold checks.
 
 The ELF carries three PT_LOADs: text R+X, rodata R (string bytes,
 string descriptors, jump tables), data R+W (globals' initial values
@@ -282,7 +300,7 @@ One suite (`tests/run_tests.sh`): bootstrap-language tests run under
 the interpreter; the shared programs in `tests/compile/` run under
 the interpreter **and** compiled, outputs and exit codes diffed — the
 strict-subset rule made executable.  `--impl=` selects a side.
-Sixteen shared programs cover the whole core-2 surface including the
+Eighteen shared programs cover the whole core-2 surface including the
 stopping paths; `std.implementation` conditionalizes where
 implementations may differ.  The diff has caught real bugs on both
 sides, including the interpreter's float-precision division.

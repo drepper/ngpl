@@ -1,0 +1,85 @@
+// core-2: characters -- Unicode scalars, string positions, .chars(),
+// .chr()/.ord(), joins and comparisons, all over real UTF-8.
+
+fn initials(s : str) → str:
+    let cs : char[] = s.chars()
+    let r : mut str = ""
+    if #cs > 0:
+        r ← r ⧺ cs[0]
+    r
+
+fn count_eq(s : str, want : char) → i64:
+    let n : mut i64 = 0
+    foreach c := s:
+        if c = want:
+            n ← n + 1
+    n
+
+fn shift(c : char, by : u32) → char:
+    (c.ord() + by).chr()
+
+@start
+@impure
+fn main():
+    // literals plain, Greek, escaped and numbered
+    let a : char = 'a'
+    let g : char = 'λ'
+    let tab : char = '\t'
+    let party : char = '\u{1F389}'
+    std.println("{} {} {}", a, g, party)
+    std.println("{}", tab = (9).chr())
+
+    // ord and chr cross between numbers and characters
+    std.println("{} {}", a.ord(), g.ord())
+    let d : char = (955).chr()
+    std.println("{} {}", d, d = g)
+    std.println("{}", 'a'.ord() + 1)
+
+    // characters order by code point
+    std.println("{} {} {}", 'a' < 'b', 'b' <= 'a', a ≠ g)
+    std.println("{} {}", 'λ' > 'z', '0' < '9')
+
+    // a string is read by character position, however wide the bytes
+    let s : str = "héllo"
+    std.println("{} {} {}", s[0], s[1], s[4])
+    std.println("{}", #s)
+    let i ¤ptrdiff : i64 = 2
+    std.println("{}", s[i])
+
+    // .chars() lays the string out as an array
+    let cs : char[] = s.chars()
+    std.println("{} {} {}", #cs, cs[1], cs[4])
+    let wide : char[] = "🎉x🎉".chars()
+    std.println("{} {} {}", #wide, wide[1], wide[0] = wide[2])
+
+    // strings build from characters
+    let built : mut str = "n="
+    built ← built ⧺ (65).chr()
+    built ← built ⧺ 'x' ⧺ "!"
+    std.println("{}", built)
+    std.println("{}", 'a' ⧺ 'b')
+
+    // walking a string hands over its characters
+    let r : mut str = ""
+    foreach c := "wörld":
+        r ← r ⧺ c
+    std.println("{}", r)
+    std.println("{}", count_eq("héllé", 'é'))
+
+    // characters travel: parameters, returns, arrays, tuples
+    std.println("{}", initials("Grüß"))
+    std.println("{}", shift('a', 2))
+    let lits : char[] = ['h', 'i']
+    std.println("{}{}", lits[0], lits[1])
+    let pair : (char, i64) = ('z', 9)
+    std.println("{} {}", pair[0], pair[1])
+
+    // a char array grows like any other
+    let grown : mut char[] = ['α']
+    grown.push('β')
+    grown.push('γ')
+    std.println("{} {} {}", #grown, grown[1], grown[2])
+    let sum : mut str = ""
+    foreach c := grown:
+        sum ← sum ⧺ c
+    std.println("{}", sum)

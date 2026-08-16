@@ -193,6 +193,8 @@ fn run_str(src : byte[], off : i64, n : i64) → str:
 let TY_UNIT : i64 = 0
 let TY_BOOL : i64 = 2
 let TY_STR : i64 = 3
+let TY_CHAR : i64 = 4       // one Unicode scalar value, UCS-4 in a slot
+let TY_U32 : i64 = 80       // what .ord() answers
 let TY_UNT : i64 = 8
 let TY_EMPTY : i64 = 9       // a bare ∅, not yet settled on its optional
 let TY_U64 : i64 = 144       // 16 + 0 + 2×64
@@ -318,6 +320,7 @@ fn type_name(t0 : i64) → str:
     if t = TY_UNIT: return "∅"
     if t = TY_BOOL: return prefix ⧺ "bool"
     if t = TY_STR: return prefix ⧺ "str"
+    if t = TY_CHAR: return prefix ⧺ "char"
     if t = TY_UNT: return "untyped integer"
     if t = TY_EMPTY: return "∅"
     if ty_is_struct(t): return prefix ⧺ "struct #" ⧺ i64_str(ty_sidx(t))
@@ -401,6 +404,7 @@ let CL_LT : i64 = 11         // < <= << <-
 let CL_GT : i64 = 12         // > >= >>
 let CL_DASH : i64 = 13       // - or ->
 let CL_QMARK : i64 = 14      // ??
+let CL_APOS : i64 = 15       // a character literal
 
 // The class table, built once per run.  An entry of kind+100 is a
 // complete single-byte token.
@@ -429,6 +433,7 @@ fn mkcls() → i64[]:
     t[62] ← CL_GT
     t[45] ← CL_DASH
     t[63] ← CL_QMARK
+    t[39] ← CL_APOS
     t[40] ← 100 + TK_LPAR
     t[41] ← 100 + TK_RPAR
     t[44] ← 100 + TK_COMMA
@@ -625,6 +630,93 @@ impl Lexer:
             return
         self.emit(TK_INT, spos, self.pos - spos, scol, v, big)
 
+    // 'a', 'λ', '\n', '\u{1F389}': one character between apostrophes.
+    // The token is a TK_INT whose big field carries 2 × TY_CHAR, the
+    // same closed-type ride a width suffix takes.
+    fn read_char(&mut self):
+        let spos : i64 = self.pos
+        let scol : i64 = self.col
+        self.adv()
+        let b : i64 = self.peek(0)
+        let code : mut i64 = 0
+        if b = ⁻1 or b = 10:
+            self.err("a character literal ends on the line it starts")
+            return
+        if b = 39:
+            self.err("a character literal holds one character, and this one holds none; a string of no characters is written \"\"")
+            return
+        if b = 92:
+            let e : i64 = self.peek(1)
+            if e = 117:
+                self.adv()
+                self.adv()
+                if self.peek(0) ≠ 123:
+                    self.err("\\u opens its number with '{'")
+                    return
+                self.adv()
+                let digits : mut i64 = 0
+                while hex_val(self.peek(0)) ≠ ⁻1:
+                    code ← code × 16 + hex_val(self.peek(0))
+                    digits ← digits + 1
+                    if digits > 6:
+                        self.err("a code point has at most six hex digits")
+                        return
+                    self.adv()
+                if digits = 0 or self.peek(0) ≠ 125:
+                    self.err("\\u{…} holds hex digits up to '}'")
+                    return
+                self.adv()
+            else:
+                if e = 110: code ← 10
+                elif e = 116: code ← 9
+                elif e = 114: code ← 13
+                elif e = 92: code ← 92
+                elif e = 39: code ← 39
+                elif e = 34: code ← 34
+                else:
+                    self.err("unknown escape in character literal")
+                    return
+                self.adv()
+                self.adv()
+        elif b < 128:
+            code ← b
+            self.adv()
+        else:
+            // one UTF-8 character, sized by its lead byte
+            let extra : mut i64 = 0
+            if b >= 240:
+                code ← b & 7
+                extra ← 3
+            elif b >= 224:
+                code ← b & 15
+                extra ← 2
+            elif b >= 194:
+                code ← b & 31
+                extra ← 1
+            else:
+                self.err("this byte begins no character")
+                return
+            self.adv()
+            while extra > 0:
+                let cb : i64 = self.peek(0)
+                if cb < 128 or cb >= 192:
+                    self.err("the character's encoding breaks off")
+                    return
+                code ← code × 64 + (cb & 63)
+                self.adv()
+                extra ← extra - 1
+        if self.peek(0) ≠ 39:
+            self.err("a character literal holds one character; ' closes it, and a string is written with double quotes")
+            return
+        self.adv()
+        if code > 1114111:
+            self.err("character literal: " ⧺ i64_str(code) ⧺ " is past the last code point, 0x10FFFF")
+            return
+        if code >= 55296 and code <= 57343:
+            self.err("character literal: " ⧺ i64_str(code) ⧺ " is a surrogate, which encodes half of a character in UTF-16 rather than being one")
+            return
+        self.emit(TK_INT, spos, self.pos - spos, scol, code, TY_CHAR × 2)
+
     fn read_string(&mut self):
         let spos : i64 = self.pos
         let scol : i64 = self.col
@@ -781,6 +873,8 @@ fn lex(src : byte[]) → Toks:
             lx.read_ident()
         elif c = CL_QUOTE:
             lx.read_string()
+        elif c = CL_APOS:
+            lx.read_char()
         elif c = CL_MB2 or c = CL_MB3:
             lx.read_glyph(c)
         elif c >= CL_COLON and c <= CL_QMARK:
@@ -883,7 +977,7 @@ let SB_EXIT : i64 = 3
 let TYNAMES : std.hash(str, i64) = (⸨
     "i8": 33, "i16": 49, "i32": 81, "i64": 145,
     "u8": 32, "u16": 48, "u32": 80, "u64": 144,
-    "bool": 2, "str": 3⸩)
+    "bool": 2, "str": 3, "char": 4⸩)
 
 struct FnDef:
     name : str
@@ -1059,8 +1153,8 @@ impl Parser:
             let es : mut i64[] = []
             while true:
                 let et : i64 = self.parse_type(false)
-                if not ((ty_is_int(et) and ty_unit(et) = 0) or et = TY_BOOL or et = TY_STR or ty_is_struct(et) or ty_is_opt(et)):
-                    self.err("a core-2 tuple holds plain integers, truth values, strings, structs or optionals")
+                if not ((ty_is_int(et) and ty_unit(et) = 0) or et = TY_BOOL or et = TY_STR or et = TY_CHAR or ty_is_struct(et) or ty_is_opt(et)):
+                    self.err("a core-2 tuple holds plain integers, truth values, characters, strings, structs or optionals")
                     return TY_I64
                 es.push(et)
                 if self.failed():
@@ -1124,8 +1218,8 @@ impl Parser:
         if self.peek() = TK_LBRACK:
             self.pos ← self.pos + 1
             _ ← self.eat(TK_RBRACK, "']' closing the array type")
-            if not (ty_is_int(base) and ty_unit(base) = 0) and not ty_is_struct(base):
-                self.err("a core-2 array holds plain integers or structs")
+            if not (ty_is_int(base) and ty_unit(base) = 0) and not ty_is_struct(base) and base ≠ TY_CHAR:
+                self.err("a core-2 array holds plain integers, characters or structs")
                 return TY_I64
             base ← mk_aty(base)
         if self.peek() = TK_QMARK:
@@ -1251,14 +1345,19 @@ impl Parser:
         let at : i64 = self.pos
         if k = TK_INT:
             self.pos ← self.pos + 1
-            return self.mknode(NK_INT, at, self.toks.val[at × 1¤ptrdiff],
-                               self.toks.big[at × 1¤ptrdiff], 0)
+            let lit : i64 = self.mknode(NK_INT, at, self.toks.val[at × 1¤ptrdiff],
+                                        self.toks.big[at × 1¤ptrdiff], 0)
+            // 'a'.ord() reads on; a number's method wants parentheses,
+            // as the bootstrap has it
+            if self.toks.big[at × 1¤ptrdiff] » 1 = TY_CHAR:
+                return self.parse_postfix(lit)
+            return lit
         if k = TK_TRUE or k = TK_FALSE:
             self.pos ← self.pos + 1
             return self.mknode(NK_BOOL, at, 1 if k = TK_TRUE else 0, 0, 0)
         if k = TK_STR:
             self.pos ← self.pos + 1
-            return self.mknode(NK_STR, at, self.toks.val[at × 1¤ptrdiff], 0, 0)
+            return self.parse_postfix(self.mknode(NK_STR, at, self.toks.val[at × 1¤ptrdiff], 0, 0))
         if k = TK_NEG:
             self.pos ← self.pos + 1
             // ⁻ against a literal is part of it, as the language says
@@ -1267,6 +1366,9 @@ impl Parser:
                 self.pos ← self.pos + 1
                 if self.toks.big[vt × 1¤ptrdiff] & 1 = 1:
                     self.err("the literal is past i64; ⁻ has nothing to negate")
+                    return 0
+                if self.toks.big[vt × 1¤ptrdiff] » 1 = TY_CHAR:
+                    self.err("⁻ negates a number, not a character")
                     return 0
                 return self.mknode(NK_INT, vt,
                                    @wrap(0 - self.toks.val[vt × 1¤ptrdiff]),
@@ -2240,6 +2342,9 @@ fn dump_ast(a : Ast, src : byte[], toks : Toks):
 let MID_PUSH : i64 = 1
 let MID_POP : i64 = 2
 let MID_GET : i64 = 3
+let MID_CHR : i64 = 4
+let MID_ORD : i64 = 5
+let MID_CHARS : i64 = 6
 
 struct Chk:
     ntype : i64[]
@@ -2525,10 +2630,14 @@ impl Checker:
         let nc : i64 = self.a.nc[id × 1¤ptrdiff]
         if k = NK_INT:
             if nb >= 2:
-                // the width suffix closed the literal's type at the
-                // lexer; only the big bit stays for the fit check
+                // the width suffix -- or a character literal -- closed
+                // the type at the lexer; only the big bit stays for
+                // the fit check
                 let st : i64 = nb » 1
                 self.a.nb[id × 1¤ptrdiff] ← nb & 1
+                if st = TY_CHAR:
+                    self.set_type(id, TY_CHAR)
+                    return
                 self.set_type(id, TY_UNT)
                 self.adopt(id, st)
             elif want ≠ TY_UNIT and ty_is_int(want):
@@ -2723,8 +2832,10 @@ impl Checker:
         elif k = NK_CCAT:
             self.check_expr(na, TY_UNIT)
             self.check_expr(nb, TY_UNIT)
-            if self.ty_of(na) ≠ TY_STR or self.ty_of(nb) ≠ TY_STR:
-                self.derr(tok, "⧺ joins strings in core-1")
+            let cl : i64 = self.ty_of(na)
+            let cr : i64 = self.ty_of(nb)
+            if not ((cl = TY_STR or cl = TY_CHAR) and (cr = TY_STR or cr = TY_CHAR)):
+                self.derr(tok, "⧺ joins strings and characters in core-2")
             self.set_type(id, TY_STR)
         else:
             // + - × ÷ % « » & | ^ ⌈ ⌊ over integers
@@ -2773,6 +2884,11 @@ impl Checker:
             self.adopt(nb, tl)
         let l : i64 = self.ty_of(na)
         let r : i64 = self.ty_of(nb)
+        if l = TY_CHAR and r = TY_CHAR:
+            // characters order by code point; the slots hold small
+            // positive numbers, so the signed compare serves
+            self.set_type(id, TY_BOOL)
+            return
         if not ty_is_int(l) or not ty_is_int(r):
             self.derr(tok, "an ordering compares numbers; the sides are " ⧺ type_name(l) ⧺ " and " ⧺ type_name(r))
         elif ty_sgn(l) ≠ ty_sgn(r):
@@ -2875,8 +2991,8 @@ impl Checker:
                 self.derr(tok, "the elements state no type; the binding must say it")
             self.set_type(id, want if ty_is_arr(want) else mk_aty(TY_I64))
             return
-        if not (ty_is_int(settled) and ty_unit(settled) = 0) and not ty_is_struct(settled):
-            self.derr(tok, "a core-2 array holds plain integers or structs")
+        if not (ty_is_int(settled) and ty_unit(settled) = 0) and not ty_is_struct(settled) and settled ≠ TY_CHAR:
+            self.derr(tok, "a core-2 array holds plain integers, characters or structs")
             self.set_type(id, mk_aty(TY_I64))
             return
         // every element meets the settled type
@@ -3021,13 +3137,26 @@ impl Checker:
                 return
             self.set_type(id, self.tup_elem(t, ix))
             return
+        if t = TY_STR:
+            // a position in a string is a count of characters, and
+            // what it names is a character
+            self.check_expr(nb, TY_UNIT)
+            let ti : i64 = self.ty_of(nb)
+            if ti = TY_UNT:
+                self.adopt(nb, ty_with_unit(TY_I64, UNIT_PTRDIFF))
+            elif not ty_is_int(ti):
+                self.derr(tok, "a subscript is a number, not " ⧺ type_name(ti))
+            elif ty_unit(ti) ≠ UNIT_PTRDIFF:
+                self.derr(tok, "a string's subscript is measured ¤ptrdiff, but the index is " ⧺ type_name(ti))
+            self.set_type(id, TY_CHAR)
+            return
         if ty_is_hash(t):
             // asking a hash answers an optional: absence is ordinary
             self.check_hash_key(tok, t, nb)
             self.set_type(id, mk_oty(ty_hval(t)))
             return
         if not ty_is_arr(t):
-            self.derr(tok, "only an array or a hash is subscripted; this is " ⧺ type_name(t))
+            self.derr(tok, "only an array, a hash or a string is subscripted; this is " ⧺ type_name(t))
             self.set_type(id, TY_I64)
             return
         self.check_index_expr(tok, t, nb)
@@ -3186,8 +3315,8 @@ impl Checker:
             let t : i64 = self.ty_of(arg)
             if t = TY_UNT:
                 self.adopt(arg, TY_I64)
-            elif not ty_is_int(t) and t ≠ TY_BOOL and t ≠ TY_STR:
-                self.derr(tok, "println writes numbers, truth values and strings; this is " ⧺ type_name(t))
+            elif not ty_is_int(t) and t ≠ TY_BOOL and t ≠ TY_STR and t ≠ TY_CHAR:
+                self.derr(tok, "println writes numbers, truth values, characters and strings; this is " ⧺ type_name(t))
             i ← i + 1
         self.set_type(id, TY_UNIT)
 
@@ -3207,8 +3336,50 @@ impl Checker:
             let sname := self.a.structs[ty_sidx(ty_strip_ref(t)) × 1¤ptrdiff].name
             self.check_smethod(id, tok, na, args_off, sname, m, true)
             return
+        let argc0 : i64 = self.a.extra[args_off × 1¤ptrdiff]
+        if (ty_is_int(t) or t = TY_UNT) and m = "chr":
+            if argc0 ≠ 0:
+                self.derr(tok, "chr takes nothing")
+            if self.kind_of(na) = NK_INT:
+                // a literal's character is judged and folded here, with
+                // the same three refusals the runtime check makes
+                let v : i64 = self.a.na[na × 1¤ptrdiff]
+                if v < 0 or self.a.nb[na × 1¤ptrdiff] ≠ 0:
+                    self.derr(tok, "chr: the value is not a code point; a character is numbered from 0")
+                elif v > 1114111:
+                    self.derr(tok, "chr: " ⧺ i64_str(v) ⧺ " is past the last code point, 0x10FFFF")
+                elif v >= 55296 and v <= 57343:
+                    self.derr(tok, "chr: " ⧺ i64_str(v) ⧺ " is a surrogate, which encodes half of a character in UTF-16 rather than being one")
+                self.a.nkind[id × 1¤ptrdiff] ← NK_INT
+                self.a.na[id × 1¤ptrdiff] ← v
+                self.a.nb[id × 1¤ptrdiff] ← 0
+                self.set_type(id, TY_CHAR)
+                return
+            if t = TY_UNT:
+                self.adopt(na, TY_I64)
+            self.a.nc[id × 1¤ptrdiff] ← MID_CHR
+            self.set_type(id, TY_CHAR)
+            return
+        if t = TY_CHAR and m = "ord":
+            if argc0 ≠ 0:
+                self.derr(tok, "ord takes nothing")
+            if self.kind_of(na) = NK_INT:
+                self.a.nkind[id × 1¤ptrdiff] ← NK_INT
+                self.a.na[id × 1¤ptrdiff] ← self.a.na[na × 1¤ptrdiff]
+                self.a.nb[id × 1¤ptrdiff] ← 0
+                self.set_type(id, TY_U32)
+                return
+            self.a.nc[id × 1¤ptrdiff] ← MID_ORD
+            self.set_type(id, TY_U32)
+            return
+        if t = TY_STR and m = "chars":
+            if argc0 ≠ 0:
+                self.derr(tok, "chars takes nothing")
+            self.a.nc[id × 1¤ptrdiff] ← MID_CHARS
+            self.set_type(id, mk_aty(TY_CHAR))
+            return
         if not ty_is_arr(t):
-            self.derr(tok, "'" ⧺ m ⧺ "' is asked of an array or a struct; this is " ⧺ type_name(t))
+            self.derr(tok, "'" ⧺ m ⧺ "' is asked of an array, a struct, a string, a character or a number; this is " ⧺ type_name(t))
             self.set_type(id, TY_I64)
             return
         let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
@@ -3387,7 +3558,12 @@ impl Checker:
                 self.nslot[id × 1¤ptrdiff] ← slot0
                 return
             if ty_is_arr(nc):
-                if self.kind_of(na) ≠ NK_ARRLIT:
+                if self.kind_of(na) = NK_MCALL:
+                    // .chars() answers a fresh array and may be the birth
+                    self.check_expr(na, nc)
+                    if self.ty_of(na) ≠ nc:
+                        self.derr(tok, "the binding says " ⧺ type_name(nc) ⧺ " but the value is " ⧺ type_name(self.ty_of(na)))
+                elif self.kind_of(na) ≠ NK_ARRLIT:
                     self.derr(tok, "a core-1 array is born from its literal")
                     self.set_type(na, nc)
                 else:
@@ -3580,11 +3756,11 @@ impl Checker:
         elif k = NK_FOREACHA:
             self.check_expr(na, TY_UNIT)
             let t : i64 = self.ty_of(na)
-            if not ty_is_arr(t):
-                self.derr(tok, "foreach walks an array or a range; this is " ⧺ type_name(t))
+            if not ty_is_arr(t) and t ≠ TY_STR:
+                self.derr(tok, "foreach walks an array, a string or a range; this is " ⧺ type_name(t))
                 return
             self.push_scope()
-            let slot : i64 = self.declare(tok, ty_elem(t), 0)
+            let slot : i64 = self.declare(tok, TY_CHAR if t = TY_STR else ty_elem(t), 0)
             self.nslot[id × 1¤ptrdiff] ← slot
             self.loop_depth ← self.loop_depth + 1
             self.check_block(nb, false)
@@ -3944,6 +4120,10 @@ let IR_HPUT : i64 = 71     // hash a takes key b → value c
 let IR_HGET : i64 = 72     // d ← hash a asked for key b, an optional
 let IR_HELEM : i64 = 73    // d ← whether hash a holds key b
 let IR_HLEN : i64 = 74     // d ← how many hash a holds
+let IR_CHR : i64 = 75      // d ← a as a character, judged first
+let IR_SIDX : i64 = 76     // d ← string a's character at position b
+let IR_CHARS : i64 = 77    // d ← string a's characters, an array
+let IR_CHARSTR : i64 = 78  // d ← character a as a fresh string
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
 let IR_FLD : i64 = 67      // d ← field b of struct a
 let IR_FSTO : i64 = 68     // field b of struct a ← c
@@ -4171,6 +4351,12 @@ impl Lower:
                 let d0 : i64 = self.tmp()
                 self.ir(IR_FLD, av0, self.a.na[nb × 1¤ptrdiff], 0, d0, w)
                 return d0
+            if self.tof(na) = TY_STR:
+                let av1 : i64 = self.lower_expr(na)
+                let iv1 : i64 = self.lower_expr(nb)
+                let d1 : i64 = self.tmp()
+                self.ir(IR_SIDX, av1, iv1, 0, d1, w)
+                return d1
             let av : i64 = self.lower_expr(na)
             let iv : i64 = self.lower_expr(nb)
             let d : i64 = self.tmp()
@@ -4236,8 +4422,18 @@ impl Lower:
             self.ir(IR_HELEM, hv, kv2, 0, d, 0)
             return d
         if k = NK_CCAT:
-            let av : i64 = self.lower_expr(na)
-            let bv : i64 = self.lower_expr(nb)
+            let av0 : i64 = self.lower_expr(na)
+            let av : mut i64 = av0
+            if self.tof(na) = TY_CHAR:
+                let ta : i64 = self.tmp()
+                self.ir(IR_CHARSTR, av0, 0, 0, ta, 0)
+                av ← ta
+            let bv0 : i64 = self.lower_expr(nb)
+            let bv : mut i64 = bv0
+            if self.tof(nb) = TY_CHAR:
+                let tb : i64 = self.tmp()
+                self.ir(IR_CHARSTR, bv0, 0, 0, tb, 0)
+                bv ← tb
             let d : i64 = self.tmp()
             self.ir(IR_SCCAT, av, bv, 0, d, w)
             return d
@@ -4393,6 +4589,18 @@ impl Lower:
             return d
         let av : i64 = self.lower_expr(base)
         let w : i64 = width_of(self.tof(nid))
+        if mid = MID_CHR:
+            let d : i64 = self.tmp()
+            self.ir(IR_CHR, av, 0, 0, d, w)
+            return d
+        if mid = MID_ORD:
+            let d : i64 = self.tmp()
+            self.ir(IR_MOV, av, 0, 0, d, w)
+            return d
+        if mid = MID_CHARS:
+            let d : i64 = self.tmp()
+            self.ir(IR_CHARS, av, 0, 0, d, 0)
+            return d
         if mid = MID_PUSH:
             let vv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
             self.ir(IR_APUSH, av, vv, 0, 0, 0)
@@ -4504,6 +4712,11 @@ impl Lower:
             else:
                 let v : i64 = self.lower_expr(arg)
                 self.ir(IR_PRINTSV, v, 0, 0, 0, 0)
+        elif t = TY_CHAR:
+            let v : i64 = self.lower_expr(arg)
+            let sv : i64 = self.tmp()
+            self.ir(IR_CHARSTR, v, 0, 0, sv, 0)
+            self.ir(IR_PRINTSV, sv, 0, 0, 0, 0)
         elif t = TY_BOOL:
             let v : i64 = self.lower_expr(arg)
             let mt : i64 = self.intern("true")
@@ -4885,7 +5098,12 @@ impl Lower:
     fn lower_foreacha(&mut self, sid : i64, tok : i64, arr : i64, body : i64,
                       ret_ty : i64):
         let evar : i64 = self.nslot[sid × 1¤ptrdiff]
-        let av : i64 = self.lower_expr(arr)
+        let av0 : i64 = self.lower_expr(arr)
+        let av : mut i64 = av0
+        if self.tof(arr) = TY_STR:
+            let cv : i64 = self.tmp()
+            self.ir(IR_CHARS, av0, 0, 0, cv, 0)
+            av ← cv
         let desc : i64 = self.tmp()
         self.ir(IR_MOV, av, 0, 0, desc, 0)
         let iv : i64 = self.tmp()
@@ -5037,6 +5255,10 @@ let RT_HGET : i64 = ⁻18
 let RT_HPUT : i64 = ⁻19
 let RT_HELEM : i64 = ⁻20
 let RT_HGROW : i64 = ⁻21
+let RT_BADCHAR : i64 = ⁻22
+let RT_STRIDX : i64 = ⁻23
+let RT_CHARS : i64 = ⁻24
+let RT_CHARSTR : i64 = ⁻25
 
 struct Emit:
     code : u8[]
@@ -5689,6 +5911,30 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.load(R_AX, a)
             em.b4(72, 139, 64, 16)           // mov rax, [rax+16]
             em.store(R_AX, d)
+        elif o = IR_CHR:
+            em.load(R_AX, a)
+            em.movimm(R_R10, 1114111)
+            em.b3(76, 57, 208)               // cmp rax, r10
+            em.jglobal(0, 135, RT_BADCHAR)   // ja: past the last, negatives included
+            em.b3(72, 141, 136)
+            em.w32(@wrap(0 - 55296))         // lea rcx, [rax - 0xD800]
+            em.movimm(R_R10, 2048)
+            em.b3(76, 57, 209)               // cmp rcx, r10
+            em.jglobal(0, 130, RT_BADCHAR)   // jb: a surrogate
+            em.store(R_AX, d)
+        elif o = IR_SIDX:
+            em.load(R_DI, a)
+            em.load(R_SI, b)
+            em.jglobal(232, ⁻1, RT_STRIDX)
+            em.store(R_AX, d)
+        elif o = IR_CHARS:
+            em.load(R_DI, a)
+            em.jglobal(232, ⁻1, RT_CHARS)
+            em.store(R_AX, d)
+        elif o = IR_CHARSTR:
+            em.load(R_DI, a)
+            em.jglobal(232, ⁻1, RT_CHARSTR)
+            em.store(R_AX, d)
         elif o = IR_JTAB:
             let jmin : i64 = ir.extra[b × 1¤ptrdiff]
             let span : i64 = ir.extra[(b + 1) × 1¤ptrdiff]
@@ -6293,6 +6539,222 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64):
     em.b1(195)
     em.resolve_locals()
 
+    // RT_BADCHAR: .chr() was handed what no character is
+    em.rt_off.push(em.here())
+    let bcm : i64 = lw.intern("not a character: past the code points or a surrogate\n")
+    em.sref(R_SI, bcm)
+    em.movimm(R_DX, str_len(lw.strs[bcm × 1¤ptrdiff]))
+    em.jglobal(233, ⁻1, RT_ABORT)
+
+    // RT_STRIDX: rdi = descriptor, rsi = character position → rax =
+    // the code point; a position past the characters is out of range.
+    // The skip walks lead bytes, the length of each computed with
+    // three materialized compares -- no branch to predict.
+    em.rt_off.push(em.here())
+    em.begin_fn(6)
+    em.b3(72, 139, 23)              // mov rdx, [rdi]
+    em.b4(72, 139, 79, 8)           // mov rcx, [rdi+8]
+    em.b3(77, 49, 210)              // xor r10, r10
+    em.set_label(0)                 // Lskip
+    em.b3(76, 57, 209)              // cmp rcx, r10
+    em.jglobal(0, 134, RT_BOUNDS)   // jbe: the position is past the end
+    em.b3(72, 133, 246)             // test rsi, rsi
+    em.jlocal(132, 1)               // jz Ldecode
+    em.b4(66, 15, 182, 4)
+    em.b1(18)                       // movzx eax, byte [rdx+r10]
+    em.b3(73, 199, 193)
+    em.w32(1)                       // mov r9, 1
+    em.b3(77, 49, 192)              // xor r8, r8
+    em.b2(60, 192)                  // cmp al, 0xC0
+    em.b4(65, 15, 147, 192)         // setae r8b
+    em.b3(77, 1, 193)               // add r9, r8
+    em.b2(60, 224)                  // cmp al, 0xE0
+    em.b4(65, 15, 147, 192)         // setae r8b
+    em.b3(77, 1, 193)               // add r9, r8
+    em.b2(60, 240)                  // cmp al, 0xF0
+    em.b4(65, 15, 147, 192)         // setae r8b
+    em.b3(77, 1, 193)               // add r9, r8
+    em.b3(77, 1, 202)               // add r10, r9
+    em.b3(72, 255, 206)             // dec rsi
+    em.jlocal(⁻1, 0)
+    em.set_label(1)                 // Ldecode
+    em.b4(66, 15, 182, 4)
+    em.b1(18)                       // movzx eax, byte [rdx+r10]
+    em.b3(73, 255, 194)             // inc r10
+    em.b2(60, 128)                  // cmp al, 0x80
+    em.jlocal(130, 2)               // jb Ldone: ASCII answers itself
+    em.b2(60, 224)                  // cmp al, 0xE0
+    em.jlocal(130, 3)               // jb: a two-byte character
+    em.b2(60, 240)                  // cmp al, 0xF0
+    em.jlocal(130, 4)               // jb: a three-byte character
+    em.b4(72, 131, 224, 7)          // and rax, 7
+    em.b3(73, 199, 192)
+    em.w32(3)                       // mov r8, 3
+    em.jlocal(⁻1, 5)
+    em.set_label(4)                 // three bytes
+    em.b4(72, 131, 224, 15)         // and rax, 15
+    em.b3(73, 199, 192)
+    em.w32(2)                       // mov r8, 2
+    em.jlocal(⁻1, 5)
+    em.set_label(3)                 // two bytes
+    em.b4(72, 131, 224, 31)         // and rax, 31
+    em.b3(73, 199, 192)
+    em.w32(1)                       // mov r8, 1
+    em.set_label(5)                 // Lacc
+    em.b3(77, 133, 192)             // test r8, r8
+    em.jlocal(132, 2)               // jz Ldone
+    em.b4(70, 15, 182, 12)
+    em.b1(18)                       // movzx r9d, byte [rdx+r10]
+    em.b3(73, 255, 194)             // inc r10
+    em.b4(73, 131, 225, 63)         // and r9, 63
+    em.b4(72, 193, 224, 6)          // shl rax, 6
+    em.b3(76, 9, 200)               // or rax, r9
+    em.b3(73, 255, 200)             // dec r8
+    em.jlocal(⁻1, 5)
+    em.set_label(2)                 // Ldone
+    em.b1(195)
+    em.resolve_locals()
+
+    // RT_CHARS: rdi = descriptor → rax = a char[] of the string's
+    // characters; the byte length bounds the capacity from above
+    em.rt_off.push(em.here())
+    em.begin_fn(6)
+    em.b3(76, 139, 39)              // mov r12, [rdi]
+    em.b4(76, 139, 111, 8)          // mov r13, [rdi+8]
+    em.b3(76, 137, 239)             // mov rdi, r13
+    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.b3(72, 137, 195)             // mov rbx, rax
+    em.b3(77, 49, 246)              // xor r14, r14
+    em.b3(77, 49, 255)              // xor r15, r15
+    em.set_label(0)                 // Lloop
+    em.b3(77, 57, 245)              // cmp r13, r14
+    em.jlocal(134, 1)               // jbe Ldone
+    em.b4(67, 15, 182, 4)
+    em.b1(52)                       // movzx eax, byte [r12+r14]
+    em.b3(73, 255, 198)             // inc r14
+    em.b2(60, 128)                  // cmp al, 0x80
+    em.jlocal(130, 2)               // jb Lstore
+    em.b2(60, 224)                  // cmp al, 0xE0
+    em.jlocal(130, 3)               // jb: two bytes
+    em.b2(60, 240)                  // cmp al, 0xF0
+    em.jlocal(130, 4)               // jb: three bytes
+    em.b4(72, 131, 224, 7)          // and rax, 7
+    em.b3(73, 199, 192)
+    em.w32(3)                       // mov r8, 3
+    em.jlocal(⁻1, 5)
+    em.set_label(4)
+    em.b4(72, 131, 224, 15)         // and rax, 15
+    em.b3(73, 199, 192)
+    em.w32(2)                       // mov r8, 2
+    em.jlocal(⁻1, 5)
+    em.set_label(3)
+    em.b4(72, 131, 224, 31)         // and rax, 31
+    em.b3(73, 199, 192)
+    em.w32(1)                       // mov r8, 1
+    em.set_label(5)                 // Lacc
+    em.b3(77, 133, 192)             // test r8, r8
+    em.jlocal(132, 2)               // jz Lstore
+    em.b4(71, 15, 182, 12)
+    em.b1(52)                       // movzx r9d, byte [r12+r14]
+    em.b3(73, 255, 198)             // inc r14
+    em.b4(73, 131, 225, 63)         // and r9, 63
+    em.b4(72, 193, 224, 6)          // shl rax, 6
+    em.b3(76, 9, 200)               // or rax, r9
+    em.b3(73, 255, 200)             // dec r8
+    em.jlocal(⁻1, 5)
+    em.set_label(2)                 // Lstore
+    em.b3(72, 139, 11)              // mov rcx, [rbx]
+    em.b4(74, 137, 4, 249)          // mov [rcx+r15*8], rax
+    em.b3(73, 255, 199)             // inc r15
+    em.jlocal(⁻1, 0)
+    em.set_label(1)                 // Ldone
+    em.b4(76, 137, 123, 8)          // mov [rbx+8], r15
+    em.b3(72, 137, 216)             // mov rax, rbx
+    em.b1(195)
+    em.resolve_locals()
+
+    // RT_CHARSTR: rdi = code point → rax = a fresh one-character
+    // string, its UTF-8 encoding 1 to 4 bytes
+    em.rt_off.push(em.here())
+    em.begin_fn(4)
+    em.b3(73, 137, 252)             // mov r12, rdi
+    em.movimm(R_DI, 20)
+    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.b4(72, 141, 72, 16)          // lea rcx, [rax+16]
+    em.b3(72, 137, 8)               // mov [rax], rcx
+    em.b3(73, 129, 252)
+    em.w32(128)                     // cmp r12, 128
+    em.jlocal(130, 0)               // jb: one byte
+    em.b3(73, 129, 252)
+    em.w32(2048)                    // cmp r12, 2048
+    em.jlocal(130, 1)               // jb: two bytes
+    em.b3(73, 129, 252)
+    em.w32(65536)                   // cmp r12, 65536
+    em.jlocal(130, 2)               // jb: three bytes
+    em.b3(77, 137, 226)             // mov r10, r12
+    em.b4(73, 193, 234, 18)         // shr r10, 18
+    em.b3(65, 129, 202)
+    em.w32(240)                     // or r10d, 0xF0
+    em.b3(68, 136, 17)              // mov [rcx], r10b
+    em.b3(77, 137, 226)             // mov r10, r12
+    em.b4(73, 193, 234, 12)         // shr r10, 12
+    em.b4(73, 131, 226, 63)         // and r10, 63
+    em.b3(65, 129, 202)
+    em.w32(128)                     // or r10d, 0x80
+    em.b4(68, 136, 81, 1)           // mov [rcx+1], r10b
+    em.b3(77, 137, 226)             // mov r10, r12
+    em.b4(73, 193, 234, 6)          // shr r10, 6
+    em.b4(73, 131, 226, 63)         // and r10, 63
+    em.b3(65, 129, 202)
+    em.w32(128)                     // or r10d, 0x80
+    em.b4(68, 136, 81, 2)           // mov [rcx+2], r10b
+    em.b3(77, 137, 226)             // mov r10, r12
+    em.b4(73, 131, 226, 63)         // and r10, 63
+    em.b3(65, 129, 202)
+    em.w32(128)                     // or r10d, 0x80
+    em.b4(68, 136, 81, 3)           // mov [rcx+3], r10b
+    em.movimm(R_DX, 4)
+    em.jlocal(⁻1, 3)                // jmp Ldone
+    em.set_label(2)                 // three bytes
+    em.b3(77, 137, 226)             // mov r10, r12
+    em.b4(73, 193, 234, 12)         // shr r10, 12
+    em.b3(65, 129, 202)
+    em.w32(224)                     // or r10d, 0xE0
+    em.b3(68, 136, 17)              // mov [rcx], r10b
+    em.b3(77, 137, 226)             // mov r10, r12
+    em.b4(73, 193, 234, 6)          // shr r10, 6
+    em.b4(73, 131, 226, 63)         // and r10, 63
+    em.b3(65, 129, 202)
+    em.w32(128)                     // or r10d, 0x80
+    em.b4(68, 136, 81, 1)           // mov [rcx+1], r10b
+    em.b3(77, 137, 226)             // mov r10, r12
+    em.b4(73, 131, 226, 63)         // and r10, 63
+    em.b3(65, 129, 202)
+    em.w32(128)                     // or r10d, 0x80
+    em.b4(68, 136, 81, 2)           // mov [rcx+2], r10b
+    em.movimm(R_DX, 3)
+    em.jlocal(⁻1, 3)
+    em.set_label(1)                 // two bytes
+    em.b3(77, 137, 226)             // mov r10, r12
+    em.b4(73, 193, 234, 6)          // shr r10, 6
+    em.b3(65, 129, 202)
+    em.w32(192)                     // or r10d, 0xC0
+    em.b3(68, 136, 17)              // mov [rcx], r10b
+    em.b3(77, 137, 226)             // mov r10, r12
+    em.b4(73, 131, 226, 63)         // and r10, 63
+    em.b3(65, 129, 202)
+    em.w32(128)                     // or r10d, 0x80
+    em.b4(68, 136, 81, 1)           // mov [rcx+1], r10b
+    em.movimm(R_DX, 2)
+    em.jlocal(⁻1, 3)
+    em.set_label(0)                 // one byte
+    em.b3(68, 136, 33)              // mov [rcx], r12b
+    em.movimm(R_DX, 1)
+    em.set_label(3)                 // Ldone
+    em.b4(72, 137, 80, 8)           // mov [rax+8], rdx
+    em.b1(195)
+    em.resolve_locals()
+
 // ---------------------------------------------------------------------------
 // The ELF executable: text R+X, rodata R, data R+W
 // ---------------------------------------------------------------------------
@@ -6435,7 +6897,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
         emit_fn(&em, ir, np, lw.strs)
     // every function was emitted and left its offset behind
     assert(#em.fn_off = #a.fns, "one code offset per function")
-    assert(#em.rt_off = 21, "every runtime routine in place")
+    assert(#em.rt_off = 25, "every runtime routine in place")
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:
         foreach i := 0…#em.cf_pos - 1:

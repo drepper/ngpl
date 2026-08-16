@@ -1,0 +1,14 @@
+// core-2: .chr() of what no character is stops the run.
+// The runner checks that both implementations refuse, not what they print.
+
+fn make(v : i64) → char:
+    v.chr()
+
+@start
+@impure
+fn main():
+    std.println("before")
+    let ok : char = make(97)
+    std.println("{}", ok)
+    let bad : char = make(55296)
+    std.println("never {}", bad)

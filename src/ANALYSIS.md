@@ -16,10 +16,11 @@ with concatenation/equality/character counts, globals, contracts, and
 optionals with `match`, arrays of structs, hashes over a probing
 runtime table (murmur3-finalizer and FNV-1a hashing, doubling growth)
 whose reads answer optionals, tuples returned and destructured on the
-struct representation with interned shapes, and width-suffixed
-literals.  Sixteen shared programs run identically interpreted and
-compiled, inside the one integrated test suite; the bootstrap suite
-stays green with `-Werror`.
+struct representation with interned shapes, width-suffixed literals,
+and characters with UTF-8 string positions, `.chars()`, `.chr()`
+and `.ord()`.  Eighteen shared programs run identically interpreted
+and compiled, inside the one integrated test suite; the bootstrap
+suite stays green with `-Werror`.
 
 The control-flow policy is real, not aspirational: comparisons
 materialize, `⌈ ⌊` and safe conditionals are `cmov`, `and`/`or` with
@@ -39,15 +40,18 @@ past i64.
 
 1. **Self-hosting is closer but not closed.**  Attempt 3 landed
    structs with methods, optionals with `match`, arrays of structs,
-   hashes with their runtime table, tuples with destructuring, and
-   width-suffixed literals.  The compiler's own source still uses
-   `str.chars()`, string indexing, and struct-typed by-value locals
-   copied around.  The gap, in dependency order: chars and string
-   indexing (the UTF-8 machinery DESIGN.md plans) → the remaining
-   by-value struct moves → `:=` inference where the right side
-   already states its type.  The hash runtime is linear probing, not
-   yet the 16-wide `pcmpeqb` Swiss-table probe the design planned;
-   the descriptor layout already accommodates that upgrade.
+   hashes with their runtime table, tuples with destructuring,
+   width-suffixed literals, and characters with UTF-8 string
+   positions, `.chars()`, `.chr()` and `.ord()`.  The compiler's own
+   source is now written almost entirely inside the subset; what
+   remains outside: struct-typed by-value locals copied around, `:=`
+   inference where the right side already states its type, string
+   slices `s[a…b]`, and lambdas/combinators in a few helpers.  The
+   hash runtime is linear probing, not yet the 16-wide `pcmpeqb`
+   Swiss-table probe the design planned, and the lexer still decodes
+   UTF-8 a byte at a time rather than through the shift-DFA and mask
+   pipeline the design researched — correctness first, the SIMD shape
+   when the native compiler makes it measurable.
 2. **Register allocation is one register deep.**  The emitter's rax
    memo skips reloads (~3% of code) but every value still lives in a
    stack slot; the true linear-scan allocator over the width-annotated
