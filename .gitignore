@@ -1,4 +1,6 @@
 .claude
-build/
+build/*
+!build/bootstrap.sh
+!build/.gitignore
 __pycache__/
 a.out

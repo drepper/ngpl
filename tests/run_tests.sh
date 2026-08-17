@@ -11,10 +11,16 @@
 #                       implementation conditionalizes on
 #                       std.implementation.
 #
-# Usage: run_tests.sh [--impl=bootstrap|compiled|both] [pattern...]
+# Usage: run_tests.sh [--impl=bootstrap|compiled|native|both|all] [pattern...]
 #   --impl=bootstrap   only the interpreter's own tests
-#   --impl=compiled    only the shared conformance run
-#   --impl=both        everything (the default)
+#   --impl=compiled    the shared conformance run, ngplc under the
+#                      interpreter
+#   --impl=native      the shared conformance run, the self-hosted
+#                      ngplc binary (built and cached by
+#                      build/bootstrap.sh; the first build takes
+#                      minutes)
+#   --impl=both        bootstrap + compiled (the default)
+#   --impl=all         bootstrap + compiled + native
 # With patterns, runs only bootstrap tests whose filename matches.
 # Exit with non-zero status if any test fails.
 
@@ -22,10 +28,10 @@ impl_mode=both
 patterns=()
 for arg in "$@"; do
     case "$arg" in
-        --impl=bootstrap|--impl=compiled|--impl=both)
+        --impl=bootstrap|--impl=compiled|--impl=native|--impl=both|--impl=all)
             impl_mode=${arg#--impl=} ;;
         --impl=*)
-            echo "unknown implementation '$arg'; bootstrap, compiled or both" >&2
+            echo "unknown implementation '$arg'; bootstrap, compiled, native, both or all" >&2
             exit 1 ;;
         *)
             patterns+=("$arg") ;;
@@ -179,6 +185,9 @@ fi
 if [[ $impl_mode == compiled ]]; then
     exec "$testdir"/compile/run_compile_tests.sh
 fi
+if [[ $impl_mode == native ]]; then
+    exec "$testdir"/compile/run_compile_tests.sh --compiler=native
+fi
 
 passed=0
 failed=0
@@ -250,9 +259,18 @@ fi
 
 # The shared conformance run: every program under tests/compile/ goes
 # through the interpreter and through ngplc, and the runs must agree.
-if [[ $impl_mode == both ]] && ((${#patterns[@]} == 0)); then
+if [[ $impl_mode == both || $impl_mode == all ]] && ((${#patterns[@]} == 0)); then
     echo
     if ! "$testdir"/compile/run_compile_tests.sh; then
+        exit 1
+    fi
+fi
+
+# And with --impl=all, once more under the self-hosted binary: the
+# same programs, the same agreement, the compiler compiled by itself.
+if [[ $impl_mode == all ]] && ((${#patterns[@]} == 0)); then
+    echo
+    if ! "$testdir"/compile/run_compile_tests.sh --compiler=native; then
         exit 1
     fi
 fi

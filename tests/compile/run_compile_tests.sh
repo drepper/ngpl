@@ -9,8 +9,22 @@
 # tNN_*.ngpl (NN < 90): outputs and exit codes must match exactly.
 # t9N_*.ngpl: programs that stop themselves; both runs must fail after
 #             printing the same successful prefix on stdout.
+#
+# --compiler=interp   ngplc run by the bootstrap interpreter (default)
+# --compiler=native   the self-hosted ngplc binary, built (and cached)
+#                     by build/bootstrap.sh -- the first build takes
+#                     minutes, every later run finds it ready
 
 topdir=$(cd "$(dirname "$(realpath "$0")")/../.." && pwd) || exit 1
+
+compiler=interp
+for arg in "$@"; do
+    case "$arg" in
+        --compiler=interp|--compiler=native) compiler=${arg#--compiler=} ;;
+        *) echo "unknown option '$arg'; --compiler=interp or --compiler=native" >&2
+           exit 1 ;;
+    esac
+done
 
 # Forward progress, guaranteed: any single interpreter invocation that
 # has not finished in this many seconds is stopped with a backtrace
@@ -20,6 +34,13 @@ cd "$topdir" || exit 1
 testdir=$topdir/tests/compile
 workdir=$(mktemp -d) || exit 1
 trap 'rm -rf "$workdir"' EXIT
+
+if [[ $compiler == native ]]; then
+    "$topdir"/build/bootstrap.sh || exit 1
+    ngplc() { "$topdir"/build/ngplc "$@"; }
+else
+    ngplc() { python -m interp src/ngplc.ngpl -- "$@"; }
+fi
 
 pass=0
 fail=0
@@ -34,7 +55,7 @@ for t in "$testdir"/t*.ngpl; do
     python -m interp --skip-tests "$t" > "$workdir/$name.interp.out" 2>/dev/null
     interp_rc=$?
 
-    if ! python -m interp src/ngplc.ngpl -- "$t" -o "$workdir/$name.bin" \
+    if ! ngplc "$t" -o "$workdir/$name.bin" \
             > "$workdir/$name.ngplc.out" 2>&1; then
         echo "FAIL $name: ngplc refused it"
         sed 's/^/    /' "$workdir/$name.ngplc.out" | head -5
@@ -71,5 +92,5 @@ for t in "$testdir"/t*.ngpl; do
 done
 
 echo
-echo "compile conformance: $pass passed, $fail failed"
+echo "compile conformance ($compiler): $pass passed, $fail failed"
 exit $((fail > 0))
