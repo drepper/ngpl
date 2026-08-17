@@ -1,0 +1,32 @@
+// core-2: sized arrays -- the length is part of the type -- and ⍴
+// fills, scalar copies and cycled elements both.
+
+struct Grid:
+    row : i64[4]
+
+fn total(v : &i64[3]) → i64:
+    let s : mut i64 = 0
+    foreach x := v:
+        s ← s + x
+    s
+
+@start
+@impure
+fn main():
+    let a : mut i32[3] = 3 ⍴ 0
+    a[1] ← 5
+    std.println("{} {} {}", #a, a[0], a[1])
+    let lit : i64[3] = [7i64, 8, 9]
+    std.println("{} {}", lit[2], #lit)
+    let f : mut i64[3] = [1i64, 2, 3]
+    std.println("{}", total(&f))
+    let cyc : i64[] = 5 ⍴ [10i64, 20]
+    std.println("{} {} {} {}", #cyc, cyc[0], cyc[1], cyc[4])
+    let emp : i64[] = 0 ⍴ [0i64]
+    std.println("{}", #emp)
+    let dyn : i64[] = 4 ⍴ 6i64
+    std.println("{} {}", #dyn, dyn[3])
+    let g : Grid = Grid{row: [1i64, 2, 3, 4]}
+    std.println("{}", g.row[3])
+    let sl : i64[] = f[0…1]
+    std.println("{}", #sl)

@@ -167,6 +167,16 @@ Attempt 3 grows core-1 to **core-2** with structs:
   bitwise op and at most one xor, and `v[a…b]` takes a fresh
   sub-array, both ends included, `hi < lo` empty, an end outside the
   array out of range.
+- **sized arrays and ⍴**: `T[n]` makes the length part of the type
+  (shapes interned like tuples'), a literal or a written-out `n ⍴ x`
+  must state exactly that size, push and pop are refused by name, and
+  a slice of one answers a dynamic array.  `n ⍴ x` fills n copies of
+  a scalar or cycles an array's elements to the count (`rt_afill`,
+  `rt_acyc`); a matrix reshape is refused by name.  Truth values join
+  the array elements, a by-value parameter may be `mut` (its slot
+  changes, the caller's value does not travel back; a mut container
+  still asks for `&mut`), and `@start` no longer demands `@impure`
+  for itself — every effect inside asks on its own.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's
@@ -402,7 +412,7 @@ the interpreter **and** compiled, outputs and exit codes diffed — the
 strict-subset rule made executable.  `--impl=` selects a side:
 `bootstrap`, `compiled` (ngplc under the interpreter), `native` (the
 self-hosted `build/ngplc`, the whole sweep in ~2.4 s), `both` (the
-default) or `all`.  Twenty-seven shared programs cover the whole
+default) or `all`.  Twenty-eight shared programs cover the whole
 core-2 surface including the stopping paths, and five bootstrap test
 files whose whole `@test` surface sits inside the subset run as
 shared tests besides: compiled, run with `--test`, and their stdout,
