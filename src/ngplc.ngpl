@@ -98,6 +98,13 @@ let TK_EMPTY : i64 = 83      // ∅
 let TK_LHASH : i64 = 84      // ⸨
 let TK_RHASH : i64 = 85      // ⸩
 let TK_ELEM : i64 = 86       // ∊
+let TK_IOTA : i64 = 87       // ⍳
+let TK_SATADD : i64 = 88     // ⊞
+let TK_SATSUB : i64 = 89     // ⊟
+let TK_SATMUL : i64 = 90     // ⊠
+let TK_LXOR : i64 = 91       // ⊕
+let TK_LNAND : i64 = 92      // ⊼
+let TK_LNOR : i64 = 93       // ⊽
 let TK_MATCH : i64 = 38
 let TK_RESERVED : i64 = 99   // a word the bootstrap reserves and core-1 does not use
 
@@ -128,6 +135,13 @@ let GLYPHS2 : std.hash(i64, i64) = (⸨
     50103: 54⸩)     // ÷
 
 let GLYPHS3 : std.hash(i64, i64) = (⸨
+    14847411: 87,   // ⍳
+    14846622: 88,   // ⊞
+    14846623: 89,   // ⊟
+    14846624: 90,   // ⊠
+    14846613: 91,   // ⊕
+    14846652: 92,   // ⊼
+    14846653: 93,   // ⊽
     14845584: 46,   // ←
     14845586: 45,   // →
     14844347: 52,   // ⁻
@@ -945,6 +959,14 @@ let NK_EMPTYV : i64 = 17    // a bare ∅
 let NK_HLIT : i64 = 18      // na = extra [n, key, value, …]
 let NK_TUPLE : i64 = 19     // na = extra [n, expr…]
 let NK_DROPU : i64 = 45     // @dropunit: na = the measured value
+let NK_IOTA : i64 = 46      // container ⍳ wanted: where it sits, if anywhere
+let NK_SATADD : i64 = 47    // ⊞: the sum, held at the type's edge
+let NK_SATSUB : i64 = 48    // ⊟
+let NK_SATMUL : i64 = 49    // ⊠
+let NK_LXOR : i64 = 53      // ⊕, both sides read
+let NK_LNAND : i64 = 54     // ⊼
+let NK_LNOR : i64 = 58      // ⊽
+let NK_SLICE : i64 = 59     // v[a…b]: na = base, nb = lo, nc = hi
 let NK_ELEMOF : i64 = 43    // key ∊ hash
 let NK_ADD : i64 = 20
 let NK_SUB : i64 = 21
@@ -1358,8 +1380,15 @@ impl Parser:
                 let at : i64 = self.pos
                 self.pos ← self.pos + 1
                 let idx : i64 = self.parse_expr()
-                _ ← self.eat(TK_RBRACK, "']' closing the subscript")
-                e ← self.mknode(NK_INDEX, at, e, idx, 0)
+                if self.peek() = TK_ELLIPSIS:
+                    // v[a…b]: both ends included, a fresh array answers
+                    self.pos ← self.pos + 1
+                    let hi : i64 = self.parse_expr()
+                    _ ← self.eat(TK_RBRACK, "']' closing the slice")
+                    e ← self.mknode(NK_SLICE, at, e, idx, hi)
+                else:
+                    _ ← self.eat(TK_RBRACK, "']' closing the subscript")
+                    e ← self.mknode(NK_INDEX, at, e, idx, 0)
             elif self.peek() = TK_DOT:
                 let at : i64 = self.pos
                 self.pos ← self.pos + 1
@@ -1625,15 +1654,16 @@ impl Parser:
         if k = TK_AND: return 3
         if k = TK_LOR: return 4
         if k = TK_LAND: return 6
+        if k = TK_LXOR or k = TK_LNAND or k = TK_LNOR: return 5
         if k = TK_EQ or k = TK_NE or k = TK_LT or k = TK_GT or k = TK_LE or k = TK_GE: return 7
-        if k = TK_MAX or k = TK_MIN or k = TK_ELEM: return 9
+        if k = TK_MAX or k = TK_MIN or k = TK_ELEM or k = TK_IOTA: return 9
         if k = TK_SHL or k = TK_SHR: return 10
         if k = TK_BOR: return 11
         if k = TK_BXOR: return 12
         if k = TK_BAND: return 13
-        if k = TK_PLUS or k = TK_MINUS: return 14
+        if k = TK_PLUS or k = TK_MINUS or k = TK_SATADD or k = TK_SATSUB: return 14
         if k = TK_CONCAT: return 15
-        if k = TK_MULT or k = TK_DIVIDE or k = TK_MOD: return 16
+        if k = TK_MULT or k = TK_DIVIDE or k = TK_MOD or k = TK_SATMUL: return 16
         ⁻1
 
     fn bin_nk(&self, k : i64) → i64:
@@ -1651,6 +1681,13 @@ impl Parser:
         if k = TK_MAX: return NK_MAXOP
         if k = TK_MIN: return NK_MINOP
         if k = TK_ELEM: return NK_ELEMOF
+        if k = TK_IOTA: return NK_IOTA
+        if k = TK_SATADD: return NK_SATADD
+        if k = TK_SATSUB: return NK_SATSUB
+        if k = TK_SATMUL: return NK_SATMUL
+        if k = TK_LXOR: return NK_LXOR
+        if k = TK_LNAND: return NK_LNAND
+        if k = TK_LNOR: return NK_LNOR
         if k = TK_SHL: return NK_SHL
         if k = TK_SHR: return NK_SHR
         if k = TK_BOR: return NK_BOR
@@ -2979,6 +3016,40 @@ impl Checker:
             self.check_expr(na, TY_UNIT)
             self.check_expr(nb, TY_UNIT)
             self.check_cmp_operands(id, tok, k, na, nb)
+        elif k = NK_IOTA:
+            // where the wanted value sits in the container, if anywhere
+            self.check_expr(na, TY_UNIT)
+            let ct : i64 = self.ty_of(na)
+            if not ty_is_arr(ct):
+                self.derr(tok, "⍳ looks through an array; this is " ⧺ type_name(ct))
+                self.check_expr(nb, TY_UNIT)
+                self.set_type(id, mk_oty(ty_with_unit(TY_I64, UNIT_PTRDIFF)))
+                return
+            let et : i64 = ty_elem(ct)
+            self.check_expr(nb, et)
+            if self.is_open(self.ty_of(nb)):
+                self.adopt(nb, et)
+            elif not self.try_fit(nb, et):
+                self.derr(tok, "⍳: the container holds " ⧺ type_name(et) ⧺ ", and what is looked for is " ⧺ type_name(self.ty_of(nb)))
+            self.set_type(id, mk_oty(ty_with_unit(TY_I64, UNIT_PTRDIFF)))
+        elif k = NK_SLICE:
+            self.check_expr(na, TY_UNIT)
+            let bt2 : i64 = self.ty_of(na)
+            if not ty_is_arr(bt2):
+                self.derr(tok, "a slice takes an array apart; this is " ⧺ type_name(bt2))
+                self.check_expr(nb, TY_UNIT)
+                self.check_expr(nc, TY_UNIT)
+                self.set_type(id, mk_aty(TY_I64))
+                return
+            self.check_index_expr(tok, bt2, nb)
+            self.check_index_expr(tok, bt2, nc)
+            self.set_type(id, bt2)
+        elif k = NK_LXOR or k = NK_LNAND or k = NK_LNOR:
+            self.check_expr(na, TY_UNIT)
+            self.check_expr(nb, TY_UNIT)
+            if self.ty_of(na) ≠ TY_BOOL or self.ty_of(nb) ≠ TY_BOOL:
+                self.derr(tok, "⊕, ⊼ and ⊽ take truth values on both sides")
+            self.set_type(id, TY_BOOL)
         elif k = NK_AND or k = NK_OR or k = NK_LAND or k = NK_LOR:
             self.check_expr(na, TY_UNIT)
             self.check_expr(nb, TY_UNIT)
@@ -3013,7 +3084,7 @@ impl Checker:
                 self.derr(tok, "this operator works numbers; the sides are " ⧺ type_name(tl) ⧺ " and " ⧺ type_name(tr))
                 self.set_type(id, TY_I64)
                 return
-            if tl = TY_UNT and tr = TY_UNT and self.kind_of(na) = NK_INT and self.kind_of(nb) = NK_INT and self.a.nb[na × 1¤ptrdiff] = 0 and self.a.nb[nb × 1¤ptrdiff] = 0:
+            if tl = TY_UNT and tr = TY_UNT and self.kind_of(na) = NK_INT and self.kind_of(nb) = NK_INT and self.a.nb[na × 1¤ptrdiff] = 0 and self.a.nb[nb × 1¤ptrdiff] = 0 and k ≠ NK_SATADD and k ≠ NK_SATSUB and k ≠ NK_SATMUL:
                 self.fold_bin(id, k, tok, self.a.na[na × 1¤ptrdiff],
                               self.a.na[nb × 1¤ptrdiff])
                 return
@@ -4462,6 +4533,11 @@ let IR_FWRITE : i64 = 84   // file a takes the bytes of array b
 let IR_FCLOSE : i64 = 85   // file a closes
 let IR_NARROW : i64 = 86   // d ← a, stopped unless it fits width w
 let IR_EPRINTS : i64 = 87  // string a on the error stream
+let IR_AFIND : i64 = 88    // d ← where b sits in array a (c: str elems)
+let IR_ASLICE : i64 = 89   // d ← array a's elements b…c, a fresh array
+let IR_SATADD : i64 = 90   // d ← a + b, held at width w's edge
+let IR_SATSUB : i64 = 91   // d ← a - b, held at the edge
+let IR_SATMUL : i64 = 92   // d ← a × b, held at the edge
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
 let IR_FLD : i64 = 67      // d ← field b of struct a
 let IR_FSTO : i64 = 68     // field b of struct a ← c
@@ -4662,6 +4738,13 @@ impl Lower:
             return d
         if k = NK_DROPU:
             return self.lower_expr(na)
+        if k = NK_SLICE:
+            let av : i64 = self.lower_expr(na)
+            let lo : i64 = self.lower_expr(nb)
+            let hi : i64 = self.lower_expr(nc)
+            let d : i64 = self.tmp()
+            self.ir(IR_ASLICE, av, lo, hi, d, 0)
+            return d
         if k = NK_TUPLE:
             let n : i64 = self.a.extra[na × 1¤ptrdiff]
             let d : i64 = self.tmp()
@@ -4872,6 +4955,23 @@ impl Lower:
         elif k = NK_LAND or k = NK_LOR:
             // both sides are bools already; one and or or does it
             self.ir(IR_BAND if k = NK_LAND else IR_BORR, av, bv, 0, d, 64)
+        elif k = NK_LXOR:
+            self.ir(IR_CNE, av, bv, 0, d, 64)
+        elif k = NK_LNAND or k = NK_LNOR:
+            let tt : i64 = self.tmp()
+            self.ir(IR_BAND if k = NK_LNAND else IR_BORR, av, bv, 0, tt, 64)
+            let c1 : i64 = self.tmp()
+            self.ir(IR_CONST, 1, 0, 0, c1, 64)
+            self.ir(IR_BXORR, tt, c1, 0, d, 64)
+        elif k = NK_IOTA:
+            let sf : i64 = 1 if ty_elem(self.tof(na)) = TY_STR else 0
+            self.ir(IR_AFIND, av, bv, sf, d, 0)
+        elif k = NK_SATADD:
+            self.ir(IR_SATADD, av, bv, 0, d, w)
+        elif k = NK_SATSUB:
+            self.ir(IR_SATSUB, av, bv, 0, d, w)
+        elif k = NK_SATMUL:
+            self.ir(IR_SATMUL, av, bv, 0, d, w)
         elif k = NK_MAXOP:
             self.ir(IR_MAXX, av, bv, 0, d, w)
         elif k = NK_MINOP:
@@ -5659,6 +5759,8 @@ let RT_FREAD : i64 = ⁻29
 let RT_FWRITE : i64 = ⁻30
 let RT_BADFIT : i64 = ⁻31
 let RT_WRITE2 : i64 = ⁻32
+let RT_AFIND : i64 = ⁻33
+let RT_ASLICE : i64 = ⁻34
 
 struct Emit:
     code : u8[]
@@ -6404,6 +6506,81 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
                     em.b3(72, 99, 200)           // movsxd rcx, eax
                 em.b3(72, 57, 193)               // cmp rcx, rax
                 em.jglobal(0, 133, RT_BADFIT)    // jne
+            em.store(R_AX, d)
+        elif o = IR_AFIND:
+            em.load(R_DI, a)
+            em.load(R_SI, b)
+            em.movimm(R_DX, c)
+            em.jglobal(232, ⁻1, RT_AFIND)
+            em.store(R_AX, d)
+        elif o = IR_ASLICE:
+            em.load(R_DI, a)
+            em.load(R_SI, b)
+            em.load(R_DX, c)
+            em.jglobal(232, ⁻1, RT_ASLICE)
+            em.store(R_AX, d)
+        elif o = IR_SATADD or o = IR_SATSUB or o = IR_SATMUL:
+            // held at the type's edge with selects, never a branch:
+            // a narrow width computes exactly in 64 bits and clamps by
+            // compare; the full width reads the flags the op leaves,
+            // the saturation target chosen before the flags matter
+            let sbits : i64 = w & 255
+            let ssgn : i64 = w » 8
+            em.load(R_AX, a)
+            em.load(R_R11, b)
+            if sbits < 64:
+                if o = IR_SATADD:
+                    em.b3(76, 1, 216)            // add rax, r11
+                elif o = IR_SATSUB:
+                    em.b3(76, 41, 216)           // sub rax, r11
+                else:
+                    em.b4(73, 15, 175, 195)      // imul rax, r11
+                if ssgn = 1:
+                    em.movimm(R_CX, @wrap(0 - (1 « (sbits - 1))))
+                    em.b3(72, 57, 200)           // cmp rax, rcx
+                    em.b4(72, 15, 76, 193)       // cmovl rax, rcx
+                    em.movimm(R_R10, (1 « (sbits - 1)) - 1)
+                    em.b3(76, 57, 208)           // cmp rax, r10
+                    em.b4(73, 15, 79, 194)       // cmovg rax, r10
+                elif o = IR_SATSUB:
+                    em.b3(72, 49, 201)           // xor rcx, rcx
+                    em.b3(72, 133, 192)          // test rax, rax
+                    em.b4(72, 15, 72, 193)       // cmovs rax, rcx
+                else:
+                    em.movimm(R_R10, (1 « sbits) - 1)
+                    em.b3(76, 57, 208)           // cmp rax, r10
+                    em.b4(73, 15, 71, 194)       // cmova rax, r10
+            elif ssgn = 1:
+                em.movimm(R_CX, 9223372036854775807)
+                em.movimm(R_DX, @wrap(0 - 9223372036854775807 - 1))
+                if o = IR_SATMUL:
+                    em.b3(73, 137, 194)          // mov r10, rax
+                    em.b3(77, 49, 218)           // xor r10, r11
+                    em.b3(77, 133, 210)          // test r10, r10
+                else:
+                    em.b3(72, 133, 192)          // test rax, rax
+                em.b4(72, 15, 72, 202)           // cmovs rcx, rdx
+                if o = IR_SATADD:
+                    em.b3(76, 1, 216)            // add rax, r11
+                elif o = IR_SATSUB:
+                    em.b3(76, 41, 216)           // sub rax, r11
+                else:
+                    em.b4(73, 15, 175, 195)      // imul rax, r11
+                em.b4(72, 15, 64, 193)           // cmovo rax, rcx
+            else:
+                if o = IR_SATADD:
+                    em.movimm(R_CX, @wrap(0 - 1))
+                    em.b3(76, 1, 216)            // add rax, r11
+                    em.b4(72, 15, 66, 193)       // cmovc rax, rcx
+                elif o = IR_SATSUB:
+                    em.b3(72, 49, 201)           // xor rcx, rcx
+                    em.b3(76, 41, 216)           // sub rax, r11
+                    em.b4(72, 15, 66, 193)       // cmovc rax, rcx
+                else:
+                    em.movimm(R_CX, @wrap(0 - 1))
+                    em.b3(73, 247, 227)          // mul r11
+                    em.b4(72, 15, 66, 193)       // cmovc rax, rcx
+            em.raxbar()
             em.store(R_AX, d)
         elif o = IR_JTAB:
             let jmin : i64 = ir.extra[b × 1¤ptrdiff]
@@ -7471,6 +7648,84 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.b2(15, 5)
     em.b1(195)
 
+    // RT_AFIND: rdi = descriptor, rsi = wanted, rdx = 1 for string
+    // elements → rax = the position boxed, or the null ∅
+    em.rt_off.push(em.here())
+    em.begin_fn(5)
+    em.b3(76, 139, 39)              // mov r12, [rdi]: the elements
+    em.b4(76, 139, 111, 8)          // mov r13, [rdi+8]: how many
+    em.b3(73, 137, 247)             // mov r15, rsi: wanted
+    em.b3(72, 137, 211)             // mov rbx, rdx: string elements?
+    em.b3(77, 49, 246)              // xor r14, r14
+    em.set_label(0)                 // Ltop
+    em.b3(77, 57, 245)              // cmp r13, r14
+    em.jlocal(134, 1)               // jbe Lnone
+    em.b4(75, 139, 4, 244)          // mov rax, [r12+r14*8]
+    em.b3(72, 133, 219)             // test rbx, rbx
+    em.jlocal(133, 2)               // jnz Lstr
+    em.b3(76, 57, 248)              // cmp rax, r15
+    em.jlocal(132, 3)               // je Lhit
+    em.jlocal(⁻1, 4)                // jmp Lnext
+    em.set_label(2)                 // Lstr
+    em.b3(72, 137, 199)             // mov rdi, rax
+    em.b3(76, 137, 254)             // mov rsi, r15
+    em.jglobal(232, ⁻1, RT_STREQ)
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(132, 4)               // jz Lnext
+    em.set_label(3)                 // Lhit: box the position
+    em.b3(77, 137, 244)             // mov r12, r14
+    em.movimm(R_DI, 8)
+    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.b3(76, 137, 32)              // mov [rax], r12
+    em.b1(195)
+    em.set_label(4)                 // Lnext
+    em.b3(73, 255, 198)             // inc r14
+    em.jlocal(⁻1, 0)
+    em.set_label(1)                 // Lnone
+    em.b2(49, 192)                  // xor eax, eax
+    em.b1(195)
+    em.resolve_locals()
+
+    // RT_ASLICE: rdi = descriptor, rsi = lo, rdx = hi → rax = a fresh
+    // array of elements lo…hi, both ends included; hi below lo is
+    // empty, an end outside the array is out of range
+    em.rt_off.push(em.here())
+    em.begin_fn(3)
+    em.b3(76, 139, 39)              // mov r12, [rdi]
+    em.b4(76, 139, 111, 8)          // mov r13, [rdi+8]
+    em.b3(73, 137, 246)             // mov r14, rsi: lo
+    em.b3(73, 137, 215)             // mov r15, rdx: hi
+    em.b3(76, 137, 248)             // mov rax, r15
+    em.b3(76, 41, 240)              // sub rax, r14
+    em.b3(72, 255, 192)             // inc rax: how many
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(142, 0)               // jle Lempty
+    em.b3(77, 133, 246)             // test r14, r14
+    em.jglobal(0, 136, RT_BOUNDS)   // js: below the array
+    em.b3(77, 57, 239)              // cmp r15, r13
+    em.jglobal(0, 131, RT_BOUNDS)   // jae: past the array
+    em.b3(72, 137, 195)             // mov rbx, rax: keep the count
+    em.b3(72, 137, 199)             // mov rdi, rax
+    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.b3(72, 139, 16)              // mov rdx, [rax]: the fresh slots
+    em.b3(72, 49, 201)              // xor rcx, rcx
+    em.set_label(1)                 // Lcopy
+    em.b3(72, 57, 217)              // cmp rcx, rbx
+    em.jlocal(131, 2)               // jae Ldone
+    em.b4(77, 141, 20, 14)          // lea r10, [r14+rcx]
+    em.b4(79, 139, 20, 212)         // mov r10, [r12+r10*8]
+    em.b4(76, 137, 20, 202)         // mov [rdx+rcx*8], r10
+    em.b3(72, 255, 193)             // inc rcx
+    em.jlocal(⁻1, 1)
+    em.set_label(2)                 // Ldone
+    em.b4(72, 137, 88, 8)           // mov [rax+8], rbx: the length
+    em.b1(195)
+    em.set_label(0)                 // Lempty
+    em.b2(49, 255)                  // xor edi, edi
+    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.b1(195)
+    em.resolve_locals()
+
 // ---------------------------------------------------------------------------
 // The ELF executable: text R+X, rodata R, data R+W
 // ---------------------------------------------------------------------------
@@ -7885,7 +8140,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
     emit_fn(&em, dir, 0, lw.strs)
     // every function was emitted and left its offset behind
     assert(@dropunit(#em.fn_off) = nfns + g1 + 2, "one code offset per function")
-    assert(#em.rt_off = 32, "every runtime routine in place")
+    assert(#em.rt_off = 34, "every runtime routine in place")
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:
         foreach i := 0…#em.cf_pos - 1:

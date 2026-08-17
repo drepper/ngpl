@@ -157,6 +157,16 @@ Attempt 3 grows core-1 to **core-2** with structs:
   `_start` hands to `exit`.  Unit-suffixed literals (`1¤ptrdiff`,
   `0¤byte`) close their type at the lexer like width suffixes, and
   `byte` names `u8`.
+- **finding, holding, slicing**: `container ⍳ wanted` answers the
+  position as an optional ¤ptrdiff (string elements compared by
+  content), `⊞ ⊟ ⊠` hold arithmetic at the type's edge — narrow
+  widths compute exactly in 64 bits and clamp by compare, the full
+  width reads the flags the op leaves, the saturation target chosen
+  by the operands' signs before the flags matter, selects throughout
+  and never a branch — `⊕ ⊼ ⊽` finish the logic family as one
+  bitwise op and at most one xor, and `v[a…b]` takes a fresh
+  sub-array, both ends included, `hi < lo` empty, an end outside the
+  array out of range.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's
@@ -392,7 +402,7 @@ the interpreter **and** compiled, outputs and exit codes diffed — the
 strict-subset rule made executable.  `--impl=` selects a side:
 `bootstrap`, `compiled` (ngplc under the interpreter), `native` (the
 self-hosted `build/ngplc`, the whole sweep in ~2.4 s), `both` (the
-default) or `all`.  Twenty-six shared programs cover the whole
+default) or `all`.  Twenty-seven shared programs cover the whole
 core-2 surface including the stopping paths, and five bootstrap test
 files whose whole `@test` surface sits inside the subset run as
 shared tests besides: compiled, run with `--test`, and their stdout,

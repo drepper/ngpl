@@ -1,0 +1,53 @@
+// core-2: ⍳ answers where, ⊞⊟⊠ hold at the type's edge, ⊕⊼⊽ finish
+// the logic family, and v[a…b] takes an array apart.
+
+fn clamp_walk(seed : u8, times : i64) → u8:
+    let x : mut u8 = seed
+    let i : mut i64 = 0
+    while i < times:
+        x ← x ⊠ 2 ⊞ 1
+        i ← i + 1
+    x
+
+@start
+@impure
+fn main():
+    // where a value sits, and that absence is ordinary
+    let v : i64[] = [10i64, 20, 30, 40]
+    std.println("{}", (v ⍳ 30) ?? ⁻1)
+    assert((v ⍳ 99) = ∅)
+    match v ⍳ 10:
+        ∃(p):
+            std.println("at {}", p)
+        ∅:
+            std.println("nowhere")
+    let names : str[] = ["lex", "parse", "check"]
+    std.println("{}", (names ⍳ "parse") ?? ⁻1)
+
+    // the edges hold
+    let a : u8 = 250
+    std.println("{} {} {}", a ⊞ 10, a ⊟ 255, a ⊠ 2)
+    let b : i8 = 100
+    std.println("{} {} {}", b ⊞ 100, b ⊟ 127i8 ⊟ 127, b ⊠ 3)
+    let c : i64 = 9223372036854775807
+    std.println("{} {}", c ⊞ 1, c ⊠ 2)
+    let d : i64 = ⁻9223372036854775807
+    std.println("{} {}", d ⊟ 100, d ⊠ 5)
+    let u : u64 = 18446744073709551615u64
+    std.println("{} {}", u ⊞ 1, u ⊠ 3)
+    std.println("{}", clamp_walk(3, 12))
+
+    // the rest of the logic family
+    std.println("{} {} {}", true ⊕ true, true ⊕ false, false ⊕ false)
+    std.println("{} {}", true ⊼ true, false ⊼ false)
+    std.println("{} {}", true ⊽ false, false ⊽ false)
+
+    // slices: both ends included, absence empty, bounds kept
+    let s : i64[] = v[1…2]
+    std.println("{} {} {}", #s, s[0], s[1])
+    let e : i64[] = v[2…1]
+    std.println("{}", #e)
+    let whole : i64[] = v[0…3]
+    std.println("{} {}", #whole, whole[3])
+    let sn : str[] = names[1…2]
+    std.println("{} {}", sn[0], sn[1])

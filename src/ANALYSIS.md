@@ -21,7 +21,7 @@ and characters with UTF-8 string positions, `.chars()`, `.chr()`
 and `.ord()`, struct values that travel — by parameter, return and
 binding — on the reference semantics both implementations share, and
 `:=` inference from a right side that states its type.
-Twenty-six shared programs run identically interpreted and
+Twenty-seven shared programs run identically interpreted and
 compiled, inside the one integrated test suite; the bootstrap suite
 stays green with `-Werror`.  The `@test`/`@expect` harness now
 compiles too, with the interpreter's options and report format, and
@@ -29,7 +29,11 @@ the first five bootstrap test files whose whole surface sits inside
 the subset run as shared conformance tests, their `--test` output
 matched byte for byte; a sweep showed the remaining 89 lean on
 features the subset refuses by name, so the shared list will grow
-with the subset rather than by porting.
+with the subset rather than by porting.  The first growth batch
+aimed at them — ⍳, saturating ⊞⊟⊠, ⊕⊼⊽, slices — landed and
+conforms, but no further whole file flipped: the near files each
+also want fixed-size arrays, ⍴ fills or matrices, which is the next
+tranche worth weighing.
 
 The control-flow policy is real, not aspirational: comparisons
 materialize, `⌈ ⌊` and safe conditionals are `cmov`, `and`/`or` with
