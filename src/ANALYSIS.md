@@ -64,15 +64,16 @@ past i64.
    code makes at run time, `IR_NARROW` → `rt_badfit`); discarded
    `pop()`s took explicit defaults; calls grew stack arguments past
    the sixth.  Stage 1 (the interpreted compiler compiling its
-   source) takes ~7 minutes; stage 2 — the same compile run by the
-   stage-1 binary — takes **49 milliseconds**, stage 3 confirms the
-   fixed point (stage2 ≡ stage3 byte for byte, and stage1 ≡ stage2
-   besides: the compiler is deterministic whichever way it runs), and
-   the native compiler passes all 25 conformance programs.  The
-   interpreter itself gained the instruments that made the chase
-   short: a forward-progress watchdog, per-function progress
-   recording, and the coercion memoization that turned a quadratic
-   compile linear.  The struct probes settled a fact worth
+   source) now takes ~2¼ minutes; stage 2 — the same compile run by
+   the stage-1 binary — takes **49 milliseconds**, stage 3 confirms
+   the fixed point (stage2 ≡ stage3 byte for byte, and stage1 ≡
+   stage2 besides: the compiler is deterministic whichever way it
+   runs), and the native compiler passes all 25 conformance programs.
+   The interpreter itself gained the instruments that made the chase
+   short — a forward-progress watchdog with heartbeats, per-function
+   progress recording (`--fn-stats`) — and then a profile-driven
+   optimization campaign in their terms; see the interpreter
+   performance section below.  The struct probes settled a fact worth
    recording: the bootstrap's struct values are references — one
    struct behind however many names — so the compiled pointer
    representation conforms by construction, and the subset's
@@ -107,11 +108,32 @@ past i64.
    conditional, eager versus short-circuit logic — the first real
    content of the machine-readable brief.  Still open: cascading
    quality after recovery, and logging layout/width decisions.
-6. **The interpreter remains the only parallelism-free bottleneck**:
-   compiling the 14-program suite takes minutes under the tree
-   walker.  The per-function pass structure is ready for the
-   parallel compile the brief demands, but only the native compiler
-   will deliver it.
+6. **The interpreter's speed was the bottleneck, and was fought to
+   a workable draw.**  Two quadratics hid in it: argument coercion
+   re-measured every array element at every call (each element
+   re-parsing its type string through a regex), and `deep_copy_value`
+   copied every by-value array argument whole — for the compiler
+   compiling itself, the entire source at every `run_str` call.  The
+   first fell to memoized type-string parsing and stamping an array's
+   element type in place after an identity pass; the second to
+   aliasing by-value parameters that cannot be written through (every
+   write path is refused, so the copy bought nothing), the spec'd
+   copy kept for `mut` parameters.  On top of that, dispatch-table
+   rounds: the two fifty-case `isinstance` ladders became one-probe
+   dict dispatch on the node's class (handlers extracted mechanically
+   by an `ast` analysis accepting only blocks whose every path
+   returns or raises), method calls check the struct and array cases
+   first, two plain integers skip straight to their operator, foreach
+   walks an array's live list rather than a copy (which is also what
+   the compiled code does), and the small values every program leans
+   on are pooled.  The self-compile went: unbounded (killed at 28
+   minutes, still lexing) → 7 min → 4m10s → 2m58s → **2m18s**, the
+   produced binary byte-identical at every step and the full suite
+   green after every batch.  What remains in the profile is diffuse
+   (`eval_expr` prologue, per-call environment setup, position
+   tracking); the next real step there would be a bytecode-style
+   pre-compilation of bodies — or simply using the 49 ms native
+   compiler, which is the point of self-hosting.
 
 ## Bootstrap Gaps Found This Round
 

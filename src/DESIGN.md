@@ -337,16 +337,51 @@ the same records as JSON; `--log=json` emits the lowering's decisions
 JSON object each with function and line, which is the edit-eval-check
 brief's requirement that a program never parse prose.
 
+## The Bootstrap Chain
+
+`build/bootstrap.sh` runs the chain the process prescribes: the
+interpreted compiler builds stage 1 (~2¼ minutes), stage 1 builds
+stage 2 (49 ms), stage 2 builds stage 3, and stages 2 and 3 must
+match byte for byte before the verified stage-2 binary installs as
+`build/ngplc`.  Stage 1 matches them too: the compiler is
+deterministic whichever way it runs.  The build caches against the
+source's timestamp, so the suite's native runs find it ready.
+
+The 2¼ minutes is the residue of a profile-driven campaign on the
+tree-walking interpreter, run entirely with its own instruments
+(`--timeout`, `--heartbeat`, `--fn-stats`) after the first
+self-compile attempts either looped or crawled:
+
+- two quadratics fell — per-call re-coercion of every array element
+  (memoized type parsing, element types stamped in place) and the
+  by-value array copy (read-only parameters alias; every write path
+  through them is refused, so the copy bought nothing)
+- the two fifty-case `isinstance` ladders became one-probe dict
+  dispatch on the node's class, the handlers extracted mechanically
+  by an `ast` analysis that accepts only blocks whose every path
+  returns or raises
+- foreach walks an array's live list rather than a copy — which is
+  also what the compiled code does — and the common small values
+  (integers, the two booleans, ∅) are pooled singletons
+
+Each batch was gated on the full suite and on the stage-1 binary
+staying byte-identical.  The arc: unbounded → 7 min → 4m10s → 2m58s
+→ 2m18s.
+
 ## Testing
 
 One suite (`tests/run_tests.sh`): bootstrap-language tests run under
 the interpreter; the shared programs in `tests/compile/` run under
 the interpreter **and** compiled, outputs and exit codes diffed — the
-strict-subset rule made executable.  `--impl=` selects a side.
-Twenty-two shared programs cover the whole core-2 surface including the
-stopping paths; `std.implementation` conditionalizes where
-implementations may differ.  The diff has caught real bugs on both
-sides, including the interpreter's float-precision division.
+strict-subset rule made executable.  `--impl=` selects a side:
+`bootstrap`, `compiled` (ngplc under the interpreter), `native` (the
+self-hosted `build/ngplc`, the whole sweep in ~2.4 s), `both` (the
+default) or `all`.  Twenty-five shared programs cover the whole
+core-2 surface including the stopping paths; `std.implementation`
+conditionalizes where implementations may differ.  The diff has
+caught real bugs on both sides, including the interpreter's
+float-precision division and the hash type band hiding inside the
+array band.
 
 ## Sources
 
