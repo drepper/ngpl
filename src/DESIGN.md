@@ -393,8 +393,15 @@ strict-subset rule made executable.  `--impl=` selects a side:
 `bootstrap`, `compiled` (ngplc under the interpreter), `native` (the
 self-hosted `build/ngplc`, the whole sweep in ~2.4 s), `both` (the
 default) or `all`.  Twenty-six shared programs cover the whole
-core-2 surface including the stopping paths; `std.implementation`
-conditionalizes where implementations may differ.  The diff has
+core-2 surface including the stopping paths, and five bootstrap test
+files whose whole `@test` surface sits inside the subset run as
+shared tests besides: compiled, run with `--test`, and their stdout,
+stderr and exit code must match the interpreter's byte for byte.
+That list grows as the subset grows — most of the other 89 files
+lean on features the subset refuses by name (floats, generics,
+combinators, custom units, comptime), which is what keeps them
+bootstrap-only.  `std.implementation` conditionalizes where
+implementations may differ.  The diff has
 caught real bugs on both sides, including the interpreter's
 float-precision division and the hash type band hiding inside the
 array band.

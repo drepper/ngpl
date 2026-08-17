@@ -2056,8 +2056,10 @@ impl Parser:
             // so it is not checked, not compiled, and not run --
             // remembered only so a reference to it can say why
             self.ignored.push(name)
-            if is_test:
-                self.igtests.push(name)
+            // every @expect'd function is reported as a test of the
+            // expectation itself, @test or not, as the interpreter
+            // reports them
+            self.igtests.push(name)
             return
         self.fns.push(FnDef{name: name, tok: name_tok, params_off: params_off,
                             ret: ret, body: body, is_impure: imp,
@@ -4362,8 +4364,12 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
                 if j > i and a.globals[j].name = a.globals[i].name:
                     c.derr(a.globals[j].tok, "'" ⧺ a.globals[i].name ⧺ "' is already defined")
             c.check_global(@dropunit(i))
-    if starts = 0:
-        c.diags.push(Diag{line: 1, col: 1, msg: "no @start function; nothing would run"})
+    let ntests : mut i64 = 0
+    foreach f2 := a.fns:
+        if f2.is_test:
+            ntests ← ntests + 1
+    if starts = 0 and ntests = 0 and #a.igtests = 0:
+        c.diags.push(Diag{line: 1, col: 1, msg: "no @start function and no @test; nothing would run"})
     if starts > 1:
         c.diags.push(Diag{line: 1, col: 1, msg: "more than one @start function"})
     if #a.fns > 0:
@@ -7828,7 +7834,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
     let args_off : i64 = alloc_off + 16
     let nfns : i64 = @dropunit(#a.fns)
     // _start: call the @start function, then exit 0
-    let start_fn : mut i64 = 0
+    let start_fn : mut i64 = ⁻1
     foreach i := 0…#a.fns - 1:
         if a.fns[i].is_start:
             start_fn ← @dropunit(i)
@@ -7850,10 +7856,11 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
     if ninit > 0:
         em.jglobal(232, ⁻1, nfns)
     em.jglobal(232, ⁻1, tdriver)
-    em.jglobal(232, ⁻1, start_fn)
+    if start_fn >= 0:
+        em.jglobal(232, ⁻1, start_fn)
     // the start function's answer is the exit status; one that
-    // answers nothing exits 0
-    if a.fns[start_fn × 1¤ptrdiff].ret ≠ TY_UNIT:
+    // answers nothing exits 0, as does a test file with no @start
+    if start_fn >= 0 and a.fns[start_fn × 1¤ptrdiff].ret ≠ TY_UNIT:
         em.b3(72, 137, 199)         // mov rdi, rax
     else:
         em.b3(72, 49, 255)          // xor rdi, rdi

@@ -91,6 +91,45 @@ for t in "$testdir"/t*.ngpl; do
     pass=$((pass + 1))
 done
 
+# ---------------------------------------------------------------------------
+# Shared test files: bootstrap suite files whose whole @test surface
+# sits inside the compiled subset.  Each is compiled and run with
+# --test, and stdout, stderr and the exit code must match the
+# interpreter's byte for byte.  The list grows as the subset grows.
+# ---------------------------------------------------------------------------
+shared_tests=(
+    test_if
+    test_noreturn
+    test_short_circuit
+    test_stepped_range
+    test_wrap
+)
+
+for name in "${shared_tests[@]}"; do
+    t=$topdir/tests/$name.ngpl
+    if ! ngplc "$t" -o "$workdir/$name.bin" \
+            > "$workdir/$name.ngplc.out" 2>&1; then
+        echo "FAIL $name: ngplc refused it"
+        sed 's/^/    /' "$workdir/$name.ngplc.out" | head -5
+        fail=$((fail + 1))
+        continue
+    fi
+    python -m interp --test "$t" > "$workdir/$name.i.out" 2> "$workdir/$name.i.err"
+    irc=$?
+    "$workdir/$name.bin" --test > "$workdir/$name.c.out" 2> "$workdir/$name.c.err"
+    crc=$?
+    if [ "$irc" -ne "$crc" ] \
+            || ! cmp -s "$workdir/$name.i.out" "$workdir/$name.c.out" \
+            || ! cmp -s "$workdir/$name.i.err" "$workdir/$name.c.err"; then
+        echo "FAIL $name: the --test runs disagree (interp rc=$irc, native rc=$crc)"
+        diff "$workdir/$name.i.err" "$workdir/$name.c.err" | head -5
+        fail=$((fail + 1))
+    else
+        echo "ok   $name (--test)"
+        pass=$((pass + 1))
+    fi
+done
+
 echo
 echo "compile conformance ($compiler): $pass passed, $fail failed"
 exit $((fail > 0))

@@ -24,9 +24,12 @@ binding — on the reference semantics both implementations share, and
 Twenty-six shared programs run identically interpreted and
 compiled, inside the one integrated test suite; the bootstrap suite
 stays green with `-Werror`.  The `@test`/`@expect` harness now
-compiles too, with the interpreter's options and report format, so
-subset-compatible test functions can join the conformance surface
-instead of living only under the interpreter.
+compiles too, with the interpreter's options and report format, and
+the first five bootstrap test files whose whole surface sits inside
+the subset run as shared conformance tests, their `--test` output
+matched byte for byte; a sweep showed the remaining 89 lean on
+features the subset refuses by name, so the shared list will grow
+with the subset rather than by porting.
 
 The control-flow policy is real, not aspirational: comparisons
 materialize, `⌈ ⌊` and safe conditionals are `cmov`, `and`/`or` with
