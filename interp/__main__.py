@@ -600,26 +600,43 @@ def _iter_ast(node, stop_at=()):
 
     Nodes listed in stop_at are yielded but not descended into, so a
     caller can treat them as boundaries and handle their contents on
-    their own terms.
+    their own terms.  Iterative, with the field names cached per node
+    class: the static checks walk every function's tree several times,
+    and this walk is most of what loading a large program costs.
     """
-    if isinstance(node, (list, tuple)):
-        for item in node:
-            yield from _iter_ast(item, stop_at)
-        return
-    if type(node).__module__ != "interp.ast":
-        return
-    yield node
-    if stop_at and isinstance(node, stop_at):
-        return
-    for name in _fields_of(node):
-        yield from _iter_ast(getattr(node, name, None), stop_at)
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if isinstance(n, (list, tuple)):
+            stack.extend(reversed(n))
+            continue
+        if type(n).__module__ != "interp.ast":
+            continue
+        yield n
+        if stop_at and isinstance(n, stop_at):
+            continue
+        fields = _fields_of(n)
+        for name in reversed(fields):
+            child = getattr(n, name, None)
+            if child is not None:
+                stack.append(child)
+
+
+_FIELDS_CACHE: dict = {}
 
 
 def _fields_of(node) -> tuple[str, ...]:
     """The names of what a node holds, however the node stores them."""
+    cls = type(node)
+    got = _FIELDS_CACHE.get(cls)
+    if got is not None:
+        return got
     if hasattr(node, "__dict__"):
-        return tuple(vars(node))
-    return tuple(getattr(type(node), "__slots__", ()))
+        fields = tuple(vars(node))
+    else:
+        fields = tuple(getattr(cls, "__slots__", ()))
+    _FIELDS_CACHE[cls] = fields
+    return fields
 
 
 def _propagated_error_type(expr, env) -> str | None:

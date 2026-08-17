@@ -705,6 +705,10 @@ def unwrap_optional(value):
     ExpectedValue with err → raises TypeError with the error description.
     Everything else → returned as-is.
     """
+    t = type(value)
+    if t is IntValue or t is StrValue or t is BoolValue or t is CharValue \
+            or t is ObjectValue:
+        return value
     if isinstance(value, SomeValue):
         return unwrap_optional(value.value)
     if isinstance(value, ExpectedValue):
@@ -2441,6 +2445,15 @@ class Evaluator:
         written as a value, so `a ⧺ b` and `⧺⌿ v` mean the same thing
         by construction rather than by two implementations agreeing.
         """
+        # Two plain integers meet most operators most of the time, and
+        # nothing on the way to the dispatch dict concerns them: no
+        # threading (rank 0), no units, no optionals.  The specials
+        # (⧺, ⍳, sets, ∊, ≈) are not in _ops, so the probe misses and
+        # falls through for them.
+        if type(left) is IntValue and type(right) is IntValue:
+            h = self._ops.get(op)
+            if h is not None:
+                return h(left, right)
         if op == "\N{DOUBLE PLUS}":
             return self._op_concat(left, right)
         if op == "\N{APL FUNCTIONAL SYMBOL IOTA}":
@@ -2485,12 +2498,13 @@ class Evaluator:
             # elements.  This sits above the unit handling below, which
             # therefore only ever meets one value at a time and keeps
             # the unit it is given.
-            threaded = self._thread_level(
-                op, self._OPERAND_NAMES, [left, right], (0, 0),
-                lambda sub: self._apply_operator(op, sub[0], sub[1]),
-                noun="operands")
-            if threaded is not None:
-                return threaded
+            if value_rank(left) > 0 or value_rank(right) > 0:
+                threaded = self._thread_level(
+                    op, self._OPERAND_NAMES, [left, right], (0, 0),
+                    lambda sub: self._apply_operator(op, sub[0], sub[1]),
+                    noun="operands")
+                if threaded is not None:
+                    return threaded
         if op in self._APPROX_OPS:
             return self._op_approx(op, left, right)
         lu = unwrap_optional(left)
@@ -3291,128 +3305,18 @@ class Evaluator:
             if self._call_stack:
                 self._call_stack[-1][1] = pos
 
-        if isinstance(node, IntLit):
-            # A literal with no suffix names no width, so it stays
-            # uncommitted until something it meets decides one.
-            return mk_int(node.value,
-                          UNTYPED if node.width == "int" else node.width)
 
-        if isinstance(node, FloatLit):
-            return mk_float(node.value, node.width)
 
-        if isinstance(node, CharLit):
-            return CharValue(node.code)
 
-        if isinstance(node, StrLit):
-            return mk_str(node.text)
 
-        if isinstance(node, BoolLit):
-            return mk_bool(node.value)
 
-        if isinstance(node, NoneLit):
-            return none()
 
-        if isinstance(node, VarRef):
-            if node.name == DISCARD_NAME:
-                raise TypeError(
-                    "'_' discards the value assigned to it and cannot be read")
-            if self._frozen_vars.get(node.name) == "moved":
-                raise TypeError(
-                    f"use of moved value '{node.name}'")
-            if (self._pure_func_name is not None
-                    and not self.env.has_local(node.name)
-                    and self.env.is_mutable_global(node.name)):
-                raise TypeError(
-                    f"pure function '{self._pure_func_name}' cannot "
-                    f"read mutable global variable '{node.name}'")
-            try:
-                val = self.env.lookup(node.name)
-            except KeyError:
-                # A type name stands for its type wherever it appears,
-                # which is what lets @typeof be compared against it.
-                if is_type_name(node.name):
-                    return TypeValue(node.name)
-                raise
-            if isinstance(val, Reference):
-                return val.get()
-            return val
 
-        if isinstance(node, RefExpr):
-            self.env.lookup(node.name)
-            return RefValue(self.env, node.name)
-
-        if isinstance(node, StaticAssert):
-            for arg in node.args:
-                if not _is_const_expr(arg):
-                    raise TypeError(
-                        "static_assert requires compile-time constant expressions")
-            if not node.args:
-                raise TypeError("static_assert requires at least 1 argument")
-            cond = self.eval_expr(node.args[0])
-            if isinstance(cond, BoolValue):
-                if not cond.value:
-                    msg = ""
-                    if len(node.args) > 1:
-                        m = self.eval_expr(node.args[1])
-                        msg = f": {m.display()}" if hasattr(m, "display") else ""
-                    raise TypeError(f"static_assert failed{msg}")
-            elif isinstance(cond, IntValue):
-                if cond.value == 0:
-                    raise TypeError("static_assert failed: value is zero")
-            else:
-                raise TypeError("static_assert condition must be bool or int")
-            return none()
-
-        if isinstance(node, StaticAssertEq):
-            if not _is_const_expr(node.expected) or not _is_const_expr(node.actual):
-                raise TypeError(
-                    "static_assert_eq requires compile-time constant expressions")
-            expected = self.eval_expr(node.expected)
-            actual = self.eval_expr(node.actual)
-            eu = _as_type_value(unwrap_optional(expected))
-            au = _as_type_value(unwrap_optional(actual))
-            if isinstance(eu, IntValue) and isinstance(au, IntValue):
-                if eu.value != au.value:
-                    raise TypeError(
-                        f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
-            elif isinstance(eu, StrValue) and isinstance(au, StrValue):
-                if eu.value != au.value:
-                    raise TypeError(
-                        f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
-            elif isinstance(eu, BoolValue) and isinstance(au, BoolValue):
-                if eu.value != au.value:
-                    raise TypeError(
-                        f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
-            elif isinstance(eu, TypeValue) and isinstance(au, TypeValue):
-                if eu.name != au.name:
-                    raise TypeError(
-                        f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
-            elif (isinstance(eu, TypeValue) and isinstance(au, StrValue)) or \
-                 (isinstance(eu, StrValue) and isinstance(au, TypeValue)):
-                # A type may also be checked against its name as a
-                # string, which predates naming the type directly.
-                type_name = eu.name if isinstance(eu, TypeValue) else au.name
-                spelled = au.value if isinstance(au, StrValue) else eu.value
-                if type_name != spelled:
-                    raise TypeError(
-                        f"static_assert_eq failed:\n  expected: {type_name}\n"
-                        f"  actual:   {spelled}")
-            elif isinstance(eu, UnitValue) and isinstance(au, UnitValue):
-                # Through the arithmetic's own comparison, so that the
-                # units have to agree as well as the numbers.
-                eq = self._unit_binop("=", eu, au)
-                if not eq.value:
-                    raise TypeError(
-                        f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
-            elif isinstance(eu, UnitOfValue) and isinstance(au, UnitOfValue):
-                eq = self._op_eq(expected, actual)
-                if not eq.value:
-                    raise TypeError(
-                        f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
-            else:
-                raise TypeError(
-                    f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
-            return none()
+        # The hot cases sit first: the ladder is walked for
+        # every expression, and these are most expressions.
+        handler = _EXPR_DISPATCH.get(node.__class__)
+        if handler is not None:
+            return handler(self, node)
 
         if isinstance(node, WrapExpr):
             old = self._wrapping
@@ -3422,227 +3326,15 @@ class Evaluator:
             finally:
                 self._wrapping = old
 
-        if isinstance(node, BinOp):
-            binop_pos = pos
-            if node.op == "??":
-                left = self.eval_expr(node.left)
-                if isinstance(left, ExpectedValue):
-                    if left.is_ok():
-                        return left.ok_value
-                    return self.eval_expr(node.right)
-                if isinstance(left, SomeValue):
-                    return left.value
-                if isinstance(left, NoneValue):
-                    return self.eval_expr(node.right)
-                return left
-            if node.op in ("and", "or"):
-                # The spec's short-circuit pair: the right side is not
-                # read when the left side already answers.  Both sides
-                # are held to the logic operators' rule -- truth
-                # values only.
-                left = self.eval_expr(node.left)
-                left_truth = self._logic_bool(_unwrap_operand(left))
-                if node.op == "and" and not left_truth:
-                    return mk_bool(False)
-                if node.op == "or" and left_truth:
-                    return mk_bool(True)
-                right = self.eval_expr(node.right)
-                if binop_pos is not None:
-                    self._last_pos = binop_pos
-                    if self._call_stack:
-                        self._call_stack[-1][1] = binop_pos
-                return mk_bool(self._logic_bool(_unwrap_operand(right)))
-            left = self.eval_expr(node.left)
-            right = self.eval_expr(node.right)
-            if binop_pos is not None:
-                self._last_pos = binop_pos
-                if self._call_stack:
-                    self._call_stack[-1][1] = binop_pos
-            return self._apply_operator(node.op, left, right)
 
-        if isinstance(node, UnitExpr):
-            value = self.eval_expr(node.expr)
-            from interp.units import eval_unit_formula
-            unit = eval_unit_formula(node.unit_spec)
-            if isinstance(value, UnitValue):
-                return UnitValue(value.inner, unit)
-            return UnitValue(value, unit)
 
-        if isinstance(node, UnaryOp):
-            if node.op == "⁻" and isinstance(node.operand, IntLit):
-                # A ⁻ written against an integer literal is part of the
-                # literal rather than an operation on it, so ⁻128i8 is
-                # the i8 whose value is ⁻128.  Read the other way the
-                # positive half would have to hold it first, and the
-                # lowest value of every signed type would be unwritable.
-                return self._mk_int(-node.operand.value,
-                                    node.operand.width or "int")
-            operand = self.eval_expr(node.operand)
-            return self._apply_unary(node.op, operand)
 
-        if isinstance(node, OptSome):
-            value = self.eval_expr(node.value)
-            return some(value)
 
-        if isinstance(node, ExpErr):
-            return ExpectedValue.err(self.eval_expr(node.value))
 
-        if isinstance(node, TryUnwrap):
-            if not self._current_ret_type:
-                raise TypeError(
-                    "? operator requires enclosing function to have optional or expected return type")
-            _, opt_err = _split_optional_type(self._current_ret_type)
-            if opt_err is None:
-                raise TypeError(
-                    "? operator requires enclosing function to have optional or expected return type")
-            val = self.eval_expr(node.expr)
-            if isinstance(val, ExpectedValue):
-                if val.is_ok():
-                    return val.ok_value
-                if opt_err != "":
-                    # The static check catches this wherever the error
-                    # type can be worked out from the source; this is
-                    # the backstop for the cases where it cannot.
-                    actual = self._value_type_name(val.err_value)
-                    if actual != opt_err.rsplit(".", 1)[-1]:
-                        raise TypeError(
-                            f"? propagates an error of type '{actual}', but "
-                            f"the function returns errors of type "
-                            f"'{opt_err}'")
-                    raise _ReturnSentinel(ExpectedValue.err(val.err_value))
-                raise _ReturnSentinel(none())
-            if isinstance(val, SomeValue):
-                return val.value
-            if isinstance(val, NoneValue):
-                raise _ReturnSentinel(none())
-            return val
 
-        if isinstance(node, StructLit):
-            return self._eval_struct_lit(node)
-
-        if isinstance(node, FuncCall):
-            args = [self.eval_expr(a) for a in node.args]
-            return self._call_func(node.name, args)
-
-        if isinstance(node, MethodCall):
-            if node.method in _ARRAY_MUTATORS:
-                self._check_mutating_call(node)
-            obj = self.eval_expr(node.obj)
-            args = [self.eval_expr(a) for a in node.args]
-            result = self._call_method(obj, node.method, args)
-            unwrapped_obj = unwrap_optional(obj)
-            if (isinstance(unwrapped_obj, ObjectValue)
-                    and isinstance(unwrapped_obj.obj, StructInstance)
-                    and isinstance(node.obj, VarRef)):
-                inst = unwrapped_obj.obj
-                method = inst.struct_type.methods.get(node.method)
-                if (method is not None
-                        and method.params
-                        and method.params[0][0] == "self"
-                        and node.method not in inst.struct_type._ref_self_methods):
-                    self._frozen_vars[node.obj.name] = "moved"
-            return result
-
-        if isinstance(node, GetAttr):
-            obj = self.eval_expr(node.obj)
-            unwrapped = unwrap_optional(obj)
-            if isinstance(unwrapped, EnumType):
-                if node.attr in unwrapped.members:
-                    return EnumValue(unwrapped, unwrapped.members[node.attr])
-                raise AttributeError(
-                    f"enum '{unwrapped.name}' has no member '{node.attr}'")
-            if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, StructInstance):
-                inst = unwrapped.obj
-                if node.attr in inst.field_values:
-                    return inst.field_values[node.attr]
-                if node.attr == "alignof":
-                    return self._struct_layout_attr(inst.struct_type, node.attr)
-                if node.attr == "sizeof":
-                    raise AttributeError(_sizeof_is_gone(node.attr))
-                raise AttributeError(
-                    f"struct '{inst.struct_type.name}' has no field '{node.attr}'")
-            if isinstance(unwrapped, StructType):
-                if node.attr == "alignof":
-                    return self._struct_layout_attr(unwrapped, node.attr)
-                if node.attr == "sizeof":
-                    raise AttributeError(_sizeof_is_gone(node.attr))
-                raise AttributeError(
-                    f"struct type '{unwrapped.name}' has no attribute "
-                    f"'{node.attr}'")
-            if isinstance(unwrapped, (TupleValue, StrValue)):
-                if node.attr == "sizeof":
-                    raise AttributeError(_sizeof_is_gone(node.attr))
-            if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
-                if node.attr == "sizeof":
-                    raise AttributeError(_sizeof_is_gone(node.attr))
-                if node.attr == "shape":
-                    # One extent per dimension, which is how a function
-                    # reads the dimensions its parameter type left open.
-                    return TupleValue([
-                        self._sizeof_result(d) if d is not None else none()
-                        for d in array_shape(unwrapped.obj)])
-            if isinstance(unwrapped, ObjectValue):
-                attr_val = getattr(unwrapped.obj, node.attr, None)
-                if attr_val is not None:
-                    if isinstance(attr_val, Value):
-                        return attr_val
-                    if callable(attr_val):
-                        return BuiltinBoundMethod(unwrapped.obj, node.attr)
-                    # bool before int: bool is a subclass of int, so the
-                    # int test would otherwise turn true/false into 1/0.
-                    if isinstance(attr_val, bool):
-                        return mk_bool(attr_val)
-                    if isinstance(attr_val, int):
-                        return mk_int(attr_val)
-                    if isinstance(attr_val, float):
-                        return mk_float(attr_val)
-                    if isinstance(attr_val, str):
-                        return mk_str(attr_val)
-                    return ObjectValue(attr_val)
-            elif isinstance(unwrapped, IntValue):
-                # int.value attribute? No, just return the int itself.
-                pass
-            return obj
 
         # Array literal [expr, expr, ...].
-        if isinstance(node, ArrayLit):
-            elements = [self.eval_expr(e) for e in node.elements]
-            settled, unit = _literal_element_type(elements)
-            if settled is not None:
-                elements = [coerce_to_type(e, settled, unit, self._mk_int)
-                            for e in elements]
-            return ObjectValue(ArrayValue(elements, element_type=settled,
-                                          element_unit=unit))
 
-        if isinstance(node, HashLit):
-            keys = [self.eval_expr(k) for k, _ in node.pairs]
-            values = [self.eval_expr(v) for _, v in node.pairs]
-            key_type, key_unit = _literal_element_type(keys)
-            value_type, value_unit = _literal_element_type(values)
-            hash_value = HashValue(key_type=key_type, value_type=value_type)
-            for key, value in zip(keys, values):
-                key = self._checked_key(key, key_type, key_unit)
-                if value_type is not None:
-                    value = coerce_to_type(value, value_type, value_unit,
-                                           self._mk_int)
-                hash_value.put(key, value)
-            return ObjectValue(hash_value)
-
-        if isinstance(node, SetLit):
-            values = [self.eval_expr(v) for v in node.elements]
-            value_type, value_unit = _literal_element_type(values)
-            set_value = SetValue(value_type=value_type)
-            for value in values:
-                set_value.put(self._checked_key(value, value_type, value_unit))
-            return ObjectValue(set_value)
-
-        if isinstance(node, EmptyCollectionLit):
-            # Empty of everything, including of which of the two it is.
-            # A type says both; a binding with no type is refused where
-            # bindings are settled, as an empty array is.
-            return ObjectValue(SetValue())
-
-        # Subscript read: arr[i] or arr[i, j, ...] or tuple[i].
         if isinstance(node, Subscript):
             # A type name with brackets after it is an array type, not
             # a subscript of anything: `i8[3]` names the type the way a
@@ -3697,6 +3389,19 @@ class Evaluator:
             return val
 
         # Slice read: arr[start…end] (inclusive).
+
+
+
+
+
+
+
+
+
+
+
+
+        # Subscript read: arr[i] or arr[i, j, ...] or tuple[i].
         if isinstance(node, SliceAccess):
             arr_val = self.eval_expr(node.obj)
             unwrapped = unwrap_optional(arr_val)
@@ -3718,189 +3423,22 @@ class Evaluator:
                                               element_type=arr.element_type))
 
         # Multi-dimensional slice: arr[range, range, ...].
-        if isinstance(node, MultiSlice):
-            arr_val = self.eval_expr(node.obj)
-            return self._eval_multi_slice_read(arr_val, node.specs)
 
-        if isinstance(node, RangeExpr):
-            s = unwrap_optional(self.eval_expr(node.start))
-            e = unwrap_optional(self.eval_expr(node.end))
-            if isinstance(s, UnitValue):
-                s = s.inner
-            if isinstance(e, UnitValue):
-                e = e.inner
-            if not isinstance(s, IntValue) or not isinstance(e, IntValue):
-                raise TypeError("range bounds must be integers")
-            step = None
-            if node.step is not None:
-                st = unwrap_optional(self.eval_expr(node.step))
-                if isinstance(st, UnitValue):
-                    st = st.inner
-                if not isinstance(st, IntValue):
-                    raise TypeError("range step must be an integer")
-                step = st.value
-            return RangeValue(s.value, e.value, step)
 
-        if isinstance(node, EnumerateExpr):
-            raise TypeError("enumerate can only be used inside foreach")
 
-        if isinstance(node, TypeOfExpr):
-            cached = getattr(node, "_cached_value", None)
-            if cached is not None:
-                return cached
-            if not _is_comptime_expr(node.expr, self._comptime_vars) \
-                    and not self._names_a_binding(node.expr):
-                raise TypeError(
-                    "@typeof requires a compile-time constant, a name, or "
-                    "an expression built from them")
-            # Reading a name bound to a reference yields the referent, so
-            # the binding itself is inspected to report the borrow.
-            val = None
-            if isinstance(node.expr, VarRef):
-                try:
-                    bound = self.env.lookup(node.expr.name)
-                except KeyError:
-                    bound = None
-                if isinstance(bound, Reference):
-                    val = bound
-            if val is None:
-                val = self.eval_expr(node.expr)
-            result = TypeValue(self._value_type_name(val))
-            if _is_const_expr(node.expr):
-                node._cached_value = result
-            return result
 
-        if isinstance(node, LimitExpr):
-            return self._eval_limit(node)
 
-        if isinstance(node, IfExpr):
-            # Only the branch taken is read, which is what makes a
-            # conditional usable as a guard: the other side may be
-            # something that could not be run.
-            if to_bool(self.eval_expr(node.cond)):
-                return self.eval_expr(node.then_expr)
-            return self.eval_expr(node.else_expr)
 
-        if isinstance(node, Quote):
-            return self._eval_quote(node)
 
-        if isinstance(node, Reflect):
-            # Nothing is worked out: what ※ is written in front of is
-            # a reference, and the reference is the answer.
-            import copy as _copy
-            return SyntaxValue(node=_copy.deepcopy(node.tree))
 
-        if isinstance(node, Splice):
-            raise TypeError(
-                "$ puts a value into a piece of program, and there is no "
-                "piece of program here")
 
-        if isinstance(node, DropUnitExpr):
-            val = self.eval_expr(node.expr)
-            inner = val.inner if isinstance(val, UnitValue) else val
-            if not isinstance(val, UnitValue):
-                self._warnings.append(
-                    "@dropunit: this value carries no unit to drop")
-            return inner
 
-        if isinstance(node, SizeOfExpr):
-            cached = getattr(node, "_cached_value", None)
-            if cached is not None:
-                return cached
-            # A written type asks how much storage it occupies; a value
-            # asks how many elements it holds.
-            written = self._written_type(node.expr)
-            if written is not None:
-                result = self._type_byte_size(written)
-                node._cached_value = result
-                return result
-            named = self._names_a_binding(node.expr)
-            if not _is_comptime_expr(node.expr, self._comptime_vars) \
-                    and not named:
-                raise TypeError(
-                    "@sizeof requires a compile-time constant, a name, or "
-                    "an expression built from them")
-            val = self.eval_expr(node.expr)
-            result = self._memory_size(unwrap_optional(val))
-            if _is_const_expr(node.expr):
-                node._cached_value = result
-            return result
 
-        if isinstance(node, ResultOfExpr):
-            cached = getattr(node, "_cached_value", None)
-            if cached is not None:
-                return cached
-            try:
-                func = self.env.lookup(node.name)
-            except KeyError:
-                raise TypeError(f"@resultof: unknown function '{node.name}'")
-            if isinstance(func, FuncValue):
-                # Every parsed signature records a return type, ∅ where
-                # none was written, so there is nothing to fall back to.
-                result = TypeValue(func.ret_type)
-            elif isinstance(func, BuiltinFunc):
-                result = TypeValue("builtin")
-            else:
-                raise TypeError(f"@resultof: '{node.name}' is not a function")
-            node._cached_value = result
-            return result
 
-        if isinstance(node, UnitOfExpr):
-            cached = getattr(node, "_cached_value", None)
-            if cached is not None:
-                return cached
-            if not _is_comptime_expr(node.expr, self._comptime_vars) \
-                    and not self._names_a_binding(node.expr):
-                raise TypeError(
-                    "@unitof requires a compile-time constant, a name, or "
-                    "an expression built from them")
-            val = self.eval_expr(node.expr)
-            unwrapped = unwrap_optional(val)
-            if isinstance(unwrapped, UnitValue):
-                result = UnitOfValue(unwrapped.unit)
-            else:
-                result = UnitOfValue(None)
-            if _is_const_expr(node.expr):
-                node._cached_value = result
-            return result
 
-        if isinstance(node, UnitRefExpr):
-            from interp.units import eval_unit_formula
-            unit = eval_unit_formula(node.unit_spec)
-            return UnitOfValue(unit)
 
-        if isinstance(node, LambdaExpr):
-            return self._eval_lambda_expr(node)
 
-        if isinstance(node, TupleLit):
-            elements = [self.eval_expr(e) for e in node.elements]
-            if len(elements) > 1 and all(isinstance(e, TypeValue)
-                                         for e in elements):
-                # A name that names a type is that type wherever it is
-                # written, and a tuple of them is the tuple type they
-                # describe, so a program compares against `(i64, str)`
-                # rather than against the text of it.
-                return TypeValue("(" + ", ".join(e.name for e in elements) + ")")
-            return TupleValue(elements)
 
-        if isinstance(node, OperatorRef):
-            # The operator as a value: a function of two arguments that
-            # does what the operator does between them.
-            return BuiltinFunc(
-                node.op, 2,
-                lambda args, op=node.op: self._apply_operator(op, args[0],
-                                                              args[1]))
-
-        if isinstance(node, FoldExpr):
-            return self._eval_fold(node)
-
-        if isinstance(node, MapExpr):
-            return self._eval_map(node)
-
-        if isinstance(node, ReshapeExpr):
-            shape = self.eval_expr(node.shape)
-            data = self.eval_expr(node.data)
-            return self._eval_reshape(shape, data)
 
         # Array allocation: new type[size] or var name : type[size] = init.
         if isinstance(node, ArrayAlloc):
@@ -3973,6 +3511,565 @@ class Evaluator:
     # ------------------------------------------------------------------
     # Statement evaluation
     # ------------------------------------------------------------------
+
+
+    def _ee_IntLit(self, node):
+        pos = getattr(node, "pos", None)
+        return mk_int(node.value,
+                      UNTYPED if node.width == "int" else node.width)
+
+    def _ee_FloatLit(self, node):
+        pos = getattr(node, "pos", None)
+        return mk_float(node.value, node.width)
+
+    def _ee_CharLit(self, node):
+        pos = getattr(node, "pos", None)
+        return CharValue(node.code)
+
+    def _ee_StrLit(self, node):
+        pos = getattr(node, "pos", None)
+        return mk_str(node.text)
+
+    def _ee_BoolLit(self, node):
+        pos = getattr(node, "pos", None)
+        return mk_bool(node.value)
+
+    def _ee_NoneLit(self, node):
+        pos = getattr(node, "pos", None)
+        return none()
+
+    def _ee_VarRef(self, node):
+        pos = getattr(node, "pos", None)
+        if node.name == DISCARD_NAME:
+            raise TypeError(
+                "'_' discards the value assigned to it and cannot be read")
+        if self._frozen_vars.get(node.name) == "moved":
+            raise TypeError(
+                f"use of moved value '{node.name}'")
+        if (self._pure_func_name is not None
+                and not self.env.has_local(node.name)
+                and self.env.is_mutable_global(node.name)):
+            raise TypeError(
+                f"pure function '{self._pure_func_name}' cannot "
+                f"read mutable global variable '{node.name}'")
+        try:
+            val = self.env.lookup(node.name)
+        except KeyError:
+            # A type name stands for its type wherever it appears,
+            # which is what lets @typeof be compared against it.
+            if is_type_name(node.name):
+                return TypeValue(node.name)
+            raise
+        if isinstance(val, Reference):
+            return val.get()
+        return val
+
+    def _ee_BinOp(self, node):
+        pos = getattr(node, "pos", None)
+        binop_pos = pos
+        if node.op == "??":
+            left = self.eval_expr(node.left)
+            if isinstance(left, ExpectedValue):
+                if left.is_ok():
+                    return left.ok_value
+                return self.eval_expr(node.right)
+            if isinstance(left, SomeValue):
+                return left.value
+            if isinstance(left, NoneValue):
+                return self.eval_expr(node.right)
+            return left
+        if node.op in ("and", "or"):
+            # The spec's short-circuit pair: the right side is not
+            # read when the left side already answers.  Both sides
+            # are held to the logic operators' rule -- truth
+            # values only.
+            left = self.eval_expr(node.left)
+            left_truth = self._logic_bool(_unwrap_operand(left))
+            if node.op == "and" and not left_truth:
+                return mk_bool(False)
+            if node.op == "or" and left_truth:
+                return mk_bool(True)
+            right = self.eval_expr(node.right)
+            if binop_pos is not None:
+                self._last_pos = binop_pos
+                if self._call_stack:
+                    self._call_stack[-1][1] = binop_pos
+            return mk_bool(self._logic_bool(_unwrap_operand(right)))
+        left = self.eval_expr(node.left)
+        right = self.eval_expr(node.right)
+        if binop_pos is not None:
+            self._last_pos = binop_pos
+            if self._call_stack:
+                self._call_stack[-1][1] = binop_pos
+        return self._apply_operator(node.op, left, right)
+
+    def _ee_UnaryOp(self, node):
+        pos = getattr(node, "pos", None)
+        if node.op == "⁻" and isinstance(node.operand, IntLit):
+            # A ⁻ written against an integer literal is part of the
+            # literal rather than an operation on it, so ⁻128i8 is
+            # the i8 whose value is ⁻128.  Read the other way the
+            # positive half would have to hold it first, and the
+            # lowest value of every signed type would be unwritable.
+            return self._mk_int(-node.operand.value,
+                                node.operand.width or "int")
+        operand = self.eval_expr(node.operand)
+        return self._apply_unary(node.op, operand)
+
+    def _ee_OptSome(self, node):
+        pos = getattr(node, "pos", None)
+        value = self.eval_expr(node.value)
+        return some(value)
+
+    def _ee_StructLit(self, node):
+        pos = getattr(node, "pos", None)
+        return self._eval_struct_lit(node)
+
+    def _ee_FuncCall(self, node):
+        pos = getattr(node, "pos", None)
+        args = [self.eval_expr(a) for a in node.args]
+        return self._call_func(node.name, args)
+
+    def _ee_MethodCall(self, node):
+        pos = getattr(node, "pos", None)
+        if node.method in _ARRAY_MUTATORS:
+            self._check_mutating_call(node)
+        obj = self.eval_expr(node.obj)
+        args = [self.eval_expr(a) for a in node.args]
+        result = self._call_method(obj, node.method, args)
+        unwrapped_obj = unwrap_optional(obj)
+        if (isinstance(unwrapped_obj, ObjectValue)
+                and isinstance(unwrapped_obj.obj, StructInstance)
+                and isinstance(node.obj, VarRef)):
+            inst = unwrapped_obj.obj
+            method = inst.struct_type.methods.get(node.method)
+            if (method is not None
+                    and method.params
+                    and method.params[0][0] == "self"
+                    and node.method not in inst.struct_type._ref_self_methods):
+                self._frozen_vars[node.obj.name] = "moved"
+        return result
+
+    def _ee_GetAttr(self, node):
+        pos = getattr(node, "pos", None)
+        obj = self.eval_expr(node.obj)
+        unwrapped = unwrap_optional(obj)
+        if isinstance(unwrapped, EnumType):
+            if node.attr in unwrapped.members:
+                return EnumValue(unwrapped, unwrapped.members[node.attr])
+            raise AttributeError(
+                f"enum '{unwrapped.name}' has no member '{node.attr}'")
+        if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, StructInstance):
+            inst = unwrapped.obj
+            if node.attr in inst.field_values:
+                return inst.field_values[node.attr]
+            if node.attr == "alignof":
+                return self._struct_layout_attr(inst.struct_type, node.attr)
+            if node.attr == "sizeof":
+                raise AttributeError(_sizeof_is_gone(node.attr))
+            raise AttributeError(
+                f"struct '{inst.struct_type.name}' has no field '{node.attr}'")
+        if isinstance(unwrapped, StructType):
+            if node.attr == "alignof":
+                return self._struct_layout_attr(unwrapped, node.attr)
+            if node.attr == "sizeof":
+                raise AttributeError(_sizeof_is_gone(node.attr))
+            raise AttributeError(
+                f"struct type '{unwrapped.name}' has no attribute "
+                f"'{node.attr}'")
+        if isinstance(unwrapped, (TupleValue, StrValue)):
+            if node.attr == "sizeof":
+                raise AttributeError(_sizeof_is_gone(node.attr))
+        if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
+            if node.attr == "sizeof":
+                raise AttributeError(_sizeof_is_gone(node.attr))
+            if node.attr == "shape":
+                # One extent per dimension, which is how a function
+                # reads the dimensions its parameter type left open.
+                return TupleValue([
+                    self._sizeof_result(d) if d is not None else none()
+                    for d in array_shape(unwrapped.obj)])
+        if isinstance(unwrapped, ObjectValue):
+            attr_val = getattr(unwrapped.obj, node.attr, None)
+            if attr_val is not None:
+                if isinstance(attr_val, Value):
+                    return attr_val
+                if callable(attr_val):
+                    return BuiltinBoundMethod(unwrapped.obj, node.attr)
+                # bool before int: bool is a subclass of int, so the
+                # int test would otherwise turn true/false into 1/0.
+                if isinstance(attr_val, bool):
+                    return mk_bool(attr_val)
+                if isinstance(attr_val, int):
+                    return mk_int(attr_val)
+                if isinstance(attr_val, float):
+                    return mk_float(attr_val)
+                if isinstance(attr_val, str):
+                    return mk_str(attr_val)
+                return ObjectValue(attr_val)
+        elif isinstance(unwrapped, IntValue):
+            # int.value attribute? No, just return the int itself.
+            pass
+        return obj
+
+    def _ee_ArrayLit(self, node):
+        pos = getattr(node, "pos", None)
+        elements = [self.eval_expr(e) for e in node.elements]
+        settled, unit = _literal_element_type(elements)
+        if settled is not None:
+            elements = [coerce_to_type(e, settled, unit, self._mk_int)
+                        for e in elements]
+        return ObjectValue(ArrayValue(elements, element_type=settled,
+                                      element_unit=unit))
+
+    def _ee_RangeExpr(self, node):
+        pos = getattr(node, "pos", None)
+        s = unwrap_optional(self.eval_expr(node.start))
+        e = unwrap_optional(self.eval_expr(node.end))
+        if isinstance(s, UnitValue):
+            s = s.inner
+        if isinstance(e, UnitValue):
+            e = e.inner
+        if not isinstance(s, IntValue) or not isinstance(e, IntValue):
+            raise TypeError("range bounds must be integers")
+        step = None
+        if node.step is not None:
+            st = unwrap_optional(self.eval_expr(node.step))
+            if isinstance(st, UnitValue):
+                st = st.inner
+            if not isinstance(st, IntValue):
+                raise TypeError("range step must be an integer")
+            step = st.value
+        return RangeValue(s.value, e.value, step)
+
+    def _ee_IfExpr(self, node):
+        pos = getattr(node, "pos", None)
+        if to_bool(self.eval_expr(node.cond)):
+            return self.eval_expr(node.then_expr)
+        return self.eval_expr(node.else_expr)
+
+    def _ee_DropUnitExpr(self, node):
+        pos = getattr(node, "pos", None)
+        val = self.eval_expr(node.expr)
+        inner = val.inner if isinstance(val, UnitValue) else val
+        if not isinstance(val, UnitValue):
+            self._warnings.append(
+                "@dropunit: this value carries no unit to drop")
+        return inner
+
+    def _ee_RefExpr(self, node):
+        pos = getattr(node, "pos", None)
+        self.env.lookup(node.name)
+        return RefValue(self.env, node.name)
+
+    def _ee_StaticAssert(self, node):
+        pos = getattr(node, "pos", None)
+        for arg in node.args:
+            if not _is_const_expr(arg):
+                raise TypeError(
+                    "static_assert requires compile-time constant expressions")
+        if not node.args:
+            raise TypeError("static_assert requires at least 1 argument")
+        cond = self.eval_expr(node.args[0])
+        if isinstance(cond, BoolValue):
+            if not cond.value:
+                msg = ""
+                if len(node.args) > 1:
+                    m = self.eval_expr(node.args[1])
+                    msg = f": {m.display()}" if hasattr(m, "display") else ""
+                raise TypeError(f"static_assert failed{msg}")
+        elif isinstance(cond, IntValue):
+            if cond.value == 0:
+                raise TypeError("static_assert failed: value is zero")
+        else:
+            raise TypeError("static_assert condition must be bool or int")
+        return none()
+
+    def _ee_StaticAssertEq(self, node):
+        pos = getattr(node, "pos", None)
+        if not _is_const_expr(node.expected) or not _is_const_expr(node.actual):
+            raise TypeError(
+                "static_assert_eq requires compile-time constant expressions")
+        expected = self.eval_expr(node.expected)
+        actual = self.eval_expr(node.actual)
+        eu = _as_type_value(unwrap_optional(expected))
+        au = _as_type_value(unwrap_optional(actual))
+        if isinstance(eu, IntValue) and isinstance(au, IntValue):
+            if eu.value != au.value:
+                raise TypeError(
+                    f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
+        elif isinstance(eu, StrValue) and isinstance(au, StrValue):
+            if eu.value != au.value:
+                raise TypeError(
+                    f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
+        elif isinstance(eu, BoolValue) and isinstance(au, BoolValue):
+            if eu.value != au.value:
+                raise TypeError(
+                    f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
+        elif isinstance(eu, TypeValue) and isinstance(au, TypeValue):
+            if eu.name != au.name:
+                raise TypeError(
+                    f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
+        elif (isinstance(eu, TypeValue) and isinstance(au, StrValue)) or \
+             (isinstance(eu, StrValue) and isinstance(au, TypeValue)):
+            # A type may also be checked against its name as a
+            # string, which predates naming the type directly.
+            type_name = eu.name if isinstance(eu, TypeValue) else au.name
+            spelled = au.value if isinstance(au, StrValue) else eu.value
+            if type_name != spelled:
+                raise TypeError(
+                    f"static_assert_eq failed:\n  expected: {type_name}\n"
+                    f"  actual:   {spelled}")
+        elif isinstance(eu, UnitValue) and isinstance(au, UnitValue):
+            # Through the arithmetic's own comparison, so that the
+            # units have to agree as well as the numbers.
+            eq = self._unit_binop("=", eu, au)
+            if not eq.value:
+                raise TypeError(
+                    f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
+        elif isinstance(eu, UnitOfValue) and isinstance(au, UnitOfValue):
+            eq = self._op_eq(expected, actual)
+            if not eq.value:
+                raise TypeError(
+                    f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
+        else:
+            raise TypeError(
+                f"static_assert_eq failed:\n  expected: {eu.display()}\n  actual:   {au.display()}")
+        return none()
+
+    def _ee_UnitExpr(self, node):
+        pos = getattr(node, "pos", None)
+        value = self.eval_expr(node.expr)
+        from interp.units import eval_unit_formula
+        unit = eval_unit_formula(node.unit_spec)
+        if isinstance(value, UnitValue):
+            return UnitValue(value.inner, unit)
+        return UnitValue(value, unit)
+
+    def _ee_ExpErr(self, node):
+        pos = getattr(node, "pos", None)
+        return ExpectedValue.err(self.eval_expr(node.value))
+
+    def _ee_TryUnwrap(self, node):
+        pos = getattr(node, "pos", None)
+        if not self._current_ret_type:
+            raise TypeError(
+                "? operator requires enclosing function to have optional or expected return type")
+        _, opt_err = _split_optional_type(self._current_ret_type)
+        if opt_err is None:
+            raise TypeError(
+                "? operator requires enclosing function to have optional or expected return type")
+        val = self.eval_expr(node.expr)
+        if isinstance(val, ExpectedValue):
+            if val.is_ok():
+                return val.ok_value
+            if opt_err != "":
+                # The static check catches this wherever the error
+                # type can be worked out from the source; this is
+                # the backstop for the cases where it cannot.
+                actual = self._value_type_name(val.err_value)
+                if actual != opt_err.rsplit(".", 1)[-1]:
+                    raise TypeError(
+                        f"? propagates an error of type '{actual}', but "
+                        f"the function returns errors of type "
+                        f"'{opt_err}'")
+                raise _ReturnSentinel(ExpectedValue.err(val.err_value))
+            raise _ReturnSentinel(none())
+        if isinstance(val, SomeValue):
+            return val.value
+        if isinstance(val, NoneValue):
+            raise _ReturnSentinel(none())
+        return val
+
+    def _ee_HashLit(self, node):
+        pos = getattr(node, "pos", None)
+        keys = [self.eval_expr(k) for k, _ in node.pairs]
+        values = [self.eval_expr(v) for _, v in node.pairs]
+        key_type, key_unit = _literal_element_type(keys)
+        value_type, value_unit = _literal_element_type(values)
+        hash_value = HashValue(key_type=key_type, value_type=value_type)
+        for key, value in zip(keys, values):
+            key = self._checked_key(key, key_type, key_unit)
+            if value_type is not None:
+                value = coerce_to_type(value, value_type, value_unit,
+                                       self._mk_int)
+            hash_value.put(key, value)
+        return ObjectValue(hash_value)
+
+    def _ee_SetLit(self, node):
+        pos = getattr(node, "pos", None)
+        values = [self.eval_expr(v) for v in node.elements]
+        value_type, value_unit = _literal_element_type(values)
+        set_value = SetValue(value_type=value_type)
+        for value in values:
+            set_value.put(self._checked_key(value, value_type, value_unit))
+        return ObjectValue(set_value)
+
+    def _ee_EmptyCollectionLit(self, node):
+        pos = getattr(node, "pos", None)
+        return ObjectValue(SetValue())
+
+    def _ee_MultiSlice(self, node):
+        pos = getattr(node, "pos", None)
+        arr_val = self.eval_expr(node.obj)
+        return self._eval_multi_slice_read(arr_val, node.specs)
+
+    def _ee_EnumerateExpr(self, node):
+        pos = getattr(node, "pos", None)
+        raise TypeError("enumerate can only be used inside foreach")
+
+    def _ee_TypeOfExpr(self, node):
+        pos = getattr(node, "pos", None)
+        cached = getattr(node, "_cached_value", None)
+        if cached is not None:
+            return cached
+        if not _is_comptime_expr(node.expr, self._comptime_vars) \
+                and not self._names_a_binding(node.expr):
+            raise TypeError(
+                "@typeof requires a compile-time constant, a name, or "
+                "an expression built from them")
+        # Reading a name bound to a reference yields the referent, so
+        # the binding itself is inspected to report the borrow.
+        val = None
+        if isinstance(node.expr, VarRef):
+            try:
+                bound = self.env.lookup(node.expr.name)
+            except KeyError:
+                bound = None
+            if isinstance(bound, Reference):
+                val = bound
+        if val is None:
+            val = self.eval_expr(node.expr)
+        result = TypeValue(self._value_type_name(val))
+        if _is_const_expr(node.expr):
+            node._cached_value = result
+        return result
+
+    def _ee_LimitExpr(self, node):
+        pos = getattr(node, "pos", None)
+        return self._eval_limit(node)
+
+    def _ee_Quote(self, node):
+        pos = getattr(node, "pos", None)
+        return self._eval_quote(node)
+
+    def _ee_Reflect(self, node):
+        pos = getattr(node, "pos", None)
+        import copy as _copy
+        return SyntaxValue(node=_copy.deepcopy(node.tree))
+
+    def _ee_Splice(self, node):
+        pos = getattr(node, "pos", None)
+        raise TypeError(
+            "$ puts a value into a piece of program, and there is no "
+            "piece of program here")
+
+    def _ee_SizeOfExpr(self, node):
+        pos = getattr(node, "pos", None)
+        cached = getattr(node, "_cached_value", None)
+        if cached is not None:
+            return cached
+        # A written type asks how much storage it occupies; a value
+        # asks how many elements it holds.
+        written = self._written_type(node.expr)
+        if written is not None:
+            result = self._type_byte_size(written)
+            node._cached_value = result
+            return result
+        named = self._names_a_binding(node.expr)
+        if not _is_comptime_expr(node.expr, self._comptime_vars) \
+                and not named:
+            raise TypeError(
+                "@sizeof requires a compile-time constant, a name, or "
+                "an expression built from them")
+        val = self.eval_expr(node.expr)
+        result = self._memory_size(unwrap_optional(val))
+        if _is_const_expr(node.expr):
+            node._cached_value = result
+        return result
+
+    def _ee_ResultOfExpr(self, node):
+        pos = getattr(node, "pos", None)
+        cached = getattr(node, "_cached_value", None)
+        if cached is not None:
+            return cached
+        try:
+            func = self.env.lookup(node.name)
+        except KeyError:
+            raise TypeError(f"@resultof: unknown function '{node.name}'")
+        if isinstance(func, FuncValue):
+            # Every parsed signature records a return type, ∅ where
+            # none was written, so there is nothing to fall back to.
+            result = TypeValue(func.ret_type)
+        elif isinstance(func, BuiltinFunc):
+            result = TypeValue("builtin")
+        else:
+            raise TypeError(f"@resultof: '{node.name}' is not a function")
+        node._cached_value = result
+        return result
+
+    def _ee_UnitOfExpr(self, node):
+        pos = getattr(node, "pos", None)
+        cached = getattr(node, "_cached_value", None)
+        if cached is not None:
+            return cached
+        if not _is_comptime_expr(node.expr, self._comptime_vars) \
+                and not self._names_a_binding(node.expr):
+            raise TypeError(
+                "@unitof requires a compile-time constant, a name, or "
+                "an expression built from them")
+        val = self.eval_expr(node.expr)
+        unwrapped = unwrap_optional(val)
+        if isinstance(unwrapped, UnitValue):
+            result = UnitOfValue(unwrapped.unit)
+        else:
+            result = UnitOfValue(None)
+        if _is_const_expr(node.expr):
+            node._cached_value = result
+        return result
+
+    def _ee_UnitRefExpr(self, node):
+        pos = getattr(node, "pos", None)
+        from interp.units import eval_unit_formula
+        unit = eval_unit_formula(node.unit_spec)
+        return UnitOfValue(unit)
+
+    def _ee_LambdaExpr(self, node):
+        pos = getattr(node, "pos", None)
+        return self._eval_lambda_expr(node)
+
+    def _ee_TupleLit(self, node):
+        pos = getattr(node, "pos", None)
+        elements = [self.eval_expr(e) for e in node.elements]
+        if len(elements) > 1 and all(isinstance(e, TypeValue)
+                                     for e in elements):
+            # A name that names a type is that type wherever it is
+            # written, and a tuple of them is the tuple type they
+            # describe, so a program compares against `(i64, str)`
+            # rather than against the text of it.
+            return TypeValue("(" + ", ".join(e.name for e in elements) + ")")
+        return TupleValue(elements)
+
+    def _ee_OperatorRef(self, node):
+        pos = getattr(node, "pos", None)
+        return BuiltinFunc(
+            node.op, 2,
+            lambda args, op=node.op: self._apply_operator(op, args[0],
+                                                          args[1]))
+
+    def _ee_FoldExpr(self, node):
+        pos = getattr(node, "pos", None)
+        return self._eval_fold(node)
+
+    def _ee_MapExpr(self, node):
+        pos = getattr(node, "pos", None)
+        return self._eval_map(node)
+
+    def _ee_ReshapeExpr(self, node):
+        pos = getattr(node, "pos", None)
+        shape = self.eval_expr(node.shape)
+        data = self.eval_expr(node.data)
+        return self._eval_reshape(shape, data)
 
     def eval_stmts(self, stmts):
         """Evaluate a list of statements in order.
@@ -5706,11 +5803,24 @@ class Evaluator:
         self, we pass the list as-is.  Otherwise we unpack args for ordinary
         Python methods like ``fs.cwd()``.
         """
-        import inspect
-
         unwrapped = unwrap_optional(obj)
         if method_name == "__call__":
             return self._do_call(unwrapped, args)
+        # The hot path first: a struct's method and an array's push,
+        # pop and get are most method calls in a large program, and
+        # neither needs the ladder below.
+        if type(unwrapped) is ObjectValue:
+            _o = unwrapped.obj
+            if type(_o) is StructInstance:
+                method = _o.struct_type.methods.get(method_name)
+                if method is not None:
+                    if method.params and method.params[0][0] == "self":
+                        return self._call_user_func(
+                            method, [unwrapped, *args])
+                    return self._call_user_func(method, list(args))
+            elif type(_o) is ArrayValue and method_name in _ARRAY_METHODS:
+                self._check_builtin_args(method_name, args)
+                return self._call_array_method(_o, method_name, args)
         if isinstance(unwrapped, StrValue):
             if method_name == "chars":
                 if args:
@@ -5760,7 +5870,8 @@ class Evaluator:
         # as the operators are: a container argument is taken apart and
         # the question asked of each element.
         if (isinstance(unwrapped, ObjectValue) and unwrapped.obj is std
-                and method_name in _LISTABLE_STD_METHODS):
+                and method_name in _LISTABLE_STD_METHODS
+                and any(value_rank(a) > 0 for a in args)):
             threaded = self._thread_level(
                 f"std.{method_name}",
                 [f"argument {i + 1}" for i in range(len(args))],
@@ -5812,6 +5923,7 @@ class Evaluator:
             if meth is not None and callable(meth):
                 self._check_builtin_args(method_name, args)
                 # Detect builtin-style method: takes exactly one "args" list.
+                import inspect
                 try:
                     sig = inspect.signature(meth)
                     params = list(sig.parameters.values())
@@ -6534,3 +6646,52 @@ class _PropagatedError(Exception):
     def __init__(self, original: Exception):
         self.original = original
         super().__init__(str(original))
+
+
+# Expression dispatch: one dict probe instead of a ladder walk.
+_EXPR_DISPATCH = {
+    IntLit: Evaluator._ee_IntLit,
+    FloatLit: Evaluator._ee_FloatLit,
+    CharLit: Evaluator._ee_CharLit,
+    StrLit: Evaluator._ee_StrLit,
+    BoolLit: Evaluator._ee_BoolLit,
+    NoneLit: Evaluator._ee_NoneLit,
+    VarRef: Evaluator._ee_VarRef,
+    BinOp: Evaluator._ee_BinOp,
+    UnaryOp: Evaluator._ee_UnaryOp,
+    OptSome: Evaluator._ee_OptSome,
+    StructLit: Evaluator._ee_StructLit,
+    FuncCall: Evaluator._ee_FuncCall,
+    MethodCall: Evaluator._ee_MethodCall,
+    GetAttr: Evaluator._ee_GetAttr,
+    ArrayLit: Evaluator._ee_ArrayLit,
+    RangeExpr: Evaluator._ee_RangeExpr,
+    IfExpr: Evaluator._ee_IfExpr,
+    DropUnitExpr: Evaluator._ee_DropUnitExpr,
+    RefExpr: Evaluator._ee_RefExpr,
+    StaticAssert: Evaluator._ee_StaticAssert,
+    StaticAssertEq: Evaluator._ee_StaticAssertEq,
+    UnitExpr: Evaluator._ee_UnitExpr,
+    ExpErr: Evaluator._ee_ExpErr,
+    TryUnwrap: Evaluator._ee_TryUnwrap,
+    HashLit: Evaluator._ee_HashLit,
+    SetLit: Evaluator._ee_SetLit,
+    EmptyCollectionLit: Evaluator._ee_EmptyCollectionLit,
+    MultiSlice: Evaluator._ee_MultiSlice,
+    EnumerateExpr: Evaluator._ee_EnumerateExpr,
+    TypeOfExpr: Evaluator._ee_TypeOfExpr,
+    LimitExpr: Evaluator._ee_LimitExpr,
+    Quote: Evaluator._ee_Quote,
+    Reflect: Evaluator._ee_Reflect,
+    Splice: Evaluator._ee_Splice,
+    SizeOfExpr: Evaluator._ee_SizeOfExpr,
+    ResultOfExpr: Evaluator._ee_ResultOfExpr,
+    UnitOfExpr: Evaluator._ee_UnitOfExpr,
+    UnitRefExpr: Evaluator._ee_UnitRefExpr,
+    LambdaExpr: Evaluator._ee_LambdaExpr,
+    TupleLit: Evaluator._ee_TupleLit,
+    OperatorRef: Evaluator._ee_OperatorRef,
+    FoldExpr: Evaluator._ee_FoldExpr,
+    MapExpr: Evaluator._ee_MapExpr,
+    ReshapeExpr: Evaluator._ee_ReshapeExpr,
+}

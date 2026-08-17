@@ -5,6 +5,7 @@ operates on these values rather than raw Python objects to support
 type checking and proper error messages.
 """
 
+import functools as _functools
 import math
 
 
@@ -60,6 +61,7 @@ _NAMED_TYPE_BITS: dict[str, int] = {
 MAX_INT_BITS = 128
 
 
+@_functools.lru_cache(maxsize=None)
 def _parse_int_width(name: str) -> int | None:
     """The bit count an integer type name states, or None if it states none.
 
@@ -1212,9 +1214,6 @@ class RangeValue(Value):
 MAX_TENSOR_RANK: int = 8
 
 
-import functools as _functools
-
-
 @_functools.lru_cache(maxsize=None)
 def parse_container_type(type_name: str):
     """Take `std.hash(K,V)` or `std.set(V)` apart, or answer None.
@@ -1729,7 +1728,17 @@ def mk_int(value: int, width: str = "int") -> IntValue:
 
     Untyped `int` has arbitrary precision and no range to leave.
     """
+    if -1 <= value <= 256:
+        got = _SMALL_INTS.get((value, width))
+        if got is not None:
+            return got
+        made = IntValue(check_int(value, width), width)
+        _SMALL_INTS[(value, width)] = made
+        return made
     return IntValue(check_int(value, width), width)
+
+
+_SMALL_INTS: dict = {}
 
 
 def mk_int_wrap(value: int, width: str = "int") -> IntValue:
@@ -2343,6 +2352,20 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
     a value still carrying one here is meeting a parameter that states
     none, and parting with it has to be said.
     """
+    if unit is None:
+        tv = type(value)
+        if tv is IntValue:
+            if value.width == param_type:
+                return value
+        elif tv is StrValue:
+            if param_type == "str":
+                return value
+        elif tv is BoolValue:
+            if param_type == "bool":
+                return value
+        elif tv is CharValue:
+            if param_type == "char":
+                return value
     param_type = resolve_type_alias(param_type)
     if is_generic_type(param_type) and _parse_array_type(param_type) is None \
             and parse_tuple_type(param_type) is None:
