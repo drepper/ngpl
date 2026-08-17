@@ -54,8 +54,25 @@ past i64.
    initialized before `@start`, the OS surface `main` stands on
    (args, open/create/read/write/close over raw syscalls), `@start`
    answering the exit status, unit-suffixed literals, and the `byte`
-   name; the two `⍴` uses were rewritten as loops.  The stage-1
-   compile of ngplc by ngplc is in progress.  The struct probes settled a fact worth
+   name; the two `⍴` uses were rewritten as loops.
+
+   **ngplc is self-hosting.**  Three diagnostic rounds separated the
+   compiler's own source from the subset: `str[]` elements; then the
+   unit and width meetings the bootstrap has always had (a plain
+   value takes a measured one's measure; a value-preserving widening
+   passes as itself and a narrowing carries a fit check the compiled
+   code makes at run time, `IR_NARROW` → `rt_badfit`); discarded
+   `pop()`s took explicit defaults; calls grew stack arguments past
+   the sixth.  Stage 1 (the interpreted compiler compiling its
+   source) takes ~7 minutes; stage 2 — the same compile run by the
+   stage-1 binary — takes **49 milliseconds**, stage 3 confirms the
+   fixed point (stage2 ≡ stage3 byte for byte, and stage1 ≡ stage2
+   besides: the compiler is deterministic whichever way it runs), and
+   the native compiler passes all 25 conformance programs.  The
+   interpreter itself gained the instruments that made the chase
+   short: a forward-progress watchdog, per-function progress
+   recording, and the coercion memoization that turned a quadratic
+   compile linear.  The struct probes settled a fact worth
    recording: the bootstrap's struct values are references — one
    struct behind however many names — so the compiled pointer
    representation conforms by construction, and the subset's

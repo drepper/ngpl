@@ -573,7 +573,7 @@ impl Lexer:
             self.emit(TK_INDENT, self.pos, 0, self.col, 0, 0)
         else:
             while width < self.indents[#self.indents - 1]:
-                _ ← self.indents.pop()
+                _ ← self.indents.pop() ?? 0
                 self.emit(TK_DEDENT, self.pos, 0, self.col, 0, 0)
             if width ≠ self.indents[#self.indents - 1]:
                 self.err("indentation does not match any enclosing block")
@@ -910,7 +910,7 @@ fn lex(src : byte[]) → Toks:
     if not at_line_start and #lx.diags = 0:
         lx.emit(TK_NL, lx.n, 0, lx.col, 0, 0)
     while #lx.indents > 1:
-        _ ← lx.indents.pop()
+        _ ← lx.indents.pop() ?? 0
         lx.emit(TK_DEDENT, lx.n, 0, 1, 0, 0)
     lx.emit(TK_EOF, lx.n, 0, 1, 0, 0)
     // the token columns are parallel arrays; leaving out of step here
@@ -1247,8 +1247,8 @@ impl Parser:
         if self.peek() = TK_LBRACK:
             self.pos ← self.pos + 1
             _ ← self.eat(TK_RBRACK, "']' closing the array type")
-            if not (ty_is_int(base) and ty_unit(base) = 0) and not ty_is_struct(base) and base ≠ TY_CHAR:
-                self.err("a core-2 array holds plain integers, characters or structs")
+            if not (ty_is_int(base) and ty_unit(base) = 0) and not ty_is_struct(base) and base ≠ TY_CHAR and base ≠ TY_STR:
+                self.err("a core-2 array holds plain integers, characters, strings or structs")
                 return TY_I64
             base ← mk_aty(base)
         if self.peek() = TK_QMARK:
@@ -1701,7 +1701,7 @@ impl Parser:
                 stmts.push(self.parse_stmt())
                 if self.poisoned:
                     // this statement is lost; the next line starts over
-                    _ ← stmts.pop()
+                    _ ← stmts.pop() ?? 0
                     self.sync()
                     if self.peek() = TK_INDENT:
                         // a block hangs off the broken statement;
@@ -2423,6 +2423,7 @@ let MID_CLOSEF : i64 = 9
 struct Chk:
     ntype : i64[]
     nslot : i64[]
+    ncvt : i64[]
     fslots : i64[]
     gvals : i64[]        // the folded initial value of every global
     ginit : i64[]        // globals whose value is built as the run begins
@@ -2438,6 +2439,7 @@ struct Checker:
     ginit : i64[]
     ntype : i64[]
     nslot : i64[]
+    ncvt : i64[]
     fslots : i64[]
     diags : Diag[]
     snames : str[]
@@ -2535,10 +2537,10 @@ impl Checker:
     fn pop_scope(&mut self):
         let low : i64 = self.marks.pop() ?? 0
         while @dropunit(#self.snames) > low:
-            _ ← self.snames.pop()
-            _ ← self.stype.pop()
-            _ ← self.smut.pop()
-            _ ← self.sslot.pop()
+            _ ← self.snames.pop() ?? ""
+            _ ← self.stype.pop() ?? 0
+            _ ← self.smut.pop() ?? 0
+            _ ← self.sslot.pop() ?? 0
 
     fn is_open(&self, t : i64) → bool:
         t = TY_UNT or t = TY_EMPTY
@@ -2571,6 +2573,28 @@ impl Checker:
         v >= @wrap(0 - half) and v <= half - 1
 
     // give an untyped node the type its context settled on
+    // whether an integer value settles into the wanted integer type,
+    // as the bootstrap has it: a value-preserving widening passes as
+    // itself; a narrowing or sign-crossing is accepted with a fit
+    // check the lowering emits, so a value that does not fit stops
+    // the run exactly where the interpreter stops it.  Anything not
+    // two integers answers plain type equality.
+    fn try_fit(&mut self, e : i64, want0 : i64) → bool:
+        let t : i64 = self.ty_of(e)
+        let want : i64 = ty_strip_ref(want0)
+        if t = want:
+            return true
+        if not (ty_is_int(t) and ty_is_int(want)):
+            return false
+        if ty_unit(t) ≠ ty_unit(want) and ty_unit(t) ≠ 0:
+            // a measured value does not quietly drop or change its
+            // measure; @dropunit is the word for parting with one
+            return false
+        let widening : bool = ty_bits(want) > ty_bits(t) and not (ty_sgn(t) = 1 and ty_sgn(want) = 0)
+        if not widening:
+            self.ncvt[e × 1¤ptrdiff] ← want
+        true
+
     fn adopt(&mut self, id : i64, t : i64):
         if self.ty_of(id) = TY_EMPTY:
             if ty_is_opt(t):
@@ -2615,7 +2639,7 @@ impl Checker:
         elif k = NK_MUL:
             res ← @wrap(l × r)
             if l ≠ 0:
-                bad ← (res ÷ l ?? 0) ≠ r or (l = ⁻1 and r = @wrap(0 - 9223372036854775807 - 1))
+                bad ← (res ÷ l ?? 0) ≠ r or (l = ⁻1 and r = 0 - 9223372036854775807 - 1)
         elif k = NK_SHL:
             if r < 0 or r > 62:
                 bad ← true
@@ -2681,22 +2705,23 @@ impl Checker:
             // bare type; everything else adopts in full
             self.adopt(nb, tl)
             return tl
-        // two typed operands: same signedness, wider wins, units meet
-        if ty_sgn(tl) ≠ ty_sgn(tr):
-            self.derr(tok, "signed and unsigned do not meet; " ⧺ type_name(tl) ⧺ " and " ⧺ type_name(tr))
-            return tl
+        // two typed operands: wider wins, units meet, and a plain
+        // value takes the measure of the measured one
         let ul : i64 = ty_unit(tl)
         let ur : i64 = ty_unit(tr)
+        if ul ≠ ur and ul ≠ 0 and ur ≠ 0:
+            self.derr(tok, "a value measured " ⧺ type_name(tl) ⧺ " does not meet one measured " ⧺ type_name(tr))
+        if ty_sgn(tl) ≠ ty_sgn(tr):
+            // an unsigned value narrower than the signed side widens
+            // as itself, and the signed type carries the operation
+            let sg : i64 = tl if ty_sgn(tl) = 1 else tr
+            let un : i64 = tr if ty_sgn(tl) = 1 else tl
+            if ty_bits(sg) > ty_bits(un):
+                return ty_with_unit(ty_drop_unit(sg), ul ⌈ ur)
+            self.derr(tok, "signed and unsigned do not meet; " ⧺ type_name(tl) ⧺ " and " ⧺ type_name(tr))
+            return tl
         let wide : i64 = tl if ty_bits(tl) >= ty_bits(tr) else tr
-        if ul = ur:
-            return wide
-        if k = NK_MUL and (ul = 0 or ur = 0):
-            // scalar multiplication keeps the measure
-            return ty_with_unit(ty_drop_unit(wide), ul ⌈ ur)
-        if (k = NK_DIV or k = NK_MOD) and ur = 0:
-            return wide if ty_unit(wide) = ul else ty_with_unit(ty_drop_unit(wide), ul)
-        self.derr(tok, "a value measured " ⧺ type_name(tl) ⧺ " does not meet one measured " ⧺ type_name(tr))
-        wide
+        return ty_with_unit(ty_drop_unit(wide), ul ⌈ ur)
 
     fn check_expr(&mut self, id : i64, want : i64):
         let k : i64 = self.kind_of(id)
@@ -2841,9 +2866,18 @@ impl Checker:
             elif tl = TY_UNT and tr = TY_UNT:
                 self.set_type(id, TY_UNT)
                 return
-            if self.ty_of(na) ≠ self.ty_of(nc):
+            let ta : i64 = self.ty_of(na)
+            let tc : i64 = self.ty_of(nc)
+            if ta = tc:
+                self.set_type(id, ta)
+            elif ty_is_int(ta) and ty_is_int(tc):
+                let joint : i64 = self.unify_arith(tok, id, NK_ADD, ta, tc)
+                _ ← self.try_fit(na, joint)
+                _ ← self.try_fit(nc, joint)
+                self.set_type(id, joint)
+            else:
                 self.derr(tok, "the two sides of a conditional say one type between them")
-            self.set_type(id, self.ty_of(na))
+                self.set_type(id, ta)
         elif k = NK_WRAP:
             self.check_expr(na, want)
             let t : i64 = self.ty_of(na)
@@ -2979,8 +3013,11 @@ impl Checker:
         if not ty_is_int(l) or not ty_is_int(r):
             self.derr(tok, "an ordering compares numbers; the sides are " ⧺ type_name(l) ⧺ " and " ⧺ type_name(r))
         elif ty_sgn(l) ≠ ty_sgn(r):
-            self.derr(tok, "signed and unsigned do not meet; " ⧺ type_name(l) ⧺ " and " ⧺ type_name(r))
-        elif ty_unit(l) ≠ ty_unit(r):
+            let sg2 : i64 = l if ty_sgn(l) = 1 else r
+            let un2 : i64 = r if ty_sgn(l) = 1 else l
+            if ty_bits(sg2) <= ty_bits(un2):
+                self.derr(tok, "signed and unsigned do not meet; " ⧺ type_name(l) ⧺ " and " ⧺ type_name(r))
+        elif ty_unit(l) ≠ ty_unit(r) and ty_unit(l) ≠ 0 and ty_unit(r) ≠ 0:
             self.derr(tok, "a value measured " ⧺ type_name(l) ⧺ " does not meet one measured " ⧺ type_name(r))
         self.set_type(id, TY_BOOL)
 
@@ -3055,7 +3092,7 @@ impl Checker:
             self.check_expr(e, et)
             if self.is_open(self.ty_of(e)):
                 self.adopt(e, et)
-            elif self.ty_of(e) ≠ et:
+            elif not self.try_fit(e, et):
                 self.derr(tok, "element " ⧺ i64_str(i) ⧺ " is " ⧺ type_name(et) ⧺ ", not " ⧺ type_name(self.ty_of(e)))
             i ← i + 1
         self.set_type(id, w)
@@ -3078,8 +3115,8 @@ impl Checker:
                 self.derr(tok, "the elements state no type; the binding must say it")
             self.set_type(id, want if ty_is_arr(want) else mk_aty(TY_I64))
             return
-        if not (ty_is_int(settled) and ty_unit(settled) = 0) and not ty_is_struct(settled) and settled ≠ TY_CHAR:
-            self.derr(tok, "a core-2 array holds plain integers, characters or structs")
+        if not (ty_is_int(settled) and ty_unit(settled) = 0) and not ty_is_struct(settled) and settled ≠ TY_CHAR and settled ≠ TY_STR:
+            self.derr(tok, "a core-2 array holds plain integers, characters, strings or structs")
             self.set_type(id, mk_aty(TY_I64))
             return
         // every element meets the settled type
@@ -3088,7 +3125,7 @@ impl Checker:
             let e : i64 = self.a.extra[(off + 1 + j) × 1¤ptrdiff]
             if self.ty_of(e) = TY_UNT:
                 self.adopt(e, settled)
-            elif self.ty_of(e) ≠ settled:
+            elif not self.try_fit(e, settled):
                 self.derr(tok, "one array, one element type; " ⧺ type_name(self.ty_of(e)) ⧺ " is not " ⧺ type_name(settled))
             j ← j + 1
         self.set_type(id, mk_aty(settled))
@@ -3123,7 +3160,7 @@ impl Checker:
                 self.check_expr(e, fty)
                 if self.is_open(self.ty_of(e)):
                     self.adopt(e, fty)
-                elif self.ty_of(e) ≠ fty:
+                elif not self.try_fit(e, fty):
                     self.derr(ftok, "field '" ⧺ self.text(ftok) ⧺ "' holds " ⧺ type_name(fty) ⧺ ", not " ⧺ type_name(self.ty_of(e)))
                 // the resolved position replaces the name for lowering
                 self.a.extra[(off + 1 + i × 2) × 1¤ptrdiff] ← fidx
@@ -3167,12 +3204,12 @@ impl Checker:
             self.check_expr(ke, kt)
             if self.is_open(self.ty_of(ke)):
                 self.adopt(ke, kt)
-            elif self.ty_of(ke) ≠ kt:
+            elif not self.try_fit(ke, kt):
                 self.derr(tok, "the keys are " ⧺ type_name(kt) ⧺ ", not " ⧺ type_name(self.ty_of(ke)))
             self.check_expr(ve, vt)
             if self.is_open(self.ty_of(ve)):
                 self.adopt(ve, vt)
-            elif self.ty_of(ve) ≠ vt:
+            elif not self.try_fit(ve, vt):
                 self.derr(tok, "the values are " ⧺ type_name(vt) ⧺ ", not " ⧺ type_name(self.ty_of(ve)))
             i ← i + 1
         self.set_type(id, ty_strip_ref(want))
@@ -3183,7 +3220,7 @@ impl Checker:
         self.check_expr(ke, kt)
         if self.is_open(self.ty_of(ke)):
             self.adopt(ke, kt)
-        elif self.ty_of(ke) ≠ kt:
+        elif not self.try_fit(ke, kt):
             self.derr(tok, "this hash's keys are " ⧺ type_name(kt) ⧺ ", not " ⧺ type_name(self.ty_of(ke)))
 
     fn index_unit_of(&self, arr_ty : i64) → i64:
@@ -3299,7 +3336,7 @@ impl Checker:
                 let at : i64 = self.ty_of(arg)
                 if self.is_open(at):
                     self.adopt(arg, base)
-                elif at ≠ base:
+                elif not self.try_fit(arg, base):
                     self.derr(tok, "argument " ⧺ i64_str(num) ⧺ " of '" ⧺ name ⧺ "' is " ⧺ type_name(at) ⧺ ", but the parameter says " ⧺ type_name(base))
 
     fn check_ref_arg(&mut self, arg : i64, base : i64, rk : i64):
@@ -3336,7 +3373,7 @@ impl Checker:
                     self.adopt(y, TY_I64)
                 if ty_is_arr(self.ty_of(x)) or ty_is_hash(self.ty_of(x)) or ty_is_tup(self.ty_of(x)) or self.ty_of(x) = TY_STR:
                     self.derr(tok, "assert_eq compares numbers in core-1")
-                elif self.ty_of(x) ≠ self.ty_of(y):
+                elif not self.try_fit(x, self.ty_of(y)):
                     self.derr(tok, "assert_eq compares two of the same type")
         else:
             if argc < 1 or argc > 2:
@@ -3550,7 +3587,7 @@ impl Checker:
                 self.check_expr(arg, ty_elem(t))
                 if self.ty_of(arg) = TY_UNT:
                     self.adopt(arg, ty_elem(t))
-                elif self.ty_of(arg) ≠ ty_elem(t):
+                elif not self.try_fit(arg, ty_elem(t)):
                     self.derr(tok, "the array holds " ⧺ type_name(ty_elem(t)) ⧺ ", not " ⧺ type_name(self.ty_of(arg)))
             self.a.nc[id × 1¤ptrdiff] ← MID_PUSH
             self.set_type(id, TY_UNIT)
@@ -3675,7 +3712,7 @@ impl Checker:
                 self.check_expr(nb, base)
                 if self.is_open(self.ty_of(nb)):
                     self.adopt(nb, base)
-                elif self.ty_of(nb) ≠ base:
+                elif not self.try_fit(nb, base):
                     self.derr(tok, "the default answers for the value, so it is " ⧺ type_name(base) ⧺ ", not " ⧺ type_name(self.ty_of(nb)))
                 self.set_type(id, base)
                 return
@@ -3684,7 +3721,7 @@ impl Checker:
         self.check_expr(nb, t)
         if self.ty_of(nb) = TY_UNT:
             self.adopt(nb, t)
-        elif self.ty_of(nb) ≠ t:
+        elif not self.try_fit(nb, t):
             self.derr(tok, "the default answers for the value, so it is " ⧺ type_name(t) ⧺ ", not " ⧺ type_name(self.ty_of(nb)))
         self.set_type(id, t)
 
@@ -3782,7 +3819,7 @@ impl Checker:
                 self.check_expr(na, nc)
                 if self.is_open(self.ty_of(na)):
                     self.adopt(na, nc)
-                elif self.ty_of(na) ≠ nc:
+                elif not self.try_fit(na, nc):
                     self.derr(tok, "the binding says " ⧺ type_name(nc) ⧺ " but the value is " ⧺ type_name(self.ty_of(na)))
             let slot : i64 = self.declare(tok, nc, nb)
             self.nslot[id × 1¤ptrdiff] ← slot
@@ -3844,7 +3881,7 @@ impl Checker:
                 self.check_expr(na, gd.ty)
                 if self.is_open(self.ty_of(na)):
                     self.adopt(na, gd.ty)
-                elif self.ty_of(na) ≠ gd.ty:
+                elif not self.try_fit(na, gd.ty):
                     self.derr(tok, "'" ⧺ name ⧺ "' holds " ⧺ type_name(gd.ty) ⧺ ", not " ⧺ type_name(self.ty_of(na)))
                 self.nslot[id × 1¤ptrdiff] ← @wrap(0 - g - 2)
                 return
@@ -3860,7 +3897,7 @@ impl Checker:
             self.check_expr(na, ty_strip_ref(st))
             if self.is_open(self.ty_of(na)):
                 self.adopt(na, ty_strip_ref(st))
-            elif self.ty_of(na) ≠ ty_strip_ref(st):
+            elif not self.try_fit(na, ty_strip_ref(st)):
                 self.derr(tok, "'" ⧺ name ⧺ "' holds " ⧺ type_name(ty_strip_ref(st)) ⧺ ", not " ⧺ type_name(self.ty_of(na)))
             self.nslot[id × 1¤ptrdiff] ← self.sslot[s × 1¤ptrdiff]
         elif k = NK_STOREIDXP:
@@ -3873,7 +3910,7 @@ impl Checker:
                 self.check_expr(nc, vt)
                 if self.is_open(self.ty_of(nc)):
                     self.adopt(nc, vt)
-                elif self.ty_of(nc) ≠ vt:
+                elif not self.try_fit(nc, vt):
                     self.derr(tok, "the hash holds " ⧺ type_name(vt) ⧺ ", not " ⧺ type_name(self.ty_of(nc)))
                 self.set_type(id, bt0)
                 return
@@ -3894,7 +3931,7 @@ impl Checker:
             self.check_expr(nc, ty_elem(bt0))
             if self.ty_of(nc) = TY_UNT:
                 self.adopt(nc, ty_elem(bt0))
-            elif self.ty_of(nc) ≠ ty_elem(bt0):
+            elif not self.try_fit(nc, ty_elem(bt0)):
                 self.derr(tok, "the array holds " ⧺ type_name(ty_elem(bt0)) ⧺ ", not " ⧺ type_name(self.ty_of(nc)))
             self.set_type(id, bt0)
         elif k = NK_STOREFLD:
@@ -3914,7 +3951,7 @@ impl Checker:
             self.check_expr(nb, fty)
             if self.is_open(self.ty_of(nb)):
                 self.adopt(nb, fty)
-            elif self.ty_of(nb) ≠ fty:
+            elif not self.try_fit(nb, fty):
                 self.derr(tok, "field '" ⧺ self.text(tok) ⧺ "' holds " ⧺ type_name(fty) ⧺ ", not " ⧺ type_name(self.ty_of(nb)))
         elif k = NK_DISCARD:
             self.check_expr(na, TY_UNIT)
@@ -3979,7 +4016,7 @@ impl Checker:
                     self.derr(tok, "the function answers nothing, but this return carries a value")
                 elif self.is_open(self.ty_of(na)):
                     self.adopt(na, want)
-                elif self.ty_of(na) ≠ want:
+                elif not self.try_fit(na, want):
                     self.derr(tok, "the function answers " ⧺ self.sname_of(want) ⧺ ", not " ⧺ self.sname_of(self.ty_of(na)))
         elif k = NK_BREAK or k = NK_CONTINUE:
             if self.loop_depth = 0:
@@ -3990,7 +4027,7 @@ impl Checker:
                 self.check_expr(na, want)
                 if self.is_open(self.ty_of(na)):
                     self.adopt(na, want)
-                elif self.ty_of(na) ≠ want:
+                elif not self.try_fit(na, want):
                     self.derr(tok, "the function answers " ⧺ self.sname_of(want) ⧺ ", but its last expression is " ⧺ self.sname_of(self.ty_of(na)))
             else:
                 self.check_expr(na, TY_UNIT)
@@ -4092,12 +4129,12 @@ impl Checker:
         self.nslots ← 0
         self.loop_depth ← 0
         while #self.snames > 0:
-            _ ← self.snames.pop()
-            _ ← self.stype.pop()
-            _ ← self.smut.pop()
-            _ ← self.sslot.pop()
+            _ ← self.snames.pop() ?? ""
+            _ ← self.stype.pop() ?? 0
+            _ ← self.smut.pop() ?? 0
+            _ ← self.sslot.pop() ?? 0
         while #self.marks > 0:
-            _ ← self.marks.pop()
+            _ ← self.marks.pop() ?? 0
         let d := self.a.fns[f × 1¤ptrdiff]
         self.push_scope()
         let np : i64 = self.a.extra[d.params_off × 1¤ptrdiff]
@@ -4108,8 +4145,8 @@ impl Checker:
             _ ← self.declare(ptok, pty, 1 if ty_ref_kind(pty) = 2 else 0)
             i ← i + 1
         assert(self.nslots >= np, "every parameter took a slot")
-        if np > 6:
-            self.derr(d.tok, "more than six parameters is not core-2 yet")
+        if np > 12:
+            self.derr(d.tok, "more than twelve parameters is not core-2 yet")
         let pi : mut i64 = 0
         while pi < np:
             let pty : i64 = self.a.extra[(d.params_off + 2 + pi × 2) × 1¤ptrdiff]
@@ -4207,14 +4244,17 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     let nnodes : i64 = @dropunit(#a.nkind)
     let ntype : mut i64[] = []
     let nslot : mut i64[] = []
+    let ncvt : mut i64[] = []
     let zi : mut i64 = 0
     while zi < nnodes:
         ntype.push(0)
         nslot.push(⁻1)
+        ncvt.push(0)
         zi ← zi + 1
     let c : mut Checker = (Checker{a: a, toks: toks, src: src, fnames: fnames,
                                    gnames: gnames, gvals: [], ginit: [],
-                                   ntype: ntype, nslot: nslot, fslots: [],
+                                   ntype: ntype, nslot: nslot, ncvt: ncvt,
+                                   fslots: [],
                                    diags: [], snames: [], stype: [], smut: [],
                                    sslot: [], marks: [], nslots: 0,
                                    loop_depth: 0, cur_fn: 0,
@@ -4269,8 +4309,8 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     if #c.diags = 0:
         assert(#c.fslots = #a.fns, "one slot count per function")
         assert(#c.gvals = #a.globals, "one folded value per global")
-    (Chk{ntype: c.ntype, nslot: c.nslot, fslots: c.fslots, gvals: c.gvals,
-         ginit: c.ginit, diags: c.diags})
+    (Chk{ntype: c.ntype, nslot: c.nslot, ncvt: c.ncvt, fslots: c.fslots,
+         gvals: c.gvals, ginit: c.ginit, diags: c.diags})
 
 // ===========================================================================
 // The IR: linear three-address code over virtual registers
@@ -4351,6 +4391,7 @@ let IR_FCREATE : i64 = 82  // d ← a fresh file at path a with mode b
 let IR_FREAD : i64 = 83    // d ← file a's bytes, a u8[]
 let IR_FWRITE : i64 = 84   // file a takes the bytes of array b
 let IR_FCLOSE : i64 = 85   // file a closes
+let IR_NARROW : i64 = 86   // d ← a, stopped unless it fits width w
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
 let IR_FLD : i64 = 67      // d ← field b of struct a
 let IR_FSTO : i64 = 68     // field b of struct a ← c
@@ -4376,6 +4417,7 @@ struct Lower:
     src : byte[]
     ntype : i64[]
     nslot : i64[]
+    ncvt : i64[]
     strs : str[]
     op : i64[]
     ia : i64[]
@@ -4498,6 +4540,17 @@ impl Lower:
     // ------------------------------------------------------------------
 
     fn lower_expr(&mut self, nid : i64) → i64:
+        let v : i64 = self.lower_expr_i(nid)
+        let cw : i64 = self.ncvt[nid × 1¤ptrdiff]
+        if cw = 0:
+            return v
+        // the checker admitted a narrowing or sign-crossing here; the
+        // run stops where a value does not fit, as the interpreter does
+        let d : i64 = self.tmp()
+        self.ir(IR_NARROW, v, 0, 0, d, width_of(cw))
+        d
+
+    fn lower_expr_i(&mut self, nid : i64) → i64:
         let k : i64 = self.kof(nid)
         let tok : i64 = self.a.ntok[nid × 1¤ptrdiff]
         let na : i64 = self.a.na[nid × 1¤ptrdiff]
@@ -4702,7 +4755,16 @@ impl Lower:
         let av : i64 = self.lower_expr(na)
         let bv : i64 = self.lower_expr(nb)
         let d : i64 = self.tmp()
-        let ow : i64 = width_of(self.tof(na))
+        let owa : i64 = width_of(self.tof(na))
+        let owb : i64 = width_of(self.tof(nb))
+        // mixed sides compare at the wider width; where signedness
+        // mixes the checker admitted only unsigned-narrower-than-
+        // signed, and the signed side's width carries the compare
+        let ow : mut i64 = owa
+        if (owa » 8) ≠ (owb » 8):
+            ow ← owa if (owa » 8) = 1 else owb
+        elif (owb & 255) > (owa & 255):
+            ow ← owb
         if k = NK_ADD:
             self.ir(IR_ADDW if self.in_wrap > 0 else IR_ADD, av, bv, 0, d, w)
         elif k = NK_SUB:
@@ -5098,8 +5160,8 @@ impl Lower:
             self.breaks.push(lend)
             self.conts.push(ltop)
             self.lower_block(nb, false, ret_ty)
-            _ ← self.breaks.pop()
-            _ ← self.conts.pop()
+            _ ← self.breaks.pop() ?? 0
+            _ ← self.conts.pop() ?? 0
             self.ir(IR_JMP, ltop, 0, 0, 0, 0)
             self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         elif k = NK_MATCH:
@@ -5340,8 +5402,8 @@ impl Lower:
         self.breaks.push(lend)
         self.conts.push(lcont)
         self.lower_block(body, false, ret_ty)
-        _ ← self.breaks.pop()
-        _ ← self.conts.pop()
+        _ ← self.breaks.pop() ?? 0
+        _ ← self.conts.pop() ?? 0
         self.ir(IR_LABEL, lcont, 0, 0, 0, 0)
         let ni : i64 = self.tmp()
         self.ir(IR_ADDW, ivar, dirv, 0, ni, 64 + 256)
@@ -5378,8 +5440,8 @@ impl Lower:
         self.breaks.push(lend)
         self.conts.push(lcont)
         self.lower_block(body, false, ret_ty)
-        _ ← self.breaks.pop()
-        _ ← self.conts.pop()
+        _ ← self.breaks.pop() ?? 0
+        _ ← self.conts.pop() ?? 0
         self.ir(IR_LABEL, lcont, 0, 0, 0, 0)
         let one : i64 = self.tmp()
         self.ir(IR_CONST, 1, 0, 0, one, 0)
@@ -5393,14 +5455,14 @@ impl Lower:
 fn lower_fn(lw : &mut Lower, a : Ast, chk : Chk, f : i64) → IrFn:
     let d := a.fns[f × 1¤ptrdiff]
     while #lw.op > 0:
-        _ ← lw.op.pop()
-        _ ← lw.ia.pop()
-        _ ← lw.ib.pop()
-        _ ← lw.ic.pop()
-        _ ← lw.idd.pop()
-        _ ← lw.iww.pop()
+        _ ← lw.op.pop() ?? 0
+        _ ← lw.ia.pop() ?? 0
+        _ ← lw.ib.pop() ?? 0
+        _ ← lw.ic.pop() ?? 0
+        _ ← lw.idd.pop() ?? 0
+        _ ← lw.iww.pop() ?? 0
     while #lw.extra > 0:
-        _ ← lw.extra.pop()
+        _ ← lw.extra.pop() ?? 0
     lw.nlabels ← 0
     lw.tbase ← chk.fslots[f × 1¤ptrdiff]
     lw.tnext ← lw.tbase
@@ -5519,6 +5581,7 @@ let RT_FOPEN : i64 = ⁻27
 let RT_FCREATE : i64 = ⁻28
 let RT_FREAD : i64 = ⁻29
 let RT_FWRITE : i64 = ⁻30
+let RT_BADFIT : i64 = ⁻31
 
 struct Emit:
     code : u8[]
@@ -5662,13 +5725,13 @@ impl Emit:
                 assert(target ≠ ⁻1, "every jumped-to label was placed")
                 self.patch32(pos, target - (pos + 4))
         while #self.lf_pos > 0:
-            _ ← self.lf_pos.pop()
-            _ ← self.lf_label.pop()
+            _ ← self.lf_pos.pop() ?? 0
+            _ ← self.lf_label.pop() ?? 0
 
     fn begin_fn(&mut self, nlabels : i64):
         self.raxbar()
         while #self.labels > 0:
-            _ ← self.labels.pop()
+            _ ← self.labels.pop() ?? 0
         let i : mut i64 = 0
         while i < nlabels:
             self.labels.push(⁻1)
@@ -5723,11 +5786,11 @@ impl Emit:
                     self.jt_entries.push(off2)
                     j ← j + 1
         while #self.pj_id > 0:
-            _ ← self.pj_id.pop()
-            _ ← self.pj_start.pop()
-            _ ← self.pj_len.pop()
+            _ ← self.pj_id.pop() ?? 0
+            _ ← self.pj_start.pop() ?? 0
+            _ ← self.pj_len.pop() ?? 0
         while #self.pj_labels > 0:
-            _ ← self.pj_labels.pop()
+            _ ← self.pj_labels.pop() ?? 0
 
     fn dref(&mut self, reg : i64, off : i64):
         self.b1(72 + (1 if reg >= 8 else 0))
@@ -5814,7 +5877,12 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
     em.w32(8 × ir.nvregs + 8)
     let j : mut i64 = 0
     while j < np:
-        em.store(arg_reg(j), j)
+        if j < 6:
+            em.store(arg_reg(j), j)
+        else:
+            em.b3(72, 139, 133)
+            em.w32(16 + 8 × (j - 6))    // mov rax, [rbp+…]: a stack argument
+            em.store(R_AX, j)
         j ← j + 1
     let n : i64 = @dropunit(#ir.op)
     let i : mut i64 = 0
@@ -5984,11 +6052,22 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.set_label(a)
         elif o = IR_CALL:
             let argc : i64 = ir.extra[b × 1¤ptrdiff]
+            if argc > 6:
+                // the seventh argument onward rides the stack, pushed
+                // last-first so the seventh sits at [rbp+16]
+                let x : mut i64 = argc - 1
+                while x >= 6:
+                    em.load(R_AX, ir.extra[(b + 1 + x) × 1¤ptrdiff])
+                    em.b1(80)                    // push rax
+                    x ← x - 1
             let k : mut i64 = 0
-            while k < argc:
+            while k < (argc ⌊ 6):
                 em.load(arg_reg(k), ir.extra[(b + 1 + k) × 1¤ptrdiff])
                 k ← k + 1
             em.jglobal(232, ⁻1, a)
+            if argc > 6:
+                em.b3(72, 129, 196)
+                em.w32(8 × (argc - 6))           // add rsp: the ride is over
             em.store(R_AX, d)
         elif o = IR_RET:
             if a ≠ ⁻1:
@@ -6222,6 +6301,29 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.movimm(R_AX, 3)
             em.b2(15, 5)                     // close
             em.raxbar()
+        elif o = IR_NARROW:
+            em.load(R_AX, a)
+            let nbits : i64 = w & 255
+            let nsgn : i64 = w » 8
+            if nbits = 64:
+                // crossing between i64 and u64 either way: the value
+                // is out of reach exactly when its top bit is set
+                em.b3(72, 133, 192)              // test rax, rax
+                em.jglobal(0, 136, RT_BADFIT)    // js
+            elif nsgn = 0:
+                em.movimm(R_R10, (1 « nbits) - 1)
+                em.b3(76, 57, 208)               // cmp rax, r10
+                em.jglobal(0, 135, RT_BADFIT)    // ja
+            else:
+                if nbits = 8:
+                    em.b4(72, 15, 190, 200)      // movsx rcx, al
+                elif nbits = 16:
+                    em.b4(72, 15, 191, 200)      // movsx rcx, ax
+                else:
+                    em.b3(72, 99, 200)           // movsxd rcx, eax
+                em.b3(72, 57, 193)               // cmp rcx, rax
+                em.jglobal(0, 133, RT_BADFIT)    // jne
+            em.store(R_AX, d)
         elif o = IR_JTAB:
             let jmin : i64 = ir.extra[b × 1¤ptrdiff]
             let span : i64 = ir.extra[(b + 1) × 1¤ptrdiff]
@@ -7274,6 +7376,13 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.jglobal(233, ⁻1, RT_ABORT)
     em.resolve_locals()
 
+    // RT_BADFIT: a value flowed into a type it does not fit
+    em.rt_off.push(em.here())
+    let bfm : i64 = lw.intern("the value does not fit the type it meets\n")
+    em.sref(R_SI, bfm)
+    em.movimm(R_DX, str_len(lw.strs[bfm × 1¤ptrdiff]))
+    em.jglobal(233, ⁻1, RT_ABORT)
+
 // ---------------------------------------------------------------------------
 // The ELF executable: text R+X, rodata R, data R+W
 // ---------------------------------------------------------------------------
@@ -7380,14 +7489,14 @@ struct Compiled:
 // global's literal is built and stored where GLOAD reads it
 fn lower_ginit(lw : &mut Lower, a : Ast, chk : Chk) → IrFn:
     while #lw.op > 0:
-        _ ← lw.op.pop()
-        _ ← lw.ia.pop()
-        _ ← lw.ib.pop()
-        _ ← lw.ic.pop()
-        _ ← lw.idd.pop()
-        _ ← lw.iww.pop()
+        _ ← lw.op.pop() ?? 0
+        _ ← lw.ia.pop() ?? 0
+        _ ← lw.ib.pop() ?? 0
+        _ ← lw.ic.pop() ?? 0
+        _ ← lw.idd.pop() ?? 0
+        _ ← lw.iww.pop() ?? 0
     while #lw.extra > 0:
-        _ ← lw.extra.pop()
+        _ ← lw.extra.pop() ?? 0
     lw.nlabels ← 0
     lw.tbase ← 0
     lw.tnext ← 0
@@ -7432,7 +7541,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
     foreach s := a.strs:
         strs0.push(s)
     let lw : mut Lower = (Lower{a: a, toks: toks, src: src, ntype: chk.ntype,
-                                nslot: chk.nslot, strs: strs0,
+                                nslot: chk.nslot, ncvt: chk.ncvt, strs: strs0,
                                 op: [], ia: [], ib: [], ic: [], idd: [],
                                 iww: [], extra: [], tbase: 0, tnext: 0,
                                 tmax: 0, nlabels: 0, breaks: [], conts: [],
@@ -7490,7 +7599,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
         emit_fn(&em, gir, 0, lw.strs)
     // every function was emitted and left its offset behind
     assert(#em.fn_off = #a.fns + (1 if ninit > 0 else 0), "one code offset per function")
-    assert(#em.rt_off = 30, "every runtime routine in place")
+    assert(#em.rt_off = 31, "every runtime routine in place")
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:
         foreach i := 0…#em.cf_pos - 1:
