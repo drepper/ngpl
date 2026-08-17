@@ -1212,6 +1212,10 @@ class RangeValue(Value):
 MAX_TENSOR_RANK: int = 8
 
 
+import functools as _functools
+
+
+@_functools.lru_cache(maxsize=None)
 def parse_container_type(type_name: str):
     """Take `std.hash(K,V)` or `std.set(V)` apart, or answer None.
 
@@ -1768,6 +1772,7 @@ def is_expected_err(value):
     return isinstance(value, ExpectedValue) and value.is_err()
 
 
+@_functools.lru_cache(maxsize=None)
 def _split_optional_type(type_name: str) -> tuple[str, str | None]:
     """Split a type string into base type and optional/expected error type.
 
@@ -1780,6 +1785,7 @@ def _split_optional_type(type_name: str) -> tuple[str, str | None]:
     return type_name[:qpos], type_name[qpos + 1:]
 
 
+@_functools.lru_cache(maxsize=None)
 def is_generic_type(type_str: str) -> bool:
     """Return True if type_str contains a generic type parameter (name ending with ')."""
     base = type_str
@@ -1866,6 +1872,7 @@ def register_struct_type(name: str):
     """Register a struct's name as a type that may be written down."""
     _STRUCT_TYPES.add(name)
     _USER_TYPES.add(name)
+    _clear_type_memos()
 
 
 def is_struct_type(name: str) -> bool:
@@ -1884,11 +1891,13 @@ def struct_type_admits(name: str, value: "Value") -> bool:
 def register_user_type(name: str):
     """Register a user-defined type name (struct, etc.)."""
     _USER_TYPES.add(name)
+    _clear_type_memos()
 
 
 def register_type_alias(name: str, target: str):
     """Register a user-defined type alias."""
     _TYPE_ALIASES[name] = target
+    _clear_type_memos()
 
 
 # Enum type names, so that a type written in a signature can be
@@ -1904,6 +1913,7 @@ def register_enum_type(name: str, underlying: str | None = None, obj=None):
     if obj is not None:
         _ENUM_OBJECTS[name] = obj
     _USER_TYPES.add(name)
+    _clear_type_memos()
 
 
 def enum_admit(name: str, value: "Value") -> "Value":
@@ -2036,7 +2046,25 @@ def sum_type_settle(name: str, value: "Value") -> "Value":
         f"but the value is {actual}")
 
 
+_type_memo: dict = {}
+_alias_memo: dict = {}
+
+
+def _clear_type_memos() -> None:
+    _type_memo.clear()
+    _alias_memo.clear()
+
+
 def resolve_type_alias(type_name: str) -> str:
+    got = _alias_memo.get(type_name)
+    if got is not None:
+        return got
+    resolved = _resolve_type_alias_uncached(type_name)
+    _alias_memo[type_name] = resolved
+    return resolved
+
+
+def _resolve_type_alias_uncached(type_name: str) -> str:
     """Resolve type aliases transitively, returning the underlying type."""
     seen: set[str] = set()
     while type_name in _TYPE_ALIASES and type_name not in seen:
@@ -2045,6 +2073,7 @@ def resolve_type_alias(type_name: str) -> str:
     return type_name
 
 
+@_functools.lru_cache(maxsize=None)
 def _parse_array_type(type_name: str) -> tuple[str, list[int | None]] | None:
     """Parse an array type string.
 
@@ -2232,6 +2261,7 @@ def check_bootstrap_type(type_name: str, where: str):
         f"such as {sized}")
 
 
+@_functools.lru_cache(maxsize=None)
 def parse_tuple_type(type_name: str) -> list[str] | None:
     """The element types a tuple type names, or None for any other type.
 
@@ -2263,6 +2293,15 @@ def parse_tuple_type(type_name: str) -> list[str] | None:
 
 
 def validate_type(type_name: str) -> bool:
+    got = _type_memo.get(type_name)
+    if got is not None:
+        return got
+    ok = _validate_type_uncached(type_name)
+    _type_memo[type_name] = ok
+    return ok
+
+
+def _validate_type_uncached(type_name: str) -> bool:
     """Return True if type_name is a known builtin type (with optional/expected/array modifiers)."""
     type_name = resolve_type_alias(type_name)
     if is_generic_type(type_name):
@@ -2816,6 +2855,10 @@ def _coerce_to_type(value: Value, target_width: str, unit=None) -> Value:
         # same mistake arithmetic reports.  Wrapping it here would mean
         # `let y : u8 = 256` and `y + 1` on a u8 of 255 answering
         # differently about the same number and the same type.
+        if value.width == target_width:
+            # Already that type: the same object serves, which is what
+            # lets a container of them pass by identity below.
+            return value
         check_int(value.value, target_width)
         return IntValue(value.value, target_width)
     if isinstance(value, ObjectValue) and isinstance(value.obj, ArrayValue):
@@ -2835,8 +2878,28 @@ def _coerce_to_type(value: Value, target_width: str, unit=None) -> Value:
         # each element is measured against is the type with that one
         # dimension taken off.
         elem_target = _array_type_name(elem_type, dims[1:])
-        coerced = [coerce_to_type(arr.get(i), elem_target, unit)
-                   for i in range(arr.sizeof)]
+        # An array already measured against this element type passes by
+        # identity: re-measuring it element by element would cost the
+        # array's length at every call that hands it over, which is
+        # what made compiling the compiler quadratic.
+        if (arr.element_type == elem_target
+                and arr.element_unit == unit
+                and arr.fixed_size == declared):
+            return value
+        coerced = []
+        untouched = True
+        for i in range(arr.sizeof):
+            before = arr.get(i)
+            after = coerce_to_type(before, elem_target, unit)
+            if after is not before:
+                untouched = False
+            coerced.append(after)
+        if (untouched and arr.fixed_size == declared):
+            # Every element passed as itself, so the array is already
+            # of this type; it is stamped so the next pass is free.
+            arr.element_type = elem_target
+            arr.element_unit = unit
+            return value
         return ObjectValue(ArrayValue(coerced, element_type=elem_target,
                                       element_unit=unit,
                                       fixed_size=declared))

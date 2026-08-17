@@ -65,6 +65,38 @@ class NoForwardProgress(RuntimeError):
     """The armed time limit passed before the program finished."""
 
 
+# Progress is also recorded per function: every completed call to a
+# user-defined function counts, and the most recently finished one is
+# named in the heartbeat, so a run that is moving shows *what* it is
+# moving through.  With --fn-stats the record is complete: calls and
+# cumulative time per function, printed when the process ends (and on
+# a timeout), which is how a super-linear cost is found.
+_fn_calls_done: int = 0
+_fn_last_name: str = ""
+_fn_stats_on: bool = False
+_fn_stats: dict = {}
+
+
+def enable_fn_stats() -> None:
+    global _fn_stats_on
+    _fn_stats_on = True
+    import atexit
+    atexit.register(report_fn_stats)
+
+
+def report_fn_stats(limit: int = 30) -> None:
+    """Print the per-function record to stderr, the costliest first."""
+    if not _fn_stats:
+        return
+    rows = sorted(_fn_stats.items(), key=lambda kv: -kv[1][1])[:limit]
+    width = max(len(name) for name, _ in rows)
+    print(f"interp: function record ({_fn_calls_done:,} calls finished):",
+          file=_sys.stderr)
+    for name, (count, cum) in rows:
+        print(f"interp:   {name:<{width}}  {count:>10,} calls  "
+              f"{cum:>9.2f}s cumulative", file=_sys.stderr, flush=True)
+
+
 from interp.ast import (
     IntLit, FloatLit, StrLit, CharLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
     IfStmt, IfExpr, WhileStmt, ReturnStmt, FuncDef, VarDef, DestructureDef,
@@ -3995,15 +4027,22 @@ class Evaluator:
             _watchdog_next_beat = now + _watchdog_beat_every
             where = ""
             if self._call_stack:
-                name, pos = self._call_stack[-1][0], self._call_stack[-1][1]
+                chain = " → ".join(f[0] for f in self._call_stack[-4:])
+                pos = self._call_stack[-1][1]
                 if pos is not None:
-                    where = f", in {name} at line {pos[0]}"
+                    where = f", in {chain} at line {pos[0]}"
                 else:
-                    where = f", in {name}"
+                    where = f", in {chain}"
+            done = ""
+            if _fn_calls_done:
+                done = (f", {_fn_calls_done:,} calls"
+                        f" (last finished: {_fn_last_name})")
             print(f"interp: {now - _watchdog_started:.0f}s, "
-                  f"{_watchdog_steps:,} statements{where}",
+                  f"{_watchdog_steps:,} statements{done}{where}",
                   file=_sys.stderr, flush=True)
         if _watchdog_deadline is not None and now >= _watchdog_deadline:
+            if _fn_stats_on:
+                report_fn_stats()
             raise NoForwardProgress(
                 f"no result within the time limit: "
                 f"{_watchdog_steps:,} statements over "
@@ -5898,6 +5937,31 @@ class Evaluator:
             check_bootstrap_argument(arg, f"{name}: argument {index + 1}")
 
     def _call_user_func(self, func: FuncValue, args):
+        """Call a user-defined function, its completion recorded."""
+        global _fn_calls_done, _fn_last_name
+        if not _watchdog_armed and not _fn_stats_on:
+            return self._call_user_func_inner(func, args)
+        if _fn_stats_on:
+            t0 = _time.monotonic()
+            try:
+                return self._call_user_func_inner(func, args)
+            finally:
+                dt = _time.monotonic() - t0
+                ent = _fn_stats.get(func.name)
+                if ent is None:
+                    _fn_stats[func.name] = [1, dt]
+                else:
+                    ent[0] += 1
+                    ent[1] += dt
+                _fn_calls_done += 1
+                _fn_last_name = func.name
+        try:
+            return self._call_user_func_inner(func, args)
+        finally:
+            _fn_calls_done += 1
+            _fn_last_name = func.name
+
+    def _call_user_func_inner(self, func: FuncValue, args):
         """Call a user-defined function with proper scoping."""
         if func.name in self._test_hooks:
             pending = self._test_hooks.pop(func.name)

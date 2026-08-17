@@ -314,6 +314,11 @@ def _parse_args() -> argparse.Namespace:
                             "SECONDS seconds, 10 without a value; the "
                             "NGPLI_HEARTBEAT environment variable does "
                             "the same")
+    parser.add_argument("--fn-stats", action="store_true",
+                       help="record every user function's calls and "
+                            "cumulative time, and print the record when "
+                            "the process ends (or the time limit stops "
+                            "it); NGPLI_FN_STATS=1 does the same")
     parser.add_argument("program_args", nargs=argparse.REMAINDER,
                        help="arguments passed to the interpreted program; "
                             "separate them from the interpreter's own options "
@@ -3017,6 +3022,9 @@ def main():
     if timeout is not None or heartbeat is not None:
         from interp.eval import arm_watchdog
         arm_watchdog(timeout, heartbeat)
+    if args.fn_stats or os.environ.get("NGPLI_FN_STATS"):
+        from interp.eval import enable_fn_stats
+        enable_fn_stats()
 
     source_path = args.source
     source = ""
