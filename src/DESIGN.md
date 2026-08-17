@@ -157,6 +157,22 @@ Attempt 3 grows core-1 to **core-2** with structs:
   `_start` hands to `exit`.  Unit-suffixed literals (`1¤ptrdiff`,
   `0¤byte`) close their type at the lexer like width suffixes, and
   `byte` names `u8`.
+- **the test harness**: `@test` functions compile into the binary and
+  run before `@start` — silently when they pass, the first failing
+  assertion stopping the run.  The binary honors the interpreter's
+  own options: `--skip-tests` bypasses them, `--test` reports each
+  test and the summary on the error stream in the interpreter's
+  exact format and exits without running `@start`; a synthesized
+  argument filter keeps both flags out of `std.args.all()`, as the
+  interpreter keeps its options out of a program's arguments.  An
+  `@expect` definition — a function or global expected to draw
+  diagnostics — is parsed and left uncompiled (the interpreter is
+  where the expectation itself is verified); a reference to one is
+  answered with "expects errors under @expect and was left
+  uncompiled", and `--test` still reports it in the suite's shape.
+  The driver and filter are ordinary synthesized IR functions, so
+  they cost two small functions in every image and nothing at run
+  time when no flag is given and no test exists.
 
 ## Pipeline and Data Flow
 
@@ -376,7 +392,7 @@ the interpreter **and** compiled, outputs and exit codes diffed — the
 strict-subset rule made executable.  `--impl=` selects a side:
 `bootstrap`, `compiled` (ngplc under the interpreter), `native` (the
 self-hosted `build/ngplc`, the whole sweep in ~2.4 s), `both` (the
-default) or `all`.  Twenty-five shared programs cover the whole
+default) or `all`.  Twenty-six shared programs cover the whole
 core-2 surface including the stopping paths; `std.implementation`
 conditionalizes where implementations may differ.  The diff has
 caught real bugs on both sides, including the interpreter's

@@ -1,0 +1,38 @@
+// core-2: @test functions run before @start and leave their marks;
+// an @expect definition is parsed and left uncompiled.
+
+let ORDER : std.hash(str, i64) = ⸨"seed": 7⸩
+
+struct Tally:
+    ran : i64
+
+fn observe(t : &mut Tally):
+    t.ran ← t.ran + 1
+
+@test
+fn test_arithmetic():
+    assert(2 + 3 = 5)
+    assert_eq(4 × 4, 16)
+
+@test
+fn test_tables():
+    assert((ORDER["seed"] ?? 0) = 7)
+    assert(not ("weed" ∊ ORDER))
+
+@test
+fn test_structs():
+    let t : mut Tally = Tally{ran: 0}
+    observe(&t)
+    observe(&t)
+    assert(t.ran = 2)
+
+@expect error "does not fit"
+@test
+fn test_expected_refusal():
+    let x : u8 = 300
+    assert(x = 44)
+
+@start
+@impure
+fn main():
+    std.println("the tests ran quietly; the start function speaks")

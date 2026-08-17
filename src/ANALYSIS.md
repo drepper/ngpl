@@ -21,9 +21,12 @@ and characters with UTF-8 string positions, `.chars()`, `.chr()`
 and `.ord()`, struct values that travel — by parameter, return and
 binding — on the reference semantics both implementations share, and
 `:=` inference from a right side that states its type.
-Twenty shared programs run identically interpreted and compiled,
-inside the one integrated test suite; the bootstrap suite stays
-green with `-Werror`.
+Twenty-six shared programs run identically interpreted and
+compiled, inside the one integrated test suite; the bootstrap suite
+stays green with `-Werror`.  The `@test`/`@expect` harness now
+compiles too, with the interpreter's options and report format, so
+subset-compatible test functions can join the conformance surface
+instead of living only under the interpreter.
 
 The control-flow policy is real, not aspirational: comparisons
 materialize, `⌈ ⌊` and safe conditionals are `cmov`, `and`/`or` with

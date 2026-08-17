@@ -1017,6 +1017,7 @@ struct FnDef:
     is_impure : bool
     is_start : bool
     is_noreturn : bool
+    is_test : bool
     pre_off : i64        // extra: [n, expr…] or ⁻1
     post_off : i64       // extra: [n, name-token, expr, …] or ⁻1
 
@@ -1046,6 +1047,8 @@ struct Ast:
     tts : i64[]          // tuple shapes: start into tte per shape
     ttl : i64[]          // … how many elements
     tte : i64[]          // … the element types, flattened
+    ignored : str[]      // names @expect left uncompiled
+    igtests : str[]      // the @test names among them, in source order
     diags : Diag[]
 
 // ===========================================================================
@@ -1070,6 +1073,8 @@ struct Parser:
     tts : i64[]          // interned tuple shapes, moved into the Ast
     ttl : i64[]
     tte : i64[]
+    ignored : str[]
+    igtests : str[]
     diags : Diag[]
     poisoned : bool      // the statement at hand already misparsed
 
@@ -1974,6 +1979,7 @@ impl Parser:
     // ------------------------------------------------------------------
 
     fn parse_fn(&mut self, imp : bool, is_start : bool, is_noreturn : bool,
+                is_test : bool, ignored : bool,
                 pres : i64[], post_toks : i64[], posts : i64[],
                 prefix : str, self_sty : i64):
         _ ← self.eat(TK_FN, "'fn'")
@@ -2045,9 +2051,18 @@ impl Parser:
             foreach i := 0…#posts - 1:
                 self.extra.push(post_toks[i])
                 self.extra.push(posts[i])
+        if ignored:
+            // @expect: the definition is expected to draw diagnostics,
+            // so it is not checked, not compiled, and not run --
+            // remembered only so a reference to it can say why
+            self.ignored.push(name)
+            if is_test:
+                self.igtests.push(name)
+            return
         self.fns.push(FnDef{name: name, tok: name_tok, params_off: params_off,
                             ret: ret, body: body, is_impure: imp,
                             is_start: is_start, is_noreturn: is_noreturn,
+                            is_test: is_test,
                             pre_off: pre_off, post_off: post_off})
 
     fn parse_struct(&mut self):
@@ -2129,19 +2144,23 @@ impl Parser:
                 if self.peek() = TK_NL:
                     self.pos ← self.pos + 1
             if self.peek() = TK_FN:
-                self.parse_fn(imp, false, is_noreturn, pres, post_toks, posts,
-                              name, sty)
+                self.parse_fn(imp, false, is_noreturn, false, false,
+                              pres, post_toks, posts, name, sty)
             else:
                 self.err("an impl block holds methods and nothing else")
         _ ← self.eat(TK_DEDENT, "the end of the impl block")
         if self.peek() = TK_NL:
             self.pos ← self.pos + 1
 
-    fn parse_global(&mut self):
+    fn parse_global(&mut self, ignored : bool):
         // a top-level let: the same shape a local has
         let stmt : i64 = self.parse_let()
         if self.failed(): return
         let tok : i64 = self.ntok[stmt × 1¤ptrdiff]
+        if ignored:
+            // @expect: parsed, remembered, left uncompiled
+            self.ignored.push(self.ttext(tok))
+            return
         self.globals.push(GlobalDef{name: self.ttext(tok), tok: tok,
                                     ty: self.nc[stmt × 1¤ptrdiff],
                                     is_mut: self.nb[stmt × 1¤ptrdiff] = 1,
@@ -2151,6 +2170,8 @@ impl Parser:
         let imp : mut bool = false
         let is_start : mut bool = false
         let is_noreturn : mut bool = false
+        let is_test : mut bool = false
+        let expects : mut i64 = 0
         let pres : mut i64[] = []
         let post_toks : mut i64[] = []
         let posts : mut i64[] = []
@@ -2164,6 +2185,23 @@ impl Parser:
                 is_start ← true
             elif name = "noreturn":
                 is_noreturn ← true
+            elif name = "test":
+                is_test ← true
+            elif name = "expect":
+                // @expect level "pattern": the definition is expected
+                // to draw diagnostics, so it is parsed and then left
+                // uncompiled; the interpreter is where the expectation
+                // itself is verified
+                let lvl := self.ttext(self.pos)
+                if lvl ≠ "error" and lvl ≠ "warning":
+                    self.err("@expect names a level, error or warning")
+                    return
+                self.pos ← self.pos + 1
+                if self.peek() ≠ TK_STR:
+                    self.err("@expect states the message it expects, as a string")
+                    return
+                self.pos ← self.pos + 1
+                expects ← expects + 1
             elif name = "pre":
                 _ ← self.eat(TK_LPAR, "'(' after @pre")
                 pres.push(self.parse_expr())
@@ -2181,20 +2219,24 @@ impl Parser:
             if self.peek() = TK_NL:
                 self.pos ← self.pos + 1
         if self.peek() = TK_FN:
-            self.parse_fn(imp, is_start, is_noreturn, pres, post_toks, posts,
-                          "", 0)
+            self.parse_fn(imp, is_start, is_noreturn, is_test, expects > 0,
+                          pres, post_toks, posts, "", 0)
         elif self.peek() = TK_STRUCT or self.peek() = TK_IMPL:
-            if imp or is_start or is_noreturn or #pres > 0 or #posts > 0:
+            if imp or is_start or is_noreturn or is_test or #pres > 0 or #posts > 0:
                 self.err("a struct carries no annotations")
+            elif expects > 0:
+                // a struct's expected errors are parse-time, which no
+                // single pass can both report and ignore
+                self.err("@expect covers functions and globals in core-2; an expected-error struct stays in the bootstrap suite")
             elif self.peek() = TK_STRUCT:
                 self.parse_struct()
             else:
                 self.parse_impl()
         elif self.peek() = TK_LET:
-            if imp or is_start or is_noreturn or #pres > 0 or #posts > 0:
+            if imp or is_start or is_noreturn or is_test or #pres > 0 or #posts > 0:
                 self.err("a global binding carries no annotations")
             else:
-                self.parse_global()
+                self.parse_global(expects > 0)
         else:
             self.err("core-2 has functions, structs, impl blocks and global bindings at the top level")
 
@@ -2203,6 +2245,7 @@ fn parse(toks : Toks, src : byte[]) → Ast:
                                  nkind: [], ntok: [], na: [], nb: [], nc: [],
                                  extra: [], fns: [], globals: [], structs: [],
                                  snames: [], tts: [], ttl: [], tte: [],
+                                 ignored: [], igtests: [],
                                  diags: [], poisoned: false})
     // a struct may be written below whatever names it, so the names
     // are gathered in one sweep before anything is parsed
@@ -2238,7 +2281,7 @@ fn parse(toks : Toks, src : byte[]) → Ast:
     (Ast{nkind: p.nkind, ntok: p.ntok, na: p.na, nb: p.nb, nc: p.nc,
          extra: p.extra, strs: p.toks.strs, fns: p.fns, globals: p.globals,
          structs: p.structs, tts: p.tts, ttl: p.ttl, tte: p.tte,
-         diags: p.diags})
+         ignored: p.ignored, igtests: p.igtests, diags: p.diags})
 
 // ===========================================================================
 // AST dump, one node a line
@@ -3051,7 +3094,10 @@ impl Checker:
             return
         let g : i64 = self.global_index(name)
         if g = ⁻1:
-            self.derr(tok, "'" ⧺ name ⧺ "' is not defined here")
+            if self.is_ignored_name(name):
+                self.derr(tok, "'" ⧺ name ⧺ "' expects errors under @expect and was left uncompiled")
+            else:
+                self.derr(tok, "'" ⧺ name ⧺ "' is not defined here")
             self.set_type(id, TY_I64)
             return
         let gd := self.a.globals[g × 1¤ptrdiff]
@@ -3294,7 +3340,10 @@ impl Checker:
             return
         let f : i64 = self.fn_index(name)
         if f = ⁻1:
-            self.derr(tok, "'" ⧺ name ⧺ "' is not a function this program defines")
+            if self.is_ignored_name(name):
+                self.derr(tok, "'" ⧺ name ⧺ "' expects errors under @expect and was left uncompiled")
+            else:
+                self.derr(tok, "'" ⧺ name ⧺ "' is not a function this program defines")
             let i : mut i64 = 0
             while i < argc:
                 self.check_expr(self.a.extra[(args_off + 1 + i) × 1¤ptrdiff], TY_UNIT)
@@ -3653,6 +3702,13 @@ impl Checker:
         // lowering finds the function and whether a receiver travels
         self.a.nc[id × 1¤ptrdiff] ← 1000 + 2 × f + (1 if instance else 0)
         self.set_type(id, callee.ret)
+
+    fn is_ignored_name(&self, name : str) → bool:
+        if #self.a.ignored > 0:
+            foreach n := self.a.ignored:
+                if n = name:
+                    return true
+        false
 
     fn call_noreturn(&self, e : i64) → bool:
         let f : i64 = self.fn_index(self.text(self.a.ntok[e × 1¤ptrdiff]))
@@ -4285,6 +4341,13 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
                 c.derr(a.fns[j].tok, "'" ⧺ f.name ⧺ "' is already defined")
         if f.name = "assert" or f.name = "assert_eq":
             c.derr(f.tok, "'" ⧺ f.name ⧺ "' is the built-in check's name")
+        if f.is_test:
+            if a.extra[f.params_off × 1¤ptrdiff] ≠ 0:
+                c.derr(f.tok, "a @test function takes no parameters")
+            if f.ret ≠ TY_UNIT:
+                c.derr(f.tok, "a @test function answers nothing; assert is how it speaks")
+            if f.is_start:
+                c.derr(f.tok, "@test and @start name different duties; one function carries one")
         if f.is_start:
             starts ← starts + 1
             if a.extra[f.params_off × 1¤ptrdiff] ≠ 0:
@@ -4392,6 +4455,7 @@ let IR_FREAD : i64 = 83    // d ← file a's bytes, a u8[]
 let IR_FWRITE : i64 = 84   // file a takes the bytes of array b
 let IR_FCLOSE : i64 = 85   // file a closes
 let IR_NARROW : i64 = 86   // d ← a, stopped unless it fits width w
+let IR_EPRINTS : i64 = 87  // string a on the error stream
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
 let IR_FLD : i64 = 67      // d ← field b of struct a
 let IR_FSTO : i64 = 68     // field b of struct a ← c
@@ -4433,6 +4497,7 @@ struct Lower:
     breaks : i64[]
     conts : i64[]
     in_wrap : i64
+    argsfix : i64        // the argument filter's index, ⁻1 for raw
     cur_ret : i64
     post_label : i64
     res_vreg : i64
@@ -4664,7 +4729,12 @@ impl Lower:
         if k = NK_SCALL:
             if na = SB_ARGS:
                 let d : i64 = self.tmp()
-                self.ir(IR_ARGS, 0, 0, 0, d, 0)
+                if self.argsfix >= 0:
+                    let coff : i64 = @dropunit(#self.extra)
+                    self.extra.push(0)
+                    self.ir(IR_CALL, self.argsfix, coff, 0, d, 0)
+                else:
+                    self.ir(IR_ARGS, 0, 0, 0, d, 0)
                 return d
             if na = SB_OPEN:
                 let pv : i64 = self.lower_expr(self.a.extra[(nb + 1) × 1¤ptrdiff])
@@ -5582,6 +5652,7 @@ let RT_FCREATE : i64 = ⁻28
 let RT_FREAD : i64 = ⁻29
 let RT_FWRITE : i64 = ⁻30
 let RT_BADFIT : i64 = ⁻31
+let RT_WRITE2 : i64 = ⁻32
 
 struct Emit:
     code : u8[]
@@ -6078,6 +6149,10 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.sref(R_SI, a)
             em.movimm(R_DX, str_len(strs[a × 1¤ptrdiff]))
             em.jglobal(232, ⁻1, RT_WRITE1)
+        elif o = IR_EPRINTS:
+            em.sref(R_SI, a)
+            em.movimm(R_DX, str_len(strs[a × 1¤ptrdiff]))
+            em.jglobal(232, ⁻1, RT_WRITE2)
         elif o = IR_PRINTI:
             em.load(R_DI, a)
             em.jglobal(232, ⁻1, RT_PRINTI)
@@ -7383,6 +7458,13 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.movimm(R_DX, str_len(lw.strs[bfm × 1¤ptrdiff]))
     em.jglobal(233, ⁻1, RT_ABORT)
 
+    // RT_WRITE2: rsi = buf, rdx = len, onto the error stream
+    em.rt_off.push(em.here())
+    em.movimm(R_AX, 1)
+    em.movimm(R_DI, 2)
+    em.b2(15, 5)
+    em.b1(195)
+
 // ---------------------------------------------------------------------------
 // The ELF executable: text R+X, rodata R, data R+W
 // ---------------------------------------------------------------------------
@@ -7485,6 +7567,190 @@ struct Compiled:
     elf : u8[]
     log : str[]
 
+// a synthesized function starts from a clean sheet
+fn lw_reset(lw : &mut Lower, fname : str):
+    while #lw.op > 0:
+        _ ← lw.op.pop() ?? 0
+        _ ← lw.ia.pop() ?? 0
+        _ ← lw.ib.pop() ?? 0
+        _ ← lw.ic.pop() ?? 0
+        _ ← lw.idd.pop() ?? 0
+        _ ← lw.iww.pop() ?? 0
+    while #lw.extra > 0:
+        _ ← lw.extra.pop() ?? 0
+    lw.nlabels ← 0
+    lw.tbase ← 0
+    lw.tnext ← 0
+    lw.tmax ← 0
+    lw.in_wrap ← 0
+    lw.cur_ret ← TY_UNIT
+    lw.post_label ← ⁻1
+    lw.res_vreg ← ⁻1
+    lw.cur_fname ← fname
+
+// …and leaves its instructions behind as an IrFn
+fn lw_snapshot(lw : &Lower) → IrFn:
+    let opc : mut i64[] = []
+    let iac : mut i64[] = []
+    let ibc : mut i64[] = []
+    let icc : mut i64[] = []
+    let idc : mut i64[] = []
+    let iwc : mut i64[] = []
+    let exc : mut i64[] = []
+    foreach v := lw.op:
+        opc.push(v)
+    foreach v := lw.ia:
+        iac.push(v)
+    foreach v := lw.ib:
+        ibc.push(v)
+    foreach v := lw.ic:
+        icc.push(v)
+    foreach v := lw.idd:
+        idc.push(v)
+    foreach v := lw.iww:
+        iwc.push(v)
+    if #lw.extra > 0:
+        foreach v := lw.extra:
+            exc.push(v)
+    (IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
+          extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels})
+
+// std.args.all()'s answer: the kernel's arguments with the test
+// harness's own options taken out, as the interpreter takes out its
+// own before a program reads them
+fn lower_argsfilter(lw : &mut Lower) → IrFn:
+    lw_reset(&lw, "the argument filter")
+    let raw : i64 = lw.tmp()
+    lw.ir(IR_ARGS, 0, 0, 0, raw, 0)
+    let out : i64 = lw.tmp()
+    lw.ir(IR_ANEW, 4, 0, 0, out, 0)
+    let n : i64 = lw.tmp()
+    lw.ir(IR_ALEN, raw, 0, 0, n, 0)
+    let i : i64 = lw.tmp()
+    lw.ir(IR_CONST, 0, 0, 0, i, 0)
+    let t1 : i64 = lw.tmp()
+    lw.ir(IR_SC, lw.intern("--test"), 0, 0, t1, 0)
+    let t2 : i64 = lw.tmp()
+    lw.ir(IR_SC, lw.intern("--skip-tests"), 0, 0, t2, 0)
+    let ltop : i64 = lw.label()
+    let lskip : i64 = lw.label()
+    let lend : i64 = lw.label()
+    lw.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+    let c : i64 = lw.tmp()
+    lw.ir(IR_CLT, i, n, 0, c, 64 + 256)
+    lw.ir(IR_JZ, c, lend, 0, 0, 0)
+    let sv : i64 = lw.tmp()
+    lw.ir(IR_AIDX, raw, i, 0, sv, 0)
+    let e1 : i64 = lw.tmp()
+    lw.ir(IR_SEQV, sv, t1, 0, e1, 64)
+    lw.ir(IR_JNZ, e1, lskip, 0, 0, 0)
+    let e2 : i64 = lw.tmp()
+    lw.ir(IR_SEQV, sv, t2, 0, e2, 64)
+    lw.ir(IR_JNZ, e2, lskip, 0, 0, 0)
+    lw.ir(IR_APUSH, out, sv, 0, 0, 0)
+    lw.ir(IR_LABEL, lskip, 0, 0, 0, 0)
+    let one : i64 = lw.tmp()
+    lw.ir(IR_CONST, 1, 0, 0, one, 0)
+    let ni : i64 = lw.tmp()
+    lw.ir(IR_ADDW, i, one, 0, ni, 64 + 256)
+    lw.ir(IR_MOV, ni, 0, 0, i, 0)
+    lw.ir(IR_JMP, ltop, 0, 0, 0, 0)
+    lw.ir(IR_LABEL, lend, 0, 0, 0, 0)
+    lw.ir(IR_RET, out, 0, 0, 0, 0)
+    lw_snapshot(&lw)
+
+// the test driver the image runs between the globals and @start: the
+// harness options are read, and the @test functions run -- silently
+// before @start, or reported and counted under --test, on the error
+// stream as the interpreter reports them
+fn lower_testdriver(lw : &mut Lower, a : Ast) → IrFn:
+    lw_reset(&lw, "the test driver")
+    let tests : mut i64[] = []
+    if #a.fns > 0:
+        foreach fi := 0…#a.fns - 1:
+            if a.fns[fi].is_test:
+                tests.push(@dropunit(fi))
+    let total : i64 = @dropunit(#tests) + @dropunit(#a.igtests)
+    let argv : i64 = lw.tmp()
+    lw.ir(IR_ARGS, 0, 0, 0, argv, 0)
+    let ton : i64 = lw.tmp()
+    lw.ir(IR_CONST, 0, 0, 0, ton, 0)
+    let skp : i64 = lw.tmp()
+    lw.ir(IR_CONST, 0, 0, 0, skp, 0)
+    let n : i64 = lw.tmp()
+    lw.ir(IR_ALEN, argv, 0, 0, n, 0)
+    let i : i64 = lw.tmp()
+    lw.ir(IR_CONST, 0, 0, 0, i, 0)
+    let t1 : i64 = lw.tmp()
+    lw.ir(IR_SC, lw.intern("--test"), 0, 0, t1, 0)
+    let t2 : i64 = lw.tmp()
+    lw.ir(IR_SC, lw.intern("--skip-tests"), 0, 0, t2, 0)
+    let one : i64 = lw.tmp()
+    lw.ir(IR_CONST, 1, 0, 0, one, 0)
+    let ltop : i64 = lw.label()
+    let lnext : i64 = lw.label()
+    let l2 : i64 = lw.label()
+    let lscanned : i64 = lw.label()
+    let lrun : i64 = lw.label()
+    let lend : i64 = lw.label()
+    lw.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+    let c : i64 = lw.tmp()
+    lw.ir(IR_CLT, i, n, 0, c, 64 + 256)
+    lw.ir(IR_JZ, c, lscanned, 0, 0, 0)
+    let sv : i64 = lw.tmp()
+    lw.ir(IR_AIDX, argv, i, 0, sv, 0)
+    let e1 : i64 = lw.tmp()
+    lw.ir(IR_SEQV, sv, t1, 0, e1, 64)
+    lw.ir(IR_JZ, e1, l2, 0, 0, 0)
+    lw.ir(IR_MOV, one, 0, 0, ton, 0)
+    lw.ir(IR_LABEL, l2, 0, 0, 0, 0)
+    let e2 : i64 = lw.tmp()
+    lw.ir(IR_SEQV, sv, t2, 0, e2, 64)
+    lw.ir(IR_JZ, e2, lnext, 0, 0, 0)
+    lw.ir(IR_MOV, one, 0, 0, skp, 0)
+    lw.ir(IR_LABEL, lnext, 0, 0, 0, 0)
+    let ni : i64 = lw.tmp()
+    lw.ir(IR_ADDW, i, one, 0, ni, 64 + 256)
+    lw.ir(IR_MOV, ni, 0, 0, i, 0)
+    lw.ir(IR_JMP, ltop, 0, 0, 0, 0)
+    lw.ir(IR_LABEL, lscanned, 0, 0, 0, 0)
+    lw.ir(IR_JZ, ton, lrun, 0, 0, 0)
+    // --test: report and count, then exit without @start
+    if total = 0:
+        lw.ir(IR_EPRINTS, lw.intern("error: no tests: nothing in this file is marked @test or @expect\n"), 0, 0, 0, 0)
+        let z0 : i64 = lw.tmp()
+        lw.ir(IR_CONST, 1, 0, 0, z0, 0)
+        lw.ir(IR_EXIT, z0, 0, 0, 0, 0)
+    else:
+        if #a.igtests > 0:
+            foreach gname := a.igtests:
+                lw.ir(IR_EPRINTS, lw.intern("test " ⧺ gname ⧺ " ... ok\n"), 0, 0, 0, 0)
+        lw.ir(IR_EPRINTS, lw.intern("\nrunning " ⧺ i64_str(total) ⧺ " tests\n"), 0, 0, 0, 0)
+        if #tests > 0:
+            foreach fi2 := tests:
+                lw.ir(IR_EPRINTS, lw.intern("test " ⧺ a.fns[fi2 × 1¤ptrdiff].name ⧺ " ... "), 0, 0, 0, 0)
+                let coff : i64 = @dropunit(#lw.extra)
+                lw.extra.push(0)
+                let d : i64 = lw.tmp()
+                lw.ir(IR_CALL, fi2, coff, 0, d, 0)
+                lw.ir(IR_EPRINTS, lw.intern("ok\n"), 0, 0, 0, 0)
+        lw.ir(IR_EPRINTS, lw.intern("\ntest result: ok. " ⧺ i64_str(total) ⧺ " passed; 0 failed\n"), 0, 0, 0, 0)
+        let z1 : i64 = lw.tmp()
+        lw.ir(IR_CONST, 0, 0, 0, z1, 0)
+        lw.ir(IR_EXIT, z1, 0, 0, 0, 0)
+    lw.ir(IR_LABEL, lrun, 0, 0, 0, 0)
+    lw.ir(IR_JNZ, skp, lend, 0, 0, 0)
+    // the ordinary run: every test, silently, before @start
+    if #tests > 0:
+        foreach fi3 := tests:
+            let coff2 : i64 = @dropunit(#lw.extra)
+            lw.extra.push(0)
+            let d2 : i64 = lw.tmp()
+            lw.ir(IR_CALL, fi3, coff2, 0, d2, 0)
+    lw.ir(IR_LABEL, lend, 0, 0, 0, 0)
+    lw.ir(IR_RET, ⁻1, 0, 0, 0, 0)
+    lw_snapshot(&lw)
+
 // the init function the image runs before @start: every marked
 // global's literal is built and stored where GLOAD reads it
 fn lower_ginit(lw : &mut Lower, a : Ast, chk : Chk) → IrFn:
@@ -7545,7 +7811,8 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
                                 op: [], ia: [], ib: [], ic: [], idd: [],
                                 iww: [], extra: [], tbase: 0, tnext: 0,
                                 tmax: 0, nlabels: 0, breaks: [], conts: [],
-                                in_wrap: 0, cur_ret: 0, post_label: ⁻1,
+                                in_wrap: 0, argsfix: ⁻1,
+                                cur_ret: 0, post_label: ⁻1,
                                 res_vreg: ⁻1, cur_fname: "", dlog: []})
     let em : mut Emit = (Emit{code: [], cf_pos: [], cf_target: [],
                               sf_pos: [], sf_str: [], sd_pos: [], sd_str: [],
@@ -7559,6 +7826,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
     let nglobals : i64 = @dropunit(#a.globals)
     let alloc_off : i64 = 8 × nglobals
     let args_off : i64 = alloc_off + 16
+    let nfns : i64 = @dropunit(#a.fns)
     // _start: call the @start function, then exit 0
     let start_fn : mut i64 = 0
     foreach i := 0…#a.fns - 1:
@@ -7574,9 +7842,14 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
     em.b1(8)                        // lea rax, [rsp+8]
     em.b4(73, 137, 67, 8)           // mov [r11+8], rax: argv
     let ninit : i64 = @dropunit(#chk.ginit)
+    let g1 : i64 = 1 if ninit > 0 else 0
+    // past the user's functions sit the synthetics: the global init,
+    // the argument filter, the test driver
+    lw.argsfix ← nfns + g1
+    let tdriver : i64 = nfns + g1 + 1
     if ninit > 0:
-        // the init function sits one index past the user's functions
-        em.jglobal(232, ⁻1, @dropunit(#a.fns))
+        em.jglobal(232, ⁻1, nfns)
+    em.jglobal(232, ⁻1, tdriver)
     em.jglobal(232, ⁻1, start_fn)
     // the start function's answer is the exit status; one that
     // answers nothing exits 0
@@ -7597,9 +7870,15 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
         let gir := lower_ginit(&lw, a, chk)
         em.fn_off.push(em.here())
         emit_fn(&em, gir, 0, lw.strs)
+    let fir := lower_argsfilter(&lw)
+    em.fn_off.push(em.here())
+    emit_fn(&em, fir, 0, lw.strs)
+    let dir := lower_testdriver(&lw, a)
+    em.fn_off.push(em.here())
+    emit_fn(&em, dir, 0, lw.strs)
     // every function was emitted and left its offset behind
-    assert(#em.fn_off = #a.fns + (1 if ninit > 0 else 0), "one code offset per function")
-    assert(#em.rt_off = 31, "every runtime routine in place")
+    assert(@dropunit(#em.fn_off) = nfns + g1 + 2, "one code offset per function")
+    assert(#em.rt_off = 32, "every runtime routine in place")
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:
         foreach i := 0…#em.cf_pos - 1:
