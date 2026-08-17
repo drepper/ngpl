@@ -2357,6 +2357,11 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
         if tv is IntValue:
             if value.width == param_type:
                 return value
+            if value.width == "int" and _parse_int_width(param_type) is not None:
+                # an untyped literal adopts a stated width directly,
+                # range-checked the same way the long path checks it
+                return IntValue(check_int(value.value, param_type),
+                                param_type)
         elif tv is StrValue:
             if param_type == "str":
                 return value

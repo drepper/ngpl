@@ -4160,8 +4160,10 @@ class Evaluator:
             if self._call_stack:
                 self._call_stack[-1][1] = pos
 
-        if isinstance(stmt, ExpectStmt):
-            return self._eval_expect(stmt)
+
+        handler = _STMT_DISPATCH.get(stmt.__class__)
+        if handler is not None:
+            return handler(self, stmt)
 
         # Handle assignment tuple returned by parser: ("assign", name, rhs_ast).
         if isinstance(stmt, tuple) and len(stmt) == 3 and stmt[0] == "assign":
@@ -4331,94 +4333,13 @@ class Evaluator:
                     self.env.define(target_ast.name, rhs)
             return none()
 
-        if isinstance(stmt, VarDef):
-            if stmt.type_annotation is not None:
-                check_bootstrap_type(stmt.type_annotation,
-                                     f"'{stmt.name}'")
-            if is_type_name(stmt.name):
-                raise TypeError(
-                    f"'{stmt.name}' names a type and cannot name a variable")
-            if stmt.name == DISCARD_NAME:
-                # `let _ := expr` discards too, so that a value can be
-                # thrown away without inventing a name for it.
-                self.eval_expr(stmt.init_expr)
-                return none()
-            if stmt.name in self._frozen_vars:
-                kind = self._frozen_vars[stmt.name]
-                if kind == "foreach":
-                    self._warnings.append(
-                        f"redefinition of foreach variable '{stmt.name}'")
-                elif not stmt.is_const:
-                    raise TypeError(
-                        f"cannot redefine {kind} variable '{stmt.name}'")
-            value = self.eval_expr(stmt.init_expr)
-            if stmt.type_annotation is None:
-                # Naming a value settles it, and without a type written
-                # down a number settles on `int` or `float` -- neither
-                # of which the bootstrap provides.
-                check_binding_settles(value, stmt.name)
-                check_bootstrap_binding(value, stmt.name)
-                value = settle_untyped(value)
-            unit = None
-            if stmt.unit_spec is not None:
-                from interp.units import eval_unit_formula
-                unit = eval_unit_formula(stmt.unit_spec)
-            if stmt.type_annotation is not None \
-                    and not isinstance(stmt.init_expr, ArrayAlloc):
-                # An array declaration writes its shape in brackets that
-                # the annotation does not carry, and the allocation has
-                # already measured the value against the whole of it.
-                # Coercing again here would meet the element type alone
-                # and take an array for it.
-                ann = stmt.type_annotation
-                if self._generic_map and is_generic_type(ann):
-                    ann = _substitute_generics(ann, self._generic_map)
-                # The binding states a unit as well as a type, so the
-                # type is what each number is held in and the unit is
-                # what it counts.  For an array that means the
-                # elements: a unit around the container is a value
-                # nothing can read an element out of.
-                value = coerce_to_type(value, ann, unit, self._mk_int)
-            else:
-                # An allocation has already measured the value against
-                # the whole of its type, so only the unit is left.
-                value = apply_unit(value, unit, self._mk_int)
-            self.env.define(stmt.name, value,
-                            Decl(self._declared_type_of(stmt, value), unit))
-            if not self._bind_reshape_access(stmt):
-                if stmt.is_const:
-                    self._frozen_vars[stmt.name] = "let"
-            return none()
 
-        if isinstance(stmt, DestructureDef):
-            return self._eval_destructure(stmt)
 
-        if isinstance(stmt, SumTypeDef):
-            register_sum_type(stmt.name, stmt.alternatives)
-            return none()
 
-        if isinstance(stmt, TypeDef):
-            target = stmt.target
-            if self._generic_map and is_generic_type(target):
-                target = _substitute_generics(target, self._generic_map)
-            register_type_alias(stmt.name, target)
-            return none()
 
-        if isinstance(stmt, ExprStmt):
-            result = self.eval_expr(stmt.expr)
-            if isinstance(result, LambdaValue):
-                self._warnings.append(
-                    "lambda value is not used (not assigned or returned)")
-            return result
 
-        if isinstance(stmt, IfStmt):
-            return self._eval_if(stmt)
 
-        if isinstance(stmt, WhileStmt):
-            return self._eval_while(stmt)
 
-        if isinstance(stmt, ForEachStmt):
-            return self._eval_foreach(stmt)
 
         if isinstance(stmt, (BreakStmt, ContinueStmt)):
             word = "break" if isinstance(stmt, BreakStmt) else "continue"
@@ -4436,20 +4357,128 @@ class Evaluator:
                 raise _BreakSignal(stmt.label)
             raise _ContinueSignal(stmt.label)
 
-        if isinstance(stmt, MatchStmt):
-            return self._eval_match(stmt)
 
-        if isinstance(stmt, CatchStmt):
-            return self._eval_catch(stmt)
 
-        if isinstance(stmt, ReturnStmt):
-            if stmt.value is not None:
-                value = self.eval_expr(stmt.value)
-            else:
-                value = none()
-            raise _ReturnSentinel(value)
 
         return none()
+
+
+    def _es_ExpectStmt(self, stmt):
+        pos = getattr(stmt, "pos", None)
+        return self._eval_expect(stmt)
+
+    def _es_VarDef(self, stmt):
+        pos = getattr(stmt, "pos", None)
+        if stmt.type_annotation is not None:
+            check_bootstrap_type(stmt.type_annotation,
+                                 f"'{stmt.name}'")
+        if is_type_name(stmt.name):
+            raise TypeError(
+                f"'{stmt.name}' names a type and cannot name a variable")
+        if stmt.name == DISCARD_NAME:
+            # `let _ := expr` discards too, so that a value can be
+            # thrown away without inventing a name for it.
+            self.eval_expr(stmt.init_expr)
+            return none()
+        if stmt.name in self._frozen_vars:
+            kind = self._frozen_vars[stmt.name]
+            if kind == "foreach":
+                self._warnings.append(
+                    f"redefinition of foreach variable '{stmt.name}'")
+            elif not stmt.is_const:
+                raise TypeError(
+                    f"cannot redefine {kind} variable '{stmt.name}'")
+        value = self.eval_expr(stmt.init_expr)
+        if stmt.type_annotation is None:
+            # Naming a value settles it, and without a type written
+            # down a number settles on `int` or `float` -- neither
+            # of which the bootstrap provides.
+            check_binding_settles(value, stmt.name)
+            check_bootstrap_binding(value, stmt.name)
+            value = settle_untyped(value)
+        unit = None
+        if stmt.unit_spec is not None:
+            from interp.units import eval_unit_formula
+            unit = eval_unit_formula(stmt.unit_spec)
+        if stmt.type_annotation is not None \
+                and not isinstance(stmt.init_expr, ArrayAlloc):
+            # An array declaration writes its shape in brackets that
+            # the annotation does not carry, and the allocation has
+            # already measured the value against the whole of it.
+            # Coercing again here would meet the element type alone
+            # and take an array for it.
+            ann = stmt.type_annotation
+            if self._generic_map and is_generic_type(ann):
+                ann = _substitute_generics(ann, self._generic_map)
+            # The binding states a unit as well as a type, so the
+            # type is what each number is held in and the unit is
+            # what it counts.  For an array that means the
+            # elements: a unit around the container is a value
+            # nothing can read an element out of.
+            value = coerce_to_type(value, ann, unit, self._mk_int)
+        else:
+            # An allocation has already measured the value against
+            # the whole of its type, so only the unit is left.
+            value = apply_unit(value, unit, self._mk_int)
+        self.env.define(stmt.name, value,
+                        Decl(self._declared_type_of(stmt, value), unit))
+        if not self._bind_reshape_access(stmt):
+            if stmt.is_const:
+                self._frozen_vars[stmt.name] = "let"
+        return none()
+
+    def _es_DestructureDef(self, stmt):
+        pos = getattr(stmt, "pos", None)
+        return self._eval_destructure(stmt)
+
+    def _es_SumTypeDef(self, stmt):
+        pos = getattr(stmt, "pos", None)
+        register_sum_type(stmt.name, stmt.alternatives)
+        return none()
+
+    def _es_TypeDef(self, stmt):
+        pos = getattr(stmt, "pos", None)
+        target = stmt.target
+        if self._generic_map and is_generic_type(target):
+            target = _substitute_generics(target, self._generic_map)
+        register_type_alias(stmt.name, target)
+        return none()
+
+    def _es_ExprStmt(self, stmt):
+        pos = getattr(stmt, "pos", None)
+        result = self.eval_expr(stmt.expr)
+        if isinstance(result, LambdaValue):
+            self._warnings.append(
+                "lambda value is not used (not assigned or returned)")
+        return result
+
+    def _es_IfStmt(self, stmt):
+        pos = getattr(stmt, "pos", None)
+        return self._eval_if(stmt)
+
+    def _es_WhileStmt(self, stmt):
+        pos = getattr(stmt, "pos", None)
+        return self._eval_while(stmt)
+
+    def _es_ForEachStmt(self, stmt):
+        pos = getattr(stmt, "pos", None)
+        return self._eval_foreach(stmt)
+
+    def _es_MatchStmt(self, stmt):
+        pos = getattr(stmt, "pos", None)
+        return self._eval_match(stmt)
+
+    def _es_CatchStmt(self, stmt):
+        pos = getattr(stmt, "pos", None)
+        return self._eval_catch(stmt)
+
+    def _es_ReturnStmt(self, stmt):
+        pos = getattr(stmt, "pos", None)
+        if stmt.value is not None:
+            value = self.eval_expr(stmt.value)
+        else:
+            value = none()
+        raise _ReturnSentinel(value)
 
     def _eval_if(self, node: IfStmt):
         """Evaluate an if/elif/else statement."""
@@ -6220,15 +6249,30 @@ class Evaluator:
                 raise TypeError(
                     f"{func.name}: parameter '{param_name}' is by-value, "
                     f"caller must not pass a reference")
-            arg_value = deep_copy_value(arg_value)
-            # The copy takes the parameter's shape: a dynamically-sized
-            # parameter yields a dynamic array whatever it was given, as
-            # `let d : mut i32[] = f` does.
-            if param_type is not None and isinstance(arg_value, ObjectValue) \
+            if param_name in func.param_muts:
+                arg_value = deep_copy_value(arg_value)
+                # The copy takes the parameter's shape: a dynamically-
+                # sized parameter yields a dynamic array whatever it was
+                # given, as `let d : mut i32[] = f` does.
+                if param_type is not None and isinstance(arg_value, ObjectValue) \
+                        and isinstance(arg_value.obj, ArrayValue):
+                    declared = _parse_array_type(param_type)
+                    if declared is not None:
+                        arg_value.obj.fixed_size = declared[1][0]
+            elif isinstance(arg_value, ObjectValue) \
                     and isinstance(arg_value.obj, ArrayValue):
-                declared = _parse_array_type(param_type)
-                if declared is not None:
-                    arg_value.obj.fixed_size = declared[1][0]
+                # A by-value parameter that cannot be written through
+                # may alias the caller's array -- every write path is
+                # refused -- so the element-by-element copy bought
+                # nothing but the time it took, which for the compiler
+                # compiling itself was the input's length at every
+                # call.  Only a shape change still copies.
+                if param_type is not None:
+                    declared = _parse_array_type(param_type)
+                    if declared is not None \
+                            and arg_value.obj.fixed_size != declared[1][0]:
+                        arg_value = deep_copy_value(arg_value)
+                        arg_value.obj.fixed_size = declared[1][0]
             param_unit = None
             if param_name in func.param_units:
                 from interp.units import eval_unit_formula
@@ -6694,4 +6738,21 @@ _EXPR_DISPATCH = {
     FoldExpr: Evaluator._ee_FoldExpr,
     MapExpr: Evaluator._ee_MapExpr,
     ReshapeExpr: Evaluator._ee_ReshapeExpr,
+}
+
+
+# Statement dispatch, the same one-probe shape as expressions.
+_STMT_DISPATCH = {
+    ExpectStmt: Evaluator._es_ExpectStmt,
+    VarDef: Evaluator._es_VarDef,
+    DestructureDef: Evaluator._es_DestructureDef,
+    SumTypeDef: Evaluator._es_SumTypeDef,
+    TypeDef: Evaluator._es_TypeDef,
+    ExprStmt: Evaluator._es_ExprStmt,
+    IfStmt: Evaluator._es_IfStmt,
+    WhileStmt: Evaluator._es_WhileStmt,
+    ForEachStmt: Evaluator._es_ForEachStmt,
+    MatchStmt: Evaluator._es_MatchStmt,
+    CatchStmt: Evaluator._es_CatchStmt,
+    ReturnStmt: Evaluator._es_ReturnStmt,
 }
