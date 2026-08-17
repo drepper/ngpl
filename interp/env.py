@@ -29,6 +29,9 @@ class Decl:
         return self.type_name is None and self.unit is None
 
 
+_MISSING = object()
+
+
 class Env:
     """Variable environment with nested scopes.
 
@@ -117,9 +120,11 @@ class Env:
         Raises:
             KeyError: if the name is not found in any scope.
         """
-        for frame in reversed(self._frames):
-            if name in frame:
-                return frame[name]
+        frames = self._frames
+        for i in range(len(frames) - 1, -1, -1):
+            v = frames[i].get(name, _MISSING)
+            if v is not _MISSING:
+                return v
         # Check parent environment (for imported modules).
         if self._parent is not None:
             return self._parent.lookup(name)

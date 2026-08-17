@@ -1752,13 +1752,23 @@ def mk_str(value):
 
 
 def mk_bool(value):
-    """Create a BoolValue."""
-    return BoolValue(value)
+    """The BoolValue for a truth: two of them serve every answer."""
+    return TRUE_VALUE if value else FALSE_VALUE
+
+
+TRUE_VALUE = BoolValue(True)
+FALSE_VALUE = BoolValue(False)
+
+
+_NONE_VALUE = None
 
 
 def none():
     """Get the singleton NoneValue."""
-    return NoneValue()
+    global _NONE_VALUE
+    if _NONE_VALUE is None:
+        _NONE_VALUE = NoneValue()
+    return _NONE_VALUE
 
 
 def some(value):
@@ -2371,6 +2381,22 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
         elif tv is CharValue:
             if param_type == "char":
                 return value
+        elif tv is ObjectValue:
+            o = value.obj
+            to = type(o)
+            if to is StructInstance:
+                # a struct argument meeting its own struct's name
+                if o.struct_type.name == param_type:
+                    return value
+            elif to is ArrayValue:
+                # an array already measured as T[] meeting T[]
+                et = o.element_type
+                if et is not None and o.fixed_size is None \
+                        and o.element_unit is None \
+                        and len(param_type) == len(et) + 2 \
+                        and param_type.startswith(et) \
+                        and param_type.endswith("[]"):
+                    return value
     param_type = resolve_type_alias(param_type)
     if is_generic_type(param_type) and _parse_array_type(param_type) is None \
             and parse_tuple_type(param_type) is None:

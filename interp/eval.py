@@ -133,7 +133,7 @@ from interp.value import (
     check_bootstrap_binding,
     UNTYPED, is_unwidthed, settle_untyped, apply_unit, convert_unit_value,
     _scalar_kind_mismatch,
-    CharValue, check_code_point,
+    CharValue, check_code_point, TRUE_VALUE, FALSE_VALUE,
     UnitValue, RefValue, Reference, ElementRef, Iterator, ArrayIterator,
     deep_copy_value, register_type_alias, DISCARD_NAME,
     register_sum_type, sum_type_alternatives, sum_type_admits,
@@ -1573,6 +1573,9 @@ class Evaluator:
 
     def _op_eq(self, left, right):
         """Equality comparison."""
+        if type(left) is IntValue and type(right) is IntValue \
+                and left.width == right.width:
+            return TRUE_VALUE if left.value == right.value else FALSE_VALUE
         self._reject_mixed_optional(left, right, "=")
         # Two optionals are compared by shape first and contents second,
         # so that a present-but-empty optional and an absent one are
@@ -4943,7 +4946,13 @@ class Evaluator:
         if isinstance(val, RangeValue):
             return [mk_int(i) for i in val.to_list()]
         if isinstance(val, ObjectValue) and isinstance(val.obj, ArrayValue):
-            return val.obj.values()
+            arr = val.obj
+            if arr._backing is None:
+                # the live list, not a copy: walking a large array is
+                # most of what large programs do, and the copy cost the
+                # array's length at every loop
+                return arr.elements
+            return arr.values()
         if isinstance(val, ObjectValue) and isinstance(val.obj, HashValue):
             # An entry is its key and what is held against it, which is
             # a pair -- so `foreach (k, v) := d` names both halves the
