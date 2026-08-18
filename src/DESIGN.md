@@ -311,9 +311,25 @@ Attempt 3 grows core-1 to **core-2** with structs:
   `→ ∅` lambda parses (so an @expect may hold one) but refuses.
   `generate(f, r)` maps a range through any one-parameter function
   value into a fresh array, reusing the range materializer.
-  Refused by name: currying (fewer arguments than parameters),
-  parameters beyond five (the box must ride a register), container
-  captures, and impure functions as values.
+  Refused by name: parameters beyond five (the box must ride a
+  register), container captures, and impure functions as values.
+- **currying**: fewer arguments than parameters answers a partial —
+  another closure box, holding a per-site shim's address, the bound
+  values, and (when the target is itself a function value) the
+  source box.  The shim receives the remaining arguments, unparks
+  the bound ones in front, and calls on — directly for a named
+  target, indirectly through the source box otherwise, which is
+  what lets partials of partials compose without the shim knowing
+  what it wraps.  An empty application answers the box unchanged
+  (boxes are immutable), and `f()` on a named function is a
+  zero-bound partial through the same path.  `(expr)(args)` applies
+  any function-valued expression, so `f(1)(2)(3)` chains.  The
+  chase fixed two latent bugs: `intern` on a program with no string
+  literal walked `0…⁻1` downward into an empty array, and a
+  synthesized lambda's prologue could overwrite the incoming box
+  with a parameter whose checker slot landed on the box's register
+  cell — everything incoming is parked in fresh temporaries first
+  now.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's

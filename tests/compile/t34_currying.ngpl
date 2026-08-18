@@ -1,0 +1,29 @@
+fn f(a : i32, b : i32, c : i32) -> i32:
+    return a + b + c
+
+fn multiply(a : i32, b : i32) -> i32:
+    return a × b
+
+@impure
+@start
+fn main():
+    let f1 := f(1)
+    let f11 := f1()
+    std.println("{}", f11(2, 3))
+    let f12 := f1(2)
+    std.println("{}", f12(3))
+    let z := f()
+    std.println("{}", z(1, 2, 3))
+    let tripled := generate(multiply(3), 1i32…5i32)
+    std.println("{} {} {}", #tripled, tripled[0], tripled[4])
+    let lam := λx : i64, y : i64 → i64: x × 10 + y
+    let lam7 := lam(7)
+    std.println("{}", lam7(3))
+    let lam70 := lam7()
+    std.println("{}", lam70(4))
+    let n : i64 = 5
+    let capped := λx : i64, y : i64 |n| → i64: x + y + n
+    let c8 := capped(8)
+    std.println("{}", c8(2))
+    let deep := f(1)(2)
+    std.println("{}", deep(3))

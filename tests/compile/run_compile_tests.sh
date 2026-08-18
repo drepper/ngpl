@@ -99,6 +99,7 @@ done
 # ---------------------------------------------------------------------------
 shared_tests=(
     test_concat
+    test_generate
     test_if
     test_iterator
     test_noreturn

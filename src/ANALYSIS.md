@@ -67,9 +67,13 @@ foreach header always used, `⍴` fillers that materialize and cycle
 — and lambdas followed in the next batch: λ literals with by-value
 captures, named functions as values, closure boxes with the code
 address in slot 0, indirect calls, and `generate` over ranges, all
-conformant byte for byte on the first probe run.  test_generate
-now stands one wall away: currying (`multiply(3)` as generate's
-mapper), with matrix column selections holding test_matrix_param.
+conformant byte for byte on the first probe run.  Currying
+followed at once — a partial is another closure box holding a
+per-site shim, the bound values and the source box, so partials of
+partials compose with no shim knowing what it wraps — and
+test_generate flipped whole as the ninth shared file.  Matrix
+column selections still hold test_matrix_param, and test_lambda
+leans on generic `T'` parameters and `@replaceable`.
 The interpreter's `println` of a range leaked the implementation's
 `RangeValue(3…7)` spelling and now answers the language's `3…7`.  The batch also caught a quiet
 acceptance bug through self-hosting: the bootstrap reserves every
