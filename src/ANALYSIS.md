@@ -139,6 +139,29 @@ a routine emitted out of turn stops the compiler instead of
 answering as some other routine.  The seal was checked in a live
 process, where the relro page reads `r--p` while `@start` runs and
 the allocator's page beside it stays `rw-p`.
+
+The images then gained a symbol table, and with it names: every
+function is called by the normalized spelling of its signature, and
+a named type by its own name and a hash of its definition, so
+`nm` on the compiler shows its 358 functions with its own
+`Ast#5e2a2a627f6130fe` and `Toks#2f5dc6c197ec76b9` among them.  The
+hash is deep — changing a struct a field reaches through changes
+the hash of the struct that reaches it — and terminates on a
+definition that refers to itself.
+
+Two divergences surfaced while writing it, both in the direction
+that matters.  ngplc accepts `plain + ptrdiff` and `plain < ptrdiff`
+where the bootstrap refuses both ("cannot + typed integer i64
+without unit with unit ptrdiff"), so the compiler is **more**
+permissive than the authority on unit arithmetic — the forbidden
+direction, and the first such gap this project has found rather
+than reasoned about.  It went unnoticed because ngplc's own source
+relied on the laxity in exactly the lines that provoked it.  Second,
+the bootstrap flattens one level of re-borrow but not two: a
+`&mut u8[]` handed on twice arrives as a `RefValue` with no methods.
+Both are recorded rather than fixed here; the first is a real
+conformance bug and wants its own batch, since tightening it will
+break every line of the compiler that leaned on it.
 The interpreter's `println` of a range leaked the implementation's
 `RangeValue(3…7)` spelling and now answers the language's `3…7`.  The batch also caught a quiet
 acceptance bug through self-hosting: the bootstrap reserves every

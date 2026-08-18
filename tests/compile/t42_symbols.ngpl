@@ -1,0 +1,74 @@
+// core-2: what a function is called in the object file is the
+// normalized spelling of its signature -- no parameter names, the
+// types that are the signature, and a named type carrying a hash of
+// what it is defined to be.  @export says a symbol is one others may
+// link against; everything else is the program's own business.
+//
+// None of that is visible from inside the language, which is why this
+// asks only that the program still means what it meant: the signatures
+// below are here to be spelled, and the answers are here to be checked.
+
+struct Point:
+    x : i64
+    y : i64
+
+// the same shape under another name, and another set of field names
+struct Pair:
+    a : i64
+    b : i64
+
+// a definition that refers to itself is still one definition
+struct Rec:
+    v : i64
+    next : Rec?
+
+@export
+fn distance2(p : &Point, q : &Point) -> i64:
+    return (p.x - q.x) × (p.x - q.x) + (p.y - q.y) × (p.y - q.y)
+
+fn pair_sum(p : &Pair) -> i64:
+    return p.a + p.b
+
+fn depth(r : &Rec) -> i64:
+    match r.next:
+        ∃(n):
+            return 1 + depth(&n)
+        ∅:
+            return 1
+
+@export
+fn every_kind(a : i32, b : u8, c : bool, d : str, e : char) -> i64:
+    let n : mut i64 = a
+    n ← n + b
+    n ← n + (1 if c else 0)
+    n ← n + @dropunit(#d)
+    n ← n + e.ord()
+    return n
+
+fn containers(v : &i64[], m : i32[,], h : &std.hash(str, i64), label : str) -> i64:
+    return @dropunit(#v) + @dropunit(#m) + @dropunit(#h) + @dropunit(#label)
+
+fn optionals(o : i64?, s : str?) -> i64?:
+    let base : i64 = o ?? 0
+    return base + @dropunit(#(s ?? ""))
+
+fn nothing():
+    ∅
+
+@impure
+@start
+fn main():
+    let p := Point{x: 3, y: 4}
+    let q := Point{x: 0, y: 0}
+    std.println("{}", distance2(&p, &q))
+    let pr := Pair{a: 20, b: 22}
+    std.println("{}", pair_sum(&pr))
+    let r := Rec{v: 1, next: ∃(Rec{v: 2, next: ∅})}
+    std.println("{}", depth(&r))
+    std.println("{}", every_kind(10i32, 5u8, true, "abc", 'A'))
+    let v : i64[] = [1, 2]
+    let m : i32[,] = [[1, 2, 3], [4, 5, 6]]
+    let h : std.hash(str, i64) = (⸨"k": 7⸩)
+    std.println("{}", containers(&v, m, &h, "xy"))
+    std.println("{} {}", optionals(∃(5), ∃("ab")) ?? ⁻1, optionals(∅, ∅) ?? ⁻1)
+    nothing()

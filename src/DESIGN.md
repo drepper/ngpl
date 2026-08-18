@@ -441,6 +441,30 @@ Attempt 3 grows core-1 to **core-2** with structs:
   the kernel's `AT_PHDR` point at something.  Where a global lives
   is a compile-time map consulted at every load and store, so the
   three kinds cost nothing to tell apart at run time.
+- **a symbol table**: the image now carries `.symtab`, `.strtab` and
+  `.shstrtab` with section headers for `.text`, `.rodata` and
+  `.data`, so `nm`, `objdump` and a profiler can say what code
+  belongs to what.  Nothing has to be mangled into an older
+  convention -- the language starts from scratch -- so a name is the
+  normalized spelling of the signature itself: `many(i32, u8, bool,
+  str, char) -> i64`.  Parameter names are a reader's business and
+  are left out; the types that *are* the signature are kept, spelled
+  the way the language spells them (`&i64[]`, `i32[,]`,
+  `std.hash(str, i64)`, `str?`, `i64` with its unit, and the empty
+  set for nothing).  A named type carries a hash of what it is
+  defined to be -- `Point#fdbb58f9c5cba14c` -- taken as FNV-1a over
+  a normalized definition: the name, then each field's name and type
+  in order, with a field's own struct type spelled the same way
+  recursively.  So renaming a field, changing one's type, or
+  changing a struct a field reaches through all change the hash,
+  while a definition that refers to itself contributes its bare name
+  the second time round and the spelling terminates.  Every function
+  is a symbol, local unless `@export` says otherwise; the entry
+  point, the runtime's routines and the compiler's own synthesized
+  functions are named as locals too, so no part of the text is
+  anonymous.  A symbol table names its locals before its globals and
+  says where the globals begin, which is what the two-pass build is
+  for.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's

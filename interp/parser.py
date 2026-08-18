@@ -334,6 +334,7 @@ class Parser:
         is_test = False
         is_flag = False
         is_replaceable = False
+        is_export = False
         is_impure = False
         is_listable = False
         is_noreturn = False
@@ -356,6 +357,13 @@ class Parser:
             elif self._check("REPLACEABLE"):
                 self._eat("REPLACEABLE")
                 is_replaceable = True
+                self._try_eat("NEWLINE")
+            elif self._check("EXPORT"):
+                # What a compiler writes into the object file under a
+                # name others may link against.  The interpreter links
+                # nothing, so it notes the intent and runs on.
+                self._eat("EXPORT")
+                is_export = True
                 self._try_eat("NEWLINE")
             elif self._check("TEST"):
                 self._eat("TEST")
@@ -481,6 +489,7 @@ class Parser:
                                             is_replaceable, is_impure, hint=hint,
                                             is_listable=is_listable,
                                             is_noreturn=is_noreturn,
+                                            is_export=is_export,
                                             preconditions=preconditions,
                                             postconditions=postconditions,
                                             is_comptime=is_comptime)
@@ -666,6 +675,7 @@ class Parser:
                             hint: str | None = None,
                             is_listable: bool = False,
                             is_noreturn: bool = False,
+                            is_export: bool = False,
                             preconditions: list | None = None,
                             postconditions: list | None = None,
                             keyword: str = "FN",
@@ -934,6 +944,10 @@ class Parser:
         fdef.param_positions = param_positions
         fdef.ret_type_pos = ret_type_pos
         fdef._self_is_ref = self_is_ref
+        # Noted rather than acted on: what a name is called in an
+        # object file is a compiler's business, and the interpreter
+        # builds none.
+        fdef.is_export = is_export
         return self._set_pos(fdef, kw_tok)
 
     def _parse_dotted_name(self) -> str:

@@ -62,6 +62,7 @@ KEYWORDS = {
     "enum": "ENUM",
     "flag": "FLAG",
     "replaceable": "REPLACEABLE",
+    "export": "EXPORT",
     "catch": "CATCH",
     "comptime": "COMPTIME",
     "type": "TYPE",
