@@ -348,6 +348,18 @@ Attempt 3 grows core-1 to **core-2** with structs:
   lambdas and captured functions.  Refused by name: replaceable or
   generic functions as bare values or curried, generic recursion,
   suffixes on type variables, and the empty capture list.
+- **optional answers**: a function or lambda may answer `T?` — a
+  bare value under an optional answer boxes itself at the return, ∅
+  passes as the null, and `T!` rides the same box (what an error
+  carries beyond absence is not core-2 yet).  The `?` postfix asks
+  an optional and answers the function early with ∅ when nothing is
+  there, unwrapping otherwise — inside a lambda it answers the
+  lambda, because the lambda's body lowers in its own function.  A
+  bare `÷` or `%` under `?`, or returned straight into an optional
+  answer, treats the zero divisor as ∅ and boxes the quotient —
+  the only places the subset lets division stand without `??`.
+  Functions answering optionals now travel as values, so a captured
+  `safe_div` composes with `?` inside a lambda.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's

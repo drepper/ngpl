@@ -1,0 +1,29 @@
+fn wrap_ret(x : i64) -> i64?:
+    return x + 1
+
+fn safe_div(a : i32, b : i32) -> i32?:
+    if b = 0: return ∅
+    a ÷ b
+
+fn chain(a : i64, b : i64) -> i64?:
+    let q := (a ÷ b)?
+    return q + 100
+
+@impure
+@start
+fn main():
+    std.println("{}", wrap_ret(5) ?? 0)
+    std.println("{}", safe_div(9i32, 3i32) ?? 0i32)
+    std.println("{}", safe_div(9i32, 0i32) ?? 42i32)
+    std.println("{}", chain(10, 2) ?? ⁻1)
+    std.println("{}", chain(10, 0) ?? ⁻1)
+    let f := λx : i64 → i64?: x + 1
+    std.println("{}", f(5) ?? 0)
+    let g := λx : i64 → i64?: ∅
+    std.println("{}", g(0) ?? 42)
+    let h := λa : i64, b : i64 |safe_div| → i64?: safe_div(a, b)?
+    std.println("{}", h(10, 2) ?? 0)
+    std.println("{}", h(10, 0) ?? 0)
+    let e := λa : i64, b : i64 → i64!: (a ÷ b)?
+    std.println("{}", e(10, 2) ?? ⁻1)
+    std.println("{}", e(10, 0) ?? ⁻1)

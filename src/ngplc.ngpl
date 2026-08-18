@@ -109,6 +109,7 @@ let TK_RESHAPE : i64 = 94    // ⍴
 let TK_MATCH : i64 = 38
 let TK_RESERVED : i64 = 99   // a word the bootstrap reserves and core-1 does not use
 let TK_LAMBDA : i64 = 100    // λ
+let TK_BANG : i64 = 101      // ! -- the expected suffix on a type
 
 // The keyword table: one hash probe replaces a comparison ladder.  A
 // word the bootstrap language reserves but core-1 gives no meaning is
@@ -417,6 +418,12 @@ fn ty_ref_kind(t : i64) → i64:
 fn ty_strip_ref(t : i64) → i64:
     t & 262143
 
+// a function travels as a value when its answer is a plain scalar,
+// or an optional of one -- absence rides the box either way
+fn fnval_ret_ok(r : i64) → bool:
+    let b : i64 = ty_opt_base(r) if ty_is_opt(r) else r
+    (ty_is_int(b) and ty_unit(b) = 0) or b = TY_BOOL or b = TY_CHAR or b = TY_STR
+
 // whether a name is the bootstrap's to keep: i or u and a nonzero
 // width, however written -- the bootstrap claims them all
 fn names_int_type(name : str) → bool:
@@ -558,6 +565,7 @@ fn mkcls() → i64[]:
     t[194] ← CL_MB2
     t[195] ← CL_MB2
     t[206] ← CL_MB2
+    t[33] ← 100 + TK_BANG
     t[226] ← CL_MB3
     t[58] ← CL_COLON
     t[60] ← CL_LT
@@ -1137,6 +1145,7 @@ let NK_RANGEV : i64 = 87    // a…b and a…step…b as a value: na = lo, nb = 
 let NK_LAMBDA : i64 = 88    // λ literal: na = extra [np, (tok,ty)…, ncap, tok…, ret], nb = body, nc = lambda index
 let NK_FNVAL : i64 = 89     // a named function as a value: na = fn index
 let NK_CALLV : i64 = 90     // applying a value: na = callee expr, nb = args
+let NK_TRY : i64 = 91       // e?: ∅ answers the function early, a value unwraps
 
 // std builtins reachable from core-1
 let SB_PRINTLN : i64 = 1
@@ -1477,7 +1486,9 @@ impl Parser:
             else:
                 _ ← self.eat(TK_RBRACK, "']' closing the array type")
                 base ← mk_aty(base)
-        if self.peek() = TK_QMARK:
+        if self.peek() = TK_QMARK or self.peek() = TK_BANG:
+            // T? and T!: the expected rides the optional's box; what an
+            // error carries beyond absence is not core-2 yet
             self.pos ← self.pos + 1
             if ty_is_mat(base):
                 self.err("an optional matrix is not core-2 yet")
@@ -1669,7 +1680,8 @@ impl Parser:
             self.pos ← self.pos + 1
         else:
             ret ← self.parse_type(false)
-            if not ((ty_is_int(ret) and ty_unit(ret) = 0) or ret = TY_BOOL or ret = TY_CHAR or ret = TY_STR):
+            let rb : i64 = ty_opt_base(ret) if ty_is_opt(ret) else ret
+            if not ((ty_is_int(rb) and ty_unit(rb) = 0) or rb = TY_BOOL or rb = TY_CHAR or rb = TY_STR):
                 self.err("a core-2 lambda answers a plain integer, a truth value, a character or a string")
                 return self.mknode(NK_INT, at, 0, 0, 0)
         _ ← self.eat(TK_COLON, "':' and the lambda's body")
@@ -1730,6 +1742,11 @@ impl Parser:
                 let at : i64 = self.pos
                 let coff : i64 = self.parse_args()
                 e ← self.mknode(NK_CALLV, at, e, coff, 0)
+            elif self.peek() = TK_QMARK:
+                // e?: absence answers the function early
+                let at : i64 = self.pos
+                self.pos ← self.pos + 1
+                e ← self.mknode(NK_TRY, at, e, 0, 0)
             elif self.peek() = TK_DOT:
                 let at : i64 = self.pos
                 self.pos ← self.pos + 1
@@ -2997,6 +3014,7 @@ struct Checker:
     psnp : i64[]         // … the target's full parameter count
     fdone : i64[]        // per function: 0 unchecked, 1 checked, 2 being checked
     skipfn : i64[]       // 1 where a generic was never shaped by a call
+    lam_ret : i64        // the lambda under check answers this; ⁻1 outside
 
 impl Checker:
     fn derr(&mut self, tok : i64, m : str):
@@ -3579,7 +3597,7 @@ impl Checker:
                             return
                         let cd := self.a.fns[cf × 1¤ptrdiff]
                         let cnp : i64 = self.a.extra[cd.params_off × 1¤ptrdiff]
-                        let cok : mut bool = cnp >= 1 and cnp <= 5 and ((ty_is_int(cd.ret) and ty_unit(cd.ret) = 0) or cd.ret = TY_BOOL or cd.ret = TY_CHAR or cd.ret = TY_STR) and not cd.is_impure
+                        let cok : mut bool = cnp >= 1 and cnp <= 5 and fnval_ret_ok(cd.ret) and not cd.is_impure
                         let cpts : mut i64[] = []
                         foreach cpi := 0…cnp - 1:
                             let cpty : i64 = self.a.extra[(cd.params_off + 2 + cpi × 2) × 1¤ptrdiff]
@@ -3614,17 +3632,46 @@ impl Checker:
                     _ ← self.declare(ctoks[ci × 1¤ptrdiff], ctys[ci × 1¤ptrdiff], 0)
                     // the cell keeps the outer slot: the value's source
                     self.a.extra[(loff + 2 + np9 × 2 + ci) × 1¤ptrdiff] ← couter[ci × 1¤ptrdiff]
+            let lr_saved : i64 = self.lam_ret
+            self.lam_ret ← lret
             self.check_expr(nb, lret)
+            self.lam_ret ← lr_saved
             if self.is_open(self.ty_of(nb)):
                 self.adopt(nb, lret)
             elif not self.try_fit(nb, lret):
-                self.derr(tok, "the lambda answers " ⧺ type_name(lret) ⧺ ", not " ⧺ type_name(self.ty_of(nb)))
+                // a bare value under an optional answer wraps itself
+                if not (ty_is_opt(lret) and self.try_fit(nb, ty_opt_base(lret))):
+                    self.derr(tok, "the lambda answers " ⧺ type_name(lret) ⧺ ", not " ⧺ type_name(self.ty_of(nb)))
             self.scope_floor ← floor9
             self.pop_scope()
             self.lams.push(id)
             self.lamns.push(self.nslots)
             self.nslot[id × 1¤ptrdiff] ← @dropunit(#self.lams) - 1
             self.set_type(id, mk_lty(nc))
+        elif k = NK_TRY:
+            let rw9 : i64 = self.lam_ret if self.lam_ret ≠ ⁻1 else self.a.fns[self.cur_fn × 1¤ptrdiff].ret
+            if not ty_is_opt(rw9):
+                self.derr(tok, "'?' answers ∅ early, so the function must answer an optional")
+            if self.kind_of(na) = NK_DIV or self.kind_of(na) = NK_MOD:
+                // ÷ under ? answers the quotient, or ∅ for the zero
+                let dl9 : i64 = self.a.na[na × 1¤ptrdiff]
+                let dr9 : i64 = self.a.nb[na × 1¤ptrdiff]
+                self.check_expr(dl9, TY_UNIT)
+                self.check_expr(dr9, self.ty_of(dl9))
+                if self.ty_of(dl9) = TY_UNT and self.ty_of(dr9) = TY_UNT:
+                    self.adopt(dl9, TY_I64)
+                    self.adopt(dr9, TY_I64)
+                let dt9 : i64 = self.unify_arith(self.a.ntok[na × 1¤ptrdiff], na, self.kind_of(na), self.ty_of(dl9), self.ty_of(dr9))
+                self.set_type(na, dt9 if dt9 ≠ TY_UNT else TY_I64)
+                self.set_type(id, self.ty_of(na))
+            else:
+                self.check_expr(na, TY_UNIT)
+                let ot9 : i64 = self.ty_of(na)
+                if not ty_is_opt(ot9):
+                    self.derr(tok, "'?' asks an optional; this is " ⧺ type_name(ot9))
+                    self.set_type(id, TY_I64)
+                    return
+                self.set_type(id, ty_opt_base(ot9))
         elif k = NK_RANGEV:
             self.check_expr(na, TY_UNIT)
             self.check_expr(nb, self.ty_of(na))
@@ -3825,7 +3872,7 @@ impl Checker:
                 // the function's name alone: it travels as a value
                 let fd := self.a.fns[fidx × 1¤ptrdiff]
                 let np : i64 = self.a.extra[fd.params_off × 1¤ptrdiff]
-                let ok9 : mut bool = np >= 1 and np <= 5 and ((ty_is_int(fd.ret) and ty_unit(fd.ret) = 0) or fd.ret = TY_BOOL or fd.ret = TY_CHAR or fd.ret = TY_STR) and not fd.is_impure and not fd.is_replaceable and not self.fn_is_generic(fidx)
+                let ok9 : mut bool = np >= 1 and np <= 5 and fnval_ret_ok(fd.ret) and not fd.is_impure and not fd.is_replaceable and not self.fn_is_generic(fidx)
                 let pts9 : mut i64[] = []
                 foreach pi := 0…np - 1:
                     let pty : i64 = self.a.extra[(fd.params_off + 2 + pi × 2) × 1¤ptrdiff]
@@ -4444,7 +4491,7 @@ impl Checker:
                      args_off : i64, argc : i64):
         let callee := self.a.fns[f × 1¤ptrdiff]
         let np : i64 = self.a.extra[callee.params_off × 1¤ptrdiff]
-        let ok9 : mut bool = np <= 5 and ((ty_is_int(callee.ret) and ty_unit(callee.ret) = 0) or callee.ret = TY_BOOL or callee.ret = TY_CHAR or callee.ret = TY_STR) and not callee.is_impure and not callee.is_replaceable
+        let ok9 : mut bool = np <= 5 and fnval_ret_ok(callee.ret) and not callee.is_impure and not callee.is_replaceable
         let pts9 : mut i64[] = []
         foreach pi := 0…np - 1:
             let pty : i64 = self.a.extra[(callee.params_off + 2 + pi × 2) × 1¤ptrdiff]
@@ -5111,6 +5158,21 @@ impl Checker:
         elif ty_ref_kind(pt) = 0 and self.smut[s × 1¤ptrdiff] = 0:
             self.derr(tok, "'" ⧺ name ⧺ "' is not mut, so nothing may change it")
 
+    // a bare ÷ or % answering into an optional: the zero divisor is ∅
+    fn check_retdiv(&mut self, na : i64, want : i64):
+        let base : i64 = ty_opt_base(want)
+        let dl : i64 = self.a.na[na × 1¤ptrdiff]
+        let dr : i64 = self.a.nb[na × 1¤ptrdiff]
+        self.check_expr(dl, base)
+        self.check_expr(dr, base)
+        if self.ty_of(dl) = TY_UNT and self.ty_of(dr) = TY_UNT:
+            self.adopt(dl, base if ty_is_int(base) else TY_I64)
+            self.adopt(dr, base if ty_is_int(base) else TY_I64)
+        let t : i64 = self.unify_arith(self.a.ntok[na × 1¤ptrdiff], na, self.kind_of(na), self.ty_of(dl), self.ty_of(dr))
+        self.set_type(na, t if t ≠ TY_UNT else TY_I64)
+        if self.ty_of(na) ≠ base:
+            self.derr(self.a.ntok[na × 1¤ptrdiff], "the function answers " ⧺ type_name(want) ⧺ ", but the division works " ⧺ type_name(self.ty_of(na)))
+
     fn check_default(&mut self, id : i64, tok : i64, na : i64, nb : i64, want : i64):
         let ik : i64 = self.kind_of(na)
         if ik = NK_DIV or ik = NK_MOD:
@@ -5563,6 +5625,8 @@ impl Checker:
             if na = ⁻1:
                 if want ≠ TY_UNIT:
                     self.derr(tok, "the function answers " ⧺ type_name(want) ⧺ "; a bare return does not")
+            elif ty_is_opt(want) and (self.kind_of(na) = NK_DIV or self.kind_of(na) = NK_MOD):
+                self.check_retdiv(na, want)
             else:
                 self.check_expr(na, want)
                 if want = TY_UNIT:
@@ -5570,7 +5634,8 @@ impl Checker:
                 elif self.is_open(self.ty_of(na)):
                     self.adopt(na, want)
                 elif not self.try_fit(na, want):
-                    self.derr(tok, "the function answers " ⧺ self.sname_of(want) ⧺ ", not " ⧺ self.sname_of(self.ty_of(na)))
+                    if not (ty_is_opt(want) and self.try_fit(na, ty_opt_base(want))):
+                        self.derr(tok, "the function answers " ⧺ self.sname_of(want) ⧺ ", not " ⧺ self.sname_of(self.ty_of(na)))
         elif k = NK_BREAK or k = NK_CONTINUE:
             if self.loop_depth = 0:
                 self.derr(tok, "there is no loop here to act on")
@@ -5583,12 +5648,15 @@ impl Checker:
                 self.a.fns[self.cur_fn × 1¤ptrdiff].ret ← self.ty_of(na)
                 return
             let want : i64 = self.a.fns[self.cur_fn × 1¤ptrdiff].ret
-            if trailing and want ≠ TY_UNIT:
+            if trailing and want ≠ TY_UNIT and ty_is_opt(want) and (self.kind_of(na) = NK_DIV or self.kind_of(na) = NK_MOD):
+                self.check_retdiv(na, want)
+            elif trailing and want ≠ TY_UNIT:
                 self.check_expr(na, want)
                 if self.is_open(self.ty_of(na)):
                     self.adopt(na, want)
                 elif not self.try_fit(na, want):
-                    self.derr(tok, "the function answers " ⧺ self.sname_of(want) ⧺ ", but its last expression is " ⧺ self.sname_of(self.ty_of(na)))
+                    if not (ty_is_opt(want) and self.try_fit(na, ty_opt_base(want))):
+                        self.derr(tok, "the function answers " ⧺ self.sname_of(want) ⧺ ", but its last expression is " ⧺ self.sname_of(self.ty_of(na)))
             else:
                 self.check_expr(na, TY_UNIT)
                 let t : i64 = self.ty_of(na)
@@ -5836,7 +5904,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
                                    in_contract: false,
                                    scope_floor: 0, lams: [], lamns: [],
                                    psfn: [], psk: [], psnp: [],
-                                   fdone: [], skipfn: []})
+                                   fdone: [], skipfn: [], lam_ret: ⁻1})
     if #a.structs > 0:
         foreach i := 0…#a.structs - 1:
             let sd := a.structs[i]
@@ -6292,6 +6360,32 @@ impl Lower:
             self.ir(IR_FADDR, na, 0, 0, av9f, 0)
             self.ir(IR_FSTO, d9f, 0, av9f, 0, 0)
             return d9f
+        if k = NK_TRY:
+            if self.kof(na) = NK_DIV or self.kof(na) = NK_MOD:
+                // the zero divisor answers the function early with ∅
+                let av9t : i64 = self.lower_expr(self.a.na[na × 1¤ptrdiff])
+                let bv9t : i64 = self.lower_expr(self.a.nb[na × 1¤ptrdiff])
+                let lok9 : i64 = self.label()
+                self.ir(IR_JNZ, bv9t, lok9, 0, 0, 0)
+                let zn9 : i64 = self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, zn9, 0)
+                self.lower_ret(zn9)
+                self.ir(IR_LABEL, lok9, 0, 0, 0, 0)
+                let zd9 : i64 = self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, zd9, 0)
+                let dq9 : i64 = self.tmp()
+                self.ir(IR_DIVV if self.kof(na) = NK_DIV else IR_MODD, av9t, bv9t, zd9, dq9, width_of(self.tof(na)))
+                return dq9
+            let bx9 : i64 = self.lower_expr(na)
+            let lok9b : i64 = self.label()
+            self.ir(IR_JNZ, bx9, lok9b, 0, 0, 0)
+            let zn9b : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, zn9b, 0)
+            self.lower_ret(zn9b)
+            self.ir(IR_LABEL, lok9b, 0, 0, 0, 0)
+            let du9 : i64 = self.tmp()
+            self.ir(IR_FLD, bx9, 0, 0, du9, 0)
+            return du9
         if k = NK_RANGEV:
             let lov9 : i64 = self.lower_expr(na)
             let hiv9 : i64 = self.lower_expr(nb)
@@ -7174,6 +7268,36 @@ impl Lower:
             self.lower_stmt(s, trailing, ret_ty)
             i ← i + 1
 
+    // what a return hands over: a bare value under an optional answer
+    // boxes itself, and a bare ÷ or % answers ∅ for the zero divisor
+    fn lower_ret_value(&mut self, na : i64):
+        if ty_is_opt(self.cur_ret) and (self.kof(na) = NK_DIV or self.kof(na) = NK_MOD) and not ty_is_opt(self.tof(na)):
+            let av9 : i64 = self.lower_expr(self.a.na[na × 1¤ptrdiff])
+            let bv9 : i64 = self.lower_expr(self.a.nb[na × 1¤ptrdiff])
+            let lok9 : i64 = self.label()
+            self.ir(IR_JNZ, bv9, lok9, 0, 0, 0)
+            let zn9 : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, zn9, 0)
+            self.lower_ret(zn9)
+            self.ir(IR_LABEL, lok9, 0, 0, 0, 0)
+            let zd9 : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, zd9, 0)
+            let q9 : i64 = self.tmp()
+            self.ir(IR_DIVV if self.kof(na) = NK_DIV else IR_MODD, av9, bv9, zd9, q9, width_of(self.tof(na)))
+            let bb9 : i64 = self.tmp()
+            self.ir(IR_SNEW, 1, 0, 0, bb9, 0)
+            self.ir(IR_FSTO, bb9, 0, q9, 0, 0)
+            self.lower_ret(bb9)
+            return
+        let v : i64 = self.lower_expr(na)
+        if ty_is_opt(self.cur_ret) and not ty_is_opt(self.tof(na)):
+            let b9 : i64 = self.tmp()
+            self.ir(IR_SNEW, 1, 0, 0, b9, 0)
+            self.ir(IR_FSTO, b9, 0, v, 0, 0)
+            self.lower_ret(b9)
+            return
+        self.lower_ret(v)
+
     fn lower_ret(&mut self, v : i64):
         if self.post_label ≠ ⁻1:
             self.ir(IR_MOV, v, 0, 0, self.res_vreg, 0)
@@ -7225,16 +7349,14 @@ impl Lower:
             _ ← self.lower_expr(na)
         elif k = NK_EXPRSTMT:
             if trailing and ret_ty ≠ TY_UNIT:
-                let v : i64 = self.lower_expr(na)
-                self.lower_ret(v)
+                self.lower_ret_value(na)
             else:
                 _ ← self.lower_expr(na)
         elif k = NK_RETURN:
             if na = ⁻1:
                 self.ir(IR_RET, ⁻1, 0, 0, 0, 0)
             else:
-                let v : i64 = self.lower_expr(na)
-                self.lower_ret(v)
+                self.lower_ret_value(na)
         elif k = NK_IF:
             if self.try_jtab(sid, ret_ty):
                 return
@@ -7702,8 +7824,16 @@ fn lower_lambda_fn(lw : &mut Lower, a : Ast, chk : Chk, j : i64) → IrFn:
     while ci < ncap:
         lw.ir(IR_FLD, boxt, 1 + ci, 0, pslot0 + np + ci, 0)
         ci ← ci + 1
-    let rv : i64 = lw.lower_expr(a.nb[nid × 1¤ptrdiff])
-    lw.ir(IR_RET, rv, 0, 0, 0, 0)
+    let bodyn : i64 = a.nb[nid × 1¤ptrdiff]
+    let rv : i64 = lw.lower_expr(bodyn)
+    if ty_is_opt(ret) and not ty_is_opt(lw.tof(bodyn)):
+        // a bare value under an optional answer boxes itself
+        let bb : i64 = lw.tmp()
+        lw.ir(IR_SNEW, 1, 0, 0, bb, 0)
+        lw.ir(IR_FSTO, bb, 0, rv, 0, 0)
+        lw.ir(IR_RET, bb, 0, 0, 0, 0)
+    else:
+        lw.ir(IR_RET, rv, 0, 0, 0, 0)
     let opc : mut i64[] = []
     let iac : mut i64[] = []
     let ibc : mut i64[] = []

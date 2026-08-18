@@ -76,9 +76,12 @@ column selections still hold test_matrix_param.  Generic `T'`
 signatures and `@replaceable` followed — one shape per program,
 bound by the first call, the body checked on demand with the
 caller's scopes parked; capture discipline enforced with the
-function's value-box behind the captured name — which leaves
-test_lambda standing behind optional and expected lambda returns
-(`→ i64?`, `→ i64!`) and the `?` postfix, the next wall there.
+function's value-box behind the captured name — Optional and
+expected answers followed — auto-boxing returns, the `?` early
+answer, bare division under an optional — which leaves test_lambda
+standing behind exactly one wall now: multi-statement lambda
+bodies (layout blocks, brace blocks with semicolons, early
+returns).
 The interpreter's `println` of a range leaked the implementation's
 `RangeValue(3…7)` spelling and now answers the language's `3…7`.  The batch also caught a quiet
 acceptance bug through self-hosting: the bootstrap reserves every
