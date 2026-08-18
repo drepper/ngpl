@@ -98,6 +98,18 @@ guard in one `sub rsp` is refused at compile time with the size to
 raise, which is the project's rule applied to its own code
 generation rather than to the language.  `PT_GNU_STACK` closes the
 executable-stack fallback.
+
+The process environment followed, and with it the first program
+written to be a program rather than a test: `examples/printenv.ngpl`
+is six lines, and its output matches the interpreter's and
+`/usr/bin/printenv`'s byte for byte on an environment carrying empty
+values, embedded spaces, embedded `=` and UTF-8.  The runtime
+ordering trap caught the batch once more — a routine's negative id
+is its index into `rt_off`, so a pair emitted anywhere but last
+answers as some earlier routine — which is the third time that
+particular shape has bitten in this project and an argument for
+having the emission assert the id it is filling rather than only the
+count.
 The interpreter's `println` of a range leaked the implementation's
 `RangeValue(3…7)` spelling and now answers the language's `3…7`.  The batch also caught a quiet
 acceptance bug through self-hosting: the bootstrap reserves every

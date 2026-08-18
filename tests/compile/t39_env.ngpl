@@ -1,0 +1,28 @@
+// core-2: the process environment, read the way the interpreter reads
+// it.  What the environment holds is the runner's business, so this
+// asks only what is true of any environment: that the names are there,
+// that each one has a value, that a name nobody sets has none, and
+// that has() and get() agree.
+
+@impure
+@start
+fn main():
+    let names := std.env.names()
+    std.println("{}", #names > 0)
+    // every name the environment carries answers, and answers alike
+    let all_present : mut bool = true
+    let all_named : mut bool = true
+    foreach n := names:
+        all_named ← all_named ∧ #n > 0
+        all_present ← all_present ∧ std.env.has(n) ∧ std.env.get(n) ≠ ∅
+    std.println("{} {}", all_named, all_present)
+    // a name nobody sets is absent, and the default answers for it
+    let missing := std.env.get("NGPL_NO_SUCH_VARIABLE_EXISTS")
+    std.println("{} {}", missing = ∅, std.env.has("NGPL_NO_SUCH_VARIABLE_EXISTS"))
+    std.println("{}", std.env.get("NGPL_NO_SUCH_VARIABLE_EXISTS") ?? "fallback")
+    // a name is what stands before the first '=', so no name carries one
+    let clean : mut bool = true
+    foreach n := names:
+        foreach c := n:
+            clean ← clean ∧ c ≠ '='
+    std.println("{}", clean)

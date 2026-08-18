@@ -1160,6 +1160,9 @@ let SB_CREATE : i64 = 6     // std.fs.cwd().create_file(p, mode) → File
 let SB_ALLOCATOR : i64 = 7  // std.arena.allocator()
 let SB_BYTES : i64 = 8      // std.bytes(s) → the string's bytes, u8[]
 let SB_CWD : i64 = 9        // std.fs.cwd() as a value
+let SB_ENVN : i64 = 10      // std.env.names() → str[]
+let SB_ENVG : i64 = 11      // std.env.get(name) → str?
+let SB_ENVH : i64 = 12      // std.env.has(name) → bool
 
 // the base type names, one probe instead of a ladder
 let TYNAMES : std.hash(str, i64) = (⸨
@@ -1953,6 +1956,19 @@ impl Parser:
                     self.pos ← self.pos + 1
                     let aoff : i64 = self.parse_args()
                     return self.mknode(NK_SCALL, at, SB_ARGS, aoff, 0)
+                if m = "env":
+                    _ ← self.eat(TK_DOT, "'.' after std.env")
+                    let em0 := self.ttext(self.pos)
+                    let esb : mut i64 = ⁻1
+                    if em0 = "names": esb ← SB_ENVN
+                    elif em0 = "get": esb ← SB_ENVG
+                    elif em0 = "has": esb ← SB_ENVH
+                    else:
+                        self.err("'std.env." ⧺ em0 ⧺ "' is not core-2; names(), get() and has() are")
+                        return 0
+                    self.pos ← self.pos + 1
+                    let eoff : i64 = self.parse_args()
+                    return self.mknode(NK_SCALL, at, esb, eoff, 0)
                 if m = "arena":
                     _ ← self.eat(TK_DOT, "'.' after std.arena")
                     if self.ttext(self.pos) ≠ "allocator":
@@ -4947,6 +4963,25 @@ impl Checker:
                 self.derr(tok, "reading the arguments is impure; the function wants @impure")
             self.set_type(id, mk_aty(TY_STR))
             return
+        if sb = SB_ENVN or sb = SB_ENVG or sb = SB_ENVH:
+            // the environment is the process's own, and reading it is
+            // as impure as reading the arguments
+            if not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:
+                self.derr(tok, "reading the environment is impure; the function wants @impure")
+            if sb = SB_ENVN:
+                if argc ≠ 0:
+                    self.derr(tok, "std.env.names takes nothing")
+                self.set_type(id, mk_aty(TY_STR))
+                return
+            if argc ≠ 1:
+                self.derr(tok, "std.env." ⧺ ("get" if sb = SB_ENVG else "has") ⧺ " takes the variable's name")
+            else:
+                let nv : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
+                self.check_expr(nv, TY_STR)
+                if self.ty_of(nv) ≠ TY_STR:
+                    self.derr(tok, "a variable's name is a string, not " ⧺ type_name(self.ty_of(nv)))
+            self.set_type(id, mk_oty(TY_STR) if sb = SB_ENVG else TY_BOOL)
+            return
         if sb = SB_CWD:
             // looking at a directory writes nothing; only opening and
             // creating files want @impure
@@ -6239,6 +6274,8 @@ let IR_ACAT : i64 = 95     // d ← arrays a then b, one fresh array
 let IR_SBYTES : i64 = 96   // d ← string a's bytes, a u8[]
 let IR_AREF : i64 = 97     // d ← the address of array a's element b
 let IR_DENTS : i64 = 98    // d ← the working directory's entries
+let IR_ENVN : i64 = 101    // d ← the environment's names, a str[]
+let IR_ENVG : i64 = 102    // d ← the value of the variable named a, a str?
 let IR_FADDR : i64 = 99    // d ← the code address of function a
 let IR_CALLI : i64 = 100   // d ← call the address in vreg a, args at extra b
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
@@ -6709,6 +6746,22 @@ impl Lower:
                 let d : i64 = self.tmp()
                 self.ir(IR_CONST, 0, 0, 0, d, 0)
                 return d
+            if na = SB_ENVN:
+                let d : i64 = self.tmp()
+                self.ir(IR_ENVN, 0, 0, 0, d, 0)
+                return d
+            if na = SB_ENVG or na = SB_ENVH:
+                let nv : i64 = self.lower_expr(self.a.extra[(nb + 1) × 1¤ptrdiff])
+                let d : i64 = self.tmp()
+                self.ir(IR_ENVG, nv, 0, 0, d, 0)
+                if na = SB_ENVG:
+                    return d
+                // has: the box is there, or it is not
+                let z : i64 = self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, z, 0)
+                let b : i64 = self.tmp()
+                self.ir(IR_CNE, d, z, 0, b, 64)
+                return b
             self.lower_scall(nid, tok, na, nb)
             return ⁻1
         if k = NK_MCALL:
@@ -8324,6 +8377,8 @@ let RT_ACYC : i64 = ⁻36
 let RT_ACAT : i64 = ⁻37
 let RT_SBYTES : i64 = ⁻38
 let RT_DENTS : i64 = ⁻39
+let RT_ENVN : i64 = ⁻40
+let RT_ENVG : i64 = ⁻41
 
 struct Emit:
     code : u8[]
@@ -9051,6 +9106,15 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
         elif o = IR_CHARSTR:
             em.load(R_DI, a)
             em.jglobal(232, ⁻1, RT_CHARSTR)
+            em.store(R_AX, d)
+        elif o = IR_ENVN:
+            em.jglobal(232, ⁻1, RT_ENVN)
+            em.store(R_AX, d)
+        elif o = IR_ENVG:
+            em.load(R_R11, a)
+            em.b3(73, 139, 51)                   // mov rsi, [r11]: the name's bytes
+            em.b4(73, 139, 83, 8)                // mov rdx, [r11+8]: how many
+            em.jglobal(232, ⁻1, RT_ENVG)
             em.store(R_AX, d)
         elif o = IR_ARGS:
             em.jglobal(232, ⁻1, RT_ARGS)
@@ -10570,6 +10634,115 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.b1(195)
     em.resolve_locals()
 
+    // RT_ENVN: → rax = a str[] of the environment's names, the part of
+    // each entry before its '=' -- or the whole of one that has none,
+    // as the interpreter's names() reads them
+    em.rt_off.push(em.here())
+    em.begin_fn(6)
+    em.dref(R_R11, args_off)
+    em.b4(77, 139, 107, 16)         // mov r13, [r11+16]: envp
+    em.b3(77, 49, 228)              // xor r12, r12
+    em.set_label(0)                 // Lcount
+    em.b4(75, 139, 68, 229)
+    em.b1(0)                        // mov rax, [r13+r12*8]
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(132, 1)               // je Lgot
+    em.b3(73, 255, 196)             // inc r12
+    em.jlocal(⁻1, 0)
+    em.set_label(1)                 // Lgot: r12 holds the count
+    em.b3(76, 137, 231)             // mov rdi, r12
+    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.b3(72, 137, 195)             // mov rbx, rax
+    em.b3(77, 49, 246)              // xor r14, r14
+    em.set_label(2)                 // Lloop
+    em.b3(77, 57, 244)              // cmp r12, r14
+    em.jlocal(134, 3)               // jbe Ldone
+    em.b4(79, 139, 124, 245)
+    em.b1(0)                        // mov r15, [r13+r14*8]
+    em.b3(72, 49, 201)              // xor rcx, rcx
+    em.set_label(4)                 // Lname
+    em.b4(65, 138, 4, 15)           // mov al, [r15+rcx]
+    em.b2(132, 192)                 // test al, al
+    em.jlocal(132, 5)               // je Lend
+    em.b2(60, 61)                   // cmp al, '='
+    em.jlocal(132, 5)               // je Lend
+    em.b3(72, 255, 193)             // inc rcx
+    em.jlocal(⁻1, 4)
+    em.set_label(5)                 // Lend: rcx is the name's length
+    em.b1(81)                       // push rcx
+    em.movimm(R_DI, 16)
+    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.b1(89)                       // pop rcx
+    em.b3(76, 137, 56)              // mov [rax], r15
+    em.b4(72, 137, 72, 8)           // mov [rax+8], rcx
+    em.b3(72, 139, 19)              // mov rdx, [rbx]
+    em.b4(74, 137, 4, 242)          // mov [rdx+r14*8], rax
+    em.b3(73, 255, 198)             // inc r14
+    em.jlocal(⁻1, 2)
+    em.set_label(3)                 // Ldone
+    em.b4(76, 137, 115, 8)          // mov [rbx+8], r14
+    em.b3(72, 137, 216)             // mov rax, rbx
+    em.b1(195)
+    em.resolve_locals()
+
+    // RT_ENVG: rsi = the name's bytes, rdx = how many → rax = an
+    // optional string: the box holding the value, or the null for a
+    // name the environment does not carry.  The first entry that
+    // matches answers, as getenv has it.
+    em.rt_off.push(em.here())
+    em.begin_fn(7)
+    em.b3(72, 137, 243)             // mov rbx, rsi: the name outlives the calls
+    em.b3(73, 137, 212)             // mov r12, rdx: and so does its length
+    em.dref(R_R11, args_off)
+    em.b4(77, 139, 107, 16)         // mov r13, [r11+16]: envp
+    em.b3(77, 49, 246)              // xor r14, r14
+    em.set_label(0)                 // Lentry
+    em.b4(79, 139, 124, 245)
+    em.b1(0)                        // mov r15, [r13+r14*8]
+    em.b3(77, 133, 255)             // test r15, r15
+    em.jlocal(132, 4)               // je Lnone
+    em.b3(72, 49, 201)              // xor rcx, rcx
+    em.set_label(1)                 // Lcmp
+    em.b3(76, 57, 225)              // cmp rcx, r12
+    em.jlocal(131, 2)               // jae Lsep: the name matched throughout
+    em.b4(65, 138, 4, 15)           // mov al, [r15+rcx]
+    em.b3(58, 4, 11)                // cmp al, [rbx+rcx]
+    em.jlocal(133, 3)               // jne Lnext
+    em.b3(72, 255, 193)             // inc rcx
+    em.jlocal(⁻1, 1)
+    em.set_label(2)                 // Lsep: and '=' ends it there
+    em.b4(67, 128, 60, 39)
+    em.b1(61)                       // cmp byte [r15+r12], '='
+    em.jlocal(133, 3)               // jne Lnext
+    em.b4(79, 141, 124, 39)
+    em.b1(1)                        // lea r15, [r15+r12+1]: the value
+    em.b3(72, 49, 201)              // xor rcx, rcx
+    em.set_label(5)                 // Lvlen
+    em.b4(65, 128, 60, 15)
+    em.b1(0)                        // cmp byte [r15+rcx], 0
+    em.jlocal(132, 6)               // je Lvgot
+    em.b3(72, 255, 193)             // inc rcx
+    em.jlocal(⁻1, 5)
+    em.set_label(6)                 // Lvgot
+    em.b1(81)                       // push rcx
+    em.movimm(R_DI, 16)
+    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.b1(89)                       // pop rcx
+    em.b3(76, 137, 56)              // mov [rax], r15
+    em.b4(72, 137, 72, 8)           // mov [rax+8], rcx
+    em.b3(73, 137, 199)             // mov r15, rax: the descriptor
+    em.movimm(R_DI, 8)
+    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.b3(76, 137, 56)              // mov [rax], r15: and the box holds it
+    em.b1(195)
+    em.set_label(3)                 // Lnext
+    em.b3(73, 255, 198)             // inc r14
+    em.jlocal(⁻1, 0)
+    em.set_label(4)                 // Lnone
+    em.b2(49, 192)                  // xor eax, eax
+    em.b1(195)
+    em.resolve_locals()
+
 // ---------------------------------------------------------------------------
 // The ELF executable: text R+X, rodata R, data R+W
 // ---------------------------------------------------------------------------
@@ -10972,6 +11145,12 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
     em.b4(72, 141, 68, 36)
     em.b1(8)                        // lea rax, [rsp+8]
     em.b4(73, 137, 67, 8)           // mov [r11+8], rax: argv
+    // the environment block follows argv and the NULL that ends it
+    em.b3(72, 139, 12)              // mov rcx, [rsp]: argc
+    em.b1(36)
+    em.b4(72, 141, 68, 200)         // lea rax, [rax+rcx*8+8]
+    em.b1(8)
+    em.b4(73, 137, 67, 16)          // mov [r11+16], rax: envp
     // The stack the program will stand on: one reservation of
     // guard + stack bytes, unreadable throughout, of which the upper
     // stack bytes are then opened for reading and writing.  What is
@@ -11067,7 +11246,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
             emit_fn(&em, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs)
     // every function was emitted and left its offset behind
     assert(@dropunit(#em.fn_off) = nfns + g1 + 2 + @dropunit(#chk.lams) + @dropunit(#chk.psfn), "one code offset per function")
-    assert(#em.rt_off = 39, "every runtime routine in place")
+    assert(#em.rt_off = 41, "every runtime routine in place")
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:
         foreach i := 0…#em.cf_pos - 1:
@@ -11123,7 +11302,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
     if nglobals > 0:
         foreach i := 0…#chk.gvals - 1:
             push64(&data, chk.gvals[i])
-    foreach _ := 1…32:
+    foreach _ := 1…40:
         data.push(0)
     // A frame deeper than the guard could be claimed in one 'sub rsp'
     // that steps clean over it, and the overflow would land on

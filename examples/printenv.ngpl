@@ -1,0 +1,9 @@
+// printenv -- the process environment, one variable to a line, in the
+// order the kernel handed it over.  A variable set to nothing is still
+// set, and prints as its name and an empty value.
+
+@impure
+@start
+fn main():
+    foreach name := std.env.names():
+        std.println("{}={}", name, std.env.get(name) ?? "")

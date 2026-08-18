@@ -396,6 +396,21 @@ Attempt 3 grows core-1 to **core-2** with structs:
   (read and write, pointedly not execute; its `p_memsz` records the
   requested size), without which the kernel falls back to an
   executable stack.
+- **the process environment**: `std.env.names()`, `std.env.get(name)`
+  and `std.env.has(name)`, all three impure as reading the arguments
+  is.  `_start` keeps `envp` beside argc and argv — it is argv plus
+  the NULL that ends it — before the stack moves, so the block and
+  the bytes it points at outlive the move.  Two runtime routines
+  carry it: one walks the block making a `str[]` of the names, each
+  the part before the first `=` (or the whole entry, for one that
+  has none, as the interpreter reads them); the other walks it
+  looking for a name, answering the box holding the value or the
+  null, first match winning as `getenv` has it.  `has` needs no
+  routine of its own — it is that answer against zero — and
+  `std.env.count()` is refused by name, since its `count` unit is
+  not one core-2 carries.  `examples/printenv.ngpl` is the utility
+  those three make, and its output matches the interpreter's and
+  `/usr/bin/printenv`'s byte for byte.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's
