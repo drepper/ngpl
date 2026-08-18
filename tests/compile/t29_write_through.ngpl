@@ -1,0 +1,24 @@
+// core-2: borrowed walks lend the elements -- & to read, &mut to
+// write through -- and a mut while binding writes back through the
+// iterator's element.
+
+@start
+@impure
+fn main():
+    let nums : mut i64[] = [1i64, 2, 3]
+    foreach x := &mut nums:
+        x ← x + 10
+    std.println("{} {} {}", nums[0], nums[1], nums[2])
+    let rd : mut i64 = 0
+    foreach y := &nums:
+        rd ← rd + y
+    std.println("{}", rd)
+    let words : mut str[] = ["a", "b"]
+    foreach w := &mut words:
+        w ← w ⧺ "!"
+    std.println("{} {}", words[0], words[1])
+    let v : i32[] = [1i32, 2, 3, 4]
+    let it := v.iterate()
+    while e : mut = it.next():
+        e ← e + 1
+    std.println("{} {}", v[0], v[3])

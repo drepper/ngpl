@@ -103,6 +103,7 @@ shared_tests=(
     test_noreturn
     test_short_circuit
     test_stepped_range
+    test_while_binding
     test_wrap
 )
 

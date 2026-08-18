@@ -211,6 +211,17 @@ Attempt 3 grows core-1 to **core-2** with structs:
   conditions looping on truthiness, `get` and discarded `pop` as
   unwrapping contexts); its `mut` form means writing back through a
   borrow, which core-2 loops do not hand yet, and says so.
+- **write-through element references**: `foreach x := &v` and
+  `&mut v` lend the elements — the binding's slot holds the
+  element's address (`IR_AREF`, a bounds-checked `lea`), a read of
+  the name reaches through it, and assignment stores back through
+  into the array; `&` refuses the store, `&mut` of an immutable
+  binding is refused at the borrow.  `while e : mut = it.next():`
+  hands the same reference from an iterator, so a loop can raise
+  every element in place.  `@typeof` of such a binding spells the
+  reference (`&mut i32`), and a bare type name in a static assertion
+  stands for its own spelling.  Struct elements are refused by name:
+  they are already shared, and their fields change in place.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's
@@ -446,8 +457,8 @@ the interpreter **and** compiled, outputs and exit codes diffed — the
 strict-subset rule made executable.  `--impl=` selects a side:
 `bootstrap`, `compiled` (ngplc under the interpreter), `native` (the
 self-hosted `build/ngplc`, the whole sweep in ~2.4 s), `both` (the
-default) or `all`.  Thirty-two shared programs cover the whole
-core-2 surface including the stopping paths, and six bootstrap test
+default) or `all`.  Thirty-three shared programs cover the whole
+core-2 surface including the stopping paths, and seven bootstrap test
 files whose whole `@test` surface sits inside the subset run as
 shared tests besides: compiled, run with `--test`, and their stdout,
 stderr and exit code must match the interpreter's byte for byte.

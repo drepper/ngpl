@@ -1979,6 +1979,19 @@ impl Parser:
                 self.err("expected the loop variable")
                 return 0
             _ ← self.eat(TK_DEFINE, "':=' before what the loop walks")
+            if self.peek() = TK_BAND:
+                // foreach x := &v / &mut v: the elements are lent
+                self.pos ← self.pos + 1
+                let brk : mut i64 = 1
+                if self.peek() = TK_MUT:
+                    brk ← 2
+                    self.pos ← self.pos + 1
+                let btok : i64 = self.pos
+                _ ← self.eat_name("the borrowed array's name")
+                let bvar : i64 = self.mknode(NK_VAR, btok, 0, 0, 0)
+                let bref : i64 = self.mknode(NK_REF, btok, bvar, brk, 0)
+                let bbody : i64 = self.parse_block()
+                return self.mknode(NK_FOREACHA, name_tok, bref, bbody, 0)
             let e1 : i64 = self.parse_bin(2)
             if self.peek() ≠ TK_ELLIPSIS:
                 // walking an array's elements
@@ -2948,8 +2961,18 @@ impl Checker:
             self.check_tuple(id, tok, na, want)
         elif k = NK_TYPEOF:
             self.check_expr(na, TY_UNIT)
-            let tt : i64 = ty_strip_ref(self.ty_of(na))
-            let sp : str = self.ty_spell(tt)
+            let tt : mut i64 = ty_strip_ref(self.ty_of(na))
+            let tpre : mut str = ""
+            if self.kind_of(na) = NK_VAR:
+                let ts : i64 = self.lookup(self.text(self.a.ntok[na × 1¤ptrdiff]))
+                if ts ≠ ⁻1:
+                    let trk : i64 = ty_ref_kind(self.stype[ts × 1¤ptrdiff])
+                    if trk = 1:
+                        tpre ← "&"
+                    elif trk = 2:
+                        tpre ← "&mut "
+            let sp0 : str = self.ty_spell(tt)
+            let sp : str = "" if sp0 = "" else tpre ⧺ sp0
             if sp = "":
                 self.derr(tok, "@typeof of " ⧺ type_name(tt) ⧺ " carries the value, not the type alone; it is not core-2")
                 self.set_type(id, TY_STR)
@@ -3296,8 +3319,14 @@ impl Checker:
             return
         let s : i64 = self.lookup(name)
         if s ≠ ⁻1:
-            self.set_type(id, ty_strip_ref(self.stype[s × 1¤ptrdiff]))
+            let st0 : i64 = self.stype[s × 1¤ptrdiff]
+            let base0 : i64 = ty_strip_ref(st0)
+            self.set_type(id, base0)
             self.nslot[id × 1¤ptrdiff] ← self.sslot[s × 1¤ptrdiff]
+            // an element reference holds the element's address: a read
+            // of the name reaches through it
+            if ty_ref_kind(st0) ≠ 0 and ty_ref_kind(st0) ≠ 3 and not ty_is_arr(base0) and not ty_is_hash(base0) and not ty_is_struct(base0):
+                self.a.nb[id × 1¤ptrdiff] ← 1
             return
         let g : i64 = self.global_index(name)
         if g = ⁻1:
@@ -3340,6 +3369,9 @@ impl Checker:
                 return
             let x : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
             let y : i64 = self.a.extra[(args_off + 2) × 1¤ptrdiff]
+            // a bare type name stands for its own spelling here
+            self.sa_fold_typename(x)
+            self.sa_fold_typename(y)
             self.check_expr(x, TY_UNIT)
             self.check_expr(y, TY_UNIT)
             let kx : i64 = self.kind_of(x)
@@ -3365,6 +3397,22 @@ impl Checker:
             return
         if self.a.na[c × 1¤ptrdiff] = 0:
             self.derr(tok, "static assertion failed")
+
+    // i64 written bare in a static assertion is the name of the type
+    fn sa_fold_typename(&mut self, e : i64):
+        if self.kind_of(e) ≠ NK_VAR:
+            return
+        let nm := self.text(self.a.ntok[e × 1¤ptrdiff])
+        if self.lookup(nm) ≠ ⁻1:
+            return
+        let known : bool = (TYNAMES[nm] ?? ⁻1) ≠ ⁻1 or self.struct_index(nm) ≠ ⁻1
+        if not known:
+            return
+        self.a.strs.push(nm)
+        self.a.nkind[e × 1¤ptrdiff] ← NK_STR
+        self.a.na[e × 1¤ptrdiff] ← @dropunit(#self.a.strs) - 1
+        self.a.nb[e × 1¤ptrdiff] ← 0
+        self.set_type(e, TY_STR)
 
     fn ty_spell(&self, t : i64) → str:
         if t = TY_BOOL: return "bool"
@@ -4316,6 +4364,21 @@ impl Checker:
                 self.nslot[id × 1¤ptrdiff] ← @wrap(0 - g - 2)
                 return
             let st : i64 = self.stype[s × 1¤ptrdiff]
+            if ty_ref_kind(st) = 2 and not ty_is_arr(ty_strip_ref(st)) and not ty_is_hash(ty_strip_ref(st)) and not ty_is_struct(ty_strip_ref(st)):
+                // through the element's address, back into the array
+                self.check_expr(na, ty_strip_ref(st))
+                if self.is_open(self.ty_of(na)):
+                    self.adopt(na, ty_strip_ref(st))
+                elif not self.try_fit(na, ty_strip_ref(st)):
+                    self.derr(tok, "'" ⧺ name ⧺ "' holds " ⧺ type_name(ty_strip_ref(st)) ⧺ ", not " ⧺ type_name(self.ty_of(na)))
+                self.nslot[id × 1¤ptrdiff] ← self.sslot[s × 1¤ptrdiff]
+                self.a.nb[id × 1¤ptrdiff] ← 1
+                self.set_type(id, TY_UNIT)
+                return
+            if ty_ref_kind(st) = 1 and not ty_is_arr(ty_strip_ref(st)) and not ty_is_hash(ty_strip_ref(st)) and not ty_is_struct(ty_strip_ref(st)):
+                self.derr(tok, "'" ⧺ name ⧺ "' is a shared borrow; & reads and &mut changes")
+                self.check_expr(na, TY_UNIT)
+                return
             if ty_is_struct(ty_strip_ref(st)) and not self.is_fresh_struct(na):
                 self.derr(tok, "a struct binding takes a fresh struct; the fields change in place")
             if ty_is_hash(ty_strip_ref(st)):
@@ -4451,21 +4514,47 @@ impl Checker:
             else:
                 self.derr(tok, "a while binding loops while a value is there; this answers " ⧺ type_name(wct) ⧺ ", not an optional")
             let wmut : i64 = self.a.extra[nc × 1¤ptrdiff]
-            if wmut = 1:
-                // mut here means writing through what a borrow hands,
-                // which core-2 loops do not hand yet
-                self.derr(tok, "a mut while binding writes back through a borrow; this loop hands values")
+            if wmut = 1 and not (ismc and wmid = MID_NEXT):
+                // only an iterator's next hands an element to write
+                // back through; everything else hands values
+                self.derr(tok, "a mut while binding writes back through the element; this loop hands values")
             let wsty : i64 = self.a.extra[(nc + 1) × 1¤ptrdiff]
             if wsty ≠ ⁻1 and wsty ≠ wbt:
                 self.derr(tok, "the binding says " ⧺ type_name(wsty) ⧺ " but the loop answers " ⧺ type_name(wbt))
             self.push_scope()
-            let wslot : i64 = self.declare(tok, wbt, wmut)
+            let wdty : i64 = wbt + 65536 × 2 if wmut = 1 and ismc and wmid = MID_NEXT else wbt
+            let wslot : i64 = self.declare(tok, wdty, wmut)
             self.nslot[id × 1¤ptrdiff] ← wslot
             self.loop_depth ← self.loop_depth + 1
             self.check_block(nb, false)
             self.loop_depth ← self.loop_depth - 1
             self.pop_scope()
         elif k = NK_FOREACHA:
+            let frk : mut i64 = 0
+            let fiter : mut i64 = na
+            if self.kind_of(na) = NK_REF:
+                frk ← self.a.nb[na × 1¤ptrdiff]
+                fiter ← self.a.na[na × 1¤ptrdiff]
+                self.check_expr(fiter, TY_UNIT)
+                let ft0 : i64 = self.ty_of(fiter)
+                if not ty_is_arr(ft0):
+                    self.derr(tok, "a borrowed walk lends an array's elements; this is " ⧺ type_name(ft0))
+                    return
+                if ty_is_struct(self.elem_of(ft0)):
+                    self.derr(tok, "a struct element is already shared; change its fields in place")
+                    return
+                if frk = 2:
+                    self.require_mut_base(fiter, tok)
+                self.a.na[id × 1¤ptrdiff] ← fiter
+                self.a.nc[id × 1¤ptrdiff] ← frk
+                self.push_scope()
+                let rslot : i64 = self.declare(tok, self.elem_of(ft0) + 65536 × frk, 1 if frk = 2 else 0)
+                self.nslot[id × 1¤ptrdiff] ← rslot
+                self.loop_depth ← self.loop_depth + 1
+                self.check_block(nb, false)
+                self.loop_depth ← self.loop_depth - 1
+                self.pop_scope()
+                return
             self.check_expr(na, TY_UNIT)
             let t : i64 = self.ty_of(na)
             if not ty_is_arr(t) and t ≠ TY_STR:
@@ -4887,6 +4976,7 @@ let IR_AFILL : i64 = 93    // d ← a copies of scalar b, a fresh array
 let IR_ACYC : i64 = 94     // d ← array b's elements cycled to count a
 let IR_ACAT : i64 = 95     // d ← arrays a then b, one fresh array
 let IR_SBYTES : i64 = 96   // d ← string a's bytes, a u8[]
+let IR_AREF : i64 = 97     // d ← the address of array a's element b
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
 let IR_FLD : i64 = 67      // d ← field b of struct a
 let IR_FSTO : i64 = 68     // field b of struct a ← c
@@ -5066,6 +5156,11 @@ impl Lower:
             if slot <= ⁻2:
                 let d : i64 = self.tmp()
                 self.ir(IR_GLOAD, @wrap(0 - slot - 2), 0, 0, d, w)
+                return d
+            if self.a.nb[nid × 1¤ptrdiff] = 1:
+                // an element reference: the slot holds the address
+                let d : i64 = self.tmp()
+                self.ir(IR_FLD, slot, 0, 0, d, w)
                 return d
             return slot
         if k = NK_ARRLIT:
@@ -5696,6 +5791,9 @@ impl Lower:
             let slot : i64 = self.nslot[sid × 1¤ptrdiff]
             if slot <= ⁻2:
                 self.ir(IR_GSTORE, @wrap(0 - slot - 2), v, 0, 0, 0)
+            elif self.a.nb[sid × 1¤ptrdiff] = 1:
+                // through the element's address, back into the array
+                self.ir(IR_FSTO, slot, 0, v, 0, 0)
             else:
                 self.ir(IR_MOV, v, 0, 0, slot, 0)
         elif k = NK_STOREFLD:
@@ -5802,7 +5900,11 @@ impl Lower:
                 let cc9 : i64 = self.tmp()
                 self.ir(IR_CLT, pos9, len9, 0, cc9, 64 + 256)
                 self.ir(IR_JZ, cc9, lend, 0, 0, 0)
-                self.ir(IR_AIDX, dsc9, pos9, 0, evar, 0)
+                if self.a.extra[nc × 1¤ptrdiff] = 1:
+                    // the element's address, to write back through
+                    self.ir(IR_AREF, dsc9, pos9, 0, evar, 0)
+                else:
+                    self.ir(IR_AIDX, dsc9, pos9, 0, evar, 0)
                 let on9 : i64 = self.tmp()
                 self.ir(IR_CONST, 1, 0, 0, on9, 0)
                 let npp : i64 = self.tmp()
@@ -6086,7 +6188,10 @@ impl Lower:
         let c : i64 = self.tmp()
         self.ir(IR_CLT, iv, n, 0, c, 64 + 256)
         self.ir(IR_JZ, c, lend, 0, 0, 0)
-        self.ir(IR_AIDX, desc, iv, 0, evar, 0)
+        if self.a.nc[sid × 1¤ptrdiff] ≠ 0:
+            self.ir(IR_AREF, desc, iv, 0, evar, 0)
+        else:
+            self.ir(IR_AIDX, desc, iv, 0, evar, 0)
         self.breaks.push(lend)
         self.conts.push(lcont)
         self.lower_block(body, false, ret_ty)
@@ -6776,6 +6881,15 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.jglobal(0, 131, RT_BOUNDS)    // jae
             em.b3(72, 139, 16)               // mov rdx, [rax]
             em.b4(72, 139, 4, 202)           // mov rax, [rdx+rcx*8]
+            em.store(R_AX, d)
+        elif o = IR_AREF:
+            em.load(R_AX, a)
+            em.load(R_CX, b)
+            em.b4(72, 59, 72, 8)             // cmp rcx, [rax+8]
+            em.jglobal(0, 131, RT_BOUNDS)    // jae
+            em.b3(72, 139, 16)               // mov rdx, [rax]
+            em.b4(72, 141, 4, 202)           // lea rax, [rdx+rcx*8]
+            em.raxbar()
             em.store(R_AX, d)
         elif o = IR_ASTO:
             em.load(R_R10, a)

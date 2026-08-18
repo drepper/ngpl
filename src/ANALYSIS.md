@@ -21,7 +21,7 @@ and characters with UTF-8 string positions, `.chars()`, `.chr()`
 and `.ord()`, struct values that travel — by parameter, return and
 binding — on the reference semantics both implementations share, and
 `:=` inference from a right side that states its type.
-Thirty-two shared programs run identically interpreted and
+Thirty-three shared programs run identically interpreted and
 compiled, inside the one integrated test suite; the bootstrap suite
 stays green with `-Werror`.  The `@test`/`@expect` harness now
 compiles too, with the interpreter's options and report format, and
@@ -33,10 +33,11 @@ with the subset rather than by porting.  Two growth batches
 aimed at them — ⍳, saturating ⊞⊟⊠, ⊕⊼⊽ and slices, then sized
 arrays, ⍴ fills, bool elements and mut value parameters — and both
 conform, but the near files keep one more layer each: statement-level
-@expect, matrices, element-wise operators, reference-valued loop
-bindings that write back through a &mut borrow (the wall
-test_while_binding ends at, past @typeof itself), and directory
-objects (all that holds test_iterator).  Array ⧺
+@expect, matrices, element-wise operators, multi-variable zip
+foreach (the wall test_borrow_foreach ends at, past the
+write-through references themselves — test_while_binding flipped
+whole, the seventh shared file), and directory objects (all that
+holds test_iterator).  Array ⧺
 broke through: test_concat became the sixth shared file, the first
 flipped by a growth batch, taking fresh-array reassignment and the
 bare-∅ body along with it.  The lesson stands: the shared list grows
