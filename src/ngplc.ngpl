@@ -213,6 +213,8 @@ let TY_CHAR : i64 = 4       // one Unicode scalar value, UCS-4 in a slot
 let TY_U32 : i64 = 80       // what .ord() answers
 let TY_FILE : i64 = 5       // an open file, its descriptor inside
 let TY_ALLOC : i64 = 6      // std.arena.allocator(): a token, nothing more
+let TY_DIR : i64 = 7        // std.fs.cwd(): a directory, a token likewise
+let TY_ENTRY : i64 = 10     // one directory entry: a name and a kind
 let TY_UNT : i64 = 8
 let TY_EMPTY : i64 = 9       // a bare ∅, not yet settled on its optional
 let TY_U64 : i64 = 144       // 16 + 0 + 2×64
@@ -364,6 +366,8 @@ fn type_name(t0 : i64) → str:
     if t = TY_CHAR: return prefix ⧺ "char"
     if t = TY_FILE: return prefix ⧺ "std.fs.File"
     if t = TY_ALLOC: return prefix ⧺ "std.arena.Allocator"
+    if t = TY_DIR: return prefix ⧺ "std.fs.Dir"
+    if t = TY_ENTRY: return prefix ⧺ "std.fs.Entry"
     if t = TY_UNT: return "untyped integer"
     if t = TY_EMPTY: return "∅"
     if ty_is_struct(t): return prefix ⧺ "struct #" ⧺ i64_str(ty_sidx(t))
@@ -1054,6 +1058,7 @@ let SB_OPEN : i64 = 5       // std.fs.cwd().open_file(p) → File?
 let SB_CREATE : i64 = 6     // std.fs.cwd().create_file(p, mode) → File
 let SB_ALLOCATOR : i64 = 7  // std.arena.allocator()
 let SB_BYTES : i64 = 8      // std.bytes(s) → the string's bytes, u8[]
+let SB_CWD : i64 = 9        // std.fs.cwd() as a value
 
 // the base type names, one probe instead of a ladder
 let TYNAMES : std.hash(str, i64) = (⸨
@@ -1626,6 +1631,11 @@ impl Parser:
                     self.pos ← self.pos + 1
                     _ ← self.eat(TK_LPAR, "'(' after cwd")
                     _ ← self.eat(TK_RPAR, "')' after cwd(")
+                    if self.peek() ≠ TK_DOT:
+                        // the directory itself, a value to iterate
+                        let coff0 : i64 = @dropunit(#self.extra)
+                        self.extra.push(0)
+                        return self.mknode(NK_SCALL, at, SB_CWD, coff0, 0)
                     _ ← self.eat(TK_DOT, "'.' and what cwd() is asked")
                     let fm := self.ttext(self.pos)
                     self.pos ← self.pos + 1
@@ -1637,6 +1647,23 @@ impl Parser:
                         return self.mknode(NK_SCALL, at, SB_CREATE, coff, 0)
                     self.err("'" ⧺ fm ⧺ "' is not core-2; cwd() answers open_file and create_file")
                     return 0
+                if m = "filetype":
+                    _ ← self.eat(TK_DOT, "'.' after std.filetype")
+                    let fname := self.ttext(self.pos)
+                    self.pos ← self.pos + 1
+                    let fv : mut i64 = ⁻1
+                    if fname = "reg": fv ← 8
+                    elif fname = "dir": fv ← 4
+                    elif fname = "lnk": fv ← 10
+                    elif fname = "chr": fv ← 2
+                    elif fname = "blk": fv ← 6
+                    elif fname = "fifo": fv ← 1
+                    elif fname = "sock": fv ← 12
+                    elif fname = "unknown": fv ← 0
+                    else:
+                        self.err("'std.filetype." ⧺ fname ⧺ "' names no kind of file")
+                        return 0
+                    return self.mknode(NK_INT, at, fv, TY_U8 × 2, 0)
                 if m = "bytes":
                     let boff : i64 = self.parse_args()
                     return self.mknode(NK_SCALL, at, SB_BYTES, boff, 0)
@@ -2619,6 +2646,7 @@ let MID_WRITEF : i64 = 8
 let MID_CLOSEF : i64 = 9
 let MID_ITER : i64 = 10
 let MID_NEXT : i64 = 11
+let MID_DIRITER : i64 = 12
 
 struct Chk:
     ntype : i64[]
@@ -3141,7 +3169,11 @@ impl Checker:
                 self.set_type(id, TY_BOOL)
                 return
             if ty_is_opt(tl) or ty_is_opt(tr):
-                self.derr(tok, "core-2 compares an optional only with ∅; take the value out with ?? or match")
+                let ob : i64 = ty_opt_base(tl if ty_is_opt(tl) else tr)
+                if tl ≠ tr:
+                    self.derr(tok, "an optional compares with its own kind or ∅; the sides are " ⧺ type_name(tl) ⧺ " and " ⧺ type_name(tr))
+                elif not ((ty_is_int(ob) and ty_unit(ob) = 0) or ob = TY_BOOL or ob = TY_CHAR or ob = TY_STR):
+                    self.derr(tok, "an optional of " ⧺ type_name(ob) ⧺ " is not compared whole; match takes it apart")
                 self.set_type(id, TY_BOOL)
                 return
             if tl = TY_STR and tr = TY_STR:
@@ -3590,6 +3622,9 @@ impl Checker:
     fn check_field(&mut self, id : i64, tok : i64, na : i64):
         self.check_expr(na, TY_UNIT)
         let t : i64 = ty_strip_ref(self.ty_of(na))
+        if t = TY_ENTRY:
+            self.check_entry_field(id, tok)
+            return
         if not ty_is_struct(t):
             self.derr(tok, "only a struct has fields; this is " ⧺ type_name(t))
             self.set_type(id, TY_I64)
@@ -3601,6 +3636,18 @@ impl Checker:
             return
         self.a.nb[id × 1¤ptrdiff] ← fidx
         self.set_type(id, fty)
+
+    fn check_entry_field(&mut self, id : i64, tok : i64):
+        let fname := self.text(tok)
+        if fname = "name":
+            self.a.nb[id × 1¤ptrdiff] ← 0
+            self.set_type(id, TY_STR)
+        elif fname = "type":
+            self.a.nb[id × 1¤ptrdiff] ← 1
+            self.set_type(id, TY_U8)
+        else:
+            self.derr(tok, "an entry holds its name and its type; '" ⧺ fname ⧺ "' is neither")
+            self.set_type(id, TY_I64)
 
     fn check_hlit(&mut self, id : i64, tok : i64, off : i64, want : i64):
         // the binding says what a hash holds; the literal fills it
@@ -3842,6 +3889,11 @@ impl Checker:
                 self.derr(tok, "reading the arguments is impure; the function wants @impure")
             self.set_type(id, mk_aty(TY_STR))
             return
+        if sb = SB_CWD:
+            // looking at a directory writes nothing; only opening and
+            // creating files want @impure
+            self.set_type(id, TY_DIR)
+            return
         if sb = SB_BYTES:
             if argc ≠ 1:
                 self.derr(tok, "std.bytes takes the string")
@@ -3997,6 +4049,23 @@ impl Checker:
             self.a.nc[id × 1¤ptrdiff] ← MID_CLOSEF
             self.set_type(id, TY_UNIT)
             return
+        if t = TY_DIR and m = "iterate":
+            if argc0 ≠ 0:
+                self.derr(tok, "iterate takes nothing")
+            let de : i64 = TY_ENTRY
+            let di : mut i64 = ⁻1
+            let dm : i64 = @dropunit(#self.ite)
+            let ds : mut i64 = 0
+            while ds < dm:
+                if self.ite[ds × 1¤ptrdiff] = de:
+                    di ← ds
+                ds ← ds + 1
+            if di = ⁻1:
+                di ← dm
+                self.ite.push(de)
+            self.a.nc[id × 1¤ptrdiff] ← MID_DIRITER
+            self.set_type(id, 30720 + di)
+            return
         if ty_is_arr(t) and m = "iterate":
             if argc0 ≠ 0:
                 self.derr(tok, "iterate takes nothing")
@@ -4017,10 +4086,9 @@ impl Checker:
         if ty_is_iter(t) and m = "next":
             if argc0 ≠ 0:
                 self.derr(tok, "next takes nothing")
-            if not under_default:
-                self.derr(tok, "next answers an optional; take it with ?? or a while binding")
             self.a.nc[id × 1¤ptrdiff] ← MID_NEXT
-            self.set_type(id, self.ite[ty_iidx(t) × 1¤ptrdiff])
+            let ne : i64 = self.ite[ty_iidx(t) × 1¤ptrdiff]
+            self.set_type(id, ne if under_default else mk_oty(ne))
             return
         if t = TY_STR and m = "chars":
             if argc0 ≠ 0:
@@ -4977,6 +5045,7 @@ let IR_ACYC : i64 = 94     // d ← array b's elements cycled to count a
 let IR_ACAT : i64 = 95     // d ← arrays a then b, one fresh array
 let IR_SBYTES : i64 = 96   // d ← string a's bytes, a u8[]
 let IR_AREF : i64 = 97     // d ← the address of array a's element b
+let IR_DENTS : i64 = 98    // d ← the working directory's entries
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
 let IR_FLD : i64 = 67      // d ← field b of struct a
 let IR_FSTO : i64 = 68     // field b of struct a ← c
@@ -5289,6 +5358,10 @@ impl Lower:
                 let d : i64 = self.tmp()
                 self.ir(IR_FCREATE, pv, mv, 0, d, 0)
                 return d
+            if na = SB_CWD:
+                let d : i64 = self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, d, 0)
+                return d
             if na = SB_BYTES:
                 let sv : i64 = self.lower_expr(self.a.extra[(nb + 1) × 1¤ptrdiff])
                 let d : i64 = self.tmp()
@@ -5362,6 +5435,15 @@ impl Lower:
             self.ir(IR_SCCAT, av, bv, 0, d, w)
             return d
         if k = NK_EQ or k = NK_NE:
+            if ty_is_opt(self.tof(na)) and ty_is_opt(self.tof(nb)):
+                let d0 : i64 = self.lower_opt_eq(na, nb)
+                if k = NK_NE:
+                    let zz : i64 = self.tmp()
+                    self.ir(IR_CONST, 0, 0, 0, zz, 64)
+                    let d1 : i64 = self.tmp()
+                    self.ir(IR_CEQ, d0, zz, 0, d1, 64)
+                    return d1
+                return d0
             if self.tof(na) = TY_STR:
                 let av : i64 = self.lower_expr(na)
                 let bv : i64 = self.lower_expr(nb)
@@ -5488,6 +5570,46 @@ impl Lower:
         self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         d
 
+    // two optionals: the shape first -- both absent is true, one
+    // absent is false -- and the contents only when both are there
+    fn lower_opt_eq(&mut self, na : i64, nb : i64) → i64:
+        let ob : i64 = ty_opt_base(self.tof(na))
+        let av : i64 = self.lower_expr(na)
+        let bv : i64 = self.lower_expr(nb)
+        let d : i64 = self.tmp()
+        let ltrue : i64 = self.label()
+        let lfalse : i64 = self.label()
+        let lcont : i64 = self.label()
+        let lend : i64 = self.label()
+        let z : i64 = self.tmp()
+        self.ir(IR_CONST, 0, 0, 0, z, 64)
+        let pa : i64 = self.tmp()
+        self.ir(IR_CNE, av, z, 0, pa, 64)
+        let pb : i64 = self.tmp()
+        self.ir(IR_CNE, bv, z, 0, pb, 64)
+        let same : i64 = self.tmp()
+        self.ir(IR_CEQ, pa, pb, 0, same, 64)
+        self.ir(IR_JZ, same, lfalse, 0, 0, 0)
+        self.ir(IR_JZ, pa, ltrue, 0, 0, 0)
+        self.ir(IR_JMP, lcont, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lcont, 0, 0, 0, 0)
+        let la : i64 = self.tmp()
+        self.ir(IR_FLD, av, 0, 0, la, 0)
+        let lb : i64 = self.tmp()
+        self.ir(IR_FLD, bv, 0, 0, lb, 0)
+        if ob = TY_STR:
+            self.ir(IR_SEQV, la, lb, 0, d, 64)
+        else:
+            self.ir(IR_CEQ, la, lb, 0, d, width_of(ob))
+        self.ir(IR_JMP, lend, 0, 0, 0, 0)
+        self.ir(IR_LABEL, ltrue, 0, 0, 0, 0)
+        self.ir(IR_CONST, 1, 0, 0, d, 64)
+        self.ir(IR_JMP, lend, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lfalse, 0, 0, 0, 0)
+        self.ir(IR_CONST, 0, 0, 0, d, 64)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        d
+
     fn lower_default(&mut self, nid : i64, na : i64, nb : i64) → i64:
         let ik : i64 = self.kof(na)
         if ik = NK_DIV or ik = NK_MOD:
@@ -5563,6 +5685,16 @@ impl Lower:
         if mid = MID_CLOSEF:
             self.ir(IR_FCLOSE, av, 0, 0, 0, 0)
             return ⁻1
+        if mid = MID_DIRITER:
+            let earr : i64 = self.tmp()
+            self.ir(IR_DENTS, 0, 0, 0, earr, 0)
+            let d : i64 = self.tmp()
+            self.ir(IR_SNEW, 2, 0, 0, d, 0)
+            self.ir(IR_FSTO, d, 0, earr, 0, 0)
+            let z8 : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, z8, 0)
+            self.ir(IR_FSTO, d, 1, z8, 0, 0)
+            return d
         if mid = MID_ITER:
             // {the array, the position}: a fresh two-slot box
             let d : i64 = self.tmp()
@@ -5571,6 +5703,37 @@ impl Lower:
             let z9 : i64 = self.tmp()
             self.ir(IR_CONST, 0, 0, 0, z9, 0)
             self.ir(IR_FSTO, d, 1, z9, 0, 0)
+            return d
+        if mid = MID_NEXT and defnode = ⁻1 and ty_is_opt(self.tof(nid)):
+            // outside ?? and the while binding: the step is boxed as
+            // any optional is, the end the null
+            let dscb : i64 = self.tmp()
+            self.ir(IR_FLD, av, 0, 0, dscb, 0)
+            let posb : i64 = self.tmp()
+            self.ir(IR_FLD, av, 1, 0, posb, 0)
+            let nb9 : i64 = self.tmp()
+            self.ir(IR_ALEN, dscb, 0, 0, nb9, 0)
+            let cb9 : i64 = self.tmp()
+            self.ir(IR_CLT, posb, nb9, 0, cb9, 64 + 256)
+            let d : i64 = self.tmp()
+            let labs : i64 = self.label()
+            let lend : i64 = self.label()
+            self.ir(IR_JZ, cb9, labs, 0, 0, 0)
+            let ev9 : i64 = self.tmp()
+            self.ir(IR_AIDX, dscb, posb, 0, ev9, 0)
+            let ob9 : i64 = self.tmp()
+            self.ir(IR_SNEW, 1, 0, 0, ob9, 0)
+            self.ir(IR_FSTO, ob9, 0, ev9, 0, 0)
+            let one8 : i64 = self.tmp()
+            self.ir(IR_CONST, 1, 0, 0, one8, 0)
+            let np8 : i64 = self.tmp()
+            self.ir(IR_ADDW, posb, one8, 0, np8, 64 + 256)
+            self.ir(IR_FSTO, av, 1, np8, 0, 0)
+            self.ir(IR_MOV, ob9, 0, 0, d, 0)
+            self.ir(IR_JMP, lend, 0, 0, 0, 0)
+            self.ir(IR_LABEL, labs, 0, 0, 0, 0)
+            self.ir(IR_CONST, 0, 0, 0, d, 0)
+            self.ir(IR_LABEL, lend, 0, 0, 0, 0)
             return d
         if mid = MID_NEXT:
             // position under length answers the element and steps; the
@@ -5659,10 +5822,19 @@ impl Lower:
         if is_eq:
             let x : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
             let y : i64 = self.a.extra[(args_off + 2) × 1¤ptrdiff]
-            let av : i64 = self.lower_expr(x)
-            let bv : i64 = self.lower_expr(y)
-            let c : i64 = self.tmp()
-            self.ir(IR_CEQ, av, bv, 0, c, width_of(self.tof(x)))
+            let c : mut i64 = 0
+            if ty_is_opt(self.tof(x)) and ty_is_opt(self.tof(y)):
+                c ← self.lower_opt_eq(x, y)
+            elif self.tof(x) = TY_STR:
+                let av0 : i64 = self.lower_expr(x)
+                let bv0 : i64 = self.lower_expr(y)
+                c ← self.tmp()
+                self.ir(IR_SEQV, av0, bv0, 0, c, 64)
+            else:
+                let av : i64 = self.lower_expr(x)
+                let bv : i64 = self.lower_expr(y)
+                c ← self.tmp()
+                self.ir(IR_CEQ, av, bv, 0, c, width_of(self.tof(x)))
             self.ir(IR_JNZ, c, lok, 0, 0, 0)
             let m : i64 = self.intern("assertion does not hold (line " ⧺ i64_str(line) ⧺ ")\n")
             self.ir(IR_ABORT, m, 0, 0, 0, 0)
@@ -6344,6 +6516,7 @@ let RT_AFILL : i64 = ⁻35
 let RT_ACYC : i64 = ⁻36
 let RT_ACAT : i64 = ⁻37
 let RT_SBYTES : i64 = ⁻38
+let RT_DENTS : i64 = ⁻39
 
 struct Emit:
     code : u8[]
@@ -6881,6 +7054,9 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.jglobal(0, 131, RT_BOUNDS)    // jae
             em.b3(72, 139, 16)               // mov rdx, [rax]
             em.b4(72, 139, 4, 202)           // mov rax, [rdx+rcx*8]
+            em.store(R_AX, d)
+        elif o = IR_DENTS:
+            em.jglobal(232, ⁻1, RT_DENTS)
             em.store(R_AX, d)
         elif o = IR_AREF:
             em.load(R_AX, a)
@@ -8459,6 +8635,113 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.b1(195)
     em.resolve_locals()
 
+    // RT_DENTS: → rax = an array of the working directory's entries,
+    // each a two-slot {name, d_type} block, "." and ".." left out.
+    // The kernel's getdents64 records are parsed in place; the order
+    // is the directory's own, the same one every reader sees.
+    em.rt_off.push(em.here())
+    em.begin_fn(9)
+    em.b4(72, 131, 236, 32)         // sub rsp, 32
+    em.movimm(R_DI, 8)
+    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.b3(72, 137, 195)             // mov rbx, rax
+    em.movimm(R_DI, @wrap(0 - 100)) // AT_FDCWD
+    em.b2(106, 46)                  // push 46: ".\0" spelled in place
+    em.b3(72, 137, 230)             // mov rsi, rsp
+    em.movimm(R_DX, 65536)          // O_RDONLY|O_DIRECTORY
+    em.b3(69, 49, 210)              // xor r10d, r10d
+    em.movimm(R_AX, 257)
+    em.b2(15, 5)                    // openat
+    em.b1(89)                       // pop rcx: the path's eight bytes
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(136, 8)               // js Lret: no directory, no entries
+    em.b3(73, 137, 196)             // mov r12, rax
+    em.movimm(R_DI, 4096)
+    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.b3(73, 137, 197)             // mov r13, rax
+    em.set_label(0)                 // Louter: one buffer of records
+    em.b3(76, 137, 231)             // mov rdi, r12
+    em.b3(76, 137, 238)             // mov rsi, r13
+    em.movimm(R_DX, 4096)
+    em.movimm(R_AX, 217)
+    em.b2(15, 5)                    // getdents64
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(142, 7)               // jle Lclose
+    em.b3(73, 137, 199)             // mov r15, rax: bytes read
+    em.b3(77, 49, 246)              // xor r14, r14
+    em.set_label(1)                 // Linner: one record
+    em.b3(77, 57, 254)              // cmp r14, r15
+    em.jlocal(131, 0)               // jae Louter
+    em.b4(75, 141, 76, 53)
+    em.b1(0)                        // lea rcx, [r13+r14]: the record
+    em.b4(72, 137, 12, 36)          // mov [rsp], rcx
+    em.b4(15, 182, 81, 18)          // movzx edx, byte [rcx+18]: d_type
+    em.b4(72, 137, 84, 36)
+    em.b1(16)                       // mov [rsp+16], rdx
+    em.b4(15, 183, 81, 16)          // movzx edx, word [rcx+16]: reclen
+    em.b3(73, 1, 214)               // add r14, rdx
+    em.b4(72, 141, 81, 19)          // lea rdx, [rcx+19]: the name
+    em.b3(128, 58, 46)              // cmp byte [rdx], '.'
+    em.jlocal(133, 2)               // jne Lname
+    em.b4(128, 122, 1, 0)           // cmp byte [rdx+1], 0
+    em.jlocal(132, 1)               // je: "." is left out
+    em.b4(128, 122, 1, 46)          // cmp byte [rdx+1], '.'
+    em.jlocal(133, 2)               // jne Lname
+    em.b4(128, 122, 2, 0)           // cmp byte [rdx+2], 0
+    em.jlocal(132, 1)               // je: ".." likewise
+    em.set_label(2)                 // Lname
+    em.b3(72, 49, 201)              // xor rcx, rcx
+    em.set_label(3)                 // Llen
+    em.b4(128, 60, 10, 0)           // cmp byte [rdx+rcx], 0
+    em.jlocal(132, 4)               // je Lgot
+    em.b3(72, 255, 193)             // inc rcx
+    em.jlocal(⁻1, 3)
+    em.set_label(4)                 // Lgot
+    em.b4(72, 137, 76, 36)
+    em.b1(8)                        // mov [rsp+8], rcx
+    em.b4(72, 141, 121, 16)         // lea rdi, [rcx+16]: desc and bytes
+    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.b4(72, 139, 52, 36)          // mov rsi, [rsp]
+    em.b4(72, 141, 118, 19)         // lea rsi, [rsi+19]
+    em.b4(72, 139, 76, 36)
+    em.b1(8)                        // mov rcx, [rsp+8]
+    em.b4(72, 141, 80, 16)          // lea rdx, [rax+16]
+    em.b3(72, 137, 16)              // mov [rax], rdx
+    em.b4(72, 137, 72, 8)           // mov [rax+8], rcx
+    em.b2(49, 255)                  // xor edi, edi
+    em.set_label(5)                 // Lcopy
+    em.b3(72, 57, 207)              // cmp rdi, rcx
+    em.jlocal(131, 6)               // jae Lentry
+    em.b4(68, 15, 182, 12)
+    em.b1(62)                       // movzx r9d, byte [rsi+rdi]
+    em.b4(68, 136, 12, 58)          // mov [rdx+rdi], r9b
+    em.b3(72, 255, 199)             // inc rdi
+    em.jlocal(⁻1, 5)
+    em.set_label(6)                 // Lentry: {name, type}
+    em.b4(72, 137, 68, 36)
+    em.b1(24)                       // mov [rsp+24], rax
+    em.movimm(R_DI, 16)
+    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.b4(72, 139, 76, 36)
+    em.b1(24)                       // mov rcx, [rsp+24]
+    em.b3(72, 137, 8)               // mov [rax], rcx
+    em.b4(72, 139, 84, 36)
+    em.b1(16)                       // mov rdx, [rsp+16]
+    em.b4(72, 137, 80, 8)           // mov [rax+8], rdx
+    em.b3(72, 137, 223)             // mov rdi, rbx
+    em.b3(72, 137, 198)             // mov rsi, rax
+    em.jglobal(232, ⁻1, RT_ARRPUSH)
+    em.jlocal(⁻1, 1)
+    em.set_label(7)                 // Lclose
+    em.b3(76, 137, 231)             // mov rdi, r12
+    em.movimm(R_AX, 3)
+    em.b2(15, 5)
+    em.set_label(8)                 // Lret
+    em.b4(72, 131, 196, 32)         // add rsp, 32
+    em.b3(72, 137, 216)             // mov rax, rbx
+    em.b1(195)
+    em.resolve_locals()
+
 // ---------------------------------------------------------------------------
 // The ELF executable: text R+X, rodata R, data R+W
 // ---------------------------------------------------------------------------
@@ -8873,7 +9156,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
     emit_fn(&em, dir, 0, lw.strs)
     // every function was emitted and left its offset behind
     assert(@dropunit(#em.fn_off) = nfns + g1 + 2, "one code offset per function")
-    assert(#em.rt_off = 38, "every runtime routine in place")
+    assert(#em.rt_off = 39, "every runtime routine in place")
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:
         foreach i := 0…#em.cf_pos - 1:

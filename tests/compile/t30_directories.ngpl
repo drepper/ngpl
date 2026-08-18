@@ -1,0 +1,55 @@
+// core-2: the working directory is a value, its iterator hands out
+// entries with a name and a type, and next() outside a while binding
+// answers a boxed optional that compares with its kind and with ∅.
+
+// reading a directory writes nothing, so a pure function may count
+fn population() -> i64:
+    let dir := std.fs.cwd()
+    let it := dir.iterate()
+    let n : mut i64 = 0
+    while e := it.next():
+        n ← n + 1
+    return n
+
+@impure
+fn survey() -> i64:
+    let dir := std.fs.cwd()
+    let it := dir.iterate()
+    let count : mut i64 = 0
+    let named : mut bool = true
+    let typed : mut bool = true
+    while e := it.next():
+        count ← count + 1
+        named ← named ∧ #e.name > 0
+        let t : u8 = e.type
+        typed ← typed ∧ (t = std.filetype.reg ∨ t = std.filetype.dir
+            ∨ t = std.filetype.lnk ∨ t = std.filetype.chr
+            ∨ t = std.filetype.blk ∨ t = std.filetype.fifo
+            ∨ t = std.filetype.sock ∨ t = std.filetype.unknown)
+    std.println("{} {} {}", count > 0, named, typed)
+    return count
+
+@start
+@impure
+fn main():
+    let n1 := survey()
+    let n2 := survey()
+    // two walks of one directory see one population
+    std.println("{}", n1 = n2)
+    std.println("{}", population() = n1)
+    let v : i64[] = [1i64]
+    let vit := v.iterate()
+    std.println("{}", vit.next() = ∃(1i64))
+    std.println("{}", vit.next() = ∅)
+    let o1 : i64? = ∃(5i64)
+    let o2 : i64? = ∃(5i64)
+    let o3 : i64? = ∃(6i64)
+    let o4 : i64? = ∅
+    std.println("{} {} {}", o1 = o2, o1 = o3, o3 ≠ o4)
+    let s1 : str? = ∃("hi")
+    std.println("{} {}", s1 = ∃("hi"), s1 = ∃("ho"))
+    let c1 : char? = ∃('x')
+    std.println("{} {}", c1 = ∃('x'), c1 = ∅)
+    assert_eq(o1, o2)
+    assert_eq(o4, ∅)
+    assert_eq(s1, ∃("hi"))

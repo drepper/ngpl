@@ -222,6 +222,24 @@ Attempt 3 grows core-1 to **core-2** with structs:
   reference (`&mut i32`), and a bare type name in a static assertion
   stands for its own spelling.  Struct elements are refused by name:
   they are already shared, and their fields change in place.
+- **directory objects**: `std.fs.cwd()` alone is a value of its own
+  type (the `.open_file`/`.create_file` chains keep their old path),
+  and `dir.iterate()` answers an iterator of entries, each a
+  two-slot `{name, d_type}` block.  The walk itself is one runtime
+  helper (`RT_DENTS`): `openat` on a stack-built `".\0"` (the rodata
+  interns strings without terminators, so the path is spelled in
+  place with a `push`), a `getdents64` loop parsing the kernel's
+  records where they lie, `"."` and `".."` left out, the order the
+  directory's own.  `e.name` and `e.type` are field reads; the
+  `std.filetype.*` names fold to the kernel's `d_type` constants at
+  check time.  Reading a directory writes nothing, so neither
+  `cwd()` nor `iterate()` wants `@impure` — only opening and
+  creating files do, as in the interpreter.  `next()` outside an
+  unwrapping context now answers the boxed optional (a step is
+  `SNEW`+`FSTO` like any `∃`, the end the null), and optionals of
+  int, bool, char and str bases compare with their own kind and with
+  `∅` — presence bits first, contents only when both are there;
+  struct bases are still taken apart by `match`.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's

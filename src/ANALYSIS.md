@@ -36,8 +36,13 @@ conform, but the near files keep one more layer each: statement-level
 @expect, matrices, element-wise operators, multi-variable zip
 foreach (the wall test_borrow_foreach ends at, past the
 write-through references themselves — test_while_binding flipped
-whole, the seventh shared file), and directory objects (all that
-holds test_iterator).  Array ⧺
+whole, the seventh shared file), and directory objects (which fell
+in their own batch — `cwd()` as a value, a `getdents64` runtime
+walk, entry fields, boxed `next()` and optional equality — yet
+test_iterator still holds out on one line: the bootstrap admits `∅`
+as an element of a plain `i64[]` literal, which a flat compiled
+array cannot represent; refused by name, recorded as a spec
+question rather than chased).  Array ⧺
 broke through: test_concat became the sixth shared file, the first
 flipped by a growth batch, taking fresh-array reassignment and the
 bare-∅ body along with it.  The lesson stands: the shared list grows
