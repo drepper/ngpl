@@ -55,7 +55,16 @@ subset now carries a `filetype` type of its own (S_IF values, one
 literals meeting it by value, printing refused by name), and the
 lesson is sharper than the first one: internal consistency can
 hide a divergence, and only asserting the authority's actual
-values surfaces it.  Array ⧺
+values surfaces it.  Matrices landed next — rank-2, rows as shared
+descriptors, tuple-⍴, multi-index as a parser desugar, `.shape`,
+extent-checked literals — all on the existing array runtime with
+zero new IR and zero new runtime helpers; the probe conforms byte
+for byte, but the matrix test files still lean on bare range
+values (`(2, 4) ⍴ (1…8)`) and `generate` with lambdas, the next
+two walls in that direction.  The batch also caught a quiet
+acceptance bug through self-hosting: the bootstrap reserves every
+`iN`/`uN` spelling with a nonzero width as a type name, and ngplc
+let `i2` name a loop counter; now both refuse alike.  Array ⧺
 broke through: test_concat became the sixth shared file, the first
 flipped by a growth batch, taking fresh-array reassignment and the
 bare-∅ body along with it.  The lesson stands: the shared list grows

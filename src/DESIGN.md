@@ -248,6 +248,31 @@ Attempt 3 grows core-1 to **core-2** with structs:
   int, bool, char and str bases compare with their own kind and with
   `∅` — presence bits first, contents only when both are there;
   struct bases are still taken apart by `match`.
+- **matrices**: rank-2, an outer dynamic array whose elements are row
+  descriptors — every sharing rule falls out of the existing array
+  runtime with no new IR and no new runtime helpers.  Types
+  `T[,]`/`T[r,c]`/`T[,c]`/`T[r,]` intern into an Ast-owned table
+  (element, two extents, ⁻1 open); the ref packing's multiplier
+  moved from 65536 to 262144 to clear the band.  Rows have a type
+  band of their own (7168+elem, inside the dynamic arrays' range):
+  they read as arrays everywhere but refuse `push`/`pop` — a
+  matrix's row keeps its length, as the interpreter's extent-locked
+  values do.  `m[i, j]` desugars in the parser to the chain
+  `m[i][j]` (rows alias, so the chain is the pair); `m[i, a…b]`
+  narrows a row into a fresh array (`ASLICE` copy), `m[a…b]` keeps
+  the matrix type with the row count opened (same rows, `ASLICE` on
+  descriptors); `[range, …]` is refused by name — a column would
+  not desugar.  A tuple-shaped `⍴` builds the flat rank-1 cycle
+  (the cycle runs across the row seam) and cuts rows with an
+  emitted `ASLICE` loop; extents are written-out numbers, checked
+  statically, so no runtime shape aborts exist.  `.shape` is
+  `[#m, #m[0]]`¤ptrdiff, safe because a matrix is never empty.
+  Literals check row-by-row against the stated type (ragged and
+  wrong extents refused with the counts); `⍴` and literals are the
+  only births.  Refused by name: rank-3, matrix equality (the
+  bootstrap threads it elementwise), printing a matrix, computed
+  rows in literals, row stores on an open row length, open-extent
+  arguments to fixed-extent parameters, `mut` matrix parameters.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's
