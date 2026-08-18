@@ -1,0 +1,47 @@
+// core-2: what a measure may meet.  A sum is of two of the same thing,
+// so its sides must be measured alike -- a plain number is not a
+// length, and adding one to a length is refused.  A product scales
+// instead: one side measured and one plain keeps the measure.  A
+// quotient divides the measures out, so two alike cancel to a bare
+// count, while what is left over after a division is measured as what
+// was divided.  An untyped number takes whatever measure it meets.
+
+@impure
+@start
+fn main():
+    let p ¤ptrdiff : i64 = 12
+    let q ¤ptrdiff : i64 = 5
+    let b ¤byte : i64 = 8
+    let n : i64 = 3
+
+    // alike meets alike, and an untyped number joins either
+    let sum ¤ptrdiff : i64 = p + q
+    let more ¤ptrdiff : i64 = p + 1
+    let least ¤ptrdiff : i64 = p ⌊ q
+    let held ¤ptrdiff : i64 = p ⊞ q
+    std.println("{} {} {} {}", sum, more, least, held)
+
+    // a product scales what it is given
+    let scaled ¤ptrdiff : i64 = p × n
+    let other ¤ptrdiff : i64 = n × p
+    let capped ¤ptrdiff : i64 = p ⊠ n
+    std.println("{} {} {}", scaled, other, capped)
+
+    // the measures cancel, and what is left over keeps them
+    let ratio : i64 = p ÷ q ?? 0
+    let part ¤ptrdiff : i64 = p ÷ n ?? 0
+    let rest ¤ptrdiff : i64 = p % q ?? 0
+    std.println("{} {} {}", ratio, part, rest)
+
+    // measured against measured, and against an untyped number
+    std.println("{} {} {}", p > q, p = q, p < 20)
+
+    // parting with a measure is written down
+    let plain : i64 = @dropunit(p) + n
+    let bytes ¤byte : i64 = b + 1
+    std.println("{} {}", plain, bytes)
+
+    // a subscript is measured, and the index arithmetic under it is not
+    let v : i64[] = [10, 20, 30, 40]
+    let i : i64 = 1
+    std.println("{} {}", v[(i + 1) × 1¤ptrdiff], #v)

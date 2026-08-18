@@ -3404,23 +3404,67 @@ impl Checker:
             // bare type; everything else adopts in full
             self.adopt(nb, tl)
             return tl
-        // two typed operands: wider wins, units meet, and a plain
-        // value takes the measure of the measured one
+        // two typed operands: wider wins, and what measure the result
+        // carries is the operator's own business
         let ul : i64 = ty_unit(tl)
         let ur : i64 = ty_unit(tr)
-        if ul ≠ ur and ul ≠ 0 and ur ≠ 0:
-            self.derr(tok, "a value measured " ⧺ type_name(tl) ⧺ " does not meet one measured " ⧺ type_name(tr))
+        let ru : i64 = self.unit_meet(tok, k, tl, tr)
         if ty_sgn(tl) ≠ ty_sgn(tr):
             // an unsigned value narrower than the signed side widens
             // as itself, and the signed type carries the operation
             let sg : i64 = tl if ty_sgn(tl) = 1 else tr
             let un : i64 = tr if ty_sgn(tl) = 1 else tl
             if ty_bits(sg) > ty_bits(un):
-                return ty_with_unit(ty_drop_unit(sg), ul ⌈ ur)
+                return ty_with_unit(ty_drop_unit(sg), ru)
             self.derr(tok, "signed and unsigned do not meet; " ⧺ type_name(tl) ⧺ " and " ⧺ type_name(tr))
             return tl
         let wide : i64 = tl if ty_bits(tl) >= ty_bits(tr) else tr
-        return ty_with_unit(ty_drop_unit(wide), ul ⌈ ur)
+        ty_with_unit(ty_drop_unit(wide), ru)
+
+    // What measure an operation's result carries, and whether the two
+    // operands may meet at all.  A sum is of two of the same thing, so
+    // its sides must be measured alike -- a plain number is not a
+    // length, and the bootstrap refuses to add it to one.  A product
+    // scales: one side measured and one plain keeps the measure, but
+    // both measured makes a measure of its own (ptrdiff×ptrdiff),
+    // which core-2 has no way to write down and so refuses.  A
+    // quotient divides the measures out: alike, they cancel.
+    fn unit_meet(&mut self, tok : i64, k : i64, tl : i64, tr : i64) → i64:
+        let ul : i64 = ty_unit(tl)
+        let ur : i64 = ty_unit(tr)
+        if k = ⁻1:
+            // a conditional is not an operation on its two sides; it
+            // hands one of them on, and the bootstrap lets the binding
+            // say what that is
+            return ul ⌈ ur
+        if k = NK_SHL or k = NK_SHR or k = NK_BAND or k = NK_BOR or k = NK_BXOR:
+            // measured operands are refused outright further on
+            return ul ⌈ ur
+        if k = NK_MUL or k = NK_SATMUL:
+            if ul ≠ 0 and ur ≠ 0:
+                self.derr(tok, "multiplying " ⧺ type_name(tl) ⧺ " by " ⧺ type_name(tr) ⧺ " makes a measure of its own, which core-2 cannot write down")
+                return 0
+            return ul ⌈ ur
+        if k = NK_DIV:
+            if ul = ur:
+                // the measures cancel and the answer is a bare count
+                return 0
+            if ur ≠ 0:
+                self.derr(tok, "dividing " ⧺ type_name(tl) ⧺ " by " ⧺ type_name(tr) ⧺ " makes a measure of its own, which core-2 cannot write down")
+                return 0
+            return ul
+        if k = NK_MOD:
+            if ul = ur:
+                // what is left over is measured as what was divided
+                return ul
+            if ur ≠ 0:
+                self.derr(tok, "taking " ⧺ type_name(tl) ⧺ " modulo " ⧺ type_name(tr) ⧺ " makes a measure of its own, which core-2 cannot write down")
+                return 0
+            return ul
+        // + - ⌈ ⌊ ⊞ ⊟: two of the same thing, or nothing
+        if ul ≠ ur:
+            self.derr(tok, "a value measured " ⧺ type_name(tl) ⧺ " does not meet one measured " ⧺ type_name(tr))
+        ul
 
     fn check_expr(&mut self, id : i64, want : i64):
         let k : i64 = self.kind_of(id)
@@ -3599,7 +3643,7 @@ impl Checker:
             if ta = tc:
                 self.set_type(id, ta)
             elif ty_is_int(ta) and ty_is_int(tc):
-                let joint : i64 = self.unify_arith(tok, id, NK_ADD, ta, tc)
+                let joint : i64 = self.unify_arith(tok, id, ⁻1, ta, tc)
                 _ ← self.try_fit(na, joint)
                 _ ← self.try_fit(nc, joint)
                 self.set_type(id, joint)
@@ -3905,9 +3949,15 @@ impl Checker:
                 self.derr(tok, "⧺ joins strings, characters and arrays in core-2")
             self.set_type(id, TY_STR)
         else:
-            // + - × ÷ % « » & | ^ ⌈ ⌊ over integers
-            self.check_expr(na, want)
-            self.check_expr(nb, want)
+            // + - × ÷ % « » & | ^ ⌈ ⌊ over integers.  A sum is of two
+            // of the same thing, so what is wanted of the whole is
+            // wanted of each side; a product is not, and pushing the
+            // wanted measure into its sides would have an untyped
+            // number there come out measured -- which is how
+            // 'n × 1¤ptrdiff' would end up adding a length to a count.
+            let side : i64 = ty_drop_unit(want) if (k = NK_MUL or k = NK_SATMUL or k = NK_DIV or k = NK_MOD) and ty_is_int(want) else want
+            self.check_expr(na, side)
+            self.check_expr(nb, side)
             let tl : i64 = self.ty_of(na)
             let tr : i64 = self.ty_of(nb)
             if not (tl = TY_UNT or ty_is_int(tl)) or not (tr = TY_UNT or ty_is_int(tr)):
@@ -3969,7 +4019,7 @@ impl Checker:
             let un2 : i64 = r if ty_sgn(l) = 1 else l
             if ty_bits(sg2) <= ty_bits(un2):
                 self.derr(tok, "signed and unsigned do not meet; " ⧺ type_name(l) ⧺ " and " ⧺ type_name(r))
-        elif ty_unit(l) ≠ ty_unit(r) and ty_unit(l) ≠ 0 and ty_unit(r) ≠ 0:
+        elif ty_unit(l) ≠ ty_unit(r):
             self.derr(tok, "a value measured " ⧺ type_name(l) ⧺ " does not meet one measured " ⧺ type_name(r))
         self.set_type(id, TY_BOOL)
 

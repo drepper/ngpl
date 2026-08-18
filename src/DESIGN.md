@@ -465,6 +465,21 @@ Attempt 3 grows core-1 to **core-2** with structs:
   anonymous.  A symbol table names its locals before its globals and
   says where the globals begin, which is what the two-pass build is
   for.
+- **what a measure may meet**: the rule is the operator's, not one
+  rule for all arithmetic.  A sum, a difference, `⌈`, `⌊`, the
+  saturating pair and every comparison want their sides measured
+  alike -- a plain number is not a length -- while an untyped number
+  takes whatever measure it meets.  A product scales: one side
+  measured and one plain keeps the measure, and two measured sides
+  make a measure of their own (`ptrdiff×ptrdiff`), which core-2
+  cannot write down and so refuses by name.  A quotient divides the
+  measures out, so two alike cancel to a bare count; a remainder
+  keeps what was divided.  A conditional is lax, as the bootstrap is
+  lax: it hands one side on rather than operating on both.  What is
+  wanted of a sum is wanted of each side, but what is wanted of a
+  product is not -- pushing a measure into a product's operands
+  would have the untyped `1` in `(pos + 1) × 1¤ptrdiff` come out
+  measured, and then be added to a plain `pos`.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's

@@ -159,9 +159,33 @@ than reasoned about.  It went unnoticed because ngplc's own source
 relied on the laxity in exactly the lines that provoked it.  Second,
 the bootstrap flattens one level of re-borrow but not two: a
 `&mut u8[]` handed on twice arrives as a `RefValue` with no methods.
-Both are recorded rather than fixed here; the first is a real
-conformance bug and wants its own batch, since tightening it will
-break every line of the compiler that leaned on it.
+The second is recorded and worked around; the first was fixed in
+the batch that followed, and the fix is worth the record.
+
+The compiler now decides what a measure may meet per operator, as
+the bootstrap does: a sum, a difference, a minimum, a saturating
+sum and every comparison want their sides measured alike, since a
+plain number is not a length; a product scales, so one measured
+side and one plain keeps the measure while two measured sides make
+a measure of their own — `ptrdiff×ptrdiff` — which core-2 has no
+way to write down and now refuses by name; a quotient divides the
+measures out, so two alike cancel to a bare count, while a
+remainder keeps what was divided.  A conditional stays lax, because
+the bootstrap is lax there: it hands one side on rather than
+operating on both, and lets the binding say what it is.  Twenty-five
+combinations were compared against the authority one by one, and
+all twenty-five now agree.
+
+The surprise was where the laxity actually lived.  Tightening the
+rule lit up 221 places in the compiler's own source — and every one
+of them was a single unrelated bug: the wanted type was being pushed
+into *both* sides of a product, so the untyped `1` in
+`(pos + 1) × 1¤ptrdiff` came out measured and was then added to a
+plain `pos`.  Not pushing a measure into a product's operands fixed
+all 221 at once and left the source untouched.  A rule that had
+looked like it needed a wide sweep needed one line, which is an
+argument for finding out what the errors have in common before
+starting to fix them.
 The interpreter's `println` of a range leaked the implementation's
 `RangeValue(3…7)` spelling and now answers the language's `3…7`.  The batch also caught a quiet
 acceptance bug through self-hosting: the bootstrap reserves every
