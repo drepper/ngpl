@@ -1,0 +1,46 @@
+// core-2: a hash answers the same whatever the probe underneath it
+// does.  The table reads sixteen control bytes at a time now, so what
+// this asks is what a group probe could get wrong: keys that land in
+// the same group and have to be told apart, a table that grows while
+// it is being filled, keys that are absent, a key overwritten rather
+// than added, and string keys whose bytes decide the answer.
+
+@impure
+@start
+fn main():
+    // more keys than a group holds, so the table grows several times
+    let g : mut std.hash(i64, i64) = (⸨⸩)
+    foreach i := 1…500:
+        g[i × 7] ← i
+    std.println("{}", #g)
+    let sum : mut i64 = 0
+    let held : mut i64 = 0
+    foreach i := 1…500:
+        sum ← sum + (g[i × 7] ?? 0)
+        held ← held + (1 if (i × 7) ∊ g else 0)
+    std.println("{} {}", sum, held)
+
+    // what was never put in is absent, and says so
+    let missing : mut i64 = 0
+    foreach i := 1…500:
+        missing ← missing + (1 if (i × 7 + 1) ∊ g else 0)
+    std.println("{} {}", missing, g[3] ?? ⁻1)
+
+    // a key put twice is one key
+    g[7] ← 1000
+    std.println("{} {}", g[7] ?? 0, #g)
+
+    // string keys, told apart by their bytes and not their length
+    let s : mut std.hash(str, i64) = (⸨⸩)
+    s["a"] ← 1
+    s["b"] ← 2
+    s["ab"] ← 3
+    s["ba"] ← 4
+    s[""] ← 5
+    std.println("{} {} {} {} {}", s["a"] ?? 0, s["b"] ?? 0, s["ab"] ?? 0,
+                s["ba"] ?? 0, s[""] ?? 0)
+    std.println("{} {} {}", #s, "ab" ∊ s, "ac" ∊ s)
+
+    // a literal table still answers
+    let lit : std.hash(str, i64) = (⸨"one": 1, "two": 2, "three": 3⸩)
+    std.println("{} {} {}", lit["one"] ?? 0, lit["three"] ?? 0, lit["four"] ?? ⁻1)

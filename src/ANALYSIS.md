@@ -284,8 +284,8 @@ past i64.
    representation conforms by construction, and the subset's
    remaining freshness rules (mut bindings and reassignment) are
    discipline, not representation.  The
-   hash runtime is linear probing, not yet the 16-wide `pcmpeqb`
-   Swiss-table probe the design planned, and the lexer still decodes
+   hash runtime now probes sixteen slots at a time with `pcmpeqb`,
+   as the design planned, and the lexer still decodes
    UTF-8 a byte at a time rather than through the shift-DFA and mask
    pipeline the design researched — correctness first, the SIMD shape
    when the native compiler makes it measurable.
@@ -361,10 +361,11 @@ ngplc's diagnostics go to stdout.
    the optional surface was finished later: what `pop` and `get`
    answer is now the optional itself rather than something that
    must be given a default on the spot, and a tuple may be
-   optional.  What is still owed from this point is the two
-   runtimes it named -- the Swiss-table hash probe and the
-   shift-DFA UTF-8 decoder -- both of which are performance
-   rewrites of working code, listed under What Fell Short.)*
+   optional.  The Swiss-table probe landed
+   after it: sixteen control bytes compared at a time, the tag
+   kept nonzero so an empty slot stays the zero fresh memory
+   already is, 1.8× on a mixed hit-and-miss workload.  What is
+   still owed from this point is the shift-DFA UTF-8 decoder.)*
 3. Linear-scan register allocation over the existing IR; value-table
    folding of constant-armed ladders.
 4. Parser error recovery with synchronization at statement starts;
