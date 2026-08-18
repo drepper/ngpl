@@ -525,9 +525,21 @@ Attempt 3 grows core-1 to **core-2** with structs:
   replaced, on both repeating text and text whose character widths
   are chosen unpredictably: no difference.  `.chars()` allocates
   eight bytes for every input byte, and that is what the time goes
-  on -- the decode was never the cost.  Making `foreach ch := s`
-  walk the bytes without materializing the array is where that cost
-  actually is, and is its own piece of work.
+  on -- the decode was never the cost.
+- **walking a string reads it where it lies**: `foreach ch := s` no
+  longer lays the characters out in an array first.  It keeps a byte
+  position and asks the runtime for the character there and where the
+  next one begins, which is the same shift-DFA run until it says a
+  character is whole.  The position moves before the body, so
+  `continue` leaves the walk where the next character starts.  What
+  this saves is not instructions but memory: the array cost eight
+  bytes for every byte of the string, and the arena does not take
+  them back, so a walk repeated was a walk that grew.  Walking a
+  50 KB string 400 times went from 185 MB of peak resident memory to
+  52 MB, and 2000 walks over a 5 KB string now peak at 3.8 MB --
+  which is the string itself.  A program that only walks strings no
+  longer carries the routine that lays them out at all; the dead
+  runtime is dropped as any other unreached routine is.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's

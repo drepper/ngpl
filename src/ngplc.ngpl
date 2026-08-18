@@ -6394,6 +6394,7 @@ let IR_AREF : i64 = 97     // d ← the address of array a's element b
 let IR_DENTS : i64 = 98    // d ← the working directory's entries
 let IR_ENVN : i64 = 101    // d ← the environment's names, a str[]
 let IR_ENVG : i64 = 102    // d ← the value of the variable named a, a str?
+let IR_SDEC : i64 = 105    // d ← the character at a's byte b, c ← the byte after it
 let IR_AUXV : i64 = 103    // d ← the auxiliary vector's entry for key a
 let IR_EXECFN : i64 = 104  // d ← AT_EXECFN as a string
 let IR_FADDR : i64 = 99    // d ← the code address of function a
@@ -8174,12 +8175,43 @@ impl Lower:
             self.lower_range_loop(sid, lo9, hi9, st9, body, ret_ty)
             return
         let evar : i64 = self.nslot[sid × 1¤ptrdiff]
+        if self.tof(arr) = TY_STR:
+            // A string is walked where it lies.  Laying its characters
+            // out first would cost eight bytes for every byte read, and
+            // the arena does not take them back -- a walk repeated is a
+            // walk that grows.  Each turn decodes one character and says
+            // where the next one begins.
+            let sv : i64 = self.lower_expr(arr)
+            let sb : i64 = self.tmp()
+            self.ir(IR_FLD, sv, 1, 0, sb, 0)
+            let si : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, si, 0)
+            let sbase : i64 = self.tbase
+            self.tbase ← self.tnext
+            let stop : i64 = self.label()
+            let scont : i64 = self.label()
+            let send : i64 = self.label()
+            self.ir(IR_LABEL, stop, 0, 0, 0, 0)
+            let sc : i64 = self.tmp()
+            self.ir(IR_CLT, si, sb, 0, sc, 64 + 256)
+            self.ir(IR_JZ, sc, send, 0, 0, 0)
+            let snext : i64 = self.tmp()
+            self.ir(IR_SDEC, sv, si, snext, evar, 0)
+            // the position moves before the body, so a continue leaves
+            // the walk where the next character begins
+            self.ir(IR_MOV, snext, 0, 0, si, 0)
+            self.breaks.push(send)
+            self.conts.push(scont)
+            self.lower_block(body, false, ret_ty)
+            _ ← self.breaks.pop() ?? 0
+            _ ← self.conts.pop() ?? 0
+            self.ir(IR_LABEL, scont, 0, 0, 0, 0)
+            self.ir(IR_JMP, stop, 0, 0, 0, 0)
+            self.ir(IR_LABEL, send, 0, 0, 0, 0)
+            self.tbase ← sbase
+            return
         let av0 : i64 = self.lower_expr(arr)
         let av : mut i64 = av0
-        if self.tof(arr) = TY_STR:
-            let cv : i64 = self.tmp()
-            self.ir(IR_CHARS, av0, 0, 0, cv, 0)
-            av ← cv
         let desc : i64 = self.tmp()
         self.ir(IR_MOV, av, 0, 0, desc, 0)
         let iv : i64 = self.tmp()
@@ -8562,6 +8594,7 @@ let RT_ENVG : i64 = ⁻41
 let RT_AUXV : i64 = ⁻42
 let RT_EXECFN : i64 = ⁻43
 let RT_RELRO : i64 = ⁻44
+let RT_STRNEXT : i64 = ⁻45
 
 struct Emit:
     code : u8[]
@@ -9356,6 +9389,12 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.load(R_DI, a)
             em.jglobal(232, ⁻1, RT_CHARSTR)
             em.store(R_AX, d)
+        elif o = IR_SDEC:
+            em.load(R_DI, a)
+            em.load(R_SI, b)
+            em.jglobal(232, ⁻1, RT_STRNEXT)
+            em.store(R_AX, d)
+            em.store(R_DX, c)
         elif o = IR_AUXV:
             em.movimm(R_DI, a)
             em.jglobal(232, ⁻1, RT_AUXV)
@@ -11175,6 +11214,55 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.b1(195)
     em.resolve_locals()
 
+    // RT_STRNEXT: rdi = descriptor, rsi = a byte position → rax = the
+    // character there, rdx = the position the next one begins at.  The
+    // same shift-DFA as RT_CHARS, run until it says a character is
+    // whole -- which is what lets a walk over a string read it where it
+    // lies instead of laying its characters out first.
+    em.rt_begin(RT_STRNEXT)
+    em.begin_fn(1)
+    em.b3(76, 139, 7)               // mov r8, [rdi]: the bytes
+    em.b3(77, 49, 210)              // xor r10, r10: the state
+    em.b3(77, 49, 201)              // xor r9, r9: the code point
+    em.rxref(R_R11, 0)              // the byte classes
+    em.rxref(R_DI, 256)             // the transition words
+    em.set_label(0)                 // Lstep
+    em.b4(65, 15, 182, 4)
+    em.b1(48)                       // movzx eax, byte [r8+rsi]
+    em.b3(72, 255, 198)             // inc rsi
+    em.b4(69, 15, 182, 60)
+    em.b1(3)                        // movzx r15d, byte [r11+rax]: the class
+    em.b3(72, 199, 194)
+    em.w32(255)                     // mov rdx, 255
+    em.b3(76, 137, 249)             // mov rcx, r15
+    em.b3(72, 211, 234)             // shr rdx, cl
+    em.b3(72, 199, 193)
+    em.w32(63)                      // mov rcx, 63
+    em.b3(77, 133, 210)             // test r10, r10
+    em.b4(72, 15, 69, 209)          // cmovnz rdx, rcx
+    em.b3(72, 33, 208)              // and rax, rdx
+    em.b3(72, 49, 210)              // xor rdx, rdx
+    em.b3(77, 133, 210)             // test r10, r10
+    em.b4(76, 15, 68, 202)          // cmovz r9, rdx
+    em.b3(72, 49, 201)              // xor rcx, rcx
+    em.b3(72, 199, 194)
+    em.w32(6)                       // mov rdx, 6
+    em.b3(77, 133, 210)             // test r10, r10
+    em.b4(72, 15, 69, 202)          // cmovnz rcx, rdx
+    em.b3(73, 211, 225)             // shl r9, cl
+    em.b3(73, 9, 193)               // or r9, rax
+    em.b4(74, 139, 4, 255)          // mov rax, [rdi+r15*8]
+    em.b3(76, 137, 209)             // mov rcx, r10
+    em.b3(72, 211, 232)             // shr rax, cl
+    em.b4(72, 131, 224, 63)         // and rax, 63
+    em.b3(73, 137, 194)             // mov r10, rax
+    em.b3(77, 133, 210)             // test r10, r10
+    em.jlocal(133, 0)               // jnz Lstep
+    em.b3(76, 137, 200)             // mov rax, r9
+    em.b3(72, 137, 242)             // mov rdx, rsi
+    em.b1(195)
+    em.resolve_locals()
+
 // the runtime's own routines, in the order their ids run, so a symbol
 // table can name the code they occupy
 fn rt_names() → str[]:
@@ -11222,7 +11310,8 @@ fn rt_names() → str[]:
     "RT_ENVG",
     "RT_AUXV",
     "RT_EXECFN",
-    "RT_RELRO"]
+    "RT_RELRO",
+    "RT_STRNEXT"]
 
 // The UTF-8 decoder is Hoehrmann's DFA in the shift form the design
 // researched: nine states, twelve byte classes, and a step that is one
@@ -12105,7 +12194,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
     // What the program calls, and what that calls in turn.  Everything
     // emitted so far is the program's own; the calls it made name the
     // runtime it needs, and the edge list closes over the rest.
-    let nrt : i64 = 44
+    let nrt : i64 = 45
     foreach _ := 1…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
@@ -12247,6 +12336,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
     soffs.push(0)
     sglob.push(false)
     let rtn := rt_names()
+    assert(@dropunit(#rtn) = nrt, "one name for every runtime routine")
     if #em.rt_off > 0:
         foreach i := 0…#em.rt_off - 1:
             // a routine nobody reached is in no binary, and so is no

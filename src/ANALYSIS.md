@@ -292,9 +292,16 @@ past i64.
    repeating text and text whose character widths are chosen
    unpredictably — the ladder and the automaton run the same, because
    `.chars()` allocates eight bytes for every input byte and that,
-   not the decode, is where the time goes.  The SIMD block pipeline
-   the design researched remains unbuilt, and would want the
-   allocation dealt with first.
+   not the decode, is where the time goes.  That allocation was then
+   dealt with where it mattered most: `foreach ch := s` walks the
+   bytes in place now, asking the runtime for one character and the
+   position of the next, so a walk allocates nothing at all.  Walking
+   a 50 KB string 400 times fell from 185 MB of peak resident memory
+   to 52 MB, and 2000 walks over a 5 KB string peak at 3.8 MB, which
+   is the string.  The compiler itself did not move: its lexer reads
+   bytes directly rather than walking characters, so the win belongs
+   to programs, not to the build.  The SIMD block pipeline the design
+   researched remains unbuilt.
 2. **Register allocation is one register deep.**  The emitter's rax
    memo skips reloads (~3% of code) but every value still lives in a
    stack slot; the true linear-scan allocator over the width-annotated

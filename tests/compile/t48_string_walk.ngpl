@@ -1,0 +1,72 @@
+// core-2: walking a string reads it where it lies.  The characters are
+// no longer laid out in an array first, so this is a loop of its own
+// and everything a loop can do has to still work in it: leaving early,
+// skipping a turn, nesting, walking nothing, and walking beside other
+// loops.  What it answers must be what laying them out answered.
+
+fn vowels(s : str) -> i64:
+    let n : mut i64 = 0
+    foreach c := s:
+        if c = 'a' ∨ c = 'e' ∨ c = 'i' ∨ c = 'o' ∨ c = 'u':
+            n ← n + 1
+    return n
+
+@impure
+@start
+fn main():
+    let s : str = "aλb→c𝄞d"
+
+    // the walk and the array agree, character for character
+    let walked : mut i64 = 0
+    foreach c := s:
+        walked ← walked + c.ord()
+    let laid : mut i64 = 0
+    foreach c := s.chars():
+        laid ← laid + c.ord()
+    std.println("{} {} {}", walked, laid, walked = laid)
+
+    // leaving early, at each width
+    let upto : mut i64 = 0
+    foreach c := s:
+        if c = '𝄞':
+            break
+        upto ← upto + 1
+    std.println("{}", upto)
+
+    // skipping a turn leaves the walk in step
+    let kept : mut str = ""
+    foreach c := s:
+        if c = 'λ' ∨ c = '→':
+            continue
+        kept ← kept ⧺ c
+    std.println("{} {}", kept, #kept)
+
+    // one walk inside another, over the same string
+    let same : mut i64 = 0
+    foreach a := s:
+        foreach b := s:
+            if a = b:
+                same ← same + 1
+    std.println("{}", same)
+
+    // a string with nothing in it
+    let none : mut i64 = 0
+    foreach _c := "":
+        none ← none + 1
+    std.println("{}", none)
+
+    // a walk beside a range walk, and one in a function
+    let mixed : mut i64 = 0
+    foreach i := 1…3:
+        foreach c := "ab":
+            mixed ← mixed + i × c.ord()
+    std.println("{} {}", mixed, vowels("alphabet soup"))
+
+    // ASCII only, and one character only
+    let a : mut i64 = 0
+    foreach c := "hello world":
+        a ← a + c.ord()
+    let one : mut i64 = 0
+    foreach c := "𝄞":
+        one ← one + c.ord()
+    std.println("{} {}", a, one)
