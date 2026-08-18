@@ -113,6 +113,7 @@ let TK_BANG : i64 = 101      // ! -- the expected suffix on a type
 let TK_SEMI : i64 = 102      // ; -- between statements in a brace block
 let TK_TYPE : i64 = 103      // type: a name standing for a type
 let TK_ENUM : i64 = 104      // enum
+let TK_UNIT : i64 = 105      // unit: a measure the file gives a name
 
 // The keyword table: one hash probe replaces a comparison ladder.  A
 // word the bootstrap language reserves but core-1 gives no meaning is
@@ -126,7 +127,7 @@ let KEYWORDS : std.hash(str, i64) = (⸨
     "opt": 99, "is": 99, "import": 99, "some": 99,
     "start": 99, "test": 99, "expect": 99, "wrap": 99, "enum": 104,
     "flag": 99, "replaceable": 99, "catch": 99, "comptime": 99,
-    "type": 103, "unit": 99, "impure": 99, "enumerate": 99,
+    "type": 103, "unit": 105, "impure": 99, "enumerate": 99,
     "macro": 99⸩)
 
 // The multi-byte glyphs, keyed by their UTF-8 bytes packed into one
@@ -216,7 +217,7 @@ let TY_UNIT : i64 = 0
 let TY_BOOL : i64 = 2
 let TY_STR : i64 = 3
 let TY_CHAR : i64 = 4       // one Unicode scalar value, UCS-4 in a slot
-let TY_U32 : i64 = 80       // what .ord() answers
+let TY_U32 : i64 = 20       // what .ord() answers
 let TY_FILE : i64 = 5       // an open file, its descriptor inside
 let TY_ALLOC : i64 = 6      // std.arena.allocator(): a token, nothing more
 let TY_DIR : i64 = 7        // std.fs.cwd(): a directory, a token likewise
@@ -224,20 +225,45 @@ let TY_ENTRY : i64 = 10     // one directory entry: a name and a kind
 let TY_FTYPE : i64 = 11     // std.filetype.*: the S_IF* constants, compared, not counted
 let TY_UNT : i64 = 8
 let TY_EMPTY : i64 = 9       // a bare ∅, not yet settled on its optional
-let TY_U64 : i64 = 144       // 16 + 0 + 2×64
-let TY_I64 : i64 = 145       // 16 + 1 + 2×64
-let TY_U8 : i64 = 32         // 16 + 0 + 2×8
-let TY_U16 : i64 = 48        // 16 + 0 + 2×16
+let TY_U64 : i64 = 22        // 16 + 0 + 2×3, the widest unsigned
+let TY_I64 : i64 = 23        // 16 + 1 + 2×3, the widest signed
+let TY_U8 : i64 = 16         // 16 + 0 + 2×0, the narrowest unsigned
+let TY_U16 : i64 = 18        // 16 + 0 + 2×1
 
 let UNIT_NONE : i64 = 0
 let UNIT_PTRDIFF : i64 = 1
 let UNIT_BYTE : i64 = 2
 
+// The measures a file starts with, in the order their indexes run.  A
+// name is what the program writes; the spelling beside it is what a
+// printed value carries, and is the interpreter's for that measure.
+// A unit the program defines is added after these.
+fn unit_names() → str[]:
+    ["", "ptrdiff", "byte", "meter", "second", "kilogram", "count",
+     "distance", "kilometer", "centimeter", "millimeter", "millisecond",
+     "microsecond", "minute", "hour", "gram", "milligram", "ampere",
+     "kelvin", "mole", "candela", "kilobyte", "kibibyte", "megabyte",
+     "mebibyte", "gigabyte", "gibibyte"]
+
+fn unit_marks() → str[]:
+    ["", "ptrdiff", "B", "m", "s", "kg", "count",
+     "distance", "km", "cm", "mm", "ms",
+     "μs", "min", "h", "g", "mg", "A",
+     "K", "mol", "cd", "kB", "KiB", "MB",
+     "MiB", "GB", "GiB"]
+
+// core-2 holds four widths, so two bits say which; the five bits that
+// spelling a width out used to take now say which measure the value
+// carries, and a measure is an index into the file's list of them.
+@pre(bits = 8 or bits = 16 or bits = 32 or bits = 64)
+fn width_index(bits : i64) → i64:
+    0 if bits = 8 else (1 if bits = 16 else (2 if bits = 32 else 3))
+
 @pre(sgn = 0 or sgn = 1)
 @pre(bits = 8 or bits = 16 or bits = 32 or bits = 64)
-@pre(u >= 0 and u <= 2)
+@pre(u >= 0 and u < 125)
 fn mk_ity(sgn : i64, bits : i64, u : i64) → i64:
-    16 + sgn + 2 × bits + 256 × u
+    16 + sgn + 2 × width_index(bits) + 8 × u
 
 // ty_is_int and the accessors below run for every node the checker
 // touches; the encoding invariants are enforced at mk_ity and the
@@ -289,16 +315,16 @@ fn ty_sgn(t : i64) → i64:
     (t - 16) & 1
 
 fn ty_bits(t : i64) → i64:
-    ((t - 16) » 1) & 127
+    8 « (((t - 16) » 1) & 3)
 
 fn ty_unit(t : i64) → i64:
-    (t » 8) & 3
+    (t - 16) » 3
 
 fn ty_drop_unit(t : i64) → i64:
-    t - 256 × ty_unit(t) if ty_is_int(t) else t
+    t - 8 × ty_unit(t) if ty_is_int(t) else t
 
 fn ty_with_unit(t : i64, u : i64) → i64:
-    ty_drop_unit(t) + 256 × u
+    ty_drop_unit(t) + 8 × u
 
 // arrays hold plain integers or structs, so the band closes below the
 // hashes' 8192; keeping the two disjoint is what lets every ty_is_*
@@ -802,15 +828,18 @@ impl Lexer:
             while self.peek(0) ≠ ⁻1 and self.cls[self.peek(0) × 1¤ptrdiff] = CL_IDENT:
                 usfx ← usfx ⧺ (self.peek(0)).chr()
                 self.adv()
-            let u : mut i64 = 0
-            if usfx = "ptrdiff":
-                u ← UNIT_PTRDIFF
-            elif usfx = "byte":
-                u ← UNIT_BYTE
-            else:
-                self.err("'¤" ⧺ usfx ⧺ "' is not a core-1 unit; ptrdiff and byte are")
+            // the lexer runs before any 'unit' definition is read, so
+            // it knows the measures the language ships with and leaves
+            // the rest to the parser
+            let names := unit_names()
+            let u : mut i64 = ⁻1
+            foreach i := 1…#names - 1:
+                if names[i] = usfx:
+                    u ← @dropunit(i)
+            if u = ⁻1:
+                self.err("'¤" ⧺ usfx ⧺ "' is no measure the language ships with; a literal takes one of those")
                 return
-            st ← (st if st ≠ ⁻1 else TY_I64) + 256 × u
+            st ← ty_with_unit(st if st ≠ ⁻1 else TY_I64, u)
         if st ≠ ⁻1:
             self.emit(TK_INT, spos, self.pos - spos, scol, v, big + st × 2)
             return
@@ -1212,9 +1241,9 @@ fn proc_key(m : i64) → i64:
 
 // the base type names, one probe instead of a ladder
 let TYNAMES : std.hash(str, i64) = (⸨
-    "i8": 33, "i16": 49, "i32": 81, "i64": 145,
-    "u8": 32, "u16": 48, "u32": 80, "u64": 144,
-    "bool": 2, "str": 3, "char": 4, "byte": 32⸩)
+    "i8": 17, "i16": 19, "i32": 21, "i64": 23,
+    "u8": 16, "u16": 18, "u32": 20, "u64": 22,
+    "bool": 2, "str": 3, "char": 4, "byte": 16⸩)
 
 struct FnDef:
     name : str
@@ -1265,6 +1294,8 @@ struct Ast:
     lts : i64[]          // lambda signatures: start into lte per shape
     ltl : i64[]          // … how many parameters
     lte : i64[]          // … the parameter types then the answer, flattened
+    unames : str[]       // the measures the file knows
+    umarks : str[]       // … and how each one prints
     enames : str[]       // enums: the name of each
     ewidth : i64[]       // … the integer type its values are held in
     estart : i64[]       // … where its enumerators begin in emembers
@@ -1294,6 +1325,8 @@ struct Parser:
     structs : SDef[]
     tanames : str[]      // the names standing for types, and what they stand for
     tatypes : i64[]
+    unames : str[]       // the measures this file knows, builtin then defined
+    umarks : str[]       // … and how each one prints
     snames : str[]       // struct names, pre-scanned so a struct may
                          // be written below whatever names it
     tts : i64[]          // interned tuple shapes, moved into the Ast
@@ -1513,15 +1546,15 @@ impl Parser:
             _ ← self.eat_word("the unit's name")
             if not ty_is_int(base):
                 self.err("only an integer carries a unit")
-            elif uname = "ptrdiff":
-                base ← ty_with_unit(base, UNIT_PTRDIFF)
-            elif uname = "byte":
-                base ← ty_with_unit(base, UNIT_BYTE)
             else:
-                self.err("'¤" ⧺ uname ⧺ "' is not a core-1 unit; ptrdiff and byte are")
+                let uix : i64 = self.unit_index(uname)
+                if uix ≠ ⁻1:
+                    base ← ty_with_unit(base, uix)
+                else:
+                    self.err("'¤" ⧺ uname ⧺ "' is no measure this file knows")
         if self.peek() = TK_LBRACK:
             self.pos ← self.pos + 1
-            if not (ty_is_int(base) and ty_unit(base) = 0) and not ty_is_struct(base) and not ty_is_enum(base) and base ≠ TY_CHAR and base ≠ TY_STR and base ≠ TY_BOOL:
+            if not ty_is_int(base) and not ty_is_struct(base) and not ty_is_enum(base) and base ≠ TY_CHAR and base ≠ TY_STR and base ≠ TY_BOOL:
                 self.err("a core-2 array holds plain integers, truth values, characters, strings or structs")
                 return TY_I64
             let d0 : mut i64 = ⁻1
@@ -1670,15 +1703,29 @@ impl Parser:
         ⁻1
 
     // the ¤unit that may follow a binding's or parameter's name
+    fn unit_index(&self, name : str) → i64:
+        foreach i := 1…#self.unames - 1:
+            if self.unames[i] = name:
+                return @dropunit(i)
+        ⁻1
+
     fn parse_name_unit(&mut self) → i64:
         if self.peek() ≠ TK_CURRENCY:
             return UNIT_NONE
         self.pos ← self.pos + 1
-        let uname := self.ttext(self.pos)
-        _ ← self.eat_word("the unit's name")
-        if uname = "ptrdiff": return UNIT_PTRDIFF
-        if uname = "byte": return UNIT_BYTE
-        self.err("'¤" ⧺ uname ⧺ "' is not a core-1 unit; ptrdiff and byte are")
+        // ¤name for one the language knows, ¤"name" for one the file
+        // defined, as the specification writes them
+        let uname : mut str = ""
+        if self.peek() = TK_STR:
+            uname ← self.toks.strs[self.toks.val[self.pos × 1¤ptrdiff] × 1¤ptrdiff]
+            self.pos ← self.pos + 1
+        else:
+            uname ← self.ttext(self.pos)
+            _ ← self.eat_word("the unit's name")
+        let u : i64 = self.unit_index(uname)
+        if u ≠ ⁻1:
+            return u
+        self.err("'¤" ⧺ uname ⧺ "' is no measure this file knows")
         UNIT_NONE
 
     // ------------------------------------------------------------------
@@ -2380,7 +2427,15 @@ impl Parser:
         let ty0 : i64 = self.parse_type(false)
         let ty : mut i64 = ty0
         if u ≠ UNIT_NONE:
-            if not ty_is_int(ty):
+            // a measure written by the name measures what an array
+            // holds, as it measures a bare number: 'let d ¤meter :
+            // i64[]' is an array of lengths
+            if ty_is_arr(ty) and not ty_is_farr(ty) and ty_is_int(ty_elem(ty)):
+                if ty_unit(ty_elem(ty)) ≠ 0 and ty_unit(ty_elem(ty)) ≠ u:
+                    self.err("the name and the type say different units")
+                else:
+                    ty ← mk_aty(ty_with_unit(ty_elem(ty), u))
+            elif not ty_is_int(ty):
                 self.err("only an integer carries a unit")
             elif ty_unit(ty) ≠ 0 and ty_unit(ty) ≠ u:
                 self.err("the name and the type say different units")
@@ -2812,6 +2867,30 @@ impl Parser:
         self.estart.push(first)
         self.ecount.push(n)
 
+    // unit name: a measure of the file's own, standing for nothing but
+    // itself.  It is written ¤"name" where a shipped one is written
+    // ¤name, as the specification has it.  A measure derived from
+    // others -- a ratio of them, or a product -- is not core-2 yet:
+    // what core-2 does with a measure is keep it apart from the
+    // others, and that needs only its name.
+    fn parse_unit_def(&mut self):
+        self.pos ← self.pos + 1
+        let name_tok : i64 = self.pos
+        let name := self.ttext(name_tok)
+        _ ← self.eat_name("the measure's name")
+        if self.unit_index(name) ≠ ⁻1:
+            self.err("'" ⧺ name ⧺ "' already names a measure")
+            return
+        if self.peek() = TK_EQ:
+            self.err("a measure derived from others is not core-2 yet; 'unit " ⧺ name ⧺ "' names one of its own")
+            return
+        if @dropunit(#self.unames) >= 125:
+            self.err("this file names more than 125 measures")
+            return
+        self.unames.push(name)
+        self.umarks.push(name)
+        self.end_stmt()
+
     // type Name = T: a name standing for a type, and nothing more --
     // what it stands for is what it is, everywhere the name is written
     fn parse_type_alias(&mut self):
@@ -3010,6 +3089,8 @@ impl Parser:
                 self.parse_struct()
             else:
                 self.parse_impl()
+        elif self.peek() = TK_UNIT:
+            self.parse_unit_def()
         elif self.peek() = TK_TYPE:
             self.parse_type_alias()
         elif self.peek() = TK_ENUM:
@@ -3027,6 +3108,7 @@ fn parse(toks : Toks, src : byte[]) → Ast:
                                  nkind: [], ntok: [], na: [], nb: [], nc: [],
                                  extra: [], fns: [], globals: [], structs: [],
                                  tanames: [], tatypes: [],
+                                 unames: unit_names(), umarks: unit_marks(),
                                  snames: [], tts: [], ttl: [], tte: [],
                                  fae: [], fas: [],
                                  mel: [], mrr: [], mcc: [],
@@ -3073,6 +3155,7 @@ fn parse(toks : Toks, src : byte[]) → Ast:
          fae: p.fae, fas: p.fas,
          mel: p.mel, mrr: p.mrr, mcc: p.mcc,
          lts: p.lts, ltl: p.ltl, lte: p.lte,
+         unames: p.unames, umarks: p.umarks,
          enames: p.enames, ewidth: p.ewidth, estart: p.estart,
          ecount: p.ecount, emembers: p.emembers, evalues: p.evalues,
          ignored: p.ignored, igtests: p.igtests, diags: p.diags})
@@ -4598,7 +4681,7 @@ impl Checker:
                 self.derr(tok, "the elements state no type; the binding must say it")
             self.set_type(id, want if ty_is_arr(want) else mk_aty(TY_I64))
             return
-        if not (ty_is_int(settled) and ty_unit(settled) = 0) and not ty_is_struct(settled) and not ty_is_enum(settled) and settled ≠ TY_CHAR and settled ≠ TY_STR and settled ≠ TY_BOOL:
+        if not ty_is_int(settled) and not ty_is_struct(settled) and not ty_is_enum(settled) and settled ≠ TY_CHAR and settled ≠ TY_STR and settled ≠ TY_BOOL:
             self.derr(tok, "a core-2 array holds plain integers, truth values, characters, strings or structs")
             self.set_type(id, mk_aty(TY_I64))
             return
@@ -7908,10 +7991,8 @@ impl Lower:
                 self.ir(IR_PRINTU, v, 0, 0, 0, 0)
             // a measured value prints its measure, as the interpreter does
             let u : i64 = ty_unit(t)
-            if u = UNIT_PTRDIFF:
-                self.ir(IR_PRINTS, self.intern(" ptrdiff"), 0, 0, 0, 0)
-            elif u = UNIT_BYTE:
-                self.ir(IR_PRINTS, self.intern(" B"), 0, 0, 0, 0)
+            if u ≠ UNIT_NONE:
+                self.ir(IR_PRINTS, self.intern(" " ⧺ self.a.umarks[u × 1¤ptrdiff]), 0, 0, 0, 0)
 
     // ------------------------------------------------------------------
     // Statements

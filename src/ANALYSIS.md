@@ -111,6 +111,20 @@ it is worth stating plainly: a feature is worth landing for the
 walls it removes, not only for the files it flips, and the two are
 rarely the same batch.
 
+Named measures followed, and were the same story at twice the size:
+twelve files carried `¤meter` or `¤count` as their blocker and none
+does now.  The interesting part was where the room came from.  A
+general measure wants an index, and the two bits the old encoding
+spared could hold four; every obvious way to widen it -- a wrapper
+band, a bigger integer band -- moved every other band with it, and
+one of them, the array's `4096 + elem`, cannot hold a code above
+4095 at all.  The room was already there: core-2 holds four widths,
+so two bits say which, and the five that spelling a width out used
+to take were free.  125 measures now fit inside the same 16..1023
+the integers always had, and not one other band moved.  Worth
+remembering the next time a field looks too narrow -- the question
+is what the field is actually spending its bits on.
+
 The generated binaries then stopped borrowing the kernel's stack:
 `_start` reserves `guard + stack` of address space, opens the stack
 part, and stands on it, so an overflow faults on a guard that is

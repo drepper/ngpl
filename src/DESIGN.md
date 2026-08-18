@@ -557,6 +557,27 @@ Attempt 3 grows core-1 to **core-2** with structs:
   Refused by name: writing an enum's value out (the interpreter
   prints `Color.green`, which wants the names in the image), and
   `@flag` enums.
+- **measures with names, and a file's own**: a unit is an index into
+  the file's list of them rather than one of two hardcoded kinds.
+  The list starts with the ones the language ships -- `meter`,
+  `second`, `kilogram`, `count`, `distance`, the SI multiples and the
+  byte multiples, alongside `ptrdiff` and `byte` -- and `unit name`
+  adds one of the file's own, written `¤"name"` where a shipped one
+  is written `¤name`.  A measured value prints with that measure's
+  own mark (`5 m`, `9 widgets`), which is the interpreter's mark for
+  it.  The rules are the ones already in place per operator: alike
+  meets alike, a plain number scales, two alike cancel to a bare
+  count.  A measure written by a binding's name measures what an
+  array holds, so `let d ¤meter : i64[]` is an array of lengths.
+  Room for this came from the integer type's own code rather than a
+  new band: core-2 holds four widths, so two bits say which, and the
+  five bits that spelling a width out used to take now hold the
+  measure -- 125 of them, in the same 16..1023 the integers always
+  had, so every other band stayed exactly where it was.  Refused by
+  name: a measure derived from others (`unit mph = … × meter ÷
+  second`), and conversion between related measures -- core-2 keeps
+  measures apart rather than converting between them, so `km + m` is
+  refused where the bootstrap converts.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's

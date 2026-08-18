@@ -1,0 +1,57 @@
+// core-2: a measure is a name a number carries, and a file may name
+// its own.  The ones the language ships with are written ¤meter; the
+// ones a file defines with `unit` are written ¤"widgets", as the
+// specification has it.  What a measure does is keep values apart: two
+// of the same may be added and compared, a plain number scales one,
+// and a quotient of two alike is a bare count.  What prints beside a
+// value is the measure's own mark.
+
+unit widgets
+unit crates
+
+fn area(w ¤meter : i64, h ¤meter : i64) -> i64:
+    // two lengths do not multiply into a length, so their measures are
+    // parted with before the product is taken
+    return @dropunit(w) × @dropunit(h)
+
+fn restock(have ¤"widgets" : i64, more ¤"widgets" : i64) -> i64:
+    return @dropunit(have + more)
+
+@impure
+@start
+fn main():
+    let a ¤meter : i64 = 5
+    let b ¤meter : i64 = 7
+    let t ¤second : i64 = 3
+    let m ¤kilogram : i64 = 2
+    let c ¤count : i64 = 9
+    std.println("{} {} {} {}", a, t, m, c)
+    std.println("{} {}", a + b, b - a)
+    std.println("{} {}", a < b, a = b)
+
+    // a plain number scales a measured one, either way round
+    std.println("{} {}", a × 3, 3 × a)
+    std.println("{}", b ÷ 2 ?? 0)
+
+    // two alike cancel to a bare count
+    let ratio : i64 = b ÷ a ?? 0
+    std.println("{}", ratio)
+
+    // an untyped number takes whatever measure it meets
+    std.println("{}", a + 1)
+
+    // a measure a file named for itself
+    let w ¤"widgets" : i64 = 4
+    let x ¤"widgets" : i64 = 6
+    let k ¤"crates" : i64 = 2
+    std.println("{} {} {}", w, x, k)
+    std.println("{} {}", w + x, restock(w, x))
+    std.println("{}", area(a, b))
+
+    // and an array of measured numbers
+    let d ¤meter : i64[] = [10, 20, 30]
+    std.println("{} {} {}", d[0], d[2], #d)
+    let total : mut i64 = 0
+    foreach v := d:
+        total ← total + @dropunit(v)
+    std.println("{}", total)
