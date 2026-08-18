@@ -1,0 +1,10 @@
+// A range with a zero step never arrives; both implementations stop.
+@impure
+@start
+fn main():
+    let z : i64 = 0
+    let r := 1…z…5
+    let c : mut i64 = 0
+    foreach i := r:
+        c ← c + 1
+    std.println("{}", c)

@@ -894,7 +894,8 @@ def _render_template(fmt: str, args, where: str) -> str:
                               ObjectValue, ArrayValue, HashValue, SetValue,
                               TupleValue,
                               EnumValue, ExpectedValue, NoneValue,
-                              TypeValue, FuncValue, LambdaValue, UnitValue)
+                              TypeValue, FuncValue, LambdaValue, UnitValue,
+                              RangeValue)
     def _fmt_value(v, spec: str = "") -> str:
         core, flags = _split_format_spec(spec)
         uv = unwrap_optional(v)
@@ -979,6 +980,9 @@ def _render_template(fmt: str, args, where: str) -> str:
             raise TypeError(
                 "'{}' met a function, not a value; a function is "
                 "applied, not written out")
+        if isinstance(uv, RangeValue):
+            # The language's own spelling, not the implementation's.
+            return uv.display()
         return str(uv)
 
     result: list[str] = []

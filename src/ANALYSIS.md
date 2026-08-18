@@ -60,8 +60,14 @@ descriptors, tuple-⍴, multi-index as a parser desugar, `.shape`,
 extent-checked literals — all on the existing array runtime with
 zero new IR and zero new runtime helpers; the probe conforms byte
 for byte, but the matrix test files still lean on bare range
-values (`(2, 4) ⍴ (1…8)`) and `generate` with lambdas, the next
-two walls in that direction.  The batch also caught a quiet
+values (`(2, 4) ⍴ (1…8)`) and `generate` with lambdas.  Range
+values then fell in their own batch — expressions at the spec's
+precedence, a three-slot box, the same sign-agnostic loop the
+foreach header always used, `⍴` fillers that materialize and cycle
+— leaving lambdas (the `λ` byte is not even lexed yet) and matrix
+column selections as the walls those files still stand behind.
+The interpreter's `println` of a range leaked the implementation's
+`RangeValue(3…7)` spelling and now answers the language's `3…7`.  The batch also caught a quiet
 acceptance bug through self-hosting: the bootstrap reserves every
 `iN`/`uN` spelling with a nonzero width as a type name, and ngplc
 let `i2` name a loop counter; now both refuse alike.  Array ⧺

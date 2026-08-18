@@ -345,16 +345,30 @@ fn mk_fty(fidx : i64) → i64:
 // the two extents, ⁻1 where the type leaves one open); the band sits
 // between the sized arrays' end and the ref packing's 262144
 fn ty_is_mat(t : i64) → bool:
-    t >= 65536 and t < 262144
+    t >= 65536 and t < 131072
 
 @pre(ty_is_mat(t))
 fn ty_midx(t : i64) → i64:
     t - 65536
 
-@pre(midx >= 0 and midx < 196608)
+@pre(midx >= 0 and midx < 65536)
 @post(r: ty_is_mat(r))
 fn mk_mty(midx : i64) → i64:
     65536 + midx
+
+// ranges: 131072 + the element's own code, no table needed; a range
+// is three numbers and a direction, not a container
+fn ty_is_rg(t : i64) → bool:
+    t >= 131072 and t < 132096
+
+@pre(ty_is_rg(t))
+fn ty_rgelem(t : i64) → i64:
+    t - 131072
+
+@pre(elem >= 16 and elem < 1024)
+@post(r: ty_is_rg(r))
+fn mk_rgty(elem : i64) → i64:
+    131072 + elem
 
 // a matrix's rows: arrays whose length is the matrix's to keep, so
 // they read as any array does and refuse to be resized; the band
@@ -411,6 +425,7 @@ fn type_name(t0 : i64) → str:
     if t = TY_ENTRY: return prefix ⧺ "std.fs.Entry"
     if t = TY_FTYPE: return prefix ⧺ "filetype"
     if ty_is_mat(t): return prefix ⧺ "a matrix"
+    if ty_is_rg(t): return prefix ⧺ "range"
     if t = TY_UNT: return "untyped integer"
     if t = TY_EMPTY: return "∅"
     if ty_is_struct(t): return prefix ⧺ "struct #" ⧺ i64_str(ty_sidx(t))
@@ -1091,6 +1106,7 @@ let NK_STOREFLD : i64 = 83  // na = base var, nb = value; field token
 let NK_MATCH : i64 = 84     // na = subject, nb = extra [some-block, empty-block]; bind token
 let NK_LETT : i64 = 85      // let (a, b) …: na = init, nb = 1 when mut, nc = extra [n, type or ⁻1, name-token…]
 let NK_STOREIDXP : i64 = 86 // path[i] ← v: na = base expr, nb = index, nc = value
+let NK_RANGEV : i64 = 87    // a…b and a…step…b as a value: na = lo, nb = hi, nc = step or ⁻1
 
 // std builtins reachable from core-1
 let SB_PRINTLN : i64 = 1
@@ -1532,15 +1548,16 @@ impl Parser:
                 let at : i64 = self.pos
                 self.pos ← self.pos + 1
                 let idx : i64 = self.parse_expr()
-                if self.peek() = TK_ELLIPSIS:
+                if self.nkind[idx × 1¤ptrdiff] = NK_RANGEV:
                     // v[a…b]: both ends included, a fresh array answers
-                    self.pos ← self.pos + 1
-                    let hi : i64 = self.parse_expr()
+                    if self.nc[idx × 1¤ptrdiff] ≠ ⁻1:
+                        self.err("a stepped slice is not core-2 yet")
+                        return e
                     if self.peek() = TK_COMMA:
                         self.err("a column of a matrix is not core-2 yet; take the rows first")
                         return e
                     _ ← self.eat(TK_RBRACK, "']' closing the slice")
-                    e ← self.mknode(NK_SLICE, at, e, idx, hi)
+                    e ← self.mknode(NK_SLICE, at, e, self.na[idx × 1¤ptrdiff], self.nb[idx × 1¤ptrdiff])
                 elif self.peek() = TK_COMMA:
                     // m[i, j] and m[i, a…b] reach the row and ask it,
                     // so the pair is the chain m[i][j] written short
@@ -1550,11 +1567,12 @@ impl Parser:
                     if self.peek() = TK_COMMA:
                         self.err("a rank-3 subscript is not core-2 yet")
                         return e
-                    if self.peek() = TK_ELLIPSIS:
-                        self.pos ← self.pos + 1
-                        let jhi : i64 = self.parse_expr()
+                    if self.nkind[jdx × 1¤ptrdiff] = NK_RANGEV:
+                        if self.nc[jdx × 1¤ptrdiff] ≠ ⁻1:
+                            self.err("a stepped slice is not core-2 yet")
+                            return e
                         _ ← self.eat(TK_RBRACK, "']' closing the slice")
-                        e ← self.mknode(NK_SLICE, at, e, jdx, jhi)
+                        e ← self.mknode(NK_SLICE, at, e, self.na[jdx × 1¤ptrdiff], self.nb[jdx × 1¤ptrdiff])
                     else:
                         _ ← self.eat(TK_RBRACK, "']' closing the subscript")
                         e ← self.mknode(NK_INDEX, at, e, jdx, 0)
@@ -1913,13 +1931,28 @@ impl Parser:
         let lhs : mut i64 = self.parse_primary()
         while not self.failed():
             let k : i64 = self.peek()
-            let bp : i64 = self.bin_bp(k)
-            if bp = ⁻1 or bp < min_bp:
-                break
-            let at : i64 = self.pos
-            self.pos ← self.pos + 1
-            let rhs : i64 = self.parse_bin(bp + 1)
-            lhs ← self.mknode(self.bin_nk(k), at, lhs, rhs, 0)
+            if k = TK_ELLIPSIS and min_bp <= 8:
+                // a…b, and a…step…b when a second … follows: the range
+                // binds tighter than comparison, looser than arithmetic
+                let at : i64 = self.pos
+                self.pos ← self.pos + 1
+                let rhs : i64 = self.parse_bin(9)
+                if self.nkind[lhs × 1¤ptrdiff] = NK_RANGEV:
+                    if self.nc[lhs × 1¤ptrdiff] ≠ ⁻1:
+                        self.err("a range is lo…hi or lo…step…hi; a fourth part names nothing")
+                        return lhs
+                    // what stood as the end steps aside to be the step
+                    lhs ← self.mknode(NK_RANGEV, at, self.na[lhs × 1¤ptrdiff], rhs, self.nb[lhs × 1¤ptrdiff])
+                else:
+                    lhs ← self.mknode(NK_RANGEV, at, lhs, rhs, ⁻1)
+            else:
+                let bp : i64 = self.bin_bp(k)
+                if bp = ⁻1 or bp < min_bp:
+                    break
+                let at : i64 = self.pos
+                self.pos ← self.pos + 1
+                let rhs : i64 = self.parse_bin(bp + 1)
+                lhs ← self.mknode(self.bin_nk(k), at, lhs, rhs, 0)
         lhs
 
     fn parse_expr(&mut self) → i64:
@@ -2134,23 +2167,16 @@ impl Parser:
                 let bbody : i64 = self.parse_block()
                 return self.mknode(NK_FOREACHA, name_tok, bref, bbody, 0)
             let e1 : i64 = self.parse_bin(2)
-            if self.peek() ≠ TK_ELLIPSIS:
-                // walking an array's elements
+            if self.nkind[e1 × 1¤ptrdiff] ≠ NK_RANGEV:
+                // walking a container's elements, or a range that
+                // arrives as a value
                 let body : i64 = self.parse_block()
                 return self.mknode(NK_FOREACHA, name_tok, e1, body, 0)
-            self.pos ← self.pos + 1
-            let e2 : i64 = self.parse_bin(2)
-            let step : mut i64 = ⁻1
-            let hi : mut i64 = e2
-            if self.peek() = TK_ELLIPSIS:
-                self.pos ← self.pos + 1
-                step ← e2
-                hi ← self.parse_bin(2)
             let body : i64 = self.parse_block()
             let off : i64 = @dropunit(#self.extra)
-            self.extra.push(e1)
-            self.extra.push(step)
-            self.extra.push(hi)
+            self.extra.push(self.na[e1 × 1¤ptrdiff])
+            self.extra.push(self.nc[e1 × 1¤ptrdiff])
+            self.extra.push(self.nb[e1 × 1¤ptrdiff])
             return self.mknode(NK_FOREACH, name_tok, off, body, 0)
         if k = TK_MATCH:
             self.pos ← self.pos + 1
@@ -3315,7 +3341,7 @@ impl Checker:
             if tl = TY_BOOL and tr = TY_BOOL:
                 self.set_type(id, TY_BOOL)
                 return
-            if ty_is_hash(tl) or ty_is_hash(tr) or ty_is_arr(tl) or ty_is_arr(tr) or ty_is_tup(tl) or ty_is_tup(tr) or ty_is_mat(tl) or ty_is_mat(tr):
+            if ty_is_hash(tl) or ty_is_hash(tr) or ty_is_arr(tl) or ty_is_arr(tr) or ty_is_tup(tl) or ty_is_tup(tr) or ty_is_mat(tl) or ty_is_mat(tr) or ty_is_rg(tl) or ty_is_rg(tr):
                 self.derr(tok, "core-2 does not compare " ⧺ type_name(tl) ⧺ " with " ⧺ type_name(tr) ⧺ "; ask the entries")
                 self.set_type(id, TY_BOOL)
                 return
@@ -3342,6 +3368,37 @@ impl Checker:
             elif not self.try_fit(nb, et):
                 self.derr(tok, "⍳: the container holds " ⧺ type_name(et) ⧺ ", and what is looked for is " ⧺ type_name(self.ty_of(nb)))
             self.set_type(id, mk_oty(ty_with_unit(TY_I64, UNIT_PTRDIFF)))
+        elif k = NK_RANGEV:
+            self.check_expr(na, TY_UNIT)
+            self.check_expr(nb, self.ty_of(na))
+            if nc ≠ ⁻1:
+                self.check_expr(nc, self.ty_of(na))
+            let tl9 : i64 = self.ty_of(na)
+            let th9 : i64 = self.ty_of(nb)
+            let vt : mut i64 = ⁻1
+            if tl9 ≠ TY_UNT:
+                vt ← tl9
+            elif th9 ≠ TY_UNT:
+                vt ← th9
+            elif nc ≠ ⁻1 and self.ty_of(nc) ≠ TY_UNT:
+                vt ← self.ty_of(nc)
+            if vt = ⁻1:
+                // ends that state nothing take the binding's element,
+                // where one is stated, and i64 otherwise
+                let w9 : i64 = ty_strip_ref(want)
+                vt ← w9 if ty_is_int(w9) and ty_unit(w9) = 0 else TY_I64
+            if not ty_is_int(vt) or ty_unit(vt) ≠ 0:
+                self.derr(tok, "a range counts plain numbers; this is " ⧺ type_name(vt))
+                vt ← TY_I64
+            self.adopt(na, vt)
+            self.adopt(nb, vt)
+            if self.ty_of(na) ≠ vt or self.ty_of(nb) ≠ vt:
+                self.derr(tok, "the range's ends say one type between them")
+            if nc ≠ ⁻1:
+                self.adopt(nc, vt)
+                if self.ty_of(nc) ≠ vt:
+                    self.derr(tok, "the step follows the range's type")
+            self.set_type(id, mk_rgty(vt))
         elif k = NK_SLICE:
             self.check_expr(na, TY_UNIT)
             let bt2 : i64 = self.ty_of(na)
@@ -3702,7 +3759,10 @@ impl Checker:
         else:
             self.check_expr(nb, ew)
         let ft : i64 = self.ty_of(nb)
-        if ty_is_arr(ft):
+        if ty_is_rg(ft):
+            if ty_rgelem(ft) ≠ ew:
+                self.derr(tok, "the filler counts " ⧺ type_name(ty_rgelem(ft)) ⧺ ", but the binding wants " ⧺ type_name(ew))
+        elif ty_is_arr(ft):
             if self.elem_of(ft) ≠ ew:
                 self.derr(tok, "the filler holds " ⧺ type_name(self.elem_of(ft)) ⧺ ", but the binding wants " ⧺ type_name(ew))
         elif self.is_open(ft):
@@ -3731,7 +3791,12 @@ impl Checker:
         else:
             self.check_expr(nb, ew if wantish else TY_UNIT)
         let ft : i64 = self.ty_of(nb)
-        if ty_is_arr(ft):
+        if ty_is_rg(ft):
+            // a range's steps cycle to the count as elements do
+            if wantish and ty_rgelem(ft) ≠ self.elem_of(w):
+                self.derr(tok, "the filler counts " ⧺ type_name(ty_rgelem(ft)) ⧺ ", but the binding wants " ⧺ type_name(self.elem_of(w)))
+            self.set_type(id, w if wantish else mk_aty(ty_rgelem(ft)))
+        elif ty_is_arr(ft):
             // the filler's elements cycle to the count
             if wantish and self.elem_of(ft) ≠ self.elem_of(w):
                 self.derr(tok, "the filler holds " ⧺ type_name(self.elem_of(ft)) ⧺ ", but the binding wants " ⧺ type_name(self.elem_of(w)))
@@ -4093,7 +4158,7 @@ impl Checker:
                 elif tl = TY_UNT and tr = TY_UNT:
                     self.adopt(x, TY_I64)
                     self.adopt(y, TY_I64)
-                if ty_is_arr(self.ty_of(x)) or ty_is_hash(self.ty_of(x)) or ty_is_tup(self.ty_of(x)) or ty_is_mat(self.ty_of(x)) or self.ty_of(x) = TY_STR:
+                if ty_is_arr(self.ty_of(x)) or ty_is_hash(self.ty_of(x)) or ty_is_tup(self.ty_of(x)) or ty_is_mat(self.ty_of(x)) or ty_is_rg(self.ty_of(x)) or self.ty_of(x) = TY_STR:
                     self.derr(tok, "assert_eq compares numbers in core-1")
                 elif not self.try_fit(x, self.ty_of(y)):
                     self.derr(tok, "assert_eq compares two of the same type")
@@ -4901,11 +4966,11 @@ impl Checker:
                 return
             self.check_expr(na, TY_UNIT)
             let t : i64 = self.ty_of(na)
-            if not ty_is_arr(t) and t ≠ TY_STR and not ty_is_mat(t):
+            if not ty_is_arr(t) and t ≠ TY_STR and not ty_is_mat(t) and not ty_is_rg(t):
                 self.derr(tok, "foreach walks an array, a string or a range; this is " ⧺ type_name(t))
                 return
             self.push_scope()
-            let slot : i64 = self.declare(tok, TY_CHAR if t = TY_STR else self.elem_of(t), 0)
+            let slot : i64 = self.declare(tok, TY_CHAR if t = TY_STR else (ty_rgelem(t) if ty_is_rg(t) else self.elem_of(t)), 0)
             self.nslot[id × 1¤ptrdiff] ← slot
             self.loop_depth ← self.loop_depth + 1
             self.check_block(nb, false)
@@ -5538,6 +5603,11 @@ impl Lower:
             if ty_is_mat(self.tof(nid)):
                 return self.lower_mreshape(nid, na, nb)
             let nv : i64 = self.lower_expr(na)
+            if ty_is_rg(self.tof(nb)):
+                let fvr : i64 = self.lower_rg_arr(nb)
+                let dr : i64 = self.tmp()
+                self.ir(IR_ACYC, nv, fvr, 0, dr, 0)
+                return dr
             let fv : i64 = self.lower_expr(nb)
             let d : i64 = self.tmp()
             if ty_is_arr(self.tof(nb)):
@@ -5566,6 +5636,28 @@ impl Lower:
                 self.ir(IR_FSTO, d, fidx, ev, 0, 0)
                 i ← i + 1
             return d
+        if k = NK_RANGEV:
+            let lov9 : i64 = self.lower_expr(na)
+            let hiv9 : i64 = self.lower_expr(nb)
+            let stv9 : i64 = self.tmp()
+            if nc = ⁻1:
+                // no step written: the direction follows the bounds
+                let c9 : i64 = self.tmp()
+                self.ir(IR_CLE, lov9, hiv9, 0, c9, 64 + 256)
+                let one9 : i64 = self.tmp()
+                self.ir(IR_CONST, 1, 0, 0, one9, 0)
+                let mone9 : i64 = self.tmp()
+                self.ir(IR_CONST, ⁻1, 0, 0, mone9, 0)
+                self.ir(IR_SEL, c9, one9, mone9, stv9, 0)
+            else:
+                let sv9 : i64 = self.lower_expr(nc)
+                self.ir(IR_MOV, sv9, 0, 0, stv9, 0)
+            let d9r : i64 = self.tmp()
+            self.ir(IR_SNEW, 3, 0, 0, d9r, 0)
+            self.ir(IR_FSTO, d9r, 0, lov9, 0, 0)
+            self.ir(IR_FSTO, d9r, 1, stv9, 0, 0)
+            self.ir(IR_FSTO, d9r, 2, hiv9, 0, 0)
+            return d9r
         if k = NK_FIELD:
             if ty_is_mat(ty_strip_ref(self.tof(na))):
                 // shape: the row count and the first row's length; a
@@ -6078,19 +6170,55 @@ impl Lower:
         self.ir(IR_AGET, av, iv, dv, d, w)
         d
 
+    // a range written out as the array of its steps, for the places
+    // that cycle an array: the walk is the foreach's own
+    fn lower_rg_arr(&mut self, nb : i64) → i64:
+        let rv : i64 = self.lower_expr(nb)
+        let lo9 : i64 = self.tmp()
+        self.ir(IR_FLD, rv, 0, 0, lo9, 0)
+        let st9 : i64 = self.tmp()
+        self.ir(IR_FLD, rv, 1, 0, st9, 0)
+        let hi9 : i64 = self.tmp()
+        self.ir(IR_FLD, rv, 2, 0, hi9, 0)
+        let lz9 : i64 = self.label()
+        self.ir(IR_JNZ, st9, lz9, 0, 0, 0)
+        let m9 : i64 = self.intern("range step must not be zero\n")
+        self.ir(IR_ABORT, m9, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lz9, 0, 0, 0, 0)
+        let d : i64 = self.tmp()
+        self.ir(IR_ANEW, 4, 0, 0, d, 0)
+        let iv : i64 = self.tmp()
+        self.ir(IR_MOV, lo9, 0, 0, iv, 0)
+        let ltop : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+        let c : i64 = self.range_alive(iv, hi9, st9)
+        self.ir(IR_JZ, c, lend, 0, 0, 0)
+        self.ir(IR_APUSH, d, iv, 0, 0, 0)
+        let ni : i64 = self.tmp()
+        self.ir(IR_ADDW, iv, st9, 0, ni, 64 + 256)
+        self.ir(IR_MOV, ni, 0, 0, iv, 0)
+        self.ir(IR_JMP, ltop, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        d
+
     fn lower_mreshape(&mut self, nid : i64, na : i64, nb : i64) → i64:
         // the flat filler cycles across the row seam, then is cut into
         // rows, each row its own fresh array
         let toff : i64 = self.a.na[na × 1¤ptrdiff]
         let r : i64 = self.a.na[self.a.extra[(toff + 1) × 1¤ptrdiff] × 1¤ptrdiff]
         let c : i64 = self.a.na[self.a.extra[(toff + 2) × 1¤ptrdiff] × 1¤ptrdiff]
-        let fv : i64 = self.lower_expr(nb)
         let nall : i64 = self.tmp()
         self.ir(IR_CONST, r × c, 0, 0, nall, 0)
         let flat : i64 = self.tmp()
-        if ty_is_arr(self.tof(nb)):
+        if ty_is_rg(self.tof(nb)):
+            let fvr : i64 = self.lower_rg_arr(nb)
+            self.ir(IR_ACYC, nall, fvr, 0, flat, 0)
+        elif ty_is_arr(self.tof(nb)):
+            let fv : i64 = self.lower_expr(nb)
             self.ir(IR_ACYC, nall, fv, 0, flat, 0)
         else:
+            let fv : i64 = self.lower_expr(nb)
             self.ir(IR_AFILL, nall, fv, 0, flat, 0)
         let d : i64 = self.tmp()
         self.ir(IR_ANEW, r ⌈ 4, 0, 0, d, 0)
@@ -6625,7 +6753,6 @@ impl Lower:
         let lo_n : i64 = self.a.extra[na × 1¤ptrdiff]
         let step_n : i64 = self.a.extra[(na + 1) × 1¤ptrdiff]
         let hi_n : i64 = self.a.extra[(na + 2) × 1¤ptrdiff]
-        let ivar : i64 = self.nslot[sid × 1¤ptrdiff]
         let lov : i64 = self.lower_expr(lo_n)
         let hiv0 : i64 = self.lower_expr(hi_n)
         let hiv : i64 = self.tmp()
@@ -6649,15 +6776,11 @@ impl Lower:
             let m : i64 = self.intern("a foreach step of zero never arrives (line " ⧺ i64_str(self.tok_line(tok)) ⧺ ")\n")
             self.ir(IR_ABORT, m, 0, 0, 0, 0)
             self.ir(IR_LABEL, lz, 0, 0, 0, 0)
-        self.ir(IR_MOV, lov, 0, 0, ivar, 0)
-        let saved_base : i64 = self.tbase
-        self.tbase ← self.tnext
-        let ltop : i64 = self.label()
-        let lcont : i64 = self.label()
-        let lend : i64 = self.label()
-        self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
-        // still inside: (dir > 0 ∧ i ≤ hi) ∨ (dir < 0 ∧ i ≥ hi) --
-        // materialized comparisons, no branches until the one decision
+        self.lower_range_loop(sid, lov, hiv, dirv, body, ret_ty)
+
+    // still inside: (dir > 0 ∧ i ≤ hi) ∨ (dir < 0 ∧ i ≥ hi) --
+    // materialized comparisons, no branches until the one decision
+    fn range_alive(&mut self, ivar : i64, hiv : i64, dirv : i64) → i64:
         let z : i64 = self.tmp()
         self.ir(IR_CONST, 0, 0, 0, z, 0)
         let up : i64 = self.tmp()
@@ -6674,6 +6797,19 @@ impl Lower:
         self.ir(IR_BAND, down, ge, 0, c2, 64)
         let c : i64 = self.tmp()
         self.ir(IR_BORR, c1, c2, 0, c, 64)
+        c
+
+    fn lower_range_loop(&mut self, sid : i64, lov : i64, hiv : i64,
+                        dirv : i64, body : i64, ret_ty : i64):
+        let ivar : i64 = self.nslot[sid × 1¤ptrdiff]
+        self.ir(IR_MOV, lov, 0, 0, ivar, 0)
+        let saved_base : i64 = self.tbase
+        self.tbase ← self.tnext
+        let ltop : i64 = self.label()
+        let lcont : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+        let c : i64 = self.range_alive(ivar, hiv, dirv)
         self.ir(IR_JZ, c, lend, 0, 0, 0)
         self.breaks.push(lend)
         self.conts.push(lcont)
@@ -6690,6 +6826,21 @@ impl Lower:
 
     fn lower_foreacha(&mut self, sid : i64, tok : i64, arr : i64, body : i64,
                       ret_ty : i64):
+        if ty_is_rg(self.tof(arr)):
+            let rv : i64 = self.lower_expr(arr)
+            let lo9 : i64 = self.tmp()
+            self.ir(IR_FLD, rv, 0, 0, lo9, 0)
+            let st9 : i64 = self.tmp()
+            self.ir(IR_FLD, rv, 1, 0, st9, 0)
+            let hi9 : i64 = self.tmp()
+            self.ir(IR_FLD, rv, 2, 0, hi9, 0)
+            let lz9 : i64 = self.label()
+            self.ir(IR_JNZ, st9, lz9, 0, 0, 0)
+            let m9 : i64 = self.intern("range step must not be zero (line " ⧺ i64_str(self.tok_line(tok)) ⧺ ")\n")
+            self.ir(IR_ABORT, m9, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lz9, 0, 0, 0, 0)
+            self.lower_range_loop(sid, lo9, hi9, st9, body, ret_ty)
+            return
         let evar : i64 = self.nslot[sid × 1¤ptrdiff]
         let av0 : i64 = self.lower_expr(arr)
         let av : mut i64 = av0

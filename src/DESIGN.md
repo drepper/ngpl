@@ -273,6 +273,26 @@ Attempt 3 grows core-1 to **core-2** with structs:
   bootstrap threads it elementwise), printing a matrix, computed
   rows in literals, row stores on an open row length, open-extent
   arguments to fixed-extent parameters, `mut` matrix parameters.
+- **range values**: `a…b` and `a…step…b` are expressions at the
+  spec's precedence — tighter than comparison, looser than
+  arithmetic — parsed in the binary-precedence loop, so `1 + 2 … 10
+  - 3` is `3…7`.  The subscript and foreach parsers now take their
+  ranges from the node rather than from the token stream, which
+  left both surfaces unchanged.  A range value is a three-slot box
+  `{lo, step, hi}`; the type is `131072 + elem` (no table — a range
+  is three numbers and a direction, not a container).  A written-out
+  header (`foreach i := 0…9`) still lowers as before; a range that
+  arrives as a value unboxes and enters the same sign-agnostic loop,
+  now factored as `lower_range_loop`/`range_alive` — the default
+  step is a `cmov` on the bounds (±1, never zero), a written step is
+  guarded by the interpreter's own "range step must not be zero"
+  abort at the loop, as the interpreter raises it there and not at
+  construction.  A `⍴` filler materializes the steps and reuses the
+  array-cycling path, so `(2, 4) ⍴ (1…8)` runs across the row seam;
+  untyped ends adopt the binding's element as the interpreter's do.
+  Refused by name: `#`, subscripting, printing, and equality — the
+  bootstrap compares ranges by identity (two equal spellings answer
+  false), which is not a semantics worth reproducing.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's
