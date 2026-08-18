@@ -101,6 +101,7 @@ shared_tests=(
     test_concat
     test_generate
     test_if
+    test_lambda
     test_iterator
     test_noreturn
     test_short_circuit

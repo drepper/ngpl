@@ -360,6 +360,22 @@ Attempt 3 grows core-1 to **core-2** with structs:
   the only places the subset lets division stand without `??`.
   Functions answering optionals now travel as values, so a captured
   `safe_div` composes with `?` inside a lambda.
+- **multi-statement lambda bodies**: a λ body may be a layout block
+  (statement by statement, as a function's), a brace block where
+  layout cannot go — inside parentheses the lexer suppresses
+  newlines, so `{ s; s; e }` separates with semicolons and the last
+  statement is the value — or the single expression it always was.
+  A block body checks and lowers exactly as a function body does,
+  under the lambda's own return type (`lam_ret` overrides the
+  enclosing function's for `return` and the trailing value), which
+  is also why `return` inside a lambda answers the lambda: its body
+  lowers in its own function.  A `:=` global may now be born of any
+  function value — the box is built by the same init code that
+  builds global hashes — and calls through a global's box mirror
+  calls through a binding's, currying included.  Lambda shapes an
+  @expect means to refuse (a parameter without a type, a missing
+  return type, the empty capture list) parse and are refused by the
+  checker, so the expectation machinery can hold them.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's

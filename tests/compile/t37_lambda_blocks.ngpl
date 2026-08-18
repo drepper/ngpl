@@ -1,0 +1,42 @@
+fn apply(f : F', x : i64) -> i64:
+    return f(x)
+
+@impure
+@start
+fn main():
+    let f := λx : i64 → i64:
+        let y := x × 2
+        y + 1
+    std.println("{}", f(5))
+    let g := λx : i64 → i64: {
+        let y := x + 10;
+        let z := y × 2;
+        z
+    }
+    std.println("{}", g(5))
+    let h := λx : i64 → i64:
+        if x < 0:
+            return 0
+        x × x
+    std.println("{} {}", h(5), h(⁻3))
+    let base : i64 = 100
+    let c := λx : i64 |base| → i64:
+        let doubled := x × 2
+        base + doubled
+    std.println("{}", c(5))
+    let lp := λn : i64 → i64:
+        let sum : mut i64 = 0
+        foreach i := 1…n:
+            sum ← sum + i
+        sum
+    std.println("{}", lp(10))
+    let r := apply(λx : i64 → i64: {
+        let a := x + 1;
+        a × 2
+    }, 4)
+    std.println("{}", r)
+    let o := λx : i64 → i64?:
+        if x < 0:
+            return ∅
+        x + 1
+    std.println("{} {}", o(5) ?? 0, o(⁻1) ?? 42)

@@ -78,10 +78,14 @@ bound by the first call, the body checked on demand with the
 caller's scopes parked; capture discipline enforced with the
 function's value-box behind the captured name — Optional and
 expected answers followed — auto-boxing returns, the `?` early
-answer, bare division under an optional — which leaves test_lambda
-standing behind exactly one wall now: multi-statement lambda
-bodies (layout blocks, brace blocks with semicolons, early
-returns).
+answer, bare division under an optional — and multi-statement
+lambda bodies closed the distance: **test_lambda flipped whole as
+the tenth shared file**, the heaviest yet at 44 entries spanning
+lambdas, currying, generics, @replaceable, optional answers and
+block bodies.  The flip also carried `:=` globals born of function
+values (built by the ginit machinery hashes already use) and calls
+through a global's box.  The lambda campaign that began at "the λ
+byte is not even lexed" is complete.
 The interpreter's `println` of a range leaked the implementation's
 `RangeValue(3…7)` spelling and now answers the language's `3…7`.  The batch also caught a quiet
 acceptance bug through self-hosting: the bootstrap reserves every

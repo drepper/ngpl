@@ -110,6 +110,7 @@ let TK_MATCH : i64 = 38
 let TK_RESERVED : i64 = 99   // a word the bootstrap reserves and core-1 does not use
 let TK_LAMBDA : i64 = 100    // λ
 let TK_BANG : i64 = 101      // ! -- the expected suffix on a type
+let TK_SEMI : i64 = 102      // ; -- between statements in a brace block
 
 // The keyword table: one hash probe replaces a comparison ladder.  A
 // word the bootstrap language reserves but core-1 gives no meaning is
@@ -566,6 +567,7 @@ fn mkcls() → i64[]:
     t[195] ← CL_MB2
     t[206] ← CL_MB2
     t[33] ← 100 + TK_BANG
+    t[59] ← 100 + TK_SEMI
     t[226] ← CL_MB3
     t[58] ← CL_COLON
     t[60] ← CL_LT
@@ -1146,6 +1148,7 @@ let NK_LAMBDA : i64 = 88    // λ literal: na = extra [np, (tok,ty)…, ncap, to
 let NK_FNVAL : i64 = 89     // a named function as a value: na = fn index
 let NK_CALLV : i64 = 90     // applying a value: na = callee expr, nb = args
 let NK_TRY : i64 = 91       // e?: ∅ answers the function early, a value unwraps
+let NK_BADLAM : i64 = 92    // a λ the checker refuses: na says why
 
 // std builtins reachable from core-1
 let SB_PRINTLN : i64 = 1
@@ -1247,6 +1250,7 @@ struct Parser:
     ltl : i64[]
     lte : i64[]
     tvn : str[]          // type-variable spellings, interned file-wide
+    braces : i64         // statements end at ';' inside a brace block
     ignored : str[]
     igtests : str[]
     diags : Diag[]
@@ -1639,18 +1643,26 @@ impl Parser:
     // lambda is written, by value, and the body is one expression
     fn parse_lambda(&mut self, at : i64) → i64:
         self.pos ← self.pos + 1
+        // shapes an @expect means to refuse still have to parse; the
+        // checker is where they are refused, so 'bad' rides along
+        let bad : mut i64 = 0
         let ptoks : mut i64[] = []
         let pts : mut i64[] = []
         while true:
             let ptok : i64 = self.pos
             _ ← self.eat_name("the parameter's name")
-            _ ← self.eat(TK_COLON, "':' and the parameter's type")
-            let pt : i64 = self.parse_type(false)
-            if not ((ty_is_int(pt) and ty_unit(pt) = 0) or pt = TY_BOOL or pt = TY_CHAR or pt = TY_STR):
-                self.err("a core-2 lambda takes plain integers, truth values, characters and strings")
-                return self.mknode(NK_INT, at, 0, 0, 0)
-            ptoks.push(ptok)
-            pts.push(pt)
+            if self.peek() ≠ TK_COLON:
+                bad ← 2
+                ptoks.push(ptok)
+                pts.push(TY_I64)
+            else:
+                self.pos ← self.pos + 1
+                let pt : i64 = self.parse_type(false)
+                if not ((ty_is_int(pt) and ty_unit(pt) = 0) or pt = TY_BOOL or pt = TY_CHAR or pt = TY_STR):
+                    self.err("a core-2 lambda takes plain integers, truth values, characters and strings")
+                    return self.mknode(NK_INT, at, 0, 0, 0)
+                ptoks.push(ptok)
+                pts.push(pt)
             if self.failed():
                 return self.mknode(NK_INT, at, 0, 0, 0)
             if self.peek() = TK_COMMA:
@@ -1670,22 +1682,36 @@ impl Parser:
                 if self.peek() = TK_COMMA:
                     self.pos ← self.pos + 1
             _ ← self.eat(TK_BOR, "'|' closing the capture list")
-            if #caps = 0:
-                self.err("an empty capture list says nothing; a lambda with no captures leaves the bars off")
-                return self.mknode(NK_INT, at, 0, 0, 0)
-        _ ← self.eat(TK_ARROW, "'→' and the lambda's answer")
+            if #caps = 0 and bad = 0:
+                bad ← 1
         let ret : mut i64 = TY_UNIT
-        if self.peek() = TK_EMPTY:
-            // parsed so an @expect may hold it; the checker refuses it
-            self.pos ← self.pos + 1
+        if self.peek() ≠ TK_ARROW:
+            if bad = 0:
+                bad ← 3
+            ret ← TY_I64
         else:
-            ret ← self.parse_type(false)
-            let rb : i64 = ty_opt_base(ret) if ty_is_opt(ret) else ret
-            if not ((ty_is_int(rb) and ty_unit(rb) = 0) or rb = TY_BOOL or rb = TY_CHAR or rb = TY_STR):
-                self.err("a core-2 lambda answers a plain integer, a truth value, a character or a string")
-                return self.mknode(NK_INT, at, 0, 0, 0)
-        _ ← self.eat(TK_COLON, "':' and the lambda's body")
-        let body : i64 = self.parse_expr()
+            self.pos ← self.pos + 1
+            if self.peek() = TK_EMPTY:
+                // parsed so an @expect may hold it; the checker refuses it
+                self.pos ← self.pos + 1
+            else:
+                ret ← self.parse_type(false)
+                let rb : i64 = ty_opt_base(ret) if ty_is_opt(ret) else ret
+                if not ((ty_is_int(rb) and ty_unit(rb) = 0) or rb = TY_BOOL or rb = TY_CHAR or rb = TY_STR):
+                    self.err("a core-2 lambda answers a plain integer, a truth value, a character or a string")
+                    return self.mknode(NK_INT, at, 0, 0, 0)
+        let body : mut i64 = ⁻1
+        if self.peek() = TK_COLON and self.peek2() = TK_NL:
+            // a layout block, statement by statement, as a function's
+            body ← self.parse_block()
+        elif self.peek() = TK_COLON and self.peek2() = TK_LBRACE:
+            _ ← self.eat(TK_COLON, "':' and the lambda's body")
+            body ← self.parse_brace_block()
+        else:
+            _ ← self.eat(TK_COLON, "':' and the lambda's body")
+            body ← self.parse_expr()
+        if bad ≠ 0:
+            return self.mknode(NK_BADLAM, at, bad, 0, 0)
         let li : i64 = self.lam_intern(pts, ret)
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(@dropunit(#pts))
@@ -1698,6 +1724,19 @@ impl Parser:
                 self.extra.push(caps[i])
         self.extra.push(ret)
         self.mknode(NK_LAMBDA, at, off, body, li)
+
+    // { s; s; e }: the braces hold statements where layout cannot go,
+    // inside parentheses; ';' separates them and the last is the value
+    fn parse_brace_block(&mut self) → i64:
+        _ ← self.eat(TK_LBRACE, "'{' opening the block")
+        self.braces ← self.braces + 1
+        let stmts : mut i64[] = []
+        while self.peek() ≠ TK_RBRACE and not self.failed():
+            stmts.push(self.parse_stmt())
+        self.braces ← self.braces - 1
+        _ ← self.eat(TK_RBRACE, "'}' closing the block")
+        let off : i64 = self.push_list(stmts)
+        self.mknode(NK_BLOCK, 0, off, 0, 0)
 
     fn parse_postfix(&mut self, base0 : i64) → i64:
         let e : mut i64 = base0
@@ -2178,9 +2217,19 @@ impl Parser:
             self.pos ← self.pos + 1
 
     fn end_stmt(&mut self):
+        if self.braces > 0:
+            // inside { }: ';' separates, and '}' closes the last
+            if self.peek() = TK_SEMI:
+                self.pos ← self.pos + 1
+            elif self.peek() ≠ TK_RBRACE:
+                self.err("';' separates the statements of a brace block")
+            return
         if self.peek() = TK_NL:
             self.pos ← self.pos + 1
         elif self.peek() = TK_DEDENT or self.peek() = TK_EOF:
+            let keep : i64 = 0
+        elif self.pos > 0 and self.toks.kind[(self.pos - 1) × 1¤ptrdiff] = TK_DEDENT:
+            // a lambda's layout body closed the line already
             let keep : i64 = 0
         else:
             self.err("the statement has ended but the line has more on it")
@@ -2743,7 +2792,7 @@ fn parse(toks : Toks, src : byte[]) → Ast:
                                  fae: [], fas: [],
                                  mel: [], mrr: [], mcc: [],
                                  lts: [], ltl: [], lte: [],
-                                 tvn: [],
+                                 tvn: [], braces: 0,
                                  ignored: [], igtests: [],
                                  diags: [], poisoned: false})
     // a struct may be written below whatever names it, so the names
@@ -3634,20 +3683,43 @@ impl Checker:
                     self.a.extra[(loff + 2 + np9 × 2 + ci) × 1¤ptrdiff] ← couter[ci × 1¤ptrdiff]
             let lr_saved : i64 = self.lam_ret
             self.lam_ret ← lret
-            self.check_expr(nb, lret)
+            if self.kind_of(nb) = NK_BLOCK:
+                let ld_saved : i64 = self.loop_depth
+                self.loop_depth ← 0
+                self.check_block(nb, true)
+                self.loop_depth ← ld_saved
+                let boff : i64 = self.a.na[nb × 1¤ptrdiff]
+                let bn : i64 = self.a.extra[boff × 1¤ptrdiff]
+                let last_is_value : mut bool = false
+                if bn > 0:
+                    let blast : i64 = self.a.extra[(boff + bn) × 1¤ptrdiff]
+                    if self.kind_of(blast) = NK_EXPRSTMT or self.kind_of(blast) = NK_MATCH:
+                        last_is_value ← true
+                if not last_is_value and not self.block_returns(nb):
+                    self.derr(tok, "the lambda answers " ⧺ type_name(lret) ⧺ " but not on every path")
+            else:
+                self.check_expr(nb, lret)
+                if self.is_open(self.ty_of(nb)):
+                    self.adopt(nb, lret)
+                elif not self.try_fit(nb, lret):
+                    // a bare value under an optional answer wraps itself
+                    if not (ty_is_opt(lret) and self.try_fit(nb, ty_opt_base(lret))):
+                        self.derr(tok, "the lambda answers " ⧺ type_name(lret) ⧺ ", not " ⧺ type_name(self.ty_of(nb)))
             self.lam_ret ← lr_saved
-            if self.is_open(self.ty_of(nb)):
-                self.adopt(nb, lret)
-            elif not self.try_fit(nb, lret):
-                // a bare value under an optional answer wraps itself
-                if not (ty_is_opt(lret) and self.try_fit(nb, ty_opt_base(lret))):
-                    self.derr(tok, "the lambda answers " ⧺ type_name(lret) ⧺ ", not " ⧺ type_name(self.ty_of(nb)))
             self.scope_floor ← floor9
             self.pop_scope()
             self.lams.push(id)
             self.lamns.push(self.nslots)
             self.nslot[id × 1¤ptrdiff] ← @dropunit(#self.lams) - 1
             self.set_type(id, mk_lty(nc))
+        elif k = NK_BADLAM:
+            if na = 1:
+                self.derr(tok, "an empty capture list says nothing; a lambda with no captures leaves the bars off")
+            elif na = 2:
+                self.derr(tok, "a lambda's parameter requires a type")
+            else:
+                self.derr(tok, "a lambda states its return type after '→'")
+            self.set_type(id, TY_I64)
         elif k = NK_TRY:
             let rw9 : i64 = self.lam_ret if self.lam_ret ≠ ⁻1 else self.a.fns[self.cur_fn × 1¤ptrdiff].ret
             if not ty_is_opt(rw9):
@@ -4441,6 +4513,10 @@ impl Checker:
         if vs9 ≠ ⁻1 and ty_is_lam(ty_strip_ref(self.stype[vs9 × 1¤ptrdiff])):
             self.check_lcall(id, tok, args_off, argc, vs9)
             return
+        let gl9 : i64 = self.global_index(name)
+        if gl9 ≠ ⁻1 and ty_is_lam(self.a.globals[gl9 × 1¤ptrdiff].ty):
+            self.check_glcall(id, tok, args_off, argc, gl9)
+            return
         let f : i64 = self.fn_index(name)
         if f = ⁻1:
             if self.is_ignored_name(name):
@@ -4610,6 +4686,46 @@ impl Checker:
             self.set_type(id, TY_I64)
             return
         self.set_type(id, shaped.ret)
+
+    // calling through a global's box: as through a binding's, with the
+    // box loaded from the global's slot
+    fn check_glcall(&mut self, id : i64, tok : i64, args_off : i64,
+                    argc : i64, g : i64):
+        let lt : i64 = self.a.globals[g × 1¤ptrdiff].ty
+        let np : i64 = self.lam_np(lt)
+        if argc > np:
+            self.derr(tok, "this function wants " ⧺ i64_str(np) ⧺ " arguments, not " ⧺ i64_str(argc))
+            self.set_type(id, self.lam_ret(lt))
+            return
+        if argc > 0:
+            foreach j := 0…argc - 1:
+                let arg : i64 = self.a.extra[(args_off + 1 + j) × 1¤ptrdiff]
+                let pt : i64 = self.lam_pt(lt, j)
+                self.check_expr(arg, pt)
+                if self.is_open(self.ty_of(arg)):
+                    self.adopt(arg, pt)
+                elif not self.try_fit(arg, pt):
+                    self.derr(tok, "argument " ⧺ i64_str(j + 1) ⧺ " is " ⧺ type_name(self.ty_of(arg)) ⧺ ", but the function takes " ⧺ type_name(pt))
+        if argc = np:
+            self.a.nc[id × 1¤ptrdiff] ← 6
+            self.nslot[id × 1¤ptrdiff] ← g
+            self.set_type(id, self.lam_ret(lt))
+            return
+        if argc = 0:
+            self.a.nc[id × 1¤ptrdiff] ← 7
+            self.nslot[id × 1¤ptrdiff] ← g
+            self.set_type(id, lt)
+            return
+        let rem : mut i64[] = []
+        foreach j := argc…np - 1:
+            rem.push(self.lam_pt(lt, j))
+        self.a.nc[id × 1¤ptrdiff] ← 8
+        self.a.nb[id × 1¤ptrdiff] ← @dropunit(#self.psfn)
+        self.nslot[id × 1¤ptrdiff] ← g
+        self.psfn.push(⁻1)
+        self.psk.push(argc)
+        self.psnp.push(np)
+        self.set_type(id, mk_lty(self.lam_intern(rem, self.lam_ret(lt))))
 
     fn check_lcall(&mut self, id : i64, tok : i64, args_off : i64,
                    argc : i64, vs : i64):
@@ -5614,6 +5730,22 @@ impl Checker:
             self.loop_depth ← self.loop_depth - 1
             self.pop_scope()
         elif k = NK_RETURN:
+            if self.lam_ret ≠ ⁻1:
+                // inside a lambda's block a return answers the lambda
+                let lwant : i64 = self.lam_ret
+                if na = ⁻1:
+                    self.derr(tok, "the lambda answers " ⧺ type_name(lwant) ⧺ "; a bare return does not")
+                    return
+                if ty_is_opt(lwant) and (self.kind_of(na) = NK_DIV or self.kind_of(na) = NK_MOD):
+                    self.check_retdiv(na, lwant)
+                    return
+                self.check_expr(na, lwant)
+                if self.is_open(self.ty_of(na)):
+                    self.adopt(na, lwant)
+                elif not self.try_fit(na, lwant):
+                    if not (ty_is_opt(lwant) and self.try_fit(na, ty_opt_base(lwant))):
+                        self.derr(tok, "the lambda answers " ⧺ type_name(lwant) ⧺ ", not " ⧺ type_name(self.ty_of(na)))
+                return
             if ty_is_var(self.a.fns[self.cur_fn × 1¤ptrdiff].ret) and na ≠ ⁻1:
                 // the first answer settles a T' return
                 self.check_expr(na, TY_UNIT)
@@ -5640,6 +5772,18 @@ impl Checker:
             if self.loop_depth = 0:
                 self.derr(tok, "there is no loop here to act on")
         elif k = NK_EXPRSTMT:
+            if trailing and self.lam_ret ≠ ⁻1:
+                let lwant : i64 = self.lam_ret
+                if ty_is_opt(lwant) and (self.kind_of(na) = NK_DIV or self.kind_of(na) = NK_MOD):
+                    self.check_retdiv(na, lwant)
+                    return
+                self.check_expr(na, lwant)
+                if self.is_open(self.ty_of(na)):
+                    self.adopt(na, lwant)
+                elif not self.try_fit(na, lwant):
+                    if not (ty_is_opt(lwant) and self.try_fit(na, ty_opt_base(lwant))):
+                        self.derr(tok, "the lambda answers " ⧺ type_name(lwant) ⧺ ", but its last expression is " ⧺ type_name(self.ty_of(na)))
+                return
             if trailing and ty_is_var(self.a.fns[self.cur_fn × 1¤ptrdiff].ret):
                 // the trailing value settles a T' return
                 self.check_expr(na, TY_UNIT)
@@ -5836,6 +5980,27 @@ impl Checker:
 
     fn check_global(&mut self, g : i64):
         let gd := self.a.globals[g × 1¤ptrdiff]
+        if gd.ty = ⁻1:
+            // := at the top level: the right side says the type
+            self.check_expr(gd.init, TY_UNIT)
+            if self.ty_of(gd.init) = TY_UNT:
+                self.adopt(gd.init, TY_I64)
+            let it : i64 = self.ty_of(gd.init)
+            self.a.globals[g × 1¤ptrdiff].ty ← it
+            if ty_is_lam(it):
+                // the box is built by init code before @start runs
+                if gd.is_mut:
+                    self.derr(gd.tok, "a global function value is immutable")
+                self.gvals.push(0)
+                self.ginit.push(g)
+                return
+            let ik0 : i64 = self.kind_of(gd.init)
+            if (ty_is_int(it) or it = TY_BOOL) and (ik0 = NK_INT or ik0 = NK_BOOL):
+                self.gvals.push(self.a.na[gd.init × 1¤ptrdiff])
+                return
+            self.derr(gd.tok, "a global begins at a constant the compiler can see")
+            self.gvals.push(0)
+            return
         if ty_is_hash(gd.ty):
             // an immutable hash global: its literal of constants is
             // built by init code before the start function runs
@@ -5945,6 +6110,13 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
             if f.ret ≠ TY_UNIT and not (ty_is_int(f.ret) and ty_unit(f.ret) = 0):
                 c.derr(f.tok, "the @start function answers the exit status, a plain integer, or nothing")
 
+    // per-function state first: a global's initializer may call, and
+    // the call consults it
+    if #a.fns > 0:
+        foreach i := 0…#a.fns - 1:
+            c.fslots.push(0)
+            c.fdone.push(0)
+            c.skipfn.push(0)
     if #a.globals > 0:
         foreach i := 0…#a.globals - 1:
             foreach j := 0…#a.globals - 1:
@@ -5960,10 +6132,6 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     if starts > 1:
         c.diags.push(Diag{line: 1, col: 1, msg: "more than one @start function"})
     if #a.fns > 0:
-        foreach i := 0…#a.fns - 1:
-            c.fslots.push(0)
-            c.fdone.push(0)
-            c.skipfn.push(0)
         foreach i := 0…#a.fns - 1:
             if not c.fn_is_generic(@dropunit(i)):
                 c.check_fn(@dropunit(i))
@@ -7094,6 +7262,43 @@ impl Lower:
             return ⁻1
         if self.a.nc[nid × 1¤ptrdiff] = 2:
             return self.lower_generate(nid, args_off)
+        if self.a.nc[nid × 1¤ptrdiff] >= 6 and self.a.nc[nid × 1¤ptrdiff] <= 8:
+            let gb9 : i64 = self.tmp()
+            self.ir(IR_GLOAD, self.nslot[nid × 1¤ptrdiff], 0, 0, gb9, 0)
+            if self.a.nc[nid × 1¤ptrdiff] = 7:
+                return gb9
+            if self.a.nc[nid × 1¤ptrdiff] = 6:
+                let gv9 : mut i64[] = []
+                let gi9 : mut i64 = 0
+                while gi9 < argc:
+                    gv9.push(self.lower_expr(self.a.extra[(args_off + 1 + gi9) × 1¤ptrdiff]))
+                    gi9 ← gi9 + 1
+                let go9 : i64 = @dropunit(#self.extra)
+                self.extra.push(argc + 1)
+                foreach v := gv9:
+                    self.extra.push(v)
+                self.extra.push(gb9)
+                let ga9 : i64 = self.tmp()
+                self.ir(IR_FLD, gb9, 0, 0, ga9, 0)
+                let gd9 : i64 = self.tmp()
+                self.ir(IR_CALLI, ga9, go9, 0, gd9, 0)
+                return gd9
+            let gv8 : mut i64[] = []
+            let gi8 : mut i64 = 0
+            while gi8 < argc:
+                gv8.push(self.lower_expr(self.a.extra[(args_off + 1 + gi8) × 1¤ptrdiff]))
+                gi8 ← gi8 + 1
+            let gp8 : i64 = self.tmp()
+            self.ir(IR_SNEW, 1 + argc + 1, 0, 0, gp8, 0)
+            let gf8 : i64 = self.tmp()
+            self.ir(IR_FADDR, self.shimbase + self.a.nb[nid × 1¤ptrdiff], 0, 0, gf8, 0)
+            self.ir(IR_FSTO, gp8, 0, gf8, 0, 0)
+            let gk8 : mut i64 = 0
+            while gk8 < argc:
+                self.ir(IR_FSTO, gp8, 1 + gk8, gv8[gk8 × 1¤ptrdiff], 0, 0)
+                gk8 ← gk8 + 1
+            self.ir(IR_FSTO, gp8, 1 + argc, gb9, 0, 0)
+            return gp8
         if self.a.nc[nid × 1¤ptrdiff] = 5:
             // an empty application answers the box unchanged
             return self.nslot[nid × 1¤ptrdiff]
@@ -7825,15 +8030,20 @@ fn lower_lambda_fn(lw : &mut Lower, a : Ast, chk : Chk, j : i64) → IrFn:
         lw.ir(IR_FLD, boxt, 1 + ci, 0, pslot0 + np + ci, 0)
         ci ← ci + 1
     let bodyn : i64 = a.nb[nid × 1¤ptrdiff]
-    let rv : i64 = lw.lower_expr(bodyn)
-    if ty_is_opt(ret) and not ty_is_opt(lw.tof(bodyn)):
-        // a bare value under an optional answer boxes itself
-        let bb : i64 = lw.tmp()
-        lw.ir(IR_SNEW, 1, 0, 0, bb, 0)
-        lw.ir(IR_FSTO, bb, 0, rv, 0, 0)
-        lw.ir(IR_RET, bb, 0, 0, 0, 0)
+    if a.nkind[bodyn × 1¤ptrdiff] = NK_BLOCK:
+        // statements, ending in a trailing value or a return; both go
+        // through lower_ret_value, which boxes under an optional answer
+        lw.lower_block(bodyn, true, ret)
     else:
-        lw.ir(IR_RET, rv, 0, 0, 0, 0)
+        let rv : i64 = lw.lower_expr(bodyn)
+        if ty_is_opt(ret) and not ty_is_opt(lw.tof(bodyn)):
+            // a bare value under an optional answer boxes itself
+            let bb : i64 = lw.tmp()
+            lw.ir(IR_SNEW, 1, 0, 0, bb, 0)
+            lw.ir(IR_FSTO, bb, 0, rv, 0, 0)
+            lw.ir(IR_RET, bb, 0, 0, 0, 0)
+        else:
+            lw.ir(IR_RET, rv, 0, 0, 0, 0)
     let opc : mut i64[] = []
     let iac : mut i64[] = []
     let ibc : mut i64[] = []
