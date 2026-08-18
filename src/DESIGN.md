@@ -422,6 +422,25 @@ Attempt 3 grows core-1 to **core-2** with structs:
   zero; the seventh takes `AT_EXECFN`'s address and measures the
   bytes into a string.  The identities are `u32` and the page size
   carries `¤byte`, as the spec has them.
+- **three kinds of data, and a program that seals its own**: a
+  global that is never written rides in the read-only segment with
+  the strings; one the initializer builds — a hash, a function
+  value — is written before `@start` and never after, and sits at
+  the head of the writable segment together with what the kernel
+  handed over (argc, argv, envp, the auxiliary vector), padded to a
+  page; a `mut` global and the allocator's own state follow it and
+  stay writable.  `PT_GNU_RELRO` records that head, and since
+  nothing loads a static program but itself, the program does what
+  a dynamic loader would: after the initializer has run and before
+  anything else does, it walks its own program headers — `AT_PHDR`,
+  `AT_PHNUM` and `AT_PHENT` from the auxiliary vector — and
+  `mprotect`s every `PT_GNU_RELRO` stretch read-only, rounding the
+  ends inward to whole pages as a loader rounds them.  For the
+  headers to be readable at all the image now maps them, in a
+  read-only `PT_LOAD` of its first page, which is also what makes
+  the kernel's `AT_PHDR` point at something.  Where a global lives
+  is a compile-time map consulted at every load and store, so the
+  three kinds cost nothing to tell apart at run time.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's

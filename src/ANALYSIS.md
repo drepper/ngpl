@@ -123,6 +123,22 @@ as `./pr.bin` says so.  The one place the implementations part is
 program under the other, because that is what it means; the
 conformance test asks the values of everything else and only
 invariants of that.
+
+The data segment then split three ways — never written, written
+only before `@start`, written throughout — with the middle kind
+marked `PT_GNU_RELRO` and sealed at run time by the program itself,
+following its own headers rather than a hardcoded address.  Two
+things had to be true for that to work and neither was: the image
+did not map its own program headers, so `AT_PHDR` pointed at
+nothing (fixed with a read-only `PT_LOAD` of the first page, which
+is what every real linker emits and what makes the kernel's
+`AT_PHDR` meaningful); and the runtime-routine ordering trap struck
+for the fourth time.  That one is now closed for good: every
+routine names the id it fills and is held to it by an assertion, so
+a routine emitted out of turn stops the compiler instead of
+answering as some other routine.  The seal was checked in a live
+process, where the relro page reads `r--p` while `@start` runs and
+the allocator's page beside it stays `rw-p`.
 The interpreter's `println` of a range leaked the implementation's
 `RangeValue(3…7)` spelling and now answers the language's `3…7`.  The batch also caught a quiet
 acceptance bug through self-hosting: the bootstrap reserves every

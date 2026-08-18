@@ -1,0 +1,39 @@
+// core-2: a program's data falls into three kinds, and the compiled
+// image keeps them apart.  A constant is never written and rides with
+// the read-only things; what the initializer builds is written before
+// @start and never after, and the program seals it there by following
+// its own PT_GNU_RELRO header as a loader would; what a program writes
+// throughout stays writable.  None of that is visible from inside the
+// language, which is exactly the point -- so what this asks is that
+// all three still answer what they hold, and that the writable one
+// still takes a write after the rest has been sealed.
+
+// a constant: never written, so it rides with the read-only things
+let LIMIT : i64 = 42
+let GREETING : bool = true
+
+// built before @start and never after: read-only from there on
+let TABLE : std.hash(str, i64) = (⸨"one": 1, "two": 2, "three": 3⸩)
+
+fn double(x : i64) -> i64:
+    return x × 2
+
+let DOUBLER := double
+
+// written throughout, so it stays writable
+let counter : mut i64 = 0
+let total : mut i64 = 100
+
+@impure
+@start
+fn main():
+    std.println("{} {}", LIMIT, GREETING)
+    std.println("{} {} {}", TABLE["one"] ?? 0, TABLE["three"] ?? 0, TABLE["four"] ?? ⁻1)
+    std.println("{}", #TABLE)
+    std.println("{}", DOUBLER(21))
+    counter ← counter + 7
+    total ← total + counter
+    std.println("{} {}", counter, total)
+    foreach i := 1…5:
+        counter ← counter + i
+    std.println("{}", counter)

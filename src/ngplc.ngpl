@@ -8452,6 +8452,7 @@ let RT_ENVN : i64 = ⁻40
 let RT_ENVG : i64 = ⁻41
 let RT_AUXV : i64 = ⁻42
 let RT_EXECFN : i64 = ⁻43
+let RT_RELRO : i64 = ⁻44
 
 struct Emit:
     code : u8[]
@@ -8485,6 +8486,12 @@ struct Emit:
     // the deepest frame any function claims: the guard below the stack
     // must be at least this, or one 'sub rsp' could step over it
     max_frame : i64
+    // where each global lives: gseg 0 for the read-only segment and 1
+    // for the writable one, gmap the offset within it
+    gmap : i64[]
+    gseg : i64[]
+    gr_pos : i64[]       // abs64 fixups against a global held in rodata
+    gr_off : i64[]
     pj_labels : i64[]
 
 impl Emit:
@@ -8665,12 +8672,37 @@ impl Emit:
         while #self.pj_labels > 0:
             _ ← self.pj_labels.pop() ?? 0
 
+    // A runtime routine is found through its negative id, which is its
+    // place in this list -- so a routine emitted out of turn answers as
+    // some other routine, silently.  Each one says which it is, and is
+    // held to it here.
+    fn rt_begin(&mut self, id : i64):
+        assert(@dropunit(#self.rt_off) = 0 - id - 1,
+               "a runtime routine was emitted out of turn")
+        self.rt_off.push(self.here())
+
     fn dref(&mut self, reg : i64, off : i64):
         self.b1(72 + (1 if reg >= 8 else 0))
         self.b1(184 + (reg & 7))
         self.df_pos.push(self.here())
         self.df_off.push(off)
         self.w64(0)
+
+    // a global that is never written lives with the other read-only
+    // things, so its address is fixed against rodata instead
+    fn groref(&mut self, reg : i64, off : i64):
+        self.b1(72 + (1 if reg >= 8 else 0))
+        self.b1(184 + (reg & 7))
+        self.gr_pos.push(self.here())
+        self.gr_off.push(off)
+        self.w64(0)
+
+    // whichever of the two a global asks for
+    fn gref(&mut self, reg : i64, g : i64):
+        if self.gseg[g × 1¤ptrdiff] = 0:
+            self.groref(reg, self.gmap[g × 1¤ptrdiff])
+        else:
+            self.dref(reg, self.gmap[g × 1¤ptrdiff])
 
     // narrow the canonical 64-bit value in rax back into its width
     fn canon(&mut self, w : i64):
@@ -8987,12 +9019,12 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.movimm(R_DX, str_len(strs[a × 1¤ptrdiff]))
             em.jglobal(232, ⁻1, RT_ABORT)
         elif o = IR_GLOAD:
-            em.dref(R_R11, 8 × a)
+            em.gref(R_R11, a)
             em.b3(73, 139, 3)                // mov rax, [r11]
             em.store(R_AX, d)
         elif o = IR_GSTORE:
             em.load(R_AX, b)
-            em.dref(R_R11, 8 × a)
+            em.gref(R_R11, a)
             em.b3(73, 137, 3)                // mov [r11], rax
         elif o = IR_ANEW:
             em.movimm(R_DI, a)
@@ -9371,7 +9403,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
 
 fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64):
     // RT_PRINTI: rdi = signed value → decimal on fd 1
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_PRINTI)
     em.begin_fn(3)
     em.b4(72, 131, 236, 40)         // sub rsp, 40
     em.b3(76, 141, 76)
@@ -9411,14 +9443,14 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.resolve_locals()
 
     // RT_WRITE1: rsi = buf, rdx = len
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_WRITE1)
     em.movimm(R_AX, 1)
     em.movimm(R_DI, 1)
     em.b2(15, 5)
     em.b1(195)
 
     // RT_ABORT: rsi = message, rdx = its length
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_ABORT)
     em.movimm(R_AX, 1)
     em.movimm(R_DI, 2)
     em.b2(15, 5)
@@ -9431,35 +9463,35 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.b2(15, 11)                   // ud2
 
     // RT_OV
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_OV)
     let ovm : i64 = lw.intern("integer overflow\n")
     em.sref(R_SI, ovm)
     em.movimm(R_DX, str_len(lw.strs[ovm × 1¤ptrdiff]))
     em.jglobal(233, ⁻1, RT_ABORT)
 
     // RT_SHIFT
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_SHIFT)
     let shm : i64 = lw.intern("shift count is past the type\n")
     em.sref(R_SI, shm)
     em.movimm(R_DX, str_len(lw.strs[shm × 1¤ptrdiff]))
     em.jglobal(233, ⁻1, RT_ABORT)
 
     // RT_BOUNDS
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_BOUNDS)
     let bdm : i64 = lw.intern("index out of range\n")
     em.sref(R_SI, bdm)
     em.movimm(R_DX, str_len(lw.strs[bdm × 1¤ptrdiff]))
     em.jglobal(233, ⁻1, RT_ABORT)
 
     // RT_OOM
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_OOM)
     let oom : i64 = lw.intern("out of memory\n")
     em.sref(R_SI, oom)
     em.movimm(R_DX, str_len(lw.strs[oom × 1¤ptrdiff]))
     em.jglobal(233, ⁻1, RT_ABORT)
 
     // RT_ALLOC: rdi = size → rax; a bump pointer over mmap regions
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_ALLOC)
     em.begin_fn(1)
     em.b4(76, 141, 87, 15)          // lea r10, [rdi+15]
     em.b4(73, 131, 226, 240)        // and r10, -16
@@ -9498,7 +9530,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.resolve_locals()
 
     // RT_ARRNEW: rdi = capacity in elements → rax = descriptor
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_ARRNEW)
     em.b1(87)                       // push rdi
     em.b3(72, 141, 60)
     em.b4(253, 24, 0, 0)
@@ -9513,7 +9545,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.b1(195)
 
     // RT_ARRPUSH: rdi = descriptor, rsi = value
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_ARRPUSH)
     em.begin_fn(3)
     em.b4(72, 139, 79, 8)           // mov rcx, [rdi+8]
     em.b4(72, 59, 79, 16)           // cmp rcx, [rdi+16]
@@ -9556,7 +9588,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.resolve_locals()
 
     // RT_CONCAT: rdi, rsi = descriptors → rax = the joined string
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_CONCAT)
     em.begin_fn(4)
     em.b1(87)                       // push rdi
     em.b1(86)                       // push rsi
@@ -9598,7 +9630,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.resolve_locals()
 
     // RT_STREQ: rdi, rsi = descriptors → rax = 0 or 1
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_STREQ)
     em.begin_fn(3)
     em.b4(72, 139, 79, 8)           // mov rcx, [rdi+8]
     em.b4(72, 59, 78, 8)            // cmp rcx, [rsi+8]
@@ -9624,7 +9656,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
 
     // RT_STRCHARS: rdi = descriptor → rax = characters, counted by
     // lead bytes with a materialized test -- no branch in the body
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_STRCHARS)
     em.begin_fn(2)
     em.b3(72, 139, 23)              // mov rdx, [rdi]
     em.b4(72, 139, 79, 8)           // mov rcx, [rdi+8]
@@ -9647,7 +9679,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.resolve_locals()
 
     // RT_PRINTSTR: rdi = descriptor
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_PRINTSTR)
     em.b3(72, 139, 119)
     em.b1(0)                        // mov rsi, [rdi]  (disp8 0)
     em.b4(72, 139, 87, 8)           // mov rdx, [rdi+8]
@@ -9657,7 +9689,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.b1(195)
 
     // RT_PRINTU: rdi = unsigned value → decimal on fd 1
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_PRINTU)
     em.begin_fn(1)
     em.b4(72, 131, 236, 40)         // sub rsp, 40
     em.b3(76, 141, 76)
@@ -9692,7 +9724,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
 
     // RT_HNEW: rdi = capacity (a power of two), rsi = 1 for str keys
     // → rax = descriptor
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_HNEW)
     em.b1(86)                       // push rsi
     em.b1(87)                       // push rdi
     em.b4(72, 193, 231, 4)          // shl rdi, 4
@@ -9715,7 +9747,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     // the first empty one, rdx = 1 found / 0 empty.  Leaves rbx = the
     // descriptor and r12 = the key for its callers; the table is
     // never full, so the probe always ends.
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_HFIND)
     em.begin_fn(8)
     em.b3(72, 137, 251)             // mov rbx, rdi
     em.b3(73, 137, 244)             // mov r12, rsi
@@ -9791,7 +9823,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
 
     // RT_HGET: rdi = descriptor, rsi = key → rax = an optional: the
     // boxed value when the key is held, the null ∅ when not
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_HGET)
     em.begin_fn(1)
     em.jglobal(232, ⁻1, RT_HFIND)
     em.b3(72, 133, 210)             // test rdx, rdx
@@ -9810,7 +9842,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.resolve_locals()
 
     // RT_HPUT: rdi = descriptor, rsi = key, rdx = value
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_HPUT)
     em.begin_fn(2)
     em.b1(87)                       // push rdi -- [rsp+16]
     em.b1(86)                       // push rsi -- [rsp+8]
@@ -9863,7 +9895,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.resolve_locals()
 
     // RT_HELEM: rdi = descriptor, rsi = key → rax = 0 or 1
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_HELEM)
     em.jglobal(232, ⁻1, RT_HFIND)
     em.b3(72, 137, 208)             // mov rax, rdx
     em.b1(195)
@@ -9871,7 +9903,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     // RT_HGROW: rdi = descriptor; the table doubles and every held
     // pair moves.  Frame: 0 desc, 8 old ctrl, 16 old kv, 24 old cap,
     // 32 the doubled cap then the walk index, 40 the value in flight.
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_HGROW)
     em.begin_fn(3)
     em.b4(72, 131, 236, 48)         // sub rsp, 48
     em.b4(72, 137, 60, 36)          // mov [rsp], rdi
@@ -9945,7 +9977,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.resolve_locals()
 
     // RT_BADCHAR: .chr() was handed what no character is
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_BADCHAR)
     let bcm : i64 = lw.intern("not a character: past the code points or a surrogate\n")
     em.sref(R_SI, bcm)
     em.movimm(R_DX, str_len(lw.strs[bcm × 1¤ptrdiff]))
@@ -9955,7 +9987,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     // the code point; a position past the characters is out of range.
     // The skip walks lead bytes, the length of each computed with
     // three materialized compares -- no branch to predict.
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_STRIDX)
     em.begin_fn(6)
     em.b3(72, 139, 23)              // mov rdx, [rdi]
     em.b4(72, 139, 79, 8)           // mov rcx, [rdi+8]
@@ -10022,7 +10054,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
 
     // RT_CHARS: rdi = descriptor → rax = a char[] of the string's
     // characters; the byte length bounds the capacity from above
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_CHARS)
     em.begin_fn(6)
     em.b3(76, 139, 39)              // mov r12, [rdi]
     em.b4(76, 139, 111, 8)          // mov r13, [rdi+8]
@@ -10080,7 +10112,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
 
     // RT_CHARSTR: rdi = code point → rax = a fresh one-character
     // string, its UTF-8 encoding 1 to 4 bytes
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_CHARSTR)
     em.begin_fn(4)
     em.b3(73, 137, 252)             // mov r12, rdi
     em.movimm(R_DI, 20)
@@ -10162,7 +10194,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
 
     // RT_ARGS: → rax = a str[] of the program's arguments, argv[0]
     // left out; each entry points straight at the kernel's bytes
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_ARGS)
     em.begin_fn(5)
     em.dref(R_R11, args_off)
     em.b3(77, 139, 35)              // mov r12, [r11]: argc
@@ -10207,7 +10239,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
 
     // RT_FOPEN: rdi = the path → rax = an optional file descriptor;
     // the path's bytes gain the NUL openat wants
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_FOPEN)
     em.begin_fn(3)
     em.b3(73, 137, 252)             // mov r12, rdi
     em.b4(73, 139, 124, 36)
@@ -10251,7 +10283,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
 
     // RT_FCREATE: rdi = the path, rsi = the mode → rax = a fresh
     // file's descriptor; refusal is a stop, not an answer
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_FCREATE)
     em.begin_fn(3)
     em.b3(73, 137, 252)             // mov r12, rdi
     em.b3(73, 137, 246)             // mov r14, rsi
@@ -10294,7 +10326,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
 
     // RT_FREAD: rdi = a file's descriptor → rax = its bytes as a
     // u8[]; the size from fstat, one read loop, one widening loop
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_FREAD)
     em.begin_fn(5)
     em.b3(73, 137, 252)             // mov r12, rdi
     em.b3(72, 129, 236)
@@ -10352,7 +10384,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
 
     // RT_FWRITE: rdi = a file's descriptor, rsi = a u8[]; the slots
     // narrow to bytes and one write loop puts them down
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_FWRITE)
     em.begin_fn(5)
     em.b3(73, 137, 252)             // mov r12, rdi
     em.b4(76, 139, 110, 8)          // mov r13, [rsi+8]: how many
@@ -10393,14 +10425,14 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.resolve_locals()
 
     // RT_BADFIT: a value flowed into a type it does not fit
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_BADFIT)
     let bfm : i64 = lw.intern("the value does not fit the type it meets\n")
     em.sref(R_SI, bfm)
     em.movimm(R_DX, str_len(lw.strs[bfm × 1¤ptrdiff]))
     em.jglobal(233, ⁻1, RT_ABORT)
 
     // RT_WRITE2: rsi = buf, rdx = len, onto the error stream
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_WRITE2)
     em.movimm(R_AX, 1)
     em.movimm(R_DI, 2)
     em.b2(15, 5)
@@ -10408,7 +10440,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
 
     // RT_AFIND: rdi = descriptor, rsi = wanted, rdx = 1 for string
     // elements → rax = the position boxed, or the null ∅
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_AFIND)
     em.begin_fn(5)
     em.b3(76, 139, 39)              // mov r12, [rdi]: the elements
     em.b4(76, 139, 111, 8)          // mov r13, [rdi+8]: how many
@@ -10447,7 +10479,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     // RT_ASLICE: rdi = descriptor, rsi = lo, rdx = hi → rax = a fresh
     // array of elements lo…hi, both ends included; hi below lo is
     // empty, an end outside the array is out of range
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_ASLICE)
     em.begin_fn(3)
     em.b3(76, 139, 39)              // mov r12, [rdi]
     em.b4(76, 139, 111, 8)          // mov r13, [rdi+8]
@@ -10486,7 +10518,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
 
     // RT_AFILL: rdi = the count, rsi = the value → rax = a fresh
     // array of that many copies
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_AFILL)
     em.begin_fn(2)
     em.b3(73, 137, 252)             // mov r12, rdi
     em.b3(73, 137, 245)             // mov r13, rsi
@@ -10510,7 +10542,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
 
     // RT_ACYC: rdi = the count, rsi = the filler array → rax = a
     // fresh array of the filler's elements, cycled to the count
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_ACYC)
     em.begin_fn(3)
     em.b3(73, 137, 252)             // mov r12, rdi
     em.b3(76, 139, 46)              // mov r13, [rsi]: the elements
@@ -10547,7 +10579,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
 
     // RT_ACAT: rdi, rsi = arrays → rax = one fresh array holding the
     // first's elements and then the second's
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_ACAT)
     em.begin_fn(4)
     em.b3(76, 139, 39)              // mov r12, [rdi]
     em.b4(76, 139, 111, 8)          // mov r13, [rdi+8]
@@ -10585,7 +10617,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
 
     // RT_SBYTES: rdi = a string → rax = its bytes as a u8[], each
     // widened into its own slot
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_SBYTES)
     em.begin_fn(2)
     em.b3(76, 139, 39)              // mov r12, [rdi]: the bytes
     em.b4(76, 139, 111, 8)          // mov r13, [rdi+8]: how many
@@ -10610,7 +10642,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     // each a two-slot {name, d_type} block, "." and ".." left out.
     // The kernel's getdents64 records are parsed in place; the order
     // is the directory's own, the same one every reader sees.
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_DENTS)
     em.begin_fn(9)
     em.b4(72, 131, 236, 32)         // sub rsp, 32
     em.movimm(R_DI, 8)
@@ -10717,7 +10749,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     // RT_ENVN: → rax = a str[] of the environment's names, the part of
     // each entry before its '=' -- or the whole of one that has none,
     // as the interpreter's names() reads them
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_ENVN)
     em.begin_fn(6)
     em.dref(R_R11, args_off)
     em.b4(77, 139, 107, 16)         // mov r13, [r11+16]: envp
@@ -10769,7 +10801,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     // optional string: the box holding the value, or the null for a
     // name the environment does not carry.  The first entry that
     // matches answers, as getenv has it.
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_ENVG)
     em.begin_fn(7)
     em.b3(72, 137, 243)             // mov rbx, rsi: the name outlives the calls
     em.b3(73, 137, 212)             // mov r12, rdx: and so does its length
@@ -10826,7 +10858,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     // RT_AUXV: rdi = the key → rax = what the auxiliary vector carries
     // under it, or zero when it carries nothing.  The vector is pairs
     // of words, a key and its value, ending at a key of zero.
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_AUXV)
     em.begin_fn(3)
     em.dref(R_R11, args_off)
     em.b4(73, 139, 75, 24)          // mov rcx, [r11+24]: the vector
@@ -10849,7 +10881,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     // RT_EXECFN: → rax = the path execve was given, as a string.  The
     // vector holds where the bytes are; they lie above the environment
     // on the entry stack, which outlives the move to the program's own.
-    em.rt_off.push(em.here())
+    em.rt_begin(RT_EXECFN)
     em.begin_fn(3)
     em.movimm(R_DI, 31)
     em.jglobal(232, ⁻1, RT_AUXV)
@@ -10877,6 +10909,60 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.b2(49, 210)                  // xor edx, edx
     em.b3(72, 137, 16)              // mov [rax], rdx
     em.b4(72, 137, 80, 8)           // mov [rax+8], rdx
+    em.b1(195)
+    em.resolve_locals()
+
+    // RT_RELRO: seal what the program headers say is read-only once it
+    // has been written.  The headers are where AT_PHDR points, as many
+    // as AT_PHNUM of AT_PHENT bytes each, and each one whose type is
+    // PT_GNU_RELRO names a stretch to protect.  The ends are rounded
+    // inward to whole pages, as a dynamic loader rounds them, so a
+    // header that names part of a page protects none of it.
+    em.rt_begin(RT_RELRO)
+    em.begin_fn(3)
+    em.movimm(R_DI, 3)              // AT_PHDR
+    em.jglobal(232, ⁻1, RT_AUXV)
+    em.b3(73, 137, 197)             // mov r13, rax: the headers
+    em.movimm(R_DI, 5)              // AT_PHNUM
+    em.jglobal(232, ⁻1, RT_AUXV)
+    em.b3(73, 137, 196)             // mov r12, rax: how many
+    em.movimm(R_DI, 4)              // AT_PHENT
+    em.jglobal(232, ⁻1, RT_AUXV)
+    em.b3(73, 137, 198)             // mov r14, rax: how long each is
+    em.movimm(R_DI, 6)              // AT_PAGESZ
+    em.jglobal(232, ⁻1, RT_AUXV)
+    em.b3(73, 137, 199)             // mov r15, rax: the page
+    em.b3(77, 133, 237)             // test r13, r13
+    em.jlocal(132, 2)               // je Lret: no headers, nothing to seal
+    em.set_label(0)                 // Lhdr
+    em.b3(77, 133, 228)             // test r12, r12
+    em.jlocal(132, 2)               // je Lret
+    em.b4(65, 139, 69, 0)           // mov eax, [r13]: p_type
+    em.b2(72, 61)
+    em.w32(1685382482)              // cmp rax, PT_GNU_RELRO
+    em.jlocal(133, 1)               // jne Lnext
+    em.b4(73, 139, 117, 16)         // mov rsi, [r13+16]: p_vaddr
+    em.b4(73, 139, 85, 40)          // mov rdx, [r13+40]: p_memsz
+    em.b3(72, 1, 242)               // add rdx, rsi: one past the end
+    // both ends inward to a page: rsi up, rdx down
+    em.b3(76, 137, 249)             // mov rcx, r15
+    em.b3(72, 255, 201)             // dec rcx
+    em.b3(72, 1, 206)               // add rsi, rcx
+    em.b3(72, 247, 209)             // not rcx
+    em.b3(72, 33, 206)              // and rsi, rcx
+    em.b3(72, 33, 202)              // and rdx, rcx
+    em.b3(72, 41, 242)              // sub rdx, rsi: how much of it
+    em.jlocal(142, 1)               // jle Lnext: no whole page inside
+    em.b3(72, 137, 247)             // mov rdi, rsi
+    em.b3(72, 137, 214)             // mov rsi, rdx
+    em.movimm(R_DX, 1)              // PROT_READ
+    em.movimm(R_AX, 10)
+    em.b2(15, 5)                    // mprotect
+    em.set_label(1)                 // Lnext
+    em.b3(77, 1, 245)               // add r13, r14
+    em.b3(73, 255, 204)             // dec r12
+    em.jlocal(⁻1, 0)
+    em.set_label(2)                 // Lret
     em.b1(195)
     em.resolve_locals()
 
@@ -10912,8 +10998,10 @@ fn push64(out : &mut u8[], v : i64):
     push32(&out, v » 32)
 
 @pre(#code > 0 and stack_size > 0)
+@pre(relro_size >= 0 and (relro_size % PAGE ?? 1) = 0)
 @post(r: #r > 4096)
-fn build_elf(code : u8[], rodata : u8[], data : u8[], stack_size : i64) → u8[]:
+fn build_elf(code : u8[], rodata : u8[], data : u8[], stack_size : i64,
+             relro_size : i64) → u8[]:
     let text_off : i64 = PAGE
     let text_vaddr : i64 = IMAGE_BASE + text_off
     let text_size : i64 = @dropunit(#code)
@@ -10940,8 +11028,19 @@ fn build_elf(code : u8[], rodata : u8[], data : u8[], stack_size : i64) → u8[]
     push64(&out, 0)
     push32(&out, 0)
     push32(&out, 64 + (56 « 16))
-    push32(&out, 4)
+    push32(&out, 6)
     push32(&out, 0)
+    // the headers themselves, mapped read-only: the kernel points
+    // AT_PHDR at them, and a program that means to follow its own
+    // program headers has to be able to read them
+    push32(&out, 1)
+    push32(&out, 4)
+    push64(&out, 0)
+    push64(&out, IMAGE_BASE)
+    push64(&out, IMAGE_BASE)
+    push64(&out, PAGE)
+    push64(&out, PAGE)
+    push64(&out, PAGE)
     // text
     push32(&out, 1)
     push32(&out, 5)
@@ -10969,6 +11068,18 @@ fn build_elf(code : u8[], rodata : u8[], data : u8[], stack_size : i64) → u8[]
     push64(&out, d_size)
     push64(&out, d_size)
     push64(&out, PAGE)
+    // PT_GNU_RELRO: the head of the writable segment, which holds what
+    // is written before @start and never after.  A dynamic loader would
+    // seal it; nothing loads a static program but itself, so the
+    // program seals it, following this entry as any loader would.
+    push32(&out, 1685382482)
+    push32(&out, 4)
+    push64(&out, d_off)
+    push64(&out, d_vaddr)
+    push64(&out, d_vaddr)
+    push64(&out, relro_size)
+    push64(&out, relro_size)
+    push64(&out, 1)
     // PT_GNU_STACK: read and write, and pointedly not execute.  Absent,
     // the kernel falls back to an executable stack; present, it says
     // what this program wants, and its size says how much.
@@ -11263,10 +11374,54 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
                               jt_starts: [], jt_is_code: [], jt_entries: [],
                               pj_id: [],
                               pj_start: [], pj_len: [], pj_labels: [],
-                              max_frame: 0})
+                              max_frame: 0,
+                              gmap: [], gseg: [], gr_pos: [], gr_off: []})
     let nglobals : i64 = @dropunit(#a.globals)
-    let alloc_off : i64 = 8 × nglobals
-    let args_off : i64 = alloc_off + 16
+    // The data a program carries falls into three kinds.  One is never
+    // written and rides with the other read-only things.  One is
+    // written before @start is reached and never again -- the globals
+    // the initializer builds, and what the kernel handed us -- and is
+    // made read-only there, which is what PT_GNU_RELRO records.  The
+    // rest is written throughout and stays writable.
+    let is_relro : mut i64[] = []
+    foreach _ := 0…nglobals:
+        is_relro.push(0)
+    foreach g := chk.ginit:
+        is_relro[g × 1¤ptrdiff] ← 1
+    let n_ro : mut i64 = 0
+    let n_relro : mut i64 = 0
+    let n_rw : mut i64 = 0
+    if nglobals > 0:
+        foreach i := 0…nglobals - 1:
+            if a.globals[i × 1¤ptrdiff].is_mut:
+                n_rw ← n_rw + 1
+            elif is_relro[i × 1¤ptrdiff] = 1:
+                n_relro ← n_relro + 1
+            else:
+                n_ro ← n_ro + 1
+    // what the kernel handed over is written once, at the very top of
+    // the program, so it belongs with the rest of the relro
+    let args_off : i64 = 8 × n_relro
+    let relro_size : i64 = align_up(args_off + 32, PAGE)
+    let alloc_off : i64 = relro_size + 8 × n_rw
+    let k_ro : mut i64 = 0
+    let k_relro : mut i64 = 0
+    let k_rw : mut i64 = 0
+    if nglobals > 0:
+        foreach i := 0…nglobals - 1:
+            if a.globals[i × 1¤ptrdiff].is_mut:
+                em.gseg.push(1)
+                em.gmap.push(relro_size + 8 × k_rw)
+                k_rw ← k_rw + 1
+            elif is_relro[i × 1¤ptrdiff] = 1:
+                em.gseg.push(1)
+                em.gmap.push(8 × k_relro)
+                k_relro ← k_relro + 1
+            else:
+                em.gseg.push(0)
+                em.gmap.push(8 × k_ro)
+                k_ro ← k_ro + 1
+    assert(@dropunit(#em.gmap) = nglobals, "every global was placed")
     let nfns : i64 = @dropunit(#a.fns)
     // _start: call the @start function, then exit 0
     let start_fn : mut i64 = ⁻1
@@ -11347,6 +11502,9 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
     let tdriver : i64 = nfns + g1 + 1
     if ninit > 0:
         em.jglobal(232, ⁻1, nfns)
+    // everything written before @start has now been written; what the
+    // headers say is read-only from here on is made so
+    em.jglobal(232, ⁻1, RT_RELRO)
     em.jglobal(232, ⁻1, tdriver)
     if start_fn >= 0:
         em.jglobal(232, ⁻1, start_fn)
@@ -11394,7 +11552,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
             emit_fn(&em, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs)
     // every function was emitted and left its offset behind
     assert(@dropunit(#em.fn_off) = nfns + g1 + 2 + @dropunit(#chk.lams) + @dropunit(#chk.psfn), "one code offset per function")
-    assert(#em.rt_off = 43, "every runtime routine in place")
+    assert(#em.rt_off = 44, "every runtime routine in place")
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:
         foreach i := 0…#em.cf_pos - 1:
@@ -11441,17 +11599,39 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
             while e3 < hi2:
                 push64(&rodata, base2 + em.jt_entries[e3 × 1¤ptrdiff])
                 e3 ← e3 + 1
-    // data: the globals' first values, then the allocator's state
+    // the globals that are never written ride here, past the tables
+    let gro_base : i64 = @dropunit(#rodata)
+    if nglobals > 0:
+        foreach i := 0…nglobals - 1:
+            if em.gseg[i × 1¤ptrdiff] = 0:
+                push64(&rodata, chk.gvals[i × 1¤ptrdiff])
+    if #em.gr_pos > 0:
+        foreach i := 0…#em.gr_pos - 1:
+            em.patch64(em.gr_pos[i], ro_vaddr + gro_base + em.gr_off[i])
+    // data: what is written before @start and then sealed, then what
+    // stays writable throughout
     let d_vaddr : i64 = IMAGE_BASE + align_up(align_up(PAGE + text_size, PAGE) + @dropunit(#rodata), PAGE)
     if #em.df_pos > 0:
         foreach i := 0…#em.df_pos - 1:
             em.patch64(em.df_pos[i], d_vaddr + em.df_off[i])
     let data : mut u8[] = []
     if nglobals > 0:
-        foreach i := 0…#chk.gvals - 1:
-            push64(&data, chk.gvals[i])
-    foreach _ := 1…48:
+        foreach i := 0…nglobals - 1:
+            if em.gseg[i × 1¤ptrdiff] = 1 and em.gmap[i × 1¤ptrdiff] < relro_size:
+                push64(&data, chk.gvals[i × 1¤ptrdiff])
+    // argc, argv, envp and the auxiliary vector, then the page's rest
+    foreach _ := 1…32:
         data.push(0)
+    while @dropunit(#data) < relro_size:
+        data.push(0)
+    if nglobals > 0:
+        foreach i := 0…nglobals - 1:
+            if em.gseg[i × 1¤ptrdiff] = 1 and em.gmap[i × 1¤ptrdiff] >= relro_size:
+                push64(&data, chk.gvals[i × 1¤ptrdiff])
+    // the allocator's bump pointer and the limit it runs to
+    foreach _ := 1…16:
+        data.push(0)
+    assert(@dropunit(#data) = alloc_off + 16, "the data segment is as long as it was planned")
     // A frame deeper than the guard could be claimed in one 'sub rsp'
     // that steps clean over it, and the overflow would land on
     // whatever lies below instead of faulting.  The compiler knows
@@ -11464,7 +11644,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
     if em.max_frame >= stack_size:
         cdiags.push(Diag{line: 1, col: 1,
                          msg: "a function claims " ⧺ i64_str(em.max_frame) ⧺ " bytes of stack, and the whole stack is " ⧺ i64_str(stack_size) ⧺ "; raise --stack-size"})
-    (Compiled{elf: build_elf(em.code, rodata, data, stack_size),
+    (Compiled{elf: build_elf(em.code, rodata, data, stack_size, relro_size),
               log: lw.dlog, diags: cdiags})
 
 // ===========================================================================
