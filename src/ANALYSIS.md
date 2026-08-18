@@ -102,6 +102,15 @@ counts as an error.  test_byte flipped whole as the eleventh shared
 file once a second gap closed with it: `std.bytes(s)` answers a
 fresh array, which the fresh-birth rule had not been told.
 
+Enums and type names followed, and neither flipped a file on its
+own -- what they did was clear the top-level blocker off all nine
+files that carried it, each of which now stops at its *next* wall:
+`@flag`, `@resultof`, `f64`, matrix columns, and glyphs core-2 does
+not lex.  That is the shape this project's growth keeps taking, and
+it is worth stating plainly: a feature is worth landing for the
+walls it removes, not only for the files it flips, and the two are
+rarely the same batch.
+
 The generated binaries then stopped borrowing the kernel's stack:
 `_start` reserves `guard + stack` of address space, opens the stack
 part, and stands on it, so an overflow faults on a guard that is

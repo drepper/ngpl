@@ -1,0 +1,74 @@
+// core-2: an enum names what a value may be, and a type name stands
+// for a type.  An enum's value is the number it was given -- counted
+// from zero, or counted on from whatever an enumerator says it stands
+// for -- and it is asked which it is rather than put in an order.  A
+// type name is nothing but the type it names, everywhere it is
+// written.
+
+enum Color:
+    red
+    green
+    blue
+
+enum Status:
+    ok = 0
+    warning = 10
+    failed = 20
+
+enum Level:
+    low
+    medium
+    high = 10
+    top
+
+enum Small : u8:
+    a
+    b
+
+type Count = i64
+type Name = str
+type Row = i64[]
+type Shade = Color
+
+fn describe(c : Color) -> Count:
+    return 1 if c = Color.red else (2 if c = Color.green else 3)
+
+fn is_bad(s : Status) -> bool:
+    return s = Status.failed
+
+fn label(c : Shade) -> Name:
+    return "red" if c = Color.red else "other"
+
+@impure
+@start
+fn main():
+    let c : Color = Color.green
+    std.println("{} {} {}", c = Color.green, c = Color.red, c ≠ Color.blue)
+    std.println("{} {} {}", describe(Color.red), describe(c), describe(Color.blue))
+
+    // counted on from what an enumerator says
+    std.println("{} {}", is_bad(Status.failed), is_bad(Status.ok))
+    std.println("{}", Level.top = Level.top)
+
+    // an enum in an array, and an optional of one
+    let v : Color[] = [Color.red, Color.blue, Color.green]
+    std.println("{} {} {}", #v, v[0] = Color.red, v[1] = Color.blue)
+    let o : Color? = ∃(Color.blue)
+    match o:
+        ∃(x):
+            std.println("{}", describe(x))
+        ∅:
+            std.println("none")
+    let n : Color? = ∅
+    std.println("{}", n = ∅)
+
+    // an enum held in a narrower integer
+    let t : Small = Small.b
+    std.println("{}", t = Small.b)
+
+    // a name standing for a type is that type
+    let k : Count = 41
+    let s : Name = "hi"
+    let r : Row = [1, 2, 3]
+    std.println("{} {} {}", k + 1, s, #r)
+    std.println("{}", label(Color.red))

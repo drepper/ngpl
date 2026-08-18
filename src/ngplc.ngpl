@@ -111,6 +111,8 @@ let TK_RESERVED : i64 = 99   // a word the bootstrap reserves and core-1 does no
 let TK_LAMBDA : i64 = 100    // λ
 let TK_BANG : i64 = 101      // ! -- the expected suffix on a type
 let TK_SEMI : i64 = 102      // ; -- between statements in a brace block
+let TK_TYPE : i64 = 103      // type: a name standing for a type
+let TK_ENUM : i64 = 104      // enum
 
 // The keyword table: one hash probe replaces a comparison ladder.  A
 // word the bootstrap language reserves but core-1 gives no meaning is
@@ -122,9 +124,9 @@ let KEYWORDS : std.hash(str, i64) = (⸨
     "true": 31, "false": 32, "and": 33, "or": 34, "not": 35,
     "struct": 36, "impl": 37, "match": 38,
     "opt": 99, "is": 99, "import": 99, "some": 99,
-    "start": 99, "test": 99, "expect": 99, "wrap": 99, "enum": 99,
+    "start": 99, "test": 99, "expect": 99, "wrap": 99, "enum": 104,
     "flag": 99, "replaceable": 99, "catch": 99, "comptime": 99,
-    "type": 99, "unit": 99, "impure": 99, "enumerate": 99,
+    "type": 103, "unit": 99, "impure": 99, "enumerate": 99,
     "macro": 99⸩)
 
 // The multi-byte glyphs, keyed by their UTF-8 bytes packed into one
@@ -245,7 +247,22 @@ fn ty_is_int(t : i64) → bool:
     t >= 16 and t < 1024
 
 fn ty_is_struct(t : i64) → bool:
-    t >= 1024 and t < 2048
+    t >= 1024 and t < 1792
+
+// enums: 1792 + the file's index for the enum.  They sit beside the
+// structs and below 2048 so an optional of one is its base and 2048,
+// as an optional of anything else below there is.
+fn ty_is_enum(t : i64) → bool:
+    t >= 1792 and t < 2048
+
+@pre(eidx >= 0 and eidx < 256)
+@post(r: ty_is_enum(r))
+fn mk_ety(eidx : i64) → i64:
+    1792 + eidx
+
+@pre(ty_is_enum(t))
+fn ty_eidx(t : i64) → i64:
+    t - 1792
 
 // An optional is its base and 2048, which holds for a base below that:
 // the scalars and the structs.  A tuple's code is far above it, so an
@@ -260,6 +277,8 @@ fn mk_oty(base : i64) → i64:
 fn ty_opt_base(t : i64) → i64:
     mk_tty(t - 198176) if t >= 198176 else t - 2048
 
+@pre(sidx >= 0 and sidx < 768)
+@post(r: ty_is_struct(r))
 fn mk_sty(sidx : i64) → i64:
     1024 + sidx
 
@@ -464,6 +483,7 @@ fn type_name(t0 : i64) → str:
     if t = TY_UNT: return "untyped integer"
     if t = TY_EMPTY: return "∅"
     if ty_is_struct(t): return prefix ⧺ "struct #" ⧺ i64_str(ty_sidx(t))
+    if ty_is_enum(t): return prefix ⧺ "enum #" ⧺ i64_str(ty_eidx(t))
     if ty_is_tup(t): return prefix ⧺ "a tuple"
     if ty_is_opt(t): return prefix ⧺ type_name(ty_opt_base(t)) ⧺ "?"
     if ty_is_arr(t) and not ty_is_farr(t): return prefix ⧺ type_name(ty_elem(t)) ⧺ "[]"
@@ -1245,6 +1265,12 @@ struct Ast:
     lts : i64[]          // lambda signatures: start into lte per shape
     ltl : i64[]          // … how many parameters
     lte : i64[]          // … the parameter types then the answer, flattened
+    enames : str[]       // enums: the name of each
+    ewidth : i64[]       // … the integer type its values are held in
+    estart : i64[]       // … where its enumerators begin in emembers
+    ecount : i64[]       // … how many it has
+    emembers : str[]     // … their names, flattened
+    evalues : i64[]      // … and what each one stands for
     ignored : str[]      // names @expect left uncompiled
     igtests : str[]      // the @test names among them, in source order
     diags : Diag[]
@@ -1266,6 +1292,8 @@ struct Parser:
     fns : FnDef[]
     globals : GlobalDef[]
     structs : SDef[]
+    tanames : str[]      // the names standing for types, and what they stand for
+    tatypes : i64[]
     snames : str[]       // struct names, pre-scanned so a struct may
                          // be written below whatever names it
     tts : i64[]          // interned tuple shapes, moved into the Ast
@@ -1279,6 +1307,12 @@ struct Parser:
     lts : i64[]
     ltl : i64[]
     lte : i64[]
+    enames : str[]
+    ewidth : i64[]
+    estart : i64[]
+    ecount : i64[]
+    emembers : str[]
+    evalues : i64[]
     tvn : str[]          // type-variable spellings, interned file-wide
     braces : i64         // statements end at ';' inside a brace block
     ignored : str[]
@@ -1347,7 +1381,10 @@ impl Parser:
     // since @start and std.println spell some of them
     fn eat_word(&mut self, what : str) → i64:
         let at : i64 = self.pos
-        if self.peek() ≠ TK_IDENT and self.peek() ≠ TK_RESERVED:
+        // a member's or field's name may be any word, including one
+        // the language keeps for itself elsewhere: 'type' names a type
+        // at the top level and a directory entry's kind after a dot
+        if self.peek() ≠ TK_IDENT and self.peek() ≠ TK_RESERVED and self.peek() ≠ TK_TYPE and self.peek() ≠ TK_ENUM:
             self.err("expected " ⧺ what)
             return at
         self.pos ← self.pos + 1
@@ -1484,7 +1521,7 @@ impl Parser:
                 self.err("'¤" ⧺ uname ⧺ "' is not a core-1 unit; ptrdiff and byte are")
         if self.peek() = TK_LBRACK:
             self.pos ← self.pos + 1
-            if not (ty_is_int(base) and ty_unit(base) = 0) and not ty_is_struct(base) and base ≠ TY_CHAR and base ≠ TY_STR and base ≠ TY_BOOL:
+            if not (ty_is_int(base) and ty_unit(base) = 0) and not ty_is_struct(base) and not ty_is_enum(base) and base ≠ TY_CHAR and base ≠ TY_STR and base ≠ TY_BOOL:
                 self.err("a core-2 array holds plain integers, truth values, characters, strings or structs")
                 return TY_I64
             let d0 : mut i64 = ⁻1
@@ -1617,6 +1654,15 @@ impl Parser:
 
     // the pre-scanned struct names answer for a name TYNAMES does not
     fn sindex_ty(&self, name : str) → i64:
+        if #self.enames > 0:
+            foreach i := 0…#self.enames - 1:
+                if self.enames[i] = name:
+                    return mk_ety(@dropunit(i))
+        // a name standing for a type answers what it stands for
+        if #self.tanames > 0:
+            foreach i := 0…#self.tanames - 1:
+                if self.tanames[i] = name:
+                    return self.tatypes[i]
         if #self.snames > 0:
             foreach i := 0…#self.snames - 1:
                 if self.snames[i] = name:
@@ -2700,6 +2746,92 @@ impl Parser:
                             is_test: is_test,
                             pre_off: pre_off, post_off: post_off})
 
+    // enum Name [: width]: one enumerator to a line.  What a value
+    // holds is its place in the list; what it is called is kept so a
+    // diagnostic and a printed value can say it.
+    fn parse_enum(&mut self):
+        self.pos ← self.pos + 1
+        let name_tok : i64 = self.pos
+        let name := self.ttext(name_tok)
+        _ ← self.eat_name("the enum's name")
+        if (TYNAMES[name] ?? ⁻1) ≠ ⁻1 or self.sindex_ty(name) ≠ ⁻1:
+            self.err("'" ⧺ name ⧺ "' already names a type")
+            return
+        let w : mut i64 = TY_I64
+        if self.peek() = TK_COLON and self.peek2() ≠ TK_NL:
+            self.pos ← self.pos + 1
+            w ← self.parse_type(false)
+            if not (ty_is_int(w) and ty_unit(w) = 0):
+                self.err("an enum's values are held in a plain integer type")
+                return
+        _ ← self.eat(TK_COLON, "':' beginning the enumerators")
+        _ ← self.eat(TK_NL, "the enumerators on their own lines")
+        _ ← self.eat(TK_INDENT, "an indented list of enumerators")
+        let first : i64 = @dropunit(#self.emembers)
+        let next_val : mut i64 = 0
+        while self.peek() ≠ TK_DEDENT and self.peek() ≠ TK_EOF and not self.failed():
+            if self.peek() = TK_NL:
+                self.pos ← self.pos + 1
+                continue
+            let mname := self.ttext(self.pos)
+            _ ← self.eat_name("an enumerator's name")
+            let m : mut i64 = first
+            while m < @dropunit(#self.emembers):
+                if self.emembers[m × 1¤ptrdiff] = mname:
+                    self.err("'" ⧺ mname ⧺ "' is named twice in this enum")
+                    return
+                m ← m + 1
+            // an enumerator may say what it stands for; the ones that
+            // follow count on from there, as they count from zero
+            if self.peek() = TK_EQ:
+                self.pos ← self.pos + 1
+                let neg : mut i64 = 1
+                if self.peek() = TK_NEG:
+                    self.pos ← self.pos + 1
+                    neg ← ⁻1
+                if self.peek() ≠ TK_INT or self.toks.big[self.pos × 1¤ptrdiff] ≠ 0:
+                    self.err("an enumerator stands for a written-out number")
+                    return
+                next_val ← neg × self.toks.val[self.pos × 1¤ptrdiff]
+                self.pos ← self.pos + 1
+            self.emembers.push(mname)
+            self.evalues.push(next_val)
+            next_val ← next_val + 1
+            if self.peek() = TK_NL:
+                self.pos ← self.pos + 1
+        _ ← self.eat(TK_DEDENT, "the end of the enumerators")
+        let n : i64 = @dropunit(#self.emembers) - first
+        if n = 0:
+            self.err("an enum names at least one of what it holds")
+            return
+        if @dropunit(#self.enames) >= 256:
+            self.err("this file names more than 256 enums")
+            return
+        self.enames.push(name)
+        self.ewidth.push(w)
+        self.estart.push(first)
+        self.ecount.push(n)
+
+    // type Name = T: a name standing for a type, and nothing more --
+    // what it stands for is what it is, everywhere the name is written
+    fn parse_type_alias(&mut self):
+        self.pos ← self.pos + 1
+        let name_tok : i64 = self.pos
+        let name := self.ttext(name_tok)
+        _ ← self.eat_name("the name being given to a type")
+        if (TYNAMES[name] ?? ⁻1) ≠ ⁻1:
+            self.err("'" ⧺ name ⧺ "' is already a type's name")
+            return
+        if self.sindex_ty(name) ≠ ⁻1:
+            self.err("'" ⧺ name ⧺ "' already stands for something")
+            return
+        _ ← self.eat(TK_EQ, "'=' and the type the name stands for")
+        let t : i64 = self.parse_type(false)
+        if self.failed(): return
+        self.tanames.push(name)
+        self.tatypes.push(t)
+        self.end_stmt()
+
     fn parse_struct(&mut self):
         _ ← self.eat(TK_STRUCT, "'struct'")
         let name_tok : i64 = self.pos
@@ -2878,22 +3010,29 @@ impl Parser:
                 self.parse_struct()
             else:
                 self.parse_impl()
+        elif self.peek() = TK_TYPE:
+            self.parse_type_alias()
+        elif self.peek() = TK_ENUM:
+            self.parse_enum()
         elif self.peek() = TK_LET:
             if imp or is_start or is_noreturn or is_test or #pres > 0 or #posts > 0:
                 self.err("a global binding carries no annotations")
             else:
                 self.parse_global(expects > 0)
         else:
-            self.err("core-2 has functions, structs, impl blocks and global bindings at the top level")
+            self.err("core-2 has functions, structs, impl blocks, enums, type names and global bindings at the top level")
 
 fn parse(toks : Toks, src : byte[]) → Ast:
     let p : mut Parser = (Parser{toks: toks, src: src, pos: 0,
                                  nkind: [], ntok: [], na: [], nb: [], nc: [],
                                  extra: [], fns: [], globals: [], structs: [],
+                                 tanames: [], tatypes: [],
                                  snames: [], tts: [], ttl: [], tte: [],
                                  fae: [], fas: [],
                                  mel: [], mrr: [], mcc: [],
                                  lts: [], ltl: [], lte: [],
+                                 enames: [], ewidth: [], estart: [],
+                                 ecount: [], emembers: [], evalues: [],
                                  tvn: [], braces: 0,
                                  ignored: [], igtests: [],
                                  diags: [], poisoned: false})
@@ -2934,6 +3073,8 @@ fn parse(toks : Toks, src : byte[]) → Ast:
          fae: p.fae, fas: p.fas,
          mel: p.mel, mrr: p.mrr, mcc: p.mcc,
          lts: p.lts, ltl: p.ltl, lte: p.lte,
+         enames: p.enames, ewidth: p.ewidth, estart: p.estart,
+         ecount: p.ecount, emembers: p.emembers, evalues: p.evalues,
          ignored: p.ignored, igtests: p.igtests, diags: p.diags})
 
 // ===========================================================================
@@ -4040,6 +4181,13 @@ impl Checker:
                 self.derr(tok, "a filetype is asked which it is; it has no order")
             self.set_type(id, TY_BOOL)
             return
+        if ty_is_enum(l) or ty_is_enum(r):
+            if l ≠ r:
+                self.derr(tok, "an enum is asked about its own kind; the sides are " ⧺ type_name(l) ⧺ " and " ⧺ type_name(r))
+            elif not (k = NK_EQ or k = NK_NE):
+                self.derr(tok, "an enum is asked which it is; it has no order")
+            self.set_type(id, TY_BOOL)
+            return
         if not ty_is_int(l) or not ty_is_int(r):
             self.derr(tok, "an ordering compares numbers; the sides are " ⧺ type_name(l) ⧺ " and " ⧺ type_name(r))
         elif ty_sgn(l) ≠ ty_sgn(r):
@@ -4450,7 +4598,7 @@ impl Checker:
                 self.derr(tok, "the elements state no type; the binding must say it")
             self.set_type(id, want if ty_is_arr(want) else mk_aty(TY_I64))
             return
-        if not (ty_is_int(settled) and ty_unit(settled) = 0) and not ty_is_struct(settled) and settled ≠ TY_CHAR and settled ≠ TY_STR and settled ≠ TY_BOOL:
+        if not (ty_is_int(settled) and ty_unit(settled) = 0) and not ty_is_struct(settled) and not ty_is_enum(settled) and settled ≠ TY_CHAR and settled ≠ TY_STR and settled ≠ TY_BOOL:
             self.derr(tok, "a core-2 array holds plain integers, truth values, characters, strings or structs")
             self.set_type(id, mk_aty(TY_I64))
             return
@@ -4509,6 +4657,24 @@ impl Checker:
         self.set_type(id, mk_sty(sidx))
 
     fn check_field(&mut self, id : i64, tok : i64, na : i64):
+        // Name.enumerator, where Name is an enum's: what it stands for
+        // is its place in the list, settled here
+        if self.kind_of(na) = NK_VAR:
+            let bn := self.text(self.a.ntok[na × 1¤ptrdiff])
+            if self.lookup(bn) = ⁻1:
+                let ei : i64 = self.enum_index(bn)
+                if ei ≠ ⁻1:
+                    let m := self.text(tok)
+                    let k : i64 = self.enum_member(ei, m)
+                    if k = ⁻1:
+                        self.derr(tok, "'" ⧺ bn ⧺ "' does not hold '" ⧺ m ⧺ "'")
+                        self.set_type(id, mk_ety(ei))
+                        return
+                    self.a.nkind[id × 1¤ptrdiff] ← NK_INT
+                    self.a.na[id × 1¤ptrdiff] ← self.a.evalues[(self.a.estart[ei × 1¤ptrdiff] + k) × 1¤ptrdiff]
+                    self.a.nb[id × 1¤ptrdiff] ← 0
+                    self.set_type(id, mk_ety(ei))
+                    return
         self.check_expr(na, TY_UNIT)
         let t : i64 = ty_strip_ref(self.ty_of(na))
         if t = TY_ENTRY:
@@ -4532,6 +4698,23 @@ impl Checker:
             return
         self.a.nb[id × 1¤ptrdiff] ← fidx
         self.set_type(id, fty)
+
+    fn enum_index(&self, name : str) → i64:
+        if #self.a.enames > 0:
+            foreach i := 0…#self.a.enames - 1:
+                if self.a.enames[i] = name:
+                    return @dropunit(i)
+        ⁻1
+
+    fn enum_member(&self, ei : i64, m : str) → i64:
+        let f : i64 = self.a.estart[ei × 1¤ptrdiff]
+        let n : i64 = self.a.ecount[ei × 1¤ptrdiff]
+        let i : mut i64 = 0
+        while i < n:
+            if self.a.emembers[(f + i) × 1¤ptrdiff] = m:
+                return i
+            i ← i + 1
+        ⁻1
 
     fn check_entry_field(&mut self, id : i64, tok : i64):
         let fname := self.text(tok)

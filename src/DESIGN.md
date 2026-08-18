@@ -540,6 +540,23 @@ Attempt 3 grows core-1 to **core-2** with structs:
   which is the string itself.  A program that only walks strings no
   longer carries the routine that lays them out at all; the dead
   runtime is dropped as any other unreached routine is.
+- **enums and type names**: `enum Name [: width]:` with one
+  enumerator to a line names what a value may be.  What a value
+  holds is the number it was given -- counted from zero, or counted
+  on from whatever an enumerator says it stands for (`ok = 0`,
+  `warning = 10`) -- so `Name.enumerator` folds to a constant where
+  it is written and costs nothing at run time.  An enum is asked
+  which it is, never put in an order, and only against its own kind;
+  it rides in arrays, parameters, returns and optionals as any
+  scalar does.  The band is carved out of the top of the structs'
+  (1792..2048, leaving 768 structs), which keeps every named type
+  below 2048 and so keeps an optional of one at `base + 2048` with
+  nothing else to teach.  `type Name = T` gives a name to a type and
+  nothing more: it resolves where any type name resolves, so it
+  stands for its type everywhere including inside another alias.
+  Refused by name: writing an enum's value out (the interpreter
+  prints `Color.green`, which wants the names in the image), and
+  `@flag` enums.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's
