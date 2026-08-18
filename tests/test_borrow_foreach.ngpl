@@ -182,6 +182,54 @@ fn error_borrow_with_destructuring():
     foreach a, b := &mut pairs:
         assert(a > 0)
 
+// ---------------------------------------------------------------------
+// A borrow handed on is the same borrow
+// ---------------------------------------------------------------------
+
+fn reborrow_push1(v : &mut i64[]):
+    v.push(9)
+
+fn reborrow_push2(v : &mut i64[]):
+    reborrow_push1(&v)
+
+fn reborrow_push3(v : &mut i64[]):
+    reborrow_push2(&v)
+
+fn reborrow_push4(v : &mut i64[]):
+    reborrow_push3(&v)
+
+// Lending what was lent reaches the caller's own array, however many
+// hands it passes through: a borrow of a borrow is that same borrow,
+// not a reference standing one step further away.
+@test
+fn test_reborrow_reaches_through():
+    let v : mut i64[] = []
+    reborrow_push1(&v)
+    assert_eq(#v, 1)
+    reborrow_push2(&v)
+    assert_eq(#v, 2)
+    reborrow_push3(&v)
+    assert_eq(#v, 3)
+    reborrow_push4(&v)
+    assert_eq(#v, 4)
+    assert_eq(v[0], 9)
+    assert_eq(v[3], 9)
+
+fn reborrow_count1(v : &i64[]) -> i64:
+    return @dropunit(#v)
+
+fn reborrow_count2(v : &i64[]) -> i64:
+    return reborrow_count1(&v)
+
+fn reborrow_count3(v : &i64[]) -> i64:
+    return reborrow_count2(&v)
+
+// A shared borrow travels as far and still reads what it was lent.
+@test
+fn test_reborrow_shared_reads_through():
+    let v : mut i64[] = [1, 2, 3]
+    assert_eq(reborrow_count3(&v), 3)
+
 @start
 @impure
 fn main():

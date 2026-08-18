@@ -1,0 +1,66 @@
+// core-2: a borrow handed on is the same borrow, however many times it
+// is handed on.  A function that lends what it was lent is lending the
+// caller's own thing, not a reference to a reference, so the depth of
+// the chain is not something the program has to think about.
+
+struct Box:
+    n : i64
+
+fn push1(v : &mut i64[]):
+    v.push(9)
+
+fn push2(v : &mut i64[]):
+    push1(&v)
+
+fn push3(v : &mut i64[]):
+    push2(&v)
+
+fn push4(v : &mut i64[]):
+    push3(&v)
+
+fn push5(v : &mut i64[]):
+    push4(&v)
+
+fn bump1(b : &mut Box):
+    b.n ← b.n + 1
+
+fn bump3(b : &mut Box):
+    bump2(&b)
+
+fn bump2(b : &mut Box):
+    bump1(&b)
+
+fn put1(h : &mut std.hash(str, i64)):
+    h["k"] ← 7
+
+fn put3(h : &mut std.hash(str, i64)):
+    put2(&h)
+
+fn put2(h : &mut std.hash(str, i64)):
+    put1(&h)
+
+// a shared borrow travels as far, and still only reads
+fn count1(v : &i64[]) -> i64:
+    return @dropunit(#v)
+
+fn count3(v : &i64[]) -> i64:
+    return count2(&v)
+
+fn count2(v : &i64[]) -> i64:
+    return count1(&v)
+
+@impure
+@start
+fn main():
+    let v : mut i64[] = []
+    push5(&v)
+    push5(&v)
+    std.println("{} {} {}", #v, v[0], v[1])
+    let b : mut Box = Box{n: 1}
+    bump3(&b)
+    bump3(&b)
+    std.println("{}", b.n)
+    let h : mut std.hash(str, i64) = (⸨⸩)
+    put3(&h)
+    std.println("{} {}", h["k"] ?? 0, #h)
+    std.println("{}", count3(&v))

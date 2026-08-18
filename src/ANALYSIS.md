@@ -157,10 +157,29 @@ permissive than the authority on unit arithmetic — the forbidden
 direction, and the first such gap this project has found rather
 than reasoned about.  It went unnoticed because ngplc's own source
 relied on the laxity in exactly the lines that provoked it.  Second,
-the bootstrap flattens one level of re-borrow but not two: a
-`&mut u8[]` handed on twice arrives as a `RefValue` with no methods.
-The second is recorded and worked around; the first was fixed in
-the batch that followed, and the fix is worth the record.
+the bootstrap flattened one level of re-borrow but not two: a
+`&mut u8[]` handed on twice arrived as a `RefValue` with no methods.
+Both were fixed in the batches that followed, and both fixes are
+worth the record.
+
+The re-borrow one was the interpreter's, and small: `&x` made a
+reference to the *name* `x`, so borrowing a name that was already
+standing for somewhere else made a reference to a reference, and
+each hand-on put the value one step further away.  A borrow of a
+borrow is the same borrow, so `&x` now hands the existing reference
+on rather than wrapping it, and the depth of the chain stops being
+something a program has to think about.  The compiler had never had
+the problem — a borrowed container is its descriptor there, and
+lending it again lends the same descriptor — so this was the
+interpreter alone being wrong about its own rule.
+
+Two neighbouring holes turned up while checking that fix and are
+*not* fixed: the bootstrap lets a `&` borrow be passed where `&mut`
+is wanted, and lets an immutable binding be lent mutably.  Both
+predate the fix — the unmodified interpreter accepts them
+identically — and both are places where ngplc is the stricter of the
+two, so the subset rule still holds; but the authority is looser
+than its own stated discipline, which is worth its own batch.
 
 The compiler now decides what a measure may meet per operator, as
 the bootstrap does: a sum, a difference, a minimum, a saturating

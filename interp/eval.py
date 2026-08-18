@@ -3772,7 +3772,14 @@ class Evaluator:
 
     def _ee_RefExpr(self, node):
         pos = getattr(node, "pos", None)
-        self.env.lookup(node.name)
+        bound = self.env.lookup(node.name)
+        if isinstance(bound, Reference):
+            # A borrow of a borrow is the same borrow.  The name is
+            # already standing for somewhere else, and wrapping it again
+            # would make a reference to a reference -- which reads back
+            # as a reference rather than as what was lent, and would
+            # leave the value one step further away at every hand-on.
+            return bound
         return RefValue(self.env, node.name)
 
     def _ee_StaticAssert(self, node):
