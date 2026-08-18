@@ -98,6 +98,7 @@ done
 # interpreter's byte for byte.  The list grows as the subset grows.
 # ---------------------------------------------------------------------------
 shared_tests=(
+    test_byte
     test_concat
     test_generate
     test_if

@@ -1,0 +1,34 @@
+// core-2: @expect over a single statement rather than a whole
+// definition.  A statement marked to draw an error is parsed and left
+// alone, as a definition marked the same way is -- it does not check,
+// so there is nothing to compile and which diagnostic it was is the
+// interpreter's to say.  One marked only for a warning is an ordinary
+// statement here, since core-2 has no warnings to draw: it checks, it
+// runs, and anything it really gets wrong is still reported.
+
+@impure
+@start
+fn main():
+    // marked for a warning: the binding is made and the walk goes on
+    @expect warning "'once' is declared mut but is never modified"
+    let once : mut i64 = 5
+    std.println("{}", once)
+
+    // marked for an error: left out, and what follows still runs
+    @expect error "undefined variable: nosuchname"
+    _ ← nosuchname
+    std.println("after the error")
+
+    // the marks are local: an unmarked statement beside a marked one
+    // is compiled and run as it always was
+    @expect error "undefined variable"
+    _ ← thirdmissing
+    let kept : mut i64 = 1
+    kept ← kept + 41
+    std.println("{}", kept)
+
+    // and a marked statement inside a block still only covers itself
+    if once = 5:
+        @expect error "undefined variable"
+        _ ← insideablock
+        std.println("the block ran")

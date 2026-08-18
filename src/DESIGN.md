@@ -550,7 +550,17 @@ Attempt 3 grows core-1 to **core-2** with structs:
   interpreter keeps its options out of a program's arguments.  An
   `@expect` definition — a function or global expected to draw
   diagnostics — is parsed and left uncompiled (the interpreter is
-  where the expectation itself is verified); a reference to one is
+  where the expectation itself is verified), and the same mark may
+  stand over a single statement inside a body.  A statement expected
+  to draw an *error* is left alone the same way: it does not check,
+  so there is nothing to compile, and what follows it is compiled and
+  run as usual.  One marked only for a *warning* is an ordinary
+  statement here — core-2 has no warnings to draw — so it checks,
+  runs, and anything it really gets wrong is still reported rather
+  than swallowed.  That distinction matters: catching every
+  diagnostic a marked statement draws would turn a refusal ngplc
+  makes and the bootstrap does not into silently missing code, which
+  is how the first attempt at this went wrong.  A reference to one is
   answered with "expects errors under @expect and was left
   uncompiled", and `--test` still reports it in the suite's shape.
   The driver and filter are ordinary synthesized IR functions, so

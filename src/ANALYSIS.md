@@ -87,6 +87,21 @@ values (built by the ginit machinery hashes already use) and calls
 through a global's box.  The lambda campaign that began at "the λ
 byte is not even lexed" is complete.
 
+Statement-level `@expect` followed, and taught a lesson about which
+way to fail.  The first shape caught every diagnostic the marked
+statement drew and skipped compiling it if there were any — which
+worked for the marked case and silently dropped the statement when
+ngplc refused it for an unrelated reason of its own.  A test that
+should have failed loudly instead printed the wrong number.  The
+shape that holds is the one the definition-level mark already used:
+a statement expecting an *error* is not checked at all, and one
+expecting only a warning is checked and reported on as any other,
+since core-2 has no warnings to draw.  Failing loudly is the only
+safe direction where the two implementations disagree about what
+counts as an error.  test_byte flipped whole as the eleventh shared
+file once a second gap closed with it: `std.bytes(s)` answers a
+fresh array, which the fresh-birth rule had not been told.
+
 The generated binaries then stopped borrowing the kernel's stack:
 `_start` reserves `guard + stack` of address space, opens the stack
 part, and stands on it, so an overflow faults on a guard that is

@@ -1152,6 +1152,7 @@ let NK_RANGEV : i64 = 87    // a…b and a…step…b as a value: na = lo, nb = 
 let NK_LAMBDA : i64 = 88    // λ literal: na = extra [np, (tok,ty)…, ncap, tok…, ret], nb = body, nc = lambda index
 let NK_FNVAL : i64 = 89     // a named function as a value: na = fn index
 let NK_CALLV : i64 = 90     // applying a value: na = callee expr, nb = args
+let NK_EXPECTS : i64 = 93   // @expect over one statement: na = it, nb = 1 when an error is expected
 let NK_TRY : i64 = 91       // e?: ∅ answers the function early, a value unwraps
 let NK_BADLAM : i64 = 92    // a λ the checker refuses: na says why
 
@@ -2389,6 +2390,30 @@ impl Parser:
     fn parse_stmt(&mut self) → i64:
         let k : i64 = self.peek()
         let at : i64 = self.pos
+        if k = TK_AT and self.ttext(self.pos + 1) = "expect":
+            // @expect level "pattern" over the one statement that
+            // follows: what it says is expected to be drawn, so what
+            // it draws is caught and kept from the report.  Which
+            // diagnostic it was is the interpreter's to check, as it
+            // is for a definition marked the same way.
+            let wants_err : mut i64 = 0
+            while self.peek() = TK_AT and self.ttext(self.pos + 1) = "expect" and not self.failed():
+                self.pos ← self.pos + 2
+                let lvl := self.ttext(self.pos)
+                if lvl ≠ "error" and lvl ≠ "warning":
+                    self.err("@expect names a level, error or warning")
+                    return 0
+                if lvl = "error":
+                    wants_err ← 1
+                self.pos ← self.pos + 1
+                if self.peek() ≠ TK_STR:
+                    self.err("@expect states the message it expects, as a string")
+                    return 0
+                self.pos ← self.pos + 1
+                while self.peek() = TK_NL:
+                    self.pos ← self.pos + 1
+            let inner : i64 = self.parse_stmt()
+            return self.mknode(NK_EXPECTS, at, inner, wants_err, 0)
         if k = TK_LET:
             return self.parse_let()
         if k = TK_IF:
@@ -5511,6 +5536,18 @@ impl Checker:
         let na : i64 = self.a.na[id × 1¤ptrdiff]
         let nb : i64 = self.a.nb[id × 1¤ptrdiff]
         let nc : i64 = self.a.nc[id × 1¤ptrdiff]
+        if k = NK_EXPECTS:
+            // A statement expected to draw an error is parsed and left
+            // alone, as a definition marked the same way is: it does
+            // not check, so there is nothing to check it against, and
+            // which diagnostic it was is the interpreter's to say.
+            // One expecting only a warning is an ordinary statement
+            // here -- core-2 has no warnings to draw -- so it is
+            // checked and reported on as any other, rather than having
+            // its refusals quietly swallowed.
+            if nb = 0:
+                self.check_stmt(na, false)
+            return
         if k = NK_LET:
             if nc = ⁻1:
                 // := and : mut =: the right side says the type; what
@@ -5533,7 +5570,7 @@ impl Checker:
                     self.derr(tok, "a mut hash binding is born from its literal; borrow with &mut to change a shared one")
                     _ ← self.declare(tok, it, nb)
                     return
-                if ty_is_arr(it) and nb = 1 and self.kind_of(na) ≠ NK_ARRLIT and self.kind_of(na) ≠ NK_CALL and self.kind_of(na) ≠ NK_MCALL and self.kind_of(na) ≠ NK_RESHAPE and self.kind_of(na) ≠ NK_CCAT and self.kind_of(na) ≠ NK_SLICE:
+                if ty_is_arr(it) and nb = 1 and self.kind_of(na) ≠ NK_ARRLIT and self.kind_of(na) ≠ NK_CALL and self.kind_of(na) ≠ NK_MCALL and self.kind_of(na) ≠ NK_RESHAPE and self.kind_of(na) ≠ NK_CCAT and self.kind_of(na) ≠ NK_SLICE and self.kind_of(na) ≠ NK_SCALL:
                     self.derr(tok, "a mut array binding is born fresh, from its literal or a call; borrow with &mut to change a shared one")
                     _ ← self.declare(tok, it, nb)
                     return
@@ -7751,7 +7788,13 @@ impl Lower:
         let na : i64 = self.a.na[sid × 1¤ptrdiff]
         let nb : i64 = self.a.nb[sid × 1¤ptrdiff]
         let nc : i64 = self.a.nc[sid × 1¤ptrdiff]
-        if k = NK_LET:
+        if k = NK_EXPECTS:
+            // one that drew what it was marked to draw did not check,
+            // and there is nothing of it to emit; one that drew nothing
+            // is an ordinary statement and is emitted as one
+            if nb = 0:
+                self.lower_stmt(na, trailing, ret_ty)
+        elif k = NK_LET:
             let v : i64 = self.lower_expr(na)
             self.ir(IR_MOV, v, 0, 0, self.nslot[sid × 1¤ptrdiff], 0)
         elif k = NK_LETT:
