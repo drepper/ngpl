@@ -996,6 +996,7 @@ let NK_LNOR : i64 = 58      // ⊽
 let NK_SLICE : i64 = 59     // v[a…b]: na = base, nb = lo, nc = hi
 let NK_RESHAPE : i64 = 60   // n ⍴ x: na = the count, nb = the filler
 let NK_WHILEB : i64 = 61    // while x := e: na = e, nb = body; name token
+let NK_TYPEOF : i64 = 62    // @typeof(e): folds to the type's spelling
 let NK_ELEMOF : i64 = 43    // key ∊ hash
 let NK_ADD : i64 = 20
 let NK_SUB : i64 = 21
@@ -1571,6 +1572,12 @@ impl Parser:
         if k = TK_AT:
             self.pos ← self.pos + 1
             let name := self.ttext(self.pos)
+            if name = "typeof":
+                self.pos ← self.pos + 1
+                _ ← self.eat(TK_LPAR, "'(' after @typeof")
+                let te : i64 = self.parse_expr()
+                _ ← self.eat(TK_RPAR, "')' closing @typeof")
+                return self.mknode(NK_TYPEOF, at, te, 0, 0)
             if name = "dropunit":
                 self.pos ← self.pos + 1
                 _ ← self.eat(TK_LPAR, "'(' after @dropunit")
@@ -1938,14 +1945,28 @@ impl Parser:
             return self.mknode(NK_IF, at, cond, then_blk, else_blk)
         if k = TK_WHILE:
             self.pos ← self.pos + 1
-            if self.peek() = TK_IDENT and self.peek2() = TK_DEFINE:
-                // while x := e: the loop runs while e answers a value,
-                // and x names it inside the body
+            if self.peek() = TK_IDENT and (self.peek2() = TK_DEFINE or (self.peek2() = TK_COLON and self.toks.kind[(self.pos + 2) × 1¤ptrdiff] ≠ TK_NL)):
+                // while x := e, while x : mut = e, while x : T = e --
+                // the loop runs while e answers a value, x naming it
                 let wname_tok : i64 = self.pos
-                self.pos ← self.pos + 2
+                let wmut : mut i64 = 0
+                let wty : mut i64 = ⁻1
+                if self.peek2() = TK_DEFINE:
+                    self.pos ← self.pos + 2
+                else:
+                    self.pos ← self.pos + 2
+                    if self.peek() = TK_MUT:
+                        wmut ← 1
+                        self.pos ← self.pos + 1
+                    if self.peek() ≠ TK_EQ:
+                        wty ← self.parse_type(false)
+                    _ ← self.eat(TK_EQ, "'=' and what the loop asks")
                 let wcond : i64 = self.parse_expr()
                 let wbody : i64 = self.parse_block()
-                return self.mknode(NK_WHILEB, wname_tok, wcond, wbody, 0)
+                let woff : i64 = @dropunit(#self.extra)
+                self.extra.push(wmut)
+                self.extra.push(wty)
+                return self.mknode(NK_WHILEB, wname_tok, wcond, wbody, woff)
             let cond : i64 = self.parse_expr()
             let body : i64 = self.parse_block()
             return self.mknode(NK_WHILE, at, cond, body, 0)
@@ -2925,6 +2946,20 @@ impl Checker:
             self.check_hlit(id, tok, na, want)
         elif k = NK_TUPLE:
             self.check_tuple(id, tok, na, want)
+        elif k = NK_TYPEOF:
+            self.check_expr(na, TY_UNIT)
+            let tt : i64 = ty_strip_ref(self.ty_of(na))
+            let sp : str = self.ty_spell(tt)
+            if sp = "":
+                self.derr(tok, "@typeof of " ⧺ type_name(tt) ⧺ " carries the value, not the type alone; it is not core-2")
+                self.set_type(id, TY_STR)
+                return
+            // the spelling is a constant the way a literal is
+            self.a.strs.push(sp)
+            self.a.nkind[id × 1¤ptrdiff] ← NK_STR
+            self.a.na[id × 1¤ptrdiff] ← @dropunit(#self.a.strs) - 1
+            self.a.nb[id × 1¤ptrdiff] ← 0
+            self.set_type(id, TY_STR)
         elif k = NK_DROPU:
             self.check_expr(na, TY_UNIT)
             let dt : i64 = self.ty_of(na)
@@ -3294,6 +3329,66 @@ impl Checker:
 
     // a tuple literal takes its shape from where it is bound: the
     // stated binding type or the function's return type says it
+    // a static assertion is judged as the file is checked: constant
+    // operands only, and a failure is a diagnostic, not code
+    fn check_static_assert(&mut self, id : i64, tok : i64, args_off : i64, is_eq : bool):
+        let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
+        self.set_type(id, TY_UNIT)
+        if is_eq:
+            if argc ≠ 2:
+                self.derr(tok, "static_assert_eq takes the two sides")
+                return
+            let x : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
+            let y : i64 = self.a.extra[(args_off + 2) × 1¤ptrdiff]
+            self.check_expr(x, TY_UNIT)
+            self.check_expr(y, TY_UNIT)
+            let kx : i64 = self.kind_of(x)
+            let ky : i64 = self.kind_of(y)
+            if kx = NK_STR and ky = NK_STR:
+                if self.a.strs[self.a.na[x × 1¤ptrdiff] × 1¤ptrdiff] ≠ self.a.strs[self.a.na[y × 1¤ptrdiff] × 1¤ptrdiff]:
+                    self.derr(tok, "static assertion failed: \"" ⧺ self.a.strs[self.a.na[x × 1¤ptrdiff] × 1¤ptrdiff] ⧺ "\" is not \"" ⧺ self.a.strs[self.a.na[y × 1¤ptrdiff] × 1¤ptrdiff] ⧺ "\"")
+                return
+            if (kx = NK_INT or kx = NK_BOOL) and (ky = NK_INT or ky = NK_BOOL):
+                if self.a.na[x × 1¤ptrdiff] ≠ self.a.na[y × 1¤ptrdiff]:
+                    self.derr(tok, "static assertion failed: " ⧺ i64_str(self.a.na[x × 1¤ptrdiff]) ⧺ " is not " ⧺ i64_str(self.a.na[y × 1¤ptrdiff]))
+                return
+            self.derr(tok, "static_assert_eq reads what the compiler can see: literals, folded numbers, @typeof")
+            return
+        if argc ≠ 1:
+            self.derr(tok, "static_assert takes the condition")
+            return
+        let c : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
+        self.check_expr(c, TY_UNIT)
+        let kc : i64 = self.kind_of(c)
+        if kc ≠ NK_BOOL and kc ≠ NK_INT:
+            self.derr(tok, "static_assert reads what the compiler can see: a condition that folds")
+            return
+        if self.a.na[c × 1¤ptrdiff] = 0:
+            self.derr(tok, "static assertion failed")
+
+    fn ty_spell(&self, t : i64) → str:
+        if t = TY_BOOL: return "bool"
+        if t = TY_STR: return "str"
+        if t = TY_CHAR: return "char"
+        if ty_is_struct(t): return self.sname_of(t)
+        if ty_is_int(t) and ty_unit(t) = 0:
+            return ("i" if ty_sgn(t) = 1 else "u") ⧺ i64_str(ty_bits(t))
+        if ty_is_farr(t):
+            let esp : str = self.ty_spell(self.a.fae[ty_fidx(t) × 1¤ptrdiff])
+            if esp = "": return ""
+            return esp ⧺ "[" ⧺ i64_str(self.farr_size(t)) ⧺ "]"
+        if ty_is_tup(t):
+            let n : i64 = self.tup_len(t)
+            let sp : mut str = "("
+            let i : mut i64 = 0
+            while i < n:
+                let e : str = self.ty_spell(self.tup_elem(t, i))
+                if e = "": return ""
+                sp ← sp ⧺ ("" if i = 0 else ", ") ⧺ e
+                i ← i + 1
+            return sp ⧺ ")"
+        ""
+
     fn check_tuple(&mut self, id : i64, tok : i64, off : i64, want : i64):
         let n : i64 = self.a.extra[off × 1¤ptrdiff]
         let w : i64 = ty_strip_ref(want)
@@ -3562,6 +3657,9 @@ impl Checker:
         let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
         if name = "assert" or name = "assert_eq":
             self.check_assert(id, tok, args_off, argc, name = "assert_eq")
+            return
+        if name = "static_assert" or name = "static_assert_eq":
+            self.check_static_assert(id, tok, args_off, name = "static_assert_eq")
             return
         let f : i64 = self.fn_index(name)
         if f = ⁻1:
@@ -4286,7 +4384,12 @@ impl Checker:
             elif not self.try_fit(nb, fty):
                 self.derr(tok, "field '" ⧺ self.text(tok) ⧺ "' holds " ⧺ type_name(fty) ⧺ ", not " ⧺ type_name(self.ty_of(nb)))
         elif k = NK_DISCARD:
-            self.check_expr(na, TY_UNIT)
+            if self.kind_of(na) = NK_MCALL:
+                self.check_mcall(na, self.a.ntok[na × 1¤ptrdiff],
+                                 self.a.na[na × 1¤ptrdiff],
+                                 self.a.nb[na × 1¤ptrdiff], true)
+            else:
+                self.check_expr(na, TY_UNIT)
             if self.ty_of(na) = TY_UNT:
                 self.adopt(na, TY_I64)
         elif k = NK_IF:
@@ -4337,16 +4440,26 @@ impl Checker:
             let wct : i64 = self.ty_of(na)
             let wmid : i64 = self.a.nc[na × 1¤ptrdiff] if ismc else 0
             let wbt : mut i64 = TY_I64
-            if ismc and wmid = MID_GET:
-                self.derr(tok, "get answers the same place every turn; a while binding wants what moves")
-            elif ismc and (wmid = MID_POP or wmid = MID_NEXT):
+            if ismc and (wmid = MID_POP or wmid = MID_NEXT or wmid = MID_GET):
                 wbt ← wct
             elif ty_is_opt(wct):
                 wbt ← ty_opt_base(wct)
+            elif (ty_is_int(wct) and ty_unit(wct) = 0) or wct = TY_BOOL:
+                // a number loops while it is not zero, a truth while it
+                // holds; the binding is the value itself
+                wbt ← wct
             else:
                 self.derr(tok, "a while binding loops while a value is there; this answers " ⧺ type_name(wct) ⧺ ", not an optional")
+            let wmut : i64 = self.a.extra[nc × 1¤ptrdiff]
+            if wmut = 1:
+                // mut here means writing through what a borrow hands,
+                // which core-2 loops do not hand yet
+                self.derr(tok, "a mut while binding writes back through a borrow; this loop hands values")
+            let wsty : i64 = self.a.extra[(nc + 1) × 1¤ptrdiff]
+            if wsty ≠ ⁻1 and wsty ≠ wbt:
+                self.derr(tok, "the binding says " ⧺ type_name(wsty) ⧺ " but the loop answers " ⧺ type_name(wbt))
             self.push_scope()
-            let wslot : i64 = self.declare(tok, wbt, 0)
+            let wslot : i64 = self.declare(tok, wbt, wmut)
             self.nslot[id × 1¤ptrdiff] ← wslot
             self.loop_depth ← self.loop_depth + 1
             self.check_block(nb, false)
@@ -5396,7 +5509,12 @@ impl Lower:
             self.ir(IR_APUSH, av, vv, 0, 0, 0)
             return ⁻1
         if mid = MID_POP:
-            let dv : i64 = self.lower_expr(defnode)
+            let dv : mut i64 = 0
+            if defnode = ⁻1:
+                dv ← self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, dv, 0)
+            else:
+                dv ← self.lower_expr(defnode)
             let d : i64 = self.tmp()
             self.ir(IR_APOP, av, dv, 0, d, w)
             return d
@@ -5421,6 +5539,8 @@ impl Lower:
     fn lower_call(&mut self, nid : i64, tok : i64, args_off : i64) → i64:
         let name := self.text(tok)
         let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
+        if name = "static_assert" or name = "static_assert_eq":
+            return ⁻1
         if name = "assert" or name = "assert_eq":
             self.lower_assert(nid, tok, args_off, name = "assert_eq")
             return ⁻1
@@ -5660,6 +5780,16 @@ impl Lower:
                 let dz : i64 = self.tmp()
                 self.ir(IR_CONST, 0, 0, 0, dz, 0)
                 self.ir(IR_APOP, av9, dz, 0, evar, width_of(self.tof(na)))
+            elif self.kof(na) = NK_MCALL and self.a.nc[na × 1¤ptrdiff] = MID_GET:
+                // the place is asked afresh each turn; absence ends it
+                let avg : i64 = self.lower_expr(self.a.na[na × 1¤ptrdiff])
+                let ivg : i64 = self.lower_expr(self.a.extra[(self.a.nb[na × 1¤ptrdiff] + 1) × 1¤ptrdiff])
+                let ng : i64 = self.tmp()
+                self.ir(IR_ALEN, avg, 0, 0, ng, 0)
+                let cg : i64 = self.tmp()
+                self.ir(IR_CLT, ivg, ng, 0, cg, 64)
+                self.ir(IR_JZ, cg, lend, 0, 0, 0)
+                self.ir(IR_AIDX, avg, ivg, 0, evar, 0)
             elif self.kof(na) = NK_MCALL and self.a.nc[na × 1¤ptrdiff] = MID_NEXT:
                 // the iterator's position against its array's length
                 let itv : i64 = self.lower_expr(self.a.na[na × 1¤ptrdiff])
@@ -5681,7 +5811,10 @@ impl Lower:
             else:
                 let v9 : i64 = self.lower_expr(na)
                 self.ir(IR_JZ, v9, lend, 0, 0, 0)
-                self.ir(IR_FLD, v9, 0, 0, evar, 0)
+                if ty_is_opt(self.tof(na)):
+                    self.ir(IR_FLD, v9, 0, 0, evar, 0)
+                else:
+                    self.ir(IR_MOV, v9, 0, 0, evar, 0)
             self.breaks.push(lend)
             self.conts.push(ltop)
             self.lower_block(nb, false, ret_ty)

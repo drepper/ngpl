@@ -199,6 +199,18 @@ Attempt 3 grows core-1 to **core-2** with structs:
   interned by element and written by no syntax — it lives only in
   inferred locals.  Zero new IR, zero new runtime.  `std.bytes(s)`
   answers a string's bytes as a `u8[]`.
+- **comptime introspection**: `@typeof(e)` folds to the type's
+  spelling as a string constant — for exactly the types whose
+  spelling is the type's alone (scalars, structs, chars, tuples,
+  sized arrays); a dynamic array's or optional's spelling carries the
+  value in the bootstrap (`i64[1]`, the unwrapped inner), so those
+  are refused by name.  `static_assert` and `static_assert_eq` are
+  judged as the file is checked — constant operands only, a failure a
+  diagnostic, the statement emitting nothing.  The while binding
+  gained its other spellings (`while x : T = e`, int and bool
+  conditions looping on truthiness, `get` and discarded `pop` as
+  unwrapping contexts); its `mut` form means writing back through a
+  borrow, which core-2 loops do not hand yet, and says so.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's
@@ -434,7 +446,7 @@ the interpreter **and** compiled, outputs and exit codes diffed — the
 strict-subset rule made executable.  `--impl=` selects a side:
 `bootstrap`, `compiled` (ngplc under the interpreter), `native` (the
 self-hosted `build/ngplc`, the whole sweep in ~2.4 s), `both` (the
-default) or `all`.  Thirty-one shared programs cover the whole
+default) or `all`.  Thirty-two shared programs cover the whole
 core-2 surface including the stopping paths, and six bootstrap test
 files whose whole `@test` surface sits inside the subset run as
 shared tests besides: compiled, run with `--test`, and their stdout,

@@ -1,0 +1,46 @@
+// core-2: @typeof folds to the type's spelling where the spelling is
+// the type's alone, and static assertions are judged as the file is
+// checked; the while binding's other spellings ride along.
+
+struct P:
+    v : i64
+
+@start
+@impure
+fn main():
+    let a : i32 = 5
+    let c : str = "x"
+    let d : P = P{v: 1}
+    let f : char = 'q'
+    let h : i64[3] = [1i64, 2, 3]
+    let t : (i64, str) = (1, "y")
+    std.println("{} {}", @typeof(a), @typeof(c))
+    std.println("{} {}", @typeof(d), @typeof(f))
+    std.println("{} {}", @typeof(h), @typeof(t))
+    static_assert_eq(@typeof(a), "i32")
+    static_assert_eq(@typeof(t), "(i64, str)")
+    static_assert_eq(@typeof(h), "i64[3]")
+    static_assert(1 + 1 = 2)
+
+    // typed and mut while bindings, and pop discarded outright
+    let v : i64[] = [1i64, 2, 3]
+    let it := v.iterate()
+    let total : mut i64 = 0
+    while e : i64 = it.next():
+        total ← total + e
+    std.println("{}", total)
+    let n : mut i64 = 3
+    let steps : mut i64 = 0
+    while remaining := n:
+        n ← remaining - 1
+        steps ← steps + 1
+    std.println("{}", steps)
+    let w : mut i64[] = [7i64, 8]
+    while x := w.pop():
+        total ← total + x × 10
+    std.println("{}", total)
+    let g : mut i64[] = [5i64, 6]
+    while y := g.get(0):
+        _ ← g.pop()
+        total ← total + y
+    std.println("{}", total)
