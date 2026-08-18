@@ -225,14 +225,22 @@ Attempt 3 grows core-1 to **core-2** with structs:
 - **directory objects**: `std.fs.cwd()` alone is a value of its own
   type (the `.open_file`/`.create_file` chains keep their old path),
   and `dir.iterate()` answers an iterator of entries, each a
-  two-slot `{name, d_type}` block.  The walk itself is one runtime
+  two-slot `{name, type}` block.  The walk itself is one runtime
   helper (`RT_DENTS`): `openat` on a stack-built `".\0"` (the rodata
   interns strings without terminators, so the path is spelled in
   place with a `push`), a `getdents64` loop parsing the kernel's
   records where they lie, `"."` and `".."` left out, the order the
   directory's own.  `e.name` and `e.type` are field reads; the
-  `std.filetype.*` names fold to the kernel's `d_type` constants at
-  check time.  Reading a directory writes nothing, so neither
+  `std.filetype.*` names fold to the `S_IF*` constants from
+  `<sys/stat.h>`, as the interpreter holds them — the kernel's
+  `d_type` is that value shifted right twelve, so the walk stores
+  `d_type << 12` and the mapping costs one instruction.  The
+  constants and `e.type` share a `filetype` type of their own
+  (`TY_FTYPE`): it compares with itself and with untyped literals
+  (which meet it by value, as the interpreter's enum does), has no
+  order, spells itself for `@typeof`, and refuses printing by name
+  — the interpreter prints the enumerator's name, which the subset
+  does not carry.  Reading a directory writes nothing, so neither
   `cwd()` nor `iterate()` wants `@impure` — only opening and
   creating files do, as in the interpreter.  `next()` outside an
   unwrapping context now answers the boxed optional (a step is

@@ -38,11 +38,24 @@ foreach (the wall test_borrow_foreach ends at, past the
 write-through references themselves — test_while_binding flipped
 whole, the seventh shared file), and directory objects (which fell
 in their own batch — `cwd()` as a value, a `getdents64` runtime
-walk, entry fields, boxed `next()` and optional equality — yet
-test_iterator still holds out on one line: the bootstrap admits `∅`
-as an element of a plain `i64[]` literal, which a flat compiled
-array cannot represent; refused by name, recorded as a spec
-question rather than chased).  Array ⧺
+walk, entry fields, boxed `next()` and optional equality).
+test_iterator held out one more day on a bootstrap hole — the
+interpreter admitted `∅` as an element of a plain `i64[]` literal,
+which a flat compiled array cannot represent — until the authority
+itself was corrected: the interpreter now refuses a `∅` or `∃`
+element in an array literal, the quirk test became an `@expect`,
+and test_iterator flipped whole as the eighth shared file.  The
+flip also caught a silent divergence the first conformance pass
+missed: ngplc had given `std.filetype.*` the kernel's `d_type`
+bytes where the interpreter holds the `S_IF*` constants as a
+`filetype` enum — both self-consistent, so comparisons matched
+byte for byte until a test asserted the values themselves.  The
+subset now carries a `filetype` type of its own (S_IF values, one
+`shl 12` in the runtime walk, equality but no order, untyped
+literals meeting it by value, printing refused by name), and the
+lesson is sharper than the first one: internal consistency can
+hide a divergence, and only asserting the authority's actual
+values surfaces it.  Array ⧺
 broke through: test_concat became the sixth shared file, the first
 flipped by a growth batch, taking fresh-array reassignment and the
 bare-∅ body along with it.  The lesson stands: the shared list grows

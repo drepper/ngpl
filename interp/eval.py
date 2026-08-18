@@ -362,6 +362,13 @@ def _literal_element_type(elements):
                     f"{unit.display_name} and element {index} is "
                     f"{element.unit.display_name}")
         inner = element.inner if isinstance(element, UnitValue) else element
+        if isinstance(inner, (NoneValue, SomeValue)):
+            # An array holds values; ∅ is the absence of one and ∃ its
+            # box, and neither is an element type an array can be of.
+            raise TypeError(
+                f"an array element is a value, but element {index} is "
+                + ("∅, the absence of one" if isinstance(inner, NoneValue)
+                   else "boxed; take ∃ apart before storing"))
         if isinstance(inner, (IntValue, FloatValue)):
             found_kind = "number"
         elif isinstance(inner, CharValue):

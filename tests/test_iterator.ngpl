@@ -101,16 +101,12 @@ fn test_other_falsy_elements():
         count ← count + 1
     assert_eq(count, 2)
 
-// An element that is itself ∅ is still an element, so an iterator can
-// carry ∅ without it being mistaken for the end.
-@test
-fn test_none_element_is_still_present():
+// An array holds values; ∅ is the absence of one, and an element that
+// could be mistaken for the end has no place in an array to begin with.
+@expect error "an array element is a value"
+fn error_none_is_not_an_element():
     let v : i64[] = [∅, 1]
-    let it := v.iterate()
-    let count : mut i64 = 0
-    while e := it.next():
-        count ← count + 1
-    assert_eq(count, 2)
+    _ ← v
 
 // A bare value keeps its own truthiness: only an optional tests presence.
 @test

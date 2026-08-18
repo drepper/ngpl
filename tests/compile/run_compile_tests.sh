@@ -100,6 +100,7 @@ done
 shared_tests=(
     test_concat
     test_if
+    test_iterator
     test_noreturn
     test_short_circuit
     test_stepped_range

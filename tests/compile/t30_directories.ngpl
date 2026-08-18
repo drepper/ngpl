@@ -21,7 +21,7 @@ fn survey() -> i64:
     while e := it.next():
         count ← count + 1
         named ← named ∧ #e.name > 0
-        let t : u8 = e.type
+        let t := e.type
         typed ← typed ∧ (t = std.filetype.reg ∨ t = std.filetype.dir
             ∨ t = std.filetype.lnk ∨ t = std.filetype.chr
             ∨ t = std.filetype.blk ∨ t = std.filetype.fifo

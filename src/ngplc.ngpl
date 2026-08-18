@@ -215,11 +215,13 @@ let TY_FILE : i64 = 5       // an open file, its descriptor inside
 let TY_ALLOC : i64 = 6      // std.arena.allocator(): a token, nothing more
 let TY_DIR : i64 = 7        // std.fs.cwd(): a directory, a token likewise
 let TY_ENTRY : i64 = 10     // one directory entry: a name and a kind
+let TY_FTYPE : i64 = 11     // std.filetype.*: the S_IF* constants, compared, not counted
 let TY_UNT : i64 = 8
 let TY_EMPTY : i64 = 9       // a bare ∅, not yet settled on its optional
 let TY_U64 : i64 = 144       // 16 + 0 + 2×64
 let TY_I64 : i64 = 145       // 16 + 1 + 2×64
 let TY_U8 : i64 = 32         // 16 + 0 + 2×8
+let TY_U16 : i64 = 48        // 16 + 0 + 2×16
 
 let UNIT_NONE : i64 = 0
 let UNIT_PTRDIFF : i64 = 1
@@ -368,6 +370,7 @@ fn type_name(t0 : i64) → str:
     if t = TY_ALLOC: return prefix ⧺ "std.arena.Allocator"
     if t = TY_DIR: return prefix ⧺ "std.fs.Dir"
     if t = TY_ENTRY: return prefix ⧺ "std.fs.Entry"
+    if t = TY_FTYPE: return prefix ⧺ "filetype"
     if t = TY_UNT: return "untyped integer"
     if t = TY_EMPTY: return "∅"
     if ty_is_struct(t): return prefix ⧺ "struct #" ⧺ i64_str(ty_sidx(t))
@@ -1652,18 +1655,21 @@ impl Parser:
                     let fname := self.ttext(self.pos)
                     self.pos ← self.pos + 1
                     let fv : mut i64 = ⁻1
-                    if fname = "reg": fv ← 8
-                    elif fname = "dir": fv ← 4
-                    elif fname = "lnk": fv ← 10
-                    elif fname = "chr": fv ← 2
-                    elif fname = "blk": fv ← 6
-                    elif fname = "fifo": fv ← 1
-                    elif fname = "sock": fv ← 12
+                    // the S_IF* constants from <sys/stat.h>, as the
+                    // interpreter holds them; the kernel's d_type is
+                    // this value shifted right twelve
+                    if fname = "reg": fv ← 32768
+                    elif fname = "dir": fv ← 16384
+                    elif fname = "lnk": fv ← 40960
+                    elif fname = "chr": fv ← 8192
+                    elif fname = "blk": fv ← 24576
+                    elif fname = "fifo": fv ← 4096
+                    elif fname = "sock": fv ← 49152
                     elif fname = "unknown": fv ← 0
                     else:
                         self.err("'std.filetype." ⧺ fname ⧺ "' names no kind of file")
                         return 0
-                    return self.mknode(NK_INT, at, fv, TY_U8 × 2, 0)
+                    return self.mknode(NK_INT, at, fv, TY_FTYPE × 2, 0)
                 if m = "bytes":
                     let boff : i64 = self.parse_args()
                     return self.mknode(NK_SCALL, at, SB_BYTES, boff, 0)
@@ -2834,6 +2840,14 @@ impl Checker:
             return
         if self.ty_of(id) ≠ TY_UNT:
             return
+        if t = TY_FTYPE and self.kind_of(id) = NK_INT:
+            // the interpreter's filetype meets a number by value
+            if not self.lit_fits(self.a.na[id × 1¤ptrdiff],
+                                 self.a.nb[id × 1¤ptrdiff], TY_U16):
+                self.derr(self.a.ntok[id × 1¤ptrdiff],
+                          "no filetype has this value")
+            self.set_type(id, t)
+            return
         if not ty_is_int(t):
             self.derr(self.a.ntok[id × 1¤ptrdiff],
                       "a number cannot become " ⧺ type_name(t))
@@ -2967,6 +2981,9 @@ impl Checker:
                 self.a.nb[id × 1¤ptrdiff] ← nb & 1
                 if st = TY_CHAR:
                     self.set_type(id, TY_CHAR)
+                    return
+                if st = TY_FTYPE:
+                    self.set_type(id, TY_FTYPE)
                     return
                 self.set_type(id, TY_UNT)
                 self.adopt(id, st)
@@ -3315,6 +3332,12 @@ impl Checker:
             // positive numbers, so the signed compare serves
             self.set_type(id, TY_BOOL)
             return
+        if l = TY_FTYPE and r = TY_FTYPE:
+            // a filetype is asked which it is, not put in an order
+            if not (k = NK_EQ or k = NK_NE):
+                self.derr(tok, "a filetype is asked which it is; it has no order")
+            self.set_type(id, TY_BOOL)
+            return
         if not ty_is_int(l) or not ty_is_int(r):
             self.derr(tok, "an ordering compares numbers; the sides are " ⧺ type_name(l) ⧺ " and " ⧺ type_name(r))
         elif ty_sgn(l) ≠ ty_sgn(r):
@@ -3450,6 +3473,7 @@ impl Checker:
         if t = TY_BOOL: return "bool"
         if t = TY_STR: return "str"
         if t = TY_CHAR: return "char"
+        if t = TY_FTYPE: return "filetype"
         if ty_is_struct(t): return self.sname_of(t)
         if ty_is_int(t) and ty_unit(t) = 0:
             return ("i" if ty_sgn(t) = 1 else "u") ⧺ i64_str(ty_bits(t))
@@ -3644,7 +3668,7 @@ impl Checker:
             self.set_type(id, TY_STR)
         elif fname = "type":
             self.a.nb[id × 1¤ptrdiff] ← 1
-            self.set_type(id, TY_U8)
+            self.set_type(id, TY_FTYPE)
         else:
             self.derr(tok, "an entry holds its name and its type; '" ⧺ fname ⧺ "' is neither")
             self.set_type(id, TY_I64)
@@ -8676,6 +8700,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.b1(0)                        // lea rcx, [r13+r14]: the record
     em.b4(72, 137, 12, 36)          // mov [rsp], rcx
     em.b4(15, 182, 81, 18)          // movzx edx, byte [rcx+18]: d_type
+    em.b4(72, 193, 226, 12)         // shl rdx, 12: d_type into its S_IF* value
     em.b4(72, 137, 84, 36)
     em.b1(16)                       // mov [rsp+16], rdx
     em.b4(15, 183, 81, 16)          // movzx edx, word [rcx+16]: reclen
