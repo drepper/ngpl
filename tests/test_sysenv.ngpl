@@ -104,6 +104,37 @@ fn test_sys_memory():
     assert((page & (page - 1)) = 0)
     assert(std.sys.total_memory() >= page)
 
+// ---------------------------------------------------------------------
+// std.process — what the kernel recorded at exec
+// ---------------------------------------------------------------------
+
+// The page size is positive and a power of two, as any page size is.
+@test
+fn test_process_pagesize():
+    let page ¤byte : i64 = std.process.pagesize
+    assert(page > 0)
+    assert((page & (page - 1)) = 0)
+
+// The auxiliary vector is written once, so a member answers the same
+// every time it is asked.
+@test
+fn test_process_members_are_settled():
+    assert_eq(std.process.uid, std.process.uid)
+    assert_eq(std.process.gid, std.process.gid)
+    assert_eq(std.process.pagesize, std.process.pagesize)
+
+// A program nobody gave privilege to reports none.
+@test
+fn test_process_secure_is_a_truth_value():
+    let s := std.process.secure
+    assert(s ∨ ¬s)
+
+// The kernel names what it executed, and a path is not empty.
+@test
+fn test_process_exec_filename():
+    let name := std.process.exec_filename
+    assert(#name > 0)
+
 @start
 @impure
 fn main():

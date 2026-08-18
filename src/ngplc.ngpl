@@ -1163,6 +1163,26 @@ let SB_CWD : i64 = 9        // std.fs.cwd() as a value
 let SB_ENVN : i64 = 10      // std.env.names() → str[]
 let SB_ENVG : i64 = 11      // std.env.get(name) → str?
 let SB_ENVH : i64 = 12      // std.env.has(name) → bool
+let SB_PROC : i64 = 13      // std.process.<member>: nb names which
+
+// what the auxiliary vector is asked for, and under which key
+let PROC_PAGESIZE : i64 = 0
+let PROC_UID : i64 = 1
+let PROC_EUID : i64 = 2
+let PROC_GID : i64 = 3
+let PROC_EGID : i64 = 4
+let PROC_SECURE : i64 = 5
+let PROC_EXECFN : i64 = 6
+
+@pre(m >= 0 and m <= 6)
+fn proc_key(m : i64) → i64:
+    if m = PROC_PAGESIZE: return 6
+    if m = PROC_UID: return 11
+    if m = PROC_EUID: return 12
+    if m = PROC_GID: return 13
+    if m = PROC_EGID: return 14
+    if m = PROC_SECURE: return 23
+    31
 
 // the base type names, one probe instead of a ladder
 let TYNAMES : std.hash(str, i64) = (⸨
@@ -1956,6 +1976,8 @@ impl Parser:
                     self.pos ← self.pos + 1
                     let aoff : i64 = self.parse_args()
                     return self.mknode(NK_SCALL, at, SB_ARGS, aoff, 0)
+                if m = "process":
+                    return self.parse_process(at)
                 if m = "env":
                     _ ← self.eat(TK_DOT, "'.' after std.env")
                     let em0 := self.ttext(self.pos)
@@ -2079,6 +2101,26 @@ impl Parser:
         let idx : i64 = @dropunit(#self.toks.strs)
         self.toks.strs.push(s)
         idx
+
+    // std.process.<member>: what the kernel recorded at exec, read as a
+    // member rather than called, since none of it can change
+    fn parse_process(&mut self, at : i64) → i64:
+        _ ← self.eat(TK_DOT, "'.' after std.process")
+        let mtok : i64 = self.pos
+        let m := self.ttext(mtok)
+        _ ← self.eat_word("the member's name")
+        let idx : mut i64 = ⁻1
+        if m = "pagesize": idx ← PROC_PAGESIZE
+        elif m = "uid": idx ← PROC_UID
+        elif m = "euid": idx ← PROC_EUID
+        elif m = "gid": idx ← PROC_GID
+        elif m = "egid": idx ← PROC_EGID
+        elif m = "secure": idx ← PROC_SECURE
+        elif m = "exec_filename": idx ← PROC_EXECFN
+        else:
+            self.err("'std.process." ⧺ m ⧺ "' is not a member; pagesize, uid, euid, gid, egid, secure and exec_filename are")
+            return 0
+        self.mknode(NK_SCALL, at, SB_PROC, idx, 0)
 
     fn parse_implementation(&mut self, at : i64) → i64:
         _ ← self.eat(TK_DOT, "'.' after std.implementation")
@@ -4943,6 +4985,18 @@ impl Checker:
         n
 
     fn check_scall(&mut self, id : i64, tok : i64, sb : i64, args_off : i64):
+        if sb = SB_PROC:
+            // the member's own index rides where an argument list would;
+            // what it answers cannot change, so reading it is pure
+            if args_off = PROC_PAGESIZE:
+                self.set_type(id, ty_with_unit(TY_I64, UNIT_BYTE))
+            elif args_off = PROC_SECURE:
+                self.set_type(id, TY_BOOL)
+            elif args_off = PROC_EXECFN:
+                self.set_type(id, TY_STR)
+            else:
+                self.set_type(id, TY_U32)
+            return
         let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
         if sb = SB_EXIT:
             if argc ≠ 1:
@@ -6276,6 +6330,8 @@ let IR_AREF : i64 = 97     // d ← the address of array a's element b
 let IR_DENTS : i64 = 98    // d ← the working directory's entries
 let IR_ENVN : i64 = 101    // d ← the environment's names, a str[]
 let IR_ENVG : i64 = 102    // d ← the value of the variable named a, a str?
+let IR_AUXV : i64 = 103    // d ← the auxiliary vector's entry for key a
+let IR_EXECFN : i64 = 104  // d ← AT_EXECFN as a string
 let IR_FADDR : i64 = 99    // d ← the code address of function a
 let IR_CALLI : i64 = 100   // d ← call the address in vreg a, args at extra b
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
@@ -6746,6 +6802,21 @@ impl Lower:
                 let d : i64 = self.tmp()
                 self.ir(IR_CONST, 0, 0, 0, d, 0)
                 return d
+            if na = SB_PROC:
+                if nb = PROC_EXECFN:
+                    let d : i64 = self.tmp()
+                    self.ir(IR_EXECFN, 0, 0, 0, d, 0)
+                    return d
+                let v : i64 = self.tmp()
+                self.ir(IR_AUXV, proc_key(nb), 0, 0, v, 0)
+                if nb ≠ PROC_SECURE:
+                    return v
+                // secure is what the kernel set, said as a truth value
+                let z : i64 = self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, z, 0)
+                let b : i64 = self.tmp()
+                self.ir(IR_CNE, v, z, 0, b, 64)
+                return b
             if na = SB_ENVN:
                 let d : i64 = self.tmp()
                 self.ir(IR_ENVN, 0, 0, 0, d, 0)
@@ -8379,6 +8450,8 @@ let RT_SBYTES : i64 = ⁻38
 let RT_DENTS : i64 = ⁻39
 let RT_ENVN : i64 = ⁻40
 let RT_ENVG : i64 = ⁻41
+let RT_AUXV : i64 = ⁻42
+let RT_EXECFN : i64 = ⁻43
 
 struct Emit:
     code : u8[]
@@ -9106,6 +9179,13 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
         elif o = IR_CHARSTR:
             em.load(R_DI, a)
             em.jglobal(232, ⁻1, RT_CHARSTR)
+            em.store(R_AX, d)
+        elif o = IR_AUXV:
+            em.movimm(R_DI, a)
+            em.jglobal(232, ⁻1, RT_AUXV)
+            em.store(R_AX, d)
+        elif o = IR_EXECFN:
+            em.jglobal(232, ⁻1, RT_EXECFN)
             em.store(R_AX, d)
         elif o = IR_ENVN:
             em.jglobal(232, ⁻1, RT_ENVN)
@@ -10743,6 +10823,63 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.b1(195)
     em.resolve_locals()
 
+    // RT_AUXV: rdi = the key → rax = what the auxiliary vector carries
+    // under it, or zero when it carries nothing.  The vector is pairs
+    // of words, a key and its value, ending at a key of zero.
+    em.rt_off.push(em.here())
+    em.begin_fn(3)
+    em.dref(R_R11, args_off)
+    em.b4(73, 139, 75, 24)          // mov rcx, [r11+24]: the vector
+    em.set_label(0)                 // Lscan
+    em.b3(72, 139, 17)              // mov rdx, [rcx]: the key
+    em.b3(72, 133, 210)             // test rdx, rdx
+    em.jlocal(132, 2)               // je Lnone: the vector ended
+    em.b3(72, 57, 250)              // cmp rdx, rdi
+    em.jlocal(132, 1)               // je Lgot
+    em.b4(72, 131, 193, 16)         // add rcx, 16
+    em.jlocal(⁻1, 0)
+    em.set_label(1)                 // Lgot
+    em.b4(72, 139, 65, 8)           // mov rax, [rcx+8]
+    em.b1(195)
+    em.set_label(2)                 // Lnone
+    em.b2(49, 192)                  // xor eax, eax
+    em.b1(195)
+    em.resolve_locals()
+
+    // RT_EXECFN: → rax = the path execve was given, as a string.  The
+    // vector holds where the bytes are; they lie above the environment
+    // on the entry stack, which outlives the move to the program's own.
+    em.rt_off.push(em.here())
+    em.begin_fn(3)
+    em.movimm(R_DI, 31)
+    em.jglobal(232, ⁻1, RT_AUXV)
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(132, 2)               // je Lnone
+    em.b3(73, 137, 199)             // mov r15, rax: the bytes
+    em.b3(72, 49, 201)              // xor rcx, rcx
+    em.set_label(0)                 // Llen
+    em.b4(65, 128, 60, 15)
+    em.b1(0)                        // cmp byte [r15+rcx], 0
+    em.jlocal(132, 1)               // je Lgot
+    em.b3(72, 255, 193)             // inc rcx
+    em.jlocal(⁻1, 0)
+    em.set_label(1)                 // Lgot
+    em.b1(81)                       // push rcx
+    em.movimm(R_DI, 16)
+    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.b1(89)                       // pop rcx
+    em.b3(76, 137, 56)              // mov [rax], r15
+    em.b4(72, 137, 72, 8)           // mov [rax+8], rcx
+    em.b1(195)
+    em.set_label(2)                 // Lnone: no name, and so no bytes
+    em.movimm(R_DI, 16)
+    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.b2(49, 210)                  // xor edx, edx
+    em.b3(72, 137, 16)              // mov [rax], rdx
+    em.b4(72, 137, 80, 8)           // mov [rax+8], rdx
+    em.b1(195)
+    em.resolve_locals()
+
 // ---------------------------------------------------------------------------
 // The ELF executable: text R+X, rodata R, data R+W
 // ---------------------------------------------------------------------------
@@ -11151,6 +11288,17 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
     em.b4(72, 141, 68, 200)         // lea rax, [rax+rcx*8+8]
     em.b1(8)
     em.b4(73, 137, 67, 16)          // mov [r11+16], rax: envp
+    // and the auxiliary vector begins one word past the NULL that ends
+    // the environment, where the kernel left it
+    em.begin_fn(1)
+    em.b3(72, 137, 193)             // mov rcx, rax
+    em.set_label(0)                 // Lwalk
+    em.b3(72, 139, 17)              // mov rdx, [rcx]
+    em.b4(72, 131, 193, 8)          // add rcx, 8
+    em.b3(72, 133, 210)             // test rdx, rdx
+    em.jlocal(133, 0)               // jne Lwalk
+    em.b4(73, 137, 75, 24)          // mov [r11+24], rcx: auxv
+    em.resolve_locals()
     // The stack the program will stand on: one reservation of
     // guard + stack bytes, unreadable throughout, of which the upper
     // stack bytes are then opened for reading and writing.  What is
@@ -11246,7 +11394,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
             emit_fn(&em, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs)
     // every function was emitted and left its offset behind
     assert(@dropunit(#em.fn_off) = nfns + g1 + 2 + @dropunit(#chk.lams) + @dropunit(#chk.psfn), "one code offset per function")
-    assert(#em.rt_off = 41, "every runtime routine in place")
+    assert(#em.rt_off = 43, "every runtime routine in place")
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:
         foreach i := 0…#em.cf_pos - 1:
@@ -11302,7 +11450,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
     if nglobals > 0:
         foreach i := 0…#chk.gvals - 1:
             push64(&data, chk.gvals[i])
-    foreach _ := 1…40:
+    foreach _ := 1…48:
         data.push(0)
     // A frame deeper than the guard could be claimed in one 'sub rsp'
     // that steps clean over it, and the overflow would land on

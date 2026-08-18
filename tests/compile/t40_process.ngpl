@@ -1,0 +1,27 @@
+// core-2: what the kernel recorded about this process in the ELF
+// auxiliary vector.  The identities and the page size describe the
+// process, so both implementations answer alike and the values
+// themselves are printed.  exec_filename names whichever executable is
+// running -- the interpreter under one, the compiled program under the
+// other -- so only what must be true of it is asked.
+
+@impure
+@start
+fn main():
+    let page ¤byte : i64 = std.process.pagesize
+    let plain : i64 = @dropunit(page)
+    std.println("{} {}", page > 0, (plain & (plain - 1)) = 0)
+    std.println("{}", page)
+    std.println("{} {} {} {}", std.process.uid, std.process.euid,
+                std.process.gid, std.process.egid)
+    // a program the kernel did not raise privilege for
+    std.println("{}", std.process.secure)
+    // the name is there, and it is a path, so it holds no NUL and no
+    // newline; what it says is each implementation's own business
+    let name := std.process.exec_filename
+    let clean : mut bool = #name > 0
+    foreach c := name:
+        clean ← clean ∧ c ≠ '\n'
+    std.println("{}", clean)
+    // read twice, the same both times: the vector is written once
+    std.println("{}", std.process.uid = std.process.uid)

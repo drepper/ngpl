@@ -110,6 +110,19 @@ answers as some earlier routine — which is the third time that
 particular shape has bitten in this project and an argument for
 having the emission assert the id it is filling rather than only the
 count.
+
+The auxiliary vector followed the environment it sits above, giving
+`std.process` its seven members in both implementations: the
+interpreter parses `/proc/self/auxv`, which is the vector itself,
+and the compiled program walks the block the kernel left on its
+entry stack.  Both were checked against the kernel's own account of
+the same values through `LD_SHOW_AUXV`, and `AT_EXECFN` proved to
+be the path as given rather than a resolved one — a program started
+as `./pr.bin` says so.  The one place the implementations part is
+`exec_filename`, which names the interpreter under one and the
+program under the other, because that is what it means; the
+conformance test asks the values of everything else and only
+invariants of that.
 The interpreter's `println` of a range leaked the implementation's
 `RangeValue(3…7)` spelling and now answers the language's `3…7`.  The batch also caught a quiet
 acceptance bug through self-hosting: the bootstrap reserves every

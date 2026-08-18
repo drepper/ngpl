@@ -8062,7 +8062,7 @@ A packed layout — one that suppresses padding entirely — is a natural second
 
 ### Standard Library: System Environment
 
-Three submodules of `std` expose the context the operating system hands to a running program: `std.args` for the command line, `std.env` for the environment, and `std.sys` for the CPU and memory properties of the machine.  All three are read-only.  A program cannot rewrite its own command line or environment from the language; doing so is a property of the process that the runtime, not the program, is responsible for.
+Four submodules of `std` expose the context the operating system hands to a running program: `std.args` for the command line, `std.env` for the environment, `std.process` for what the kernel recorded about the process itself, and `std.sys` for the CPU and memory properties of the machine.  All four are read-only.  A program cannot rewrite its own command line or environment from the language; doing so is a property of the process that the runtime, not the program, is responsible for.
 
 #### Command Line Parameters (`std.args`)
 
@@ -8120,6 +8120,33 @@ let verbose : mut = std.env.get("VERBOSE") ?? "0"
 The environment is read on each call rather than snapshotted at startup, so a variable changed by a lower layer of the runtime is observed by the next call.
 
 The operating system does not guarantee that environment variables are valid UTF-8, but the language requires that every `str` is.  Byte sequences that are not valid UTF-8 are therefore replaced with U+FFFD (REPLACEMENT CHARACTER) rather than raising an error, so that one malformed variable cannot make `names()` fail for the whole environment.
+
+#### The Process Itself (`std.process`)
+
+```
+if std.process.secure:
+    // started with privilege the caller did not have: trust nothing
+    ...
+let page ¤byte : i64 = std.process.pagesize
+```
+
+What the kernel recorded about this process when it executed it, taken from the ELF auxiliary vector — the block of key and value pairs the kernel leaves above the environment on the initial stack.  These are members rather than calls, because none of them is a question the program asks twice with different answers: the vector is written once, at `execve`, and never changes.
+
+| Member | Type | Description |
+|--------|------|-------------|
+| `pagesize` | `int¤byte` | Size of a memory page (`AT_PAGESZ`) |
+| `uid` | `u32` | Real user id at exec (`AT_UID`) |
+| `euid` | `u32` | Effective user id at exec (`AT_EUID`) |
+| `gid` | `u32` | Real group id at exec (`AT_GID`) |
+| `egid` | `u32` | Effective group id at exec (`AT_EGID`) |
+| `secure` | `bool` | Whether the kernel raised privilege to start the program (`AT_SECURE`) |
+| `exec_filename` | `str` | The path `execve` was given for this process (`AT_EXECFN`) |
+
+`secure` is what a program must consult before trusting anything it was handed: it is set when the program was executed setuid or setgid, or with capabilities it did not already hold, which is exactly when the environment, the command line and the working directory are the caller's to choose and not the program's to trust.
+
+The identities are the ones settled at `execve`, not the ones a later system call would report; the language has no way to change them, so the two agree for the whole of a program's run.
+
+`exec_filename` is the path as it was handed to `execve`, not a resolved one: a program started as `./tool` says `./tool`.  It names whichever executable the kernel started, which under an interpreter is the interpreter rather than the source it is running.
 
 #### System Properties (`std.sys`)
 

@@ -21,6 +21,7 @@ operations that would bypass the kernel's directory-based interfaces.
 import ctypes
 import ctypes.util
 import hashlib
+import struct
 import math as _math
 import mmap
 import os
@@ -1117,6 +1118,7 @@ class StdModule:
         self._arena = None  # lazy-initialized arena submodule
         self._env = None  # lazy-initialized env submodule
         self._sys = None  # lazy-initialized sys submodule
+        self._process = None  # lazy-initialized process submodule
         self._stdout_file = StdoutFile()
         self._syntax = None  # lazy-initialized syntax submodule
         self.args = ArgsModule()
@@ -1157,6 +1159,13 @@ class StdModule:
         if self._sys is None:
             self._sys = SysModule()
         return self._sys
+
+    @property
+    def process(self):
+        """Lazy-access to what the kernel recorded about this process."""
+        if self._process is None:
+            self._process = ProcessModule()
+        return self._process
 
     # ------------------------------------------------------------------
     # Process termination
@@ -1957,6 +1966,136 @@ class EnvModule:
     def names(self):
         """Return the names of all environment variables as a `str[]`."""
         return _str_array(e.partition("=")[0] for e in _environ_entries())
+
+
+# The auxiliary vector's keys, from <elf.h>.  Only the ones the
+# language answers for are named here.
+_AT_PAGESZ = 6
+_AT_UID = 11
+_AT_EUID = 12
+_AT_GID = 13
+_AT_EGID = 14
+_AT_SECURE = 23
+_AT_EXECFN = 31
+
+_auxv_cache: dict[int, int] | None = None
+
+
+def _auxv() -> dict[int, int]:
+    """The ELF auxiliary vector the kernel left for this process.
+
+    `/proc/self/auxv` is the vector itself, not a rendering of it: pairs
+    of native words, a key and its value, ending at a key of AT_NULL.
+    The vector is written once, when the kernel starts the process, and
+    never changes, so it is read once and kept.
+    """
+    global _auxv_cache
+    if _auxv_cache is not None:
+        return _auxv_cache
+    try:
+        with open("/proc/self/auxv", "rb") as handle:
+            raw = handle.read()
+    except OSError:
+        raise TypeError(
+            "the auxiliary vector cannot be read; /proc/self/auxv is "
+            "where the kernel leaves it") from None
+    stride = struct.calcsize("@NN")
+    found: dict[int, int] = {}
+    offset = 0
+    while offset + stride <= len(raw):
+        key, value = struct.unpack_from("@NN", raw, offset)
+        offset += stride
+        if key == 0:
+            break
+        found[key] = value
+    _auxv_cache = found
+    return found
+
+
+def _auxv_at(key: int, who: str) -> int:
+    """One entry of the vector, or an error naming what was missing."""
+    vector = _auxv()
+    if key not in vector:
+        raise TypeError(
+            f"the auxiliary vector carries no {who}; this kernel did "
+            f"not supply it")
+    return vector[key]
+
+
+class ProcessModule:
+    """What the kernel recorded about this process when it started it.
+
+    Every member here comes from the ELF auxiliary vector rather than
+    from a system call made later, so what they answer is the process
+    as it was executed: the identity `execve` settled on, before
+    anything the program itself might do.  All are read-only.
+
+    Under the interpreter the process is the interpreter's own, so
+    `exec_filename` names the interpreter rather than the source it is
+    running; the compiled program names itself.  The rest -- the page
+    size, the four identities, and whether the kernel started the
+    program with elevated privilege -- describe the same process either
+    way and agree between them.
+    """
+
+    __slots__ = ()
+
+    @property
+    def pagesize(self):
+        """The page size, in bytes: AT_PAGESZ."""
+        from interp.units import BUILTIN_UNITS
+        from interp.value import UnitValue, IntValue
+        return UnitValue(IntValue(_auxv_at(_AT_PAGESZ, "page size"), "i64"),
+                         BUILTIN_UNITS["byte"])
+
+    @property
+    def uid(self):
+        """The real user id: AT_UID."""
+        from interp.value import IntValue
+        return IntValue(_auxv_at(_AT_UID, "user id"), "u32")
+
+    @property
+    def euid(self):
+        """The effective user id: AT_EUID."""
+        from interp.value import IntValue
+        return IntValue(_auxv_at(_AT_EUID, "effective user id"), "u32")
+
+    @property
+    def gid(self):
+        """The real group id: AT_GID."""
+        from interp.value import IntValue
+        return IntValue(_auxv_at(_AT_GID, "group id"), "u32")
+
+    @property
+    def egid(self):
+        """The effective group id: AT_EGID."""
+        from interp.value import IntValue
+        return IntValue(_auxv_at(_AT_EGID, "effective group id"), "u32")
+
+    @property
+    def secure(self):
+        """Whether the kernel raised privilege to start this program.
+
+        AT_SECURE is set when the program was executed setuid, setgid or
+        with capabilities it did not already hold, which is when a
+        program must not trust what it was handed.
+        """
+        from interp.value import mk_bool
+        return mk_bool(_auxv_at(_AT_SECURE, "secure flag") != 0)
+
+    @property
+    def exec_filename(self):
+        """The path `execve` was given for this process: AT_EXECFN.
+
+        The vector holds the address of the bytes, which lie above the
+        environment on the process's own initial stack, so reading them
+        is reading this process's memory.
+        """
+        from interp.value import mk_str
+        address = _auxv_at(_AT_EXECFN, "executable name")
+        if address == 0:
+            return mk_str("")
+        return mk_str(_decode(ctypes.cast(address, ctypes.c_char_p).value or b""))
 
 
 class SysModule:

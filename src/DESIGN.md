@@ -411,6 +411,17 @@ Attempt 3 grows core-1 to **core-2** with structs:
   not one core-2 carries.  `examples/printenv.ngpl` is the utility
   those three make, and its output matches the interpreter's and
   `/usr/bin/printenv`'s byte for byte.
+- **the process itself**: `std.process.pagesize`, `.uid`, `.euid`,
+  `.gid`, `.egid`, `.secure` and `.exec_filename` — members, not
+  calls, because the ELF auxiliary vector they come from is written
+  once at `execve` and never changes, which also makes reading them
+  pure.  `_start` walks the environment to its NULL and keeps the
+  word past it: that is where the kernel left the vector.  One
+  runtime routine scans it for a key, so six of the seven members
+  are one call and an immediate, `secure` being that answer against
+  zero; the seventh takes `AT_EXECFN`'s address and measures the
+  bytes into a string.  The identities are `u32` and the page size
+  carries `¤byte`, as the spec has them.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's
