@@ -86,6 +86,18 @@ block bodies.  The flip also carried `:=` globals born of function
 values (built by the ginit machinery hashes already use) and calls
 through a global's box.  The lambda campaign that began at "the λ
 byte is not even lexed" is complete.
+
+The generated binaries then stopped borrowing the kernel's stack:
+`_start` reserves `guard + stack` of address space, opens the stack
+part, and stands on it, so an overflow faults on a guard that is
+there by construction rather than by the kernel's grace — verified
+in a live process map, where the fault lands exactly on the guard's
+top edge.  The static half is the part worth keeping: the compiler
+knows every frame it emits, so a frame that could step over the
+guard in one `sub rsp` is refused at compile time with the size to
+raise, which is the project's rule applied to its own code
+generation rather than to the language.  `PT_GNU_STACK` closes the
+executable-stack fallback.
 The interpreter's `println` of a range leaked the implementation's
 `RangeValue(3…7)` spelling and now answers the language's `3…7`.  The batch also caught a quiet
 acceptance bug through self-hosting: the bootstrap reserves every

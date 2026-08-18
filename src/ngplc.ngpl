@@ -8354,6 +8354,9 @@ struct Emit:
     pj_id : i64[]
     pj_start : i64[]
     pj_len : i64[]
+    // the deepest frame any function claims: the guard below the stack
+    // must be at least this, or one 'sub rsp' could step over it
+    max_frame : i64
     pj_labels : i64[]
 
 impl Emit:
@@ -8616,7 +8619,9 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
     em.b1(85)                       // push rbp
     em.b3(72, 137, 229)             // mov rbp, rsp
     em.b3(72, 129, 236)             // sub rsp, imm32
-    em.w32(8 × ir.nvregs + 8)
+    let frame : i64 = 8 × ir.nvregs + 8
+    em.max_frame ← em.max_frame ⌈ (frame + 16)
+    em.w32(frame)
     let j : mut i64 = 0
     while j < np:
         if j < 6:
@@ -10572,6 +10577,15 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
 let IMAGE_BASE : i64 = 4194304
 let PAGE : i64 = 4096
 
+// The stack the program runs on is reserved at startup rather than
+// grown by the kernel on demand: a region of STACK bytes with a GUARD
+// of unreadable pages below it, so an overflow stops the program where
+// it happens instead of walking into whatever lies beneath.  Both are
+// settable on the command line; both are rounded up to whole pages.
+let STACK_DEFAULT : i64 = 8388608     // 8 MiB, what a Linux stack usually gets
+let GUARD_DEFAULT : i64 = 65536       // 64 KiB: sixteen pages of nothing
+let SIZE_MAX_OPT : i64 = 1073741824   // a gibibyte is past any real need
+
 @pre(a > 0 and v >= 0)
 @post(r: r >= v and (r % a ?? 1) = 0)
 fn align_up(v : i64, a : i64) → i64:
@@ -10587,9 +10601,9 @@ fn push64(out : &mut u8[], v : i64):
     push32(&out, v)
     push32(&out, v » 32)
 
-@pre(#code > 0)
+@pre(#code > 0 and stack_size > 0)
 @post(r: #r > 4096)
-fn build_elf(code : u8[], rodata : u8[], data : u8[]) → u8[]:
+fn build_elf(code : u8[], rodata : u8[], data : u8[], stack_size : i64) → u8[]:
     let text_off : i64 = PAGE
     let text_vaddr : i64 = IMAGE_BASE + text_off
     let text_size : i64 = @dropunit(#code)
@@ -10616,7 +10630,7 @@ fn build_elf(code : u8[], rodata : u8[], data : u8[]) → u8[]:
     push64(&out, 0)
     push32(&out, 0)
     push32(&out, 64 + (56 « 16))
-    push32(&out, 3)
+    push32(&out, 4)
     push32(&out, 0)
     // text
     push32(&out, 1)
@@ -10645,6 +10659,17 @@ fn build_elf(code : u8[], rodata : u8[], data : u8[]) → u8[]:
     push64(&out, d_size)
     push64(&out, d_size)
     push64(&out, PAGE)
+    // PT_GNU_STACK: read and write, and pointedly not execute.  Absent,
+    // the kernel falls back to an executable stack; present, it says
+    // what this program wants, and its size says how much.
+    push32(&out, 1685382481)
+    push32(&out, 6)
+    push64(&out, 0)
+    push64(&out, 0)
+    push64(&out, 0)
+    push64(&out, 0)
+    push64(&out, stack_size)
+    push64(&out, 16)
     while @dropunit(#out) < text_off:
         out.push(0)
     foreach b := code:
@@ -10666,6 +10691,7 @@ fn build_elf(code : u8[], rodata : u8[], data : u8[]) → u8[]:
 struct Compiled:
     elf : u8[]
     log : str[]
+    diags : Diag[]
 
 // a synthesized function starts from a clean sheet
 fn lw_reset(lw : &mut Lower, fname : str):
@@ -10902,7 +10928,10 @@ fn lower_ginit(lw : &mut Lower, a : Ast, chk : Chk) → IrFn:
     (IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
           extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels})
 
-fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
+@pre(stack_size >= PAGE and guard_size >= PAGE)
+@pre((stack_size % PAGE ?? 1) = 0 and (guard_size % PAGE ?? 1) = 0)
+fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
+           stack_size : i64, guard_size : i64) → Compiled:
     let strs0 : mut str[] = []
     foreach s := a.strs:
         strs0.push(s)
@@ -10923,7 +10952,8 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
                               jt_pos: [], jt_id: [], jt_count: 0,
                               jt_starts: [], jt_is_code: [], jt_entries: [],
                               pj_id: [],
-                              pj_start: [], pj_len: [], pj_labels: []})
+                              pj_start: [], pj_len: [], pj_labels: [],
+                              max_frame: 0})
     let nglobals : i64 = @dropunit(#a.globals)
     let alloc_off : i64 = 8 × nglobals
     let args_off : i64 = alloc_off + 16
@@ -10942,6 +10972,44 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
     em.b4(72, 141, 68, 36)
     em.b1(8)                        // lea rax, [rsp+8]
     em.b4(73, 137, 67, 8)           // mov [r11+8], rax: argv
+    // The stack the program will stand on: one reservation of
+    // guard + stack bytes, unreadable throughout, of which the upper
+    // stack bytes are then opened for reading and writing.  What is
+    // left below stays unreadable, so an overflow faults on the guard
+    // rather than reaching whatever the kernel put beneath.  argc and
+    // argv were copied out above, and the entry stack stays mapped, so
+    // the strings they point at outlive the move.
+    em.begin_fn(2)
+    em.b2(49, 255)                  // xor edi, edi: let the kernel place it
+    em.movimm(R_SI, guard_size + stack_size)
+    em.b2(49, 210)                  // xor edx, edx: PROT_NONE
+    em.movimm(R_R10, 147490)        // PRIVATE|ANONYMOUS|NORESERVE|STACK
+    em.movimm(R_R8, @wrap(0 - 1))
+    em.b3(69, 49, 201)              // xor r9d, r9d
+    em.movimm(R_AX, 9)
+    em.b2(15, 5)                    // mmap
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(136, 0)               // js: the kernel refused
+    em.b3(72, 137, 195)             // mov rbx, rax: the region's foot
+    em.movimm(R_DI, guard_size)
+    em.b3(72, 1, 199)               // add rdi, rax: past the guard
+    em.movimm(R_SI, stack_size)
+    em.movimm(R_DX, 3)              // PROT_READ|PROT_WRITE
+    em.movimm(R_AX, 10)
+    em.b2(15, 5)                    // mprotect
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(136, 0)               // js: the kernel refused
+    em.movimm(R_AX, guard_size + stack_size)
+    em.b3(72, 1, 216)               // add rax, rbx: the head of the region
+    em.b3(72, 137, 196)             // mov rsp, rax: and the program stands
+    em.jlocal(⁻1, 1)
+    em.set_label(0)
+    let smsg : i64 = lw.intern("the stack could not be reserved\n")
+    em.sref(R_SI, smsg)
+    em.movimm(R_DX, str_len("the stack could not be reserved\n"))
+    em.jglobal(232, ⁻1, RT_ABORT)
+    em.set_label(1)
+    em.resolve_locals()
     let ninit : i64 = @dropunit(#chk.ginit)
     let g1 : i64 = 1 if ninit > 0 else 0
     // past the user's functions sit the synthetics: the global init,
@@ -11057,7 +11125,20 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
             push64(&data, chk.gvals[i])
     foreach _ := 1…32:
         data.push(0)
-    (Compiled{elf: build_elf(em.code, rodata, data), log: lw.dlog})
+    // A frame deeper than the guard could be claimed in one 'sub rsp'
+    // that steps clean over it, and the overflow would land on
+    // whatever lies below instead of faulting.  The compiler knows
+    // every frame it laid down, so it says so here rather than leaving
+    // it to be discovered.
+    let cdiags : mut Diag[] = []
+    if em.max_frame > guard_size:
+        cdiags.push(Diag{line: 1, col: 1,
+                         msg: "a function claims " ⧺ i64_str(em.max_frame) ⧺ " bytes of stack, more than the " ⧺ i64_str(guard_size) ⧺ "-byte guard below it, which it could step over; raise --guard-size"})
+    if em.max_frame >= stack_size:
+        cdiags.push(Diag{line: 1, col: 1,
+                         msg: "a function claims " ⧺ i64_str(em.max_frame) ⧺ " bytes of stack, and the whole stack is " ⧺ i64_str(stack_size) ⧺ "; raise --stack-size"})
+    (Compiled{elf: build_elf(em.code, rodata, data, stack_size),
+              log: lw.dlog, diags: cdiags})
 
 // ===========================================================================
 // Driver (grows as the pipeline does)
@@ -11124,12 +11205,65 @@ fn missing_input(name : str):
     std.println("ngplc: cannot open '{}': no such file or it cannot be read", name)
     std.exit(1)
 
+// a size on the command line: bytes, or K, M or G of them; ⁻1 when
+// the text is not a size at all
+@post(r: r = ⁻1 or r >= 0)
+fn parse_size(t : str) → i64:
+    let cs := t.chars()
+    if #cs = 0:
+        return ⁻1
+    let scale : mut i64 = 1
+    let n : mut i64 = @dropunit(#cs)
+    let last := cs[#cs - 1]
+    if last = 'K' or last = 'k':
+        scale ← 1024
+        n ← n - 1
+    elif last = 'M' or last = 'm':
+        scale ← 1048576
+        n ← n - 1
+    elif last = 'G' or last = 'g':
+        scale ← 1073741824
+        n ← n - 1
+    if n = 0:
+        return ⁻1
+    let v : mut i64 = 0
+    foreach i := 0…n - 1:
+        let c := cs[i × 1¤ptrdiff]
+        if c < '0' or c > '9':
+            return ⁻1
+        if v > SIZE_MAX_OPT:
+            return ⁻1
+        v ← v × 10 + (c.ord() - 48)
+    v × scale
+
+// whether an argument is 'name=' and then whatever it carries
+fn opt_matches(a : str, name : str) → bool:
+    let ac := a.chars()
+    let nc := name.chars()
+    if #nc = 0 or #ac <= #nc:
+        return false
+    foreach i := 0…#nc - 1:
+        if ac[i] ≠ nc[i]:
+            return false
+    ac[#nc] = '='
+
+// what it carries, which an argument written 'name=' alone leaves empty
+fn opt_value(a : str, name : str) → str:
+    let ac := a.chars()
+    let nc := name.chars()
+    let out : mut str = ""
+    if #ac <= #nc + 1:
+        return out
+    foreach i := #nc + 1…#ac - 1:
+        out ← out ⧺ ac[i]
+    out
+
 @start
 @impure
 fn main() → u8:
     let argv := std.args.all()
     if #argv = 0:
-        std.println("usage: ngplc <source.ngpl> [-o out] [--dump-tokens] [--dump-ast] [--diag=json] [--log=json]")
+        std.println("usage: ngplc <source.ngpl> [-o out] [--stack-size=N] [--guard-size=N] [--dump-tokens] [--dump-ast] [--diag=json] [--log=json]")
         return 1
     let input : mut str = ""
     let output : mut str = ""
@@ -11137,6 +11271,8 @@ fn main() → u8:
     let want_ast : mut bool = false
     let want_log : mut bool = false
     let json : mut bool = false
+    let stack_size : mut i64 = STACK_DEFAULT
+    let guard_size : mut i64 = GUARD_DEFAULT
     let i ¤ptrdiff : mut i64 = 0
     while i < #argv:
         let a := argv[i]
@@ -11146,6 +11282,23 @@ fn main() → u8:
                 return 1
             output ← argv[i + 1]
             i ← i + 2
+            continue
+        if opt_matches(a, "--stack-size") or opt_matches(a, "--guard-size"):
+            let is_stack : bool = opt_matches(a, "--stack-size")
+            let which : str = "--stack-size" if is_stack else "--guard-size"
+            let raw : str = opt_value(a, which)
+            let v : i64 = parse_size(raw)
+            if v = ⁻1:
+                std.println("ngplc: {} wants a size, as 8388608 or 8M; '{}' is not one", which, raw)
+                return 1
+            if v < PAGE or v > SIZE_MAX_OPT:
+                std.println("ngplc: {} runs from one page to a gibibyte; {} is outside it", which, i64_str(v))
+                return 1
+            if is_stack:
+                stack_size ← align_up(v, PAGE)
+            else:
+                guard_size ← align_up(v, PAGE)
+            i ← i + 1
             continue
         if a = "--dump-tokens":
             want_tokens ← true
@@ -11193,7 +11346,10 @@ fn main() → u8:
         report(chk.diags, input, json, src)
         return 1
 
-    let compiled := codegen(ast, toks, src, chk)
+    let compiled := codegen(ast, toks, src, chk, stack_size, guard_size)
+    if #compiled.diags > 0:
+        report(compiled.diags, input, json, src)
+        return 1
     if want_log:
         foreach l := compiled.log:
             std.println("{}", l)

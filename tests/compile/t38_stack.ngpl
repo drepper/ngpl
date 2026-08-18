@@ -1,0 +1,37 @@
+// core-2: the program stands on a stack it reserved for itself, with a
+// guard below it.  What that changes is nothing a program can see --
+// which is the point, and what this checks: recursion deep enough to
+// need real stack, frames wide enough to matter, and the answers the
+// interpreter gives on its own stack.
+
+fn depth(n : i64) -> i64:
+    if n <= 0:
+        return 0
+    return 1 + depth(n - 1)
+
+fn wide(a : i64, b : i64, c : i64, d : i64, e : i64, f : i64, g : i64) -> i64:
+    let p : i64 = a × 2
+    let q : i64 = b × 3
+    let r : i64 = c × 5
+    let s : i64 = d × 7
+    let t : i64 = e × 11
+    let u : i64 = f × 13
+    let v : i64 = g × 17
+    if a > 40:
+        return p + q + r + s + t + u + v
+    return wide(a + 1, b, c, d, e, f, g) + 1
+
+@impure
+@start
+fn main():
+    std.println("{}", depth(600))
+    std.println("{}", wide(1, 2, 3, 4, 5, 6, 7))
+    // the arena still answers while the stack is elsewhere
+    let v : mut i64[] = []
+    foreach i := 1…2000:
+        v.push(i × i)
+    std.println("{} {}", #v, v[1999])
+    let s : mut str = ""
+    foreach i := 1…20:
+        s ← s ⧺ "ab"
+    std.println("{}", #s)

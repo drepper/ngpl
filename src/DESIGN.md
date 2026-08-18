@@ -376,6 +376,26 @@ Attempt 3 grows core-1 to **core-2** with structs:
   @expect means to refuse (a parameter without a type, a missing
   return type, the empty capture list) parse and are refused by the
   checker, so the expectation machinery can hold them.
+- **a stack the program reserves for itself**: the kernel's
+  grow-on-demand stack is left where it is (argv's strings live on
+  it), and `_start` — after copying argc and argv out — makes the
+  stack it will actually stand on: one `mmap` of `guard + stack`
+  bytes, `PROT_NONE` throughout so the whole region is reserved
+  address space, then one `mprotect` opening the upper `stack`
+  bytes for reading and writing.  What stays unreadable below is
+  the guard, so an overflow faults on it instead of walking into
+  whatever the kernel put beneath; `rsp` moves to the head of the
+  region and the program runs there.  `--stack-size=N` and
+  `--guard-size=N` (bytes, or `K`/`M`/`G` of them, rounded up to
+  whole pages, one page to a gibibyte) override the defaults of 8
+  MiB and 64 KiB.  Because the compiler knows every frame it lays
+  down, it refuses a program whose deepest frame exceeds the guard
+  — that frame's single `sub rsp` could step clean over the guard
+  and land past it — and one whose deepest frame exceeds the whole
+  stack, naming the size to raise.  The image carries `PT_GNU_STACK`
+  (read and write, pointedly not execute; its `p_memsz` records the
+  requested size), without which the kernel falls back to an
+  executable stack.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's
