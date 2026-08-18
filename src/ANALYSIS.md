@@ -186,6 +186,20 @@ all 221 at once and left the source untouched.  A rule that had
 looked like it needed a wide sweep needed one line, which is an
 argument for finding out what the errors have in common before
 starting to fix them.
+
+The binaries then stopped carrying the runtime they do not use.
+The routines are emitted after the program rather than before it,
+so what the program calls is known by the time they are laid down,
+and a call graph extracted from the emitter's own text closes over
+the rest.  Skipping is one switch over the byte sink and the fixup
+recorders, so no part of the emission code had to learn about it.
+The safety is the part worth keeping: a skipped routine is left
+without an address, so a call that reaches for one stops the
+compiler at resolution — verified by removing an edge from the
+table by hand, which halts the build instead of emitting a jump
+into whichever routine happened to follow.  A program that does
+nothing now carries 11 of the 44 routines and the compiler itself
+33, and the smallest binary fell from 22664 bytes to 17424.
 The interpreter's `println` of a range leaked the implementation's
 `RangeValue(3…7)` spelling and now answers the language's `3…7`.  The batch also caught a quiet
 acceptance bug through self-hosting: the bootstrap reserves every

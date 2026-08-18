@@ -480,6 +480,21 @@ Attempt 3 grows core-1 to **core-2** with structs:
   product is not -- pushing a measure into a product's operands
   would have the untyped `1` in `(pos + 1) × 1¤ptrdiff` come out
   measured, and then be added to a plain `pos`.
+- **only the runtime a program reaches**: the routines are emitted
+  last, once the program's own code has been laid down and the calls
+  it made are known.  Those seed a reachable set, closed over a
+  table of which routine calls which -- extracted from the emitter
+  itself rather than written by hand -- and everything outside the
+  set is passed over.  Passing over is one switch: while it is on,
+  the emitter's byte sink and every fixup it records go into the
+  ground, so a routine is skipped without any of the emission code
+  knowing there is such a thing as skipping.  A routine that is
+  passed over is left without a place, so a call that somehow still
+  reaches for it has nowhere to land, and resolving the calls says
+  so and stops -- which is what keeps the table honest: removing one
+  edge from it by hand halts the compiler rather than producing a
+  binary that jumps into the wrong routine.  A program that does
+  nothing carries 11 of the 44; the compiler itself carries 33.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's
