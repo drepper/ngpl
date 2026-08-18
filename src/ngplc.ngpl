@@ -247,14 +247,18 @@ fn ty_is_int(t : i64) → bool:
 fn ty_is_struct(t : i64) → bool:
     t >= 1024 and t < 2048
 
+// An optional is its base and 2048, which holds for a base below that:
+// the scalars and the structs.  A tuple's code is far above it, so an
+// optional tuple gets a band of its own past the type variables, and
+// the three words below are the only ones that need to know.
 fn ty_is_opt(t : i64) → bool:
-    t >= 2048 and t < 4096
+    t >= 2048 and t < 4096 or (t >= 198176 and t < 202272)
 
 fn mk_oty(base : i64) → i64:
-    2048 + base
+    198176 + ty_tidx(base) if ty_is_tup(base) else 2048 + base
 
 fn ty_opt_base(t : i64) → i64:
-    t - 2048
+    mk_tty(t - 198176) if t >= 198176 else t - 2048
 
 fn mk_sty(sidx : i64) → i64:
     1024 + sidx
@@ -460,6 +464,7 @@ fn type_name(t0 : i64) → str:
     if t = TY_UNT: return "untyped integer"
     if t = TY_EMPTY: return "∅"
     if ty_is_struct(t): return prefix ⧺ "struct #" ⧺ i64_str(ty_sidx(t))
+    if ty_is_tup(t): return prefix ⧺ "a tuple"
     if ty_is_opt(t): return prefix ⧺ type_name(ty_opt_base(t)) ⧺ "?"
     if ty_is_arr(t) and not ty_is_farr(t): return prefix ⧺ type_name(ty_elem(t)) ⧺ "[]"
     if ty_is_hash(t): return prefix ⧺ "std.hash(" ⧺ type_name(ty_hkey(t)) ⧺ ", " ⧺ type_name(ty_hval(t)) ⧺ ")"
@@ -1404,8 +1409,10 @@ impl Parser:
                 self.err("a tuple type holds at least two elements; (T) is just T")
                 return TY_I64
             if self.peek() = TK_QMARK:
-                self.err("an optional tuple is not core-2 yet")
-                return TY_I64
+                // a tuple is a pointer to its elements, so an optional
+                // one is that pointer in a box, as any optional is
+                self.pos ← self.pos + 1
+                return mk_oty(mk_tty(self.tup_intern(es)))
             if self.peek() = TK_LBRACK:
                 self.err("an array of tuples is not core-2 yet")
                 return TY_I64
@@ -3544,7 +3551,7 @@ impl Checker:
         elif k = NK_FIELD:
             self.check_field(id, tok, na)
         elif k = NK_SOME:
-            let iw : i64 = ty_opt_base(want) if ty_is_opt(want) else TY_UNIT
+            let iw : i64 = ty_opt_base(ty_strip_ref(want)) if ty_is_opt(ty_strip_ref(want)) else TY_UNIT
             self.check_expr(na, iw)
             if self.ty_of(na) = TY_UNT:
                 self.adopt(na, iw if iw ≠ TY_UNIT and ty_is_int(iw) else TY_I64)
@@ -3555,10 +3562,6 @@ impl Checker:
                 return
             if ty_is_hash(it):
                 self.derr(tok, "an optional hash is not core-2 yet")
-                self.set_type(id, mk_oty(TY_I64))
-                return
-            if ty_is_tup(it):
-                self.derr(tok, "an optional tuple is not core-2 yet")
                 self.set_type(id, mk_oty(TY_I64))
                 return
             if ty_is_opt(it) or it = TY_EMPTY:
@@ -5335,19 +5338,18 @@ impl Checker:
             self.require_mut_base(na, tok)
             if argc ≠ 0:
                 self.derr(tok, "pop takes nothing")
-            if not under_default:
-                self.derr(tok, "pop answers an optional; write v.pop() ?? default")
             self.a.nc[id × 1¤ptrdiff] ← MID_POP
-            self.set_type(id, self.elem_of(t))
+            // under ?? the default stands in and the value is bare;
+            // anywhere else the absence is the answer, and it is boxed
+            // as any optional is
+            self.set_type(id, self.elem_of(t) if under_default else mk_oty(self.elem_of(t)))
         elif m = "get":
             if argc ≠ 1:
                 self.derr(tok, "get takes the index to look at")
             else:
                 self.check_index_expr(tok, t, self.a.extra[(args_off + 1) × 1¤ptrdiff])
-            if not under_default:
-                self.derr(tok, "get answers an optional; write v.get(i) ?? default")
             self.a.nc[id × 1¤ptrdiff] ← MID_GET
-            self.set_type(id, self.elem_of(t))
+            self.set_type(id, self.elem_of(t) if under_default else mk_oty(self.elem_of(t)))
         else:
             self.derr(tok, "'" ⧺ m ⧺ "' is not a core-1 array method; push, pop and get are")
             self.set_type(id, TY_I64)
@@ -7290,6 +7292,28 @@ impl Lower:
             let vv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
             self.ir(IR_APUSH, av, vv, 0, 0, 0)
             return ⁻1
+        if mid = MID_POP and defnode = ⁻1 and ty_is_opt(self.tof(nid)):
+            // outside ??: an empty array answers the null, and a value
+            // answers boxed, as ∃ boxes
+            let n9 : i64 = self.tmp()
+            self.ir(IR_ALEN, av, 0, 0, n9, 0)
+            let d9 : i64 = self.tmp()
+            let lno : i64 = self.label()
+            let lend : i64 = self.label()
+            self.ir(IR_JZ, n9, lno, 0, 0, 0)
+            let z9 : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, z9, 0)
+            let e9 : i64 = self.tmp()
+            self.ir(IR_APOP, av, z9, 0, e9, width_of(ty_opt_base(self.tof(nid))))
+            let b9 : i64 = self.tmp()
+            self.ir(IR_SNEW, 1, 0, 0, b9, 0)
+            self.ir(IR_FSTO, b9, 0, e9, 0, 0)
+            self.ir(IR_MOV, b9, 0, 0, d9, 0)
+            self.ir(IR_JMP, lend, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lno, 0, 0, 0, 0)
+            self.ir(IR_CONST, 0, 0, 0, d9, 0)
+            self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+            return d9
         if mid = MID_POP:
             let dv : mut i64 = 0
             if defnode = ⁻1:
@@ -7300,6 +7324,28 @@ impl Lower:
             let d : i64 = self.tmp()
             self.ir(IR_APOP, av, dv, 0, d, w)
             return d
+        if defnode = ⁻1 and ty_is_opt(self.tof(nid)):
+            // get, outside ??: past the end answers the null
+            let iv9 : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            let n8 : i64 = self.tmp()
+            self.ir(IR_ALEN, av, 0, 0, n8, 0)
+            let c8 : i64 = self.tmp()
+            self.ir(IR_CLT, iv9, n8, 0, c8, 64 + 256)
+            let d8 : i64 = self.tmp()
+            let lno8 : i64 = self.label()
+            let lend8 : i64 = self.label()
+            self.ir(IR_JZ, c8, lno8, 0, 0, 0)
+            let e8 : i64 = self.tmp()
+            self.ir(IR_AIDX, av, iv9, 0, e8, 0)
+            let b8 : i64 = self.tmp()
+            self.ir(IR_SNEW, 1, 0, 0, b8, 0)
+            self.ir(IR_FSTO, b8, 0, e8, 0, 0)
+            self.ir(IR_MOV, b8, 0, 0, d8, 0)
+            self.ir(IR_JMP, lend8, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lno8, 0, 0, 0, 0)
+            self.ir(IR_CONST, 0, 0, 0, d8, 0)
+            self.ir(IR_LABEL, lend8, 0, 0, 0, 0)
+            return d8
         // get
         let iv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
         let dv : i64 = self.lower_expr(defnode)

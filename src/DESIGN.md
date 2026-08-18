@@ -495,6 +495,18 @@ Attempt 3 grows core-1 to **core-2** with structs:
   edge from it by hand halts the compiler rather than producing a
   binary that jumps into the wrong routine.  A program that does
   nothing carries 11 of the 44; the compiler itself carries 33.
+- **an optional is a value like any other**: what `pop` and `get`
+  answer is the optional itself, not a value that has to be given a
+  default on the spot.  `?? d` is one thing to do with it rather
+  than the only thing: it binds, it matches, it compares with `∅`,
+  it is handed back.  Under `??` the value still arrives bare and
+  nothing is allocated -- the boxing happens only where the optional
+  is what the program asked for -- which is the same shape `next()`
+  already had.  A tuple may be optional too.  Its code sits far
+  above the optionals' band, so `base + 2048` would land inside the
+  tuples' own; an optional tuple therefore gets a band of its own
+  past the type variables, and the three words that make, test and
+  open an optional are the only ones that had to learn about it.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's

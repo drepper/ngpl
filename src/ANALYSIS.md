@@ -356,7 +356,15 @@ ngplc's diagnostics go to stdout.
    biggest unlock toward self-hosting.
 2. Optionals as values and `match` on them; then hashes with the
    Swiss-table runtime; then `char`, string indexing and `chars()`
-   over the shift-DFA UTF-8 core.
+   over the shift-DFA UTF-8 core.  *(Optionals, `match`, hashes,
+   `char`, string indexing and `chars()` all landed.  The last of
+   the optional surface was finished later: what `pop` and `get`
+   answer is now the optional itself rather than something that
+   must be given a default on the spot, and a tuple may be
+   optional.  What is still owed from this point is the two
+   runtimes it named -- the Swiss-table hash probe and the
+   shift-DFA UTF-8 decoder -- both of which are performance
+   rewrites of working code, listed under What Fell Short.)*
 3. Linear-scan register allocation over the existing IR; value-table
    folding of constant-armed ladders.
 4. Parser error recovery with synchronization at statement starts;

@@ -1,0 +1,65 @@
+// core-2: an optional is a value like any other.  What pop and get
+// answer is that optional itself, not a value that must be given a
+// default on the spot -- so it can be bound, matched, compared with ∅
+// and handed on, and ?? is one thing to do with it rather than the
+// only thing.  A tuple may be optional too: it is a pointer to its
+// elements, so an optional one is that pointer in a box.
+
+fn first_pair(v : &i64[]) -> (i64, i64)?:
+    match v.get(0):
+        ∃(a):
+            match v.get(1):
+                ∃(b):
+                    return ∃((a, b))
+                ∅:
+                    return ∅
+        ∅:
+            return ∅
+
+@impure
+@start
+fn main():
+    // what pop answers is the optional, and match takes it apart
+    let v : mut i64[] = [1, 2]
+    match v.pop():
+        ∃(x):
+            std.println("popped {}", x)
+        ∅:
+            std.println("empty")
+    match v.pop():
+        ∃(x):
+            std.println("popped {}", x)
+        ∅:
+            std.println("empty")
+    match v.pop():
+        ∃(x):
+            std.println("popped {}", x)
+        ∅:
+            std.println("empty")
+
+    // and it binds, and compares, and still takes a default
+    let w : mut i64[] = [7]
+    let taken := w.pop()
+    std.println("{} {}", taken ≠ ∅, taken ?? 0)
+    std.println("{}", w.pop() ?? 99)
+
+    // get past the end is absence, not an abort
+    let r : i64[] = [10, 20]
+    std.println("{} {}", r.get(1) ?? 0, r.get(5) ?? ⁻1)
+    match r.get(5):
+        ∃(x):
+            std.println("{}", x)
+        ∅:
+            std.println("nothing at 5")
+
+    // an optional tuple, built, matched and handed back
+    let p := first_pair(&r)
+    match p:
+        ∃(t):
+            std.println("{} {}", t[0], t[1])
+        ∅:
+            std.println("no pair")
+    let one : i64[] = [3]
+    std.println("{}", first_pair(&one) = ∅)
+    let n : (i64, str)? = ∅
+    std.println("{}", n = ∅)
