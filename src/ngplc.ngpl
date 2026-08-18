@@ -8603,6 +8603,9 @@ struct Emit:
     gr_off : i64[]
     skipping : i64       // 1 while a routine nobody calls goes by
     rt_need : i64[]      // which runtime routines the program reaches
+    rx : u8[]            // constant tables the runtime reads, in rodata
+    rx_pos : i64[]       // abs64 fixups against them
+    rx_off : i64[]
     pj_labels : i64[]
 
 impl Emit:
@@ -8816,6 +8819,16 @@ impl Emit:
         if self.skipping = 0:
             self.df_pos.push(self.here())
             self.df_off.push(off)
+        self.w64(0)
+
+    // a table the runtime reads is constant, so it rides in rodata
+    // beside the strings; this is where its address is asked for
+    fn rxref(&mut self, reg : i64, off : i64):
+        self.b1(72 + (1 if reg >= 8 else 0))
+        self.b1(184 + (reg & 7))
+        if self.skipping = 0:
+            self.rx_pos.push(self.here())
+            self.rx_off.push(off)
         self.w64(0)
 
     // a global that is never written lives with the other read-only
@@ -10234,55 +10247,70 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.resolve_locals()
 
     // RT_CHARS: rdi = descriptor → rax = a char[] of the string's
-    // characters; the byte length bounds the capacity from above
+    // characters; the byte length bounds the capacity from above.
+    //
+    // The decode is Hoehrmann's DFA in the shift form: a byte's class
+    // is one table read, the next state is that class's word shifted
+    // by the state and masked to six bits, and the code point grows
+    // six bits a byte.  Whether a byte begins a character or continues
+    // one is three conditional moves rather than a ladder of compares,
+    // so the only branch left in the body is the one that says a
+    // character is finished.
     em.rt_begin(RT_CHARS)
-    em.begin_fn(6)
+    em.begin_fn(2)
     em.b3(76, 139, 39)              // mov r12, [rdi]
     em.b4(76, 139, 111, 8)          // mov r13, [rdi+8]
     em.b3(76, 137, 239)             // mov rdi, r13
     em.jglobal(232, ⁻1, RT_ARRNEW)
     em.b3(72, 137, 195)             // mov rbx, rax
-    em.b3(77, 49, 246)              // xor r14, r14
-    em.b3(77, 49, 255)              // xor r15, r15
+    em.b3(77, 49, 246)              // xor r14, r14: the byte read
+    em.b3(77, 49, 255)              // xor r15, r15: the character written
+    em.b3(77, 49, 210)              // xor r10, r10: the state
+    em.b3(77, 49, 201)              // xor r9, r9: the code point
+    // the two tables are read once a byte, so their addresses are
+    // taken once and not at every step
+    em.rxref(R_SI, 0)               // the byte classes
+    em.rxref(R_DI, 256)             // the transition words
     em.set_label(0)                 // Lloop
     em.b3(77, 57, 245)              // cmp r13, r14
     em.jlocal(134, 1)               // jbe Ldone
     em.b4(67, 15, 182, 4)
     em.b1(52)                       // movzx eax, byte [r12+r14]
     em.b3(73, 255, 198)             // inc r14
-    em.b2(60, 128)                  // cmp al, 0x80
-    em.jlocal(130, 2)               // jb Lstore
-    em.b2(60, 224)                  // cmp al, 0xE0
-    em.jlocal(130, 3)               // jb: two bytes
-    em.b2(60, 240)                  // cmp al, 0xF0
-    em.jlocal(130, 4)               // jb: three bytes
-    em.b4(72, 131, 224, 7)          // and rax, 7
-    em.b3(73, 199, 192)
-    em.w32(3)                       // mov r8, 3
-    em.jlocal(⁻1, 5)
-    em.set_label(4)
-    em.b4(72, 131, 224, 15)         // and rax, 15
-    em.b3(73, 199, 192)
-    em.w32(2)                       // mov r8, 2
-    em.jlocal(⁻1, 5)
-    em.set_label(3)
-    em.b4(72, 131, 224, 31)         // and rax, 31
-    em.b3(73, 199, 192)
-    em.w32(1)                       // mov r8, 1
-    em.set_label(5)                 // Lacc
-    em.b3(77, 133, 192)             // test r8, r8
-    em.jlocal(132, 2)               // jz Lstore
-    em.b4(71, 15, 182, 12)
-    em.b1(52)                       // movzx r9d, byte [r12+r14]
-    em.b3(73, 255, 198)             // inc r14
-    em.b4(73, 131, 225, 63)         // and r9, 63
-    em.b4(72, 193, 224, 6)          // shl rax, 6
-    em.b3(76, 9, 200)               // or rax, r9
-    em.b3(73, 255, 200)             // dec r8
-    em.jlocal(⁻1, 5)
-    em.set_label(2)                 // Lstore
+    em.b4(68, 15, 182, 4)
+    em.b1(6)                        // movzx r8d, byte [rsi+rax]: the class
+    // what of this byte belongs to the code point: all that the class
+    // leaves at a lead byte, the low six bits at a continuation
+    em.b3(72, 199, 194)
+    em.w32(255)                     // mov rdx, 255
+    em.b3(76, 137, 193)             // mov rcx, r8
+    em.b3(72, 211, 234)             // shr rdx, cl
+    em.b3(72, 199, 193)
+    em.w32(63)                      // mov rcx, 63
+    em.b3(77, 133, 210)             // test r10, r10
+    em.b4(72, 15, 69, 209)          // cmovnz rdx, rcx
+    em.b3(72, 33, 208)              // and rax, rdx
+    // a lead byte starts the code point over; a continuation shifts it
+    em.b3(72, 49, 210)              // xor rdx, rdx
+    em.b3(77, 133, 210)             // test r10, r10
+    em.b4(76, 15, 68, 202)          // cmovz r9, rdx
+    em.b3(72, 49, 201)              // xor rcx, rcx
+    em.b3(72, 199, 194)
+    em.w32(6)                       // mov rdx, 6
+    em.b3(77, 133, 210)             // test r10, r10
+    em.b4(72, 15, 69, 202)          // cmovnz rcx, rdx
+    em.b3(73, 211, 225)             // shl r9, cl
+    em.b3(73, 9, 193)               // or r9, rax
+    // and the step itself: one shift by the state, one mask
+    em.b4(74, 139, 4, 199)          // mov rax, [rdi+r8*8]
+    em.b3(76, 137, 209)             // mov rcx, r10
+    em.b3(72, 211, 232)             // shr rax, cl
+    em.b4(72, 131, 224, 63)         // and rax, 63
+    em.b3(73, 137, 194)             // mov r10, rax
+    em.b3(77, 133, 210)             // test r10, r10
+    em.jlocal(133, 0)               // jnz Lloop: the character goes on
     em.b3(72, 139, 11)              // mov rcx, [rbx]
-    em.b4(74, 137, 4, 249)          // mov [rcx+r15*8], rax
+    em.b4(78, 137, 12, 249)         // mov [rcx+r15*8], r9
     em.b3(73, 255, 199)             // inc r15
     em.jlocal(⁻1, 0)
     em.set_label(1)                 // Ldone
@@ -11196,6 +11224,43 @@ fn rt_names() → str[]:
     "RT_EXECFN",
     "RT_RELRO"]
 
+// The UTF-8 decoder is Hoehrmann's DFA in the shift form the design
+// researched: nine states, twelve byte classes, and a step that is one
+// table read, one shift and one mask instead of a ladder of compares.
+// A state is kept already multiplied by six -- its field's place in the
+// word -- so the step needs no multiply: state = T[class] >> state & 63.
+//
+// One byte to a class, as the DFA has them.
+fn utf8_class_bytes() → u8[]:
+    let t : mut u8[] = []
+    foreach b := 0…255:
+        let c : i64 = 0
+        let k : mut i64 = 0
+        if b < 128: k ← 0
+        elif b < 144: k ← 1
+        elif b < 160: k ← 9
+        elif b < 192: k ← 7
+        elif b < 194: k ← 8
+        elif b < 224: k ← 2
+        elif b < 225: k ← 10
+        elif b < 237: k ← 3
+        elif b < 238: k ← 4
+        elif b < 240: k ← 3
+        elif b < 241: k ← 11
+        elif b < 244: k ← 6
+        elif b < 245: k ← 5
+        else: k ← 8
+        _ ← c
+        t.push(@wrap(k) & 255)
+    t
+
+// One word to a class: the whole transition row packed six bits to a
+// state, each field holding where that state goes next.
+fn utf8_dfa_words() → i64[]:
+    [1715657000903040, 5146139723563398, 1715657000903052, 1715657000903058,
+     1715657000903070, 1715657000903088, 1715657000903082, 1769258294968710,
+     1715657000903046, 1769264636756358, 1715657000903064, 1715657000903076]
+
 // Which runtime routine calls which, as pairs: the caller, then what it
 // calls.  A routine the program reaches drags its callees in after it,
 // and nothing else is emitted.  Getting this wrong cannot pass quietly:
@@ -11858,7 +11923,8 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
                               pj_start: [], pj_len: [], pj_labels: [],
                               max_frame: 0,
                               gmap: [], gseg: [], gr_pos: [], gr_off: [],
-                              skipping: 0, rt_need: []})
+                              skipping: 0, rt_need: [],
+                              rx: [], rx_pos: [], rx_off: []})
     let nglobals : i64 = @dropunit(#a.globals)
     // The data a program carries falls into three kinds.  One is never
     // written and rides with the other read-only things.  One is
@@ -12115,6 +12181,16 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
             while e3 < hi2:
                 push64(&rodata, base2 + em.jt_entries[e3 × 1¤ptrdiff])
                 e3 ← e3 + 1
+    // the constant tables the runtime reads: the UTF-8 decoder's byte
+    // classes, then its transition words, one to a class
+    let rx_base : i64 = @dropunit(#rodata)
+    foreach b := utf8_class_bytes():
+        rodata.push(b)
+    foreach w := utf8_dfa_words():
+        push64(&rodata, w)
+    if #em.rx_pos > 0:
+        foreach i := 0…#em.rx_pos - 1:
+            em.patch64(em.rx_pos[i], ro_vaddr + rx_base + em.rx_off[i])
     // the globals that are never written ride here, past the tables
     let gro_base : i64 = @dropunit(#rodata)
     if nglobals > 0:

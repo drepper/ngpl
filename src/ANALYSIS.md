@@ -285,10 +285,16 @@ past i64.
    remaining freshness rules (mut bindings and reassignment) are
    discipline, not representation.  The
    hash runtime now probes sixteen slots at a time with `pcmpeqb`,
-   as the design planned, and the lexer still decodes
-   UTF-8 a byte at a time rather than through the shift-DFA and mask
-   pipeline the design researched — correctness first, the SIMD shape
-   when the native compiler makes it measurable.
+   as the design planned, and `.chars()` decodes UTF-8 through the
+   shift-based DFA rather than a ladder of compares.  That last one
+   is worth an honest note: it is the shape the design asked for and
+   it is branch-free, but it is not faster.  Measured both ways —
+   repeating text and text whose character widths are chosen
+   unpredictably — the ladder and the automaton run the same, because
+   `.chars()` allocates eight bytes for every input byte and that,
+   not the decode, is where the time goes.  The SIMD block pipeline
+   the design researched remains unbuilt, and would want the
+   allocation dealt with first.
 2. **Register allocation is one register deep.**  The emitter's rax
    memo skips reloads (~3% of code) but every value still lives in a
    stack slot; the true linear-scan allocator over the width-annotated
@@ -364,8 +370,9 @@ ngplc's diagnostics go to stdout.
    optional.  The Swiss-table probe landed
    after it: sixteen control bytes compared at a time, the tag
    kept nonzero so an empty slot stays the zero fresh memory
-   already is, 1.8× on a mixed hit-and-miss workload.  What is
-   still owed from this point is the shift-DFA UTF-8 decoder.)*
+   already is, 1.8× on a mixed hit-and-miss workload.  The shift-DFA decoder
+   followed it, which closes the point — though see What Fell Short
+   for what the measurement said about it.)*
 3. Linear-scan register allocation over the existing IR; value-table
    folding of constant-armed ladders.
 4. Parser error recovery with synchronization at statement starts;

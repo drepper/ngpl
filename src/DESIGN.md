@@ -507,6 +507,27 @@ Attempt 3 grows core-1 to **core-2** with structs:
   tuples' own; an optional tuple therefore gets a band of its own
   past the type variables, and the three words that make, test and
   open an optional are the only ones that had to learn about it.
+- **UTF-8 through a shift-based DFA**: `.chars()` decodes with
+  Höhrmann's automaton in the shift form the design researched --
+  nine states and twelve byte classes, a state kept already
+  multiplied by its field's width so the step is
+  `state = T[class] >> state & 63` with no multiply, and the code
+  point grown six bits a byte.  Whether a byte begins a character
+  or continues one is three conditional moves, so the ladder of
+  compares and its inner continuation loop are gone and the only
+  branch left in the body is the one that says a character is
+  finished.  The tables (256 class bytes, twelve transition words)
+  ride in rodata beside the strings, through the same kind of fixup
+  a global there uses.  The automaton also *knows* malformed UTF-8,
+  which the ladder could only mis-decode; nothing in core-2 can
+  build an invalid string yet, so that is machinery in hand rather
+  than a check being made.  Measured against the ladder it
+  replaced, on both repeating text and text whose character widths
+  are chosen unpredictably: no difference.  `.chars()` allocates
+  eight bytes for every input byte, and that is what the time goes
+  on -- the decode was never the cost.  Making `foreach ch := s`
+  walk the bytes without materializing the array is where that cost
+  actually is, and is its own piece of work.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's

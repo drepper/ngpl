@@ -1,0 +1,54 @@
+// core-2: UTF-8 in and code points out, at every width and at the
+// edges of each.  The decoder underneath is a shift-based DFA now --
+// a byte's class, then the class's transition word shifted by the
+// state -- so what this asks is that every sequence length still
+// yields what it always did, that the boundaries between them are
+// where they should be, and that a string's characters and its
+// positions agree.
+
+@impure
+@start
+fn main():
+    // one byte, two bytes, three bytes, four bytes
+    let b1 : u32 = 127
+    let b2 : u32 = 128
+    let b3 : u32 = 2047
+    let b4 : u32 = 2048
+    let b5 : u32 = 65535
+    let b6 : u32 = 65536
+    let b7 : u32 = 1114111
+    let widths : str = "A" ⧺ b1.chr() ⧺ b2.chr() ⧺ b3.chr() ⧺ b4.chr() ⧺ b5.chr() ⧺ b6.chr() ⧺ b7.chr()
+    let cs := widths.chars()
+    std.println("{}", #cs)
+    foreach c := cs:
+        std.print("{} ", c.ord())
+    std.println("")
+
+    // the same code points reached by position instead
+    foreach i := 0…7:
+        std.print("{} ", widths[i × 1¤ptrdiff].ord())
+    std.println("")
+
+    // a string that mixes the widths, walked and counted
+    let mixed : str = "aλb→c𝄞d"
+    std.println("{} {}", #mixed, #mixed.chars())
+    let sum : mut i64 = 0
+    foreach c := mixed:
+        sum ← sum + c.ord()
+    std.println("{}", sum)
+
+    // the empty string decodes to nothing
+    let none : str = ""
+    std.println("{} {}", #none, #none.chars())
+
+    // characters just below and above each boundary
+    let edges : str = b1.chr() ⧺ b2.chr() ⧺ b3.chr() ⧺ b4.chr() ⧺ b5.chr() ⧺ b6.chr()
+    let ec := edges.chars()
+    std.println("{} {} {} {} {} {} {}", #ec, ec[0].ord(), ec[1].ord(),
+                ec[2].ord(), ec[3].ord(), ec[4].ord(), ec[5].ord())
+
+    // and a long string, so the walk runs past any one group
+    let long : mut str = ""
+    foreach _ := 1…50:
+        long ← long ⧺ mixed
+    std.println("{} {}", #long, #long.chars())
