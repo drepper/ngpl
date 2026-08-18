@@ -965,8 +965,20 @@ def _render_template(fmt: str, args, where: str) -> str:
                 return "[" + ", ".join(str(b) for b in obj.data) + "]"
             return f"<{type(obj).__name__}>"
         if isinstance(uv, (FuncValue, LambdaValue)):
-            name = getattr(uv, "name", "\N{GREEK SMALL LETTER LAMDA}")
-            return f"<fn {name}>"
+            # A function is applied, not written out: reaching here
+            # means the program printed the wrong thing, most often a
+            # partial application it believed was a finished call.
+            if (isinstance(uv, LambdaValue)
+                    and uv.partial_func is not None):
+                n = len(uv.params)
+                raise TypeError(
+                    f"'{{}}' met a partial application of "
+                    f"'{uv.partial_func.name}' that still waits for {n} "
+                    f"argument{'s' if n != 1 else ''}, not a value; "
+                    f"apply the rest before printing")
+            raise TypeError(
+                "'{}' met a function, not a value; a function is "
+                "applied, not written out")
         return str(uv)
 
     result: list[str] = []

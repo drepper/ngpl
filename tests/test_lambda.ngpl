@@ -119,6 +119,23 @@ fn test_ignored_curry_warning():
 fn test_ignored_lambda_warning():
   λx : i64 → i64: x + 1
 
+// An empty application changes nothing: the arguments already given
+// stay given, and the function waits for the rest.
+@test
+fn test_empty_application_keeps_arguments():
+  let f1 := add(1)
+  let f11 := f1()
+  assert_eq(3, f11(2))
+
+// Printing a function is a mistake the run points out: the value the
+// program meant is still waiting for its arguments.
+@expect error "still waits for 1 argument"
+@impure
+fn error_print_partial():
+  let f1 := add(1)
+  let f11 := f1()
+  std.println("{}", f11())
+
 // Non-replaceable function accessible without capture
 fn helper(x: i32) → i32:
   x + 100
