@@ -1,0 +1,32 @@
+// core-2: ⧺ joins arrays at the outermost dimension into one fresh
+// array, and a mut binding may take the join or be reborn from one.
+
+struct P:
+    v : i64
+
+@start
+@impure
+fn main():
+    let a : i64[] = [1i64, 2]
+    let b : i64[] = [3i64]
+    let c : i64[] = a ⧺ b
+    std.println("{} {} {} {}", #c, c[0], c[2], #a)
+    let e : i64[] = []
+    let d : i64[] = a ⧺ e
+    std.println("{}", #d)
+    let f : mut i64[] = a ⧺ b
+    f.push(9)
+    std.println("{} {}", #f, #a)
+    let s1 : str[] = ["x"]
+    let s2 : str[] = s1 ⧺ ["y", "z"]
+    std.println("{} {}", #s2, s2[2])
+    let z1 : i64[2] = [7i64, 8]
+    let z2 : i64[] = z1 ⧺ b
+    std.println("{} {}", #z2, z2[2])
+    let ps : P[] = [P{v: 1}] ⧺ [P{v: 2}]
+    std.println("{} {}", #ps, ps[1].v)
+    let chain : i64[] = [1i64] ⧺ [2i64] ⧺ [3i64]
+    std.println("{} {}", #chain, chain[2])
+    let re : mut i64[] = [9i64]
+    re ← re ⧺ [10i64, 11]
+    std.println("{} {}", #re, re[2])

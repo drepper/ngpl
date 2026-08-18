@@ -177,6 +177,13 @@ Attempt 3 grows core-1 to **core-2** with structs:
   changes, the caller's value does not travel back; a mut container
   still asks for `&mut`), and `@start` no longer demands `@impure`
   for itself — every effect inside asks on its own.
+- **array joining**: `a ⧺ b` joins two arrays of one element type at
+  the outermost dimension into one fresh array (`rt_acat`), the
+  binding's array type reaching both sides so a bare literal operand
+  settles where it stands.  A join is a fresh birth, so a mut array
+  binding may be born from one — or reborn: a mut array now takes any
+  fresh array on reassignment, `x ← x ⧺ […]` included.  A bare `∅`
+  as a unit body is the nothing it names.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's
@@ -412,8 +419,8 @@ the interpreter **and** compiled, outputs and exit codes diffed — the
 strict-subset rule made executable.  `--impl=` selects a side:
 `bootstrap`, `compiled` (ngplc under the interpreter), `native` (the
 self-hosted `build/ngplc`, the whole sweep in ~2.4 s), `both` (the
-default) or `all`.  Twenty-eight shared programs cover the whole
-core-2 surface including the stopping paths, and five bootstrap test
+default) or `all`.  Twenty-nine shared programs cover the whole
+core-2 surface including the stopping paths, and six bootstrap test
 files whose whole `@test` surface sits inside the subset run as
 shared tests besides: compiled, run with `--test`, and their stdout,
 stderr and exit code must match the interpreter's byte for byte.

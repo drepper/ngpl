@@ -3128,12 +3128,24 @@ impl Checker:
             self.check_hash_key(tok, ht, na)
             self.set_type(id, TY_BOOL)
         elif k = NK_CCAT:
-            self.check_expr(na, TY_UNIT)
-            self.check_expr(nb, TY_UNIT)
+            // the binding's array type reaches both sides, so a bare
+            // literal operand settles the way a bound one does
+            self.check_expr(na, want if ty_is_arr(ty_strip_ref(want)) else TY_UNIT)
             let cl : i64 = self.ty_of(na)
+            if ty_is_arr(cl):
+                let ce : i64 = self.elem_of(cl)
+                self.check_expr(nb, mk_aty(ce))
+                let cr0 : i64 = self.ty_of(nb)
+                if not ty_is_arr(cr0):
+                    self.derr(tok, "an array joins an array; the right side is " ⧺ type_name(cr0))
+                elif self.elem_of(cr0) ≠ ce:
+                    self.derr(tok, "one array holds one element type; " ⧺ type_name(ce) ⧺ " does not join " ⧺ type_name(self.elem_of(cr0)))
+                self.set_type(id, mk_aty(ce))
+                return
+            self.check_expr(nb, TY_UNIT)
             let cr : i64 = self.ty_of(nb)
             if not ((cl = TY_STR or cl = TY_CHAR) and (cr = TY_STR or cr = TY_CHAR)):
-                self.derr(tok, "⧺ joins strings and characters in core-2")
+                self.derr(tok, "⧺ joins strings, characters and arrays in core-2")
             self.set_type(id, TY_STR)
         else:
             // + - × ÷ % « » & | ^ ⌈ ⌊ over integers
@@ -3299,7 +3311,12 @@ impl Checker:
         let w : i64 = ty_strip_ref(want)
         let wantish : bool = ty_is_arr(w)
         let ew : i64 = self.elem_of(w) if wantish else TY_UNIT
-        self.check_expr(nb, ew if wantish else TY_UNIT)
+        // an array-literal filler settles under the array want; a
+        // scalar filler settles under the element's
+        if wantish and self.kind_of(nb) = NK_ARRLIT:
+            self.check_expr(nb, mk_aty(ew))
+        else:
+            self.check_expr(nb, ew if wantish else TY_UNIT)
         let ft : i64 = self.ty_of(nb)
         if ty_is_arr(ft):
             // the filler's elements cycle to the count
@@ -4011,7 +4028,7 @@ impl Checker:
                     self.derr(tok, "a mut hash binding is born from its literal; borrow with &mut to change a shared one")
                     _ ← self.declare(tok, it, nb)
                     return
-                if ty_is_arr(it) and nb = 1 and self.kind_of(na) ≠ NK_ARRLIT and self.kind_of(na) ≠ NK_CALL and self.kind_of(na) ≠ NK_MCALL and self.kind_of(na) ≠ NK_RESHAPE:
+                if ty_is_arr(it) and nb = 1 and self.kind_of(na) ≠ NK_ARRLIT and self.kind_of(na) ≠ NK_CALL and self.kind_of(na) ≠ NK_MCALL and self.kind_of(na) ≠ NK_RESHAPE and self.kind_of(na) ≠ NK_CCAT:
                     self.derr(tok, "a mut array binding is born fresh, from its literal or a call; borrow with &mut to change a shared one")
                     _ ← self.declare(tok, it, nb)
                     return
@@ -4044,6 +4061,13 @@ impl Checker:
                 self.nslot[id × 1¤ptrdiff] ← slot0
                 return
             if ty_is_arr(nc):
+                if self.kind_of(na) = NK_CCAT:
+                    self.check_expr(na, nc)
+                    if self.ty_of(na) ≠ nc and not ty_is_farr(nc):
+                        self.derr(tok, "the binding says " ⧺ type_name(nc) ⧺ " but the value is " ⧺ type_name(self.ty_of(na)))
+                    let slot8 : i64 = self.declare(tok, nc, nb)
+                    self.nslot[id × 1¤ptrdiff] ← slot8
+                    return
                 if self.kind_of(na) = NK_RESHAPE:
                     self.check_expr(na, nc)
                     let slot9 : i64 = self.declare(tok, nc, nb)
@@ -4137,8 +4161,8 @@ impl Checker:
                 self.derr(tok, "a struct binding takes a fresh struct; the fields change in place")
             if ty_is_hash(ty_strip_ref(st)):
                 self.derr(tok, "a core-2 hash is built once and changed in place")
-            if ty_is_arr(ty_strip_ref(st)):
-                self.derr(tok, "a core-2 array is built once and changed in place")
+            if ty_is_arr(ty_strip_ref(st)) and not (self.kind_of(na) = NK_ARRLIT or self.kind_of(na) = NK_CALL or self.kind_of(na) = NK_MCALL or self.kind_of(na) = NK_RESHAPE or self.kind_of(na) = NK_CCAT or self.kind_of(na) = NK_SLICE):
+                self.derr(tok, "a mut array binding takes a fresh array; borrow with &mut to change a shared one")
             if self.smut[s × 1¤ptrdiff] = 0:
                 self.derr(tok, "'" ⧺ name ⧺ "' is not mut, so nothing may be stored into it")
             self.check_expr(na, ty_strip_ref(st))
@@ -4279,7 +4303,9 @@ impl Checker:
             else:
                 self.check_expr(na, TY_UNIT)
                 let t : i64 = self.ty_of(na)
-                if t ≠ TY_UNIT:
+                if t ≠ TY_UNIT and self.kind_of(na) ≠ NK_EMPTYV:
+                    // a bare ∅ says "nothing here", which is exactly
+                    // what a unit position holds
                     self.derr(tok, "the value of this statement is not used; bind it or write '_ ← …'")
         else:
             self.derr(tok, "this statement kind escaped the checker; that is an ngplc bug")
@@ -4657,6 +4683,7 @@ let IR_SATSUB : i64 = 91   // d ← a - b, held at the edge
 let IR_SATMUL : i64 = 92   // d ← a × b, held at the edge
 let IR_AFILL : i64 = 93    // d ← a copies of scalar b, a fresh array
 let IR_ACYC : i64 = 94     // d ← array b's elements cycled to count a
+let IR_ACAT : i64 = 95     // d ← arrays a then b, one fresh array
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
 let IR_FLD : i64 = 67      // d ← field b of struct a
 let IR_FSTO : i64 = 68     // field b of struct a ← c
@@ -5010,6 +5037,12 @@ impl Lower:
             self.ir(IR_HELEM, hv, kv2, 0, d, 0)
             return d
         if k = NK_CCAT:
+            if ty_is_arr(self.tof(nid)):
+                let aav : i64 = self.lower_expr(na)
+                let abv : i64 = self.lower_expr(nb)
+                let ad : i64 = self.tmp()
+                self.ir(IR_ACAT, aav, abv, 0, ad, 0)
+                return ad
             let av0 : i64 = self.lower_expr(na)
             let av : mut i64 = av0
             if self.tof(na) = TY_CHAR:
@@ -5897,6 +5930,7 @@ let RT_AFIND : i64 = ⁻33
 let RT_ASLICE : i64 = ⁻34
 let RT_AFILL : i64 = ⁻35
 let RT_ACYC : i64 = ⁻36
+let RT_ACAT : i64 = ⁻37
 
 struct Emit:
     code : u8[]
@@ -6642,6 +6676,11 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
                     em.b3(72, 99, 200)           // movsxd rcx, eax
                 em.b3(72, 57, 193)               // cmp rcx, rax
                 em.jglobal(0, 133, RT_BADFIT)    // jne
+            em.store(R_AX, d)
+        elif o = IR_ACAT:
+            em.load(R_DI, a)
+            em.load(R_SI, b)
+            em.jglobal(232, ⁻1, RT_ACAT)
             em.store(R_AX, d)
         elif o = IR_AFILL:
             em.load(R_DI, a)
@@ -7933,6 +7972,44 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.b1(195)
     em.resolve_locals()
 
+    // RT_ACAT: rdi, rsi = arrays → rax = one fresh array holding the
+    // first's elements and then the second's
+    em.rt_off.push(em.here())
+    em.begin_fn(4)
+    em.b3(76, 139, 39)              // mov r12, [rdi]
+    em.b4(76, 139, 111, 8)          // mov r13, [rdi+8]
+    em.b3(76, 139, 54)              // mov r14, [rsi]
+    em.b4(76, 139, 126, 8)          // mov r15, [rsi+8]
+    em.b4(75, 141, 124, 61)
+    em.b1(0)                        // lea rdi, [r13+r15]
+    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.b3(72, 139, 16)              // mov rdx, [rax]
+    em.b3(72, 49, 201)              // xor rcx, rcx
+    em.set_label(0)                 // the first array's elements
+    em.b3(76, 57, 233)              // cmp rcx, r13
+    em.jlocal(131, 1)               // jae
+    em.b4(77, 139, 20, 204)         // mov r10, [r12+rcx*8]
+    em.b4(76, 137, 20, 202)         // mov [rdx+rcx*8], r10
+    em.b3(72, 255, 193)             // inc rcx
+    em.jlocal(⁻1, 0)
+    em.set_label(1)                 // …and then the second's
+    em.b3(72, 49, 201)              // xor rcx, rcx
+    em.set_label(2)
+    em.b3(76, 57, 249)              // cmp rcx, r15
+    em.jlocal(131, 3)               // jae Ldone -- label 3? two labels left; renumber below
+    em.b4(77, 139, 20, 206)         // mov r10, [r14+rcx*8]
+    em.b4(77, 141, 92, 13)
+    em.b1(0)                        // lea r11, [r13+rcx]
+    em.b4(78, 137, 20, 218)         // mov [rdx+r11*8], r10
+    em.b3(72, 255, 193)             // inc rcx
+    em.jlocal(⁻1, 2)
+    em.set_label(3)                 // Ldone
+    em.b4(75, 141, 76, 61)
+    em.b1(0)                        // lea rcx, [r13+r15]
+    em.b4(72, 137, 72, 8)           // mov [rax+8], rcx
+    em.b1(195)
+    em.resolve_locals()
+
 // ---------------------------------------------------------------------------
 // The ELF executable: text R+X, rodata R, data R+W
 // ---------------------------------------------------------------------------
@@ -8347,7 +8424,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
     emit_fn(&em, dir, 0, lw.strs)
     // every function was emitted and left its offset behind
     assert(@dropunit(#em.fn_off) = nfns + g1 + 2, "one code offset per function")
-    assert(#em.rt_off = 36, "every runtime routine in place")
+    assert(#em.rt_off = 37, "every runtime routine in place")
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:
         foreach i := 0…#em.cf_pos - 1:
