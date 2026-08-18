@@ -119,6 +119,16 @@ fn test_ignored_curry_warning():
 fn test_ignored_lambda_warning():
   λx : i64 → i64: x + 1
 
+// A global may be born of a partial application: functions install
+// before globals, whatever order the file writes them in.
+let add_ten := add(10)
+let add_ten_still := add_ten()
+
+@test
+fn test_global_partial_application():
+  assert_eq(17, add_ten(7))
+  assert_eq(17, add_ten_still(7))
+
 // An empty application changes nothing: the arguments already given
 // stay given, and the function waits for the rest.
 @test

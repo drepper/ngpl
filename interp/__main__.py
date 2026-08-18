@@ -2637,126 +2637,9 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 raise DefinitionError(str(e), _node_pos(defn)) from None
             register_type_alias(defn.name, defn.target)
 
-    for defn in definitions:
-        if isinstance(defn, ASTVarDef):
-            # A lambda written here states its own signature, so it is
-            # asked what a function is asked.
-            lambda_err = (_static_lambda_return_check(defn, env)
-                          or _static_conditional_check(defn))
-            if lambda_err is not None:
-                raise DefinitionError(
-                    f"in '{defn.name}': {lambda_err}",
-                    _finding_pos(lambda_err) or _node_pos(defn))
-            if defn.name == DISCARD_NAME:
-                # Evaluated for its effects, then dropped; nothing is bound.
-                evaluator.eval_expr(defn.init_expr)
-                continue
-            if defn.is_const and defn.type_annotation is not None and defn.type_annotation in FAST_TYPES:
-                raise DefinitionError(
-                    f"fast type '{defn.type_annotation}' cannot be used in "
-                    f"let definition '{defn.name}'", _node_pos(defn))
-            if not redefine_vars and defn.name in env._frames[0]:
-                # A file defines a name once; a second let is a mistake
-                # rather than an update.  The REPL is the one place a
-                # definition may be replaced, entry by entry.
-                raise DefinitionError(
-                    f"'{defn.name}' is already defined; a file defines a "
-                    f"name once (at the REPL a new let replaces the old)",
-                    _node_pos(defn))
-            # A global is worked out while the definitions are being
-            # installed, so what it objects to is reported the way the
-            # checks around it are rather than as a bare traceback.
-            try:
-                value = evaluator.eval_expr(defn.init_expr)
-                unit = None
-                if defn.unit_spec is not None:
-                    from interp.units import eval_unit_formula
-                    unit = eval_unit_formula(defn.unit_spec)
-                if defn.type_annotation is None:
-                    # A global is a binding like any other: without a
-                    # type written down a number settles on int or
-                    # float, and the bootstrap has neither.
-                    check_binding_settles(value, defn.name)
-                    check_bootstrap_binding(value, defn.name)
-                    value = apply_unit(value, unit, evaluator._mk_int)
-                elif isinstance(defn.init_expr, _ast.ArrayAlloc):
-                    # An array declaration writes its shape in brackets
-                    # that the annotation does not carry, and the
-                    # allocation has already measured the value against
-                    # the whole of it.  Coercing again here would meet
-                    # the element type alone and take an array for it,
-                    # which is what made a global fixed-size array
-                    # impossible to write at all.
-                    value = apply_unit(value, unit, evaluator._mk_int)
-                else:
-                    # The type says what each number is held in and the
-                    # unit says what it counts, as at a local binding:
-                    # for an array that means the elements.
-                    value = coerce_to_type(value, defn.type_annotation, unit,
-                                           evaluator._mk_int)
-            except (OverflowError, TypeError, ValueError) as e:
-                raise DefinitionError(
-                    f"in {defn.name}: {strip_position_prefix(str(e))}",
-                    extract_position(e) or _node_pos(defn)) from None
-            env._const_globals.discard(defn.name)
-            env._mutable_globals.discard(defn.name)
-            env.define(defn.name, value,
-                        Decl(evaluator._declared_type_of(defn, value), unit))
-            if defn.is_const:
-                env._const_globals.add(defn.name)
-            else:
-                env._mutable_globals.add(defn.name)
-
-    for defn in definitions:
-        if isinstance(defn, ASTDestructureDef):
-            if not redefine_vars:
-                for name in _destructured_names(defn.names):
-                    if name != DISCARD_NAME and name in env._frames[0]:
-                        raise DefinitionError(
-                            f"'{name}' is already defined; a file defines "
-                            f"a name once (at the REPL a new let replaces "
-                            f"the old)", _node_pos(defn))
-            # A global may take a tuple apart as a local does; the
-            # evaluator knows how, and what it binds becomes global.
-            try:
-                evaluator._eval_destructure(defn)
-            except (OverflowError, TypeError, ValueError) as e:
-                raise DefinitionError(
-                    strip_position_prefix(str(e)),
-                    extract_position(e) or _node_pos(defn)) from None
-            for name in _destructured_names(defn.names):
-                if name == DISCARD_NAME:
-                    continue
-                env._const_globals.discard(name)
-                env._mutable_globals.discard(name)
-                env.define(name, evaluator.env.lookup(name))
-                if defn.is_const:
-                    env._const_globals.add(name)
-                else:
-                    env._mutable_globals.add(name)
-
-    for defn in definitions:
-        if isinstance(defn, ASTUnitDef):
-            from interp.units import eval_unit_formula, register_user_unit, Unit
-            from fractions import Fraction
-            if defn.formula is not None:
-                unit = eval_unit_formula(defn.formula)
-                unit = Unit(unit.components, unit.factor, defn.name)
-            else:
-                unit = Unit({defn.name: 1}, Fraction(1), defn.name)
-            register_user_unit(defn.name, unit)
-
-    # Every struct exists by now, so a @repr(C) layout can be checked even
-    # when it names a struct declared further down the file.  Checking here
-    # rather than on first use means an unrepresentable field is reported
-    # where it is written.
-    for defn in definitions:
-        if isinstance(defn, ASTStructDef) and defn.repr_kind is not None:
-            try:
-                struct_layout(env.lookup(defn.name), struct_lookup(env))
-            except LayoutError as e:
-                raise DefinitionError(str(e), _field_pos(defn, e.field))
-
+    # Functions install before globals: a file may write its
+    # functions in any order, and a global binding may call one
+    # while it is being worked out.
     for defn in definitions:
         if isinstance(defn, ASTFuncDef):
             if defn.expect_annotations:
@@ -2842,6 +2725,131 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                         program.referenced_tests[ref].append(fv)
                 else:
                     program.standalone_tests.append(fv)
+
+
+    for defn in definitions:
+        if isinstance(defn, ASTVarDef):
+            # A lambda written here states its own signature, so it is
+            # asked what a function is asked.
+            lambda_err = (_static_lambda_return_check(defn, env)
+                          or _static_conditional_check(defn))
+            if lambda_err is not None:
+                raise DefinitionError(
+                    f"in '{defn.name}': {lambda_err}",
+                    _finding_pos(lambda_err) or _node_pos(defn))
+            if defn.name == DISCARD_NAME:
+                # Evaluated for its effects, then dropped; nothing is bound.
+                evaluator.eval_expr(defn.init_expr)
+                continue
+            if defn.is_const and defn.type_annotation is not None and defn.type_annotation in FAST_TYPES:
+                raise DefinitionError(
+                    f"fast type '{defn.type_annotation}' cannot be used in "
+                    f"let definition '{defn.name}'", _node_pos(defn))
+            if not redefine_vars and defn.name in env._frames[0]:
+                # A file defines a name once; a second let is a mistake
+                # rather than an update.  The REPL is the one place a
+                # definition may be replaced, entry by entry.
+                raise DefinitionError(
+                    f"'{defn.name}' is already defined; a file defines a "
+                    f"name once (at the REPL a new let replaces the old)",
+                    _node_pos(defn))
+            # A global is worked out while the definitions are being
+            # installed, so what it objects to is reported the way the
+            # checks around it are rather than as a bare traceback.
+            try:
+                value = evaluator.eval_expr(defn.init_expr)
+                unit = None
+                if defn.unit_spec is not None:
+                    from interp.units import eval_unit_formula
+                    unit = eval_unit_formula(defn.unit_spec)
+                if defn.type_annotation is None:
+                    # A global is a binding like any other: without a
+                    # type written down a number settles on int or
+                    # float, and the bootstrap has neither.
+                    check_binding_settles(value, defn.name)
+                    check_bootstrap_binding(value, defn.name)
+                    value = apply_unit(value, unit, evaluator._mk_int)
+                elif isinstance(defn.init_expr, _ast.ArrayAlloc):
+                    # An array declaration writes its shape in brackets
+                    # that the annotation does not carry, and the
+                    # allocation has already measured the value against
+                    # the whole of it.  Coercing again here would meet
+                    # the element type alone and take an array for it,
+                    # which is what made a global fixed-size array
+                    # impossible to write at all.
+                    value = apply_unit(value, unit, evaluator._mk_int)
+                else:
+                    # The type says what each number is held in and the
+                    # unit says what it counts, as at a local binding:
+                    # for an array that means the elements.
+                    value = coerce_to_type(value, defn.type_annotation, unit,
+                                           evaluator._mk_int)
+            except KeyError as e:
+                raise DefinitionError(
+                    f"in {defn.name}: {e.args[0] if e.args else e}",
+                    _node_pos(defn)) from None
+            except (OverflowError, TypeError, ValueError) as e:
+                raise DefinitionError(
+                    f"in {defn.name}: {strip_position_prefix(str(e))}",
+                    extract_position(e) or _node_pos(defn)) from None
+            env._const_globals.discard(defn.name)
+            env._mutable_globals.discard(defn.name)
+            env.define(defn.name, value,
+                        Decl(evaluator._declared_type_of(defn, value), unit))
+            if defn.is_const:
+                env._const_globals.add(defn.name)
+            else:
+                env._mutable_globals.add(defn.name)
+
+    for defn in definitions:
+        if isinstance(defn, ASTDestructureDef):
+            if not redefine_vars:
+                for name in _destructured_names(defn.names):
+                    if name != DISCARD_NAME and name in env._frames[0]:
+                        raise DefinitionError(
+                            f"'{name}' is already defined; a file defines "
+                            f"a name once (at the REPL a new let replaces "
+                            f"the old)", _node_pos(defn))
+            # A global may take a tuple apart as a local does; the
+            # evaluator knows how, and what it binds becomes global.
+            try:
+                evaluator._eval_destructure(defn)
+            except (OverflowError, TypeError, ValueError) as e:
+                raise DefinitionError(
+                    strip_position_prefix(str(e)),
+                    extract_position(e) or _node_pos(defn)) from None
+            for name in _destructured_names(defn.names):
+                if name == DISCARD_NAME:
+                    continue
+                env._const_globals.discard(name)
+                env._mutable_globals.discard(name)
+                env.define(name, evaluator.env.lookup(name))
+                if defn.is_const:
+                    env._const_globals.add(name)
+                else:
+                    env._mutable_globals.add(name)
+
+    for defn in definitions:
+        if isinstance(defn, ASTUnitDef):
+            from interp.units import eval_unit_formula, register_user_unit, Unit
+            from fractions import Fraction
+            if defn.formula is not None:
+                unit = eval_unit_formula(defn.formula)
+                unit = Unit(unit.components, unit.factor, defn.name)
+            else:
+                unit = Unit({defn.name: 1}, Fraction(1), defn.name)
+            register_user_unit(defn.name, unit)
+
+    # Every struct exists by now, so a @repr(C) layout can be checked even
+    # when it names a struct declared further down the file.  Checking here
+    # rather than on first use means an unrepresentable field is reported
+    # where it is written.
+    for defn in definitions:
+        if isinstance(defn, ASTStructDef) and defn.repr_kind is not None:
+            try:
+                struct_layout(env.lookup(defn.name), struct_lookup(env))
+            except LayoutError as e:
+                raise DefinitionError(str(e), _field_pos(defn, e.field))
 
     for defn in definitions:
         if isinstance(defn, ASTImplBlock):
