@@ -794,18 +794,27 @@ class Parser:
                 next_is_tuple = (next_idx < len(self.tokens) and
                                  self.tokens[next_idx].type == "PUNCT" and
                                  self.tokens[next_idx].value == "(")
-                if next_is_type or next_is_ref or next_is_mut or next_is_tuple:
-                    self._eat("PUNCT", ":")
-                    if self._check("OP") and self._cur().value == "&":
-                        self.pos += 1
-                        is_ref = True
-                    if self._try_eat("MUT"):
-                        is_mut = True
-                    if self._at_tuple_type():
-                        param_type = self._parse_tuple_type()
-                    else:
-                        type_tok = self._cur()
-                        param_type = self._parse_base_type_name()
+                if not (next_is_type or next_is_ref or next_is_mut
+                        or next_is_tuple):
+                    # A ':' promises a type, and what follows has to be
+                    # able to keep that promise.
+                    bad = (self.tokens[next_idx]
+                           if next_idx < len(self.tokens) else self._cur())
+                    raise ParseError(
+                        f"{self._tok_display(bad)} does not name a type; "
+                        f"a parameter's ':' is followed by one, as 'a : i64'",
+                        bad)
+                self._eat("PUNCT", ":")
+                if self._check("OP") and self._cur().value == "&":
+                    self.pos += 1
+                    is_ref = True
+                if self._try_eat("MUT"):
+                    is_mut = True
+                if self._at_tuple_type():
+                    param_type = self._parse_tuple_type()
+                else:
+                    type_tok = self._cur()
+                    param_type = self._parse_base_type_name()
                 param_unit = self._unit_after_type(param_unit, unit_tok)
                 param_type += self._parse_array_suffix()
                 if self._check("OP") and self._cur().value == "?":
@@ -882,6 +891,11 @@ class Parser:
                 elif self._check("OP") and self._cur().value == "!":
                     self.pos += 1
                     ret_type += "?std.errors"
+            else:
+                raise ParseError(
+                    f"{self._tok_display(self._cur())} does not name a "
+                    f"type; the arrow is followed by one, as '-> i64'",
+                    self._cur())
 
         if expect_annotations:
             try:
@@ -1347,6 +1361,13 @@ class Parser:
                 elif self._check("OP") and self._cur().value == "!":
                     self.pos += 1
                     type_annotation += "?std.errors"
+            elif not (self._check("PUNCT") and self._cur().value == "="):
+                # Neither a type nor the '=' of ':=': the binding
+                # promised a type it does not state.
+                raise ParseError(
+                    f"{self._tok_display(self._cur())} does not name a "
+                    f"type; ':' is followed by one, as ': i64 =', or "
+                    f"':=' leaves it to the right side", self._cur())
 
         if not has_colon:
             if not (self._check("PUNCT") and self._cur().value == ":"):

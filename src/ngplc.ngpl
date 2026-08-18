@@ -1319,6 +1319,9 @@ impl Parser:
                 self.err("an array of tuples is not core-2 yet")
                 return TY_I64
             return mk_tty(self.tup_intern(es))
+        if self.peek() = TK_INT:
+            self.err("'" ⧺ self.ttext(self.pos) ⧺ "' does not name a type; a type is written by name, as i64")
+            return TY_I64
         let name := self.ttext(self.pos)
         _ ← self.eat_name("a type name")
         if name = "std":
