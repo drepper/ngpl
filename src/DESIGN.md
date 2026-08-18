@@ -184,6 +184,12 @@ Attempt 3 grows core-1 to **core-2** with structs:
   binding may be born from one — or reborn: a mut array now takes any
   fresh array on reassignment, `x ← x ⧺ […]` included.  A bare `∅`
   as a unit body is the nothing it names.
+- **while bindings**: `while x := e:` evaluates `e` afresh each
+  turn, loops while it answers a value, and `x` names the value
+  inside the body — an optional-answering call unboxed by the loop's
+  own test, or `pop`, whose emptiness is the test (no boxing at all:
+  one length check, then the pop).  `get` is refused by name — it
+  answers the same place every turn.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's
@@ -419,7 +425,7 @@ the interpreter **and** compiled, outputs and exit codes diffed — the
 strict-subset rule made executable.  `--impl=` selects a side:
 `bootstrap`, `compiled` (ngplc under the interpreter), `native` (the
 self-hosted `build/ngplc`, the whole sweep in ~2.4 s), `both` (the
-default) or `all`.  Twenty-nine shared programs cover the whole
+default) or `all`.  Thirty shared programs cover the whole
 core-2 surface including the stopping paths, and six bootstrap test
 files whose whole `@test` surface sits inside the subset run as
 shared tests besides: compiled, run with `--test`, and their stdout,

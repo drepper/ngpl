@@ -1,0 +1,34 @@
+// core-2: while x := e loops while e answers a value, x naming it
+// inside the body -- an optional-answering call, or pop's own test.
+
+let LIMIT : i64 = 5
+
+fn count_from(state : &mut i64[]) → i64?:
+    if state[0] >= LIMIT:
+        return ∅
+    state[0] ← state[0] + 1
+    ∃(state[0])
+
+@start
+@impure
+fn main():
+    let st : mut i64[] = [0i64]
+    let total : mut i64 = 0
+    while e := count_from(&st):
+        total ← total + e
+    std.println("{}", total)
+    let v : mut i64[] = [1i64, 2, 3]
+    let sum : mut i64 = 0
+    while x := v.pop():
+        sum ← sum + x
+    std.println("{} {}", sum, #v)
+    let names : mut str[] = ["a", "b"]
+    let joined : mut str = ""
+    while nm := names.pop():
+        joined ← joined ⧺ nm
+    std.println("{}", joined)
+    let brk : mut i64[] = [9i64, 8, 7]
+    while y := brk.pop():
+        if y = 8:
+            break
+    std.println("{}", #brk)

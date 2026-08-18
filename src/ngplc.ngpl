@@ -985,6 +985,7 @@ let NK_LNAND : i64 = 54     // ⊼
 let NK_LNOR : i64 = 58      // ⊽
 let NK_SLICE : i64 = 59     // v[a…b]: na = base, nb = lo, nc = hi
 let NK_RESHAPE : i64 = 60   // n ⍴ x: na = the count, nb = the filler
+let NK_WHILEB : i64 = 61    // while x := e: na = e, nb = body; name token
 let NK_ELEMOF : i64 = 43    // key ∊ hash
 let NK_ADD : i64 = 20
 let NK_SUB : i64 = 21
@@ -1923,6 +1924,14 @@ impl Parser:
             return self.mknode(NK_IF, at, cond, then_blk, else_blk)
         if k = TK_WHILE:
             self.pos ← self.pos + 1
+            if self.peek() = TK_IDENT and self.peek2() = TK_DEFINE:
+                // while x := e: the loop runs while e answers a value,
+                // and x names it inside the body
+                let wname_tok : i64 = self.pos
+                self.pos ← self.pos + 2
+                let wcond : i64 = self.parse_expr()
+                let wbody : i64 = self.parse_block()
+                return self.mknode(NK_WHILEB, wname_tok, wcond, wbody, 0)
             let cond : i64 = self.parse_expr()
             let body : i64 = self.parse_block()
             return self.mknode(NK_WHILE, at, cond, body, 0)
@@ -4263,6 +4272,34 @@ impl Checker:
                     self.derr(tok, "the ∅ arm answers nothing on some path")
         elif k = NK_FOREACH:
             self.check_foreach(id, tok, na, nb)
+        elif k = NK_WHILEB:
+            // pop unwraps here the way ?? unwraps it: the loop's own
+            // test is what a default would be
+            let ismc : bool = self.kind_of(na) = NK_MCALL
+            if ismc:
+                self.check_mcall(na, self.a.ntok[na × 1¤ptrdiff],
+                                 self.a.na[na × 1¤ptrdiff],
+                                 self.a.nb[na × 1¤ptrdiff], true)
+            else:
+                self.check_expr(na, TY_UNIT)
+            let wct : i64 = self.ty_of(na)
+            let wmid : i64 = self.a.nc[na × 1¤ptrdiff] if ismc else 0
+            let wbt : mut i64 = TY_I64
+            if ismc and wmid = MID_GET:
+                self.derr(tok, "get answers the same place every turn; a while binding wants what moves")
+            elif ismc and wmid = MID_POP:
+                wbt ← wct
+            elif ty_is_opt(wct):
+                wbt ← ty_opt_base(wct)
+            else:
+                self.derr(tok, "a while binding loops while a value is there; this answers " ⧺ type_name(wct) ⧺ ", not an optional")
+            self.push_scope()
+            let wslot : i64 = self.declare(tok, wbt, 0)
+            self.nslot[id × 1¤ptrdiff] ← wslot
+            self.loop_depth ← self.loop_depth + 1
+            self.check_block(nb, false)
+            self.loop_depth ← self.loop_depth - 1
+            self.pop_scope()
         elif k = NK_FOREACHA:
             self.check_expr(na, TY_UNIT)
             let t : i64 = self.ty_of(na)
@@ -5515,6 +5552,31 @@ impl Lower:
             self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         elif k = NK_FOREACH:
             self.lower_foreach(sid, tok, na, nb, ret_ty)
+        elif k = NK_WHILEB:
+            let evar : i64 = self.nslot[sid × 1¤ptrdiff]
+            let ltop : i64 = self.label()
+            let lend : i64 = self.label()
+            self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+            if self.kof(na) = NK_MCALL and self.a.nc[na × 1¤ptrdiff] = MID_POP:
+                // pop's own emptiness is the loop's test
+                let av9 : i64 = self.lower_expr(self.a.na[na × 1¤ptrdiff])
+                let n9 : i64 = self.tmp()
+                self.ir(IR_ALEN, av9, 0, 0, n9, 0)
+                self.ir(IR_JZ, n9, lend, 0, 0, 0)
+                let dz : i64 = self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, dz, 0)
+                self.ir(IR_APOP, av9, dz, 0, evar, width_of(self.tof(na)))
+            else:
+                let v9 : i64 = self.lower_expr(na)
+                self.ir(IR_JZ, v9, lend, 0, 0, 0)
+                self.ir(IR_FLD, v9, 0, 0, evar, 0)
+            self.breaks.push(lend)
+            self.conts.push(ltop)
+            self.lower_block(nb, false, ret_ty)
+            _ ← self.breaks.pop() ?? 0
+            _ ← self.conts.pop() ?? 0
+            self.ir(IR_JMP, ltop, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         elif k = NK_FOREACHA:
             self.lower_foreacha(sid, tok, na, nb, ret_ty)
         elif k = NK_BREAK:
