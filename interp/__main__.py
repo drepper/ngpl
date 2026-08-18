@@ -3235,6 +3235,9 @@ def main():
                           preconditions=defn.preconditions,
                           postconditions=defn.postconditions)
             eval_inst = Evaluator(env)
+            # The body runs to be measured against its expectations, so
+            # its warnings are collected for matching, not reported.
+            eval_inst._collect_warnings = True
             try:
                 eval_inst._call_user_func(fv, [])
             except Exception as e:

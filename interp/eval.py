@@ -1032,6 +1032,9 @@ class Evaluator:
         self._current_ret_type: str | None = None
         self._frozen_vars: dict[str, str] = {}
         self._warnings: list[str] = []
+        # True while an @expect body runs: its warnings are collected
+        # for matching rather than reported to the user.
+        self._collect_warnings: bool = False
         self._wrapping: bool = False
         self._catch_depth: int = 0
         self._loops: list[str | None] = []
@@ -4094,10 +4097,14 @@ class Evaluator:
             _ReturnSentinel: when a return statement is encountered (caught by caller).
         """
         result = none()
-        for stmt in stmts:
+        last = len(stmts) - 1
+        for i, stmt in enumerate(stmts):
             result = self.eval_stmt(stmt)
             if isinstance(result, _ReturnSentinel):
                 raise result
+            if (i != last and isinstance(stmt, ExprStmt)
+                    and isinstance(result, LambdaValue)):
+                self._warn_discarded_lambda(result)
         return result
 
     def eval_stmt(self, stmt):
@@ -4456,11 +4463,30 @@ class Evaluator:
 
     def _es_ExprStmt(self, stmt):
         pos = getattr(stmt, "pos", None)
-        result = self.eval_expr(stmt.expr)
-        if isinstance(result, LambdaValue):
-            self._warnings.append(
-                "lambda value is not used (not assigned or returned)")
-        return result
+        return self.eval_expr(stmt.expr)
+
+    def _warn_discarded_lambda(self, value):
+        """Report a lambda that a statement computed and then dropped.
+
+        The spec promises this catches accidental partial applications.
+        The trailing statement of a body is not reported here: its value
+        may be the function's answer, and the static analysis already
+        weighs that case against the return type.
+        """
+        message = "lambda value is not used (not assigned or returned)"
+        if value.partial_func is not None:
+            n = len(value.params)
+            message += (
+                f"; the call answered a partial application of "
+                f"'{value.partial_func.name}' that still waits for "
+                f"{n} argument{'s' if n != 1 else ''}")
+        self._warnings.append(message)
+        if not self._collect_warnings:
+            from interp.errors import diagnostic_level
+            level = diagnostic_level("warning")
+            if level == "error":
+                raise TypeError(message)
+            print(f"{level}: {message}", file=_sys.stderr)
 
     def _es_IfStmt(self, stmt):
         pos = getattr(stmt, "pos", None)
@@ -5051,13 +5077,16 @@ class Evaluator:
         diagnostics.extend(
             ("error", e) for e in getattr(node.stmt, "static_errors", ()))
         saved_warnings = self._warnings
+        saved_collect = self._collect_warnings
         self._warnings = []
+        self._collect_warnings = True
         try:
             self.eval_stmt(node.stmt)
         except Exception as e:
             diagnostics.append(("error", str(e)))
         diagnostics.extend(("warning", w) for w in self._warnings)
         self._warnings = saved_warnings
+        self._collect_warnings = saved_collect
 
         remaining = list(node.expectations)
         for level, msg in diagnostics:
