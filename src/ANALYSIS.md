@@ -64,8 +64,12 @@ values (`(2, 4) ⍴ (1…8)`) and `generate` with lambdas.  Range
 values then fell in their own batch — expressions at the spec's
 precedence, a three-slot box, the same sign-agnostic loop the
 foreach header always used, `⍴` fillers that materialize and cycle
-— leaving lambdas (the `λ` byte is not even lexed yet) and matrix
-column selections as the walls those files still stand behind.
+— and lambdas followed in the next batch: λ literals with by-value
+captures, named functions as values, closure boxes with the code
+address in slot 0, indirect calls, and `generate` over ranges, all
+conformant byte for byte on the first probe run.  test_generate
+now stands one wall away: currying (`multiply(3)` as generate's
+mapper), with matrix column selections holding test_matrix_param.
 The interpreter's `println` of a range leaked the implementation's
 `RangeValue(3…7)` spelling and now answers the language's `3…7`.  The batch also caught a quiet
 acceptance bug through self-hosting: the bootstrap reserves every

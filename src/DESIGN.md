@@ -293,6 +293,27 @@ Attempt 3 grows core-1 to **core-2** with structs:
   Refused by name: `#`, subscripting, printing, and equality — the
   bootstrap compares ranges by identity (two equal spellings answer
   false), which is not a semantics worth reproducing.
+- **lambdas**: `λx : T |cap| → R: expr` is a value — a box holding
+  the code address of a synthesized function and the captures, read
+  by value where the lambda is written, as the interpreter's are
+  (mutating a captured binding afterward changes nothing).  Each λ
+  lowers to its own function past the synthetics: parameters arrive
+  in the argument registers, the box rides behind them as a hidden
+  last argument, and the callee unpacks its own captures — so a
+  named function's bare name also travels as a value in a one-slot
+  box, ignoring the box register, and every call site is
+  capture-agnostic.  Two new IR ops carry it: `IR_FADDR` (a
+  RIP-relative `lea` through the same relocation list calls use)
+  and `IR_CALLI` (`call r11`).  Signatures intern into an Ast table
+  (band 132096+, parameters and answer; captures are the value's,
+  not the type's).  The checker closes a scope floor over the body:
+  it sees parameters, captures and functions, nothing else, and a
+  `→ ∅` lambda parses (so an @expect may hold one) but refuses.
+  `generate(f, r)` maps a range through any one-parameter function
+  value into a fresh array, reusing the range materializer.
+  Refused by name: currying (fewer arguments than parameters),
+  parameters beyond five (the box must ride a register), container
+  captures, and impure functions as values.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's

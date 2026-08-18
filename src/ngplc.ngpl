@@ -108,6 +108,7 @@ let TK_LNOR : i64 = 93       // ⊽
 let TK_RESHAPE : i64 = 94    // ⍴
 let TK_MATCH : i64 = 38
 let TK_RESERVED : i64 = 99   // a word the bootstrap reserves and core-1 does not use
+let TK_LAMBDA : i64 = 100    // λ
 
 // The keyword table: one hash probe replaces a comparison ladder.  A
 // word the bootstrap language reserves but core-1 gives no meaning is
@@ -133,7 +134,8 @@ let GLYPHS2 : std.hash(i64, i64) = (⸨
     49836: 70,      // ¬
     49828: 76,      // ¤
     50071: 53,      // ×
-    50103: 54⸩)     // ÷
+    50103: 54,      // ÷
+    52923: 100⸩)    // λ
 
 let GLYPHS3 : std.hash(i64, i64) = (⸨
     14847411: 87,   // ⍳
@@ -370,6 +372,20 @@ fn ty_rgelem(t : i64) → i64:
 fn mk_rgty(elem : i64) → i64:
     131072 + elem
 
+// lambdas: 132096 + lidx into the Ast's signature table; captures are
+// the value's, not the type's
+fn ty_is_lam(t : i64) → bool:
+    t >= 132096 and t < 262144
+
+@pre(ty_is_lam(t))
+fn ty_lidx(t : i64) → i64:
+    t - 132096
+
+@pre(lidx >= 0 and lidx < 130048)
+@post(r: ty_is_lam(r))
+fn mk_lty(lidx : i64) → i64:
+    132096 + lidx
+
 // a matrix's rows: arrays whose length is the matrix's to keep, so
 // they read as any array does and refuse to be resized; the band
 // borrows the top of the dynamic arrays' own
@@ -426,6 +442,7 @@ fn type_name(t0 : i64) → str:
     if t = TY_FTYPE: return prefix ⧺ "filetype"
     if ty_is_mat(t): return prefix ⧺ "a matrix"
     if ty_is_rg(t): return prefix ⧺ "range"
+    if ty_is_lam(t): return prefix ⧺ "a function"
     if t = TY_UNT: return "untyped integer"
     if t = TY_EMPTY: return "∅"
     if ty_is_struct(t): return prefix ⧺ "struct #" ⧺ i64_str(ty_sidx(t))
@@ -503,7 +520,7 @@ let CL_DIGIT : i64 = 3
 let CL_IDENT : i64 = 4
 let CL_QUOTE : i64 = 5
 let CL_SLASH : i64 = 6
-let CL_MB2 : i64 = 7         // two-byte glyph lead (C2, C3)
+let CL_MB2 : i64 = 7         // two-byte glyph lead (C2, C3, CE)
 let CL_MB3 : i64 = 8         // three-byte glyph lead (E2)
 let CL_TAB : i64 = 9
 let CL_COLON : i64 = 10      // : or :=
@@ -534,6 +551,7 @@ fn mkcls() → i64[]:
     t[47] ← CL_SLASH
     t[194] ← CL_MB2
     t[195] ← CL_MB2
+    t[206] ← CL_MB2
     t[226] ← CL_MB3
     t[58] ← CL_COLON
     t[60] ← CL_LT
@@ -1107,6 +1125,8 @@ let NK_MATCH : i64 = 84     // na = subject, nb = extra [some-block, empty-block
 let NK_LETT : i64 = 85      // let (a, b) …: na = init, nb = 1 when mut, nc = extra [n, type or ⁻1, name-token…]
 let NK_STOREIDXP : i64 = 86 // path[i] ← v: na = base expr, nb = index, nc = value
 let NK_RANGEV : i64 = 87    // a…b and a…step…b as a value: na = lo, nb = hi, nc = step or ⁻1
+let NK_LAMBDA : i64 = 88    // λ literal: na = extra [np, (tok,ty)…, ncap, tok…, ret], nb = body, nc = lambda index
+let NK_FNVAL : i64 = 89     // a named function as a value: na = fn index
 
 // std builtins reachable from core-1
 let SB_PRINTLN : i64 = 1
@@ -1169,6 +1189,9 @@ struct Ast:
     mel : i64[]          // matrices: the element type per shape
     mrr : i64[]          // … the row count, ⁻1 where the type leaves it open
     mcc : i64[]          // … and the row length, likewise
+    lts : i64[]          // lambda signatures: start into lte per shape
+    ltl : i64[]          // … how many parameters
+    lte : i64[]          // … the parameter types then the answer, flattened
     ignored : str[]      // names @expect left uncompiled
     igtests : str[]      // the @test names among them, in source order
     diags : Diag[]
@@ -1200,6 +1223,9 @@ struct Parser:
     mel : i64[]
     mrr : i64[]
     mcc : i64[]
+    lts : i64[]
+    ltl : i64[]
+    lte : i64[]
     ignored : str[]
     igtests : str[]
     diags : Diag[]
@@ -1472,6 +1498,31 @@ impl Parser:
         self.fas.push(size)
         m
 
+    // equal lambda signatures share one type code, as tuple shapes do
+    fn lam_intern(&mut self, pts : i64[], ret : i64) → i64:
+        let n : i64 = @dropunit(#pts)
+        let m : i64 = @dropunit(#self.ltl)
+        let sh : mut i64 = 0
+        while sh < m:
+            if self.ltl[sh × 1¤ptrdiff] = n:
+                let st : i64 = self.lts[sh × 1¤ptrdiff]
+                let same : mut bool = self.lte[(st + n) × 1¤ptrdiff] = ret
+                let i : mut i64 = 0
+                while i < n:
+                    same ← same and self.lte[(st + i) × 1¤ptrdiff] = pts[i × 1¤ptrdiff]
+                    i ← i + 1
+                if same:
+                    return sh
+            sh ← sh + 1
+        self.lts.push(@dropunit(#self.lte))
+        self.ltl.push(n)
+        let j : mut i64 = 0
+        while j < n:
+            self.lte.push(pts[j × 1¤ptrdiff])
+            j ← j + 1
+        self.lte.push(ret)
+        m
+
     // equal matrix shapes share one type code, as tuple shapes do
     fn mat_intern(&mut self, elem : i64, r : i64, c : i64) → i64:
         let m : i64 = @dropunit(#self.mel)
@@ -1541,6 +1592,66 @@ impl Parser:
         off
 
     // postfix: indexing and method calls chain off a primary
+    // λx : T, y : T |cap| → R: expr — the captures are read where the
+    // lambda is written, by value, and the body is one expression
+    fn parse_lambda(&mut self, at : i64) → i64:
+        self.pos ← self.pos + 1
+        let ptoks : mut i64[] = []
+        let pts : mut i64[] = []
+        while true:
+            let ptok : i64 = self.pos
+            _ ← self.eat_name("the parameter's name")
+            _ ← self.eat(TK_COLON, "':' and the parameter's type")
+            let pt : i64 = self.parse_type(false)
+            if not ((ty_is_int(pt) and ty_unit(pt) = 0) or pt = TY_BOOL or pt = TY_CHAR or pt = TY_STR):
+                self.err("a core-2 lambda takes plain integers, truth values, characters and strings")
+                return self.mknode(NK_INT, at, 0, 0, 0)
+            ptoks.push(ptok)
+            pts.push(pt)
+            if self.failed():
+                return self.mknode(NK_INT, at, 0, 0, 0)
+            if self.peek() = TK_COMMA:
+                self.pos ← self.pos + 1
+            else:
+                break
+        if #pts > 5:
+            self.err("a core-2 lambda takes at most five parameters")
+            return self.mknode(NK_INT, at, 0, 0, 0)
+        let caps : mut i64[] = []
+        if self.peek() = TK_BOR:
+            self.pos ← self.pos + 1
+            while self.peek() ≠ TK_BOR and not self.failed():
+                let ctok : i64 = self.pos
+                _ ← self.eat_name("the captured name")
+                caps.push(ctok)
+                if self.peek() = TK_COMMA:
+                    self.pos ← self.pos + 1
+            _ ← self.eat(TK_BOR, "'|' closing the capture list")
+        _ ← self.eat(TK_ARROW, "'→' and the lambda's answer")
+        let ret : mut i64 = TY_UNIT
+        if self.peek() = TK_EMPTY:
+            // parsed so an @expect may hold it; the checker refuses it
+            self.pos ← self.pos + 1
+        else:
+            ret ← self.parse_type(false)
+            if not ((ty_is_int(ret) and ty_unit(ret) = 0) or ret = TY_BOOL or ret = TY_CHAR or ret = TY_STR):
+                self.err("a core-2 lambda answers a plain integer, a truth value, a character or a string")
+                return self.mknode(NK_INT, at, 0, 0, 0)
+        _ ← self.eat(TK_COLON, "':' and the lambda's body")
+        let body : i64 = self.parse_expr()
+        let li : i64 = self.lam_intern(pts, ret)
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(@dropunit(#pts))
+        foreach i := 0…#pts - 1:
+            self.extra.push(ptoks[i])
+            self.extra.push(pts[i])
+        self.extra.push(@dropunit(#caps))
+        if #caps > 0:
+            foreach i := 0…#caps - 1:
+                self.extra.push(caps[i])
+        self.extra.push(ret)
+        self.mknode(NK_LAMBDA, at, off, body, li)
+
     fn parse_postfix(&mut self, base0 : i64) → i64:
         let e : mut i64 = base0
         while not self.failed():
@@ -1596,6 +1707,8 @@ impl Parser:
     fn parse_primary(&mut self) → i64:
         let k : i64 = self.peek()
         let at : i64 = self.pos
+        if k = TK_LAMBDA:
+            return self.parse_lambda(at)
         if k = TK_INT:
             self.pos ← self.pos + 1
             let lit : i64 = self.mknode(NK_INT, at, self.toks.val[at × 1¤ptrdiff],
@@ -2567,6 +2680,7 @@ fn parse(toks : Toks, src : byte[]) → Ast:
                                  snames: [], tts: [], ttl: [], tte: [],
                                  fae: [], fas: [],
                                  mel: [], mrr: [], mcc: [],
+                                 lts: [], ltl: [], lte: [],
                                  ignored: [], igtests: [],
                                  diags: [], poisoned: false})
     // a struct may be written below whatever names it, so the names
@@ -2605,6 +2719,7 @@ fn parse(toks : Toks, src : byte[]) → Ast:
          structs: p.structs, tts: p.tts, ttl: p.ttl, tte: p.tte,
          fae: p.fae, fas: p.fas,
          mel: p.mel, mrr: p.mrr, mcc: p.mcc,
+         lts: p.lts, ltl: p.ltl, lte: p.lte,
          ignored: p.ignored, igtests: p.igtests, diags: p.diags})
 
 // ===========================================================================
@@ -2797,6 +2912,8 @@ struct Chk:
     fslots : i64[]
     gvals : i64[]        // the folded initial value of every global
     ginit : i64[]        // globals whose value is built as the run begins
+    lams : i64[]         // every λ node, in the order lowered
+    lamns : i64[]        // … and the slot count its frame must cover
     diags : Diag[]
 
 struct Checker:
@@ -2822,6 +2939,9 @@ struct Checker:
     loop_depth : i64
     cur_fn : i64
     in_contract : bool
+    scope_floor : i64    // a lambda's body sees nothing below this
+    lams : i64[]         // every λ node, in the order lowered
+    lamns : i64[]        // … and the slot count its frame must cover
 
 impl Checker:
     fn derr(&mut self, tok : i64, m : str):
@@ -2879,7 +2999,7 @@ impl Checker:
 
     fn lookup(&self, name : str) → i64:
         let i : mut i64 = @dropunit(#self.snames) - 1
-        while i >= 0:
+        while i >= self.scope_floor:
             if self.snames[i × 1¤ptrdiff] = name:
                 return i
             i ← i - 1
@@ -3368,6 +3488,60 @@ impl Checker:
             elif not self.try_fit(nb, et):
                 self.derr(tok, "⍳: the container holds " ⧺ type_name(et) ⧺ ", and what is looked for is " ⧺ type_name(self.ty_of(nb)))
             self.set_type(id, mk_oty(ty_with_unit(TY_I64, UNIT_PTRDIFF)))
+        elif k = NK_LAMBDA:
+            let loff : i64 = na
+            let np9 : i64 = self.a.extra[loff × 1¤ptrdiff]
+            let ncap9 : i64 = self.a.extra[(loff + 1 + np9 × 2) × 1¤ptrdiff]
+            let lret : i64 = self.a.extra[(loff + 2 + np9 × 2 + ncap9) × 1¤ptrdiff]
+            if lret = TY_UNIT:
+                self.derr(tok, "a lambda must not return ∅; it answers a value")
+                self.set_type(id, TY_I64)
+                return
+            // captures resolve outside, before the floor closes: their
+            // values are read where the lambda is written
+            let couter : mut i64[] = []
+            let ctoks : mut i64[] = []
+            let ctys : mut i64[] = []
+            if ncap9 > 0:
+                foreach ci := 0…ncap9 - 1:
+                    let ctok : i64 = self.a.extra[(loff + 2 + np9 × 2 + ci) × 1¤ptrdiff]
+                    let cs : i64 = self.lookup(self.text(ctok))
+                    if cs = ⁻1:
+                        self.derr(ctok, "'" ⧺ self.text(ctok) ⧺ "' is not here to capture")
+                        self.set_type(id, TY_I64)
+                        return
+                    let cty0 : i64 = self.stype[cs × 1¤ptrdiff]
+                    if ty_ref_kind(cty0) ≠ 0 or not ((ty_is_int(cty0)) or cty0 = TY_BOOL or cty0 = TY_CHAR or cty0 = TY_STR):
+                        self.derr(ctok, "a capture is one value read now; '" ⧺ self.text(ctok) ⧺ "' is " ⧺ type_name(cty0))
+                        self.set_type(id, TY_I64)
+                        return
+                    couter.push(self.sslot[cs × 1¤ptrdiff])
+                    ctoks.push(ctok)
+                    ctys.push(cty0)
+            self.push_scope()
+            let floor9 : i64 = self.scope_floor
+            self.scope_floor ← @dropunit(#self.snames)
+            foreach pi := 0…np9 - 1:
+                let ptok : i64 = self.a.extra[(loff + 1 + pi × 2) × 1¤ptrdiff]
+                let pty : i64 = self.a.extra[(loff + 2 + pi × 2) × 1¤ptrdiff]
+                let ps : i64 = self.declare(ptok, pty, 0)
+                self.a.extra[(loff + 1 + pi × 2) × 1¤ptrdiff] ← ps
+            if ncap9 > 0:
+                foreach ci := 0…ncap9 - 1:
+                    _ ← self.declare(ctoks[ci × 1¤ptrdiff], ctys[ci × 1¤ptrdiff], 0)
+                    // the cell keeps the outer slot: the value's source
+                    self.a.extra[(loff + 2 + np9 × 2 + ci) × 1¤ptrdiff] ← couter[ci × 1¤ptrdiff]
+            self.check_expr(nb, lret)
+            if self.is_open(self.ty_of(nb)):
+                self.adopt(nb, lret)
+            elif not self.try_fit(nb, lret):
+                self.derr(tok, "the lambda answers " ⧺ type_name(lret) ⧺ ", not " ⧺ type_name(self.ty_of(nb)))
+            self.scope_floor ← floor9
+            self.pop_scope()
+            self.lams.push(id)
+            self.lamns.push(self.nslots)
+            self.nslot[id × 1¤ptrdiff] ← @dropunit(#self.lams) - 1
+            self.set_type(id, mk_lty(nc))
         elif k = NK_RANGEV:
             self.check_expr(na, TY_UNIT)
             self.check_expr(nb, self.ty_of(na))
@@ -3563,6 +3737,25 @@ impl Checker:
             return
         let g : i64 = self.global_index(name)
         if g = ⁻1:
+            let fidx : i64 = self.fn_index(name)
+            if fidx ≠ ⁻1:
+                // the function's name alone: it travels as a value
+                let fd := self.a.fns[fidx × 1¤ptrdiff]
+                let np : i64 = self.a.extra[fd.params_off × 1¤ptrdiff]
+                let ok9 : mut bool = np >= 1 and np <= 5 and ((ty_is_int(fd.ret) and ty_unit(fd.ret) = 0) or fd.ret = TY_BOOL or fd.ret = TY_CHAR or fd.ret = TY_STR) and not fd.is_impure
+                let pts9 : mut i64[] = []
+                foreach pi := 0…np - 1:
+                    let pty : i64 = self.a.extra[(fd.params_off + 2 + pi × 2) × 1¤ptrdiff]
+                    ok9 ← ok9 and ty_ref_kind(pty) = 0 and ((ty_is_int(pty) and ty_unit(pty) = 0) or pty = TY_BOOL or pty = TY_CHAR or pty = TY_STR)
+                    pts9.push(ty_strip_ref(pty))
+                if not ok9:
+                    self.derr(tok, "'" ⧺ name ⧺ "' does not travel as a value; only a pure function of up to five plain scalars does")
+                    self.set_type(id, TY_I64)
+                    return
+                self.a.nkind[id × 1¤ptrdiff] ← NK_FNVAL
+                self.a.na[id × 1¤ptrdiff] ← fidx
+                self.set_type(id, mk_lty(self.lam_intern(pts9, fd.ret)))
+                return
             if self.is_ignored_name(name):
                 self.derr(tok, "'" ⧺ name ⧺ "' expects errors under @expect and was left uncompiled")
             else:
@@ -3584,6 +3777,41 @@ impl Checker:
 
     fn farr_size(&self, t : i64) → i64:
         self.a.fas[ty_fidx(t) × 1¤ptrdiff]
+
+    // the checker interns a named function's signature when it turns
+    // into a value, as the parser interns a written-out λ's
+    fn lam_intern(&mut self, pts : i64[], ret : i64) → i64:
+        let n : i64 = @dropunit(#pts)
+        let m : i64 = @dropunit(#self.a.ltl)
+        let sh : mut i64 = 0
+        while sh < m:
+            if self.a.ltl[sh × 1¤ptrdiff] = n:
+                let st : i64 = self.a.lts[sh × 1¤ptrdiff]
+                let same : mut bool = self.a.lte[(st + n) × 1¤ptrdiff] = ret
+                let i : mut i64 = 0
+                while i < n:
+                    same ← same and self.a.lte[(st + i) × 1¤ptrdiff] = pts[i × 1¤ptrdiff]
+                    i ← i + 1
+                if same:
+                    return sh
+            sh ← sh + 1
+        self.a.lts.push(@dropunit(#self.a.lte))
+        self.a.ltl.push(n)
+        let j : mut i64 = 0
+        while j < n:
+            self.a.lte.push(pts[j × 1¤ptrdiff])
+            j ← j + 1
+        self.a.lte.push(ret)
+        m
+
+    fn lam_np(&self, t : i64) → i64:
+        self.a.ltl[ty_lidx(t) × 1¤ptrdiff]
+
+    fn lam_pt(&self, t : i64, i : i64) → i64:
+        self.a.lte[(self.a.lts[ty_lidx(t) × 1¤ptrdiff] + i) × 1¤ptrdiff]
+
+    fn lam_ret(&self, t : i64) → i64:
+        self.a.lte[(self.a.lts[ty_lidx(t) × 1¤ptrdiff] + self.a.ltl[ty_lidx(t) × 1¤ptrdiff]) × 1¤ptrdiff]
 
     // the checker interns shapes a slice invents, as the parser does
     fn mat_intern(&mut self, elem : i64, r : i64, c : i64) → i64:
@@ -4076,6 +4304,13 @@ impl Checker:
         if name = "static_assert" or name = "static_assert_eq":
             self.check_static_assert(id, tok, args_off, name = "static_assert_eq")
             return
+        if name = "generate" and self.fn_index("generate") = ⁻1:
+            self.check_generate(id, tok, args_off, argc)
+            return
+        let vs9 : i64 = self.lookup(name)
+        if vs9 ≠ ⁻1 and ty_is_lam(ty_strip_ref(self.stype[vs9 × 1¤ptrdiff])):
+            self.check_lcall(id, tok, args_off, argc, vs9)
+            return
         let f : i64 = self.fn_index(name)
         if f = ⁻1:
             if self.is_ignored_name(name):
@@ -4105,6 +4340,60 @@ impl Checker:
             self.check_one_arg(tok, name, j + 1, arg, pty)
             j ← j + 1
         self.set_type(id, callee.ret)
+
+    fn check_lcall(&mut self, id : i64, tok : i64, args_off : i64,
+                   argc : i64, vs : i64):
+        let lt : i64 = ty_strip_ref(self.stype[vs × 1¤ptrdiff])
+        let np : i64 = self.lam_np(lt)
+        if argc < np:
+            self.derr(tok, "core-2 applies a function whole; currying is not core-2 yet")
+        elif argc > np:
+            self.derr(tok, "this function wants " ⧺ i64_str(np) ⧺ " arguments, not " ⧺ i64_str(argc))
+        let n9 : i64 = argc ⌊ np
+        if n9 > 0:
+            foreach j := 0…n9 - 1:
+                let arg : i64 = self.a.extra[(args_off + 1 + j) × 1¤ptrdiff]
+                let pt : i64 = self.lam_pt(lt, j)
+                self.check_expr(arg, pt)
+                if self.is_open(self.ty_of(arg)):
+                    self.adopt(arg, pt)
+                elif not self.try_fit(arg, pt):
+                    self.derr(tok, "argument " ⧺ i64_str(j + 1) ⧺ " is " ⧺ type_name(self.ty_of(arg)) ⧺ ", but the function takes " ⧺ type_name(pt))
+        self.a.nc[id × 1¤ptrdiff] ← 1
+        self.nslot[id × 1¤ptrdiff] ← self.sslot[vs × 1¤ptrdiff]
+        self.set_type(id, self.lam_ret(lt))
+
+    // generate(f, r): f maps each of the range's steps to an element
+    fn check_generate(&mut self, id : i64, tok : i64, args_off : i64, argc : i64):
+        if argc ≠ 2:
+            self.derr(tok, "generate takes the function and the range")
+            self.set_type(id, mk_aty(TY_I64))
+            return
+        let fe : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
+        let re : i64 = self.a.extra[(args_off + 2) × 1¤ptrdiff]
+        self.check_expr(fe, TY_UNIT)
+        let ft : i64 = self.ty_of(fe)
+        if not ty_is_lam(ft):
+            self.derr(tok, "generate's first argument is a function; this is " ⧺ type_name(ft))
+            self.check_expr(re, TY_UNIT)
+            self.set_type(id, mk_aty(TY_I64))
+            return
+        if self.lam_np(ft) ≠ 1:
+            self.derr(tok, "generate maps one value at a time; this function takes " ⧺ i64_str(self.lam_np(ft)))
+            self.check_expr(re, TY_UNIT)
+            self.set_type(id, mk_aty(self.lam_ret(ft)))
+            return
+        let pt : i64 = self.lam_pt(ft, 0)
+        if not ty_is_int(pt):
+            self.derr(tok, "generate walks a range, so the function takes a number; this one takes " ⧺ type_name(pt))
+        self.check_expr(re, pt)
+        let rt : i64 = self.ty_of(re)
+        if not ty_is_rg(rt):
+            self.derr(tok, "generate's second argument must be a range; this is " ⧺ type_name(rt))
+        elif ty_rgelem(rt) ≠ pt:
+            self.derr(tok, "the range counts " ⧺ type_name(ty_rgelem(rt)) ⧺ ", but the function takes " ⧺ type_name(pt))
+        self.a.nc[id × 1¤ptrdiff] ← 2
+        self.set_type(id, mk_aty(self.lam_ret(ft)))
 
     fn check_one_arg(&mut self, tok : i64, name : str, num : i64,
                      arg : i64, pty : i64):
@@ -4158,7 +4447,7 @@ impl Checker:
                 elif tl = TY_UNT and tr = TY_UNT:
                     self.adopt(x, TY_I64)
                     self.adopt(y, TY_I64)
-                if ty_is_arr(self.ty_of(x)) or ty_is_hash(self.ty_of(x)) or ty_is_tup(self.ty_of(x)) or ty_is_mat(self.ty_of(x)) or ty_is_rg(self.ty_of(x)) or self.ty_of(x) = TY_STR:
+                if ty_is_arr(self.ty_of(x)) or ty_is_hash(self.ty_of(x)) or ty_is_tup(self.ty_of(x)) or ty_is_mat(self.ty_of(x)) or ty_is_rg(self.ty_of(x)) or ty_is_lam(self.ty_of(x)) or self.ty_of(x) = TY_STR:
                     self.derr(tok, "assert_eq compares numbers in core-1")
                 elif not self.try_fit(x, self.ty_of(y)):
                     self.derr(tok, "assert_eq compares two of the same type")
@@ -5231,7 +5520,8 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
                                    diags: [], snames: [], stype: [], smut: [],
                                    sslot: [], marks: [], nslots: 0,
                                    loop_depth: 0, cur_fn: 0,
-                                   in_contract: false})
+                                   in_contract: false,
+                                   scope_floor: 0, lams: [], lamns: []})
     if #a.structs > 0:
         foreach i := 0…#a.structs - 1:
             let sd := a.structs[i]
@@ -5293,7 +5583,8 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
         assert(#c.fslots = #a.fns, "one slot count per function")
         assert(#c.gvals = #a.globals, "one folded value per global")
     (Chk{ntype: c.ntype, nslot: c.nslot, ncvt: c.ncvt, fslots: c.fslots,
-         gvals: c.gvals, ginit: c.ginit, diags: c.diags})
+         gvals: c.gvals, ginit: c.ginit, lams: c.lams, lamns: c.lamns,
+         diags: c.diags})
 
 // ===========================================================================
 // The IR: linear three-address code over virtual registers
@@ -5387,6 +5678,8 @@ let IR_ACAT : i64 = 95     // d ← arrays a then b, one fresh array
 let IR_SBYTES : i64 = 96   // d ← string a's bytes, a u8[]
 let IR_AREF : i64 = 97     // d ← the address of array a's element b
 let IR_DENTS : i64 = 98    // d ← the working directory's entries
+let IR_FADDR : i64 = 99    // d ← the code address of function a
+let IR_CALLI : i64 = 100   // d ← call the address in vreg a, args at extra b
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
 let IR_FLD : i64 = 67      // d ← field b of struct a
 let IR_FSTO : i64 = 68     // field b of struct a ← c
@@ -5428,7 +5721,8 @@ struct Lower:
     breaks : i64[]
     conts : i64[]
     in_wrap : i64
-    argsfix : i64        // the argument filter's index, ⁻1 for raw
+    argsfix : i64
+    lambase : i64        // the first lambda's function index        // the argument filter's index, ⁻1 for raw
     cur_ret : i64
     post_label : i64
     res_vreg : i64
@@ -5636,6 +5930,30 @@ impl Lower:
                 self.ir(IR_FSTO, d, fidx, ev, 0, 0)
                 i ← i + 1
             return d
+        if k = NK_LAMBDA:
+            let loff : i64 = na
+            let np9 : i64 = self.a.extra[loff × 1¤ptrdiff]
+            let ncap9 : i64 = self.a.extra[(loff + 1 + np9 × 2) × 1¤ptrdiff]
+            let ord9 : i64 = self.nslot[nid × 1¤ptrdiff]
+            let d9l : i64 = self.tmp()
+            self.ir(IR_SNEW, 1 + ncap9, 0, 0, d9l, 0)
+            let av9 : i64 = self.tmp()
+            self.ir(IR_FADDR, self.lambase + ord9, 0, 0, av9, 0)
+            self.ir(IR_FSTO, d9l, 0, av9, 0, 0)
+            let ci9 : mut i64 = 0
+            while ci9 < ncap9:
+                // the capture cell holds the outer slot: read its value
+                // now, into the box
+                self.ir(IR_FSTO, d9l, 1 + ci9, self.a.extra[(loff + 2 + np9 × 2 + ci9) × 1¤ptrdiff], 0, 0)
+                ci9 ← ci9 + 1
+            return d9l
+        if k = NK_FNVAL:
+            let d9f : i64 = self.tmp()
+            self.ir(IR_SNEW, 1, 0, 0, d9f, 0)
+            let av9f : i64 = self.tmp()
+            self.ir(IR_FADDR, na, 0, 0, av9f, 0)
+            self.ir(IR_FSTO, d9f, 0, av9f, 0, 0)
+            return d9f
         if k = NK_RANGEV:
             let lov9 : i64 = self.lower_expr(na)
             let hiv9 : i64 = self.lower_expr(nb)
@@ -6252,6 +6570,44 @@ impl Lower:
         self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         d
 
+    // generate(f, r): the range written out, then one call per step
+    fn lower_generate(&mut self, nid : i64, args_off : i64) → i64:
+        let fe : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
+        let re : i64 = self.a.extra[(args_off + 2) × 1¤ptrdiff]
+        let fv : i64 = self.lower_expr(fe)
+        let rga : i64 = self.lower_rg_arr(re)
+        let out : i64 = self.tmp()
+        self.ir(IR_ANEW, 4, 0, 0, out, 0)
+        let n9 : i64 = self.tmp()
+        self.ir(IR_ALEN, rga, 0, 0, n9, 0)
+        let ix9 : i64 = self.tmp()
+        self.ir(IR_CONST, 0, 0, 0, ix9, 0)
+        let one9 : i64 = self.tmp()
+        self.ir(IR_CONST, 1, 0, 0, one9, 0)
+        let ad9 : i64 = self.tmp()
+        self.ir(IR_FLD, fv, 0, 0, ad9, 0)
+        let ltop : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+        let c9 : i64 = self.tmp()
+        self.ir(IR_CLT, ix9, n9, 0, c9, 64 + 256)
+        self.ir(IR_JZ, c9, lend, 0, 0, 0)
+        let x9 : i64 = self.tmp()
+        self.ir(IR_AIDX, rga, ix9, 0, x9, 0)
+        let off9 : i64 = @dropunit(#self.extra)
+        self.extra.push(2)
+        self.extra.push(x9)
+        self.extra.push(fv)
+        let r9 : i64 = self.tmp()
+        self.ir(IR_CALLI, ad9, off9, 0, r9, 0)
+        self.ir(IR_APUSH, out, r9, 0, 0, 0)
+        let ni9 : i64 = self.tmp()
+        self.ir(IR_ADDW, ix9, one9, 0, ni9, 64 + 256)
+        self.ir(IR_MOV, ni9, 0, 0, ix9, 0)
+        self.ir(IR_JMP, ltop, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        out
+
     fn lower_arrlit(&mut self, nid : i64, off : i64) → i64:
         let n : i64 = self.a.extra[off × 1¤ptrdiff]
         let d : i64 = self.tmp()
@@ -6271,6 +6627,27 @@ impl Lower:
         if name = "assert" or name = "assert_eq":
             self.lower_assert(nid, tok, args_off, name = "assert_eq")
             return ⁻1
+        if self.a.nc[nid × 1¤ptrdiff] = 2:
+            return self.lower_generate(nid, args_off)
+        if self.a.nc[nid × 1¤ptrdiff] = 1:
+            // through the binding's box: the address in slot 0, the
+            // box itself riding along as the hidden last argument
+            let box9 : i64 = self.nslot[nid × 1¤ptrdiff]
+            let vr9 : mut i64[] = []
+            let ix9 : mut i64 = 0
+            while ix9 < argc:
+                vr9.push(self.lower_expr(self.a.extra[(args_off + 1 + ix9) × 1¤ptrdiff]))
+                ix9 ← ix9 + 1
+            let off9 : i64 = @dropunit(#self.extra)
+            self.extra.push(argc + 1)
+            foreach v := vr9:
+                self.extra.push(v)
+            self.extra.push(box9)
+            let ad9 : i64 = self.tmp()
+            self.ir(IR_FLD, box9, 0, 0, ad9, 0)
+            let d9 : i64 = self.tmp()
+            self.ir(IR_CALLI, ad9, off9, 0, d9, 0)
+            return d9
         let vregs : mut i64[] = []
         let i : mut i64 = 0
         while i < argc:
@@ -6881,6 +7258,71 @@ impl Lower:
         self.ir(IR_JMP, ltop, 0, 0, 0, 0)
         self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         self.tbase ← saved_base
+
+// one λ becomes one function: the parameters arrive in the argument
+// registers, the box rides behind them, and the captures come out of
+// the box into the slots the body reads
+fn lower_lambda_fn(lw : &mut Lower, a : Ast, chk : Chk, j : i64) → IrFn:
+    while #lw.op > 0:
+        _ ← lw.op.pop() ?? 0
+        _ ← lw.ia.pop() ?? 0
+        _ ← lw.ib.pop() ?? 0
+        _ ← lw.ic.pop() ?? 0
+        _ ← lw.idd.pop() ?? 0
+        _ ← lw.iww.pop() ?? 0
+    while #lw.extra > 0:
+        _ ← lw.extra.pop() ?? 0
+    lw.nlabels ← 0
+    let nid : i64 = chk.lams[j × 1¤ptrdiff]
+    let loff : i64 = a.na[nid × 1¤ptrdiff]
+    let np : i64 = a.extra[loff × 1¤ptrdiff]
+    let ncap : i64 = a.extra[(loff + 1 + np × 2) × 1¤ptrdiff]
+    let ret : i64 = a.extra[(loff + 2 + np × 2 + ncap) × 1¤ptrdiff]
+    lw.tbase ← chk.lamns[j × 1¤ptrdiff] ⌈ (np + 2)
+    lw.tnext ← lw.tbase
+    lw.tmax ← lw.tbase
+    lw.in_wrap ← 0
+    lw.cur_ret ← ret
+    lw.post_label ← ⁻1
+    lw.res_vreg ← ⁻1
+    lw.cur_fname ← "λ"
+    // the prologue put argument k in slot k; the body reads the slots
+    // the checker declared, so each value moves once
+    let pi : mut i64 = 0
+    while pi < np:
+        lw.ir(IR_MOV, pi, 0, 0, a.extra[(loff + 1 + pi × 2) × 1¤ptrdiff], 0)
+        pi ← pi + 1
+    let pslot0 : i64 = a.extra[(loff + 1) × 1¤ptrdiff]
+    let ci : mut i64 = 0
+    while ci < ncap:
+        lw.ir(IR_FLD, np, 1 + ci, 0, pslot0 + np + ci, 0)
+        ci ← ci + 1
+    let rv : i64 = lw.lower_expr(a.nb[nid × 1¤ptrdiff])
+    lw.ir(IR_RET, rv, 0, 0, 0, 0)
+    let opc : mut i64[] = []
+    let iac : mut i64[] = []
+    let ibc : mut i64[] = []
+    let icc : mut i64[] = []
+    let idc : mut i64[] = []
+    let iwc : mut i64[] = []
+    let exc : mut i64[] = []
+    foreach v := lw.op:
+        opc.push(v)
+    foreach v := lw.ia:
+        iac.push(v)
+    foreach v := lw.ib:
+        ibc.push(v)
+    foreach v := lw.ic:
+        icc.push(v)
+    foreach v := lw.idd:
+        idc.push(v)
+    foreach v := lw.iww:
+        iwc.push(v)
+    if #lw.extra > 0:
+        foreach v := lw.extra:
+            exc.push(v)
+    (IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
+          extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels})
 
 fn lower_fn(lw : &mut Lower, a : Ast, chk : Chk, f : i64) → IrFn:
     let d := a.fns[f × 1¤ptrdiff]
@@ -7506,6 +7948,21 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             if argc > 6:
                 em.b3(72, 129, 196)
                 em.w32(8 × (argc - 6))           // add rsp: the ride is over
+            em.store(R_AX, d)
+        elif o = IR_FADDR:
+            em.raxbar()
+            em.b2(72, 141)                   // lea rax, [rip+disp32]
+            em.jglobal(5, ⁻1, a)
+            em.store(R_AX, d)
+        elif o = IR_CALLI:
+            let argci : i64 = ir.extra[b × 1¤ptrdiff]
+            let ki : mut i64 = 0
+            while ki < argci:
+                em.load(arg_reg(ki), ir.extra[(b + 1 + ki) × 1¤ptrdiff])
+                ki ← ki + 1
+            em.load(R_R11, a)
+            em.raxbar()
+            em.b3(65, 255, 211)              // call r11
             em.store(R_AX, d)
         elif o = IR_RET:
             if a ≠ ⁻1:
@@ -9592,7 +10049,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
                                 op: [], ia: [], ib: [], ic: [], idd: [],
                                 iww: [], extra: [], tbase: 0, tnext: 0,
                                 tmax: 0, nlabels: 0, breaks: [], conts: [],
-                                in_wrap: 0, argsfix: ⁻1,
+                                in_wrap: 0, argsfix: ⁻1, lambase: 0,
                                 cur_ret: 0, post_label: ⁻1,
                                 res_vreg: ⁻1, cur_fname: "", dlog: []})
     let em : mut Emit = (Emit{code: [], cf_pos: [], cf_target: [],
@@ -9627,6 +10084,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
     // past the user's functions sit the synthetics: the global init,
     // the argument filter, the test driver
     lw.argsfix ← nfns + g1
+    lw.lambase ← nfns + g1 + 2
     let tdriver : i64 = nfns + g1 + 1
     if ninit > 0:
         em.jglobal(232, ⁻1, nfns)
@@ -9658,8 +10116,14 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
     let dir := lower_testdriver(&lw, a)
     em.fn_off.push(em.here())
     emit_fn(&em, dir, 0, lw.strs)
+    if #chk.lams > 0:
+        foreach j := 0…#chk.lams - 1:
+            let lir := lower_lambda_fn(&lw, a, chk, @dropunit(j))
+            em.fn_off.push(em.here())
+            let lnp : i64 = a.extra[a.na[chk.lams[j] × 1¤ptrdiff] × 1¤ptrdiff]
+            emit_fn(&em, lir, lnp + 1, lw.strs)
     // every function was emitted and left its offset behind
-    assert(@dropunit(#em.fn_off) = nfns + g1 + 2, "one code offset per function")
+    assert(@dropunit(#em.fn_off) = nfns + g1 + 2 + @dropunit(#chk.lams), "one code offset per function")
     assert(#em.rt_off = 39, "every runtime routine in place")
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:
