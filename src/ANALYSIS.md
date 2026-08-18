@@ -72,8 +72,13 @@ followed at once — a partial is another closure box holding a
 per-site shim, the bound values and the source box, so partials of
 partials compose with no shim knowing what it wraps — and
 test_generate flipped whole as the ninth shared file.  Matrix
-column selections still hold test_matrix_param, and test_lambda
-leans on generic `T'` parameters and `@replaceable`.
+column selections still hold test_matrix_param.  Generic `T'`
+signatures and `@replaceable` followed — one shape per program,
+bound by the first call, the body checked on demand with the
+caller's scopes parked; capture discipline enforced with the
+function's value-box behind the captured name — which leaves
+test_lambda standing behind optional and expected lambda returns
+(`→ i64?`, `→ i64!`) and the `?` postfix, the next wall there.
 The interpreter's `println` of a range leaked the implementation's
 `RangeValue(3…7)` spelling and now answers the language's `3…7`.  The batch also caught a quiet
 acceptance bug through self-hosting: the bootstrap reserves every

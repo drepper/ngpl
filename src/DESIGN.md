@@ -330,6 +330,24 @@ Attempt 3 grows core-1 to **core-2** with structs:
   with a parameter whose checker slot landed on the box's register
   cell — everything incoming is parked in fresh temporaries first
   now.
+- **type variables and @replaceable**: a name ending in `'` (the
+  lexer lets the prime ride an identifier) is a type variable, alone
+  in a signature.  The subset gives a generic function **one shape
+  per program**: the first call that reaches it binds each variable
+  to its argument's type, rewrites the signature concrete, and
+  checks the body then and there — the caller's scopes parked and
+  restored around the recursive check — so every later call meets an
+  ordinary function, and a disagreeing call refuses where the
+  interpreter would happily re-shape.  A `T'` return a parameter
+  does not bind is settled by the body's first answer.  A generic no
+  call ever reaches compiles to a stub.  `@replaceable` is capture
+  discipline: inside a lambda such a function must be captured
+  (`|mutable_fn|`), and the capture is the function's value-box read
+  where the lambda is written, so the call inside the body goes
+  through the box — one mechanism for captured locals, captured
+  lambdas and captured functions.  Refused by name: replaceable or
+  generic functions as bare values or curried, generic recursion,
+  suffixes on type variables, and the empty capture list.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's

@@ -375,13 +375,18 @@ fn mk_rgty(elem : i64) → i64:
 // lambdas: 132096 + lidx into the Ast's signature table; captures are
 // the value's, not the type's
 fn ty_is_lam(t : i64) → bool:
-    t >= 132096 and t < 262144
+    t >= 132096 and t < 194048
+
+// type variables: 194048 + the file-wide index of the spelling; they
+// live in signatures and are gone by the time a body is checked
+fn ty_is_var(t : i64) → bool:
+    t >= 194048 and t < 194080
 
 @pre(ty_is_lam(t))
 fn ty_lidx(t : i64) → i64:
     t - 132096
 
-@pre(lidx >= 0 and lidx < 130048)
+@pre(lidx >= 0 and lidx < 61952)
 @post(r: ty_is_lam(r))
 fn mk_lty(lidx : i64) → i64:
     132096 + lidx
@@ -443,6 +448,7 @@ fn type_name(t0 : i64) → str:
     if ty_is_mat(t): return prefix ⧺ "a matrix"
     if ty_is_rg(t): return prefix ⧺ "range"
     if ty_is_lam(t): return prefix ⧺ "a function"
+    if ty_is_var(t): return prefix ⧺ "a type variable"
     if t = TY_UNT: return "untyped integer"
     if t = TY_EMPTY: return "∅"
     if ty_is_struct(t): return prefix ⧺ "struct #" ⧺ i64_str(ty_sidx(t))
@@ -904,6 +910,9 @@ impl Lexer:
             let c : i64 = self.cls[b × 1¤ptrdiff]
             if c ≠ CL_IDENT and c ≠ CL_DIGIT: break
             self.adv()
+        if self.peek(0) = 39:
+            // F', T': the prime rides the name; it spells a type variable
+            self.adv()
         let text := run_str(self.src, spos, self.pos - spos)
         self.emit(KEYWORDS[text] ?? TK_IDENT, spos, self.pos - spos, scol, 0, 0)
 
@@ -1152,6 +1161,7 @@ struct FnDef:
     params_off : i64     // extra: [n, name-token, type, …]
     ret : i64
     body : i64
+    is_replaceable : bool
     is_impure : bool
     is_start : bool
     is_noreturn : bool
@@ -1227,6 +1237,7 @@ struct Parser:
     lts : i64[]
     ltl : i64[]
     lte : i64[]
+    tvn : str[]          // type-variable spellings, interned file-wide
     ignored : str[]
     igtests : str[]
     diags : Diag[]
@@ -1388,6 +1399,26 @@ impl Parser:
             if refk ≠ 0:
                 return mk_hty(kt, vt) + 262144 × refk
             return mk_hty(kt, vt)
+        if #name >= 2 and name[#name - 1] = '\'':
+            // a type variable: whatever the call hands over
+            let tv : mut i64 = ⁻1
+            if #self.tvn > 0:
+                foreach i := 0…#self.tvn - 1:
+                    if self.tvn[i] = name:
+                        tv ← 194048 + @dropunit(i)
+            if tv = ⁻1:
+                if #self.tvn >= 32:
+                    self.err("this file spells more than 32 type variables")
+                    return TY_I64
+                tv ← 194048 + @dropunit(#self.tvn)
+                self.tvn.push(name)
+            if self.peek() = TK_LBRACK or self.peek() = TK_QMARK or self.peek() = TK_CURRENCY:
+                self.err("a type variable stands alone; it carries no suffix")
+                return TY_I64
+            if refk ≠ 0:
+                self.err("a type variable travels by value")
+                return TY_I64
+            return tv
         let base0 : i64 = TYNAMES[name] ?? self.sindex_ty(name)
         if base0 = ⁻1:
             self.err("'" ⧺ name ⧺ "' is not a core-2 type")
@@ -1628,6 +1659,9 @@ impl Parser:
                 if self.peek() = TK_COMMA:
                     self.pos ← self.pos + 1
             _ ← self.eat(TK_BOR, "'|' closing the capture list")
+            if #caps = 0:
+                self.err("an empty capture list says nothing; a lambda with no captures leaves the bars off")
+                return self.mknode(NK_INT, at, 0, 0, 0)
         _ ← self.eat(TK_ARROW, "'→' and the lambda's answer")
         let ret : mut i64 = TY_UNIT
         if self.peek() = TK_EMPTY:
@@ -2404,7 +2438,7 @@ impl Parser:
     // ------------------------------------------------------------------
 
     fn parse_fn(&mut self, imp : bool, is_start : bool, is_noreturn : bool,
-                is_test : bool, ignored : bool,
+                is_test : bool, is_repl : bool, ignored : bool,
                 pres : i64[], post_toks : i64[], posts : i64[],
                 prefix : str, self_sty : i64):
         _ ← self.eat(TK_FN, "'fn'")
@@ -2499,7 +2533,8 @@ impl Parser:
             self.igtests.push(name)
             return
         self.fns.push(FnDef{name: name, tok: name_tok, params_off: params_off,
-                            ret: ret, body: body, is_impure: imp,
+                            ret: ret, body: body, is_replaceable: is_repl,
+                            is_impure: imp,
                             is_start: is_start, is_noreturn: is_noreturn,
                             is_test: is_test,
                             pre_off: pre_off, post_off: post_off})
@@ -2583,7 +2618,7 @@ impl Parser:
                 if self.peek() = TK_NL:
                     self.pos ← self.pos + 1
             if self.peek() = TK_FN:
-                self.parse_fn(imp, false, is_noreturn, false, false,
+                self.parse_fn(imp, false, is_noreturn, false, false, false,
                               pres, post_toks, posts, name, sty)
             else:
                 self.err("an impl block holds methods and nothing else")
@@ -2610,6 +2645,7 @@ impl Parser:
         let is_start : mut bool = false
         let is_noreturn : mut bool = false
         let is_test : mut bool = false
+        let is_repl : mut bool = false
         let expects : mut i64 = 0
         let pres : mut i64[] = []
         let post_toks : mut i64[] = []
@@ -2626,6 +2662,8 @@ impl Parser:
                 is_noreturn ← true
             elif name = "test":
                 is_test ← true
+            elif name = "replaceable":
+                is_repl ← true
             elif name = "expect":
                 // @expect level "pattern": the definition is expected
                 // to draw diagnostics, so it is parsed and then left
@@ -2658,7 +2696,8 @@ impl Parser:
             if self.peek() = TK_NL:
                 self.pos ← self.pos + 1
         if self.peek() = TK_FN:
-            self.parse_fn(imp, is_start, is_noreturn, is_test, expects > 0,
+            self.parse_fn(imp, is_start, is_noreturn, is_test, is_repl,
+                          expects > 0,
                           pres, post_toks, posts, "", 0)
         elif self.peek() = TK_STRUCT or self.peek() = TK_IMPL:
             if imp or is_start or is_noreturn or is_test or #pres > 0 or #posts > 0:
@@ -2687,6 +2726,7 @@ fn parse(toks : Toks, src : byte[]) → Ast:
                                  fae: [], fas: [],
                                  mel: [], mrr: [], mcc: [],
                                  lts: [], ltl: [], lte: [],
+                                 tvn: [],
                                  ignored: [], igtests: [],
                                  diags: [], poisoned: false})
     // a struct may be written below whatever names it, so the names
@@ -2923,6 +2963,7 @@ struct Chk:
     psfn : i64[]         // partial-application shims: target, bound, full count
     psk : i64[]
     psnp : i64[]
+    skipfn : i64[]       // 1 where a generic was never shaped by a call
     diags : Diag[]
 
 struct Checker:
@@ -2954,6 +2995,8 @@ struct Checker:
     psfn : i64[]         // partial-application shims: the named target, ⁻1 for a closure
     psk : i64[]          // … how many arguments the box binds
     psnp : i64[]         // … the target's full parameter count
+    fdone : i64[]        // per function: 0 unchecked, 1 checked, 2 being checked
+    skipfn : i64[]       // 1 where a generic was never shaped by a call
 
 impl Checker:
     fn derr(&mut self, tok : i64, m : str):
@@ -3019,6 +3062,8 @@ impl Checker:
 
     fn declare(&mut self, tok : i64, ty : i64, is_mut : i64) → i64:
         let name := self.text(tok)
+        if ty_is_var(ty_strip_ref(ty)):
+            self.derr(tok, "a type variable belongs in a signature; a binding states what it holds")
         if names_int_type(name):
             self.derr(tok, "'" ⧺ name ⧺ "' names a type and cannot name a variable")
         let low : i64 = self.marks[#self.marks - 1]
@@ -3521,17 +3566,41 @@ impl Checker:
                     let ctok : i64 = self.a.extra[(loff + 2 + np9 × 2 + ci) × 1¤ptrdiff]
                     let cs : i64 = self.lookup(self.text(ctok))
                     if cs = ⁻1:
-                        self.derr(ctok, "'" ⧺ self.text(ctok) ⧺ "' is not here to capture")
-                        self.set_type(id, TY_I64)
-                        return
-                    let cty0 : i64 = self.stype[cs × 1¤ptrdiff]
-                    if ty_ref_kind(cty0) ≠ 0 or not ((ty_is_int(cty0)) or cty0 = TY_BOOL or cty0 = TY_CHAR or cty0 = TY_STR):
-                        self.derr(ctok, "a capture is one value read now; '" ⧺ self.text(ctok) ⧺ "' is " ⧺ type_name(cty0))
-                        self.set_type(id, TY_I64)
-                        return
-                    couter.push(self.sslot[cs × 1¤ptrdiff])
-                    ctoks.push(ctok)
-                    ctys.push(cty0)
+                        let cf : i64 = self.fn_index(self.text(ctok))
+                        if cf = ⁻1:
+                            self.derr(ctok, "'" ⧺ self.text(ctok) ⧺ "' is not here to capture")
+                            self.set_type(id, TY_I64)
+                            return
+                        // a captured function is its value in the box,
+                        // read now -- which is what @replaceable asks
+                        if self.fn_is_generic(cf):
+                            self.derr(ctok, "a generic function has no one shape to capture")
+                            self.set_type(id, TY_I64)
+                            return
+                        let cd := self.a.fns[cf × 1¤ptrdiff]
+                        let cnp : i64 = self.a.extra[cd.params_off × 1¤ptrdiff]
+                        let cok : mut bool = cnp >= 1 and cnp <= 5 and ((ty_is_int(cd.ret) and ty_unit(cd.ret) = 0) or cd.ret = TY_BOOL or cd.ret = TY_CHAR or cd.ret = TY_STR) and not cd.is_impure
+                        let cpts : mut i64[] = []
+                        foreach cpi := 0…cnp - 1:
+                            let cpty : i64 = self.a.extra[(cd.params_off + 2 + cpi × 2) × 1¤ptrdiff]
+                            cok ← cok and ty_ref_kind(cpty) = 0 and ((ty_is_int(cpty) and ty_unit(cpty) = 0) or cpty = TY_BOOL or cpty = TY_CHAR or cpty = TY_STR)
+                            cpts.push(ty_strip_ref(cpty))
+                        if not cok:
+                            self.derr(ctok, "'" ⧺ self.text(ctok) ⧺ "' does not travel as a value; only a pure function of up to five plain scalars does")
+                            self.set_type(id, TY_I64)
+                            return
+                        couter.push(@wrap(0 - cf - 1))
+                        ctoks.push(ctok)
+                        ctys.push(mk_lty(self.lam_intern(cpts, cd.ret)))
+                    else:
+                        let cty0 : i64 = self.stype[cs × 1¤ptrdiff]
+                        if ty_ref_kind(cty0) ≠ 0 or not (ty_is_int(cty0) or cty0 = TY_BOOL or cty0 = TY_CHAR or cty0 = TY_STR or ty_is_lam(cty0)):
+                            self.derr(ctok, "a capture is one value read now; '" ⧺ self.text(ctok) ⧺ "' is " ⧺ type_name(cty0))
+                            self.set_type(id, TY_I64)
+                            return
+                        couter.push(self.sslot[cs × 1¤ptrdiff])
+                        ctoks.push(ctok)
+                        ctys.push(cty0)
             self.push_scope()
             let floor9 : i64 = self.scope_floor
             self.scope_floor ← @dropunit(#self.snames)
@@ -3756,7 +3825,7 @@ impl Checker:
                 // the function's name alone: it travels as a value
                 let fd := self.a.fns[fidx × 1¤ptrdiff]
                 let np : i64 = self.a.extra[fd.params_off × 1¤ptrdiff]
-                let ok9 : mut bool = np >= 1 and np <= 5 and ((ty_is_int(fd.ret) and ty_unit(fd.ret) = 0) or fd.ret = TY_BOOL or fd.ret = TY_CHAR or fd.ret = TY_STR) and not fd.is_impure
+                let ok9 : mut bool = np >= 1 and np <= 5 and ((ty_is_int(fd.ret) and ty_unit(fd.ret) = 0) or fd.ret = TY_BOOL or fd.ret = TY_CHAR or fd.ret = TY_STR) and not fd.is_impure and not fd.is_replaceable and not self.fn_is_generic(fidx)
                 let pts9 : mut i64[] = []
                 foreach pi := 0…np - 1:
                     let pty : i64 = self.a.extra[(fd.params_off + 2 + pi × 2) × 1¤ptrdiff]
@@ -4342,6 +4411,15 @@ impl Checker:
             self.derr(tok, "'" ⧺ name ⧺ "' is @impure, and impurity travels to the caller")
         if self.in_contract and callee.is_impure:
             self.derr(tok, "a contract's condition is pure; '" ⧺ name ⧺ "' is not")
+        if callee.is_replaceable and self.scope_floor > 0:
+            self.derr(tok, "'" ⧺ name ⧺ "' is @replaceable and not captured; a lambda lists it in |…|")
+        if self.fdone[f × 1¤ptrdiff] = 2 and self.fn_is_generic(f):
+            self.derr(tok, "a generic function cannot shape itself; the recursion never settles")
+            self.set_type(id, TY_I64)
+            return
+        if self.fdone[f × 1¤ptrdiff] = 0 and self.fn_is_generic(f):
+            self.instantiate(id, tok, f, args_off, argc)
+            return
         let np : i64 = self.a.extra[callee.params_off × 1¤ptrdiff]
         if argc < np:
             // fewer arguments curry: what is given is bound now, by
@@ -4366,7 +4444,7 @@ impl Checker:
                      args_off : i64, argc : i64):
         let callee := self.a.fns[f × 1¤ptrdiff]
         let np : i64 = self.a.extra[callee.params_off × 1¤ptrdiff]
-        let ok9 : mut bool = np <= 5 and ((ty_is_int(callee.ret) and ty_unit(callee.ret) = 0) or callee.ret = TY_BOOL or callee.ret = TY_CHAR or callee.ret = TY_STR) and not callee.is_impure
+        let ok9 : mut bool = np <= 5 and ((ty_is_int(callee.ret) and ty_unit(callee.ret) = 0) or callee.ret = TY_BOOL or callee.ret = TY_CHAR or callee.ret = TY_STR) and not callee.is_impure and not callee.is_replaceable
         let pts9 : mut i64[] = []
         foreach pi := 0…np - 1:
             let pty : i64 = self.a.extra[(callee.params_off + 2 + pi × 2) × 1¤ptrdiff]
@@ -4394,6 +4472,97 @@ impl Checker:
         self.psk.push(argc)
         self.psnp.push(np)
         self.set_type(id, mk_lty(self.lam_intern(rem, callee.ret)))
+
+    // the one call that reaches a generic first gives it its shape:
+    // each type variable takes its argument's type, the body is then
+    // checked concrete, and every later call meets an ordinary function
+    fn instantiate(&mut self, id : i64, tok : i64, f : i64,
+                   args_off : i64, argc : i64):
+        let callee := self.a.fns[f × 1¤ptrdiff]
+        let np : i64 = self.a.extra[callee.params_off × 1¤ptrdiff]
+        if argc ≠ np:
+            self.derr(tok, "'" ⧺ callee.name ⧺ "' wants " ⧺ i64_str(np) ⧺ " arguments, not " ⧺ i64_str(argc))
+            self.set_type(id, TY_I64)
+            return
+        let vmap : mut i64[] = []
+        foreach vi := 0…31:
+            vmap.push(⁻1)
+        let j : mut i64 = 0
+        while j < np:
+            let arg : i64 = self.a.extra[(args_off + 1 + j) × 1¤ptrdiff]
+            let pty : i64 = self.a.extra[(callee.params_off + 2 + j × 2) × 1¤ptrdiff]
+            if ty_is_var(ty_strip_ref(pty)):
+                self.check_expr(arg, TY_UNIT)
+                if self.is_open(self.ty_of(arg)):
+                    self.adopt(arg, TY_I64)
+                let at9 : i64 = self.ty_of(arg)
+                if ty_ref_kind(at9) ≠ 0 or at9 = TY_UNIT or at9 = TY_EMPTY:
+                    self.derr(tok, "this argument cannot shape a type variable")
+                let vix : i64 = ty_strip_ref(pty) - 194048
+                if vmap[vix × 1¤ptrdiff] = ⁻1:
+                    vmap[vix × 1¤ptrdiff] ← at9
+                elif vmap[vix × 1¤ptrdiff] ≠ at9:
+                    self.derr(tok, "one type variable, one type; it is handed " ⧺ type_name(vmap[vix × 1¤ptrdiff]) ⧺ " and " ⧺ type_name(at9) ⧺ " at once")
+                self.a.extra[(callee.params_off + 2 + j × 2) × 1¤ptrdiff] ← vmap[vix × 1¤ptrdiff]
+            else:
+                self.check_one_arg(tok, callee.name, j + 1, arg, pty)
+            j ← j + 1
+        if ty_is_var(callee.ret):
+            let rix : i64 = callee.ret - 194048
+            if vmap[rix × 1¤ptrdiff] ≠ ⁻1:
+                self.a.fns[f × 1¤ptrdiff].ret ← vmap[rix × 1¤ptrdiff]
+        // the caller's scopes are parked while the shaped body checks
+        let sv_names : mut str[] = []
+        foreach v := self.snames:
+            sv_names.push(v)
+        let sv_type : mut i64[] = []
+        foreach v := self.stype:
+            sv_type.push(v)
+        let sv_mut : mut i64[] = []
+        foreach v := self.smut:
+            sv_mut.push(v)
+        let sv_slot : mut i64[] = []
+        foreach v := self.sslot:
+            sv_slot.push(v)
+        let sv_marks : mut i64[] = []
+        foreach v := self.marks:
+            sv_marks.push(v)
+        let sv_nslots : i64 = self.nslots
+        let sv_cur : i64 = self.cur_fn
+        let sv_loop : i64 = self.loop_depth
+        let sv_floor : i64 = self.scope_floor
+        let sv_inc : bool = self.in_contract
+        self.scope_floor ← 0
+        self.fdone[f × 1¤ptrdiff] ← 2
+        self.check_fn(f)
+        while #self.snames > 0:
+            _ ← self.snames.pop() ?? ""
+            _ ← self.stype.pop() ?? 0
+            _ ← self.smut.pop() ?? 0
+            _ ← self.sslot.pop() ?? 0
+        while #self.marks > 0:
+            _ ← self.marks.pop() ?? 0
+        foreach v := sv_names:
+            self.snames.push(v)
+        foreach v := sv_type:
+            self.stype.push(v)
+        foreach v := sv_mut:
+            self.smut.push(v)
+        foreach v := sv_slot:
+            self.sslot.push(v)
+        foreach v := sv_marks:
+            self.marks.push(v)
+        self.nslots ← sv_nslots
+        self.cur_fn ← sv_cur
+        self.loop_depth ← sv_loop
+        self.scope_floor ← sv_floor
+        self.in_contract ← sv_inc
+        let shaped := self.a.fns[f × 1¤ptrdiff]
+        if ty_is_var(shaped.ret):
+            self.derr(tok, "'" ⧺ shaped.name ⧺ "' never settles what it answers")
+            self.set_type(id, TY_I64)
+            return
+        self.set_type(id, shaped.ret)
 
     fn check_lcall(&mut self, id : i64, tok : i64, args_off : i64,
                    argc : i64, vs : i64):
@@ -5383,6 +5552,13 @@ impl Checker:
             self.loop_depth ← self.loop_depth - 1
             self.pop_scope()
         elif k = NK_RETURN:
+            if ty_is_var(self.a.fns[self.cur_fn × 1¤ptrdiff].ret) and na ≠ ⁻1:
+                // the first answer settles a T' return
+                self.check_expr(na, TY_UNIT)
+                if self.is_open(self.ty_of(na)):
+                    self.adopt(na, TY_I64)
+                self.a.fns[self.cur_fn × 1¤ptrdiff].ret ← self.ty_of(na)
+                return
             let want : i64 = self.a.fns[self.cur_fn × 1¤ptrdiff].ret
             if na = ⁻1:
                 if want ≠ TY_UNIT:
@@ -5399,6 +5575,13 @@ impl Checker:
             if self.loop_depth = 0:
                 self.derr(tok, "there is no loop here to act on")
         elif k = NK_EXPRSTMT:
+            if trailing and ty_is_var(self.a.fns[self.cur_fn × 1¤ptrdiff].ret):
+                // the trailing value settles a T' return
+                self.check_expr(na, TY_UNIT)
+                if self.is_open(self.ty_of(na)):
+                    self.adopt(na, TY_I64)
+                self.a.fns[self.cur_fn × 1¤ptrdiff].ret ← self.ty_of(na)
+                return
             let want : i64 = self.a.fns[self.cur_fn × 1¤ptrdiff].ret
             if trailing and want ≠ TY_UNIT:
                 self.check_expr(na, want)
@@ -5503,6 +5686,18 @@ impl Checker:
     // Functions and globals
     // ------------------------------------------------------------------
 
+    fn fn_is_generic(&self, f : i64) → bool:
+        let d := self.a.fns[f × 1¤ptrdiff]
+        if ty_is_var(d.ret):
+            return true
+        let np : i64 = self.a.extra[d.params_off × 1¤ptrdiff]
+        let i : mut i64 = 0
+        while i < np:
+            if ty_is_var(ty_strip_ref(self.a.extra[(d.params_off + 2 + i × 2) × 1¤ptrdiff])):
+                return true
+            i ← i + 1
+        false
+
     fn check_fn(&mut self, f : i64):
         self.cur_fn ← f
         self.nslots ← 0
@@ -5568,7 +5763,8 @@ impl Checker:
                     last_is_value ← true
             if not last_is_value and not self.block_returns(d.body):
                 self.derr(d.tok, "'" ⧺ d.name ⧺ "' answers " ⧺ type_name(d.ret) ⧺ " but not on every path")
-        self.fslots.push(self.nslots)
+        self.fslots[f × 1¤ptrdiff] ← self.nslots
+        self.fdone[f × 1¤ptrdiff] ← 1
 
     fn check_global(&mut self, g : i64):
         let gd := self.a.globals[g × 1¤ptrdiff]
@@ -5639,7 +5835,8 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
                                    loop_depth: 0, cur_fn: 0,
                                    in_contract: false,
                                    scope_floor: 0, lams: [], lamns: [],
-                                   psfn: [], psk: [], psnp: []})
+                                   psfn: [], psk: [], psnp: [],
+                                   fdone: [], skipfn: []})
     if #a.structs > 0:
         foreach i := 0…#a.structs - 1:
             let sd := a.structs[i]
@@ -5696,13 +5893,22 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
         c.diags.push(Diag{line: 1, col: 1, msg: "more than one @start function"})
     if #a.fns > 0:
         foreach i := 0…#a.fns - 1:
-            c.check_fn(@dropunit(i))
+            c.fslots.push(0)
+            c.fdone.push(0)
+            c.skipfn.push(0)
+        foreach i := 0…#a.fns - 1:
+            if not c.fn_is_generic(@dropunit(i)):
+                c.check_fn(@dropunit(i))
+        // a generic no call reached is never shaped; a stub stands in
+        foreach i := 0…#a.fns - 1:
+            if c.fdone[i] = 0:
+                c.skipfn[i] ← 1
     if #c.diags = 0:
         assert(#c.fslots = #a.fns, "one slot count per function")
         assert(#c.gvals = #a.globals, "one folded value per global")
     (Chk{ntype: c.ntype, nslot: c.nslot, ncvt: c.ncvt, fslots: c.fslots,
          gvals: c.gvals, ginit: c.ginit, lams: c.lams, lamns: c.lamns,
-         psfn: c.psfn, psk: c.psk, psnp: c.psnp,
+         psfn: c.psfn, psk: c.psk, psnp: c.psnp, skipfn: c.skipfn,
          diags: c.diags})
 
 // ===========================================================================
@@ -6065,9 +6271,18 @@ impl Lower:
             self.ir(IR_FSTO, d9l, 0, av9, 0, 0)
             let ci9 : mut i64 = 0
             while ci9 < ncap9:
-                // the capture cell holds the outer slot: read its value
-                // now, into the box
-                self.ir(IR_FSTO, d9l, 1 + ci9, self.a.extra[(loff + 2 + np9 × 2 + ci9) × 1¤ptrdiff], 0, 0)
+                // the capture cell holds the outer slot -- or, below
+                // zero, a function whose value-box is built here
+                let cell9 : i64 = self.a.extra[(loff + 2 + np9 × 2 + ci9) × 1¤ptrdiff]
+                if cell9 < 0:
+                    let fb9 : i64 = self.tmp()
+                    self.ir(IR_SNEW, 1, 0, 0, fb9, 0)
+                    let fa9 : i64 = self.tmp()
+                    self.ir(IR_FADDR, @wrap(0 - cell9 - 1), 0, 0, fa9, 0)
+                    self.ir(IR_FSTO, fb9, 0, fa9, 0, 0)
+                    self.ir(IR_FSTO, d9l, 1 + ci9, fb9, 0, 0)
+                else:
+                    self.ir(IR_FSTO, d9l, 1 + ci9, cell9, 0, 0)
                 ci9 ← ci9 + 1
             return d9l
         if k = NK_FNVAL:
@@ -7594,6 +7809,42 @@ fn lower_shim_fn(lw : &mut Lower, chk : Chk, j : i64) → IrFn:
             exc.push(v)
     (IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
           extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels})
+
+fn lower_stub_fn(lw : &mut Lower, np : i64) → IrFn:
+    while #lw.op > 0:
+        _ ← lw.op.pop() ?? 0
+        _ ← lw.ia.pop() ?? 0
+        _ ← lw.ib.pop() ?? 0
+        _ ← lw.ic.pop() ?? 0
+        _ ← lw.idd.pop() ?? 0
+        _ ← lw.iww.pop() ?? 0
+    while #lw.extra > 0:
+        _ ← lw.extra.pop() ?? 0
+    lw.nlabels ← 0
+    lw.tbase ← np + 1
+    lw.tnext ← lw.tbase
+    lw.tmax ← lw.tbase
+    lw.ir(IR_RET, ⁻1, 0, 0, 0, 0)
+    let opc : mut i64[] = []
+    let iac : mut i64[] = []
+    let ibc : mut i64[] = []
+    let icc : mut i64[] = []
+    let idc : mut i64[] = []
+    let iwc : mut i64[] = []
+    foreach v := lw.op:
+        opc.push(v)
+    foreach v := lw.ia:
+        iac.push(v)
+    foreach v := lw.ib:
+        ibc.push(v)
+    foreach v := lw.ic:
+        icc.push(v)
+    foreach v := lw.idd:
+        idc.push(v)
+    foreach v := lw.iww:
+        iwc.push(v)
+    (IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
+          extra: [], nvregs: lw.tmax, nlabels: 0})
 
 fn lower_fn(lw : &mut Lower, a : Ast, chk : Chk, f : i64) → IrFn:
     let d := a.fns[f × 1¤ptrdiff]
@@ -10375,10 +10626,16 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
     emit_runtime(&em, &lw, alloc_off, args_off)
     foreach i := 0…#a.fns - 1:
         let f : i64 = @dropunit(i)
-        let ir := lower_fn(&lw, a, chk, f)
-        em.fn_off.push(em.here())
         let np : i64 = a.extra[a.fns[i].params_off × 1¤ptrdiff]
-        emit_fn(&em, ir, np, lw.strs)
+        if chk.skipfn[i] = 1:
+            // a generic no call shaped: an empty body stands in
+            let sir := lower_stub_fn(&lw, np)
+            em.fn_off.push(em.here())
+            emit_fn(&em, sir, np, lw.strs)
+        else:
+            let ir := lower_fn(&lw, a, chk, f)
+            em.fn_off.push(em.here())
+            emit_fn(&em, ir, np, lw.strs)
     if ninit > 0:
         let gir := lower_ginit(&lw, a, chk)
         em.fn_off.push(em.here())

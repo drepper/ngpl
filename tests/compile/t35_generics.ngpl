@@ -1,0 +1,24 @@
+fn apply(f : F', x : i32) -> i32:
+    return f(x)
+
+fn make_adder(n : i32) -> T':
+    return λx : i64 |n| → i64: x + n
+
+fn pick(a : T', b : T') -> T':
+    return a if a > b else b
+
+@replaceable
+fn mutable_fn(x : i32) -> i32:
+    return x × 2
+
+@impure
+@start
+fn main():
+    let double := λx : i32 → i32: x × 2
+    std.println("{}", apply(double, 5))
+    let add3 := make_adder(3)
+    std.println("{}", add3(5))
+    std.println("{}", pick(4, 9))
+    let f := λx : i64 |mutable_fn| → i64: mutable_fn(x)
+    std.println("{}", f(5))
+    std.println("{}", mutable_fn(7))
