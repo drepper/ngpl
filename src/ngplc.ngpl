@@ -312,7 +312,16 @@ fn ty_hval(t : i64) → i64:
 // tuples: 26624 + tidx into the Ast's interned shape table; the band
 // sits between the hashes' end and the ref packing's 65536
 fn ty_is_tup(t : i64) → bool:
-    t >= 26624 and t < 32768
+    t >= 26624 and t < 30720
+
+// iterators: 30720 + an interned element type; born of iterate(),
+// stepped by next(), written down by no type syntax at all
+fn ty_is_iter(t : i64) → bool:
+    t >= 30720 and t < 32768
+
+@pre(ty_is_iter(t))
+fn ty_iidx(t : i64) → i64:
+    t - 30720
 
 // sized arrays: 32768 + fidx into the Ast's shape table (element and
 // size); the band fills what is left below the ref packing
@@ -332,7 +341,7 @@ fn mk_fty(fidx : i64) → i64:
 fn ty_tidx(t : i64) → i64:
     t - 26624
 
-@pre(tidx >= 0 and tidx < 6144)
+@pre(tidx >= 0 and tidx < 4096)
 @post(r: ty_is_tup(r))
 fn mk_tty(tidx : i64) → i64:
     26624 + tidx
@@ -363,6 +372,7 @@ fn type_name(t0 : i64) → str:
     if ty_is_hash(t): return prefix ⧺ "std.hash(" ⧺ type_name(ty_hkey(t)) ⧺ ", " ⧺ type_name(ty_hval(t)) ⧺ ")"
     if ty_is_tup(t): return prefix ⧺ "tuple #" ⧺ i64_str(ty_tidx(t))
     if ty_is_farr(t): return prefix ⧺ "sized array #" ⧺ i64_str(ty_fidx(t))
+    if ty_is_iter(t): return prefix ⧺ "iterator #" ⧺ i64_str(ty_iidx(t))
     let base : str = ("i" if ty_sgn(t) = 1 else "u") ⧺ i64_str(ty_bits(t))
     let u : i64 = ty_unit(t)
     base if u = 0 else (base ⧺ " ¤ptrdiff" if u = 1 else base ⧺ " ¤byte")
@@ -1042,6 +1052,7 @@ let SB_ARGS : i64 = 4       // std.args.all() → str[]
 let SB_OPEN : i64 = 5       // std.fs.cwd().open_file(p) → File?
 let SB_CREATE : i64 = 6     // std.fs.cwd().create_file(p, mode) → File
 let SB_ALLOCATOR : i64 = 7  // std.arena.allocator()
+let SB_BYTES : i64 = 8      // std.bytes(s) → the string's bytes, u8[]
 
 // the base type names, one probe instead of a ladder
 let TYNAMES : std.hash(str, i64) = (⸨
@@ -1619,6 +1630,9 @@ impl Parser:
                         return self.mknode(NK_SCALL, at, SB_CREATE, coff, 0)
                     self.err("'" ⧺ fm ⧺ "' is not core-2; cwd() answers open_file and create_file")
                     return 0
+                if m = "bytes":
+                    let boff : i64 = self.parse_args()
+                    return self.mknode(NK_SCALL, at, SB_BYTES, boff, 0)
                 let sb : mut i64 = ⁻1
                 if m = "println": sb ← SB_PRINTLN
                 elif m = "print": sb ← SB_PRINT
@@ -2569,6 +2583,8 @@ let MID_CHARS : i64 = 6
 let MID_READF : i64 = 7
 let MID_WRITEF : i64 = 8
 let MID_CLOSEF : i64 = 9
+let MID_ITER : i64 = 10
+let MID_NEXT : i64 = 11
 
 struct Chk:
     ntype : i64[]
@@ -2587,6 +2603,7 @@ struct Checker:
     gnames : str[]
     gvals : i64[]
     ginit : i64[]
+    ite : i64[]          // iterators: the element type per interned kind
     ntype : i64[]
     nslot : i64[]
     ncvt : i64[]
@@ -3679,6 +3696,16 @@ impl Checker:
                 self.derr(tok, "reading the arguments is impure; the function wants @impure")
             self.set_type(id, mk_aty(TY_STR))
             return
+        if sb = SB_BYTES:
+            if argc ≠ 1:
+                self.derr(tok, "std.bytes takes the string")
+            else:
+                let bs : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
+                self.check_expr(bs, TY_STR)
+                if self.ty_of(bs) ≠ TY_STR:
+                    self.derr(tok, "std.bytes reads a string, not " ⧺ type_name(self.ty_of(bs)))
+            self.set_type(id, mk_aty(TY_U8))
+            return
         if sb = SB_ALLOCATOR:
             if argc ≠ 0:
                 self.derr(tok, "std.arena.allocator takes nothing")
@@ -3823,6 +3850,31 @@ impl Checker:
                 self.derr(tok, "close takes nothing")
             self.a.nc[id × 1¤ptrdiff] ← MID_CLOSEF
             self.set_type(id, TY_UNIT)
+            return
+        if ty_is_arr(t) and m = "iterate":
+            if argc0 ≠ 0:
+                self.derr(tok, "iterate takes nothing")
+            let ie : i64 = self.elem_of(t)
+            let ii : mut i64 = ⁻1
+            let mi : i64 = @dropunit(#self.ite)
+            let si : mut i64 = 0
+            while si < mi:
+                if self.ite[si × 1¤ptrdiff] = ie:
+                    ii ← si
+                si ← si + 1
+            if ii = ⁻1:
+                ii ← mi
+                self.ite.push(ie)
+            self.a.nc[id × 1¤ptrdiff] ← MID_ITER
+            self.set_type(id, 30720 + ii)
+            return
+        if ty_is_iter(t) and m = "next":
+            if argc0 ≠ 0:
+                self.derr(tok, "next takes nothing")
+            if not under_default:
+                self.derr(tok, "next answers an optional; take it with ?? or a while binding")
+            self.a.nc[id × 1¤ptrdiff] ← MID_NEXT
+            self.set_type(id, self.ite[ty_iidx(t) × 1¤ptrdiff])
             return
         if t = TY_STR and m = "chars":
             if argc0 ≠ 0:
@@ -4287,7 +4339,7 @@ impl Checker:
             let wbt : mut i64 = TY_I64
             if ismc and wmid = MID_GET:
                 self.derr(tok, "get answers the same place every turn; a while binding wants what moves")
-            elif ismc and wmid = MID_POP:
+            elif ismc and (wmid = MID_POP or wmid = MID_NEXT):
                 wbt ← wct
             elif ty_is_opt(wct):
                 wbt ← ty_opt_base(wct)
@@ -4562,7 +4614,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
         ncvt.push(0)
         zi ← zi + 1
     let c : mut Checker = (Checker{a: a, toks: toks, src: src, fnames: fnames,
-                                   gnames: gnames, gvals: [], ginit: [],
+                                   gnames: gnames, gvals: [], ginit: [], ite: [],
                                    ntype: ntype, nslot: nslot, ncvt: ncvt,
                                    fslots: [],
                                    diags: [], snames: [], stype: [], smut: [],
@@ -4721,6 +4773,7 @@ let IR_SATMUL : i64 = 92   // d ← a × b, held at the edge
 let IR_AFILL : i64 = 93    // d ← a copies of scalar b, a fresh array
 let IR_ACYC : i64 = 94     // d ← array b's elements cycled to count a
 let IR_ACAT : i64 = 95     // d ← arrays a then b, one fresh array
+let IR_SBYTES : i64 = 96   // d ← string a's bytes, a u8[]
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
 let IR_FLD : i64 = 67      // d ← field b of struct a
 let IR_FSTO : i64 = 68     // field b of struct a ← c
@@ -5028,6 +5081,11 @@ impl Lower:
                 let d : i64 = self.tmp()
                 self.ir(IR_FCREATE, pv, mv, 0, d, 0)
                 return d
+            if na = SB_BYTES:
+                let sv : i64 = self.lower_expr(self.a.extra[(nb + 1) × 1¤ptrdiff])
+                let d : i64 = self.tmp()
+                self.ir(IR_SBYTES, sv, 0, 0, d, 0)
+                return d
             if na = SB_ALLOCATOR:
                 let d : i64 = self.tmp()
                 self.ir(IR_CONST, 0, 0, 0, d, 0)
@@ -5297,6 +5355,42 @@ impl Lower:
         if mid = MID_CLOSEF:
             self.ir(IR_FCLOSE, av, 0, 0, 0, 0)
             return ⁻1
+        if mid = MID_ITER:
+            // {the array, the position}: a fresh two-slot box
+            let d : i64 = self.tmp()
+            self.ir(IR_SNEW, 2, 0, 0, d, 0)
+            self.ir(IR_FSTO, d, 0, av, 0, 0)
+            let z9 : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, z9, 0)
+            self.ir(IR_FSTO, d, 1, z9, 0, 0)
+            return d
+        if mid = MID_NEXT:
+            // position under length answers the element and steps; the
+            // end answers the default, as pop does under ??
+            let dsc : i64 = self.tmp()
+            self.ir(IR_FLD, av, 0, 0, dsc, 0)
+            let pos : i64 = self.tmp()
+            self.ir(IR_FLD, av, 1, 0, pos, 0)
+            let n9 : i64 = self.tmp()
+            self.ir(IR_ALEN, dsc, 0, 0, n9, 0)
+            let c9 : i64 = self.tmp()
+            self.ir(IR_CLT, pos, n9, 0, c9, 64 + 256)
+            let d : i64 = self.tmp()
+            let ldef : i64 = self.label()
+            let lend : i64 = self.label()
+            self.ir(IR_JZ, c9, ldef, 0, 0, 0)
+            self.ir(IR_AIDX, dsc, pos, 0, d, 0)
+            let one9 : i64 = self.tmp()
+            self.ir(IR_CONST, 1, 0, 0, one9, 0)
+            let np9 : i64 = self.tmp()
+            self.ir(IR_ADDW, pos, one9, 0, np9, 64 + 256)
+            self.ir(IR_FSTO, av, 1, np9, 0, 0)
+            self.ir(IR_JMP, lend, 0, 0, 0, 0)
+            self.ir(IR_LABEL, ldef, 0, 0, 0, 0)
+            let dv9 : i64 = self.lower_expr(defnode)
+            self.ir(IR_MOV, dv9, 0, 0, d, 0)
+            self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+            return d
         if mid = MID_PUSH:
             let vv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
             self.ir(IR_APUSH, av, vv, 0, 0, 0)
@@ -5566,6 +5660,24 @@ impl Lower:
                 let dz : i64 = self.tmp()
                 self.ir(IR_CONST, 0, 0, 0, dz, 0)
                 self.ir(IR_APOP, av9, dz, 0, evar, width_of(self.tof(na)))
+            elif self.kof(na) = NK_MCALL and self.a.nc[na × 1¤ptrdiff] = MID_NEXT:
+                // the iterator's position against its array's length
+                let itv : i64 = self.lower_expr(self.a.na[na × 1¤ptrdiff])
+                let dsc9 : i64 = self.tmp()
+                self.ir(IR_FLD, itv, 0, 0, dsc9, 0)
+                let pos9 : i64 = self.tmp()
+                self.ir(IR_FLD, itv, 1, 0, pos9, 0)
+                let len9 : i64 = self.tmp()
+                self.ir(IR_ALEN, dsc9, 0, 0, len9, 0)
+                let cc9 : i64 = self.tmp()
+                self.ir(IR_CLT, pos9, len9, 0, cc9, 64 + 256)
+                self.ir(IR_JZ, cc9, lend, 0, 0, 0)
+                self.ir(IR_AIDX, dsc9, pos9, 0, evar, 0)
+                let on9 : i64 = self.tmp()
+                self.ir(IR_CONST, 1, 0, 0, on9, 0)
+                let npp : i64 = self.tmp()
+                self.ir(IR_ADDW, pos9, on9, 0, npp, 64 + 256)
+                self.ir(IR_FSTO, itv, 1, npp, 0, 0)
             else:
                 let v9 : i64 = self.lower_expr(na)
                 self.ir(IR_JZ, v9, lend, 0, 0, 0)
@@ -5993,6 +6105,7 @@ let RT_ASLICE : i64 = ⁻34
 let RT_AFILL : i64 = ⁻35
 let RT_ACYC : i64 = ⁻36
 let RT_ACAT : i64 = ⁻37
+let RT_SBYTES : i64 = ⁻38
 
 struct Emit:
     code : u8[]
@@ -6738,6 +6851,10 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
                     em.b3(72, 99, 200)           // movsxd rcx, eax
                 em.b3(72, 57, 193)               // cmp rcx, rax
                 em.jglobal(0, 133, RT_BADFIT)    // jne
+            em.store(R_AX, d)
+        elif o = IR_SBYTES:
+            em.load(R_DI, a)
+            em.jglobal(232, ⁻1, RT_SBYTES)
             em.store(R_AX, d)
         elif o = IR_ACAT:
             em.load(R_DI, a)
@@ -8072,6 +8189,29 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.b1(195)
     em.resolve_locals()
 
+    // RT_SBYTES: rdi = a string → rax = its bytes as a u8[], each
+    // widened into its own slot
+    em.rt_off.push(em.here())
+    em.begin_fn(2)
+    em.b3(76, 139, 39)              // mov r12, [rdi]: the bytes
+    em.b4(76, 139, 111, 8)          // mov r13, [rdi+8]: how many
+    em.b3(76, 137, 239)             // mov rdi, r13
+    em.jglobal(232, ⁻1, RT_ARRNEW)
+    em.b3(72, 139, 16)              // mov rdx, [rax]
+    em.b3(72, 49, 201)              // xor rcx, rcx
+    em.set_label(0)
+    em.b3(76, 57, 233)              // cmp rcx, r13
+    em.jlocal(131, 1)               // jae
+    em.b4(69, 15, 182, 20)
+    em.b1(12)                       // movzx r10d, byte [r12+rcx]
+    em.b4(76, 137, 20, 202)         // mov [rdx+rcx*8], r10
+    em.b3(72, 255, 193)             // inc rcx
+    em.jlocal(⁻1, 0)
+    em.set_label(1)
+    em.b4(76, 137, 104, 8)          // mov [rax+8], r13
+    em.b1(195)
+    em.resolve_locals()
+
 // ---------------------------------------------------------------------------
 // The ELF executable: text R+X, rodata R, data R+W
 // ---------------------------------------------------------------------------
@@ -8486,7 +8626,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk) → Compiled:
     emit_fn(&em, dir, 0, lw.strs)
     // every function was emitted and left its offset behind
     assert(@dropunit(#em.fn_off) = nfns + g1 + 2, "one code offset per function")
-    assert(#em.rt_off = 37, "every runtime routine in place")
+    assert(#em.rt_off = 38, "every runtime routine in place")
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:
         foreach i := 0…#em.cf_pos - 1:

@@ -190,6 +190,15 @@ Attempt 3 grows core-1 to **core-2** with structs:
   own test, or `pop`, whose emptiness is the test (no boxing at all:
   one length check, then the pop).  `get` is refused by name — it
   answers the same place every turn.
+- **iterators**: `v.iterate()` answers a two-slot box — the array
+  and a position — and `it.next()` steps it: position under length
+  answers the element and advances, the end answers ∅, the length
+  read fresh each step so the walk is live against the array, as the
+  interpreter's is.  next() is taken with `??` or a while binding
+  (which steps it with no boxing at all); an iterator's type is
+  interned by element and written by no syntax — it lives only in
+  inferred locals.  Zero new IR, zero new runtime.  `std.bytes(s)`
+  answers a string's bytes as a `u8[]`.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's
@@ -425,7 +434,7 @@ the interpreter **and** compiled, outputs and exit codes diffed — the
 strict-subset rule made executable.  `--impl=` selects a side:
 `bootstrap`, `compiled` (ngplc under the interpreter), `native` (the
 self-hosted `build/ngplc`, the whole sweep in ~2.4 s), `both` (the
-default) or `all`.  Thirty shared programs cover the whole
+default) or `all`.  Thirty-one shared programs cover the whole
 core-2 surface including the stopping paths, and six bootstrap test
 files whose whole `@test` surface sits inside the subset run as
 shared tests besides: compiled, run with `--test`, and their stdout,

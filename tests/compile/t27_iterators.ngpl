@@ -1,0 +1,38 @@
+// core-2: iterators -- born of iterate(), stepped by next(), the
+// walk live against the array it walks -- and std.bytes.
+
+@start
+@impure
+fn main():
+    let v : mut i64[] = [1i64, 2]
+    let it := v.iterate()
+    let a : i64 = it.next() ?? ⁻1
+    v.push(3)
+    let b : i64 = it.next() ?? ⁻1
+    let c : i64 = it.next() ?? ⁻1
+    let d : i64 = it.next() ?? ⁻1
+    let e : i64 = it.next() ?? ⁻1
+    std.println("{} {} {} {} {}", a, b, c, d, e)
+
+    let ss : str[] = ["x", "y"]
+    let sit := ss.iterate()
+    while nm := sit.next():
+        std.println("[{}]", nm)
+
+    let ps : i64[] = [10i64, 20, 30]
+    let pit := ps.iterate()
+    let t : mut i64 = 0
+    while x := pit.next():
+        t ← t + x
+    std.println("{}", t)
+
+    // two iterators over one array step on their own
+    let one := ps.iterate()
+    let two := ps.iterate()
+    let f1 : i64 = one.next() ?? ⁻1
+    let f2 : i64 = two.next() ?? ⁻1
+    let f3 : i64 = one.next() ?? ⁻1
+    std.println("{} {} {}", f1, f2, f3)
+
+    let bs := std.bytes("abé")
+    std.println("{} {} {}", #bs, bs[0¤byte], bs[3¤byte])
