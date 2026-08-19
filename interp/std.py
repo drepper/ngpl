@@ -582,6 +582,48 @@ class FileStream:
             view = view[n:]
         return none()
 
+    def writev(self, *parts):
+        """Write several pieces in one call, as writev(2) does.
+
+        Each argument is one piece and becomes one iovec entry: a byte
+        array, a struct with a defined layout, or an array of such
+        structs -- a table, written element after element as C lays an
+        array out.  The pieces reach the file in the order given and
+        with nothing between them, which is what makes this the way to
+        write a binary format whose parts are described rather than
+        assembled: the description stays typed and the kernel does the
+        joining.
+
+        Writing is a statement rather than a value-producing
+        expression, so nothing is returned; a write that cannot
+        complete raises.
+        """
+        from interp.pack import PackError, collect_lookup, iov_bytes
+        from interp.value import none
+
+        self._check_open("writev")
+        lookup = collect_lookup(parts)
+        chunks = []
+        for index, part in enumerate(parts):
+            try:
+                chunks.append(iov_bytes(part, lookup, index))
+            except PackError as e:
+                raise TypeError(f"file.writev: {e}") from None
+        # A short writev leaves the remaining pieces unwritten, so the
+        # loop resumes from wherever the kernel stopped rather than
+        # trusting one call to place everything.
+        views = [memoryview(c) for c in chunks if c]
+        while views:
+            written = os.writev(self._fd, views)
+            while written and views:
+                if written >= len(views[0]):
+                    written -= len(views[0])
+                    views.pop(0)
+                else:
+                    views[0] = views[0][written:]
+                    written = 0
+        return none()
+
     def chmod(self, mode):
         """Set the file's permission bits, e.g. 0o755 for an executable."""
         self._check_open("chmod")

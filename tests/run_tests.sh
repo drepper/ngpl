@@ -110,6 +110,7 @@ all_tests=(
     "$testdir"/test_move.ngpl
     "$testdir"/test_sysenv.ngpl
     "$testdir"/test_repr_c.ngpl
+    "$testdir"/test_writev.ngpl
     "$testdir"/test_callstack.ngpl
     "$testdir"/test_discard.ngpl
     "$testdir"/test_scope_close.ngpl

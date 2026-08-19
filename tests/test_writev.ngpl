@@ -1,0 +1,136 @@
+// writev: several pieces written in one call, in order and with
+// nothing between them.  What is checked here is that a struct with a
+// defined layout writes out as exactly the bytes its layout describes
+// -- fields where the layout puts them, padding as zeros -- and that
+// an array of such structs writes element after element, which is what
+// makes a table one piece rather than one piece per entry.
+
+@repr(C)
+struct Head:
+    magic : u32          // 0..3
+    count : u16          // 4..5
+    kind : u8            // 6, then one byte of tail padding
+
+@repr(C)
+struct Ent:
+    id : u32             // 0..3, then four bytes of padding
+    size : u64           // 8..15
+
+@repr(C)
+struct Nest:
+    lead : u8            // 0, then three bytes of padding
+    head : Head          // 4..11
+    tail : u8            // 12, then three bytes of tail padding
+
+// what the layouts above say, so that a change to either the layout
+// rules or the writing shows up as a disagreement here
+@test
+fn test_the_pieces_have_the_sizes_their_layouts_say():
+    assert_eq(@sizeof(Head), 8)
+    assert_eq(@sizeof(Ent), 16)
+    assert_eq(@sizeof(Nest), 16)
+    assert_eq(Head.offsetof("kind"), 6)
+    assert_eq(Ent.offsetof("size"), 8)
+    assert_eq(Nest.offsetof("head"), 4)
+
+@impure
+fn write_pieces(name : str):
+    let f := std.fs.cwd().create_file(name, 420) ?? std.exit(1)
+    let h : Head = Head{magic: 1179403647, count: 2, kind: 7}
+    let es : mut Ent[] = []
+    es.push(Ent{id: 1, size: 100})
+    es.push(Ent{id: 2, size: 200})
+    let trailer : u8[] = [65, 66, 67]
+    f.writev(h, es, trailer)
+    f.close()
+
+@impure
+fn read_back(name : str) → u8[]:
+    let alloc := std.arena.allocator()
+    let back := std.fs.cwd().open_file(name) ?? std.exit(1)
+    let got := back.read_file(alloc)
+    back.close()
+    let out : mut u8[] = []
+    foreach b := got:
+        out.push(b)
+    alloc.deinit()
+    out
+
+@test
+@impure
+fn test_a_struct_writes_the_bytes_its_layout_describes():
+    write_pieces("build/test_writev.bin")
+    let got := read_back("build/test_writev.bin")
+    // eight for the header, sixteen for each entry, three for the
+    // trailer: the pieces run together with nothing between them
+    assert_eq(@dropunit(#got), 8 + 32 + 3)
+    // the magic, little-endian, is where the layout put it
+    assert_eq(got[0], 127)
+    assert_eq(got[1], 69)
+    assert_eq(got[2], 76)
+    assert_eq(got[3], 70)
+    assert_eq(got[4], 2)
+    assert_eq(got[5], 0)
+    assert_eq(got[6], 7)
+    // the byte the layout skipped is written as a zero, not as
+    // whatever lay beside it
+    assert_eq(got[7], 0)
+
+@test
+@impure
+fn test_an_array_of_structs_writes_element_after_element():
+    write_pieces("build/test_writev.bin")
+    let got := read_back("build/test_writev.bin")
+    // the first entry: id at 8, four bytes of padding, size at 16
+    assert_eq(got[8], 1)
+    assert_eq(got[12], 0)
+    assert_eq(got[16], 100)
+    // the second begins one whole entry later
+    assert_eq(got[24], 2)
+    assert_eq(got[32], 200)
+
+@test
+@impure
+fn test_a_byte_array_piece_is_its_own_bytes():
+    write_pieces("build/test_writev.bin")
+    let got := read_back("build/test_writev.bin")
+    assert_eq(got[40], 65)
+    assert_eq(got[41], 66)
+    assert_eq(got[42], 67)
+
+@test
+@impure
+fn test_a_nested_struct_writes_at_the_offset_its_layout_gives():
+    let f := std.fs.cwd().create_file("build/test_writev2.bin", 420) ?? std.exit(1)
+    let n : Nest = Nest{lead: 9, head: Head{magic: 16909060, count: 5, kind: 6}, tail: 8}
+    f.writev(n)
+    f.close()
+    let got := read_back("build/test_writev2.bin")
+    assert_eq(@dropunit(#got), 16)
+    assert_eq(got[0], 9)
+    assert_eq(got[1], 0)          // padding before the nested struct
+    assert_eq(got[4], 4)          // 16909060 is 0x01020304, little-endian
+    assert_eq(got[7], 1)
+    assert_eq(got[8], 5)          // count, inside the nested struct
+    assert_eq(got[10], 6)         // kind
+    assert_eq(got[12], 8)         // tail, past the nested struct's padding
+
+// an empty piece contributes nothing, so a caller may write a length
+// it computed without testing it first
+@test
+@impure
+fn test_an_empty_piece_is_not_an_error():
+    let f := std.fs.cwd().create_file("build/test_writev3.bin", 420) ?? std.exit(1)
+    let nothing : u8[] = []
+    let something : u8[] = [1, 2]
+    f.writev(nothing, something, nothing)
+    f.close()
+    let got := read_back("build/test_writev3.bin")
+    assert_eq(@dropunit(#got), 2)
+    assert_eq(got[0], 1)
+    assert_eq(got[1], 2)
+
+@start
+@impure
+fn main():
+    std.println("writev tests passed")

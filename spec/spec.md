@@ -8140,6 +8140,56 @@ The one deliberate departure is that Rust and Zig will still tell a program the 
 A packed layout — one that suppresses padding entirely — is a natural second `@repr` kind and is not yet defined.
 
 
+### Writing Several Pieces at Once (`writev`)
+
+`write` takes one run of bytes.  `writev` takes several and writes them in order with nothing between them, which is what turns a described binary format into a written one:
+
+```
+let f : mut = std.fs.cwd().create_file("image.bin", 0o644) ?? std.exit(1)
+f.writev(header, entries, payload)
+f.close()
+```
+
+Each argument is one piece, and each piece becomes one entry of the vector the kernel is handed — the `writev(2)` call, whose whole point is that a file made of parts does not have to be assembled into one buffer before it can be written.
+
+#### What a Piece May Be
+
+| Piece | Written as |
+|-------|-----------|
+| `u8[]`, `byte[]` | the bytes themselves |
+| a `@repr(C)` struct | the bytes of its layout, padding included |
+| an array of `@repr(C)` structs | element after element, as C lays an array out |
+
+The second and third rows are the reason [`@repr(C)`](#product-type-layout-repr) exists in a language that has no foreign function interface yet.  A struct with a defined layout *is* a statement about bytes; `writev` is where that statement is carried out.  A table — a section header table, a symbol table, an array of directory records — is one array of one struct type, so it is written as one piece rather than as an entry at a time.
+
+A struct without `@repr(C)` is refused, for the same reason its size is:
+
+```
+struct Loose:
+    a : u8
+    b : i64
+
+f.writev(loose)
+
+error: struct 'Loose' has no defined layout; annotate it with @repr(C)
+to give it one
+```
+
+#### Padding Is Written as Zeros
+
+A piece is exactly as long as its layout says, and the bytes a layout skips are written as zeros rather than as whatever the field beside them left behind.  Two runs of the same program therefore produce the same file, which is worth more than the cycles saved by leaving padding alone — a build that is reproducible can be compared, and one that is not cannot.
+
+#### Order and Completeness
+
+The pieces reach the file in the order written.  A `writev` that the kernel satisfies only in part resumes from where it stopped, so the call returns when every piece has been written or raises when it cannot be; a short write is never silently accepted.  An empty piece contributes nothing and is not an error, which lets a caller write a piece whose length is computed without testing it first.
+
+Like `write`, `writev` is a statement and answers nothing.
+
+#### Byte Order
+
+The bytes are the target machine's, which on the only target there is today is little-endian.  A format that must be written in a fixed byte order regardless of the machine cannot yet say so, and the field would have to be byte-swapped by the program before it is stored.
+
+
 ### Standard Library: System Environment
 
 Four submodules of `std` expose the context the operating system hands to a running program: `std.args` for the command line, `std.env` for the environment, `std.process` for what the kernel recorded about the process itself, and `std.sys` for the CPU and memory properties of the machine.  All four are read-only.  A program cannot rewrite its own command line or environment from the language; doing so is a property of the process that the runtime, not the program, is responsible for.
