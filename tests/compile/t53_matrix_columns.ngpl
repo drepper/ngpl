@@ -1,0 +1,52 @@
+// core-2: a matrix cut down both ways at once.  m[rows, cols] answers
+// a matrix of what the two ranges name, and m[rows, i] answers one
+// element from each row -- an array, since a column is not a matrix.
+// Neither can hand back rows the matrix already holds, so both build
+// what they answer and share nothing with what they were cut from;
+// a range of rows alone still shares, which is the difference this
+// checks.
+
+@impure
+@start
+fn main():
+    let m : i64[,] = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]]
+
+    // both ways at once
+    let s : i64[,] = m[0…1, 1…2]
+    std.println("{} {} {} {}", #s, s[0, 0], s[0, 1], s[1, 1])
+
+    // one column, taken from every row
+    let c : i64[] = m[0…2, 1]
+    std.println("{} {} {} {}", #c, c[0], c[1], c[2])
+
+    // a column of one row, and a corner
+    let one : i64[] = m[1…1, 3]
+    std.println("{} {}", #one, one[0])
+    let corner : i64[,] = m[2…2, 0…0]
+    std.println("{} {}", #corner, corner[0, 0])
+
+    // what is cut both ways is a copy
+    let n : mut i64[,] = [[1, 2, 3], [4, 5, 6]]
+    let sub : i64[,] = n[0…1, 0…1]
+    let col : i64[] = n[0…1, 2]
+    n[0, 0] ← 99
+    n[0, 2] ← 88
+    std.println("{} {} {} {}", sub[0, 0], n[0, 0], col[0], n[0, 2])
+
+    // a range of rows alone still hands back the rows themselves
+    let rows : i64[,] = n[0…1]
+    n[1, 0] ← 77
+    std.println("{} {}", rows[1, 0], n[1, 0])
+
+    // the bounds may be computed rather than written out
+    let lo : i64 = 0
+    let hi : i64 = 1
+    let d : i64[,] = m[lo × 1¤ptrdiff…hi × 1¤ptrdiff, lo × 1¤ptrdiff…hi × 1¤ptrdiff]
+    std.println("{} {} {}", #d, d[0, 0], d[1, 1])
+
+    // and what was cut can be walked like anything else
+    let total : mut i64 = 0
+    foreach row := s:
+        foreach v := row:
+            total ← total + v
+    std.println("{}", total)

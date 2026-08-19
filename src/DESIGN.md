@@ -261,8 +261,15 @@ Attempt 3 grows core-1 to **core-2** with structs:
   `m[i][j]` (rows alias, so the chain is the pair); `m[i, a…b]`
   narrows a row into a fresh array (`ASLICE` copy), `m[a…b]` keeps
   the matrix type with the row count opened (same rows, `ASLICE` on
-  descriptors); `[range, …]` is refused by name — a column would
-  not desugar.  A tuple-shaped `⍴` builds the flat rank-1 cycle
+  descriptors).  `m[rows, cols]` cuts both ways at once and answers
+  a matrix; `m[rows, i]` answers one element from each row, which
+  is an array, a column not being a matrix.  Neither can hand back
+  rows the matrix already holds, so both build every row of what
+  they answer and share nothing with what they were cut from --
+  where a range of rows alone shares, which is the distinction the
+  spec draws and t53 pins by writing through the original.  Both
+  lower to one walk over the chosen rows, cutting each with the
+  slice the runtime already had.  A tuple-shaped `⍴` builds the flat rank-1 cycle
   (the cycle runs across the row seam) and cuts rows with an
   emitted `ASLICE` loop; extents are written-out numbers, checked
   statically, so no runtime shape aborts exist.  `.shape` is

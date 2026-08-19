@@ -111,6 +111,15 @@ it is worth stating plainly: a feature is worth landing for the
 walls it removes, not only for the files it flips, and the two are
 rarely the same batch.
 
+Matrix column selection followed, which the design had left refused
+by name because the parser's `m[i, j]` desugars to `m[i][j]` and a
+column desugars to nothing.  It needed a node of its own rather than
+a rewrite, and once it had one the sharing rule fell out of the
+spec: a range of rows hands back the rows themselves, and anything
+cut the other way has to be built, so it shares nothing.  That
+distinction is the part worth testing, and t53 writes through the
+original to prove it both ways.
+
 Branch hints closed the statement-level annotations: `@likely` and
 `@unlikely` before an `if`, honoured in the layout where honouring
 them is free, and `@hot`/`@cold` noted on a definition.  Two things
@@ -123,7 +132,10 @@ had been flipping for some time and were never added: the shared
 list is maintained by hand and had drifted behind what the compiler
 could actually do.  Sixteen files run shared now, up from eleven,
 and only one of the five is this batch's doing.  A sweep of that
-kind belongs in the gates rather than in a session's memory.
+kind belongs in the gates rather than in a session's memory, and now
+it is one: `run_compile_tests.sh --sweep` names every suite file that
+already runs identically under both implementations and is not in the
+list, so the drift reports itself.
 
 Named measures followed, and were the same story at twice the size:
 twelve files carried `¤meter` or `¤count` as their blocker and none

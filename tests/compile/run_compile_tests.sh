@@ -21,7 +21,8 @@ compiler=interp
 for arg in "$@"; do
     case "$arg" in
         --compiler=interp|--compiler=native) compiler=${arg#--compiler=} ;;
-        *) echo "unknown option '$arg'; --compiler=interp or --compiler=native" >&2
+        --sweep) ;;
+        *) echo "unknown option '$arg'; --compiler=interp, --compiler=native or --sweep" >&2
            exit 1 ;;
     esac
 done
@@ -97,6 +98,15 @@ done
 # --test, and stdout, stderr and the exit code must match the
 # interpreter's byte for byte.  The list grows as the subset grows.
 # ---------------------------------------------------------------------------
+# --sweep: report suite files that already run identically under both
+# implementations but are not in the list below.  The list is kept by
+# hand, and a hand-kept list drifts behind what the compiler can do;
+# this says so rather than leaving it to be noticed.
+sweep_only=0
+for a in "$@"; do
+    case "$a" in --sweep) sweep_only=1 ;; esac
+done
+
 shared_tests=(
     test_arrows
     test_byte
@@ -115,6 +125,29 @@ shared_tests=(
     test_while_binding
     test_wrap
 )
+
+if [ $sweep_only -eq 1 ]; then
+    missing=0
+    for t in "$topdir"/tests/test_*.ngpl; do
+        name=$(basename "$t" .ngpl)
+        case " ${shared_tests[*]} " in *" $name "*) continue ;; esac
+        ngplc "$t" -o "$workdir/$name.bin" >/dev/null 2>&1 || continue
+        "$workdir/$name.bin" --test > "$workdir/$name.sn" 2> "$workdir/$name.sne"
+        python3 -m interp --test "$t" > "$workdir/$name.si" 2> "$workdir/$name.sie" || true
+        if cmp -s "$workdir/$name.si" "$workdir/$name.sn" &&
+           cmp -s "$workdir/$name.sie" "$workdir/$name.sne"; then
+            echo "could be shared: $name"
+            missing=$((missing + 1))
+        fi
+    done
+    if [ $missing -eq 0 ]; then
+        echo "sweep: the shared list is current"
+    else
+        echo "sweep: $missing file(s) could be shared and are not"
+    fi
+    exit $missing
+fi
+
 
 for name in "${shared_tests[@]}"; do
     t=$topdir/tests/$name.ngpl

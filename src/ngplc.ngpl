@@ -1203,6 +1203,7 @@ let NK_FNVAL : i64 = 89     // a named function as a value: na = fn index
 let NK_CALLV : i64 = 90     // applying a value: na = callee expr, nb = args
 let NK_EXPECTS : i64 = 93   // @expect over one statement: na = it, nb = 1 when an error is expected
 let NK_HINTED : i64 = 94    // @likely/@unlikely over an if: na = it, nb = 1 when unlikely
+let NK_MSLICE : i64 = 95    // m[rows, cols]: na = matrix, nb = extra [rlo, rhi, clo, chi], nc = 1 for a column
 let NK_TRY : i64 = 91       // e?: ∅ answers the function early, a value unwraps
 let NK_BADLAM : i64 = 92    // a λ the checker refuses: na says why
 
@@ -1877,8 +1878,33 @@ impl Parser:
                         self.err("a stepped slice is not core-2 yet")
                         return e
                     if self.peek() = TK_COMMA:
-                        self.err("a column of a matrix is not core-2 yet; take the rows first")
-                        return e
+                        // m[rows, cols] and m[rows, i]: a range of rows
+                        // cut down the other way.  Neither can hand back
+                        // rows the matrix already holds, so both build
+                        // what they answer.
+                        self.pos ← self.pos + 1
+                        let cidx : i64 = self.parse_expr()
+                        if self.peek() = TK_COMMA:
+                            self.err("a rank-3 subscript is not core-2 yet")
+                            return e
+                        _ ← self.eat(TK_RBRACK, "']' closing the subscript")
+                        let moff : i64 = @dropunit(#self.extra)
+                        self.extra.push(self.na[idx × 1¤ptrdiff])
+                        self.extra.push(self.nb[idx × 1¤ptrdiff])
+                        if self.nkind[cidx × 1¤ptrdiff] = NK_RANGEV:
+                            if self.nc[cidx × 1¤ptrdiff] ≠ ⁻1:
+                                self.err("a stepped slice is not core-2 yet")
+                                return e
+                            self.extra.push(self.na[cidx × 1¤ptrdiff])
+                            self.extra.push(self.nb[cidx × 1¤ptrdiff])
+                            e ← self.mknode(NK_MSLICE, at, e, moff, 0)
+                        else:
+                            // one column: an element from each row, so
+                            // what answers is an array and not a matrix
+                            self.extra.push(cidx)
+                            self.extra.push(⁻1)
+                            e ← self.mknode(NK_MSLICE, at, e, moff, 1)
+                        continue
                     _ ← self.eat(TK_RBRACK, "']' closing the slice")
                     e ← self.mknode(NK_SLICE, at, e, self.na[idx × 1¤ptrdiff], self.nb[idx × 1¤ptrdiff])
                 elif self.peek() = TK_COMMA:
@@ -4174,6 +4200,32 @@ impl Checker:
                 if self.ty_of(nc) ≠ vt:
                     self.derr(tok, "the step follows the range's type")
             self.set_type(id, mk_rgty(vt))
+        elif k = NK_MSLICE:
+            self.check_expr(na, TY_UNIT)
+            let mt9 : i64 = self.ty_of(na)
+            let rlo : i64 = self.a.extra[nb × 1¤ptrdiff]
+            let rhi : i64 = self.a.extra[(nb + 1) × 1¤ptrdiff]
+            let clo : i64 = self.a.extra[(nb + 2) × 1¤ptrdiff]
+            let chi : i64 = self.a.extra[(nb + 3) × 1¤ptrdiff]
+            if not ty_is_mat(mt9):
+                self.derr(tok, "two subscripts take a matrix apart; this is " ⧺ type_name(mt9))
+                self.check_expr(rlo, TY_UNIT)
+                self.check_expr(rhi, TY_UNIT)
+                self.check_expr(clo, TY_UNIT)
+                self.set_type(id, mk_aty(TY_I64))
+                return
+            self.check_index_expr(tok, mt9, rlo)
+            self.check_index_expr(tok, mt9, rhi)
+            let rowty : i64 = mk_aty(self.mat_elem(mt9))
+            self.check_index_expr(tok, rowty, clo)
+            if chi ≠ ⁻1:
+                self.check_index_expr(tok, rowty, chi)
+            if nc = 1:
+                // one element from each row: an array of them
+                self.set_type(id, mk_aty(self.mat_elem(mt9)))
+            else:
+                // neither extent is known before it is cut, so both open
+                self.set_type(id, mk_mty(self.mat_intern(self.mat_elem(mt9), ⁻1, ⁻1)))
         elif k = NK_SLICE:
             self.check_expr(na, TY_UNIT)
             let bt2 : i64 = self.ty_of(na)
@@ -6952,6 +7004,8 @@ impl Lower:
             return d
         if k = NK_DROPU:
             return self.lower_expr(na)
+        if k = NK_MSLICE:
+            return self.lower_mslice(nid, na, nb, nc)
         if k = NK_SLICE:
             let av : i64 = self.lower_expr(na)
             let lo : i64 = self.lower_expr(nb)
@@ -7728,6 +7782,46 @@ impl Lower:
         self.ir(IR_JMP, ltop, 0, 0, 0, 0)
         self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         d
+
+    // m[rows, cols] and m[rows, i]: the rows are walked and each is cut
+    // to what was asked for.  A row the matrix holds cannot be handed
+    // back narrowed, so every row of the answer is built, and the answer
+    // shares nothing with what it was cut from.
+    fn lower_mslice(&mut self, nid : i64, na : i64, off : i64, iscol : i64) → i64:
+        let mv : i64 = self.lower_expr(na)
+        let rlo : i64 = self.lower_expr(self.a.extra[off × 1¤ptrdiff])
+        let rhi : i64 = self.lower_expr(self.a.extra[(off + 1) × 1¤ptrdiff])
+        let clo : i64 = self.lower_expr(self.a.extra[(off + 2) × 1¤ptrdiff])
+        let chin : i64 = self.a.extra[(off + 3) × 1¤ptrdiff]
+        let chi : mut i64 = 0
+        if chin ≠ ⁻1:
+            chi ← self.lower_expr(chin)
+        let out : i64 = self.tmp()
+        self.ir(IR_ANEW, 4, 0, 0, out, 0)
+        let r : i64 = self.tmp()
+        self.ir(IR_MOV, rlo, 0, 0, r, 0)
+        let one : i64 = self.tmp()
+        self.ir(IR_CONST, 1, 0, 0, one, 0)
+        let ltop : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+        let cnd : i64 = self.tmp()
+        self.ir(IR_CLE, r, rhi, 0, cnd, 64 + 256)
+        self.ir(IR_JZ, cnd, lend, 0, 0, 0)
+        let row : i64 = self.tmp()
+        self.ir(IR_AIDX, mv, r, 0, row, 0)
+        let piece : i64 = self.tmp()
+        if iscol = 1:
+            self.ir(IR_AIDX, row, clo, 0, piece, 0)
+        else:
+            self.ir(IR_ASLICE, row, clo, chi, piece, 0)
+        self.ir(IR_APUSH, out, piece, 0, 0, 0)
+        let nr : i64 = self.tmp()
+        self.ir(IR_ADDW, r, one, 0, nr, 64 + 256)
+        self.ir(IR_MOV, nr, 0, 0, r, 0)
+        self.ir(IR_JMP, ltop, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        out
 
     fn lower_mreshape(&mut self, nid : i64, na : i64, nb : i64) → i64:
         // the flat filler cycles across the row seam, then is cut into
