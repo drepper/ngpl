@@ -1,0 +1,71 @@
+// Rank-3 arrays: a cube is planes of rows, so one subscript answers a
+// matrix and the type spells three extents.  What is checked here is
+// that the compiled cube and the interpreted one agree on every step
+// in -- literal, reshape, shape, walk, store and slice.
+
+fn volume(t : i32[2,2,3]) → i64:
+    @dropunit(t.shape[0]) × @dropunit(t.shape[1]) × @dropunit(t.shape[2])
+
+fn edges(t : i32[,,]) → i64:
+    @dropunit(t.shape[0]) + @dropunit(t.shape[2])
+
+fn total(t : i64[,,]) → i64:
+    let s : mut i64 = 0
+    foreach plane := t:
+        foreach row := plane:
+            foreach x := row:
+                s ← s + x
+    s
+
+@impure
+fn literals():
+    let c : i32[2,2,3] = [[[1,2,3],[4,5,6]],[[7,8,9],[10,11,12]]]
+    std.println("{} {} {}", c[0,0,0], c[1,1,2], c[0,1,0])
+    std.println("{} {} {}", c[0][1][2], c[1][0][0], c[1][1][1])
+    std.println("{} {} {}", c.shape[0], c.shape[1], c.shape[2])
+    std.println("{} {}", @dropunit(#c.shape), @dropunit(#c))
+    std.println("{} {}", volume(c), edges(c))
+    // an open cube type takes its extents from the literal
+    let o : i64[,,] = [[[1,2],[3,4]],[[5,6],[7,8]]]
+    std.println("{} {} {}", o[1,0,1], o.shape[1], o.shape[2])
+
+@impure
+fn reshapes():
+    let s : i32[2,2,2] = (2,2,2) ⍴ (1…8)
+    std.println("{} {} {}", s[0,0,0], s[0,1,1], s[1,1,1])
+    let z : i64[2,3,4] = (2,3,4) ⍴ 0
+    let n : mut i64 = 0
+    foreach plane := z:
+        foreach row := plane:
+            n ← n + @dropunit(#row)
+    std.println("{} {}", n, @dropunit(#z))
+    let q : i64[2,2,2] = (2,2,2) ⍴ (1…8)
+    std.println("{}", total(q))
+
+@impure
+fn steps_in():
+    let c : i64[2,2,3] = [[[1,2,3],[4,5,6]],[[7,8,9],[10,11,12]]]
+    // one subscript answers the plane, which is a matrix and shares
+    let p := c[1]
+    std.println("{} {} {}", p[0,1], p[1,2], p.shape[0])
+    // two answer the row
+    let r := c[1,0]
+    std.println("{} {}", @dropunit(#r), r[2])
+    // a range of planes answers a cube again
+    let sl := c[0…0]
+    std.println("{} {}", @dropunit(#sl), sl[0,1,2])
+
+@impure
+fn stores():
+    let m : mut i64[2,2,2] = (2,2,2) ⍴ (1…8)
+    m[1,0,1] ← 42
+    m[0][1][0] ← 99
+    std.println("{} {} {}", m[1,0,1], m[0,1,0], m[1,1,0])
+    std.println("{}", total(m))
+
+@impure @start
+fn main():
+    literals()
+    reshapes()
+    steps_in()
+    stores()

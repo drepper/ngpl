@@ -248,8 +248,8 @@ Attempt 3 grows core-1 to **core-2** with structs:
   int, bool, char and str bases compare with their own kind and with
   `∅` — presence bits first, contents only when both are there;
   struct bases are still taken apart by `match`.
-- **matrices**: rank-2, an outer dynamic array whose elements are row
-  descriptors — every sharing rule falls out of the existing array
+- **matrices**: rank 2 and rank 3, an outer dynamic array whose
+  elements are row descriptors (rank 2) or plane descriptors (rank 3) — every sharing rule falls out of the existing array
   runtime with no new IR and no new runtime helpers.  Types
   `T[,]`/`T[r,c]`/`T[,c]`/`T[r,]` intern into an Ast-owned table
   (element, two extents, ⁻1 open); the ref packing's multiplier
@@ -276,10 +276,32 @@ Attempt 3 grows core-1 to **core-2** with structs:
   `[#m, #m[0]]`¤ptrdiff, safe because a matrix is never empty.
   Literals check row-by-row against the stated type (ragged and
   wrong extents refused with the counts); `⍴` and literals are the
-  only births.  Refused by name: rank-3, matrix equality (the
-  bootstrap threads it elementwise), printing a matrix, computed
-  rows in literals, row stores on an open row length, open-extent
-  arguments to fixed-extent parameters, `mut` matrix parameters.
+  only births.
+  A rank-3 shape (`T[,,]`, `T[p,r,c]` and every partly-open kin)
+  adds a third extent to the same table plus one field the table
+  did not need before: **the type one subscript answers**, a row
+  for a matrix and a matrix for a cube.  It is settled inside
+  `mat_intern`, where the table may still grow, because the two
+  `elem_of` copies read it from a `&self` that cannot intern; the
+  cube's plane type is therefore interned as a side effect of
+  interning the cube, and the landing index is asked again after
+  that recursion rather than remembered from the dedup scan.
+  Everything above then follows without new machinery: a cube is an
+  array of matrices at runtime, so `c[i]` is a plane that shares,
+  `c[i, j, k]` desugars to the chain `c[i][j][k]`, `foreach`
+  hands out planes, and a cube slice keeps the cube type with only
+  the plane count opened.  A rank-3 literal recurses through
+  `check_cubelit`, whose first plane settles whatever the type left
+  open so a ragged cube is caught even under `T[,,]`.  The
+  tuple-shaped `⍴` takes three extents and runs the same cutting
+  loop twice — `cut_up` factored out of the rank-2 path — first
+  into planes of `c×d` elements, then each plane into rows.
+  `.shape` grows a third entry, `#m[0][0]`, reached the same way.
+  Refused by name: rank 4 and beyond, cutting a cube with a range
+  pair, matrix equality (the bootstrap threads it elementwise),
+  printing a matrix, computed rows in literals, row stores on an
+  open row length, open-extent arguments to fixed-extent
+  parameters, `mut` matrix parameters.
 - **range values**: `a…b` and `a…step…b` are expressions at the
   spec's precedence — tighter than comparison, looser than
   arithmetic — parsed in the binary-precedence loop, so `1 + 2 … 10

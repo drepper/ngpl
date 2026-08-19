@@ -1291,8 +1291,11 @@ struct Ast:
     fae : i64[]          // sized arrays: the element type per shape
     fas : i64[]          // … and the size
     mel : i64[]          // matrices: the element type per shape
-    mrr : i64[]          // … the row count, ⁻1 where the type leaves it open
-    mcc : i64[]          // … and the row length, likewise
+    mrr : i64[]          // … the first extent, ⁻1 where the type leaves it open
+    mcc : i64[]          // … the second, likewise
+    mdd : i64[]          // … the third, or ⁻2 where the shape has only two
+    minner : i64[]       // … and the type one subscript answers: a row for a
+                         //   matrix, a matrix for a cube
     lts : i64[]          // lambda signatures: start into lte per shape
     ltl : i64[]          // … how many parameters
     lte : i64[]          // … the parameter types then the answer, flattened
@@ -1339,6 +1342,8 @@ struct Parser:
     mel : i64[]
     mrr : i64[]
     mcc : i64[]
+    mdd : i64[]
+    minner : i64[]
     lts : i64[]
     ltl : i64[]
     lte : i64[]
@@ -1580,14 +1585,25 @@ impl Parser:
                         return TY_I64
                     d1 ← self.toks.val[self.pos × 1¤ptrdiff]
                     self.pos ← self.pos + 1
+                let d2 : mut i64 = ⁻2
                 if self.peek() = TK_COMMA:
-                    self.err("a rank-3 array is not core-2 yet")
-                    return TY_I64
+                    // T[,,]: a cube, its planes one matrix type
+                    self.pos ← self.pos + 1
+                    d2 ← ⁻1
+                    if self.peek() = TK_INT:
+                        if self.toks.big[self.pos × 1¤ptrdiff] ≠ 0:
+                            self.err("a matrix states its extents as plain numbers")
+                            return TY_I64
+                        d2 ← self.toks.val[self.pos × 1¤ptrdiff]
+                        self.pos ← self.pos + 1
+                    if self.peek() = TK_COMMA:
+                        self.err("a rank-4 array is not core-2 yet")
+                        return TY_I64
                 _ ← self.eat(TK_RBRACK, "']' closing the matrix type")
-                if d0 = 0 or d1 = 0:
+                if d0 = 0 or d1 = 0 or d2 = 0:
                     self.err("a matrix has at least one row and one column")
                     return TY_I64
-                base ← mk_mty(self.mat_intern(base, d0, d1))
+                base ← mk_mty(self.mat_intern(base, d0, d1, d2))
             elif d0 ≠ ⁻1:
                 _ ← self.eat(TK_RBRACK, "']' closing the sized array type")
                 base ← mk_fty(self.farr_intern(base, d0))
@@ -1675,17 +1691,29 @@ impl Parser:
         m
 
     // equal matrix shapes share one type code, as tuple shapes do
-    fn mat_intern(&mut self, elem : i64, r : i64, c : i64) → i64:
+    fn mat_intern(&mut self, elem : i64, r : i64, c : i64, d : i64) → i64:
         let m : i64 = @dropunit(#self.mel)
         let i : mut i64 = 0
         while i < m:
-            if self.mel[i × 1¤ptrdiff] = elem and self.mrr[i × 1¤ptrdiff] = r and self.mcc[i × 1¤ptrdiff] = c:
+            if self.mel[i × 1¤ptrdiff] = elem and self.mrr[i × 1¤ptrdiff] = r and self.mcc[i × 1¤ptrdiff] = c and self.mdd[i × 1¤ptrdiff] = d:
                 return i
             i ← i + 1
+        // What one subscript answers is settled here, where a shape may
+        // still be interned, so that reading it later -- from a &self
+        // that cannot intern -- is a plain lookup.
+        let inner : mut i64 = mk_rty(elem)
+        if d ≠ ⁻2:
+            inner ← mk_mty(self.mat_intern(elem, c, d, ⁻2))
+        // interning the plane may have grown the table, so where this
+        // shape lands is asked again and not remembered from the scan
+        let at : i64 = @dropunit(#self.mel)
         self.mel.push(elem)
         self.mrr.push(r)
         self.mcc.push(c)
-        m
+        self.mdd.push(d)
+        self.minner.push(inner)
+        assert(#self.mel = #self.minner and #self.mel = #self.mdd, "shape table arrays in step")
+        at
 
     // the pre-scanned struct names answer for a name TYNAMES does not
     fn sindex_ty(&self, name : str) → i64:
@@ -1913,6 +1941,24 @@ impl Parser:
                     self.pos ← self.pos + 1
                     e ← self.mknode(NK_INDEX, at, e, idx, 0)
                     let jdx : i64 = self.parse_expr()
+                    if self.peek() = TK_COMMA and self.nkind[jdx × 1¤ptrdiff] ≠ NK_RANGEV:
+                        // c[i, j, k]: one step further in, one more link
+                        self.pos ← self.pos + 1
+                        e ← self.mknode(NK_INDEX, at, e, jdx, 0)
+                        let kdx : i64 = self.parse_expr()
+                        if self.peek() = TK_COMMA:
+                            self.err("a rank-4 subscript is not core-2 yet")
+                            return e
+                        if self.nkind[kdx × 1¤ptrdiff] = NK_RANGEV:
+                            if self.nc[kdx × 1¤ptrdiff] ≠ ⁻1:
+                                self.err("a stepped slice is not core-2 yet")
+                                return e
+                            _ ← self.eat(TK_RBRACK, "']' closing the slice")
+                            e ← self.mknode(NK_SLICE, at, e, self.na[kdx × 1¤ptrdiff], self.nb[kdx × 1¤ptrdiff])
+                        else:
+                            _ ← self.eat(TK_RBRACK, "']' closing the subscript")
+                            e ← self.mknode(NK_INDEX, at, e, kdx, 0)
+                        continue
                     if self.peek() = TK_COMMA:
                         self.err("a rank-3 subscript is not core-2 yet")
                         return e
@@ -3170,7 +3216,7 @@ fn parse(toks : Toks, src : byte[]) → Ast:
                                  unames: unit_names(), umarks: unit_marks(),
                                  snames: [], tts: [], ttl: [], tte: [],
                                  fae: [], fas: [],
-                                 mel: [], mrr: [], mcc: [],
+                                 mel: [], mrr: [], mcc: [], mdd: [], minner: [],
                                  lts: [], ltl: [], lte: [],
                                  enames: [], ewidth: [], estart: [],
                                  ecount: [], emembers: [], evalues: [],
@@ -3212,7 +3258,7 @@ fn parse(toks : Toks, src : byte[]) → Ast:
          extra: p.extra, strs: p.toks.strs, fns: p.fns, globals: p.globals,
          structs: p.structs, tts: p.tts, ttl: p.ttl, tte: p.tte,
          fae: p.fae, fas: p.fas,
-         mel: p.mel, mrr: p.mrr, mcc: p.mcc,
+         mel: p.mel, mrr: p.mrr, mcc: p.mcc, mdd: p.mdd, minner: p.minner,
          lts: p.lts, ltl: p.ltl, lte: p.lte,
          unames: p.unames, umarks: p.umarks,
          enames: p.enames, ewidth: p.ewidth, estart: p.estart,
@@ -3589,7 +3635,7 @@ impl Checker:
         if ty_is_mat(t) and ty_is_mat(want):
             // a stated extent fits an open one; an open one fits only
             // openness, since nothing vouches for its size
-            return self.mat_elem(t) = self.mat_elem(want) and (self.mat_rr(want) = ⁻1 or self.mat_rr(want) = self.mat_rr(t)) and (self.mat_cc(want) = ⁻1 or self.mat_cc(want) = self.mat_cc(t))
+            return self.mat_elem(t) = self.mat_elem(want) and self.mat_rank(t) = self.mat_rank(want) and (self.mat_rr(want) = ⁻1 or self.mat_rr(want) = self.mat_rr(t)) and (self.mat_cc(want) = ⁻1 or self.mat_cc(want) = self.mat_cc(t)) and (self.mat_dd(want) = ⁻1 or self.mat_dd(want) = self.mat_dd(t))
         if not (ty_is_int(t) and ty_is_int(want)):
             return false
         if ty_unit(t) ≠ ty_unit(want) and ty_unit(t) ≠ 0:
@@ -4207,6 +4253,13 @@ impl Checker:
             let rhi : i64 = self.a.extra[(nb + 1) × 1¤ptrdiff]
             let clo : i64 = self.a.extra[(nb + 2) × 1¤ptrdiff]
             let chi : i64 = self.a.extra[(nb + 3) × 1¤ptrdiff]
+            if ty_is_mat(mt9) and self.mat_rank(mt9) = 3:
+                self.derr(tok, "cutting a rank-3 array with a range is not core-2 yet")
+                self.check_expr(rlo, TY_UNIT)
+                self.check_expr(rhi, TY_UNIT)
+                self.check_expr(clo, TY_UNIT)
+                self.set_type(id, mk_aty(TY_I64))
+                return
             if not ty_is_mat(mt9):
                 self.derr(tok, "two subscripts take a matrix apart; this is " ⧺ type_name(mt9))
                 self.check_expr(rlo, TY_UNIT)
@@ -4225,7 +4278,7 @@ impl Checker:
                 self.set_type(id, mk_aty(self.mat_elem(mt9)))
             else:
                 // neither extent is known before it is cut, so both open
-                self.set_type(id, mk_mty(self.mat_intern(self.mat_elem(mt9), ⁻1, ⁻1)))
+                self.set_type(id, mk_mty(self.mat_intern(self.mat_elem(mt9), ⁻1, ⁻1, ⁻2)))
         elif k = NK_SLICE:
             self.check_expr(na, TY_UNIT)
             let bt2 : i64 = self.ty_of(na)
@@ -4240,7 +4293,7 @@ impl Checker:
             if ty_is_mat(bt2):
                 // fewer rows, the same rows: the row count opens, the
                 // row length is still the type's to say
-                self.set_type(id, mk_mty(self.mat_intern(self.mat_elem(bt2), ⁻1, self.mat_cc(bt2))))
+                self.set_type(id, mk_mty(self.mat_intern(self.mat_elem(bt2), ⁻1, self.mat_cc(bt2), self.mat_dd(bt2))))
                 return
             self.set_type(id, mk_aty(self.elem_of(bt2)) if ty_is_farr(bt2) or ty_is_row(bt2) else bt2)
         elif k = NK_LXOR or k = NK_LNAND or k = NK_LNOR:
@@ -4438,7 +4491,7 @@ impl Checker:
 
     fn elem_of(&self, t : i64) → i64:
         if ty_is_mat(t):
-            return mk_rty(self.a.mel[ty_midx(t) × 1¤ptrdiff])
+            return self.a.minner[ty_midx(t) × 1¤ptrdiff]
         self.a.fae[ty_fidx(t) × 1¤ptrdiff] if ty_is_farr(t) else ty_elem(t)
 
     fn farr_size(&self, t : i64) → i64:
@@ -4480,17 +4533,26 @@ impl Checker:
         self.a.lte[(self.a.lts[ty_lidx(t) × 1¤ptrdiff] + self.a.ltl[ty_lidx(t) × 1¤ptrdiff]) × 1¤ptrdiff]
 
     // the checker interns shapes a slice invents, as the parser does
-    fn mat_intern(&mut self, elem : i64, r : i64, c : i64) → i64:
+    fn mat_intern(&mut self, elem : i64, r : i64, c : i64, d : i64) → i64:
         let m : i64 = @dropunit(#self.a.mel)
         let i : mut i64 = 0
         while i < m:
-            if self.a.mel[i × 1¤ptrdiff] = elem and self.a.mrr[i × 1¤ptrdiff] = r and self.a.mcc[i × 1¤ptrdiff] = c:
+            if self.a.mel[i × 1¤ptrdiff] = elem and self.a.mrr[i × 1¤ptrdiff] = r and self.a.mcc[i × 1¤ptrdiff] = c and self.a.mdd[i × 1¤ptrdiff] = d:
                 return i
             i ← i + 1
+        let inner : mut i64 = mk_rty(elem)
+        if d ≠ ⁻2:
+            inner ← mk_mty(self.mat_intern(elem, c, d, ⁻2))
+        // interning the plane may have grown the table, so where this
+        // shape lands is asked again and not remembered from the scan
+        let at : i64 = @dropunit(#self.a.mel)
         self.a.mel.push(elem)
         self.a.mrr.push(r)
         self.a.mcc.push(c)
-        m
+        self.a.mdd.push(d)
+        self.a.minner.push(inner)
+        assert(#self.a.mel = #self.a.minner and #self.a.mel = #self.a.mdd, "shape table arrays in step")
+        at
 
     fn mat_elem(&self, t : i64) → i64:
         self.a.mel[ty_midx(t) × 1¤ptrdiff]
@@ -4500,6 +4562,13 @@ impl Checker:
 
     fn mat_cc(&self, t : i64) → i64:
         self.a.mcc[ty_midx(t) × 1¤ptrdiff]
+
+    fn mat_dd(&self, t : i64) → i64:
+        self.a.mdd[ty_midx(t) × 1¤ptrdiff]
+
+    // two extents or three
+    fn mat_rank(&self, t : i64) → i64:
+        2 if self.a.mdd[ty_midx(t) × 1¤ptrdiff] = ⁻2 else 3
 
     fn tup_len(&self, t : i64) → i64:
         self.a.ttl[ty_tidx(t) × 1¤ptrdiff]
@@ -4626,26 +4695,32 @@ impl Checker:
             return
         let toff : i64 = self.a.na[na × 1¤ptrdiff]
         let tn : i64 = self.a.extra[toff × 1¤ptrdiff]
-        if tn ≠ 2:
-            self.derr(tok, "a matrix ⍴ takes the two extents, rows and columns" if tn > 2 else "one extent is a count, not a shape")
+        let rank : i64 = self.mat_rank(w)
+        if tn ≠ rank:
+            self.derr(tok, "a shape states as many extents as the binding has dimensions, " ⧺ i64_str(rank) if tn > 1 else "one extent is a count, not a shape")
             self.set_type(id, w)
             return
         let re : i64 = self.a.extra[(toff + 1) × 1¤ptrdiff]
         let ce : i64 = self.a.extra[(toff + 2) × 1¤ptrdiff]
-        if self.kind_of(re) ≠ NK_INT or self.kind_of(ce) ≠ NK_INT or self.a.nb[re × 1¤ptrdiff] ≠ 0 or self.a.nb[ce × 1¤ptrdiff] ≠ 0:
+        let de : i64 = self.a.extra[(toff + rank) × 1¤ptrdiff]
+        if self.kind_of(re) ≠ NK_INT or self.kind_of(ce) ≠ NK_INT or self.kind_of(de) ≠ NK_INT or self.a.nb[re × 1¤ptrdiff] ≠ 0 or self.a.nb[ce × 1¤ptrdiff] ≠ 0 or self.a.nb[de × 1¤ptrdiff] ≠ 0:
             self.derr(tok, "a matrix ⍴ states its extents as written-out numbers")
             self.set_type(id, w)
             return
         self.set_type(re, TY_I64)
         self.set_type(ce, TY_I64)
+        self.set_type(de, TY_I64)
         let r : i64 = self.a.na[re × 1¤ptrdiff]
         let c : i64 = self.a.na[ce × 1¤ptrdiff]
-        if r < 1 or c < 1:
+        let d3 : i64 = self.a.na[de × 1¤ptrdiff]
+        if r < 1 or c < 1 or (rank = 3 and d3 < 1):
             self.derr(tok, "a matrix has at least one row and one column")
         if self.mat_rr(w) ≠ ⁻1 and r ≠ self.mat_rr(w):
             self.derr(tok, "array size mismatch: the type says " ⧺ i64_str(self.mat_rr(w)) ⧺ " rows, got " ⧺ i64_str(r))
         if self.mat_cc(w) ≠ ⁻1 and c ≠ self.mat_cc(w):
             self.derr(tok, "array size mismatch: the type says rows of " ⧺ i64_str(self.mat_cc(w)) ⧺ ", got " ⧺ i64_str(c))
+        if rank = 3 and self.mat_dd(w) ≠ ⁻1 and d3 ≠ self.mat_dd(w):
+            self.derr(tok, "array size mismatch: the type says rows of " ⧺ i64_str(self.mat_dd(w)) ⧺ ", got " ⧺ i64_str(d3))
         // the filler settles as it does for a one-dimensional ⍴
         let ew : i64 = self.mat_elem(w)
         if self.kind_of(nb) = NK_ARRLIT:
@@ -4712,9 +4787,20 @@ impl Checker:
             elif self.a.na[na × 1¤ptrdiff] ≠ self.farr_size(w):
                 self.derr(tok, "array size mismatch: declared " ⧺ i64_str(self.farr_size(w)) ⧺ ", got " ⧺ i64_str(self.a.na[na × 1¤ptrdiff]))
 
+    // the length of a written-out plane's first row, or ⁻1 where the
+    // literal does not say
+    fn lit_cols(&self, poff : i64) → i64:
+        if self.a.extra[poff × 1¤ptrdiff] = 0:
+            return ⁻1
+        let r0 : i64 = self.a.extra[(poff + 1) × 1¤ptrdiff]
+        ⁻1 if self.kind_of(r0) ≠ NK_ARRLIT else self.a.extra[self.a.na[r0 × 1¤ptrdiff] × 1¤ptrdiff]
+
     fn check_matlit(&mut self, id : i64, tok : i64, off : i64, w : i64):
         let n : i64 = self.a.extra[off × 1¤ptrdiff]
         let elem : i64 = self.mat_elem(w)
+        if self.mat_rank(w) = 3:
+            self.check_cubelit(id, tok, off, w)
+            return
         if n = 0:
             self.derr(tok, "a matrix has at least one row")
             self.set_type(id, w)
@@ -4740,6 +4826,36 @@ impl Checker:
                 elif rl ≠ c0:
                     self.derr(tok, "rows of differing lengths are not a dimension; " ⧺ i64_str(c0) ⧺ " then " ⧺ i64_str(rl))
                 self.check_expr(e, mk_aty(elem))
+            i ← i + 1
+        self.set_type(id, w)
+
+    // a cube's elements are its planes, each a matrix literal.  Where
+    // the type leaves an extent open the first plane settles it, so a
+    // ragged literal is still caught.
+    fn check_cubelit(&mut self, id : i64, tok : i64, off : i64, w : i64):
+        let n : i64 = self.a.extra[off × 1¤ptrdiff]
+        if n = 0:
+            self.derr(tok, "a matrix has at least one row")
+            self.set_type(id, w)
+            return
+        if self.mat_rr(w) ≠ ⁻1 and n ≠ self.mat_rr(w):
+            self.derr(tok, "array size mismatch: the type says " ⧺ i64_str(self.mat_rr(w)) ⧺ " planes, got " ⧺ i64_str(n))
+        let e0 : i64 = self.a.extra[(off + 1) × 1¤ptrdiff]
+        let rw : mut i64 = self.mat_cc(w)
+        let cw : mut i64 = self.mat_dd(w)
+        if self.kind_of(e0) = NK_ARRLIT:
+            let poff0 : i64 = self.a.na[e0 × 1¤ptrdiff]
+            rw ← self.a.extra[poff0 × 1¤ptrdiff] if rw = ⁻1 else rw
+            cw ← self.lit_cols(poff0) if cw = ⁻1 else cw
+        let inner : i64 = mk_mty(self.mat_intern(self.mat_elem(w), rw, cw, ⁻2))
+        let i : mut i64 = 0
+        while i < n:
+            let e : i64 = self.a.extra[(off + 1 + i) × 1¤ptrdiff]
+            if self.kind_of(e) ≠ NK_ARRLIT:
+                self.derr(tok, "a matrix literal writes its rows out; a computed row is not core-2 yet")
+                self.check_expr(e, TY_UNIT)
+            else:
+                self.check_matlit(e, tok, self.a.na[e × 1¤ptrdiff], inner)
             i ← i + 1
         self.set_type(id, w)
 
@@ -7148,6 +7264,14 @@ impl Lower:
                 let cl9 : i64 = self.tmp()
                 self.ir(IR_ALEN, r09, 0, 0, cl9, 0)
                 self.ir(IR_APUSH, d9, cl9, 0, 0, 0)
+                if self.mat_rank(ty_strip_ref(self.tof(na))) = 3:
+                    // a cube's planes are matrices, so one step further
+                    // in reaches the row whose length is the last extent
+                    let r19 : i64 = self.tmp()
+                    self.ir(IR_AIDX, r09, z9, 0, r19, 0)
+                    let dl9 : i64 = self.tmp()
+                    self.ir(IR_ALEN, r19, 0, 0, dl9, 0)
+                    self.ir(IR_APUSH, d9, dl9, 0, 0, 0)
                 return d9
             let bv : i64 = self.lower_expr(na)
             let d : i64 = self.tmp()
@@ -7827,10 +7951,14 @@ impl Lower:
         // the flat filler cycles across the row seam, then is cut into
         // rows, each row its own fresh array
         let toff : i64 = self.a.na[na × 1¤ptrdiff]
+        let rank : i64 = self.a.extra[toff × 1¤ptrdiff]
         let r : i64 = self.a.na[self.a.extra[(toff + 1) × 1¤ptrdiff] × 1¤ptrdiff]
         let c : i64 = self.a.na[self.a.extra[(toff + 2) × 1¤ptrdiff] × 1¤ptrdiff]
+        // a cube is planes of rows: the last two extents make the plane,
+        // and the first counts them
+        let d3 : i64 = 1 if rank = 2 else self.a.na[self.a.extra[(toff + 3) × 1¤ptrdiff] × 1¤ptrdiff]
         let nall : i64 = self.tmp()
-        self.ir(IR_CONST, r × c, 0, 0, nall, 0)
+        self.ir(IR_CONST, r × c × d3, 0, 0, nall, 0)
         let flat : i64 = self.tmp()
         if ty_is_rg(self.tof(nb)):
             let fvr : i64 = self.lower_rg_arr(nb)
@@ -7841,14 +7969,48 @@ impl Lower:
         else:
             let fv : i64 = self.lower_expr(nb)
             self.ir(IR_AFILL, nall, fv, 0, flat, 0)
+        // the outermost dimension counts what the level below builds:
+        // rows for a matrix, planes for a cube.  Either way the cutting
+        // is the same loop, so a cube runs it twice, once nested.
+        let d : i64 = self.cut_up(flat, r, c × d3)
+        if rank = 2:
+            return d
+        let cube : i64 = self.tmp()
+        self.ir(IR_ANEW, r ⌈ 4, 0, 0, cube, 0)
+        let pi : i64 = self.tmp()
+        self.ir(IR_CONST, 0, 0, 0, pi, 0)
+        let pn : i64 = self.tmp()
+        self.ir(IR_CONST, r, 0, 0, pn, 0)
+        let pone : i64 = self.tmp()
+        self.ir(IR_CONST, 1, 0, 0, pone, 0)
+        let ptop : i64 = self.label()
+        let pend : i64 = self.label()
+        self.ir(IR_LABEL, ptop, 0, 0, 0, 0)
+        let pc : i64 = self.tmp()
+        self.ir(IR_CLT, pi, pn, 0, pc, 64 + 256)
+        self.ir(IR_JZ, pc, pend, 0, 0, 0)
+        let plane : i64 = self.tmp()
+        self.ir(IR_AIDX, d, pi, 0, plane, 0)
+        let pm : i64 = self.cut_up(plane, c, d3)
+        self.ir(IR_APUSH, cube, pm, 0, 0, 0)
+        let pnx : i64 = self.tmp()
+        self.ir(IR_ADDW, pi, pone, 0, pnx, 64 + 256)
+        self.ir(IR_MOV, pnx, 0, 0, pi, 0)
+        self.ir(IR_JMP, ptop, 0, 0, 0, 0)
+        self.ir(IR_LABEL, pend, 0, 0, 0, 0)
+        cube
+
+    // n slices of width w, cut off the front of flat and pushed into a
+    // fresh array; the slices share with what they were cut from
+    fn cut_up(&mut self, flat : i64, n : i64, w : i64) → i64:
         let d : i64 = self.tmp()
-        self.ir(IR_ANEW, r ⌈ 4, 0, 0, d, 0)
+        self.ir(IR_ANEW, n ⌈ 4, 0, 0, d, 0)
         let i : i64 = self.tmp()
         self.ir(IR_CONST, 0, 0, 0, i, 0)
         let rv : i64 = self.tmp()
-        self.ir(IR_CONST, r, 0, 0, rv, 0)
+        self.ir(IR_CONST, n, 0, 0, rv, 0)
         let cv : i64 = self.tmp()
-        self.ir(IR_CONST, c, 0, 0, cv, 0)
+        self.ir(IR_CONST, w, 0, 0, cv, 0)
         let one : i64 = self.tmp()
         self.ir(IR_CONST, 1, 0, 0, one, 0)
         let ltop : i64 = self.label()
@@ -8526,7 +8688,7 @@ impl Lower:
 
     fn elem_of(&self, t : i64) → i64:
         if ty_is_mat(t):
-            return mk_rty(self.a.mel[ty_midx(t) × 1¤ptrdiff])
+            return self.a.minner[ty_midx(t) × 1¤ptrdiff]
         self.a.fae[ty_fidx(t) × 1¤ptrdiff] if ty_is_farr(t) else ty_elem(t)
 
     fn farr_size(&self, t : i64) → i64:
@@ -8540,6 +8702,12 @@ impl Lower:
 
     fn mat_cc(&self, t : i64) → i64:
         self.a.mcc[ty_midx(t) × 1¤ptrdiff]
+
+    fn mat_dd(&self, t : i64) → i64:
+        self.a.mdd[ty_midx(t) × 1¤ptrdiff]
+
+    fn mat_rank(&self, t : i64) → i64:
+        2 if self.a.mdd[ty_midx(t) × 1¤ptrdiff] = ⁻2 else 3
 
     fn tup_len(&self, t : i64) → i64:
         self.a.ttl[ty_tidx(t) × 1¤ptrdiff]
@@ -11903,7 +12071,9 @@ fn sym_type(a : Ast, toks : Toks, src : byte[], t0 : i64, seen : i64[]) → str:
     if ty_is_mat(t):
         let mr : i64 = a.mrr[ty_midx(t) × 1¤ptrdiff]
         let mc : i64 = a.mcc[ty_midx(t) × 1¤ptrdiff]
-        return pre ⧺ sym_type(a, toks, src, a.mel[ty_midx(t) × 1¤ptrdiff], seen) ⧺ "[" ⧺ ("" if mr = ⁻1 else i64_str(mr)) ⧺ "," ⧺ ("" if mc = ⁻1 else i64_str(mc)) ⧺ "]"
+        let md : i64 = a.mdd[ty_midx(t) × 1¤ptrdiff]
+        let tail : str = "" if md = ⁻2 else ("," if md = ⁻1 else "," ⧺ i64_str(md))
+        return pre ⧺ sym_type(a, toks, src, a.mel[ty_midx(t) × 1¤ptrdiff], seen) ⧺ "[" ⧺ ("" if mr = ⁻1 else i64_str(mr)) ⧺ "," ⧺ ("" if mc = ⁻1 else i64_str(mc)) ⧺ tail ⧺ "]"
     if ty_is_farr(t):
         return pre ⧺ sym_type(a, toks, src, a.fae[ty_fidx(t) × 1¤ptrdiff], seen) ⧺ "[" ⧺ i64_str(a.fas[ty_fidx(t) × 1¤ptrdiff]) ⧺ "]"
     if ty_is_row(t) or ty_is_arr(t):

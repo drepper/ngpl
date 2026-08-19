@@ -426,6 +426,25 @@ unlexed, units refused on struct fields, `std.args.get` raising
 instead of answering `∅`, and no error stream (`std.eprintln`) so
 ngplc's diagnostics go to stdout.
 
+Rank-3 arrays followed the column work.  The interesting part was
+not the third extent -- adding it to the shape table is bookkeeping
+-- but that `elem_of` runs on a `&self` and so cannot intern the
+type it needs to answer with.  For a matrix that never mattered,
+because a row's type is computable from the element (`7168 + elem`);
+for a cube the answer is a *matrix* type, which lives in the table
+and might not be there yet.  Storing the answer in the table at
+intern time is the whole fix, and it is a better shape than a
+mutable `elem_of` would have been: interning a cube interns its
+plane as a side effect, once, and every later reader is a lookup.
+The one trap was that the recursion grows the table under the
+caller, so the index the dedup scan computed on entry is stale by
+the time the push happens -- exactly the class of bug the parallel
+arrays' `assert` at the end of `mat_intern` now watches for.  With
+that settled, indexing, `foreach`, slicing and stores needed no new
+code at all, because a cube at runtime is an array of matrices and
+every one of those paths already walked one type deeper by asking
+`elem_of`.
+
 ## The Plan for Attempt 3 (sketch)
 
 1. Structs by value: `@repr`-style layout in slots or heap, field
