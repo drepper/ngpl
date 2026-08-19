@@ -9731,6 +9731,17 @@ struct Emit:
     rx_pos : i64[]       // abs64 fixups against them
     rx_off : i64[]
     pj_labels : i64[]
+    // the retargetable driver's fixups: local branches with their
+    // instruction form, and function-address materializations
+    tf_pos : i64[]
+    tf_lab : i64[]
+    tf_form : i64[]
+    ff_pos : i64[]
+    ff_fn : i64[]
+    // where the kernel block and the allocator's cells sit in the
+    // data segment, for IR_KADDR
+    k_args : i64
+    k_alloc : i64
 
 impl Emit:
     fn here(&self) → i64:
@@ -12724,6 +12735,7 @@ struct Target:
     sc_getdents : i64
     sc_openat : i64
     stat_size : i64      // where st_size sits in what fstat fills in
+    o_directory : i64    // O_DIRECTORY: x86 and the generic table disagree
 
 fn targets() → Target[]:
     let t : mut Target[] = []
@@ -12732,38 +12744,38 @@ fn targets() → Target[]:
                   sc_read: 0, sc_write: 1, sc_close: 3, sc_fstat: 5,
                   sc_mmap: 9, sc_mprotect: 10, sc_writev: 20,
                   sc_getpid: 39, sc_kill: 62, sc_exit: 60,
-                  sc_getdents: 217, sc_openat: 257, stat_size: 48})
+                  sc_getdents: 217, sc_openat: 257, stat_size: 48, o_directory: 65536})
     t.push(Target{id: TGT_I386, name: "i386", machine: 3, is64: false,
                   eflags: 0, ptr: 4,
                   sc_read: 3, sc_write: 4, sc_close: 6, sc_fstat: 197,
                   sc_mmap: 192, sc_mprotect: 125, sc_writev: 146,
                   sc_getpid: 20, sc_kill: 37, sc_exit: 1,
-                  sc_getdents: 220, sc_openat: 295, stat_size: 44})
+                  sc_getdents: 220, sc_openat: 295, stat_size: 44, o_directory: 65536})
     t.push(Target{id: TGT_A64, name: "aarch64", machine: 183, is64: true,
                   eflags: 0, ptr: 8,
                   sc_read: 63, sc_write: 64, sc_close: 57, sc_fstat: 80,
                   sc_mmap: 222, sc_mprotect: 226, sc_writev: 66,
                   sc_getpid: 172, sc_kill: 129, sc_exit: 93,
-                  sc_getdents: 61, sc_openat: 56, stat_size: 48})
+                  sc_getdents: 61, sc_openat: 56, stat_size: 48, o_directory: 16384})
     // EABI version 5, soft-float: the runtime touches no float register
     t.push(Target{id: TGT_A32, name: "arm", machine: 40, is64: false,
                   eflags: 83886592, ptr: 4,
                   sc_read: 3, sc_write: 4, sc_close: 6, sc_fstat: 197,
                   sc_mmap: 192, sc_mprotect: 125, sc_writev: 146,
                   sc_getpid: 20, sc_kill: 37, sc_exit: 1,
-                  sc_getdents: 217, sc_openat: 322, stat_size: 48})
+                  sc_getdents: 217, sc_openat: 322, stat_size: 48, o_directory: 16384})
     t.push(Target{id: TGT_RV64, name: "riscv64", machine: 243, is64: true,
                   eflags: 0, ptr: 8,
                   sc_read: 63, sc_write: 64, sc_close: 57, sc_fstat: 80,
                   sc_mmap: 222, sc_mprotect: 226, sc_writev: 66,
                   sc_getpid: 172, sc_kill: 129, sc_exit: 93,
-                  sc_getdents: 61, sc_openat: 56, stat_size: 48})
+                  sc_getdents: 61, sc_openat: 56, stat_size: 48, o_directory: 16384})
     t.push(Target{id: TGT_RV32, name: "riscv32", machine: 243, is64: false,
                   eflags: 0, ptr: 4,
                   sc_read: 63, sc_write: 64, sc_close: 57, sc_fstat: 80,
                   sc_mmap: 222, sc_mprotect: 226, sc_writev: 66,
                   sc_getpid: 172, sc_kill: 129, sc_exit: 93,
-                  sc_getdents: 61, sc_openat: 56, stat_size: 48})
+                  sc_getdents: 61, sc_openat: 56, stat_size: 48, o_directory: 16384})
     t
 
 // The architecture this compiler is running on, which is what a
@@ -13593,7 +13605,9 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                               max_frame: 0,
                               gmap: [], gseg: [], gr_pos: [], gr_off: [],
                               skipping: 0, rt_need: [],
-                              rx: [], rx_pos: [], rx_off: []})
+                              rx: [], rx_pos: [], rx_off: [],
+                              tf_pos: [], tf_lab: [], tf_form: [],
+                              ff_pos: [], ff_fn: [], k_args: 0, k_alloc: 0})
     let nglobals : i64 = @dropunit(#a.globals)
     // The data a program carries falls into three kinds.  One is never
     // written and rides with the other read-only things.  One is
@@ -14256,6 +14270,2833 @@ fn main() → u8:
     0
 
 // ===========================================================================
+// The retargetable backend's abstract machine
+//
+// Three abstract 64-bit registers, RA, RB and RC, every IR value in an
+// 8-byte stack slot, and a small set of operations each target spells
+// in its own instructions.  The driver below composes every IR op out
+// of these; a target teaches the machine its spelling and gets the
+// whole language.  The x86-64 pioneer keeps its hand-tuned emitter;
+// everything else arrives through here.
+// ===========================================================================
+
+let RG_A : i64 = 0
+let RG_B : i64 = 1
+let RG_C : i64 = 2
+
+// comparison conditions, signedness aside
+let CC_EQ : i64 = 0
+let CC_NE : i64 = 1
+let CC_LT : i64 = 2
+let CC_LE : i64 = 3
+let CC_GT : i64 = 4
+let CC_GE : i64 = 5
+
+// IR the runtime builders use and the front end never writes
+let IR_SYSC : i64 = 108    // d ← syscall a (an SC_* index); extra b: [argc, arg vregs…]
+let IR_LDN : i64 = 109     // d ← mem[vreg a + imm b]; w = width in bytes, 0 for a pointer, +256 for signed
+let IR_STN : i64 = 110     // mem[vreg a + imm b] ← vreg c; w = width, 0 for a pointer
+let IR_KADDR : i64 = 111   // d ← a data address: a = 0 the kernel block, 1 the allocator's; b = byte offset
+
+// what the runtime asks of the kernel, named so the builders stay
+// architecture-blind; the target row resolves each to its number
+let SC_READ : i64 = 0
+let SC_WRITE : i64 = 1
+let SC_CLOSE : i64 = 2
+let SC_FSTAT : i64 = 3
+let SC_MMAP : i64 = 4
+let SC_MPROT : i64 = 5
+let SC_WRITEV : i64 = 6
+let SC_GETPID : i64 = 7
+let SC_KILL : i64 = 8
+let SC_EXIT : i64 = 9
+let SC_GETDENTS : i64 = 10
+let SC_OPENAT : i64 = 11
+
+fn sc_number(tg : Target, id : i64) → i64:
+    if id = SC_READ: return tg.sc_read
+    if id = SC_WRITE: return tg.sc_write
+    if id = SC_CLOSE: return tg.sc_close
+    if id = SC_FSTAT: return tg.sc_fstat
+    if id = SC_MMAP: return tg.sc_mmap
+    if id = SC_MPROT: return tg.sc_mprotect
+    if id = SC_WRITEV: return tg.sc_writev
+    if id = SC_GETPID: return tg.sc_getpid
+    if id = SC_KILL: return tg.sc_kill
+    if id = SC_EXIT: return tg.sc_exit
+    if id = SC_GETDENTS: return tg.sc_getdents
+    assert(id = SC_OPENAT, "a syscall the table knows")
+    tg.sc_openat
+
+// ---------------------------------------------------------------------------
+// aarch64: the A64 instruction layer
+//
+// Register plan: RA=x9, RB=x10, RC=x11, x12/x13 scratch, arguments in
+// x0..x7, the result in x0, x8 the syscall number, x29/x30 frame and
+// link.  A frame is [outgoing args: 4 slots][vreg slots]; sp stays put
+// between prologue and epilogue, so a slot is [sp, #32 + 8×slot] and
+// an incoming stack argument [x29, #16 + 8×(k−8)].
+// ---------------------------------------------------------------------------
+
+let A64_RA : i64 = 9
+let A64_RB : i64 = 10
+let A64_RC : i64 = 11
+let A64_T0 : i64 = 12
+let A64_T1 : i64 = 13
+
+fn a64_r(r : i64) → i64:
+    A64_RA if r = RG_A else (A64_RB if r = RG_B else A64_RC)
+
+impl Emit:
+    // one A64 word, little-endian; respects the skipping switch
+    fn aw(&mut self, w : i64):
+        self.w32(w)
+
+    // a local branch: the word goes down with a zero displacement and
+    // the form says which immediate field the resolver fills
+    fn a64_bfix(&mut self, word : i64, lab : i64, form : i64):
+        self.tf_pos.push(self.here())
+        self.tf_lab.push(lab)
+        self.tf_form.push(form)
+        self.aw(word)
+
+// one little-endian word read back from the code, each byte widened
+// before it is shifted
+fn code_word(em : &Emit, pos : i64) → i64:
+    let b0 : i64 = @dropunit(em.code[pos × 1¤byte])
+    let b1 : i64 = @dropunit(em.code[(pos + 1) × 1¤byte])
+    let b2 : i64 = @dropunit(em.code[(pos + 2) × 1¤byte])
+    let b3 : i64 = @dropunit(em.code[(pos + 3) × 1¤byte])
+    b0 + (b1 « 8) + (b2 « 16) + (b3 « 24)
+
+fn a64_movimm(em : &mut Emit, rd : i64, v : i64):
+    if v >= 0 and v < 65536:
+        em.aw(3531603968 + ((v & 65535) « 5) + rd)          // movz
+        return
+    // ~v computed with @wrap: the most negative value may pass through
+    if v < 0 and @wrap(0 - v - 1) < 65536 and @wrap(0 - v - 1) >= 0:
+        em.aw(2457862144 + ((@wrap(0 - v - 1) & 65535) « 5) + rd)  // movn
+        return
+    em.aw(3531603968 + ((v & 65535) « 5) + rd)              // movz lo
+    em.aw(4070572032 + (((v » 16) & 65535) « 5) + rd)       // movk lsl16
+    em.aw(4072669184 + (((v » 32) & 65535) « 5) + rd)       // movk lsl32
+    em.aw(4074766336 + (((v » 48) & 65535) « 5) + rd)       // movk lsl48
+
+// a 64-bit slot in the frame: [sp, #32 + 8×slot]
+fn a64_ldslot(em : &mut Emit, rd : i64, slot : i64):
+    let off : i64 = 4 + slot
+    assert(off >= 0 and off < 4096, "the frame offset fits the scaled field")
+    em.aw(4181721088 + (off « 10) + (31 « 5) + rd)          // ldr rd, [sp, #off×8]
+
+fn a64_stslot(em : &mut Emit, rs : i64, slot : i64):
+    let off : i64 = 4 + slot
+    assert(off >= 0 and off < 4096, "the frame offset fits the scaled field")
+    em.aw(4177526784 + (off « 10) + (31 « 5) + rs)          // str rs, [sp, #off×8]
+
+// register-to-register forms, each one verified word
+fn a64_addr_(em : &mut Emit, rd : i64, rn : i64, rm : i64):
+    em.aw(2332033024 + (rm « 16) + (rn « 5) + rd)           // add
+fn a64_subr(em : &mut Emit, rd : i64, rn : i64, rm : i64):
+    em.aw(3405774848 + (rm « 16) + (rn « 5) + rd)           // sub
+fn a64_addsr(em : &mut Emit, rd : i64, rn : i64, rm : i64):
+    em.aw(2868903936 + (rm « 16) + (rn « 5) + rd)           // adds
+fn a64_subsr(em : &mut Emit, rd : i64, rn : i64, rm : i64):
+    em.aw(3942645760 + (rm « 16) + (rn « 5) + rd)           // subs
+fn a64_mulr(em : &mut Emit, rd : i64, rn : i64, rm : i64):
+    em.aw(2600500224 + (rm « 16) + (rn « 5) + rd)           // mul (madd xzr)
+fn a64_smulh(em : &mut Emit, rd : i64, rn : i64, rm : i64):
+    em.aw(2604694528 + (rm « 16) + (rn « 5) + rd)
+fn a64_umulh(em : &mut Emit, rd : i64, rn : i64, rm : i64):
+    em.aw(2613083136 + (rm « 16) + (rn « 5) + rd)
+fn a64_sdiv(em : &mut Emit, rd : i64, rn : i64, rm : i64):
+    em.aw(2596277248 + (rm « 16) + (rn « 5) + rd)
+fn a64_udiv(em : &mut Emit, rd : i64, rn : i64, rm : i64):
+    em.aw(2596276224 + (rm « 16) + (rn « 5) + rd)
+fn a64_msub(em : &mut Emit, rd : i64, rn : i64, rm : i64, ra : i64):
+    em.aw(2600501248 + (rm « 16) + (ra « 10) + (rn « 5) + rd)
+fn a64_andr(em : &mut Emit, rd : i64, rn : i64, rm : i64):
+    em.aw(2315255808 + (rm « 16) + (rn « 5) + rd)
+fn a64_orrr(em : &mut Emit, rd : i64, rn : i64, rm : i64):
+    em.aw(2852126720 + (rm « 16) + (rn « 5) + rd)
+fn a64_eorr(em : &mut Emit, rd : i64, rn : i64, rm : i64):
+    em.aw(3388997632 + (rm « 16) + (rn « 5) + rd)
+fn a64_mvn(em : &mut Emit, rd : i64, rm : i64):
+    em.aw(2854224864 + (rm « 16) + rd)
+fn a64_negr(em : &mut Emit, rd : i64, rm : i64):
+    em.aw(3405775840 + (rm « 16) + rd)
+fn a64_lslv(em : &mut Emit, rd : i64, rn : i64, rm : i64):
+    em.aw(2596282368 + (rm « 16) + (rn « 5) + rd)
+fn a64_lsrv(em : &mut Emit, rd : i64, rn : i64, rm : i64):
+    em.aw(2596283392 + (rm « 16) + (rn « 5) + rd)
+fn a64_asrv(em : &mut Emit, rd : i64, rn : i64, rm : i64):
+    em.aw(2596284416 + (rm « 16) + (rn « 5) + rd)
+fn a64_cmpr(em : &mut Emit, rn : i64, rm : i64):
+    em.aw(3942645791 + (rm « 16) + (rn « 5))
+fn a64_movr(em : &mut Emit, rd : i64, rm : i64):
+    em.aw(2852127712 + (rm « 16) + rd)                      // orr rd, xzr, rm
+fn a64_addi(em : &mut Emit, rd : i64, rn : i64, imm : i64):
+    assert(imm >= 0 and imm < 4096, "the immediate fits add's field")
+    em.aw(2432696320 + (imm « 10) + (rn « 5) + rd)
+fn a64_subi(em : &mut Emit, rd : i64, rn : i64, imm : i64):
+    assert(imm >= 0 and imm < 4096, "the immediate fits sub's field")
+    em.aw(3506438144 + (imm « 10) + (rn « 5) + rd)
+
+// A64 condition codes
+let A64_EQ : i64 = 0
+let A64_NE : i64 = 1
+let A64_CS : i64 = 2
+let A64_CC : i64 = 3
+let A64_MI : i64 = 4
+let A64_VS : i64 = 6
+let A64_HI : i64 = 8
+let A64_LS : i64 = 9
+let A64_GE : i64 = 10
+let A64_LT : i64 = 11
+let A64_GT : i64 = 12
+let A64_LE : i64 = 13
+
+// cset rd, cond: the cond is stored inverted, as csinc has it
+fn a64_cset(em : &mut Emit, rd : i64, cond : i64):
+    em.aw(2594113504 + ((cond ^ 1) « 12) + rd)
+fn a64_csel(em : &mut Emit, rd : i64, rn : i64, rm : i64, cond : i64):
+    em.aw(2592079872 + (rm « 16) + (cond « 12) + (rn « 5) + rd)
+
+// loads and stores through a base register, offset zero
+fn a64_ldw(em : &mut Emit, rd : i64, base : i64, width : i64, sgn : i64):
+    if width = 8:
+        em.aw(4181721088 + (base « 5) + rd)                 // ldr x
+    elif width = 4:
+        em.aw(3107979264 + (base « 5) + rd)                 // ldr w
+        if sgn = 1:
+            em.aw(2470476800 + (rd « 5) + rd)               // sxtw
+    elif width = 2:
+        em.aw(2034237440 + (base « 5) + rd)                 // ldrh
+        if sgn = 1:
+            em.aw(2470460416 + (rd « 5) + rd)               // sxth
+    else:
+        em.aw(960495616 + (base « 5) + rd)                  // ldrb
+        if sgn = 1:
+            em.aw(2470452224 + (rd « 5) + rd)               // sxtb
+fn a64_stw(em : &mut Emit, rs : i64, base : i64, width : i64):
+    if width = 8:
+        em.aw(4177526784 + (base « 5) + rs)                 // str x
+    elif width = 4:
+        em.aw(3103784960 + (base « 5) + rs)                 // str w
+    elif width = 2:
+        em.aw(2030043136 + (base « 5) + rs)                 // strh
+    else:
+        em.aw(956301312 + (base « 5) + rs)                  // strb
+
+// scaled 64-bit load and store at a small positive byte offset
+fn a64_ldo(em : &mut Emit, rd : i64, base : i64, off : i64):
+    assert(off >= 0 and (off % 8 ?? 1) = 0 and off < 32768, "a scaled offset")
+    em.aw(4181721088 + ((off ÷ 8 ?? 0) « 10) + (base « 5) + rd)
+fn a64_sto(em : &mut Emit, rs : i64, base : i64, off : i64):
+    assert(off >= 0 and (off % 8 ?? 1) = 0 and off < 32768, "a scaled offset")
+    em.aw(4177526784 + ((off ÷ 8 ?? 0) « 10) + (base « 5) + rs)
+
+fn a64_sxt(em : &mut Emit, rd : i64, bits : i64):
+    if bits = 8:
+        em.aw(2470452224 + (rd « 5) + rd)                   // sxtb
+    elif bits = 16:
+        em.aw(2470460416 + (rd « 5) + rd)                   // sxth
+    else:
+        em.aw(2470476800 + (rd « 5) + rd)                   // sxtw
+fn a64_uxt(em : &mut Emit, rd : i64, bits : i64):
+    if bits = 8:
+        em.aw(1392516096 + (rd « 5) + rd)                   // uxtb
+    elif bits = 16:
+        em.aw(1392524288 + (rd « 5) + rd)                   // uxth
+    else:
+        em.aw(704644064 + (rd « 16) + rd)                   // mov w,w
+
+// an absolute address, materialized as movz+movk and patched later;
+// answers the position the patcher writes into
+fn a64_absref(em : &mut Emit, rd : i64) → i64:
+    let pos : i64 = em.here()
+    em.aw(3531603968 + rd)                                  // movz rd, #0
+    em.aw(4070572032 + rd)                                  // movk rd, #0, lsl 16
+    pos
+
+fn a64_patch_abs(em : &mut Emit, pos : i64, v : i64):
+    // the register the materialization was aimed at, read back from
+    // its own first byte
+    let rd : i64 = @dropunit(em.code[pos × 1¤byte]) & 31
+    em.patch32(pos, 3531603968 + ((v & 65535) « 5) + rd)
+    em.patch32(pos + 4, 4070572032 + (((v » 16) & 65535) « 5) + rd)
+
+// local branches: the resolver reads the form
+let A64F_B26 : i64 = 26
+let A64F_B19 : i64 = 19
+
+fn a64_jmp(em : &mut Emit, lab : i64):
+    em.a64_bfix(335544320, lab, A64F_B26)                   // b
+fn a64_bcond(em : &mut Emit, cond : i64, lab : i64):
+    em.a64_bfix(1409286144 + cond, lab, A64F_B19)           // b.cond
+fn a64_cbz(em : &mut Emit, r : i64, lab : i64):
+    em.a64_bfix(3019898880 + r, lab, A64F_B19)
+fn a64_cbnz(em : &mut Emit, r : i64, lab : i64):
+    em.a64_bfix(3036676096 + r, lab, A64F_B19)
+
+// a call against a function or runtime id: one bl, patched at the end
+fn a64_call(em : &mut Emit, target : i64):
+    if em.skipping = 1:
+        return
+    em.cf_pos.push(em.here())
+    em.cf_target.push(target)
+    em.aw(2483027968)                                       // bl 0
+
+fn a64_blr(em : &mut Emit, r : i64):
+    em.aw(3594452992 + (r « 5))
+fn a64_br(em : &mut Emit, r : i64):
+    em.aw(3592355840 + (r « 5))
+fn a64_ret(em : &mut Emit):
+    em.aw(3596551104)
+fn a64_svc(em : &mut Emit):
+    em.aw(3556769793)
+
+// after the labels of a function settle, its local branches do
+fn a64_resolve(em : &mut Emit):
+    if #em.tf_pos > 0:
+        foreach i := 0…#em.tf_pos - 1:
+            let pos : i64 = em.tf_pos[i]
+            let delta : i64 = em.labels[em.tf_lab[i] × 1¤ptrdiff] - pos
+            let word : i64 = code_word(&em, pos)
+            if em.tf_form[i] = A64F_B26:
+                em.patch32(pos, word + (((delta » 2) & 67108863)))
+            else:
+                em.patch32(pos, word + (((delta » 2) & 524287) « 5))
+    while #em.tf_pos > 0:
+        _ ← em.tf_pos.pop() ?? 0
+        _ ← em.tf_lab.pop() ?? 0
+        _ ← em.tf_form.pop() ?? 0
+
+// ---------------------------------------------------------------------------
+// The abstract operations, dispatched on the target.  Every function
+// here is one small spelling decision; the thinking lives in the
+// driver below, written once.
+// ---------------------------------------------------------------------------
+
+let RG_T : i64 = 3
+
+fn a64_ar(r : i64) → i64:
+    if r = RG_A: return A64_RA
+    if r = RG_B: return A64_RB
+    if r = RG_C: return A64_RC
+    A64_T0
+
+fn g_lds(em : &mut Emit, tg : Target, r : i64, slot : i64):
+    a64_ldslot(&em, a64_ar(r), slot)
+
+fn g_sts(em : &mut Emit, tg : Target, r : i64, slot : i64):
+    a64_stslot(&em, a64_ar(r), slot)
+
+fn g_const(em : &mut Emit, tg : Target, r : i64, v : i64):
+    a64_movimm(&em, a64_ar(r), v)
+
+fn g_mov2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
+    a64_movr(&em, a64_ar(rd), a64_ar(rs))
+
+fn g_add3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    a64_addr_(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
+
+fn g_sub3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    a64_subr(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
+
+fn g_mul3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    a64_mulr(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
+
+fn g_and3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    a64_andr(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
+
+fn g_or3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    a64_orrr(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
+
+fn g_xor3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    a64_eorr(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
+
+fn g_not2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
+    a64_mvn(&em, a64_ar(rd), a64_ar(rs))
+
+fn g_neg2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
+    a64_negr(&em, a64_ar(rd), a64_ar(rs))
+
+fn g_shl3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    a64_lslv(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
+
+fn g_shr3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    a64_lsrv(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
+
+fn g_sar3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    a64_asrv(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
+
+// rd ← rs « imm, the shift written into the instruction
+fn g_shl3i(em : &mut Emit, tg : Target, rd : i64, rs : i64, imm : i64):
+    // ubfm rd, rs, #(64-imm), #(63-imm)
+    em.aw(3544186880 + (((64 - imm) & 63) « 16) + ((63 - imm) « 10) + (a64_ar(rs) « 5) + a64_ar(rd))
+
+// the A64 spelling of a comparison's answer
+fn a64_cc(cond : i64, sgn : i64) → i64:
+    if cond = CC_EQ: return A64_EQ
+    if cond = CC_NE: return A64_NE
+    if sgn = 1:
+        if cond = CC_LT: return A64_LT
+        if cond = CC_LE: return A64_LE
+        if cond = CC_GT: return A64_GT
+        return A64_GE
+    if cond = CC_LT: return A64_CC
+    if cond = CC_LE: return A64_LS
+    if cond = CC_GT: return A64_HI
+    A64_CS
+
+// rd ← rx rel ry, materialized as 0 or 1
+fn g_cmp3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64):
+    a64_cmpr(&em, a64_ar(rx), a64_ar(ry))
+    a64_cset(&em, a64_ar(rd), a64_cc(cond, sgn))
+
+// rd ← rc ≠ 0 ? rx : ry
+fn g_sel4(em : &mut Emit, tg : Target, rd : i64, rc : i64, rx : i64, ry : i64):
+    em.aw(4043309087 + (a64_ar(rc) « 5))     // cmp rc, #0
+    a64_csel(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry), A64_NE)
+
+fn g_div3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
+    if sgn = 1:
+        a64_sdiv(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
+    else:
+        a64_udiv(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
+
+fn g_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
+    if sgn = 1:
+        a64_sdiv(&em, A64_T1, a64_ar(rx), a64_ar(ry))
+    else:
+        a64_udiv(&em, A64_T1, a64_ar(rx), a64_ar(ry))
+    a64_msub(&em, a64_ar(rd), A64_T1, a64_ar(ry), a64_ar(rx))
+
+// rd ← rx op ry with rf saying whether the 64-bit result overflowed
+fn g_addov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64):
+    a64_addsr(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
+    a64_cset(&em, a64_ar(rf), A64_VS if sgn = 1 else A64_CS)
+
+fn g_subov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64):
+    a64_subsr(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
+    // on ARM a clear carry is the borrow
+    a64_cset(&em, a64_ar(rf), A64_VS if sgn = 1 else A64_CC)
+
+fn g_mulov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64):
+    if sgn = 1:
+        a64_mulr(&em, A64_T1, a64_ar(rx), a64_ar(ry))
+        a64_smulh(&em, A64_T0, a64_ar(rx), a64_ar(ry))
+        // the high half of an unoverflowed product is the low half's sign
+        em.aw(2470445056 + (63 « 16) + (63 « 10) + (A64_T1 « 5) + a64_ar(rf))   // asr rf, t1, #63
+        a64_cmpr(&em, A64_T0, a64_ar(rf))
+        a64_cset(&em, a64_ar(rf), A64_NE)
+        a64_movr(&em, a64_ar(rd), A64_T1)
+    else:
+        a64_mulr(&em, A64_T1, a64_ar(rx), a64_ar(ry))
+        a64_umulh(&em, A64_T0, a64_ar(rx), a64_ar(ry))
+        em.aw(4043309087 + (A64_T0 « 5))                            // cmp t0, #0
+        a64_cset(&em, a64_ar(rf), A64_NE)
+        a64_movr(&em, a64_ar(rd), A64_T1)
+
+// r ← r as its width says, sign or zero carried through
+fn g_ext2(em : &mut Emit, tg : Target, r : i64, bits : i64, sgn : i64):
+    if bits >= 64:
+        return
+    if sgn = 1:
+        a64_sxt(&em, a64_ar(r), bits)
+    else:
+        a64_uxt(&em, a64_ar(r), bits)
+
+// rd ← mem[rbase + off]; width 0 is the target's pointer, zero-extended
+fn g_ldo(em : &mut Emit, tg : Target, rd : i64, rbase : i64, off : i64, width : i64, sgn : i64):
+    let wd : i64 = tg.ptr if width = 0 else width
+    if off = 0:
+        a64_ldw(&em, a64_ar(rd), a64_ar(rbase), wd, sgn)
+    elif wd = 8 and (off % 8 ?? 1) = 0 and off > 0:
+        a64_ldo(&em, a64_ar(rd), a64_ar(rbase), off)
+    else:
+        a64_movimm(&em, A64_T1, off)
+        a64_addr_(&em, A64_T1, a64_ar(rbase), A64_T1)
+        a64_ldw(&em, a64_ar(rd), A64_T1, wd, sgn)
+
+fn g_sto(em : &mut Emit, tg : Target, rs : i64, rbase : i64, off : i64, width : i64):
+    let wd : i64 = tg.ptr if width = 0 else width
+    if off = 0:
+        a64_stw(&em, a64_ar(rs), a64_ar(rbase), wd)
+    elif wd = 8 and (off % 8 ?? 1) = 0 and off > 0:
+        a64_sto(&em, a64_ar(rs), a64_ar(rbase), off)
+    else:
+        a64_movimm(&em, A64_T1, off)
+        a64_addr_(&em, A64_T1, a64_ar(rbase), A64_T1)
+        a64_stw(&em, a64_ar(rs), A64_T1, wd)
+
+fn g_jmp(em : &mut Emit, tg : Target, lab : i64):
+    a64_jmp(&em, lab)
+
+fn g_jz(em : &mut Emit, tg : Target, r : i64, lab : i64):
+    a64_cbz(&em, a64_ar(r), lab)
+
+fn g_jnz(em : &mut Emit, tg : Target, r : i64, lab : i64):
+    a64_cbnz(&em, a64_ar(r), lab)
+
+fn g_label(em : &mut Emit, tg : Target, lab : i64):
+    em.set_label(lab)
+
+fn g_call(em : &mut Emit, tg : Target, target : i64):
+    a64_call(&em, target)
+
+fn g_calli(em : &mut Emit, tg : Target, r : i64):
+    a64_blr(&em, a64_ar(r))
+
+fn g_ijmp(em : &mut Emit, tg : Target, r : i64):
+    a64_br(&em, a64_ar(r))
+
+// arguments travel in x0…x7; the ninth onward in the outgoing slots
+fn g_argld(em : &mut Emit, tg : Target, k : i64, slot : i64):
+    if k < 8:
+        a64_ldslot(&em, k, slot)
+    else:
+        a64_ldslot(&em, A64_T1, slot)
+        a64_sto(&em, A64_T1, 31, 8 × (k - 8))
+
+fn g_argconst(em : &mut Emit, tg : Target, k : i64, v : i64):
+    assert(k < 8, "a constant argument rides a register")
+    a64_movimm(&em, k, v)
+
+fn g_argmov(em : &mut Emit, tg : Target, k : i64, r : i64):
+    assert(k < 8, "a moved argument rides a register")
+    a64_movr(&em, k, a64_ar(r))
+
+// the returned value's two directions
+fn g_retst(em : &mut Emit, tg : Target, slot : i64):
+    a64_stslot(&em, 0, slot)
+
+fn g_retld(em : &mut Emit, tg : Target, slot : i64):
+    a64_ldslot(&em, 0, slot)
+
+fn g_retmov(em : &mut Emit, tg : Target, r : i64):
+    a64_movr(&em, 0, a64_ar(r))
+
+// an absolute address, materialized into an abstract register or an
+// argument register; the caller records the answered position in the
+// fixup list the address belongs to
+fn g_absref(em : &mut Emit, tg : Target, r : i64) → i64:
+    a64_absref(&em, a64_ar(r))
+
+fn g_absref_arg(em : &mut Emit, tg : Target, k : i64) → i64:
+    assert(k < 8, "an address argument rides a register")
+    a64_absref(&em, k)
+
+// the kernel: arguments from slots, the number, the trap
+fn g_sysarg(em : &mut Emit, tg : Target, k : i64, slot : i64):
+    a64_ldslot(&em, k, slot)
+
+fn g_sysimm(em : &mut Emit, tg : Target, k : i64, v : i64):
+    a64_movimm(&em, k, v)
+
+fn g_sysmov(em : &mut Emit, tg : Target, k : i64, r : i64):
+    a64_movr(&em, k, a64_ar(r))
+
+fn g_syscall(em : &mut Emit, tg : Target, scid : i64):
+    a64_movimm(&em, 8, sc_number(tg, scid))
+    a64_svc(&em)
+
+fn g_sysret(em : &mut Emit, tg : Target, r : i64):
+    a64_movr(&em, a64_ar(r), 0)
+
+// the frame: save the caller's, claim the slots and the outgoing
+// argument room, spill the incoming arguments to their slots
+fn g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64):
+    let frame : i64 = align_up(32 + 8 × nvregs, 16)
+    em.max_frame ← em.max_frame ⌈ (frame + 16)
+    em.aw(2847898621)                            // stp x29, x30, [sp, #-16]!
+    em.aw(2432697341)                            // mov x29, sp
+    if frame < 4096:
+        em.aw(3506438144 + (frame « 10) + (31 « 5) + 31)     // sub sp, sp, #frame
+    else:
+        a64_movimm(&em, A64_T1, frame)
+        em.aw(3405774848 + (A64_T1 « 16) + (31 « 5) + 31)    // sub sp, sp, t1
+    let j : mut i64 = 0
+    while j < np:
+        if j < 8:
+            a64_stslot(&em, j, j)
+        else:
+            // an incoming stack argument sits above the saved pair
+            a64_ldo(&em, A64_T1, 29, 16 + 8 × (j - 8))
+            a64_stslot(&em, A64_T1, j)
+        j ← j + 1
+
+fn g_epilogue(em : &mut Emit, tg : Target):
+    em.aw(2432697279)                            // mov sp, x29: drop the frame
+    em.aw(2831252477)                            // ldp x29, x30, [sp], #16
+    a64_ret(&em)
+
+fn g_resolve(em : &mut Emit, tg : Target):
+    a64_resolve(&em)
+
+fn g_patch_abs(em : &mut Emit, tg : Target, pos : i64, v : i64):
+    a64_patch_abs(&em, pos, v)
+
+fn g_patch_call(em : &mut Emit, tg : Target, pos : i64, dest : i64):
+    let word : i64 = code_word(&em, pos)
+    em.patch32(pos, word + (((dest - pos) » 2) & 67108863))
+
+// ---------------------------------------------------------------------------
+// The driver: every IR op composed from the abstract operations.
+// Written once; a target that teaches the machine its spellings gets
+// all of it.  The x86-64 emitter above stays as the measure the
+// compositions are checked against.
+// ---------------------------------------------------------------------------
+
+// a value that must fit its width or leave for RT_OV, composed with
+// scratch labels the caller hands out
+fn t_range_check(em : &mut Emit, tg : Target, w : i64, lok : i64):
+    let bits : i64 = w & 255
+    let sgn : i64 = w » 8
+    if sgn = 0:
+        g_const(&em, tg, RG_B, (1 « bits) - 1)
+        g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_LE, 0)
+        g_jnz(&em, tg, RG_C, lok)
+        g_call(&em, tg, RT_OV)
+    else:
+        g_mov2(&em, tg, RG_B, RG_A)
+        g_ext2(&em, tg, RG_B, bits, 1)
+        g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_EQ, 0)
+        g_jnz(&em, tg, RG_C, lok)
+        g_call(&em, tg, RT_OV)
+    g_label(&em, tg, lok)
+
+// the canonical form of a wrapped result
+fn t_canon(em : &mut Emit, tg : Target, w : i64):
+    let bits : i64 = w & 255
+    if bits < 64:
+        g_ext2(&em, tg, RG_A, bits, w » 8)
+
+fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
+    assert(ir.nvregs >= np, "the frame covers the spilled arguments")
+    let n : i64 = @dropunit(#ir.op)
+    em.begin_fn(ir.nlabels + 6 × n + 8)
+    let sl : mut i64 = ir.nlabels
+    g_prologue(&em, tg, ir.nvregs, np)
+    let i : mut i64 = 0
+    while i < n:
+        let o : i64 = ir.op[i × 1¤ptrdiff]
+        let a : i64 = ir.ia[i × 1¤ptrdiff]
+        let b : i64 = ir.ib[i × 1¤ptrdiff]
+        let c : i64 = ir.ic[i × 1¤ptrdiff]
+        let d : i64 = ir.id[i × 1¤ptrdiff]
+        let w : i64 = ir.iw[i × 1¤ptrdiff]
+        let bits : i64 = w & 255
+        let sgn : i64 = w » 8
+        if o = IR_CONST:
+            g_const(&em, tg, RG_A, a)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_MOV:
+            g_lds(&em, tg, RG_A, a)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_ADD or o = IR_ADDW or o = IR_SUB or o = IR_SUBW:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            if o = IR_ADD or o = IR_SUB:
+                if bits = 64:
+                    if o = IR_ADD:
+                        g_addov(&em, tg, RG_A, RG_C, RG_A, RG_B, sgn)
+                    else:
+                        g_subov(&em, tg, RG_A, RG_C, RG_A, RG_B, sgn)
+                    g_jz(&em, tg, RG_C, sl)
+                    g_call(&em, tg, RT_OV)
+                    g_label(&em, tg, sl)
+                    sl ← sl + 1
+                else:
+                    if o = IR_ADD:
+                        g_add3(&em, tg, RG_A, RG_A, RG_B)
+                    else:
+                        g_sub3(&em, tg, RG_A, RG_A, RG_B)
+                    t_range_check(&em, tg, w, sl)
+                    sl ← sl + 1
+            else:
+                if o = IR_ADDW:
+                    g_add3(&em, tg, RG_A, RG_A, RG_B)
+                else:
+                    g_sub3(&em, tg, RG_A, RG_A, RG_B)
+                t_canon(&em, tg, w)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_MUL or o = IR_MULW:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            if o = IR_MULW:
+                g_mul3(&em, tg, RG_A, RG_A, RG_B)
+                t_canon(&em, tg, w)
+            elif bits = 64:
+                g_mulov(&em, tg, RG_A, RG_C, RG_A, RG_B, sgn)
+                g_jz(&em, tg, RG_C, sl)
+                g_call(&em, tg, RT_OV)
+                g_label(&em, tg, sl)
+                sl ← sl + 1
+            else:
+                g_mul3(&em, tg, RG_A, RG_A, RG_B)
+                t_range_check(&em, tg, w, sl)
+                sl ← sl + 1
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_NEG or o = IR_NEGW:
+            g_lds(&em, tg, RG_A, a)
+            if o = IR_NEG and sgn = 1 and bits = 64:
+                // the one signed value with no negation
+                g_const(&em, tg, RG_B, ⁻9223372036854775807 - 1)
+                g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_NE, 0)
+                g_jnz(&em, tg, RG_C, sl)
+                g_call(&em, tg, RT_OV)
+                g_label(&em, tg, sl)
+                sl ← sl + 1
+                g_neg2(&em, tg, RG_A, RG_A)
+            elif o = IR_NEG and sgn = 0:
+                // a negated unsigned is only 0
+                g_jz(&em, tg, RG_A, sl)
+                g_call(&em, tg, RT_OV)
+                g_label(&em, tg, sl)
+                sl ← sl + 1
+                g_neg2(&em, tg, RG_A, RG_A)
+            else:
+                g_neg2(&em, tg, RG_A, RG_A)
+                if o = IR_NEG:
+                    t_range_check(&em, tg, w, sl)
+                    sl ← sl + 1
+                else:
+                    t_canon(&em, tg, w)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_BAND or o = IR_BORR or o = IR_BXORR:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            if o = IR_BAND:
+                g_and3(&em, tg, RG_A, RG_A, RG_B)
+            elif o = IR_BORR:
+                g_or3(&em, tg, RG_A, RG_A, RG_B)
+            else:
+                g_xor3(&em, tg, RG_A, RG_A, RG_B)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_BNOTT:
+            g_lds(&em, tg, RG_A, a)
+            g_not2(&em, tg, RG_A, RG_A)
+            t_canon(&em, tg, w)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_SHLL or o = IR_SHRR:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            g_const(&em, tg, RG_C, bits - sgn)
+            g_cmp3(&em, tg, RG_C, RG_B, RG_C, CC_LT, 0)
+            g_jnz(&em, tg, RG_C, sl)
+            g_call(&em, tg, RT_SHIFT)
+            g_label(&em, tg, sl)
+            sl ← sl + 1
+            if o = IR_SHLL:
+                g_shl3(&em, tg, RG_A, RG_A, RG_B)
+                t_canon(&em, tg, w)
+            elif sgn = 1:
+                g_sar3(&em, tg, RG_A, RG_A, RG_B)
+            else:
+                g_shr3(&em, tg, RG_A, RG_A, RG_B)
+            g_sts(&em, tg, RG_A, d)
+        elif o >= IR_CEQ and o <= IR_CGE:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            g_cmp3(&em, tg, RG_C, RG_A, RG_B, o - IR_CEQ, sgn)
+            g_mov2(&em, tg, RG_A, RG_C)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_MAXX or o = IR_MINN:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_GE if o = IR_MAXX else CC_LE, sgn)
+            g_sel4(&em, tg, RG_A, RG_C, RG_A, RG_B)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_SEL:
+            g_lds(&em, tg, RG_C, a)
+            g_lds(&em, tg, RG_A, b)
+            g_lds(&em, tg, RG_B, c)
+            g_sel4(&em, tg, RG_A, RG_C, RG_A, RG_B)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_DIVV or o = IR_MODD:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            let ldo9 : i64 = sl
+            let lend9 : i64 = sl + 1
+            sl ← sl + 2
+            g_jnz(&em, tg, RG_B, ldo9)
+            g_lds(&em, tg, RG_A, c)
+            g_jmp(&em, tg, lend9)
+            g_label(&em, tg, ldo9)
+            if sgn = 1 and bits = 64:
+                g_const(&em, tg, RG_C, ⁻9223372036854775807 - 1)
+                g_cmp3(&em, tg, RG_C, RG_A, RG_C, CC_NE, 0)
+                g_jnz(&em, tg, RG_C, sl)
+                g_const(&em, tg, RG_C, ⁻1)
+                g_cmp3(&em, tg, RG_C, RG_B, RG_C, CC_NE, 0)
+                g_jnz(&em, tg, RG_C, sl)
+                g_call(&em, tg, RT_OV)
+                g_label(&em, tg, sl)
+                sl ← sl + 1
+            if o = IR_DIVV:
+                g_div3(&em, tg, RG_A, RG_A, RG_B, sgn)
+            else:
+                g_mod3(&em, tg, RG_A, RG_A, RG_B, sgn)
+            if sgn = 1 and bits ≠ 64:
+                t_range_check(&em, tg, w, sl)
+                sl ← sl + 1
+            g_label(&em, tg, lend9)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_JMP:
+            g_jmp(&em, tg, a)
+        elif o = IR_JZ or o = IR_JNZ:
+            g_lds(&em, tg, RG_A, a)
+            if o = IR_JZ:
+                g_jz(&em, tg, RG_A, b)
+            else:
+                g_jnz(&em, tg, RG_A, b)
+        elif o = IR_LABEL:
+            g_label(&em, tg, a)
+        elif o = IR_CALL:
+            let argc : i64 = ir.extra[b × 1¤ptrdiff]
+            let k : mut i64 = 0
+            while k < argc:
+                g_argld(&em, tg, k, ir.extra[(b + 1 + k) × 1¤ptrdiff])
+                k ← k + 1
+            g_call(&em, tg, a)
+            g_retst(&em, tg, d)
+        elif o = IR_CALLI:
+            let argci : i64 = ir.extra[b × 1¤ptrdiff]
+            let ki : mut i64 = 0
+            while ki < argci:
+                g_argld(&em, tg, ki, ir.extra[(b + 1 + ki) × 1¤ptrdiff])
+                ki ← ki + 1
+            g_lds(&em, tg, RG_C, a)
+            g_calli(&em, tg, RG_C)
+            g_retst(&em, tg, d)
+        elif o = IR_RET:
+            if a ≠ ⁻1:
+                g_retld(&em, tg, a)
+            g_epilogue(&em, tg)
+        elif o = IR_PRINTS or o = IR_EPRINTS or o = IR_ABORT:
+            let pos : i64 = g_absref_arg(&em, tg, 0)
+            if em.skipping = 0:
+                em.sf_pos.push(pos)
+                em.sf_str.push(a)
+            g_argconst(&em, tg, 1, str_len(strs[a × 1¤ptrdiff]))
+            g_call(&em, tg, RT_WRITE1 if o = IR_PRINTS else (RT_WRITE2 if o = IR_EPRINTS else RT_ABORT))
+        elif o = IR_PRINTI or o = IR_PRINTU:
+            g_argld(&em, tg, 0, a)
+            g_call(&em, tg, RT_PRINTI if o = IR_PRINTI else RT_PRINTU)
+        elif o = IR_PRINTSV:
+            g_argld(&em, tg, 0, a)
+            g_call(&em, tg, RT_PRINTSTR)
+        elif o = IR_EXIT:
+            g_sysarg(&em, tg, 0, a)
+            g_syscall(&em, tg, SC_EXIT)
+        elif o = IR_GLOAD or o = IR_GSTORE:
+            let gg : i64 = a if o = IR_GLOAD else a
+            let pos : i64 = g_absref(&em, tg, RG_B)
+            if em.skipping = 0:
+                if em.gseg[gg × 1¤ptrdiff] = 0:
+                    em.gr_pos.push(pos)
+                    em.gr_off.push(em.gmap[gg × 1¤ptrdiff])
+                else:
+                    em.df_pos.push(pos)
+                    em.df_off.push(em.gmap[gg × 1¤ptrdiff])
+            if o = IR_GLOAD:
+                g_ldo(&em, tg, RG_A, RG_B, 0, 8, 0)
+                g_sts(&em, tg, RG_A, d)
+            else:
+                g_lds(&em, tg, RG_A, b)
+                g_sto(&em, tg, RG_A, RG_B, 0, 8)
+        elif o = IR_ANEW:
+            g_argconst(&em, tg, 0, a)
+            g_call(&em, tg, RT_ARRNEW)
+            g_retst(&em, tg, d)
+        elif o = IR_SNEW:
+            g_argconst(&em, tg, 0, 8 × a)
+            g_call(&em, tg, RT_ALLOC)
+            g_retst(&em, tg, d)
+        elif o = IR_APUSH:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_call(&em, tg, RT_ARRPUSH)
+        elif o = IR_AIDX or o = IR_AREF:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            g_ldo(&em, tg, RG_C, RG_A, 8, 8, 0)
+            g_cmp3(&em, tg, RG_C, RG_B, RG_C, CC_LT, 0)
+            g_jnz(&em, tg, RG_C, sl)
+            g_call(&em, tg, RT_BOUNDS)
+            g_label(&em, tg, sl)
+            sl ← sl + 1
+            g_ldo(&em, tg, RG_C, RG_A, 0, 8, 0)
+            g_shl3i(&em, tg, RG_T, RG_B, 3)
+            g_add3(&em, tg, RG_C, RG_C, RG_T)
+            if o = IR_AIDX:
+                g_ldo(&em, tg, RG_A, RG_C, 0, 8, 0)
+            else:
+                g_mov2(&em, tg, RG_A, RG_C)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_ASTO:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            g_ldo(&em, tg, RG_C, RG_A, 8, 8, 0)
+            g_cmp3(&em, tg, RG_C, RG_B, RG_C, CC_LT, 0)
+            g_jnz(&em, tg, RG_C, sl)
+            g_call(&em, tg, RT_BOUNDS)
+            g_label(&em, tg, sl)
+            sl ← sl + 1
+            g_ldo(&em, tg, RG_C, RG_A, 0, 8, 0)
+            g_shl3i(&em, tg, RG_T, RG_B, 3)
+            g_add3(&em, tg, RG_C, RG_C, RG_T)
+            g_lds(&em, tg, RG_B, c)
+            g_sto(&em, tg, RG_B, RG_C, 0, 8)
+        elif o = IR_APOP:
+            let lem : i64 = sl
+            let ldn : i64 = sl + 1
+            sl ← sl + 2
+            g_lds(&em, tg, RG_A, a)
+            g_ldo(&em, tg, RG_B, RG_A, 8, 8, 0)
+            g_jz(&em, tg, RG_B, lem)
+            g_const(&em, tg, RG_C, 1)
+            g_sub3(&em, tg, RG_B, RG_B, RG_C)
+            g_sto(&em, tg, RG_B, RG_A, 8, 8)
+            g_ldo(&em, tg, RG_C, RG_A, 0, 8, 0)
+            g_shl3i(&em, tg, RG_T, RG_B, 3)
+            g_add3(&em, tg, RG_C, RG_C, RG_T)
+            g_ldo(&em, tg, RG_A, RG_C, 0, 8, 0)
+            g_jmp(&em, tg, ldn)
+            g_label(&em, tg, lem)
+            g_lds(&em, tg, RG_A, b)
+            g_label(&em, tg, ldn)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_AGET:
+            let ldf : i64 = sl
+            let ldn : i64 = sl + 1
+            sl ← sl + 2
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            g_ldo(&em, tg, RG_C, RG_A, 8, 8, 0)
+            g_cmp3(&em, tg, RG_C, RG_B, RG_C, CC_GE, 0)
+            g_jnz(&em, tg, RG_C, ldf)
+            g_ldo(&em, tg, RG_C, RG_A, 0, 8, 0)
+            g_shl3i(&em, tg, RG_T, RG_B, 3)
+            g_add3(&em, tg, RG_C, RG_C, RG_T)
+            g_ldo(&em, tg, RG_A, RG_C, 0, 8, 0)
+            g_jmp(&em, tg, ldn)
+            g_label(&em, tg, ldf)
+            g_lds(&em, tg, RG_A, c)
+            g_label(&em, tg, ldn)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_ALEN:
+            g_lds(&em, tg, RG_A, a)
+            g_ldo(&em, tg, RG_A, RG_A, 8, 8, 0)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_HLEN:
+            g_lds(&em, tg, RG_A, a)
+            g_ldo(&em, tg, RG_A, RG_A, 16, 8, 0)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_SC:
+            let pos : i64 = g_absref(&em, tg, RG_A)
+            if em.skipping = 0:
+                em.sd_pos.push(pos)
+                em.sd_str.push(a)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_FADDR:
+            let pos : i64 = g_absref(&em, tg, RG_A)
+            if em.skipping = 0:
+                em.ff_pos.push(pos)
+                em.ff_fn.push(a)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_FLD:
+            g_lds(&em, tg, RG_A, a)
+            g_ldo(&em, tg, RG_A, RG_A, 8 × b, 8, 0)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_FSTO:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, c)
+            g_sto(&em, tg, RG_B, RG_A, 8 × b, 8)
+        elif o = IR_HNEW:
+            g_argconst(&em, tg, 0, a)
+            g_argconst(&em, tg, 1, b)
+            g_call(&em, tg, RT_HNEW)
+            g_retst(&em, tg, d)
+        elif o = IR_HPUT:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_argld(&em, tg, 2, c)
+            g_call(&em, tg, RT_HPUT)
+        elif o = IR_HGET or o = IR_HELEM:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_call(&em, tg, RT_HGET if o = IR_HGET else RT_HELEM)
+            g_retst(&em, tg, d)
+        elif o = IR_CHR:
+            g_lds(&em, tg, RG_A, a)
+            g_const(&em, tg, RG_B, 1114111)
+            g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_LE, 0)
+            g_jnz(&em, tg, RG_C, sl)
+            g_call(&em, tg, RT_BADCHAR)
+            g_label(&em, tg, sl)
+            sl ← sl + 1
+            g_mov2(&em, tg, RG_C, RG_A)
+            g_const(&em, tg, RG_B, 55296)
+            g_sub3(&em, tg, RG_C, RG_C, RG_B)
+            g_const(&em, tg, RG_B, 2048)
+            g_cmp3(&em, tg, RG_C, RG_C, RG_B, CC_GE, 0)
+            g_jnz(&em, tg, RG_C, sl)
+            g_call(&em, tg, RT_BADCHAR)
+            g_label(&em, tg, sl)
+            sl ← sl + 1
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_SIDX:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_call(&em, tg, RT_STRIDX)
+            g_retst(&em, tg, d)
+        elif o = IR_SCCAT or o = IR_SEQV:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_call(&em, tg, RT_CONCAT if o = IR_SCCAT else RT_STREQ)
+            g_retst(&em, tg, d)
+        elif o = IR_SLENV or o = IR_CHARS or o = IR_CHARSTR or o = IR_SBYTES or o = IR_TORAW or o = IR_FREAD or o = IR_FOPEN:
+            g_argld(&em, tg, 0, a)
+            if o = IR_SLENV:
+                g_call(&em, tg, RT_STRCHARS)
+            elif o = IR_CHARS:
+                g_call(&em, tg, RT_CHARS)
+            elif o = IR_CHARSTR:
+                g_call(&em, tg, RT_CHARSTR)
+            elif o = IR_SBYTES:
+                g_call(&em, tg, RT_SBYTES)
+            elif o = IR_TORAW:
+                g_call(&em, tg, RT_TORAW)
+            elif o = IR_FREAD:
+                g_call(&em, tg, RT_FREAD)
+            else:
+                g_call(&em, tg, RT_FOPEN)
+            g_retst(&em, tg, d)
+        elif o = IR_SDEC:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_call(&em, tg, RT_STRNEXT)
+            g_retst(&em, tg, d)
+            g_lds(&em, tg, RG_A, d)
+            g_const(&em, tg, RG_B, 32)
+            g_shr3(&em, tg, RG_B, RG_A, RG_B)
+            g_sts(&em, tg, RG_B, c)
+            g_const(&em, tg, RG_C, 4294967295)
+            g_and3(&em, tg, RG_A, RG_A, RG_C)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_AUXV:
+            g_argconst(&em, tg, 0, a)
+            g_call(&em, tg, RT_AUXV)
+            g_retst(&em, tg, d)
+        elif o = IR_EXECFN or o = IR_ENVN or o = IR_ARGS or o = IR_DENTS:
+            if o = IR_EXECFN:
+                g_call(&em, tg, RT_EXECFN)
+            elif o = IR_ENVN:
+                g_call(&em, tg, RT_ENVN)
+            elif o = IR_ARGS:
+                g_call(&em, tg, RT_ARGS)
+            else:
+                g_call(&em, tg, RT_DENTS)
+            g_retst(&em, tg, d)
+        elif o = IR_ENVG:
+            g_argld(&em, tg, 0, a)
+            g_call(&em, tg, RT_ENVG)
+            g_retst(&em, tg, d)
+        elif o = IR_FCREATE:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_call(&em, tg, RT_FCREATE)
+            g_retst(&em, tg, d)
+        elif o = IR_FWRITE or o = IR_WRITEV:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_call(&em, tg, RT_FWRITE if o = IR_FWRITE else RT_WRITEV)
+        elif o = IR_FCLOSE:
+            g_sysarg(&em, tg, 0, a)
+            g_syscall(&em, tg, SC_CLOSE)
+        elif o = IR_NARROW:
+            g_lds(&em, tg, RG_A, a)
+            if bits = 64:
+                g_const(&em, tg, RG_B, 0)
+                g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_GE, 1)
+                g_jnz(&em, tg, RG_C, sl)
+                g_call(&em, tg, RT_BADFIT)
+                g_label(&em, tg, sl)
+                sl ← sl + 1
+            elif sgn = 0:
+                g_const(&em, tg, RG_B, (1 « bits) - 1)
+                g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_LE, 0)
+                g_jnz(&em, tg, RG_C, sl)
+                g_call(&em, tg, RT_BADFIT)
+                g_label(&em, tg, sl)
+                sl ← sl + 1
+            else:
+                g_mov2(&em, tg, RG_B, RG_A)
+                g_ext2(&em, tg, RG_B, bits, 1)
+                g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_EQ, 0)
+                g_jnz(&em, tg, RG_C, sl)
+                g_call(&em, tg, RT_BADFIT)
+                g_label(&em, tg, sl)
+                sl ← sl + 1
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_ACAT or o = IR_AFILL or o = IR_ACYC:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            if o = IR_ACAT:
+                g_call(&em, tg, RT_ACAT)
+            elif o = IR_AFILL:
+                g_call(&em, tg, RT_AFILL)
+            else:
+                g_call(&em, tg, RT_ACYC)
+            g_retst(&em, tg, d)
+        elif o = IR_AFIND:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_argconst(&em, tg, 2, c)
+            g_call(&em, tg, RT_AFIND)
+            g_retst(&em, tg, d)
+        elif o = IR_ASLICE:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_argld(&em, tg, 2, c)
+            g_call(&em, tg, RT_ASLICE)
+            g_retst(&em, tg, d)
+        elif o = IR_SATADD or o = IR_SATSUB or o = IR_SATMUL:
+            t_emit_sat(&em, tg, o, w, a, b, d, sl)
+            sl ← sl + 2
+        elif o = IR_JTAB:
+            let jmin : i64 = ir.extra[b × 1¤ptrdiff]
+            let span : i64 = ir.extra[(b + 1) × 1¤ptrdiff]
+            let ldef : i64 = ir.extra[(b + 2) × 1¤ptrdiff]
+            g_lds(&em, tg, RG_A, a)
+            g_const(&em, tg, RG_B, jmin)
+            g_sub3(&em, tg, RG_A, RG_A, RG_B)
+            g_const(&em, tg, RG_B, span)
+            g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_GE, 0)
+            g_jnz(&em, tg, RG_C, ldef)
+            let id : i64 = em.jt_count
+            em.jt_count ← em.jt_count + 1
+            let pos : i64 = g_absref(&em, tg, RG_B)
+            if em.skipping = 0:
+                em.jt_pos.push(pos)
+                em.jt_id.push(id)
+            g_shl3i(&em, tg, RG_T, RG_A, 3)
+            g_add3(&em, tg, RG_B, RG_B, RG_T)
+            g_ldo(&em, tg, RG_A, RG_B, 0, 8, 0)
+            g_ijmp(&em, tg, RG_A)
+            em.pj_id.push(id)
+            em.pj_start.push(@dropunit(#em.pj_labels))
+            em.pj_len.push(span)
+            let e : mut i64 = 0
+            while e < span:
+                em.pj_labels.push(ir.extra[(b + 3 + e) × 1¤ptrdiff])
+                e ← e + 1
+        elif o = IR_VTAB:
+            let vmin : i64 = ir.extra[b × 1¤ptrdiff]
+            let span : i64 = ir.extra[(b + 1) × 1¤ptrdiff]
+            let defv : i64 = ir.extra[(b + 2) × 1¤ptrdiff]
+            g_lds(&em, tg, RG_A, a)
+            g_const(&em, tg, RG_B, vmin)
+            g_sub3(&em, tg, RG_A, RG_A, RG_B)
+            g_const(&em, tg, RG_B, span)
+            g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_LT, 0)
+            // the load is clamped inside the table; the answer is
+            // chosen after
+            g_const(&em, tg, RG_B, 0)
+            g_sel4(&em, tg, RG_A, RG_C, RG_A, RG_B)
+            let id2 : i64 = em.jt_count
+            em.jt_count ← em.jt_count + 1
+            let pos : i64 = g_absref(&em, tg, RG_B)
+            if em.skipping = 0:
+                em.jt_pos.push(pos)
+                em.jt_id.push(id2)
+            g_shl3i(&em, tg, RG_T, RG_A, 3)
+            g_add3(&em, tg, RG_B, RG_B, RG_T)
+            g_ldo(&em, tg, RG_A, RG_B, 0, 8, 0)
+            g_const(&em, tg, RG_B, defv)
+            g_sel4(&em, tg, RG_A, RG_C, RG_A, RG_B)
+            g_sts(&em, tg, RG_A, d)
+            em.pj_id.push(id2)
+            em.pj_start.push(@dropunit(#em.pj_labels))
+            em.pj_len.push(0 - span)
+            let e2 : mut i64 = 0
+            while e2 < span:
+                em.pj_labels.push(ir.extra[(b + 3 + e2) × 1¤ptrdiff])
+                e2 ← e2 + 1
+        elif o = IR_SYSC:
+            let sargc : i64 = ir.extra[b × 1¤ptrdiff]
+            let sk : mut i64 = 0
+            while sk < sargc:
+                g_sysarg(&em, tg, sk, ir.extra[(b + 1 + sk) × 1¤ptrdiff])
+                sk ← sk + 1
+            g_syscall(&em, tg, a)
+            if d ≠ ⁻1:
+                g_sysret(&em, tg, RG_A)
+                g_sts(&em, tg, RG_A, d)
+        elif o = IR_LDN:
+            g_lds(&em, tg, RG_A, a)
+            g_ldo(&em, tg, RG_A, RG_A, b, bits, sgn)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_STN:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, c)
+            g_sto(&em, tg, RG_B, RG_A, b, bits)
+        elif o = IR_KADDR:
+            let pos : i64 = g_absref(&em, tg, RG_A)
+            if em.skipping = 0:
+                em.df_pos.push(pos)
+                em.df_off.push((em.k_args if a = 0 else em.k_alloc) + b)
+            g_sts(&em, tg, RG_A, d)
+        else:
+            assert(false, "an IR op the driver knows")
+        i ← i + 1
+    g_resolve(&em, tg)
+    em.resolve_jtabs()
+
+// saturating arithmetic, held at the type's edge; two scratch labels
+fn t_emit_sat(em : &mut Emit, tg : Target, o : i64, w : i64, a : i64, b : i64, d : i64, sl : i64):
+    let bits : i64 = w & 255
+    let sgn : i64 = w » 8
+    g_lds(&em, tg, RG_A, a)
+    g_lds(&em, tg, RG_B, b)
+    if bits < 64:
+        if o = IR_SATADD:
+            g_add3(&em, tg, RG_A, RG_A, RG_B)
+        elif o = IR_SATSUB:
+            g_sub3(&em, tg, RG_A, RG_A, RG_B)
+        else:
+            g_mul3(&em, tg, RG_A, RG_A, RG_B)
+        if sgn = 1:
+            g_const(&em, tg, RG_C, 0 - (1 « (bits - 1)))
+            g_cmp3(&em, tg, RG_T, RG_A, RG_C, CC_LT, 1)
+            g_sel4(&em, tg, RG_A, RG_T, RG_C, RG_A)
+            g_const(&em, tg, RG_C, (1 « (bits - 1)) - 1)
+            g_cmp3(&em, tg, RG_T, RG_A, RG_C, CC_GT, 1)
+            g_sel4(&em, tg, RG_A, RG_T, RG_C, RG_A)
+        elif o = IR_SATSUB:
+            g_const(&em, tg, RG_C, 0)
+            g_cmp3(&em, tg, RG_T, RG_A, RG_C, CC_LT, 1)
+            g_sel4(&em, tg, RG_A, RG_T, RG_C, RG_A)
+        else:
+            g_const(&em, tg, RG_C, (1 « bits) - 1)
+            g_cmp3(&em, tg, RG_T, RG_A, RG_C, CC_GT, 0)
+            g_sel4(&em, tg, RG_A, RG_T, RG_C, RG_A)
+        g_sts(&em, tg, RG_A, d)
+        return
+    if sgn = 0:
+        if o = IR_SATADD:
+            g_addov(&em, tg, RG_A, RG_C, RG_A, RG_B, 0)
+            g_jz(&em, tg, RG_C, sl)
+            g_const(&em, tg, RG_A, ⁻1)
+        elif o = IR_SATSUB:
+            g_subov(&em, tg, RG_A, RG_C, RG_A, RG_B, 0)
+            g_jz(&em, tg, RG_C, sl)
+            g_const(&em, tg, RG_A, 0)
+        else:
+            g_mulov(&em, tg, RG_A, RG_C, RG_A, RG_B, 0)
+            g_jz(&em, tg, RG_C, sl)
+            g_const(&em, tg, RG_A, ⁻1)
+        g_label(&em, tg, sl)
+        g_sts(&em, tg, RG_A, d)
+        return
+    // signed, full width: the direction of the clamp follows the
+    // operands, read before they are lost
+    if o = IR_SATMUL:
+        g_xor3(&em, tg, RG_C, RG_A, RG_B)
+        g_mulov(&em, tg, RG_A, RG_B, RG_A, RG_B, 1)
+        g_jz(&em, tg, RG_B, sl + 1)
+        g_const(&em, tg, RG_B, 0)
+        g_cmp3(&em, tg, RG_T, RG_C, RG_B, CC_LT, 1)
+        g_const(&em, tg, RG_A, 9223372036854775807)
+        g_jz(&em, tg, RG_T, sl + 1)
+        g_const(&em, tg, RG_A, ⁻9223372036854775807 - 1)
+        g_label(&em, tg, sl + 1)
+        g_sts(&em, tg, RG_A, d)
+        return
+    if o = IR_SATADD:
+        g_addov(&em, tg, RG_A, RG_C, RG_A, RG_B, 1)
+    else:
+        g_subov(&em, tg, RG_A, RG_C, RG_A, RG_B, 1)
+    g_jz(&em, tg, RG_C, sl + 1)
+    g_const(&em, tg, RG_C, 0)
+    // an overflowed add went the way of b; a subtract the other way
+    g_cmp3(&em, tg, RG_T, RG_B, RG_C, CC_LT if o = IR_SATADD else CC_GT, 1)
+    g_const(&em, tg, RG_A, 9223372036854775807)
+    g_jz(&em, tg, RG_T, sl + 1)
+    g_const(&em, tg, RG_A, ⁻9223372036854775807 - 1)
+    g_label(&em, tg, sl + 1)
+    g_sts(&em, tg, RG_A, d)
+
+// ---------------------------------------------------------------------------
+// The runtime, written once as IR and compiled by the driver above for
+// whichever target is asked for.  The x86-64 pioneer keeps its
+// hand-tuned routines; these are the same contracts in a portable
+// spelling, and the conformance suite holds the two to one behavior.
+// ---------------------------------------------------------------------------
+
+struct RtB:
+    op : i64[]
+    ia : i64[]
+    ib : i64[]
+    ic : i64[]
+    idd : i64[]
+    iww : i64[]
+    extra : i64[]
+    ntmp : i64
+    nlab : i64
+
+fn rtb(np : i64) → RtB:
+    (RtB{op: [], ia: [], ib: [], ic: [], idd: [], iww: [], extra: [],
+         ntmp: np, nlab: 0})
+
+impl RtB:
+    fn o(&mut self, op : i64, a : i64, b : i64, c : i64, d : i64, w : i64):
+        self.op.push(op)
+        self.ia.push(a)
+        self.ib.push(b)
+        self.ic.push(c)
+        self.idd.push(d)
+        self.iww.push(w)
+
+    fn t(&mut self) → i64:
+        self.ntmp ← self.ntmp + 1
+        self.ntmp - 1
+
+    fn l(&mut self) → i64:
+        self.nlab ← self.nlab + 1
+        self.nlab - 1
+
+    fn cst(&mut self, v : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_CONST, v, 0, 0, d, 0)
+        d
+
+    fn mov(&mut self, dst : i64, src : i64):
+        self.o(IR_MOV, src, 0, 0, dst, 0)
+
+    fn add(&mut self, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_ADDW, a, b, 0, d, 64 + 256)
+        d
+
+    fn sub(&mut self, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_SUBW, a, b, 0, d, 64 + 256)
+        d
+
+    fn mul(&mut self, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_MULW, a, b, 0, d, 64 + 256)
+        d
+
+    fn band(&mut self, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_BAND, a, b, 0, d, 64 + 256)
+        d
+
+    fn bor(&mut self, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_BORR, a, b, 0, d, 64 + 256)
+        d
+
+    fn shl(&mut self, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_SHLL, a, b, 0, d, 64)
+        d
+
+    fn shr(&mut self, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_SHRR, a, b, 0, d, 64)
+        d
+
+    // unsigned division and remainder; the divisor is never zero here,
+    // so the default lane is fed the dividend and cannot be taken
+    fn udiv(&mut self, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_DIVV, a, b, a, d, 64)
+        d
+
+    fn umod(&mut self, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_MODD, a, b, a, d, 64)
+        d
+
+    // comparisons, unsigned unless said otherwise
+    fn ceq(&mut self, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_CEQ, a, b, 0, d, 64)
+        d
+
+    fn cne(&mut self, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_CNE, a, b, 0, d, 64)
+        d
+
+    fn cltu(&mut self, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_CLT, a, b, 0, d, 64)
+        d
+
+    fn cgeu(&mut self, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_CGE, a, b, 0, d, 64)
+        d
+
+    fn clts(&mut self, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_CLT, a, b, 0, d, 64 + 256)
+        d
+
+    fn sel(&mut self, c : i64, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_SEL, c, a, b, d, 0)
+        d
+
+    fn jz(&mut self, v : i64, lab : i64):
+        self.o(IR_JZ, v, lab, 0, 0, 0)
+
+    fn jnz(&mut self, v : i64, lab : i64):
+        self.o(IR_JNZ, v, lab, 0, 0, 0)
+
+    fn jmp(&mut self, lab : i64):
+        self.o(IR_JMP, lab, 0, 0, 0, 0)
+
+    fn lab(&mut self, l : i64):
+        self.o(IR_LABEL, l, 0, 0, 0, 0)
+
+    // raw memory, the runtime's own privilege
+    fn ldn(&mut self, base : i64, off : i64, w : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_LDN, base, off, 0, d, w)
+        d
+
+    fn stn(&mut self, base : i64, off : i64, v : i64, w : i64):
+        self.o(IR_STN, base, off, v, 0, w)
+
+    fn kaddr(&mut self, which : i64, off : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_KADDR, which, off, 0, d, 0)
+        d
+
+    // calls into the rest of the runtime
+    fn call0(&mut self, target : i64) → i64:
+        let d : i64 = self.t()
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(0)
+        self.o(IR_CALL, target, off, 0, d, 0)
+        d
+
+    fn call1(&mut self, target : i64, a0 : i64) → i64:
+        let d : i64 = self.t()
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(1)
+        self.extra.push(a0)
+        self.o(IR_CALL, target, off, 0, d, 0)
+        d
+
+    fn call2(&mut self, target : i64, a0 : i64, a1 : i64) → i64:
+        let d : i64 = self.t()
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(2)
+        self.extra.push(a0)
+        self.extra.push(a1)
+        self.o(IR_CALL, target, off, 0, d, 0)
+        d
+
+    fn call3(&mut self, target : i64, a0 : i64, a1 : i64, a2 : i64) → i64:
+        let d : i64 = self.t()
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(3)
+        self.extra.push(a0)
+        self.extra.push(a1)
+        self.extra.push(a2)
+        self.o(IR_CALL, target, off, 0, d, 0)
+        d
+
+    // the kernel; up to six arguments from slots
+    fn sys1(&mut self, id : i64, a0 : i64) → i64:
+        let d : i64 = self.t()
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(1)
+        self.extra.push(a0)
+        self.o(IR_SYSC, id, off, 0, d, 0)
+        d
+
+    fn sys2(&mut self, id : i64, a0 : i64, a1 : i64) → i64:
+        let d : i64 = self.t()
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(2)
+        self.extra.push(a0)
+        self.extra.push(a1)
+        self.o(IR_SYSC, id, off, 0, d, 0)
+        d
+
+    fn sys3(&mut self, id : i64, a0 : i64, a1 : i64, a2 : i64) → i64:
+        let d : i64 = self.t()
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(3)
+        self.extra.push(a0)
+        self.extra.push(a1)
+        self.extra.push(a2)
+        self.o(IR_SYSC, id, off, 0, d, 0)
+        d
+
+    fn sys4(&mut self, id : i64, a0 : i64, a1 : i64, a2 : i64, a3 : i64) → i64:
+        let d : i64 = self.t()
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(4)
+        self.extra.push(a0)
+        self.extra.push(a1)
+        self.extra.push(a2)
+        self.extra.push(a3)
+        self.o(IR_SYSC, id, off, 0, d, 0)
+        d
+
+    fn sys6(&mut self, id : i64, a0 : i64, a1 : i64, a2 : i64, a3 : i64, a4 : i64, a5 : i64) → i64:
+        let d : i64 = self.t()
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(6)
+        self.extra.push(a0)
+        self.extra.push(a1)
+        self.extra.push(a2)
+        self.extra.push(a3)
+        self.extra.push(a4)
+        self.extra.push(a5)
+        self.o(IR_SYSC, id, off, 0, d, 0)
+        d
+
+    fn ret(&mut self, v : i64):
+        self.o(IR_RET, v, 0, 0, 0, 0)
+
+    fn retn(&mut self):
+        self.o(IR_RET, ⁻1, 0, 0, 0, 0)
+
+    fn abort_msg(&mut self, strid : i64):
+        self.o(IR_ABORT, strid, 0, 0, 0, 0)
+
+fn rtb_fn(b : RtB) → IrFn:
+    (IrFn{op: b.op, ia: b.ia, ib: b.ib, ic: b.ic, id: b.idd, iw: b.iww,
+          extra: b.extra, nvregs: b.ntmp, nlabels: b.nlab})
+
+// each runtime routine, one builder; the id picks it
+fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
+    if id = RT_WRITE1 or id = RT_WRITE2:
+        // (buf, len): the loop puts every byte down or dies trying
+        let b : mut RtB = rtb(2)
+        let fd : i64 = b.cst(1 if id = RT_WRITE1 else 2)
+        let done : i64 = b.t()
+        let z : i64 = b.cst(0)
+        b.mov(done, z)
+        let ltop : i64 = b.l()
+        let lend : i64 = b.l()
+        b.lab(ltop)
+        let left : i64 = b.sub(1, done)
+        b.jz(left, lend)
+        let at : i64 = b.add(0, done)
+        let r : i64 = b.sys3(SC_WRITE, fd, at, left)
+        let bad : i64 = b.clts(r, b.cst(1))
+        b.jnz(bad, lend)
+        let nd : i64 = b.add(done, r)
+        b.mov(done, nd)
+        b.jmp(ltop)
+        b.lab(lend)
+        b.retn()
+        return rtb_fn(b)
+    if id = RT_ABORT:
+        // (buf, len): say it, then die the abort's death
+        let b : mut RtB = rtb(2)
+        _ ← b.call2(RT_WRITE2, 0, 1)
+        let pid : i64 = b.t()
+        let off0 : i64 = @dropunit(#b.extra)
+        b.extra.push(0)
+        b.o(IR_SYSC, SC_GETPID, off0, 0, pid, 0)
+        let sig : i64 = b.cst(6)
+        _ ← b.sys2(SC_KILL, pid, sig)
+        let spin : i64 = b.l()
+        b.lab(spin)
+        b.jmp(spin)
+        return rtb_fn(b)
+    if id = RT_OV or id = RT_SHIFT or id = RT_BOUNDS or id = RT_OOM or id = RT_BADCHAR or id = RT_BADFIT:
+        let b : mut RtB = rtb(0)
+        let msg : mut str = "integer overflow\n"
+        if id = RT_SHIFT:
+            msg ← "shift count is past the type\n"
+        elif id = RT_BOUNDS:
+            msg ← "index out of range\n"
+        elif id = RT_OOM:
+            msg ← "out of memory\n"
+        elif id = RT_BADCHAR:
+            msg ← "chr: the value is not a code point\n"
+        elif id = RT_BADFIT:
+            msg ← "the value does not fit the type it meets\n"
+        b.abort_msg(lw.intern(msg))
+        return rtb_fn(b)
+    if id = RT_ALLOC:
+        // (size) → address; sixteen-aligned bump over mmap regions
+        let b : mut RtB = rtb(1)
+        let fifteen : i64 = b.cst(15)
+        let mask : i64 = b.cst(⁻16)
+        let sz : i64 = b.band(b.add(0, fifteen), mask)
+        let k : i64 = b.kaddr(1, 0)
+        let nxt : i64 = b.ldn(k, 0, 8)
+        let lim : i64 = b.ldn(k, 8, 8)
+        let want : i64 = b.add(nxt, sz)
+        let fits : i64 = b.cltu(lim, want)
+        let lmap : i64 = b.l()
+        b.jnz(fits, lmap)
+        b.stn(k, 0, want, 8)
+        b.ret(nxt)
+        b.lab(lmap)
+        // a fresh region: at least a mebibyte, whole pages
+        let p4 : i64 = b.cst(4095)
+        let pmask : i64 = b.cst(⁻4096)
+        let len : i64 = b.band(b.add(sz, p4), pmask)
+        let meg : i64 = b.cst(1048576)
+        let small : i64 = b.cltu(len, meg)
+        let len2 : i64 = b.sel(small, meg, len)
+        let z2 : i64 = b.cst(0)
+        let prot : i64 = b.cst(3)
+        let fl : i64 = b.cst(34)
+        let m1 : i64 = b.cst(⁻1)
+        let r : i64 = b.sys6(SC_MMAP, z2, len2, prot, fl, m1, z2)
+        let neg : i64 = b.clts(r, z2)
+        let lok : i64 = b.l()
+        b.jz(neg, lok)
+        _ ← b.call0(RT_OOM)
+        b.lab(lok)
+        let e : i64 = b.add(r, len2)
+        b.stn(k, 8, e, 8)
+        let n2 : i64 = b.add(r, sz)
+        b.stn(k, 0, n2, 8)
+        b.ret(r)
+        return rtb_fn(b)
+    if id = RT_ARRNEW:
+        // (cap) → descriptor {slots, len, cap}, the slots in line
+        let b : mut RtB = rtb(1)
+        let three : i64 = b.cst(3)
+        let hdr : i64 = b.cst(24)
+        let sz : i64 = b.add(b.shl(0, three), hdr)
+        let h : i64 = b.call1(RT_ALLOC, sz)
+        let slots : i64 = b.add(h, hdr)
+        b.stn(h, 0, slots, 8)
+        let z : i64 = b.cst(0)
+        b.stn(h, 8, z, 8)
+        b.stn(h, 16, 0, 8)
+        b.ret(h)
+        return rtb_fn(b)
+    if id = RT_ARRPUSH:
+        // (h, v): the array grows by doubling when it must
+        let b : mut RtB = rtb(2)
+        let len : i64 = b.ldn(0, 8, 8)
+        let cap : i64 = b.ldn(0, 16, 8)
+        let full : i64 = b.ceq(len, cap)
+        let lroom : i64 = b.l()
+        b.jz(full, lroom)
+        let two : i64 = b.cst(2)
+        let four : i64 = b.cst(4)
+        let ncap0 : i64 = b.mul(cap, two)
+        let small : i64 = b.cltu(ncap0, four)
+        let ncap : i64 = b.sel(small, four, ncap0)
+        let three : i64 = b.cst(3)
+        let nb : i64 = b.call1(RT_ALLOC, b.shl(ncap, three))
+        let old : i64 = b.ldn(0, 0, 8)
+        let ix : i64 = b.t()
+        let z : i64 = b.cst(0)
+        b.mov(ix, z)
+        let lcp : i64 = b.l()
+        let lcpe : i64 = b.l()
+        b.lab(lcp)
+        let more : i64 = b.cltu(ix, len)
+        b.jz(more, lcpe)
+        let o8 : i64 = b.shl(ix, three)
+        let v9 : i64 = b.ldn(b.add(old, o8), 0, 8)
+        b.stn(b.add(nb, o8), 0, v9, 8)
+        let one : i64 = b.cst(1)
+        b.mov(ix, b.add(ix, one))
+        b.jmp(lcp)
+        b.lab(lcpe)
+        b.stn(0, 0, nb, 8)
+        b.stn(0, 16, ncap, 8)
+        b.lab(lroom)
+        let slots : i64 = b.ldn(0, 0, 8)
+        let three2 : i64 = b.cst(3)
+        b.stn(b.add(slots, b.shl(len, three2)), 0, 1, 8)
+        let one2 : i64 = b.cst(1)
+        b.stn(0, 8, b.add(len, one2), 8)
+        b.retn()
+        return rtb_fn(b)
+    if id = RT_CONCAT:
+        // (a, b) → the joined string, bytes then a fresh descriptor
+        let b : mut RtB = rtb(2)
+        let la : i64 = b.ldn(0, 8, 8)
+        let lb : i64 = b.ldn(1, 8, 8)
+        let n : i64 = b.add(la, lb)
+        let one : i64 = b.cst(1)
+        let small : i64 = b.cltu(n, one)
+        let n1 : i64 = b.sel(small, one, n)
+        let p : i64 = b.call1(RT_ALLOC, n1)
+        let pa : i64 = b.ldn(0, 0, 8)
+        rt_copy_bytes(&b, pa, p, la)
+        let pb : i64 = b.ldn(1, 0, 8)
+        rt_copy_bytes(&b, pb, b.add(p, la), lb)
+        let dsc : i64 = b.call1(RT_ALLOC, b.cst(16))
+        b.stn(dsc, 0, p, 8)
+        b.stn(dsc, 8, n, 8)
+        b.ret(dsc)
+        return rtb_fn(b)
+    if id = RT_STREQ:
+        let b : mut RtB = rtb(2)
+        let la : i64 = b.ldn(0, 8, 8)
+        let lb : i64 = b.ldn(1, 8, 8)
+        let same : i64 = b.ceq(la, lb)
+        let lno : i64 = b.l()
+        b.jz(same, lno)
+        let pa : i64 = b.ldn(0, 0, 8)
+        let pb : i64 = b.ldn(1, 0, 8)
+        let ix : i64 = b.t()
+        let z : i64 = b.cst(0)
+        b.mov(ix, z)
+        let ltop : i64 = b.l()
+        let lyes : i64 = b.l()
+        b.lab(ltop)
+        let more : i64 = b.cltu(ix, la)
+        b.jz(more, lyes)
+        let ca : i64 = b.ldn(b.add(pa, ix), 0, 1)
+        let cb : i64 = b.ldn(b.add(pb, ix), 0, 1)
+        let df : i64 = b.cne(ca, cb)
+        b.jnz(df, lno)
+        let one : i64 = b.cst(1)
+        b.mov(ix, b.add(ix, one))
+        b.jmp(ltop)
+        b.lab(lyes)
+        b.ret(b.cst(1))
+        b.lab(lno)
+        b.ret(b.cst(0))
+        return rtb_fn(b)
+    if id = RT_STRCHARS:
+        // (s) → how many characters: the bytes that begin one
+        let b : mut RtB = rtb(1)
+        let p : i64 = b.ldn(0, 0, 8)
+        let n : i64 = b.ldn(0, 8, 8)
+        let cnt : i64 = b.t()
+        let ix : i64 = b.t()
+        let z : i64 = b.cst(0)
+        b.mov(cnt, z)
+        b.mov(ix, z)
+        let ltop : i64 = b.l()
+        let lend : i64 = b.l()
+        b.lab(ltop)
+        let more : i64 = b.cltu(ix, n)
+        b.jz(more, lend)
+        let c : i64 = b.ldn(b.add(p, ix), 0, 1)
+        let m : i64 = b.cst(192)
+        let cont : i64 = b.ceq(b.band(c, m), b.cst(128))
+        let one : i64 = b.cst(1)
+        let add1 : i64 = b.sel(cont, z, one)
+        b.mov(cnt, b.add(cnt, add1))
+        b.mov(ix, b.add(ix, one))
+        b.jmp(ltop)
+        b.lab(lend)
+        b.ret(cnt)
+        return rtb_fn(b)
+    if id = RT_PRINTSTR:
+        let b : mut RtB = rtb(1)
+        let p : i64 = b.ldn(0, 0, 8)
+        let n : i64 = b.ldn(0, 8, 8)
+        _ ← b.call2(RT_WRITE1, p, n)
+        b.retn()
+        return rtb_fn(b)
+    if id = RT_PRINTI or id = RT_PRINTU:
+        // (v): decimal onto fd 1, built least digit first
+        let b : mut RtB = rtb(1)
+        let buf : i64 = b.call1(RT_ALLOC, b.cst(24))
+        let z : i64 = b.cst(0)
+        let neg : mut i64 = z
+        if id = RT_PRINTI:
+            neg ← b.clts(0, z)
+            let nv : i64 = b.sub(z, 0)
+            b.mov(0, b.sel(neg, nv, 0))
+        let ix : i64 = b.t()
+        b.mov(ix, b.cst(24))
+        let ten : i64 = b.cst(10)
+        let one : i64 = b.cst(1)
+        let ltop : i64 = b.l()
+        b.lab(ltop)
+        let dgt : i64 = b.umod(0, ten)
+        b.mov(0, b.udiv(0, ten))
+        b.mov(ix, b.sub(ix, one))
+        b.stn(b.add(buf, ix), 0, b.add(dgt, b.cst(48)), 1)
+        b.jnz(0, ltop)
+        if id = RT_PRINTI:
+            let lpos : i64 = b.l()
+            b.jz(neg, lpos)
+            b.mov(ix, b.sub(ix, one))
+            b.stn(b.add(buf, ix), 0, b.cst(45), 1)
+            b.lab(lpos)
+        let n24 : i64 = b.cst(24)
+        _ ← b.call2(RT_WRITE1, b.add(buf, ix), b.sub(n24, ix))
+        b.retn()
+        return rtb_fn(b)
+    rt_build2(id, tg, &lw)
+
+// a byte copy the builders above lean on: src, dst, n as vregs
+fn rt_copy_bytes(b : &mut RtB, src : i64, dst : i64, n : i64):
+    let ix : i64 = b.t()
+    let z : i64 = b.cst(0)
+    b.mov(ix, z)
+    let ltop : i64 = b.l()
+    let lend : i64 = b.l()
+    b.lab(ltop)
+    let more : i64 = b.cltu(ix, n)
+    b.jz(more, lend)
+    let c : i64 = b.ldn(b.add(src, ix), 0, 1)
+    b.stn(b.add(dst, ix), 0, c, 1)
+    let one : i64 = b.cst(1)
+    b.mov(ix, b.add(ix, one))
+    b.jmp(ltop)
+    b.lab(lend)
+
+// the rest of the runtime: hashes, characters, the kernel block,
+// files, and the array helpers
+fn rt_build2(id : i64, tg : Target, lw : &mut Lower) → IrFn:
+    if id = RT_HNEW:
+        // (cap, iskeystr) → {iskeystr, pairs, count, cap, index, icap}
+        let b : mut RtB = rtb(2)
+        let h : i64 = b.call1(RT_ALLOC, b.cst(48))
+        b.stn(h, 0, 1, 8)
+        let four : i64 = b.cst(4)
+        let pairs : i64 = b.call1(RT_ALLOC, b.shl(0, four))
+        b.stn(h, 8, pairs, 8)
+        let z : i64 = b.cst(0)
+        b.stn(h, 16, z, 8)
+        b.stn(h, 24, 0, 8)
+        let one : i64 = b.cst(1)
+        let icap : i64 = b.shl(0, one)
+        let three : i64 = b.cst(3)
+        let idx : i64 = b.call1(RT_ALLOC, b.shl(icap, three))
+        rt_zero_words(&b, idx, icap)
+        b.stn(h, 32, idx, 8)
+        b.stn(h, 40, icap, 8)
+        b.ret(h)
+        return rtb_fn(b)
+    if id = RT_HFIND:
+        // (h, key) → (slot « 1) | found: where the key sits in the
+        // index, or where it would go
+        let b : mut RtB = rtb(2)
+        let iskey : i64 = b.ldn(0, 0, 8)
+        let hv : i64 = b.t()
+        let lraw : i64 = b.l()
+        let lgo : i64 = b.l()
+        b.jz(iskey, lraw)
+        b.mov(hv, rt_hash_str(&b, 1))
+        b.jmp(lgo)
+        b.lab(lraw)
+        // a number's bits, stirred a little
+        let k1 : i64 = b.cst(⁻7046029254386353131)
+        b.mov(hv, b.mul(1, k1))
+        let s33 : i64 = b.cst(33)
+        b.mov(hv, b.bor(b.shr(hv, s33), hv))
+        b.lab(lgo)
+        let icap : i64 = b.ldn(0, 40, 8)
+        let one : i64 = b.cst(1)
+        let mask : i64 = b.sub(icap, one)
+        let pos : i64 = b.t()
+        b.mov(pos, b.band(hv, mask))
+        let pairs : i64 = b.ldn(0, 8, 8)
+        let idx : i64 = b.ldn(0, 32, 8)
+        let three : i64 = b.cst(3)
+        let four : i64 = b.cst(4)
+        let ltop : i64 = b.l()
+        let lmiss : i64 = b.l()
+        let lnext : i64 = b.l()
+        b.lab(ltop)
+        let e : i64 = b.ldn(b.add(idx, b.shl(pos, three)), 0, 8)
+        b.jz(e, lmiss)
+        let pe : i64 = b.add(pairs, b.shl(b.sub(e, one), four))
+        let ke : i64 = b.ldn(pe, 0, 8)
+        let same : i64 = b.t()
+        let lcmp2 : i64 = b.l()
+        let lcmpd : i64 = b.l()
+        b.jz(iskey, lcmp2)
+        b.mov(same, b.call2(RT_STREQ, ke, 1))
+        b.jmp(lcmpd)
+        b.lab(lcmp2)
+        b.mov(same, b.ceq(ke, 1))
+        b.lab(lcmpd)
+        b.jz(same, lnext)
+        b.ret(b.bor(b.shl(pos, one), one))
+        b.lab(lnext)
+        b.mov(pos, b.band(b.add(pos, one), mask))
+        b.jmp(ltop)
+        b.lab(lmiss)
+        b.ret(b.shl(pos, one))
+        return rtb_fn(b)
+    if id = RT_HGET:
+        let b : mut RtB = rtb(2)
+        let f : i64 = b.call2(RT_HFIND, 0, 1)
+        let one : i64 = b.cst(1)
+        let found : i64 = b.band(f, one)
+        let lno : i64 = b.l()
+        b.jz(found, lno)
+        let v : i64 = rt_hentry_val(&b, f)
+        let box : i64 = b.call1(RT_ALLOC, b.cst(8))
+        b.stn(box, 0, v, 8)
+        b.ret(box)
+        b.lab(lno)
+        b.ret(b.cst(0))
+        return rtb_fn(b)
+    if id = RT_HELEM:
+        let b : mut RtB = rtb(2)
+        let f : i64 = b.call2(RT_HFIND, 0, 1)
+        let one : i64 = b.cst(1)
+        b.ret(b.band(f, one))
+        return rtb_fn(b)
+    if id = RT_HPUT:
+        let b : mut RtB = rtb(3)
+        let f : i64 = b.t()
+        b.mov(f, b.call2(RT_HFIND, 0, 1))
+        let one : i64 = b.cst(1)
+        let found : i64 = b.band(f, one)
+        let lnew : i64 = b.l()
+        b.jz(found, lnew)
+        // only the value changes; the key keeps its place
+        let pairs : i64 = b.ldn(0, 8, 8)
+        let idx : i64 = b.ldn(0, 32, 8)
+        let three : i64 = b.cst(3)
+        let four : i64 = b.cst(4)
+        let e : i64 = b.ldn(b.add(idx, b.shl(b.shr(f, one), three)), 0, 8)
+        b.stn(b.add(pairs, b.shl(b.sub(e, one), four)), 8, 2, 8)
+        b.retn()
+        b.lab(lnew)
+        // grow the index before it clogs: past seven eighths full
+        let cnt : i64 = b.ldn(0, 16, 8)
+        let icap : i64 = b.ldn(0, 40, 8)
+        let three2 : i64 = b.cst(3)
+        let lhs : i64 = b.shl(b.add(cnt, b.cst(1)), three2)
+        let seven : i64 = b.cst(7)
+        let rhs : i64 = b.mul(icap, seven)
+        let tight : i64 = b.cltu(rhs, lhs)
+        let lroom : i64 = b.l()
+        b.jz(tight, lroom)
+        _ ← b.call1(RT_HGROW, 0)
+        b.mov(f, b.call2(RT_HFIND, 0, 1))
+        b.lab(lroom)
+        // the pairs block doubles as it fills
+        let cnt2 : i64 = b.ldn(0, 16, 8)
+        let pcap : i64 = b.ldn(0, 24, 8)
+        let lpair : i64 = b.l()
+        let full : i64 = b.ceq(cnt2, pcap)
+        b.jz(full, lpair)
+        let two : i64 = b.cst(2)
+        let eight : i64 = b.cst(8)
+        let ncap0 : i64 = b.mul(pcap, two)
+        let smallp : i64 = b.cltu(ncap0, eight)
+        let ncap : i64 = b.sel(smallp, eight, ncap0)
+        let four2 : i64 = b.cst(4)
+        let np : i64 = b.call1(RT_ALLOC, b.shl(ncap, four2))
+        let op : i64 = b.ldn(0, 8, 8)
+        rt_zero_words(&b, np, b.cst(0))
+        rt_copy_words(&b, op, np, b.shl(cnt2, b.cst(1)))
+        b.stn(0, 8, np, 8)
+        b.stn(0, 24, ncap, 8)
+        b.lab(lpair)
+        let pairs2 : i64 = b.ldn(0, 8, 8)
+        let four3 : i64 = b.cst(4)
+        let pe : i64 = b.add(pairs2, b.shl(cnt2, four3))
+        b.stn(pe, 0, 1, 8)
+        b.stn(pe, 8, 2, 8)
+        let idx2 : i64 = b.ldn(0, 32, 8)
+        let three3 : i64 = b.cst(3)
+        b.stn(b.add(idx2, b.shl(b.shr(f, b.cst(1)), three3)), 0, b.add(cnt2, b.cst(1)), 8)
+        b.stn(0, 16, b.add(cnt2, b.cst(1)), 8)
+        b.retn()
+        return rtb_fn(b)
+    if id = RT_HGROW:
+        // (h): a wider index, every entry re-homed by its key
+        let b : mut RtB = rtb(1)
+        let one : i64 = b.cst(1)
+        let three : i64 = b.cst(3)
+        let icap : i64 = b.ldn(0, 40, 8)
+        let ncap : i64 = b.shl(icap, one)
+        let idx : i64 = b.call1(RT_ALLOC, b.shl(ncap, three))
+        rt_zero_words(&b, idx, ncap)
+        b.stn(0, 32, idx, 8)
+        b.stn(0, 40, ncap, 8)
+        let cnt : i64 = b.ldn(0, 16, 8)
+        let pairs : i64 = b.ldn(0, 8, 8)
+        let four : i64 = b.cst(4)
+        let e : i64 = b.t()
+        let z : i64 = b.cst(0)
+        b.mov(e, z)
+        let ltop : i64 = b.l()
+        let lend : i64 = b.l()
+        b.lab(ltop)
+        let more : i64 = b.cltu(e, cnt)
+        b.jz(more, lend)
+        let ke : i64 = b.ldn(b.add(pairs, b.shl(e, four)), 0, 8)
+        let f : i64 = b.call2(RT_HFIND, 0, ke)
+        b.stn(b.add(idx, b.shl(b.shr(f, one), three)), 0, b.add(e, one), 8)
+        b.mov(e, b.add(e, one))
+        b.jmp(ltop)
+        b.lab(lend)
+        b.retn()
+        return rtb_fn(b)
+    if id = RT_STRIDX or id = RT_STRNEXT:
+        // (s, i): the character at a position -- counted in characters
+        // for STRIDX, begun at a byte for STRNEXT, which also answers
+        // where the next begins, packed above the code point
+        let b : mut RtB = rtb(2)
+        let p : i64 = b.ldn(0, 0, 8)
+        let n : i64 = b.ldn(0, 8, 8)
+        let at : i64 = b.t()
+        let z : i64 = b.cst(0)
+        let one : i64 = b.cst(1)
+        if id = RT_STRIDX:
+            b.mov(at, z)
+            // skip as many characters as the position names
+            let want : i64 = b.t()
+            b.mov(want, 1)
+            let lskip : i64 = b.l()
+            let lgot : i64 = b.l()
+            b.lab(lskip)
+            b.jz(want, lgot)
+            let inb : i64 = b.cltu(at, n)
+            let lok : i64 = b.l()
+            b.jnz(inb, lok)
+            _ ← b.call0(RT_BOUNDS)
+            b.lab(lok)
+            b.mov(at, b.add(at, rt_charlen(&b, p, at)))
+            b.mov(want, b.sub(want, one))
+            b.jmp(lskip)
+            b.lab(lgot)
+            let inb2 : i64 = b.cltu(at, n)
+            let lok2 : i64 = b.l()
+            b.jnz(inb2, lok2)
+            _ ← b.call0(RT_BOUNDS)
+            b.lab(lok2)
+            b.ret(rt_decode(&b, p, at))
+        else:
+            b.mov(at, 1)
+            let cp : i64 = rt_decode(&b, p, at)
+            let nxt : i64 = b.add(at, rt_charlen(&b, p, at))
+            let s32 : i64 = b.cst(32)
+            b.ret(b.bor(b.shl(nxt, s32), cp))
+        return rtb_fn(b)
+    if id = RT_CHARS:
+        let b : mut RtB = rtb(1)
+        let p : i64 = b.ldn(0, 0, 8)
+        let n : i64 = b.ldn(0, 8, 8)
+        let out : i64 = b.call1(RT_ARRNEW, b.cst(4))
+        let at : i64 = b.t()
+        let z : i64 = b.cst(0)
+        b.mov(at, z)
+        let ltop : i64 = b.l()
+        let lend : i64 = b.l()
+        b.lab(ltop)
+        let more : i64 = b.cltu(at, n)
+        b.jz(more, lend)
+        _ ← b.call2(RT_ARRPUSH, out, rt_decode(&b, p, at))
+        b.mov(at, b.add(at, rt_charlen(&b, p, at)))
+        b.jmp(ltop)
+        b.lab(lend)
+        b.ret(out)
+        return rtb_fn(b)
+    if id = RT_CHARSTR:
+        // (cp) → a fresh one-character string
+        let b : mut RtB = rtb(1)
+        let p : i64 = b.call1(RT_ALLOC, b.cst(4))
+        let nlen : i64 = b.t()
+        let l1 : i64 = b.l()
+        let l2 : i64 = b.l()
+        let l3 : i64 = b.l()
+        let ldone : i64 = b.l()
+        let a80 : i64 = b.cst(128)
+        let small1 : i64 = b.cltu(0, a80)
+        b.jz(small1, l1)
+        b.stn(p, 0, 0, 1)
+        b.mov(nlen, b.cst(1))
+        b.jmp(ldone)
+        b.lab(l1)
+        let a800 : i64 = b.cst(2048)
+        let small2 : i64 = b.cltu(0, a800)
+        b.jz(small2, l2)
+        let six : i64 = b.cst(6)
+        let m3f : i64 = b.cst(63)
+        b.stn(p, 0, b.bor(b.cst(192), b.shr(0, six)), 1)
+        b.stn(p, 1, b.bor(a80, b.band(0, m3f)), 1)
+        b.mov(nlen, b.cst(2))
+        b.jmp(ldone)
+        b.lab(l2)
+        let a10000 : i64 = b.cst(65536)
+        let small3 : i64 = b.cltu(0, a10000)
+        b.jz(small3, l3)
+        let six2 : i64 = b.cst(6)
+        let twelve : i64 = b.cst(12)
+        let m3f2 : i64 = b.cst(63)
+        b.stn(p, 0, b.bor(b.cst(224), b.shr(0, twelve)), 1)
+        b.stn(p, 1, b.bor(a80, b.band(b.shr(0, six2), m3f2)), 1)
+        b.stn(p, 2, b.bor(a80, b.band(0, m3f2)), 1)
+        b.mov(nlen, b.cst(3))
+        b.jmp(ldone)
+        b.lab(l3)
+        let six3 : i64 = b.cst(6)
+        let twelve2 : i64 = b.cst(12)
+        let e18 : i64 = b.cst(18)
+        let m3f3 : i64 = b.cst(63)
+        b.stn(p, 0, b.bor(b.cst(240), b.shr(0, e18)), 1)
+        b.stn(p, 1, b.bor(a80, b.band(b.shr(0, twelve2), m3f3)), 1)
+        b.stn(p, 2, b.bor(a80, b.band(b.shr(0, six3), m3f3)), 1)
+        b.stn(p, 3, b.bor(a80, b.band(0, m3f3)), 1)
+        b.mov(nlen, b.cst(4))
+        b.lab(ldone)
+        let dsc : i64 = b.call1(RT_ALLOC, b.cst(16))
+        b.stn(dsc, 0, p, 8)
+        b.stn(dsc, 8, nlen, 8)
+        b.ret(dsc)
+        return rtb_fn(b)
+    rt_build3(id, tg, &lw)
+
+// how many bytes the character at p+at occupies, from its lead byte
+fn rt_charlen(b : &mut RtB, p : i64, at : i64) → i64:
+    let c : i64 = b.ldn(b.add(p, at), 0, 1)
+    let one : i64 = b.cst(1)
+    let n : i64 = b.t()
+    b.mov(n, one)
+    let l1 : i64 = b.l()
+    let c1 : i64 = b.cltu(c, b.cst(128))
+    b.jnz(c1, l1)
+    b.mov(n, b.cst(2))
+    let c2 : i64 = b.cltu(c, b.cst(224))
+    b.jnz(c2, l1)
+    b.mov(n, b.cst(3))
+    let c3 : i64 = b.cltu(c, b.cst(240))
+    b.jnz(c3, l1)
+    b.mov(n, b.cst(4))
+    b.lab(l1)
+    n
+
+// the code point beginning at p+at, the input already known valid
+fn rt_decode(b : &mut RtB, p : i64, at : i64) → i64:
+    let c : i64 = b.ldn(b.add(p, at), 0, 1)
+    let cp : i64 = b.t()
+    let l1 : i64 = b.l()
+    let l2 : i64 = b.l()
+    let l3 : i64 = b.l()
+    let ldone : i64 = b.l()
+    let six : i64 = b.cst(6)
+    let m3f : i64 = b.cst(63)
+    let one : i64 = b.cst(1)
+    let two : i64 = b.cst(2)
+    let three : i64 = b.cst(3)
+    let c1 : i64 = b.cltu(c, b.cst(128))
+    b.jz(c1, l1)
+    b.mov(cp, c)
+    b.jmp(ldone)
+    b.lab(l1)
+    let b1 : i64 = b.band(b.ldn(b.add(b.add(p, at), one), 0, 1), m3f)
+    let c2 : i64 = b.cltu(c, b.cst(224))
+    b.jz(c2, l2)
+    b.mov(cp, b.bor(b.shl(b.band(c, b.cst(31)), six), b1))
+    b.jmp(ldone)
+    b.lab(l2)
+    let b2 : i64 = b.band(b.ldn(b.add(b.add(p, at), two), 0, 1), m3f)
+    let c3 : i64 = b.cltu(c, b.cst(240))
+    b.jz(c3, l3)
+    b.mov(cp, b.bor(b.bor(b.shl(b.band(c, b.cst(15)), b.cst(12)), b.shl(b1, six)), b2))
+    b.jmp(ldone)
+    b.lab(l3)
+    let b3 : i64 = b.band(b.ldn(b.add(b.add(p, at), three), 0, 1), m3f)
+    b.mov(cp, b.bor(b.bor(b.bor(b.shl(b.band(c, b.cst(7)), b.cst(18)), b.shl(b1, b.cst(12))), b.shl(b2, six)), b3))
+    b.lab(ldone)
+    cp
+
+// FNV-1a over a descriptor's bytes; the descriptor rides slot `slot`
+fn rt_hash_str(b : &mut RtB, slot : i64) → i64:
+    let p : i64 = b.ldn(slot, 0, 8)
+    let n : i64 = b.ldn(slot, 8, 8)
+    let h : i64 = b.t()
+    b.mov(h, b.cst(⁻3750763034362895579))
+    let ix : i64 = b.t()
+    let z : i64 = b.cst(0)
+    b.mov(ix, z)
+    let prime : i64 = b.cst(1099511628211)
+    let one : i64 = b.cst(1)
+    let ltop : i64 = b.l()
+    let lend : i64 = b.l()
+    b.lab(ltop)
+    let more : i64 = b.cltu(ix, n)
+    b.jz(more, lend)
+    let c : i64 = b.ldn(b.add(p, ix), 0, 1)
+    let x : i64 = b.t()
+    b.o(IR_BXORR, h, c, 0, x, 64 + 256)
+    b.mov(h, b.mul(x, prime))
+    b.mov(ix, b.add(ix, one))
+    b.jmp(ltop)
+    b.lab(lend)
+    h
+
+// n zero words at p
+fn rt_zero_words(b : &mut RtB, p : i64, n : i64):
+    let ix : i64 = b.t()
+    let z : i64 = b.cst(0)
+    b.mov(ix, z)
+    let three : i64 = b.cst(3)
+    let one : i64 = b.cst(1)
+    let ltop : i64 = b.l()
+    let lend : i64 = b.l()
+    b.lab(ltop)
+    let more : i64 = b.cltu(ix, n)
+    b.jz(more, lend)
+    b.stn(b.add(p, b.shl(ix, three)), 0, z, 8)
+    b.mov(ix, b.add(ix, one))
+    b.jmp(ltop)
+    b.lab(lend)
+
+// n words from src to dst
+fn rt_copy_words(b : &mut RtB, src : i64, dst : i64, n : i64):
+    let ix : i64 = b.t()
+    let z : i64 = b.cst(0)
+    b.mov(ix, z)
+    let three : i64 = b.cst(3)
+    let one : i64 = b.cst(1)
+    let ltop : i64 = b.l()
+    let lend : i64 = b.l()
+    b.lab(ltop)
+    let more : i64 = b.cltu(ix, n)
+    b.jz(more, lend)
+    let o8 : i64 = b.shl(ix, three)
+    b.stn(b.add(dst, o8), 0, b.ldn(b.add(src, o8), 0, 8), 8)
+    b.mov(ix, b.add(ix, one))
+    b.jmp(ltop)
+    b.lab(lend)
+
+// the value half of the pair a find answered
+fn rt_hentry_val(b : &mut RtB, f : i64) → i64:
+    let one : i64 = b.cst(1)
+    let three : i64 = b.cst(3)
+    let four : i64 = b.cst(4)
+    let idx : i64 = b.ldn(0, 32, 8)
+    let e : i64 = b.ldn(b.add(idx, b.shl(b.shr(f, one), three)), 0, 8)
+    let pairs : i64 = b.ldn(0, 8, 8)
+    b.ldn(b.add(pairs, b.shl(b.sub(e, one), four)), 8, 8)
+
+// the last of the runtime: the kernel block, files, directories, and
+// the array helpers
+fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
+    let pw : i64 = tg.ptr
+    if id = RT_ARGS or id = RT_ENVN:
+        let b : mut RtB = rtb(0)
+        let k : i64 = b.kaddr(0, 0)
+        let out : i64 = b.call1(RT_ARRNEW, b.cst(4))
+        let vptr : i64 = b.t()
+        b.mov(vptr, b.ldn(k, 8 if id = RT_ARGS else 16, 8))
+        let left : i64 = b.t()
+        if id = RT_ARGS:
+            b.mov(left, b.ldn(k, 0, 8))
+        let pwc : i64 = b.cst(pw)
+        let one : i64 = b.cst(1)
+        let z : i64 = b.cst(0)
+        let ltop : i64 = b.l()
+        let lend : i64 = b.l()
+        b.lab(ltop)
+        if id = RT_ARGS:
+            b.jz(left, lend)
+        let e : i64 = b.ldn(vptr, 0, 0)
+        if id = RT_ENVN:
+            b.jz(e, lend)
+        // the length: to the terminator for an argument, to the '='
+        // for an environment entry -- or its end when it has none
+        let n : i64 = b.t()
+        b.mov(n, z)
+        let lsc : i64 = b.l()
+        let lgot : i64 = b.l()
+        b.lab(lsc)
+        let c : i64 = b.ldn(b.add(e, n), 0, 1)
+        b.jz(c, lgot)
+        if id = RT_ENVN:
+            let iseq : i64 = b.ceq(c, b.cst(61))
+            b.jnz(iseq, lgot)
+        b.mov(n, b.add(n, one))
+        b.jmp(lsc)
+        b.lab(lgot)
+        let dsc : i64 = b.call1(RT_ALLOC, b.cst(16))
+        b.stn(dsc, 0, e, 8)
+        b.stn(dsc, 8, n, 8)
+        _ ← b.call2(RT_ARRPUSH, out, dsc)
+        b.mov(vptr, b.add(vptr, pwc))
+        if id = RT_ARGS:
+            b.mov(left, b.sub(left, one))
+        b.jmp(ltop)
+        b.lab(lend)
+        b.ret(out)
+        return rtb_fn(b)
+    if id = RT_ENVG:
+        // (name desc) → the boxed value, or the null for a name the
+        // environment does not carry
+        let b : mut RtB = rtb(1)
+        let nb : i64 = b.ldn(0, 0, 8)
+        let nl : i64 = b.ldn(0, 8, 8)
+        let k : i64 = b.kaddr(0, 0)
+        let vptr : i64 = b.t()
+        b.mov(vptr, b.ldn(k, 16, 8))
+        let pwc : i64 = b.cst(pw)
+        let one : i64 = b.cst(1)
+        let z : i64 = b.cst(0)
+        let ltop : i64 = b.l()
+        let lnone : i64 = b.l()
+        let lnext : i64 = b.l()
+        b.lab(ltop)
+        let e : i64 = b.ldn(vptr, 0, 0)
+        b.jz(e, lnone)
+        // the name matches byte for byte, then meets its '='
+        let ix : i64 = b.t()
+        b.mov(ix, z)
+        let lcmp : i64 = b.l()
+        let lpast : i64 = b.l()
+        b.lab(lcmp)
+        let done : i64 = b.cgeu(ix, nl)
+        b.jnz(done, lpast)
+        let ce : i64 = b.ldn(b.add(e, ix), 0, 1)
+        let cn : i64 = b.ldn(b.add(nb, ix), 0, 1)
+        let df : i64 = b.cne(ce, cn)
+        b.jnz(df, lnext)
+        b.mov(ix, b.add(ix, one))
+        b.jmp(lcmp)
+        b.lab(lpast)
+        let eq2 : i64 = b.ceq(b.ldn(b.add(e, nl), 0, 1), b.cst(61))
+        b.jz(eq2, lnext)
+        let vat : i64 = b.add(b.add(e, nl), one)
+        let vl : i64 = b.t()
+        b.mov(vl, z)
+        let lvl : i64 = b.l()
+        let lvg : i64 = b.l()
+        b.lab(lvl)
+        let cv : i64 = b.ldn(b.add(vat, vl), 0, 1)
+        b.jz(cv, lvg)
+        b.mov(vl, b.add(vl, one))
+        b.jmp(lvl)
+        b.lab(lvg)
+        let dsc : i64 = b.call1(RT_ALLOC, b.cst(16))
+        b.stn(dsc, 0, vat, 8)
+        b.stn(dsc, 8, vl, 8)
+        let box : i64 = b.call1(RT_ALLOC, b.cst(8))
+        b.stn(box, 0, dsc, 8)
+        b.ret(box)
+        b.lab(lnext)
+        b.mov(vptr, b.add(vptr, pwc))
+        b.jmp(ltop)
+        b.lab(lnone)
+        b.ret(b.cst(0))
+        return rtb_fn(b)
+    if id = RT_AUXV:
+        let b : mut RtB = rtb(1)
+        let k : i64 = b.kaddr(0, 0)
+        let vp : i64 = b.t()
+        b.mov(vp, b.ldn(k, 24, 8))
+        let pw2 : i64 = b.cst(2 × pw)
+        let ltop : i64 = b.l()
+        let lz : i64 = b.l()
+        b.lab(ltop)
+        let key : i64 = b.ldn(vp, 0, 0)
+        b.jz(key, lz)
+        let hit : i64 = b.ceq(key, 0)
+        let lnext : i64 = b.l()
+        b.jz(hit, lnext)
+        b.ret(b.ldn(vp, pw, 0))
+        b.lab(lnext)
+        b.mov(vp, b.add(vp, pw2))
+        b.jmp(ltop)
+        b.lab(lz)
+        b.ret(b.cst(0))
+        return rtb_fn(b)
+    if id = RT_EXECFN:
+        let b : mut RtB = rtb(0)
+        let p : i64 = b.call1(RT_AUXV, b.cst(31))
+        let n : i64 = b.t()
+        let z : i64 = b.cst(0)
+        let one : i64 = b.cst(1)
+        b.mov(n, z)
+        let ltop : i64 = b.l()
+        let lend : i64 = b.l()
+        b.lab(ltop)
+        let c : i64 = b.ldn(b.add(p, n), 0, 1)
+        b.jz(c, lend)
+        b.mov(n, b.add(n, one))
+        b.jmp(ltop)
+        b.lab(lend)
+        let dsc : i64 = b.call1(RT_ALLOC, b.cst(16))
+        b.stn(dsc, 0, p, 8)
+        b.stn(dsc, 8, n, 8)
+        b.ret(dsc)
+        return rtb_fn(b)
+    if id = RT_RELRO:
+        // follow the program's own headers, as any loader would
+        let b : mut RtB = rtb(0)
+        let phdr : i64 = b.call1(RT_AUXV, b.cst(3))
+        let phent : i64 = b.call1(RT_AUXV, b.cst(4))
+        let phnum : i64 = b.call1(RT_AUXV, b.cst(5))
+        let ix : i64 = b.t()
+        let z : i64 = b.cst(0)
+        let one : i64 = b.cst(1)
+        b.mov(ix, z)
+        let ltop : i64 = b.l()
+        let lend : i64 = b.l()
+        let lnext : i64 = b.l()
+        b.lab(ltop)
+        let more : i64 = b.cltu(ix, phnum)
+        b.jz(more, lend)
+        let ph : i64 = b.add(phdr, b.mul(ix, phent))
+        let ty : i64 = b.ldn(ph, 0, 4)
+        let isrelro : i64 = b.ceq(ty, b.cst(1685382482))
+        b.jz(isrelro, lnext)
+        let vaddr : i64 = b.ldn(ph, 16 if tg.is64 else 8, 0)
+        let memsz : i64 = b.ldn(ph, 40 if tg.is64 else 20, 0)
+        // both ends inward to a page
+        let p4 : i64 = b.cst(4095)
+        let pmask : i64 = b.cst(⁻4096)
+        let head : i64 = b.band(b.add(vaddr, p4), pmask)
+        let e : i64 = b.band(b.add(vaddr, memsz), pmask)
+        let has : i64 = b.cltu(head, e)
+        b.jz(has, lnext)
+        _ ← b.sys3(SC_MPROT, head, b.sub(e, head), one)
+        b.lab(lnext)
+        b.mov(ix, b.add(ix, one))
+        b.jmp(ltop)
+        b.lab(lend)
+        b.retn()
+        return rtb_fn(b)
+    if id = RT_FOPEN or id = RT_FCREATE:
+        let b : mut RtB = rtb(2 if id = RT_FCREATE else 1)
+        let n : i64 = b.ldn(0, 8, 8)
+        let one : i64 = b.cst(1)
+        let p : i64 = b.call1(RT_ALLOC, b.add(n, one))
+        let src : i64 = b.ldn(0, 0, 8)
+        rt_copy_bytes(&b, src, p, n)
+        let z : i64 = b.cst(0)
+        b.stn(b.add(p, n), 0, z, 1)
+        let atc : i64 = b.cst(⁻100)
+        let fd : mut i64 = 0
+        if id = RT_FOPEN:
+            fd ← b.sys4(SC_OPENAT, atc, p, z, z)
+            let bad : i64 = b.clts(fd, z)
+            let lno : i64 = b.l()
+            b.jnz(bad, lno)
+            let box : i64 = b.call1(RT_ALLOC, b.cst(8))
+            b.stn(box, 0, fd, 8)
+            b.ret(box)
+            b.lab(lno)
+            b.ret(z)
+        else:
+            let flags : i64 = b.cst(577)
+            fd ← b.sys4(SC_OPENAT, atc, p, flags, 1)
+            let bad : i64 = b.clts(fd, z)
+            let lok : i64 = b.l()
+            b.jz(bad, lok)
+            b.abort_msg(lw.intern("ngplc: the output file cannot be created\n"))
+            b.lab(lok)
+            b.ret(fd)
+        return rtb_fn(b)
+    if id = RT_FREAD:
+        // (fd) → the file's bytes as a u8[], each in its own slot
+        let b : mut RtB = rtb(1)
+        let st : i64 = b.call1(RT_ALLOC, b.cst(144))
+        let r : i64 = b.sys2(SC_FSTAT, 0, st)
+        let z : i64 = b.cst(0)
+        let bad : i64 = b.clts(r, z)
+        let lok : i64 = b.l()
+        b.jz(bad, lok)
+        b.abort_msg(lw.intern("ngplc: the input cannot be read\n"))
+        b.lab(lok)
+        let size : i64 = b.ldn(st, tg.stat_size, 8)
+        let one : i64 = b.cst(1)
+        let small : i64 = b.cltu(size, one)
+        let sz1 : i64 = b.sel(small, one, size)
+        let buf : i64 = b.call1(RT_ALLOC, sz1)
+        let off : i64 = b.t()
+        b.mov(off, z)
+        let ltop : i64 = b.l()
+        let lend : i64 = b.l()
+        b.lab(ltop)
+        let left : i64 = b.sub(size, off)
+        b.jz(left, lend)
+        let got : i64 = b.sys3(SC_READ, 0, b.add(buf, off), left)
+        let done : i64 = b.clts(got, one)
+        b.jnz(done, lend)
+        b.mov(off, b.add(off, got))
+        b.jmp(ltop)
+        b.lab(lend)
+        let out : i64 = b.call1(RT_ARRNEW, off)
+        let ix : i64 = b.t()
+        b.mov(ix, z)
+        let lcp : i64 = b.l()
+        let lcpe : i64 = b.l()
+        b.lab(lcp)
+        let more : i64 = b.cltu(ix, off)
+        b.jz(more, lcpe)
+        _ ← b.call2(RT_ARRPUSH, out, b.ldn(b.add(buf, ix), 0, 1))
+        b.mov(ix, b.add(ix, one))
+        b.jmp(lcp)
+        b.lab(lcpe)
+        b.ret(out)
+        return rtb_fn(b)
+    if id = RT_TORAW:
+        let b : mut RtB = rtb(1)
+        let n : i64 = b.ldn(0, 8, 8)
+        let one : i64 = b.cst(1)
+        let small : i64 = b.cltu(n, one)
+        let p : i64 = b.call1(RT_ALLOC, b.sel(small, one, n))
+        let slots : i64 = b.ldn(0, 0, 8)
+        let ix : i64 = b.t()
+        let z : i64 = b.cst(0)
+        let three : i64 = b.cst(3)
+        b.mov(ix, z)
+        let ltop : i64 = b.l()
+        let lend : i64 = b.l()
+        b.lab(ltop)
+        let more : i64 = b.cltu(ix, n)
+        b.jz(more, lend)
+        b.stn(b.add(p, ix), 0, b.ldn(b.add(slots, b.shl(ix, three)), 0, 8), 1)
+        b.mov(ix, b.add(ix, one))
+        b.jmp(ltop)
+        b.lab(lend)
+        b.ret(p)
+        return rtb_fn(b)
+    if id = RT_FWRITE:
+        // (fd, u8arr): narrowed and written whole
+        let b : mut RtB = rtb(2)
+        let n : i64 = b.ldn(1, 8, 8)
+        let raw : i64 = b.call1(RT_TORAW, 1)
+        let z : i64 = b.cst(0)
+        let one : i64 = b.cst(1)
+        let done : i64 = b.t()
+        b.mov(done, z)
+        let ltop : i64 = b.l()
+        let lend : i64 = b.l()
+        b.lab(ltop)
+        let left : i64 = b.sub(n, done)
+        b.jz(left, lend)
+        let r : i64 = b.sys3(SC_WRITE, 0, b.add(raw, done), left)
+        let bad : i64 = b.clts(r, one)
+        let lok : i64 = b.l()
+        b.jz(bad, lok)
+        b.abort_msg(lw.intern("ngplc: the output cannot be written\n"))
+        b.lab(lok)
+        b.mov(done, b.add(done, r))
+        b.jmp(ltop)
+        b.lab(lend)
+        b.retn()
+        return rtb_fn(b)
+    if id = RT_WRITEV:
+        // (fd, runs): the vector built in the kernel's own widths
+        let b : mut RtB = rtb(2)
+        let n : i64 = b.t()
+        b.mov(n, b.ldn(1, 8, 8))
+        let three : i64 = b.cst(3)
+        let iv : i64 = b.t()
+        let entw : i64 = b.cst(2 × pw)
+        let sixteen : i64 = b.cst(16)
+        b.mov(iv, b.call1(RT_ALLOC, b.mul(n, entw)))
+        let slots : i64 = b.ldn(1, 0, 8)
+        let ix : i64 = b.t()
+        let z : i64 = b.cst(0)
+        let one : i64 = b.cst(1)
+        b.mov(ix, z)
+        let lf : i64 = b.l()
+        let lfe : i64 = b.l()
+        b.lab(lf)
+        let more : i64 = b.cltu(ix, n)
+        b.jz(more, lfe)
+        let run : i64 = b.ldn(b.add(slots, b.shl(ix, three)), 0, 8)
+        let ent : i64 = b.add(iv, b.mul(ix, entw))
+        b.stn(ent, 0, b.ldn(run, 0, 8), 0)
+        b.stn(ent, pw, b.ldn(run, 8, 8), 0)
+        b.mov(ix, b.add(ix, one))
+        b.jmp(lf)
+        b.lab(lfe)
+        let ltop : i64 = b.l()
+        let lend : i64 = b.l()
+        b.lab(ltop)
+        b.jz(n, lend)
+        let r : i64 = b.t()
+        b.mov(r, b.sys3(SC_WRITEV, 0, iv, n))
+        let bad : i64 = b.clts(r, z)
+        let lok : i64 = b.l()
+        b.jz(bad, lok)
+        b.abort_msg(lw.intern("ngplc: the output cannot be written\n"))
+        b.lab(lok)
+        let lcons : i64 = b.l()
+        let lpart : i64 = b.l()
+        b.lab(lcons)
+        b.jz(n, lend)
+        let l0 : i64 = b.ldn(iv, pw, 0)
+        let less : i64 = b.cltu(r, l0)
+        b.jnz(less, lpart)
+        b.mov(r, b.sub(r, l0))
+        b.mov(iv, b.add(iv, entw))
+        b.mov(n, b.sub(n, one))
+        b.jmp(lcons)
+        b.lab(lpart)
+        b.jz(r, ltop)
+        b.stn(iv, 0, b.add(b.ldn(iv, 0, 0), r), 0)
+        b.stn(iv, pw, b.sub(l0, r), 0)
+        b.mov(r, z)
+        b.jmp(ltop)
+        b.lab(lend)
+        b.retn()
+        return rtb_fn(b)
+    if id = RT_DENTS:
+        // → the working directory's entries, "." and ".." left out
+        let b : mut RtB = rtb(0)
+        let out : i64 = b.call1(RT_ARRNEW, b.cst(8))
+        let dot : i64 = b.call1(RT_ALLOC, b.cst(2))
+        let z : i64 = b.cst(0)
+        let one : i64 = b.cst(1)
+        b.stn(dot, 0, b.cst(46), 1)
+        b.stn(dot, 1, z, 1)
+        let atc : i64 = b.cst(⁻100)
+        let odir : i64 = b.cst(tg.o_directory)
+        let fd : i64 = b.sys4(SC_OPENAT, atc, dot, odir, z)
+        let bad : i64 = b.clts(fd, z)
+        let lend : i64 = b.l()
+        b.jnz(bad, lend)
+        let buf : i64 = b.call1(RT_ALLOC, b.cst(4096))
+        let lread : i64 = b.l()
+        let lclose : i64 = b.l()
+        b.lab(lread)
+        let r : i64 = b.sys3(SC_GETDENTS, fd, buf, b.cst(4096))
+        let done : i64 = b.clts(r, one)
+        b.jnz(done, lclose)
+        let at : i64 = b.t()
+        b.mov(at, z)
+        let lrec : i64 = b.l()
+        let lrece : i64 = b.l()
+        let lskip : i64 = b.l()
+        b.lab(lrec)
+        let more : i64 = b.cltu(at, r)
+        b.jz(more, lrece)
+        let rec : i64 = b.add(buf, at)
+        let rl : i64 = b.ldn(rec, 16, 2)
+        let dtype : i64 = b.ldn(rec, 18, 1)
+        let name : i64 = b.add(rec, b.cst(19))
+        // "." and ".." step past themselves
+        let c0 : i64 = b.ldn(name, 0, 1)
+        let isdot : i64 = b.ceq(c0, b.cst(46))
+        let lkeep : i64 = b.l()
+        b.jz(isdot, lkeep)
+        let c1 : i64 = b.ldn(name, 1, 1)
+        b.jz(c1, lskip)
+        let isdd : i64 = b.ceq(c1, b.cst(46))
+        let lkeep2 : i64 = b.l()
+        b.jz(isdd, lkeep2)
+        let c2 : i64 = b.ldn(name, 2, 1)
+        b.jz(c2, lskip)
+        b.lab(lkeep2)
+        b.lab(lkeep)
+        let nl : i64 = b.t()
+        b.mov(nl, z)
+        let lnl : i64 = b.l()
+        let lng : i64 = b.l()
+        b.lab(lnl)
+        let cx : i64 = b.ldn(b.add(name, nl), 0, 1)
+        b.jz(cx, lng)
+        b.mov(nl, b.add(nl, one))
+        b.jmp(lnl)
+        b.lab(lng)
+        let cp : i64 = b.call1(RT_ALLOC, b.sel(b.cltu(nl, one), one, nl))
+        rt_copy_bytes(&b, name, cp, nl)
+        let dsc : i64 = b.call1(RT_ALLOC, b.cst(16))
+        b.stn(dsc, 0, cp, 8)
+        b.stn(dsc, 8, nl, 8)
+        let ent : i64 = b.call1(RT_ALLOC, b.cst(16))
+        b.stn(ent, 0, dsc, 8)
+        let twelve : i64 = b.cst(12)
+        b.stn(ent, 8, b.shl(dtype, twelve), 8)
+        _ ← b.call2(RT_ARRPUSH, out, ent)
+        b.lab(lskip)
+        b.mov(at, b.add(at, rl))
+        b.jmp(lrec)
+        b.lab(lrece)
+        b.jmp(lread)
+        b.lab(lclose)
+        _ ← b.sys1(SC_CLOSE, fd)
+        b.lab(lend)
+        b.ret(out)
+        return rtb_fn(b)
+    if id = RT_AFIND:
+        // (arr, wanted, isstr) → the boxed position or the null
+        let b : mut RtB = rtb(3)
+        let n : i64 = b.ldn(0, 8, 8)
+        let slots : i64 = b.ldn(0, 0, 8)
+        let ix : i64 = b.t()
+        let z : i64 = b.cst(0)
+        let one : i64 = b.cst(1)
+        let three : i64 = b.cst(3)
+        b.mov(ix, z)
+        let ltop : i64 = b.l()
+        let lno : i64 = b.l()
+        let lnext : i64 = b.l()
+        b.lab(ltop)
+        let more : i64 = b.cltu(ix, n)
+        b.jz(more, lno)
+        let e : i64 = b.ldn(b.add(slots, b.shl(ix, three)), 0, 8)
+        let same : i64 = b.t()
+        let ls : i64 = b.l()
+        let lsd : i64 = b.l()
+        b.jz(2, ls)
+        b.mov(same, b.call2(RT_STREQ, e, 1))
+        b.jmp(lsd)
+        b.lab(ls)
+        b.mov(same, b.ceq(e, 1))
+        b.lab(lsd)
+        b.jz(same, lnext)
+        let box : i64 = b.call1(RT_ALLOC, b.cst(8))
+        b.stn(box, 0, ix, 8)
+        b.ret(box)
+        b.lab(lnext)
+        b.mov(ix, b.add(ix, one))
+        b.jmp(ltop)
+        b.lab(lno)
+        b.ret(z)
+        return rtb_fn(b)
+    if id = RT_ASLICE:
+        // (arr, lo, hi) → a fresh array of lo…hi, both ends included
+        let b : mut RtB = rtb(3)
+        let n : i64 = b.ldn(0, 8, 8)
+        let empty : i64 = b.cltu(2, 1)
+        let lmt : i64 = b.l()
+        b.jnz(empty, lmt)
+        let bad1 : i64 = b.cgeu(1, n)
+        let bad2 : i64 = b.cgeu(2, n)
+        let bad : i64 = b.bor(bad1, bad2)
+        let lok : i64 = b.l()
+        b.jz(bad, lok)
+        _ ← b.call0(RT_BOUNDS)
+        b.lab(lok)
+        let one : i64 = b.cst(1)
+        let m : i64 = b.add(b.sub(2, 1), one)
+        let out : i64 = b.call1(RT_ARRNEW, m)
+        let slots : i64 = b.ldn(0, 0, 8)
+        let ix : i64 = b.t()
+        b.mov(ix, 1)
+        let three : i64 = b.cst(3)
+        let ltop : i64 = b.l()
+        let lend : i64 = b.l()
+        b.lab(ltop)
+        let past : i64 = b.cltu(2, ix)
+        b.jnz(past, lend)
+        _ ← b.call2(RT_ARRPUSH, out, b.ldn(b.add(slots, b.shl(ix, three)), 0, 8))
+        b.mov(ix, b.add(ix, one))
+        b.jmp(ltop)
+        b.lab(lend)
+        b.ret(out)
+        b.lab(lmt)
+        b.ret(b.call1(RT_ARRNEW, b.cst(4)))
+        return rtb_fn(b)
+    if id = RT_AFILL:
+        let b : mut RtB = rtb(2)
+        let out : i64 = b.call1(RT_ARRNEW, 0)
+        let ix : i64 = b.t()
+        let z : i64 = b.cst(0)
+        let one : i64 = b.cst(1)
+        b.mov(ix, z)
+        let ltop : i64 = b.l()
+        let lend : i64 = b.l()
+        b.lab(ltop)
+        let more : i64 = b.cltu(ix, 0)
+        b.jz(more, lend)
+        _ ← b.call2(RT_ARRPUSH, out, 1)
+        b.mov(ix, b.add(ix, one))
+        b.jmp(ltop)
+        b.lab(lend)
+        b.ret(out)
+        return rtb_fn(b)
+    if id = RT_ACYC:
+        // (n, filler) → the filler's elements cycled to the count
+        let b : mut RtB = rtb(2)
+        let out : i64 = b.call1(RT_ARRNEW, 0)
+        let sl : i64 = b.ldn(1, 8, 8)
+        let slots : i64 = b.ldn(1, 0, 8)
+        let ix : i64 = b.t()
+        let j : i64 = b.t()
+        let z : i64 = b.cst(0)
+        let one : i64 = b.cst(1)
+        let three : i64 = b.cst(3)
+        b.mov(ix, z)
+        b.mov(j, z)
+        let ltop : i64 = b.l()
+        let lend : i64 = b.l()
+        b.lab(ltop)
+        let more : i64 = b.cltu(ix, 0)
+        b.jz(more, lend)
+        _ ← b.call2(RT_ARRPUSH, out, b.ldn(b.add(slots, b.shl(j, three)), 0, 8))
+        b.mov(j, b.add(j, one))
+        let over : i64 = b.cgeu(j, sl)
+        let lnw : i64 = b.l()
+        b.jz(over, lnw)
+        b.mov(j, z)
+        b.lab(lnw)
+        b.mov(ix, b.add(ix, one))
+        b.jmp(ltop)
+        b.lab(lend)
+        b.ret(out)
+        return rtb_fn(b)
+    if id = RT_ACAT:
+        let b : mut RtB = rtb(2)
+        let la : i64 = b.ldn(0, 8, 8)
+        let lb : i64 = b.ldn(1, 8, 8)
+        let out : i64 = b.call1(RT_ARRNEW, b.add(la, lb))
+        rt_push_all(&b, out, 0)
+        rt_push_all(&b, out, 1)
+        b.ret(out)
+        return rtb_fn(b)
+    if id = RT_SBYTES:
+        let b : mut RtB = rtb(1)
+        let p : i64 = b.ldn(0, 0, 8)
+        let n : i64 = b.ldn(0, 8, 8)
+        let out : i64 = b.call1(RT_ARRNEW, n)
+        let ix : i64 = b.t()
+        let z : i64 = b.cst(0)
+        let one : i64 = b.cst(1)
+        b.mov(ix, z)
+        let ltop : i64 = b.l()
+        let lend : i64 = b.l()
+        b.lab(ltop)
+        let more : i64 = b.cltu(ix, n)
+        b.jz(more, lend)
+        _ ← b.call2(RT_ARRPUSH, out, b.ldn(b.add(p, ix), 0, 1))
+        b.mov(ix, b.add(ix, one))
+        b.jmp(ltop)
+        b.lab(lend)
+        b.ret(out)
+        return rtb_fn(b)
+    // a routine the shared runtime does not carry: it must never be
+    // called, and says so if it is
+    let b : mut RtB = rtb(0)
+    b.abort_msg(lw.intern("ngplc runtime: an unprovided routine was reached\n"))
+    rtb_fn(b)
+
+// every element of src pushed onto out
+fn rt_push_all(b : &mut RtB, out : i64, src : i64):
+    let n : i64 = b.ldn(src, 8, 8)
+    let slots : i64 = b.ldn(src, 0, 8)
+    let ix : i64 = b.t()
+    let z : i64 = b.cst(0)
+    let one : i64 = b.cst(1)
+    let three : i64 = b.cst(3)
+    b.mov(ix, z)
+    let ltop : i64 = b.l()
+    let lend : i64 = b.l()
+    b.lab(ltop)
+    let more : i64 = b.cltu(ix, n)
+    b.jz(more, lend)
+    _ ← b.call2(RT_ARRPUSH, out, b.ldn(b.add(slots, b.shl(ix, three)), 0, 8))
+    b.mov(ix, b.add(ix, one))
+    b.jmp(ltop)
+    b.lab(lend)
+
+// ===========================================================================
 // Code generation for every target that is not the x86-64 pioneer:
 // one shared driver over the IR, one thin instruction layer per
 // architecture, and a runtime written once as IR and compiled by the
@@ -14264,10 +17105,338 @@ fn main() → u8:
 
 fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
              stack_size : i64, guard_size : i64) → Compiled:
-    _ ← stack_size + guard_size
-    _ ← @dropunit(#a.fns) + @dropunit(#toks.off) + @dropunit(#src) + @dropunit(#chk.ntype)
-    let diags : mut Diag[] = []
-    diags.push(Diag{line: 1, col: 1,
-                    msg: "the " ⧺ tgt.name ⧺ " backend is not written yet"})
-    (Compiled{code: [], rodata: [], data: [], relro_size: 0, syms: [],
-              log: [], diags: diags})
+    let strs0 : mut str[] = []
+    foreach s := a.strs:
+        strs0.push(s)
+    let lw : mut Lower = (Lower{a: a, toks: toks, src: src, ntype: chk.ntype,
+                                nslot: chk.nslot, ncvt: chk.ncvt, strs: strs0,
+                                op: [], ia: [], ib: [], ic: [], idd: [],
+                                iww: [], extra: [], tbase: 0, tnext: 0,
+                                tmax: 0, nlabels: 0, breaks: [], conts: [],
+                                in_wrap: 0, argsfix: ⁻1, lambase: 0,
+                                shimbase: 0,
+                                cur_ret: 0, post_label: ⁻1,
+                                res_vreg: ⁻1, cur_fname: "", dlog: []})
+    let em : mut Emit = (Emit{code: [], cf_pos: [], cf_target: [],
+                              sf_pos: [], sf_str: [], sd_pos: [], sd_str: [],
+                              df_pos: [], df_off: [], labels: [],
+                              lf_pos: [], lf_label: [], fn_off: [],
+                              rt_off: [], rax_slot: ⁻1,
+                              jt_pos: [], jt_id: [], jt_count: 0,
+                              jt_starts: [], jt_is_code: [], jt_entries: [],
+                              pj_id: [],
+                              pj_start: [], pj_len: [], pj_labels: [],
+                              max_frame: 0,
+                              gmap: [], gseg: [], gr_pos: [], gr_off: [],
+                              skipping: 0, rt_need: [],
+                              rx: [], rx_pos: [], rx_off: [],
+                              tf_pos: [], tf_lab: [], tf_form: [],
+                              ff_pos: [], ff_fn: [], k_args: 0, k_alloc: 0})
+    let nglobals : i64 = @dropunit(#a.globals)
+    // the same three kinds of data the x86-64 path sorts out, placed
+    // with the same offsets
+    let is_relro : mut i64[] = []
+    foreach _ := 0…nglobals:
+        is_relro.push(0)
+    foreach g := chk.ginit:
+        is_relro[g × 1¤ptrdiff] ← 1
+    let n_relro : mut i64 = 0
+    let n_rw : mut i64 = 0
+    if nglobals > 0:
+        foreach i := 0…nglobals - 1:
+            if a.globals[i × 1¤ptrdiff].is_mut:
+                n_rw ← n_rw + 1
+            elif is_relro[i × 1¤ptrdiff] = 1:
+                n_relro ← n_relro + 1
+    let args_off : i64 = 8 × n_relro
+    let relro_size : i64 = align_up(args_off + 32, PAGE)
+    let alloc_off : i64 = relro_size + 8 × n_rw
+    em.k_args ← args_off
+    em.k_alloc ← alloc_off
+    let k_ro : mut i64 = 0
+    let k_relro : mut i64 = 0
+    let k_rw : mut i64 = 0
+    if nglobals > 0:
+        foreach i := 0…nglobals - 1:
+            if a.globals[i × 1¤ptrdiff].is_mut:
+                em.gseg.push(1)
+                em.gmap.push(relro_size + 8 × k_rw)
+                k_rw ← k_rw + 1
+            elif is_relro[i × 1¤ptrdiff] = 1:
+                em.gseg.push(1)
+                em.gmap.push(8 × k_relro)
+                k_relro ← k_relro + 1
+            else:
+                em.gseg.push(0)
+                em.gmap.push(8 × k_ro)
+                k_ro ← k_ro + 1
+    let nfns : i64 = @dropunit(#a.fns)
+    let start_fn : mut i64 = ⁻1
+    foreach i := 0…#a.fns - 1:
+        if a.fns[i].is_start:
+            start_fn ← @dropunit(i)
+    let ninit : i64 = @dropunit(#chk.ginit)
+    let g1 : i64 = 1 if ninit > 0 else 0
+    lw.argsfix ← nfns + g1
+    lw.lambase ← nfns + g1 + 2
+    lw.shimbase ← lw.lambase + @dropunit(#chk.lams)
+    let tdriver : i64 = nfns + g1 + 1
+    let sret : bool = start_fn >= 0 and a.fns[start_fn × 1¤ptrdiff].ret ≠ TY_UNIT
+    t_startup(&em, &lw, tgt, args_off, stack_size, guard_size,
+              nfns if ninit > 0 else ⁻1, tdriver, start_fn, sret)
+    // the program's own code, then the whole runtime: nothing is
+    // trimmed here yet, since the IR-built routines call each other
+    foreach i := 0…#a.fns - 1:
+        let f : i64 = @dropunit(i)
+        let np : i64 = a.extra[a.fns[i].params_off × 1¤ptrdiff]
+        if chk.skipfn[i] = 1:
+            let sir := lower_stub_fn(&lw, np)
+            em.fn_off.push(em.here())
+            t_emit_fn(&em, tgt, sir, np, lw.strs)
+        else:
+            let ir := lower_fn(&lw, a, chk, f)
+            em.fn_off.push(em.here())
+            t_emit_fn(&em, tgt, ir, np, lw.strs)
+    if ninit > 0:
+        let gir := lower_ginit(&lw, a, chk)
+        em.fn_off.push(em.here())
+        t_emit_fn(&em, tgt, gir, 0, lw.strs)
+    let fir := lower_argsfilter(&lw)
+    em.fn_off.push(em.here())
+    t_emit_fn(&em, tgt, fir, 0, lw.strs)
+    let dir := lower_testdriver(&lw, a)
+    em.fn_off.push(em.here())
+    t_emit_fn(&em, tgt, dir, 0, lw.strs)
+    if #chk.lams > 0:
+        foreach j := 0…#chk.lams - 1:
+            let lir := lower_lambda_fn(&lw, a, chk, @dropunit(j))
+            em.fn_off.push(em.here())
+            let lnp : i64 = a.extra[a.na[chk.lams[j] × 1¤ptrdiff] × 1¤ptrdiff]
+            t_emit_fn(&em, tgt, lir, lnp + 1, lw.strs)
+    if #chk.psfn > 0:
+        foreach j := 0…#chk.psfn - 1:
+            let sir := lower_shim_fn(&lw, chk, @dropunit(j))
+            em.fn_off.push(em.here())
+            t_emit_fn(&em, tgt, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs)
+    assert(@dropunit(#em.fn_off) = nfns + g1 + 2 + @dropunit(#chk.lams) + @dropunit(#chk.psfn), "one code offset per function")
+    let nrt : i64 = 47
+    foreach id0 := 0…nrt - 1:
+        em.rt_off.push(em.here())
+        let rid : i64 = 0 - @dropunit(id0) - 1
+        let np9 : i64 = rt_nargs(rid)
+        t_emit_fn(&em, tgt, rt_build(rid, tgt, &lw), np9, lw.strs)
+    // calls resolve now that every target has a place
+    if #em.cf_pos > 0:
+        foreach i := 0…#em.cf_pos - 1:
+            let pos : i64 = em.cf_pos[i]
+            let t : i64 = em.cf_target[i]
+            let dest : i64 = em.fn_off[t × 1¤ptrdiff] if t >= 0 else em.rt_off[(0 - t - 1) × 1¤ptrdiff]
+            assert(dest ≠ ⁻1, "every call reaches a routine that was emitted")
+            g_patch_call(&em, tgt, pos, dest)
+    // a function's address, taken as a value
+    if #em.ff_pos > 0:
+        foreach i := 0…#em.ff_pos - 1:
+            g_patch_abs(&em, tgt, em.ff_pos[i], IMAGE_BASE + PAGE + em.fn_off[em.ff_fn[i] × 1¤ptrdiff])
+    // rodata: the strings' bytes, then their descriptors, then the
+    // tables -- the same layout the x86-64 path writes
+    let text_size : i64 = em.here()
+    let ro_vaddr : i64 = IMAGE_BASE + align_up(PAGE + text_size, PAGE)
+    let stroffs : mut i64[] = []
+    let acc : mut i64 = 0
+    foreach s := lw.strs:
+        stroffs.push(acc)
+        acc ← acc + str_len(s)
+    let descbase : i64 = align_up(acc, 8)
+    let jt_base : i64 = descbase + 16 × @dropunit(#lw.strs)
+    if #em.sf_pos > 0:
+        foreach i := 0…#em.sf_pos - 1:
+            g_patch_abs(&em, tgt, em.sf_pos[i], ro_vaddr + stroffs[em.sf_str[i] × 1¤ptrdiff])
+    if #em.sd_pos > 0:
+        foreach i := 0…#em.sd_pos - 1:
+            g_patch_abs(&em, tgt, em.sd_pos[i], ro_vaddr + descbase + 16 × em.sd_str[i])
+    if #em.jt_pos > 0:
+        foreach i := 0…#em.jt_pos - 1:
+            g_patch_abs(&em, tgt, em.jt_pos[i], ro_vaddr + jt_base + 8 × em.jt_starts[em.jt_id[i] × 1¤ptrdiff])
+    let rodata : mut u8[] = []
+    foreach s := lw.strs:
+        foreach c := s:
+            rodata.push(c.ord() & 255)
+    while @dropunit(#rodata) < descbase:
+        rodata.push(0)
+    foreach i := 0…#lw.strs - 1:
+        push64(&rodata, ro_vaddr + stroffs[i])
+        push64(&rodata, str_len(lw.strs[i]))
+    if #em.jt_starts > 0:
+        foreach t := 0…#em.jt_starts - 1:
+            let lo2 : i64 = em.jt_starts[t]
+            let hi2 : i64 = em.jt_starts[t + 1] if t + 1 < #em.jt_starts else @dropunit(#em.jt_entries)
+            let base2 : i64 = IMAGE_BASE + PAGE if em.jt_is_code[t] = 1 else 0
+            let e3 : mut i64 = lo2
+            while e3 < hi2:
+                push64(&rodata, base2 + em.jt_entries[e3 × 1¤ptrdiff])
+                e3 ← e3 + 1
+    let gro_base : i64 = @dropunit(#rodata)
+    if nglobals > 0:
+        foreach i := 0…nglobals - 1:
+            if em.gseg[i × 1¤ptrdiff] = 0:
+                push64(&rodata, chk.gvals[i × 1¤ptrdiff])
+    if #em.gr_pos > 0:
+        foreach i := 0…#em.gr_pos - 1:
+            g_patch_abs(&em, tgt, em.gr_pos[i], ro_vaddr + gro_base + em.gr_off[i])
+    let d_vaddr : i64 = IMAGE_BASE + align_up(align_up(PAGE + text_size, PAGE) + @dropunit(#rodata), PAGE)
+    if #em.df_pos > 0:
+        foreach i := 0…#em.df_pos - 1:
+            g_patch_abs(&em, tgt, em.df_pos[i], d_vaddr + em.df_off[i])
+    let data : mut u8[] = []
+    if nglobals > 0:
+        foreach i := 0…nglobals - 1:
+            if em.gseg[i × 1¤ptrdiff] = 1 and em.gmap[i × 1¤ptrdiff] < relro_size:
+                push64(&data, chk.gvals[i × 1¤ptrdiff])
+    foreach _ := 1…32:
+        data.push(0)
+    while @dropunit(#data) < relro_size:
+        data.push(0)
+    if nglobals > 0:
+        foreach i := 0…nglobals - 1:
+            if em.gseg[i × 1¤ptrdiff] = 1 and em.gmap[i × 1¤ptrdiff] >= relro_size:
+                push64(&data, chk.gvals[i × 1¤ptrdiff])
+    foreach _ := 1…16:
+        data.push(0)
+    assert(@dropunit(#data) = alloc_off + 16, "the data segment is as long as it was planned")
+    let cdiags : mut Diag[] = []
+    if em.max_frame > guard_size:
+        cdiags.push(Diag{line: 1, col: 1,
+                         msg: "a function claims " ⧺ i64_str(em.max_frame) ⧺ " bytes of stack, more than the " ⧺ i64_str(guard_size) ⧺ "-byte guard below it, which it could step over; raise --guard-size"})
+    if em.max_frame >= stack_size:
+        cdiags.push(Diag{line: 1, col: 1,
+                         msg: "a function claims " ⧺ i64_str(em.max_frame) ⧺ " bytes of stack, and the whole stack is " ⧺ i64_str(stack_size) ⧺ "; raise --stack-size"})
+    // the symbols, in address order: the entry point, the functions,
+    // the synthetics, and the runtime, which here is emitted in id
+    // order and so already ascends
+    let sname : mut str[] = []
+    let soffs : mut i64[] = []
+    let sglob : mut bool[] = []
+    sname.push("_start")
+    soffs.push(0)
+    sglob.push(false)
+    foreach i := 0…#a.fns - 1:
+        sname.push(fn_symbol(a, toks, src, @dropunit(i)))
+        soffs.push(em.fn_off[i])
+        sglob.push(a.fns[i].is_export)
+    let synth : mut str[] = []
+    if ninit > 0:
+        synth.push("<globals>")
+    synth.push("<args>")
+    synth.push("<tests>")
+    if #chk.lams > 0:
+        foreach j := 0…#chk.lams - 1:
+            synth.push("λ#" ⧺ i64_str(@dropunit(j)))
+    if #chk.psfn > 0:
+        foreach j := 0…#chk.psfn - 1:
+            synth.push("partial#" ⧺ i64_str(@dropunit(j)))
+    foreach j := 0…#synth - 1:
+        sname.push(synth[j])
+        soffs.push(em.fn_off[(nfns + @dropunit(j)) × 1¤ptrdiff])
+        sglob.push(false)
+    let rtn := rt_names()
+    foreach i := 0…#em.rt_off - 1:
+        sname.push(rtn[i])
+        soffs.push(em.rt_off[i])
+        sglob.push(false)
+    let syms : mut Sym[] = []
+    foreach i := 0…#sname - 1:
+        let here : i64 = soffs[i]
+        let next : i64 = soffs[i + 1] if i + 1 < #soffs else text_size
+        assert(next >= here, "the symbols run up the text")
+        syms.push(Sym{name: sname[i], value: here, size: next - here,
+                      is_global: sglob[i]})
+    (Compiled{code: em.code, rodata: rodata, data: data,
+              relro_size: relro_size, syms: syms,
+              log: lw.dlog, diags: cdiags})
+
+// how many arguments each runtime routine takes, for the prologue
+fn rt_nargs(id : i64) → i64:
+    if id = RT_WRITE1 or id = RT_WRITE2 or id = RT_ABORT: return 2
+    if id = RT_ALLOC or id = RT_ARRNEW or id = RT_PRINTI or id = RT_PRINTU: return 1
+    if id = RT_ARRPUSH or id = RT_CONCAT or id = RT_STREQ: return 2
+    if id = RT_STRCHARS or id = RT_PRINTSTR: return 1
+    if id = RT_HNEW: return 2
+    if id = RT_HFIND or id = RT_HGET or id = RT_HELEM: return 2
+    if id = RT_HPUT: return 3
+    if id = RT_HGROW: return 1
+    if id = RT_STRIDX or id = RT_STRNEXT: return 2
+    if id = RT_CHARS or id = RT_CHARSTR: return 1
+    if id = RT_FOPEN or id = RT_FREAD or id = RT_TORAW or id = RT_SBYTES: return 1
+    if id = RT_FCREATE or id = RT_FWRITE or id = RT_WRITEV: return 2
+    if id = RT_AFIND: return 3
+    if id = RT_ASLICE: return 3
+    if id = RT_AFILL or id = RT_ACYC or id = RT_ACAT: return 2
+    if id = RT_ENVG or id = RT_AUXV: return 1
+    0
+
+// the door of the program: keep what the kernel handed over, stand up
+// the guarded stack, run the phases, and leave through exit
+fn t_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
+             stack_size : i64, guard_size : i64, ginit : i64,
+             tdriver : i64, start_fn : i64, sret : bool):
+    em.begin_fn(4)
+    // the kernel block: argc, argv, envp, auxv as four 8-byte cells
+    let pos : i64 = a64_absref(&em, A64_RB)
+    em.df_pos.push(pos)
+    em.df_off.push(args_off)
+    a64_ldo(&em, A64_RA, 31, 0)                  // argc
+    a64_sto(&em, A64_RA, A64_RB, 0)
+    a64_addi(&em, A64_RC, 31, 8)                 // argv
+    a64_sto(&em, A64_RC, A64_RB, 8)
+    em.aw(3544186880 + (61 « 16) + (60 « 10) + (A64_RA « 5) + A64_T0)  // lsl t0, argc, #3
+    a64_addr_(&em, A64_T0, A64_T0, A64_RC)
+    a64_addi(&em, A64_T0, A64_T0, 8)             // envp = argv + 8×argc + 8
+    a64_sto(&em, A64_T0, A64_RB, 16)
+    em.set_label(0)                              // walk to the env's end
+    a64_ldw(&em, A64_T1, A64_T0, 8, 0)
+    a64_addi(&em, A64_T0, A64_T0, 8)
+    a64_cbnz(&em, A64_T1, 0)
+    a64_sto(&em, A64_T0, A64_RB, 24)             // auxv
+    // the stack: one PROT_NONE reservation, the top opened RW
+    a64_movimm(&em, 0, 0)
+    a64_movimm(&em, 1, guard_size + stack_size)
+    a64_movimm(&em, 2, 0)
+    a64_movimm(&em, 3, 147490)
+    a64_movimm(&em, 4, ⁻1)
+    a64_movimm(&em, 5, 0)
+    a64_movimm(&em, 8, sc_number(tg, SC_MMAP))
+    a64_svc(&em)
+    a64_cmpr(&em, 0, 31)                         // the flags of x0 - xzr
+    a64_bcond(&em, A64_MI, 1)                    // the kernel refused
+    a64_movr(&em, A64_RB, 0)                     // the region's foot
+    a64_movimm(&em, 0, guard_size)
+    a64_addr_(&em, 0, 0, A64_RB)
+    a64_movimm(&em, 1, stack_size)
+    a64_movimm(&em, 2, 3)
+    a64_movimm(&em, 8, sc_number(tg, SC_MPROT))
+    a64_svc(&em)
+    a64_cmpr(&em, 0, 31)
+    a64_bcond(&em, A64_MI, 1)
+    a64_movimm(&em, A64_RA, guard_size + stack_size)
+    a64_addr_(&em, A64_RA, A64_RA, A64_RB)
+    em.aw(2432696320 + (A64_RA « 5) + 31)        // mov sp, ra
+    a64_jmp(&em, 2)
+    em.set_label(1)
+    let smsg : i64 = lw.intern("the stack could not be reserved\n")
+    let spos : i64 = a64_absref(&em, 0)
+    em.sf_pos.push(spos)
+    em.sf_str.push(smsg)
+    a64_movimm(&em, 1, str_len("the stack could not be reserved\n"))
+    a64_call(&em, RT_ABORT)
+    em.set_label(2)
+    if ginit >= 0:
+        a64_call(&em, ginit)
+    a64_call(&em, RT_RELRO)
+    a64_call(&em, tdriver)
+    if start_fn >= 0:
+        a64_call(&em, start_fn)
+    if not sret:
+        a64_movimm(&em, 0, 0)
+    a64_movimm(&em, 8, sc_number(tg, SC_EXIT))
+    a64_svc(&em)
+    a64_resolve(&em)
