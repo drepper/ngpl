@@ -1,0 +1,79 @@
+// @repr(C): a struct that gives up the freedom to reorder its fields
+// in exchange for the layout a C compiler would give it.  What is
+// pinned here is the arithmetic of the System V AMD64 psABI -- a field
+// starts at the next multiple of its own alignment, the struct aligns
+// like its widest field, and the size rounds up so an array of it
+// stays aligned -- computed by both implementations and compared.
+
+enum Kind : u16:
+    first
+    second
+
+@repr(C)
+struct Mixed:
+    a : u8
+    b : i32
+    c : u8
+
+@repr(C)
+struct Nested:
+    p : u32
+    q : Mixed
+    r : u8
+
+@repr(C)
+struct WithArray:
+    v : u8[6]
+    w : u32
+
+@repr(C)
+struct WithEnum:
+    e : Kind
+    f : bool
+
+@repr(C)
+struct Wide:
+    one : u8
+    two : u64
+
+@impure
+fn sizes():
+    // the scalars, whose sizes are their widths
+    std.println("{} {} {} {}", @sizeof(u8), @sizeof(u16), @sizeof(i32), @sizeof(u64))
+    std.println("{} {} {}", @sizeof(bool), @sizeof(i8), @sizeof(i16))
+    // an enum is its underlying integer
+    std.println("{}", @sizeof(Kind))
+
+@impure
+fn padding():
+    // a:0, three bytes of padding, b:4..7, c:8, three of tail padding
+    std.println("{} {} {}", @sizeof(Mixed), Mixed.alignof, Mixed.offsetof("b"))
+    std.println("{} {}", Mixed.offsetof("a"), Mixed.offsetof("c"))
+    // one:0, seven of padding, two:8..15
+    std.println("{} {} {}", @sizeof(Wide), Wide.alignof, Wide.offsetof("two"))
+
+@impure
+fn nesting():
+    // a nested struct aligns like its own widest field and takes its
+    // whole size, tail padding included
+    std.println("{} {} {}", @sizeof(Nested), Nested.alignof, Nested.offsetof("q"))
+    std.println("{}", Nested.offsetof("r"))
+    // a sized array is its elements running one after the other
+    std.println("{} {} {}", @sizeof(WithArray), WithArray.alignof, WithArray.offsetof("w"))
+    std.println("{} {} {}", @sizeof(WithEnum), WithEnum.alignof, WithEnum.offsetof("f"))
+
+@impure
+fn on_a_value():
+    // the question may be asked of an instance as well as of the type
+    let m : Mixed = Mixed{a: 1, b: 2, c: 3}
+    let n : Nested = Nested{p: 9, q: m, r: 4}
+    std.println("{} {}", @sizeof(m), @sizeof(n))
+    let x : i32 = 7
+    std.println("{} {}", @sizeof(x), m.b)
+
+@impure @start
+fn main():
+    sizes()
+    padding()
+    nesting()
+    on_a_value()

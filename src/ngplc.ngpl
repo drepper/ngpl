@@ -1203,6 +1203,7 @@ let NK_FNVAL : i64 = 89     // a named function as a value: na = fn index
 let NK_CALLV : i64 = 90     // applying a value: na = callee expr, nb = args
 let NK_EXPECTS : i64 = 93   // @expect over one statement: na = it, nb = 1 when an error is expected
 let NK_HINTED : i64 = 94    // @likely/@unlikely over an if: na = it, nb = 1 when unlikely
+let NK_SIZEOF : i64 = 96    // @sizeof(T) or @sizeof(e): folds to a count of bytes
 let NK_MSLICE : i64 = 95    // m[rows, cols]: na = matrix, nb = extra [rlo, rhi, clo, chi], nc = 1 for a column
 let NK_TRY : i64 = 91       // e?: ∅ answers the function early, a value unwraps
 let NK_BADLAM : i64 = 92    // a λ the checker refuses: na says why
@@ -1266,6 +1267,7 @@ struct SDef:
     name : str
     tok : i64
     fields_off : i64     // extra: [n, field-token, type, …]
+    is_repr_c : bool     // @repr(C): the fields sit where C would put them
 
 struct GlobalDef:
     name : str
@@ -2119,6 +2121,12 @@ impl Parser:
                 let te : i64 = self.parse_expr()
                 _ ← self.eat(TK_RPAR, "')' closing @typeof")
                 return self.mknode(NK_TYPEOF, at, te, 0, 0)
+            if name = "sizeof":
+                self.pos ← self.pos + 1
+                _ ← self.eat(TK_LPAR, "'(' after @sizeof")
+                let se : i64 = self.parse_expr()
+                _ ← self.eat(TK_RPAR, "')' closing @sizeof")
+                return self.mknode(NK_SIZEOF, at, se, 0, 0)
             if name = "dropunit":
                 self.pos ← self.pos + 1
                 _ ← self.eat(TK_LPAR, "'(' after @dropunit")
@@ -2126,7 +2134,7 @@ impl Parser:
                 _ ← self.eat(TK_RPAR, "')' closing @dropunit")
                 return self.mknode(NK_DROPU, at, e0, 0, 0)
             if name ≠ "wrap":
-                self.err("'@" ⧺ name ⧺ "' is not core-2; @wrap and @dropunit are the expression annotations")
+                self.err("'@" ⧺ name ⧺ "' is not core-2; @wrap, @dropunit and @sizeof are the expression annotations")
                 return 0
             self.pos ← self.pos + 1
             _ ← self.eat(TK_LPAR, "'(' after @wrap")
@@ -3005,7 +3013,7 @@ impl Parser:
         self.tatypes.push(t)
         self.end_stmt()
 
-    fn parse_struct(&mut self):
+    fn parse_struct(&mut self, repr_c : bool):
         _ ← self.eat(TK_STRUCT, "'struct'")
         let name_tok : i64 = self.pos
         let name := self.ttext(name_tok)
@@ -3036,7 +3044,8 @@ impl Parser:
             foreach i := 0…#ftoks - 1:
                 self.extra.push(ftoks[i])
                 self.extra.push(ftypes[i])
-        self.structs.push(SDef{name: name, tok: name_tok, fields_off: off})
+        self.structs.push(SDef{name: name, tok: name_tok, fields_off: off,
+                               is_repr_c: repr_c})
 
     fn parse_impl(&mut self):
         _ ← self.eat(TK_IMPL, "'impl'")
@@ -3118,6 +3127,7 @@ impl Parser:
         let is_test : mut bool = false
         let is_repl : mut bool = false
         let is_exp : mut bool = false
+        let is_repr : mut bool = false
         let expects : mut i64 = 0
         let pres : mut i64[] = []
         let post_toks : mut i64[] = []
@@ -3144,6 +3154,19 @@ impl Parser:
                 _ ← noted
             elif name = "export":
                 is_exp ← true
+            elif name = "repr":
+                // @repr(C): the one layout there is.  An unknown name
+                // is refused rather than ignored, since accepting it
+                // and laying the struct out some other way is the one
+                // behaviour guaranteed to corrupt data.
+                _ ← self.eat(TK_LPAR, "'(' after @repr")
+                let kind := self.ttext(self.pos)
+                _ ← self.eat_word("the layout's name")
+                if kind ≠ "C":
+                    self.err("'@repr(" ⧺ kind ⧺ ")' is not a layout core-2 defines; C is the one there is")
+                    return
+                _ ← self.eat(TK_RPAR, "')' closing @repr")
+                is_repr ← true
             elif name = "expect":
                 // @expect level "pattern": the definition is expected
                 // to draw diagnostics, so it is parsed and then left
@@ -3175,6 +3198,9 @@ impl Parser:
                 return
             if self.peek() = TK_NL:
                 self.pos ← self.pos + 1
+        if is_repr and self.peek() ≠ TK_STRUCT:
+            self.err("@repr gives a struct its layout; nothing else has one")
+            return
         if self.peek() = TK_FN:
             self.parse_fn(imp, is_start, is_noreturn, is_test,
                           (1 if is_repl else 0) + (2 if is_exp else 0),
@@ -3191,7 +3217,7 @@ impl Parser:
                 // single pass can both report and ignore
                 self.err("@expect covers functions and globals in core-2; an expected-error struct stays in the bootstrap suite")
             elif self.peek() = TK_STRUCT:
-                self.parse_struct()
+                self.parse_struct(is_repr)
             else:
                 self.parse_impl()
         elif self.peek() = TK_UNIT:
@@ -3463,6 +3489,104 @@ struct Chk:
     skipfn : i64[]       // 1 where a generic was never shaped by a call
     diags : Diag[]
 
+// ---------------------------------------------------------------------------
+// The C layout of a @repr(C) struct
+// ---------------------------------------------------------------------------
+//
+// The System V AMD64 psABI's rules, which are also every other
+// mainstream C ABI's for these types: a field starts at the next
+// offset that is a multiple of its own alignment, the struct aligns
+// like its widest field, and its size rounds up to that alignment so
+// an array of it keeps every element aligned.
+//
+// Size and alignment answer ⁻1 where C has no representation for the
+// type.  Nothing here reports a diagnostic: the caller knows which
+// field it asked about and can point at where that field was written,
+// which is where the mistake is.
+
+// how deep a @repr(C) struct may nest before the nesting is taken for
+// a cycle.  A struct holding itself by value has no finite size, and
+// the fixed ceiling says so without a set to carry around.
+let C_NEST_MAX : i64 = 24
+
+fn c_layout(a : Ast, t0 : i64, depth : i64) → (i64, i64):
+    if depth > C_NEST_MAX:
+        return (⁻1, ⁻1)
+    let t : i64 = ty_drop_unit(ty_strip_ref(t0))
+    if ty_ref_kind(t0) ≠ 0:
+        return (⁻1, ⁻1)
+    if t = TY_BOOL:
+        return (1, 1)
+    if ty_is_int(t):
+        let w : i64 = ty_bits(t) ÷ 8 ?? 1
+        return (w, w)
+    if ty_is_enum(t):
+        // an enum is its underlying integer and lays out as one
+        let w : i64 = ty_bits(a.ewidth[ty_eidx(t) × 1¤ptrdiff]) ÷ 8 ?? 1
+        return (w, w)
+    if ty_is_farr(t):
+        // T[N] is N elements running one after the other, so it aligns
+        // like one of them and is as long as all of them
+        let (es, ea) := c_layout(a, a.fae[ty_fidx(t) × 1¤ptrdiff], depth + 1)
+        if es = ⁻1:
+            return (⁻1, ⁻1)
+        return (es × a.fas[ty_fidx(t) × 1¤ptrdiff], ea)
+    if ty_is_struct(t):
+        return c_struct_layout(a, ty_sidx(t), depth)
+    (⁻1, ⁻1)
+
+@post(r: r[0] = ⁻1 or (r[1] >= 1 and (r[0] % r[1] ?? 1) = 0))
+fn c_struct_layout(a : Ast, si : i64, depth : i64) → (i64, i64):
+    let d := a.structs[si × 1¤ptrdiff]
+    if not d.is_repr_c or depth > C_NEST_MAX:
+        return (⁻1, ⁻1)
+    let n : i64 = a.extra[d.fields_off × 1¤ptrdiff]
+    let off : mut i64 = 0
+    let al : mut i64 = 1
+    if n > 0:
+        foreach i := 0…n - 1:
+            let fty : i64 = a.extra[(d.fields_off + 2 + i × 2) × 1¤ptrdiff]
+            let (fs, fa) := c_layout(a, fty, depth + 1)
+            if fs = ⁻1:
+                return (⁻1, ⁻1)
+            off ← align_up(off, fa) + fs
+            al ← al ⌈ fa
+    (align_up(off, al), al)
+
+// where field k of a @repr(C) struct begins, or ⁻1 where the struct
+// has no layout at all
+fn c_field_offset(a : Ast, si : i64, k : i64) → i64:
+    let d := a.structs[si × 1¤ptrdiff]
+    if not d.is_repr_c:
+        return ⁻1
+    let n : i64 = a.extra[d.fields_off × 1¤ptrdiff]
+    if k < 0 or k >= n:
+        return ⁻1
+    let off : mut i64 = 0
+    foreach i := 0…k:
+        let fty : i64 = a.extra[(d.fields_off + 2 + i × 2) × 1¤ptrdiff]
+        let (fs, fa) := c_layout(a, fty, 1)
+        if fs = ⁻1:
+            return ⁻1
+        off ← align_up(off, fa)
+        if i < k:
+            off ← off + fs
+    off
+
+// the first field whose type C cannot represent, so the diagnostic can
+// point at the field rather than at the struct
+fn c_bad_field(a : Ast, si : i64) → i64:
+    let d := a.structs[si × 1¤ptrdiff]
+    let n : i64 = a.extra[d.fields_off × 1¤ptrdiff]
+    if n > 0:
+        foreach i := 0…n - 1:
+            let fty : i64 = a.extra[(d.fields_off + 2 + i × 2) × 1¤ptrdiff]
+            let (fs, fa) := c_layout(a, fty, 1)
+            _ ← fa
+            if fs = ⁻1:
+                return i
+    ⁻1
+
 struct Checker:
     a : Ast
     toks : Toks
@@ -3504,6 +3628,77 @@ impl Checker:
     fn text(&self, tok : i64) → str:
         run_str(self.src, self.toks.off[tok × 1¤ptrdiff],
                 self.toks.len[tok × 1¤ptrdiff])
+
+    // @sizeof(T), T.alignof and T.offsetof(f) all answer a count of
+    // bytes settled here, and all three fold into the literal the
+    // lowering would have had to make anyway.
+    fn fold_bytes(&mut self, id : i64, v : i64):
+        self.a.nkind[id × 1¤ptrdiff] ← NK_INT
+        self.a.na[id × 1¤ptrdiff] ← v
+        self.a.nb[id × 1¤ptrdiff] ← 0
+        self.a.nc[id × 1¤ptrdiff] ← 0
+        self.set_type(id, ty_with_unit(TY_I64, UNIT_BYTE))
+
+    // the struct a name stands for, where the name is a type's and not
+    // a binding's; ⁻1 for anything else
+    fn type_named(&self, na : i64) → i64:
+        if self.kind_of(na) ≠ NK_VAR:
+            return ⁻1
+        let nm := self.text(self.a.ntok[na × 1¤ptrdiff])
+        ⁻1 if self.lookup(nm) ≠ ⁻1 else self.struct_index(nm)
+
+    // a struct with no layout has no size a program may use: reporting
+    // one would invite exactly the dependency the default prevents
+    fn layout_err(&mut self, tok : i64, si : i64, what : str):
+        let d := self.a.structs[si × 1¤ptrdiff]
+        if not d.is_repr_c:
+            self.derr(tok, "struct '" ⧺ d.name ⧺ "' has no defined layout; annotate it with @repr(C) to give it one")
+            return
+        let bad : i64 = c_bad_field(self.a, si)
+        if bad = ⁻1:
+            self.derr(tok, "struct '" ⧺ d.name ⧺ "' has no C layout")
+            return
+        let ftok : i64 = self.a.extra[(d.fields_off + 1 + bad × 2) × 1¤ptrdiff]
+        let fty : i64 = self.a.extra[(d.fields_off + 2 + bad × 2) × 1¤ptrdiff]
+        self.derr(ftok, "in @repr(C) struct '" ⧺ d.name ⧺ "', field '" ⧺ self.text(ftok) ⧺ "': " ⧺ type_name(fty) ⧺ " has no defined C representation")
+        _ ← what
+
+    // the type a name stands for where the name is a type's, so
+    // @sizeof takes the type itself and not only a value of it
+    fn named_type(&self, na : i64) → i64:
+        if self.kind_of(na) ≠ NK_VAR:
+            return ⁻1
+        let nm := self.text(self.a.ntok[na × 1¤ptrdiff])
+        if self.lookup(nm) ≠ ⁻1:
+            return ⁻1
+        let bt : i64 = TYNAMES[nm] ?? ⁻1
+        if bt ≠ ⁻1:
+            return bt
+        let si : i64 = self.struct_index(nm)
+        if si ≠ ⁻1:
+            return mk_sty(si)
+        let ei : i64 = self.enum_index(nm)
+        ⁻1 if ei = ⁻1 else mk_ety(ei)
+
+    fn check_sizeof(&mut self, id : i64, tok : i64, na : i64):
+        let named : i64 = self.named_type(na)
+        let t : mut i64 = named
+        if named = ⁻1:
+            self.check_expr(na, TY_UNIT)
+            t ← ty_strip_ref(self.ty_of(na))
+        let (sz, al) := c_layout(self.a, t, 0)
+        _ ← al
+        if sz ≠ ⁻1:
+            self.fold_bytes(id, sz)
+            return
+        // no size to give.  A struct knows why -- no layout asked for,
+        // or a field C cannot represent -- and says so; anything else
+        // has no C representation at all.
+        if ty_is_struct(t):
+            self.layout_err(tok, ty_sidx(t), "sized")
+        else:
+            self.derr(tok, "@sizeof measures what C can represent; " ⧺ type_name(t) ⧺ " it cannot")
+        self.fold_bytes(id, 0)
 
     fn sname_of(&self, t : i64) → str:
         // a diagnostic writes the struct's name, not its number
@@ -3865,6 +4060,8 @@ impl Checker:
             self.check_hlit(id, tok, na, want)
         elif k = NK_TUPLE:
             self.check_tuple(id, tok, na, want)
+        elif k = NK_SIZEOF:
+            self.check_sizeof(id, tok, na)
         elif k = NK_TYPEOF:
             self.check_expr(na, TY_UNIT)
             let tt : mut i64 = ty_strip_ref(self.ty_of(na))
@@ -4941,6 +5138,22 @@ impl Checker:
         self.set_type(id, mk_sty(sidx))
 
     fn check_field(&mut self, id : i64, tok : i64, na : i64):
+        // Name.alignof, where Name is a struct's: the layout answers,
+        // and does so before anything is evaluated
+        let lsi : i64 = self.type_named(na)
+        if lsi ≠ ⁻1:
+            if self.text(tok) ≠ "alignof":
+                self.derr(tok, "a struct type answers alignof and offsetof; '" ⧺ self.text(tok) ⧺ "' is a field, which an instance has")
+                self.fold_bytes(id, 0)
+                return
+            let (asz, aal) := c_struct_layout(self.a, lsi, 0)
+            _ ← asz
+            if aal = ⁻1:
+                self.layout_err(tok, lsi, "aligned")
+                self.fold_bytes(id, 0)
+                return
+            self.fold_bytes(id, aal)
+            return
         // Name.enumerator, where Name is an enum's: what it stands for
         // is its place in the list, settled here
         if self.kind_of(na) = NK_VAR:
@@ -5673,6 +5886,35 @@ impl Checker:
             i ← i + 1
         self.set_type(id, TY_UNIT)
 
+    // T.offsetof("f"): where the named field begins, settled here and
+    // folded, so nothing of it survives into the run
+    fn check_offsetof(&mut self, id : i64, tok : i64, si : i64, args_off : i64):
+        let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
+        if argc ≠ 1:
+            self.derr(tok, "offsetof names one field, written out as a string")
+            self.fold_bytes(id, 0)
+            return
+        let ae : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
+        if self.kind_of(ae) ≠ NK_STR:
+            self.check_expr(ae, TY_STR)
+            self.derr(tok, "offsetof names the field with a written-out string, since the answer is settled before the run")
+            self.fold_bytes(id, 0)
+            return
+        self.set_type(ae, TY_STR)
+        let fname := self.a.strs[self.a.na[ae × 1¤ptrdiff] × 1¤ptrdiff]
+        let (fidx, fty) := self.field_of(si, fname)
+        _ ← fty
+        if fidx = ⁻1:
+            self.derr(tok, "'" ⧺ self.a.structs[si × 1¤ptrdiff].name ⧺ "' has no field '" ⧺ fname ⧺ "'")
+            self.fold_bytes(id, 0)
+            return
+        let off : i64 = c_field_offset(self.a, si, fidx)
+        if off = ⁻1:
+            self.layout_err(tok, si, "placed")
+            self.fold_bytes(id, 0)
+            return
+        self.fold_bytes(id, off)
+
     fn check_mcall(&mut self, id : i64, tok : i64, na : i64, args_off : i64,
                    under_default : bool):
         let m := self.text(tok)
@@ -5681,6 +5923,9 @@ impl Checker:
         if self.kind_of(na) = NK_VAR:
             let bname := self.text(self.a.ntok[na × 1¤ptrdiff])
             if self.lookup(bname) = ⁻1 and self.struct_index(bname) ≠ ⁻1:
+                if m = "offsetof":
+                    self.check_offsetof(id, tok, self.struct_index(bname), args_off)
+                    return
                 self.check_smethod(id, tok, na, args_off, bname, m, false)
                 return
         self.check_expr(na, TY_UNIT)
@@ -6750,6 +6995,15 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
                         c.derr(ty0, "'" ⧺ sd.name ⧺ "' names field '" ⧺ c.text(tx) ⧺ "' twice")
                     y ← y + 1
                 x ← x + 1
+            // a @repr(C) struct is held to what C can represent where
+            // it is written, not where its size is first asked for, so
+            // the complaint points at the offending field
+            if sd.is_repr_c:
+                let bad : i64 = c_bad_field(a, @dropunit(i))
+                if bad ≠ ⁻1:
+                    let btok : i64 = a.extra[(sd.fields_off + 1 + bad × 2) × 1¤ptrdiff]
+                    let bty : i64 = a.extra[(sd.fields_off + 2 + bad × 2) × 1¤ptrdiff]
+                    c.derr(btok, "in @repr(C) struct '" ⧺ sd.name ⧺ "', field '" ⧺ c.text(btok) ⧺ "': " ⧺ type_name(bty) ⧺ " has no defined C representation")
     let starts : mut i64 = 0
     if #a.fns > 0:
       foreach i := 0…#a.fns - 1:
