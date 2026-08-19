@@ -174,6 +174,20 @@ for name in "${shared_tests[@]}"; do
     fi
 done
 
+# ---------------------------------------------------------------------------
+# The shape of the binaries themselves.  Everything above compares what
+# a compiled program prints; this asserts what the file it arrived in
+# looks like -- the segment permissions, the RELRO region, the
+# non-executable stack, the symbol table's ordering and names, and the
+# runtime routines that a program out of reach of them does not carry.
+# ---------------------------------------------------------------------------
+echo
+if python "$topdir"/tests/compile/run_elf_tests.py "--compiler=$compiler"; then
+    :
+else
+    fail=$((fail + 1))
+fi
+
 echo
 echo "compile conformance ($compiler): $pass passed, $fail failed"
 exit $((fail > 0))

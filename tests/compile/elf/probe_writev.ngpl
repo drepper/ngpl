@@ -1,0 +1,17 @@
+// A probe for the other side of the trimming: a program that does
+// write a file, so the routines the first probe must not carry are
+// exactly the ones this one must.
+
+@repr(C)
+struct Rec:
+    id : u32
+    size : u64
+
+@impure @start
+fn main():
+    let f := std.fs.cwd().create_file("/tmp/ngpl_elf_probe.tmp", 420)
+    let runs : mut std.iovec[] = []
+    runs.push(std.iov(Rec{id: 1, size: 2}))
+    f.writev(runs)
+    f.close()
+    std.println("wrote")

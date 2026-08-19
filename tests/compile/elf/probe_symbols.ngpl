@@ -1,0 +1,20 @@
+// A probe for the symbol table and the segment permissions: one
+// exported function, one that is not, a struct in a signature so the
+// name carries a definition hash, and no file I/O at all so the
+// runtime routines that serve it are trimmed away.
+
+struct Point:
+    x : i32
+    y : i32
+
+@export
+fn shared(a : i64, b : i64) → i64:
+    a + b
+
+fn hidden(p : Point) → i32:
+    p.x + p.y
+
+@impure @start
+fn main():
+    let p : Point = Point{x: 1, y: 2}
+    std.println("{} {}", shared(3, 4), hidden(p))

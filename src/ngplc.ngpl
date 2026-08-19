@@ -3522,14 +3522,27 @@ struct Chk:
 // the fixed ceiling says so without a set to carry around.
 let C_NEST_MAX : i64 = 24
 
+// what a type C has no representation for answers, and what a type
+// one byte wide and one byte aligned answers.  Both are written out
+// as bindings rather than as a bare pair: a tuple of plain numbers
+// states no type, and the bootstrap will not let one settle on a type
+// it does not have.
+fn c_none() → (i64, i64):
+    let m : i64 = ⁻1
+    (m, m)
+
+fn c_byte_wide() → (i64, i64):
+    let one : i64 = 1
+    (one, one)
+
 fn c_layout(a : Ast, t0 : i64, depth : i64) → (i64, i64):
     if depth > C_NEST_MAX:
-        return (⁻1, ⁻1)
+        return c_none()
     let t : i64 = ty_drop_unit(ty_strip_ref(t0))
     if ty_ref_kind(t0) ≠ 0:
-        return (⁻1, ⁻1)
+        return c_none()
     if t = TY_BOOL:
-        return (1, 1)
+        return c_byte_wide()
     if ty_is_int(t):
         let w : i64 = ty_bits(t) ÷ 8 ?? 1
         return (w, w)
@@ -3542,17 +3555,17 @@ fn c_layout(a : Ast, t0 : i64, depth : i64) → (i64, i64):
         // like one of them and is as long as all of them
         let (es, ea) := c_layout(a, a.fae[ty_fidx(t) × 1¤ptrdiff], depth + 1)
         if es = ⁻1:
-            return (⁻1, ⁻1)
+            return c_none()
         return (es × a.fas[ty_fidx(t) × 1¤ptrdiff], ea)
     if ty_is_struct(t):
         return c_struct_layout(a, ty_sidx(t), depth)
-    (⁻1, ⁻1)
+    c_none()
 
 @post(r: r[0] = ⁻1 or (r[1] >= 1 and (r[0] % r[1] ?? 1) = 0))
 fn c_struct_layout(a : Ast, si : i64, depth : i64) → (i64, i64):
     let d := a.structs[si × 1¤ptrdiff]
     if not d.is_repr_c or depth > C_NEST_MAX:
-        return (⁻1, ⁻1)
+        return c_none()
     let n : i64 = a.extra[d.fields_off × 1¤ptrdiff]
     let off : mut i64 = 0
     let al : mut i64 = 1
@@ -3561,7 +3574,7 @@ fn c_struct_layout(a : Ast, si : i64, depth : i64) → (i64, i64):
             let fty : i64 = a.extra[(d.fields_off + 2 + i × 2) × 1¤ptrdiff]
             let (fs, fa) := c_layout(a, fty, depth + 1)
             if fs = ⁻1:
-                return (⁻1, ⁻1)
+                return c_none()
             off ← align_up(off, fa) + fs
             al ← al ⌈ fa
     (align_up(off, al), al)

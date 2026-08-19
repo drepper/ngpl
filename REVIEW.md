@@ -149,7 +149,19 @@ byte-diffing, the shared-file mechanism) and weak in one repeating
 pattern: **what was verified by hand during development has no
 automated guard.**
 
-### B1. The binary-format features have zero tests
+### B1. The binary-format features have zero tests  *(done)*
+
+> Closed on 2026-08-19 by `tests/compile/run_elf_tests.py`, which the
+> compile-conformance runner calls in both modes.  Eleven cases over
+> two probes cover the header, the segment permissions and W^X, the
+> RELRO region, the non-executable stack and its size, the seven
+> sections, the symbol table's local-before-global ordering and
+> `sh_info`, an `@export` symbol's binding, a signature's definition
+> hash, function extents that lie inside `.text` and do not overlap
+> each other, the runtime trimming from both sides, `--stack-size` and
+> `--guard-size`, and a `readelf -a` that must not complain.  Nine
+> mutations of a good binary were checked to fail it.
+
 
 The symbol table and signature names, struct definition hashes,
 PT_GNU_RELRO and the self-applied seal, the stack reservation and
@@ -197,8 +209,9 @@ Sparse coverage at INT_MIN/INT_MAX per width outside t91/t92; no
 shift-count-at-the-edge sweep per width; no malformed-UTF-8 *source
 file* tests (the shift-DFA can detect malformed input; nothing feeds
 it any); no huge-input lexer test; no OOM or arena-growth test.
-`tests/output/` holds three cases and `run_output_tests.py` is not
-part of the standard gate loop — worth either wiring in or retiring.
+This review said `tests/output/` held three cases outside the gate
+loop; that was wrong when written — it holds 134 and `run_tests.sh`
+runs it.
 
 ### B7. Property-based tests fit this project unusually well
 
@@ -282,4 +295,4 @@ Three items need no discussion, only work:
 1. Settle mutation-during-iteration (A1) — it is a live divergence.
 2. Write the evaluation-order and short-circuit paragraphs into the
    spec (A3).
-3. Add the ELF-invariants test file (B1).
+3. ~~Add the ELF-invariants test file (B1).~~  Done; see B1 above.

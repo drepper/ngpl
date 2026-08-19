@@ -490,6 +490,34 @@ bytes.  The lesson is not about REX; it is that a hand-assembled
 routine deserves a disassembly of itself, and reading `objdump` output
 back was what found it in one look after reasoning had failed twice.
 
+The ELF-invariants harness closed the oldest hole in the testing: the
+conformance suite compares what a compiled program prints and says
+nothing about the file it arrived in, which is where the segment
+permissions, the RELRO region, the non-executable stack, the symbol
+table and the runtime trimming all live.  All of it had been checked
+by hand with readelf and nm and by nothing since.
+
+Two choices in it are worth recording.  The file is parsed in the
+harness rather than scraped out of readelf's prose -- exact checks,
+and no dependency on binutils -- but readelf is still run where it
+exists, because a second reader that has never seen this compiler is
+worth more than any assertion written next to it.  And the harness was
+checked against nine mutations of a good binary before being believed,
+including the two shapes that actually occurred: a symbol whose size
+reaches into its neighbour, and one whose size is a negative number
+read back as a huge unsigned one.
+
+Running it in interp mode as well as native mode paid for itself
+immediately, and not through the ELF checks: it found that `c_layout`
+returned a bare `(1, 1)`, a tuple of written-out numbers that states
+no type.  The compiler's own inference adopts the return type; the
+bootstrap refuses to settle an unannotated binding on an unsized type,
+so `@sizeof(bool)` failed under the interpreted compiler and nowhere
+else.  It had been in since @repr(C) landed, because that batch was
+gated on the native run only.  The lesson is the mundane one: the
+interpreter is the semantic authority, and a gate that is only run on
+the faster implementation is not the gate.
+
 ## The Plan for Attempt 3 (sketch)
 
 1. Structs by value: `@repr`-style layout in slots or heap, field
