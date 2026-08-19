@@ -1,0 +1,85 @@
+// writev: a described binary format written as its pieces, each piece
+// one entry of the vector the kernel is handed.  What is pinned here
+// is that both implementations agree byte for byte on what a struct
+// with a defined layout looks like on disk -- fields at the offsets
+// the layout gives, padding written as zeros, an array of structs
+// written element after element.
+
+@noreturn
+@impure
+fn vanished(n : str):
+    std.println("'{}' vanished", n)
+    std.exit(3)
+
+@repr(C)
+struct Ident:
+    mag : u8[4]
+    class : u8
+    data : u8
+    version : u8
+    pad : u8[9]
+
+@repr(C)
+struct Head:
+    id : Ident
+    kind : u16
+    machine : u16
+    entry : u64
+
+@repr(C)
+struct Ent:
+    num : u32
+    size : u64
+
+@repr(C)
+struct Signed:
+    small : i8
+    mid : i16
+    wide : i64
+
+@impure
+fn write_it(name : str):
+    let f := std.fs.cwd().create_file(name, 420)
+    let idv : Ident = Ident{mag: [127, 69, 76, 70], class: 2, data: 1, version: 1, pad: [0, 0, 0, 0, 0, 0, 0, 0, 0]}
+    let h : Head = Head{id: idv, kind: 2, machine: 62, entry: 4198400}
+    let es : mut Ent[] = []
+    es.push(Ent{num: 1, size: 100})
+    es.push(Ent{num: 2, size: 200})
+    es.push(Ent{num: 3, size: 300})
+    let sg : Signed = Signed{small: 0 - 1, mid: 0 - 2, wide: 0 - 3}
+    let trailer : u8[] = [78, 71, 80, 76]
+    let nothing : u8[] = []
+    // five pieces, five entries; the empty one contributes nothing
+    f.writev(h, es, sg, nothing, trailer)
+    f.close()
+
+@start
+@impure
+fn main() → u8:
+    std.println("{} {} {} {}", @sizeof(Ident), @sizeof(Head), @sizeof(Ent), @sizeof(Signed))
+    std.println("{} {} {}", Head.offsetof("kind"), Head.offsetof("entry"), Signed.offsetof("wide"))
+
+    let path : str = "/tmp/ngpl_t56_writev.tmp"
+    write_it(path)
+    let alloc := std.arena.allocator()
+    let f := std.fs.cwd().open_file(path) ?? vanished(path)
+    let got := f.read_file(alloc)
+    std.println("{}", #got)
+
+    // the identifier: the magic, then the bytes the layout left inside
+    std.println("{} {} {} {} {} {} {}", got[0¤byte], got[1¤byte], got[2¤byte], got[3¤byte], got[4¤byte], got[5¤byte], got[6¤byte])
+    std.println("{} {} {}", got[7¤byte], got[10¤byte], got[15¤byte])
+    // kind at 16, machine at 18, entry at 24 -- little-endian
+    std.println("{} {} {} {}", got[16¤byte], got[17¤byte], got[18¤byte], got[19¤byte])
+    std.println("{} {} {} {}", got[20¤byte], got[24¤byte], got[25¤byte], got[26¤byte])
+    // the table: three entries of sixteen bytes, the number then four
+    // bytes of padding then the size
+    std.println("{} {} {} {}", got[32¤byte], got[36¤byte], got[40¤byte], got[41¤byte])
+    std.println("{} {} {}", got[48¤byte], got[56¤byte], got[64¤byte])
+    std.println("{} {}", got[72¤byte], got[73¤byte])
+    // signed fields keep their sign across their own width
+    std.println("{} {} {} {}", got[80¤byte], got[81¤byte], got[82¤byte], got[83¤byte])
+    std.println("{} {} {}", got[88¤byte], got[89¤byte], got[95¤byte])
+    // and the trailer follows with nothing between
+    std.println("{} {} {} {}", got[96¤byte], got[97¤byte], got[98¤byte], got[99¤byte])
+    0

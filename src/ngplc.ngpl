@@ -3473,6 +3473,7 @@ let MID_CLOSEF : i64 = 9
 let MID_ITER : i64 = 10
 let MID_NEXT : i64 = 11
 let MID_DIRITER : i64 = 12
+let MID_WRITEV : i64 = 13
 
 struct Chk:
     ntype : i64[]
@@ -5970,6 +5971,32 @@ impl Checker:
             self.a.nc[id × 1¤ptrdiff] ← MID_ORD
             self.set_type(id, TY_U32)
             return
+        if t = TY_FILE and m = "writev":
+            if not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:
+                self.derr(tok, "touching files is impure; the function wants @impure")
+            let np : i64 = self.a.extra[args_off × 1¤ptrdiff]
+            if np = 0:
+                self.derr(tok, "writev writes the pieces it is given, and takes at least one")
+            foreach pi := 0…np - 1:
+                let pe : i64 = self.a.extra[(args_off + 1 + pi) × 1¤ptrdiff]
+                self.check_expr(pe, TY_UNIT)
+                let pt : i64 = ty_strip_ref(self.ty_of(pe))
+                if pt = mk_aty(TY_U8):
+                    continue
+                // a struct with a layout, or a table of them: what is
+                // written is the bytes the layout describes, so the
+                // layout has to exist and be one C can produce
+                let et : i64 = self.elem_of(pt) if ty_is_arr(pt) else pt
+                if not ty_is_struct(et):
+                    self.derr(tok, "writev writes bytes, a struct with a defined layout, or an array of them; this is " ⧺ type_name(pt))
+                    continue
+                let (psz, pal) := c_struct_layout(self.a, ty_sidx(et), 0)
+                _ ← pal
+                if psz = ⁻1:
+                    self.layout_err(tok, ty_sidx(et), "written")
+            self.a.nc[id × 1¤ptrdiff] ← MID_WRITEV
+            self.set_type(id, TY_UNIT)
+            return
         if t = TY_FILE and (m = "read_file" or m = "write" or m = "close"):
             if not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:
                 self.derr(tok, "touching files is impure; the function wants @impure")
@@ -7162,6 +7189,8 @@ let IR_SDEC : i64 = 105    // d ← the character at a's byte b, c ← the byte 
 let IR_AUXV : i64 = 103    // d ← the auxiliary vector's entry for key a
 let IR_EXECFN : i64 = 104  // d ← AT_EXECFN as a string
 let IR_FADDR : i64 = 99    // d ← the code address of function a
+let IR_TORAW : i64 = 106   // d ← a raw byte run holding what the u8[] a says
+let IR_WRITEV : i64 = 107  // file a takes the runs named by arrays b (bases) and c (lengths)
 let IR_CALLI : i64 = 100   // d ← call the address in vreg a, args at extra b
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
 let IR_FLD : i64 = 67      // d ← field b of struct a
@@ -7987,6 +8016,9 @@ impl Lower:
         if mid = MID_CLOSEF:
             self.ir(IR_FCLOSE, av, 0, 0, 0, 0)
             return ⁻1
+        if mid = MID_WRITEV:
+            self.lower_writev(av, args_off)
+            return ⁻1
         if mid = MID_DIRITER:
             let earr : i64 = self.tmp()
             self.ir(IR_DENTS, 0, 0, 0, earr, 0)
@@ -8288,6 +8320,131 @@ impl Lower:
         self.ir(IR_JMP, ltop, 0, 0, 0, 0)
         self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         d
+
+    // Writing a described format: each piece becomes one run of bytes
+    // and one entry of the vector the kernel is handed.  A byte array
+    // is already its own bytes; a struct with a layout is written into
+    // one field at a time, at the offsets the layout gives, with what
+    // the layout skips written as zeros so the same program twice
+    // produces the same file.
+    fn lower_writev(&mut self, av : i64, args_off : i64):
+        let np : i64 = self.a.extra[args_off × 1¤ptrdiff]
+        let bases : i64 = self.tmp()
+        self.ir(IR_ANEW, np ⌈ 4, 0, 0, bases, 0)
+        let lens : i64 = self.tmp()
+        self.ir(IR_ANEW, np ⌈ 4, 0, 0, lens, 0)
+        foreach pi := 0…np - 1:
+            let pe : i64 = self.a.extra[(args_off + 1 + pi) × 1¤ptrdiff]
+            let pt : i64 = ty_strip_ref(self.tof(pe))
+            let pv : i64 = self.lower_expr(pe)
+            let bytes : mut i64 = pv
+            if pt ≠ mk_aty(TY_U8):
+                bytes ← self.pack_piece(pt, pv)
+            let raw : i64 = self.tmp()
+            self.ir(IR_TORAW, bytes, 0, 0, raw, 0)
+            let n : i64 = self.tmp()
+            self.ir(IR_ALEN, bytes, 0, 0, n, 0)
+            self.ir(IR_APUSH, bases, raw, 0, 0, 0)
+            self.ir(IR_APUSH, lens, n, 0, 0, 0)
+        self.ir(IR_WRITEV, av, bases, lens, 0, 0)
+
+    // the bytes of one piece that is not already bytes: a struct, or a
+    // table of them walked one entry at a time
+    fn pack_piece(&mut self, pt : i64, pv : i64) → i64:
+        let buf : i64 = self.tmp()
+        self.ir(IR_ANEW, 4, 0, 0, buf, 0)
+        if not ty_is_arr(pt):
+            _ ← self.pack_val(buf, pt, pv, 0)
+            return buf
+        // a table: the same static sequence inside a loop, since how
+        // many entries there are is not known until it runs
+        let et : i64 = self.elem_of(pt)
+        let n : i64 = self.tmp()
+        self.ir(IR_ALEN, pv, 0, 0, n, 0)
+        let ix : i64 = self.tmp()
+        self.ir(IR_CONST, 0, 0, 0, ix, 0)
+        let one : i64 = self.tmp()
+        self.ir(IR_CONST, 1, 0, 0, one, 0)
+        let ltop : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+        let c : i64 = self.tmp()
+        self.ir(IR_CLT, ix, n, 0, c, 64 + 256)
+        self.ir(IR_JZ, c, lend, 0, 0, 0)
+        let e : i64 = self.tmp()
+        self.ir(IR_AIDX, pv, ix, 0, e, 0)
+        _ ← self.pack_val(buf, et, e, 0)
+        let nx : i64 = self.tmp()
+        self.ir(IR_ADDW, ix, one, 0, nx, 64 + 256)
+        self.ir(IR_MOV, nx, 0, 0, ix, 0)
+        self.ir(IR_JMP, ltop, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        buf
+
+    // push one byte, whose value the caller has already reduced
+    fn pack_byte(&mut self, buf : i64, v : i64):
+        self.ir(IR_APUSH, buf, v, 0, 0, 0)
+
+    // zeros up to the offset the layout wants next
+    fn pack_pad(&mut self, buf : i64, from : i64, to : i64):
+        if to > from:
+            let z : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, z, 0)
+            foreach _ := from…to - 1:
+                self.pack_byte(buf, z)
+
+    // one value of type ty appended to buf; answers how far along the
+    // piece the writing has got, so the caller can pad to the next
+    // field without counting the bytes again
+    fn pack_val(&mut self, buf : i64, ty0 : i64, v : i64, pos0 : i64) → i64:
+        let ty : i64 = ty_drop_unit(ty_strip_ref(ty0))
+        let pos : mut i64 = pos0
+        if ty_is_struct(ty):
+            let si : i64 = ty_sidx(ty)
+            let d := self.a.structs[si × 1¤ptrdiff]
+            let nf : i64 = self.a.extra[d.fields_off × 1¤ptrdiff]
+            let (ssz, sal) := c_struct_layout(self.a, si, 0)
+            _ ← sal
+            if nf > 0:
+                foreach fi := 0…nf - 1:
+                    let fty : i64 = self.a.extra[(d.fields_off + 2 + fi × 2) × 1¤ptrdiff]
+                    self.pack_pad(buf, pos, pos0 + c_field_offset(self.a, si, @dropunit(fi)))
+                    pos ← pos0 + c_field_offset(self.a, si, @dropunit(fi))
+                    let fv : i64 = self.tmp()
+                    self.ir(IR_FLD, v, fi, 0, fv, 0)
+                    pos ← self.pack_val(buf, fty, fv, pos)
+            // the tail padding is part of the struct, so an array of
+            // it keeps every element where the layout says
+            self.pack_pad(buf, pos, pos0 + ssz)
+            return pos0 + ssz
+        if ty_is_farr(ty):
+            // a sized array is its elements one after the other, and
+            // how many there are is part of the type
+            let et : i64 = self.a.fae[ty_fidx(ty) × 1¤ptrdiff]
+            let cnt : i64 = self.a.fas[ty_fidx(ty) × 1¤ptrdiff]
+            if cnt > 0:
+                foreach ei := 0…cnt - 1:
+                    let ix : i64 = self.tmp()
+                    self.ir(IR_CONST, @dropunit(ei), 0, 0, ix, 0)
+                    let ev : i64 = self.tmp()
+                    self.ir(IR_AIDX, v, ix, 0, ev, 0)
+                    pos ← self.pack_val(buf, et, ev, pos)
+            return pos
+        // a scalar: its own width, least significant byte first, which
+        // is the target's order
+        let (sz, al) := c_layout(self.a, ty, 0)
+        _ ← al
+        let m : i64 = self.tmp()
+        self.ir(IR_CONST, 255, 0, 0, m, 0)
+        foreach bi := 0…sz - 1:
+            let sh : i64 = self.tmp()
+            self.ir(IR_CONST, 8 × @dropunit(bi), 0, 0, sh, 0)
+            let shifted : i64 = self.tmp()
+            self.ir(IR_SHRR, v, sh, 0, shifted, 64 + 256)
+            let byte : i64 = self.tmp()
+            self.ir(IR_BAND, shifted, m, 0, byte, 64 + 256)
+            self.pack_byte(buf, byte)
+        pos + sz
 
     // generate(f, r): the range written out, then one call per step
     fn lower_generate(&mut self, nid : i64, args_off : i64) → i64:
@@ -9480,6 +9637,8 @@ let RT_AUXV : i64 = ⁻42
 let RT_EXECFN : i64 = ⁻43
 let RT_RELRO : i64 = ⁻44
 let RT_STRNEXT : i64 = ⁻45
+let RT_TORAW : i64 = ⁻46
+let RT_WRITEV : i64 = ⁻47
 
 struct Emit:
     code : u8[]
@@ -10316,6 +10475,15 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.load(R_DI, a)
             em.load(R_SI, b)
             em.jglobal(232, ⁻1, RT_FWRITE)
+        elif o = IR_TORAW:
+            em.load(R_DI, a)
+            em.jglobal(232, ⁻1, RT_TORAW)
+            em.store(R_AX, d)
+        elif o = IR_WRITEV:
+            em.load(R_DI, a)
+            em.load(R_SI, b)
+            em.load(R_DX, c)
+            em.jglobal(232, ⁻1, RT_WRITEV)
         elif o = IR_FCLOSE:
             em.load(R_DI, a)
             em.b3(72, 137, 248)              // mov rax, rdi -- the fd
@@ -11557,6 +11725,95 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.jglobal(233, ⁻1, RT_ABORT)
     em.resolve_locals()
 
+    // RT_TORAW: rdi = a u8[]; rax = a fresh run of raw bytes holding
+    // what its slots say.  An array keeps one eight-byte slot per
+    // element whatever it holds, so anything that hands bytes to the
+    // kernel has to narrow them first; this is that narrowing, kept in
+    // one place because writev needs it once per piece.
+    em.rt_begin(RT_TORAW)
+    em.begin_fn(2)
+    em.b4(76, 139, 111, 8)          // mov r13, [rdi+8]: how many
+    em.b3(76, 139, 55)              // mov r14, [rdi]: the slots
+    em.b3(76, 137, 239)             // mov rdi, r13
+    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.b3(72, 137, 195)             // mov rbx, rax: the raw bytes
+    em.b3(72, 49, 201)              // xor rcx, rcx
+    em.set_label(0)
+    em.b3(76, 57, 233)              // cmp rcx, r13
+    em.jlocal(131, 1)               // jae
+    em.b4(73, 139, 4, 206)          // mov rax, [r14+rcx*8]
+    em.b3(136, 4, 11)               // mov [rbx+rcx], al
+    em.b3(72, 255, 193)             // inc rcx
+    em.jlocal(⁻1, 0)
+    em.set_label(1)
+    em.b3(72, 137, 216)             // mov rax, rbx
+    em.b1(195)
+    em.resolve_locals()
+
+    // RT_WRITEV: rdi = a file's descriptor, rsi = the runs' bases,
+    // rdx = their lengths.  The two arrays are turned into the vector
+    // the kernel wants and written in one call; a call the kernel
+    // satisfies only in part resumes from wherever it stopped, which
+    // for a vector means walking off the entries it finished and
+    // shortening the one it did not.
+    em.rt_begin(RT_WRITEV)
+    em.begin_fn(6)
+    em.b3(73, 137, 252)             // mov r12, rdi: the descriptor
+    em.b4(76, 139, 110, 8)          // mov r13, [rsi+8]: how many runs
+    em.b3(76, 139, 54)              // mov r14, [rsi]: the bases
+    em.b3(76, 139, 58)              // mov r15, [rdx]: the lengths
+    em.b3(76, 137, 239)             // mov rdi, r13
+    em.b4(72, 193, 231, 4)          // shl rdi, 4: sixteen bytes an entry
+    em.jglobal(232, ⁻1, RT_ALLOC)
+    em.b3(72, 137, 195)             // mov rbx, rax: the vector
+    em.b3(73, 137, 218)             // mov r10, rbx: where the next entry goes
+    em.b3(72, 49, 201)              // xor rcx, rcx
+    em.set_label(0)                 // Lfill
+    em.b3(76, 57, 233)              // cmp rcx, r13
+    em.jlocal(131, 1)               // jae
+    em.b4(73, 139, 4, 206)          // mov rax, [r14+rcx*8]: the base
+    em.b3(73, 137, 2)               // mov [r10], rax
+    em.b4(73, 139, 4, 207)          // mov rax, [r15+rcx*8]: the length
+    em.b4(73, 137, 66, 8)           // mov [r10+8], rax
+    em.b4(73, 131, 194, 16)         // add r10, 16
+    em.b3(72, 255, 193)             // inc rcx
+    em.jlocal(⁻1, 0)
+    em.set_label(1)                 // Lwrite
+    em.b3(77, 133, 237)             // test r13, r13
+    em.jlocal(132, 5)               // jz Ldone
+    em.b3(76, 137, 231)             // mov rdi, r12
+    em.b3(72, 137, 222)             // mov rsi, rbx
+    em.b3(76, 137, 234)             // mov rdx, r13
+    em.movimm(R_AX, 20)             // writev
+    em.b2(15, 5)
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(136, 4)               // js Lbad
+    em.set_label(2)                 // Lconsume
+    em.b3(77, 133, 237)             // test r13, r13
+    em.jlocal(132, 5)               // jz Ldone
+    em.b4(72, 139, 75, 8)           // mov rcx, [rbx+8]: this run's length
+    em.b3(72, 57, 200)              // cmp rax, rcx
+    em.jlocal(130, 3)               // jb Lpartial
+    em.b3(72, 41, 200)              // sub rax, rcx
+    em.b4(72, 131, 195, 16)         // add rbx, 16
+    em.b3(73, 255, 205)             // dec r13
+    em.jlocal(⁻1, 2)
+    em.set_label(3)                 // Lpartial
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(132, 1)               // jz Lwrite
+    em.b3(72, 1, 3)                 // add [rbx], rax
+    em.b4(72, 41, 67, 8)            // sub [rbx+8], rax
+    em.b3(72, 49, 192)              // xor rax, rax
+    em.jlocal(⁻1, 1)
+    em.set_label(4)                 // Lbad
+    let wvm : i64 = lw.intern("ngplc: the output cannot be written\n")
+    em.sref(R_SI, wvm)
+    em.movimm(R_DX, str_len(lw.strs[wvm × 1¤ptrdiff]))
+    em.jglobal(233, ⁻1, RT_ABORT)
+    em.set_label(5)                 // Ldone
+    em.b1(195)
+    em.resolve_locals()
+
     // RT_BADFIT: a value flowed into a type it does not fit
     em.rt_begin(RT_BADFIT)
     let bfm : i64 = lw.intern("the value does not fit the type it meets\n")
@@ -12196,7 +12453,9 @@ fn rt_names() → str[]:
     "RT_AUXV",
     "RT_EXECFN",
     "RT_RELRO",
-    "RT_STRNEXT"]
+    "RT_STRNEXT",
+    "RT_TORAW",
+    "RT_WRITEV"]
 
 // The UTF-8 decoder is Hoehrmann's DFA in the shift form the design
 // researched: nine states, twelve byte classes, and a step that is one
@@ -12241,7 +12500,7 @@ fn utf8_dfa_words() → i64[]:
 // a call whose target was never emitted stops the compiler where the
 // calls are resolved.
 fn rt_edges() → i64[]:
-    [4, 3, 5, 3, 6, 3, 7, 3, 8, 7, 9, 8, 10, 8, 11, 8, 16, 8, 17, 12, 18, 8, 18, 17, 19, 17, 19, 21, 20, 17, 21, 8, 21, 17, 22, 3, 23, 6, 24, 9, 25, 8, 26, 8, 26, 9, 27, 8, 28, 3, 28, 8, 29, 3, 29, 8, 29, 9, 30, 3, 30, 8, 31, 3, 33, 8, 33, 12, 34, 6, 34, 9, 35, 6, 35, 9, 36, 6, 36, 9, 37, 9, 38, 9, 39, 8, 39, 9, 39, 10, 40, 8, 40, 9, 41, 8, 43, 8, 43, 42, 44, 42]
+    [4, 3, 5, 3, 6, 3, 7, 3, 8, 7, 9, 8, 10, 8, 11, 8, 16, 8, 17, 12, 18, 8, 18, 17, 19, 17, 19, 21, 20, 17, 21, 8, 21, 17, 22, 3, 23, 6, 24, 9, 25, 8, 26, 8, 26, 9, 27, 8, 28, 3, 28, 8, 29, 3, 29, 8, 29, 9, 30, 3, 30, 8, 31, 3, 33, 8, 33, 12, 34, 6, 34, 9, 35, 6, 35, 9, 36, 6, 36, 9, 37, 9, 38, 9, 39, 8, 39, 9, 39, 10, 40, 8, 40, 9, 41, 8, 43, 8, 43, 42, 44, 42, 46, 8, 47, 3, 47, 8]
 
 // ---------------------------------------------------------------------------
 // Symbol names: what a function is called in the object file
@@ -13081,7 +13340,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
     // What the program calls, and what that calls in turn.  Everything
     // emitted so far is the program's own; the calls it made name the
     // runtime it needs, and the edge list closes over the rest.
-    let nrt : i64 = 45
+    let nrt : i64 = 47
     foreach _ := 1…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
