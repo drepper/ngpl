@@ -49,8 +49,15 @@ fn write_it(name : str):
     let sg : Signed = Signed{small: 0 - 1, mid: 0 - 2, wide: 0 - 3}
     let trailer : u8[] = [78, 71, 80, 76]
     let nothing : u8[] = []
-    // five pieces, five entries; the empty one contributes nothing
-    f.writev(h, es, sg, nothing, trailer)
+    // five runs, five entries; the empty one contributes nothing
+    let runs : mut std.iovec[] = []
+    runs.push(std.iov(h))
+    runs.push(std.iov(es))
+    runs.push(std.iov(sg))
+    runs.push(std.iov(nothing))
+    runs.push(std.iov(trailer))
+    std.println("runs {}", #runs)
+    f.writev(runs)
     f.close()
 
 @start

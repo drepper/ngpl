@@ -8142,25 +8142,34 @@ A packed layout — one that suppresses padding entirely — is a natural second
 
 ### Writing Several Pieces at Once (`writev`)
 
-`write` takes one run of bytes.  `writev` takes several and writes them in order with nothing between them, which is what turns a described binary format into a written one:
+`write` takes one run of bytes.  `writev` takes an array of runs and writes them in order with nothing between them, which is what turns a described binary format into a written one:
 
 ```
+let runs : mut std.iovec[] = []
+runs.push(std.iov(header))
+runs.push(std.iov(entries))
+runs.push(std.iov(payload))
+
 let f : mut = std.fs.cwd().create_file("image.bin", 0o644) ?? std.exit(1)
-f.writev(header, entries, payload)
+f.writev(runs)
 f.close()
 ```
 
-Each argument is one piece, and each piece becomes one entry of the vector the kernel is handed — the `writev(2)` call, whose whole point is that a file made of parts does not have to be assembled into one buffer before it can be written.
+Each run becomes one entry of the vector the kernel is handed — the `writev(2)` call, whose whole point is that a file made of parts does not have to be assembled into one buffer before it can be written.
 
-#### What a Piece May Be
+#### `std.iovec` and `std.iov`
 
-| Piece | Written as |
-|-------|-----------|
+`std.iovec` is a run of bytes waiting to be written.  It is made by `std.iov`, and it is opaque: a run is a thing to write, not a thing to read back or take apart.  Being a value rather than an argument position is what lets a program build the list of runs the way it builds anything else — push in a loop, count what it has, hand the array to one call.
+
+`std.iov` settles what a value's bytes are at the moment it is called, so a run is a run and not a promise:
+
+| Argument | The run holds |
+|----------|--------------|
 | `u8[]`, `byte[]` | the bytes themselves |
 | a `@repr(C)` struct | the bytes of its layout, padding included |
 | an array of `@repr(C)` structs | element after element, as C lays an array out |
 
-The second and third rows are the reason [`@repr(C)`](#product-type-layout-repr) exists in a language that has no foreign function interface yet.  A struct with a defined layout *is* a statement about bytes; `writev` is where that statement is carried out.  A table — a section header table, a symbol table, an array of directory records — is one array of one struct type, so it is written as one piece rather than as an entry at a time.
+The second and third rows are the reason [`@repr(C)`](#product-type-layout-repr) exists in a language that has no foreign function interface yet.  A struct with a defined layout *is* a statement about bytes; `std.iov` is where that statement is carried out.  A table — a section header table, a symbol table, an array of directory records — is one array of one struct type, so it is one run rather than one run per entry.
 
 A struct without `@repr(C)` is refused, for the same reason its size is:
 
@@ -8169,7 +8178,7 @@ struct Loose:
     a : u8
     b : i64
 
-f.writev(loose)
+std.iov(loose)
 
 error: struct 'Loose' has no defined layout; annotate it with @repr(C)
 to give it one
@@ -8177,11 +8186,11 @@ to give it one
 
 #### Padding Is Written as Zeros
 
-A piece is exactly as long as its layout says, and the bytes a layout skips are written as zeros rather than as whatever the field beside them left behind.  Two runs of the same program therefore produce the same file, which is worth more than the cycles saved by leaving padding alone — a build that is reproducible can be compared, and one that is not cannot.
+A run is exactly as long as its layout says, and the bytes a layout skips are written as zeros rather than as whatever the field beside them left behind.  Two runs of the same program therefore produce the same file, which is worth more than the cycles saved by leaving padding alone — a build that is reproducible can be compared, and one that is not cannot.
 
 #### Order and Completeness
 
-The pieces reach the file in the order written.  A `writev` that the kernel satisfies only in part resumes from where it stopped, so the call returns when every piece has been written or raises when it cannot be; a short write is never silently accepted.  An empty piece contributes nothing and is not an error, which lets a caller write a piece whose length is computed without testing it first.
+The runs reach the file in the order the array has them.  A `writev` that the kernel satisfies only in part resumes from where it stopped, so the call returns when every run has been written or raises when it cannot be; a short write is never silently accepted.  An empty run contributes nothing and is not an error, which lets a caller make a run whose length is computed without testing it first.
 
 Like `write`, `writev` is a statement and answers nothing.
 

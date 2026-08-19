@@ -41,7 +41,11 @@ fn write_pieces(name : str):
     es.push(Ent{id: 1, size: 100})
     es.push(Ent{id: 2, size: 200})
     let trailer : u8[] = [65, 66, 67]
-    f.writev(h, es, trailer)
+    let runs : mut std.iovec[] = []
+    runs.push(std.iov(h))
+    runs.push(std.iov(es))
+    runs.push(std.iov(trailer))
+    f.writev(runs)
     f.close()
 
 @impure
@@ -103,7 +107,9 @@ fn test_a_byte_array_piece_is_its_own_bytes():
 fn test_a_nested_struct_writes_at_the_offset_its_layout_gives():
     let f := std.fs.cwd().create_file("build/test_writev2.bin", 420) ?? std.exit(1)
     let n : Nest = Nest{lead: 9, head: Head{magic: 16909060, count: 5, kind: 6}, tail: 8}
-    f.writev(n)
+    let runs : mut std.iovec[] = []
+    runs.push(std.iov(n))
+    f.writev(runs)
     f.close()
     let got := read_back("build/test_writev2.bin")
     assert_eq(@dropunit(#got), 16)
@@ -123,7 +129,11 @@ fn test_an_empty_piece_is_not_an_error():
     let f := std.fs.cwd().create_file("build/test_writev3.bin", 420) ?? std.exit(1)
     let nothing : u8[] = []
     let something : u8[] = [1, 2]
-    f.writev(nothing, something, nothing)
+    let runs : mut std.iovec[] = []
+    runs.push(std.iov(nothing))
+    runs.push(std.iov(something))
+    runs.push(std.iov(nothing))
+    f.writev(runs)
     f.close()
     let got := read_back("build/test_writev3.bin")
     assert_eq(@dropunit(#got), 2)

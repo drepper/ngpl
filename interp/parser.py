@@ -989,15 +989,15 @@ class Parser:
     def _parse_base_type_name(self) -> str:
         """Read the name a type starts with, container types and all.
 
-        Only std.hash and std.set take the dot: every other type is one
-        name, and a dot after one means something else.
+        Only std.hash, std.set and std.iovec take the dot: every other
+        type is one name, and a dot after one means something else.
         """
         name = self._eat("IDENT").value
         if (self._check("PUNCT") and self._cur().value == "."
                 and self.pos + 1 < len(self.tokens)
                 and self.tokens[self.pos + 1].type == "IDENT"
                 and f"{name}.{self.tokens[self.pos + 1].value}"
-                in ("std.hash", "std.set")):
+                in ("std.hash", "std.set", "std.iovec")):
             self.pos += 1
             name += "." + self._eat("IDENT").value
             return self._parse_type_arguments(name)

@@ -469,6 +469,27 @@ two orders in agreement, because keeping them in agreement is exactly
 the kind of invariant that holds until someone edits the middle of a
 function.
 
+The first cut of `writev` was variadic, and moving it to a first-class
+`std.iovec` was worth the second pass.  A value can be pushed in a
+loop, counted, and passed as one array; an argument position can only
+be written out, which the compiler's own writer did fourteen times.
+The cost was a type that has to be spellable -- `std.iovec` in both
+front ends, `std.iovec[]` past an array-type matcher that had never
+seen a dotted element name -- and the gain is that nothing about the
+number of runs is fixed at the call.
+
+The bug that cost the most time was one byte.  REX is `0100WRXB`, and
+writing the bits in the order the letters are usually *said* -- W, R,
+X, B -- while thinking of them as a mask puts R where X belongs.
+`4B` instead of `4D` turned `mov r15, [r14+rcx*8]` into `mov rdi,
+[r14+r9*8]`, so every run was read from a stale r15, every length came
+out zero, and every file the compiler wrote was empty while every exit
+status said success.  Nothing asserted, because nothing was wrong from
+the program's point of view: it asked for zero bytes and got zero
+bytes.  The lesson is not about REX; it is that a hand-assembled
+routine deserves a disassembly of itself, and reading `objdump` output
+back was what found it in one look after reasoning had failed twice.
+
 ## The Plan for Attempt 3 (sketch)
 
 1. Structs by value: `@repr`-style layout in slots or heap, field

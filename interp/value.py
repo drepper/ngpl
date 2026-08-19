@@ -27,6 +27,8 @@ BUILTIN_TYPES: set[str] = {
     # A piece of the program, which is what a macro is handed and what
     # it answers.
     "syntax",
+    # One run of bytes waiting to be written, as std.iov settles it.
+    "std.iovec",
 }
 
 # Platform-specific fast type mapping (x86_64: sub-32 → 32, 32/64 → 64).
@@ -2104,8 +2106,10 @@ def _parse_array_type(type_name: str) -> tuple[str, list[int | None]] | None:
     import re
     # An element type is a name or a tuple, and a tuple carries commas
     # and brackets of its own, so it is matched as a parenthesized run
-    # rather than as a word.
-    m = re.fullmatch(r"(\w+|\(.*\))\[(\d*(?:,\d*)*)\]", type_name)
+    # rather than as a word.  A dotted name -- std.iovec -- is one name
+    # for this purpose, since the dot belongs to the type and not to
+    # the array written around it.
+    m = re.fullmatch(r"(\w+(?:\.\w+)*|\(.*\))\[(\d*(?:,\d*)*)\]", type_name)
     if m is None:
         return None
     return m.group(1), [int(d) if d else None for d in m.group(2).split(",")]

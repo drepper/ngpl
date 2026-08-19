@@ -148,16 +148,18 @@ def pack_struct(instance, lookup) -> bytes:
 
 
 def iov_bytes(part, lookup, index: int) -> bytes:
-    """The bytes of one `writev` piece.
+    """The bytes one run of a `writev` holds.
 
-    A piece is one of three things: a byte array, which is already its
-    own bytes; a @repr(C) struct, which is packed; or an array of
-    @repr(C) structs -- a table, such as a section header table -- which
-    is packed element after element, exactly as C lays an array out.
+    A run is made from one of three things: a byte array, which is
+    already its own bytes; a @repr(C) struct, which is packed; or an
+    array of @repr(C) structs -- a table, such as a section header
+    table -- which is packed element after element, exactly as C lays
+    an array out.
     """
     from interp.value import (ArrayValue, IntValue, ObjectValue,
                               StructInstance, UnitValue)
 
+    _ = index
     inner = part
     while isinstance(inner, (UnitValue, ObjectValue)):
         inner = inner.inner if isinstance(inner, UnitValue) else inner.obj
@@ -181,21 +183,21 @@ def iov_bytes(part, lookup, index: int) -> bytes:
             if isinstance(value, IntValue):
                 if value.value < 0 or value.value > 255:
                     raise PackError(
-                        f"piece {index}: {value.value} does not fit a byte")
+                        f"{value.value} does not fit a byte")
                 out.append(value.value)
                 continue
             raise PackError(
-                f"piece {index}: an array written out holds bytes or structs "
-                f"with a defined layout, not {type(value).__name__}")
+                f"an array written out holds bytes or structs with a "
+                f"defined layout, not {type(value).__name__}")
         return bytes(out)
 
     raise PackError(
-        f"piece {index}: writev writes a byte array, a struct with a defined "
-        f"layout, or an array of them")
+        "a run of bytes is made from bytes, a struct with a defined layout, "
+        "or an array of them")
 
 
 def collect_lookup(parts):
-    """A struct-name resolver built from the values about to be written.
+    """A struct-name resolver built from the values about to be packed.
 
     `struct_layout` resolves a nested struct field by name, which
     normally means asking the environment.  Nothing needs to be asked

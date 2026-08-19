@@ -461,6 +461,24 @@ class DirFD:
 # File stream wrapper
 # ---------------------------------------------------------------------------
 
+class IoVec:
+    """One run of bytes waiting to be written.
+
+    `std.iov` settles what a value's bytes are; this holds them, so a
+    program can put a run in an array, count the array, and hand the
+    whole of it to `writev` as one call.  It is opaque on purpose: a
+    run is a thing to write, not a thing to read back or take apart.
+    """
+
+    __slots__ = ("data",)
+
+    def __init__(self, data: bytes):
+        self.data = data
+
+    def display(self) -> str:
+        return f"<std.iovec {len(self.data)} bytes>"
+
+
 class FileStream:
     """Wrapper around an opened file descriptor.
 
@@ -582,33 +600,39 @@ class FileStream:
             view = view[n:]
         return none()
 
-    def writev(self, *parts):
-        """Write several pieces in one call, as writev(2) does.
+    def writev(self, runs):
+        """Write the runs in one call, as writev(2) does.
 
-        Each argument is one piece and becomes one iovec entry: a byte
-        array, a struct with a defined layout, or an array of such
-        structs -- a table, written element after element as C lays an
-        array out.  The pieces reach the file in the order given and
-        with nothing between them, which is what makes this the way to
-        write a binary format whose parts are described rather than
-        assembled: the description stays typed and the kernel does the
-        joining.
+        The argument is an array of `std.iovec`, each made by
+        `std.iov`, and each becomes one entry of the vector the kernel
+        is handed.  The runs reach the file in the order the array has
+        them and with nothing between them, which is what makes this
+        the way to write a binary format whose parts are described
+        rather than assembled: the description stays typed and the
+        kernel does the joining.
 
         Writing is a statement rather than a value-producing
         expression, so nothing is returned; a write that cannot
         complete raises.
         """
-        from interp.pack import PackError, collect_lookup, iov_bytes
-        from interp.value import none
+        from interp.value import ArrayValue, ObjectValue, UnitValue, none
 
         self._check_open("writev")
-        lookup = collect_lookup(parts)
+        held = runs.obj if isinstance(runs, ObjectValue) else runs
+        if not isinstance(held, ArrayValue):
+            raise TypeError(
+                "file.writev: the runs to write are one array of "
+                "std.iovec; std.iov makes one")
         chunks = []
-        for index, part in enumerate(parts):
-            try:
-                chunks.append(iov_bytes(part, lookup, index))
-            except PackError as e:
-                raise TypeError(f"file.writev: {e}") from None
+        for index, element in enumerate(held.elements):
+            run = element
+            while isinstance(run, (UnitValue, ObjectValue)):
+                run = (run.inner if isinstance(run, UnitValue) else run.obj)
+            if not isinstance(run, IoVec):
+                raise TypeError(
+                    f"file.writev: run {index} is not one std.iov made; "
+                    f"it is {type(run).__name__}")
+            chunks.append(run.data)
         # A short writev leaves the remaining pieces unwritten, so the
         # loop resumes from wherever the kernel stopped rather than
         # trusting one call to place everything.
@@ -1424,6 +1448,27 @@ class StdModule:
         if self._syntax is None:
             self._syntax = SyntaxModule()
         return self._syntax
+
+    def iov(self, args):
+        """iov(x) -- the run of bytes x amounts to, ready to be written.
+
+        A run is made from one of three things: a byte array, which is
+        already its own bytes; a struct with a defined layout, which is
+        packed as that layout describes; or an array of such structs --
+        a table -- which is packed element after element, as C lays an
+        array out.  The bytes are settled here, where the value is, so
+        that a run handed to `writev` later is a run and not a promise.
+        """
+        from interp.pack import PackError, collect_lookup, iov_bytes
+        from interp.value import ObjectValue
+
+        if len(args) != 1:
+            raise TypeError("iov(x) takes exactly 1 argument")
+        try:
+            raw = iov_bytes(args[0], collect_lookup(args), 0)
+        except PackError as e:
+            raise TypeError(f"std.iov: {e}") from None
+        return ObjectValue(IoVec(raw))
 
     def bytes(self, args):
         """bytes(str) -- create a byte[] array from a UTF-8 string."""

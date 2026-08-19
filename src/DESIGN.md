@@ -791,10 +791,19 @@ The file's own structures — `Elf64_Ehdr`, `Elf64_Phdr`, `Elf64_Shdr`,
 structs with the field names `<elf.h>` uses, and are written out as
 themselves.  Nothing pushes a header into a byte array a half-word at
 a time, and there is no single image: `build_elf` answers an `Elf`
-holding the fourteen pieces the file is made of, and the writer hands
-all of them to `writev` in one call.  A table — the program headers,
-the symbols, the section headers — is an array of its entry type and
-one piece, so the kernel does the joining that a buffer used to.
+holding the fourteen pieces the file is made of, `std.iov` turns each
+into a `std.iovec`, and the writer hands the array of them to `writev`
+in one call.  A table — the program headers, the symbols, the section
+headers — is an array of its entry type and one run, so the kernel
+does the joining that a buffer used to.
+
+A run is a value rather than an argument position, which is what lets
+the writer build its list the way it builds anything else: push in a
+loop, count what it has, hand the array over.  `std.iov` settles the
+bytes where it is called — a byte array is already its own bytes, a
+struct is packed by a straight-line sequence the lowering emits from
+the layout, a table is that same sequence inside a loop — so a run
+carries a base and a length and nothing that still has to happen.
 
 Only what ELF gives no structure to stays a run of bytes: the text,
 the read-only and writable images, the two string tables, and the
