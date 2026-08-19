@@ -445,6 +445,30 @@ code at all, because a cube at runtime is an array of matrices and
 every one of those paths already walked one type deeper by asking
 `elem_of`.
 
+@repr(C), writev and the ELF structures came in as one line of work,
+and the interesting part is what the last step found.  Declaring the
+headers as structs and writing them with writev is mostly a
+translation; the fields become typed, which is the whole point, and a
+typed field refuses what a byte push accepted.  Two bugs fell out
+immediately.  `_start` was reported as 960 KB long because the symbol
+list ran entry point, runtime, functions while the text runs entry
+point, functions, runtime -- so its size was the distance to something
+far past it.  And the symbol at the seam had a negative size, which
+`push64` had been masking into a large positive one for as long as the
+symbol table has existed.  Neither was visible while the header was a
+sequence of `& 255`; both were an abort the first time a `u64` field
+was asked to hold the value.
+
+The second lesson is smaller and worth writing down anyway: a runtime
+routine's id is its place in the list, not its place in the code.
+That was true by accident until a routine was written next to the one
+it belongs beside rather than at the end of the emitter, and the
+symbol table -- which walks ids -- came out unsorted.  The fix sorts
+the few dozen surviving routines by address rather than trying to keep
+two orders in agreement, because keeping them in agreement is exactly
+the kind of invariant that holds until someone edits the middle of a
+function.
+
 ## The Plan for Attempt 3 (sketch)
 
 1. Structs by value: `@repr`-style layout in slots or heap, field

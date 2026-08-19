@@ -8441,9 +8441,9 @@ impl Lower:
             self.ir(IR_CONST, 8 × @dropunit(bi), 0, 0, sh, 0)
             let shifted : i64 = self.tmp()
             self.ir(IR_SHRR, v, sh, 0, shifted, 64 + 256)
-            let byte : i64 = self.tmp()
-            self.ir(IR_BAND, shifted, m, 0, byte, 64 + 256)
-            self.pack_byte(buf, byte)
+            let low : i64 = self.tmp()
+            self.ir(IR_BAND, shifted, m, 0, low, 64 + 256)
+            self.pack_byte(buf, low)
         pos + sz
 
     // generate(f, r): the range written out, then one call per step
@@ -12649,10 +12649,97 @@ let SIZE_MAX_OPT : i64 = 1073741824   // a gibibyte is past any real need
 fn align_up(v : i64, a : i64) → i64:
     ((v + a - 1) ÷ a ?? 0) × a
 
-fn push16(out : &mut u8[], v : i64):
-    out.push(@wrap(v) & 255)
-    out.push(@wrap(v » 8) & 255)
+// The file's own structures, as <elf.h> declares them.  They are
+// written out as themselves rather than assembled byte by byte: a
+// header is a statement about where things are, and stating it as a
+// struct with a defined layout keeps the statement and the bytes the
+// same thing.  Only what ELF gives no structure to -- the code, the
+// read-only and writable images, the string tables, the gaps between
+// segments -- stays a run of bytes.
 
+@repr(C)
+struct Elf64_Ehdr:
+    e_ident : u8[16]
+    e_type : u16
+    e_machine : u16
+    e_version : u32
+    e_entry : u64
+    e_phoff : u64
+    e_shoff : u64
+    e_flags : u32
+    e_ehsize : u16
+    e_phentsize : u16
+    e_phnum : u16
+    e_shentsize : u16
+    e_shnum : u16
+    e_shstrndx : u16
+
+@repr(C)
+struct Elf64_Phdr:
+    p_type : u32
+    p_flags : u32
+    p_offset : u64
+    p_vaddr : u64
+    p_paddr : u64
+    p_filesz : u64
+    p_memsz : u64
+    p_align : u64
+
+@repr(C)
+struct Elf64_Shdr:
+    sh_name : u32
+    sh_type : u32
+    sh_flags : u64
+    sh_addr : u64
+    sh_offset : u64
+    sh_size : u64
+    sh_link : u32
+    sh_info : u32
+    sh_addralign : u64
+    sh_entsize : u64
+
+@repr(C)
+struct Elf64_Sym:
+    st_name : u32
+    st_info : u8
+    st_other : u8
+    st_shndx : u16
+    st_value : u64
+    st_size : u64
+
+// what the constants in <elf.h> are called, so the code that uses them
+// reads as the specification does
+let PT_LOAD : i64 = 1
+let PT_GNU_STACK : i64 = 1685382481
+let PT_GNU_RELRO : i64 = 1685382482
+let PF_X : i64 = 1
+let PF_W : i64 = 2
+let PF_R : i64 = 4
+let SHT_PROGBITS : i64 = 1
+let SHT_SYMTAB : i64 = 2
+let SHT_STRTAB : i64 = 3
+let SHF_WRITE : i64 = 1
+let SHF_ALLOC : i64 = 2
+let SHF_EXECINSTR : i64 = 4
+let STB_LOCAL : i64 = 0
+let STB_GLOBAL : i64 = 1
+let STT_FUNC : i64 = 2
+let ET_EXEC : i64 = 2
+let EM_X86_64 : i64 = 62
+let EV_CURRENT : i64 = 1
+let SHN_TEXT : i64 = 1        // the first section header is the absent one
+
+// One symbol: what it is called, where it starts, how long it is, and
+// whether anything outside may link against it.
+struct Sym:
+    name : str
+    value : i64          // the offset within the text, made absolute below
+    size : i64
+    is_global : bool
+
+// The images ELF gives no structure to -- the read-only and writable
+// data -- are built a word at a time, since what they hold is the
+// program's, not the format's.
 fn push32(out : &mut u8[], v : i64):
     out.push(@wrap(v) & 255)
     out.push(@wrap(v » 8) & 255)
@@ -12663,55 +12750,58 @@ fn push64(out : &mut u8[], v : i64):
     push32(&out, v)
     push32(&out, v » 32)
 
-// One symbol: what it is called, where it starts, how long it is, and
-// whether anything outside may link against it.
-struct Sym:
-    name : str
-    value : i64          // the offset within the text, made absolute below
-    size : i64
-    is_global : bool
+// n bytes of nothing, which is what a gap between segments is and what
+// the file has no structure for
+@pre(n >= 0)
+@post(r: @dropunit(#r) = n)
+fn zeros(n : i64) → u8[]:
+    let out : mut u8[] = []
+    let i : mut i64 = 0
+    while i < n:
+        out.push(0)
+        i ← i + 1
+    out
 
-// one section header, in the order the specification writes its fields
-fn push_shdr(out : &mut u8[], name : i64, kind : i64, flags : i64,
-             addr : i64, off : i64, size : i64, link : i64, info : i64,
-             align : i64, entsize : i64):
-    // the eight-byte fields are written as their two halves: a borrow
-    // handed on twice is one borrow too many for the bootstrap
-    push32(&out, name)
-    push32(&out, kind)
-    push32(&out, flags)
-    push32(&out, flags » 32)
-    push32(&out, addr)
-    push32(&out, addr » 32)
-    push32(&out, off)
-    push32(&out, off » 32)
-    push32(&out, size)
-    push32(&out, size » 32)
-    push32(&out, link)
-    push32(&out, info)
-    push32(&out, align)
-    push32(&out, align » 32)
-    push32(&out, entsize)
-    push32(&out, entsize » 32)
+// The file, as the pieces it is made of and in the order they are
+// written.  Nothing here is a single array of everything: each piece
+// keeps its own shape until the kernel is handed all of them at once.
+struct Elf:
+    ehdr : Elf64_Ehdr
+    phdrs : Elf64_Phdr[]
+    gap_text : u8[]
+    code : u8[]
+    gap_ro : u8[]
+    rodata : u8[]
+    gap_data : u8[]
+    data : u8[]
+    gap_syms : u8[]
+    syms : Elf64_Sym[]
+    strtab : u8[]
+    shstrtab : u8[]
+    gap_shdrs : u8[]
+    shdrs : Elf64_Shdr[]
 
-// what the ELF header could not know until the file was laid out
-fn patch32_at(out : &mut u8[], at : i64, v : i64):
-    // a u8[] is measured in bytes, which is what an offset into the
-    // file already is
-    out[at × 1¤byte] ← @wrap(v) & 255
-    out[(at + 1) × 1¤byte] ← @wrap(v » 8) & 255
-    out[(at + 2) × 1¤byte] ← @wrap(v » 16) & 255
-    out[(at + 3) × 1¤byte] ← @wrap(v » 24) & 255
+// a program header, whose fields are the same shape every time
+fn phdr(kind : i64, flags : i64, off : i64, vaddr : i64,
+        filesz : i64, memsz : i64, align : i64) → Elf64_Phdr:
+    (Elf64_Phdr{p_type: @wrap(kind), p_flags: @wrap(flags),
+                p_offset: @wrap(off), p_vaddr: @wrap(vaddr),
+                p_paddr: @wrap(vaddr), p_filesz: @wrap(filesz),
+                p_memsz: @wrap(memsz), p_align: @wrap(align)})
 
-fn patch64_at(out : &mut u8[], at : i64, v : i64):
-    patch32_at(&out, at, v)
-    patch32_at(&out, at + 4, v » 32)
+fn shdr(name : i64, kind : i64, flags : i64, addr : i64, off : i64,
+        size : i64, link : i64, info : i64, align : i64,
+        entsize : i64) → Elf64_Shdr:
+    (Elf64_Shdr{sh_name: @wrap(name), sh_type: @wrap(kind),
+                sh_flags: @wrap(flags), sh_addr: @wrap(addr),
+                sh_offset: @wrap(off), sh_size: @wrap(size),
+                sh_link: @wrap(link), sh_info: @wrap(info),
+                sh_addralign: @wrap(align), sh_entsize: @wrap(entsize)})
 
 @pre(#code > 0 and stack_size > 0)
 @pre(relro_size >= 0 and (relro_size % PAGE ?? 1) = 0)
-@post(r: #r > 4096)
 fn build_elf(code : u8[], rodata : u8[], data : u8[], stack_size : i64,
-             relro_size : i64, syms : Sym[]) → u8[]:
+             relro_size : i64, syms : Sym[]) → Elf:
     let text_off : i64 = PAGE
     let text_vaddr : i64 = IMAGE_BASE + text_off
     let text_size : i64 = @dropunit(#code)
@@ -12721,123 +12811,33 @@ fn build_elf(code : u8[], rodata : u8[], data : u8[], stack_size : i64,
     let d_off : i64 = align_up(ro_off + ro_size, PAGE)
     let d_vaddr : i64 = IMAGE_BASE + d_off
     let d_size : i64 = @dropunit(#data)
-    let out : mut u8[] = []
-    out.push(127)
-    out.push(69)
-    out.push(76)
-    out.push(70)
-    out.push(2)
-    out.push(1)
-    out.push(1)
-    foreach _ := 1…9:
-        out.push(0)
-    push32(&out, 2 + (62 « 16))
-    push32(&out, 1)
-    push64(&out, text_vaddr)
-    push64(&out, 64)
-    push64(&out, 0)                 // e_shoff, filled in once it is known
-    push32(&out, 0)
-    push32(&out, 64 + (56 « 16))
-    push32(&out, 6 + (64 « 16))     // e_phnum, e_shentsize
-    push32(&out, 0)                 // e_shnum and e_shstrndx, filled in below
-    // the headers themselves, mapped read-only: the kernel points
-    // AT_PHDR at them, and a program that means to follow its own
-    // program headers has to be able to read them
-    push32(&out, 1)
-    push32(&out, 4)
-    push64(&out, 0)
-    push64(&out, IMAGE_BASE)
-    push64(&out, IMAGE_BASE)
-    push64(&out, PAGE)
-    push64(&out, PAGE)
-    push64(&out, PAGE)
-    // text
-    push32(&out, 1)
-    push32(&out, 5)
-    push64(&out, text_off)
-    push64(&out, text_vaddr)
-    push64(&out, text_vaddr)
-    push64(&out, text_size)
-    push64(&out, text_size)
-    push64(&out, PAGE)
-    // rodata
-    push32(&out, 1)
-    push32(&out, 4)
-    push64(&out, ro_off)
-    push64(&out, ro_vaddr)
-    push64(&out, ro_vaddr)
-    push64(&out, ro_size)
-    push64(&out, ro_size)
-    push64(&out, PAGE)
-    // data
-    push32(&out, 1)
-    push32(&out, 6)
-    push64(&out, d_off)
-    push64(&out, d_vaddr)
-    push64(&out, d_vaddr)
-    push64(&out, d_size)
-    push64(&out, d_size)
-    push64(&out, PAGE)
-    // PT_GNU_RELRO: the head of the writable segment, which holds what
-    // is written before @start and never after.  A dynamic loader would
-    // seal it; nothing loads a static program but itself, so the
-    // program seals it, following this entry as any loader would.
-    push32(&out, 1685382482)
-    push32(&out, 4)
-    push64(&out, d_off)
-    push64(&out, d_vaddr)
-    push64(&out, d_vaddr)
-    push64(&out, relro_size)
-    push64(&out, relro_size)
-    push64(&out, 1)
-    // PT_GNU_STACK: read and write, and pointedly not execute.  Absent,
-    // the kernel falls back to an executable stack; present, it says
-    // what this program wants, and its size says how much.
-    push32(&out, 1685382481)
-    push32(&out, 6)
-    push64(&out, 0)
-    push64(&out, 0)
-    push64(&out, 0)
-    push64(&out, 0)
-    push64(&out, stack_size)
-    push64(&out, 16)
-    while @dropunit(#out) < text_off:
-        out.push(0)
-    foreach b := code:
-        out.push(b)
-    while @dropunit(#out) < ro_off:
-        out.push(0)
-    foreach b := rodata:
-        out.push(b)
-    while @dropunit(#out) < d_off:
-        out.push(0)
-    foreach b := data:
-        out.push(b)
-    // Past the last thing the kernel loads: the symbol table, the
-    // strings its names live in, and the section headers that say
-    // where all of it is.  None of this is in a segment, so none of it
-    // is mapped -- it is there for whoever reads the file.
-    //
+
     // A symbol table names the locals first and the globals after, and
     // says in the section's own header where the first global sits;
     // readers rely on that, so the two runs are built separately.
     let strtab : mut u8[] = []
     strtab.push(0)
-    let soff : mut i64[] = []
-    let sval : mut i64[] = []
-    let ssz : mut i64[] = []
-    let nlocal ¤ptrdiff : mut i64 = 0
+    let symtab : mut Elf64_Sym[] = []
+    // the first symbol is the absent one, all zeroes
+    symtab.push(Elf64_Sym{st_name: 0, st_info: 0, st_other: 0, st_shndx: 0,
+                          st_value: 0, st_size: 0})
+    let nlocal : mut i64 = 0
     foreach want := 0…1:
         foreach sy := syms:
             if (1 if sy.is_global else 0) = want:
-                soff.push(@dropunit(#strtab))
-                sval.push(sy.value)
-                ssz.push(sy.size)
+                let bind : i64 = STB_GLOBAL if sy.is_global else STB_LOCAL
+                symtab.push(Elf64_Sym{st_name: @wrap(@dropunit(#strtab)),
+                                      st_info: @wrap(bind × 16 + STT_FUNC),
+                                      st_other: 0,
+                                      st_shndx: @wrap(SHN_TEXT),
+                                      st_value: @wrap(text_vaddr + sy.value),
+                                      st_size: @wrap(sy.size)})
                 foreach b := std.bytes(sy.name):
                     strtab.push(b)
                 strtab.push(0)
                 if want = 0:
                     nlocal ← nlocal + 1
+
     let shstr : mut u8[] = []
     shstr.push(0)
     let shname : mut i64[] = []
@@ -12846,53 +12846,87 @@ fn build_elf(code : u8[], rodata : u8[], data : u8[], stack_size : i64,
         foreach b := std.bytes(nm):
             shstr.push(b)
         shstr.push(0)
-    // the tables sit one after the other, each where the last ended
-    let sym_off : i64 = align_up(@dropunit(#out), 8)
-    let nsym : i64 = @dropunit(#soff) + 1
-    let str_off : i64 = sym_off + 24 × nsym
+
+    // Past the last thing the kernel loads: the symbol table, the
+    // strings its names live in, and the section headers that say
+    // where all of it is.  None of this is in a segment, so none of it
+    // is mapped -- it is there for whoever reads the file.  Every
+    // offset is settled here, before anything is written, which is why
+    // nothing has to be patched afterwards.
+    let nsym : i64 = @dropunit(#symtab)
+    let sym_off : i64 = align_up(d_off + d_size, 8)
+    let sym_size : i64 = @dropunit(@sizeof(Elf64_Sym)) × nsym
+    let str_off : i64 = sym_off + sym_size
     let shstr_off : i64 = str_off + @dropunit(#strtab)
     let sh_off : i64 = align_up(shstr_off + @dropunit(#shstr), 8)
-    while @dropunit(#out) < sym_off:
-        out.push(0)
-    // the first symbol is the absent one, all zeroes
-    foreach _ := 1…24:
-        out.push(0)
-    foreach i := 0…#soff - 1:
-        push32(&out, soff[i])
-        // a function, local until the definition said @export
-        out.push(2 if i < nlocal else 18)
-        out.push(0)
-        push16(&out, 1)              // the text section holds it
-        push64(&out, IMAGE_BASE + PAGE + sval[i])
-        push64(&out, ssz[i])
-    foreach b := strtab:
-        out.push(b)
-    foreach b := shstr:
-        out.push(b)
-    while @dropunit(#out) < sh_off:
-        out.push(0)
+    assert((sh_off % 8 ?? 1) = 0, "the section headers are aligned")
+
+    let phdrs : mut Elf64_Phdr[] = []
+    // the headers themselves, mapped read-only: the kernel points
+    // AT_PHDR at them, and a program that means to follow its own
+    // program headers has to be able to read them
+    phdrs.push(phdr(PT_LOAD, PF_R, 0, IMAGE_BASE, PAGE, PAGE, PAGE))
+    phdrs.push(phdr(PT_LOAD, PF_R + PF_X, text_off, text_vaddr,
+                    text_size, text_size, PAGE))
+    phdrs.push(phdr(PT_LOAD, PF_R, ro_off, ro_vaddr, ro_size, ro_size, PAGE))
+    phdrs.push(phdr(PT_LOAD, PF_R + PF_W, d_off, d_vaddr, d_size, d_size, PAGE))
+    // PT_GNU_RELRO: the head of the writable segment, which holds what
+    // is written before @start and never after.  A dynamic loader would
+    // seal it; nothing loads a static program but itself, so the
+    // program seals it, following this entry as any loader would.
+    phdrs.push(phdr(PT_GNU_RELRO, PF_R, d_off, d_vaddr,
+                    relro_size, relro_size, 1))
+    // PT_GNU_STACK: read and write, and pointedly not execute.  Absent,
+    // the kernel falls back to an executable stack; present, it says
+    // what this program wants, and its size says how much.
+    phdrs.push(phdr(PT_GNU_STACK, PF_R + PF_W, 0, 0, 0, stack_size, 16))
+
+    let nph : i64 = @dropunit(#phdrs)
+    let hdrs_size : i64 = @dropunit(@sizeof(Elf64_Ehdr)) + @dropunit(@sizeof(Elf64_Phdr)) × nph
+    assert(hdrs_size <= text_off, "the headers fit the page before the text")
+
+    let shdrs : mut Elf64_Shdr[] = []
     // section headers: the absent one, then what the file holds
-    foreach _ := 1…64:
-        out.push(0)
-    push_shdr(&out, shname[0], 1, 6, text_vaddr, text_off, text_size, 0, 0, 16, 0)
-    push_shdr(&out, shname[1], 1, 2, ro_vaddr, ro_off, ro_size, 0, 0, 8, 0)
-    push_shdr(&out, shname[2], 1, 3, d_vaddr, d_off, d_size, 0, 0, 8, 0)
-    push_shdr(&out, shname[3], 2, 0, 0, sym_off, 24 × nsym, 5, @dropunit(nlocal) + 1, 8, 24)
-    push_shdr(&out, shname[4], 3, 0, 0, str_off, @dropunit(#strtab), 0, 0, 1, 0)
-    push_shdr(&out, shname[5], 3, 0, 0, shstr_off, @dropunit(#shstr), 0, 0, 1, 0)
-    // the header said where the section headers are once they exist
-    // e_shnum in the low half, e_shstrndx in the high: the names of
-    // the sections live in the last of them
-    patch32_at(&out, 60, 7 + (6 « 16))
-    patch64_at(&out, 40, sh_off)
-    out
+    shdrs.push(shdr(0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+    shdrs.push(shdr(shname[0], SHT_PROGBITS, SHF_ALLOC + SHF_EXECINSTR,
+                    text_vaddr, text_off, text_size, 0, 0, 16, 0))
+    shdrs.push(shdr(shname[1], SHT_PROGBITS, SHF_ALLOC,
+                    ro_vaddr, ro_off, ro_size, 0, 0, 8, 0))
+    shdrs.push(shdr(shname[2], SHT_PROGBITS, SHF_WRITE + SHF_ALLOC,
+                    d_vaddr, d_off, d_size, 0, 0, 8, 0))
+    shdrs.push(shdr(shname[3], SHT_SYMTAB, 0, 0, sym_off, sym_size,
+                    5, nlocal + 1, 8, @dropunit(@sizeof(Elf64_Sym))))
+    shdrs.push(shdr(shname[4], SHT_STRTAB, 0, 0, str_off,
+                    @dropunit(#strtab), 0, 0, 1, 0))
+    shdrs.push(shdr(shname[5], SHT_STRTAB, 0, 0, shstr_off,
+                    @dropunit(#shstr), 0, 0, 1, 0))
+    let nsh : i64 = @dropunit(#shdrs)
+
+    let ehdr : Elf64_Ehdr = (Elf64_Ehdr{
+        e_ident: [127, 69, 76, 70, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        e_type: @wrap(ET_EXEC), e_machine: @wrap(EM_X86_64),
+        e_version: @wrap(EV_CURRENT), e_entry: @wrap(text_vaddr),
+        e_phoff: @wrap(@dropunit(@sizeof(Elf64_Ehdr))), e_shoff: @wrap(sh_off),
+        e_flags: 0, e_ehsize: @wrap(@dropunit(@sizeof(Elf64_Ehdr))),
+        e_phentsize: @wrap(@dropunit(@sizeof(Elf64_Phdr))), e_phnum: @wrap(nph),
+        e_shentsize: @wrap(@dropunit(@sizeof(Elf64_Shdr))), e_shnum: @wrap(nsh),
+        e_shstrndx: @wrap(nsh - 1)})
+
+    (Elf{ehdr: ehdr, phdrs: phdrs,
+        gap_text: zeros(text_off - hdrs_size), code: code,
+        gap_ro: zeros(ro_off - (text_off + text_size)), rodata: rodata,
+        gap_data: zeros(d_off - (ro_off + ro_size)), data: data,
+        gap_syms: zeros(sym_off - (d_off + d_size)), syms: symtab,
+        strtab: strtab, shstrtab: shstr,
+        gap_shdrs: zeros(sh_off - (shstr_off + @dropunit(#shstr))),
+        shdrs: shdrs})
 
 // ---------------------------------------------------------------------------
 // Putting the pieces together
 // ---------------------------------------------------------------------------
 
 struct Compiled:
-    elf : u8[]
+    elf : Elf
     log : str[]
     diags : Diag[]
 
@@ -13472,25 +13506,18 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
         cdiags.push(Diag{line: 1, col: 1,
                          msg: "a function claims " ⧺ i64_str(em.max_frame) ⧺ " bytes of stack, and the whole stack is " ⧺ i64_str(stack_size) ⧺ "; raise --stack-size"})
     // The symbols, in the order the code lays them out: the entry
-    // point, the runtime's routines, then the program's own functions
-    // and the ones the compiler synthesized behind them.  Each runs
-    // until the next begins, and the last runs to the end of the text.
+    // point, the program's own functions, the ones the compiler
+    // synthesized behind them, and the runtime last, which is where
+    // the emitter puts it so that a routine nobody reached can be left
+    // out.  Each symbol runs until the next begins, and the last runs
+    // to the end of the text, so this list has to be in address order
+    // or a size comes out as the distance to somewhere behind it.
     let sname : mut str[] = []
     let soffs : mut i64[] = []
     let sglob : mut bool[] = []
     sname.push("_start")
     soffs.push(0)
     sglob.push(false)
-    let rtn := rt_names()
-    assert(@dropunit(#rtn) = nrt, "one name for every runtime routine")
-    if #em.rt_off > 0:
-        foreach i := 0…#em.rt_off - 1:
-            // a routine nobody reached is in no binary, and so is no
-            // symbol either
-            if em.rt_off[i] ≠ ⁻1:
-                sname.push(rtn[i])
-                soffs.push(em.rt_off[i])
-                sglob.push(false)
     foreach i := 0…#a.fns - 1:
         sname.push(fn_symbol(a, toks, src, @dropunit(i)))
         soffs.push(em.fn_off[i])
@@ -13510,11 +13537,46 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
         sname.push(synth[j])
         soffs.push(em.fn_off[(nfns + @dropunit(j)) × 1¤ptrdiff])
         sglob.push(false)
+    // The runtime comes last in the text, but a routine's id is its
+    // place in the list rather than its place in the code -- the two
+    // agreed until a routine was written next to the one it belongs
+    // beside instead of at the end.  Rather than depend on that
+    // agreement, the routines that survived are put in address order
+    // here.  There are a few dozen of them, so the plainest sort is
+    // the right one.
+    let rtn := rt_names()
+    assert(@dropunit(#rtn) = nrt, "one name for every runtime routine")
+    let rname : mut str[] = []
+    let roff : mut i64[] = []
+    if #em.rt_off > 0:
+        foreach i := 0…#em.rt_off - 1:
+            // a routine nobody reached is in no binary, and so is no
+            // symbol either
+            if em.rt_off[i] ≠ ⁻1:
+                let at : i64 = em.rt_off[i]
+                let nm : str = rtn[i]
+                let k : mut i64 = @dropunit(#roff)
+                rname.push(nm)
+                roff.push(at)
+                while k > 0 and roff[(k - 1) × 1¤ptrdiff] > at:
+                    rname[k × 1¤ptrdiff] ← rname[(k - 1) × 1¤ptrdiff]
+                    roff[k × 1¤ptrdiff] ← roff[(k - 1) × 1¤ptrdiff]
+                    k ← k - 1
+                rname[k × 1¤ptrdiff] ← nm
+                roff[k × 1¤ptrdiff] ← at
+    if #roff > 0:
+        foreach i := 0…#roff - 1:
+            sname.push(rname[i])
+            soffs.push(roff[i])
+            sglob.push(false)
     assert(#sname = #soffs and #sname = #sglob, "one of each per symbol")
     let syms : mut Sym[] = []
     foreach i := 0…#sname - 1:
         let here : i64 = soffs[i]
         let next : i64 = soffs[i + 1] if i + 1 < #soffs else text_size
+        // in address order, so a symbol's size is the distance to the
+        // next one and never a distance backwards
+        assert(next >= here, "the symbols run up the text")
         syms.push(Sym{name: sname[i], value: here, size: next - here,
                       is_global: sglob[i]})
     (Compiled{elf: build_elf(em.code, rodata, data, stack_size, relro_size,
@@ -13738,6 +13800,12 @@ fn main() → u8:
     // as every Unix compiler has it: a.out unless -o names the file
     let outname : str = output if output ≠ "" else "a.out"
     let outf := std.fs.cwd().create_file(outname, 493)
-    outf.write(compiled.elf)
+    // one entry of the vector for each thing the file is made of; the
+    // kernel joins them, so nothing here ever holds the whole image
+    let e := compiled.elf
+    outf.writev(e.ehdr, e.phdrs, e.gap_text, e.code,
+                e.gap_ro, e.rodata, e.gap_data, e.data,
+                e.gap_syms, e.syms, e.strtab, e.shstrtab,
+                e.gap_shdrs, e.shdrs)
     outf.close()
     0

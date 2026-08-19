@@ -784,6 +784,36 @@ string descriptors, jump tables), data R+W (globals' initial values
 and the allocator state).  No libc, no relocations at run time —
 every address is patched at layout.
 
+### The File Is Written, Not Assembled
+
+The file's own structures — `Elf64_Ehdr`, `Elf64_Phdr`, `Elf64_Shdr`,
+`Elf64_Sym` — are declared in the compiler's source as `@repr(C)`
+structs with the field names `<elf.h>` uses, and are written out as
+themselves.  Nothing pushes a header into a byte array a half-word at
+a time, and there is no single image: `build_elf` answers an `Elf`
+holding the fourteen pieces the file is made of, and the writer hands
+all of them to `writev` in one call.  A table — the program headers,
+the symbols, the section headers — is an array of its entry type and
+one piece, so the kernel does the joining that a buffer used to.
+
+Only what ELF gives no structure to stays a run of bytes: the text,
+the read-only and writable images, the two string tables, and the
+gaps between segments.  A struct's own padding is written as zeros by
+the packer, so the same source still produces the same file.
+
+Two things follow from writing structures instead of bytes.  Every
+offset is now settled before anything is written — `e_shoff` used to
+be patched back into the header afterwards, and there is no patching
+left.  And the fields are typed, which found two bugs the byte-pushing
+had hidden: `_start`'s size was the distance to the first *runtime*
+routine rather than to the next function (960 KB in a 1 MB binary),
+and the symbol after the last runtime routine had a negative size that
+`push64`'s masking quietly turned into a large positive one.  Both
+were one mistake — the symbol list was not in address order.  The
+functions come before the runtime in the text, and a runtime routine's
+id is its place in the list rather than its place in the code, so the
+surviving routines are sorted by address before their sizes are taken.
+
 ## The Lexer's Future: the Mask Pipeline
 
 The current lexer is the scalar, table-driven shape of a design meant
