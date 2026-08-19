@@ -833,6 +833,73 @@ functions come before the runtime in the text, and a runtime routine's
 id is its place in the list rather than its place in the code, so the
 surviving routines are sorted by address before their sizes are taken.
 
+## Six Targets, One Driver
+
+The backend is a pioneer and a framework.  x86-64 keeps the original
+hand-tuned emitter; every other architecture arrives through a shared
+retargetable path, so a new one is a spelling exercise rather than a
+port.
+
+**A Target descriptor** carries what varies: the ELF machine number
+and class, the pointer width, the Linux syscall numbers, e_flags, and
+the per-arch quirks (O_DIRECTORY, st_size's offset, whether the arch
+even has fstat).  `--target=A` selects a row, defaulting to the host.
+
+**One ELF plan, two spellings.**  `plan_elf` computes every offset and
+table once; `elf_file64`/`elf_file32` are dumb loops into the @repr(C)
+structures, including the two field reorderings the 32-bit format asks
+for.
+
+**An abstract machine** of four 64-bit registers and slot-resident IR
+values, with ~40 operations.  The driver `t_emit_fn` composes every IR
+op from those once; the x86-64 emitter stays as the measure.
+
+**The runtime is written once as IR** and compiled by the same driver
+for whichever target is asked, so 47 routines exist in a single
+portable spelling.  What 64-bit hardware does in one instruction the
+32-bit targets get as shared software: 64-bit divide/remainder
+(shift-and-subtract) and multiply-overflow (four half-products), as
+RT_*64 helpers the IR builders never recurse into.
+
+**The instruction layers**, each verified against llvm-mc before use:
+aarch64 (~60 fixed-width words), riscv64 (RV64IM, flags materialized
+since RISC-V has none), i386 and arm (8-byte model carried in memory
+cell-pairs, since neither has 64-bit registers), and riscv32 (the
+RV64 encoders reused with pair arithmetic).
+
+Every target runs all 61 conformance programs and all 16 shared
+--test files byte-identical with the interpreter, under qemu for the
+cross targets and the native loader for i386.
+
+### What the ports taught
+
+Almost every bug was a byte, and almost every one was caught by a
+tool rather than by reasoning:
+
+- **llvm-mc is the second reader.**  Verifying encodings before use
+  caught eight hand-converted aarch64 constants; a later cross-check
+  caught that a sweep of corrections had chained two replacements and
+  turned every 64-bit load into a store.
+- **The compiler's own checked arithmetic caught its own bugs.**
+  movn's ~v overflowed on INT_MIN; the RISC-V large-constant seam
+  carried on INT_MAX's low half — both aborted the compiler on itself
+  until the @wrap was written where the wrap was meant.
+- **A syscall answer is not wholly signed.**  Sign-extending a 32-bit
+  return turns a high mmap address into an error; only the errno band
+  (−4096..−1) is negative.
+- **The quirks live in the row, not the code.**  O_DIRECTORY is
+  0x10000 on x86 and RISC-V but 0x4000 on ARM; st_size sits at a
+  different offset per 32-bit ABI; RV32 has no fstat at all and reads
+  a size through statx.  Each is a field, discovered by strace and
+  parked in the descriptor.
+- **A shared register is a shared hazard.**  The driver aliases an
+  overflow flag's cell with an operand's in saturating multiply, so
+  the memory-cell targets must compute and park the product before
+  the flag lands; the register targets were immune only by accident.
+  And the rv32 startup clobbered argc with the register it borrowed
+  to zero a cell's high half — one line, and both env and auxv went
+  blank until it moved.
+
 ## The Lexer's Future: the Mask Pipeline
 
 The current lexer is the scalar, table-driven shape of a design meant

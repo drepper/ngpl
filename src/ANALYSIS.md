@@ -518,6 +518,31 @@ gated on the native run only.  The lesson is the mundane one: the
 interpreter is the semantic authority, and a gate that is only run on
 the faster implementation is not the gate.
 
+The six-target backend was the largest single piece of work in the
+compiler so far, and its shape is the lesson.  One hand-tuned pioneer
+(x86-64) fixes the meaning of every IR op; a shared driver composes
+those meanings out of an abstract machine; each new architecture
+teaches the machine ~40 spellings and gets the whole language,
+runtime included, because the runtime is itself IR the driver
+compiles.  Five backends came in behind the first with no change to
+the driver or the runtime -- only instruction layers and a descriptor
+row apiece.
+
+The 32-bit targets were the interesting half.  The language's data
+model is 8 bytes on every target; a 32-bit machine carries it in
+pairs (memory cells on i386/arm, register pairs threaded through the
+RV64 encoders on rv32), and the arithmetic hardware does not have --
+64-bit divide, remainder, multiply-overflow -- became shared software
+the IR builders compile once.
+
+What is worth carrying forward is how the bugs were caught.  Almost
+none were caught by reading the code; they were caught by llvm-mc
+disagreeing about an encoding, by strace showing an unknown syscall,
+by the compiler's own overflow checks aborting it on a seam value, by
+qemu segfaulting on a clobbered register.  The discipline that pays
+is not writing bytes carefully -- it is never trusting a hand-written
+byte without a second reader, and the tools are the second reader.
+
 ## The Plan for Attempt 3 (sketch)
 
 1. Structs by value: `@repr`-style layout in slots or heap, field

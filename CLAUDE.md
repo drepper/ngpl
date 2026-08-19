@@ -126,8 +126,9 @@ Limitations
 -----------
 
 The following limitations are for now acceptable:
-- the compiler generates only x86-64 for Linux.  Other architectures and
-  possibly other OSes will be supported later
+- the compiler now generates x86-64, i386, aarch64, arm and riscv64/32
+  for Linux, selected with --target (default: the host); other OSes
+  will be supported later
 - the ultimate goal is not to rely on existing runtime of the OS but
   instead use only the system call interface.  For the time being it is
   OK to write the compiler as a normal bimary and use existing functionlity
