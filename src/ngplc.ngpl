@@ -788,6 +788,10 @@ impl Lexer:
             if hex_val(self.peek(0)) = ⁻1:
                 self.err("hexadecimal literal without digits")
                 return
+            // A u64 literal past i64 is meant to run negative: the
+            // bit pattern is the value, and the sign is how the reader
+            // below learns the literal is a big one.  This is the
+            // wrapping the annotation is for.
             let digits : mut i64 = 0
             while hex_val(self.peek(0)) ≠ ⁻1:
                 digits ← digits + 1
@@ -799,6 +803,7 @@ impl Lexer:
             if v < 0:
                 big ← 1
         else:
+            // …and the same for a decimal one
             while is_digit(self.peek(0)):
                 let d : i64 = self.peek(0) - 48
                 if self.too_big_dec(v, d):
@@ -2041,6 +2046,10 @@ impl Parser:
                 if self.toks.big[vt × 1¤ptrdiff] » 1 = TY_CHAR:
                     self.err("⁻ negates a number, not a character")
                     return 0
+                // the refusal above keeps the value inside i64, so
+                // nothing wraps today; the annotation is what makes
+                // that still true if ⁻9223372036854775808 is ever
+                // admitted, which is the one value that would
                 return self.mknode(NK_INT, vt,
                                    @wrap(0 - self.toks.val[vt × 1¤ptrdiff]),
                                    self.toks.big[vt × 1¤ptrdiff], 0)
@@ -3854,7 +3863,7 @@ impl Checker:
             return v <= (1 « bits) - 1
         if bits = 64: return true
         let half : i64 = 1 « (bits - 1)
-        v >= @wrap(0 - half) and v <= half - 1
+        v >= 0 - half and v <= half - 1
 
     // give an untyped node the type its context settled on
     // whether an integer value settles into the wanted integer type,
@@ -4365,7 +4374,7 @@ impl Checker:
                             self.derr(ctok, "'" ⧺ self.text(ctok) ⧺ "' does not travel as a value; only a pure function of up to five plain scalars does")
                             self.set_type(id, TY_I64)
                             return
-                        couter.push(@wrap(0 - cf - 1))
+                        couter.push(0 - cf - 1)
                         ctoks.push(ctok)
                         ctys.push(mk_lty(self.lam_intern(cpts, cd.ret)))
                     else:
@@ -4605,6 +4614,9 @@ impl Checker:
             else:
                 self.set_type(id, t)
 
+    // as above: the negation of a folded literal wraps rather than
+    // reports, since the one value that would report is the one a
+    // program is entitled to write
     fn fold_neg(&mut self, id : i64, na : i64):
         let v : i64 = self.a.na[na × 1¤ptrdiff]
         self.a.nkind[id × 1¤ptrdiff] ← NK_INT
@@ -4725,7 +4737,7 @@ impl Checker:
         if gd.is_mut and self.in_contract:
             self.derr(tok, "a contract's condition is pure; '" ⧺ name ⧺ "' is mutable")
         self.set_type(id, gd.ty)
-        self.nslot[id × 1¤ptrdiff] ← @wrap(0 - g - 2)
+        self.nslot[id × 1¤ptrdiff] ← 0 - g - 2
 
     fn elem_of(&self, t : i64) → i64:
         if ty_is_mat(t):
@@ -6477,7 +6489,7 @@ impl Checker:
                     self.adopt(na, gd.ty)
                 elif not self.try_fit(na, gd.ty):
                     self.derr(tok, "'" ⧺ name ⧺ "' holds " ⧺ type_name(gd.ty) ⧺ ", not " ⧺ type_name(self.ty_of(na)))
-                self.nslot[id × 1¤ptrdiff] ← @wrap(0 - g - 2)
+                self.nslot[id × 1¤ptrdiff] ← 0 - g - 2
                 return
             let st : i64 = self.stype[s × 1¤ptrdiff]
             if ty_ref_kind(st) = 2 and not ty_is_arr(ty_strip_ref(st)) and not ty_is_hash(ty_strip_ref(st)) and not ty_is_struct(ty_strip_ref(st)):
@@ -7411,7 +7423,7 @@ impl Lower:
             let slot : i64 = self.nslot[nid × 1¤ptrdiff]
             if slot <= ⁻2:
                 let d : i64 = self.tmp()
-                self.ir(IR_GLOAD, @wrap(0 - slot - 2), 0, 0, d, w)
+                self.ir(IR_GLOAD, 0 - slot - 2, 0, 0, d, w)
                 return d
             if self.a.nb[nid × 1¤ptrdiff] = 1:
                 // an element reference: the slot holds the address
@@ -7504,7 +7516,7 @@ impl Lower:
                     let fb9 : i64 = self.tmp()
                     self.ir(IR_SNEW, 1, 0, 0, fb9, 0)
                     let fa9 : i64 = self.tmp()
-                    self.ir(IR_FADDR, @wrap(0 - cell9 - 1), 0, 0, fa9, 0)
+                    self.ir(IR_FADDR, 0 - cell9 - 1, 0, 0, fa9, 0)
                     self.ir(IR_FSTO, fb9, 0, fa9, 0, 0)
                     self.ir(IR_FSTO, d9l, 1 + ci9, fb9, 0, 0)
                 else:
@@ -8848,7 +8860,7 @@ impl Lower:
             let v : i64 = self.lower_expr(na)
             let slot : i64 = self.nslot[sid × 1¤ptrdiff]
             if slot <= ⁻2:
-                self.ir(IR_GSTORE, @wrap(0 - slot - 2), v, 0, 0, 0)
+                self.ir(IR_GSTORE, 0 - slot - 2, v, 0, 0, 0)
             elif self.a.nb[sid × 1¤ptrdiff] = 1:
                 // through the element's address, back into the array
                 self.ir(IR_FSTO, slot, 0, v, 0, 0)
@@ -9730,7 +9742,7 @@ impl Emit:
     fn b1(&mut self, a : i64):
         if self.skipping = 1:
             return
-        self.code.push(@wrap(a) & 255)
+        self.code.push(a & 255)
 
     fn b2(&mut self, a : i64, b : i64):
         self.b1(a)
@@ -9758,10 +9770,10 @@ impl Emit:
         self.w32(v » 32)
 
     fn patch32(&mut self, pos : i64, v : i64):
-        self.code[pos × 1¤byte] ← @wrap(v) & 255
-        self.code[(pos + 1) × 1¤byte] ← @wrap(v » 8) & 255
-        self.code[(pos + 2) × 1¤byte] ← @wrap(v » 16) & 255
-        self.code[(pos + 3) × 1¤byte] ← @wrap(v » 24) & 255
+        self.code[pos × 1¤byte] ← v & 255
+        self.code[(pos + 1) × 1¤byte] ← (v » 8) & 255
+        self.code[(pos + 2) × 1¤byte] ← (v » 16) & 255
+        self.code[(pos + 3) × 1¤byte] ← (v » 24) & 255
 
     fn patch64(&mut self, pos : i64, v : i64):
         self.patch32(pos, v)
@@ -9775,7 +9787,7 @@ impl Emit:
         self.b1(72 + (4 if reg >= 8 else 0))
         self.b1(139)
         self.b1(133 + ((reg & 7) « 3))
-        self.w32(@wrap(0 - 8 × (slot + 1)))
+        self.w32(0 - 8 × (slot + 1))
 
     fn store(&mut self, reg : i64, slot : i64):
         if reg = 0:
@@ -9786,7 +9798,7 @@ impl Emit:
         self.b1(72 + (4 if reg >= 8 else 0))
         self.b1(137)
         self.b1(133 + ((reg & 7) « 3))
-        self.w32(@wrap(0 - 8 × (slot + 1)))
+        self.w32(0 - 8 × (slot + 1))
 
     // anything that may change rax or be jumped to forgets the memo
     fn raxbar(&mut self):
@@ -9886,7 +9898,7 @@ impl Emit:
                 let st : i64 = self.pj_start[i]
                 if n0 < 0:
                     // a value table: the entries are the data itself
-                    let n : i64 = @wrap(0 - n0)
+                    let n : i64 = 0 - n0
                     self.jt_is_code.push(0)
                     let j : mut i64 = 0
                     while j < n:
@@ -9993,7 +10005,7 @@ impl Emit:
             self.b3(76, 57, 216)             // cmp rax, r11
             self.jglobal(0, 135, RT_OV)      // ja
         else:
-            self.movimm(R_R10, @wrap(0 - (1 « (bits - 1))))
+            self.movimm(R_R10, 0 - (1 « (bits - 1)))
             self.b3(72, 137, 194)            // mov rdx, rax
             self.b3(76, 41, 210)             // sub rdx, r10
             self.movimm(R_R11, (1 « bits) - 1)
@@ -10401,7 +10413,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.store(R_AX, d)
             em.pj_id.push(id2)
             em.pj_start.push(@dropunit(#em.pj_labels))
-            em.pj_len.push(@wrap(0 - span))  // negative: raw values, not labels
+            em.pj_len.push(0 - span)         // negative: raw values, not labels
             let e2 : mut i64 = 0
             while e2 < span:
                 em.pj_labels.push(ir.extra[(b + 3 + e2) × 1¤ptrdiff])
@@ -10450,7 +10462,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.b3(76, 57, 208)               // cmp rax, r10
             em.jglobal(0, 135, RT_BADCHAR)   // ja: past the last, negatives included
             em.b3(72, 141, 136)
-            em.w32(@wrap(0 - 55296))         // lea rcx, [rax - 0xD800]
+            em.w32(⁻55296)                   // lea rcx, [rax - 0xD800]
             em.movimm(R_R10, 2048)
             em.b3(76, 57, 209)               // cmp rcx, r10
             em.jglobal(0, 130, RT_BADCHAR)   // jb: a surrogate
@@ -10596,7 +10608,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
                 else:
                     em.b4(73, 15, 175, 195)      // imul rax, r11
                 if ssgn = 1:
-                    em.movimm(R_CX, @wrap(0 - (1 « (sbits - 1))))
+                    em.movimm(R_CX, 0 - (1 « (sbits - 1)))
                     em.b3(72, 57, 200)           // cmp rax, rcx
                     em.b4(72, 15, 76, 193)       // cmovl rax, rcx
                     em.movimm(R_R10, (1 « (sbits - 1)) - 1)
@@ -10612,7 +10624,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
                     em.b4(73, 15, 71, 194)       // cmova rax, r10
             elif ssgn = 1:
                 em.movimm(R_CX, 9223372036854775807)
-                em.movimm(R_DX, @wrap(0 - 9223372036854775807 - 1))
+                em.movimm(R_DX, 0 - 9223372036854775807 - 1)
                 if o = IR_SATMUL:
                     em.b3(73, 137, 194)          // mov r10, rax
                     em.b3(77, 49, 218)           // xor r10, r11
@@ -10629,7 +10641,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
                 em.b4(72, 15, 64, 193)           // cmovo rax, rcx
             else:
                 if o = IR_SATADD:
-                    em.movimm(R_CX, @wrap(0 - 1))
+                    em.movimm(R_CX, ⁻1)
                     em.b3(76, 1, 216)            // add rax, r11
                     em.b4(72, 15, 66, 193)       // cmovc rax, rcx
                 elif o = IR_SATSUB:
@@ -10637,7 +10649,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
                     em.b3(76, 41, 216)           // sub rax, r11
                     em.b4(72, 15, 66, 193)       // cmovc rax, rcx
                 else:
-                    em.movimm(R_CX, @wrap(0 - 1))
+                    em.movimm(R_CX, ⁻1)
                     em.b3(73, 247, 227)          // mul r11
                     em.b4(72, 15, 66, 193)       // cmovc rax, rcx
             em.raxbar()
@@ -10774,14 +10786,14 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.b3(73, 141, 178)
     em.w32(4095)                    // lea rsi, [r10+4095]
     em.b3(72, 129, 230)
-    em.w32(@wrap(0 - 4096))         // and rsi, -4096
+    em.w32(⁻4096)                   // and rsi, -4096
     em.movimm(R_CX, 1048576)
     em.b3(72, 57, 206)              // cmp rsi, rcx
     em.b4(72, 15, 66, 241)          // cmovb rsi, rcx
     em.b2(49, 255)                  // xor edi, edi
     em.movimm(R_DX, 3)
     em.movimm(R_R10, 34)
-    em.movimm(R_R8, @wrap(0 - 1))
+    em.movimm(R_R8, ⁻1)
     em.b3(69, 49, 201)              // xor r9d, r9d
     em.movimm(R_AX, 9)
     em.b2(15, 5)                    // mmap
@@ -11598,7 +11610,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.set_label(1)
     em.b4(65, 198, 68, 21)
     em.b2(0, 0)                     // mov byte [r13+rdx], 0
-    em.movimm(R_DI, @wrap(0 - 100)) // AT_FDCWD
+    em.movimm(R_DI, ⁻100) // AT_FDCWD
     em.b3(76, 137, 238)             // mov rsi, r13
     em.b2(49, 210)                  // xor edx, edx: O_RDONLY
     em.b3(69, 49, 210)              // xor r10d, r10d
@@ -11643,7 +11655,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.set_label(1)
     em.b4(65, 198, 68, 21)
     em.b2(0, 0)                     // mov byte [r13+rdx], 0
-    em.movimm(R_DI, @wrap(0 - 100))
+    em.movimm(R_DI, ⁻100)
     em.b3(76, 137, 238)             // mov rsi, r13
     em.movimm(R_DX, 577)            // O_WRONLY|O_CREAT|O_TRUNC
     em.b3(77, 137, 242)             // mov r10, r14: the mode
@@ -12072,7 +12084,7 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.movimm(R_DI, 8)
     em.jglobal(232, ⁻1, RT_ARRNEW)
     em.b3(72, 137, 195)             // mov rbx, rax
-    em.movimm(R_DI, @wrap(0 - 100)) // AT_FDCWD
+    em.movimm(R_DI, ⁻100) // AT_FDCWD
     em.b2(106, 46)                  // push 46: ".\0" spelled in place
     em.b3(72, 137, 230)             // mov rsi, rsp
     em.movimm(R_DX, 65536)          // O_RDONLY|O_DIRECTORY
@@ -12518,7 +12530,7 @@ fn utf8_class_bytes() → u8[]:
         elif b < 245: k ← 5
         else: k ← 8
         _ ← c
-        t.push(@wrap(k) & 255)
+        t.push(k & 255)
     t
 
 // One word to a class: the whole transition row packed six bits to a
@@ -12549,9 +12561,10 @@ fn rt_edges() → i64[]:
 // ---------------------------------------------------------------------------
 
 // FNV-1a over a string's bytes, which is what the hash of a definition
-// is derived from
+// is derived from.  The multiply is meant to run off the end of the
+// word -- that is what mixes the bits -- so it wraps.
 fn fnv1a(t : str) → i64:
-    let h : mut i64 = @wrap(0 - 3750763034362895579)
+    let h : mut i64 = ⁻3750763034362895579
     foreach b := std.bytes(t):
         h ← @wrap((h ^ b) × 1099511628211)
     h
@@ -12775,10 +12788,10 @@ struct Sym:
 // data -- are built a word at a time, since what they hold is the
 // program's, not the format's.
 fn push32(out : &mut u8[], v : i64):
-    out.push(@wrap(v) & 255)
-    out.push(@wrap(v » 8) & 255)
-    out.push(@wrap(v » 16) & 255)
-    out.push(@wrap(v » 24) & 255)
+    out.push(v & 255)
+    out.push((v » 8) & 255)
+    out.push((v » 16) & 255)
+    out.push((v » 24) & 255)
 
 fn push64(out : &mut u8[], v : i64):
     push32(&out, v)
@@ -13318,7 +13331,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
     em.movimm(R_SI, guard_size + stack_size)
     em.b2(49, 210)                  // xor edx, edx: PROT_NONE
     em.movimm(R_R10, 147490)        // PRIVATE|ANONYMOUS|NORESERVE|STACK
-    em.movimm(R_R8, @wrap(0 - 1))
+    em.movimm(R_R8, ⁻1)
     em.b3(69, 49, 201)              // xor r9d, r9d
     em.movimm(R_AX, 9)
     em.b2(15, 5)                    // mmap

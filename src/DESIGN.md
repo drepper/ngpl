@@ -860,6 +860,33 @@ attempt 3+ can build toward it:
 5. **Keywords**: today one hash probe; natively, padded 8/16-byte
    images compared with one masked load + `cmov` of the token id.
 
+## `@wrap` in the Compiler's Own Source
+
+`@wrap` says that arithmetic is meant to run off the end of its type,
+and so suppresses the overflow report.  That makes an unnecessary one
+worse than noise: it switches off a check over whatever it encloses.
+A sweep of the source left eleven, and each of them wraps on purpose:
+
+- `i64_str` works below zero, because `0 - n` for the most negative
+  `i64` is the one negation that has no answer;
+- the lexer accumulates a `u64` literal past `i64` deliberately — the
+  bit pattern *is* the value, and the sign is how the reader learns
+  the literal is a big one;
+- `fold_bin` computes the wrapped result precisely so it can compare
+  it against the operands and *report* the overflow itself;
+- `fnv1a`'s multiply is meant to run off the end of the word, since
+  that is what mixes the bits;
+- and two literal negations at the type's edge, where nothing wraps
+  today but the one value that would is one a program may write.
+
+Everything else was reflex.  A bitwise mask cannot overflow, so
+`@wrap(v) & 255` was wrapping nothing; `0 - 100` and `0 - 1` are
+negative constants, written `⁻100` and `⁻1`; `0 - (1 « (bits - 1))`
+sits behind a guard that has already returned for the 64-bit case;
+and slot and index arithmetic like `0 - slot - 2` is nowhere near an
+edge.  Removing those restores the checking they were switched off
+over, which is the whole point of the annotation being explicit.
+
 ## Contracts in the Compiler's Own Source
 
 Per the policy in CLAUDE.md, the compiler practices what it compiles:
