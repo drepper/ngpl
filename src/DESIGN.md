@@ -810,7 +810,17 @@ the read-only and writable images, the two string tables, and the
 gaps between segments.  A struct's own padding is written as zeros by
 the packer, so the same source still produces the same file.
 
-Two things follow from writing structures instead of bytes.  Every
+The fields carry no `@wrap`.  A written-out number or an `i64` meets a
+`u16` or a `u32` field the way it meets any narrower type — accepted
+with a fit check the lowering emits — so the annotation was noise
+carried over from the byte-pushing it replaced, where `@wrap(v) & 255`
+genuinely needed it.  Dropping it also restores the checking it was
+suppressing: `bind × 16 + STT_FUNC` and `text_vaddr + sy.value` are
+now watched for overflow like any other arithmetic, and a header field
+that cannot hold what it is given stops the compiler instead of
+quietly keeping the low bits.
+
+Two further things follow from writing structures instead of bytes.  Every
 offset is now settled before anything is written — `e_shoff` used to
 be patched back into the header afterwards, and there is no patching
 left.  And the fields are typed, which found two bugs the byte-pushing

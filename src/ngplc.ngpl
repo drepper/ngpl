@@ -12818,19 +12818,19 @@ struct Elf:
 // a program header, whose fields are the same shape every time
 fn phdr(kind : i64, flags : i64, off : i64, vaddr : i64,
         filesz : i64, memsz : i64, align : i64) → Elf64_Phdr:
-    (Elf64_Phdr{p_type: @wrap(kind), p_flags: @wrap(flags),
-                p_offset: @wrap(off), p_vaddr: @wrap(vaddr),
-                p_paddr: @wrap(vaddr), p_filesz: @wrap(filesz),
-                p_memsz: @wrap(memsz), p_align: @wrap(align)})
+    (Elf64_Phdr{p_type: kind, p_flags: flags,
+                p_offset: off, p_vaddr: vaddr,
+                p_paddr: vaddr, p_filesz: filesz,
+                p_memsz: memsz, p_align: align})
 
 fn shdr(name : i64, kind : i64, flags : i64, addr : i64, off : i64,
         size : i64, link : i64, info : i64, align : i64,
         entsize : i64) → Elf64_Shdr:
-    (Elf64_Shdr{sh_name: @wrap(name), sh_type: @wrap(kind),
-                sh_flags: @wrap(flags), sh_addr: @wrap(addr),
-                sh_offset: @wrap(off), sh_size: @wrap(size),
-                sh_link: @wrap(link), sh_info: @wrap(info),
-                sh_addralign: @wrap(align), sh_entsize: @wrap(entsize)})
+    (Elf64_Shdr{sh_name: name, sh_type: kind,
+                sh_flags: flags, sh_addr: addr,
+                sh_offset: off, sh_size: size,
+                sh_link: link, sh_info: info,
+                sh_addralign: align, sh_entsize: entsize})
 
 @pre(#code > 0 and stack_size > 0)
 @pre(relro_size >= 0 and (relro_size % PAGE ?? 1) = 0)
@@ -12860,12 +12860,12 @@ fn build_elf(code : u8[], rodata : u8[], data : u8[], stack_size : i64,
         foreach sy := syms:
             if (1 if sy.is_global else 0) = want:
                 let bind : i64 = STB_GLOBAL if sy.is_global else STB_LOCAL
-                symtab.push(Elf64_Sym{st_name: @wrap(@dropunit(#strtab)),
-                                      st_info: @wrap(bind × 16 + STT_FUNC),
+                symtab.push(Elf64_Sym{st_name: @dropunit(#strtab),
+                                      st_info: bind × 16 + STT_FUNC,
                                       st_other: 0,
-                                      st_shndx: @wrap(SHN_TEXT),
-                                      st_value: @wrap(text_vaddr + sy.value),
-                                      st_size: @wrap(sy.size)})
+                                      st_shndx: SHN_TEXT,
+                                      st_value: text_vaddr + sy.value,
+                                      st_size: sy.size})
                 foreach b := std.bytes(sy.name):
                     strtab.push(b)
                 strtab.push(0)
@@ -12938,13 +12938,13 @@ fn build_elf(code : u8[], rodata : u8[], data : u8[], stack_size : i64,
 
     let ehdr : Elf64_Ehdr = (Elf64_Ehdr{
         e_ident: [127, 69, 76, 70, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        e_type: @wrap(ET_EXEC), e_machine: @wrap(EM_X86_64),
-        e_version: @wrap(EV_CURRENT), e_entry: @wrap(text_vaddr),
-        e_phoff: @wrap(@dropunit(@sizeof(Elf64_Ehdr))), e_shoff: @wrap(sh_off),
-        e_flags: 0, e_ehsize: @wrap(@dropunit(@sizeof(Elf64_Ehdr))),
-        e_phentsize: @wrap(@dropunit(@sizeof(Elf64_Phdr))), e_phnum: @wrap(nph),
-        e_shentsize: @wrap(@dropunit(@sizeof(Elf64_Shdr))), e_shnum: @wrap(nsh),
-        e_shstrndx: @wrap(nsh - 1)})
+        e_type: ET_EXEC, e_machine: EM_X86_64,
+        e_version: EV_CURRENT, e_entry: text_vaddr,
+        e_phoff: @dropunit(@sizeof(Elf64_Ehdr)), e_shoff: sh_off,
+        e_flags: 0, e_ehsize: @dropunit(@sizeof(Elf64_Ehdr)),
+        e_phentsize: @dropunit(@sizeof(Elf64_Phdr)), e_phnum: nph,
+        e_shentsize: @dropunit(@sizeof(Elf64_Shdr)), e_shnum: nsh,
+        e_shstrndx: nsh - 1})
 
     (Elf{ehdr: ehdr, phdrs: phdrs,
         gap_text: zeros(text_off - hdrs_size), code: code,
