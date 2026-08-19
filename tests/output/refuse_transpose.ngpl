@@ -1,0 +1,6 @@
+@start
+@impure
+fn main():
+    let m : i64[,] = (2, 3) ⍴ (1…6)
+    let t : i64[,] = mᵀ
+    std.println("{}", t[0, 1])

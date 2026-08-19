@@ -5623,6 +5623,86 @@ A width converts, as it does at a definition, and a value the element type canno
 The naming follows Rust rather than C++, whose `push_back`/`pop_back` carry a symmetry with `push_front` that no other language here needs, and whose `pop_back` returns nothing so that a caller must read before popping.  Python's `pop` raises on an empty list, which turns the common drain loop into either a length test or an exception handler; the optional makes it one expression.
 
 
+### Transposing a Matrix (`ᵀ`)
+
+> **Full language.**  Not available in the bootstrap implementation.
+
+`ᵀ` is written after a matrix and answers the matrix with its two dimensions exchanged.  The glyph is U+1D40 MODIFIER LETTER CAPITAL T, so `mᵀ` reads on the page the way it is written in mathematics.
+
+```
+let m : i32[2,3] = [[1, 2, 3], [4, 5, 6]]
+let t := mᵀ                 // [[1, 4], [2, 5], [3, 6]]
+```
+
+What it means is one sentence: `mᵀ[i, j]` is `m[j, i]`, for every position either of them has.  Everything else below follows from that sentence and from rules the language already has.
+
+#### The Shape and the Type
+
+The extents exchange, and an extent the type left open stays open:
+
+| Operand type | Result type |
+|--------------|-------------|
+| `i32[2,3]` | `i32[3,2]` |
+| `i32[,4]` | `i32[4,]` |
+| `i32[3,]` | `i32[,3]` |
+| `i32[,]` | `i32[,]` |
+
+So `mᵀ.shape[0]` is `m.shape[1]`, and a function whose parameter fixes one dimension can be handed the transpose of a matrix that fixes the other.  The element type and its unit are carried across untouched: transposing rearranges positions and reads no values.
+
+#### It Is Written on a Matrix, and on Nothing Else
+
+The operand's rank has to be exactly two.  A one-dimensional array is refused rather than answered with itself, because this language does not distinguish a row vector from a column vector, and an operator that quietly did nothing would be a place for a mistake to hide:
+
+```
+let v : i32[] = [1, 2, 3]
+vᵀ
+
+error: 'ᵀ' exchanges the two dimensions of a matrix; this is i32[],
+which has one
+```
+
+A rank-3 array is refused for the opposite reason — not too few dimensions to exchange but too many, and `ᵀ` names no choice among them:
+
+```
+let c : i32[2,2,3] = …
+cᵀ
+
+error: 'ᵀ' exchanges the two dimensions of a matrix; this is
+i32[2,2,3], which has three.  Name the axes to permute a
+higher-rank array
+```
+
+The operator that takes an axis permutation is a separate question and is not settled here.  Anything that is not an array at all is refused the same way, naming what it got.
+
+#### What It Shares
+
+Nothing.  Row *i* of `mᵀ` is column *i* of `m`, and a column is not one of the rows `m` holds, so there is nothing to hand back and the result has to be built.  This is the rule [Slicing a Dimension](#slicing-a-dimension) states — what a slice shares follows from what it had to build — reaching the same answer here:
+
+```
+let m : mut i32[2,3] = [[1, 2, 3], [4, 5, 6]]
+let t : mut = mᵀ
+t[0][1] ← 99              // m is unchanged
+```
+
+Like a slice and unlike a reshape, the result does not inherit `mut` from its operand; the binding says `mut` for itself.  A transposed view, which would share, belongs with the other view types and is not this operator.
+
+#### Where It Binds
+
+`ᵀ` is postfix and binds as tightly as a subscript, tighter than any arithmetic or comparison.  It attaches to the expression immediately to its left, whatever that expression is:
+
+```
+mᵀ[0, 1]           // (mᵀ)[0, 1], which is m[1, 0]
+aᵀ × b               // (aᵀ) × b
+((2, 3) ⍴ (1…6))ᵀ   // a call's result, transposed
+```
+
+`(mᵀ)ᵀ` holds the same values in the same places as `m`, and is a fresh matrix rather than `m` itself, since each `ᵀ` built one.
+
+#### What It Is Not
+
+`ᵀ` exchanges positions and does nothing to the values.  It is therefore *not* a conjugate transpose: when complex numbers arrive, conjugation will be asked for separately rather than folded into this glyph, so that one operator does not mean two things depending on what the elements happen to be.
+
+
 ### Iterators
 
 A container hands out an iterator with `iterate()`.  The iterator has exactly one member function:

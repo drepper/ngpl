@@ -225,6 +225,11 @@ Outstanding
     semicolon discards it -- one program, two meanings, now refused with both spellings
     offered.  `import` and the glyphs are refused by name; @repr(packed) already was.
 
+    `ᵀ` joined them when transpose was specified.  It is the same trap the optional glyphs
+    were -- a modifier letter, so `isalnum()` answers yes for it and an identifier scanner
+    swallows it silently -- which is why the name scanner now stops there rather than the
+    refusal being left to catch a glyph that never reaches it.  tests/output/refuse_transpose.
+
 [x] the interpreter reads the @build function before anything runs: search paths and
     compiler flags declared through std.build.search_path and std.build.flag land in
     std.build, answered back by paths() and flags().  At most one @build function, no

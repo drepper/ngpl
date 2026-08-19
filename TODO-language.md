@@ -726,6 +726,15 @@ Data Structures
 [ ] [FULL] matrix type: 2D+ built-in data structure with arithmetic operations (multiply, transpose,
     element-wise ops).  Attributes: diagonal, upper/lower triangle, sparse.
 
+    Transpose is specified -- `ᵀ` written after a matrix, `mᵀ[i, j]` is `m[j, i]`, the extents
+    exchanged and an open one left open, sharing nothing because a column is not a row the
+    operand holds.  See the chapter in `spec/spec.md`.  The bootstrap refuses the glyph by
+    name.  What is left here is the arithmetic and the attributes.
+
+[ ] [FULL] an operator that permutes the axes of a higher-rank array, which `ᵀ` deliberately is
+    not: `ᵀ` names one exchange and a cube has three to choose from, so it is refused there
+    rather than given an arbitrary meaning.  APL's dyadic `⍉` is the shape to look at.
+
 [ ] [FULL] tensor type for limited dimensionality with GPU-offloadable operations.
 
 [ ] [FULL] vector/matrix attributes: sparse, list-backed (O(n) access, stable addresses),

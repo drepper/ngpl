@@ -31,6 +31,13 @@ class Token:
         return f"Token({self.type}, {self.value!r}, @{self.line}:{self.col})"
 
 
+# The full language's transpose operator.  Named here because it is
+# wanted in two places -- the identifier scanner has to stop at it, and
+# the refusal has to name it -- and because a modifier letter is not
+# something to leave sitting bare in a comparison.
+TRANSPOSE = "\N{MODIFIER LETTER CAPITAL T}"
+
+
 # Keywords: maps keyword string to token type.
 KEYWORDS = {
     "fn": "FN",
@@ -563,6 +570,12 @@ def tokenize(src: str):
                 f"'{ch}' {what}, which the bootstrap does not provide "
                 f"yet; ?? and match serve meanwhile", line, col)
 
+        if ch == TRANSPOSE:
+            raise LexerError(
+                f"'{ch}' transposes a matrix, which the bootstrap does "
+                f"not provide yet; write the two loops meanwhile",
+                line, col)
+
         # String literal.
         if ch == '"':
             token, pos = _read_string(src, pos + 1, line, col, line_start)
@@ -626,6 +639,12 @@ def tokenize(src: str):
             name_start = pos
             pos += 1
             while pos < length and (src[pos].isalnum() or src[pos] in "_'"):
+                # 'ᵀ' is a modifier letter, so isalnum() answers yes for
+                # it; left alone the name would swallow the transpose
+                # that follows it and the refusal below would never be
+                # reached.  A name ends where the operator begins.
+                if src[pos] == TRANSPOSE:
+                    break
                 pos += 1
             name = src[name_start:pos]
             token_type = KEYWORDS.get(name, "IDENT")

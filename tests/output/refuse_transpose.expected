@@ -1,0 +1,7 @@
+error: 'ᵀ' transposes a matrix, which the bootstrap does not provide yet; write the two loops meanwhile
+  --> tests/output/refuse_transpose.ngpl:5:23
+    |
+  5 |     let t : i64[,] = mᵀ
+    |                       ^
+  6 |     std.println("{}", t[0, 1])
+    |
