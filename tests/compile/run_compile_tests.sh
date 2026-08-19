@@ -98,13 +98,18 @@ done
 # interpreter's byte for byte.  The list grows as the subset grows.
 # ---------------------------------------------------------------------------
 shared_tests=(
+    test_arrows
     test_byte
+    test_callee_scope
     test_concat
+    test_exit_code
     test_generate
+    test_hints
     test_if
-    test_lambda
     test_iterator
+    test_lambda
     test_noreturn
+    test_reshape
     test_short_circuit
     test_stepped_range
     test_while_binding

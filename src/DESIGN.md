@@ -578,6 +578,19 @@ Attempt 3 grows core-1 to **core-2** with structs:
   second`), and conversion between related measures -- core-2 keeps
   measures apart rather than converting between them, so `km + m` is
   refused where the bootstrap converts.
+- **branch hints**: `@likely` and `@unlikely` stand before an `if`
+  and say which way the condition is expected to go.  They belong to
+  that statement and to nothing else, and they never change what is
+  computed -- what they change is where the code goes.  Without a
+  hint the then-block falls through, which is the common case a
+  reader assumes; `@unlikely` says otherwise, and where there is an
+  else the two arms swap for nothing: the same instructions, with the
+  cold block out of the straight line.  With no else there is nothing
+  to swap it against, and the layout stands (moving it would want a
+  cold section the emitter does not have).  `@hot` and `@cold` on a
+  function or method are accepted and noted, as the interpreter notes
+  them; acting on them wants control over the order functions are
+  emitted in, which is its own piece of work.
 - **the test harness**: `@test` functions compile into the binary and
   run before `@start` — silently when they pass, the first failing
   assertion stopping the run.  The binary honors the interpreter's

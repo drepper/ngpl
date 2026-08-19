@@ -1,0 +1,73 @@
+// core-2: @likely and @unlikely say which way a condition is expected
+// to go.  They belong to the if that follows and to nothing else, and
+// they never change what a program computes -- only where the compiler
+// puts the code, so what this asks is that every branch still goes
+// where it always went, hinted or not, right or wrong.
+
+@cold
+fn rarely(n : i64) -> i64:
+    return n × 2
+
+@hot
+fn often(n : i64) -> i64:
+    return n + 1
+
+fn classify(n : i64) -> i64:
+    @unlikely
+    if n < 0:
+        return ⁻1
+    @likely
+    if n > 0:
+        return 1
+    return 0
+
+@impure
+@start
+fn main():
+    std.println("{} {} {}", classify(⁻5), classify(0), classify(7))
+
+    // a hint that turns out wrong still takes the branch it must
+    let taken : mut bool = false
+    @unlikely
+    if true:
+        taken ← true
+    std.println("{}", taken)
+
+    let skipped : mut bool = false
+    @likely
+    if false:
+        skipped ← true
+    std.println("{}", skipped)
+
+    // the hint covers the whole statement, so elif and else still stand
+    let which : mut i64 = 0
+    @unlikely
+    if false:
+        which ← 1
+    elif true:
+        which ← 2
+    else:
+        which ← 3
+    std.println("{}", which)
+
+    // and with an else, where the two arms swap places in the layout
+    let pick : mut i64 = 0
+    @unlikely
+    if false:
+        pick ← 1
+    else:
+        pick ← 2
+    std.println("{}", pick)
+
+    // a hint on a nested condition belongs to that one
+    let reached : mut i64 = 0
+    @likely
+    if true:
+        @unlikely
+        if true:
+            reached ← 2
+    std.println("{}", reached)
+
+    std.println("{} {}", often(1), rarely(3))
+    // a string compares by what it holds
+    assert_eq("a counter", "a counter")

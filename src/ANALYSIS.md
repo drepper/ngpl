@@ -111,6 +111,20 @@ it is worth stating plainly: a feature is worth landing for the
 walls it removes, not only for the files it flips, and the two are
 rarely the same batch.
 
+Branch hints closed the statement-level annotations: `@likely` and
+`@unlikely` before an `if`, honoured in the layout where honouring
+them is free, and `@hot`/`@cold` noted on a definition.  Two things
+fell out of chasing test_hints to a flip.  `assert_eq` refused
+strings although the lowering had always known how to compare them
+-- the checker was simply stricter than the code beneath it, which
+is the kind of gap that survives precisely because it never
+misbehaves.  And a sweep of every unshared file found four more that
+had been flipping for some time and were never added: the shared
+list is maintained by hand and had drifted behind what the compiler
+could actually do.  Sixteen files run shared now, up from eleven,
+and only one of the five is this batch's doing.  A sweep of that
+kind belongs in the gates rather than in a session's memory.
+
 Named measures followed, and were the same story at twice the size:
 twelve files carried `¤meter` or `¤count` as their blocker and none
 does now.  The interesting part was where the room came from.  A

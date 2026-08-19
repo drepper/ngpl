@@ -1202,6 +1202,7 @@ let NK_LAMBDA : i64 = 88    // λ literal: na = extra [np, (tok,ty)…, ncap, to
 let NK_FNVAL : i64 = 89     // a named function as a value: na = fn index
 let NK_CALLV : i64 = 90     // applying a value: na = callee expr, nb = args
 let NK_EXPECTS : i64 = 93   // @expect over one statement: na = it, nb = 1 when an error is expected
+let NK_HINTED : i64 = 94    // @likely/@unlikely over an if: na = it, nb = 1 when unlikely
 let NK_TRY : i64 = 91       // e?: ∅ answers the function early, a value unwraps
 let NK_BADLAM : i64 = 92    // a λ the checker refuses: na says why
 
@@ -2491,6 +2492,27 @@ impl Parser:
     fn parse_stmt(&mut self) → i64:
         let k : i64 = self.peek()
         let at : i64 = self.pos
+        if k = TK_AT and (self.ttext(self.pos + 1) = "likely" or self.ttext(self.pos + 1) = "unlikely"):
+            // @likely and @unlikely say which way a condition is
+            // expected to go.  They belong to the if that follows and
+            // to nothing else, and they never change what is computed
+            // -- only where the compiler puts the code.
+            let hname := self.ttext(self.pos + 1)
+            self.pos ← self.pos + 2
+            while self.peek() = TK_NL:
+                self.pos ← self.pos + 1
+            if self.peek() = TK_AT and (self.ttext(self.pos + 1) = "likely" or self.ttext(self.pos + 1) = "unlikely"):
+                let second := self.ttext(self.pos + 1)
+                if second = hname:
+                    self.err("@" ⧺ hname ⧺ " is given twice on the same condition")
+                else:
+                    self.err("@" ⧺ second ⧺ " contradicts @" ⧺ hname ⧺ " on the same condition")
+                return 0
+            if self.peek() ≠ TK_IF:
+                self.err("@" ⧺ hname ⧺ " applies to an if statement, but none follows")
+                return 0
+            let inner : i64 = self.parse_stmt()
+            return self.mknode(NK_HINTED, at, inner, 1 if hname = "unlikely" else 0, 0)
         if k = TK_AT and self.ttext(self.pos + 1) = "expect":
             // @expect level "pattern" over the one statement that
             // follows: what it says is expected to be drawn, so what
@@ -2984,6 +3006,11 @@ impl Parser:
                     _ ← self.eat(TK_COLON, "':' after the result's name")
                     posts.push(self.parse_expr())
                     _ ← self.eat(TK_RPAR, "')' closing @post")
+                elif aname = "hot" or aname = "cold":
+                    // how often a method is expected to run: noted, as
+                    // the interpreter notes it
+                    let mnoted : i64 = 0
+                    _ ← mnoted
                 else:
                     self.err("'@" ⧺ aname ⧺ "' is not core-2 on a method")
                     return
@@ -3037,6 +3064,12 @@ impl Parser:
                 is_test ← true
             elif name = "replaceable":
                 is_repl ← true
+            elif name = "hot" or name = "cold":
+                // how often a function is expected to run: noted and
+                // not yet acted on, as the interpreter notes it.  It
+                // says where to spend effort, never what to compute.
+                let noted : i64 = 0
+                _ ← noted
             elif name = "export":
                 is_exp ← true
             elif name = "expect":
@@ -5310,8 +5343,10 @@ impl Checker:
                 elif tl = TY_UNT and tr = TY_UNT:
                     self.adopt(x, TY_I64)
                     self.adopt(y, TY_I64)
-                if ty_is_arr(self.ty_of(x)) or ty_is_hash(self.ty_of(x)) or ty_is_tup(self.ty_of(x)) or ty_is_mat(self.ty_of(x)) or ty_is_rg(self.ty_of(x)) or ty_is_lam(self.ty_of(x)) or self.ty_of(x) = TY_STR:
-                    self.derr(tok, "assert_eq compares numbers in core-1")
+                // a string compares by what it holds, which the
+                // lowering has always known how to ask
+                if ty_is_arr(self.ty_of(x)) or ty_is_hash(self.ty_of(x)) or ty_is_tup(self.ty_of(x)) or ty_is_mat(self.ty_of(x)) or ty_is_rg(self.ty_of(x)) or ty_is_lam(self.ty_of(x)):
+                    self.derr(tok, "assert_eq compares numbers, truth values, characters and strings in core-2")
                 elif not self.try_fit(x, self.ty_of(y)):
                     self.derr(tok, "assert_eq compares two of the same type")
         else:
@@ -5802,6 +5837,10 @@ impl Checker:
         let na : i64 = self.a.na[id × 1¤ptrdiff]
         let nb : i64 = self.a.nb[id × 1¤ptrdiff]
         let nc : i64 = self.a.nc[id × 1¤ptrdiff]
+        if k = NK_HINTED:
+            // the hint says nothing about what is checked
+            self.check_stmt(na, trailing)
+            return
         if k = NK_EXPECTS:
             // A statement expected to draw an error is parsed and left
             // alone, as a definition marked the same way is: it does
@@ -8045,6 +8084,40 @@ impl Lower:
         else:
             self.ir(IR_RET, v, 0, 0, 0, 0)
 
+    // An if, laid out so the way it is expected to go is the way that
+    // falls through.  Without a hint the then-block falls through;
+    // @unlikely says otherwise, and where there is an else the two swap
+    // for nothing -- the same instructions, with the cold block out of
+    // the straight line.  With no else there is nothing to swap it
+    // with, and the layout stands as it was.
+    fn lower_if(&mut self, sid : i64, unlikely : i64, trailing : bool, ret_ty : i64):
+        if self.try_jtab(sid, ret_ty):
+            return
+        let na : i64 = self.a.na[sid × 1¤ptrdiff]
+        let nb : i64 = self.a.nb[sid × 1¤ptrdiff]
+        let nc : i64 = self.a.nc[sid × 1¤ptrdiff]
+        let lelse : i64 = self.label()
+        let cv : i64 = self.lower_expr(na)
+        if unlikely = 1 and nc ≠ ⁻1:
+            let lend2 : i64 = self.label()
+            self.ir(IR_JNZ, cv, lelse, 0, 0, 0)
+            self.lower_block(nc, false, ret_ty)
+            self.ir(IR_JMP, lend2, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lelse, 0, 0, 0, 0)
+            self.lower_block(nb, false, ret_ty)
+            self.ir(IR_LABEL, lend2, 0, 0, 0, 0)
+            return
+        self.ir(IR_JZ, cv, lelse, 0, 0, 0)
+        self.lower_block(nb, false, ret_ty)
+        if nc = ⁻1:
+            self.ir(IR_LABEL, lelse, 0, 0, 0, 0)
+        else:
+            let lend : i64 = self.label()
+            self.ir(IR_JMP, lend, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lelse, 0, 0, 0, 0)
+            self.lower_block(nc, false, ret_ty)
+            self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+
     fn lower_stmt(&mut self, sid : i64, trailing : bool, ret_ty : i64):
         self.tnext ← self.tbase
         let k : i64 = self.kof(sid)
@@ -8103,21 +8176,10 @@ impl Lower:
                 self.ir(IR_RET, ⁻1, 0, 0, 0, 0)
             else:
                 self.lower_ret_value(na)
+        elif k = NK_HINTED:
+            self.lower_if(na, nb, trailing, ret_ty)
         elif k = NK_IF:
-            if self.try_jtab(sid, ret_ty):
-                return
-            let lelse : i64 = self.label()
-            let cv : i64 = self.lower_expr(na)
-            self.ir(IR_JZ, cv, lelse, 0, 0, 0)
-            self.lower_block(nb, false, ret_ty)
-            if nc = ⁻1:
-                self.ir(IR_LABEL, lelse, 0, 0, 0, 0)
-            else:
-                let lend : i64 = self.label()
-                self.ir(IR_JMP, lend, 0, 0, 0, 0)
-                self.ir(IR_LABEL, lelse, 0, 0, 0, 0)
-                self.lower_block(nc, false, ret_ty)
-                self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+            self.lower_if(sid, 0, trailing, ret_ty)
         elif k = NK_WHILE:
             let ltop : i64 = self.label()
             let lend : i64 = self.label()
