@@ -12679,6 +12679,123 @@ fn fn_symbol(a : Ast, toks : Toks, src : byte[], f : i64) → str:
 // The ELF executable: text R+X, rodata R, data R+W
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Targets
+//
+// One backend, several architectures.  Everything that varies between
+// them -- the ELF machine number and class, the width of a pointer,
+// the Linux syscall numbers, the quirks -- is collected in one
+// descriptor, so the code above it can ask rather than assume.  The
+// data model does not vary: every value is an 8-byte slot on every
+// target, and a pointer on a 32-bit machine rides zero-extended in
+// one, so the data sections and the IR mean the same thing everywhere.
+// A new target is a new row here and a new instruction layer below,
+// and nothing in between.
+// ---------------------------------------------------------------------------
+
+let TGT_X64 : i64 = 0
+let TGT_I386 : i64 = 1
+let TGT_A64 : i64 = 2
+let TGT_A32 : i64 = 3
+let TGT_RV64 : i64 = 4
+let TGT_RV32 : i64 = 5
+
+struct Target:
+    id : i64
+    name : str           // the canonical spelling --target accepts
+    machine : i64        // ELF e_machine
+    is64 : bool          // ELFCLASS64: 8-byte kernel words
+    eflags : i64         // ELF e_flags
+    ptr : i64            // bytes in a pointer
+    // the Linux syscall numbers the runtime issues.  The kernel gave
+    // every old architecture its own table and the new ones a shared
+    // generic table, which is why aarch64 and RISC-V agree and the
+    // rest do not.
+    sc_read : i64
+    sc_write : i64
+    sc_close : i64
+    sc_fstat : i64
+    sc_mmap : i64        // mmap2 on the 32-bit legacy targets
+    sc_mprotect : i64
+    sc_writev : i64
+    sc_getpid : i64
+    sc_kill : i64
+    sc_exit : i64
+    sc_getdents : i64
+    sc_openat : i64
+    stat_size : i64      // where st_size sits in what fstat fills in
+
+fn targets() → Target[]:
+    let t : mut Target[] = []
+    t.push(Target{id: TGT_X64, name: "x86-64", machine: 62, is64: true,
+                  eflags: 0, ptr: 8,
+                  sc_read: 0, sc_write: 1, sc_close: 3, sc_fstat: 5,
+                  sc_mmap: 9, sc_mprotect: 10, sc_writev: 20,
+                  sc_getpid: 39, sc_kill: 62, sc_exit: 60,
+                  sc_getdents: 217, sc_openat: 257, stat_size: 48})
+    t.push(Target{id: TGT_I386, name: "i386", machine: 3, is64: false,
+                  eflags: 0, ptr: 4,
+                  sc_read: 3, sc_write: 4, sc_close: 6, sc_fstat: 197,
+                  sc_mmap: 192, sc_mprotect: 125, sc_writev: 146,
+                  sc_getpid: 20, sc_kill: 37, sc_exit: 1,
+                  sc_getdents: 220, sc_openat: 295, stat_size: 44})
+    t.push(Target{id: TGT_A64, name: "aarch64", machine: 183, is64: true,
+                  eflags: 0, ptr: 8,
+                  sc_read: 63, sc_write: 64, sc_close: 57, sc_fstat: 80,
+                  sc_mmap: 222, sc_mprotect: 226, sc_writev: 66,
+                  sc_getpid: 172, sc_kill: 129, sc_exit: 93,
+                  sc_getdents: 61, sc_openat: 56, stat_size: 48})
+    // EABI version 5, soft-float: the runtime touches no float register
+    t.push(Target{id: TGT_A32, name: "arm", machine: 40, is64: false,
+                  eflags: 83886592, ptr: 4,
+                  sc_read: 3, sc_write: 4, sc_close: 6, sc_fstat: 197,
+                  sc_mmap: 192, sc_mprotect: 125, sc_writev: 146,
+                  sc_getpid: 20, sc_kill: 37, sc_exit: 1,
+                  sc_getdents: 217, sc_openat: 322, stat_size: 48})
+    t.push(Target{id: TGT_RV64, name: "riscv64", machine: 243, is64: true,
+                  eflags: 0, ptr: 8,
+                  sc_read: 63, sc_write: 64, sc_close: 57, sc_fstat: 80,
+                  sc_mmap: 222, sc_mprotect: 226, sc_writev: 66,
+                  sc_getpid: 172, sc_kill: 129, sc_exit: 93,
+                  sc_getdents: 61, sc_openat: 56, stat_size: 48})
+    t.push(Target{id: TGT_RV32, name: "riscv32", machine: 243, is64: false,
+                  eflags: 0, ptr: 4,
+                  sc_read: 63, sc_write: 64, sc_close: 57, sc_fstat: 80,
+                  sc_mmap: 222, sc_mprotect: 226, sc_writev: 66,
+                  sc_getpid: 172, sc_kill: 129, sc_exit: 93,
+                  sc_getdents: 61, sc_openat: 56, stat_size: 48})
+    t
+
+// The architecture this compiler is running on, which is what a
+// --target-less run aims at.  The compiler only builds and runs on
+// x86-64 hosts today; when it is compiled for another host, the stage
+// that compiles it stamps this answer.
+fn host_target() → str:
+    "x86-64"
+
+// a spelling to a descriptor, the common aliases included; ⁻1 answers
+// for a name no target claims
+fn target_index(name : str) → i64:
+    let canon : mut str = name
+    if name = "amd64" or name = "x86_64": canon ← "x86-64"
+    elif name = "x86-32" or name = "i686" or name = "ia32": canon ← "i386"
+    elif name = "arm64": canon ← "aarch64"
+    elif name = "arm32" or name = "armv7": canon ← "arm"
+    elif name = "rv64": canon ← "riscv64"
+    elif name = "rv32": canon ← "riscv32"
+    let ts := targets()
+    foreach i := 0…#ts - 1:
+        if ts[i].name = canon:
+            return @dropunit(i)
+    ⁻1
+
+fn target_names() → str:
+    let ts := targets()
+    let out : mut str = ""
+    foreach i := 0…#ts - 1:
+        out ← out ⧺ ("" if i = 0 else ", ") ⧺ ts[i].name
+    out
+
 let IMAGE_BASE : i64 = 4194304
 let PAGE : i64 = 4096
 
@@ -12776,6 +12893,61 @@ let EM_X86_64 : i64 = 62
 let EV_CURRENT : i64 = 1
 let SHN_TEXT : i64 = 1        // the first section header is the absent one
 
+// The 32-bit file wears the same information in narrower fields, and
+// twice in a different order: the ELF specification moved p_flags to
+// the end of a 32-bit program header and st_info behind st_value in a
+// 32-bit symbol.  The materializers below are where that difference
+// lives, and nowhere else.
+@repr(C)
+struct Elf32_Ehdr:
+    e_ident : u8[16]
+    e_type : u16
+    e_machine : u16
+    e_version : u32
+    e_entry : u32
+    e_phoff : u32
+    e_shoff : u32
+    e_flags : u32
+    e_ehsize : u16
+    e_phentsize : u16
+    e_phnum : u16
+    e_shentsize : u16
+    e_shnum : u16
+    e_shstrndx : u16
+
+@repr(C)
+struct Elf32_Phdr:
+    p_type : u32
+    p_offset : u32
+    p_vaddr : u32
+    p_paddr : u32
+    p_filesz : u32
+    p_memsz : u32
+    p_flags : u32
+    p_align : u32
+
+@repr(C)
+struct Elf32_Shdr:
+    sh_name : u32
+    sh_type : u32
+    sh_flags : u32
+    sh_addr : u32
+    sh_offset : u32
+    sh_size : u32
+    sh_link : u32
+    sh_info : u32
+    sh_addralign : u32
+    sh_entsize : u32
+
+@repr(C)
+struct Elf32_Sym:
+    st_name : u32
+    st_value : u32
+    st_size : u32
+    st_info : u8
+    st_other : u8
+    st_shndx : u16
+
 // One symbol: what it is called, where it starts, how long it is, and
 // whether anything outside may link against it.
 struct Sym:
@@ -12828,6 +13000,23 @@ struct Elf:
     gap_shdrs : u8[]
     shdrs : Elf64_Shdr[]
 
+// …and the same pieces in the 32-bit spelling
+struct Elf32:
+    ehdr : Elf32_Ehdr
+    phdrs : Elf32_Phdr[]
+    gap_text : u8[]
+    code : u8[]
+    gap_ro : u8[]
+    rodata : u8[]
+    gap_data : u8[]
+    data : u8[]
+    gap_syms : u8[]
+    syms : Elf32_Sym[]
+    strtab : u8[]
+    shstrtab : u8[]
+    gap_shdrs : u8[]
+    shdrs : Elf32_Shdr[]
+
 // a program header, whose fields are the same shape every time
 fn phdr(kind : i64, flags : i64, off : i64, vaddr : i64,
         filesz : i64, memsz : i64, align : i64) → Elf64_Phdr:
@@ -12845,10 +13034,71 @@ fn shdr(name : i64, kind : i64, flags : i64, addr : i64, off : i64,
                 sh_link: link, sh_info: info,
                 sh_addralign: align, sh_entsize: entsize})
 
+// The plan: every offset, every table, every number both classes of
+// file agree on, computed once.  The class changes only how wide the
+// fields are written -- and the size of the entries themselves, which
+// the offsets below take from the target -- so the two materializers
+// under this are dumb loops and the thinking is not written twice.
+struct ElfPlan:
+    text_off : i64
+    text_vaddr : i64
+    text_size : i64
+    ro_off : i64
+    ro_vaddr : i64
+    ro_size : i64
+    d_off : i64
+    d_vaddr : i64
+    d_size : i64
+    sym_off : i64
+    str_off : i64
+    shstr_off : i64
+    sh_off : i64
+    hdrs_size : i64
+    strtab : u8[]
+    shstr : u8[]
+    nlocal : i64
+    // the symbols, flattened: the name's offset, the info byte, and
+    // where and how long
+    s_name : i64[]
+    s_info : i64[]
+    s_shndx : i64[]
+    s_value : i64[]
+    s_size : i64[]
+    // the program and section headers, flattened
+    ph : PhTab
+    sh : ShTab
+
+// the program headers as columns, filled a row at a time
+struct PhTab:
+    t : i64[]
+    f : i64[]
+    o : i64[]
+    v : i64[]
+    fs : i64[]
+    ms : i64[]
+    al : i64[]
+
+struct ShTab:
+    n : i64[]
+    t : i64[]
+    f : i64[]
+    a : i64[]
+    o : i64[]
+    sz : i64[]
+    l : i64[]
+    inf : i64[]
+    al : i64[]
+    es : i64[]
+
 @pre(#code > 0 and stack_size > 0)
 @pre(relro_size >= 0 and (relro_size % PAGE ?? 1) = 0)
-fn build_elf(code : u8[], rodata : u8[], data : u8[], stack_size : i64,
-             relro_size : i64, syms : Sym[]) → Elf:
+fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
+            stack_size : i64, relro_size : i64, syms : Sym[]) → ElfPlan:
+    // how wide this class's own bookkeeping is
+    let ehsize : i64 = @dropunit(@sizeof(Elf64_Ehdr)) if tgt.is64 else @dropunit(@sizeof(Elf32_Ehdr))
+    let phent : i64 = @dropunit(@sizeof(Elf64_Phdr)) if tgt.is64 else @dropunit(@sizeof(Elf32_Phdr))
+    let shent : i64 = @dropunit(@sizeof(Elf64_Shdr)) if tgt.is64 else @dropunit(@sizeof(Elf32_Shdr))
+    let syment : i64 = @dropunit(@sizeof(Elf64_Sym)) if tgt.is64 else @dropunit(@sizeof(Elf32_Sym))
     let text_off : i64 = PAGE
     let text_vaddr : i64 = IMAGE_BASE + text_off
     let text_size : i64 = @dropunit(#code)
@@ -12864,21 +13114,27 @@ fn build_elf(code : u8[], rodata : u8[], data : u8[], stack_size : i64,
     // readers rely on that, so the two runs are built separately.
     let strtab : mut u8[] = []
     strtab.push(0)
-    let symtab : mut Elf64_Sym[] = []
+    let s_name : mut i64[] = []
+    let s_info : mut i64[] = []
+    let s_shndx : mut i64[] = []
+    let s_value : mut i64[] = []
+    let s_size : mut i64[] = []
     // the first symbol is the absent one, all zeroes
-    symtab.push(Elf64_Sym{st_name: 0, st_info: 0, st_other: 0, st_shndx: 0,
-                          st_value: 0, st_size: 0})
+    s_name.push(0)
+    s_info.push(0)
+    s_shndx.push(0)
+    s_value.push(0)
+    s_size.push(0)
     let nlocal : mut i64 = 0
     foreach want := 0…1:
         foreach sy := syms:
             if (1 if sy.is_global else 0) = want:
                 let bind : i64 = STB_GLOBAL if sy.is_global else STB_LOCAL
-                symtab.push(Elf64_Sym{st_name: @dropunit(#strtab),
-                                      st_info: bind × 16 + STT_FUNC,
-                                      st_other: 0,
-                                      st_shndx: SHN_TEXT,
-                                      st_value: text_vaddr + sy.value,
-                                      st_size: sy.size})
+                s_name.push(@dropunit(#strtab))
+                s_info.push(bind × 16 + STT_FUNC)
+                s_shndx.push(SHN_TEXT)
+                s_value.push(text_vaddr + sy.value)
+                s_size.push(sy.size)
                 foreach b := std.bytes(sy.name):
                     strtab.push(b)
                 strtab.push(0)
@@ -12900,80 +13156,173 @@ fn build_elf(code : u8[], rodata : u8[], data : u8[], stack_size : i64,
     // is mapped -- it is there for whoever reads the file.  Every
     // offset is settled here, before anything is written, which is why
     // nothing has to be patched afterwards.
-    let nsym : i64 = @dropunit(#symtab)
+    let nsym : i64 = @dropunit(#s_name)
     let sym_off : i64 = align_up(d_off + d_size, 8)
-    let sym_size : i64 = @dropunit(@sizeof(Elf64_Sym)) × nsym
+    let sym_size : i64 = syment × nsym
     let str_off : i64 = sym_off + sym_size
     let shstr_off : i64 = str_off + @dropunit(#strtab)
     let sh_off : i64 = align_up(shstr_off + @dropunit(#shstr), 8)
     assert((sh_off % 8 ?? 1) = 0, "the section headers are aligned")
 
-    let phdrs : mut Elf64_Phdr[] = []
+    let ph : mut PhTab = (PhTab{t: [], f: [], o: [], v: [], fs: [], ms: [], al: []})
     // the headers themselves, mapped read-only: the kernel points
     // AT_PHDR at them, and a program that means to follow its own
     // program headers has to be able to read them
-    phdrs.push(phdr(PT_LOAD, PF_R, 0, IMAGE_BASE, PAGE, PAGE, PAGE))
-    phdrs.push(phdr(PT_LOAD, PF_R + PF_X, text_off, text_vaddr,
-                    text_size, text_size, PAGE))
-    phdrs.push(phdr(PT_LOAD, PF_R, ro_off, ro_vaddr, ro_size, ro_size, PAGE))
-    phdrs.push(phdr(PT_LOAD, PF_R + PF_W, d_off, d_vaddr, d_size, d_size, PAGE))
+    plan_phdr(&ph, PT_LOAD, PF_R, 0, IMAGE_BASE, PAGE, PAGE, PAGE)
+    plan_phdr(&ph, PT_LOAD, PF_R + PF_X, text_off, text_vaddr, text_size, text_size, PAGE)
+    plan_phdr(&ph, PT_LOAD, PF_R, ro_off, ro_vaddr, ro_size, ro_size, PAGE)
+    plan_phdr(&ph, PT_LOAD, PF_R + PF_W, d_off, d_vaddr, d_size, d_size, PAGE)
     // PT_GNU_RELRO: the head of the writable segment, which holds what
     // is written before @start and never after.  A dynamic loader would
     // seal it; nothing loads a static program but itself, so the
     // program seals it, following this entry as any loader would.
-    phdrs.push(phdr(PT_GNU_RELRO, PF_R, d_off, d_vaddr,
-                    relro_size, relro_size, 1))
+    plan_phdr(&ph, PT_GNU_RELRO, PF_R, d_off, d_vaddr, relro_size, relro_size, 1)
     // PT_GNU_STACK: read and write, and pointedly not execute.  Absent,
     // the kernel falls back to an executable stack; present, it says
     // what this program wants, and its size says how much.
-    phdrs.push(phdr(PT_GNU_STACK, PF_R + PF_W, 0, 0, 0, stack_size, 16))
+    plan_phdr(&ph, PT_GNU_STACK, PF_R + PF_W, 0, 0, 0, stack_size, 16)
 
-    let nph : i64 = @dropunit(#phdrs)
-    let hdrs_size : i64 = @dropunit(@sizeof(Elf64_Ehdr)) + @dropunit(@sizeof(Elf64_Phdr)) × nph
+    let nph : i64 = @dropunit(#ph.t)
+    let hdrs_size : i64 = ehsize + phent × nph
     assert(hdrs_size <= text_off, "the headers fit the page before the text")
 
-    let shdrs : mut Elf64_Shdr[] = []
+    let sh : mut ShTab = (ShTab{n: [], t: [], f: [], a: [], o: [], sz: [],
+                                l: [], inf: [], al: [], es: []})
     // section headers: the absent one, then what the file holds
-    shdrs.push(shdr(0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
-    shdrs.push(shdr(shname[0], SHT_PROGBITS, SHF_ALLOC + SHF_EXECINSTR,
-                    text_vaddr, text_off, text_size, 0, 0, 16, 0))
-    shdrs.push(shdr(shname[1], SHT_PROGBITS, SHF_ALLOC,
-                    ro_vaddr, ro_off, ro_size, 0, 0, 8, 0))
-    shdrs.push(shdr(shname[2], SHT_PROGBITS, SHF_WRITE + SHF_ALLOC,
-                    d_vaddr, d_off, d_size, 0, 0, 8, 0))
-    shdrs.push(shdr(shname[3], SHT_SYMTAB, 0, 0, sym_off, sym_size,
-                    5, nlocal + 1, 8, @dropunit(@sizeof(Elf64_Sym))))
-    shdrs.push(shdr(shname[4], SHT_STRTAB, 0, 0, str_off,
-                    @dropunit(#strtab), 0, 0, 1, 0))
-    shdrs.push(shdr(shname[5], SHT_STRTAB, 0, 0, shstr_off,
-                    @dropunit(#shstr), 0, 0, 1, 0))
-    let nsh : i64 = @dropunit(#shdrs)
+    plan_shdr(&sh, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    plan_shdr(&sh, shname[0], SHT_PROGBITS, SHF_ALLOC + SHF_EXECINSTR, text_vaddr, text_off, text_size, 0, 0, 16, 0)
+    plan_shdr(&sh, shname[1], SHT_PROGBITS, SHF_ALLOC, ro_vaddr, ro_off, ro_size, 0, 0, 8, 0)
+    plan_shdr(&sh, shname[2], SHT_PROGBITS, SHF_WRITE + SHF_ALLOC, d_vaddr, d_off, d_size, 0, 0, 8, 0)
+    plan_shdr(&sh, shname[3], SHT_SYMTAB, 0, 0, sym_off, sym_size, 5, nlocal + 1, 8, syment)
+    plan_shdr(&sh, shname[4], SHT_STRTAB, 0, 0, str_off, @dropunit(#strtab), 0, 0, 1, 0)
+    plan_shdr(&sh, shname[5], SHT_STRTAB, 0, 0, shstr_off, @dropunit(#shstr), 0, 0, 1, 0)
 
+    (ElfPlan{text_off: text_off, text_vaddr: text_vaddr, text_size: text_size,
+             ro_off: ro_off, ro_vaddr: ro_vaddr, ro_size: ro_size,
+             d_off: d_off, d_vaddr: d_vaddr, d_size: d_size,
+             sym_off: sym_off, str_off: str_off, shstr_off: shstr_off,
+             sh_off: sh_off, hdrs_size: hdrs_size,
+             strtab: strtab, shstr: shstr, nlocal: nlocal,
+             s_name: s_name, s_info: s_info, s_shndx: s_shndx,
+             s_value: s_value, s_size: s_size, ph: ph, sh: sh})
+
+fn plan_phdr(ph : &mut PhTab, kind : i64, flags : i64, off : i64,
+             vaddr : i64, filesz : i64, memsz : i64, align : i64):
+    ph.t.push(kind)
+    ph.f.push(flags)
+    ph.o.push(off)
+    ph.v.push(vaddr)
+    ph.fs.push(filesz)
+    ph.ms.push(memsz)
+    ph.al.push(align)
+
+fn plan_shdr(sh : &mut ShTab, name : i64, kind : i64, flags : i64,
+             addr : i64, off : i64, size : i64, link : i64, info : i64,
+             align : i64, entsize : i64):
+    sh.n.push(name)
+    sh.t.push(kind)
+    sh.f.push(flags)
+    sh.a.push(addr)
+    sh.o.push(off)
+    sh.sz.push(size)
+    sh.l.push(link)
+    sh.inf.push(info)
+    sh.al.push(align)
+    sh.es.push(entsize)
+
+// the plan written out in 64-bit fields
+fn elf_file64(tgt : Target, pl : ElfPlan, code : u8[], rodata : u8[],
+              data : u8[]) → Elf:
+    let phdrs : mut Elf64_Phdr[] = []
+    foreach i := 0…#pl.ph.t - 1:
+        phdrs.push(phdr(pl.ph.t[i], pl.ph.f[i], pl.ph.o[i],
+                        pl.ph.v[i], pl.ph.fs[i], pl.ph.ms[i], pl.ph.al[i]))
+    let shdrs : mut Elf64_Shdr[] = []
+    foreach i := 0…#pl.sh.n - 1:
+        shdrs.push(shdr(pl.sh.n[i], pl.sh.t[i], pl.sh.f[i],
+                        pl.sh.a[i], pl.sh.o[i], pl.sh.sz[i],
+                        pl.sh.l[i], pl.sh.inf[i], pl.sh.al[i], pl.sh.es[i]))
+    let symtab : mut Elf64_Sym[] = []
+    foreach i := 0…#pl.s_name - 1:
+        symtab.push(Elf64_Sym{st_name: pl.s_name[i], st_info: pl.s_info[i],
+                              st_other: 0, st_shndx: pl.s_shndx[i],
+                              st_value: pl.s_value[i], st_size: pl.s_size[i]})
+    let nph : i64 = @dropunit(#pl.ph.t)
+    let nsh : i64 = @dropunit(#pl.sh.n)
     let ehdr : Elf64_Ehdr = (Elf64_Ehdr{
         e_ident: [127, 69, 76, 70, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        e_type: ET_EXEC, e_machine: EM_X86_64,
-        e_version: EV_CURRENT, e_entry: text_vaddr,
-        e_phoff: @dropunit(@sizeof(Elf64_Ehdr)), e_shoff: sh_off,
-        e_flags: 0, e_ehsize: @dropunit(@sizeof(Elf64_Ehdr)),
+        e_type: ET_EXEC, e_machine: tgt.machine,
+        e_version: EV_CURRENT, e_entry: pl.text_vaddr,
+        e_phoff: @dropunit(@sizeof(Elf64_Ehdr)), e_shoff: pl.sh_off,
+        e_flags: tgt.eflags, e_ehsize: @dropunit(@sizeof(Elf64_Ehdr)),
         e_phentsize: @dropunit(@sizeof(Elf64_Phdr)), e_phnum: nph,
         e_shentsize: @dropunit(@sizeof(Elf64_Shdr)), e_shnum: nsh,
         e_shstrndx: nsh - 1})
-
     (Elf{ehdr: ehdr, phdrs: phdrs,
-        gap_text: zeros(text_off - hdrs_size), code: code,
-        gap_ro: zeros(ro_off - (text_off + text_size)), rodata: rodata,
-        gap_data: zeros(d_off - (ro_off + ro_size)), data: data,
-        gap_syms: zeros(sym_off - (d_off + d_size)), syms: symtab,
-        strtab: strtab, shstrtab: shstr,
-        gap_shdrs: zeros(sh_off - (shstr_off + @dropunit(#shstr))),
+        gap_text: zeros(pl.text_off - pl.hdrs_size), code: code,
+        gap_ro: zeros(pl.ro_off - (pl.text_off + pl.text_size)), rodata: rodata,
+        gap_data: zeros(pl.d_off - (pl.ro_off + pl.ro_size)), data: data,
+        gap_syms: zeros(pl.sym_off - (pl.d_off + pl.d_size)), syms: symtab,
+        strtab: pl.strtab, shstrtab: pl.shstr,
+        gap_shdrs: zeros(pl.sh_off - (pl.shstr_off + @dropunit(#pl.shstr))),
+        shdrs: shdrs})
+
+// …and in 32-bit fields, with the two reorderings the specification
+// asks for written where the fields are named
+fn elf_file32(tgt : Target, pl : ElfPlan, code : u8[], rodata : u8[],
+              data : u8[]) → Elf32:
+    let phdrs : mut Elf32_Phdr[] = []
+    foreach i := 0…#pl.ph.t - 1:
+        phdrs.push(Elf32_Phdr{p_type: pl.ph.t[i], p_offset: pl.ph.o[i],
+                              p_vaddr: pl.ph.v[i], p_paddr: pl.ph.v[i],
+                              p_filesz: pl.ph.fs[i], p_memsz: pl.ph.ms[i],
+                              p_flags: pl.ph.f[i], p_align: pl.ph.al[i]})
+    let shdrs : mut Elf32_Shdr[] = []
+    foreach i := 0…#pl.sh.n - 1:
+        shdrs.push(Elf32_Shdr{sh_name: pl.sh.n[i], sh_type: pl.sh.t[i],
+                              sh_flags: pl.sh.f[i], sh_addr: pl.sh.a[i],
+                              sh_offset: pl.sh.o[i], sh_size: pl.sh.sz[i],
+                              sh_link: pl.sh.l[i], sh_info: pl.sh.inf[i],
+                              sh_addralign: pl.sh.al[i],
+                              sh_entsize: pl.sh.es[i]})
+    let symtab : mut Elf32_Sym[] = []
+    foreach i := 0…#pl.s_name - 1:
+        symtab.push(Elf32_Sym{st_name: pl.s_name[i], st_value: pl.s_value[i],
+                              st_size: pl.s_size[i], st_info: pl.s_info[i],
+                              st_other: 0, st_shndx: pl.s_shndx[i]})
+    let nph : i64 = @dropunit(#pl.ph.t)
+    let nsh : i64 = @dropunit(#pl.sh.n)
+    let ehdr : Elf32_Ehdr = (Elf32_Ehdr{
+        e_ident: [127, 69, 76, 70, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        e_type: ET_EXEC, e_machine: tgt.machine,
+        e_version: EV_CURRENT, e_entry: pl.text_vaddr,
+        e_phoff: @dropunit(@sizeof(Elf32_Ehdr)), e_shoff: pl.sh_off,
+        e_flags: tgt.eflags, e_ehsize: @dropunit(@sizeof(Elf32_Ehdr)),
+        e_phentsize: @dropunit(@sizeof(Elf32_Phdr)), e_phnum: nph,
+        e_shentsize: @dropunit(@sizeof(Elf32_Shdr)), e_shnum: nsh,
+        e_shstrndx: nsh - 1})
+    (Elf32{ehdr: ehdr, phdrs: phdrs,
+        gap_text: zeros(pl.text_off - pl.hdrs_size), code: code,
+        gap_ro: zeros(pl.ro_off - (pl.text_off + pl.text_size)), rodata: rodata,
+        gap_data: zeros(pl.d_off - (pl.ro_off + pl.ro_size)), data: data,
+        gap_syms: zeros(pl.sym_off - (pl.d_off + pl.d_size)), syms: symtab,
+        strtab: pl.strtab, shstrtab: pl.shstr,
+        gap_shdrs: zeros(pl.sh_off - (pl.shstr_off + @dropunit(#pl.shstr))),
         shdrs: shdrs})
 
 // ---------------------------------------------------------------------------
 // Putting the pieces together
 // ---------------------------------------------------------------------------
 
+// what codegen answers: the three images and what the file writer
+// needs to wrap them.  The ELF itself is built in main, where the
+// target's class picks the materializer.
 struct Compiled:
-    elf : Elf
+    code : u8[]
+    rodata : u8[]
+    data : u8[]
+    relro_size : i64
+    syms : Sym[]
     log : str[]
     diags : Diag[]
 
@@ -13214,8 +13563,12 @@ fn lower_ginit(lw : &mut Lower, a : Ast, chk : Chk) → IrFn:
 
 @pre(stack_size >= PAGE and guard_size >= PAGE)
 @pre((stack_size % PAGE ?? 1) = 0 and (guard_size % PAGE ?? 1) = 0)
-fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
+fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
            stack_size : i64, guard_size : i64) → Compiled:
+    if tgt.id ≠ TGT_X64:
+        // the shared driver and the target's instruction layer carry
+        // every other architecture
+        return codegen_t(a, toks, src, chk, tgt, stack_size, guard_size)
     let strs0 : mut str[] = []
     foreach s := a.strs:
         strs0.push(s)
@@ -13626,8 +13979,8 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk,
         assert(next >= here, "the symbols run up the text")
         syms.push(Sym{name: sname[i], value: here, size: next - here,
                       is_global: sglob[i]})
-    (Compiled{elf: build_elf(em.code, rodata, data, stack_size, relro_size,
-                             syms),
+    (Compiled{code: em.code, rodata: rodata, data: data,
+              relro_size: relro_size, syms: syms,
               log: lw.dlog, diags: cdiags})
 
 // ===========================================================================
@@ -13753,7 +14106,8 @@ fn opt_value(a : str, name : str) → str:
 fn main() → u8:
     let argv := std.args.all()
     if #argv = 0:
-        std.println("usage: ngplc <source.ngpl> [-o out] [--stack-size=N] [--guard-size=N] [--dump-tokens] [--dump-ast] [--diag=json] [--log=json]")
+        std.println("usage: ngplc <source.ngpl> [-o out] [--target=A] [--stack-size=N] [--guard-size=N] [--dump-tokens] [--dump-ast] [--diag=json] [--log=json]")
+        std.println("targets: {} (default: the architecture this compiler runs on)", target_names())
         return 1
     let input : mut str = ""
     let output : mut str = ""
@@ -13763,6 +14117,8 @@ fn main() → u8:
     let json : mut bool = false
     let stack_size : mut i64 = STACK_DEFAULT
     let guard_size : mut i64 = GUARD_DEFAULT
+    // aim at the machine underfoot unless --target says otherwise
+    let tgt_index : mut i64 = target_index(host_target())
     let i ¤ptrdiff : mut i64 = 0
     while i < #argv:
         let a := argv[i]
@@ -13788,6 +14144,15 @@ fn main() → u8:
                 stack_size ← align_up(v, PAGE)
             else:
                 guard_size ← align_up(v, PAGE)
+            i ← i + 1
+            continue
+        if opt_matches(a, "--target"):
+            let tname : str = opt_value(a, "--target")
+            let ti : i64 = target_index(tname)
+            if ti = ⁻1:
+                std.println("ngplc: '{}' is not a target this compiler has; they are {}", tname, target_names())
+                return 1
+            tgt_index ← ti
             i ← i + 1
             continue
         if a = "--dump-tokens":
@@ -13836,7 +14201,8 @@ fn main() → u8:
         report(chk.diags, input, json, src)
         return 1
 
-    let compiled := codegen(ast, toks, src, chk, stack_size, guard_size)
+    let tgt := targets()[tgt_index × 1¤ptrdiff]
+    let compiled := codegen(ast, toks, src, chk, tgt, stack_size, guard_size)
     if #compiled.diags > 0:
         report(compiled.diags, input, json, src)
         return 1
@@ -13847,24 +14213,61 @@ fn main() → u8:
     // as every Unix compiler has it: a.out unless -o names the file
     let outname : str = output if output ≠ "" else "a.out"
     let outf := std.fs.cwd().create_file(outname, 493)
-    // one run for each thing the file is made of; the kernel joins
-    // them, so nothing here ever holds the whole image
-    let e := compiled.elf
+    // one plan, and the class picks how wide its fields are written;
+    // one run for each thing the file is made of, and the kernel
+    // joins them, so nothing here ever holds the whole image
+    let pl := plan_elf(tgt, compiled.code, compiled.rodata, compiled.data,
+                       stack_size, compiled.relro_size, compiled.syms)
     let runs : mut std.iovec[] = []
-    runs.push(std.iov(e.ehdr))
-    runs.push(std.iov(e.phdrs))
-    runs.push(std.iov(e.gap_text))
-    runs.push(std.iov(e.code))
-    runs.push(std.iov(e.gap_ro))
-    runs.push(std.iov(e.rodata))
-    runs.push(std.iov(e.gap_data))
-    runs.push(std.iov(e.data))
-    runs.push(std.iov(e.gap_syms))
-    runs.push(std.iov(e.syms))
-    runs.push(std.iov(e.strtab))
-    runs.push(std.iov(e.shstrtab))
-    runs.push(std.iov(e.gap_shdrs))
-    runs.push(std.iov(e.shdrs))
+    if tgt.is64:
+        let e := elf_file64(tgt, pl, compiled.code, compiled.rodata, compiled.data)
+        runs.push(std.iov(e.ehdr))
+        runs.push(std.iov(e.phdrs))
+        runs.push(std.iov(e.gap_text))
+        runs.push(std.iov(e.code))
+        runs.push(std.iov(e.gap_ro))
+        runs.push(std.iov(e.rodata))
+        runs.push(std.iov(e.gap_data))
+        runs.push(std.iov(e.data))
+        runs.push(std.iov(e.gap_syms))
+        runs.push(std.iov(e.syms))
+        runs.push(std.iov(e.strtab))
+        runs.push(std.iov(e.shstrtab))
+        runs.push(std.iov(e.gap_shdrs))
+        runs.push(std.iov(e.shdrs))
+    else:
+        let e := elf_file32(tgt, pl, compiled.code, compiled.rodata, compiled.data)
+        runs.push(std.iov(e.ehdr))
+        runs.push(std.iov(e.phdrs))
+        runs.push(std.iov(e.gap_text))
+        runs.push(std.iov(e.code))
+        runs.push(std.iov(e.gap_ro))
+        runs.push(std.iov(e.rodata))
+        runs.push(std.iov(e.gap_data))
+        runs.push(std.iov(e.data))
+        runs.push(std.iov(e.gap_syms))
+        runs.push(std.iov(e.syms))
+        runs.push(std.iov(e.strtab))
+        runs.push(std.iov(e.shstrtab))
+        runs.push(std.iov(e.gap_shdrs))
+        runs.push(std.iov(e.shdrs))
     outf.writev(runs)
     outf.close()
     0
+
+// ===========================================================================
+// Code generation for every target that is not the x86-64 pioneer:
+// one shared driver over the IR, one thin instruction layer per
+// architecture, and a runtime written once as IR and compiled by the
+// same driver it serves.
+// ===========================================================================
+
+fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
+             stack_size : i64, guard_size : i64) → Compiled:
+    _ ← stack_size + guard_size
+    _ ← @dropunit(#a.fns) + @dropunit(#toks.off) + @dropunit(#src) + @dropunit(#chk.ntype)
+    let diags : mut Diag[] = []
+    diags.push(Diag{line: 1, col: 1,
+                    msg: "the " ⧺ tgt.name ⧺ " backend is not written yet"})
+    (Compiled{code: [], rodata: [], data: [], relro_size: 0, syms: [],
+              log: [], diags: diags})
