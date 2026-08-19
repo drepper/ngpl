@@ -9686,6 +9686,13 @@ let RT_RELRO : i64 = ⁻44
 let RT_STRNEXT : i64 = ⁻45
 let RT_TORAW : i64 = ⁻46
 let RT_WRITEV : i64 = ⁻47
+// the software arithmetic a 32-bit target leans on; a 64-bit target
+// never calls these and never carries them
+let RT_DIVU64 : i64 = ⁻48
+let RT_MODU64 : i64 = ⁻49
+let RT_DIVS64 : i64 = ⁻50
+let RT_MODS64 : i64 = ⁻51
+let RT_MULOV64 : i64 = ⁻52
 
 struct Emit:
     code : u8[]
@@ -12512,7 +12519,12 @@ fn rt_names() → str[]:
     "RT_RELRO",
     "RT_STRNEXT",
     "RT_TORAW",
-    "RT_WRITEV"]
+    "RT_WRITEV",
+    "RT_DIVU64",
+    "RT_MODU64",
+    "RT_DIVS64",
+    "RT_MODS64",
+    "RT_MULOV64"]
 
 // The UTF-8 decoder is Hoehrmann's DFA in the shift form the design
 // researched: nine states, twelve byte classes, and a step that is one
@@ -13788,7 +13800,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // What the program calls, and what that calls in turn.  Everything
     // emitted so far is the program's own; the calls it made name the
     // runtime it needs, and the edge list closes over the rest.
-    let nrt : i64 = 47
+    let nrt : i64 = 52
     foreach _ := 1…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
@@ -14846,305 +14858,456 @@ fn g_lds(em : &mut Emit, tg : Target, r : i64, slot : i64):
     if tg.id = TGT_A64:
         a64g_lds(&em, tg, r, slot)
         return
-    rvg_lds(&em, tg, r, slot)
+    if tg.id = TGT_RV64:
+        rvg_lds(&em, tg, r, slot)
+        return
+    i3g_lds(&em, tg, r, slot)
 
 fn g_sts(em : &mut Emit, tg : Target, r : i64, slot : i64):
     if tg.id = TGT_A64:
         a64g_sts(&em, tg, r, slot)
         return
-    rvg_sts(&em, tg, r, slot)
+    if tg.id = TGT_RV64:
+        rvg_sts(&em, tg, r, slot)
+        return
+    i3g_sts(&em, tg, r, slot)
 
 fn g_const(em : &mut Emit, tg : Target, r : i64, v : i64):
     if tg.id = TGT_A64:
         a64g_const(&em, tg, r, v)
         return
-    rvg_const(&em, tg, r, v)
+    if tg.id = TGT_RV64:
+        rvg_const(&em, tg, r, v)
+        return
+    i3g_const(&em, tg, r, v)
 
 fn g_mov2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
     if tg.id = TGT_A64:
         a64g_mov2(&em, tg, rd, rs)
         return
-    rvg_mov2(&em, tg, rd, rs)
+    if tg.id = TGT_RV64:
+        rvg_mov2(&em, tg, rd, rs)
+        return
+    i3g_mov2(&em, tg, rd, rs)
 
 fn g_add3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
     if tg.id = TGT_A64:
         a64g_add3(&em, tg, rd, rx, ry)
         return
-    rvg_add3(&em, tg, rd, rx, ry)
+    if tg.id = TGT_RV64:
+        rvg_add3(&em, tg, rd, rx, ry)
+        return
+    i3g_add3(&em, tg, rd, rx, ry)
 
 fn g_sub3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
     if tg.id = TGT_A64:
         a64g_sub3(&em, tg, rd, rx, ry)
         return
-    rvg_sub3(&em, tg, rd, rx, ry)
+    if tg.id = TGT_RV64:
+        rvg_sub3(&em, tg, rd, rx, ry)
+        return
+    i3g_sub3(&em, tg, rd, rx, ry)
 
 fn g_mul3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
     if tg.id = TGT_A64:
         a64g_mul3(&em, tg, rd, rx, ry)
         return
-    rvg_mul3(&em, tg, rd, rx, ry)
+    if tg.id = TGT_RV64:
+        rvg_mul3(&em, tg, rd, rx, ry)
+        return
+    i3g_mul3(&em, tg, rd, rx, ry)
 
 fn g_and3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
     if tg.id = TGT_A64:
         a64g_and3(&em, tg, rd, rx, ry)
         return
-    rvg_and3(&em, tg, rd, rx, ry)
+    if tg.id = TGT_RV64:
+        rvg_and3(&em, tg, rd, rx, ry)
+        return
+    i3g_and3(&em, tg, rd, rx, ry)
 
 fn g_or3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
     if tg.id = TGT_A64:
         a64g_or3(&em, tg, rd, rx, ry)
         return
-    rvg_or3(&em, tg, rd, rx, ry)
+    if tg.id = TGT_RV64:
+        rvg_or3(&em, tg, rd, rx, ry)
+        return
+    i3g_or3(&em, tg, rd, rx, ry)
 
 fn g_xor3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
     if tg.id = TGT_A64:
         a64g_xor3(&em, tg, rd, rx, ry)
         return
-    rvg_xor3(&em, tg, rd, rx, ry)
+    if tg.id = TGT_RV64:
+        rvg_xor3(&em, tg, rd, rx, ry)
+        return
+    i3g_xor3(&em, tg, rd, rx, ry)
 
 fn g_not2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
     if tg.id = TGT_A64:
         a64g_not2(&em, tg, rd, rs)
         return
-    rvg_not2(&em, tg, rd, rs)
+    if tg.id = TGT_RV64:
+        rvg_not2(&em, tg, rd, rs)
+        return
+    i3g_not2(&em, tg, rd, rs)
 
 fn g_neg2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
     if tg.id = TGT_A64:
         a64g_neg2(&em, tg, rd, rs)
         return
-    rvg_neg2(&em, tg, rd, rs)
+    if tg.id = TGT_RV64:
+        rvg_neg2(&em, tg, rd, rs)
+        return
+    i3g_neg2(&em, tg, rd, rs)
 
 fn g_shl3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
     if tg.id = TGT_A64:
         a64g_shl3(&em, tg, rd, rx, ry)
         return
-    rvg_shl3(&em, tg, rd, rx, ry)
+    if tg.id = TGT_RV64:
+        rvg_shl3(&em, tg, rd, rx, ry)
+        return
+    i3g_shl3(&em, tg, rd, rx, ry)
 
 fn g_shr3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
     if tg.id = TGT_A64:
         a64g_shr3(&em, tg, rd, rx, ry)
         return
-    rvg_shr3(&em, tg, rd, rx, ry)
+    if tg.id = TGT_RV64:
+        rvg_shr3(&em, tg, rd, rx, ry)
+        return
+    i3g_shr3(&em, tg, rd, rx, ry)
 
 fn g_sar3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
     if tg.id = TGT_A64:
         a64g_sar3(&em, tg, rd, rx, ry)
         return
-    rvg_sar3(&em, tg, rd, rx, ry)
+    if tg.id = TGT_RV64:
+        rvg_sar3(&em, tg, rd, rx, ry)
+        return
+    i3g_sar3(&em, tg, rd, rx, ry)
 
 fn g_shl3i(em : &mut Emit, tg : Target, rd : i64, rs : i64, imm : i64):
     if tg.id = TGT_A64:
         a64g_shl3i(&em, tg, rd, rs, imm)
         return
-    rvg_shl3i(&em, tg, rd, rs, imm)
+    if tg.id = TGT_RV64:
+        rvg_shl3i(&em, tg, rd, rs, imm)
+        return
+    i3g_shl3i(&em, tg, rd, rs, imm)
 
 fn g_cmp3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64):
     if tg.id = TGT_A64:
         a64g_cmp3(&em, tg, rd, rx, ry, cond, sgn)
         return
-    rvg_cmp3(&em, tg, rd, rx, ry, cond, sgn)
+    if tg.id = TGT_RV64:
+        rvg_cmp3(&em, tg, rd, rx, ry, cond, sgn)
+        return
+    i3g_cmp3(&em, tg, rd, rx, ry, cond, sgn)
 
 fn g_sel4(em : &mut Emit, tg : Target, rd : i64, rc : i64, rx : i64, ry : i64):
     if tg.id = TGT_A64:
         a64g_sel4(&em, tg, rd, rc, rx, ry)
         return
-    rvg_sel4(&em, tg, rd, rc, rx, ry)
+    if tg.id = TGT_RV64:
+        rvg_sel4(&em, tg, rd, rc, rx, ry)
+        return
+    i3g_sel4(&em, tg, rd, rc, rx, ry)
 
 fn g_div3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
     if tg.id = TGT_A64:
         a64g_div3(&em, tg, rd, rx, ry, sgn)
         return
-    rvg_div3(&em, tg, rd, rx, ry, sgn)
+    if tg.id = TGT_RV64:
+        rvg_div3(&em, tg, rd, rx, ry, sgn)
+        return
+    i3g_div3(&em, tg, rd, rx, ry, sgn)
 
 fn g_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
     if tg.id = TGT_A64:
         a64g_mod3(&em, tg, rd, rx, ry, sgn)
         return
-    rvg_mod3(&em, tg, rd, rx, ry, sgn)
+    if tg.id = TGT_RV64:
+        rvg_mod3(&em, tg, rd, rx, ry, sgn)
+        return
+    i3g_mod3(&em, tg, rd, rx, ry, sgn)
 
 fn g_addov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64):
     if tg.id = TGT_A64:
         a64g_addov(&em, tg, rd, rf, rx, ry, sgn)
         return
-    rvg_addov(&em, tg, rd, rf, rx, ry, sgn)
+    if tg.id = TGT_RV64:
+        rvg_addov(&em, tg, rd, rf, rx, ry, sgn)
+        return
+    i3g_addov(&em, tg, rd, rf, rx, ry, sgn)
 
 fn g_subov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64):
     if tg.id = TGT_A64:
         a64g_subov(&em, tg, rd, rf, rx, ry, sgn)
         return
-    rvg_subov(&em, tg, rd, rf, rx, ry, sgn)
+    if tg.id = TGT_RV64:
+        rvg_subov(&em, tg, rd, rf, rx, ry, sgn)
+        return
+    i3g_subov(&em, tg, rd, rf, rx, ry, sgn)
 
 fn g_mulov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64):
     if tg.id = TGT_A64:
         a64g_mulov(&em, tg, rd, rf, rx, ry, sgn)
         return
-    rvg_mulov(&em, tg, rd, rf, rx, ry, sgn)
+    if tg.id = TGT_RV64:
+        rvg_mulov(&em, tg, rd, rf, rx, ry, sgn)
+        return
+    i3g_mulov(&em, tg, rd, rf, rx, ry, sgn)
 
 fn g_ext2(em : &mut Emit, tg : Target, r : i64, bits : i64, sgn : i64):
     if tg.id = TGT_A64:
         a64g_ext2(&em, tg, r, bits, sgn)
         return
-    rvg_ext2(&em, tg, r, bits, sgn)
+    if tg.id = TGT_RV64:
+        rvg_ext2(&em, tg, r, bits, sgn)
+        return
+    i3g_ext2(&em, tg, r, bits, sgn)
 
 fn g_ldo(em : &mut Emit, tg : Target, rd : i64, rbase : i64, off : i64, width : i64, sgn : i64):
     if tg.id = TGT_A64:
         a64g_ldo(&em, tg, rd, rbase, off, width, sgn)
         return
-    rvg_ldo(&em, tg, rd, rbase, off, width, sgn)
+    if tg.id = TGT_RV64:
+        rvg_ldo(&em, tg, rd, rbase, off, width, sgn)
+        return
+    i3g_ldo(&em, tg, rd, rbase, off, width, sgn)
 
 fn g_sto(em : &mut Emit, tg : Target, rs : i64, rbase : i64, off : i64, width : i64):
     if tg.id = TGT_A64:
         a64g_sto(&em, tg, rs, rbase, off, width)
         return
-    rvg_sto(&em, tg, rs, rbase, off, width)
+    if tg.id = TGT_RV64:
+        rvg_sto(&em, tg, rs, rbase, off, width)
+        return
+    i3g_sto(&em, tg, rs, rbase, off, width)
 
 fn g_jmp(em : &mut Emit, tg : Target, lab : i64):
     if tg.id = TGT_A64:
         a64g_jmp(&em, tg, lab)
         return
-    rvg_jmp(&em, tg, lab)
+    if tg.id = TGT_RV64:
+        rvg_jmp(&em, tg, lab)
+        return
+    i3g_jmp(&em, tg, lab)
 
 fn g_jz(em : &mut Emit, tg : Target, r : i64, lab : i64):
     if tg.id = TGT_A64:
         a64g_jz(&em, tg, r, lab)
         return
-    rvg_jz(&em, tg, r, lab)
+    if tg.id = TGT_RV64:
+        rvg_jz(&em, tg, r, lab)
+        return
+    i3g_jz(&em, tg, r, lab)
 
 fn g_jnz(em : &mut Emit, tg : Target, r : i64, lab : i64):
     if tg.id = TGT_A64:
         a64g_jnz(&em, tg, r, lab)
         return
-    rvg_jnz(&em, tg, r, lab)
+    if tg.id = TGT_RV64:
+        rvg_jnz(&em, tg, r, lab)
+        return
+    i3g_jnz(&em, tg, r, lab)
 
 fn g_label(em : &mut Emit, tg : Target, lab : i64):
     if tg.id = TGT_A64:
         a64g_label(&em, tg, lab)
         return
-    rvg_label(&em, tg, lab)
+    if tg.id = TGT_RV64:
+        rvg_label(&em, tg, lab)
+        return
+    i3g_label(&em, tg, lab)
 
 fn g_call(em : &mut Emit, tg : Target, target : i64):
     if tg.id = TGT_A64:
         a64g_call(&em, tg, target)
         return
-    rvg_call(&em, tg, target)
+    if tg.id = TGT_RV64:
+        rvg_call(&em, tg, target)
+        return
+    i3g_call(&em, tg, target)
 
 fn g_calli(em : &mut Emit, tg : Target, r : i64):
     if tg.id = TGT_A64:
         a64g_calli(&em, tg, r)
         return
-    rvg_calli(&em, tg, r)
+    if tg.id = TGT_RV64:
+        rvg_calli(&em, tg, r)
+        return
+    i3g_calli(&em, tg, r)
 
 fn g_ijmp(em : &mut Emit, tg : Target, r : i64):
     if tg.id = TGT_A64:
         a64g_ijmp(&em, tg, r)
         return
-    rvg_ijmp(&em, tg, r)
+    if tg.id = TGT_RV64:
+        rvg_ijmp(&em, tg, r)
+        return
+    i3g_ijmp(&em, tg, r)
 
 fn g_argld(em : &mut Emit, tg : Target, k : i64, slot : i64):
     if tg.id = TGT_A64:
         a64g_argld(&em, tg, k, slot)
         return
-    rvg_argld(&em, tg, k, slot)
+    if tg.id = TGT_RV64:
+        rvg_argld(&em, tg, k, slot)
+        return
+    i3g_argld(&em, tg, k, slot)
 
 fn g_argconst(em : &mut Emit, tg : Target, k : i64, v : i64):
     if tg.id = TGT_A64:
         a64g_argconst(&em, tg, k, v)
         return
-    rvg_argconst(&em, tg, k, v)
+    if tg.id = TGT_RV64:
+        rvg_argconst(&em, tg, k, v)
+        return
+    i3g_argconst(&em, tg, k, v)
 
 fn g_argmov(em : &mut Emit, tg : Target, k : i64, r : i64):
     if tg.id = TGT_A64:
         a64g_argmov(&em, tg, k, r)
         return
-    rvg_argmov(&em, tg, k, r)
+    if tg.id = TGT_RV64:
+        rvg_argmov(&em, tg, k, r)
+        return
+    i3g_argmov(&em, tg, k, r)
 
 fn g_retst(em : &mut Emit, tg : Target, slot : i64):
     if tg.id = TGT_A64:
         a64g_retst(&em, tg, slot)
         return
-    rvg_retst(&em, tg, slot)
+    if tg.id = TGT_RV64:
+        rvg_retst(&em, tg, slot)
+        return
+    i3g_retst(&em, tg, slot)
 
 fn g_retld(em : &mut Emit, tg : Target, slot : i64):
     if tg.id = TGT_A64:
         a64g_retld(&em, tg, slot)
         return
-    rvg_retld(&em, tg, slot)
+    if tg.id = TGT_RV64:
+        rvg_retld(&em, tg, slot)
+        return
+    i3g_retld(&em, tg, slot)
 
 fn g_retmov(em : &mut Emit, tg : Target, r : i64):
     if tg.id = TGT_A64:
         a64g_retmov(&em, tg, r)
         return
-    rvg_retmov(&em, tg, r)
+    if tg.id = TGT_RV64:
+        rvg_retmov(&em, tg, r)
+        return
+    i3g_retmov(&em, tg, r)
 
 fn g_absref(em : &mut Emit, tg : Target, r : i64) → i64:
     if tg.id = TGT_A64:
         return a64g_absref(&em, tg, r)
-    rvg_absref(&em, tg, r)
+    if tg.id = TGT_RV64:
+        return rvg_absref(&em, tg, r)
+    i3g_absref(&em, tg, r)
 
 fn g_absref_arg(em : &mut Emit, tg : Target, k : i64) → i64:
     if tg.id = TGT_A64:
         return a64g_absref_arg(&em, tg, k)
-    rvg_absref_arg(&em, tg, k)
+    if tg.id = TGT_RV64:
+        return rvg_absref_arg(&em, tg, k)
+    i3g_absref_arg(&em, tg, k)
 
 fn g_sysarg(em : &mut Emit, tg : Target, k : i64, slot : i64):
     if tg.id = TGT_A64:
         a64g_sysarg(&em, tg, k, slot)
         return
-    rvg_sysarg(&em, tg, k, slot)
+    if tg.id = TGT_RV64:
+        rvg_sysarg(&em, tg, k, slot)
+        return
+    i3g_sysarg(&em, tg, k, slot)
 
 fn g_sysimm(em : &mut Emit, tg : Target, k : i64, v : i64):
     if tg.id = TGT_A64:
         a64g_sysimm(&em, tg, k, v)
         return
-    rvg_sysimm(&em, tg, k, v)
+    if tg.id = TGT_RV64:
+        rvg_sysimm(&em, tg, k, v)
+        return
+    i3g_sysimm(&em, tg, k, v)
 
 fn g_sysmov(em : &mut Emit, tg : Target, k : i64, r : i64):
     if tg.id = TGT_A64:
         a64g_sysmov(&em, tg, k, r)
         return
-    rvg_sysmov(&em, tg, k, r)
+    if tg.id = TGT_RV64:
+        rvg_sysmov(&em, tg, k, r)
+        return
+    i3g_sysmov(&em, tg, k, r)
 
 fn g_syscall(em : &mut Emit, tg : Target, scid : i64):
     if tg.id = TGT_A64:
         a64g_syscall(&em, tg, scid)
         return
-    rvg_syscall(&em, tg, scid)
+    if tg.id = TGT_RV64:
+        rvg_syscall(&em, tg, scid)
+        return
+    i3g_syscall(&em, tg, scid)
 
 fn g_sysret(em : &mut Emit, tg : Target, r : i64):
     if tg.id = TGT_A64:
         a64g_sysret(&em, tg, r)
         return
-    rvg_sysret(&em, tg, r)
+    if tg.id = TGT_RV64:
+        rvg_sysret(&em, tg, r)
+        return
+    i3g_sysret(&em, tg, r)
 
 fn g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64):
     if tg.id = TGT_A64:
         a64g_prologue(&em, tg, nvregs, np)
         return
-    rvg_prologue(&em, tg, nvregs, np)
+    if tg.id = TGT_RV64:
+        rvg_prologue(&em, tg, nvregs, np)
+        return
+    i3g_prologue(&em, tg, nvregs, np)
 
 fn g_epilogue(em : &mut Emit, tg : Target):
     if tg.id = TGT_A64:
         a64g_epilogue(&em, tg)
         return
-    rvg_epilogue(&em, tg)
+    if tg.id = TGT_RV64:
+        rvg_epilogue(&em, tg)
+        return
+    i3g_epilogue(&em, tg)
 
 fn g_resolve(em : &mut Emit, tg : Target):
     if tg.id = TGT_A64:
         a64g_resolve(&em, tg)
         return
-    rvg_resolve(&em, tg)
+    if tg.id = TGT_RV64:
+        rvg_resolve(&em, tg)
+        return
+    i3g_resolve(&em, tg)
 
 fn g_patch_abs(em : &mut Emit, tg : Target, pos : i64, v : i64):
     if tg.id = TGT_A64:
         a64g_patch_abs(&em, tg, pos, v)
         return
-    rvg_patch_abs(&em, tg, pos, v)
+    if tg.id = TGT_RV64:
+        rvg_patch_abs(&em, tg, pos, v)
+        return
+    i3g_patch_abs(&em, tg, pos, v)
 
 fn g_patch_call(em : &mut Emit, tg : Target, pos : i64, dest : i64):
     if tg.id = TGT_A64:
         a64g_patch_call(&em, tg, pos, dest)
         return
-    rvg_patch_call(&em, tg, pos, dest)
+    if tg.id = TGT_RV64:
+        rvg_patch_call(&em, tg, pos, dest)
+        return
+    i3g_patch_call(&em, tg, pos, dest)
 
 // ---------------------------------------------------------------------------
 // riscv64: the RV64IM instruction layer
@@ -15553,6 +15716,534 @@ fn rvg_patch_call(em : &mut Emit, tg : Target, pos : i64, dest : i64):
     let hi : i64 = (delta + 2048) » 12
     em.patch32(pos, code_word(&em, pos) + ((hi & 1048575) « 12))
     em.patch32(pos + 4, code_word(&em, pos + 4) + (((delta - (hi « 12)) & 4095) « 20))
+
+// ---------------------------------------------------------------------------
+// i386: the 32-bit x86 instruction layer
+//
+// A 32-bit machine carries the 8-byte data model in pairs.  Here the
+// abstract registers are not registers at all: they are four 8-byte
+// cells at the top of the frame, and every operation loads its pairs
+// into eax:edx and ecx:ebx, computes, and puts the result back.  The
+// real registers never hold anything across two operations, which
+// costs memory traffic and buys a layer simple enough to trust.
+// Arguments travel on the stack, eight bytes each; the syscall is
+// int 0x80 with the six arguments staged below it.
+// ---------------------------------------------------------------------------
+
+// the cells: A, B, C, T at [ebp-8], [ebp-16], [ebp-24], [ebp-32]
+fn i3_cello(r : i64) → i64:
+    0 - 8 × (r + 1)
+
+// slot s lives at [ebp - 32 - 8×(s+1)]
+fn i3_sloto(slot : i64) → i64:
+    0 - 32 - 8 × (slot + 1)
+
+// opcode + modrm(10, reg, 101) + disp32: the [ebp+disp] form
+fn i3_rm(em : &mut Emit, op : i64, reg : i64, disp : i64):
+    em.b2(op, 128 + reg × 8 + 5)
+    em.w32(disp)
+
+// a pair into (lo, hi) registers, and back
+fn i3_ldpair(em : &mut Emit, lo : i64, hi : i64, disp : i64):
+    i3_rm(&em, 139, lo, disp)
+    i3_rm(&em, 139, hi, disp + 4)
+
+fn i3_stpair(em : &mut Emit, lo : i64, hi : i64, disp : i64):
+    i3_rm(&em, 137, lo, disp)
+    i3_rm(&em, 137, hi, disp + 4)
+
+fn i3_movimm(em : &mut Emit, reg : i64, v : i64):
+    em.b1(184 + reg)
+    em.w32(v)
+
+fn i3g_lds(em : &mut Emit, tg : Target, r : i64, slot : i64):
+    i3_ldpair(&em, 0, 2, i3_sloto(slot))
+    i3_stpair(&em, 0, 2, i3_cello(r))
+
+fn i3g_sts(em : &mut Emit, tg : Target, r : i64, slot : i64):
+    i3_ldpair(&em, 0, 2, i3_cello(r))
+    i3_stpair(&em, 0, 2, i3_sloto(slot))
+
+fn i3g_const(em : &mut Emit, tg : Target, r : i64, v : i64):
+    // straight into the cell, no register needed
+    em.b2(199, 128 + 5)
+    em.w32(i3_cello(r))
+    em.w32(v & 4294967295)
+    em.b2(199, 128 + 5)
+    em.w32(i3_cello(r) + 4)
+    em.w32(@wrap(v » 32) & 4294967295)
+
+fn i3g_mov2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
+    i3_ldpair(&em, 0, 2, i3_cello(rs))
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+
+// the pair ALU: x in eax:edx, y in ecx:ebx, result in eax:edx
+fn i3_binprep(em : &mut Emit, rx : i64, ry : i64):
+    i3_ldpair(&em, 0, 2, i3_cello(rx))
+    i3_ldpair(&em, 1, 3, i3_cello(ry))
+
+fn i3g_add3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    i3_binprep(&em, rx, ry)
+    em.b2(1, 200)                    // add eax, ecx
+    em.b2(17, 218)                   // adc edx, ebx
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+
+fn i3g_sub3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    i3_binprep(&em, rx, ry)
+    em.b2(41, 200)                   // sub eax, ecx
+    em.b2(25, 218)                   // sbb edx, ebx
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+
+fn i3g_and3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    i3_binprep(&em, rx, ry)
+    em.b2(33, 200)
+    em.b2(33, 218)
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+
+fn i3g_or3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    i3_binprep(&em, rx, ry)
+    em.b2(9, 200)
+    em.b2(9, 218)
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+
+fn i3g_xor3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    i3_binprep(&em, rx, ry)
+    em.b2(49, 200)
+    em.b2(49, 218)
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+
+fn i3g_not2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
+    i3_ldpair(&em, 0, 2, i3_cello(rs))
+    em.b2(247, 208)                  // not eax
+    em.b2(247, 210)                  // not edx
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+
+fn i3g_neg2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
+    i3_ldpair(&em, 0, 2, i3_cello(rs))
+    em.b2(247, 208)
+    em.b2(247, 210)
+    em.b3(131, 192, 1)               // add eax, 1
+    em.b3(131, 210, 0)               // adc edx, 0
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+
+fn i3g_mul3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    // x in esi:edi, y in ecx:ebx; the three half-products
+    i3_ldpair(&em, 6, 7, i3_cello(rx))
+    i3_ldpair(&em, 1, 3, i3_cello(ry))
+    em.b3(15, 175, 249)              // imul edi, ecx: x_hi × y_lo
+    em.b3(15, 175, 222)              // imul ebx, esi: y_hi × x_lo
+    em.b2(1, 223)                    // add edi, ebx
+    em.b2(137, 240)                  // mov eax, esi
+    em.b2(247, 225)                  // mul ecx: edx:eax = x_lo × y_lo
+    em.b2(1, 250)                    // add edx, edi
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+
+fn i3g_shl3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    i3_ldpair(&em, 0, 2, i3_cello(rx))
+    i3_rm(&em, 139, 1, i3_cello(ry))     // mov ecx, count
+    em.b3(128, 249, 32)              // cmp cl, 32
+    em.b2(114, 11)                   // jb small (+11)
+    em.b2(137, 194)                  // mov edx, eax
+    em.b2(49, 192)                   // xor eax, eax
+    em.b3(128, 233, 32)              // sub cl, 32
+    em.b2(211, 226)                  // shl edx, cl
+    em.b2(235, 5)                    // jmp done (+5)
+    em.b4(15, 165, 194, 211)         // shld edx, eax, cl; shl eax, cl (starts)
+    em.b1(224)
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+
+fn i3g_shr3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    i3_ldpair(&em, 0, 2, i3_cello(rx))
+    i3_rm(&em, 139, 1, i3_cello(ry))
+    em.b3(128, 249, 32)              // cmp cl, 32
+    em.b2(114, 11)                   // jb small (+11)
+    em.b2(137, 208)                  // mov eax, edx
+    em.b2(49, 210)                   // xor edx, edx
+    em.b3(128, 233, 32)              // sub cl, 32
+    em.b2(211, 232)                  // shr eax, cl
+    em.b2(235, 5)                    // jmp done (+5)
+    em.b4(15, 173, 208, 211)         // shrd eax, edx, cl; shr edx, cl
+    em.b1(234)
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+
+fn i3g_sar3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    i3_ldpair(&em, 0, 2, i3_cello(rx))
+    i3_rm(&em, 139, 1, i3_cello(ry))
+    em.b3(128, 249, 32)              // cmp cl, 32
+    em.b2(114, 12)                   // jb small (+12)
+    em.b2(137, 208)                  // mov eax, edx
+    em.b3(193, 250, 31)              // sar edx, 31
+    em.b3(128, 233, 32)              // sub cl, 32
+    em.b2(211, 248)                  // sar eax, cl
+    em.b2(235, 5)                    // jmp done (+5)
+    em.b4(15, 173, 208, 211)         // shrd eax, edx, cl; sar edx, cl
+    em.b1(250)
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+
+fn i3g_shl3i(em : &mut Emit, tg : Target, rd : i64, rs : i64, imm : i64):
+    i3_ldpair(&em, 0, 2, i3_cello(rs))
+    // the driver only asks for small shifts; the pair form is shld
+    em.b4(15, 164, 194, imm)         // shld edx, eax, imm
+    em.b3(193, 224, imm)             // shl eax, imm
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+
+fn i3g_cmp3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64):
+    i3_binprep(&em, rx, ry)
+    if cond = CC_EQ or cond = CC_NE:
+        em.b2(49, 200)               // xor eax, ecx
+        em.b2(49, 218)               // xor edx, ebx
+        em.b2(9, 208)                // or eax, edx
+        em.b3(15, 148 if cond = CC_EQ else 149, 192)
+        em.b4(15, 182, 192, 144)     // movzx eax, al; nop
+    else:
+        // the swapped pair asks the mirrored question
+        let flip : bool = cond = CC_GT or cond = CC_LE
+        if flip:
+            em.b2(135, 200)          // xchg eax, ecx
+            em.b2(135, 218)          // xchg edx, ebx
+        em.b2(57, 218)               // cmp edx, ebx
+        em.b2(117, 7)                // jne past-the-low (+7)
+        em.b2(57, 200)               // cmp eax, ecx
+        em.b3(15, 146, 192)          // setb al: the low words decide
+        em.b2(235, 4)                // jmp join (+4)
+        em.b3(15, 156 if sgn = 1 else 146, 192)   // setl / setb on the high
+        em.b1(144)                   // nop
+        em.b4(15, 182, 192, 144)     // movzx eax, al; nop
+        if cond = CC_GE or cond = CC_LE:
+            em.b2(52, 1)             // xor al, 1
+    em.b2(49, 210)                   // xor edx, edx
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+
+fn i3g_sel4(em : &mut Emit, tg : Target, rd : i64, rc : i64, rx : i64, ry : i64):
+    i3_ldpair(&em, 0, 2, i3_cello(rc))
+    em.b2(9, 208)                    // or eax, edx
+    em.b2(117, 14)                   // jnz take-rx (+14)
+    i3_ldpair(&em, 0, 2, i3_cello(ry))
+    em.b2(235, 12)                   // jmp join (+12)
+    i3_ldpair(&em, 0, 2, i3_cello(rx))
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+
+fn i3g_div3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
+    i3_helper2(&em, rd, rx, ry, RT_DIVS64 if sgn = 1 else RT_DIVU64)
+
+fn i3g_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
+    i3_helper2(&em, rd, rx, ry, RT_MODS64 if sgn = 1 else RT_MODU64)
+
+// a two-argument helper call: the cells staged, the answer stored
+fn i3_helper2(em : &mut Emit, rd : i64, rx : i64, ry : i64, target : i64):
+    i3_ldpair(&em, 0, 2, i3_cello(rx))
+    em.b3(137, 68, 36)
+    em.b1(0)                         // mov [esp], eax
+    em.b3(137, 84, 36)
+    em.b1(4)                         // mov [esp+4], edx
+    i3_ldpair(&em, 0, 2, i3_cello(ry))
+    em.b3(137, 68, 36)
+    em.b1(8)
+    em.b3(137, 84, 36)
+    em.b1(12)
+    i3_call(&em, target)
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+
+fn i3g_addov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64):
+    i3_binprep(&em, rx, ry)
+    em.b2(1, 200)                    // add eax, ecx
+    em.b2(17, 218)                   // adc edx, ebx
+    em.b3(15, 144 if sgn = 1 else 146, 193)   // seto cl / setb cl
+    em.b4(15, 182, 201, 144)         // movzx ecx, cl
+    em.b2(49, 219)                   // xor ebx, ebx
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+    i3_stpair(&em, 1, 3, i3_cello(rf))
+
+fn i3g_subov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64):
+    i3_binprep(&em, rx, ry)
+    em.b2(41, 200)                   // sub eax, ecx
+    em.b2(25, 218)                   // sbb edx, ebx
+    em.b3(15, 144 if sgn = 1 else 146, 193)
+    em.b4(15, 182, 201, 144)
+    em.b2(49, 219)
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+    i3_stpair(&em, 1, 3, i3_cello(rf))
+
+fn i3g_mulov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64):
+    // the helper's arguments staged, the product computed and parked
+    // past them, the flag fetched, and only then the cells written --
+    // the driver aliases the flag's cell with an operand's
+    i3_ldpair(&em, 0, 2, i3_cello(rx))
+    em.b3(137, 68, 36)
+    em.b1(0)
+    em.b3(137, 84, 36)
+    em.b1(4)
+    i3_ldpair(&em, 0, 2, i3_cello(ry))
+    em.b3(137, 68, 36)
+    em.b1(8)
+    em.b3(137, 84, 36)
+    em.b1(12)
+    em.b3(199, 68, 36)
+    em.b1(16)
+    em.w32(sgn)                      // mov dword [esp+16], sgn
+    em.b3(199, 68, 36)
+    em.b1(20)
+    em.w32(0)
+    // the wrapped product, into the parking pair at [esp+24]
+    i3_ldpair(&em, 6, 7, i3_cello(rx))
+    i3_ldpair(&em, 1, 3, i3_cello(ry))
+    em.b3(15, 175, 249)              // imul edi, ecx
+    em.b3(15, 175, 222)              // imul ebx, esi
+    em.b2(1, 223)                    // add edi, ebx
+    em.b2(137, 240)                  // mov eax, esi
+    em.b2(247, 225)                  // mul ecx
+    em.b2(1, 250)                    // add edx, edi
+    em.b3(137, 68, 36)
+    em.b1(24)
+    em.b3(137, 84, 36)
+    em.b1(28)
+    i3_call(&em, RT_MULOV64)
+    i3_stpair(&em, 0, 2, i3_cello(rf))
+    em.b3(139, 68, 36)
+    em.b1(24)
+    em.b3(139, 84, 36)
+    em.b1(28)
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+
+fn i3g_ext2(em : &mut Emit, tg : Target, r : i64, bits : i64, sgn : i64):
+    if bits >= 64:
+        return
+    i3_ldpair(&em, 0, 2, i3_cello(r))
+    if bits = 8:
+        em.b3(15, 190 if sgn = 1 else 182, 192)   // movsx/movzx eax, al
+    elif bits = 16:
+        em.b3(15, 191 if sgn = 1 else 183, 192)   // movsx/movzx eax, ax
+    if sgn = 1:
+        em.b1(153)                   // cdq
+    else:
+        em.b2(49, 210)               // xor edx, edx
+    i3_stpair(&em, 0, 2, i3_cello(r))
+
+fn i3g_ldo(em : &mut Emit, tg : Target, rd : i64, rbase : i64, off : i64, width : i64, sgn : i64):
+    let wd : i64 = tg.ptr if width = 0 else width
+    i3_rm(&em, 139, 0, i3_cello(rbase))       // mov eax, base.lo
+    if off ≠ 0:
+        em.b1(5)
+        em.w32(off)                  // add eax, off
+    if wd = 8:
+        em.b2(139, 72)
+        em.b1(0)                     // mov ecx, [eax]
+        em.b2(139, 88)
+        em.b1(4)                     // mov ebx, [eax+4]
+    elif wd = 4:
+        em.b2(139, 8)                // mov ecx, [eax]
+        if sgn = 1:
+            em.b2(137, 203)          // mov ebx, ecx
+            em.b3(193, 251, 31)      // sar ebx, 31
+        else:
+            em.b2(49, 219)
+    elif wd = 2:
+        em.b3(15, 191 if sgn = 1 else 183, 8)     // movsx/movzx ecx, word [eax]
+        if sgn = 1:
+            em.b2(137, 203)
+            em.b3(193, 251, 31)
+        else:
+            em.b2(49, 219)
+    else:
+        em.b3(15, 190 if sgn = 1 else 182, 8)     // …byte [eax]
+        if sgn = 1:
+            em.b2(137, 203)
+            em.b3(193, 251, 31)
+        else:
+            em.b2(49, 219)
+    i3_stpair(&em, 1, 3, i3_cello(rd))
+
+fn i3g_sto(em : &mut Emit, tg : Target, rs : i64, rbase : i64, off : i64, width : i64):
+    let wd : i64 = tg.ptr if width = 0 else width
+    i3_rm(&em, 139, 0, i3_cello(rbase))
+    if off ≠ 0:
+        em.b1(5)
+        em.w32(off)
+    i3_ldpair(&em, 1, 3, i3_cello(rs))
+    if wd = 8:
+        em.b2(137, 8)                // mov [eax], ecx
+        em.b2(137, 88)
+        em.b1(4)                     // mov [eax+4], ebx
+    elif wd = 4:
+        em.b2(137, 8)
+    elif wd = 2:
+        em.b3(102, 137, 8)           // mov [eax], cx
+    else:
+        em.b2(136, 8)                // mov [eax], cl
+
+let I3F_REL : i64 = 32
+
+fn i3g_jmp(em : &mut Emit, tg : Target, lab : i64):
+    em.tf_pos.push(em.here() + 1)
+    em.tf_lab.push(lab)
+    em.tf_form.push(I3F_REL)
+    em.b1(233)                       // jmp rel32
+    em.w32(0)
+
+fn i3_jcc(em : &mut Emit, cc : i64, lab : i64):
+    em.tf_pos.push(em.here() + 2)
+    em.tf_lab.push(lab)
+    em.tf_form.push(I3F_REL)
+    em.b2(15, cc)
+    em.w32(0)
+
+fn i3g_jz(em : &mut Emit, tg : Target, r : i64, lab : i64):
+    i3_ldpair(&em, 0, 2, i3_cello(r))
+    em.b2(9, 208)                    // or eax, edx
+    i3_jcc(&em, 132, lab)
+
+fn i3g_jnz(em : &mut Emit, tg : Target, r : i64, lab : i64):
+    i3_ldpair(&em, 0, 2, i3_cello(r))
+    em.b2(9, 208)
+    i3_jcc(&em, 133, lab)
+
+fn i3g_label(em : &mut Emit, tg : Target, lab : i64):
+    em.set_label(lab)
+
+fn i3_call(em : &mut Emit, target : i64):
+    if em.skipping = 1:
+        return
+    em.cf_pos.push(em.here() + 1)
+    em.cf_target.push(target)
+    em.b1(232)                       // call rel32
+    em.w32(0)
+
+fn i3g_call(em : &mut Emit, tg : Target, target : i64):
+    i3_call(&em, target)
+
+fn i3g_calli(em : &mut Emit, tg : Target, r : i64):
+    i3_rm(&em, 139, 0, i3_cello(r))
+    em.b2(255, 208)                  // call eax
+
+fn i3g_ijmp(em : &mut Emit, tg : Target, r : i64):
+    i3_rm(&em, 139, 0, i3_cello(r))
+    em.b2(255, 224)                  // jmp eax
+
+fn i3g_argld(em : &mut Emit, tg : Target, k : i64, slot : i64):
+    i3_ldpair(&em, 0, 2, i3_sloto(slot))
+    em.b3(137, 68, 36)
+    em.b1(8 × k)
+    em.b3(137, 84, 36)
+    em.b1(8 × k + 4)
+
+fn i3g_argconst(em : &mut Emit, tg : Target, k : i64, v : i64):
+    em.b3(199, 68, 36)
+    em.b1(8 × k)
+    em.w32(v & 4294967295)
+    em.b3(199, 68, 36)
+    em.b1(8 × k + 4)
+    em.w32(@wrap(v » 32) & 4294967295)
+
+fn i3g_argmov(em : &mut Emit, tg : Target, k : i64, r : i64):
+    i3_ldpair(&em, 0, 2, i3_cello(r))
+    em.b3(137, 68, 36)
+    em.b1(8 × k)
+    em.b3(137, 84, 36)
+    em.b1(8 × k + 4)
+
+fn i3g_retst(em : &mut Emit, tg : Target, slot : i64):
+    i3_stpair(&em, 0, 2, i3_sloto(slot))
+
+fn i3g_retld(em : &mut Emit, tg : Target, slot : i64):
+    i3_ldpair(&em, 0, 2, i3_sloto(slot))
+
+fn i3g_retmov(em : &mut Emit, tg : Target, r : i64):
+    i3_ldpair(&em, 0, 2, i3_cello(r))
+
+fn i3g_absref(em : &mut Emit, tg : Target, r : i64) → i64:
+    let pos : i64 = em.here() + 1
+    i3_movimm(&em, 0, 0)             // mov eax, imm32
+    em.b2(49, 210)                   // xor edx, edx
+    i3_stpair(&em, 0, 2, i3_cello(r))
+    pos
+
+fn i3g_absref_arg(em : &mut Emit, tg : Target, k : i64) → i64:
+    let pos : i64 = em.here() + 1
+    i3_movimm(&em, 0, 0)
+    em.b3(137, 68, 36)
+    em.b1(8 × k)
+    em.b3(199, 68, 36)
+    em.b1(8 × k + 4)
+    em.w32(0)
+    pos
+
+// the kernel: the six arguments staged low in the outgoing area as
+// 4-byte words, then gathered into the registers int 0x80 reads
+fn i3g_sysarg(em : &mut Emit, tg : Target, k : i64, slot : i64):
+    i3_rm(&em, 139, 0, i3_sloto(slot))
+    em.b3(137, 68, 36)
+    em.b1(4 × k)
+
+fn i3g_sysimm(em : &mut Emit, tg : Target, k : i64, v : i64):
+    em.b3(199, 68, 36)
+    em.b1(4 × k)
+    em.w32(v)
+
+fn i3g_sysmov(em : &mut Emit, tg : Target, k : i64, r : i64):
+    i3_rm(&em, 139, 0, i3_cello(r))
+    em.b3(137, 68, 36)
+    em.b1(4 × k)
+
+fn i3g_syscall(em : &mut Emit, tg : Target, scid : i64):
+    i3_movimm(&em, 0, sc_number(tg, scid))
+    em.b1(85)                        // push ebp
+    em.b3(139, 92, 36)
+    em.b1(4)                         // mov ebx, [esp+4]
+    em.b3(139, 76, 36)
+    em.b1(8)
+    em.b3(139, 84, 36)
+    em.b1(12)
+    em.b3(139, 116, 36)
+    em.b1(16)
+    em.b3(139, 124, 36)
+    em.b1(20)
+    em.b3(139, 108, 36)
+    em.b1(24)                        // mov ebp, [esp+24]
+    em.b2(205, 128)                  // int 0x80
+    em.b1(93)                        // pop ebp
+    // only the errno band is negative; an address above 2G is not
+    em.b2(49, 210)                   // xor edx, edx
+    em.b1(61)
+    em.w32(⁻4096)                    // cmp eax, -4096
+    em.b2(114, 5)                    // jb done (+5)
+    i3_movimm(&em, 2, ⁻1)            // mov edx, -1: a real error
+
+fn i3g_sysret(em : &mut Emit, tg : Target, r : i64):
+    i3_stpair(&em, 0, 2, i3_cello(r))
+
+fn i3g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64):
+    let frame : i64 = 32 + 8 × nvregs + 128
+    em.max_frame ← em.max_frame ⌈ (frame + 16)
+    em.b1(85)                        // push ebp
+    em.b2(137, 229)                  // mov ebp, esp
+    em.b2(129, 236)
+    em.w32(frame)                    // sub esp, frame
+    let j : mut i64 = 0
+    while j < np:
+        i3_ldpair(&em, 0, 2, 8 + 8 × j)
+        i3_stpair(&em, 0, 2, i3_sloto(j))
+        j ← j + 1
+
+fn i3g_epilogue(em : &mut Emit, tg : Target):
+    em.b2(137, 236)                  // mov esp, ebp
+    em.b1(93)                        // pop ebp
+    em.b1(195)                       // ret
+
+fn i3g_resolve(em : &mut Emit, tg : Target):
+    if #em.tf_pos > 0:
+        foreach i := 0…#em.tf_pos - 1:
+            let pos : i64 = em.tf_pos[i]
+            em.patch32(pos, em.labels[em.tf_lab[i] × 1¤ptrdiff] - (pos + 4))
+    while #em.tf_pos > 0:
+        _ ← em.tf_pos.pop() ?? 0
+        _ ← em.tf_lab.pop() ?? 0
+        _ ← em.tf_form.pop() ?? 0
+
+fn i3g_patch_abs(em : &mut Emit, tg : Target, pos : i64, v : i64):
+    em.patch32(pos, v)
+
+fn i3g_patch_call(em : &mut Emit, tg : Target, pos : i64, dest : i64):
+    em.patch32(pos, dest - (pos + 4))
 
 // ---------------------------------------------------------------------------
 // The driver: every IR op composed from the abstract operations.
@@ -17784,6 +18475,88 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(lend)
         b.ret(out)
         return rtb_fn(b)
+    if id = RT_DIVU64 or id = RT_MODU64:
+        // (n, d) → n ÷ d or n % d, unsigned, by shift and subtract --
+        // the arithmetic a machine without a wide divider leans on.
+        // Nothing here divides, so a target may compile this with the
+        // very helper it implements.
+        let b : mut RtB = rtb(2)
+        let q : i64 = b.t()
+        let r : i64 = b.t()
+        let ix : i64 = b.t()
+        let z : i64 = b.cst(0)
+        let one : i64 = b.cst(1)
+        b.mov(q, z)
+        b.mov(r, z)
+        b.mov(ix, b.cst(64))
+        let ltop : i64 = b.l()
+        let lend : i64 = b.l()
+        let lskip : i64 = b.l()
+        b.lab(ltop)
+        b.jz(ix, lend)
+        b.mov(ix, b.sub(ix, one))
+        b.mov(r, b.bor(b.shl(r, one), b.band(b.shr(0, ix), one)))
+        let ge : i64 = b.cgeu(r, 1)
+        b.jz(ge, lskip)
+        b.mov(r, b.sub(r, 1))
+        b.mov(q, b.bor(q, b.shl(one, ix)))
+        b.lab(lskip)
+        b.jmp(ltop)
+        b.lab(lend)
+        b.ret(q if id = RT_DIVU64 else r)
+        return rtb_fn(b)
+    if id = RT_DIVS64 or id = RT_MODS64:
+        // signs peeled off, the unsigned helper asked, the signs put
+        // back the way idiv puts them: the quotient truncates toward
+        // zero and the remainder keeps the dividend's sign
+        let b : mut RtB = rtb(2)
+        let z : i64 = b.cst(0)
+        let nneg : i64 = b.clts(0, z)
+        let dneg : i64 = b.clts(1, z)
+        let na : i64 = b.sel(nneg, b.sub(z, 0), 0)
+        let da : i64 = b.sel(dneg, b.sub(z, 1), 1)
+        if id = RT_DIVS64:
+            let q : i64 = b.call2(RT_DIVU64, na, da)
+            let flip : i64 = b.t()
+            b.o(IR_BXORR, nneg, dneg, 0, flip, 64)
+            b.ret(b.sel(flip, b.sub(z, q), q))
+        else:
+            let r : i64 = b.call2(RT_MODU64, na, da)
+            b.ret(b.sel(nneg, b.sub(z, r), r))
+        return rtb_fn(b)
+    if id = RT_MULOV64:
+        // (x, y, sgn) → 1 where the 64-bit product overflows.  The
+        // halves are 32-bit, so every product below is exact in 64.
+        let b : mut RtB = rtb(3)
+        let z : i64 = b.cst(0)
+        let s32 : i64 = b.cst(32)
+        let m32 : i64 = b.cst(4294967295)
+        let xl : i64 = b.band(0, m32)
+        let xh : i64 = b.shr(0, s32)
+        let yl : i64 = b.band(1, m32)
+        let yh : i64 = b.shr(1, s32)
+        let ll : i64 = b.mul(xl, yl)
+        let lh : i64 = b.mul(xl, yh)
+        let hl : i64 = b.mul(xh, yl)
+        let hh : i64 = b.mul(xh, yh)
+        let mid : i64 = b.add(b.add(b.shr(ll, s32), b.band(lh, m32)), b.band(hl, m32))
+        let hi : i64 = b.t()
+        b.mov(hi, b.add(b.add(hh, b.shr(lh, s32)), b.add(b.shr(hl, s32), b.shr(mid, s32))))
+        let luns : i64 = b.l()
+        b.jz(2, luns)
+        // the signed high half adjusts by the operands the sign bits name
+        let xn : i64 = b.clts(0, z)
+        let yn : i64 = b.clts(1, z)
+        b.mov(hi, b.sub(hi, b.sel(xn, 1, z)))
+        b.mov(hi, b.sub(hi, b.sel(yn, 0, z)))
+        let lo : i64 = b.mul(0, 1)
+        // the sign, spread across the word without a shift the
+        // language would refuse
+        let sign : i64 = b.sub(z, b.clts(lo, z))
+        b.ret(b.cne(hi, sign))
+        b.lab(luns)
+        b.ret(b.cne(hi, z))
+        return rtb_fn(b)
     // a routine the shared runtime does not carry: it must never be
     // called, and says so if it is
     let b : mut RtB = rtb(0)
@@ -17932,7 +18705,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             em.fn_off.push(em.here())
             t_emit_fn(&em, tgt, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs)
     assert(@dropunit(#em.fn_off) = nfns + g1 + 2 + @dropunit(#chk.lams) + @dropunit(#chk.psfn), "one code offset per function")
-    let nrt : i64 = 47
+    let nrt : i64 = 52
     foreach id0 := 0…nrt - 1:
         em.rt_off.push(em.here())
         let rid : i64 = 0 - @dropunit(id0) - 1
@@ -18131,6 +18904,101 @@ fn rv_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
     em.aw(115)
     rvg_resolve(&em, tg)
 
+// the door on 32-bit x86: the kernel's words are four bytes, the
+// cells they land in stay eight
+fn i3_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
+              stack_size : i64, guard_size : i64, ginit : i64,
+              tdriver : i64, start_fn : i64, sret : bool):
+    em.begin_fn(4)
+    let pos : i64 = em.here() + 1
+    i3_movimm(&em, 6, 0)             // mov esi, args-block (patched)
+    em.df_pos.push(pos)
+    em.df_off.push(args_off)
+    em.b3(139, 4, 36)                // mov eax, [esp]: argc
+    em.b2(137, 6)                    // mov [esi], eax
+    em.b3(199, 70, 4)
+    em.w32(0)                        // the cell's high half is zero
+    em.b4(141, 76, 36, 4)            // lea ecx, [esp+4]: argv
+    em.b3(137, 78, 8)                // mov [esi+8], ecx
+    em.b3(199, 70, 12)
+    em.w32(0)
+    em.b4(141, 76, 132, 8)           // lea ecx, [esp+eax*4+8]: envp
+    em.b3(137, 78, 16)
+    em.b3(199, 70, 20)
+    em.w32(0)
+    em.set_label(0)                  // walk to the env's end
+    em.b2(139, 17)                   // mov edx, [ecx]
+    em.b3(131, 193, 4)               // add ecx, 4
+    em.b2(133, 210)                  // test edx, edx
+    i3_jcc(&em, 133, 0)              // jnz
+    em.b3(137, 78, 24)               // mov [esi+24], ecx: auxv
+    em.b3(199, 70, 28)
+    em.w32(0)
+    // the stack: mmap2, then the top opened, then the move
+    i3_movimm(&em, 0, sc_number(tg, SC_MMAP))
+    em.b2(49, 219)                   // xor ebx, ebx
+    i3_movimm(&em, 1, guard_size + stack_size)
+    em.b2(49, 210)                   // xor edx, edx: PROT_NONE
+    i3_movimm(&em, 6, 147490)
+    i3_movimm(&em, 7, ⁻1)
+    em.b1(85)                        // push ebp
+    em.b2(49, 237)                   // xor ebp, ebp: page offset 0
+    em.b2(205, 128)                  // int 0x80
+    em.b1(93)                        // pop ebp
+    em.b1(61)
+    em.w32(⁻4096)                    // cmp eax, -4096
+    i3_jcc(&em, 131, 1)              // jae: the kernel refused
+    em.b2(137, 199)                  // mov edi, eax: the region's foot
+    i3_movimm(&em, 0, sc_number(tg, SC_MPROT))
+    em.b2(137, 251)                  // mov ebx, edi
+    em.b2(129, 195)
+    em.w32(guard_size)               // add ebx, guard
+    i3_movimm(&em, 1, stack_size)
+    i3_movimm(&em, 2, 3)
+    em.b2(205, 128)
+    em.b1(61)
+    em.w32(⁻4096)
+    i3_jcc(&em, 131, 1)
+    em.b2(137, 252)                  // mov esp, edi
+    em.b2(129, 196)
+    em.w32(guard_size + stack_size)  // add esp, the whole reservation
+    i3g_jmp(&em, tg, 2)
+    em.set_label(1)
+    em.b2(131, 236)
+    em.b1(16)                       // sub esp, 16: room for the message
+    let smsg : i64 = lw.intern("the stack could not be reserved\n")
+    let spos : i64 = em.here() + 1
+    i3_movimm(&em, 0, 0)
+    em.sf_pos.push(spos)
+    em.sf_str.push(smsg)
+    em.b3(137, 4, 36)                // mov [esp], eax
+    em.b3(199, 68, 36)
+    em.b1(4)
+    em.w32(0)
+    em.b3(199, 68, 36)
+    em.b1(8)
+    em.w32(str_len("the stack could not be reserved\n"))
+    em.b3(199, 68, 36)
+    em.b1(12)
+    em.w32(0)
+    i3_call(&em, RT_ABORT)
+    em.set_label(2)
+    em.b2(131, 236)
+    em.b1(96)                        // sub esp, 96: the door's own outgoing area
+    if ginit >= 0:
+        i3_call(&em, ginit)
+    i3_call(&em, RT_RELRO)
+    i3_call(&em, tdriver)
+    if start_fn >= 0:
+        i3_call(&em, start_fn)
+    if sret:
+        em.b2(137, 195)              // mov ebx, eax: the status
+    else:
+        em.b2(49, 219)
+    i3_movimm(&em, 0, sc_number(tg, SC_EXIT))
+    em.b2(205, 128)
+    i3g_resolve(&em, tg)
+
 // how many arguments each runtime routine takes, for the prologue
 fn rt_nargs(id : i64) → i64:
     if id = RT_WRITE1 or id = RT_WRITE2 or id = RT_ABORT: return 2
@@ -18149,6 +19017,8 @@ fn rt_nargs(id : i64) → i64:
     if id = RT_ASLICE: return 3
     if id = RT_AFILL or id = RT_ACYC or id = RT_ACAT: return 2
     if id = RT_ENVG or id = RT_AUXV: return 1
+    if id = RT_DIVU64 or id = RT_MODU64 or id = RT_DIVS64 or id = RT_MODS64: return 2
+    if id = RT_MULOV64: return 3
     0
 
 // the door of the program: keep what the kernel handed over, stand up
@@ -18156,8 +19026,12 @@ fn rt_nargs(id : i64) → i64:
 fn t_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
              stack_size : i64, guard_size : i64, ginit : i64,
              tdriver : i64, start_fn : i64, sret : bool):
-    if tg.id ≠ TGT_A64:
+    if tg.id = TGT_RV64:
         rv_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+                   ginit, tdriver, start_fn, sret)
+        return
+    if tg.id ≠ TGT_A64:
+        i3_startup(&em, &lw, tg, args_off, stack_size, guard_size,
                    ginit, tdriver, start_fn, sret)
         return
     em.begin_fn(4)
