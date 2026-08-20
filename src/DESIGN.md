@@ -845,10 +845,15 @@ and class, the pointer width, the Linux syscall numbers, e_flags, and
 the per-arch quirks (O_DIRECTORY, st_size's offset, whether the arch
 even has fstat).  `--target=A` selects a row, defaulting to the host.
 
-**One ELF plan, two spellings.**  `plan_elf` computes every offset and
-table once; `elf_file64`/`elf_file32` are dumb loops into the @repr(C)
-structures, including the two field reorderings the 32-bit format asks
-for.
+**One ELF plan, two spellings, in the gelf manner.**  The 64-bit
+structures are wide enough to hold everything a 32-bit file says, so
+`plan_elf` builds the final Elf64 forms outright — as libelf's
+`gelf_*` functions have it.  A 64-bit file hands them to the writer
+as they are, so the common path copies nothing; a 32-bit file narrows
+copies on the way out, including the two field reorderings the format
+asks for.  The values are the file's own either way: the offsets are
+computed with the class's entry sizes, so a 32-bit plan holds 32-bit
+truths in 64-bit fields.
 
 **An abstract machine** of four 64-bit registers and slot-resident IR
 values, with ~40 operations.  The driver `t_emit_fn` composes every IR
