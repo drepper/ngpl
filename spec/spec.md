@@ -7412,6 +7412,20 @@ let has_read : mut = (rw & Perms.read) = Perms.read    /* true */
 let has_exec : mut = (rw & Perms.exec) = Perms.exec    /* false */
 ```
 
+#### The Number an Enumerator Stands For (`.ord()`)
+
+`.ord()` on an enum value answers the number the enumerator stands for, in the enum's underlying type — for a `@flag` enum, the combined bits.  It is the one deliberate door out of the identity discipline: an enum is compared, not computed with, but a program writing a binary format needs the bits, and `.ord()` is where that need is said out loud rather than met by an implicit conversion.
+
+```
+enum Machine : u16:
+    x86_64 = 62
+
+Machine.x86_64.ord()            /* 62, a u16 */
+(Perms.read | Perms.write).ord() /* 3, in Perms' underlying type */
+```
+
+There is no door back: a number does not become an enum, for the reasons the assignment rule above gives.
+
 The complement operator `~` masks against the union of all defined member values, so `~Perms.read` yields `Perms.write | Perms.exec` rather than a full integer complement.
 
 #### The `std.errors` Enum

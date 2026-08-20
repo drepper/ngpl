@@ -225,6 +225,14 @@ Outstanding
     semicolon discards it -- one program, two meanings, now refused with both spellings
     offered.  `import` and the glyphs are refused by name; @repr(packed) already was.
 
+    @flag enums crossed into core-2 when the ELF constants became
+    enumerations: automatic values that double from one, the empty
+    combination under nil, | & ^ as the set operations, ~ masked to
+    the set's own bits, and .ord() answering the number an enumerator
+    stands for -- on every enum, in the underlying type, which for a
+    flag set is the bits.  tests/compile/t57_flag_enums.ngpl holds the
+    two implementations to one behavior.
+
     A struct field may now state a unit the way a binding does (name ¤unit : type), so the
     ELF structures can say that st_size counts bytes and st_shndx counts section indices.
     The adoption rule was pinned while the boundary moved: an untyped literal adopts

@@ -1321,6 +1321,7 @@ struct Ast:
     ewidth : i64[]       // … the integer type its values are held in
     estart : i64[]       // … where its enumerators begin in emembers
     ecount : i64[]       // … how many it has
+    eflag : i64[]        // … and 1 where @flag makes it a bit set
     emembers : str[]     // … their names, flattened
     evalues : i64[]      // … and what each one stands for
     ignored : str[]      // names @expect left uncompiled
@@ -1367,6 +1368,7 @@ struct Parser:
     ewidth : i64[]
     estart : i64[]
     ecount : i64[]
+    eflag : i64[]
     emembers : str[]
     evalues : i64[]
     tvn : str[]          // type-variable spellings, interned file-wide
@@ -2933,7 +2935,7 @@ impl Parser:
     // enum Name [: width]: one enumerator to a line.  What a value
     // holds is its place in the list; what it is called is kept so a
     // diagnostic and a printed value can say it.
-    fn parse_enum(&mut self):
+    fn parse_enum(&mut self, is_flag : bool):
         self.pos ← self.pos + 1
         let name_tok : i64 = self.pos
         let name := self.ttext(name_tok)
@@ -2952,7 +2954,9 @@ impl Parser:
         _ ← self.eat(TK_NL, "the enumerators on their own lines")
         _ ← self.eat(TK_INDENT, "an indented list of enumerators")
         let first : i64 = @dropunit(#self.emembers)
-        let next_val : mut i64 = 0
+        // a flag's members are bits, so the automatic values double
+        // where an ordinary enum's count on
+        let next_val : mut i64 = 1 if is_flag else 0
         while self.peek() ≠ TK_DEDENT and self.peek() ≠ TK_EOF and not self.failed():
             if self.peek() = TK_NL:
                 self.pos ← self.pos + 1
@@ -2980,10 +2984,39 @@ impl Parser:
                 self.pos ← self.pos + 1
             self.emembers.push(mname)
             self.evalues.push(next_val)
-            next_val ← next_val + 1
+            if is_flag:
+                next_val ← @wrap(next_val « 1) if next_val ≠ 0 else 1
+            else:
+                next_val ← next_val + 1
             if self.peek() = TK_NL:
                 self.pos ← self.pos + 1
         _ ← self.eat(TK_DEDENT, "the end of the enumerators")
+        if is_flag:
+            // a flag set holds the empty combination under 'nil'
+            // unless some member already stands for zero
+            let has0 : mut bool = false
+            let z : mut i64 = first
+            while z < @dropunit(#self.emembers):
+                if self.evalues[z × 1¤ptrdiff] = 0:
+                    has0 ← true
+                z ← z + 1
+            if not has0:
+                self.emembers.push("nil")
+                self.evalues.push(0)
+        // every member fits the type the values are stored in
+        let bits : i64 = ty_bits(w)
+        let sgn : i64 = ty_sgn(w)
+        let f : mut i64 = first
+        while f < @dropunit(#self.emembers):
+            let v : i64 = self.evalues[f × 1¤ptrdiff]
+            let lo : i64 = 0 - (1 « (bits - 1)) if sgn = 1 and bits < 64 else (⁻9223372036854775807 - 1 if sgn = 1 else 0)
+            // a shift of 63 is past what a signed count allows, so the
+            // top of the range is written out where it would be needed
+            let hi : i64 = 9223372036854775807 if bits - sgn >= 63 else (1 « (bits - sgn)) - 1
+            if v < lo or (bits - sgn < 64 and v > hi):
+                self.err("enumerator '" ⧺ self.emembers[f × 1¤ptrdiff] ⧺ "' is " ⧺ i64_str(v) ⧺ ", which does not fit " ⧺ type_name(w) ⧺ ", the type the values are stored in")
+                return
+            f ← f + 1
         let n : i64 = @dropunit(#self.emembers) - first
         if n = 0:
             self.err("an enum names at least one of what it holds")
@@ -2995,6 +3028,7 @@ impl Parser:
         self.ewidth.push(w)
         self.estart.push(first)
         self.ecount.push(n)
+        self.eflag.push(1 if is_flag else 0)
 
     // unit name: a measure of the file's own, standing for nothing but
     // itself.  It is written ¤"name" where a shipped one is written
@@ -3163,6 +3197,7 @@ impl Parser:
         let is_repl : mut bool = false
         let is_exp : mut bool = false
         let is_repr : mut bool = false
+        let is_fl : mut bool = false
         let expects : mut i64 = 0
         let pres : mut i64[] = []
         let post_toks : mut i64[] = []
@@ -3189,6 +3224,10 @@ impl Parser:
                 _ ← noted
             elif name = "export":
                 is_exp ← true
+            elif name = "flag":
+                // the enum below holds independent bits rather than a
+                // count; its automatic values double and combine
+                is_fl ← true
             elif name = "repr":
                 // @repr(C): the one layout there is.  An unknown name
                 // is refused rather than ignored, since accepting it
@@ -3236,6 +3275,9 @@ impl Parser:
         if is_repr and self.peek() ≠ TK_STRUCT:
             self.err("@repr gives a struct its layout; nothing else has one")
             return
+        if is_fl and self.peek() ≠ TK_ENUM:
+            self.err("@flag makes an enum a bit set; nothing else combines")
+            return
         if self.peek() = TK_FN:
             self.parse_fn(imp, is_start, is_noreturn, is_test,
                           (1 if is_repl else 0) + (2 if is_exp else 0),
@@ -3260,7 +3302,7 @@ impl Parser:
         elif self.peek() = TK_TYPE:
             self.parse_type_alias()
         elif self.peek() = TK_ENUM:
-            self.parse_enum()
+            self.parse_enum(is_fl)
         elif self.peek() = TK_LET:
             if imp or is_start or is_noreturn or is_test or #pres > 0 or #posts > 0:
                 self.err("a global binding carries no annotations")
@@ -3280,7 +3322,7 @@ fn parse(toks : Toks, src : byte[]) → Ast:
                                  mel: [], mrr: [], mcc: [], mdd: [], minner: [],
                                  lts: [], ltl: [], lte: [],
                                  enames: [], ewidth: [], estart: [],
-                                 ecount: [], emembers: [], evalues: [],
+                                 ecount: [], eflag: [], emembers: [], evalues: [],
                                  tvn: [], braces: 0,
                                  ignored: [], igtests: [],
                                  diags: [], poisoned: false})
@@ -3323,7 +3365,8 @@ fn parse(toks : Toks, src : byte[]) → Ast:
          lts: p.lts, ltl: p.ltl, lte: p.lte,
          unames: p.unames, umarks: p.umarks,
          enames: p.enames, ewidth: p.ewidth, estart: p.estart,
-         ecount: p.ecount, emembers: p.emembers, evalues: p.evalues,
+         ecount: p.ecount, eflag: p.eflag, emembers: p.emembers,
+         evalues: p.evalues,
          ignored: p.ignored, igtests: p.igtests, diags: p.diags})
 
 // ===========================================================================
@@ -4245,8 +4288,11 @@ impl Checker:
                 self.set_type(id, TY_UNT)
             elif ty_is_int(t) and ty_unit(t) = 0:
                 self.set_type(id, t)
+            elif ty_is_enum(t) and self.enum_is_flag(t):
+                // the complement within the set's own bits
+                self.set_type(id, t)
             else:
-                self.derr(tok, "~ flips the bits of a plain integer, not " ⧺ type_name(t))
+                self.derr(tok, "~ flips the bits of a plain integer or a @flag enum, not " ⧺ type_name(t))
                 self.set_type(id, TY_I64)
         elif k = NK_NOT:
             self.check_expr(na, TY_UNIT)
@@ -4621,6 +4667,22 @@ impl Checker:
             self.check_expr(nb, side)
             let tl : i64 = self.ty_of(na)
             let tr : i64 = self.ty_of(nb)
+            if ty_is_enum(tl) or ty_is_enum(tr):
+                // a @flag enum is a set of bits, and the bit operators
+                // are its set operations; anything else two enums
+                // cannot do to each other
+                if not (k = NK_BAND or k = NK_BOR or k = NK_BXOR):
+                    self.derr(tok, "an enum is compared, not computed with")
+                    self.set_type(id, TY_I64)
+                    return
+                if tl ≠ tr:
+                    self.derr(tok, "the sides are " ⧺ type_name(tl) ⧺ " and " ⧺ type_name(tr) ⧺ "; a bit operation takes two of the same @flag enum")
+                    self.set_type(id, tl if ty_is_enum(tl) else tr)
+                    return
+                if not self.enum_is_flag(tl):
+                    self.derr(tok, "bit operations take a @flag enum; '" ⧺ self.a.enames[ty_eidx(tl) × 1¤ptrdiff] ⧺ "' counts rather than combines")
+                self.set_type(id, tl)
+                return
             if not (tl = TY_UNT or ty_is_int(tl)) or not (tr = TY_UNT or ty_is_int(tr)):
                 self.derr(tok, "this operator works numbers; the sides are " ⧺ type_name(tl) ⧺ " and " ⧺ type_name(tr))
                 self.set_type(id, TY_I64)
@@ -5272,6 +5334,22 @@ impl Checker:
             return
         self.a.nb[id × 1¤ptrdiff] ← fidx
         self.set_type(id, fty)
+
+    // whether an enum's members are independent bits
+    fn enum_is_flag(&self, t : i64) → bool:
+        self.a.eflag[ty_eidx(ty_strip_ref(t)) × 1¤ptrdiff] = 1
+
+    // the union of a flag enum's bits, which is what ~ flips within
+    fn enum_bits(&self, t : i64) → i64:
+        let ei : i64 = ty_eidx(ty_strip_ref(t))
+        let st : i64 = self.a.estart[ei × 1¤ptrdiff]
+        let n : i64 = self.a.ecount[ei × 1¤ptrdiff]
+        let m : mut i64 = 0
+        let i : mut i64 = 0
+        while i < n:
+            m ← m | self.a.evalues[(st + i) × 1¤ptrdiff]
+            i ← i + 1
+        m
 
     fn enum_index(&self, name : str) → i64:
         if #self.a.enames > 0:
@@ -6043,6 +6121,14 @@ impl Checker:
                 self.adopt(na, TY_I64)
             self.a.nc[id × 1¤ptrdiff] ← MID_CHR
             self.set_type(id, TY_CHAR)
+            return
+        if ty_is_enum(t) and m = "ord":
+            // the number an enumerator stands for, in the enum's own
+            // underlying type -- for a @flag enum, the bit set
+            if argc0 ≠ 0:
+                self.derr(tok, "ord takes nothing")
+            self.a.nc[id × 1¤ptrdiff] ← MID_ORD
+            self.set_type(id, self.a.ewidth[ty_eidx(t) × 1¤ptrdiff])
             return
         if t = TY_CHAR and m = "ord":
             if argc0 ≠ 0:
@@ -7790,6 +7876,23 @@ impl Lower:
         if k = NK_BNOT:
             let v : i64 = self.lower_expr(na)
             let d : i64 = self.tmp()
+            let t9 : i64 = ty_strip_ref(self.tof(nid))
+            if ty_is_enum(t9):
+                // the complement stays within the set's own bits
+                let ei : i64 = ty_eidx(t9)
+                let st : i64 = self.a.estart[ei × 1¤ptrdiff]
+                let nm : i64 = self.a.ecount[ei × 1¤ptrdiff]
+                let msk : mut i64 = 0
+                let mi : mut i64 = 0
+                while mi < nm:
+                    msk ← msk | self.a.evalues[(st + mi) × 1¤ptrdiff]
+                    mi ← mi + 1
+                let flipped : i64 = self.tmp()
+                self.ir(IR_BNOTT, v, 0, 0, flipped, 64)
+                let mv : i64 = self.tmp()
+                self.ir(IR_CONST, msk, 0, 0, mv, 0)
+                self.ir(IR_BAND, flipped, mv, 0, d, 64)
+                return d
             self.ir(IR_BNOTT, v, 0, 0, d, w)
             return d
         if k = NK_NOT:
@@ -12740,6 +12843,15 @@ fn fn_symbol(a : Ast, toks : Toks, src : byte[], f : i64) → str:
 // and nothing in between.
 // ---------------------------------------------------------------------------
 
+// the machines ELF names, with the format's own width
+enum Em : u16:
+    none = 0
+    i386 = 3
+    arm = 40
+    x86_64 = 62
+    aarch64 = 183
+    riscv = 243
+
 let TGT_X64 : i64 = 0
 let TGT_I386 : i64 = 1
 let TGT_A64 : i64 = 2
@@ -12750,7 +12862,7 @@ let TGT_RV32 : i64 = 5
 struct Target:
     id : i64
     name : str           // the canonical spelling --target accepts
-    machine : i64        // ELF e_machine
+    machine : Em         // ELF e_machine
     is64 : bool          // ELFCLASS64: 8-byte kernel words
     eflags : i64         // ELF e_flags
     ptr : i64            // bytes in a pointer
@@ -12777,38 +12889,38 @@ struct Target:
 
 fn targets() → Target[]:
     let t : mut Target[] = []
-    t.push(Target{id: TGT_X64, name: "x86-64", machine: 62, is64: true,
+    t.push(Target{id: TGT_X64, name: "x86-64", machine: Em.x86_64, is64: true,
                   eflags: 0, ptr: 8,
                   sc_read: 0, sc_write: 1, sc_close: 3, sc_fstat: 5,
                   sc_mmap: 9, sc_mprotect: 10, sc_writev: 20,
                   sc_getpid: 39, sc_kill: 62, sc_exit: 60,
                   sc_getdents: 217, sc_openat: 257, stat_size: 48, o_directory: 65536, sc_statx: 291, stx_size: 40})
-    t.push(Target{id: TGT_I386, name: "i386", machine: 3, is64: false,
+    t.push(Target{id: TGT_I386, name: "i386", machine: Em.i386, is64: false,
                   eflags: 0, ptr: 4,
                   sc_read: 3, sc_write: 4, sc_close: 6, sc_fstat: 197,
                   sc_mmap: 192, sc_mprotect: 125, sc_writev: 146,
                   sc_getpid: 20, sc_kill: 37, sc_exit: 1,
                   sc_getdents: 220, sc_openat: 295, stat_size: 44, o_directory: 65536, sc_statx: 383, stx_size: 40})
-    t.push(Target{id: TGT_A64, name: "aarch64", machine: 183, is64: true,
+    t.push(Target{id: TGT_A64, name: "aarch64", machine: Em.aarch64, is64: true,
                   eflags: 0, ptr: 8,
                   sc_read: 63, sc_write: 64, sc_close: 57, sc_fstat: 80,
                   sc_mmap: 222, sc_mprotect: 226, sc_writev: 66,
                   sc_getpid: 172, sc_kill: 129, sc_exit: 93,
                   sc_getdents: 61, sc_openat: 56, stat_size: 48, o_directory: 16384, sc_statx: 291, stx_size: 40})
     // EABI version 5, soft-float: the runtime touches no float register
-    t.push(Target{id: TGT_A32, name: "arm", machine: 40, is64: false,
+    t.push(Target{id: TGT_A32, name: "arm", machine: Em.arm, is64: false,
                   eflags: 83886592, ptr: 4,
                   sc_read: 3, sc_write: 4, sc_close: 6, sc_fstat: 197,
                   sc_mmap: 192, sc_mprotect: 125, sc_writev: 146,
                   sc_getpid: 20, sc_kill: 37, sc_exit: 1,
                   sc_getdents: 217, sc_openat: 322, stat_size: 48, o_directory: 16384, sc_statx: 397, stx_size: 40})
-    t.push(Target{id: TGT_RV64, name: "riscv64", machine: 243, is64: true,
+    t.push(Target{id: TGT_RV64, name: "riscv64", machine: Em.riscv, is64: true,
                   eflags: 0, ptr: 8,
                   sc_read: 63, sc_write: 64, sc_close: 57, sc_fstat: 80,
                   sc_mmap: 222, sc_mprotect: 226, sc_writev: 66,
                   sc_getpid: 172, sc_kill: 129, sc_exit: 93,
                   sc_getdents: 61, sc_openat: 56, stat_size: 48, o_directory: 65536, sc_statx: 291, stx_size: 40})
-    t.push(Target{id: TGT_RV32, name: "riscv32", machine: 243, is64: false,
+    t.push(Target{id: TGT_RV32, name: "riscv32", machine: Em.riscv, is64: false,
                   eflags: 0, ptr: 4,
                   sc_read: 63, sc_write: 64, sc_close: 57, sc_fstat: 80,
                   sc_mmap: 222, sc_mprotect: 226, sc_writev: 66,
@@ -12880,6 +12992,57 @@ unit shndx
 unit symndx
 unit phndx
 
+// What the constants in <elf.h> are called, spelled as what they
+// are: enumerations with the format's own widths, and bit sets where
+// the field is one.  The automatic @flag values double from one, so
+// the members stand in <elf.h>'s order.
+enum Et : u16:
+    none
+    rel
+    exec
+    dyn
+    core
+
+enum Ev : u32:
+    none
+    current
+
+enum Pt : u32:
+    null
+    load
+    dynamic
+    interp
+    note
+    shlib
+    phdr
+    tls
+    gnu_stack = 1685382481
+    gnu_relro = 1685382482
+
+@flag
+enum Pf : u32:
+    x
+    w
+    r
+
+enum Sht : u32:
+    null
+    progbits
+    symtab
+    strtab
+    rela
+    hash
+    dynamic
+    note
+    nobits
+
+@flag
+enum Shf : u64:
+    write
+    alloc
+    execinstr
+
+
 // The file's own structures, as <elf.h> declares them.  They are
 // written out as themselves rather than assembled byte by byte: a
 // header is a statement about where things are, and stating it as a
@@ -12891,9 +13054,9 @@ unit phndx
 @repr(C)
 struct Elf64_Ehdr:
     e_ident : u8[16]
-    e_type : u16
-    e_machine : u16
-    e_version : u32
+    e_type : Et
+    e_machine : Em
+    e_version : Ev
     e_entry ¤byte : u64
     e_phoff ¤byte : u64
     e_shoff ¤byte : u64
@@ -12907,8 +13070,8 @@ struct Elf64_Ehdr:
 
 @repr(C)
 struct Elf64_Phdr:
-    p_type : u32
-    p_flags : u32
+    p_type : Pt
+    p_flags : Pf
     p_offset ¤byte : u64
     p_vaddr ¤byte : u64
     p_paddr ¤byte : u64
@@ -12919,8 +13082,8 @@ struct Elf64_Phdr:
 @repr(C)
 struct Elf64_Shdr:
     sh_name ¤byte : u32
-    sh_type : u32
-    sh_flags : u64
+    sh_type : Sht
+    sh_flags : Shf
     sh_addr ¤byte : u64
     sh_offset ¤byte : u64
     sh_size ¤byte : u64
@@ -12938,26 +13101,10 @@ struct Elf64_Sym:
     st_value ¤byte : u64
     st_size ¤byte : u64
 
-// what the constants in <elf.h> are called, so the code that uses them
-// reads as the specification does
-let PT_LOAD : i64 = 1
-let PT_GNU_STACK : i64 = 1685382481
-let PT_GNU_RELRO : i64 = 1685382482
-let PF_X : i64 = 1
-let PF_W : i64 = 2
-let PF_R : i64 = 4
-let SHT_PROGBITS : i64 = 1
-let SHT_SYMTAB : i64 = 2
-let SHT_STRTAB : i64 = 3
-let SHF_WRITE : i64 = 1
-let SHF_ALLOC : i64 = 2
-let SHF_EXECINSTR : i64 = 4
+// the symbol-table packing, two codes in one byte
 let STB_LOCAL : i64 = 0
 let STB_GLOBAL : i64 = 1
 let STT_FUNC : i64 = 2
-let ET_EXEC : i64 = 2
-let EM_X86_64 : i64 = 62
-let EV_CURRENT : i64 = 1
 let SHN_TEXT ¤"shndx" : i64 = 1   // the first section header is the absent one
 
 // The 32-bit file wears the same information in narrower fields, and
@@ -12968,9 +13115,9 @@ let SHN_TEXT ¤"shndx" : i64 = 1   // the first section header is the absent one
 @repr(C)
 struct Elf32_Ehdr:
     e_ident : u8[16]
-    e_type : u16
-    e_machine : u16
-    e_version : u32
+    e_type : Et
+    e_machine : Em
+    e_version : Ev
     e_entry ¤byte : u32
     e_phoff ¤byte : u32
     e_shoff ¤byte : u32
@@ -12984,20 +13131,21 @@ struct Elf32_Ehdr:
 
 @repr(C)
 struct Elf32_Phdr:
-    p_type : u32
+    p_type : Pt
     p_offset ¤byte : u32
     p_vaddr ¤byte : u32
     p_paddr ¤byte : u32
     p_filesz ¤byte : u32
     p_memsz ¤byte : u32
-    p_flags : u32
+    p_flags : Pf
     p_align ¤byte : u32
 
 @repr(C)
 struct Elf32_Shdr:
     sh_name ¤byte : u32
-    sh_type : u32
-    sh_flags : u32
+    sh_type : Sht
+    sh_flags : u32       // ELF32's Word is narrower than Shf's fixed
+                         // u64, so the bits are copied out by number
     sh_addr ¤byte : u32
     sh_offset ¤byte : u32
     sh_size ¤byte : u32
@@ -13085,14 +13233,14 @@ struct Elf32:
     shdrs : Elf32_Shdr[]
 
 // a program header, whose fields are the same shape every time
-fn phdr(kind : i64, flags : i64, off ¤byte : i64, vaddr ¤byte : i64,
+fn phdr(kind : Pt, flags : Pf, off ¤byte : i64, vaddr ¤byte : i64,
         filesz ¤byte : i64, memsz ¤byte : i64, align ¤byte : i64) → Elf64_Phdr:
     (Elf64_Phdr{p_type: kind, p_flags: flags,
                 p_offset: off, p_vaddr: vaddr,
                 p_paddr: vaddr, p_filesz: filesz,
                 p_memsz: memsz, p_align: align})
 
-fn shdr(name ¤byte : i64, kind : i64, flags : i64, addr ¤byte : i64,
+fn shdr(name ¤byte : i64, kind : Sht, flags : Shf, addr ¤byte : i64,
         off ¤byte : i64, size ¤byte : i64, link ¤"shndx" : i64,
         info ¤"symndx" : i64, align ¤byte : i64,
         entsize ¤byte : i64) → Elf64_Shdr:
@@ -13205,22 +13353,22 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
     // the headers themselves, mapped read-only: the kernel points
     // AT_PHDR at them, and a program that means to follow its own
     // program headers has to be able to read them
-    phdrs.push(phdr(PT_LOAD, PF_R, 0, image, page, page, page))
-    phdrs.push(phdr(PT_LOAD, PF_R + PF_X, text_off, text_vaddr,
+    phdrs.push(phdr(Pt.load, Pf.r, 0, image, page, page, page))
+    phdrs.push(phdr(Pt.load, Pf.r | Pf.x, text_off, text_vaddr,
                     text_size, text_size, page))
-    phdrs.push(phdr(PT_LOAD, PF_R, ro_off, ro_vaddr, ro_size, ro_size, page))
-    phdrs.push(phdr(PT_LOAD, PF_R + PF_W, d_off, d_vaddr, d_size, d_size, page))
+    phdrs.push(phdr(Pt.load, Pf.r, ro_off, ro_vaddr, ro_size, ro_size, page))
+    phdrs.push(phdr(Pt.load, Pf.r | Pf.w, d_off, d_vaddr, d_size, d_size, page))
     // PT_GNU_RELRO: the head of the writable segment, which holds what
     // is written before @start and never after.  A dynamic loader would
     // seal it; nothing loads a static program but itself, so the
     // program seals it, following this entry as any loader would.
-    phdrs.push(phdr(PT_GNU_RELRO, PF_R, d_off, d_vaddr,
+    phdrs.push(phdr(Pt.gnu_relro, Pf.r, d_off, d_vaddr,
                     relro_size, relro_size, 1))
     // PT_GNU_STACK: read and write, and pointedly not execute.  Absent,
     // the kernel falls back to an executable stack; present, it says
     // what this program wants, and its size says how much.
     let sixteen ¤byte : i64 = 16
-    phdrs.push(phdr(PT_GNU_STACK, PF_R + PF_W, 0, 0, 0, stack_size, sixteen))
+    phdrs.push(phdr(Pt.gnu_stack, Pf.r | Pf.w, 0, 0, 0, stack_size, sixteen))
 
     let nph ¤"phndx" : i64 = @dropunit(#phdrs)
     let hdrs_size ¤byte : i64 = ehsize + phent × @dropunit(nph)
@@ -13228,26 +13376,26 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
 
     let shdrs : mut Elf64_Shdr[] = []
     // section headers: the absent one, then what the file holds
-    shdrs.push(shdr(0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
-    shdrs.push(shdr(shname[0], SHT_PROGBITS, SHF_ALLOC + SHF_EXECINSTR,
+    shdrs.push(shdr(0, Sht.null, Shf.nil, 0, 0, 0, 0, 0, 0, 0))
+    shdrs.push(shdr(shname[0], Sht.progbits, Shf.alloc | Shf.execinstr,
                     text_vaddr, text_off, text_size, 0, 0, 16, 0))
-    shdrs.push(shdr(shname[1], SHT_PROGBITS, SHF_ALLOC,
+    shdrs.push(shdr(shname[1], Sht.progbits, Shf.alloc,
                     ro_vaddr, ro_off, ro_size, 0, 0, 8, 0))
-    shdrs.push(shdr(shname[2], SHT_PROGBITS, SHF_WRITE + SHF_ALLOC,
+    shdrs.push(shdr(shname[2], Sht.progbits, Shf.write | Shf.alloc,
                     d_vaddr, d_off, d_size, 0, 0, 8, 0))
-    shdrs.push(shdr(shname[3], SHT_SYMTAB, 0, 0, sym_off, sym_size,
+    shdrs.push(shdr(shname[3], Sht.symtab, Shf.nil, 0, sym_off, sym_size,
                     5, nlocal + 1, 8, syment))
-    shdrs.push(shdr(shname[4], SHT_STRTAB, 0, 0, str_off,
+    shdrs.push(shdr(shname[4], Sht.strtab, Shf.nil, 0, str_off,
                     #strtab, 0, 0, 1, 0))
-    shdrs.push(shdr(shname[5], SHT_STRTAB, 0, 0, shstr_off,
+    shdrs.push(shdr(shname[5], Sht.strtab, Shf.nil, 0, shstr_off,
                     #shstr, 0, 0, 1, 0))
     let nsh ¤"shndx" : i64 = @dropunit(#shdrs)
 
     let cls : i64 = 2 if tgt.is64 else 1
     let ehdr : Elf64_Ehdr = (Elf64_Ehdr{
         e_ident: [127, 69, 76, 70, cls, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        e_type: ET_EXEC, e_machine: tgt.machine,
-        e_version: EV_CURRENT, e_entry: text_vaddr,
+        e_type: Et.exec, e_machine: tgt.machine,
+        e_version: Ev.current, e_entry: text_vaddr,
         e_phoff: ehsize, e_shoff: sh_off,
         e_flags: tgt.eflags, e_ehsize: ehsize,
         e_phentsize: phent, e_phnum: nph,
@@ -13288,7 +13436,7 @@ fn elf_file32(pl : ElfPlan, code : u8[], rodata : u8[], data : u8[]) → Elf32:
     let shdrs : mut Elf32_Shdr[] = []
     foreach h := pl.shdrs:
         shdrs.push(Elf32_Shdr{sh_name: h.sh_name, sh_type: h.sh_type,
-                              sh_flags: h.sh_flags, sh_addr: h.sh_addr,
+                              sh_flags: h.sh_flags.ord(), sh_addr: h.sh_addr,
                               sh_offset: h.sh_offset, sh_size: h.sh_size,
                               sh_link: h.sh_link, sh_info: h.sh_info,
                               sh_addralign: h.sh_addralign,

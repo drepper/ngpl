@@ -1,0 +1,69 @@
+// @flag enums: members are independent bits, the automatic values
+// double from one, nil is the empty combination, and the bit
+// operators are the set operations.  What is pinned here is that the
+// two implementations agree on the values, the operators, the
+// complement's mask, ord()'s answer, and the bytes a flag field puts
+// down through a @repr(C) layout.
+
+@flag
+enum Perm : u32:
+    x
+    w
+    r
+
+@flag
+enum Wide : u64:
+    lo
+    mid = 65536
+    hi
+
+enum Plain : u16:
+    a
+    b
+
+@repr(C)
+struct Mode:
+    bits : Perm
+    kind : Plain
+    pad : u16
+
+@impure
+fn values():
+    std.println("{} {} {} {}", Perm.x.ord(), Perm.w.ord(), Perm.r.ord(), Perm.nil.ord())
+    // an explicit value resets the doubling from itself
+    std.println("{} {} {}", Wide.lo.ord(), Wide.mid.ord(), Wide.hi.ord())
+    std.println("{} {}", Plain.a.ord(), Plain.b.ord())
+
+@impure
+fn operators():
+    let rw := Perm.r | Perm.w
+    std.println("{}", rw.ord())
+    std.println("{} {}", (rw & Perm.r) = Perm.r, (rw & Perm.x) = Perm.x)
+    std.println("{}", (rw ^ Perm.w) = Perm.r)
+    // the complement stays within the set's own bits
+    std.println("{}", (~rw) = Perm.x)
+    std.println("{}", (~Perm.nil).ord())
+
+@impure
+fn through_a_layout():
+    std.println("{} {}", @sizeof(Mode), Mode.offsetof("kind"))
+    let m : Mode = Mode{bits: Perm.r | Perm.x, kind: Plain.b, pad: 0}
+    std.println("{} {}", m.bits.ord(), (m.bits & Perm.w) = Perm.w)
+    let f := std.fs.cwd().create_file("/tmp/ngpl_t57.tmp", 420)
+    let runs : mut std.iovec[] = []
+    runs.push(std.iov(m))
+    f.writev(runs)
+    f.close()
+    let alloc := std.arena.allocator()
+    match std.fs.cwd().open_file("/tmp/ngpl_t57.tmp"):
+        ∃(g):
+            let got := g.read_file(alloc)
+            std.println("{} {} {} {}", #got, got[0¤byte], got[4¤byte], got[6¤byte])
+        ∅:
+            std.println("vanished")
+
+@impure @start
+fn main():
+    values()
+    operators()
+    through_a_layout()

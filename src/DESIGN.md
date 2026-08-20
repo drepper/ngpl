@@ -845,6 +845,19 @@ and class, the pointer width, the Linux syscall numbers, e_flags, and
 the per-arch quirks (O_DIRECTORY, st_size's offset, whether the arch
 even has fstat).  `--target=A` selects a row, defaulting to the host.
 
+**The structures speak in enumerations.**  e_type, e_machine and
+e_version, p_type and sh_type carry enums with the format's fixed
+widths (`Et : u16`, `Em : u16`, `Ev : u32`, `Pt : u32`, `Sht : u32`),
+and the two genuine bit fields carry @flag enums whose members are
+the format's bits in <elf.h>'s order: `Pf : u32` (x, w, r) and
+`Shf : u64` (write, alloc, execinstr), combined with `|` at the six
+program-header and seven section-header rows.  The one seam: ELF32's
+sh_flags is a Word where Shf's fixed representation is u64, and a
+fixed-width enum cannot be two widths, so the 32-bit copy takes the
+bits out by number with `.ord()` — the same narrowing libelf performs
+between GElf_Shdr and Elf32_Shdr.  Target.machine is an `Em`, so a
+target row names its machine rather than remembering 183.
+
 **The structures are measured.**  Offsets, sizes and addresses in the
 ELF structures carry ¤byte; section indices ¤"shndx", symbol indices
 ¤"symndx", program-header counts ¤"phndx" — units the compiler's own

@@ -5942,6 +5942,13 @@ class Evaluator:
             if args:
                 raise TypeError("char.ord takes no arguments")
             return mk_int(unwrapped.code, "u32")
+        if isinstance(unwrapped, EnumValue) and method_name == "ord":
+            # the number an enumerator stands for, in the enum's own
+            # underlying type -- which for a @flag enum is the bit set
+            if args:
+                raise TypeError("ord takes no arguments")
+            return mk_int(unwrapped.value,
+                          unwrapped.enum_type.underlying_type or "u64")
         if isinstance(unwrapped, IntValue) and method_name == "chr":
             if args:
                 raise TypeError("chr takes no arguments")
