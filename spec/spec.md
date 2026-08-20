@@ -8369,6 +8369,28 @@ d ← 3000¤meter           // expression with unit meter, converted to kilomete
 
 A unit written inside a tuple element or a type alias is refused: it would have to belong to the type itself rather than to a binding or to what an array holds, which is the question a sum or product type raises.
 
+#### Units on Struct Fields
+
+A struct field may state a unit the way a binding does, written between the field's name and the colon:
+
+```
+unit shndx
+
+struct Span:
+    off ¤byte : i64
+    len ¤byte : i64
+    idx ¤"shndx" : u16
+    tag : i64
+```
+
+From then on the field's numbers count in that unit.  A literal filling the field adopts it; a measured value converts within its dimension or is refused across one; a read answers a measured value that carries into arithmetic; and a store through `←` is held to the same rule.  A field that states no unit refuses a measured value, exactly as a plain binding does — the measure has to be parted with by `@dropunit` first.
+
+The unit says what a number counts, never how wide it is: a `@repr(C)` layout is blind to it, and the field's bytes on disk or in `writev` are the number's alone.
+
+#### Where a Typed Value Adopts a Measure
+
+An *untyped literal* takes whatever measure it meets, in every position.  A *typed* value that measures nothing is adopted at a binding and at a struct field — the declaration is the authority there — but **not** at a call: a parameter that states a unit requires an argument that carries it, and a plain typed value is refused until `× 1¤unit` or a measured binding says the adoption out loud.  The asymmetry is deliberate: a binding or literal sits next to the declaration that measures it, while a call site may be far from the signature it feeds, and a silent adoption there is how a section index ends up counting bytes.
+
 #### Unit Names
 
 Builtin units use identifier syntax with full names: `meter`, `second`, `kilogram`, `kilometer`, `millisecond`, `byte`, etc.  User-defined units are referenced with string syntax: `¤"speed"`, `¤"widgets"`.

@@ -2557,6 +2557,20 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
     # may refer to any of them, and each may be declared below
     # whatever names it.
 
+    # The measures a file names for itself register first: a global's
+    # binding or a struct's field may state one, and both are installed
+    # in the passes below.
+    for defn in definitions:
+        if isinstance(defn, ASTUnitDef):
+            from interp.units import eval_unit_formula, register_user_unit, Unit
+            from fractions import Fraction
+            if defn.formula is not None:
+                unit = eval_unit_formula(defn.formula)
+                unit = Unit(unit.components, unit.factor, defn.name)
+            else:
+                unit = Unit({defn.name: 1}, Fraction(1), defn.name)
+            register_user_unit(defn.name, unit)
+
     for defn in definitions:
         if isinstance(defn, ASTEnumDef):
             members: dict[str, int] = {}
@@ -2610,7 +2624,8 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                     raise DefinitionError(
                         str(e), _field_pos(defn, field_name)) from None
             register_struct_type(defn.name)
-            st = StructType(defn.name, defn.fields, repr_kind=defn.repr_kind)
+            st = StructType(defn.name, defn.fields, repr_kind=defn.repr_kind,
+                            field_units=getattr(defn, "field_units", None))
             env.define(defn.name, st)
 
     # Every struct and enum exists by now, so an alternative may be
@@ -2829,16 +2844,6 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 else:
                     env._mutable_globals.add(name)
 
-    for defn in definitions:
-        if isinstance(defn, ASTUnitDef):
-            from interp.units import eval_unit_formula, register_user_unit, Unit
-            from fractions import Fraction
-            if defn.formula is not None:
-                unit = eval_unit_formula(defn.formula)
-                unit = Unit(unit.components, unit.factor, defn.name)
-            else:
-                unit = Unit({defn.name: 1}, Fraction(1), defn.name)
-            register_user_unit(defn.name, unit)
 
     # Every struct exists by now, so a @repr(C) layout can be checked even
     # when it names a struct declared further down the file.  Checking here

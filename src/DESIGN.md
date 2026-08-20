@@ -845,6 +845,14 @@ and class, the pointer width, the Linux syscall numbers, e_flags, and
 the per-arch quirks (O_DIRECTORY, st_size's offset, whether the arch
 even has fstat).  `--target=A` selects a row, defaulting to the host.
 
+**The structures are measured.**  Offsets, sizes and addresses in the
+ELF structures carry ¤byte; section indices ¤"shndx", symbol indices
+¤"symndx", program-header counts ¤"phndx" — units the compiler's own
+source defines.  Every variable in `plan_elf` that computes a field
+carries the field's unit, so an index cannot wander into a byte count
+without `@dropunit` saying so.  The units are typing only: the emitted
+files are byte-identical with and without them.
+
 **One ELF plan, two spellings, in the gelf manner.**  The 64-bit
 structures are wide enough to hold everything a 32-bit file says, so
 `plan_elf` builds the final Elf64 forms outright — as libelf's

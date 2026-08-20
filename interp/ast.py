@@ -857,10 +857,14 @@ class StructDef:
     """
 
     def __init__(self, name: str, fields: list[tuple[str, str]],
-                 repr_kind: str | None = None):
+                 repr_kind: str | None = None, field_units=None):
         self.name = name
         self.fields = fields
         self.repr_kind = repr_kind
+        # The unit each field's numbers count in, by field name; a
+        # field not named here measures nothing.  Held as the parsed
+        # spec, since the units a file defines register later.
+        self.field_units = field_units or {}
         # Where each field's type was written, by field name.  A
         # complaint about a field is nearly always about its type, so
         # that is what a diagnostic points at.

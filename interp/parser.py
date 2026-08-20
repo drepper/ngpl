@@ -1113,6 +1113,7 @@ class Parser:
             pass
 
         fields: list[tuple[str, str]] = []
+        field_units: dict = {}
         field_positions: dict[str, tuple[int, int, int | None]] = {}
         if self._check("INDENT"):
             self._eat("INDENT")
@@ -1122,6 +1123,12 @@ class Parser:
                 if self._check("DEDENT", "EOF"):
                     break
                 field_name_tok = self._eat("IDENT")
+                # a field may state a unit the way a binding does:
+                # name ¤unit : type
+                field_unit = None
+                if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+                    self.pos += 1
+                    field_unit = self._parse_unit_spec()
                 self._eat("PUNCT", ":")
                 type_tok = self._cur()
                 if self._at_tuple_type():
@@ -1134,6 +1141,8 @@ class Parser:
                     self.pos += 1
                     field_type += "?"
                 fields.append((field_name_tok.value, field_type))
+                if field_unit is not None:
+                    field_units[field_name_tok.value] = field_unit
                 # The span runs from the type's first token through the
                 # last one an array suffix or `?` added.
                 field_positions[field_name_tok.value] = (
@@ -1143,7 +1152,7 @@ class Parser:
                 while self._try_eat("NEWLINE"):
                     pass
             self._eat("DEDENT")
-        sdef = StructDef(name, fields, repr_kind)
+        sdef = StructDef(name, fields, repr_kind, field_units)
         sdef.field_positions = field_positions
         return self._set_pos(sdef, kw_tok)
 

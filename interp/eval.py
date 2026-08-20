@@ -4298,8 +4298,14 @@ class Evaluator:
                             field_type = ftype
                             break
                     if field_type is not None:
-                        rhs = coerce_arg(rhs, field_type, "field assignment",
-                                         target_ast.attr)
+                        funit = inst.struct_type.field_unit(target_ast.attr)
+                        if funit is not None:
+                            rhs = coerce_to_type(rhs, field_type, funit,
+                                                 self._mk_int)
+                        else:
+                            rhs = coerce_arg(rhs, field_type,
+                                             "field assignment",
+                                             target_ast.attr)
                     inst.field_values[target_ast.attr] = rhs
                 elif isinstance(au, ObjectValue) and au.obj is std \
                         and target_ast.attr in _STD_SETTINGS:
@@ -5854,7 +5860,14 @@ class Evaluator:
                 raise TypeError(
                     f"struct '{node.name}' has no field '{field_name}'")
             value = self.eval_expr(field_expr)
-            value = coerce_arg(value, found_type, node.name, field_name)
+            funit = struct_type.field_unit(field_name)
+            if funit is not None:
+                # a measured field coerces the way a measured binding
+                # does: the number to the type, then the unit onto it
+                value = coerce_to_type(value, found_type, funit,
+                                       self._mk_int)
+            else:
+                value = coerce_arg(value, found_type, node.name, field_name)
             field_values[field_name] = value
         for fname, ftype in struct_type.fields:
             if fname not in field_values:

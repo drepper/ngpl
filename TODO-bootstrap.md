@@ -225,6 +225,13 @@ Outstanding
     semicolon discards it -- one program, two meanings, now refused with both spellings
     offered.  `import` and the glyphs are refused by name; @repr(packed) already was.
 
+    A struct field may now state a unit the way a binding does (name ¤unit : type), so the
+    ELF structures can say that st_size counts bytes and st_shndx counts section indices.
+    The adoption rule was pinned while the boundary moved: an untyped literal adopts
+    everywhere, a typed plain value adopts at bindings and fields but is refused at call
+    arguments -- and ngplc was brought up to that refusal, which try_fit alone was too lax
+    for.  tests/test_field_units.ngpl.
+
     `ᵀ` joined them when transpose was specified.  It is the same trap the optional glyphs
     were -- a modifier letter, so `isalnum()` answers yes for it and an identifier scanner
     swallows it silently -- which is why the name scanner now stops there rather than the

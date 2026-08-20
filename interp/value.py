@@ -1148,16 +1148,34 @@ class StructType(Value):
     to order and pad its fields as it sees fit.
     """
 
-    __slots__ = ("name", "fields", "methods", "repr_kind", "_ref_self_methods")
+    __slots__ = ("name", "fields", "methods", "repr_kind",
+                 "_ref_self_methods", "field_units", "_resolved_units")
 
     def __init__(self, name: str, fields: list[tuple[str, str]],
                  methods: dict[str, "FuncValue"] | None = None,
-                 repr_kind: str | None = None):
+                 repr_kind: str | None = None, field_units=None):
         self.name = name
         self.fields = fields
         self.methods: dict[str, FuncValue] = methods or {}
         self.repr_kind = repr_kind
         self._ref_self_methods: set[str] = set()
+        # The unit specs the definition wrote per field, resolved to
+        # Unit objects on first use -- the units a file defines for
+        # itself register after the structs do.
+        self.field_units = field_units or {}
+        self._resolved_units: dict = {}
+
+    def field_unit(self, name: str):
+        """The Unit a field's numbers count in, or None."""
+        if name in self._resolved_units:
+            return self._resolved_units[name]
+        spec = self.field_units.get(name)
+        unit = None
+        if spec is not None:
+            from interp.units import eval_unit_formula
+            unit = eval_unit_formula(spec)
+        self._resolved_units[name] = unit
+        return unit
 
     def display(self):
         if self.repr_kind is not None:
