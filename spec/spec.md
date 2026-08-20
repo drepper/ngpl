@@ -5764,7 +5764,7 @@ The iterator reads through the directory's descriptor, so it stops working once 
 
 #### File Types
 
-`std.filetype` names the kinds of thing a directory entry can be, with the values of the `S_IF*` constants in `<sys/stat.h>`:
+`std.filetype` is an enumeration — one the language ships rather than one a file declares, but an enum in every other way: its members answer `.ord()`, it compares with a number without becoming one, and it is asked which it is rather than put in an order.  It names the kinds of thing a directory entry can be, with the values of the `S_IF*` constants in `<sys/stat.h>`:
 
 | Member | Value | `<sys/stat.h>` |
 |--------|-------|----------------|
@@ -5783,6 +5783,8 @@ if e.type = std.filetype.dir:
 ```
 
 The kernel reports an entry's type as a `DT_*` value, which is the matching `S_IF*` value shifted right by twelve.  The `S_IF*` form is the one exposed, because it is what a program comparing against a `stat` result already has.
+
+Being a builtin, it is reached through `std` and has no name of its own in the type namespace: `std.filetype.dir` is how a member is written, and `filetype` alone names nothing — neither a type a binding may state nor a value a program may hold.
 
 `unknown` has no `S_IF*` counterpart.  Some filesystems do not record an entry's kind in the directory itself, and report `DT_UNKNOWN`; an entry of that type has to be opened to find out what it is.  A program that must know the kind has to handle this rather than assume it never happens.
 

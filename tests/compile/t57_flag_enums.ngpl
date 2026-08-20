@@ -62,8 +62,19 @@ fn through_a_layout():
         ∅:
             std.println("vanished")
 
+// std.filetype is an enumeration like any the file declares: its
+// members answer .ord(), it compares with a number without becoming
+// one, and it is reached through std rather than by a bare name.
+@impure
+fn the_builtin_enum():
+    std.println("{} {} {}", std.filetype.unknown.ord(), std.filetype.dir.ord(), std.filetype.reg.ord())
+    std.println("{} {}", std.filetype.reg = 32768, std.filetype.reg = 1)
+    std.println("{}", std.filetype.dir = std.filetype.dir)
+    std.println("{}", @typeof(std.filetype.lnk))
+
 @impure @start
 fn main():
     values()
     operators()
     through_a_layout()
+    the_builtin_enum()

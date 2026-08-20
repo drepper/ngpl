@@ -845,6 +845,13 @@ and class, the pointer width, the Linux syscall numbers, e_flags, and
 the per-arch quirks (O_DIRECTORY, st_size's offset, whether the arch
 even has fstat).  `--target=A` selects a row, defaulting to the host.
 
+**std.filetype is an enum too.**  It was a bespoke type code (TY_FTYPE)
+that behaved like an enum without being one; it is now the first row
+of the enum table every file holds, so `.ord()`, the comparison rule
+and `@typeof` all reach it through the ordinary path and the special
+code is gone.  A builtin enum is reached through `std`, never by its
+bare name, which is what the two written-name lookups skip past.
+
 **The structures speak in enumerations.**  e_type, e_machine and
 e_version, p_type and sh_type carry enums with the format's fixed
 widths (`Et : u16`, `Em : u16`, `Ev : u32`, `Pt : u32`, `Sht : u32`),
