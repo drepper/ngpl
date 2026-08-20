@@ -4001,8 +4001,15 @@ impl Checker:
             return
         if ty_is_enum(t) and self.kind_of(id) = NK_INT:
             // an enum holds exactly its members, so a written-out
-            // number becomes one only where it names one
+            // number becomes one only where it names one -- and a
+            // @flag enum's values are combinations, which no bare
+            // number names, so none becomes one there
             let ei9 : i64 = ty_eidx(t)
+            if self.enum_is_flag(t):
+                self.derr(self.a.ntok[id × 1¤ptrdiff],
+                          "'" ⧺ self.a.enames[ei9 × 1¤ptrdiff] ⧺ "' is a @flag enum, so its values are combinations of members that a bare number does not name")
+                self.set_type(id, t)
+                return
             let st9 : i64 = self.a.estart[ei9 × 1¤ptrdiff]
             let n9 : i64 = self.a.ecount[ei9 × 1¤ptrdiff]
             let v9 : i64 = self.a.na[id × 1¤ptrdiff]

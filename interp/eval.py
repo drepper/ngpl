@@ -730,6 +730,24 @@ def unwrap_optional(value):
     return value
 
 
+def _enum_meets_number(ev) -> bool:
+    """Whether an enum value may be compared with a bare number.
+
+    An ordinary enum holds exactly its members, so asking whether one
+    equals a number is a fair question with a plain answer: it matches
+    or it does not.  A @flag enum's values are combinations of its
+    members, which no bare number names, so the question is refused
+    rather than answered -- `.ord()` is how a program asks for the
+    bits, and asking for them is then written down.
+    """
+    if ev.enum_type.is_flag:
+        raise TypeError(
+            f"'{ev.enum_type.name}' is a @flag enum, so its values are "
+            f"combinations of members that a bare number does not name; "
+            f"write .ord() to compare the bits")
+    return True
+
+
 def _unwrap_operand(value):
     v = unwrap_optional(value)
     if isinstance(v, UnitValue):
@@ -1616,9 +1634,9 @@ class Evaluator:
                     f"with enum '{ru.enum_type.name}'")
             return mk_bool(lu.value == ru.value)
         if isinstance(lu, EnumValue) and isinstance(ru, IntValue):
-            return mk_bool(lu.value == ru.value)
+            return mk_bool(_enum_meets_number(lu) and lu.value == ru.value)
         if isinstance(lu, IntValue) and isinstance(ru, EnumValue):
-            return mk_bool(lu.value == ru.value)
+            return mk_bool(_enum_meets_number(ru) and lu.value == ru.value)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_bool(lu.value == ru.value)
         if isinstance(lu, FloatValue) and isinstance(ru, FloatValue):

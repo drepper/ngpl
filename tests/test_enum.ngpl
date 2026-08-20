@@ -81,23 +81,23 @@ enum Perms:
 
 @test
 fn test_flag_auto_values():
-    assert(Perms.read = 1)
-    assert(Perms.write = 2)
-    assert(Perms.exec = 4)
+    assert(Perms.read.ord() = 1)
+    assert(Perms.write.ord() = 2)
+    assert(Perms.exec.ord() = 4)
 
 @test
 fn test_flag_nil_auto_created():
-    assert(Perms.nil = 0)
+    assert(Perms.nil.ord() = 0)
 
 @test
 fn test_flag_combine_or():
     let rw := Perms.read | Perms.write
-    assert(rw = 3)
+    assert(rw.ord() = 3)
 
 @test
 fn test_flag_combine_all():
     let all := Perms.read | Perms.write | Perms.exec
-    assert(all = 7)
+    assert(all.ord() = 7)
 
 @test
 fn test_flag_and():
@@ -136,10 +136,10 @@ enum Flags:
 
 @test
 fn test_flag_explicit_and_auto():
-    assert(Flags.a = 1)
-    assert(Flags.b = 4)
-    assert(Flags.c = 8)
-    assert(Flags.d = 16)
+    assert(Flags.a.ord() = 1)
+    assert(Flags.b.ord() = 4)
+    assert(Flags.c.ord() = 8)
+    assert(Flags.d.ord() = 16)
 
 // ---- @flag enum with explicit zero (no auto nil) -------------------------
 
@@ -151,8 +151,8 @@ enum Mode:
 
 @test
 fn test_flag_explicit_zero_no_nil():
-    assert(Mode.off = 0)
-    assert(Mode.read = 1)
+    assert(Mode.off.ord() = 0)
+    assert(Mode.read.ord() = 1)
 
 // ---- std.errors enum -----------------------------------------------------
 

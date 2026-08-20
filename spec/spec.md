@@ -7335,7 +7335,15 @@ paint(0)            // Color.red: 0 is red's value
 paint(7)            // error: 'Color' holds exactly its members, and 7 is not one of them
 ```
 
-The two rules meet cleanly: *assigning* an outside number is an error, since a Color holding 7 would be a Color that is no color; *comparing* with one merely answers no match, as [Comparison](#comparison) describes, since asking is not storing.  A `@flag` enum is different on both counts — its values are combinations of members, which a bare number does not name, so a number is refused there regardless of its value.
+The two rules meet cleanly: *assigning* an outside number is an error, since a Color holding 7 would be a Color that is no color; *comparing* with one merely answers no match, as [Comparison](#comparison) describes, since asking is not storing.  A `@flag` enum is different on both counts — its values are combinations of members, which a bare number does not name, so a number is refused there regardless of its value, in an assignment and in a comparison alike:
+
+```
+Perms.read = 1          // error: a bare number does not name a combination
+let p : Perms = 1       // error, for the same reason
+Perms.read.ord() = 1    // true: the bits, asked for by name
+```
+
+`.ord()` is the door to the bits, and a program that wants them writes it down.
 
 An enum may be declared below whatever names it, as a struct may.
 

@@ -111,10 +111,16 @@ fn test_comparison_with_an_outside_number_answers_no():
     assert(c = 1)
 
 // A @flag enum's values are combinations of members, which a bare
-// number does not name, so a number is refused there regardless.
-@expect error "'Perms' is an enum, but the value is"
+// number does not name, so a number is refused there regardless --
+// and the refusal says which of the two reasons it is.
+@expect error "'Perms' is a @flag enum, so its values are combinations"
 fn error_flag_enum_still_rejects_numbers():
     _ ← count_perms(1)
+
+// …and the same reason, in the same words, where one is compared
+@expect error "a bare number does not name"
+fn error_flag_enum_is_not_compared_with_a_number() → bool:
+    Perms.read = 1
 
 @expect error "'Color' is an enum, but the value is Size"
 fn error_binding_rejects_other_enum():

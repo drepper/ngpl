@@ -225,6 +225,12 @@ Outstanding
     semicolon discards it -- one program, two meanings, now refused with both spellings
     offered.  `import` and the glyphs are refused by name; @repr(packed) already was.
 
+    The @flag rule was made whole where the interpreter had only half of it: a bare number
+    was refused in an assignment but silently compared, which the specification forbids on
+    both counts.  Both halves now refuse in the same words, and .ord() is the door the
+    tests use for the bits.  This is the rare case where the interpreter was the one that
+    moved -- its own tests asserted the behaviour the specification does not have.
+
     @flag enums crossed into core-2 when the ELF constants became
     enumerations: automatic values that double from one, the empty
     combination under nil, | & ^ as the set operations, ~ masked to

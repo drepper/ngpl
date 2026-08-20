@@ -1967,8 +1967,15 @@ def enum_admit(name: str, value: "Value") -> "Value":
     if isinstance(value, EnumValue) and value.enum_type.name == name:
         return value
     et = _ENUM_OBJECTS.get(name)
-    if (et is not None and not et.is_flag and isinstance(value, IntValue)
+    if (et is not None and isinstance(value, IntValue)
             and not isinstance(value, UnitValue)):
+        if et.is_flag:
+            # The same reason the comparison gives, said in the same
+            # words: a flag enum's values are combinations, and no bare
+            # number names one.
+            raise TypeError(
+                f"'{name}' is a @flag enum, so its values are combinations "
+                f"of members that a bare number does not name")
         if value.value in et.values_to_names:
             return EnumValue(et, value.value)
         raise TypeError(
