@@ -1,0 +1,675 @@
+// ---------------------------------------------------------------------------
+// Putting the pieces together
+// ---------------------------------------------------------------------------
+
+// what codegen answers: the three images and what the file writer
+// needs to wrap them.  The ELF itself is built in main, where the
+// target's class picks the materializer.
+struct Compiled:
+    code : u8[]
+    rodata : u8[]
+    data : u8[]
+    relro_size : i64
+    syms : Sym[]
+    log : str[]
+    diags : Diag[]
+
+// a synthesized function starts from a clean sheet
+fn lw_reset(lw : &mut Lower, fname : str):
+    while #lw.op > 0:
+        _ ← lw.op.pop() ?? 0
+        _ ← lw.ia.pop() ?? 0
+        _ ← lw.ib.pop() ?? 0
+        _ ← lw.ic.pop() ?? 0
+        _ ← lw.idd.pop() ?? 0
+        _ ← lw.iww.pop() ?? 0
+    while #lw.extra > 0:
+        _ ← lw.extra.pop() ?? 0
+    lw.nlabels ← 0
+    lw.tbase ← 0
+    lw.tnext ← 0
+    lw.tmax ← 0
+    lw.in_wrap ← 0
+    lw.cur_ret ← TY_UNIT
+    lw.post_label ← ⁻1
+    lw.res_vreg ← ⁻1
+    lw.cur_fname ← fname
+
+// …and leaves its instructions behind as an IrFn
+fn lw_snapshot(lw : &Lower) → IrFn:
+    let opc : mut i64[] = []
+    let iac : mut i64[] = []
+    let ibc : mut i64[] = []
+    let icc : mut i64[] = []
+    let idc : mut i64[] = []
+    let iwc : mut i64[] = []
+    let exc : mut i64[] = []
+    foreach v := lw.op:
+        opc.push(v)
+    foreach v := lw.ia:
+        iac.push(v)
+    foreach v := lw.ib:
+        ibc.push(v)
+    foreach v := lw.ic:
+        icc.push(v)
+    foreach v := lw.idd:
+        idc.push(v)
+    foreach v := lw.iww:
+        iwc.push(v)
+    if #lw.extra > 0:
+        foreach v := lw.extra:
+            exc.push(v)
+    (IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
+          extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels})
+
+// std.args.all()'s answer: the kernel's arguments with the test
+// harness's own options taken out, as the interpreter takes out its
+// own before a program reads them
+fn lower_argsfilter(lw : &mut Lower) → IrFn:
+    lw_reset(&lw, "the argument filter")
+    let raw : i64 = lw.tmp()
+    lw.ir(IR_ARGS, 0, 0, 0, raw, 0)
+    let out : i64 = lw.tmp()
+    lw.ir(IR_ANEW, 4, 0, 0, out, 0)
+    let n : i64 = lw.tmp()
+    lw.ir(IR_ALEN, raw, 0, 0, n, 0)
+    let i : i64 = lw.tmp()
+    lw.ir(IR_CONST, 0, 0, 0, i, 0)
+    let t1 : i64 = lw.tmp()
+    lw.ir(IR_SC, lw.intern("--test"), 0, 0, t1, 0)
+    let t2 : i64 = lw.tmp()
+    lw.ir(IR_SC, lw.intern("--skip-tests"), 0, 0, t2, 0)
+    let ltop : i64 = lw.label()
+    let lskip : i64 = lw.label()
+    let lend : i64 = lw.label()
+    lw.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+    let c : i64 = lw.tmp()
+    lw.ir(IR_CLT, i, n, 0, c, 64 + 256)
+    lw.ir(IR_JZ, c, lend, 0, 0, 0)
+    let sv : i64 = lw.tmp()
+    lw.ir(IR_AIDX, raw, i, 0, sv, 0)
+    let e1 : i64 = lw.tmp()
+    lw.ir(IR_SEQV, sv, t1, 0, e1, 64)
+    lw.ir(IR_JNZ, e1, lskip, 0, 0, 0)
+    let e2 : i64 = lw.tmp()
+    lw.ir(IR_SEQV, sv, t2, 0, e2, 64)
+    lw.ir(IR_JNZ, e2, lskip, 0, 0, 0)
+    lw.ir(IR_APUSH, out, sv, 0, 0, 0)
+    lw.ir(IR_LABEL, lskip, 0, 0, 0, 0)
+    let one : i64 = lw.tmp()
+    lw.ir(IR_CONST, 1, 0, 0, one, 0)
+    let ni : i64 = lw.tmp()
+    lw.ir(IR_ADDW, i, one, 0, ni, 64 + 256)
+    lw.ir(IR_MOV, ni, 0, 0, i, 0)
+    lw.ir(IR_JMP, ltop, 0, 0, 0, 0)
+    lw.ir(IR_LABEL, lend, 0, 0, 0, 0)
+    lw.ir(IR_RET, out, 0, 0, 0, 0)
+    lw_snapshot(&lw)
+
+// the test driver the image runs between the globals and @start: the
+// harness options are read, and the @test functions run -- silently
+// before @start, or reported and counted under --test, on the error
+// stream as the interpreter reports them
+fn lower_testdriver(lw : &mut Lower, a : Ast) → IrFn:
+    lw_reset(&lw, "the test driver")
+    let tests : mut i64[] = []
+    if #a.fns > 0:
+        foreach fi := 0…#a.fns - 1:
+            if a.fns[fi].is_test:
+                tests.push(@dropunit(fi))
+    let total : i64 = @dropunit(#tests) + @dropunit(#a.igtests)
+    let argv : i64 = lw.tmp()
+    lw.ir(IR_ARGS, 0, 0, 0, argv, 0)
+    let ton : i64 = lw.tmp()
+    lw.ir(IR_CONST, 0, 0, 0, ton, 0)
+    let skp : i64 = lw.tmp()
+    lw.ir(IR_CONST, 0, 0, 0, skp, 0)
+    let n : i64 = lw.tmp()
+    lw.ir(IR_ALEN, argv, 0, 0, n, 0)
+    let i : i64 = lw.tmp()
+    lw.ir(IR_CONST, 0, 0, 0, i, 0)
+    let t1 : i64 = lw.tmp()
+    lw.ir(IR_SC, lw.intern("--test"), 0, 0, t1, 0)
+    let t2 : i64 = lw.tmp()
+    lw.ir(IR_SC, lw.intern("--skip-tests"), 0, 0, t2, 0)
+    let one : i64 = lw.tmp()
+    lw.ir(IR_CONST, 1, 0, 0, one, 0)
+    let ltop : i64 = lw.label()
+    let lnext : i64 = lw.label()
+    let l2 : i64 = lw.label()
+    let lscanned : i64 = lw.label()
+    let lrun : i64 = lw.label()
+    let lend : i64 = lw.label()
+    lw.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+    let c : i64 = lw.tmp()
+    lw.ir(IR_CLT, i, n, 0, c, 64 + 256)
+    lw.ir(IR_JZ, c, lscanned, 0, 0, 0)
+    let sv : i64 = lw.tmp()
+    lw.ir(IR_AIDX, argv, i, 0, sv, 0)
+    let e1 : i64 = lw.tmp()
+    lw.ir(IR_SEQV, sv, t1, 0, e1, 64)
+    lw.ir(IR_JZ, e1, l2, 0, 0, 0)
+    lw.ir(IR_MOV, one, 0, 0, ton, 0)
+    lw.ir(IR_LABEL, l2, 0, 0, 0, 0)
+    let e2 : i64 = lw.tmp()
+    lw.ir(IR_SEQV, sv, t2, 0, e2, 64)
+    lw.ir(IR_JZ, e2, lnext, 0, 0, 0)
+    lw.ir(IR_MOV, one, 0, 0, skp, 0)
+    lw.ir(IR_LABEL, lnext, 0, 0, 0, 0)
+    let ni : i64 = lw.tmp()
+    lw.ir(IR_ADDW, i, one, 0, ni, 64 + 256)
+    lw.ir(IR_MOV, ni, 0, 0, i, 0)
+    lw.ir(IR_JMP, ltop, 0, 0, 0, 0)
+    lw.ir(IR_LABEL, lscanned, 0, 0, 0, 0)
+    lw.ir(IR_JZ, ton, lrun, 0, 0, 0)
+    // --test: report and count, then exit without @start
+    if total = 0:
+        lw.ir(IR_EPRINTS, lw.intern("error: no tests: nothing in this file is marked @test or @expect\n"), 0, 0, 0, 0)
+        let z0 : i64 = lw.tmp()
+        lw.ir(IR_CONST, 1, 0, 0, z0, 0)
+        lw.ir(IR_EXIT, z0, 0, 0, 0, 0)
+    else:
+        if #a.igtests > 0:
+            foreach gname := a.igtests:
+                lw.ir(IR_EPRINTS, lw.intern("test " ⧺ gname ⧺ " ... ok\n"), 0, 0, 0, 0)
+        lw.ir(IR_EPRINTS, lw.intern("\nrunning " ⧺ i64_str(total) ⧺ " tests\n"), 0, 0, 0, 0)
+        if #tests > 0:
+            foreach fi2 := tests:
+                lw.ir(IR_EPRINTS, lw.intern("test " ⧺ a.fns[fi2 × 1¤ptrdiff].name ⧺ " ... "), 0, 0, 0, 0)
+                let coff : i64 = @dropunit(#lw.extra)
+                lw.extra.push(0)
+                let d : i64 = lw.tmp()
+                lw.ir(IR_CALL, fi2, coff, 0, d, 0)
+                lw.ir(IR_EPRINTS, lw.intern("ok\n"), 0, 0, 0, 0)
+        lw.ir(IR_EPRINTS, lw.intern("\ntest result: ok. " ⧺ i64_str(total) ⧺ " passed; 0 failed\n"), 0, 0, 0, 0)
+        let z1 : i64 = lw.tmp()
+        lw.ir(IR_CONST, 0, 0, 0, z1, 0)
+        lw.ir(IR_EXIT, z1, 0, 0, 0, 0)
+    lw.ir(IR_LABEL, lrun, 0, 0, 0, 0)
+    lw.ir(IR_JNZ, skp, lend, 0, 0, 0)
+    // the ordinary run: every test, silently, before @start
+    if #tests > 0:
+        foreach fi3 := tests:
+            let coff2 : i64 = @dropunit(#lw.extra)
+            lw.extra.push(0)
+            let d2 : i64 = lw.tmp()
+            lw.ir(IR_CALL, fi3, coff2, 0, d2, 0)
+    lw.ir(IR_LABEL, lend, 0, 0, 0, 0)
+    lw.ir(IR_RET, ⁻1, 0, 0, 0, 0)
+    lw_snapshot(&lw)
+
+// the init function the image runs before @start: every marked
+// global's literal is built and stored where GLOAD reads it
+fn lower_ginit(lw : &mut Lower, a : Ast, chk : Chk) → IrFn:
+    while #lw.op > 0:
+        _ ← lw.op.pop() ?? 0
+        _ ← lw.ia.pop() ?? 0
+        _ ← lw.ib.pop() ?? 0
+        _ ← lw.ic.pop() ?? 0
+        _ ← lw.idd.pop() ?? 0
+        _ ← lw.iww.pop() ?? 0
+    while #lw.extra > 0:
+        _ ← lw.extra.pop() ?? 0
+    lw.nlabels ← 0
+    lw.tbase ← 0
+    lw.tnext ← 0
+    lw.tmax ← 0
+    lw.in_wrap ← 0
+    lw.cur_ret ← TY_UNIT
+    lw.post_label ← ⁻1
+    lw.res_vreg ← ⁻1
+    lw.cur_fname ← "the global initializer"
+    foreach g := chk.ginit:
+        lw.tnext ← lw.tbase
+        let v : i64 = lw.lower_expr(a.globals[g × 1¤ptrdiff].init)
+        lw.ir(IR_GSTORE, g, v, 0, 0, 0)
+    lw.ir(IR_RET, ⁻1, 0, 0, 0, 0)
+    let opc : mut i64[] = []
+    let iac : mut i64[] = []
+    let ibc : mut i64[] = []
+    let icc : mut i64[] = []
+    let idc : mut i64[] = []
+    let iwc : mut i64[] = []
+    let exc : mut i64[] = []
+    foreach v := lw.op:
+        opc.push(v)
+    foreach v := lw.ia:
+        iac.push(v)
+    foreach v := lw.ib:
+        ibc.push(v)
+    foreach v := lw.ic:
+        icc.push(v)
+    foreach v := lw.idd:
+        idc.push(v)
+    foreach v := lw.iww:
+        iwc.push(v)
+    if #lw.extra > 0:
+        foreach v := lw.extra:
+            exc.push(v)
+    (IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
+          extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels})
+
+@pre(stack_size >= PAGE and guard_size >= PAGE)
+@pre((stack_size % PAGE ?? 1) = 0 and (guard_size % PAGE ?? 1) = 0)
+fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
+           stack_size : i64, guard_size : i64) → Compiled:
+    if tgt.id ≠ TGT_X64:
+        // the shared driver and the target's instruction layer carry
+        // every other architecture
+        return codegen_t(a, toks, src, chk, tgt, stack_size, guard_size)
+    let strs0 : mut str[] = []
+    foreach s := a.strs:
+        strs0.push(s)
+    let lw : mut Lower = (Lower{a: a, toks: toks, src: src, ntype: chk.ntype,
+                                nslot: chk.nslot, ncvt: chk.ncvt, strs: strs0,
+                                op: [], ia: [], ib: [], ic: [], idd: [],
+                                iww: [], extra: [], tbase: 0, tnext: 0,
+                                tmax: 0, nlabels: 0, breaks: [], conts: [],
+                                in_wrap: 0, argsfix: ⁻1, lambase: 0,
+                                shimbase: 0,
+                                cur_ret: 0, post_label: ⁻1,
+                                res_vreg: ⁻1, cur_fname: "", dlog: []})
+    let em : mut Emit = (Emit{code: [], cf_pos: [], cf_target: [],
+                              sf_pos: [], sf_str: [], sd_pos: [], sd_str: [],
+                              df_pos: [], df_off: [], labels: [],
+                              lf_pos: [], lf_label: [], fn_off: [],
+                              rt_off: [], rax_slot: ⁻1,
+                              jt_pos: [], jt_id: [], jt_count: 0,
+                              jt_starts: [], jt_is_code: [], jt_entries: [],
+                              pj_id: [],
+                              pj_start: [], pj_len: [], pj_labels: [],
+                              max_frame: 0,
+                              gmap: [], gseg: [], gr_pos: [], gr_off: [],
+                              skipping: 0, rt_need: [],
+                              rx: [], rx_pos: [], rx_off: [],
+                              tf_pos: [], tf_lab: [], tf_form: [],
+                              ff_pos: [], ff_fn: [], k_args: 0, k_alloc: 0})
+    let nglobals : i64 = @dropunit(#a.globals)
+    // The data a program carries falls into three kinds.  One is never
+    // written and rides with the other read-only things.  One is
+    // written before @start is reached and never again -- the globals
+    // the initializer builds, and what the kernel handed us -- and is
+    // made read-only there, which is what PT_GNU_RELRO records.  The
+    // rest is written throughout and stays writable.
+    let is_relro : mut i64[] = []
+    foreach _ := 0…nglobals:
+        is_relro.push(0)
+    foreach g := chk.ginit:
+        is_relro[g × 1¤ptrdiff] ← 1
+    let n_ro : mut i64 = 0
+    let n_relro : mut i64 = 0
+    let n_rw : mut i64 = 0
+    if nglobals > 0:
+        foreach i := 0…nglobals - 1:
+            if a.globals[i × 1¤ptrdiff].is_mut:
+                n_rw ← n_rw + 1
+            elif is_relro[i × 1¤ptrdiff] = 1:
+                n_relro ← n_relro + 1
+            else:
+                n_ro ← n_ro + 1
+    // what the kernel handed over is written once, at the very top of
+    // the program, so it belongs with the rest of the relro
+    let args_off : i64 = 8 × n_relro
+    let relro_size : i64 = align_up(args_off + 32, PAGE)
+    let alloc_off : i64 = relro_size + 8 × n_rw
+    let k_ro : mut i64 = 0
+    let k_relro : mut i64 = 0
+    let k_rw : mut i64 = 0
+    if nglobals > 0:
+        foreach i := 0…nglobals - 1:
+            if a.globals[i × 1¤ptrdiff].is_mut:
+                em.gseg.push(1)
+                em.gmap.push(relro_size + 8 × k_rw)
+                k_rw ← k_rw + 1
+            elif is_relro[i × 1¤ptrdiff] = 1:
+                em.gseg.push(1)
+                em.gmap.push(8 × k_relro)
+                k_relro ← k_relro + 1
+            else:
+                em.gseg.push(0)
+                em.gmap.push(8 × k_ro)
+                k_ro ← k_ro + 1
+    assert(@dropunit(#em.gmap) = nglobals, "every global was placed")
+    let nfns : i64 = @dropunit(#a.fns)
+    // _start: call the @start function, then exit 0
+    let start_fn : mut i64 = ⁻1
+    foreach i := 0…#a.fns - 1:
+        if a.fns[i].is_start:
+            start_fn ← @dropunit(i)
+    // the kernel's argc and argv sit at the entry rsp; they are kept
+    // in the data segment before anything moves the stack
+    em.b3(72, 139, 4)
+    em.b1(36)                       // mov rax, [rsp]
+    em.dref(R_R11, args_off)
+    em.b3(73, 137, 3)               // mov [r11], rax: argc
+    em.b4(72, 141, 68, 36)
+    em.b1(8)                        // lea rax, [rsp+8]
+    em.b4(73, 137, 67, 8)           // mov [r11+8], rax: argv
+    // the environment block follows argv and the NULL that ends it
+    em.b3(72, 139, 12)              // mov rcx, [rsp]: argc
+    em.b1(36)
+    em.b4(72, 141, 68, 200)         // lea rax, [rax+rcx*8+8]
+    em.b1(8)
+    em.b4(73, 137, 67, 16)          // mov [r11+16], rax: envp
+    // and the auxiliary vector begins one word past the NULL that ends
+    // the environment, where the kernel left it
+    em.begin_fn(1)
+    em.b3(72, 137, 193)             // mov rcx, rax
+    em.set_label(0)                 // Lwalk
+    em.b3(72, 139, 17)              // mov rdx, [rcx]
+    em.b4(72, 131, 193, 8)          // add rcx, 8
+    em.b3(72, 133, 210)             // test rdx, rdx
+    em.jlocal(133, 0)               // jne Lwalk
+    em.b4(73, 137, 75, 24)          // mov [r11+24], rcx: auxv
+    em.resolve_locals()
+    // The stack the program will stand on: one reservation of
+    // guard + stack bytes, unreadable throughout, of which the upper
+    // stack bytes are then opened for reading and writing.  What is
+    // left below stays unreadable, so an overflow faults on the guard
+    // rather than reaching whatever the kernel put beneath.  argc and
+    // argv were copied out above, and the entry stack stays mapped, so
+    // the strings they point at outlive the move.
+    em.begin_fn(2)
+    em.b2(49, 255)                  // xor edi, edi: let the kernel place it
+    em.movimm(R_SI, guard_size + stack_size)
+    em.b2(49, 210)                  // xor edx, edx: PROT_NONE
+    em.movimm(R_R10, 147490)        // PRIVATE|ANONYMOUS|NORESERVE|STACK
+    em.movimm(R_R8, ⁻1)
+    em.b3(69, 49, 201)              // xor r9d, r9d
+    em.movimm(R_AX, 9)
+    em.b2(15, 5)                    // mmap
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(136, 0)               // js: the kernel refused
+    em.b3(72, 137, 195)             // mov rbx, rax: the region's foot
+    em.movimm(R_DI, guard_size)
+    em.b3(72, 1, 199)               // add rdi, rax: past the guard
+    em.movimm(R_SI, stack_size)
+    em.movimm(R_DX, 3)              // PROT_READ|PROT_WRITE
+    em.movimm(R_AX, 10)
+    em.b2(15, 5)                    // mprotect
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(136, 0)               // js: the kernel refused
+    em.movimm(R_AX, guard_size + stack_size)
+    em.b3(72, 1, 216)               // add rax, rbx: the head of the region
+    em.b3(72, 137, 196)             // mov rsp, rax: and the program stands
+    em.jlocal(⁻1, 1)
+    em.set_label(0)
+    let smsg : i64 = lw.intern("the stack could not be reserved\n")
+    em.sref(R_SI, smsg)
+    em.movimm(R_DX, str_len("the stack could not be reserved\n"))
+    em.jglobal(232, ⁻1, RT_ABORT)
+    em.set_label(1)
+    em.resolve_locals()
+    let ninit : i64 = @dropunit(#chk.ginit)
+    let g1 : i64 = 1 if ninit > 0 else 0
+    // past the user's functions sit the synthetics: the global init,
+    // the argument filter, the test driver
+    lw.argsfix ← nfns + g1
+    lw.lambase ← nfns + g1 + 2
+    lw.shimbase ← lw.lambase + @dropunit(#chk.lams)
+    let tdriver : i64 = nfns + g1 + 1
+    if ninit > 0:
+        em.jglobal(232, ⁻1, nfns)
+    // everything written before @start has now been written; what the
+    // headers say is read-only from here on is made so
+    em.jglobal(232, ⁻1, RT_RELRO)
+    em.jglobal(232, ⁻1, tdriver)
+    if start_fn >= 0:
+        em.jglobal(232, ⁻1, start_fn)
+    // the start function's answer is the exit status; one that
+    // answers nothing exits 0, as does a test file with no @start
+    if start_fn >= 0 and a.fns[start_fn × 1¤ptrdiff].ret ≠ TY_UNIT:
+        em.b3(72, 137, 199)         // mov rdi, rax
+    else:
+        em.b3(72, 49, 255)          // xor rdi, rdi
+    em.movimm(R_AX, 60)
+    em.b2(15, 5)
+    // The program's own code first: what it calls is then known, and
+    // the runtime that follows carries only what is reached.
+    foreach i := 0…#a.fns - 1:
+        let f : i64 = @dropunit(i)
+        let np : i64 = a.extra[a.fns[i].params_off × 1¤ptrdiff]
+        if chk.skipfn[i] = 1:
+            // a generic no call shaped: an empty body stands in
+            let sir := lower_stub_fn(&lw, np)
+            em.fn_off.push(em.here())
+            emit_fn(&em, sir, np, lw.strs)
+        else:
+            let ir := lower_fn(&lw, a, chk, f)
+            em.fn_off.push(em.here())
+            emit_fn(&em, ir, np, lw.strs)
+    if ninit > 0:
+        let gir := lower_ginit(&lw, a, chk)
+        em.fn_off.push(em.here())
+        emit_fn(&em, gir, 0, lw.strs)
+    let fir := lower_argsfilter(&lw)
+    em.fn_off.push(em.here())
+    emit_fn(&em, fir, 0, lw.strs)
+    let dir := lower_testdriver(&lw, a)
+    em.fn_off.push(em.here())
+    emit_fn(&em, dir, 0, lw.strs)
+    if #chk.lams > 0:
+        foreach j := 0…#chk.lams - 1:
+            let lir := lower_lambda_fn(&lw, a, chk, @dropunit(j))
+            em.fn_off.push(em.here())
+            let lnp : i64 = a.extra[a.na[chk.lams[j] × 1¤ptrdiff] × 1¤ptrdiff]
+            emit_fn(&em, lir, lnp + 1, lw.strs)
+    if #chk.psfn > 0:
+        foreach j := 0…#chk.psfn - 1:
+            let sir := lower_shim_fn(&lw, chk, @dropunit(j))
+            em.fn_off.push(em.here())
+            emit_fn(&em, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs)
+    // every function was emitted and left its offset behind
+    assert(@dropunit(#em.fn_off) = nfns + g1 + 2 + @dropunit(#chk.lams) + @dropunit(#chk.psfn), "one code offset per function")
+    // What the program calls, and what that calls in turn.  Everything
+    // emitted so far is the program's own; the calls it made name the
+    // runtime it needs, and the edge list closes over the rest.
+    let nrt : i64 = 52
+    foreach _ := 1…nrt:
+        em.rt_need.push(0)
+        em.rt_off.push(⁻1)
+    if #em.cf_target > 0:
+        foreach i := 0…#em.cf_target - 1:
+            let t : i64 = em.cf_target[i]
+            if t < 0:
+                em.rt_need[(0 - t - 1) × 1¤ptrdiff] ← 1
+    let edges := rt_edges()
+    let npair : i64 = @dropunit(#edges) ÷ 2 ?? 0
+    let changed : mut bool = true
+    while changed:
+        changed ← false
+        foreach e := 0…npair - 1:
+            // the pairs hold the routines' ids as positive numbers, and
+            // a routine's place in the list is one less than its id
+            let from : i64 = edges[(e × 2) × 1¤ptrdiff] - 1
+            let to : i64 = edges[(e × 2 + 1) × 1¤ptrdiff] - 1
+            if em.rt_need[from × 1¤ptrdiff] = 1 and em.rt_need[to × 1¤ptrdiff] = 0:
+                em.rt_need[to × 1¤ptrdiff] ← 1
+                changed ← true
+    emit_runtime(&em, &lw, alloc_off, args_off)
+    em.skipping ← 0
+    if #em.rt_off > 0:
+        foreach i := 0…nrt - 1:
+            assert(em.rt_off[i × 1¤ptrdiff] ≠ ⁻1 or em.rt_need[i × 1¤ptrdiff] = 0, "a needed routine was emitted")
+    // calls resolve now that every target has a place
+    if #em.cf_pos > 0:
+        foreach i := 0…#em.cf_pos - 1:
+            let pos : i64 = em.cf_pos[i]
+            let t : i64 = em.cf_target[i]
+            let dest : i64 = em.fn_off[t × 1¤ptrdiff] if t >= 0 else em.rt_off[(0 - t - 1) × 1¤ptrdiff]
+            // a call whose target was passed over means the edge list
+            // does not say everything the emitter does
+            assert(dest ≠ ⁻1, "every call reaches a routine that was emitted")
+            em.patch32(pos, dest - (pos + 4))
+    // rodata: the strings' bytes, then their descriptors
+    let text_size : i64 = em.here()
+    let ro_vaddr : i64 = IMAGE_BASE + align_up(PAGE + text_size, PAGE)
+    let stroffs : mut i64[] = []
+    let acc : mut i64 = 0
+    foreach s := lw.strs:
+        stroffs.push(acc)
+        acc ← acc + str_len(s)
+    let descbase : i64 = align_up(acc, 8)
+    let jt_base : i64 = descbase + 16 × @dropunit(#lw.strs)
+    if #em.sf_pos > 0:
+        foreach i := 0…#em.sf_pos - 1:
+            em.patch64(em.sf_pos[i], ro_vaddr + stroffs[em.sf_str[i] × 1¤ptrdiff])
+    if #em.sd_pos > 0:
+        foreach i := 0…#em.sd_pos - 1:
+            em.patch64(em.sd_pos[i], ro_vaddr + descbase + 16 × em.sd_str[i])
+    if #em.jt_pos > 0:
+        foreach i := 0…#em.jt_pos - 1:
+            em.patch64(em.jt_pos[i], ro_vaddr + jt_base + 8 × em.jt_starts[em.jt_id[i] × 1¤ptrdiff])
+    assert(#stroffs = #lw.strs, "one offset per string")
+    let rodata : mut u8[] = []
+    foreach s := lw.strs:
+        foreach c := s:
+            rodata.push(c.ord() & 255)
+    while @dropunit(#rodata) < descbase:
+        rodata.push(0)
+    foreach i := 0…#lw.strs - 1:
+        push64(&rodata, ro_vaddr + stroffs[i])
+        push64(&rodata, str_len(lw.strs[i]))
+    // a jump table holds code addresses, a value table its data
+    if #em.jt_starts > 0:
+        foreach t := 0…#em.jt_starts - 1:
+            let lo2 : i64 = em.jt_starts[t]
+            let hi2 : i64 = em.jt_starts[t + 1] if t + 1 < #em.jt_starts else @dropunit(#em.jt_entries)
+            let base2 : i64 = IMAGE_BASE + PAGE if em.jt_is_code[t] = 1 else 0
+            let e3 : mut i64 = lo2
+            while e3 < hi2:
+                push64(&rodata, base2 + em.jt_entries[e3 × 1¤ptrdiff])
+                e3 ← e3 + 1
+    // the constant tables the runtime reads: the UTF-8 decoder's byte
+    // classes, then its transition words, one to a class
+    let rx_base : i64 = @dropunit(#rodata)
+    foreach b := utf8_class_bytes():
+        rodata.push(b)
+    foreach w := utf8_dfa_words():
+        push64(&rodata, w)
+    if #em.rx_pos > 0:
+        foreach i := 0…#em.rx_pos - 1:
+            em.patch64(em.rx_pos[i], ro_vaddr + rx_base + em.rx_off[i])
+    // the globals that are never written ride here, past the tables
+    let gro_base : i64 = @dropunit(#rodata)
+    if nglobals > 0:
+        foreach i := 0…nglobals - 1:
+            if em.gseg[i × 1¤ptrdiff] = 0:
+                push64(&rodata, chk.gvals[i × 1¤ptrdiff])
+    if #em.gr_pos > 0:
+        foreach i := 0…#em.gr_pos - 1:
+            em.patch64(em.gr_pos[i], ro_vaddr + gro_base + em.gr_off[i])
+    // data: what is written before @start and then sealed, then what
+    // stays writable throughout
+    let d_vaddr : i64 = IMAGE_BASE + align_up(align_up(PAGE + text_size, PAGE) + @dropunit(#rodata), PAGE)
+    if #em.df_pos > 0:
+        foreach i := 0…#em.df_pos - 1:
+            em.patch64(em.df_pos[i], d_vaddr + em.df_off[i])
+    let data : mut u8[] = []
+    if nglobals > 0:
+        foreach i := 0…nglobals - 1:
+            if em.gseg[i × 1¤ptrdiff] = 1 and em.gmap[i × 1¤ptrdiff] < relro_size:
+                push64(&data, chk.gvals[i × 1¤ptrdiff])
+    // argc, argv, envp and the auxiliary vector, then the page's rest
+    foreach _ := 1…32:
+        data.push(0)
+    while @dropunit(#data) < relro_size:
+        data.push(0)
+    if nglobals > 0:
+        foreach i := 0…nglobals - 1:
+            if em.gseg[i × 1¤ptrdiff] = 1 and em.gmap[i × 1¤ptrdiff] >= relro_size:
+                push64(&data, chk.gvals[i × 1¤ptrdiff])
+    // the allocator's bump pointer and the limit it runs to
+    foreach _ := 1…16:
+        data.push(0)
+    assert(@dropunit(#data) = alloc_off + 16, "the data segment is as long as it was planned")
+    // A frame deeper than the guard could be claimed in one 'sub rsp'
+    // that steps clean over it, and the overflow would land on
+    // whatever lies below instead of faulting.  The compiler knows
+    // every frame it laid down, so it says so here rather than leaving
+    // it to be discovered.
+    let cdiags : mut Diag[] = []
+    if em.max_frame > guard_size:
+        cdiags.push(Diag{line: 1, col: 1,
+                         msg: "a function claims " ⧺ i64_str(em.max_frame) ⧺ " bytes of stack, more than the " ⧺ i64_str(guard_size) ⧺ "-byte guard below it, which it could step over; raise --guard-size"})
+    if em.max_frame >= stack_size:
+        cdiags.push(Diag{line: 1, col: 1,
+                         msg: "a function claims " ⧺ i64_str(em.max_frame) ⧺ " bytes of stack, and the whole stack is " ⧺ i64_str(stack_size) ⧺ "; raise --stack-size"})
+    // The symbols, in the order the code lays them out: the entry
+    // point, the program's own functions, the ones the compiler
+    // synthesized behind them, and the runtime last, which is where
+    // the emitter puts it so that a routine nobody reached can be left
+    // out.  Each symbol runs until the next begins, and the last runs
+    // to the end of the text, so this list has to be in address order
+    // or a size comes out as the distance to somewhere behind it.
+    let sname : mut str[] = []
+    let soffs : mut i64[] = []
+    let sglob : mut bool[] = []
+    sname.push("_start")
+    soffs.push(0)
+    sglob.push(false)
+    foreach i := 0…#a.fns - 1:
+        sname.push(fn_symbol(a, toks, src, @dropunit(i)))
+        soffs.push(em.fn_off[i])
+        sglob.push(a.fns[i].is_export)
+    let synth : mut str[] = []
+    if ninit > 0:
+        synth.push("<globals>")
+    synth.push("<args>")
+    synth.push("<tests>")
+    if #chk.lams > 0:
+        foreach j := 0…#chk.lams - 1:
+            synth.push("λ#" ⧺ i64_str(@dropunit(j)))
+    if #chk.psfn > 0:
+        foreach j := 0…#chk.psfn - 1:
+            synth.push("partial#" ⧺ i64_str(@dropunit(j)))
+    foreach j := 0…#synth - 1:
+        sname.push(synth[j])
+        soffs.push(em.fn_off[(nfns + @dropunit(j)) × 1¤ptrdiff])
+        sglob.push(false)
+    // The runtime comes last in the text, but a routine's id is its
+    // place in the list rather than its place in the code -- the two
+    // agreed until a routine was written next to the one it belongs
+    // beside instead of at the end.  Rather than depend on that
+    // agreement, the routines that survived are put in address order
+    // here.  There are a few dozen of them, so the plainest sort is
+    // the right one.
+    let rtn := rt_names()
+    assert(@dropunit(#rtn) = nrt, "one name for every runtime routine")
+    let rname : mut str[] = []
+    let roff : mut i64[] = []
+    if #em.rt_off > 0:
+        foreach i := 0…#em.rt_off - 1:
+            // a routine nobody reached is in no binary, and so is no
+            // symbol either
+            if em.rt_off[i] ≠ ⁻1:
+                let at : i64 = em.rt_off[i]
+                let nm : str = rtn[i]
+                let k : mut i64 = @dropunit(#roff)
+                rname.push(nm)
+                roff.push(at)
+                while k > 0 and roff[(k - 1) × 1¤ptrdiff] > at:
+                    rname[k × 1¤ptrdiff] ← rname[(k - 1) × 1¤ptrdiff]
+                    roff[k × 1¤ptrdiff] ← roff[(k - 1) × 1¤ptrdiff]
+                    k ← k - 1
+                rname[k × 1¤ptrdiff] ← nm
+                roff[k × 1¤ptrdiff] ← at
+    if #roff > 0:
+        foreach i := 0…#roff - 1:
+            sname.push(rname[i])
+            soffs.push(roff[i])
+            sglob.push(false)
+    assert(#sname = #soffs and #sname = #sglob, "one of each per symbol")
+    let syms : mut Sym[] = []
+    foreach i := 0…#sname - 1:
+        let here ¤byte : i64 = soffs[i]
+        let next ¤byte : i64 = soffs[i + 1] if i + 1 < #soffs else text_size
+        // in address order, so a symbol's size is the distance to the
+        // next one and never a distance backwards
+        assert(next >= here, "the symbols run up the text")
+        syms.push(Sym{name: sname[i], value: here, size: next - here,
+                      is_global: sglob[i]})
+    (Compiled{code: em.code, rodata: rodata, data: data,
+              relro_size: relro_size, syms: syms,
+              log: lw.dlog, diags: cdiags})
+

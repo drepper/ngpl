@@ -647,6 +647,38 @@ Attempt 3 grows core-1 to **core-2** with structs:
   they cost two small functions in every image and nothing at run
   time when no flag is given and no test exists.
 
+## The Files
+
+The compiler is twenty-five source files, listed in build order by
+`build/sources.sh` and by the `@build` recipe in `src/main.ngpl`.
+Twenty-four of them were cut from one 20,836-line file by contiguous
+slices -- concatenating them in that order reproduced it byte for byte,
+and the binary they compiled to was byte-identical on all six targets,
+which is how the split was checked.  `comptime.ngpl` is the one that
+was written afterwards.
+
+    tokens types diag lex ast parse dumpast check comptime ir lower
+    x86 symbols elf codegen main
+    arch_a64 dispatch arch_rv64 arch_i386 arch_arm arch_rv32
+    tdriver rt_ir codegen_t
+
+Build it with `ngplc --build src/main.ngpl`; the recipe in `main.ngpl`
+is a `@build` function, which generates no code and cannot be called.
+
+**The order is part of the program.**  A struct may be declared below
+whatever names it — the parser sweeps for struct names before parsing —
+but an `enum` and a `unit` are registered as they are read, so
+`elf.ngpl` must precede everything that writes `Sht` or `¤"shndx"`.
+Nothing may glob `src/*.ngpl`: alphabetical is not dependency order.
+Two lists therefore say the same thing, and the bootstrap checks them
+against each other rather than trusting a comment.
+
+Two seams the list does not hide: `impl Emit` is opened in both
+`x86.ngpl` and `arch_a64.ngpl`, which the language allows and which was
+already true within the one file; and the target-independent `g_*`
+dispatchers sit in `dispatch.ngpl` between aarch64 and riscv64, where
+contiguity put them.
+
 ## Pipeline and Data Flow
 
 Unchanged in shape from attempt 1 — flat parallel arrays and ids
@@ -1018,12 +1050,16 @@ brief's requirement that a program never parse prose.
 ## The Bootstrap Chain
 
 `build/bootstrap.sh` runs the chain the process prescribes: the
-interpreted compiler builds stage 1 (~2¼ minutes), stage 1 builds
+interpreted compiler builds stage 1 (minutes), stage 1 builds
 stage 2 (49 ms), stage 2 builds stage 3, and stages 2 and 3 must
 match byte for byte before the verified stage-2 binary installs as
 `build/ngplc`.  Stage 1 matches them too: the compiler is
 deterministic whichever way it runs.  The build caches against the
-source's timestamp, so the suite's native runs find it ready.
+newest of the sources, so the suite's native runs find it ready.
+
+Stage 1 is where the whole chain's time goes, and how long it takes is
+a property of the machine rather than of the compiler; the figure below
+is what a profile-driven campaign left, measured where it was run.
 
 The 2¼ minutes is the residue of a profile-driven campaign on the
 tree-walking interpreter, run entirely with its own instruments

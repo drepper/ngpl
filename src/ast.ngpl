@@ -1,0 +1,216 @@
+// ===========================================================================
+// The AST: flat parallel arrays indexed by node id
+// ===========================================================================
+
+// expressions
+let NK_INT : i64 = 1        // na = value (wrapped), nb = big flag
+let NK_BOOL : i64 = 2       // na = 0 or 1
+let NK_STR : i64 = 3        // na = string table index
+let NK_VAR : i64 = 4        // name is the token
+let NK_ARRLIT : i64 = 5     // na = extra [count, elem…]
+let NK_INDEX : i64 = 6      // na = base, nb = index
+let NK_LEN : i64 = 7        // na = base (# of an array or a string)
+let NK_CALL : i64 = 10      // na = extra [argc, arg…]; callee token
+let NK_SCALL : i64 = 11     // na = builtin id, nb = extra [argc, arg…]
+let NK_MCALL : i64 = 12     // na = base, nb = extra [argc, arg…]; method token
+let NK_REF : i64 = 13       // na = inner, nb = 1 shared or 2 mut
+let NK_SLIT : i64 = 14      // na = extra [n, field-token, expr, …]; name token
+let NK_FIELD : i64 = 15     // na = base; field token
+let NK_SOME : i64 = 16      // na = the value ∃ carries
+let NK_EMPTYV : i64 = 17    // a bare ∅
+let NK_HLIT : i64 = 18      // na = extra [n, key, value, …]
+let NK_TUPLE : i64 = 19     // na = extra [n, expr…]
+let NK_DROPU : i64 = 45     // @dropunit: na = the measured value
+let NK_IOTA : i64 = 46      // container ⍳ wanted: where it sits, if anywhere
+let NK_SATADD : i64 = 47    // ⊞: the sum, held at the type's edge
+let NK_SATSUB : i64 = 48    // ⊟
+let NK_SATMUL : i64 = 49    // ⊠
+let NK_LXOR : i64 = 53      // ⊕, both sides read
+let NK_LNAND : i64 = 54     // ⊼
+let NK_LNOR : i64 = 58      // ⊽
+let NK_SLICE : i64 = 59     // v[a…b]: na = base, nb = lo, nc = hi
+let NK_RESHAPE : i64 = 60   // n ⍴ x: na = the count, nb = the filler
+let NK_WHILEB : i64 = 61    // while x := e: na = e, nb = body; name token
+let NK_TYPEOF : i64 = 62    // @typeof(e): folds to the type's spelling
+let NK_ELEMOF : i64 = 43    // key ∊ hash
+let NK_ADD : i64 = 20
+let NK_SUB : i64 = 21
+let NK_MUL : i64 = 22
+let NK_DIV : i64 = 23
+let NK_MOD : i64 = 24
+let NK_SHL : i64 = 25
+let NK_SHR : i64 = 26
+let NK_BAND : i64 = 27
+let NK_BOR : i64 = 28
+let NK_BXOR : i64 = 29
+let NK_EQ : i64 = 30
+let NK_NE : i64 = 31
+let NK_LT : i64 = 32
+let NK_LE : i64 = 33
+let NK_GT : i64 = 34
+let NK_GE : i64 = 35
+let NK_AND : i64 = 36       // short-circuit
+let NK_OR : i64 = 37        // short-circuit
+let NK_LAND : i64 = 38      // ∧, both sides read
+let NK_LOR : i64 = 39       // ∨
+let NK_MAXOP : i64 = 40     // ⌈
+let NK_MINOP : i64 = 41     // ⌊
+let NK_CCAT : i64 = 42      // ⧺ on strings
+let NK_NEG : i64 = 50       // ⁻
+let NK_NOT : i64 = 51       // not, ¬
+let NK_BNOT : i64 = 52      // ~
+let NK_COND : i64 = 55      // na = then-value, nb = condition, nc = else-value
+let NK_WRAP : i64 = 56      // na = inner
+let NK_DEFAULT : i64 = 57   // na = the result-shaped thing, nb = default
+// statements
+let NK_LET : i64 = 70       // na = init, nb = 1 when mut, nc = type; name token
+let NK_ASSIGN : i64 = 71    // na = value; target name token
+let NK_DISCARD : i64 = 72   // na = value
+let NK_IF : i64 = 73        // na = cond, nb = then block, nc = else block or ⁻1
+let NK_WHILE : i64 = 74     // na = cond, nb = body
+let NK_FOREACH : i64 = 75   // na = extra [lo, step or ⁻1, hi], nb = body; var token
+let NK_FOREACHA : i64 = 76  // na = array expr, nb = body; var token
+let NK_RETURN : i64 = 77    // na = value or ⁻1
+let NK_BREAK : i64 = 78
+let NK_CONTINUE : i64 = 79
+let NK_EXPRSTMT : i64 = 80  // na = expr
+let NK_BLOCK : i64 = 81     // na = extra [count, stmt…]
+let NK_STOREFLD : i64 = 83  // na = base var, nb = value; field token
+let NK_MATCH : i64 = 84     // na = subject, nb = extra [some-block, empty-block]; bind token
+let NK_LETT : i64 = 85      // let (a, b) …: na = init, nb = 1 when mut, nc = extra [n, type or ⁻1, name-token…]
+let NK_STOREIDXP : i64 = 86 // path[i] ← v: na = base expr, nb = index, nc = value
+let NK_RANGEV : i64 = 87    // a…b and a…step…b as a value: na = lo, nb = hi, nc = step or ⁻1
+let NK_LAMBDA : i64 = 88    // λ literal: na = extra [np, (tok,ty)…, ncap, tok…, ret], nb = body, nc = lambda index
+let NK_FNVAL : i64 = 89     // a named function as a value: na = fn index
+let NK_CALLV : i64 = 90     // applying a value: na = callee expr, nb = args
+let NK_EXPECTS : i64 = 93   // @expect over one statement: na = it, nb = 1 when an error is expected
+let NK_HINTED : i64 = 94    // @likely/@unlikely over an if: na = it, nb = 1 when unlikely
+let NK_SIZEOF : i64 = 96    // @sizeof(T) or @sizeof(e): folds to a count of bytes
+let NK_MSLICE : i64 = 95    // m[rows, cols]: na = matrix, nb = extra [rlo, rhi, clo, chi], nc = 1 for a column
+let NK_TRY : i64 = 91       // e?: ∅ answers the function early, a value unwraps
+let NK_BADLAM : i64 = 92    // a λ the checker refuses: na says why
+
+// std builtins reachable from core-1
+let SB_PRINTLN : i64 = 1
+let SB_PRINT : i64 = 2
+let SB_EXIT : i64 = 3
+let SB_ARGS : i64 = 4       // std.args.all() → str[]
+let SB_OPEN : i64 = 5       // std.fs.cwd().open_file(p) → File?
+let SB_CREATE : i64 = 6     // std.fs.cwd().create_file(p, mode) → File
+let SB_ALLOCATOR : i64 = 7  // std.arena.allocator()
+let SB_BYTES : i64 = 8      // std.bytes(s) → the string's bytes, u8[]
+let SB_CWD : i64 = 9        // std.fs.cwd() as a value
+let SB_ENVN : i64 = 10      // std.env.names() → str[]
+let SB_ENVG : i64 = 11      // std.env.get(name) → str?
+let SB_ENVH : i64 = 12      // std.env.has(name) → bool
+let SB_IOV : i64 = 14       // std.iov(x) → the bytes of x, ready to be written
+let SB_PROC : i64 = 13      // std.process.<member>: nb names which
+
+// std.build.<member>: what a @build recipe declares, and what it reads
+// back.  The five declarations come first and the five readers after,
+// so "is this a build builtin" and "is this a declaration" are each one
+// comparison against the ends of a run.
+let SB_BSRC : i64 = 15      // std.build.source(p)
+let SB_BOUT : i64 = 16      // std.build.output(n)
+let SB_BOUTD : i64 = 17     // std.build.output_dir(d)
+let SB_BPATH : i64 = 18     // std.build.search_path(p)
+let SB_BFLAG : i64 = 19     // std.build.flag(f)
+let SB_BSRCS : i64 = 20     // std.build.sources() → str[]
+let SB_BOUTN : i64 = 21     // std.build.output_name() → str
+let SB_BOUTDN : i64 = 22    // std.build.output_directory() → str
+let SB_BPATHS : i64 = 23    // std.build.paths() → str[]
+let SB_BFLAGS : i64 = 24    // std.build.flags() → str[]
+
+// what the auxiliary vector is asked for, and under which key
+let PROC_PAGESIZE : i64 = 0
+let PROC_UID : i64 = 1
+let PROC_EUID : i64 = 2
+let PROC_GID : i64 = 3
+let PROC_EGID : i64 = 4
+let PROC_SECURE : i64 = 5
+let PROC_EXECFN : i64 = 6
+
+@pre(m >= 0 and m <= 6)
+fn proc_key(m : i64) → i64:
+    if m = PROC_PAGESIZE: return 6
+    if m = PROC_UID: return 11
+    if m = PROC_EUID: return 12
+    if m = PROC_GID: return 13
+    if m = PROC_EGID: return 14
+    if m = PROC_SECURE: return 23
+    31
+
+// the base type names, one probe instead of a ladder
+let TYNAMES : std.hash(str, i64) = (⸨
+    "i8": 17, "i16": 19, "i32": 21, "i64": 23,
+    "u8": 16, "u16": 18, "u32": 20, "u64": 22,
+    "bool": 2, "str": 3, "char": 4, "byte": 16⸩)
+
+struct FnDef:
+    name : str
+    tok : i64
+    params_off : i64     // extra: [n, name-token, type, …]
+    ret : i64
+    body : i64
+    is_export : bool     // its symbol is one others may link against
+    is_replaceable : bool
+    is_impure : bool
+    is_start : bool
+    is_noreturn : bool
+    is_test : bool
+    pre_off : i64        // extra: [n, expr…] or ⁻1
+    post_off : i64       // extra: [n, name-token, expr, …] or ⁻1
+
+struct SDef:
+    name : str
+    tok : i64
+    fields_off : i64     // extra: [n, field-token, type, …]
+    is_repr_c : bool     // @repr(C): the fields sit where C would put them
+
+struct GlobalDef:
+    name : str
+    tok : i64
+    ty : i64
+    is_mut : bool
+    init : i64
+
+struct Ast:
+    nkind : i64[]
+    ntok : i64[]
+    na : i64[]
+    nb : i64[]
+    nc : i64[]
+    extra : i64[]
+    strs : str[]
+    fns : FnDef[]
+    builds : FnDef[]     // the @build recipe, read while the program is
+                         // built and never written into the image
+    globals : GlobalDef[]
+    structs : SDef[]
+    tts : i64[]          // tuple shapes: start into tte per shape
+    ttl : i64[]          // … how many elements
+    tte : i64[]          // … the element types, flattened
+    fae : i64[]          // sized arrays: the element type per shape
+    fas : i64[]          // … and the size
+    mel : i64[]          // matrices: the element type per shape
+    mrr : i64[]          // … the first extent, ⁻1 where the type leaves it open
+    mcc : i64[]          // … the second, likewise
+    mdd : i64[]          // … the third, or ⁻2 where the shape has only two
+    minner : i64[]       // … and the type one subscript answers: a row for a
+                         //   matrix, a matrix for a cube
+    lts : i64[]          // lambda signatures: start into lte per shape
+    ltl : i64[]          // … how many parameters
+    lte : i64[]          // … the parameter types then the answer, flattened
+    unames : str[]       // the measures the file knows
+    umarks : str[]       // … and how each one prints
+    enames : str[]       // enums: the name of each
+    ewidth : i64[]       // … the integer type its values are held in
+    estart : i64[]       // … where its enumerators begin in emembers
+    ecount : i64[]       // … how many it has
+    eflag : i64[]        // … and 1 where @flag makes it a bit set
+    emembers : str[]     // … their names, flattened
+    evalues : i64[]      // … and what each one stands for
+    ignored : str[]      // names @expect left uncompiled
+    igtests : str[]      // the @test names among them, in source order
+    diags : Diag[]
+

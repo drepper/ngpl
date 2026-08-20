@@ -1,0 +1,6 @@
+// The second file names Level, which the first declared.  It also calls
+// shout(), which the third defines: a function may be written below
+// whatever calls it, so only the enum fixes the order.
+
+fn announce(l : Level) → str:
+    greeting(l) ⧺ ", " ⧺ shout(l)

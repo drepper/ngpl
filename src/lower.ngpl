@@ -1,0 +1,2386 @@
+// ===========================================================================
+// Lowering: Ast + Chk → IrFn per function
+// ===========================================================================
+
+struct Lower:
+    a : Ast
+    toks : Toks
+    src : byte[]
+    ntype : i64[]
+    nslot : i64[]
+    ncvt : i64[]
+    strs : str[]
+    op : i64[]
+    ia : i64[]
+    ib : i64[]
+    ic : i64[]
+    idd : i64[]
+    iww : i64[]
+    extra : i64[]
+    tbase : i64
+    tnext : i64
+    tmax : i64
+    nlabels : i64
+    breaks : i64[]
+    conts : i64[]
+    in_wrap : i64
+    argsfix : i64
+    lambase : i64        // the first lambda's function index
+    shimbase : i64       // the first partial-application shim's        // the argument filter's index, ⁻1 for raw
+    cur_ret : i64
+    post_label : i64
+    res_vreg : i64
+    cur_fname : str
+    dlog : str[]         // one JSON line per code-shaping decision
+
+@post(r: (r & 255) >= 8 and (r & 255) <= 64)
+fn width_of(t : i64) → i64:
+    // the width an operation on this type runs at, bits + 256×sgn
+    if t = TY_BOOL: return 64 + 256
+    if not ty_is_int(t): return 64 + 256
+    ty_bits(t) + 256 × ty_sgn(t)
+
+impl Lower:
+    fn ir(&mut self, o : i64, a : i64, b : i64, c : i64, d : i64, w : i64):
+        self.op.push(o)
+        self.ia.push(a)
+        self.ib.push(b)
+        self.ic.push(c)
+        self.idd.push(d)
+        self.iww.push(w)
+
+    fn tmp(&mut self) → i64:
+        let v : i64 = self.tnext
+        self.tnext ← self.tnext + 1
+        if self.tnext > self.tmax:
+            self.tmax ← self.tnext
+        v
+
+    fn label(&mut self) → i64:
+        let l : i64 = self.nlabels
+        self.nlabels ← self.nlabels + 1
+        l
+
+    fn intern(&mut self, s : str) → i64:
+        // a program without one string literal arrives here empty, and
+        // 0…⁻1 would walk down; the guard keeps the range ascending
+        if #self.strs > 0:
+            foreach i := 0…#self.strs - 1:
+                if self.strs[i] = s:
+                    return @dropunit(i)
+        let idx : i64 = @dropunit(#self.strs)
+        self.strs.push(s)
+        idx
+
+    fn fname_index(&self, name : str) → i64:
+        foreach i := 0…#self.a.fns - 1:
+            if self.a.fns[i].name = name:
+                return @dropunit(i)
+        ⁻1
+
+    fn text(&self, tok : i64) → str:
+        run_str(self.src, self.toks.off[tok × 1¤ptrdiff],
+                self.toks.len[tok × 1¤ptrdiff])
+
+    fn tok_line(&self, tok : i64) → i64:
+        self.toks.line[tok × 1¤ptrdiff]
+
+    // what was decided and where, for the log a program can read
+    fn decide(&mut self, line : i64, what : str, detail : str):
+        self.dlog.push("{\"function\": \"" ⧺ self.cur_fname ⧺ "\", \"line\": " ⧺ i64_str(line) ⧺ ", \"decision\": \"" ⧺ what ⧺ "\"" ⧺ detail ⧺ "}")
+
+    fn tof(&self, id : i64) → i64:
+        self.ntype[id × 1¤ptrdiff]
+
+    fn kof(&self, id : i64) → i64:
+        self.a.nkind[id × 1¤ptrdiff]
+
+    // ------------------------------------------------------------------
+    // What may be read without being asked: no effects, no faults.
+    // Checked arithmetic can abort, so only @wrap arithmetic passes;
+    // loads from arrays are bounds-checked, so they do not.  This is
+    // the speculation-legality rule if-conversion runs on.
+    // ------------------------------------------------------------------
+
+    fn speculatable(&self, id : i64) → bool:
+        let k : i64 = self.kof(id)
+        let na : i64 = self.a.na[id × 1¤ptrdiff]
+        let nb : i64 = self.a.nb[id × 1¤ptrdiff]
+        let nc : i64 = self.a.nc[id × 1¤ptrdiff]
+        if k = NK_INT or k = NK_BOOL or k = NK_STR or k = NK_VAR or k = NK_EMPTYV:
+            return true
+        if k = NK_NOT or k = NK_BNOT:
+            return self.speculatable(na)
+        if k = NK_LEN or k = NK_FIELD:
+            return self.speculatable(na)
+        if k = NK_WRAP:
+            return self.wrap_speculatable(na)
+        if k = NK_EQ or k = NK_NE or k = NK_LT or k = NK_LE or k = NK_GT or k = NK_GE or k = NK_LAND or k = NK_LOR or k = NK_AND or k = NK_OR or k = NK_MAXOP or k = NK_MINOP:
+            return self.speculatable(na) and self.speculatable(nb)
+        if k = NK_COND:
+            return self.speculatable(na) and self.speculatable(nb) and self.speculatable(nc)
+        false
+
+    fn wrap_speculatable(&self, id : i64) → bool:
+        // inside @wrap the arithmetic cannot abort; shifts still can
+        let k : i64 = self.kof(id)
+        let na : i64 = self.a.na[id × 1¤ptrdiff]
+        let nb : i64 = self.a.nb[id × 1¤ptrdiff]
+        if k = NK_ADD or k = NK_SUB or k = NK_MUL or k = NK_BAND or k = NK_BOR or k = NK_BXOR:
+            return self.wrap_speculatable(na) and self.wrap_speculatable(nb)
+        if k = NK_NEG or k = NK_BNOT:
+            return self.wrap_speculatable(na)
+        self.speculatable(id)
+
+    // ------------------------------------------------------------------
+    // Expressions
+    // ------------------------------------------------------------------
+
+    fn lower_expr(&mut self, nid : i64) → i64:
+        let v : i64 = self.lower_expr_i(nid)
+        let cw : i64 = self.ncvt[nid × 1¤ptrdiff]
+        if cw = 0:
+            return v
+        // the checker admitted a narrowing or sign-crossing here; the
+        // run stops where a value does not fit, as the interpreter does
+        let d : i64 = self.tmp()
+        self.ir(IR_NARROW, v, 0, 0, d, width_of(cw))
+        d
+
+    fn lower_expr_i(&mut self, nid : i64) → i64:
+        let k : i64 = self.kof(nid)
+        let tok : i64 = self.a.ntok[nid × 1¤ptrdiff]
+        let na : i64 = self.a.na[nid × 1¤ptrdiff]
+        let nb : i64 = self.a.nb[nid × 1¤ptrdiff]
+        let nc : i64 = self.a.nc[nid × 1¤ptrdiff]
+        let w : i64 = width_of(self.tof(nid))
+        if k = NK_INT or k = NK_BOOL:
+            let d : i64 = self.tmp()
+            self.ir(IR_CONST, na, 0, 0, d, w)
+            return d
+        if k = NK_STR:
+            let d : i64 = self.tmp()
+            self.ir(IR_SC, na, 0, 0, d, w)
+            return d
+        if k = NK_VAR:
+            let slot : i64 = self.nslot[nid × 1¤ptrdiff]
+            if slot <= ⁻2:
+                let d : i64 = self.tmp()
+                self.ir(IR_GLOAD, 0 - slot - 2, 0, 0, d, w)
+                return d
+            if self.a.nb[nid × 1¤ptrdiff] = 1:
+                // an element reference: the slot holds the address
+                let d : i64 = self.tmp()
+                self.ir(IR_FLD, slot, 0, 0, d, w)
+                return d
+            return slot
+        if k = NK_ARRLIT:
+            return self.lower_arrlit(nid, na)
+        if k = NK_HLIT:
+            let n : i64 = self.a.extra[na × 1¤ptrdiff]
+            // a group is sixteen slots wide, so a table is at least one
+            let cap : mut i64 = 16
+            while cap × 7 < (n + 1) × 8:
+                cap ← cap × 2
+            let keystr : i64 = 1 if ty_hkey(self.tof(nid)) = TY_STR else 0
+            let d : i64 = self.tmp()
+            self.ir(IR_HNEW, cap, keystr, 0, d, 0)
+            let i : mut i64 = 0
+            while i < n:
+                let kv : i64 = self.lower_expr(self.a.extra[(na + 1 + i × 2) × 1¤ptrdiff])
+                let vv : i64 = self.lower_expr(self.a.extra[(na + 2 + i × 2) × 1¤ptrdiff])
+                self.ir(IR_HPUT, d, kv, vv, 0, 0)
+                i ← i + 1
+            return d
+        if k = NK_DROPU:
+            return self.lower_expr(na)
+        if k = NK_MSLICE:
+            return self.lower_mslice(nid, na, nb, nc)
+        if k = NK_SLICE:
+            let av : i64 = self.lower_expr(na)
+            let lo : i64 = self.lower_expr(nb)
+            let hi : i64 = self.lower_expr(nc)
+            let d : i64 = self.tmp()
+            self.ir(IR_ASLICE, av, lo, hi, d, 0)
+            return d
+        if k = NK_RESHAPE:
+            if ty_is_mat(self.tof(nid)):
+                return self.lower_mreshape(nid, na, nb)
+            let nv : i64 = self.lower_expr(na)
+            if ty_is_rg(self.tof(nb)):
+                let fvr : i64 = self.lower_rg_arr(nb)
+                let dr : i64 = self.tmp()
+                self.ir(IR_ACYC, nv, fvr, 0, dr, 0)
+                return dr
+            let fv : i64 = self.lower_expr(nb)
+            let d : i64 = self.tmp()
+            if ty_is_arr(self.tof(nb)):
+                self.ir(IR_ACYC, nv, fv, 0, d, 0)
+            else:
+                self.ir(IR_AFILL, nv, fv, 0, d, 0)
+            return d
+        if k = NK_TUPLE:
+            let n : i64 = self.a.extra[na × 1¤ptrdiff]
+            let d : i64 = self.tmp()
+            self.ir(IR_SNEW, n, 0, 0, d, 0)
+            let i : mut i64 = 0
+            while i < n:
+                let ev : i64 = self.lower_expr(self.a.extra[(na + 1 + i) × 1¤ptrdiff])
+                self.ir(IR_FSTO, d, i, ev, 0, 0)
+                i ← i + 1
+            return d
+        if k = NK_SLIT:
+            let n : i64 = self.a.extra[na × 1¤ptrdiff]
+            let d : i64 = self.tmp()
+            self.ir(IR_SNEW, n, 0, 0, d, 0)
+            let i : mut i64 = 0
+            while i < n:
+                let fidx : i64 = self.a.extra[(na + 1 + i × 2) × 1¤ptrdiff]
+                let ev : i64 = self.lower_expr(self.a.extra[(na + 2 + i × 2) × 1¤ptrdiff])
+                self.ir(IR_FSTO, d, fidx, ev, 0, 0)
+                i ← i + 1
+            return d
+        if k = NK_LAMBDA:
+            let loff : i64 = na
+            let np9 : i64 = self.a.extra[loff × 1¤ptrdiff]
+            let ncap9 : i64 = self.a.extra[(loff + 1 + np9 × 2) × 1¤ptrdiff]
+            let ord9 : i64 = self.nslot[nid × 1¤ptrdiff]
+            let d9l : i64 = self.tmp()
+            self.ir(IR_SNEW, 1 + ncap9, 0, 0, d9l, 0)
+            let av9 : i64 = self.tmp()
+            self.ir(IR_FADDR, self.lambase + ord9, 0, 0, av9, 0)
+            self.ir(IR_FSTO, d9l, 0, av9, 0, 0)
+            let ci9 : mut i64 = 0
+            while ci9 < ncap9:
+                // the capture cell holds the outer slot -- or, below
+                // zero, a function whose value-box is built here
+                let cell9 : i64 = self.a.extra[(loff + 2 + np9 × 2 + ci9) × 1¤ptrdiff]
+                if cell9 < 0:
+                    let fb9 : i64 = self.tmp()
+                    self.ir(IR_SNEW, 1, 0, 0, fb9, 0)
+                    let fa9 : i64 = self.tmp()
+                    self.ir(IR_FADDR, 0 - cell9 - 1, 0, 0, fa9, 0)
+                    self.ir(IR_FSTO, fb9, 0, fa9, 0, 0)
+                    self.ir(IR_FSTO, d9l, 1 + ci9, fb9, 0, 0)
+                else:
+                    self.ir(IR_FSTO, d9l, 1 + ci9, cell9, 0, 0)
+                ci9 ← ci9 + 1
+            return d9l
+        if k = NK_FNVAL:
+            let d9f : i64 = self.tmp()
+            self.ir(IR_SNEW, 1, 0, 0, d9f, 0)
+            let av9f : i64 = self.tmp()
+            self.ir(IR_FADDR, na, 0, 0, av9f, 0)
+            self.ir(IR_FSTO, d9f, 0, av9f, 0, 0)
+            return d9f
+        if k = NK_TRY:
+            if self.kof(na) = NK_DIV or self.kof(na) = NK_MOD:
+                // the zero divisor answers the function early with ∅
+                let av9t : i64 = self.lower_expr(self.a.na[na × 1¤ptrdiff])
+                let bv9t : i64 = self.lower_expr(self.a.nb[na × 1¤ptrdiff])
+                let lok9 : i64 = self.label()
+                self.ir(IR_JNZ, bv9t, lok9, 0, 0, 0)
+                let zn9 : i64 = self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, zn9, 0)
+                self.lower_ret(zn9)
+                self.ir(IR_LABEL, lok9, 0, 0, 0, 0)
+                let zd9 : i64 = self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, zd9, 0)
+                let dq9 : i64 = self.tmp()
+                self.ir(IR_DIVV if self.kof(na) = NK_DIV else IR_MODD, av9t, bv9t, zd9, dq9, width_of(self.tof(na)))
+                return dq9
+            let bx9 : i64 = self.lower_expr(na)
+            let lok9b : i64 = self.label()
+            self.ir(IR_JNZ, bx9, lok9b, 0, 0, 0)
+            let zn9b : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, zn9b, 0)
+            self.lower_ret(zn9b)
+            self.ir(IR_LABEL, lok9b, 0, 0, 0, 0)
+            let du9 : i64 = self.tmp()
+            self.ir(IR_FLD, bx9, 0, 0, du9, 0)
+            return du9
+        if k = NK_RANGEV:
+            let lov9 : i64 = self.lower_expr(na)
+            let hiv9 : i64 = self.lower_expr(nb)
+            let stv9 : i64 = self.tmp()
+            if nc = ⁻1:
+                // no step written: the direction follows the bounds
+                let c9 : i64 = self.tmp()
+                self.ir(IR_CLE, lov9, hiv9, 0, c9, 64 + 256)
+                let one9 : i64 = self.tmp()
+                self.ir(IR_CONST, 1, 0, 0, one9, 0)
+                let mone9 : i64 = self.tmp()
+                self.ir(IR_CONST, ⁻1, 0, 0, mone9, 0)
+                self.ir(IR_SEL, c9, one9, mone9, stv9, 0)
+            else:
+                let sv9 : i64 = self.lower_expr(nc)
+                self.ir(IR_MOV, sv9, 0, 0, stv9, 0)
+            let d9r : i64 = self.tmp()
+            self.ir(IR_SNEW, 3, 0, 0, d9r, 0)
+            self.ir(IR_FSTO, d9r, 0, lov9, 0, 0)
+            self.ir(IR_FSTO, d9r, 1, stv9, 0, 0)
+            self.ir(IR_FSTO, d9r, 2, hiv9, 0, 0)
+            return d9r
+        if k = NK_FIELD:
+            if ty_is_mat(ty_strip_ref(self.tof(na))):
+                // shape: the row count and the first row's length; a
+                // matrix is never empty, so the first row is there
+                let mv : i64 = self.lower_expr(na)
+                let d9 : i64 = self.tmp()
+                self.ir(IR_ANEW, 4, 0, 0, d9, 0)
+                let rl9 : i64 = self.tmp()
+                self.ir(IR_ALEN, mv, 0, 0, rl9, 0)
+                self.ir(IR_APUSH, d9, rl9, 0, 0, 0)
+                let z9 : i64 = self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, z9, 0)
+                let r09 : i64 = self.tmp()
+                self.ir(IR_AIDX, mv, z9, 0, r09, 0)
+                let cl9 : i64 = self.tmp()
+                self.ir(IR_ALEN, r09, 0, 0, cl9, 0)
+                self.ir(IR_APUSH, d9, cl9, 0, 0, 0)
+                if self.mat_rank(ty_strip_ref(self.tof(na))) = 3:
+                    // a cube's planes are matrices, so one step further
+                    // in reaches the row whose length is the last extent
+                    let r19 : i64 = self.tmp()
+                    self.ir(IR_AIDX, r09, z9, 0, r19, 0)
+                    let dl9 : i64 = self.tmp()
+                    self.ir(IR_ALEN, r19, 0, 0, dl9, 0)
+                    self.ir(IR_APUSH, d9, dl9, 0, 0, 0)
+                return d9
+            let bv : i64 = self.lower_expr(na)
+            let d : i64 = self.tmp()
+            self.ir(IR_FLD, bv, nb, 0, d, 0)
+            return d
+        if k = NK_SOME:
+            let v : i64 = self.lower_expr(na)
+            let d : i64 = self.tmp()
+            self.ir(IR_SNEW, 1, 0, 0, d, 0)
+            self.ir(IR_FSTO, d, 0, v, 0, 0)
+            return d
+        if k = NK_EMPTYV:
+            let d : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, d, 0)
+            return d
+        if k = NK_INDEX:
+            if ty_is_tup(self.tof(na)):
+                let av0 : i64 = self.lower_expr(na)
+                let d0 : i64 = self.tmp()
+                self.ir(IR_FLD, av0, self.a.na[nb × 1¤ptrdiff], 0, d0, w)
+                return d0
+            if self.tof(na) = TY_STR:
+                let av1 : i64 = self.lower_expr(na)
+                let iv1 : i64 = self.lower_expr(nb)
+                let d1 : i64 = self.tmp()
+                self.ir(IR_SIDX, av1, iv1, 0, d1, w)
+                return d1
+            let av : i64 = self.lower_expr(na)
+            let iv : i64 = self.lower_expr(nb)
+            let d : i64 = self.tmp()
+            if ty_is_hash(self.tof(na)):
+                self.ir(IR_HGET, av, iv, 0, d, 0)
+            else:
+                self.ir(IR_AIDX, av, iv, 0, d, w)
+            return d
+        if k = NK_LEN:
+            let av : i64 = self.lower_expr(na)
+            let d : i64 = self.tmp()
+            if self.tof(na) = TY_STR:
+                self.ir(IR_SLENV, av, 0, 0, d, w)
+            elif ty_is_hash(self.tof(na)):
+                self.ir(IR_HLEN, av, 0, 0, d, w)
+            elif ty_is_tup(self.tof(na)):
+                self.ir(IR_CONST, self.tup_len(self.tof(na)), 0, 0, d, w)
+            else:
+                self.ir(IR_ALEN, av, 0, 0, d, w)
+            return d
+        if k = NK_CALL:
+            return self.lower_call(nid, tok, na)
+        if k = NK_CALLV:
+            let bx9 : i64 = self.lower_expr(na)
+            let cargc : i64 = self.a.extra[nb × 1¤ptrdiff]
+            if self.a.nc[nid × 1¤ptrdiff] = 5:
+                return bx9
+            let cav : mut i64[] = []
+            let cj : mut i64 = 0
+            while cj < cargc:
+                cav.push(self.lower_expr(self.a.extra[(nb + 1 + cj) × 1¤ptrdiff]))
+                cj ← cj + 1
+            if self.a.nc[nid × 1¤ptrdiff] = 1:
+                let coff : i64 = @dropunit(#self.extra)
+                self.extra.push(cargc + 1)
+                foreach v := cav:
+                    self.extra.push(v)
+                self.extra.push(bx9)
+                let cad : i64 = self.tmp()
+                self.ir(IR_FLD, bx9, 0, 0, cad, 0)
+                let cd : i64 = self.tmp()
+                self.ir(IR_CALLI, cad, coff, 0, cd, 0)
+                return cd
+            // a partial of the value: bind now, keep the source box
+            let dp : i64 = self.tmp()
+            self.ir(IR_SNEW, 1 + cargc + 1, 0, 0, dp, 0)
+            let ap : i64 = self.tmp()
+            self.ir(IR_FADDR, self.shimbase + self.nslot[nid × 1¤ptrdiff], 0, 0, ap, 0)
+            self.ir(IR_FSTO, dp, 0, ap, 0, 0)
+            let ck : mut i64 = 0
+            while ck < cargc:
+                self.ir(IR_FSTO, dp, 1 + ck, cav[ck × 1¤ptrdiff], 0, 0)
+                ck ← ck + 1
+            self.ir(IR_FSTO, dp, 1 + cargc, bx9, 0, 0)
+            return dp
+        if k = NK_SCALL:
+            if na = SB_ARGS:
+                let d : i64 = self.tmp()
+                if self.argsfix >= 0:
+                    let coff : i64 = @dropunit(#self.extra)
+                    self.extra.push(0)
+                    self.ir(IR_CALL, self.argsfix, coff, 0, d, 0)
+                else:
+                    self.ir(IR_ARGS, 0, 0, 0, d, 0)
+                return d
+            if na = SB_OPEN:
+                let pv : i64 = self.lower_expr(self.a.extra[(nb + 1) × 1¤ptrdiff])
+                let d : i64 = self.tmp()
+                self.ir(IR_FOPEN, pv, 0, 0, d, 0)
+                return d
+            if na = SB_CREATE:
+                let pv : i64 = self.lower_expr(self.a.extra[(nb + 1) × 1¤ptrdiff])
+                let mv : i64 = self.lower_expr(self.a.extra[(nb + 2) × 1¤ptrdiff])
+                let d : i64 = self.tmp()
+                self.ir(IR_FCREATE, pv, mv, 0, d, 0)
+                return d
+            if na = SB_CWD:
+                let d : i64 = self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, d, 0)
+                return d
+            if na = SB_BYTES:
+                let sv : i64 = self.lower_expr(self.a.extra[(nb + 1) × 1¤ptrdiff])
+                let d : i64 = self.tmp()
+                self.ir(IR_SBYTES, sv, 0, 0, d, 0)
+                return d
+            if na = SB_IOV:
+                return self.lower_iov(self.a.extra[(nb + 1) × 1¤ptrdiff])
+            if na = SB_ALLOCATOR:
+                let d : i64 = self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, d, 0)
+                return d
+            if na = SB_PROC:
+                if nb = PROC_EXECFN:
+                    let d : i64 = self.tmp()
+                    self.ir(IR_EXECFN, 0, 0, 0, d, 0)
+                    return d
+                let v : i64 = self.tmp()
+                self.ir(IR_AUXV, proc_key(nb), 0, 0, v, 0)
+                if nb ≠ PROC_SECURE:
+                    return v
+                // secure is what the kernel set, said as a truth value
+                let z : i64 = self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, z, 0)
+                let b : i64 = self.tmp()
+                self.ir(IR_CNE, v, z, 0, b, 64)
+                return b
+            if na = SB_ENVN:
+                let d : i64 = self.tmp()
+                self.ir(IR_ENVN, 0, 0, 0, d, 0)
+                return d
+            if na = SB_ENVG or na = SB_ENVH:
+                let nv : i64 = self.lower_expr(self.a.extra[(nb + 1) × 1¤ptrdiff])
+                let d : i64 = self.tmp()
+                self.ir(IR_ENVG, nv, 0, 0, d, 0)
+                if na = SB_ENVG:
+                    return d
+                // has: the box is there, or it is not
+                let z : i64 = self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, z, 0)
+                let b : i64 = self.tmp()
+                self.ir(IR_CNE, d, z, 0, b, 64)
+                return b
+            self.lower_scall(nid, tok, na, nb)
+            return ⁻1
+        if k = NK_MCALL:
+            return self.lower_mcall(nid, ⁻1)
+        if k = NK_REF:
+            return self.lower_expr(na)
+        if k = NK_NEG:
+            let v : i64 = self.lower_expr(na)
+            let d : i64 = self.tmp()
+            self.ir(IR_NEGW if self.in_wrap > 0 else IR_NEG, v, 0, 0, d, w)
+            return d
+        if k = NK_BNOT:
+            let v : i64 = self.lower_expr(na)
+            let d : i64 = self.tmp()
+            let t9 : i64 = ty_strip_ref(self.tof(nid))
+            if ty_is_enum(t9):
+                // the complement stays within the set's own bits
+                let ei : i64 = ty_eidx(t9)
+                let st : i64 = self.a.estart[ei × 1¤ptrdiff]
+                let nm : i64 = self.a.ecount[ei × 1¤ptrdiff]
+                let msk : mut i64 = 0
+                let mi : mut i64 = 0
+                while mi < nm:
+                    msk ← msk | self.a.evalues[(st + mi) × 1¤ptrdiff]
+                    mi ← mi + 1
+                let flipped : i64 = self.tmp()
+                self.ir(IR_BNOTT, v, 0, 0, flipped, 64)
+                let mv : i64 = self.tmp()
+                self.ir(IR_CONST, msk, 0, 0, mv, 0)
+                self.ir(IR_BAND, flipped, mv, 0, d, 64)
+                return d
+            self.ir(IR_BNOTT, v, 0, 0, d, w)
+            return d
+        if k = NK_NOT:
+            // the operand is a bool, 0 or 1; flipping it is one xor
+            let v : i64 = self.lower_expr(na)
+            let one : i64 = self.tmp()
+            self.ir(IR_CONST, 1, 0, 0, one, 64)
+            let d : i64 = self.tmp()
+            self.ir(IR_BXORR, v, one, 0, d, 64)
+            return d
+        if k = NK_WRAP:
+            self.in_wrap ← self.in_wrap + 1
+            let v : i64 = self.lower_expr(na)
+            self.in_wrap ← self.in_wrap - 1
+            return v
+        if k = NK_COND:
+            return self.lower_cond(nid, na, nb, nc, w)
+        if k = NK_DEFAULT:
+            return self.lower_default(nid, na, nb)
+        if k = NK_AND or k = NK_OR:
+            return self.lower_andor(nid, k, na, nb)
+        if k = NK_ELEMOF:
+            let kv2 : i64 = self.lower_expr(na)
+            let hv : i64 = self.lower_expr(nb)
+            let d : i64 = self.tmp()
+            self.ir(IR_HELEM, hv, kv2, 0, d, 0)
+            return d
+        if k = NK_CCAT:
+            if ty_is_arr(self.tof(nid)):
+                let aav : i64 = self.lower_expr(na)
+                let abv : i64 = self.lower_expr(nb)
+                let ad : i64 = self.tmp()
+                self.ir(IR_ACAT, aav, abv, 0, ad, 0)
+                return ad
+            let av0 : i64 = self.lower_expr(na)
+            let av : mut i64 = av0
+            if self.tof(na) = TY_CHAR:
+                let ta : i64 = self.tmp()
+                self.ir(IR_CHARSTR, av0, 0, 0, ta, 0)
+                av ← ta
+            let bv0 : i64 = self.lower_expr(nb)
+            let bv : mut i64 = bv0
+            if self.tof(nb) = TY_CHAR:
+                let tb : i64 = self.tmp()
+                self.ir(IR_CHARSTR, bv0, 0, 0, tb, 0)
+                bv ← tb
+            let d : i64 = self.tmp()
+            self.ir(IR_SCCAT, av, bv, 0, d, w)
+            return d
+        if k = NK_EQ or k = NK_NE:
+            if ty_is_opt(self.tof(na)) and ty_is_opt(self.tof(nb)):
+                let d0 : i64 = self.lower_opt_eq(na, nb)
+                if k = NK_NE:
+                    let zz : i64 = self.tmp()
+                    self.ir(IR_CONST, 0, 0, 0, zz, 64)
+                    let d1 : i64 = self.tmp()
+                    self.ir(IR_CEQ, d0, zz, 0, d1, 64)
+                    return d1
+                return d0
+            if self.tof(na) = TY_STR:
+                let av : i64 = self.lower_expr(na)
+                let bv : i64 = self.lower_expr(nb)
+                let d : i64 = self.tmp()
+                self.ir(IR_SEQV, av, bv, 0, d, 64)
+                if k = NK_NE:
+                    let z : i64 = self.tmp()
+                    self.ir(IR_CONST, 0, 0, 0, z, 64)
+                    let d2 : i64 = self.tmp()
+                    self.ir(IR_CEQ, d, z, 0, d2, 64)
+                    return d2
+                return d
+        // the remaining family evaluates both sides
+        let av : i64 = self.lower_expr(na)
+        let bv : i64 = self.lower_expr(nb)
+        let d : i64 = self.tmp()
+        let owa : i64 = width_of(self.tof(na))
+        let owb : i64 = width_of(self.tof(nb))
+        // mixed sides compare at the wider width; where signedness
+        // mixes the checker admitted only unsigned-narrower-than-
+        // signed, and the signed side's width carries the compare
+        let ow : mut i64 = owa
+        if (owa » 8) ≠ (owb » 8):
+            ow ← owa if (owa » 8) = 1 else owb
+        elif (owb & 255) > (owa & 255):
+            ow ← owb
+        if k = NK_ADD:
+            self.ir(IR_ADDW if self.in_wrap > 0 else IR_ADD, av, bv, 0, d, w)
+        elif k = NK_SUB:
+            self.ir(IR_SUBW if self.in_wrap > 0 else IR_SUB, av, bv, 0, d, w)
+        elif k = NK_MUL:
+            self.ir(IR_MULW if self.in_wrap > 0 else IR_MUL, av, bv, 0, d, w)
+        elif k = NK_SHL:
+            self.ir(IR_SHLL, av, bv, 0, d, w)
+        elif k = NK_SHR:
+            self.ir(IR_SHRR, av, bv, 0, d, w)
+        elif k = NK_BAND:
+            self.ir(IR_BAND, av, bv, 0, d, w)
+        elif k = NK_BOR:
+            self.ir(IR_BORR, av, bv, 0, d, w)
+        elif k = NK_BXOR:
+            self.ir(IR_BXORR, av, bv, 0, d, w)
+        elif k = NK_EQ:
+            self.ir(IR_CEQ, av, bv, 0, d, ow)
+        elif k = NK_NE:
+            self.ir(IR_CNE, av, bv, 0, d, ow)
+        elif k = NK_LT:
+            self.ir(IR_CLT, av, bv, 0, d, ow)
+        elif k = NK_LE:
+            self.ir(IR_CLE, av, bv, 0, d, ow)
+        elif k = NK_GT:
+            self.ir(IR_CGT, av, bv, 0, d, ow)
+        elif k = NK_GE:
+            self.ir(IR_CGE, av, bv, 0, d, ow)
+        elif k = NK_LAND or k = NK_LOR:
+            // both sides are bools already; one and or or does it
+            self.ir(IR_BAND if k = NK_LAND else IR_BORR, av, bv, 0, d, 64)
+        elif k = NK_LXOR:
+            self.ir(IR_CNE, av, bv, 0, d, 64)
+        elif k = NK_LNAND or k = NK_LNOR:
+            let tt : i64 = self.tmp()
+            self.ir(IR_BAND if k = NK_LNAND else IR_BORR, av, bv, 0, tt, 64)
+            let c1 : i64 = self.tmp()
+            self.ir(IR_CONST, 1, 0, 0, c1, 64)
+            self.ir(IR_BXORR, tt, c1, 0, d, 64)
+        elif k = NK_IOTA:
+            let sf : i64 = 1 if self.elem_of(self.tof(na)) = TY_STR else 0
+            self.ir(IR_AFIND, av, bv, sf, d, 0)
+        elif k = NK_SATADD:
+            self.ir(IR_SATADD, av, bv, 0, d, w)
+        elif k = NK_SATSUB:
+            self.ir(IR_SATSUB, av, bv, 0, d, w)
+        elif k = NK_SATMUL:
+            self.ir(IR_SATMUL, av, bv, 0, d, w)
+        elif k = NK_MAXOP:
+            self.ir(IR_MAXX, av, bv, 0, d, w)
+        elif k = NK_MINOP:
+            self.ir(IR_MINN, av, bv, 0, d, w)
+        return d
+
+    fn lower_cond(&mut self, nid : i64, na : i64, nb : i64, nc : i64, w : i64) → i64:
+        // a select when both sides may be read; branches otherwise
+        self.decide(self.tok_line(self.a.ntok[nid × 1¤ptrdiff]),
+                    "select" if self.speculatable(na) and self.speculatable(nc) else "branched-conditional", "")
+        if self.speculatable(na) and self.speculatable(nc):
+            let cv : i64 = self.lower_expr(nb)
+            let tv : i64 = self.lower_expr(na)
+            let ev : i64 = self.lower_expr(nc)
+            let d : i64 = self.tmp()
+            self.ir(IR_SEL, cv, tv, ev, d, w)
+            return d
+        let d : i64 = self.tmp()
+        let lelse : i64 = self.label()
+        let lend : i64 = self.label()
+        let cv : i64 = self.lower_expr(nb)
+        self.ir(IR_JZ, cv, lelse, 0, 0, 0)
+        let tv : i64 = self.lower_expr(na)
+        self.ir(IR_MOV, tv, 0, 0, d, 0)
+        self.ir(IR_JMP, lend, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lelse, 0, 0, 0, 0)
+        let ev : i64 = self.lower_expr(nc)
+        self.ir(IR_MOV, ev, 0, 0, d, 0)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        d
+
+    fn lower_andor(&mut self, nid : i64, k : i64, na : i64, nb : i64) → i64:
+        // a pure, fault-free right side may be read eagerly, and the
+        // whole answer becomes three straight-line instructions
+        self.decide(self.tok_line(self.a.ntok[nid × 1¤ptrdiff]),
+                    "eager-logic" if self.speculatable(nb) else "short-circuit", "")
+        if self.speculatable(nb):
+            let av : i64 = self.lower_expr(na)
+            let bv : i64 = self.lower_expr(nb)
+            let d : i64 = self.tmp()
+            self.ir(IR_BAND if k = NK_AND else IR_BORR, av, bv, 0, d, 64)
+            return d
+        let d : i64 = self.tmp()
+        let lend : i64 = self.label()
+        let av : i64 = self.lower_expr(na)
+        self.ir(IR_CONST, 0 if k = NK_AND else 1, 0, 0, d, 64)
+        self.ir(IR_JZ if k = NK_AND else IR_JNZ, av, lend, 0, 0, 0)
+        let bv : i64 = self.lower_expr(nb)
+        self.ir(IR_MOV, bv, 0, 0, d, 0)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        d
+
+    // two optionals: the shape first -- both absent is true, one
+    // absent is false -- and the contents only when both are there
+    fn lower_opt_eq(&mut self, na : i64, nb : i64) → i64:
+        let ob : i64 = ty_opt_base(self.tof(na))
+        let av : i64 = self.lower_expr(na)
+        let bv : i64 = self.lower_expr(nb)
+        let d : i64 = self.tmp()
+        let ltrue : i64 = self.label()
+        let lfalse : i64 = self.label()
+        let lcont : i64 = self.label()
+        let lend : i64 = self.label()
+        let z : i64 = self.tmp()
+        self.ir(IR_CONST, 0, 0, 0, z, 64)
+        let pa : i64 = self.tmp()
+        self.ir(IR_CNE, av, z, 0, pa, 64)
+        let pb : i64 = self.tmp()
+        self.ir(IR_CNE, bv, z, 0, pb, 64)
+        let same : i64 = self.tmp()
+        self.ir(IR_CEQ, pa, pb, 0, same, 64)
+        self.ir(IR_JZ, same, lfalse, 0, 0, 0)
+        self.ir(IR_JZ, pa, ltrue, 0, 0, 0)
+        self.ir(IR_JMP, lcont, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lcont, 0, 0, 0, 0)
+        let la : i64 = self.tmp()
+        self.ir(IR_FLD, av, 0, 0, la, 0)
+        let lb : i64 = self.tmp()
+        self.ir(IR_FLD, bv, 0, 0, lb, 0)
+        if ob = TY_STR:
+            self.ir(IR_SEQV, la, lb, 0, d, 64)
+        else:
+            self.ir(IR_CEQ, la, lb, 0, d, width_of(ob))
+        self.ir(IR_JMP, lend, 0, 0, 0, 0)
+        self.ir(IR_LABEL, ltrue, 0, 0, 0, 0)
+        self.ir(IR_CONST, 1, 0, 0, d, 64)
+        self.ir(IR_JMP, lend, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lfalse, 0, 0, 0, 0)
+        self.ir(IR_CONST, 0, 0, 0, d, 64)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        d
+
+    fn lower_default(&mut self, nid : i64, na : i64, nb : i64) → i64:
+        let ik : i64 = self.kof(na)
+        if ik = NK_DIV or ik = NK_MOD:
+            let av : i64 = self.lower_expr(self.a.na[na × 1¤ptrdiff])
+            let bv : i64 = self.lower_expr(self.a.nb[na × 1¤ptrdiff])
+            let dv : i64 = self.lower_expr(nb)
+            let d : i64 = self.tmp()
+            self.ir(IR_DIVV if ik = NK_DIV else IR_MODD, av, bv, dv, d,
+                    width_of(self.tof(na)))
+            return d
+        if ik = NK_MCALL and self.a.nc[na × 1¤ptrdiff] < 1000:
+            return self.lower_mcall(na, nb)
+        // any optional: absent takes the default, present unwraps
+        let v : i64 = self.lower_expr(na)
+        let d : i64 = self.tmp()
+        let ldef : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(IR_JZ, v, ldef, 0, 0, 0)
+        self.ir(IR_FLD, v, 0, 0, d, 0)
+        self.ir(IR_JMP, lend, 0, 0, 0, 0)
+        self.ir(IR_LABEL, ldef, 0, 0, 0, 0)
+        let dv : i64 = self.lower_expr(nb)
+        self.ir(IR_MOV, dv, 0, 0, d, 0)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        d
+
+    fn lower_mcall(&mut self, nid : i64, defnode : i64) → i64:
+        let mid : i64 = self.a.nc[nid × 1¤ptrdiff]
+        let base : i64 = self.a.na[nid × 1¤ptrdiff]
+        let args_off : i64 = self.a.nb[nid × 1¤ptrdiff]
+        if mid >= 1000:
+            // a struct's method is a function with the receiver first
+            let f : i64 = ((mid - 1000) ÷ 2) ?? 0
+            let inst : i64 = (mid - 1000) & 1
+            let vregs : mut i64[] = []
+            if inst = 1:
+                vregs.push(self.lower_expr(base))
+            let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
+            let i : mut i64 = 0
+            while i < argc:
+                vregs.push(self.lower_expr(self.a.extra[(args_off + 1 + i) × 1¤ptrdiff]))
+                i ← i + 1
+            let off : i64 = @dropunit(#self.extra)
+            self.extra.push(@dropunit(#vregs))
+            foreach v := vregs:
+                self.extra.push(v)
+            let d : i64 = self.tmp()
+            self.ir(IR_CALL, f, off, 0, d, 0)
+            return d
+        let av : i64 = self.lower_expr(base)
+        let w : i64 = width_of(self.tof(nid))
+        if mid = MID_CHR:
+            let d : i64 = self.tmp()
+            self.ir(IR_CHR, av, 0, 0, d, w)
+            return d
+        if mid = MID_ORD:
+            let d : i64 = self.tmp()
+            self.ir(IR_MOV, av, 0, 0, d, w)
+            return d
+        if mid = MID_CHARS:
+            let d : i64 = self.tmp()
+            self.ir(IR_CHARS, av, 0, 0, d, 0)
+            return d
+        if mid = MID_READF:
+            _ ← self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            let d : i64 = self.tmp()
+            self.ir(IR_FREAD, av, 0, 0, d, 0)
+            return d
+        if mid = MID_WRITEF:
+            let bv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            self.ir(IR_FWRITE, av, bv, 0, 0, 0)
+            return ⁻1
+        if mid = MID_CLOSEF:
+            self.ir(IR_FCLOSE, av, 0, 0, 0, 0)
+            return ⁻1
+        if mid = MID_WRITEV:
+            let pv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            self.ir(IR_WRITEV, av, pv, 0, 0, 0)
+            return ⁻1
+        if mid = MID_DIRITER:
+            let earr : i64 = self.tmp()
+            self.ir(IR_DENTS, 0, 0, 0, earr, 0)
+            let d : i64 = self.tmp()
+            self.ir(IR_SNEW, 2, 0, 0, d, 0)
+            self.ir(IR_FSTO, d, 0, earr, 0, 0)
+            let z8 : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, z8, 0)
+            self.ir(IR_FSTO, d, 1, z8, 0, 0)
+            return d
+        if mid = MID_ITER:
+            // {the array, the position}: a fresh two-slot box
+            let d : i64 = self.tmp()
+            self.ir(IR_SNEW, 2, 0, 0, d, 0)
+            self.ir(IR_FSTO, d, 0, av, 0, 0)
+            let z9 : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, z9, 0)
+            self.ir(IR_FSTO, d, 1, z9, 0, 0)
+            return d
+        if mid = MID_NEXT and defnode = ⁻1 and ty_is_opt(self.tof(nid)):
+            // outside ?? and the while binding: the step is boxed as
+            // any optional is, the end the null
+            let dscb : i64 = self.tmp()
+            self.ir(IR_FLD, av, 0, 0, dscb, 0)
+            let posb : i64 = self.tmp()
+            self.ir(IR_FLD, av, 1, 0, posb, 0)
+            let nb9 : i64 = self.tmp()
+            self.ir(IR_ALEN, dscb, 0, 0, nb9, 0)
+            let cb9 : i64 = self.tmp()
+            self.ir(IR_CLT, posb, nb9, 0, cb9, 64 + 256)
+            let d : i64 = self.tmp()
+            let labs : i64 = self.label()
+            let lend : i64 = self.label()
+            self.ir(IR_JZ, cb9, labs, 0, 0, 0)
+            let ev9 : i64 = self.tmp()
+            self.ir(IR_AIDX, dscb, posb, 0, ev9, 0)
+            let ob9 : i64 = self.tmp()
+            self.ir(IR_SNEW, 1, 0, 0, ob9, 0)
+            self.ir(IR_FSTO, ob9, 0, ev9, 0, 0)
+            let one8 : i64 = self.tmp()
+            self.ir(IR_CONST, 1, 0, 0, one8, 0)
+            let np8 : i64 = self.tmp()
+            self.ir(IR_ADDW, posb, one8, 0, np8, 64 + 256)
+            self.ir(IR_FSTO, av, 1, np8, 0, 0)
+            self.ir(IR_MOV, ob9, 0, 0, d, 0)
+            self.ir(IR_JMP, lend, 0, 0, 0, 0)
+            self.ir(IR_LABEL, labs, 0, 0, 0, 0)
+            self.ir(IR_CONST, 0, 0, 0, d, 0)
+            self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+            return d
+        if mid = MID_NEXT:
+            // position under length answers the element and steps; the
+            // end answers the default, as pop does under ??
+            let dsc : i64 = self.tmp()
+            self.ir(IR_FLD, av, 0, 0, dsc, 0)
+            let pos : i64 = self.tmp()
+            self.ir(IR_FLD, av, 1, 0, pos, 0)
+            let n9 : i64 = self.tmp()
+            self.ir(IR_ALEN, dsc, 0, 0, n9, 0)
+            let c9 : i64 = self.tmp()
+            self.ir(IR_CLT, pos, n9, 0, c9, 64 + 256)
+            let d : i64 = self.tmp()
+            let ldef : i64 = self.label()
+            let lend : i64 = self.label()
+            self.ir(IR_JZ, c9, ldef, 0, 0, 0)
+            self.ir(IR_AIDX, dsc, pos, 0, d, 0)
+            let one9 : i64 = self.tmp()
+            self.ir(IR_CONST, 1, 0, 0, one9, 0)
+            let np9 : i64 = self.tmp()
+            self.ir(IR_ADDW, pos, one9, 0, np9, 64 + 256)
+            self.ir(IR_FSTO, av, 1, np9, 0, 0)
+            self.ir(IR_JMP, lend, 0, 0, 0, 0)
+            self.ir(IR_LABEL, ldef, 0, 0, 0, 0)
+            let dv9 : i64 = self.lower_expr(defnode)
+            self.ir(IR_MOV, dv9, 0, 0, d, 0)
+            self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+            return d
+        if mid = MID_PUSH:
+            let vv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            self.ir(IR_APUSH, av, vv, 0, 0, 0)
+            return ⁻1
+        if mid = MID_POP and defnode = ⁻1 and ty_is_opt(self.tof(nid)):
+            // outside ??: an empty array answers the null, and a value
+            // answers boxed, as ∃ boxes
+            let n9 : i64 = self.tmp()
+            self.ir(IR_ALEN, av, 0, 0, n9, 0)
+            let d9 : i64 = self.tmp()
+            let lno : i64 = self.label()
+            let lend : i64 = self.label()
+            self.ir(IR_JZ, n9, lno, 0, 0, 0)
+            let z9 : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, z9, 0)
+            let e9 : i64 = self.tmp()
+            self.ir(IR_APOP, av, z9, 0, e9, width_of(ty_opt_base(self.tof(nid))))
+            let b9 : i64 = self.tmp()
+            self.ir(IR_SNEW, 1, 0, 0, b9, 0)
+            self.ir(IR_FSTO, b9, 0, e9, 0, 0)
+            self.ir(IR_MOV, b9, 0, 0, d9, 0)
+            self.ir(IR_JMP, lend, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lno, 0, 0, 0, 0)
+            self.ir(IR_CONST, 0, 0, 0, d9, 0)
+            self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+            return d9
+        if mid = MID_POP:
+            let dv : mut i64 = 0
+            if defnode = ⁻1:
+                dv ← self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, dv, 0)
+            else:
+                dv ← self.lower_expr(defnode)
+            let d : i64 = self.tmp()
+            self.ir(IR_APOP, av, dv, 0, d, w)
+            return d
+        if defnode = ⁻1 and ty_is_opt(self.tof(nid)):
+            // get, outside ??: past the end answers the null
+            let iv9 : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            let n8 : i64 = self.tmp()
+            self.ir(IR_ALEN, av, 0, 0, n8, 0)
+            let c8 : i64 = self.tmp()
+            self.ir(IR_CLT, iv9, n8, 0, c8, 64 + 256)
+            let d8 : i64 = self.tmp()
+            let lno8 : i64 = self.label()
+            let lend8 : i64 = self.label()
+            self.ir(IR_JZ, c8, lno8, 0, 0, 0)
+            let e8 : i64 = self.tmp()
+            self.ir(IR_AIDX, av, iv9, 0, e8, 0)
+            let b8 : i64 = self.tmp()
+            self.ir(IR_SNEW, 1, 0, 0, b8, 0)
+            self.ir(IR_FSTO, b8, 0, e8, 0, 0)
+            self.ir(IR_MOV, b8, 0, 0, d8, 0)
+            self.ir(IR_JMP, lend8, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lno8, 0, 0, 0, 0)
+            self.ir(IR_CONST, 0, 0, 0, d8, 0)
+            self.ir(IR_LABEL, lend8, 0, 0, 0, 0)
+            return d8
+        // get
+        let iv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+        let dv : i64 = self.lower_expr(defnode)
+        let d : i64 = self.tmp()
+        self.ir(IR_AGET, av, iv, dv, d, w)
+        d
+
+    // a range written out as the array of its steps, for the places
+    // that cycle an array: the walk is the foreach's own
+    fn lower_rg_arr(&mut self, nb : i64) → i64:
+        let rv : i64 = self.lower_expr(nb)
+        let lo9 : i64 = self.tmp()
+        self.ir(IR_FLD, rv, 0, 0, lo9, 0)
+        let st9 : i64 = self.tmp()
+        self.ir(IR_FLD, rv, 1, 0, st9, 0)
+        let hi9 : i64 = self.tmp()
+        self.ir(IR_FLD, rv, 2, 0, hi9, 0)
+        let lz9 : i64 = self.label()
+        self.ir(IR_JNZ, st9, lz9, 0, 0, 0)
+        let m9 : i64 = self.intern("range step must not be zero\n")
+        self.ir(IR_ABORT, m9, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lz9, 0, 0, 0, 0)
+        let d : i64 = self.tmp()
+        self.ir(IR_ANEW, 4, 0, 0, d, 0)
+        let iv : i64 = self.tmp()
+        self.ir(IR_MOV, lo9, 0, 0, iv, 0)
+        let ltop : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+        let c : i64 = self.range_alive(iv, hi9, st9)
+        self.ir(IR_JZ, c, lend, 0, 0, 0)
+        self.ir(IR_APUSH, d, iv, 0, 0, 0)
+        let ni : i64 = self.tmp()
+        self.ir(IR_ADDW, iv, st9, 0, ni, 64 + 256)
+        self.ir(IR_MOV, ni, 0, 0, iv, 0)
+        self.ir(IR_JMP, ltop, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        d
+
+    // m[rows, cols] and m[rows, i]: the rows are walked and each is cut
+    // to what was asked for.  A row the matrix holds cannot be handed
+    // back narrowed, so every row of the answer is built, and the answer
+    // shares nothing with what it was cut from.
+    fn lower_mslice(&mut self, nid : i64, na : i64, off : i64, iscol : i64) → i64:
+        let mv : i64 = self.lower_expr(na)
+        let rlo : i64 = self.lower_expr(self.a.extra[off × 1¤ptrdiff])
+        let rhi : i64 = self.lower_expr(self.a.extra[(off + 1) × 1¤ptrdiff])
+        let clo : i64 = self.lower_expr(self.a.extra[(off + 2) × 1¤ptrdiff])
+        let chin : i64 = self.a.extra[(off + 3) × 1¤ptrdiff]
+        let chi : mut i64 = 0
+        if chin ≠ ⁻1:
+            chi ← self.lower_expr(chin)
+        let out : i64 = self.tmp()
+        self.ir(IR_ANEW, 4, 0, 0, out, 0)
+        let r : i64 = self.tmp()
+        self.ir(IR_MOV, rlo, 0, 0, r, 0)
+        let one : i64 = self.tmp()
+        self.ir(IR_CONST, 1, 0, 0, one, 0)
+        let ltop : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+        let cnd : i64 = self.tmp()
+        self.ir(IR_CLE, r, rhi, 0, cnd, 64 + 256)
+        self.ir(IR_JZ, cnd, lend, 0, 0, 0)
+        let row : i64 = self.tmp()
+        self.ir(IR_AIDX, mv, r, 0, row, 0)
+        let piece : i64 = self.tmp()
+        if iscol = 1:
+            self.ir(IR_AIDX, row, clo, 0, piece, 0)
+        else:
+            self.ir(IR_ASLICE, row, clo, chi, piece, 0)
+        self.ir(IR_APUSH, out, piece, 0, 0, 0)
+        let nr : i64 = self.tmp()
+        self.ir(IR_ADDW, r, one, 0, nr, 64 + 256)
+        self.ir(IR_MOV, nr, 0, 0, r, 0)
+        self.ir(IR_JMP, ltop, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        out
+
+    fn lower_mreshape(&mut self, nid : i64, na : i64, nb : i64) → i64:
+        // the flat filler cycles across the row seam, then is cut into
+        // rows, each row its own fresh array
+        let toff : i64 = self.a.na[na × 1¤ptrdiff]
+        let rank : i64 = self.a.extra[toff × 1¤ptrdiff]
+        let r : i64 = self.a.na[self.a.extra[(toff + 1) × 1¤ptrdiff] × 1¤ptrdiff]
+        let c : i64 = self.a.na[self.a.extra[(toff + 2) × 1¤ptrdiff] × 1¤ptrdiff]
+        // a cube is planes of rows: the last two extents make the plane,
+        // and the first counts them
+        let d3 : i64 = 1 if rank = 2 else self.a.na[self.a.extra[(toff + 3) × 1¤ptrdiff] × 1¤ptrdiff]
+        let nall : i64 = self.tmp()
+        self.ir(IR_CONST, r × c × d3, 0, 0, nall, 0)
+        let flat : i64 = self.tmp()
+        if ty_is_rg(self.tof(nb)):
+            let fvr : i64 = self.lower_rg_arr(nb)
+            self.ir(IR_ACYC, nall, fvr, 0, flat, 0)
+        elif ty_is_arr(self.tof(nb)):
+            let fv : i64 = self.lower_expr(nb)
+            self.ir(IR_ACYC, nall, fv, 0, flat, 0)
+        else:
+            let fv : i64 = self.lower_expr(nb)
+            self.ir(IR_AFILL, nall, fv, 0, flat, 0)
+        // the outermost dimension counts what the level below builds:
+        // rows for a matrix, planes for a cube.  Either way the cutting
+        // is the same loop, so a cube runs it twice, once nested.
+        let d : i64 = self.cut_up(flat, r, c × d3)
+        if rank = 2:
+            return d
+        let cube : i64 = self.tmp()
+        self.ir(IR_ANEW, r ⌈ 4, 0, 0, cube, 0)
+        let pi : i64 = self.tmp()
+        self.ir(IR_CONST, 0, 0, 0, pi, 0)
+        let pn : i64 = self.tmp()
+        self.ir(IR_CONST, r, 0, 0, pn, 0)
+        let pone : i64 = self.tmp()
+        self.ir(IR_CONST, 1, 0, 0, pone, 0)
+        let ptop : i64 = self.label()
+        let pend : i64 = self.label()
+        self.ir(IR_LABEL, ptop, 0, 0, 0, 0)
+        let pc : i64 = self.tmp()
+        self.ir(IR_CLT, pi, pn, 0, pc, 64 + 256)
+        self.ir(IR_JZ, pc, pend, 0, 0, 0)
+        let plane : i64 = self.tmp()
+        self.ir(IR_AIDX, d, pi, 0, plane, 0)
+        let pm : i64 = self.cut_up(plane, c, d3)
+        self.ir(IR_APUSH, cube, pm, 0, 0, 0)
+        let pnx : i64 = self.tmp()
+        self.ir(IR_ADDW, pi, pone, 0, pnx, 64 + 256)
+        self.ir(IR_MOV, pnx, 0, 0, pi, 0)
+        self.ir(IR_JMP, ptop, 0, 0, 0, 0)
+        self.ir(IR_LABEL, pend, 0, 0, 0, 0)
+        cube
+
+    // n slices of width w, cut off the front of flat and pushed into a
+    // fresh array; the slices share with what they were cut from
+    fn cut_up(&mut self, flat : i64, n : i64, w : i64) → i64:
+        let d : i64 = self.tmp()
+        self.ir(IR_ANEW, n ⌈ 4, 0, 0, d, 0)
+        let i : i64 = self.tmp()
+        self.ir(IR_CONST, 0, 0, 0, i, 0)
+        let rv : i64 = self.tmp()
+        self.ir(IR_CONST, n, 0, 0, rv, 0)
+        let cv : i64 = self.tmp()
+        self.ir(IR_CONST, w, 0, 0, cv, 0)
+        let one : i64 = self.tmp()
+        self.ir(IR_CONST, 1, 0, 0, one, 0)
+        let ltop : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+        let cnd : i64 = self.tmp()
+        self.ir(IR_CLT, i, rv, 0, cnd, 64 + 256)
+        self.ir(IR_JZ, cnd, lend, 0, 0, 0)
+        let lo : i64 = self.tmp()
+        self.ir(IR_MULW, i, cv, 0, lo, 64 + 256)
+        let hi : i64 = self.tmp()
+        self.ir(IR_ADDW, lo, cv, 0, hi, 64 + 256)
+        let hi1 : i64 = self.tmp()
+        self.ir(IR_SUBW, hi, one, 0, hi1, 64 + 256)
+        let row : i64 = self.tmp()
+        self.ir(IR_ASLICE, flat, lo, hi1, row, 0)
+        self.ir(IR_APUSH, d, row, 0, 0, 0)
+        let nxt : i64 = self.tmp()
+        self.ir(IR_ADDW, i, one, 0, nxt, 64 + 256)
+        self.ir(IR_MOV, nxt, 0, 0, i, 0)
+        self.ir(IR_JMP, ltop, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        d
+
+    // std.iov(x): the run of bytes x amounts to, made here and held as
+    // a base and a length.  A byte array is already its own bytes; a
+    // struct with a layout is written out one field at a time, at the
+    // offsets the layout gives, with what the layout skips written as
+    // zeros so the same program twice produces the same file.
+    fn lower_iov(&mut self, pe : i64) → i64:
+        let pt : i64 = ty_strip_ref(self.tof(pe))
+        let pv : i64 = self.lower_expr(pe)
+        let bytes : mut i64 = pv
+        if pt ≠ mk_aty(TY_U8):
+            bytes ← self.pack_piece(pt, pv)
+        let raw : i64 = self.tmp()
+        self.ir(IR_TORAW, bytes, 0, 0, raw, 0)
+        let n : i64 = self.tmp()
+        self.ir(IR_ALEN, bytes, 0, 0, n, 0)
+        // the two slots the kernel wants, in the order it wants them,
+        // so a run needs no rearranging when it is handed over
+        let d : i64 = self.tmp()
+        self.ir(IR_SNEW, 2, 0, 0, d, 0)
+        self.ir(IR_FSTO, d, 0, raw, 0, 0)
+        self.ir(IR_FSTO, d, 1, n, 0, 0)
+        d
+
+    // the bytes of one piece that is not already bytes: a struct, or a
+    // table of them walked one entry at a time
+    fn pack_piece(&mut self, pt : i64, pv : i64) → i64:
+        let buf : i64 = self.tmp()
+        self.ir(IR_ANEW, 4, 0, 0, buf, 0)
+        if not ty_is_arr(pt):
+            _ ← self.pack_val(buf, pt, pv, 0)
+            return buf
+        // a table: the same static sequence inside a loop, since how
+        // many entries there are is not known until it runs
+        let et : i64 = self.elem_of(pt)
+        let n : i64 = self.tmp()
+        self.ir(IR_ALEN, pv, 0, 0, n, 0)
+        let ix : i64 = self.tmp()
+        self.ir(IR_CONST, 0, 0, 0, ix, 0)
+        let one : i64 = self.tmp()
+        self.ir(IR_CONST, 1, 0, 0, one, 0)
+        let ltop : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+        let c : i64 = self.tmp()
+        self.ir(IR_CLT, ix, n, 0, c, 64 + 256)
+        self.ir(IR_JZ, c, lend, 0, 0, 0)
+        let e : i64 = self.tmp()
+        self.ir(IR_AIDX, pv, ix, 0, e, 0)
+        _ ← self.pack_val(buf, et, e, 0)
+        let nx : i64 = self.tmp()
+        self.ir(IR_ADDW, ix, one, 0, nx, 64 + 256)
+        self.ir(IR_MOV, nx, 0, 0, ix, 0)
+        self.ir(IR_JMP, ltop, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        buf
+
+    // push one byte, whose value the caller has already reduced
+    fn pack_byte(&mut self, buf : i64, v : i64):
+        self.ir(IR_APUSH, buf, v, 0, 0, 0)
+
+    // zeros up to the offset the layout wants next
+    fn pack_pad(&mut self, buf : i64, from : i64, to : i64):
+        if to > from:
+            let z : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, z, 0)
+            foreach _ := from…to - 1:
+                self.pack_byte(buf, z)
+
+    // one value of type ty appended to buf; answers how far along the
+    // piece the writing has got, so the caller can pad to the next
+    // field without counting the bytes again
+    fn pack_val(&mut self, buf : i64, ty0 : i64, v : i64, pos0 : i64) → i64:
+        let ty : i64 = ty_drop_unit(ty_strip_ref(ty0))
+        let pos : mut i64 = pos0
+        if ty_is_struct(ty):
+            let si : i64 = ty_sidx(ty)
+            let d := self.a.structs[si × 1¤ptrdiff]
+            let nf : i64 = self.a.extra[d.fields_off × 1¤ptrdiff]
+            let (ssz, sal) := c_struct_layout(self.a, si, 0)
+            _ ← sal
+            if nf > 0:
+                foreach fi := 0…nf - 1:
+                    let fty : i64 = self.a.extra[(d.fields_off + 2 + fi × 2) × 1¤ptrdiff]
+                    self.pack_pad(buf, pos, pos0 + c_field_offset(self.a, si, @dropunit(fi)))
+                    pos ← pos0 + c_field_offset(self.a, si, @dropunit(fi))
+                    let fv : i64 = self.tmp()
+                    self.ir(IR_FLD, v, fi, 0, fv, 0)
+                    pos ← self.pack_val(buf, fty, fv, pos)
+            // the tail padding is part of the struct, so an array of
+            // it keeps every element where the layout says
+            self.pack_pad(buf, pos, pos0 + ssz)
+            return pos0 + ssz
+        if ty_is_farr(ty):
+            // a sized array is its elements one after the other, and
+            // how many there are is part of the type
+            let et : i64 = self.a.fae[ty_fidx(ty) × 1¤ptrdiff]
+            let cnt : i64 = self.a.fas[ty_fidx(ty) × 1¤ptrdiff]
+            if cnt > 0:
+                foreach ei := 0…cnt - 1:
+                    let ix : i64 = self.tmp()
+                    self.ir(IR_CONST, @dropunit(ei), 0, 0, ix, 0)
+                    let ev : i64 = self.tmp()
+                    self.ir(IR_AIDX, v, ix, 0, ev, 0)
+                    pos ← self.pack_val(buf, et, ev, pos)
+            return pos
+        // a scalar: its own width, least significant byte first, which
+        // is the target's order
+        let (sz, al) := c_layout(self.a, ty, 0)
+        _ ← al
+        let m : i64 = self.tmp()
+        self.ir(IR_CONST, 255, 0, 0, m, 0)
+        foreach bi := 0…sz - 1:
+            let sh : i64 = self.tmp()
+            self.ir(IR_CONST, 8 × @dropunit(bi), 0, 0, sh, 0)
+            let shifted : i64 = self.tmp()
+            self.ir(IR_SHRR, v, sh, 0, shifted, 64 + 256)
+            let low : i64 = self.tmp()
+            self.ir(IR_BAND, shifted, m, 0, low, 64 + 256)
+            self.pack_byte(buf, low)
+        pos + sz
+
+    // generate(f, r): the range written out, then one call per step
+    fn lower_generate(&mut self, nid : i64, args_off : i64) → i64:
+        let fe : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
+        let re : i64 = self.a.extra[(args_off + 2) × 1¤ptrdiff]
+        let fv : i64 = self.lower_expr(fe)
+        let rga : i64 = self.lower_rg_arr(re)
+        let out : i64 = self.tmp()
+        self.ir(IR_ANEW, 4, 0, 0, out, 0)
+        let n9 : i64 = self.tmp()
+        self.ir(IR_ALEN, rga, 0, 0, n9, 0)
+        let ix9 : i64 = self.tmp()
+        self.ir(IR_CONST, 0, 0, 0, ix9, 0)
+        let one9 : i64 = self.tmp()
+        self.ir(IR_CONST, 1, 0, 0, one9, 0)
+        let ad9 : i64 = self.tmp()
+        self.ir(IR_FLD, fv, 0, 0, ad9, 0)
+        let ltop : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+        let c9 : i64 = self.tmp()
+        self.ir(IR_CLT, ix9, n9, 0, c9, 64 + 256)
+        self.ir(IR_JZ, c9, lend, 0, 0, 0)
+        let x9 : i64 = self.tmp()
+        self.ir(IR_AIDX, rga, ix9, 0, x9, 0)
+        let off9 : i64 = @dropunit(#self.extra)
+        self.extra.push(2)
+        self.extra.push(x9)
+        self.extra.push(fv)
+        let r9 : i64 = self.tmp()
+        self.ir(IR_CALLI, ad9, off9, 0, r9, 0)
+        self.ir(IR_APUSH, out, r9, 0, 0, 0)
+        let ni9 : i64 = self.tmp()
+        self.ir(IR_ADDW, ix9, one9, 0, ni9, 64 + 256)
+        self.ir(IR_MOV, ni9, 0, 0, ix9, 0)
+        self.ir(IR_JMP, ltop, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        out
+
+    fn lower_arrlit(&mut self, nid : i64, off : i64) → i64:
+        let n : i64 = self.a.extra[off × 1¤ptrdiff]
+        let d : i64 = self.tmp()
+        self.ir(IR_ANEW, n ⌈ 4, 0, 0, d, 0)
+        let i : mut i64 = 0
+        while i < n:
+            let ev : i64 = self.lower_expr(self.a.extra[(off + 1 + i) × 1¤ptrdiff])
+            self.ir(IR_APUSH, d, ev, 0, 0, 0)
+            i ← i + 1
+        d
+
+    fn lower_call(&mut self, nid : i64, tok : i64, args_off : i64) → i64:
+        let name := self.text(tok)
+        let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
+        if name = "static_assert" or name = "static_assert_eq":
+            return ⁻1
+        if name = "assert" or name = "assert_eq":
+            self.lower_assert(nid, tok, args_off, name = "assert_eq")
+            return ⁻1
+        if self.a.nc[nid × 1¤ptrdiff] = 2:
+            return self.lower_generate(nid, args_off)
+        if self.a.nc[nid × 1¤ptrdiff] >= 6 and self.a.nc[nid × 1¤ptrdiff] <= 8:
+            let gb9 : i64 = self.tmp()
+            self.ir(IR_GLOAD, self.nslot[nid × 1¤ptrdiff], 0, 0, gb9, 0)
+            if self.a.nc[nid × 1¤ptrdiff] = 7:
+                return gb9
+            if self.a.nc[nid × 1¤ptrdiff] = 6:
+                let gv9 : mut i64[] = []
+                let gi9 : mut i64 = 0
+                while gi9 < argc:
+                    gv9.push(self.lower_expr(self.a.extra[(args_off + 1 + gi9) × 1¤ptrdiff]))
+                    gi9 ← gi9 + 1
+                let go9 : i64 = @dropunit(#self.extra)
+                self.extra.push(argc + 1)
+                foreach v := gv9:
+                    self.extra.push(v)
+                self.extra.push(gb9)
+                let ga9 : i64 = self.tmp()
+                self.ir(IR_FLD, gb9, 0, 0, ga9, 0)
+                let gd9 : i64 = self.tmp()
+                self.ir(IR_CALLI, ga9, go9, 0, gd9, 0)
+                return gd9
+            let gv8 : mut i64[] = []
+            let gi8 : mut i64 = 0
+            while gi8 < argc:
+                gv8.push(self.lower_expr(self.a.extra[(args_off + 1 + gi8) × 1¤ptrdiff]))
+                gi8 ← gi8 + 1
+            let gp8 : i64 = self.tmp()
+            self.ir(IR_SNEW, 1 + argc + 1, 0, 0, gp8, 0)
+            let gf8 : i64 = self.tmp()
+            self.ir(IR_FADDR, self.shimbase + self.a.nb[nid × 1¤ptrdiff], 0, 0, gf8, 0)
+            self.ir(IR_FSTO, gp8, 0, gf8, 0, 0)
+            let gk8 : mut i64 = 0
+            while gk8 < argc:
+                self.ir(IR_FSTO, gp8, 1 + gk8, gv8[gk8 × 1¤ptrdiff], 0, 0)
+                gk8 ← gk8 + 1
+            self.ir(IR_FSTO, gp8, 1 + argc, gb9, 0, 0)
+            return gp8
+        if self.a.nc[nid × 1¤ptrdiff] = 5:
+            // an empty application answers the box unchanged
+            return self.nslot[nid × 1¤ptrdiff]
+        if self.a.nc[nid × 1¤ptrdiff] = 3 or self.a.nc[nid × 1¤ptrdiff] = 4:
+            // a partial: the shim's address, then the bound values,
+            // then -- for a closure source -- the source box itself
+            let isclo : i64 = 1 if self.a.nc[nid × 1¤ptrdiff] = 4 else 0
+            let vb9 : mut i64[] = []
+            let bi9 : mut i64 = 0
+            while bi9 < argc:
+                vb9.push(self.lower_expr(self.a.extra[(args_off + 1 + bi9) × 1¤ptrdiff]))
+                bi9 ← bi9 + 1
+            let d9p : i64 = self.tmp()
+            self.ir(IR_SNEW, 1 + argc + isclo, 0, 0, d9p, 0)
+            let av9p : i64 = self.tmp()
+            self.ir(IR_FADDR, self.shimbase + self.a.nb[nid × 1¤ptrdiff], 0, 0, av9p, 0)
+            self.ir(IR_FSTO, d9p, 0, av9p, 0, 0)
+            let ci9p : mut i64 = 0
+            while ci9p < argc:
+                self.ir(IR_FSTO, d9p, 1 + ci9p, vb9[ci9p × 1¤ptrdiff], 0, 0)
+                ci9p ← ci9p + 1
+            if isclo = 1:
+                self.ir(IR_FSTO, d9p, 1 + argc, self.nslot[nid × 1¤ptrdiff], 0, 0)
+            return d9p
+        if self.a.nc[nid × 1¤ptrdiff] = 1:
+            // through the binding's box: the address in slot 0, the
+            // box itself riding along as the hidden last argument
+            let box9 : i64 = self.nslot[nid × 1¤ptrdiff]
+            let vr9 : mut i64[] = []
+            let ix9 : mut i64 = 0
+            while ix9 < argc:
+                vr9.push(self.lower_expr(self.a.extra[(args_off + 1 + ix9) × 1¤ptrdiff]))
+                ix9 ← ix9 + 1
+            let off9 : i64 = @dropunit(#self.extra)
+            self.extra.push(argc + 1)
+            foreach v := vr9:
+                self.extra.push(v)
+            self.extra.push(box9)
+            let ad9 : i64 = self.tmp()
+            self.ir(IR_FLD, box9, 0, 0, ad9, 0)
+            let d9 : i64 = self.tmp()
+            self.ir(IR_CALLI, ad9, off9, 0, d9, 0)
+            return d9
+        let vregs : mut i64[] = []
+        let i : mut i64 = 0
+        while i < argc:
+            vregs.push(self.lower_expr(self.a.extra[(args_off + 1 + i) × 1¤ptrdiff]))
+            i ← i + 1
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(argc)
+        foreach v := vregs:
+            self.extra.push(v)
+        let f : i64 = self.fname_index(name)
+        let d : i64 = self.tmp()
+        self.ir(IR_CALL, f, off, 0, d, 0)
+        d
+
+    fn lower_assert(&mut self, nid : i64, tok : i64, args_off : i64, is_eq : bool):
+        let line : i64 = self.tok_line(tok)
+        let lok : i64 = self.label()
+        if is_eq:
+            let x : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
+            let y : i64 = self.a.extra[(args_off + 2) × 1¤ptrdiff]
+            let c : mut i64 = 0
+            if ty_is_opt(self.tof(x)) and ty_is_opt(self.tof(y)):
+                c ← self.lower_opt_eq(x, y)
+            elif self.tof(x) = TY_STR:
+                let av0 : i64 = self.lower_expr(x)
+                let bv0 : i64 = self.lower_expr(y)
+                c ← self.tmp()
+                self.ir(IR_SEQV, av0, bv0, 0, c, 64)
+            else:
+                let av : i64 = self.lower_expr(x)
+                let bv : i64 = self.lower_expr(y)
+                c ← self.tmp()
+                self.ir(IR_CEQ, av, bv, 0, c, width_of(self.tof(x)))
+            self.ir(IR_JNZ, c, lok, 0, 0, 0)
+            let m : i64 = self.intern("assertion does not hold (line " ⧺ i64_str(line) ⧺ ")\n")
+            self.ir(IR_ABORT, m, 0, 0, 0, 0)
+        else:
+            let cv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            self.ir(IR_JNZ, cv, lok, 0, 0, 0)
+            let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
+            let msg : mut str = "assertion does not hold (line " ⧺ i64_str(line) ⧺ ")\n"
+            if argc = 2:
+                let marg : i64 = self.a.extra[(args_off + 2) × 1¤ptrdiff]
+                msg ← "assertion does not hold (line " ⧺ i64_str(line) ⧺ "): " ⧺ self.a.strs[self.a.na[marg × 1¤ptrdiff] × 1¤ptrdiff] ⧺ "\n"
+            let m : i64 = self.intern(msg)
+            self.ir(IR_ABORT, m, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lok, 0, 0, 0, 0)
+
+    fn lower_scall(&mut self, nid : i64, tok : i64, sb : i64, args_off : i64):
+        let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
+        if sb = SB_EXIT:
+            let v : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            self.ir(IR_EXIT, v, 0, 0, 0, 0)
+            return
+        let fmt : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
+        let cs := self.a.strs[self.a.na[fmt × 1¤ptrdiff] × 1¤ptrdiff].chars()
+        let chunk : mut str = ""
+        let argi : mut i64 = 2
+        let i ¤ptrdiff : mut i64 = 0
+        while i < #cs:
+            if i + 1 < #cs and cs[i] = '{' and cs[i + 1] = '}':
+                if chunk ≠ "":
+                    let m : i64 = self.intern(chunk)
+                    self.ir(IR_PRINTS, m, 0, 0, 0, 0)
+                    chunk ← ""
+                let arg : i64 = self.a.extra[(args_off + argi) × 1¤ptrdiff]
+                self.lower_print_arg(arg)
+                argi ← argi + 1
+                i ← i + 2
+            else:
+                chunk ← chunk ⧺ cs[i]
+                i ← i + 1
+        if sb = SB_PRINTLN:
+            chunk ← chunk ⧺ (10).chr()
+        if chunk ≠ "":
+            let m : i64 = self.intern(chunk)
+            self.ir(IR_PRINTS, m, 0, 0, 0, 0)
+
+    fn lower_print_arg(&mut self, arg : i64):
+        let t : i64 = self.tof(arg)
+        if t = TY_STR:
+            if self.kof(arg) = NK_STR:
+                let m : i64 = self.intern(self.a.strs[self.a.na[arg × 1¤ptrdiff] × 1¤ptrdiff])
+                self.ir(IR_PRINTS, m, 0, 0, 0, 0)
+            else:
+                let v : i64 = self.lower_expr(arg)
+                self.ir(IR_PRINTSV, v, 0, 0, 0, 0)
+        elif t = TY_CHAR:
+            let v : i64 = self.lower_expr(arg)
+            let sv : i64 = self.tmp()
+            self.ir(IR_CHARSTR, v, 0, 0, sv, 0)
+            self.ir(IR_PRINTSV, sv, 0, 0, 0, 0)
+        elif t = TY_BOOL:
+            let v : i64 = self.lower_expr(arg)
+            let mt : i64 = self.intern("true")
+            let mf : i64 = self.intern("false")
+            let lfalse : i64 = self.label()
+            let lend : i64 = self.label()
+            self.ir(IR_JZ, v, lfalse, 0, 0, 0)
+            self.ir(IR_PRINTS, mt, 0, 0, 0, 0)
+            self.ir(IR_JMP, lend, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lfalse, 0, 0, 0, 0)
+            self.ir(IR_PRINTS, mf, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        else:
+            let v : i64 = self.lower_expr(arg)
+            if ty_sgn(t) = 1:
+                self.ir(IR_PRINTI, v, 0, 0, 0, 0)
+            else:
+                self.ir(IR_PRINTU, v, 0, 0, 0, 0)
+            // a measured value prints its measure, as the interpreter does
+            let u : i64 = ty_unit(t)
+            if u ≠ UNIT_NONE:
+                self.ir(IR_PRINTS, self.intern(" " ⧺ self.a.umarks[u × 1¤ptrdiff]), 0, 0, 0, 0)
+
+    // ------------------------------------------------------------------
+    // Statements
+    // ------------------------------------------------------------------
+
+    fn lower_block(&mut self, blk : i64, is_fn_body : bool, ret_ty : i64):
+        let off : i64 = self.a.na[blk × 1¤ptrdiff]
+        let n : i64 = self.a.extra[off × 1¤ptrdiff]
+        let i : mut i64 = 0
+        while i < n:
+            let s : i64 = self.a.extra[(off + 1 + i) × 1¤ptrdiff]
+            let trailing : bool = is_fn_body and i = n - 1
+            self.lower_stmt(s, trailing, ret_ty)
+            i ← i + 1
+
+    // what a return hands over: a bare value under an optional answer
+    // boxes itself, and a bare ÷ or % answers ∅ for the zero divisor
+    fn lower_ret_value(&mut self, na : i64):
+        if ty_is_opt(self.cur_ret) and (self.kof(na) = NK_DIV or self.kof(na) = NK_MOD) and not ty_is_opt(self.tof(na)):
+            let av9 : i64 = self.lower_expr(self.a.na[na × 1¤ptrdiff])
+            let bv9 : i64 = self.lower_expr(self.a.nb[na × 1¤ptrdiff])
+            let lok9 : i64 = self.label()
+            self.ir(IR_JNZ, bv9, lok9, 0, 0, 0)
+            let zn9 : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, zn9, 0)
+            self.lower_ret(zn9)
+            self.ir(IR_LABEL, lok9, 0, 0, 0, 0)
+            let zd9 : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, zd9, 0)
+            let q9 : i64 = self.tmp()
+            self.ir(IR_DIVV if self.kof(na) = NK_DIV else IR_MODD, av9, bv9, zd9, q9, width_of(self.tof(na)))
+            let bb9 : i64 = self.tmp()
+            self.ir(IR_SNEW, 1, 0, 0, bb9, 0)
+            self.ir(IR_FSTO, bb9, 0, q9, 0, 0)
+            self.lower_ret(bb9)
+            return
+        let v : i64 = self.lower_expr(na)
+        if ty_is_opt(self.cur_ret) and not ty_is_opt(self.tof(na)):
+            let b9 : i64 = self.tmp()
+            self.ir(IR_SNEW, 1, 0, 0, b9, 0)
+            self.ir(IR_FSTO, b9, 0, v, 0, 0)
+            self.lower_ret(b9)
+            return
+        self.lower_ret(v)
+
+    fn lower_ret(&mut self, v : i64):
+        if self.post_label ≠ ⁻1:
+            self.ir(IR_MOV, v, 0, 0, self.res_vreg, 0)
+            self.ir(IR_JMP, self.post_label, 0, 0, 0, 0)
+        else:
+            self.ir(IR_RET, v, 0, 0, 0, 0)
+
+    // An if, laid out so the way it is expected to go is the way that
+    // falls through.  Without a hint the then-block falls through;
+    // @unlikely says otherwise, and where there is an else the two swap
+    // for nothing -- the same instructions, with the cold block out of
+    // the straight line.  With no else there is nothing to swap it
+    // with, and the layout stands as it was.
+    fn lower_if(&mut self, sid : i64, unlikely : i64, trailing : bool, ret_ty : i64):
+        if self.try_jtab(sid, ret_ty):
+            return
+        let na : i64 = self.a.na[sid × 1¤ptrdiff]
+        let nb : i64 = self.a.nb[sid × 1¤ptrdiff]
+        let nc : i64 = self.a.nc[sid × 1¤ptrdiff]
+        let lelse : i64 = self.label()
+        let cv : i64 = self.lower_expr(na)
+        if unlikely = 1 and nc ≠ ⁻1:
+            let lend2 : i64 = self.label()
+            self.ir(IR_JNZ, cv, lelse, 0, 0, 0)
+            self.lower_block(nc, false, ret_ty)
+            self.ir(IR_JMP, lend2, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lelse, 0, 0, 0, 0)
+            self.lower_block(nb, false, ret_ty)
+            self.ir(IR_LABEL, lend2, 0, 0, 0, 0)
+            return
+        self.ir(IR_JZ, cv, lelse, 0, 0, 0)
+        self.lower_block(nb, false, ret_ty)
+        if nc = ⁻1:
+            self.ir(IR_LABEL, lelse, 0, 0, 0, 0)
+        else:
+            let lend : i64 = self.label()
+            self.ir(IR_JMP, lend, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lelse, 0, 0, 0, 0)
+            self.lower_block(nc, false, ret_ty)
+            self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+
+    fn lower_stmt(&mut self, sid : i64, trailing : bool, ret_ty : i64):
+        self.tnext ← self.tbase
+        let k : i64 = self.kof(sid)
+        let tok : i64 = self.a.ntok[sid × 1¤ptrdiff]
+        let na : i64 = self.a.na[sid × 1¤ptrdiff]
+        let nb : i64 = self.a.nb[sid × 1¤ptrdiff]
+        let nc : i64 = self.a.nc[sid × 1¤ptrdiff]
+        if k = NK_EXPECTS:
+            // one that drew what it was marked to draw did not check,
+            // and there is nothing of it to emit; one that drew nothing
+            // is an ordinary statement and is emitted as one
+            if nb = 0:
+                self.lower_stmt(na, trailing, ret_ty)
+        elif k = NK_LET:
+            let v : i64 = self.lower_expr(na)
+            self.ir(IR_MOV, v, 0, 0, self.nslot[sid × 1¤ptrdiff], 0)
+        elif k = NK_LETT:
+            let n : i64 = self.a.extra[nc × 1¤ptrdiff]
+            let v : i64 = self.lower_expr(na)
+            let slot0 : i64 = self.nslot[sid × 1¤ptrdiff]
+            let i : mut i64 = 0
+            while i < n:
+                self.ir(IR_FLD, v, i, 0, slot0 + i, 0)
+                i ← i + 1
+        elif k = NK_ASSIGN:
+            let v : i64 = self.lower_expr(na)
+            let slot : i64 = self.nslot[sid × 1¤ptrdiff]
+            if slot <= ⁻2:
+                self.ir(IR_GSTORE, 0 - slot - 2, v, 0, 0, 0)
+            elif self.a.nb[sid × 1¤ptrdiff] = 1:
+                // through the element's address, back into the array
+                self.ir(IR_FSTO, slot, 0, v, 0, 0)
+            else:
+                self.ir(IR_MOV, v, 0, 0, slot, 0)
+        elif k = NK_STOREFLD:
+            let bv : i64 = self.lower_expr(na)
+            let vv : i64 = self.lower_expr(nb)
+            self.ir(IR_FSTO, bv, nc, vv, 0, 0)
+        elif k = NK_STOREIDXP:
+            let bv : i64 = self.lower_expr(na)
+            let iv : i64 = self.lower_expr(nb)
+            let vv : i64 = self.lower_expr(nc)
+            if ty_is_hash(self.tof(sid)):
+                self.ir(IR_HPUT, bv, iv, vv, 0, 0)
+            else:
+                self.ir(IR_ASTO, bv, iv, vv, 0, 0)
+        elif k = NK_DISCARD:
+            _ ← self.lower_expr(na)
+        elif k = NK_EXPRSTMT:
+            if trailing and ret_ty ≠ TY_UNIT:
+                self.lower_ret_value(na)
+            else:
+                _ ← self.lower_expr(na)
+        elif k = NK_RETURN:
+            if na = ⁻1:
+                self.ir(IR_RET, ⁻1, 0, 0, 0, 0)
+            else:
+                self.lower_ret_value(na)
+        elif k = NK_HINTED:
+            self.lower_if(na, nb, trailing, ret_ty)
+        elif k = NK_IF:
+            self.lower_if(sid, 0, trailing, ret_ty)
+        elif k = NK_WHILE:
+            let ltop : i64 = self.label()
+            let lend : i64 = self.label()
+            self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+            let cv : i64 = self.lower_expr(na)
+            self.ir(IR_JZ, cv, lend, 0, 0, 0)
+            self.breaks.push(lend)
+            self.conts.push(ltop)
+            self.lower_block(nb, false, ret_ty)
+            _ ← self.breaks.pop() ?? 0
+            _ ← self.conts.pop() ?? 0
+            self.ir(IR_JMP, ltop, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        elif k = NK_MATCH:
+            let v : i64 = self.lower_expr(na)
+            let bind : i64 = self.nslot[sid × 1¤ptrdiff]
+            let lempty : i64 = self.label()
+            let lend : i64 = self.label()
+            self.ir(IR_JZ, v, lempty, 0, 0, 0)
+            self.ir(IR_FLD, v, 0, 0, bind, 0)
+            self.lower_block(self.a.extra[nb × 1¤ptrdiff], trailing, ret_ty)
+            self.ir(IR_JMP, lend, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lempty, 0, 0, 0, 0)
+            self.lower_block(self.a.extra[(nb + 1) × 1¤ptrdiff], trailing, ret_ty)
+            self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        elif k = NK_FOREACH:
+            self.lower_foreach(sid, tok, na, nb, ret_ty)
+        elif k = NK_WHILEB:
+            let evar : i64 = self.nslot[sid × 1¤ptrdiff]
+            let ltop : i64 = self.label()
+            let lend : i64 = self.label()
+            self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+            if self.kof(na) = NK_MCALL and self.a.nc[na × 1¤ptrdiff] = MID_POP:
+                // pop's own emptiness is the loop's test
+                let av9 : i64 = self.lower_expr(self.a.na[na × 1¤ptrdiff])
+                let n9 : i64 = self.tmp()
+                self.ir(IR_ALEN, av9, 0, 0, n9, 0)
+                self.ir(IR_JZ, n9, lend, 0, 0, 0)
+                let dz : i64 = self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, dz, 0)
+                self.ir(IR_APOP, av9, dz, 0, evar, width_of(self.tof(na)))
+            elif self.kof(na) = NK_MCALL and self.a.nc[na × 1¤ptrdiff] = MID_GET:
+                // the place is asked afresh each turn; absence ends it
+                let avg : i64 = self.lower_expr(self.a.na[na × 1¤ptrdiff])
+                let ivg : i64 = self.lower_expr(self.a.extra[(self.a.nb[na × 1¤ptrdiff] + 1) × 1¤ptrdiff])
+                let ng : i64 = self.tmp()
+                self.ir(IR_ALEN, avg, 0, 0, ng, 0)
+                let cg : i64 = self.tmp()
+                self.ir(IR_CLT, ivg, ng, 0, cg, 64)
+                self.ir(IR_JZ, cg, lend, 0, 0, 0)
+                self.ir(IR_AIDX, avg, ivg, 0, evar, 0)
+            elif self.kof(na) = NK_MCALL and self.a.nc[na × 1¤ptrdiff] = MID_NEXT:
+                // the iterator's position against its array's length
+                let itv : i64 = self.lower_expr(self.a.na[na × 1¤ptrdiff])
+                let dsc9 : i64 = self.tmp()
+                self.ir(IR_FLD, itv, 0, 0, dsc9, 0)
+                let pos9 : i64 = self.tmp()
+                self.ir(IR_FLD, itv, 1, 0, pos9, 0)
+                let len9 : i64 = self.tmp()
+                self.ir(IR_ALEN, dsc9, 0, 0, len9, 0)
+                let cc9 : i64 = self.tmp()
+                self.ir(IR_CLT, pos9, len9, 0, cc9, 64 + 256)
+                self.ir(IR_JZ, cc9, lend, 0, 0, 0)
+                if self.a.extra[nc × 1¤ptrdiff] = 1:
+                    // the element's address, to write back through
+                    self.ir(IR_AREF, dsc9, pos9, 0, evar, 0)
+                else:
+                    self.ir(IR_AIDX, dsc9, pos9, 0, evar, 0)
+                let on9 : i64 = self.tmp()
+                self.ir(IR_CONST, 1, 0, 0, on9, 0)
+                let npp : i64 = self.tmp()
+                self.ir(IR_ADDW, pos9, on9, 0, npp, 64 + 256)
+                self.ir(IR_FSTO, itv, 1, npp, 0, 0)
+            else:
+                let v9 : i64 = self.lower_expr(na)
+                self.ir(IR_JZ, v9, lend, 0, 0, 0)
+                if ty_is_opt(self.tof(na)):
+                    self.ir(IR_FLD, v9, 0, 0, evar, 0)
+                else:
+                    self.ir(IR_MOV, v9, 0, 0, evar, 0)
+            self.breaks.push(lend)
+            self.conts.push(ltop)
+            self.lower_block(nb, false, ret_ty)
+            _ ← self.breaks.pop() ?? 0
+            _ ← self.conts.pop() ?? 0
+            self.ir(IR_JMP, ltop, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        elif k = NK_FOREACHA:
+            self.lower_foreacha(sid, tok, na, nb, ret_ty)
+        elif k = NK_BREAK:
+            self.ir(IR_JMP, self.breaks[#self.breaks - 1], 0, 0, 0, 0)
+        elif k = NK_CONTINUE:
+            self.ir(IR_JMP, self.conts[#self.conts - 1], 0, 0, 0, 0)
+
+    // ------------------------------------------------------------------
+    // Dense dispatch becomes a jump table.  An if/elif ladder testing
+    // one variable against integer constants is one decision, not
+    // many; with at least four cases and a span within three times
+    // their count (the profitability window real compilers use), the
+    // ladder lowers to a bounds check and one indirect jump through a
+    // table of code addresses in rodata.
+    // ------------------------------------------------------------------
+
+    fn try_jtab(&mut self, sid : i64, ret_ty : i64) → bool:
+        let ks : mut i64[] = []
+        let blks : mut i64[] = []
+        let xslot : mut i64 = ⁻1
+        let default_blk : mut i64 = ⁻1
+        let cur : mut i64 = sid
+        let good : mut bool = true
+        while true:
+            let cond : i64 = self.a.na[cur × 1¤ptrdiff]
+            if self.kof(cond) ≠ NK_EQ:
+                good ← false
+                break
+            let l : i64 = self.a.na[cond × 1¤ptrdiff]
+            let r : i64 = self.a.nb[cond × 1¤ptrdiff]
+            let vn : mut i64 = ⁻1
+            let kn : mut i64 = ⁻1
+            if self.kof(l) = NK_VAR and self.kof(r) = NK_INT:
+                vn ← l
+                kn ← r
+            elif self.kof(r) = NK_VAR and self.kof(l) = NK_INT:
+                vn ← r
+                kn ← l
+            else:
+                good ← false
+                break
+            let slot : i64 = self.nslot[vn × 1¤ptrdiff]
+            if slot < 0 or self.a.nb[kn × 1¤ptrdiff] ≠ 0:
+                // a global, or a constant past i64: leave it a ladder
+                good ← false
+                break
+            if xslot = ⁻1:
+                xslot ← slot
+            elif slot ≠ xslot:
+                good ← false
+                break
+            ks.push(self.a.na[kn × 1¤ptrdiff])
+            blks.push(self.a.nb[cur × 1¤ptrdiff])
+            let els : i64 = self.a.nc[cur × 1¤ptrdiff]
+            if els = ⁻1:
+                break
+            // an elif chain is an else block holding exactly one if
+            let off : i64 = self.a.na[els × 1¤ptrdiff]
+            if self.a.extra[off × 1¤ptrdiff] = 1 and self.kof(self.a.extra[(off + 1) × 1¤ptrdiff]) = NK_IF:
+                cur ← self.a.extra[(off + 1) × 1¤ptrdiff]
+            else:
+                default_blk ← els
+                break
+        assert(#ks = #blks, "one arm per case")
+        if not good or #ks < 4:
+            return false
+        let lo : mut i64 = ks[0]
+        let hi : mut i64 = ks[0]
+        foreach k := ks:
+            lo ← lo ⌊ k
+            hi ← hi ⌈ k
+        let span : i64 = hi - lo + 1
+        let shape : str = ", \"cases\": " ⧺ i64_str(@dropunit(#ks)) ⧺ ", \"span\": " ⧺ i64_str(span)
+        if span > 3 × @dropunit(#ks) or span > 1024:
+            self.decide(self.tok_line(self.a.ntok[sid × 1¤ptrdiff]), "ladder-kept", shape)
+            return false
+        // distinct cases; a repeat would silently shadow, so leave a
+        // repeat to the ladder the checker saw
+        foreach i := 0…#ks - 1:
+            foreach j := 0…#ks - 1:
+                if j > i and ks[i] = ks[j]:
+                    return false
+        // a ladder whose every arm returns a constant, default
+        // included, is not control flow at all: it folds to one load
+        // from a table of values and one select against the default
+        if default_blk ≠ ⁻1 and self.post_label = ⁻1:
+            let vals : mut i64[] = []
+            let all_const : mut bool = true
+            foreach b := blks:
+                let cv : i64 = self.block_ret_const(b)
+                if cv = ⁻4611686018427387904:
+                    all_const ← false
+                vals.push(cv)
+            let defv : i64 = self.block_ret_const(default_blk)
+            if defv = ⁻4611686018427387904:
+                all_const ← false
+            if all_const:
+                let off0 : i64 = @dropunit(#self.extra)
+                self.extra.push(lo)
+                self.extra.push(span)
+                self.extra.push(defv)
+                let si : mut i64 = 0
+                while si < span:
+                    let entry : mut i64 = defv
+                    foreach i := 0…#ks - 1:
+                        if ks[i] = lo + si:
+                            entry ← vals[i]
+                    self.extra.push(entry)
+                    si ← si + 1
+                let xv0 : i64 = xslot
+                let d : i64 = self.tmp()
+                self.ir(IR_VTAB, xv0, off0, 0, d, 0)
+                self.ir(IR_RET, d, 0, 0, 0, 0)
+                self.decide(self.tok_line(self.a.ntok[sid × 1¤ptrdiff]), "value-table", shape)
+                return true
+        // labels: one per case, the default, the join
+        let ldef : i64 = self.label()
+        let lend : i64 = self.label()
+        let case_labels : mut i64[] = []
+        foreach _ := 0…#ks - 1:
+            case_labels.push(self.label())
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(lo)
+        self.extra.push(span)
+        self.extra.push(ldef)
+        let s : mut i64 = 0
+        while s < span:
+            let target : mut i64 = ldef
+            foreach i := 0…#ks - 1:
+                if ks[i] = lo + s:
+                    target ← case_labels[i]
+            self.extra.push(target)
+            s ← s + 1
+        self.decide(self.tok_line(self.a.ntok[sid × 1¤ptrdiff]), "jump-table", shape)
+        self.ir(IR_JTAB, xslot, off, 0, 0, 0)
+        foreach i := 0…#ks - 1:
+            self.ir(IR_LABEL, case_labels[i], 0, 0, 0, 0)
+            self.lower_block(blks[i], false, ret_ty)
+            self.ir(IR_JMP, lend, 0, 0, 0, 0)
+        self.ir(IR_LABEL, ldef, 0, 0, 0, 0)
+        if default_blk ≠ ⁻1:
+            self.lower_block(default_blk, false, ret_ty)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        true
+
+    // the constant a block returns, or the impossible sentinel
+    fn block_ret_const(&self, blk : i64) → i64:
+        let off : i64 = self.a.na[blk × 1¤ptrdiff]
+        if self.a.extra[off × 1¤ptrdiff] ≠ 1:
+            return ⁻4611686018427387904
+        let st : i64 = self.a.extra[(off + 1) × 1¤ptrdiff]
+        if self.kof(st) ≠ NK_RETURN:
+            return ⁻4611686018427387904
+        let e : i64 = self.a.na[st × 1¤ptrdiff]
+        if e = ⁻1:
+            return ⁻4611686018427387904
+        let ek : i64 = self.kof(e)
+        if ek ≠ NK_INT and ek ≠ NK_BOOL:
+            return ⁻4611686018427387904
+        // a constant that happens to be the sentinel itself simply
+        // does not fold; the jump table serves it instead
+        self.a.na[e × 1¤ptrdiff]
+
+    fn elem_of(&self, t : i64) → i64:
+        if ty_is_mat(t):
+            return self.a.minner[ty_midx(t) × 1¤ptrdiff]
+        self.a.fae[ty_fidx(t) × 1¤ptrdiff] if ty_is_farr(t) else ty_elem(t)
+
+    fn farr_size(&self, t : i64) → i64:
+        self.a.fas[ty_fidx(t) × 1¤ptrdiff]
+
+    fn mat_elem(&self, t : i64) → i64:
+        self.a.mel[ty_midx(t) × 1¤ptrdiff]
+
+    fn mat_rr(&self, t : i64) → i64:
+        self.a.mrr[ty_midx(t) × 1¤ptrdiff]
+
+    fn mat_cc(&self, t : i64) → i64:
+        self.a.mcc[ty_midx(t) × 1¤ptrdiff]
+
+    fn mat_dd(&self, t : i64) → i64:
+        self.a.mdd[ty_midx(t) × 1¤ptrdiff]
+
+    fn mat_rank(&self, t : i64) → i64:
+        2 if self.a.mdd[ty_midx(t) × 1¤ptrdiff] = ⁻2 else 3
+
+    fn tup_len(&self, t : i64) → i64:
+        self.a.ttl[ty_tidx(t) × 1¤ptrdiff]
+
+    fn lower_foreach(&mut self, sid : i64, tok : i64, na : i64, body : i64,
+                     ret_ty : i64):
+        let lo_n : i64 = self.a.extra[na × 1¤ptrdiff]
+        let step_n : i64 = self.a.extra[(na + 1) × 1¤ptrdiff]
+        let hi_n : i64 = self.a.extra[(na + 2) × 1¤ptrdiff]
+        let lov : i64 = self.lower_expr(lo_n)
+        let hiv0 : i64 = self.lower_expr(hi_n)
+        let hiv : i64 = self.tmp()
+        self.ir(IR_MOV, hiv0, 0, 0, hiv, 0)
+        let dirv : i64 = self.tmp()
+        if step_n = ⁻1:
+            // without a step the direction follows the bounds: a cmov,
+            // not a branch
+            let c : i64 = self.tmp()
+            self.ir(IR_CLE, lov, hiv, 0, c, 64 + 256)
+            let one : i64 = self.tmp()
+            self.ir(IR_CONST, 1, 0, 0, one, 0)
+            let mone : i64 = self.tmp()
+            self.ir(IR_CONST, ⁻1, 0, 0, mone, 0)
+            self.ir(IR_SEL, c, one, mone, dirv, 0)
+        else:
+            let sv : i64 = self.lower_expr(step_n)
+            self.ir(IR_MOV, sv, 0, 0, dirv, 0)
+            let lz : i64 = self.label()
+            self.ir(IR_JNZ, dirv, lz, 0, 0, 0)
+            let m : i64 = self.intern("a foreach step of zero never arrives (line " ⧺ i64_str(self.tok_line(tok)) ⧺ ")\n")
+            self.ir(IR_ABORT, m, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lz, 0, 0, 0, 0)
+        self.lower_range_loop(sid, lov, hiv, dirv, body, ret_ty)
+
+    // still inside: (dir > 0 ∧ i ≤ hi) ∨ (dir < 0 ∧ i ≥ hi) --
+    // materialized comparisons, no branches until the one decision
+    fn range_alive(&mut self, ivar : i64, hiv : i64, dirv : i64) → i64:
+        let z : i64 = self.tmp()
+        self.ir(IR_CONST, 0, 0, 0, z, 0)
+        let up : i64 = self.tmp()
+        self.ir(IR_CGT, dirv, z, 0, up, 64 + 256)
+        let le : i64 = self.tmp()
+        self.ir(IR_CLE, ivar, hiv, 0, le, 64 + 256)
+        let c1 : i64 = self.tmp()
+        self.ir(IR_BAND, up, le, 0, c1, 64)
+        let down : i64 = self.tmp()
+        self.ir(IR_CLT, dirv, z, 0, down, 64 + 256)
+        let ge : i64 = self.tmp()
+        self.ir(IR_CGE, ivar, hiv, 0, ge, 64 + 256)
+        let c2 : i64 = self.tmp()
+        self.ir(IR_BAND, down, ge, 0, c2, 64)
+        let c : i64 = self.tmp()
+        self.ir(IR_BORR, c1, c2, 0, c, 64)
+        c
+
+    fn lower_range_loop(&mut self, sid : i64, lov : i64, hiv : i64,
+                        dirv : i64, body : i64, ret_ty : i64):
+        let ivar : i64 = self.nslot[sid × 1¤ptrdiff]
+        self.ir(IR_MOV, lov, 0, 0, ivar, 0)
+        let saved_base : i64 = self.tbase
+        self.tbase ← self.tnext
+        let ltop : i64 = self.label()
+        let lcont : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+        let c : i64 = self.range_alive(ivar, hiv, dirv)
+        self.ir(IR_JZ, c, lend, 0, 0, 0)
+        self.breaks.push(lend)
+        self.conts.push(lcont)
+        self.lower_block(body, false, ret_ty)
+        _ ← self.breaks.pop() ?? 0
+        _ ← self.conts.pop() ?? 0
+        self.ir(IR_LABEL, lcont, 0, 0, 0, 0)
+        let ni : i64 = self.tmp()
+        self.ir(IR_ADDW, ivar, dirv, 0, ni, 64 + 256)
+        self.ir(IR_MOV, ni, 0, 0, ivar, 0)
+        self.ir(IR_JMP, ltop, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        self.tbase ← saved_base
+
+    fn lower_foreacha(&mut self, sid : i64, tok : i64, arr : i64, body : i64,
+                      ret_ty : i64):
+        if ty_is_rg(self.tof(arr)):
+            let rv : i64 = self.lower_expr(arr)
+            let lo9 : i64 = self.tmp()
+            self.ir(IR_FLD, rv, 0, 0, lo9, 0)
+            let st9 : i64 = self.tmp()
+            self.ir(IR_FLD, rv, 1, 0, st9, 0)
+            let hi9 : i64 = self.tmp()
+            self.ir(IR_FLD, rv, 2, 0, hi9, 0)
+            let lz9 : i64 = self.label()
+            self.ir(IR_JNZ, st9, lz9, 0, 0, 0)
+            let m9 : i64 = self.intern("range step must not be zero (line " ⧺ i64_str(self.tok_line(tok)) ⧺ ")\n")
+            self.ir(IR_ABORT, m9, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lz9, 0, 0, 0, 0)
+            self.lower_range_loop(sid, lo9, hi9, st9, body, ret_ty)
+            return
+        let evar : i64 = self.nslot[sid × 1¤ptrdiff]
+        if self.tof(arr) = TY_STR:
+            // A string is walked where it lies.  Laying its characters
+            // out first would cost eight bytes for every byte read, and
+            // the arena does not take them back -- a walk repeated is a
+            // walk that grows.  Each turn decodes one character and says
+            // where the next one begins.
+            let sv : i64 = self.lower_expr(arr)
+            let sb : i64 = self.tmp()
+            self.ir(IR_FLD, sv, 1, 0, sb, 0)
+            let si : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, si, 0)
+            let sbase : i64 = self.tbase
+            self.tbase ← self.tnext
+            let stop : i64 = self.label()
+            let scont : i64 = self.label()
+            let send : i64 = self.label()
+            self.ir(IR_LABEL, stop, 0, 0, 0, 0)
+            let sc : i64 = self.tmp()
+            self.ir(IR_CLT, si, sb, 0, sc, 64 + 256)
+            self.ir(IR_JZ, sc, send, 0, 0, 0)
+            let snext : i64 = self.tmp()
+            self.ir(IR_SDEC, sv, si, snext, evar, 0)
+            // the position moves before the body, so a continue leaves
+            // the walk where the next character begins
+            self.ir(IR_MOV, snext, 0, 0, si, 0)
+            self.breaks.push(send)
+            self.conts.push(scont)
+            self.lower_block(body, false, ret_ty)
+            _ ← self.breaks.pop() ?? 0
+            _ ← self.conts.pop() ?? 0
+            self.ir(IR_LABEL, scont, 0, 0, 0, 0)
+            self.ir(IR_JMP, stop, 0, 0, 0, 0)
+            self.ir(IR_LABEL, send, 0, 0, 0, 0)
+            self.tbase ← sbase
+            return
+        let av0 : i64 = self.lower_expr(arr)
+        let av : mut i64 = av0
+        let desc : i64 = self.tmp()
+        self.ir(IR_MOV, av, 0, 0, desc, 0)
+        let iv : i64 = self.tmp()
+        self.ir(IR_CONST, 0, 0, 0, iv, 0)
+        let saved_base : i64 = self.tbase
+        self.tbase ← self.tnext
+        let ltop : i64 = self.label()
+        let lcont : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+        let n : i64 = self.tmp()
+        self.ir(IR_ALEN, desc, 0, 0, n, 0)
+        let c : i64 = self.tmp()
+        self.ir(IR_CLT, iv, n, 0, c, 64 + 256)
+        self.ir(IR_JZ, c, lend, 0, 0, 0)
+        if self.a.nc[sid × 1¤ptrdiff] ≠ 0:
+            self.ir(IR_AREF, desc, iv, 0, evar, 0)
+        else:
+            self.ir(IR_AIDX, desc, iv, 0, evar, 0)
+        self.breaks.push(lend)
+        self.conts.push(lcont)
+        self.lower_block(body, false, ret_ty)
+        _ ← self.breaks.pop() ?? 0
+        _ ← self.conts.pop() ?? 0
+        self.ir(IR_LABEL, lcont, 0, 0, 0, 0)
+        let one : i64 = self.tmp()
+        self.ir(IR_CONST, 1, 0, 0, one, 0)
+        let ni : i64 = self.tmp()
+        self.ir(IR_ADDW, iv, one, 0, ni, 64 + 256)
+        self.ir(IR_MOV, ni, 0, 0, iv, 0)
+        self.ir(IR_JMP, ltop, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        self.tbase ← saved_base
+
+// one λ becomes one function: the parameters arrive in the argument
+// registers, the box rides behind them, and the captures come out of
+// the box into the slots the body reads
+fn lower_lambda_fn(lw : &mut Lower, a : Ast, chk : Chk, j : i64) → IrFn:
+    while #lw.op > 0:
+        _ ← lw.op.pop() ?? 0
+        _ ← lw.ia.pop() ?? 0
+        _ ← lw.ib.pop() ?? 0
+        _ ← lw.ic.pop() ?? 0
+        _ ← lw.idd.pop() ?? 0
+        _ ← lw.iww.pop() ?? 0
+    while #lw.extra > 0:
+        _ ← lw.extra.pop() ?? 0
+    lw.nlabels ← 0
+    let nid : i64 = chk.lams[j × 1¤ptrdiff]
+    let loff : i64 = a.na[nid × 1¤ptrdiff]
+    let np : i64 = a.extra[loff × 1¤ptrdiff]
+    let ncap : i64 = a.extra[(loff + 1 + np × 2) × 1¤ptrdiff]
+    let ret : i64 = a.extra[(loff + 2 + np × 2 + ncap) × 1¤ptrdiff]
+    lw.tbase ← chk.lamns[j × 1¤ptrdiff] ⌈ (np + 2)
+    lw.tnext ← lw.tbase
+    lw.tmax ← lw.tbase
+    lw.in_wrap ← 0
+    lw.cur_ret ← ret
+    lw.post_label ← ⁻1
+    lw.res_vreg ← ⁻1
+    lw.cur_fname ← "λ"
+    // the prologue put argument k in slot k, and the checker's slots
+    // for the parameters may overlap those very cells -- so everything
+    // incoming is parked in fresh temporaries first, then placed
+    let parked : mut i64[] = []
+    let pi : mut i64 = 0
+    while pi < np:
+        let pt9 : i64 = lw.tmp()
+        lw.ir(IR_MOV, pi, 0, 0, pt9, 0)
+        parked.push(pt9)
+        pi ← pi + 1
+    let boxt : i64 = lw.tmp()
+    lw.ir(IR_MOV, np, 0, 0, boxt, 0)
+    let pj : mut i64 = 0
+    while pj < np:
+        lw.ir(IR_MOV, parked[pj × 1¤ptrdiff], 0, 0, a.extra[(loff + 1 + pj × 2) × 1¤ptrdiff], 0)
+        pj ← pj + 1
+    let pslot0 : i64 = a.extra[(loff + 1) × 1¤ptrdiff]
+    let ci : mut i64 = 0
+    while ci < ncap:
+        lw.ir(IR_FLD, boxt, 1 + ci, 0, pslot0 + np + ci, 0)
+        ci ← ci + 1
+    let bodyn : i64 = a.nb[nid × 1¤ptrdiff]
+    if a.nkind[bodyn × 1¤ptrdiff] = NK_BLOCK:
+        // statements, ending in a trailing value or a return; both go
+        // through lower_ret_value, which boxes under an optional answer
+        lw.lower_block(bodyn, true, ret)
+    else:
+        let rv : i64 = lw.lower_expr(bodyn)
+        if ty_is_opt(ret) and not ty_is_opt(lw.tof(bodyn)):
+            // a bare value under an optional answer boxes itself
+            let bb : i64 = lw.tmp()
+            lw.ir(IR_SNEW, 1, 0, 0, bb, 0)
+            lw.ir(IR_FSTO, bb, 0, rv, 0, 0)
+            lw.ir(IR_RET, bb, 0, 0, 0, 0)
+        else:
+            lw.ir(IR_RET, rv, 0, 0, 0, 0)
+    let opc : mut i64[] = []
+    let iac : mut i64[] = []
+    let ibc : mut i64[] = []
+    let icc : mut i64[] = []
+    let idc : mut i64[] = []
+    let iwc : mut i64[] = []
+    let exc : mut i64[] = []
+    foreach v := lw.op:
+        opc.push(v)
+    foreach v := lw.ia:
+        iac.push(v)
+    foreach v := lw.ib:
+        ibc.push(v)
+    foreach v := lw.ic:
+        icc.push(v)
+    foreach v := lw.idd:
+        idc.push(v)
+    foreach v := lw.iww:
+        iwc.push(v)
+    if #lw.extra > 0:
+        foreach v := lw.extra:
+            exc.push(v)
+    (IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
+          extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels})
+
+// one partial-application site becomes one shim: the remaining
+// arguments arrive in registers, the box rides behind them, and the
+// bound values come out of the box in front
+fn lower_shim_fn(lw : &mut Lower, chk : Chk, j : i64) → IrFn:
+    while #lw.op > 0:
+        _ ← lw.op.pop() ?? 0
+        _ ← lw.ia.pop() ?? 0
+        _ ← lw.ib.pop() ?? 0
+        _ ← lw.ic.pop() ?? 0
+        _ ← lw.idd.pop() ?? 0
+        _ ← lw.iww.pop() ?? 0
+    while #lw.extra > 0:
+        _ ← lw.extra.pop() ?? 0
+    lw.nlabels ← 0
+    let target : i64 = chk.psfn[j × 1¤ptrdiff]
+    let k : i64 = chk.psk[j × 1¤ptrdiff]
+    let np : i64 = chk.psnp[j × 1¤ptrdiff]
+    let rem : i64 = np - k
+    let box9 : i64 = rem
+    lw.tbase ← rem + 2
+    lw.tnext ← lw.tbase
+    lw.tmax ← lw.tbase
+    lw.in_wrap ← 0
+    lw.cur_ret ← TY_I64
+    lw.post_label ← ⁻1
+    lw.res_vreg ← ⁻1
+    lw.cur_fname ← "λ"
+    let bound : mut i64[] = []
+    let bi : mut i64 = 0
+    while bi < k:
+        let bv : i64 = lw.tmp()
+        lw.ir(IR_FLD, box9, 1 + bi, 0, bv, 0)
+        bound.push(bv)
+        bi ← bi + 1
+    let off : i64 = @dropunit(#lw.extra)
+    if target >= 0:
+        lw.extra.push(np)
+    else:
+        lw.extra.push(np + 1)
+    foreach v := bound:
+        lw.extra.push(v)
+    let ri : mut i64 = 0
+    while ri < rem:
+        lw.extra.push(ri)
+        ri ← ri + 1
+    let d : i64 = lw.tmp()
+    if target >= 0:
+        lw.ir(IR_CALL, target, off, 0, d, 0)
+    else:
+        let src : i64 = lw.tmp()
+        lw.ir(IR_FLD, box9, 1 + k, 0, src, 0)
+        lw.extra.push(src)
+        let ad : i64 = lw.tmp()
+        lw.ir(IR_FLD, src, 0, 0, ad, 0)
+        lw.ir(IR_CALLI, ad, off, 0, d, 0)
+    lw.ir(IR_RET, d, 0, 0, 0, 0)
+    let opc : mut i64[] = []
+    let iac : mut i64[] = []
+    let ibc : mut i64[] = []
+    let icc : mut i64[] = []
+    let idc : mut i64[] = []
+    let iwc : mut i64[] = []
+    let exc : mut i64[] = []
+    foreach v := lw.op:
+        opc.push(v)
+    foreach v := lw.ia:
+        iac.push(v)
+    foreach v := lw.ib:
+        ibc.push(v)
+    foreach v := lw.ic:
+        icc.push(v)
+    foreach v := lw.idd:
+        idc.push(v)
+    foreach v := lw.iww:
+        iwc.push(v)
+    if #lw.extra > 0:
+        foreach v := lw.extra:
+            exc.push(v)
+    (IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
+          extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels})
+
+fn lower_stub_fn(lw : &mut Lower, np : i64) → IrFn:
+    while #lw.op > 0:
+        _ ← lw.op.pop() ?? 0
+        _ ← lw.ia.pop() ?? 0
+        _ ← lw.ib.pop() ?? 0
+        _ ← lw.ic.pop() ?? 0
+        _ ← lw.idd.pop() ?? 0
+        _ ← lw.iww.pop() ?? 0
+    while #lw.extra > 0:
+        _ ← lw.extra.pop() ?? 0
+    lw.nlabels ← 0
+    lw.tbase ← np + 1
+    lw.tnext ← lw.tbase
+    lw.tmax ← lw.tbase
+    lw.ir(IR_RET, ⁻1, 0, 0, 0, 0)
+    let opc : mut i64[] = []
+    let iac : mut i64[] = []
+    let ibc : mut i64[] = []
+    let icc : mut i64[] = []
+    let idc : mut i64[] = []
+    let iwc : mut i64[] = []
+    foreach v := lw.op:
+        opc.push(v)
+    foreach v := lw.ia:
+        iac.push(v)
+    foreach v := lw.ib:
+        ibc.push(v)
+    foreach v := lw.ic:
+        icc.push(v)
+    foreach v := lw.idd:
+        idc.push(v)
+    foreach v := lw.iww:
+        iwc.push(v)
+    (IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
+          extra: [], nvregs: lw.tmax, nlabels: 0})
+
+fn lower_fn(lw : &mut Lower, a : Ast, chk : Chk, f : i64) → IrFn:
+    let d := a.fns[f × 1¤ptrdiff]
+    while #lw.op > 0:
+        _ ← lw.op.pop() ?? 0
+        _ ← lw.ia.pop() ?? 0
+        _ ← lw.ib.pop() ?? 0
+        _ ← lw.ic.pop() ?? 0
+        _ ← lw.idd.pop() ?? 0
+        _ ← lw.iww.pop() ?? 0
+    while #lw.extra > 0:
+        _ ← lw.extra.pop() ?? 0
+    lw.nlabels ← 0
+    lw.tbase ← chk.fslots[f × 1¤ptrdiff]
+    lw.tnext ← lw.tbase
+    lw.tmax ← lw.tbase
+    lw.in_wrap ← 0
+    lw.cur_ret ← d.ret
+    lw.post_label ← ⁻1
+    lw.res_vreg ← ⁻1
+    lw.cur_fname ← d.name
+    if d.pre_off ≠ ⁻1:
+        let n : i64 = a.extra[d.pre_off × 1¤ptrdiff]
+        let j : mut i64 = 0
+        while j < n:
+            lw.tnext ← lw.tbase
+            let c : i64 = a.extra[(d.pre_off + 1 + j) × 1¤ptrdiff]
+            let cv : i64 = lw.lower_expr(c)
+            let lok : i64 = lw.label()
+            lw.ir(IR_JNZ, cv, lok, 0, 0, 0)
+            let m : i64 = lw.intern("precondition of '" ⧺ d.name ⧺ "' does not hold\n")
+            lw.ir(IR_ABORT, m, 0, 0, 0, 0)
+            lw.ir(IR_LABEL, lok, 0, 0, 0, 0)
+            j ← j + 1
+    if d.post_off ≠ ⁻1 and d.ret ≠ TY_UNIT:
+        lw.post_label ← lw.label()
+        // the checker gave the result's name the slot after the
+        // parameters, so the value is put where the conditions read it
+        lw.res_vreg ← a.extra[d.params_off × 1¤ptrdiff]
+    lw.lower_block(d.body, true, d.ret)
+    if d.ret = TY_UNIT:
+        lw.ir(IR_RET, ⁻1, 0, 0, 0, 0)
+    if lw.post_label ≠ ⁻1:
+        lw.ir(IR_LABEL, lw.post_label, 0, 0, 0, 0)
+        let n : i64 = a.extra[d.post_off × 1¤ptrdiff]
+        let j : mut i64 = 0
+        while j < n:
+            lw.tnext ← lw.tbase
+            let c : i64 = a.extra[(d.post_off + 2 + j × 2) × 1¤ptrdiff]
+            let cv : i64 = lw.lower_expr(c)
+            let lok : i64 = lw.label()
+            lw.ir(IR_JNZ, cv, lok, 0, 0, 0)
+            let m : i64 = lw.intern("postcondition of '" ⧺ d.name ⧺ "' does not hold\n")
+            lw.ir(IR_ABORT, m, 0, 0, 0, 0)
+            lw.ir(IR_LABEL, lok, 0, 0, 0, 0)
+            j ← j + 1
+        lw.ir(IR_RET, lw.res_vreg, 0, 0, 0, 0)
+    let opc : mut i64[] = []
+    let iac : mut i64[] = []
+    let ibc : mut i64[] = []
+    let icc : mut i64[] = []
+    let idc : mut i64[] = []
+    let iwc : mut i64[] = []
+    let exc : mut i64[] = []
+    foreach v := lw.op:
+        opc.push(v)
+    foreach v := lw.ia:
+        iac.push(v)
+    foreach v := lw.ib:
+        ibc.push(v)
+    foreach v := lw.ic:
+        icc.push(v)
+    foreach v := lw.idd:
+        idc.push(v)
+    foreach v := lw.iww:
+        iwc.push(v)
+    if #lw.extra > 0:
+        foreach v := lw.extra:
+            exc.push(v)
+    assert(#opc = #iac and #opc = #ibc and #opc = #icc, "ir arrays in step")
+    assert(#opc = #idc and #opc = #iwc, "ir arrays in step")
+    assert(lw.tmax >= chk.fslots[f × 1¤ptrdiff], "the frame covers the locals")
+    (IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc, extra: exc,
+          nvregs: lw.tmax, nlabels: lw.nlabels})
+

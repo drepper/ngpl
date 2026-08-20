@@ -36,11 +36,12 @@ testdir=$topdir/tests/compile
 workdir=$(mktemp -d) || exit 1
 trap 'rm -rf "$workdir"' EXIT
 
+source "$topdir"/build/sources.sh
 if [[ $compiler == native ]]; then
     "$topdir"/build/bootstrap.sh || exit 1
     ngplc() { "$topdir"/build/ngplc "$@"; }
 else
-    ngplc() { python -m interp src/ngplc.ngpl -- "$@"; }
+    ngplc() { python -m interp "${NGPLC_SOURCES[@]}" -- "$@"; }
 fi
 
 pass=0
@@ -86,6 +87,71 @@ for t in "$testdir"/t*.ngpl; do
         diff "$workdir/$name.interp.out" "$workdir/$name.native.out" | head -10 | sed 's/^/    /'
         fail=$((fail + 1))
         continue
+    fi
+
+    echo "ok   $name"
+    pass=$((pass + 1))
+done
+
+# ---------------------------------------------------------------------------
+# Multi-file programs: several sources read as if they were one.  Each
+# directory under multi/ holds its files and a `sources` naming them in
+# the order they are compiled, which is part of the program -- an enum
+# must be declared before it is used as a type.
+#
+# A directory whose files carry a @build recipe is compiled a second
+# time through --build, and the two binaries must be byte-identical:
+# that is what says the recipe names exactly the files `sources` does,
+# rather than something that merely also works.
+# ---------------------------------------------------------------------------
+for d in "$testdir"/multi/*/; do
+    [ -f "$d/sources" ] || continue
+    name=multi-$(basename "$d")
+    files=()
+    while read -r f; do
+        [ -n "$f" ] && files+=("$d$f")
+    done < "$d/sources"
+
+    python -m interp --skip-tests "${files[@]}" \
+        > "$workdir/$name.interp.out" 2>/dev/null
+    interp_rc=$?
+
+    if ! ngplc "${files[@]}" -o "$workdir/$name.bin" \
+            > "$workdir/$name.ngplc.out" 2>&1; then
+        echo "FAIL $name: ngplc refused it"
+        sed 's/^/    /' "$workdir/$name.ngplc.out" | head -5
+        fail=$((fail + 1))
+        continue
+    fi
+    "$workdir/$name.bin" > "$workdir/$name.native.out" 2>/dev/null
+    native_rc=$?
+
+    if [ $interp_rc -ne $native_rc ]; then
+        echo "FAIL $name: exit codes differ (interp $interp_rc, native $native_rc)"
+        fail=$((fail + 1))
+        continue
+    fi
+    if ! diff -q "$workdir/$name.interp.out" "$workdir/$name.native.out" > /dev/null; then
+        echo "FAIL $name: outputs differ"
+        diff "$workdir/$name.interp.out" "$workdir/$name.native.out" | head -10 | sed 's/^/    /'
+        fail=$((fail + 1))
+        continue
+    fi
+
+    recipe=$(grep -l '@build' "${files[@]}" 2>/dev/null | head -1)
+    if [ -n "$recipe" ]; then
+        if ! ngplc --build "$recipe" -o "$workdir/$name.build.bin" \
+                > "$workdir/$name.build.out" 2>&1; then
+            echo "FAIL $name: --build refused the recipe"
+            sed 's/^/    /' "$workdir/$name.build.out" | head -5
+            fail=$((fail + 1))
+            continue
+        fi
+        if ! cmp -s "$workdir/$name.bin" "$workdir/$name.build.bin"; then
+            echo "FAIL $name: --build produced a different binary than the file list"
+            fail=$((fail + 1))
+            continue
+        fi
     fi
 
     echo "ok   $name"

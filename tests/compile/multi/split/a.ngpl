@@ -1,0 +1,17 @@
+// The first of three files that make one program.  It declares the
+// enum, which the file after it uses as a type -- an enum is registered
+// as it is read, so this file has to come first.  It also carries the
+// build recipe, which no file of its own is needed for.
+
+enum Level:
+    quiet
+    loud
+
+fn greeting(l : Level) → str:
+    "hello" if l = Level.quiet else "HELLO"
+
+@build
+fn build():
+    foreach part := ["a", "b", "c"]:
+        std.build.source(part ⧺ ".ngpl")
+    std.build.output("split")

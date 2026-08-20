@@ -273,9 +273,12 @@ def _parse_args() -> argparse.Namespace:
         prog="ngpli",
         description="Prototype interpreter for the NGPL programming language.",
     )
-    parser.add_argument("source", nargs="?",
-                        help="source file to interpret; without one the "
-                             "interpreter starts a REPL")
+    parser.add_argument("sources", nargs="*", metavar="SOURCE",
+                        help="source files to interpret, read as if they were "
+                             "one file concatenated in the order given; "
+                             "without any the interpreter starts a REPL.  "
+                             "Name them together -- an option written between "
+                             "two of them is not understood")
     parser.add_argument("--repl", action="store_true",
                         help="enter the REPL after loading the source instead "
                              "of running the startup function")
@@ -319,22 +322,26 @@ def _parse_args() -> argparse.Namespace:
                             "cumulative time, and print the record when "
                             "the process ends (or the time limit stops "
                             "it); NGPLI_FN_STATS=1 does the same")
-    parser.add_argument("program_args", nargs=argparse.REMAINDER,
-                       help="arguments passed to the interpreted program; "
-                            "separate them from the interpreter's own options "
-                            "with --")
-    return parser.parse_args()
+    # Everything after a bare `--` belongs to the interpreted program and
+    # is split off before argparse sees it, so it is not an argument here.
+    ours, theirs = _split_at_separator(sys.argv[1:])
+    args = parser.parse_args(ours)
+    args.program_args = theirs
+    return args
 
 
-def _program_args(raw: list[str]) -> list[str]:
-    """Strip the optional `--` separator from the interpreted program's args.
+def _split_at_separator(argv: list[str]) -> tuple[list[str], list[str]]:
+    """Divide a command line at the first bare `--`.
 
-    argparse.REMAINDER keeps the separator when one is present, but the
-    program should see only what follows it.
+    The interpreter's own options come first and the interpreted
+    program's arguments follow.  argparse.REMAINDER used to draw this
+    line, but it cannot: a REMAINDER beside a positional that takes
+    several file names swallows the separator along with the files.
     """
-    if raw and raw[0] == "--":
-        return raw[1:]
-    return raw
+    if "--" in argv:
+        at = argv.index("--")
+        return argv[:at], argv[at + 1:]
+    return argv, []
 
 
 def _show_error(exc: BaseException, source: str, source_path: str,
@@ -3056,32 +3063,56 @@ def main():
         from interp.eval import enable_fn_stats
         enable_fn_stats()
 
-    source_path = args.source
+    # Several sources are read as if they were one file: the program is
+    # what they say together, in the order they were named.  The name of
+    # the first stands for the whole where a single one is wanted -- as
+    # the program's own argv[0] -- while `starts` remembers which line
+    # each file began on, so a diagnostic still points into the file it
+    # came from.
+    source_paths = args.sources
+    source_path = source_paths[0] if source_paths else None
     source = ""
     definitions = []
 
-    if source_path is not None:
-        if not os.path.isfile(source_path):
-            print(f"Error: file not found: {source_path}", file=sys.stderr)
-            sys.exit(1)
+    if source_paths:
+        pieces: list[str] = []
+        starts: list[int] = []
+        line_count = 0
+        for path in source_paths:
+            if not os.path.isfile(path):
+                print(f"Error: file not found: {path}", file=sys.stderr)
+                sys.exit(1)
 
-        with open(source_path, "rb") as f:
-            raw = f.read()
-        try:
-            source = raw.decode("utf-8")
-        except UnicodeDecodeError as e:
-            # The language mandates UTF-8; what is not is refused with
-            # its position rather than surfacing as a decoder traceback.
-            line = raw.count(b"\n", 0, e.start) + 1
-            col = e.start - (raw.rfind(b"\n", 0, e.start) + 1) + 1
-            print(f"error: {source_path}:{line}:{col}: the source is not "
-                  f"UTF-8: byte 0x{raw[e.start]:02X} {e.reason}",
-                  file=sys.stderr)
-            sys.exit(1)
+            with open(path, "rb") as f:
+                raw = f.read()
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError as e:
+                # The language mandates UTF-8; what is not is refused
+                # with its position rather than surfacing as a decoder
+                # traceback.  The count is over this file's own bytes,
+                # so it says the position in the file that is wrong.
+                line = raw.count(b"\n", 0, e.start) + 1
+                col = e.start - (raw.rfind(b"\n", 0, e.start) + 1) + 1
+                print(f"error: {path}:{line}:{col}: the source is not "
+                      f"UTF-8: byte 0x{raw[e.start]:02X} {e.reason}",
+                      file=sys.stderr)
+                sys.exit(1)
+
+            # A file ends its last line before the next one starts.
+            # Without this the two would run together into a single line
+            # spanning a file boundary, which nothing downstream could
+            # make sense of.
+            if text and not text.endswith("\n"):
+                text += "\n"
+            starts.append(line_count + 1)
+            line_count += text.count("\n")
+            pieces.append(text)
+        source = "".join(pieces)
 
         # A diagnostic raised mid-run never reaches the top level, so it
         # finds the text to point into here rather than being handed it.
-        set_source(source, source_path)
+        set_source(source, source_path, starts, source_paths)
 
         try:
             tokens = process_indentation(tokenize(source))
@@ -3106,7 +3137,7 @@ def main():
         sys.exit(1)
 
     env = Env()
-    setup_std_env(env, source_path or "", _program_args(args.program_args))
+    setup_std_env(env, source_path or "", args.program_args)
 
     evaluator = Evaluator(env)
     try:

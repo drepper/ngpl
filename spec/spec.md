@@ -8548,6 +8548,86 @@ The builtin units use conventional abbreviations: `B` for byte, `m` for meter, `
 The `¤` syntax keeps unit annotations visually distinct from type annotations (which use `:`) and avoids ambiguity with function call or subscript delimiters.  The lossless conversion check for integers prevents silent truncation when converting between units of different scale.
 
 
+Chapter 8: Modules and Build System — Source Files and the Build Function
+-------------------------------------------------------------------------
+
+### Several Files, One Program
+
+A compilation names one source file or several.  Several are read **as if they were one file, concatenated in the order they were named**:
+
+```
+ngplc src/lex.ngpl src/parse.ngpl src/check.ngpl -o out
+```
+
+There is no separate compilation and no linking here: what the files say together is the program, and a name defined in one is a name in all of them.  A file boundary is a line boundary — a file that does not end in a newline is given one — so a definition never spans two files.
+
+A diagnostic names the file it came from and the line within that file, not the line within the concatenation.  A file therefore reports the same positions whether it is compiled alone or beside twenty others, which is what makes the order below a matter of meaning rather than of message quality.
+
+#### The order is part of the program
+
+Most definitions may be written in any order.  A `struct` in particular may be declared below whatever names it, because the parser sweeps the token stream for struct names before it parses anything.
+
+Two kinds are not free, because they are registered as they are read:
+
+- an `enum` must be declared before its name is used as a type;
+- a `unit` must be declared before the measure is written.
+
+So the order of the file list is significant, and a build that lists its sources alphabetically — as a shell glob would — is not the same program as one that lists them in dependency order.  This is a limitation of the present implementation and not a property the language wants; when the module system of this chapter's roadmap arrives, it subsumes it.
+
+### The Build Function
+
+A program may carry one function annotated `@build`.  It is the build recipe: what the program is made of, and what should be done with it.
+
+```
+@build
+fn build():
+    foreach part := ["lex", "parse", "check"]:
+        std.build.source("src/" ⧺ part ⧺ ".ngpl")
+    std.build.output_dir("build")
+    std.build.output("ngplc")
+```
+
+The recipe lives in the source, not in a file of its own — any source file may carry it — and it takes no parameters.  A program carries **at most one**; a second is refused where it is written.
+
+A recipe is **comptime-only**: it runs while the program is being built and **no code for it is written into the executable**.  It cannot be called from the program, and the program cannot observe what it declared.
+
+`--build FILE` finds the recipe in `FILE`, runs it, and compiles the sources it names:
+
+```
+ngplc --build src/main.ngpl
+```
+
+Because only `FILE` is read at that point — the other sources are what the recipe is for — a recipe reaches what its own file defines and no more.
+
+#### What a Recipe Declares
+
+Each thing is declared by naming it and answered by a reader.  The three that hold a list answer it in the order it was declared; the two that hold a single name are last-writer-wins and answer `""` until one is declared.
+
+| declares | answers | |
+|---|---|---|
+| `std.build.source(p)` | `std.build.sources()` | a source file of the program |
+| `std.build.output(n)` | `std.build.output_name()` | what the result is called |
+| `std.build.output_dir(d)` | `std.build.output_directory()` | where the result goes |
+| `std.build.search_path(p)` | `std.build.paths()` | where a source is looked for |
+| `std.build.flag(f)` | `std.build.flags()` | a compiler flag |
+
+A relative source name is taken relative to the directory `FILE` is in, then against each search path in the order declared, so a recipe means the same thing from whatever directory it is run.
+
+Where the recipe and the command line say different things, **the command line wins**: it is the more specific statement of intent.  A flag the compiler does not have is refused rather than ignored, because accepting a directive and then doing something else is the one behaviour guaranteed to be wrong.
+
+#### What a Recipe May Say
+
+A recipe is a program, not a list — the example above computed its sources — but it is a program in a subset.  A recipe binds names, tests them, loops, joins strings, and calls the functions its own file defines.  It holds integers, truth values, strings and arrays of strings.
+
+The interpreter reads a recipe with the same evaluator it runs everything else with, so it accepts recipes the compiler does not.  The compiler **refuses what it cannot do, by name**, rather than ignoring it — a recipe that the compiler accepts means the same thing under both, and a recipe that reaches past the subset is told which construct did it.
+
+The subset is where compile-time evaluation begins; Chapter 11 is where it goes.
+
+### Roadmap
+
+The module system proper — compilation units, imports, dependency resolution, and the SBOM written into the output — is not yet designed.  The build function is the part of this chapter that exists, and it exists first because the compiler's own sources needed it.
+
+
 Chapter 12: The Interpreter — The Interactive Read-Eval-Print Loop
 ------------------------------------------------------------------
 
@@ -8586,16 +8666,22 @@ A value carrying a unit shows the unit as it always did, after the type:
 
 ### Reading the Build Function
 
-A program may carry one `@build` function.  It is the build recipe; the compiler will one day run it.  The interpreter *reads* it — evaluates it before anything else runs — for what it declares, and no more:
+A program may carry one `@build` function: the build recipe, described in full in Chapter 8.  The interpreter *reads* it — evaluates it before anything else runs — for what it declares, and no more; acting on the declarations is the compiler's business:
 
 ```
 @build
 fn build():
+    foreach part := ["lex", "parse", "check"]:
+        std.build.source("src/" ⧺ part ⧺ ".ngpl")
+    std.build.output_dir("build")
+    std.build.output("demo")
     std.build.search_path("vendor")
     std.build.flag("contracts=enforce")
 ```
 
-`std.build.search_path(p)` and `std.build.flag(f)` declare a search path and a compiler flag; `std.build.paths()` and `std.build.flags()` answer what was declared, in order.  The function takes no parameters, and a program carries at most one.
+A recipe is a program, not a list, so the sources above were computed rather than written out.  Because the interpreter evaluates it with the same evaluator it runs everything else with, the recipes it accepts are a superset of the ones the compiler accepts; Chapter 8 says what the compiler's subset holds.
+
+The function takes no parameters, and a program carries at most one.
 
 ### Entering the REPL
 

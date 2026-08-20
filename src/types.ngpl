@@ -1,0 +1,357 @@
+// ===========================================================================
+// Types: one integer encodes what a value is
+// ===========================================================================
+//
+//   0                unit (∅ -- a function that answers nothing)
+//   2                bool
+//   3                str
+//   8                an untyped integer literal, not yet committed
+//   16 + s + 2b + 256u   an integer type: s = 1 when signed, b = bits,
+//                        u = 0 none, 1 ¤ptrdiff, 2 ¤byte
+//   1024 + i         the struct whose definition came i-th
+//   2048 + base      an optional holding a base-typed value, or ∅
+//   4096 + elem      an array of elem-typed things (integers, structs)
+//   8192 + 2048k + v a hash from key-palette entry k to v-typed values
+//
+// A parameter's type may add 262144×r: r = 1 for a & borrow, 2 for &mut.
+
+let TY_UNIT : i64 = 0
+let TY_BOOL : i64 = 2
+let TY_STR : i64 = 3
+let TY_CHAR : i64 = 4       // one Unicode scalar value, UCS-4 in a slot
+let TY_U32 : i64 = 20       // what .ord() answers
+let TY_FILE : i64 = 5       // an open file, its descriptor inside
+let TY_ALLOC : i64 = 6      // std.arena.allocator(): a token, nothing more
+let TY_DIR : i64 = 7        // std.fs.cwd(): a directory, a token likewise
+let TY_ENTRY : i64 = 10     // one directory entry: a name and a kind
+// 11 was std.filetype, which is an enumeration now and needs no
+// type code of its own
+
+// std.filetype is an enumeration like any other, and the first one
+// every file holds.  It is reached through std, never by its bare
+// name, so the two lookups that read a written name skip past it.
+let EI_FILETYPE : i64 = 0
+let NBUILTIN_ENUMS : i64 = 1
+
+fn builtin_enum_names() → str[]:
+    ["filetype"]
+
+fn builtin_enum_widths() → i64[]:
+    [TY_U32]
+
+// the S_IF* constants from <sys/stat.h>, as the interpreter holds
+// them; the kernel's d_type is this value shifted right twelve
+fn builtin_enum_members() → str[]:
+    ["unknown", "fifo", "chr", "dir", "blk", "reg", "lnk", "sock"]
+
+fn builtin_enum_values() → i64[]:
+    [0, 4096, 8192, 16384, 24576, 32768, 40960, 49152]
+let TY_IOVEC : i64 = 12     // one run of bytes waiting to be written: a base and a length
+let TY_UNT : i64 = 8
+let TY_EMPTY : i64 = 9       // a bare ∅, not yet settled on its optional
+let TY_U64 : i64 = 22        // 16 + 0 + 2×3, the widest unsigned
+let TY_I64 : i64 = 23        // 16 + 1 + 2×3, the widest signed
+let TY_U8 : i64 = 16         // 16 + 0 + 2×0, the narrowest unsigned
+let TY_U16 : i64 = 18        // 16 + 0 + 2×1
+
+let UNIT_NONE : i64 = 0
+let UNIT_PTRDIFF : i64 = 1
+let UNIT_BYTE : i64 = 2
+
+// The measures a file starts with, in the order their indexes run.  A
+// name is what the program writes; the spelling beside it is what a
+// printed value carries, and is the interpreter's for that measure.
+// A unit the program defines is added after these.
+fn unit_names() → str[]:
+    ["", "ptrdiff", "byte", "meter", "second", "kilogram", "count",
+     "distance", "kilometer", "centimeter", "millimeter", "millisecond",
+     "microsecond", "minute", "hour", "gram", "milligram", "ampere",
+     "kelvin", "mole", "candela", "kilobyte", "kibibyte", "megabyte",
+     "mebibyte", "gigabyte", "gibibyte"]
+
+fn unit_marks() → str[]:
+    ["", "ptrdiff", "B", "m", "s", "kg", "count",
+     "distance", "km", "cm", "mm", "ms",
+     "μs", "min", "h", "g", "mg", "A",
+     "K", "mol", "cd", "kB", "KiB", "MB",
+     "MiB", "GB", "GiB"]
+
+// core-2 holds four widths, so two bits say which; the five bits that
+// spelling a width out used to take now say which measure the value
+// carries, and a measure is an index into the file's list of them.
+@pre(bits = 8 or bits = 16 or bits = 32 or bits = 64)
+fn width_index(bits : i64) → i64:
+    0 if bits = 8 else (1 if bits = 16 else (2 if bits = 32 else 3))
+
+@pre(sgn = 0 or sgn = 1)
+@pre(bits = 8 or bits = 16 or bits = 32 or bits = 64)
+@pre(u >= 0 and u < 125)
+fn mk_ity(sgn : i64, bits : i64, u : i64) → i64:
+    16 + sgn + 2 × width_index(bits) + 8 × u
+
+// ty_is_int and the accessors below run for every node the checker
+// touches; the encoding invariants are enforced at mk_ity and the
+// other constructors instead of per read -- the recorded exception
+// the contract policy allows for measured hot paths.
+fn ty_is_int(t : i64) → bool:
+    t >= 16 and t < 1024
+
+fn ty_is_struct(t : i64) → bool:
+    t >= 1024 and t < 1792
+
+// enums: 1792 + the file's index for the enum.  They sit beside the
+// structs and below 2048 so an optional of one is its base and 2048,
+// as an optional of anything else below there is.
+fn ty_is_enum(t : i64) → bool:
+    t >= 1792 and t < 2048
+
+@pre(eidx >= 0 and eidx < 256)
+@post(r: ty_is_enum(r))
+fn mk_ety(eidx : i64) → i64:
+    1792 + eidx
+
+@pre(ty_is_enum(t))
+fn ty_eidx(t : i64) → i64:
+    t - 1792
+
+// An optional is its base and 2048, which holds for a base below that:
+// the scalars and the structs.  A tuple's code is far above it, so an
+// optional tuple gets a band of its own past the type variables, and
+// the three words below are the only ones that need to know.
+fn ty_is_opt(t : i64) → bool:
+    t >= 2048 and t < 4096 or (t >= 198176 and t < 202272)
+
+fn mk_oty(base : i64) → i64:
+    198176 + ty_tidx(base) if ty_is_tup(base) else 2048 + base
+
+fn ty_opt_base(t : i64) → i64:
+    mk_tty(t - 198176) if t >= 198176 else t - 2048
+
+@pre(sidx >= 0 and sidx < 768)
+@post(r: ty_is_struct(r))
+fn mk_sty(sidx : i64) → i64:
+    1024 + sidx
+
+fn ty_sidx(t : i64) → i64:
+    t - 1024
+
+fn ty_sgn(t : i64) → i64:
+    (t - 16) & 1
+
+fn ty_bits(t : i64) → i64:
+    8 « (((t - 16) » 1) & 3)
+
+fn ty_unit(t : i64) → i64:
+    (t - 16) » 3
+
+fn ty_drop_unit(t : i64) → i64:
+    t - 8 × ty_unit(t) if ty_is_int(t) else t
+
+fn ty_with_unit(t : i64, u : i64) → i64:
+    ty_drop_unit(t) + 8 × u
+
+// arrays hold plain integers or structs, so the band closes below the
+// hashes' 8192; keeping the two disjoint is what lets every ty_is_*
+// answer alone, in any order
+fn ty_is_arr(t : i64) → bool:
+    t >= 4096 and t < 8192 or t >= 32768 and t < 65536
+
+fn ty_elem(t : i64) → i64:
+    t - 7168 if t >= 7168 and t < 8192 else t - 4096
+
+@pre(elem >= 0 and elem < 4096)
+fn mk_aty(elem : i64) → i64:
+    4096 + elem
+
+fn ty_is_hash(t : i64) → bool:
+    t >= 8192 and t < 26624
+
+// the key palette: 0..7 the integer family (sgn + width), 8 str
+@pre(t = TY_STR or (ty_is_int(t) and ty_unit(t) = 0))
+@post(r: r >= 0 and r <= 8)
+fn hkey_index(t : i64) → i64:
+    if t = TY_STR: return 8
+    let b : i64 = ty_bits(t)
+    ty_sgn(t) × 4 + (0 if b = 8 else (1 if b = 16 else (2 if b = 32 else 3)))
+
+@pre(ki >= 0 and ki <= 8)
+fn hkey_code(ki : i64) → i64:
+    if ki = 8: return TY_STR
+    mk_ity((ki ÷ 4) ?? 0, 8 « (ki & 3), 0)
+
+@pre(v >= 0 and v < 2048)
+@post(r: ty_is_hash(r))
+fn mk_hty(k : i64, v : i64) → i64:
+    8192 + hkey_index(k) × 2048 + v
+
+fn ty_hkey(t : i64) → i64:
+    hkey_code(((t - 8192) ÷ 2048) ?? 0)
+
+fn ty_hval(t : i64) → i64:
+    (t - 8192) % 2048 ?? 0
+
+// tuples: 26624 + tidx into the Ast's interned shape table; the band
+// sits between the hashes' end and the ref packing's 65536
+fn ty_is_tup(t : i64) → bool:
+    t >= 26624 and t < 30720
+
+// iterators: 30720 + an interned element type; born of iterate(),
+// stepped by next(), written down by no type syntax at all
+fn ty_is_iter(t : i64) → bool:
+    t >= 30720 and t < 32768
+
+@pre(ty_is_iter(t))
+fn ty_iidx(t : i64) → i64:
+    t - 30720
+
+// sized arrays: 32768 + fidx into the Ast's shape table (element and
+// size); the band fills what is left below the ref packing
+fn ty_is_farr(t : i64) → bool:
+    t >= 32768 and t < 65536
+
+@pre(ty_is_farr(t))
+fn ty_fidx(t : i64) → i64:
+    t - 32768
+
+@pre(fidx >= 0 and fidx < 32768)
+@post(r: ty_is_farr(r))
+fn mk_fty(fidx : i64) → i64:
+    32768 + fidx
+
+// matrices: 65536 + midx into the Ast's matrix table (element and
+// the two extents, ⁻1 where the type leaves one open); the band sits
+// between the sized arrays' end and the ref packing's 262144
+fn ty_is_mat(t : i64) → bool:
+    t >= 65536 and t < 131072
+
+@pre(ty_is_mat(t))
+fn ty_midx(t : i64) → i64:
+    t - 65536
+
+@pre(midx >= 0 and midx < 65536)
+@post(r: ty_is_mat(r))
+fn mk_mty(midx : i64) → i64:
+    65536 + midx
+
+// ranges: 131072 + the element's own code, no table needed; a range
+// is three numbers and a direction, not a container
+fn ty_is_rg(t : i64) → bool:
+    t >= 131072 and t < 132096
+
+@pre(ty_is_rg(t))
+fn ty_rgelem(t : i64) → i64:
+    t - 131072
+
+@pre(elem >= 16 and elem < 1024)
+@post(r: ty_is_rg(r))
+fn mk_rgty(elem : i64) → i64:
+    131072 + elem
+
+// lambdas: 132096 + lidx into the Ast's signature table; captures are
+// the value's, not the type's
+fn ty_is_lam(t : i64) → bool:
+    t >= 132096 and t < 194048
+
+// type variables: 194048 + the file-wide index of the spelling; they
+// live in signatures and are gone by the time a body is checked
+fn ty_is_var(t : i64) → bool:
+    t >= 194048 and t < 194080
+
+@pre(ty_is_lam(t))
+fn ty_lidx(t : i64) → i64:
+    t - 132096
+
+@pre(lidx >= 0 and lidx < 61952)
+@post(r: ty_is_lam(r))
+fn mk_lty(lidx : i64) → i64:
+    132096 + lidx
+
+// a matrix's rows: arrays whose length is the matrix's to keep, so
+// they read as any array does and refuse to be resized; the band
+// borrows the top of the dynamic arrays' own
+fn ty_is_row(t : i64) → bool:
+    t >= 7168 and t < 8192
+
+@pre(elem >= 0 and elem < 1024)
+@post(r: ty_is_row(r))
+fn mk_rty(elem : i64) → i64:
+    7168 + elem
+
+@pre(ty_is_tup(t))
+fn ty_tidx(t : i64) → i64:
+    t - 26624
+
+@pre(tidx >= 0 and tidx < 4096)
+@post(r: ty_is_tup(r))
+fn mk_tty(tidx : i64) → i64:
+    26624 + tidx
+
+fn ty_ref_kind(t : i64) → i64:
+    t » 18
+
+fn ty_strip_ref(t : i64) → i64:
+    t & 262143
+
+// a function travels as a value when its answer is a plain scalar,
+// or an optional of one -- absence rides the box either way
+fn fnval_ret_ok(r : i64) → bool:
+    let b : i64 = ty_opt_base(r) if ty_is_opt(r) else r
+    (ty_is_int(b) and ty_unit(b) = 0) or b = TY_BOOL or b = TY_CHAR or b = TY_STR
+
+// whether a name is the bootstrap's to keep: i or u and a nonzero
+// width, however written -- the bootstrap claims them all
+fn names_int_type(name : str) → bool:
+    let cs := name.chars()
+    if #cs < 2 or (cs[0] ≠ 'i' and cs[0] ≠ 'u'):
+        return false
+    let nz : mut bool = false
+    foreach k := 1…#cs - 1:
+        if cs[k] < '0' or cs[k] > '9':
+            return false
+        nz ← nz ∨ cs[k] ≠ '0'
+    nz
+
+// the name of a type, as a diagnostic writes it
+@post(r: #r > 0)
+fn type_name(t0 : i64) → str:
+    let r : i64 = ty_ref_kind(t0)
+    let t : i64 = ty_strip_ref(t0)
+    let prefix : str = "" if r = 0 else ("&" if r = 1 else "&mut ")
+    if t = TY_UNIT: return "∅"
+    if t = TY_BOOL: return prefix ⧺ "bool"
+    if t = TY_STR: return prefix ⧺ "str"
+    if t = TY_CHAR: return prefix ⧺ "char"
+    if t = TY_FILE: return prefix ⧺ "std.fs.File"
+    if t = TY_ALLOC: return prefix ⧺ "std.arena.Allocator"
+    if t = TY_DIR: return prefix ⧺ "std.fs.Dir"
+    if t = TY_ENTRY: return prefix ⧺ "std.fs.Entry"
+    if t = TY_IOVEC: return prefix ⧺ "std.iovec"
+    if ty_is_mat(t): return prefix ⧺ "a matrix"
+    if ty_is_rg(t): return prefix ⧺ "range"
+    if ty_is_lam(t): return prefix ⧺ "a function"
+    if ty_is_var(t): return prefix ⧺ "a type variable"
+    if t = TY_UNT: return "untyped integer"
+    if t = TY_EMPTY: return "∅"
+    if ty_is_struct(t): return prefix ⧺ "struct #" ⧺ i64_str(ty_sidx(t))
+    if ty_is_enum(t):
+        // a builtin enum has a name every file knows; a file's own is
+        // named by its place, since this function has no file to ask
+        let bn := builtin_enum_names()
+        return prefix ⧺ (bn[ty_eidx(t) × 1¤ptrdiff] if ty_eidx(t) < @dropunit(#bn) else "enum #" ⧺ i64_str(ty_eidx(t)))
+    if ty_is_tup(t): return prefix ⧺ "a tuple"
+    if ty_is_opt(t): return prefix ⧺ type_name(ty_opt_base(t)) ⧺ "?"
+    if ty_is_arr(t) and not ty_is_farr(t): return prefix ⧺ type_name(ty_elem(t)) ⧺ "[]"
+    if ty_is_hash(t): return prefix ⧺ "std.hash(" ⧺ type_name(ty_hkey(t)) ⧺ ", " ⧺ type_name(ty_hval(t)) ⧺ ")"
+    if ty_is_tup(t): return prefix ⧺ "tuple #" ⧺ i64_str(ty_tidx(t))
+    if ty_is_farr(t): return prefix ⧺ "sized array #" ⧺ i64_str(ty_fidx(t))
+    if ty_is_iter(t): return prefix ⧺ "iterator #" ⧺ i64_str(ty_iidx(t))
+    let base : str = ("i" if ty_sgn(t) = 1 else "u") ⧺ i64_str(ty_bits(t))
+    let u : i64 = ty_unit(t)
+    if u = 0:
+        return base
+    // the marks the language ships with are spelled; a measure the
+    // file defined is named by its index, since this function has no
+    // file to ask
+    let marks := unit_marks()
+    base ⧺ " ¤" ⧺ (marks[u × 1¤ptrdiff] if u < @dropunit(#marks) else "unit#" ⧺ i64_str(u))
+

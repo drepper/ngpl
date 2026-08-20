@@ -1,9 +1,18 @@
 // The @build function is read for what it declares before anything
-// runs: search paths and compiler flags land in std.build.  Running a
-// build recipe belongs to the compiler; reading it does not.
+// runs: the sources the program is made of, where the result goes, the
+// search paths and the compiler flags all land in std.build.  Acting on
+// a build recipe belongs to the compiler; reading it does not.
+//
+// Each thing is declared by naming it and answered by a reader.  The
+// two that hold a single name are last-writer-wins; the three that hold
+// a list answer it in the order it was declared.
 
 @build
 fn build():
+    foreach part := ["lex", "parse", "check"]:
+        std.build.source("src/" ⧺ part ⧺ ".ngpl")
+    std.build.output_dir("build")
+    std.build.output("demo")
     std.build.search_path("vendor")
     std.build.search_path("third_party/ngpl")
     std.build.flag("O1")
@@ -23,6 +32,21 @@ fn test_flags_are_read():
     assert(#f = 2)
     assert(f[0] = "O1")
     assert(f[1] = "contracts=enforce")
+
+// A recipe is a program, not a list: the sources here were computed,
+// one per turn of a loop, and they answer in the order they were named.
+@test
+fn test_sources_are_read_in_order():
+    let s := std.build.sources()
+    assert(#s = 3)
+    assert(s[0] = "src/lex.ngpl")
+    assert(s[1] = "src/parse.ngpl")
+    assert(s[2] = "src/check.ngpl")
+
+@test
+fn test_the_output_is_read():
+    assert(std.build.output_name() = "demo")
+    assert(std.build.output_directory() = "build")
 
 @start
 @impure

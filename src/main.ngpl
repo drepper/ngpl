@@ -1,0 +1,449 @@
+// ===========================================================================
+// Driver (grows as the pipeline does)
+// ===========================================================================
+
+fn tok_name(k : i64) → str:
+    if k = TK_EOF: return "eof"
+    if k = TK_NL: return "nl"
+    if k = TK_INDENT: return "indent"
+    if k = TK_DEDENT: return "dedent"
+    if k = TK_IDENT: return "ident"
+    if k = TK_INT: return "int"
+    if k = TK_STR: return "str"
+    if k = TK_RESERVED: return "reserved"
+    if k >= 20 and k <= 38: return "kw"
+    "op"
+
+@impure
+fn dump_tokens(t : Toks, src : byte[], files : Files):
+    // a token's line is counted over the whole text, so it is turned
+    // back into the file it came from, as a diagnostic's is
+    let starts := file_lines(files, src)
+    foreach i := 0…#t.kind - 1:
+        let k : i64 = t.kind[i]
+        let text := run_str(src, t.off[i], t.len[i])
+        let f : i64 = file_of(starts, t.line[i])
+        std.println("{}:{}:{} {} {} '{}' {}", files.names[f × 1¤ptrdiff],
+                    t.line[i] - starts[f × 1¤ptrdiff] + 1, t.col[i], k,
+                    tok_name(k), text, t.val[i])
+
+@impure
+fn report(diags : Diag[], files : Files, as_json : bool, src : byte[]):
+    // one walk of the text, here where something is being reported
+    // anyway, rather than on every compile that has nothing to say
+    let starts := file_lines(files, src)
+    foreach d := diags:
+        // the excerpt is taken with the line counted over the whole
+        // text, which is what it is an index into; the file and the
+        // line within it are what get printed
+        let k : i64 = file_of(starts, d.line)
+        let file : str = files.names[k × 1¤ptrdiff]
+        let ln : i64 = d.line - starts[k × 1¤ptrdiff] + 1
+        if as_json:
+            std.println("{}\"file\": \"{}\", \"line\": {}, \"col\": {}, \"severity\": \"error\", \"message\": \"{}\"{}",
+                        "{", file, ln, d.col, d.msg, "}")
+        else:
+            std.println("{}:{}:{}: error: {}", file, ln, d.col, d.msg)
+            let num := i64_str(ln)
+            let gut : mut str = ""
+            let g ¤ptrdiff : mut i64 = 0
+            while g < #num:
+                gut ← gut ⧺ " "
+                g ← g + 1
+            let pad : mut str = ""
+            let c : mut i64 = 1
+            while c < d.col:
+                pad ← pad ⧺ " "
+                c ← c + 1
+            std.println("  {} | {}", num, line_str(src, d.line))
+            std.println("  {} | {}^", gut, pad)
+
+// What a file is for is told by its name: a source file ends in
+// .ngpl, and other kinds of input -- objects, libraries -- will carry
+// names of their own.  A name the compiler cannot classify is refused
+// up front rather than read and misparsed.
+fn is_ngpl_source(path : str) → bool:
+    let cs := path.chars()
+    if #cs < 6:
+        return false
+    cs[#cs - 5] = '.' and cs[#cs - 4] = 'n' and cs[#cs - 3] = 'g' and cs[#cs - 2] = 'p' and cs[#cs - 1] = 'l'
+
+// The named source could not be opened: say which file and why the
+// compiler stopped, in the compiler's own words rather than a raw
+// operating system error.
+@noreturn
+@impure
+fn missing_input(name : str):
+    std.println("ngplc: cannot open '{}': no such file or it cannot be read", name)
+    std.exit(1)
+
+// a size on the command line: bytes, or K, M or G of them; ⁻1 when
+// the text is not a size at all
+@post(r: r = ⁻1 or r >= 0)
+fn parse_size(t : str) → i64:
+    let cs := t.chars()
+    if #cs = 0:
+        return ⁻1
+    let scale : mut i64 = 1
+    let n : mut i64 = @dropunit(#cs)
+    let last := cs[#cs - 1]
+    if last = 'K' or last = 'k':
+        scale ← 1024
+        n ← n - 1
+    elif last = 'M' or last = 'm':
+        scale ← 1048576
+        n ← n - 1
+    elif last = 'G' or last = 'g':
+        scale ← 1073741824
+        n ← n - 1
+    if n = 0:
+        return ⁻1
+    let v : mut i64 = 0
+    foreach i := 0…n - 1:
+        let c := cs[i × 1¤ptrdiff]
+        if c < '0' or c > '9':
+            return ⁻1
+        if v > SIZE_MAX_OPT:
+            return ⁻1
+        v ← v × 10 + (c.ord() - 48)
+    v × scale
+
+// whether an argument is 'name=' and then whatever it carries
+fn opt_matches(a : str, name : str) → bool:
+    let ac := a.chars()
+    let nc := name.chars()
+    if #nc = 0 or #ac <= #nc:
+        return false
+    foreach i := 0…#nc - 1:
+        if ac[i] ≠ nc[i]:
+            return false
+    ac[#nc] = '='
+
+// what it carries, which an argument written 'name=' alone leaves empty
+fn opt_value(a : str, name : str) → str:
+    let ac := a.chars()
+    let nc := name.chars()
+    let out : mut str = ""
+    if #ac <= #nc + 1:
+        return out
+    foreach i := #nc + 1…#ac - 1:
+        out ← out ⧺ ac[i]
+    out
+
+// The compiler's own build, run with `ngplc --build src/main.ngpl`.
+//
+// The order below is the order the program is in, and it is not a
+// convenience: a struct may be declared below whatever names it, since
+// the parser sweeps the token stream for struct names before parsing,
+// but an `enum` and a `unit` are registered as they are read.  So
+// elf.ngpl has to come before anything that writes `Sht` or `¤"shndx"`,
+// and sorting this list -- alphabetically, or any other way -- makes a
+// different program.  build/sources.sh keeps the same list for the
+// bootstrap's first stage, which runs under the interpreter and so
+// cannot read this one; the two are checked against each other by the
+// bootstrap comparing the stage each built.
+@build
+fn build():
+    foreach part := ["tokens", "types", "diag", "lex", "ast", "parse",
+                     "dumpast", "check", "comptime", "ir", "lower", "x86",
+                     "symbols", "elf", "codegen", "main",
+                     "arch_a64", "dispatch", "arch_rv64", "arch_i386",
+                     "arch_arm", "arch_rv32", "tdriver", "rt_ir",
+                     "codegen_t"]:
+        std.build.source(part ⧺ ".ngpl")
+    std.build.output_dir("build")
+    std.build.output("ngplc")
+
+fn empty_recipe() → Recipe:
+    (Recipe{sources: [], output: "", output_dir: "", paths: [], flags: [],
+            diags: []})
+
+// the directory a path names something in, "" when it names something
+// in the working directory
+fn dir_of(path : str) → str:
+    let cs := path.chars()
+    let cut : mut i64 = ⁻1
+    if #cs > 0:
+        foreach i := 0…#cs - 1:
+            if cs[i] = '/':
+                cut ← @dropunit(i)
+    if cut < 0:
+        return ""
+    let out : mut str = ""
+    let j : mut i64 = 0
+    while j < cut:
+        out ← out ⧺ cs[j × 1¤ptrdiff]
+        j ← j + 1
+    out
+
+// A name the recipe gave, made into a path this run can open.  An
+// absolute name is taken as written; anything else is looked for beside
+// the recipe first -- so a recipe means the same thing from whatever
+// directory it is run -- and then along each search path it declared.
+@impure
+fn resolve_source(name : str, base : str, paths : str[]) → str:
+    let cs := name.chars()
+    if #cs > 0 and cs[0 × 1¤ptrdiff] = '/':
+        return name
+    let here : str = name if base = "" else base ⧺ "/" ⧺ name
+    if can_open(here):
+        return here
+    foreach d := paths:
+        let dc := d.chars()
+        let root : str = d if (#dc > 0 and dc[0 × 1¤ptrdiff] = '/') or base = "" else base ⧺ "/" ⧺ d
+        let cand : str = root ⧺ "/" ⧺ name
+        if can_open(cand):
+            return cand
+    here
+
+@impure
+fn can_open(path : str) → bool:
+    let f := std.fs.cwd().open_file(path)
+    match f:
+        ∃(_): true
+        ∅: false
+
+// Read the recipe out of its own file: lex it, parse it leniently, and
+// run it.  The file is not compiled here -- what it says to compile is
+// the whole point -- so nothing past the recipe needs to be understood.
+@noreturn
+@impure
+fn recipe_failed():
+    std.exit(1)
+
+@impure
+fn read_build(path : str, json : bool) → Recipe:
+    if not is_ngpl_source(path):
+        std.println("ngplc: cannot tell what '{}' is: an NGPL source file's name ends in '.ngpl'", path)
+        recipe_failed()
+    let alloc := std.arena.allocator()
+    let file := std.fs.cwd().open_file(path) ?? missing_input(path)
+    let src := file.read_file(alloc)
+    let files := Files{names: [path], off: [0]}
+    let toks := lex(src)
+    if #toks.diags > 0:
+        report(toks.diags, files, json, src)
+        recipe_failed()
+    let ast := parse_recipe(toks, src)
+    if #ast.diags > 0:
+        report(ast.diags, files, json, src)
+        recipe_failed()
+    if #ast.builds = 0:
+        std.println("ngplc: '{}' carries no @build function, so there is no recipe to read", path)
+        recipe_failed()
+    // The recipe runs without the checker having seen the file: what it
+    // may contain is settled by the evaluator's own first pass, and no
+    // global has been folded, so it reads none.
+    let plan := build_recipe(ast, toks, src, [])
+    if #plan.diags > 0:
+        report(plan.diags, files, json, src)
+        recipe_failed()
+    plan
+
+@start
+@impure
+fn main() → u8:
+    let argv := std.args.all()
+    if #argv = 0:
+        std.println("usage: ngplc <source.ngpl>… [-o out] [--target=A] [--stack-size=N] [--guard-size=N] [--dump-tokens] [--dump-ast] [--diag=json] [--log=json]")
+        std.println("       ngplc --build <recipe.ngpl> [-o out] [--target=A] …")
+        std.println("targets: {} (default: the architecture this compiler runs on)", target_names())
+        return 1
+    let inputs : mut str[] = []
+    let output : mut str = ""
+    let build_file : mut str = ""
+    let want_tokens : mut bool = false
+    let want_ast : mut bool = false
+    let want_log : mut bool = false
+    let json : mut bool = false
+    let stack_size : mut i64 = STACK_DEFAULT
+    let guard_size : mut i64 = GUARD_DEFAULT
+    // aim at the machine underfoot unless --target says otherwise
+    let tgt_index : mut i64 = target_index(host_target())
+    let i ¤ptrdiff : mut i64 = 0
+    while i < #argv:
+        let a := argv[i]
+        if a = "-o":
+            if i + 1 >= #argv:
+                std.println("ngplc: -o requires the output file name after it")
+                return 1
+            output ← argv[i + 1]
+            i ← i + 2
+            continue
+        if a = "--build":
+            if i + 1 >= #argv:
+                std.println("ngplc: --build requires the file holding the @build recipe after it")
+                return 1
+            build_file ← argv[i + 1]
+            i ← i + 2
+            continue
+        if opt_matches(a, "--stack-size") or opt_matches(a, "--guard-size"):
+            let is_stack : bool = opt_matches(a, "--stack-size")
+            let which : str = "--stack-size" if is_stack else "--guard-size"
+            let raw : str = opt_value(a, which)
+            let v : i64 = parse_size(raw)
+            if v = ⁻1:
+                std.println("ngplc: {} wants a size, as 8388608 or 8M; '{}' is not one", which, raw)
+                return 1
+            if v < PAGE or v > SIZE_MAX_OPT:
+                std.println("ngplc: {} runs from one page to a gibibyte; {} is outside it", which, i64_str(v))
+                return 1
+            if is_stack:
+                stack_size ← align_up(v, PAGE)
+            else:
+                guard_size ← align_up(v, PAGE)
+            i ← i + 1
+            continue
+        if opt_matches(a, "--target"):
+            let tname : str = opt_value(a, "--target")
+            let ti : i64 = target_index(tname)
+            if ti = ⁻1:
+                std.println("ngplc: '{}' is not a target this compiler has; they are {}", tname, target_names())
+                return 1
+            tgt_index ← ti
+            i ← i + 1
+            continue
+        if a = "--dump-tokens":
+            want_tokens ← true
+        elif a = "--dump-ast":
+            want_ast ← true
+        elif a = "--diag=json":
+            json ← true
+        elif a = "--log=json":
+            want_log ← true
+        else:
+            inputs.push(a)
+        i ← i + 1
+    // --build reads the source list from the recipe, so naming files
+    // beside it would be saying two different things at once
+    if build_file ≠ "" and #inputs > 0:
+        std.println("ngplc: --build reads the source list from the recipe; '{}' names a file besides", inputs[0 × 1¤ptrdiff])
+        return 1
+    let plan : Recipe = read_build(build_file, json) if build_file ≠ "" else empty_recipe()
+    if build_file ≠ "":
+        if #plan.sources = 0:
+            std.println("ngplc: the @build recipe in '{}' names no source", build_file)
+            return 1
+        // a source is looked for beside the recipe first, then along
+        // each search path the recipe declared, in the order declared
+        foreach s := plan.sources:
+            inputs.push(resolve_source(s, dir_of(build_file), plan.paths))
+        if output = "" and plan.output ≠ "":
+            output ← plan.output if plan.output_dir = "" else plan.output_dir ⧺ "/" ⧺ plan.output
+        foreach f := plan.flags:
+            std.println("ngplc: the build recipe asks for flag '{}', which this compiler does not have", f)
+            return 1
+    if #inputs = 0:
+        std.println("ngplc: no source file named")
+        return 1
+    foreach nm := inputs:
+        if not is_ngpl_source(nm):
+            std.println("ngplc: cannot tell what '{}' is: an NGPL source file's name ends in '.ngpl'", nm)
+            return 1
+
+    // Several sources make one program: they are read as if written
+    // end to end, in the order they were named.  The lexer sees one
+    // text and counts one set of line numbers over it; `files` keeps
+    // what is needed to give a diagnostic back the file it came from.
+    let alloc := std.arena.allocator()
+    let src : mut byte[] = []
+    let offs : mut i64[] = []
+    foreach nm := inputs:
+        let file := std.fs.cwd().open_file(nm) ?? missing_input(nm)
+        let text := file.read_file(alloc)
+        offs.push(@dropunit(#src))
+        src ← src ⧺ text
+        // a file ends its last line before the next one begins, or the
+        // two would run together into a line spanning the boundary
+        let n : i64 = @dropunit(#text)
+        if n > 0 and text[(n - 1) × 1¤byte] ≠ 10:
+            src.push(10)
+    let files := Files{names: inputs, off: offs}
+    assert(#files.names = #files.off, "one starting offset per source file")
+
+    let toks := lex(src)
+    if #toks.diags > 0:
+        report(toks.diags, files, json, src)
+        return 1
+    if want_tokens:
+        dump_tokens(toks, src, files)
+        return 0
+
+    let ast := parse(toks, src)
+    if #ast.diags > 0:
+        report(ast.diags, files, json, src)
+        return 1
+    if want_ast:
+        dump_ast(ast, src, toks)
+        return 0
+
+    let chk := check(ast, toks, src)
+    if #chk.diags > 0:
+        report(chk.diags, files, json, src)
+        return 1
+
+    // The recipe is read whenever the program carries one, not only
+    // under --build.  The interpreter runs it at load with no flag
+    // involved, so a compiler that read it only when asked would accept
+    // recipes the interpreter refuses -- the one direction this project
+    // does not allow.  A file without a recipe pays one comparison.
+    let recipe := build_recipe(ast, toks, src, chk.gvals)
+    if #recipe.diags > 0:
+        report(recipe.diags, files, json, src)
+        return 1
+
+    let tgt := targets()[tgt_index × 1¤ptrdiff]
+    let compiled := codegen(ast, toks, src, chk, tgt, stack_size, guard_size)
+    if #compiled.diags > 0:
+        report(compiled.diags, files, json, src)
+        return 1
+    if want_log:
+        foreach l := compiled.log:
+            std.println("{}", l)
+
+    // as every Unix compiler has it: a.out unless -o names the file
+    let outname : str = output if output ≠ "" else "a.out"
+    let outf := std.fs.cwd().create_file(outname, 493)
+    // one plan, and the class picks how wide its fields are written;
+    // one run for each thing the file is made of, and the kernel
+    // joins them, so nothing here ever holds the whole image
+    let pl := plan_elf(tgt, compiled.code, compiled.rodata, compiled.data,
+                       stack_size × 1¤byte, compiled.relro_size × 1¤byte,
+                       compiled.syms)
+    let runs : mut std.iovec[] = []
+    if tgt.is64:
+        let e := elf_file64(pl, compiled.code, compiled.rodata, compiled.data)
+        runs.push(std.iov(e.ehdr))
+        runs.push(std.iov(e.phdrs))
+        runs.push(std.iov(e.gap_text))
+        runs.push(std.iov(e.code))
+        runs.push(std.iov(e.gap_ro))
+        runs.push(std.iov(e.rodata))
+        runs.push(std.iov(e.gap_data))
+        runs.push(std.iov(e.data))
+        runs.push(std.iov(e.gap_syms))
+        runs.push(std.iov(e.syms))
+        runs.push(std.iov(e.strtab))
+        runs.push(std.iov(e.shstrtab))
+        runs.push(std.iov(e.gap_shdrs))
+        runs.push(std.iov(e.shdrs))
+    else:
+        let e := elf_file32(pl, compiled.code, compiled.rodata, compiled.data)
+        runs.push(std.iov(e.ehdr))
+        runs.push(std.iov(e.phdrs))
+        runs.push(std.iov(e.gap_text))
+        runs.push(std.iov(e.code))
+        runs.push(std.iov(e.gap_ro))
+        runs.push(std.iov(e.rodata))
+        runs.push(std.iov(e.gap_data))
+        runs.push(std.iov(e.data))
+        runs.push(std.iov(e.gap_syms))
+        runs.push(std.iov(e.syms))
+        runs.push(std.iov(e.strtab))
+        runs.push(std.iov(e.shstrtab))
+        runs.push(std.iov(e.gap_shdrs))
+        runs.push(std.iov(e.shdrs))
+    outf.writev(runs)
+    outf.close()
+    0
+

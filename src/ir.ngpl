@@ -1,0 +1,116 @@
+// ===========================================================================
+// The IR: linear three-address code over virtual registers
+// ===========================================================================
+//
+// Every operation carries the width it works at: w = bits + 256×sgn.
+// Checked arithmetic aborts on overflow -- a cold, never-taken branch,
+// which is what production checkers emit and costs nothing on the hot
+// path; @wrap variants mask instead.  Comparisons materialize their
+// answer with setcc; selection is a conditional move.
+
+let IR_CONST : i64 = 1     // d ← imm a
+let IR_MOV : i64 = 2       // d ← vreg a
+let IR_ADD : i64 = 10
+let IR_SUB : i64 = 11
+let IR_MUL : i64 = 12
+let IR_ADDW : i64 = 13
+let IR_SUBW : i64 = 14
+let IR_MULW : i64 = 15
+let IR_NEG : i64 = 16
+let IR_NEGW : i64 = 17
+let IR_BAND : i64 = 18
+let IR_BORR : i64 = 19
+let IR_BXORR : i64 = 20
+let IR_BNOTT : i64 = 21
+let IR_SHLL : i64 = 22
+let IR_SHRR : i64 = 23
+let IR_DIVV : i64 = 24     // d ← a ÷ b, c the default when b = 0
+let IR_MODD : i64 = 25
+let IR_MAXX : i64 = 26     // d ← the larger of a and b, by cmov
+let IR_MINN : i64 = 27
+let IR_SEL : i64 = 28      // d ← b when a is true, else c, by cmov
+let IR_CEQ : i64 = 30
+let IR_CNE : i64 = 31
+let IR_CLT : i64 = 32
+let IR_CLE : i64 = 33
+let IR_CGT : i64 = 34
+let IR_CGE : i64 = 35
+let IR_JMP : i64 = 40      // a = label
+let IR_JZ : i64 = 41       // a = vreg, b = label
+let IR_JNZ : i64 = 42
+let IR_LABEL : i64 = 43    // a = label
+let IR_CALL : i64 = 44     // d ← call fn a, args at extra b: [argc, vreg…]
+let IR_RET : i64 = 45      // a = vreg, ⁻1 for none
+let IR_PRINTS : i64 = 46   // a = string index (its bytes)
+let IR_PRINTI : i64 = 47   // a = vreg, signed decimal
+let IR_PRINTU : i64 = 48   // a = vreg, unsigned decimal
+let IR_EXIT : i64 = 49     // a = vreg
+let IR_ABORT : i64 = 50    // a = string index of the message
+let IR_GLOAD : i64 = 51    // d ← global a
+let IR_GSTORE : i64 = 52   // global a ← vreg b
+let IR_ANEW : i64 = 53     // d ← a fresh array, capacity imm a
+let IR_APUSH : i64 = 54    // array a grows by vreg b
+let IR_AIDX : i64 = 55     // d ← a[b], bounds-checked
+let IR_ASTO : i64 = 56     // a[b] ← c, bounds-checked
+let IR_APOP : i64 = 57     // d ← a's last, or b when empty
+let IR_AGET : i64 = 58     // d ← a[b], or c when out of range
+let IR_ALEN : i64 = 59     // d ← how many a holds
+let IR_SC : i64 = 60       // d ← the descriptor of string literal a
+let IR_SCCAT : i64 = 61    // d ← a ⧺ b
+let IR_SEQV : i64 = 62     // d ← a = b, for strings
+let IR_SLENV : i64 = 63    // d ← how many characters a holds
+let IR_PRINTSV : i64 = 64  // a = vreg holding a string
+let IR_JTAB : i64 = 65     // a = vreg, b = extra [min, span, Ldef, L…]
+let IR_VTAB : i64 = 69     // d ← value table: a = vreg, b = extra [min, span, default, v…]
+let IR_HNEW : i64 = 70     // d ← a fresh hash: a = capacity, b = 1 for str keys
+let IR_HPUT : i64 = 71     // hash a takes key b → value c
+let IR_HGET : i64 = 72     // d ← hash a asked for key b, an optional
+let IR_HELEM : i64 = 73    // d ← whether hash a holds key b
+let IR_HLEN : i64 = 74     // d ← how many hash a holds
+let IR_CHR : i64 = 75      // d ← a as a character, judged first
+let IR_SIDX : i64 = 76     // d ← string a's character at position b
+let IR_CHARS : i64 = 77    // d ← string a's characters, an array
+let IR_CHARSTR : i64 = 78  // d ← character a as a fresh string
+let IR_ARGS : i64 = 80     // d ← the program's arguments, a str[]
+let IR_FOPEN : i64 = 81    // d ← the file at path a, an optional
+let IR_FCREATE : i64 = 82  // d ← a fresh file at path a with mode b
+let IR_FREAD : i64 = 83    // d ← file a's bytes, a u8[]
+let IR_FWRITE : i64 = 84   // file a takes the bytes of array b
+let IR_FCLOSE : i64 = 85   // file a closes
+let IR_NARROW : i64 = 86   // d ← a, stopped unless it fits width w
+let IR_EPRINTS : i64 = 87  // string a on the error stream
+let IR_AFIND : i64 = 88    // d ← where b sits in array a (c: str elems)
+let IR_ASLICE : i64 = 89   // d ← array a's elements b…c, a fresh array
+let IR_SATADD : i64 = 90   // d ← a + b, held at width w's edge
+let IR_SATSUB : i64 = 91   // d ← a - b, held at the edge
+let IR_SATMUL : i64 = 92   // d ← a × b, held at the edge
+let IR_AFILL : i64 = 93    // d ← a copies of scalar b, a fresh array
+let IR_ACYC : i64 = 94     // d ← array b's elements cycled to count a
+let IR_ACAT : i64 = 95     // d ← arrays a then b, one fresh array
+let IR_SBYTES : i64 = 96   // d ← string a's bytes, a u8[]
+let IR_AREF : i64 = 97     // d ← the address of array a's element b
+let IR_DENTS : i64 = 98    // d ← the working directory's entries
+let IR_ENVN : i64 = 101    // d ← the environment's names, a str[]
+let IR_ENVG : i64 = 102    // d ← the value of the variable named a, a str?
+let IR_SDEC : i64 = 105    // d ← the character at a's byte b, c ← the byte after it
+let IR_AUXV : i64 = 103    // d ← the auxiliary vector's entry for key a
+let IR_EXECFN : i64 = 104  // d ← AT_EXECFN as a string
+let IR_FADDR : i64 = 99    // d ← the code address of function a
+let IR_TORAW : i64 = 106   // d ← a raw byte run holding what the u8[] a says
+let IR_WRITEV : i64 = 107  // file a takes the runs held in array b
+let IR_CALLI : i64 = 100   // d ← call the address in vreg a, args at extra b
+let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
+let IR_FLD : i64 = 67      // d ← field b of struct a
+let IR_FSTO : i64 = 68     // field b of struct a ← c
+
+struct IrFn:
+    op : i64[]
+    ia : i64[]
+    ib : i64[]
+    ic : i64[]
+    id : i64[]
+    iw : i64[]
+    extra : i64[]
+    nvregs : i64
+    nlabels : i64
+

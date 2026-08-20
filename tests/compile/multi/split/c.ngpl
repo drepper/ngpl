@@ -1,0 +1,10 @@
+// The third file completes the program.
+
+fn shout(l : Level) → str:
+    "world" if l = Level.quiet else "WORLD"
+
+@start
+@impure
+fn main():
+    std.println("{}", announce(Level.quiet))
+    std.println("{}", announce(Level.loud))

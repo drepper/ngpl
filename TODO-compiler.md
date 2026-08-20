@@ -22,8 +22,9 @@ The Compiler
 [ ] [FULL] compiler mode: ahead-of-time compilation to native code.  Startup function designation
     via command line or attribute.
 
-    Attempt 2 of the self-hosted compiler lives in src/ (src/DESIGN.md, src/ngplc.ngpl,
-    src/ANALYSIS.md; attempt 1 archived under old/attempt1/): it compiles the core-1
+    Attempt 2 of the self-hosted compiler lives in src/ (src/DESIGN.md, twenty-four .ngpl
+    sources listed in build order by build/sources.sh, src/ANALYSIS.md; attempt 1 archived
+    under old/attempt1/): it compiles the core-1
     subset -- the sized integer family with faithful overflow/wrap semantics, ¤ptrdiff and
     ¤byte units, arrays with borrows, strings, globals, contracts, std.implementation --
     to static syscall-only x86-64 ELF executables, under the control-flow policy: cmov
@@ -32,11 +33,29 @@ The Compiler
     phase runs each program through the interpreter and the binary and diffs.  What is
     missing for self-hosting is laid out in src/ANALYSIS.md.
 
-[ ] [FULL] multi-file compilation: compiler accepts multiple source files, build function determines
-    compilation strategy.
+[x] multi-file compilation: both front ends take several source files and read them as if
+    they were one, concatenated in the order named; a diagnostic still says which file and
+    which line within it.  A file boundary is a line boundary.  What is not yet true is
+    separate compilation: there is one text and one pass over it, so this is the stand-in
+    for a module system, not the thing itself.  Note the order of the list is significant --
+    an enum and a unit must be declared before use, though a struct need not be.
 
-[ ] [FULL] built-in build system: @build-annotated comptime function provides build recipe.
-    Recompiled when source changes.  SBOM generation in output binary.
+[ ] the compiler's own refusals have no home in the suite.  tests/compile/ requires every
+    program to compile and tests/output/ drives the interpreter, so what ngplc says no to --
+    a std.build outside a recipe, a recipe reaching past the subset, two @build functions --
+    is checked by hand today.  A tests/compile/refuse/*.ngpl + *.expected pair driven from
+    run_compile_tests.sh is the right shape, and the suite will want it for far more than
+    @build.
+
+[ ] [FULL] separate compilation: a source file compiled on its own into something the next
+    step links, so a change to one file does not re-read the rest.  The module system is
+    what decides the unit; until then, multi-file compilation above reads everything.
+
+[x] built-in build system: an @build-annotated comptime-only function provides the build
+    recipe; --build FILE finds it, runs it, and compiles what it names.  No code for it is
+    written into the executable.  Declares sources, output name, output directory, search
+    paths and flags.  Still to do: recompiled-when-source-changes, and SBOM generation in
+    the output binary, both of which want separate compilation first.
 
 [ ] what a violation does is always an error.  C++26 chooses between ignore, observe, enforce
     and quick-enforce at build time, which wants a build system to choose in.

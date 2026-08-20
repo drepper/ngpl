@@ -1,0 +1,210 @@
+// ngplc -- the NGPL compiler, attempt 2.
+//
+// Written in the bootstrap subset of NGPL, and compiled by itself.  It
+// compiles the core-2 subset described in DESIGN.md to static Linux ELF
+// executables that speak only to the kernel, for six targets: x86-64,
+// i386, aarch64, arm, riscv64 and riscv32.
+//
+// The compiler is twenty-five source files, read as if they were one
+// and named in order by build/sources.sh and by the @build recipe in
+// main.ngpl.  The order is part of the program: an enum and a unit must
+// be declared before they are used.  Build it with
+//
+//     ngplc --build src/main.ngpl
+//
+// or, for the first stage, through the bootstrap interpreter, which
+// takes the same list:
+//
+//     python -m interp <sources…> -- <sources…> -o build/ngplc
+//
+// The pipeline is a chain of pure functions over flat arrays:
+//     bytes -> lex -> Toks -> parse -> Ast -> check -> lower -> Ir
+//           -> emit -> code bytes -> elf -> a.out (or the -o name)
+//
+// Control flow policy (CLAUDE.md): decisions are data.  The lexer runs
+// on a byte-class table and two glyph hashes rather than a branch
+// tree; the code generator materializes comparisons (setcc), selects
+// with conditional moves where both sides are safe to read, and turns
+// dense dispatch into jump tables.  Branches that remain are cold
+// paths (aborts) or semantically required (short-circuit with an
+// effectful right side).
+//
+// This file holds the token kinds and the helpers over raw byte runs;
+// what follows it is listed in build/sources.sh.
+
+// ===========================================================================
+// Token kinds
+// ===========================================================================
+
+let TK_EOF : i64 = 0
+let TK_NL : i64 = 1
+let TK_INDENT : i64 = 2
+let TK_DEDENT : i64 = 3
+let TK_IDENT : i64 = 10
+let TK_INT : i64 = 11
+let TK_STR : i64 = 12
+// keywords core-1 parses
+let TK_FN : i64 = 20
+let TK_LET : i64 = 21
+let TK_MUT : i64 = 22
+let TK_IF : i64 = 23
+let TK_ELIF : i64 = 24
+let TK_ELSE : i64 = 25
+let TK_WHILE : i64 = 26
+let TK_FOREACH : i64 = 27
+let TK_RETURN : i64 = 28
+let TK_BREAK : i64 = 29
+let TK_CONTINUE : i64 = 30
+let TK_TRUE : i64 = 31
+let TK_FALSE : i64 = 32
+let TK_AND : i64 = 33
+let TK_OR : i64 = 34
+let TK_NOT : i64 = 35
+let TK_STRUCT : i64 = 36
+let TK_IMPL : i64 = 37
+// punctuation and operators
+let TK_LPAR : i64 = 40
+let TK_RPAR : i64 = 41
+let TK_COLON : i64 = 42
+let TK_COMMA : i64 = 43
+let TK_DOT : i64 = 44
+let TK_ARROW : i64 = 45      // → or ->
+let TK_ASSIGN : i64 = 46     // ← or <-
+let TK_DEFINE : i64 = 47     // :=
+let TK_ELLIPSIS : i64 = 48   // …
+let TK_AT : i64 = 49         // @
+let TK_PLUS : i64 = 50
+let TK_MINUS : i64 = 51      // binary -
+let TK_NEG : i64 = 52        // unary ⁻
+let TK_MULT : i64 = 53       // ×
+let TK_DIVIDE : i64 = 54     // ÷
+let TK_MOD : i64 = 55
+let TK_EQ : i64 = 56         // =
+let TK_NE : i64 = 57         // ≠
+let TK_LT : i64 = 58
+let TK_GT : i64 = 59
+let TK_LE : i64 = 60
+let TK_GE : i64 = 61
+let TK_SHL : i64 = 62        // « or <<
+let TK_SHR : i64 = 63        // » or >>
+let TK_BAND : i64 = 64       // & (also the borrow marker)
+let TK_BOR : i64 = 65
+let TK_BXOR : i64 = 66
+let TK_BNOT : i64 = 67       // ~
+let TK_LAND : i64 = 68       // ∧
+let TK_LOR : i64 = 69        // ∨
+let TK_LNOT : i64 = 70       // ¬
+let TK_MAX : i64 = 71        // ⌈
+let TK_MIN : i64 = 72        // ⌊
+let TK_COALESCE : i64 = 73   // ??
+let TK_LBRACK : i64 = 74
+let TK_RBRACK : i64 = 75
+let TK_CURRENCY : i64 = 76   // ¤
+let TK_HASH : i64 = 77       // #
+let TK_CONCAT : i64 = 78     // ⧺
+let TK_LBRACE : i64 = 79
+let TK_RBRACE : i64 = 80
+let TK_QMARK : i64 = 81      // ? as a type's suffix
+let TK_EXISTS : i64 = 82     // ∃
+let TK_EMPTY : i64 = 83      // ∅
+let TK_LHASH : i64 = 84      // ⸨
+let TK_RHASH : i64 = 85      // ⸩
+let TK_ELEM : i64 = 86       // ∊
+let TK_IOTA : i64 = 87       // ⍳
+let TK_SATADD : i64 = 88     // ⊞
+let TK_SATSUB : i64 = 89     // ⊟
+let TK_SATMUL : i64 = 90     // ⊠
+let TK_LXOR : i64 = 91       // ⊕
+let TK_LNAND : i64 = 92      // ⊼
+let TK_LNOR : i64 = 93       // ⊽
+let TK_RESHAPE : i64 = 94    // ⍴
+let TK_MATCH : i64 = 38
+let TK_RESERVED : i64 = 99   // a word the bootstrap reserves and core-1 does not use
+let TK_LAMBDA : i64 = 100    // λ
+let TK_BANG : i64 = 101      // ! -- the expected suffix on a type
+let TK_SEMI : i64 = 102      // ; -- between statements in a brace block
+let TK_TYPE : i64 = 103      // type: a name standing for a type
+let TK_ENUM : i64 = 104      // enum
+let TK_UNIT : i64 = 105      // unit: a measure the file gives a name
+
+// The keyword table: one hash probe replaces a comparison ladder.  A
+// word the bootstrap language reserves but core-1 gives no meaning is
+// mapped to TK_RESERVED, so it is refused wherever a name is expected
+// rather than quietly accepted -- the strict-subset rule.
+let KEYWORDS : std.hash(str, i64) = (⸨
+    "fn": 20, "let": 21, "mut": 22, "if": 23, "elif": 24, "else": 25,
+    "while": 26, "foreach": 27, "return": 28, "break": 29, "continue": 30,
+    "true": 31, "false": 32, "and": 33, "or": 34, "not": 35,
+    "struct": 36, "impl": 37, "match": 38,
+    "opt": 99, "is": 99, "import": 99, "some": 99,
+    "start": 99, "test": 99, "expect": 99, "wrap": 99, "enum": 104,
+    "flag": 99, "replaceable": 99, "catch": 99, "comptime": 99,
+    "type": 103, "unit": 105, "impure": 99, "enumerate": 99,
+    "macro": 99⸩)
+
+// The multi-byte glyphs, keyed by their UTF-8 bytes packed into one
+// number: b0×256+b1 for two-byte glyphs, b0×65536+b1×256+b2 for three.
+// One hash probe per glyph instead of a branch tree over byte values.
+let GLYPHS2 : std.hash(i64, i64) = (⸨
+    49835: 62,      // « shl
+    49851: 63,      // » shr
+    49836: 70,      // ¬
+    49828: 76,      // ¤
+    50071: 53,      // ×
+    50103: 54,      // ÷
+    52923: 100⸩)    // λ
+
+let GLYPHS3 : std.hash(i64, i64) = (⸨
+    14847411: 87,   // ⍳
+    14847412: 94,   // ⍴
+    14846622: 88,   // ⊞
+    14846623: 89,   // ⊟
+    14846624: 90,   // ⊠
+    14846613: 91,   // ⊕
+    14846652: 92,   // ⊼
+    14846653: 93,   // ⊽
+    14845584: 46,   // ←
+    14845586: 45,   // →
+    14844347: 52,   // ⁻
+    14844070: 48,   // …
+    14846368: 57,   // ≠
+    14846119: 68,   // ∧
+    14846120: 69,   // ∨
+    14847112: 71,   // ⌈
+    14847114: 72,   // ⌊
+    14854074: 78,   // ⧺
+    14846083: 82,   // ∃
+    14846085: 83,   // ∅
+    14858408: 84,   // ⸨
+    14858409: 85,   // ⸩
+    14846090: 86⸩)  // ∊
+
+// ===========================================================================
+// Small helpers
+// ===========================================================================
+
+@post(r: #r > 0)
+fn i64_str(n : i64) → str:
+    if n = 0: return "0"
+    let neg : bool = n < 0
+    // work below zero, where every i64 has a home; the remainders come
+    // out non-positive and are flipped digit by digit
+    let v : mut i64 = n if neg else @wrap(0 - n)
+    let s : mut str = ""
+    while v ≠ 0:
+        let digit : i64 = @wrap(0 - (v % 10 ?? 0))
+        s ← (48 + digit).chr() ⧺ s
+        v ← (v ÷ 10 ?? 0)
+    ("-" ⧺ s) if neg else s
+
+// The text of a byte run, for identifiers, keywords and messages.
+@pre(off >= 0 and n >= 0)
+fn run_str(src : byte[], off : i64, n : i64) → str:
+    let s : mut str = ""
+    let i : mut i64 = 0
+    while i < n:
+        let b : i64 = src[(off + i) × 1¤byte]
+        s ← s ⧺ b.chr()
+        i ← i + 1
+    s
+

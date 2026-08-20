@@ -1,0 +1,789 @@
+// ===========================================================================
+// Compile-time evaluation: reading the @build recipe
+// ===========================================================================
+//
+// A recipe is a program that runs while the program is being built.
+// This runs it, over a subset: integers, truth values, strings, arrays
+// of strings; let and ←; if, while, foreach; calls to the functions the
+// file defines; and std.build, which is the point of the exercise.
+//
+// Two passes, and the first is the one that matters.  The recipe is the
+// one function the checker never walks, so nothing has looked at its
+// body before now -- and the interpreter's purity check reads a whole
+// body, taken branches and untaken alike, refusing a pure function that
+// so much as mentions std.println.  An evaluator that only walked the
+// branch it took would let `if false: std.println(…)` through, and the
+// interpreter would then refuse the program the compiler accepted.  So
+// ev_scan walks every node and refuses every construct outside the
+// subset before anything runs.
+//
+// This is where the compiler's compile-time evaluation begins; @build
+// is its first customer.
+
+// what a recipe computed with
+let CV_NONE : i64 = 0       // what a declaration answers
+let CV_INT : i64 = 1
+let CV_BOOL : i64 = 2       // n is 0 or 1
+let CV_STR : i64 = 3
+let CV_ARR : i64 = 4        // str[]: n where it starts in the pool, m how many
+
+// A value the recipe made.  Everything it may hold is a number, a truth
+// value, a string or a run of strings, so one struct with a tag says all
+// of it; a run lives in the evaluator's pool and is named here by where
+// it starts.  A CVal is never changed once made, so handing one on can
+// never alias.
+struct CVal:
+    tag : i64
+    n : i64
+    m : i64
+    s : str
+
+fn cv_none() → CVal:
+    (CVal{tag: CV_NONE, n: 0, m: 0, s: ""})
+
+fn cv_int(v : i64) → CVal:
+    (CVal{tag: CV_INT, n: v, m: 0, s: ""})
+
+fn cv_bool(b : bool) → CVal:
+    (CVal{tag: CV_BOOL, n: 1 if b else 0, m: 0, s: ""})
+
+fn cv_str(t : str) → CVal:
+    (CVal{tag: CV_STR, n: 0, m: 0, s: t})
+
+// how a statement left off, carried outward by one comparison
+let EV_NORM : i64 = 0
+let EV_BREAK : i64 = 1
+let EV_CONT : i64 = 2
+let EV_RET : i64 = 3
+let EV_STOP : i64 = 4       // a diagnostic was raised; everything unwinds
+
+// What a recipe may do before it is called a mistake rather than a
+// program.  A recipe names files: this compiler's own uses a few
+// hundred steps, so the room here is some hundreds of times over.
+// The ceiling is not set higher because reaching it is how a recipe
+// that loops is reported, and stage 1 runs this compiler under the
+// interpreter, where every step costs a great deal -- a budget of
+// millions turns a mistake in a recipe into a wait of minutes.
+let EV_STEPS : i64 = 100000
+let EV_DEPTH : i64 = 64
+
+// What the recipe said, answered together with whatever went wrong
+// saying it -- the shape every phase here has.
+struct Recipe:
+    sources : str[]
+    output : str            // "" where the recipe named none
+    output_dir : str
+    paths : str[]
+    flags : str[]
+    diags : Diag[]
+
+struct Cev:
+    a : Ast
+    toks : Toks
+    src : byte[]
+    gvals : i64[]           // what the checker folded each global to,
+                            // empty where it has not run
+    names : str[]           // the bindings in scope, innermost last
+    vals : CVal[]           // … and what each one holds
+    vmut : i64[]            // … 1 where ← may write to it
+    marks : i64[]           // where each open scope began
+    floor : i64             // a called function sees nothing below this
+    pool : str[]            // the elements of every array value, one arena
+    srcs : str[]            // what has been declared, in order
+    outn : str
+    outd : str
+    paths : str[]
+    flags : str[]
+    steps : i64             // what is left of the budget
+    depth : i64             // how deep the calls stand
+    ret : CVal              // what a return carried
+    diags : Diag[]
+
+// how a construct a recipe may not use is spelled, so the complaint
+// names what was written rather than a node number
+fn ev_spell(k : i64) → str:
+    if k = NK_MCALL: return "a method call"
+    if k = NK_HLIT: return "a hash literal"
+    if k = NK_SLIT: return "a struct literal"
+    if k = NK_FIELD: return "a field"
+    if k = NK_TUPLE: return "a tuple"
+    if k = NK_LAMBDA or k = NK_BADLAM: return "a λ"
+    if k = NK_FNVAL or k = NK_CALLV: return "a function value"
+    if k = NK_SOME or k = NK_EMPTYV or k = NK_DEFAULT or k = NK_TRY: return "an optional"
+    if k = NK_MATCH: return "a match"
+    if k = NK_REF: return "a borrow"
+    if k = NK_SLICE or k = NK_MSLICE: return "a slice"
+    if k = NK_RESHAPE: return "a reshape"
+    if k = NK_IOTA or k = NK_ELEMOF: return "a search"
+    if k = NK_SATADD or k = NK_SATSUB or k = NK_SATMUL: return "saturating arithmetic"
+    if k = NK_SHL or k = NK_SHR or k = NK_BAND or k = NK_BOR or k = NK_BXOR or k = NK_BNOT: return "a bit operation"
+    if k = NK_LAND or k = NK_LOR or k = NK_LXOR or k = NK_LNAND or k = NK_LNOR: return "an eager logical operation"
+    if k = NK_MAXOP or k = NK_MINOP: return "⌈ or ⌊"
+    if k = NK_WRAP: return "@wrap"
+    if k = NK_TYPEOF or k = NK_SIZEOF: return "@typeof or @sizeof"
+    if k = NK_RANGEV: return "a range as a value"
+    if k = NK_WHILEB: return "while with a binding"
+    if k = NK_LETT: return "a tuple binding"
+    if k = NK_STOREFLD or k = NK_STOREIDXP: return "a write through a path"
+    if k = NK_EXPECTS: return "@expect"
+    if k = NK_HINTED: return "@likely or @unlikely"
+    "that"
+
+// how a std member a recipe may not reach is spelled
+fn sb_spell(sb : i64) → str:
+    if sb = SB_PRINTLN or sb = SB_PRINT: return "std.println"
+    if sb = SB_EXIT: return "std.exit"
+    if sb = SB_ARGS: return "std.args"
+    if sb = SB_OPEN or sb = SB_CREATE or sb = SB_CWD: return "std.fs"
+    if sb = SB_ALLOCATOR: return "std.arena"
+    if sb = SB_BYTES or sb = SB_IOV: return "std.bytes"
+    if sb = SB_ENVN or sb = SB_ENVG or sb = SB_ENVH: return "std.env"
+    if sb = SB_PROC: return "std.process"
+    "that"
+
+// what a recipe holds, said once and quoted wherever it is refused
+fn ev_subset() → str:
+    "a recipe binds names, tests them, loops, joins strings and calls the functions this file defines"
+
+// a node with nothing under it
+fn ev_is_leaf(k : i64) → bool:
+    if k = NK_INT or k = NK_BOOL or k = NK_STR: return true
+    k = NK_VAR or k = NK_BREAK or k = NK_CONTINUE
+
+// How many of na, nb and nc hold a child, for the nodes that keep them
+// there; 0 says the node is not part of the subset.  The count has to
+// be exact rather than "walk all three": a let keeps its mutability in
+// nb and its type in nc, and either read as a node id sends the walk
+// somewhere else in the tree entirely.
+fn ev_nchildren(k : i64) → i64:
+    if k = NK_LEN or k = NK_NEG or k = NK_NOT or k = NK_DROPU: return 1
+    if k = NK_RETURN or k = NK_DISCARD or k = NK_EXPRSTMT: return 1
+    if k = NK_LET or k = NK_ASSIGN: return 1
+    if k = NK_INDEX or k = NK_CCAT: return 2
+    if k >= NK_ADD and k <= NK_MOD: return 2
+    if k >= NK_EQ and k <= NK_OR: return 2
+    if k = NK_WHILE or k = NK_FOREACHA: return 2
+    if k = NK_COND or k = NK_IF: return 3
+    0
+
+// which orderings each comparison admits, indexed by NK_EQ…NK_GE:
+// less is 1, equal is 2, greater is 4.  One subtraction and a mask
+// answers all six, over integers, strings and truth values alike.
+fn ev_cmp_admits() → i64[]:
+    [2, 5, 1, 3, 4, 6]
+
+impl Cev:
+    fn derr(&mut self, tok : i64, m : str):
+        let at ¤ptrdiff : i64 = tok
+        self.diags.push(Diag{line: self.toks.line[at],
+                             col: self.toks.col[at], msg: m})
+
+    // One diagnostic ends the recipe.  Unlike the parser and the
+    // checker, which recover and go on, a recipe that has gone wrong
+    // computes on values that were never made, so everything after the
+    // first complaint would be noise.
+    fn halted(&self) → bool:
+        #self.diags > 0
+
+    fn text(&self, tok : i64) → str:
+        run_str(self.src, self.toks.off[tok × 1¤ptrdiff],
+                self.toks.len[tok × 1¤ptrdiff])
+
+    // -------------------------------------------------------------------
+    // Pass one: what the recipe may contain, settled for every branch
+    // -------------------------------------------------------------------
+
+    fn ev_scan(&mut self, id : i64):
+        if id = ⁻1 or self.halted():
+            return
+        let k : i64 = self.a.nkind[id × 1¤ptrdiff]
+        let tok : i64 = self.a.ntok[id × 1¤ptrdiff]
+        let na : i64 = self.a.na[id × 1¤ptrdiff]
+        let nb : i64 = self.a.nb[id × 1¤ptrdiff]
+        let nc : i64 = self.a.nc[id × 1¤ptrdiff]
+        if ev_is_leaf(k):
+            return
+        if k = NK_ARRLIT or k = NK_CALL:
+            if k = NK_CALL:
+                self.scan_callee(tok)
+                if self.halted():
+                    return
+            self.scan_list(na)
+            return
+        if k = NK_SCALL:
+            if na < SB_BSRC or na > SB_BFLAGS:
+                self.derr(tok, sb_spell(na) ⧺ " is not part of a build recipe; " ⧺ ev_subset())
+                return
+            self.scan_list(nb)
+            return
+        if k = NK_BLOCK:
+            self.scan_list(na)
+            return
+        if k = NK_FOREACH:
+            self.ev_scan(self.a.extra[na × 1¤ptrdiff])
+            self.ev_scan(self.a.extra[(na + 1) × 1¤ptrdiff])
+            self.ev_scan(self.a.extra[(na + 2) × 1¤ptrdiff])
+            self.ev_scan(nb)
+            return
+        // everything left that is admitted keeps its children in na,
+        // nb and nc, as many of them as the node has
+        let nch : i64 = ev_nchildren(k)
+        if nch > 0:
+            self.ev_scan(na)
+            if nch >= 2:
+                self.ev_scan(nb)
+            if nch >= 3:
+                self.ev_scan(nc)
+            return
+        self.derr(tok, ev_spell(k) ⧺ " is not part of a build recipe; " ⧺ ev_subset())
+
+    fn scan_list(&mut self, off : i64):
+        let n : i64 = self.a.extra[off × 1¤ptrdiff]
+        let i : mut i64 = 0
+        while i < n and not self.halted():
+            self.ev_scan(self.a.extra[(off + 1 + i) × 1¤ptrdiff])
+            i ← i + 1
+
+    // A recipe calls only what is effect-free: an @impure callee would
+    // put std.println back within reach through the side door, and with
+    // it the divergence pass one exists to close.
+    fn scan_callee(&mut self, tok : i64):
+        let name : str = self.text(tok)
+        let f : i64 = self.fn_index(name)
+        if f = ⁻1:
+            self.derr(tok, "'" ⧺ name ⧺ "' is not a function this file defines; a build recipe reaches what is written beside it")
+            return
+        if self.a.fns[f × 1¤ptrdiff].is_impure:
+            self.derr(tok, "'" ⧺ name ⧺ "' is @impure, and a build recipe does nothing but declare; " ⧺ ev_subset())
+
+    fn fn_index(&self, name : str) → i64:
+        if #self.a.fns > 0:
+            foreach i := 0…#self.a.fns - 1:
+                if self.a.fns[i].name = name:
+                    return @dropunit(i)
+        ⁻1
+
+    // -------------------------------------------------------------------
+    // Scope: the checker's watermark, and its floor for a called frame
+    // -------------------------------------------------------------------
+
+    fn push_scope(&mut self):
+        self.marks.push(@dropunit(#self.names))
+
+    fn pop_scope(&mut self):
+        let base : i64 = self.marks.pop() ?? 0
+        while @dropunit(#self.names) > base:
+            _ ← self.names.pop() ?? ""
+            _ ← self.vals.pop() ?? cv_none()
+            _ ← self.vmut.pop() ?? 0
+
+    fn bind(&mut self, name : str, v : CVal, is_mut : bool):
+        self.names.push(name)
+        self.vals.push(v)
+        self.vmut.push(1 if is_mut else 0)
+
+    // innermost first, and never below the frame's floor, so a callee
+    // sees its own parameters and nothing of its caller's
+    fn slot_of(&self, name : str) → i64:
+        let i : mut i64 = @dropunit(#self.names) - 1
+        while i >= self.floor:
+            if self.names[i × 1¤ptrdiff] = name:
+                return i
+            i ← i - 1
+        ⁻1
+
+    // -------------------------------------------------------------------
+    // The budgets, so a recipe that loops ends with a complaint
+    // -------------------------------------------------------------------
+
+    @pre(self.steps >= 0)
+    fn tick(&mut self, tok : i64) → bool:
+        if self.steps = 0:
+            if not self.halted():
+                self.derr(tok, "this build recipe did not settle after " ⧺ i64_str(EV_STEPS) ⧺ " steps; something in it does not finish")
+            return false
+        self.steps ← self.steps - 1
+        not self.halted()
+
+    // -------------------------------------------------------------------
+    // Pass two: run it
+    // -------------------------------------------------------------------
+
+    fn ev_block(&mut self, off : i64) → i64:
+        let n : i64 = self.a.extra[off × 1¤ptrdiff]
+        let i : mut i64 = 0
+        while i < n:
+            let fl : i64 = self.ev_stmt(self.a.extra[(off + 1 + i) × 1¤ptrdiff])
+            if fl ≠ EV_NORM:
+                return fl
+            i ← i + 1
+        EV_NORM
+
+    fn ev_stmt(&mut self, id : i64) → i64:
+        let tok : i64 = self.a.ntok[id × 1¤ptrdiff]
+        if not self.tick(tok):
+            return EV_STOP
+        let k : i64 = self.a.nkind[id × 1¤ptrdiff]
+        let na : i64 = self.a.na[id × 1¤ptrdiff]
+        let nb : i64 = self.a.nb[id × 1¤ptrdiff]
+        let nc : i64 = self.a.nc[id × 1¤ptrdiff]
+        if k = NK_BLOCK:
+            self.push_scope()
+            let fl : i64 = self.ev_block(na)
+            self.pop_scope()
+            return fl
+        if k = NK_LET:
+            let v : CVal = self.ev_expr(na)
+            if self.halted():
+                return EV_STOP
+            self.bind(self.text(tok), v, nb = 1)
+            return EV_NORM
+        if k = NK_ASSIGN:
+            let v : CVal = self.ev_expr(na)
+            if self.halted():
+                return EV_STOP
+            let name : str = self.text(tok)
+            let s : i64 = self.slot_of(name)
+            if s = ⁻1:
+                self.derr(tok, "'" ⧺ name ⧺ "' is not a name in scope here")
+                return EV_STOP
+            if self.vmut[s × 1¤ptrdiff] = 0:
+                self.derr(tok, "'" ⧺ name ⧺ "' was not declared mut, so ← may not write to it")
+                return EV_STOP
+            self.vals[s × 1¤ptrdiff] ← v
+            return EV_NORM
+        if k = NK_DISCARD:
+            _ ← self.ev_expr(na)
+            return EV_STOP if self.halted() else EV_NORM
+        if k = NK_EXPRSTMT:
+            // A function answers with its last expression rather than a
+            // return, so every expression statement leaves its value
+            // where a return would; the one the body ends on is the one
+            // still there when the frame closes.
+            self.ret ← self.ev_expr(na)
+            return EV_STOP if self.halted() else EV_NORM
+        if k = NK_RETURN:
+            self.ret ← cv_none() if na = ⁻1 else self.ev_expr(na)
+            return EV_STOP if self.halted() else EV_RET
+        if k = NK_BREAK:
+            return EV_BREAK
+        if k = NK_CONTINUE:
+            return EV_CONT
+        if k = NK_IF:
+            let c : CVal = self.ev_expr(na)
+            if self.halted():
+                return EV_STOP
+            if c.n ≠ 0:
+                return self.ev_stmt(nb)
+            return EV_NORM if nc = ⁻1 else self.ev_stmt(nc)
+        if k = NK_WHILE:
+            while true:
+                let c : CVal = self.ev_expr(na)
+                if self.halted():
+                    return EV_STOP
+                if c.n = 0:
+                    return EV_NORM
+                let fl : i64 = self.ev_stmt(nb)
+                if fl = EV_BREAK:
+                    return EV_NORM
+                if fl = EV_RET or fl = EV_STOP:
+                    return fl
+                if not self.tick(tok):
+                    return EV_STOP
+            return EV_NORM
+        if k = NK_FOREACH:
+            return self.ev_foreach(id, tok, na, nb)
+        if k = NK_FOREACHA:
+            return self.ev_foreacha(id, tok, na, nb)
+        self.derr(tok, ev_spell(k) ⧺ " is not part of a build recipe; " ⧺ ev_subset())
+        EV_STOP
+
+    // foreach v := lo…hi and lo…step…hi.  A range counts downward when
+    // its end is below its base, which is the language's rule and the
+    // reason a step of zero has to be refused rather than run.
+    fn ev_foreach(&mut self, id : i64, tok : i64, na : i64, body : i64) → i64:
+        let lo_v : CVal = self.ev_expr(self.a.extra[na × 1¤ptrdiff])
+        let step_id : i64 = self.a.extra[(na + 1) × 1¤ptrdiff]
+        let hi_v : CVal = self.ev_expr(self.a.extra[(na + 2) × 1¤ptrdiff])
+        if self.halted():
+            return EV_STOP
+        let one : i64 = 1
+        let minus : i64 = ⁻1
+        let dir : i64 = one if hi_v.n >= lo_v.n else minus
+        let step : mut i64 = dir
+        if step_id ≠ ⁻1:
+            let sv : CVal = self.ev_expr(step_id)
+            if self.halted():
+                return EV_STOP
+            if sv.n = 0:
+                self.derr(tok, "a step of zero never reaches the end of the range")
+                return EV_STOP
+            step ← sv.n
+        let name : str = self.text(tok)
+        let i : mut i64 = lo_v.n
+        while (i <= hi_v.n if step > 0 else i >= hi_v.n):
+            self.push_scope()
+            self.bind(name, cv_int(i), false)
+            let fl : i64 = self.ev_stmt(body)
+            self.pop_scope()
+            if fl = EV_BREAK:
+                return EV_NORM
+            if fl = EV_RET or fl = EV_STOP:
+                return fl
+            if not self.tick(tok):
+                return EV_STOP
+            i ← i + step
+        EV_NORM
+
+    fn ev_foreacha(&mut self, id : i64, tok : i64, na : i64, body : i64) → i64:
+        let av : CVal = self.ev_expr(na)
+        if self.halted():
+            return EV_STOP
+        if av.tag ≠ CV_ARR:
+            self.derr(tok, "foreach walks an array, and this is " ⧺ self.cv_kind(av))
+            return EV_STOP
+        let name : str = self.text(tok)
+        let i : mut i64 = 0
+        while i < av.m:
+            self.push_scope()
+            self.bind(name, cv_str(self.pool[(av.n + i) × 1¤ptrdiff]), false)
+            let fl : i64 = self.ev_stmt(body)
+            self.pop_scope()
+            if fl = EV_BREAK:
+                return EV_NORM
+            if fl = EV_RET or fl = EV_STOP:
+                return fl
+            if not self.tick(tok):
+                return EV_STOP
+            i ← i + 1
+        EV_NORM
+
+    fn cv_kind(&self, v : CVal) → str:
+        if v.tag = CV_INT: return "a number"
+        if v.tag = CV_BOOL: return "a truth value"
+        if v.tag = CV_STR: return "a string"
+        if v.tag = CV_ARR: return "an array of strings"
+        "nothing"
+
+    // -------------------------------------------------------------------
+    // Expressions
+    // -------------------------------------------------------------------
+
+    fn ev_expr(&mut self, id : i64) → CVal:
+        if id = ⁻1 or self.halted():
+            return cv_none()
+        let tok : i64 = self.a.ntok[id × 1¤ptrdiff]
+        if not self.tick(tok):
+            return cv_none()
+        let k : i64 = self.a.nkind[id × 1¤ptrdiff]
+        let na : i64 = self.a.na[id × 1¤ptrdiff]
+        let nb : i64 = self.a.nb[id × 1¤ptrdiff]
+        let nc : i64 = self.a.nc[id × 1¤ptrdiff]
+        if k = NK_INT:
+            return cv_int(na)
+        if k = NK_BOOL:
+            return cv_bool(na = 1)
+        if k = NK_STR:
+            return cv_str(self.a.strs[na × 1¤ptrdiff])
+        if k = NK_DROPU:
+            // @dropunit(#xs) is how this project writes a count, and a
+            // recipe in the house style should not be punished for it
+            return self.ev_expr(na)
+        if k = NK_VAR:
+            return self.ev_var(tok)
+        if k = NK_ARRLIT:
+            return self.ev_arrlit(tok, na)
+        if k = NK_LEN:
+            let v : CVal = self.ev_expr(na)
+            if self.halted():
+                return cv_none()
+            if v.tag = CV_ARR:
+                return cv_int(v.m)
+            if v.tag = CV_STR:
+                return cv_int(@dropunit(#v.s.chars()))
+            self.derr(tok, "# counts an array or a string, and this is " ⧺ self.cv_kind(v))
+            return cv_none()
+        if k = NK_INDEX:
+            return self.ev_index(tok, na, nb)
+        if k = NK_CCAT:
+            return self.ev_ccat(tok, na, nb)
+        if k = NK_NEG:
+            let v : CVal = self.ev_expr(na)
+            return cv_int(⁻v.n)
+        if k = NK_NOT:
+            let v : CVal = self.ev_expr(na)
+            return cv_bool(v.n = 0)
+        if k = NK_AND or k = NK_OR:
+            // short-circuit, as the language has it
+            let l : CVal = self.ev_expr(na)
+            if self.halted():
+                return cv_none()
+            if k = NK_AND and l.n = 0:
+                return cv_bool(false)
+            if k = NK_OR and l.n ≠ 0:
+                return cv_bool(true)
+            let r : CVal = self.ev_expr(nb)
+            return cv_bool(r.n ≠ 0)
+        if k = NK_COND:
+            let c : CVal = self.ev_expr(nb)
+            if self.halted():
+                return cv_none()
+            return self.ev_expr(na if c.n ≠ 0 else nc)
+        if k >= NK_ADD and k <= NK_MOD:
+            return self.ev_arith(k, tok, na, nb)
+        if k >= NK_EQ and k <= NK_GE:
+            return self.ev_cmp(k, tok, na, nb)
+        if k = NK_CALL:
+            return self.ev_call(tok, na)
+        if k = NK_SCALL:
+            return self.ev_scall(tok, na, nb)
+        self.derr(tok, ev_spell(k) ⧺ " is not part of a build recipe; " ⧺ ev_subset())
+        cv_none()
+
+    fn ev_var(&mut self, tok : i64) → CVal:
+        let name : str = self.text(tok)
+        let s : i64 = self.slot_of(name)
+        if s ≠ ⁻1:
+            return self.vals[s × 1¤ptrdiff]
+        // A global the checker folded to a constant is readable.  Every
+        // integer and truth-value global folds -- the checker refuses
+        // one that does not -- and what does not fold is a function
+        // value, which is not something a recipe holds.
+        let g : i64 = self.global_index(name)
+        if g ≠ ⁻1:
+            if g < @dropunit(#self.gvals):
+                let gt : i64 = self.a.globals[g × 1¤ptrdiff].ty
+                let gv : i64 = self.gvals[g × 1¤ptrdiff]
+                if gt = TY_BOOL:
+                    return cv_bool(gv ≠ 0)
+                if ty_is_int(gt):
+                    return cv_int(gv)
+        self.derr(tok, "'" ⧺ name ⧺ "' is not a name a build recipe can read here")
+        cv_none()
+
+    fn global_index(&self, name : str) → i64:
+        if #self.a.globals > 0:
+            foreach i := 0…#self.a.globals - 1:
+                if self.a.globals[i].name = name:
+                    return @dropunit(i)
+        ⁻1
+
+    fn ev_arrlit(&mut self, tok : i64, off : i64) → CVal:
+        let n : i64 = self.a.extra[off × 1¤ptrdiff]
+        let base : i64 = @dropunit(#self.pool)
+        let i : mut i64 = 0
+        while i < n:
+            let e : CVal = self.ev_expr(self.a.extra[(off + 1 + i) × 1¤ptrdiff])
+            if self.halted():
+                return cv_none()
+            if e.tag ≠ CV_STR:
+                self.derr(tok, "a build recipe's arrays hold strings, and this element is " ⧺ self.cv_kind(e))
+                return cv_none()
+            self.pool.push(e.s)
+            i ← i + 1
+        assert(@dropunit(#self.pool) = base + n, "every element reached the pool")
+        (CVal{tag: CV_ARR, n: base, m: n, s: ""})
+
+    fn ev_index(&mut self, tok : i64, na : i64, nb : i64) → CVal:
+        let base : CVal = self.ev_expr(na)
+        let idx : CVal = self.ev_expr(nb)
+        if self.halted():
+            return cv_none()
+        if base.tag ≠ CV_ARR:
+            self.derr(tok, "indexing reads an array, and this is " ⧺ self.cv_kind(base))
+            return cv_none()
+        if idx.n < 0 or idx.n >= base.m:
+            self.derr(tok, "the array holds " ⧺ i64_str(base.m) ⧺ " elements, so " ⧺ i64_str(idx.n) ⧺ " is not one of them")
+            return cv_none()
+        cv_str(self.pool[(base.n + idx.n) × 1¤ptrdiff])
+
+    // ⧺ joins two strings or two arrays.  An array join copies both runs
+    // to the top of the pool rather than writing into either, so no
+    // value already handed out is disturbed.
+    fn ev_ccat(&mut self, tok : i64, na : i64, nb : i64) → CVal:
+        let l : CVal = self.ev_expr(na)
+        let r : CVal = self.ev_expr(nb)
+        if self.halted():
+            return cv_none()
+        if l.tag = CV_STR and r.tag = CV_STR:
+            return cv_str(l.s ⧺ r.s)
+        if l.tag = CV_ARR and r.tag = CV_ARR:
+            let base : i64 = @dropunit(#self.pool)
+            let i : mut i64 = 0
+            while i < l.m:
+                self.pool.push(self.pool[(l.n + i) × 1¤ptrdiff])
+                i ← i + 1
+            let j : mut i64 = 0
+            while j < r.m:
+                self.pool.push(self.pool[(r.n + j) × 1¤ptrdiff])
+                j ← j + 1
+            return (CVal{tag: CV_ARR, n: base, m: l.m + r.m, s: ""})
+        self.derr(tok, "⧺ joins two strings or two arrays, and these are " ⧺ self.cv_kind(l) ⧺ " and " ⧺ self.cv_kind(r))
+        cv_none()
+
+    // The compiler's own arithmetic aborts on overflow, so a recipe's
+    // overflow has to be caught before it reaches it.
+    fn ev_arith(&mut self, k : i64, tok : i64, na : i64, nb : i64) → CVal:
+        let l : CVal = self.ev_expr(na)
+        let r : CVal = self.ev_expr(nb)
+        if self.halted():
+            return cv_none()
+        if l.tag ≠ CV_INT or r.tag ≠ CV_INT:
+            self.derr(tok, "arithmetic in a build recipe is over numbers, and these are " ⧺ self.cv_kind(l) ⧺ " and " ⧺ self.cv_kind(r))
+            return cv_none()
+        let lim : i64 = 4611686018427387903
+        if l.n > lim or l.n < ⁻lim or r.n > lim or r.n < ⁻lim:
+            self.derr(tok, "the numbers a build recipe counts with stay well inside i64; these do not")
+            return cv_none()
+        if k = NK_ADD: return cv_int(l.n + r.n)
+        if k = NK_SUB: return cv_int(l.n - r.n)
+        if k = NK_MUL:
+            let small : i64 = 2147483647
+            if l.n > small or l.n < ⁻small or r.n > small or r.n < ⁻small:
+                self.derr(tok, "the numbers a build recipe multiplies stay inside i32; these do not")
+                return cv_none()
+            return cv_int(l.n × r.n)
+        if r.n = 0:
+            self.derr(tok, "a build recipe divided by zero")
+            return cv_none()
+        // the zero divisor was refused just above, so the default here
+        // stands for a case that cannot arise
+        let zero : i64 = 0
+        cv_int(((l.n ÷ r.n) ?? zero) if k = NK_DIV else ((l.n % r.n) ?? zero))
+
+    // One comparison into a sign, then which orderings the operator
+    // admits: less is 1, equal is 2, greater is 4.
+    fn ev_cmp(&mut self, k : i64, tok : i64, na : i64, nb : i64) → CVal:
+        let l : CVal = self.ev_expr(na)
+        let r : CVal = self.ev_expr(nb)
+        if self.halted():
+            return cv_none()
+        if l.tag ≠ r.tag:
+            self.derr(tok, "a comparison reads two of a kind, and these are " ⧺ self.cv_kind(l) ⧺ " and " ⧺ self.cv_kind(r))
+            return cv_none()
+        let one : i64 = 1
+        let two : i64 = 2
+        let four : i64 = 4
+        let ord : mut i64 = two
+        if l.tag = CV_STR:
+            ord ← two if l.s = r.s else one
+        else:
+            ord ← two if l.n = r.n else (one if l.n < r.n else four)
+        let admits : i64[] = ev_cmp_admits()
+        cv_bool(admits[(k - NK_EQ) × 1¤ptrdiff] & ord ≠ 0)
+
+    // -------------------------------------------------------------------
+    // Calls, and what the recipe declares
+    // -------------------------------------------------------------------
+
+    fn ev_call(&mut self, tok : i64, args_off : i64) → CVal:
+        let name : str = self.text(tok)
+        let f : i64 = self.fn_index(name)
+        if f = ⁻1:
+            self.derr(tok, "'" ⧺ name ⧺ "' is not a function this file defines; a build recipe reaches what is written beside it")
+            return cv_none()
+        if self.depth >= EV_DEPTH:
+            self.derr(tok, "the calls in this build recipe stand more than " ⧺ i64_str(EV_DEPTH) ⧺ " deep; something in it does not finish")
+            return cv_none()
+        let callee : FnDef = self.a.fns[f × 1¤ptrdiff]
+        let np : i64 = self.a.extra[callee.params_off × 1¤ptrdiff]
+        let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
+        if argc ≠ np:
+            self.derr(tok, "'" ⧺ name ⧺ "' wants " ⧺ i64_str(np) ⧺ " arguments, not " ⧺ i64_str(argc))
+            return cv_none()
+        // the arguments are read in the caller's scope, before the
+        // callee's frame hides it
+        let vs : mut CVal[] = []
+        let i : mut i64 = 0
+        while i < argc:
+            vs.push(self.ev_expr(self.a.extra[(args_off + 1 + i) × 1¤ptrdiff]))
+            if self.halted():
+                return cv_none()
+            i ← i + 1
+        let saved_floor : i64 = self.floor
+        let saved_ret : CVal = self.ret
+        self.push_scope()
+        self.floor ← @dropunit(#self.names)
+        self.depth ← self.depth + 1
+        let j : mut i64 = 0
+        while j < np:
+            let ptok : i64 = self.a.extra[(callee.params_off + 1 + j × 2) × 1¤ptrdiff]
+            self.bind(self.text(ptok), vs[j × 1¤ptrdiff], false)
+            j ← j + 1
+        self.ret ← cv_none()
+        let fl : i64 = self.ev_stmt(callee.body)
+        let answered : CVal = self.ret
+        self.depth ← self.depth - 1
+        self.floor ← saved_floor
+        self.pop_scope()
+        self.ret ← saved_ret
+        assert(self.floor = saved_floor, "the frame's floor was put back")
+        if fl = EV_STOP:
+            return cv_none()
+        answered
+
+    fn ev_scall(&mut self, tok : i64, sb : i64, args_off : i64) → CVal:
+        let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
+        // the five declarations take the one string; the five readers
+        // take nothing
+        if sb <= SB_BFLAG:
+            if argc ≠ 1:
+                self.derr(tok, "this std.build declaration takes the one string")
+                return cv_none()
+            let v : CVal = self.ev_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            if self.halted():
+                return cv_none()
+            if v.tag ≠ CV_STR:
+                self.derr(tok, "std.build is told a string, and this is " ⧺ self.cv_kind(v))
+                return cv_none()
+            if sb = SB_BSRC: self.srcs.push(v.s)
+            elif sb = SB_BOUT: self.outn ← v.s
+            elif sb = SB_BOUTD: self.outd ← v.s
+            elif sb = SB_BPATH: self.paths.push(v.s)
+            else: self.flags.push(v.s)
+            return cv_none()
+        if argc ≠ 0:
+            self.derr(tok, "this std.build reader takes no arguments")
+            return cv_none()
+        if sb = SB_BOUTN: return cv_str(self.outn)
+        if sb = SB_BOUTDN: return cv_str(self.outd)
+        let from : str[] = self.srcs if sb = SB_BSRCS else (self.paths if sb = SB_BPATHS else self.flags)
+        self.pooled(from)
+
+    // a copy of a list into the pool, so what a reader answers is what
+    // was declared when it was asked and not what came after
+    fn pooled(&mut self, xs : str[]) → CVal:
+        let base : i64 = @dropunit(#self.pool)
+        foreach x := xs:
+            self.pool.push(x)
+        (CVal{tag: CV_ARR, n: base, m: @dropunit(#xs), s: ""})
+
+// Read the @build recipe, if the program carries one.  A file without
+// one pays a single comparison; every other phase here answers a struct
+// carrying its own diagnostics, and so does this.
+@post(r: #r.diags = 0 or (#r.sources = 0 and #r.paths = 0 and #r.flags = 0))
+fn build_recipe(a : Ast, toks : Toks, src : byte[], gvals : i64[]) → Recipe:
+    if #a.builds = 0:
+        return (Recipe{sources: [], output: "", output_dir: "",
+                       paths: [], flags: [], diags: []})
+    let recipe : FnDef = a.builds[0 × 1¤ptrdiff]
+    let ev : mut Cev = (Cev{a: a, toks: toks, src: src, gvals: gvals,
+                          names: [], vals: [], vmut: [], marks: [], floor: 0,
+                          pool: [], srcs: [], outn: "", outd: "",
+                          paths: [], flags: [],
+                          steps: EV_STEPS, depth: 0, ret: cv_none(),
+                          diags: []})
+    // Pass one settles what the body may contain, for every branch --
+    // including the ones pass two will not take.
+    ev.ev_scan(recipe.body)
+    if #ev.diags = 0:
+        ev.push_scope()
+        _ ← ev.ev_stmt(recipe.body)
+        ev.pop_scope()
+    if #ev.diags > 0:
+        return (Recipe{sources: [], output: "", output_dir: "",
+                       paths: [], flags: [], diags: ev.diags})
+    assert(#ev.marks = 0, "every scope the recipe opened was closed")
+    assert(ev.depth = 0, "every call the recipe made returned")
+    (Recipe{sources: ev.srcs, output: ev.outn, output_dir: ev.outd,
+            paths: ev.paths, flags: ev.flags, diags: []})

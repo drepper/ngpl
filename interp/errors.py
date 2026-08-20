@@ -82,12 +82,45 @@ def contract_semantic() -> str:
 _source_text: str = ""
 _source_path: str = "<unknown>"
 
+# Where each source file begins in the concatenated text, as a line
+# number, beside the name of the file that begins there.  One file
+# leaves these empty and every line is simply its own.
+_file_starts: list[int] = []
+_file_names: list[str] = []
 
-def set_source(text: str, path: str) -> None:
-    """Register the source a diagnostic raised mid-run points into."""
-    global _source_text, _source_path
+
+def set_source(text: str, path: str,
+               starts: list[int] | None = None,
+               names: list[str] | None = None) -> None:
+    """Register the source a diagnostic raised mid-run points into.
+
+    Several files are read as one, so a line number counted from the
+    start of the whole text is not the line number anybody wrote.
+    `starts` and `names` say where each file began, which is what turns
+    the one back into the other.
+    """
+    global _source_text, _source_path, _file_starts, _file_names
     _source_text = text
     _source_path = path
+    _file_starts = list(starts or [])
+    _file_names = list(names or [])
+
+
+def locate(line: int, fallback: str) -> tuple[str, int]:
+    """Say which file a line of the concatenated source came from.
+
+    Answers the file's name and the line number within it.  With one
+    file, or none registered, the line is already what it should be.
+    """
+    if len(_file_starts) < 2:
+        return fallback, line
+    # The file a line belongs to is the last one that begins at or
+    # before it.  A source is a handful of files, so a walk from the
+    # back finds it in fewer steps than the search would take to set up.
+    for k in range(len(_file_starts) - 1, -1, -1):
+        if line >= _file_starts[k]:
+            return _file_names[k], line - _file_starts[k] + 1
+    return fallback, line
 
 
 class _StackHolder:
@@ -181,8 +214,13 @@ def format_backtrace(exc: BaseException, source_path: str, *,
     lines = [f"{c.bold}backtrace{c.reset} (innermost call first):"]
     for depth, frame in enumerate(reversed(frames)):
         name, pos, label = frame[0], frame[1], frame[2]
-        origin = label if label is not None else source_path
-        where = origin if pos is None else f"{origin}:{pos[0]}:{pos[1]}"
+        if pos is None:
+            where = label if label is not None else source_path
+        else:
+            # a frame's line is counted over the whole text, so it says
+            # which of the source files it fell in, as a diagnostic does
+            origin, line = locate(pos[0], source_path)
+            where = f"{label or origin}:{line}:{pos[1]}"
         lines.append(f"  #{depth} {c.bold}{name}{c.reset} at {where}")
     return "\n".join(lines)
 
@@ -322,13 +360,19 @@ def format_diagnostic(
 
     src_line = lines[line - 1]
 
+    # `line` indexes the whole text, which is where the excerpt comes
+    # from; what is shown is the file that text belongs to and the line
+    # number within it, which is what somebody reading the error has in
+    # front of them.
+    shown_path, shown_line = locate(line, source_path)
+
     if end_col is None or end_col <= col:
         end_col = col + 1
 
     end_col = min(end_col, len(src_line) + 1)
     underline_len = max(end_col - col, 1)
 
-    max_line = line + 1 if line < len(lines) else line
+    max_line = shown_line + 1 if line < len(lines) else shown_line
     num_width = max(len(str(max_line)), 2)
 
     level_colors = {
@@ -346,7 +390,7 @@ def format_diagnostic(
         f"{level_color}{c.bold}{level}{c.reset}{c.bold}: {message}{c.reset}"
     )
 
-    loc = f"{source_path}:{line}:{col + 1}"
+    loc = f"{shown_path}:{shown_line}:{col + 1}"
     arrow_pad = " " * max(num_width - 1, 0)
     parts.append(
         f" {arrow_pad}{c.blue}{c.bold}-->{c.reset} {loc}"
@@ -354,7 +398,7 @@ def format_diagnostic(
 
     parts.append(blank_gutter)
 
-    line_num_str = str(line).rjust(num_width)
+    line_num_str = str(shown_line).rjust(num_width)
     highlighted = _highlight_line(src_line, c)
     parts.append(
         f" {c.blue}{c.bold}{line_num_str} |{c.reset} {highlighted}"
@@ -368,7 +412,7 @@ def format_diagnostic(
 
     if line < len(lines):
         ctx_line = lines[line]
-        ctx_num = str(line + 1).rjust(num_width)
+        ctx_num = str(shown_line + 1).rjust(num_width)
         ctx_highlighted = _highlight_line(ctx_line, c)
         parts.append(
             f" {c.blue}{c.bold}{ctx_num} |{c.reset} {ctx_highlighted}"

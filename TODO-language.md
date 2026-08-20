@@ -846,6 +846,13 @@ Module System
     compact spelling of the module, the name, and the signature.  Decide which, and record it
     with the object-file encoding in TODO-compiler.md.
 
+    The build function landed ahead of the module system, because the compiler's own sources
+    needed splitting before either existed: several files are read as if concatenated, and a
+    @build recipe names them.  Spec Chapter 8 describes what is there and says plainly that
+    it is a stand-in.  The module system subsumes two of its limitations -- that there is one
+    text rather than compilation units, and that the order of the file list is significant
+    because an enum and a unit must be declared before use.
+
 
 Contract System
 ---------------

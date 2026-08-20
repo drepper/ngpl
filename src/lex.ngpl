@@ -1,0 +1,554 @@
+// ===========================================================================
+// Lexing: a byte-class table drives the scan
+// ===========================================================================
+//
+// Every byte is classified once through a 256-entry table; the class
+// either is the token (entries ≥ 100 carry the token kind directly) or
+// names the one handler that reads the run.  Multi-byte glyphs go
+// through the GLYPHS hashes.  This is the scalar, table-driven shape of
+// the mask-pipeline design DESIGN.md describes: the classes here are
+// the classes a SIMD or GPU lexer computes 64 bytes at a time.
+
+let CL_INVALID : i64 = 0
+let CL_WS : i64 = 1
+let CL_NL : i64 = 2
+let CL_DIGIT : i64 = 3
+let CL_IDENT : i64 = 4
+let CL_QUOTE : i64 = 5
+let CL_SLASH : i64 = 6
+let CL_MB2 : i64 = 7         // two-byte glyph lead (C2, C3, CE)
+let CL_MB3 : i64 = 8         // three-byte glyph lead (E2)
+let CL_TAB : i64 = 9
+let CL_COLON : i64 = 10      // : or :=
+let CL_LT : i64 = 11         // < <= << <-
+let CL_GT : i64 = 12         // > >= >>
+let CL_DASH : i64 = 13       // - or ->
+let CL_QMARK : i64 = 14      // ??
+let CL_APOS : i64 = 15       // a character literal
+
+// The class table, built once per run.  An entry of kind+100 is a
+// complete single-byte token.
+@post(t: #t = 256)
+fn mkcls() → i64[]:
+    let t : mut i64[] = []
+    foreach _ := 0…255:
+        t.push(0)
+    t[32] ← CL_WS
+    t[10] ← CL_NL
+    t[9] ← CL_TAB
+    foreach d := 48…57:
+        t[d × 1¤ptrdiff] ← CL_DIGIT
+    foreach c := 97…122:
+        t[c × 1¤ptrdiff] ← CL_IDENT
+    foreach c := 65…90:
+        t[c × 1¤ptrdiff] ← CL_IDENT
+    t[95] ← CL_IDENT
+    t[34] ← CL_QUOTE
+    t[47] ← CL_SLASH
+    t[194] ← CL_MB2
+    t[195] ← CL_MB2
+    t[206] ← CL_MB2
+    t[33] ← 100 + TK_BANG
+    t[59] ← 100 + TK_SEMI
+    t[226] ← CL_MB3
+    t[58] ← CL_COLON
+    t[60] ← CL_LT
+    t[62] ← CL_GT
+    t[45] ← CL_DASH
+    t[63] ← CL_QMARK
+    t[39] ← CL_APOS
+    t[40] ← 100 + TK_LPAR
+    t[41] ← 100 + TK_RPAR
+    t[44] ← 100 + TK_COMMA
+    t[46] ← 100 + TK_DOT
+    t[64] ← 100 + TK_AT
+    t[43] ← 100 + TK_PLUS
+    t[37] ← 100 + TK_MOD
+    t[61] ← 100 + TK_EQ
+    t[126] ← 100 + TK_BNOT
+    t[38] ← 100 + TK_BAND
+    t[124] ← 100 + TK_BOR
+    t[94] ← 100 + TK_BXOR
+    t[91] ← 100 + TK_LBRACK
+    t[93] ← 100 + TK_RBRACK
+    t[35] ← 100 + TK_HASH
+    t[123] ← 100 + TK_LBRACE
+    t[125] ← 100 + TK_RBRACE
+    t
+
+fn is_digit(b : i64) → bool:
+    b >= 48 and b <= 57
+
+@post(r: r >= ⁻1 and r <= 15)
+fn hex_val(b : i64) → i64:
+    if is_digit(b): return b - 48
+    if b >= 97 and b <= 102: return b - 87
+    if b >= 65 and b <= 70: return b - 55
+    ⁻1
+
+struct Toks:
+    kind : i64[]
+    off : i64[]
+    len : i64[]
+    line : i64[]
+    col : i64[]
+    val : i64[]      // value of TK_INT, string table index of TK_STR
+    big : i64[]      // 1 when a TK_INT is in [2^63, 2^64), stored wrapped
+    strs : str[]     // string literal table
+    diags : Diag[]
+
+struct Lexer:
+    src : byte[]
+    n : i64
+    cls : i64[]
+    pos : i64
+    line : i64
+    col : i64
+    parens : i64
+    kind : i64[]
+    off : i64[]
+    len : i64[]
+    tline : i64[]
+    tcol : i64[]
+    val : i64[]
+    big : i64[]
+    strs : str[]
+    indents : i64[]
+    diags : Diag[]
+
+impl Lexer:
+    fn peek(&self, ahead : i64) → i64:
+        if self.pos + ahead >= self.n: return ⁻1
+        self.src[(self.pos + ahead) × 1¤byte]
+
+    fn emit(&mut self, k : i64, o : i64, l : i64, c : i64, v : i64, b : i64):
+        self.kind.push(k)
+        self.off.push(o)
+        self.len.push(l)
+        self.tline.push(self.line)
+        self.tcol.push(c)
+        self.val.push(v)
+        self.big.push(b)
+
+    fn err(&mut self, m : str):
+        self.diags.push(Diag{line: self.line, col: self.col, msg: m})
+        self.pos ← self.n
+
+    // one ASCII byte
+    fn adv(&mut self):
+        self.pos ← self.pos + 1
+        self.col ← self.col + 1
+
+    // a whole glyph of n bytes counts one column: columns are
+    // characters, as the interpreter reports them
+    fn advg(&mut self, n : i64):
+        self.pos ← self.pos + n
+        self.col ← self.col + 1
+
+    fn skip_gaps(&mut self) → bool:
+        while true:
+            let b : i64 = self.peek(0)
+            if b = ⁻1 or b = 10:
+                return false
+            let c : i64 = self.cls[b × 1¤ptrdiff]
+            if c = CL_WS:
+                self.adv()
+            elif c = CL_TAB:
+                self.err("tab in indentation or code; ngplc reads spaces only")
+                return false
+            elif c = CL_SLASH and self.peek(1) = 47:
+                while self.peek(0) ≠ 10 and self.peek(0) ≠ ⁻1:
+                    self.pos ← self.pos + 1
+            elif c = CL_SLASH and self.peek(1) = 42:
+                self.adv()
+                self.adv()
+                while true:
+                    let d : i64 = self.peek(0)
+                    if d = ⁻1:
+                        self.err("unterminated block comment")
+                        return false
+                    if d = 42 and self.peek(1) = 47:
+                        self.adv()
+                        self.adv()
+                        break
+                    if d = 10:
+                        self.pos ← self.pos + 1
+                        self.line ← self.line + 1
+                        self.col ← 1
+                    else:
+                        // any byte, including inside a multi-byte
+                        // character; the column counts lead bytes only
+                        self.pos ← self.pos + 1
+                        self.col ← self.col + (0 if (d & 192) = 128 else 1)
+            else:
+                return true
+        false
+
+    fn handle_indent(&mut self):
+        let width : i64 = self.col - 1
+        let top : i64 = self.indents[#self.indents - 1]
+        if width > top:
+            self.indents.push(width)
+            self.emit(TK_INDENT, self.pos, 0, self.col, 0, 0)
+        else:
+            while width < self.indents[#self.indents - 1]:
+                _ ← self.indents.pop() ?? 0
+                self.emit(TK_DEDENT, self.pos, 0, self.col, 0, 0)
+            if width ≠ self.indents[#self.indents - 1]:
+                self.err("indentation does not match any enclosing block")
+
+    // whether appending decimal digit d to the wrapped value v walks
+    // past 2^64-1, v being read through the unsigned lens
+    fn too_big_dec(&self, v : i64, d : i64) → bool:
+        if v < 0:
+            // already ≥ 2^63; ×10 always overflows
+            return true
+        let lim : i64 = 1844674407370955161
+        v > lim or (v = lim and d > 5)
+
+    fn read_number(&mut self):
+        let spos : i64 = self.pos
+        let scol : i64 = self.col
+        let v : mut i64 = 0
+        let big : mut i64 = 0
+        if self.peek(0) = 48 and (self.peek(1) = 120 or self.peek(1) = 88):
+            self.adv()
+            self.adv()
+            if hex_val(self.peek(0)) = ⁻1:
+                self.err("hexadecimal literal without digits")
+                return
+            // A u64 literal past i64 is meant to run negative: the
+            // bit pattern is the value, and the sign is how the reader
+            // below learns the literal is a big one.  This is the
+            // wrapping the annotation is for.
+            let digits : mut i64 = 0
+            while hex_val(self.peek(0)) ≠ ⁻1:
+                digits ← digits + 1
+                if digits > 16:
+                    self.err("integer literal does not fit u64, the widest core-1 has")
+                    return
+                v ← @wrap(v × 16 + hex_val(self.peek(0)))
+                self.adv()
+            if v < 0:
+                big ← 1
+        else:
+            // …and the same for a decimal one
+            while is_digit(self.peek(0)):
+                let d : i64 = self.peek(0) - 48
+                if self.too_big_dec(v, d):
+                    self.err("integer literal does not fit u64, the widest core-1 has")
+                    return
+                v ← @wrap(v × 10 + d)
+                self.adv()
+            if v < 0:
+                big ← 1
+        let nb : i64 = self.peek(0)
+        let st : mut i64 = ⁻1
+        if nb ≠ ⁻1 and self.cls[nb × 1¤ptrdiff] = CL_IDENT:
+            // i8…i64, u8…u64: the suffix says the literal's type, and
+            // it rides in the big field as big + 2 × the type's code
+            let sfx : mut str = ""
+            while self.peek(0) ≠ ⁻1 and (self.cls[self.peek(0) × 1¤ptrdiff] = CL_IDENT or is_digit(self.peek(0))):
+                sfx ← sfx ⧺ (self.peek(0)).chr()
+                self.adv()
+            st ← TYNAMES[sfx] ?? ⁻1
+            if st = ⁻1 or not ty_is_int(st):
+                self.err("'" ⧺ sfx ⧺ "' is not a width; a literal's suffix is i8…i64 or u8…u64")
+                return
+        if self.peek(0) = 194 and self.peek(1) = 164:
+            // 1¤ptrdiff, 0¤byte: the literal states its measure, and
+            // an unstated width settles on i64
+            self.adv()
+            self.adv()
+            let usfx : mut str = ""
+            while self.peek(0) ≠ ⁻1 and self.cls[self.peek(0) × 1¤ptrdiff] = CL_IDENT:
+                usfx ← usfx ⧺ (self.peek(0)).chr()
+                self.adv()
+            // the lexer runs before any 'unit' definition is read, so
+            // it knows the measures the language ships with and leaves
+            // the rest to the parser
+            let names := unit_names()
+            let u : mut i64 = ⁻1
+            foreach i := 1…#names - 1:
+                if names[i] = usfx:
+                    u ← @dropunit(i)
+            if u = ⁻1:
+                self.err("'¤" ⧺ usfx ⧺ "' is no measure the language ships with; a literal takes one of those")
+                return
+            st ← ty_with_unit(st if st ≠ ⁻1 else TY_I64, u)
+        if st ≠ ⁻1:
+            self.emit(TK_INT, spos, self.pos - spos, scol, v, big + st × 2)
+            return
+        self.emit(TK_INT, spos, self.pos - spos, scol, v, big)
+
+    // 'a', 'λ', '\n', '\u{1F389}': one character between apostrophes.
+    // The token is a TK_INT whose big field carries 2 × TY_CHAR, the
+    // same closed-type ride a width suffix takes.
+    fn read_char(&mut self):
+        let spos : i64 = self.pos
+        let scol : i64 = self.col
+        self.adv()
+        let b : i64 = self.peek(0)
+        let code : mut i64 = 0
+        if b = ⁻1 or b = 10:
+            self.err("a character literal ends on the line it starts")
+            return
+        if b = 39:
+            self.err("a character literal holds one character, and this one holds none; a string of no characters is written \"\"")
+            return
+        if b = 92:
+            let e : i64 = self.peek(1)
+            if e = 117:
+                self.adv()
+                self.adv()
+                if self.peek(0) ≠ 123:
+                    self.err("\\u opens its number with '{'")
+                    return
+                self.adv()
+                let digits : mut i64 = 0
+                while hex_val(self.peek(0)) ≠ ⁻1:
+                    code ← code × 16 + hex_val(self.peek(0))
+                    digits ← digits + 1
+                    if digits > 6:
+                        self.err("a code point has at most six hex digits")
+                        return
+                    self.adv()
+                if digits = 0 or self.peek(0) ≠ 125:
+                    self.err("\\u{…} holds hex digits up to '}'")
+                    return
+                self.adv()
+            else:
+                if e = 110: code ← 10
+                elif e = 116: code ← 9
+                elif e = 114: code ← 13
+                elif e = 92: code ← 92
+                elif e = 39: code ← 39
+                elif e = 34: code ← 34
+                else:
+                    self.err("unknown escape in character literal")
+                    return
+                self.adv()
+                self.adv()
+        elif b < 128:
+            code ← b
+            self.adv()
+        else:
+            // one UTF-8 character, sized by its lead byte
+            let extra : mut i64 = 0
+            if b >= 240:
+                code ← b & 7
+                extra ← 3
+            elif b >= 224:
+                code ← b & 15
+                extra ← 2
+            elif b >= 194:
+                code ← b & 31
+                extra ← 1
+            else:
+                self.err("this byte begins no character")
+                return
+            self.adv()
+            while extra > 0:
+                let cb : i64 = self.peek(0)
+                if cb < 128 or cb >= 192:
+                    self.err("the character's encoding breaks off")
+                    return
+                code ← code × 64 + (cb & 63)
+                self.adv()
+                extra ← extra - 1
+        if self.peek(0) ≠ 39:
+            self.err("a character literal holds one character; ' closes it, and a string is written with double quotes")
+            return
+        self.adv()
+        if code > 1114111:
+            self.err("character literal: " ⧺ i64_str(code) ⧺ " is past the last code point, 0x10FFFF")
+            return
+        if code >= 55296 and code <= 57343:
+            self.err("character literal: " ⧺ i64_str(code) ⧺ " is a surrogate, which encodes half of a character in UTF-16 rather than being one")
+            return
+        self.emit(TK_INT, spos, self.pos - spos, scol, code, TY_CHAR × 2)
+
+    fn read_string(&mut self):
+        let spos : i64 = self.pos
+        let scol : i64 = self.col
+        self.adv()
+        let s : mut str = ""
+        while true:
+            let b : i64 = self.peek(0)
+            if b = ⁻1 or b = 10:
+                self.err("string literal does not end before the line does")
+                return
+            if b = 34:
+                self.adv()
+                break
+            if b = 92:
+                let e : i64 = self.peek(1)
+                if e = 110: s ← s ⧺ (10).chr()
+                elif e = 116: s ← s ⧺ (9).chr()
+                elif e = 114: s ← s ⧺ (13).chr()
+                elif e = 92: s ← s ⧺ (92).chr()
+                elif e = 34: s ← s ⧺ (34).chr()
+                else:
+                    self.err("unknown escape in string literal")
+                    return
+                self.adv()
+                self.adv()
+            else:
+                s ← s ⧺ b.chr()
+                self.pos ← self.pos + 1
+                self.col ← self.col + (0 if (b & 192) = 128 else 1)
+        let idx : i64 = @dropunit(#self.strs)
+        self.strs.push(s)
+        self.emit(TK_STR, spos, self.pos - spos, scol, idx, 0)
+
+    fn read_ident(&mut self):
+        let spos : i64 = self.pos
+        let scol : i64 = self.col
+        while true:
+            let b : i64 = self.peek(0)
+            if b = ⁻1: break
+            let c : i64 = self.cls[b × 1¤ptrdiff]
+            if c ≠ CL_IDENT and c ≠ CL_DIGIT: break
+            self.adv()
+        if self.peek(0) = 39:
+            // F', T': the prime rides the name; it spells a type variable
+            self.adv()
+        let text := run_str(self.src, spos, self.pos - spos)
+        self.emit(KEYWORDS[text] ?? TK_IDENT, spos, self.pos - spos, scol, 0, 0)
+
+    // the two-character ASCII operators, reached through their class
+    fn read_op2(&mut self, c : i64):
+        let spos : i64 = self.pos
+        let scol : i64 = self.col
+        let b1 : i64 = self.peek(1)
+        let k : mut i64 = ⁻1
+        let w : mut i64 = 1
+        if c = CL_COLON:
+            k ← TK_COLON
+            if b1 = 61:
+                k ← TK_DEFINE
+                w ← 2
+        elif c = CL_LT:
+            k ← TK_LT
+            if b1 = 61:
+                k ← TK_LE
+                w ← 2
+            elif b1 = 60:
+                k ← TK_SHL
+                w ← 2
+            elif b1 = 45:
+                k ← TK_ASSIGN
+                w ← 2
+        elif c = CL_GT:
+            k ← TK_GT
+            if b1 = 61:
+                k ← TK_GE
+                w ← 2
+            elif b1 = 62:
+                k ← TK_SHR
+                w ← 2
+        elif c = CL_DASH:
+            k ← TK_MINUS
+            if b1 = 62:
+                k ← TK_ARROW
+                w ← 2
+        else:
+            k ← TK_QMARK
+            if b1 = 63:
+                k ← TK_COALESCE
+                w ← 2
+        let i : mut i64 = 0
+        while i < w:
+            self.adv()
+            i ← i + 1
+        self.emit(k, spos, w, scol, 0, 0)
+
+    fn read_glyph(&mut self, c : i64):
+        let spos : i64 = self.pos
+        let scol : i64 = self.col
+        if c = CL_MB2:
+            let key : i64 = self.peek(0) × 256 + self.peek(1)
+            let k : i64 = GLYPHS2[key] ?? ⁻1
+            if k = ⁻1:
+                self.err("this character begins nothing core-1 knows")
+                return
+            self.advg(2)
+            self.emit(k, spos, 2, scol, 0, 0)
+        else:
+            let key : i64 = self.peek(0) × 65536 + self.peek(1) × 256 + self.peek(2)
+            let k : i64 = GLYPHS3[key] ?? ⁻1
+            if k = ⁻1:
+                self.err("this character begins nothing core-1 knows")
+                return
+            if k = TK_LHASH:
+                self.parens ← self.parens + 1
+            if k = TK_RHASH and self.parens > 0:
+                self.parens ← self.parens - 1
+            self.advg(3)
+            self.emit(k, spos, 3, scol, 0, 0)
+
+fn lex(src : byte[]) → Toks:
+    let lx : mut Lexer = (Lexer{src: src, n: @dropunit(#src), cls: mkcls(),
+                                pos: 0, line: 1, col: 1, parens: 0,
+                                kind: [], off: [], len: [], tline: [],
+                                tcol: [], val: [], big: [], strs: [],
+                                indents: [0], diags: []})
+    let at_line_start : mut bool = true
+    while lx.pos < lx.n and #lx.diags = 0:
+        let more : bool = lx.skip_gaps()
+        if not more:
+            if lx.peek(0) = 10:
+                if lx.parens = 0 and not at_line_start:
+                    lx.emit(TK_NL, lx.pos, 1, lx.col, 0, 0)
+                lx.pos ← lx.pos + 1
+                lx.line ← lx.line + 1
+                lx.col ← 1
+                if lx.parens = 0:
+                    at_line_start ← true
+            continue
+        if at_line_start:
+            lx.handle_indent()
+            at_line_start ← false
+            if #lx.diags > 0:
+                break
+        let b : i64 = lx.peek(0)
+        let c : i64 = lx.cls[b × 1¤ptrdiff]
+        if c >= 100:
+            let k : i64 = c - 100
+            if k = TK_LPAR or k = TK_LBRACK or k = TK_LBRACE:
+                lx.parens ← lx.parens + 1
+            if (k = TK_RPAR or k = TK_RBRACK or k = TK_RBRACE) and lx.parens > 0:
+                lx.parens ← lx.parens - 1
+            lx.emit(k, lx.pos, 1, lx.col, 0, 0)
+            lx.adv()
+        elif c = CL_DIGIT:
+            lx.read_number()
+        elif c = CL_IDENT:
+            lx.read_ident()
+        elif c = CL_QUOTE:
+            lx.read_string()
+        elif c = CL_APOS:
+            lx.read_char()
+        elif c = CL_MB2 or c = CL_MB3:
+            lx.read_glyph(c)
+        elif c >= CL_COLON and c <= CL_QMARK:
+            lx.read_op2(c)
+        elif c = CL_SLASH:
+            lx.err("'/' is not an operator; division is written ÷")
+        else:
+            lx.err("this byte begins nothing core-1 knows")
+    if not at_line_start and #lx.diags = 0:
+        lx.emit(TK_NL, lx.n, 0, lx.col, 0, 0)
+    while #lx.indents > 1:
+        _ ← lx.indents.pop() ?? 0
+        lx.emit(TK_DEDENT, lx.n, 0, 1, 0, 0)
+    lx.emit(TK_EOF, lx.n, 0, 1, 0, 0)
+    // the token columns are parallel arrays; leaving out of step here
+    // would surface as nonsense positions far away
+    assert(#lx.kind = #lx.off and #lx.kind = #lx.len, "token arrays in step")
+    assert(#lx.kind = #lx.tline and #lx.kind = #lx.val and #lx.kind = #lx.big,
+           "token arrays in step")
+    (Toks{kind: lx.kind, off: lx.off, len: lx.len, line: lx.tline,
+          col: lx.tcol, val: lx.val, big: lx.big, strs: lx.strs,
+          diags: lx.diags})
+

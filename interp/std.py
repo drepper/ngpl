@@ -1105,18 +1105,26 @@ class ImplementationInfo:
 class BuildModule:
     """What the build function said, kept for whoever asks.
 
-    The interpreter reads the @build function for the search paths and
-    compiler flags it declares; running any recipe belongs to the
-    compiler.  Declaring is calling `std.build.search_path(p)` and
-    `std.build.flag(f)`; what was declared answers from `paths()` and
-    `flags()`.
+    The interpreter reads the @build function for what it declares --
+    the sources the program is made of, where the result goes, the
+    search paths and the compiler flags -- before anything else runs.
+    Acting on any of it belongs to the compiler; reading it does not.
+
+    Each thing is declared by naming it and answered by a reader:
+    `source(p)`/`sources()`, `output(n)`/`output_name()`,
+    `output_dir(d)`/`output_directory()`, `search_path(p)`/`paths()`
+    and `flag(f)`/`flags()`.  The two that hold a single name are
+    last-writer-wins, and answer "" until one is declared.
     """
 
-    __slots__ = ("_paths", "_flags")
+    __slots__ = ("_paths", "_flags", "_sources", "_output", "_output_dir")
 
     def __init__(self):
         self._paths: list[str] = []
         self._flags: list[str] = []
+        self._sources: list[str] = []
+        self._output: str = ""
+        self._output_dir: str = ""
 
     def _one_str(self, args, who):
         from interp.eval import unwrap_optional
@@ -1139,15 +1147,46 @@ class BuildModule:
         self._flags.append(self._one_str(args, "flag"))
         return none()
 
-    def paths(self, args):
+    def source(self, args):
+        from interp.value import none
+        self._sources.append(self._one_str(args, "source"))
+        return none()
+
+    def output(self, args):
+        from interp.value import none
+        self._output = self._one_str(args, "output")
+        return none()
+
+    def output_dir(self, args):
+        from interp.value import none
+        self._output_dir = self._one_str(args, "output_dir")
+        return none()
+
+    def _nothing(self, args, who):
         if args:
-            raise TypeError("std.build.paths takes no arguments")
+            raise TypeError(f"std.build.{who} takes no arguments")
+
+    def paths(self, args):
+        self._nothing(args, "paths")
         return _str_array(self._paths)
 
     def flags(self, args):
-        if args:
-            raise TypeError("std.build.flags takes no arguments")
+        self._nothing(args, "flags")
         return _str_array(self._flags)
+
+    def sources(self, args):
+        self._nothing(args, "sources")
+        return _str_array(self._sources)
+
+    def output_name(self, args):
+        from interp.value import mk_str
+        self._nothing(args, "output_name")
+        return mk_str(self._output)
+
+    def output_directory(self, args):
+        from interp.value import mk_str
+        self._nothing(args, "output_directory")
+        return mk_str(self._output_dir)
 
 
 class StdModule:

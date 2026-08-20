@@ -1,0 +1,457 @@
+// ---------------------------------------------------------------------------
+// riscv32: the RV32IM pair layer
+//
+// The RV64 base encoders (rv_R, rv_I, rv_S) are width-blind, so RV32
+// reuses them and works the 8-byte model in pairs: a0:a1 hold x, a2:a3
+// hold y, t0…t2 scratch, everything at rest at [sp,#128…].  Carry and
+// the high half of a product are what sltu and mulhu give, which is
+// exactly the pair math a 32-bit machine needs.
+// ---------------------------------------------------------------------------
+
+fn r32_cello(r : i64) → i64:
+    128 + 8 × r
+
+fn r32_sloto(slot : i64) → i64:
+    160 + 8 × slot
+
+fn r32_ld(em : &mut Emit, rd : i64, off : i64):
+    let base : i64 = rv_slotaddr(&em, off)
+    let zero : i64 = 0
+    rv_I(&em, off if base = 2 else zero, base, 2, rd, 3)   // lw
+fn r32_st(em : &mut Emit, rs : i64, off : i64):
+    let base : i64 = rv_slotaddr(&em, off)
+    let zero : i64 = 0
+    rv_S(&em, off if base = 2 else zero, rs, base, 2)      // sw
+fn r32_ldpair(em : &mut Emit, lo : i64, hi : i64, off : i64):
+    r32_ld(&em, lo, off)
+    r32_ld(&em, hi, off + 4)
+fn r32_stpair(em : &mut Emit, lo : i64, hi : i64, off : i64):
+    r32_st(&em, lo, off)
+    r32_st(&em, hi, off + 4)
+
+fn r32_movimm(em : &mut Emit, rd : i64, v : i64):
+    let w : i64 = v & 4294967295
+    if w >= 2147483648:
+        rv_movimm(&em, rd, w - 4294967296)
+    else:
+        rv_movimm(&em, rd, w)
+
+fn r32g_lds(em : &mut Emit, tg : Target, r : i64, slot : i64):
+    r32_ldpair(&em, 10, 11, r32_sloto(slot))
+    r32_stpair(&em, 10, 11, r32_cello(r))
+fn r32g_sts(em : &mut Emit, tg : Target, r : i64, slot : i64):
+    r32_ldpair(&em, 10, 11, r32_cello(r))
+    r32_stpair(&em, 10, 11, r32_sloto(slot))
+fn r32g_const(em : &mut Emit, tg : Target, r : i64, v : i64):
+    r32_movimm(&em, 10, v & 4294967295)
+    r32_movimm(&em, 11, @wrap(v » 32) & 4294967295)
+    r32_stpair(&em, 10, 11, r32_cello(r))
+fn r32g_mov2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
+    r32_ldpair(&em, 10, 11, r32_cello(rs))
+    r32_stpair(&em, 10, 11, r32_cello(rd))
+
+fn r32_binprep(em : &mut Emit, rx : i64, ry : i64):
+    r32_ldpair(&em, 10, 11, r32_cello(rx))
+    r32_ldpair(&em, 12, 13, r32_cello(ry))
+
+fn r32g_add3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    r32_binprep(&em, rx, ry)
+    rv_R(&em, 0, 12, 10, 0, 10, 51)             // add a0, a0, a2
+    rv_R(&em, 0, 12, 10, 3, 5, 51)              // sltu t0, a0, a2: carry
+    rv_R(&em, 0, 13, 11, 0, 11, 51)             // add a1, a1, a3
+    rv_R(&em, 0, 5, 11, 0, 11, 51)              // add a1, a1, t0
+    r32_stpair(&em, 10, 11, r32_cello(rd))
+fn r32g_sub3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    r32_binprep(&em, rx, ry)
+    rv_R(&em, 0, 12, 10, 3, 5, 51)              // sltu t0, a0, a2: borrow
+    rv_R(&em, 32, 12, 10, 0, 10, 51)            // sub a0, a0, a2
+    rv_R(&em, 32, 13, 11, 0, 11, 51)            // sub a1, a1, a3
+    rv_R(&em, 32, 5, 11, 0, 11, 51)             // sub a1, a1, t0
+    r32_stpair(&em, 10, 11, r32_cello(rd))
+fn r32_bitwise(em : &mut Emit, rd : i64, rx : i64, ry : i64, f3 : i64):
+    r32_binprep(&em, rx, ry)
+    rv_R(&em, 0, 12, 10, f3, 10, 51)
+    rv_R(&em, 0, 13, 11, f3, 11, 51)
+    r32_stpair(&em, 10, 11, r32_cello(rd))
+fn r32g_and3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    r32_bitwise(&em, rd, rx, ry, 7)
+fn r32g_or3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    r32_bitwise(&em, rd, rx, ry, 6)
+fn r32g_xor3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    r32_bitwise(&em, rd, rx, ry, 4)
+fn r32g_not2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
+    r32_ldpair(&em, 10, 11, r32_cello(rs))
+    rv_I(&em, ⁻1, 10, 4, 10, 19)
+    rv_I(&em, ⁻1, 11, 4, 11, 19)
+    r32_stpair(&em, 10, 11, r32_cello(rd))
+fn r32g_neg2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
+    r32_ldpair(&em, 10, 11, r32_cello(rs))
+    rv_R(&em, 0, 10, 0, 3, 5, 51)               // sltu t0, x0, a0: borrow if lo≠0
+    rv_R(&em, 32, 10, 0, 0, 10, 51)             // sub a0, x0, a0
+    rv_R(&em, 32, 11, 0, 0, 11, 51)             // sub a1, x0, a1
+    rv_R(&em, 32, 5, 11, 0, 11, 51)             // sub a1, a1, t0
+    r32_stpair(&em, 10, 11, r32_cello(rd))
+fn r32g_mul3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    r32_binprep(&em, rx, ry)
+    rv_R(&em, 1, 12, 10, 3, 5, 51)              // mulhu t0, a0, a2
+    rv_R(&em, 1, 13, 10, 0, 6, 51)              // mul t1, a0, a3
+    rv_R(&em, 1, 12, 11, 0, 7, 51)              // mul t2, a1, a2
+    rv_R(&em, 1, 12, 10, 0, 10, 51)             // mul a0, a0, a2 (low, last)
+    rv_R(&em, 0, 6, 5, 0, 5, 51)                // t0 += t1
+    rv_R(&em, 0, 7, 5, 0, 11, 51)               // a1 = t0 + t2
+    r32_stpair(&em, 10, 11, r32_cello(rd))
+
+// the pair shift by a variable count.  RISC-V masks a shift count to
+// five bits, so the natural cross term lo>>(32-c) misbehaves at c=0;
+// (lo>>(31-c))>>1 is the same value for c in 1..31 and folds to zero
+// at c=0, which is what the near case needs.  The far case (c≥32) is
+// chosen by a mask, so nothing branches.
+fn r32g_shl3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    r32_shift(&em, rd, rx, ry, 0)
+fn r32g_shr3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    r32_shift(&em, rd, rx, ry, 1)
+fn r32g_sar3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
+    r32_shift(&em, rd, rx, ry, 2)
+
+// registers: a0:a1 = x, t0 = c, t1 = c&31, t2 = 31-(c&31), t3 = near
+fn r32_shift(em : &mut Emit, rd : i64, rx : i64, ry : i64, kind : i64):
+    r32_ldpair(&em, 10, 11, r32_cello(rx))
+    r32_ld(&em, 5, r32_cello(ry))               // t0 = count
+    rv_I(&em, 31, 5, 7, 6, 19)                   // t1 = c & 31
+    rv_I(&em, 31, 6, 4, 7, 19)                   // t2 = 31 ^ (c&31) = 31 - (c&31)
+    rv_I(&em, 32, 5, 3, 28, 19)                  // t3 = (c <u 32) : near
+    if kind = 0:
+        // hn = (hi<<c1) | ((lo>>t2)>>1);  hf = lo<<c1
+        rv_R(&em, 0, 6, 11, 1, 29, 51)          // t4 = hi << c1
+        rv_R(&em, 0, 7, 10, 5, 30, 51)          // t5 = lo >> t2
+        rv_I(&em, 1, 30, 5, 30, 19)             // t5 >>= 1
+        rv_R(&em, 0, 30, 29, 6, 29, 51)         // t4 = t4 | t5  (near hi)
+        rv_R(&em, 0, 6, 10, 1, 30, 51)          // t5 = lo << c1 (far hi = near lo)
+        // hi = near ? t4 : t5
+        r32_pick(&em, 28, 29, 30, 11)
+        // lo = near ? (lo<<c1) : 0
+        rv_R(&em, 0, 6, 10, 1, 29, 51)          // t4 = lo << c1
+        rv_movimm(&em, 30, 0)
+        r32_pick(&em, 28, 29, 30, 10)
+    elif kind = 1:
+        // ln = (lo>>c1) | ((hi<<t2)<<1);  lf = hi>>c1;  hn = hi>>c1; hf = 0
+        rv_R(&em, 0, 6, 10, 5, 29, 51)          // t4 = lo >> c1
+        rv_R(&em, 0, 7, 11, 1, 30, 51)          // t5 = hi << t2
+        rv_I(&em, 1, 30, 1, 30, 19)             // t5 <<= 1
+        rv_R(&em, 0, 30, 29, 6, 29, 51)         // t4 = near lo
+        rv_R(&em, 0, 6, 11, 5, 30, 51)          // t5 = hi >> c1 (far lo)
+        r32_pick(&em, 28, 29, 30, 10)
+        rv_R(&em, 0, 6, 11, 5, 29, 51)          // t4 = hi >> c1 (near hi)
+        rv_movimm(&em, 30, 0)                   // far hi = 0
+        r32_pick(&em, 28, 29, 30, 11)
+    else:
+        // arithmetic: lo like logical; hi near = hi>>a c1, far = hi>>a31
+        rv_R(&em, 0, 6, 10, 5, 29, 51)          // t4 = lo >> c1
+        rv_R(&em, 0, 7, 11, 1, 30, 51)          // t5 = hi << t2
+        rv_I(&em, 1, 30, 1, 30, 19)
+        rv_R(&em, 0, 30, 29, 6, 29, 51)         // near lo
+        rv_R(&em, 32, 6, 11, 5, 30, 51)         // t5 = hi >>a c1 (far lo)
+        r32_pick(&em, 28, 29, 30, 10)
+        rv_R(&em, 32, 6, 11, 5, 29, 51)         // t4 = hi >>a c1 (near hi)
+        rv_movimm(&em, 6, 31)
+        rv_R(&em, 32, 6, 11, 5, 30, 51)         // t5 = hi >>a 31 (far hi)
+        r32_pick(&em, 28, 29, 30, 11)
+    r32_stpair(&em, 10, 11, r32_cello(rd))
+
+// rd ← cond ? ra : rb, cond a 0/1 in a register; ra and rb are
+// clobbered, so a caller passes scratch
+fn r32_pick(em : &mut Emit, cond : i64, ra : i64, rb : i64, rd : i64):
+    rv_R(&em, 32, cond, 0, 0, 31, 51)           // t6 = -cond (mask)
+    rv_R(&em, 0, 31, ra, 7, ra, 51)             // ra &= mask
+    rv_I(&em, ⁻1, 31, 4, 31, 19)                // ~mask
+    rv_R(&em, 0, 31, rb, 7, rb, 51)             // rb &= ~mask
+    rv_R(&em, 0, rb, ra, 6, rd, 51)             // rd = ra | rb
+
+// rd ← cond ? ra : rb, cond a 0/1 already in a register
+fn r32g_shl3i(em : &mut Emit, tg : Target, rd : i64, rs : i64, imm : i64):
+    r32_ldpair(&em, 10, 11, r32_cello(rs))
+    rv_I(&em, imm, 11, 1, 11, 19)               // slli a1, a1, imm
+    rv_I(&em, 32 - imm, 10, 5, 5, 19)           // srli t0, a0, 32-imm
+    rv_R(&em, 0, 5, 11, 6, 11, 51)              // or a1, a1, t0
+    rv_I(&em, imm, 10, 1, 10, 19)               // slli a0, a0, imm
+    r32_stpair(&em, 10, 11, r32_cello(rd))
+
+fn r32g_cmp3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64):
+    r32_binprep(&em, rx, ry)
+    if cond = CC_EQ or cond = CC_NE:
+        rv_R(&em, 0, 12, 10, 4, 5, 51)          // xor t0, lo, lo'
+        rv_R(&em, 0, 13, 11, 4, 6, 51)          // xor t1, hi, hi'
+        rv_R(&em, 0, 6, 5, 6, 5, 51)            // or t0, t0, t1
+        if cond = CC_EQ:
+            rv_I(&em, 1, 5, 3, 10, 19)          // sltiu a0, t0, 1
+        else:
+            rv_R(&em, 0, 5, 0, 3, 10, 51)       // sltu a0, x0, t0
+        r32_finish(&em, rd)
+        return
+    // the high halves decide unless equal; a signed test on the top,
+    // an unsigned on the bottom
+    let flip : bool = cond = CC_GT or cond = CC_LE
+    let xl : i64 = 12 if flip else 10
+    let xh : i64 = 13 if flip else 11
+    let yl : i64 = 10 if flip else 12
+    let yh : i64 = 11 if flip else 13
+    let hf3 : i64 = 2 if sgn = 1 else 3
+    rv_R(&em, 0, yh, xh, hf3, 5, 51)            // t0 = hi < hi'
+    rv_R(&em, 0, xh, yh, hf3, 6, 51)            // t1 = hi > hi'
+    rv_R(&em, 0, yl, xl, 3, 7, 51)              // t2 = lo <u lo'
+    // if hi==hi' use t2, else t0.  eq = 1 - t0 - t1
+    rv_R(&em, 0, 6, 5, 6, RV_S0, 51)            // t4 = t0|t1: hi differ
+    rv_R(&em, 0, RV_S0, 0, 3, RV_S1, 51)        // t5 = (t4≠0)
+    // res = t4 ? t0 : t2
+    rv_R(&em, 32, RV_S1, 0, 0, RV_S2, 51)       // mask = -t5
+    rv_R(&em, 0, RV_S2, 5, 7, 5, 51)            // t0 &= mask
+    rv_I(&em, ⁻1, RV_S2, 4, RV_S2, 19)
+    rv_R(&em, 0, RV_S2, 7, 7, 7, 51)            // t2 &= ~mask
+    rv_R(&em, 0, 7, 5, 6, 10, 51)               // a0 = t0 | t2
+    if cond = CC_GE or cond = CC_LE:
+        rv_I(&em, 1, 10, 4, 10, 19)             // xori a0, a0, 1
+    r32_finish(&em, rd)
+
+fn r32_finish(em : &mut Emit, rd : i64):
+    rv_movimm(&em, 11, 0)
+    r32_stpair(&em, 10, 11, r32_cello(rd))
+
+fn r32g_sel4(em : &mut Emit, tg : Target, rd : i64, rc : i64, rx : i64, ry : i64):
+    r32_ldpair(&em, 10, 11, r32_cello(rc))
+    rv_R(&em, 0, 11, 10, 6, 5, 51)              // t0 = lo | hi
+    rv_R(&em, 0, 5, 0, 3, 5, 51)                // t0 = (t0≠0)
+    rv_R(&em, 32, 5, 0, 0, 5, 51)               // t0 = -t0: mask
+    r32_ldpair(&em, 12, 13, r32_cello(rx))
+    r32_ldpair(&em, 6, 7, r32_cello(ry))        // t1:t2 = ry
+    rv_R(&em, 0, 5, 12, 7, 12, 51)              // rx &= mask
+    rv_R(&em, 0, 5, 13, 7, 13, 51)
+    rv_I(&em, ⁻1, 5, 4, 5, 19)                  // ~mask
+    rv_R(&em, 0, 5, 6, 7, 6, 51)                // ry &= ~mask
+    rv_R(&em, 0, 5, 7, 7, 7, 51)
+    rv_R(&em, 0, 6, 12, 6, 10, 51)              // a0 = rxlo | rylo
+    rv_R(&em, 0, 7, 13, 6, 11, 51)
+    r32_stpair(&em, 10, 11, r32_cello(rd))
+
+fn r32g_div3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
+    r32_helper2(&em, rd, rx, ry, RT_DIVS64 if sgn = 1 else RT_DIVU64)
+fn r32g_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
+    r32_helper2(&em, rd, rx, ry, RT_MODS64 if sgn = 1 else RT_MODU64)
+fn r32_helper2(em : &mut Emit, rd : i64, rx : i64, ry : i64, target : i64):
+    r32_ldpair(&em, 10, 11, r32_cello(rx))
+    r32_stpair(&em, 10, 11, 0)
+    r32_ldpair(&em, 10, 11, r32_cello(ry))
+    r32_stpair(&em, 10, 11, 8)
+    r32_call(&em, target)
+    r32_stpair(&em, 10, 11, r32_cello(rd))
+
+fn r32g_addov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64):
+    r32_ovhelper(&em, rd, rf, rx, ry, sgn, 0)
+fn r32g_subov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64):
+    r32_ovhelper(&em, rd, rf, rx, ry, sgn, 1)
+fn r32_ovhelper(em : &mut Emit, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, issub : i64):
+    // do the 64-bit op in pairs, then read overflow from the operands
+    r32_binprep(&em, rx, ry)
+    if issub = 0:
+        rv_R(&em, 0, 12, 10, 0, RV_S0, 51)      // t4 = lo + lo'
+        rv_R(&em, 0, 12, RV_S0, 3, 5, 51)       // carry
+        rv_R(&em, 0, 13, 11, 0, RV_S1, 51)      // t5 = hi + hi'
+        rv_R(&em, 0, 5, RV_S1, 0, RV_S1, 51)    // + carry
+    else:
+        rv_R(&em, 0, 12, 10, 3, 5, 51)          // borrow
+        rv_R(&em, 32, 12, 10, 0, RV_S0, 51)
+        rv_R(&em, 32, 13, 11, 0, RV_S1, 51)
+        rv_R(&em, 32, 5, RV_S1, 0, RV_S1, 51)
+    if sgn = 1:
+        // overflow if (x^y sign matches op) and (x^res sign differs) —
+        // for add: ~(xh^yh) & (xh^resh); for sub: (xh^yh) & (xh^resh)
+        rv_R(&em, 0, 13, 11, 4, 6, 51)          // t1 = xh ^ yh
+        if issub = 0:
+            rv_I(&em, ⁻1, 6, 4, 6, 19)
+        rv_R(&em, 0, RV_S1, 11, 4, 7, 51)       // t2 = xh ^ resh
+        rv_R(&em, 0, 7, 6, 7, 6, 51)            // and
+        rv_I(&em, 31, 6, 5, 10, 19)             // srli a0, t1, 31
+    else:
+        if issub = 0:
+            rv_R(&em, 0, 11, RV_S1, 3, 10, 51)  // sltu a0, resh, xh: the sum wrapped below x
+        else:
+            // a 64-bit borrow leaves the high result above the minuend
+            rv_R(&em, 0, RV_S1, 11, 3, 10, 51)  // sltu a0, xh, resh
+    rv_movimm(&em, 11, 0)
+    r32_stpair(&em, RV_S0, RV_S1, r32_cello(rd))
+    r32_stpair(&em, 10, 11, r32_cello(rf))
+
+fn r32g_mulov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64):
+    r32_ldpair(&em, 10, 11, r32_cello(rx))
+    r32_stpair(&em, 10, 11, 0)
+    r32_ldpair(&em, 10, 11, r32_cello(ry))
+    r32_stpair(&em, 10, 11, 8)
+    r32_movimm(&em, 10, sgn)
+    rv_movimm(&em, 11, 0)
+    r32_stpair(&em, 10, 11, 16)
+    // the wrapped product parked at 24
+    r32g_mul3(&em, tg, rd, rx, ry)
+    r32_ldpair(&em, 10, 11, r32_cello(rd))
+    r32_stpair(&em, 10, 11, 24)
+    r32_call(&em, RT_MULOV64)
+    r32_stpair(&em, 10, 11, r32_cello(rf))
+    r32_ldpair(&em, 10, 11, 24)
+    r32_stpair(&em, 10, 11, r32_cello(rd))
+
+fn r32g_ext2(em : &mut Emit, tg : Target, r : i64, bits : i64, sgn : i64):
+    if bits >= 64:
+        return
+    r32_ldpair(&em, 10, 11, r32_cello(r))
+    if bits < 32:
+        let sh : i64 = 32 - bits
+        rv_I(&em, sh, 10, 1, 10, 19)            // slli
+        let ab : i64 = 1024 if sgn = 1 else 0
+        rv_I(&em, sh + ab, 10, 5, 10, 19)
+    if sgn = 1:
+        rv_I(&em, 31 + 1024, 10, 5, 11, 19)     // srai a1, a0, 31
+    else:
+        rv_movimm(&em, 11, 0)
+    r32_stpair(&em, 10, 11, r32_cello(r))
+
+fn r32g_ldo(em : &mut Emit, tg : Target, rd : i64, rbase : i64, off : i64, width : i64, sgn : i64):
+    let wd : i64 = tg.ptr if width = 0 else width
+    r32_ld(&em, 12, r32_cello(rbase))
+    if off ≠ 0:
+        r32_movimm(&em, 5, off)
+        rv_R(&em, 0, 5, 12, 0, 12, 51)
+    if wd = 8:
+        rv_I(&em, 0, 12, 2, 10, 3)
+        rv_I(&em, 4, 12, 2, 11, 3)
+    else:
+        let f3 : i64 = 2 if wd = 4 else (1 if wd = 2 and sgn = 1 else (5 if wd = 2 else (0 if sgn = 1 else 4)))
+        rv_I(&em, 0, 12, f3, 10, 3)
+        if sgn = 1:
+            rv_I(&em, 31 + 1024, 10, 5, 11, 19)
+        else:
+            rv_movimm(&em, 11, 0)
+    r32_stpair(&em, 10, 11, r32_cello(rd))
+
+fn r32g_sto(em : &mut Emit, tg : Target, rs : i64, rbase : i64, off : i64, width : i64):
+    let wd : i64 = tg.ptr if width = 0 else width
+    r32_ld(&em, 12, r32_cello(rbase))
+    if off ≠ 0:
+        r32_movimm(&em, 5, off)
+        rv_R(&em, 0, 5, 12, 0, 12, 51)
+    r32_ldpair(&em, 10, 11, r32_cello(rs))
+    if wd = 8:
+        rv_S(&em, 0, 10, 12, 2)
+        rv_S(&em, 4, 11, 12, 2)
+    else:
+        let f3 : i64 = 2 if wd = 4 else (1 if wd = 2 else 0)
+        rv_S(&em, 0, 10, 12, f3)
+
+fn r32g_jmp(em : &mut Emit, tg : Target, lab : i64):
+    rvg_jmp(&em, tg, lab)
+fn r32g_jz(em : &mut Emit, tg : Target, r : i64, lab : i64):
+    r32_ldpair(&em, 10, 11, r32_cello(r))
+    rv_R(&em, 0, 11, 10, 6, 5, 51)              // t0 = lo | hi
+    rv_bshort(&em, 1, 5, 0, 8)                  // bne t0, x0, +8
+    rvg_jmp(&em, tg, lab)
+fn r32g_jnz(em : &mut Emit, tg : Target, r : i64, lab : i64):
+    r32_ldpair(&em, 10, 11, r32_cello(r))
+    rv_R(&em, 0, 11, 10, 6, 5, 51)
+    rv_bshort(&em, 0, 5, 0, 8)                  // beq t0, x0, +8
+    rvg_jmp(&em, tg, lab)
+fn r32g_label(em : &mut Emit, tg : Target, lab : i64):
+    em.set_label(lab)
+
+fn r32_call(em : &mut Emit, target : i64):
+    if em.skipping = 1:
+        return
+    em.cf_pos.push(em.here())
+    em.cf_target.push(target)
+    em.aw((1 « 7) + 23)                         // auipc ra, 0
+    rv_I(&em, 0, 1, 0, 1, 103)                  // jalr ra, ra, 0
+fn r32g_call(em : &mut Emit, tg : Target, target : i64):
+    r32_call(&em, target)
+fn r32g_calli(em : &mut Emit, tg : Target, r : i64):
+    r32_ld(&em, 5, r32_cello(r))
+    rv_I(&em, 0, 5, 0, 1, 103)
+fn r32g_ijmp(em : &mut Emit, tg : Target, r : i64):
+    r32_ld(&em, 5, r32_cello(r))
+    rv_I(&em, 0, 5, 0, 0, 103)
+
+fn r32g_argld(em : &mut Emit, tg : Target, k : i64, slot : i64):
+    r32_ldpair(&em, 10, 11, r32_sloto(slot))
+    r32_stpair(&em, 10, 11, 8 × k)
+fn r32g_argconst(em : &mut Emit, tg : Target, k : i64, v : i64):
+    r32_movimm(&em, 10, v & 4294967295)
+    r32_movimm(&em, 11, @wrap(v » 32) & 4294967295)
+    r32_stpair(&em, 10, 11, 8 × k)
+fn r32g_argmov(em : &mut Emit, tg : Target, k : i64, r : i64):
+    r32_ldpair(&em, 10, 11, r32_cello(r))
+    r32_stpair(&em, 10, 11, 8 × k)
+fn r32g_retst(em : &mut Emit, tg : Target, slot : i64):
+    r32_stpair(&em, 10, 11, r32_sloto(slot))
+fn r32g_retld(em : &mut Emit, tg : Target, slot : i64):
+    r32_ldpair(&em, 10, 11, r32_sloto(slot))
+fn r32g_retmov(em : &mut Emit, tg : Target, r : i64):
+    r32_ldpair(&em, 10, 11, r32_cello(r))
+
+fn r32g_absref(em : &mut Emit, tg : Target, r : i64) → i64:
+    let pos : i64 = em.here()
+    rv_U(&em, 0, 10, 55)                        // lui
+    rv_I(&em, 0, 10, 0, 10, 19)                 // addi
+    rv_movimm(&em, 11, 0)
+    r32_stpair(&em, 10, 11, r32_cello(r))
+    pos
+fn r32g_absref_arg(em : &mut Emit, tg : Target, k : i64) → i64:
+    let pos : i64 = em.here()
+    rv_U(&em, 0, 10, 55)
+    rv_I(&em, 0, 10, 0, 10, 19)
+    rv_movimm(&em, 11, 0)
+    r32_stpair(&em, 10, 11, 8 × k)
+    pos
+
+fn r32g_sysarg(em : &mut Emit, tg : Target, k : i64, slot : i64):
+    r32_ld(&em, 10 + k, r32_sloto(slot))
+fn r32g_sysimm(em : &mut Emit, tg : Target, k : i64, v : i64):
+    r32_movimm(&em, 10 + k, v)
+fn r32g_sysmov(em : &mut Emit, tg : Target, k : i64, r : i64):
+    r32_ld(&em, 10 + k, r32_cello(r))
+fn r32g_syscall(em : &mut Emit, tg : Target, scid : i64):
+    r32_movimm(&em, 17, sc_number(tg, scid))
+    em.aw(115)
+    // sign-extend the 32-bit answer into the high half of the cell
+    rv_I(&em, 31 + 1024, 10, 5, 11, 19)         // srai a1, a0, 31
+fn r32g_sysret(em : &mut Emit, tg : Target, r : i64):
+    r32_stpair(&em, 10, 11, r32_cello(r))
+
+fn r32g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64):
+    let frame : i64 = align_up(160 + 8 × nvregs, 16)
+    em.max_frame ← em.max_frame ⌈ (frame + 16)
+    rv_I(&em, ⁻16, 2, 0, 2, 19)
+    rv_S(&em, 8, 1, 2, 2)                        // sw ra, 8(sp)
+    rv_S(&em, 4, 8, 2, 2)                        // sw s0, 4(sp)
+    rv_I(&em, 0, 2, 0, 8, 19)                    // mv s0, sp
+    if frame < 2048:
+        rv_I(&em, 0 - frame, 2, 0, 2, 19)
+    else:
+        r32_movimm(&em, 5, frame)
+        rv_R(&em, 32, 5, 2, 0, 2, 51)
+    let j : mut i64 = 0
+    while j < np:
+        // the incoming pair sits above the save area, so it is read
+        // through s0 (x8), which sp has moved away from
+        rv_I(&em, 16 + 8 × j, 8, 2, 10, 3)      // lw a0, off(s0)
+        rv_I(&em, 20 + 8 × j, 8, 2, 11, 3)
+        r32_stpair(&em, 10, 11, r32_sloto(j))
+        j ← j + 1
+fn r32g_epilogue(em : &mut Emit, tg : Target):
+    rv_I(&em, 0, 8, 0, 2, 19)                    // mv sp, s0
+    rv_I(&em, 8, 2, 2, 1, 3)                     // lw ra, 8(sp)
+    rv_I(&em, 4, 2, 2, 8, 3)                     // lw s0, 4(sp)
+    rv_I(&em, 16, 2, 0, 2, 19)
+    rv_I(&em, 0, 1, 0, 0, 103)
+
+fn r32g_resolve(em : &mut Emit, tg : Target):
+    rvg_resolve(&em, tg)
+fn r32g_patch_abs(em : &mut Emit, tg : Target, pos : i64, v : i64):
+    rvg_patch_abs(&em, tg, pos, v)
+fn r32g_patch_call(em : &mut Emit, tg : Target, pos : i64, dest : i64):
+    rvg_patch_call(&em, tg, pos, dest)
+

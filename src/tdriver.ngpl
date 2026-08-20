@@ -1,0 +1,688 @@
+// ---------------------------------------------------------------------------
+// The driver: every IR op composed from the abstract operations.
+// Written once; a target that teaches the machine its spellings gets
+// all of it.  The x86-64 emitter above stays as the measure the
+// compositions are checked against.
+// ---------------------------------------------------------------------------
+
+// a value that must fit its width or leave for RT_OV, composed with
+// scratch labels the caller hands out
+fn t_range_check(em : &mut Emit, tg : Target, w : i64, lok : i64):
+    let bits : i64 = w & 255
+    let sgn : i64 = w » 8
+    if sgn = 0:
+        g_const(&em, tg, RG_B, (1 « bits) - 1)
+        g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_LE, 0)
+        g_jnz(&em, tg, RG_C, lok)
+        g_call(&em, tg, RT_OV)
+    else:
+        g_mov2(&em, tg, RG_B, RG_A)
+        g_ext2(&em, tg, RG_B, bits, 1)
+        g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_EQ, 0)
+        g_jnz(&em, tg, RG_C, lok)
+        g_call(&em, tg, RT_OV)
+    g_label(&em, tg, lok)
+
+// the canonical form of a wrapped result
+fn t_canon(em : &mut Emit, tg : Target, w : i64):
+    let bits : i64 = w & 255
+    if bits < 64:
+        g_ext2(&em, tg, RG_A, bits, w » 8)
+
+fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
+    assert(ir.nvregs >= np, "the frame covers the spilled arguments")
+    let n : i64 = @dropunit(#ir.op)
+    em.begin_fn(ir.nlabels + 6 × n + 8)
+    let sl : mut i64 = ir.nlabels
+    g_prologue(&em, tg, ir.nvregs, np)
+    let i : mut i64 = 0
+    while i < n:
+        let o : i64 = ir.op[i × 1¤ptrdiff]
+        let a : i64 = ir.ia[i × 1¤ptrdiff]
+        let b : i64 = ir.ib[i × 1¤ptrdiff]
+        let c : i64 = ir.ic[i × 1¤ptrdiff]
+        let d : i64 = ir.id[i × 1¤ptrdiff]
+        let w : i64 = ir.iw[i × 1¤ptrdiff]
+        let bits : i64 = w & 255
+        let sgn : i64 = w » 8
+        if o = IR_CONST:
+            g_const(&em, tg, RG_A, a)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_MOV:
+            g_lds(&em, tg, RG_A, a)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_ADD or o = IR_ADDW or o = IR_SUB or o = IR_SUBW:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            if o = IR_ADD or o = IR_SUB:
+                if bits = 64:
+                    if o = IR_ADD:
+                        g_addov(&em, tg, RG_A, RG_C, RG_A, RG_B, sgn)
+                    else:
+                        g_subov(&em, tg, RG_A, RG_C, RG_A, RG_B, sgn)
+                    g_jz(&em, tg, RG_C, sl)
+                    g_call(&em, tg, RT_OV)
+                    g_label(&em, tg, sl)
+                    sl ← sl + 1
+                else:
+                    if o = IR_ADD:
+                        g_add3(&em, tg, RG_A, RG_A, RG_B)
+                    else:
+                        g_sub3(&em, tg, RG_A, RG_A, RG_B)
+                    t_range_check(&em, tg, w, sl)
+                    sl ← sl + 1
+            else:
+                if o = IR_ADDW:
+                    g_add3(&em, tg, RG_A, RG_A, RG_B)
+                else:
+                    g_sub3(&em, tg, RG_A, RG_A, RG_B)
+                t_canon(&em, tg, w)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_MUL or o = IR_MULW:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            if o = IR_MULW:
+                g_mul3(&em, tg, RG_A, RG_A, RG_B)
+                t_canon(&em, tg, w)
+            elif bits = 64:
+                g_mulov(&em, tg, RG_A, RG_C, RG_A, RG_B, sgn)
+                g_jz(&em, tg, RG_C, sl)
+                g_call(&em, tg, RT_OV)
+                g_label(&em, tg, sl)
+                sl ← sl + 1
+            else:
+                g_mul3(&em, tg, RG_A, RG_A, RG_B)
+                t_range_check(&em, tg, w, sl)
+                sl ← sl + 1
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_NEG or o = IR_NEGW:
+            g_lds(&em, tg, RG_A, a)
+            if o = IR_NEG and sgn = 1 and bits = 64:
+                // the one signed value with no negation
+                g_const(&em, tg, RG_B, ⁻9223372036854775807 - 1)
+                g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_NE, 0)
+                g_jnz(&em, tg, RG_C, sl)
+                g_call(&em, tg, RT_OV)
+                g_label(&em, tg, sl)
+                sl ← sl + 1
+                g_neg2(&em, tg, RG_A, RG_A)
+            elif o = IR_NEG and sgn = 0:
+                // a negated unsigned is only 0
+                g_jz(&em, tg, RG_A, sl)
+                g_call(&em, tg, RT_OV)
+                g_label(&em, tg, sl)
+                sl ← sl + 1
+                g_neg2(&em, tg, RG_A, RG_A)
+            else:
+                g_neg2(&em, tg, RG_A, RG_A)
+                if o = IR_NEG:
+                    t_range_check(&em, tg, w, sl)
+                    sl ← sl + 1
+                else:
+                    t_canon(&em, tg, w)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_BAND or o = IR_BORR or o = IR_BXORR:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            if o = IR_BAND:
+                g_and3(&em, tg, RG_A, RG_A, RG_B)
+            elif o = IR_BORR:
+                g_or3(&em, tg, RG_A, RG_A, RG_B)
+            else:
+                g_xor3(&em, tg, RG_A, RG_A, RG_B)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_BNOTT:
+            g_lds(&em, tg, RG_A, a)
+            g_not2(&em, tg, RG_A, RG_A)
+            t_canon(&em, tg, w)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_SHLL or o = IR_SHRR:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            g_const(&em, tg, RG_C, bits - sgn)
+            g_cmp3(&em, tg, RG_C, RG_B, RG_C, CC_LT, 0)
+            g_jnz(&em, tg, RG_C, sl)
+            g_call(&em, tg, RT_SHIFT)
+            g_label(&em, tg, sl)
+            sl ← sl + 1
+            if o = IR_SHLL:
+                g_shl3(&em, tg, RG_A, RG_A, RG_B)
+                t_canon(&em, tg, w)
+            elif sgn = 1:
+                g_sar3(&em, tg, RG_A, RG_A, RG_B)
+            else:
+                g_shr3(&em, tg, RG_A, RG_A, RG_B)
+            g_sts(&em, tg, RG_A, d)
+        elif o >= IR_CEQ and o <= IR_CGE:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            g_cmp3(&em, tg, RG_C, RG_A, RG_B, o - IR_CEQ, sgn)
+            g_mov2(&em, tg, RG_A, RG_C)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_MAXX or o = IR_MINN:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_GE if o = IR_MAXX else CC_LE, sgn)
+            g_sel4(&em, tg, RG_A, RG_C, RG_A, RG_B)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_SEL:
+            g_lds(&em, tg, RG_C, a)
+            g_lds(&em, tg, RG_A, b)
+            g_lds(&em, tg, RG_B, c)
+            g_sel4(&em, tg, RG_A, RG_C, RG_A, RG_B)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_DIVV or o = IR_MODD:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            let ldo9 : i64 = sl
+            let lend9 : i64 = sl + 1
+            sl ← sl + 2
+            g_jnz(&em, tg, RG_B, ldo9)
+            g_lds(&em, tg, RG_A, c)
+            g_jmp(&em, tg, lend9)
+            g_label(&em, tg, ldo9)
+            if sgn = 1 and bits = 64:
+                g_const(&em, tg, RG_C, ⁻9223372036854775807 - 1)
+                g_cmp3(&em, tg, RG_C, RG_A, RG_C, CC_NE, 0)
+                g_jnz(&em, tg, RG_C, sl)
+                g_const(&em, tg, RG_C, ⁻1)
+                g_cmp3(&em, tg, RG_C, RG_B, RG_C, CC_NE, 0)
+                g_jnz(&em, tg, RG_C, sl)
+                g_call(&em, tg, RT_OV)
+                g_label(&em, tg, sl)
+                sl ← sl + 1
+            if o = IR_DIVV:
+                g_div3(&em, tg, RG_A, RG_A, RG_B, sgn)
+            else:
+                g_mod3(&em, tg, RG_A, RG_A, RG_B, sgn)
+            if sgn = 1 and bits ≠ 64:
+                t_range_check(&em, tg, w, sl)
+                sl ← sl + 1
+            g_label(&em, tg, lend9)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_JMP:
+            g_jmp(&em, tg, a)
+        elif o = IR_JZ or o = IR_JNZ:
+            g_lds(&em, tg, RG_A, a)
+            if o = IR_JZ:
+                g_jz(&em, tg, RG_A, b)
+            else:
+                g_jnz(&em, tg, RG_A, b)
+        elif o = IR_LABEL:
+            g_label(&em, tg, a)
+        elif o = IR_CALL:
+            let argc : i64 = ir.extra[b × 1¤ptrdiff]
+            let k : mut i64 = 0
+            while k < argc:
+                g_argld(&em, tg, k, ir.extra[(b + 1 + k) × 1¤ptrdiff])
+                k ← k + 1
+            g_call(&em, tg, a)
+            g_retst(&em, tg, d)
+        elif o = IR_CALLI:
+            let argci : i64 = ir.extra[b × 1¤ptrdiff]
+            let ki : mut i64 = 0
+            while ki < argci:
+                g_argld(&em, tg, ki, ir.extra[(b + 1 + ki) × 1¤ptrdiff])
+                ki ← ki + 1
+            g_lds(&em, tg, RG_C, a)
+            g_calli(&em, tg, RG_C)
+            g_retst(&em, tg, d)
+        elif o = IR_RET:
+            if a ≠ ⁻1:
+                g_retld(&em, tg, a)
+            g_epilogue(&em, tg)
+        elif o = IR_PRINTS or o = IR_EPRINTS or o = IR_ABORT:
+            let pos : i64 = g_absref_arg(&em, tg, 0)
+            if em.skipping = 0:
+                em.sf_pos.push(pos)
+                em.sf_str.push(a)
+            g_argconst(&em, tg, 1, str_len(strs[a × 1¤ptrdiff]))
+            g_call(&em, tg, RT_WRITE1 if o = IR_PRINTS else (RT_WRITE2 if o = IR_EPRINTS else RT_ABORT))
+        elif o = IR_PRINTI or o = IR_PRINTU:
+            g_argld(&em, tg, 0, a)
+            g_call(&em, tg, RT_PRINTI if o = IR_PRINTI else RT_PRINTU)
+        elif o = IR_PRINTSV:
+            g_argld(&em, tg, 0, a)
+            g_call(&em, tg, RT_PRINTSTR)
+        elif o = IR_EXIT:
+            g_sysarg(&em, tg, 0, a)
+            g_syscall(&em, tg, SC_EXIT)
+        elif o = IR_GLOAD or o = IR_GSTORE:
+            let gg : i64 = a if o = IR_GLOAD else a
+            let pos : i64 = g_absref(&em, tg, RG_B)
+            if em.skipping = 0:
+                if em.gseg[gg × 1¤ptrdiff] = 0:
+                    em.gr_pos.push(pos)
+                    em.gr_off.push(em.gmap[gg × 1¤ptrdiff])
+                else:
+                    em.df_pos.push(pos)
+                    em.df_off.push(em.gmap[gg × 1¤ptrdiff])
+            if o = IR_GLOAD:
+                g_ldo(&em, tg, RG_A, RG_B, 0, 8, 0)
+                g_sts(&em, tg, RG_A, d)
+            else:
+                g_lds(&em, tg, RG_A, b)
+                g_sto(&em, tg, RG_A, RG_B, 0, 8)
+        elif o = IR_ANEW:
+            g_argconst(&em, tg, 0, a)
+            g_call(&em, tg, RT_ARRNEW)
+            g_retst(&em, tg, d)
+        elif o = IR_SNEW:
+            g_argconst(&em, tg, 0, 8 × a)
+            g_call(&em, tg, RT_ALLOC)
+            g_retst(&em, tg, d)
+        elif o = IR_APUSH:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_call(&em, tg, RT_ARRPUSH)
+        elif o = IR_AIDX or o = IR_AREF:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            g_ldo(&em, tg, RG_C, RG_A, 8, 8, 0)
+            g_cmp3(&em, tg, RG_C, RG_B, RG_C, CC_LT, 0)
+            g_jnz(&em, tg, RG_C, sl)
+            g_call(&em, tg, RT_BOUNDS)
+            g_label(&em, tg, sl)
+            sl ← sl + 1
+            g_ldo(&em, tg, RG_C, RG_A, 0, 8, 0)
+            g_shl3i(&em, tg, RG_T, RG_B, 3)
+            g_add3(&em, tg, RG_C, RG_C, RG_T)
+            if o = IR_AIDX:
+                g_ldo(&em, tg, RG_A, RG_C, 0, 8, 0)
+            else:
+                g_mov2(&em, tg, RG_A, RG_C)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_ASTO:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            g_ldo(&em, tg, RG_C, RG_A, 8, 8, 0)
+            g_cmp3(&em, tg, RG_C, RG_B, RG_C, CC_LT, 0)
+            g_jnz(&em, tg, RG_C, sl)
+            g_call(&em, tg, RT_BOUNDS)
+            g_label(&em, tg, sl)
+            sl ← sl + 1
+            g_ldo(&em, tg, RG_C, RG_A, 0, 8, 0)
+            g_shl3i(&em, tg, RG_T, RG_B, 3)
+            g_add3(&em, tg, RG_C, RG_C, RG_T)
+            g_lds(&em, tg, RG_B, c)
+            g_sto(&em, tg, RG_B, RG_C, 0, 8)
+        elif o = IR_APOP:
+            let lem : i64 = sl
+            let ldn : i64 = sl + 1
+            sl ← sl + 2
+            g_lds(&em, tg, RG_A, a)
+            g_ldo(&em, tg, RG_B, RG_A, 8, 8, 0)
+            g_jz(&em, tg, RG_B, lem)
+            g_const(&em, tg, RG_C, 1)
+            g_sub3(&em, tg, RG_B, RG_B, RG_C)
+            g_sto(&em, tg, RG_B, RG_A, 8, 8)
+            g_ldo(&em, tg, RG_C, RG_A, 0, 8, 0)
+            g_shl3i(&em, tg, RG_T, RG_B, 3)
+            g_add3(&em, tg, RG_C, RG_C, RG_T)
+            g_ldo(&em, tg, RG_A, RG_C, 0, 8, 0)
+            g_jmp(&em, tg, ldn)
+            g_label(&em, tg, lem)
+            g_lds(&em, tg, RG_A, b)
+            g_label(&em, tg, ldn)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_AGET:
+            let ldf : i64 = sl
+            let ldn : i64 = sl + 1
+            sl ← sl + 2
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, b)
+            g_ldo(&em, tg, RG_C, RG_A, 8, 8, 0)
+            g_cmp3(&em, tg, RG_C, RG_B, RG_C, CC_GE, 0)
+            g_jnz(&em, tg, RG_C, ldf)
+            g_ldo(&em, tg, RG_C, RG_A, 0, 8, 0)
+            g_shl3i(&em, tg, RG_T, RG_B, 3)
+            g_add3(&em, tg, RG_C, RG_C, RG_T)
+            g_ldo(&em, tg, RG_A, RG_C, 0, 8, 0)
+            g_jmp(&em, tg, ldn)
+            g_label(&em, tg, ldf)
+            g_lds(&em, tg, RG_A, c)
+            g_label(&em, tg, ldn)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_ALEN:
+            g_lds(&em, tg, RG_A, a)
+            g_ldo(&em, tg, RG_A, RG_A, 8, 8, 0)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_HLEN:
+            g_lds(&em, tg, RG_A, a)
+            g_ldo(&em, tg, RG_A, RG_A, 16, 8, 0)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_SC:
+            let pos : i64 = g_absref(&em, tg, RG_A)
+            if em.skipping = 0:
+                em.sd_pos.push(pos)
+                em.sd_str.push(a)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_FADDR:
+            let pos : i64 = g_absref(&em, tg, RG_A)
+            if em.skipping = 0:
+                em.ff_pos.push(pos)
+                em.ff_fn.push(a)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_FLD:
+            g_lds(&em, tg, RG_A, a)
+            g_ldo(&em, tg, RG_A, RG_A, 8 × b, 8, 0)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_FSTO:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, c)
+            g_sto(&em, tg, RG_B, RG_A, 8 × b, 8)
+        elif o = IR_HNEW:
+            g_argconst(&em, tg, 0, a)
+            g_argconst(&em, tg, 1, b)
+            g_call(&em, tg, RT_HNEW)
+            g_retst(&em, tg, d)
+        elif o = IR_HPUT:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_argld(&em, tg, 2, c)
+            g_call(&em, tg, RT_HPUT)
+        elif o = IR_HGET or o = IR_HELEM:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_call(&em, tg, RT_HGET if o = IR_HGET else RT_HELEM)
+            g_retst(&em, tg, d)
+        elif o = IR_CHR:
+            g_lds(&em, tg, RG_A, a)
+            g_const(&em, tg, RG_B, 1114111)
+            g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_LE, 0)
+            g_jnz(&em, tg, RG_C, sl)
+            g_call(&em, tg, RT_BADCHAR)
+            g_label(&em, tg, sl)
+            sl ← sl + 1
+            g_mov2(&em, tg, RG_C, RG_A)
+            g_const(&em, tg, RG_B, 55296)
+            g_sub3(&em, tg, RG_C, RG_C, RG_B)
+            g_const(&em, tg, RG_B, 2048)
+            g_cmp3(&em, tg, RG_C, RG_C, RG_B, CC_GE, 0)
+            g_jnz(&em, tg, RG_C, sl)
+            g_call(&em, tg, RT_BADCHAR)
+            g_label(&em, tg, sl)
+            sl ← sl + 1
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_SIDX:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_call(&em, tg, RT_STRIDX)
+            g_retst(&em, tg, d)
+        elif o = IR_SCCAT or o = IR_SEQV:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_call(&em, tg, RT_CONCAT if o = IR_SCCAT else RT_STREQ)
+            g_retst(&em, tg, d)
+        elif o = IR_SLENV or o = IR_CHARS or o = IR_CHARSTR or o = IR_SBYTES or o = IR_TORAW or o = IR_FREAD or o = IR_FOPEN:
+            g_argld(&em, tg, 0, a)
+            if o = IR_SLENV:
+                g_call(&em, tg, RT_STRCHARS)
+            elif o = IR_CHARS:
+                g_call(&em, tg, RT_CHARS)
+            elif o = IR_CHARSTR:
+                g_call(&em, tg, RT_CHARSTR)
+            elif o = IR_SBYTES:
+                g_call(&em, tg, RT_SBYTES)
+            elif o = IR_TORAW:
+                g_call(&em, tg, RT_TORAW)
+            elif o = IR_FREAD:
+                g_call(&em, tg, RT_FREAD)
+            else:
+                g_call(&em, tg, RT_FOPEN)
+            g_retst(&em, tg, d)
+        elif o = IR_SDEC:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_call(&em, tg, RT_STRNEXT)
+            g_retst(&em, tg, d)
+            g_lds(&em, tg, RG_A, d)
+            g_const(&em, tg, RG_B, 32)
+            g_shr3(&em, tg, RG_B, RG_A, RG_B)
+            g_sts(&em, tg, RG_B, c)
+            g_const(&em, tg, RG_C, 4294967295)
+            g_and3(&em, tg, RG_A, RG_A, RG_C)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_AUXV:
+            g_argconst(&em, tg, 0, a)
+            g_call(&em, tg, RT_AUXV)
+            g_retst(&em, tg, d)
+        elif o = IR_EXECFN or o = IR_ENVN or o = IR_ARGS or o = IR_DENTS:
+            if o = IR_EXECFN:
+                g_call(&em, tg, RT_EXECFN)
+            elif o = IR_ENVN:
+                g_call(&em, tg, RT_ENVN)
+            elif o = IR_ARGS:
+                g_call(&em, tg, RT_ARGS)
+            else:
+                g_call(&em, tg, RT_DENTS)
+            g_retst(&em, tg, d)
+        elif o = IR_ENVG:
+            g_argld(&em, tg, 0, a)
+            g_call(&em, tg, RT_ENVG)
+            g_retst(&em, tg, d)
+        elif o = IR_FCREATE:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_call(&em, tg, RT_FCREATE)
+            g_retst(&em, tg, d)
+        elif o = IR_FWRITE or o = IR_WRITEV:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_call(&em, tg, RT_FWRITE if o = IR_FWRITE else RT_WRITEV)
+        elif o = IR_FCLOSE:
+            g_sysarg(&em, tg, 0, a)
+            g_syscall(&em, tg, SC_CLOSE)
+        elif o = IR_NARROW:
+            g_lds(&em, tg, RG_A, a)
+            if bits = 64:
+                g_const(&em, tg, RG_B, 0)
+                g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_GE, 1)
+                g_jnz(&em, tg, RG_C, sl)
+                g_call(&em, tg, RT_BADFIT)
+                g_label(&em, tg, sl)
+                sl ← sl + 1
+            elif sgn = 0:
+                g_const(&em, tg, RG_B, (1 « bits) - 1)
+                g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_LE, 0)
+                g_jnz(&em, tg, RG_C, sl)
+                g_call(&em, tg, RT_BADFIT)
+                g_label(&em, tg, sl)
+                sl ← sl + 1
+            else:
+                g_mov2(&em, tg, RG_B, RG_A)
+                g_ext2(&em, tg, RG_B, bits, 1)
+                g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_EQ, 0)
+                g_jnz(&em, tg, RG_C, sl)
+                g_call(&em, tg, RT_BADFIT)
+                g_label(&em, tg, sl)
+                sl ← sl + 1
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_ACAT or o = IR_AFILL or o = IR_ACYC:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            if o = IR_ACAT:
+                g_call(&em, tg, RT_ACAT)
+            elif o = IR_AFILL:
+                g_call(&em, tg, RT_AFILL)
+            else:
+                g_call(&em, tg, RT_ACYC)
+            g_retst(&em, tg, d)
+        elif o = IR_AFIND:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_argconst(&em, tg, 2, c)
+            g_call(&em, tg, RT_AFIND)
+            g_retst(&em, tg, d)
+        elif o = IR_ASLICE:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_argld(&em, tg, 2, c)
+            g_call(&em, tg, RT_ASLICE)
+            g_retst(&em, tg, d)
+        elif o = IR_SATADD or o = IR_SATSUB or o = IR_SATMUL:
+            t_emit_sat(&em, tg, o, w, a, b, d, sl)
+            sl ← sl + 2
+        elif o = IR_JTAB:
+            let jmin : i64 = ir.extra[b × 1¤ptrdiff]
+            let span : i64 = ir.extra[(b + 1) × 1¤ptrdiff]
+            let ldef : i64 = ir.extra[(b + 2) × 1¤ptrdiff]
+            g_lds(&em, tg, RG_A, a)
+            g_const(&em, tg, RG_B, jmin)
+            g_sub3(&em, tg, RG_A, RG_A, RG_B)
+            g_const(&em, tg, RG_B, span)
+            g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_GE, 0)
+            g_jnz(&em, tg, RG_C, ldef)
+            let id : i64 = em.jt_count
+            em.jt_count ← em.jt_count + 1
+            let pos : i64 = g_absref(&em, tg, RG_B)
+            if em.skipping = 0:
+                em.jt_pos.push(pos)
+                em.jt_id.push(id)
+            g_shl3i(&em, tg, RG_T, RG_A, 3)
+            g_add3(&em, tg, RG_B, RG_B, RG_T)
+            g_ldo(&em, tg, RG_A, RG_B, 0, 8, 0)
+            g_ijmp(&em, tg, RG_A)
+            em.pj_id.push(id)
+            em.pj_start.push(@dropunit(#em.pj_labels))
+            em.pj_len.push(span)
+            let e : mut i64 = 0
+            while e < span:
+                em.pj_labels.push(ir.extra[(b + 3 + e) × 1¤ptrdiff])
+                e ← e + 1
+        elif o = IR_VTAB:
+            let vmin : i64 = ir.extra[b × 1¤ptrdiff]
+            let span : i64 = ir.extra[(b + 1) × 1¤ptrdiff]
+            let defv : i64 = ir.extra[(b + 2) × 1¤ptrdiff]
+            g_lds(&em, tg, RG_A, a)
+            g_const(&em, tg, RG_B, vmin)
+            g_sub3(&em, tg, RG_A, RG_A, RG_B)
+            g_const(&em, tg, RG_B, span)
+            g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_LT, 0)
+            // the load is clamped inside the table; the answer is
+            // chosen after
+            g_const(&em, tg, RG_B, 0)
+            g_sel4(&em, tg, RG_A, RG_C, RG_A, RG_B)
+            let id2 : i64 = em.jt_count
+            em.jt_count ← em.jt_count + 1
+            let pos : i64 = g_absref(&em, tg, RG_B)
+            if em.skipping = 0:
+                em.jt_pos.push(pos)
+                em.jt_id.push(id2)
+            g_shl3i(&em, tg, RG_T, RG_A, 3)
+            g_add3(&em, tg, RG_B, RG_B, RG_T)
+            g_ldo(&em, tg, RG_A, RG_B, 0, 8, 0)
+            g_const(&em, tg, RG_B, defv)
+            g_sel4(&em, tg, RG_A, RG_C, RG_A, RG_B)
+            g_sts(&em, tg, RG_A, d)
+            em.pj_id.push(id2)
+            em.pj_start.push(@dropunit(#em.pj_labels))
+            em.pj_len.push(0 - span)
+            let e2 : mut i64 = 0
+            while e2 < span:
+                em.pj_labels.push(ir.extra[(b + 3 + e2) × 1¤ptrdiff])
+                e2 ← e2 + 1
+        elif o = IR_SYSC:
+            let sargc : i64 = ir.extra[b × 1¤ptrdiff]
+            let sk : mut i64 = 0
+            while sk < sargc:
+                g_sysarg(&em, tg, sk, ir.extra[(b + 1 + sk) × 1¤ptrdiff])
+                sk ← sk + 1
+            g_syscall(&em, tg, a)
+            if d ≠ ⁻1:
+                g_sysret(&em, tg, RG_A)
+                g_sts(&em, tg, RG_A, d)
+        elif o = IR_LDN:
+            g_lds(&em, tg, RG_A, a)
+            g_ldo(&em, tg, RG_A, RG_A, b, bits, sgn)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_STN:
+            g_lds(&em, tg, RG_A, a)
+            g_lds(&em, tg, RG_B, c)
+            g_sto(&em, tg, RG_B, RG_A, b, bits)
+        elif o = IR_KADDR:
+            let pos : i64 = g_absref(&em, tg, RG_A)
+            if em.skipping = 0:
+                em.df_pos.push(pos)
+                em.df_off.push((em.k_args if a = 0 else em.k_alloc) + b)
+            g_sts(&em, tg, RG_A, d)
+        else:
+            assert(false, "an IR op the driver knows")
+        i ← i + 1
+    g_resolve(&em, tg)
+    em.resolve_jtabs()
+
+// saturating arithmetic, held at the type's edge; two scratch labels
+fn t_emit_sat(em : &mut Emit, tg : Target, o : i64, w : i64, a : i64, b : i64, d : i64, sl : i64):
+    let bits : i64 = w & 255
+    let sgn : i64 = w » 8
+    g_lds(&em, tg, RG_A, a)
+    g_lds(&em, tg, RG_B, b)
+    if bits < 64:
+        if o = IR_SATADD:
+            g_add3(&em, tg, RG_A, RG_A, RG_B)
+        elif o = IR_SATSUB:
+            g_sub3(&em, tg, RG_A, RG_A, RG_B)
+        else:
+            g_mul3(&em, tg, RG_A, RG_A, RG_B)
+        if sgn = 1:
+            g_const(&em, tg, RG_C, 0 - (1 « (bits - 1)))
+            g_cmp3(&em, tg, RG_T, RG_A, RG_C, CC_LT, 1)
+            g_sel4(&em, tg, RG_A, RG_T, RG_C, RG_A)
+            g_const(&em, tg, RG_C, (1 « (bits - 1)) - 1)
+            g_cmp3(&em, tg, RG_T, RG_A, RG_C, CC_GT, 1)
+            g_sel4(&em, tg, RG_A, RG_T, RG_C, RG_A)
+        elif o = IR_SATSUB:
+            g_const(&em, tg, RG_C, 0)
+            g_cmp3(&em, tg, RG_T, RG_A, RG_C, CC_LT, 1)
+            g_sel4(&em, tg, RG_A, RG_T, RG_C, RG_A)
+        else:
+            g_const(&em, tg, RG_C, (1 « bits) - 1)
+            g_cmp3(&em, tg, RG_T, RG_A, RG_C, CC_GT, 0)
+            g_sel4(&em, tg, RG_A, RG_T, RG_C, RG_A)
+        g_sts(&em, tg, RG_A, d)
+        return
+    if sgn = 0:
+        if o = IR_SATADD:
+            g_addov(&em, tg, RG_A, RG_C, RG_A, RG_B, 0)
+            g_jz(&em, tg, RG_C, sl)
+            g_const(&em, tg, RG_A, ⁻1)
+        elif o = IR_SATSUB:
+            g_subov(&em, tg, RG_A, RG_C, RG_A, RG_B, 0)
+            g_jz(&em, tg, RG_C, sl)
+            g_const(&em, tg, RG_A, 0)
+        else:
+            g_mulov(&em, tg, RG_A, RG_C, RG_A, RG_B, 0)
+            g_jz(&em, tg, RG_C, sl)
+            g_const(&em, tg, RG_A, ⁻1)
+        g_label(&em, tg, sl)
+        g_sts(&em, tg, RG_A, d)
+        return
+    // signed, full width: the direction of the clamp follows the
+    // operands, read before they are lost
+    if o = IR_SATMUL:
+        g_xor3(&em, tg, RG_C, RG_A, RG_B)
+        g_mulov(&em, tg, RG_A, RG_B, RG_A, RG_B, 1)
+        g_jz(&em, tg, RG_B, sl + 1)
+        g_const(&em, tg, RG_B, 0)
+        g_cmp3(&em, tg, RG_T, RG_C, RG_B, CC_LT, 1)
+        g_const(&em, tg, RG_A, 9223372036854775807)
+        g_jz(&em, tg, RG_T, sl + 1)
+        g_const(&em, tg, RG_A, ⁻9223372036854775807 - 1)
+        g_label(&em, tg, sl + 1)
+        g_sts(&em, tg, RG_A, d)
+        return
+    if o = IR_SATADD:
+        g_addov(&em, tg, RG_A, RG_C, RG_A, RG_B, 1)
+    else:
+        g_subov(&em, tg, RG_A, RG_C, RG_A, RG_B, 1)
+    g_jz(&em, tg, RG_C, sl + 1)
+    g_const(&em, tg, RG_C, 0)
+    // an overflowed add went the way of b; a subtract the other way
+    g_cmp3(&em, tg, RG_T, RG_B, RG_C, CC_LT if o = IR_SATADD else CC_GT, 1)
+    g_const(&em, tg, RG_A, 9223372036854775807)
+    g_jz(&em, tg, RG_T, sl + 1)
+    g_const(&em, tg, RG_A, ⁻9223372036854775807 - 1)
+    g_label(&em, tg, sl + 1)
+    g_sts(&em, tg, RG_A, d)
+

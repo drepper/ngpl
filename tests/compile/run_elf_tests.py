@@ -376,8 +376,25 @@ def refuse(compiler, source: str, out: str, extra) -> str:
     return run.stdout.decode("utf-8", "replace").strip()
 
 
+def compiler_sources() -> list:
+    """The compiler's own sources, in the order build/sources.sh names them.
+
+    One list, read rather than repeated: the order is part of the
+    program, so a second copy of it here would be a second thing that
+    can be wrong.
+    """
+    text = open(os.path.join(topdir, "build", "sources.sh")).read()
+    inside = text.split("NGPLC_SOURCES=(", 1)[1].split(")", 1)[0]
+    out = []
+    for line in inside.splitlines():
+        name = line.split("#", 1)[0].strip()
+        if name:
+            out.append(name)
+    return out
+
+
 def main() -> int:
-    compiler = ["python", "-m", "interp", "src/ngplc.ngpl", "--"]
+    compiler = ["python", "-m", "interp"] + compiler_sources() + ["--"]
     for arg in sys.argv[1:]:
         if arg == "--compiler=native":
             compiler = [os.path.join(topdir, "build", "ngplc")]
