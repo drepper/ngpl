@@ -946,9 +946,13 @@ truths in 64-bit fields.
 values, with ~40 operations.  The driver `t_emit_fn` composes every IR
 op from those once; the x86-64 emitter stays as the measure.
 
-**The runtime is written once as IR** and compiled by the same driver
-for whichever target is asked, so 47 routines exist in a single
-portable spelling.  What 64-bit hardware does in one instruction the
+**The runtime is written once as IR** (`rt_ir.ngpl`) and compiled by the
+same driver for whichever target is asked, so 47 routines exist in a
+single portable spelling.  This is why the sources hold an
+`rt_x86_64.ngpl` and no `rt_aarch64.ngpl`: the pioneer's runtime is
+machine code written out for one target, and the other five have one
+runtime between them, which is named for how it is written rather than
+for any of them.  What 64-bit hardware does in one instruction the
 32-bit targets get as shared software: 64-bit divide/remainder
 (shift-and-subtract) and multiply-overflow (four half-products), as
 RT_*64 helpers the IR builders never recurse into.

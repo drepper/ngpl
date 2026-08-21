@@ -31,15 +31,24 @@ NGPLC_SOURCES=(
     src/elf.ngpl           # targets, the ELF structures, and writing them
     src/codegen.ngpl       # the x86-64 pipeline, put together
     src/main.ngpl          # the driver, the command line, the @build recipe
-    src/arch_x86_64.ngpl   # x86-64, the hand-tuned pioneer
-    src/rt_x86_64.ngpl     # … and its runtime, written as machine code
-    src/arch_a64.ngpl      # the abstract machine, and aarch64
-    src/dispatch.ngpl      # every abstract operation, dispatched on target
-    src/arch_rv64.ngpl     # riscv64
-    src/arch_i386.ngpl     # i386
-    src/arch_arm.ngpl      # arm, 32-bit EABI
-    src/arch_rv32.ngpl     # riscv32
-    src/tdriver.ngpl       # every IR op composed from the abstract ops
-    src/rt_ir.ngpl         # the runtime, written once as IR
+
+    # x86-64 is the pioneer and carries its own of everything: its
+    # emitter is hand-tuned and its runtime is machine code written out.
+    src/arch_x86_64.ngpl   # x86-64: the emitter
+    src/rt_x86_64.ngpl     # x86-64: the runtime, as machine code
+
+    # The other five share one of everything.  Each names only how it
+    # spells the abstract operations -- there is no rt_aarch64.ngpl
+    # because there is no aarch64 runtime: the five have one runtime
+    # between them, written once as IR and compiled for whichever is
+    # asked for.
+    src/arch_a64.ngpl      # the abstract machine, and aarch64's spellings
+    src/dispatch.ngpl      # each abstract operation, dispatched on the target
+    src/arch_rv64.ngpl     # riscv64's spellings
+    src/arch_i386.ngpl     # i386's
+    src/arch_arm.ngpl      # arm's, 32-bit EABI
+    src/arch_rv32.ngpl     # riscv32's
+    src/tdriver.ngpl       # every IR op composed from those, once
+    src/rt_ir.ngpl         # the runtime those five share, written as IR
     src/codegen_t.ngpl     # the pipeline for every target but the pioneer
 )
