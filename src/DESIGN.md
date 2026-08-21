@@ -649,7 +649,7 @@ Attempt 3 grows core-1 to **core-2** with structs:
 
 ## The Files
 
-The compiler is twenty-five source files, listed in build order by
+The compiler is twenty-seven source files, listed in build order by
 `build/sources.sh` and by the `@build` recipe in `src/main.ngpl`.
 Twenty-four of them were cut from one 20,836-line file by contiguous
 slices -- concatenating them in that order reproduced it byte for byte,
@@ -658,9 +658,9 @@ which is how the split was checked.  `comptime.ngpl` is the one that
 was written afterwards.
 
     tokens types diag lex ast parse dumpast check comptime ir lower
-    x86 symbols elf codegen main
-    arch_a64 dispatch arch_rv64 arch_i386 arch_arm arch_rv32
-    tdriver rt_ir codegen_t
+    emit symbols elf codegen main
+    arch_x86_64 rt_x86_64 arch_a64 dispatch arch_rv64 arch_i386
+    arch_arm arch_rv32 tdriver rt_ir codegen_t
 
 Build it with `ngplc --build src/main.ngpl`; the recipe in `main.ngpl`
 is a `@build` function, which generates no code and cannot be called.
@@ -673,11 +673,10 @@ Nothing may glob `src/*.ngpl`: alphabetical is not dependency order.
 Two lists therefore say the same thing, and the bootstrap checks them
 against each other rather than trusting a comment.
 
-Two seams the list does not hide: `impl Emit` is opened in both
-`x86.ngpl` and `arch_a64.ngpl`, which the language allows and which was
-already true within the one file; and the target-independent `g_*`
-dispatchers sit in `dispatch.ngpl` between aarch64 and riscv64, where
-contiguity put them.
+One seam the list does not hide: `impl Emit` is opened in both
+`emit.ngpl`, which declares it, and `arch_a64.ngpl`, which adds the two
+methods aarch64 writes words through.  The language allows a second
+`impl` block and this was already true inside the one file.
 
 ## Pipeline and Data Flow
 

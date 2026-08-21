@@ -150,8 +150,9 @@ fn opt_value(a : str, name : str) → str:
 @build
 fn build():
     foreach part := ["tokens", "types", "diag", "lex", "ast", "parse",
-                     "dumpast", "check", "comptime", "ir", "lower", "x86",
+                     "dumpast", "check", "comptime", "ir", "lower", "emit",
                      "symbols", "elf", "codegen", "main",
+                     "arch_x86_64", "rt_x86_64",
                      "arch_a64", "dispatch", "arch_rv64", "arch_i386",
                      "arch_arm", "arch_rv32", "tdriver", "rt_ir",
                      "codegen_t"]:

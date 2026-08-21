@@ -26,11 +26,13 @@ NGPLC_SOURCES=(
     src/comptime.ngpl      # running the @build recipe while building
     src/ir.ngpl            # the three-address IR
     src/lower.ngpl         # Ast + Chk → IrFn
-    src/x86.ngpl           # the x86-64 pioneer: emitter and runtime
+    src/emit.ngpl          # the buffer every backend writes its code into
     src/symbols.ngpl       # what a function is called in the object file
     src/elf.ngpl           # targets, the ELF structures, and writing them
     src/codegen.ngpl       # the x86-64 pipeline, put together
     src/main.ngpl          # the driver, the command line, the @build recipe
+    src/arch_x86_64.ngpl   # x86-64, the hand-tuned pioneer
+    src/rt_x86_64.ngpl     # … and its runtime, written as machine code
     src/arch_a64.ngpl      # the abstract machine, and aarch64
     src/dispatch.ngpl      # every abstract operation, dispatched on target
     src/arch_rv64.ngpl     # riscv64
