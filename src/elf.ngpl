@@ -32,6 +32,15 @@ let TGT_A32 : i64 = 3
 let TGT_RV64 : i64 = 4
 let TGT_RV32 : i64 = 5
 
+// e_flags is the one header field whose meaning belongs to the machine
+// rather than to ELF: what a bit says for arm it says for nothing else,
+// and the top byte is not a flag at all but which version of the ABI
+// this is.  So it is no enumeration -- the field stays a word, and the
+// machines with something to put in it name their own pieces here.
+// Every other machine this compiler targets puts nothing.
+let EF_ARM_EABI_VER5 : i64 = 83886080      // 0x05000000, in the ABI byte
+let EF_ARM_ABI_FLOAT_SOFT : i64 = 512      // the runtime touches no float register
+
 struct Target:
     id : i64
     name : str           // the canonical spelling --target accepts
@@ -80,9 +89,8 @@ fn targets() → Target[]:
                   sc_mmap: 222, sc_mprotect: 226, sc_writev: 66,
                   sc_getpid: 172, sc_kill: 129, sc_exit: 93,
                   sc_getdents: 61, sc_openat: 56, stat_size: 48, o_directory: 16384, sc_statx: 291, stx_size: 40})
-    // EABI version 5, soft-float: the runtime touches no float register
     t.push(Target{id: TGT_A32, name: "arm", machine: Em.arm, is64: false,
-                  eflags: 83886592, ptr: 4,
+                  eflags: EF_ARM_EABI_VER5 | EF_ARM_ABI_FLOAT_SOFT, ptr: 4,
                   sc_read: 3, sc_write: 4, sc_close: 6, sc_fstat: 197,
                   sc_mmap: 192, sc_mprotect: 125, sc_writev: 146,
                   sc_getpid: 20, sc_kill: 37, sc_exit: 1,
@@ -216,6 +224,78 @@ enum Shf : u64:
     execinstr
 
 
+// What a symbol is for, and how far it is meant to reach.  ELF gives
+// each its own set of names and then packs the two into one byte, so
+// each is its own enumeration here and sym_info() is the one place the
+// packing is written down.
+enum Stb : u8:
+    local
+    global
+    weak
+
+enum Stt : u8:
+    notype
+    object
+    func
+    section
+    file
+
+// What a symbol shows to whoever links against it.  ELF calls the
+// field st_other and gives meaning to its low two bits, which are
+// these; the rest must be zero, so the field is nothing but this.
+enum Stv : u8:
+    default
+    internal
+    hidden
+    protected
+
+// The binding sits above the type in one byte.  Neither reaches
+// sixteen, so the two fit side by side without either being cut short.
+@post(r: r >= 0)
+fn sym_info(bind : Stb, kind : Stt) → u8:
+    bind.ord() × 16 + kind.ord()
+
+// The identification bytes, which ELF names one at a time rather than
+// giving them a structure: four that say the file is an ELF file at
+// all, then how wide its words are, which end they start from, which
+// version this is, and whose ABI it follows.  The rest is padding and
+// must be zero.
+enum Elfclass : u8:
+    none
+    class32
+    class64
+
+enum Elfdata : u8:
+    none
+    lsb                  // two's complement, least significant byte first
+    msb
+
+enum Elfosabi : u8:
+    sysv                 // what Linux writes, whatever it then does
+    hpux
+    netbsd
+    gnu
+
+// EI_VERSION says the same thing e_version does, one byte wide where
+// that field is a word, so Ev cannot be spelled here and this is the
+// same value at the width the identification uses.
+let EI_CURRENT : u8 = 1
+
+// The file's own name for itself.  Written out rather than assembled
+// from a literal so that each byte is said rather than counted to.
+fn elf_ident(cls : Elfclass, order : Elfdata, abi : Elfosabi) → u8[16]:
+    [127, 69, 76, 70,                       // DEL, then "ELF"
+     cls.ord(), order.ord(), EI_CURRENT, abi.ord(),
+     0, 0, 0, 0, 0, 0, 0, 0]
+
+// A section index is a number and not an enumeration -- the sections
+// are this file's own, and it names them by where they sit -- so these
+// are named values of the measure rather than members of a type.  Only
+// the absent one is ELF's; the text index is where this compiler puts
+// its text.
+let SHN_UNDEF ¤"shndx" : i64 = 0
+let SHN_TEXT ¤"shndx" : i64 = 1   // the first section header is the absent one
+
 // The file's own structures, as <elf.h> declares them.  They are
 // written out as themselves rather than assembled byte by byte: a
 // header is a statement about where things are, and stating it as a
@@ -269,16 +349,11 @@ struct Elf64_Shdr:
 struct Elf64_Sym:
     st_name ¤byte : u32
     st_info : u8
-    st_other : u8
+    st_other : Stv
     st_shndx ¤"shndx" : u16
     st_value ¤byte : u64
     st_size ¤byte : u64
 
-// the symbol-table packing, two codes in one byte
-let STB_LOCAL : i64 = 0
-let STB_GLOBAL : i64 = 1
-let STT_FUNC : i64 = 2
-let SHN_TEXT ¤"shndx" : i64 = 1   // the first section header is the absent one
 
 // The 32-bit file wears the same information in narrower fields, and
 // twice in a different order: the ELF specification moved p_flags to
@@ -333,7 +408,7 @@ struct Elf32_Sym:
     st_value ¤byte : u32
     st_size ¤byte : u32
     st_info : u8
-    st_other : u8
+    st_other : Stv
     st_shndx ¤"shndx" : u16
 
 // One symbol: what it is called, where it starts, how long it is, and
@@ -479,16 +554,18 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
     strtab.push(0)
     let symtab : mut Elf64_Sym[] = []
     // the first symbol is the absent one, all zeroes
-    symtab.push(Elf64_Sym{st_name: 0, st_info: 0, st_other: 0, st_shndx: 0,
+    symtab.push(Elf64_Sym{st_name: 0,
+                          st_info: sym_info(Stb.local, Stt.notype),
+                          st_other: Stv.default, st_shndx: SHN_UNDEF,
                           st_value: 0, st_size: 0})
     let nlocal ¤"symndx" : mut i64 = 0
     foreach want := 0…1:
         foreach sy := syms:
             if (1 if sy.is_global else 0) = want:
-                let bind : i64 = STB_GLOBAL if sy.is_global else STB_LOCAL
+                let bind : Stb = Stb.global if sy.is_global else Stb.local
                 symtab.push(Elf64_Sym{st_name: #strtab,
-                                      st_info: bind × 16 + STT_FUNC,
-                                      st_other: 0,
+                                      st_info: sym_info(bind, Stt.func),
+                                      st_other: Stv.default,
                                       st_shndx: SHN_TEXT,
                                       st_value: text_vaddr + sy.value,
                                       st_size: sy.size})
@@ -564,9 +641,9 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
                     #shstr, 0, 0, 1, 0))
     let nsh ¤"shndx" : i64 = @dropunit(#shdrs)
 
-    let cls : i64 = 2 if tgt.is64 else 1
+    let cls : Elfclass = Elfclass.class64 if tgt.is64 else Elfclass.class32
     let ehdr : Elf64_Ehdr = (Elf64_Ehdr{
-        e_ident: [127, 69, 76, 70, cls, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        e_ident: elf_ident(cls, Elfdata.lsb, Elfosabi.sysv),
         e_type: Et.exec, e_machine: tgt.machine,
         e_version: Ev.current, e_entry: text_vaddr,
         e_phoff: ehsize, e_shoff: sh_off,

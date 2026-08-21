@@ -847,10 +847,38 @@ The fields carry no `@wrap`.  A written-out number or an `i64` meets a
 with a fit check the lowering emits — so the annotation was noise
 carried over from the byte-pushing it replaced, where `@wrap(v) & 255`
 genuinely needed it.  Dropping it also restores the checking it was
-suppressing: `bind × 16 + STT_FUNC` and `text_vaddr + sy.value` are
+suppressing: `sym_info(bind, kind)`'s packing and `text_vaddr + sy.value` are
 now watched for overflow like any other arithmetic, and a header field
 that cannot hold what it is given stops the compiler instead of
 quietly keeping the low bits.
+
+**Every field says what it holds.**  A field whose value ELF draws
+from a fixed set is an enum with a fixed representation — `Et`, `Em`,
+`Ev`, `Pt`, `Sht` and the `@flag` enums `Pf` and `Shf` for the
+headers, `Stb`, `Stt` and `Stv` for a symbol — and a field that counts
+something carries the measure it counts in: `¤byte`, or one of
+`shndx`, `symndx`, `phndx` for the three kinds of index the file has.
+What is left is left deliberately.  `st_info` stays a byte because it
+is not one enumeration but two packed into one, so the two are enums
+and `sym_info(bind, kind)` is the single place the packing is written.
+`e_ident` stays a sixteen-byte array because that is what `<elf.h>`
+declares, but `elf_ident(class, order, abi)` builds it from named
+values rather than from a row of numbers.  `e_flags` stays a plain
+word because its meaning belongs to the machine rather than to ELF —
+what a bit says for arm it says for nothing else, and its top byte is
+not a flag at all but an ABI version — so the one architecture with
+something to put there names its pieces (`EF_ARM_EABI_VER5`,
+`EF_ARM_ABI_FLOAT_SOFT`) and composes them.
+
+The typing is invisible in the output, which is the test it has to
+pass: an enum folds where it is written, so the same source produces
+the same file, and every step of this was gated on the six targets'
+binaries staying byte-identical.  It is not invisible in the source,
+where the ordering rule bites — an enum must be declared before its
+name is used as a type, so the symbol enums sit above the structures
+that name them.  The bootstrap caught that: the interpreter reads an
+enum declared below its use, and ngplc refuses it, so a file that
+loads happily still failed to compile itself.
 
 Two further things follow from writing structures instead of bytes.  Every
 offset is now settled before anything is written — `e_shoff` used to
