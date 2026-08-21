@@ -121,6 +121,8 @@ let SB_BOUTDN : i64 = 22    // std.build.output_directory() → str
 let SB_BPATHS : i64 = 23    // std.build.paths() → str[]
 let SB_BFLAGS : i64 = 24    // std.build.flags() → str[]
 
+let SB_SHA256 : i64 = 25    // std.sha256(x) → the digest of x, a u8[] of 32
+
 // what the auxiliary vector is asked for, and under which key
 let PROC_PAGESIZE : i64 = 0
 let PROC_UID : i64 = 1

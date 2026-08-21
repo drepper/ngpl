@@ -76,6 +76,11 @@ let RT_MODU64 : i64 = ⁻49
 let RT_DIVS64 : i64 = ⁻50
 let RT_MODS64 : i64 = ⁻51
 let RT_MULOV64 : i64 = ⁻52
+// the digest a bill of materials names things by.  Unlike every routine
+// above it, this one is written as IR for all six targets rather than
+// twice -- rt_sha256.ngpl holds it, and the pioneer compiles the same
+// IR the other five do.
+let RT_SHA256 : i64 = ⁻53
 
 struct Emit:
     code : u8[]
@@ -472,7 +477,8 @@ fn rt_names() → str[]:
     "RT_MODU64",
     "RT_DIVS64",
     "RT_MODS64",
-    "RT_MULOV64"]
+    "RT_MULOV64",
+    "RT_SHA256"]
 
 // The UTF-8 decoder is Hoehrmann's DFA in the shift form the design
 // researched: nine states, twelve byte classes, and a step that is one
@@ -517,5 +523,5 @@ fn utf8_dfa_words() → i64[]:
 // a call whose target was never emitted stops the compiler where the
 // calls are resolved.
 fn rt_edges() → i64[]:
-    [4, 3, 5, 3, 6, 3, 7, 3, 8, 7, 9, 8, 10, 8, 11, 8, 16, 8, 17, 12, 18, 8, 18, 17, 19, 17, 19, 21, 20, 17, 21, 8, 21, 17, 22, 3, 23, 6, 24, 9, 25, 8, 26, 8, 26, 9, 27, 8, 28, 3, 28, 8, 29, 3, 29, 8, 29, 9, 30, 3, 30, 8, 31, 3, 33, 8, 33, 12, 34, 6, 34, 9, 35, 6, 35, 9, 36, 6, 36, 9, 37, 9, 38, 9, 39, 8, 39, 9, 39, 10, 40, 8, 40, 9, 41, 8, 43, 8, 43, 42, 44, 42, 46, 8, 47, 3, 47, 8]
+    [4, 3, 5, 3, 6, 3, 7, 3, 8, 7, 9, 8, 10, 8, 11, 8, 16, 8, 17, 12, 18, 8, 18, 17, 19, 17, 19, 21, 20, 17, 21, 8, 21, 17, 22, 3, 23, 6, 24, 9, 25, 8, 26, 8, 26, 9, 27, 8, 28, 3, 28, 8, 29, 3, 29, 8, 29, 9, 30, 3, 30, 8, 31, 3, 33, 8, 33, 12, 34, 6, 34, 9, 35, 6, 35, 9, 36, 6, 36, 9, 37, 9, 38, 9, 39, 8, 39, 9, 39, 10, 40, 8, 40, 9, 41, 8, 43, 8, 43, 42, 44, 42, 46, 8, 47, 3, 47, 8, 53, 5, 53, 8, 53, 9, 53, 10]
 

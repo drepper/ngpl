@@ -51,5 +51,6 @@ NGPLC_SOURCES=(
     src/arch_rv32.ngpl     # riscv32's
     src/tdriver.ngpl       # every IR op composed from those, once
     src/rt_portable.ngpl   # the runtime those five share, written as IR
+    src/rt_sha256.ngpl     # SHA-256 as IR, the one routine all six share
     src/codegen_t.ngpl     # the pipeline for every target but the pioneer
 )

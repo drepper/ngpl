@@ -139,6 +139,7 @@ fn sb_spell(sb : i64) → str:
     if sb = SB_BYTES or sb = SB_IOV: return "std.bytes"
     if sb = SB_ENVN or sb = SB_ENVG or sb = SB_ENVH: return "std.env"
     if sb = SB_PROC: return "std.process"
+    if sb = SB_SHA256: return "std.sha256"
     "that"
 
 // what a recipe holds, said once and quoted wherever it is refused

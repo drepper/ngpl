@@ -1774,3 +1774,10 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.b3(72, 137, 242)             // mov rdx, rsi
     em.b1(195)
     em.resolve_locals()
+
+    // SHA-256 is the one routine not written twice.  It is arithmetic
+    // and nothing else -- no kernel, no calling convention of its own --
+    // so there is nothing here a hand-written version would know that
+    // the IR does not, and rt_sha256.ngpl writes it once for all six.
+    em.rt_begin(RT_SHA256)
+    emit_fn(&em, rt_sha256_ir(), 1, lw.strs)

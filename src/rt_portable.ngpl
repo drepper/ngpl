@@ -141,6 +141,33 @@ impl RtB:
     fn lab(&mut self, l : i64):
         self.o(IR_LABEL, l, 0, 0, 0, 0)
 
+    // The same four at thirty-two bits.  A width narrower than the
+    // machine's costs nothing extra here -- the driver's t_canon
+    // narrows what the operation widened, which is the mask a hash
+    // would otherwise have to write out at every step -- and it says
+    // in the IR what the arithmetic actually is.
+    fn add32(&mut self, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_ADDW, a, b, 0, d, 32)
+        d
+
+    fn shl32(&mut self, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_SHLL, a, b, 0, d, 32)
+        d
+
+    // no narrowing follows a right shift, so what goes in must already
+    // be a thirty-two bit value; everything here is
+    fn shr32(&mut self, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_SHRR, a, b, 0, d, 32)
+        d
+
+    fn bnot32(&mut self, a : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_BNOTT, a, 0, 0, d, 32)
+        d
+
     // raw memory, the runtime's own privilege
     fn bxor(&mut self, a : i64, b : i64) → i64:
         let d : i64 = self.t()
@@ -279,6 +306,10 @@ fn rtb_fn(b : RtB) → IrFn:
 
 // each runtime routine, one builder; the id picks it
 fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
+    // the one routine every target takes from here, the pioneer with
+    // the rest: rt_sha256.ngpl writes it, and nobody writes it twice
+    if id = RT_SHA256:
+        return rt_sha256_ir()
     if id = RT_WRITE1 or id = RT_WRITE2:
         // (buf, len): the loop puts every byte down or dies trying
         let b : mut RtB = rtb(2)

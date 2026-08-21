@@ -98,6 +98,9 @@ let IR_EXECFN : i64 = 104  // d ← AT_EXECFN as a string
 let IR_FADDR : i64 = 99    // d ← the code address of function a
 let IR_TORAW : i64 = 106   // d ← a raw byte run holding what the u8[] a says
 let IR_WRITEV : i64 = 107  // file a takes the runs held in array b
+// 108 through 111 are the retargetable path's own, declared in
+// arch_a64.ngpl where that path begins
+let IR_SHA256 : i64 = 112  // d ← the SHA-256 of the u8[] a, a u8[] of 32
 let IR_CALLI : i64 = 100   // d ← call the address in vreg a, args at extra b
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
 let IR_FLD : i64 = 67      // d ← field b of struct a

@@ -1,0 +1,54 @@
+// std.sha256, which is two implementations held to one answer: the
+// host's own under the interpreter, and RT_SHA256 -- written once as
+// IR in src/rt_sha256.ngpl and compiled for all six targets -- in a
+// compiled program.  The suite runs both and diffs them, so this file
+// is where the two meet.
+//
+// The lengths are chosen for the padding, which is the part of
+// FIPS 180-4 that is easy to get wrong: 55 is the last length that
+// leaves room for the one bit and the eight length bytes in one block,
+// 56 is the first that does not, 64 fills a block exactly, and 119/120
+// say the same at the next boundary.  Zero is here because an empty
+// message is still a whole block of padding.
+
+fn hex(d : u8[]) → str:
+    let digits : str = "0123456789abcdef"
+    let cs := digits.chars()
+    let out : mut str = ""
+    foreach v := d:
+        out ← out ⧺ cs[((v » 4) & 15) × 1¤ptrdiff] ⧺ cs[(v & 15) × 1¤ptrdiff]
+    out
+
+// n bytes that are not all alike, so a digest that dropped one would
+// not land on the right answer anyway
+fn run_of(n : i64) → u8[]:
+    let out : mut u8[] = []
+    let i : mut i64 = 0
+    while i < n:
+        out.push((i × 37 + 11) & 255)
+        i ← i + 1
+    out
+
+@start
+@impure
+fn main():
+    // FIPS 180-4's own vectors
+    std.println("{}", hex(std.sha256("")))
+    std.println("{}", hex(std.sha256("abc")))
+    std.println("{}", hex(std.sha256("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")))
+    // a string and its bytes are the same message
+    let s : str = "the quick brown fox"
+    let a : str = hex(std.sha256(s))
+    let b : str = hex(std.sha256(std.bytes(s)))
+    std.println("string and bytes agree: {}", a = b)
+    // every length the padding turns a corner at
+    let lens : i64[] = [0, 1, 54, 55, 56, 57, 63, 64, 65, 119, 120, 127, 128, 1000]
+    foreach n := lens:
+        std.println("{} {}", n, hex(std.sha256(run_of(n))))
+    // a digest is thirty-two bytes, and each of them is a byte
+    let d : u8[] = std.sha256("abc")
+    std.println("a digest is {} long", #d)
+    let hi : mut i64 = 0
+    foreach v := d:
+        hi ← hi ⌈ v
+    std.println("largest byte fits: {}", hi <= 255)

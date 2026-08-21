@@ -460,6 +460,21 @@ impl Lower:
                 let d : i64 = self.tmp()
                 self.ir(IR_SBYTES, sv, 0, 0, d, 0)
                 return d
+            if na = SB_SHA256:
+                // the routine reads an array, so a string hands over
+                // its bytes first; the copy is a page at most and the
+                // alternative is a second runtime routine
+                let hn : i64 = self.a.extra[(nb + 1) × 1¤ptrdiff]
+                let ht : i64 = ty_strip_ref(self.tof(hn))
+                let hv0 : i64 = self.lower_expr(hn)
+                let hv : mut i64 = hv0
+                if ht = TY_STR:
+                    let bv : i64 = self.tmp()
+                    self.ir(IR_SBYTES, hv0, 0, 0, bv, 0)
+                    hv ← bv
+                let d : i64 = self.tmp()
+                self.ir(IR_SHA256, hv, 0, 0, d, 0)
+                return d
             if na = SB_IOV:
                 return self.lower_iov(self.a.extra[(nb + 1) × 1¤ptrdiff])
             if na = SB_ALLOCATOR:

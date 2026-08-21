@@ -2580,6 +2580,21 @@ impl Checker:
                     self.derr(tok, "std.bytes reads a string, not " ⧺ self.tn(self.ty_of(bs)))
             self.set_type(id, mk_aty(TY_U8))
             return
+        if sb = SB_SHA256:
+            // A string or its bytes.  Thirty-two bytes come back rather
+            // than a number, because no sized type the language has
+            // holds two hundred and fifty-six bits, so a program handed
+            // one could not keep it.
+            if argc ≠ 1:
+                self.derr(tok, "std.sha256 takes the one thing it is to digest")
+            else:
+                let hv : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
+                self.check_expr(hv, mk_aty(TY_U8))
+                let ht : i64 = ty_strip_ref(self.ty_of(hv))
+                if ht ≠ mk_aty(TY_U8) and ht ≠ TY_STR:
+                    self.derr(tok, "std.sha256 digests a string or its bytes, not " ⧺ self.tn(ht))
+            self.set_type(id, mk_aty(TY_U8))
+            return
         if sb = SB_IOV:
             if argc ≠ 1:
                 self.derr(tok, "std.iov takes the one thing it is to write")

@@ -601,6 +601,10 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.load(R_DI, a)
             em.jglobal(232, ⁻1, RT_SBYTES)
             em.store(R_AX, d)
+        elif o = IR_SHA256:
+            em.load(R_DI, a)
+            em.jglobal(232, ⁻1, RT_SHA256)
+            em.store(R_AX, d)
         elif o = IR_ACAT:
             em.load(R_DI, a)
             em.load(R_SI, b)

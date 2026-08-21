@@ -1015,12 +1015,15 @@ impl Parser:
                 if m = "iov":
                     let ioff : i64 = self.parse_args()
                     return self.mknode(NK_SCALL, at, SB_IOV, ioff, 0)
+                if m = "sha256":
+                    let hoff : i64 = self.parse_args()
+                    return self.mknode(NK_SCALL, at, SB_SHA256, hoff, 0)
                 let sb : mut i64 = ⁻1
                 if m = "println": sb ← SB_PRINTLN
                 elif m = "print": sb ← SB_PRINT
                 elif m = "exit": sb ← SB_EXIT
                 else:
-                    self.err("'std." ⧺ m ⧺ "' is not core-2; println, print, exit, args, env, process, fs, arena, bytes, iov, build and implementation are")
+                    self.err("'std." ⧺ m ⧺ "' is not core-2; println, print, exit, args, env, process, fs, arena, bytes, iov, sha256, build and implementation are")
                     return 0
                 let off : i64 = self.parse_args()
                 return self.mknode(NK_SCALL, at, sb, off, 0)

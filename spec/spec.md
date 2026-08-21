@@ -8342,6 +8342,19 @@ Memory and page sizes carry the `byte` unit, so they combine correctly with `siz
 let pages : mut = std.sys.total_memory() ÷ std.sys.page_size()
 ```
 
+#### Digests (`std.sha256`)
+
+```
+let d : u8[] = std.sha256("abc")            // a string, as its UTF-8 bytes
+let e : u8[] = std.sha256(std.bytes("abc")) // the same message, the same digest
+```
+
+`std.sha256(x)` answers the SHA-256 of `x` as its thirty-two bytes, most significant first, per FIPS 180-4.  `x` is a string — hashed as its UTF-8 bytes — or a `u8[]`/`byte[]`.
+
+The result is bytes rather than a number because no sized type the language has holds two hundred and fifty-six bits, so a program handed a digest as an integer could not keep it.  Thirty-two bytes it can hold, compare, index, and write out in whatever spelling it likes.
+
+A digest is a name that cannot be forged, which is why the compiler uses this one to say what a program was built from; see the bill of materials in the chapter on modules and the build system.
+
 #### Comparison with Other Languages
 
 | Feature | C | Rust | Zig | Python | NGPL |
