@@ -178,3 +178,34 @@ Tooling
     The compiler checks for all the needed runtime functions whether it is defined in the module.
     if no optimized runtime is given, the portable rt functions can be called directly.
     Otherwise the optimized routine is emitted.
+
+[~] the compiler creates a hash for all the sources it compiles.  Done, behind --sbom: SHA-256
+    in src/sha256.ngpl, a token-based digest in src/sbom.ngpl (kind and content, so a comment,
+    a rewrap or -> for → does not move it), .sbom and .sbomstr in their own read-only segment,
+    last of what is loaded, with rows for the compiler, each source, all the sources, and the
+    program.  The program's own digest covers the code, what it reads, what it writes, the
+    entry point, the machine and the class -- not the bill, which would be a hash of its own
+    hash, and not the name, since the same program deployed twice is one program.
+
+    Not on by default, and this is the one thing left.  SHA-256 written in NGPL runs at about
+    6 MB/s compiled, so the compiler bills its own 27 sources in 0.35s -- and at 2.4 KiB/s
+    under the interpreter, which would add some forty minutes to stage 1.  What fixes it is
+    what std.sha256 is for: hashlib under the interpreter (done, returns u8[32]) and a runtime
+    routine in the compiler.  The cheap way to get that routine is to teach the x86-64 emitter
+    IR_LDN, IR_STN and IR_KADDR -- the ops the portable runtime builders use and emit_fn does
+    not know -- so SHA-256 is written once as IR in rt_portable.ngpl and every target compiles
+    it, rather than once by hand for x86-64 and once as IR for the other five.  Then --sbom
+    becomes the default and the flag goes.
+
+[ ] the original wording, for what the entry kinds are to grow into:  the hash is token-based,
+    not purely text, so that irrelevant changes in layout, whist spaces, and spelling (e.g.,
+    -> vs →) are discounted.  Each individual source file is also hashed.  the compiler emits
+    into the generated ELF file a new section .sbom with reference to another new section .sbomstr
+    with a data structure that is a table with three columns, the first being an identifier/enum,
+    the second and third referencing a string in the
+    .sbomstr section. the first column is the type of entry: compiler, source file, output file,
+    and more in future.  the second is the associated name (file name, compiler name, output file name, etc)
+    and the last is the hash value as ASCII.  The hash algo is SHA256.  The new sections must be
+    available at runtime but need to be the last before the sections that are not loaded.  the
+    output file hash sum is computed with all the actual section content plus relevant information
+    from the ELF data structures like the entry point.

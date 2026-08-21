@@ -151,7 +151,7 @@ fn opt_value(a : str, name : str) → str:
 fn build():
     foreach part := ["tokens", "types", "diag", "lex", "ast", "parse",
                      "dumpast", "check", "comptime", "ir", "lower", "emit",
-                     "symbols", "elf", "codegen", "main",
+                     "sha256", "symbols", "sbom", "elf", "codegen", "main",
                      "arch_x86_64", "rt_x86_64",
                      "arch_a64", "dispatch", "arch_rv64", "arch_i386",
                      "arch_arm", "arch_rv32", "tdriver", "rt_portable",
@@ -251,7 +251,7 @@ fn read_build(path : str, json : bool) → Recipe:
 fn main() → u8:
     let argv := std.args.all()
     if #argv = 0:
-        std.println("usage: ngplc <source.ngpl>… [-o out] [--target=A] [--stack-size=N] [--guard-size=N] [--dump-tokens] [--dump-ast] [--diag=json] [--log=json]")
+        std.println("usage: ngplc <source.ngpl>… [-o out] [--target=A] [--stack-size=N] [--guard-size=N] [--sbom] [--dump-tokens] [--dump-ast] [--diag=json] [--log=json]")
         std.println("       ngplc --build <recipe.ngpl> [-o out] [--target=A] …")
         std.println("targets: {} (default: the architecture this compiler runs on)", target_names())
         return 1
@@ -261,6 +261,7 @@ fn main() → u8:
     let want_tokens : mut bool = false
     let want_ast : mut bool = false
     let want_log : mut bool = false
+    let want_sbom : mut bool = false
     let json : mut bool = false
     let stack_size : mut i64 = STACK_DEFAULT
     let guard_size : mut i64 = GUARD_DEFAULT
@@ -317,6 +318,8 @@ fn main() → u8:
             json ← true
         elif a = "--log=json":
             want_log ← true
+        elif a = "--sbom":
+            want_sbom ← true
         else:
             inputs.push(a)
         i ← i + 1
@@ -413,9 +416,18 @@ fn main() → u8:
     // one plan, and the class picks how wide its fields are written;
     // one run for each thing the file is made of, and the kernel
     // joins them, so nothing here ever holds the whole image
+    // What went in: the compiler, then each source and all of them
+    // together.  What came out is added by the plan, which is where the
+    // entry point is known.
+    let bom : mut SbomRow[] = []
+    if want_sbom:
+        bom.push(SbomRow{kind: Sbomkind.compiler, name: sbom_compiler_name(),
+                         hash: sha256_hex(std.bytes(sbom_compiler_name()))})
+        foreach r := sbom_sources(toks, src, files):
+            bom.push(r)
     let pl := plan_elf(tgt, compiled.code, compiled.rodata, compiled.data,
                        stack_size × 1¤byte, compiled.relro_size × 1¤byte,
-                       compiled.syms)
+                       compiled.syms, bom)
     let runs : mut std.iovec[] = []
     if tgt.is64:
         let e := elf_file64(pl, compiled.code, compiled.rodata, compiled.data)
@@ -427,6 +439,9 @@ fn main() → u8:
         runs.push(std.iov(e.rodata))
         runs.push(std.iov(e.gap_data))
         runs.push(std.iov(e.data))
+        runs.push(std.iov(e.gap_sbom))
+        runs.push(std.iov(e.sbom))
+        runs.push(std.iov(e.sbomstr))
         runs.push(std.iov(e.gap_syms))
         runs.push(std.iov(e.syms))
         runs.push(std.iov(e.strtab))
@@ -443,6 +458,9 @@ fn main() → u8:
         runs.push(std.iov(e.rodata))
         runs.push(std.iov(e.gap_data))
         runs.push(std.iov(e.data))
+        runs.push(std.iov(e.gap_sbom))
+        runs.push(std.iov(e.sbom))
+        runs.push(std.iov(e.sbomstr))
         runs.push(std.iov(e.gap_syms))
         runs.push(std.iov(e.syms))
         runs.push(std.iov(e.strtab))

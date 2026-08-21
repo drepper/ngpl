@@ -10,7 +10,7 @@ The std object exposes:
     args              → Command line parameters of the running program
     env               → Read access to the process environment
     sys               → CPU affinity, CPU counts, and memory sizes
-    sha256(data)      → SHA-256 hash as IntValue (arbitrary-width int)
+    sha256(data)      → SHA-256 digest as u8[32]
     format(str, file?, fd?) → Format a string, optionally write to a file descriptor
     get_stdout()      → StdoutFile object wrapping stdout fd
 
@@ -1402,13 +1402,18 @@ class StdModule:
         return ObjectValue(self._stdout_file)
 
     def sha256(self, args):
-        """sha256(data) — compute SHA-256 hash as arbitrary-width integer.
+        """sha256(data) — the SHA-256 digest of data, as its 32 bytes.
+
+        The bytes rather than a number: a 256-bit digest does not fit
+        any sized type the language has, so a program that was handed
+        one could not hold it.  Thirty-two bytes it can hold, compare,
+        and write out however it likes.
 
         Args:
             args[0]: byte[] ArrayValue, Bytes, or StrValue object to hash.
 
         Returns:
-            IntValue representing the 256-bit digest.
+            A u8[] of 32 bytes, most significant first.
         """
         from interp.eval import unwrap_optional
         from interp.value import ObjectValue, StrValue, IntValue, ArrayValue, mk_int
@@ -1427,8 +1432,10 @@ class StdModule:
             data = data_arg.value.encode("utf-8")
         else:
             raise TypeError(f"sha256 expects byte[] or StrValue, got {type(data_arg).__name__}")
-        h = self._sha256(data)
-        return mk_int(h)
+        from interp.value import ArrayValue as _AV
+        digest = hashlib.sha256(data).digest()
+        return ObjectValue(_AV([mk_int(b, "u8") for b in digest],
+                               element_type="u8", fixed_size=32))
 
     # ------------------------------------------------------------------
     # Trigonometry

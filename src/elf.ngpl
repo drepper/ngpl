@@ -345,6 +345,16 @@ struct Elf64_Shdr:
     sh_addralign ¤byte : u64
     sh_entsize ¤byte : u64
 
+// A row of the bill of materials, as it sits in the file: what it is
+// about, and where in .sbomstr its name and its digest are.  Twelve
+// bytes, the same in both classes -- an offset into a string table is
+// no wider on a 64-bit machine than on a 32-bit one.
+@repr(C)
+struct Sbom_Entry:
+    kind : Sbomkind
+    name ¤byte : u32     // offset into .sbomstr
+    hash ¤byte : u32     // …and of the digest, written out as ASCII
+
 @repr(C)
 struct Elf64_Sym:
     st_name ¤byte : u32
@@ -456,6 +466,9 @@ struct Elf:
     rodata : u8[]
     gap_data : u8[]
     data : u8[]
+    gap_sbom : u8[]
+    sbom : Sbom_Entry[]
+    sbomstr : u8[]
     gap_syms : u8[]
     syms : Elf64_Sym[]
     strtab : u8[]
@@ -473,6 +486,9 @@ struct Elf32:
     rodata : u8[]
     gap_data : u8[]
     data : u8[]
+    gap_sbom : u8[]
+    sbom : Sbom_Entry[]
+    sbomstr : u8[]
     gap_syms : u8[]
     syms : Elf32_Sym[]
     strtab : u8[]
@@ -513,6 +529,8 @@ struct ElfPlan:
     syms : Elf64_Sym[]
     strtab : u8[]
     shstr : u8[]
+    sbom : Sbom_Entry[]
+    sbomstr : u8[]
     // where the pieces fall, for the gaps between them
     text_off ¤byte : i64
     text_size ¤byte : i64
@@ -520,16 +538,39 @@ struct ElfPlan:
     ro_size ¤byte : i64
     d_off ¤byte : i64
     d_size ¤byte : i64
+    bom_off ¤byte : i64
+    bom_size ¤byte : i64
+    bstr_size ¤byte : i64
     sym_off ¤byte : i64
     shstr_off ¤byte : i64
     sh_off ¤byte : i64
     hdrs_size ¤byte : i64
 
+// The program itself, hashed: the code, what it reads, what it writes,
+// and where it starts, plus which machine and how wide its words are.
+// Not the file -- the bill of materials, the symbol names and the
+// section headers are things said *about* the program, and two builds
+// that differ only in what they say about themselves are one program.
+fn image_digest(tgt : Target, code : u8[], rodata : u8[], data : u8[],
+                entry ¤byte : i64) → str:
+    let feed : mut u8[] = []
+    foreach b := code:
+        feed.push(b)
+    foreach b := rodata:
+        feed.push(b)
+    foreach b := data:
+        feed.push(b)
+    push64(&feed, @dropunit(entry))
+    push32(&feed, tgt.machine.ord())
+    push32(&feed, 2 if tgt.is64 else 1)
+    push32(&feed, tgt.eflags)
+    sha256_hex(feed)
+
 @pre(#code > 0 and stack_size > 0)
 @pre(relro_size >= 0)
 fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
             stack_size ¤byte : i64, relro_size ¤byte : i64,
-            syms : Sym[]) → ElfPlan:
+            syms : Sym[], bom : SbomRow[]) → ElfPlan:
     // how wide this class's own bookkeeping is
     let ehsize ¤byte : i64 = @sizeof(Elf64_Ehdr) if tgt.is64 else @sizeof(Elf32_Ehdr)
     let phent ¤byte : i64 = @sizeof(Elf64_Phdr) if tgt.is64 else @sizeof(Elf32_Phdr)
@@ -546,6 +587,46 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
     let d_off ¤byte : i64 = align_up_b(ro_off + ro_size, page)
     let d_vaddr ¤byte : i64 = image + d_off
     let d_size ¤byte : i64 = #data
+
+    // The bill of materials sits in its own read-only segment after the
+    // writable one: loaded, so a program can read its own, and last of
+    // what is loaded, so nothing mapped follows it.  The program's own
+    // digest is taken here, where the entry point is known, and covers
+    // the program rather than the file -- the code, what it reads, what
+    // it writes, and where it starts.  Not the bill itself, which would
+    // be a hash of its own hash; and not the name it was written under,
+    // since the same program deployed twice is one program.
+    // No bill asked for, no sections: a file built without one is what
+    // it was before there were any.
+    let rows : mut SbomRow[] = []
+    if #bom > 0:
+        foreach r := bom:
+            rows.push(r)
+        rows.push(SbomRow{kind: Sbomkind.output, name: "",
+                          hash: image_digest(tgt, code, rodata, data, text_vaddr)})
+    let sbomstr : mut u8[] = []
+    if #rows > 0:
+        // a string table begins with the empty string, so that offset
+        // zero names nothing; with no bill there is no table at all
+        sbomstr.push(0)
+    let sbom : mut Sbom_Entry[] = []
+    foreach r := rows:
+        let nat ¤byte : i64 = #sbomstr
+        foreach b := std.bytes(r.name):
+            sbomstr.push(b)
+        sbomstr.push(0)
+        let hat ¤byte : i64 = #sbomstr
+        foreach b := std.bytes(r.hash):
+            sbomstr.push(b)
+        sbomstr.push(0)
+        sbom.push(Sbom_Entry{kind: r.kind, name: nat, hash: hat})
+    let sbent ¤byte : i64 = @sizeof(Sbom_Entry)
+    let bom_off ¤byte : i64 = align_up_b(d_off + d_size, page) if #rows > 0 else d_off + d_size
+    let bom_vaddr ¤byte : i64 = image + bom_off
+    let bom_size ¤byte : i64 = sbent × @dropunit(#sbom)
+    let bstr_off ¤byte : i64 = bom_off + bom_size
+    let bstr_size ¤byte : i64 = #sbomstr
+    let bom_seg ¤byte : i64 = bom_size + bstr_size
 
     // A symbol table names the locals first and the globals after, and
     // says in the section's own header where the first global sits;
@@ -578,11 +659,28 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
     let shstr : mut u8[] = []
     shstr.push(0)
     let shname ¤byte : mut i64[] = []
-    foreach nm := [".text", ".rodata", ".data", ".symtab", ".strtab", ".shstrtab"]:
+    // The bill's two sections are named only when there is one, so a
+    // file built without it is what it was before there were any.
+    let names : mut str[] = [".text", ".rodata", ".data"]
+    if #rows > 0:
+        names.push(".sbom")
+        names.push(".sbomstr")
+    names.push(".symtab")
+    names.push(".strtab")
+    names.push(".shstrtab")
+    foreach nm := names:
         shname.push(#shstr)
         foreach b := std.bytes(nm):
             shstr.push(b)
         shstr.push(0)
+    // where the ones that are always there sit in that list
+    let n_sym ¤ptrdiff : i64 = 5 if #rows > 0 else 3
+    let n_str ¤ptrdiff : i64 = n_sym + 1
+    let n_shs ¤ptrdiff : i64 = n_sym + 2
+    // which section header the symbol table's names are in: the null
+    // one, the three that are always loaded, the bill's two when there
+    // is one, then the symbols and their strings
+    let strtab_ndx ¤"shndx" : i64 = 7 if #rows > 0 else 5
 
     // Past the last thing the kernel loads: the symbol table, the
     // strings its names live in, and the section headers that say
@@ -592,7 +690,7 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
     // nothing has to be patched afterwards.
     let nsym ¤"symndx" : i64 = @dropunit(#symtab)
     let word ¤byte : i64 = 8
-    let sym_off ¤byte : i64 = align_up_b(d_off + d_size, word)
+    let sym_off ¤byte : i64 = align_up_b(bstr_off + bstr_size, word)
     let sym_size ¤byte : i64 = syment × @dropunit(nsym)
     let str_off ¤byte : i64 = sym_off + sym_size
     let shstr_off ¤byte : i64 = str_off + #strtab
@@ -608,6 +706,8 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
                     text_size, text_size, page))
     phdrs.push(phdr(Pt.load, Pf.r, ro_off, ro_vaddr, ro_size, ro_size, page))
     phdrs.push(phdr(Pt.load, Pf.r | Pf.w, d_off, d_vaddr, d_size, d_size, page))
+    if #rows > 0:
+        phdrs.push(phdr(Pt.load, Pf.r, bom_off, bom_vaddr, bom_seg, bom_seg, page))
     // PT_GNU_RELRO: the head of the writable segment, which holds what
     // is written before @start and never after.  A dynamic loader would
     // seal it; nothing loads a static program but itself, so the
@@ -633,11 +733,16 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
                     ro_vaddr, ro_off, ro_size, 0, 0, 8, 0))
     shdrs.push(shdr(shname[2], Sht.progbits, Shf.write | Shf.alloc,
                     d_vaddr, d_off, d_size, 0, 0, 8, 0))
-    shdrs.push(shdr(shname[3], Sht.symtab, Shf.nil, 0, sym_off, sym_size,
-                    5, nlocal + 1, 8, syment))
-    shdrs.push(shdr(shname[4], Sht.strtab, Shf.nil, 0, str_off,
+    if #rows > 0:
+        shdrs.push(shdr(shname[3 × 1¤ptrdiff], Sht.progbits, Shf.alloc,
+                        bom_vaddr, bom_off, bom_size, 0, 0, 4, sbent))
+        shdrs.push(shdr(shname[4 × 1¤ptrdiff], Sht.strtab, Shf.alloc,
+                        bom_vaddr + bom_size, bstr_off, bstr_size, 0, 0, 1, 0))
+    shdrs.push(shdr(shname[n_sym], Sht.symtab, Shf.nil, 0, sym_off, sym_size,
+                    strtab_ndx, nlocal + 1, 8, syment))
+    shdrs.push(shdr(shname[n_str], Sht.strtab, Shf.nil, 0, str_off,
                     #strtab, 0, 0, 1, 0))
-    shdrs.push(shdr(shname[5], Sht.strtab, Shf.nil, 0, shstr_off,
+    shdrs.push(shdr(shname[n_shs], Sht.strtab, Shf.nil, 0, shstr_off,
                     #shstr, 0, 0, 1, 0))
     let nsh ¤"shndx" : i64 = @dropunit(#shdrs)
 
@@ -654,9 +759,11 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
 
     (ElfPlan{ehdr: ehdr, phdrs: phdrs, shdrs: shdrs, syms: symtab,
              strtab: strtab, shstr: shstr,
+             sbom: sbom, sbomstr: sbomstr,
              text_off: text_off, text_size: text_size,
              ro_off: ro_off, ro_size: ro_size,
              d_off: d_off, d_size: d_size,
+             bom_off: bom_off, bom_size: bom_size, bstr_size: bstr_size,
              sym_off: sym_off, shstr_off: shstr_off,
              sh_off: sh_off, hdrs_size: hdrs_size})
 
@@ -668,7 +775,10 @@ fn elf_file64(pl : ElfPlan, code : u8[], rodata : u8[], data : u8[]) → Elf:
         gap_text: zeros(pl.text_off - pl.hdrs_size), code: code,
         gap_ro: zeros(pl.ro_off - (pl.text_off + pl.text_size)), rodata: rodata,
         gap_data: zeros(pl.d_off - (pl.ro_off + pl.ro_size)), data: data,
-        gap_syms: zeros(pl.sym_off - (pl.d_off + pl.d_size)), syms: pl.syms,
+        gap_sbom: zeros(pl.bom_off - (pl.d_off + pl.d_size)),
+        sbom: pl.sbom, sbomstr: pl.sbomstr,
+        gap_syms: zeros(pl.sym_off - (pl.bom_off + pl.bom_size + pl.bstr_size)),
+        syms: pl.syms,
         strtab: pl.strtab, shstrtab: pl.shstr,
         gap_shdrs: zeros(pl.sh_off - (pl.shstr_off + #pl.shstr)),
         shdrs: pl.shdrs})
@@ -710,7 +820,13 @@ fn elf_file32(pl : ElfPlan, code : u8[], rodata : u8[], data : u8[]) → Elf32:
         gap_text: zeros(pl.text_off - pl.hdrs_size), code: code,
         gap_ro: zeros(pl.ro_off - (pl.text_off + pl.text_size)), rodata: rodata,
         gap_data: zeros(pl.d_off - (pl.ro_off + pl.ro_size)), data: data,
-        gap_syms: zeros(pl.sym_off - (pl.d_off + pl.d_size)), syms: symtab,
+        // the bill of materials is the same twelve bytes a row in both
+        // classes: an offset into a string table is no wider on a
+        // 64-bit machine, so there is nothing here to narrow
+        gap_sbom: zeros(pl.bom_off - (pl.d_off + pl.d_size)),
+        sbom: pl.sbom, sbomstr: pl.sbomstr,
+        gap_syms: zeros(pl.sym_off - (pl.bom_off + pl.bom_size + pl.bstr_size)),
+        syms: symtab,
         strtab: pl.strtab, shstrtab: pl.shstr,
         gap_shdrs: zeros(pl.sh_off - (pl.shstr_off + #pl.shstr)),
         shdrs: shdrs})

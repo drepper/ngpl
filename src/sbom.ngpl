@@ -1,0 +1,110 @@
+// ===========================================================================
+// The bill of materials: what a program was built from
+// ===========================================================================
+//
+// A binary that cannot say what it was made of has to be taken on
+// trust.  This writes the answer into the file: the compiler, each
+// source, the sources together, and the program itself, each named and
+// each with a SHA-256 beside it.
+//
+// The source hashes are over the *tokens*, not the text.  A comment
+// added, a line rewrapped, `->` written where `→` was: none of those
+// change what the program is, and a hash that moved for them would say
+// two builds differ when they do not.  What the lexer kept is exactly
+// what the program is, so that is what is hashed.
+
+// What a row is about.  A fixed representation, since these are read
+// out of a file by whoever wants to know.
+enum Sbomkind : u32:
+    compiler         // which compiler built it
+    source           // one of the sources it was built from
+    sources          // all of them together, in the order they were read
+    output           // the program itself
+
+// A row before it is laid out: the strings still strings.
+struct SbomRow:
+    kind : Sbomkind
+    name : str
+    hash : str
+
+// What this compiler calls itself.  A build records which compiler made
+// it, and this is that name; it is a constant so that two builds of the
+// same program by the same compiler agree, which is what a bill of
+// materials is for.
+fn sbom_compiler_name() → str:
+    "ngplc core-2"
+
+// ---------------------------------------------------------------------------
+// Hashing what the program is, rather than how it was typed
+// ---------------------------------------------------------------------------
+
+// The bytes a token contributes: what kind it is, and what it says.
+// Layout contributes nothing, and neither does a comment, since the
+// lexer kept neither.  A number is written out in decimal rather than
+// as it was spelled, so 0x10 and 16 hash alike if the lexer read them
+// alike.
+fn token_bytes(t : Toks, src : byte[], i ¤ptrdiff : i64, into : &mut u8[]):
+    let k : i64 = t.kind[i]
+    into.push(k & 255)
+    into.push((k » 8) & 255)
+    if k = TK_IDENT or k = TK_INT or k = TK_STR:
+        // an identifier and a string say their text; a number says the
+        // value the lexer read, and whether it needed all sixty-four
+        // bits to hold it
+        let what : str = t.strs[t.val[i] × 1¤ptrdiff] if k = TK_STR else (i64_str(t.val[i]) if k = TK_INT else run_str(src, t.off[i], t.len[i]))
+        foreach b := std.bytes(what):
+            into.push(b)
+        if k = TK_INT:
+            into.push(t.big[i] & 255)
+    into.push(0)
+
+// The digest of the tokens that came from a run of the source: one
+// file, or all of it.
+@pre(lo >= 0 and hi >= lo)
+fn token_digest(t : Toks, src : byte[], lo ¤byte : i64, hi ¤byte : i64) → str:
+    let feed : mut u8[] = []
+    let n ¤ptrdiff : i64 = #t.kind
+    let i ¤ptrdiff : mut i64 = 0
+    while i < n:
+        let at ¤byte : i64 = t.off[i]
+        if at >= lo and at < hi:
+            token_bytes(t, src, i, &feed)
+        i ← i + 1
+    sha256_hex(feed)
+
+// The rows a program's sources make: one for each file, in the order
+// they were read, and one for all of them together.
+//
+// One pass.  The tokens are in the order they were read, so the file a
+// token belongs to only ever moves forward, and each file's bytes are
+// hashed as its last token goes by.  Walking every token once per file
+// would be the same answer for the length of the sources times the
+// number of them, which for this compiler is a quarter of a million
+// tokens twenty-seven times over.
+fn sbom_sources(t : Toks, src : byte[], files : Files) → SbomRow[]:
+    let rows : mut SbomRow[] = []
+    let nf ¤ptrdiff : i64 = #files.names
+    let ntok ¤ptrdiff : i64 = #t.kind
+    let total ¤byte : i64 = #src
+    let whole : mut u8[] = []
+    let feed : mut u8[] = []
+    let fi ¤ptrdiff : mut i64 = 0
+    let hi ¤byte : mut i64 = files.off[1 × 1¤ptrdiff] if nf > 1 else total
+    let i ¤ptrdiff : mut i64 = 0
+    while i < ntok:
+        let at ¤byte : i64 = t.off[i]
+        while at >= hi and fi + 1 < nf:
+            rows.push(SbomRow{kind: Sbomkind.source, name: files.names[fi],
+                              hash: sha256_hex(feed)})
+            whole ← whole ⧺ feed
+            feed ← []
+            fi ← fi + 1
+            hi ← files.off[(fi + 1) × 1¤ptrdiff] if fi + 1 < nf else total
+        token_bytes(t, src, i, &feed)
+        i ← i + 1
+    rows.push(SbomRow{kind: Sbomkind.source, name: files.names[fi],
+                      hash: sha256_hex(feed)})
+    whole ← whole ⧺ feed
+    rows.push(SbomRow{kind: Sbomkind.sources, name: "",
+                      hash: sha256_hex(whole)})
+    rows
