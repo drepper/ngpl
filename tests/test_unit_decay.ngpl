@@ -1,0 +1,111 @@
+// A measure may stand in for another: `unit tok → ptrdiff` says a
+// token index goes wherever a ptrdiff is wanted.
+//
+// This is what lets a program give each of its tables an index of its
+// own without those indices becoming useless.  A subscript is measured
+// ¤ptrdiff and nothing else, so before this a table index had to be a
+// ptrdiff -- which made every table's index the same thing as every
+// other's, and a token index interchangeable with a node id.  A measure
+// that stands in for ptrdiff subscripts, counts and compares, while
+// remaining something its siblings are not.
+//
+// The relation is one-way and it is not shared: what stands in for a
+// thing is not the thing, and two measures that stand in for the same
+// thing do not stand in for each other.
+
+unit tok -> ptrdiff
+unit node → ptrdiff          // → and -> say the same
+unit height
+
+// ---------------------------------------------------------------------
+// What standing in for ptrdiff buys
+// ---------------------------------------------------------------------
+
+@test
+fn test_it_subscripts():
+    let xs : i64[] = [10, 20, 30]
+    let t ¤"tok" : i64 = 1
+    assert_eq(xs[t], 20)
+
+@test
+fn test_it_compares_with_a_count():
+    let xs : i64[] = [10, 20, 30]
+    let t ¤"tok" : i64 = 1
+    assert(t < #xs)
+    assert(not (t >= #xs))
+
+@test
+fn test_it_walks_an_array():
+    let xs : i64[] = [10, 20, 30]
+    let i ¤"tok" : mut i64 = 0
+    let sum : mut i64 = 0
+    while i < #xs:
+        sum ← sum + xs[i]
+        i ← i + 1
+    assert_eq(sum, 60)
+
+// Arithmetic on it keeps the measure: a token index plus one is still
+// a token index, which is the whole reason for having it.
+@test
+fn test_arithmetic_keeps_the_measure():
+    let t ¤"tok" : i64 = 1
+    let u ¤"tok" : i64 = t + 1
+    assert_eq(@dropunit(u), 2)
+
+fn wants_ptrdiff(p ¤ptrdiff : i64) → i64:
+    @dropunit(p)
+
+@test
+fn test_it_passes_where_a_ptrdiff_is_wanted():
+    let t ¤"tok" : i64 = 7
+    assert_eq(wants_ptrdiff(t), 7)
+
+fn wants_tok(t ¤"tok" : i64) → i64:
+    @dropunit(t)
+
+@test
+fn test_its_own_measure_passes():
+    let t ¤"tok" : i64 = 7
+    assert_eq(wants_tok(t), 7)
+
+// ---------------------------------------------------------------------
+// What it does not buy
+// ---------------------------------------------------------------------
+
+// Two measures standing in for the same thing are still two measures.
+@expect error "tok"
+fn error_a_sibling_is_not_it():
+    let t ¤"tok" : i64 = 1
+    let n ¤"node" : i64 = t
+    _ ← n
+
+@expect error "tok"
+fn error_a_sibling_does_not_pass():
+    let n ¤"node" : i64 = 1
+    _ ← wants_tok(n)
+
+@expect error "tok"
+fn error_siblings_do_not_add():
+    let t ¤"tok" : i64 = 1
+    let n ¤"node" : i64 = 2
+    _ ← t + n
+
+// The way back is not open: what stands in for a thing is not the
+// thing, so a plain ptrdiff is not a token index.
+@expect error "tok"
+fn error_the_way_back_is_shut():
+    let p ¤ptrdiff : i64 = 1
+    let t ¤"tok" : i64 = p
+    _ ← t
+
+// A measure that stands in for nothing stands in for nothing.
+@expect error "height"
+fn error_a_measure_that_stands_in_for_nothing():
+    let xs : i64[] = [10, 20, 30]
+    let h ¤"height" : i64 = 1
+    _ ← xs[h]
+
+@start
+@impure
+fn main():
+    std.println("unit decay tests passed")

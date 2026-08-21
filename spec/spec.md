@@ -8534,6 +8534,29 @@ std.println("{}", 1024¤kibibyte) // prints: 1024 KiB
 
 The builtin units use conventional abbreviations: `B` for byte, `m` for meter, `s` for second, etc.
 
+#### A Measure That Stands In for Another
+
+A declaration may say that a measure goes wherever another one is wanted:
+
+```
+unit tok → ptrdiff
+unit node -> ptrdiff        // → and -> say the same
+```
+
+A value measured `tok` may now be used where a `ptrdiff` is asked for — it subscripts an array, it compares against a count, it passes to a parameter measured `ptrdiff` — while remaining `tok` everywhere else.
+
+This exists because a subscript is measured `¤ptrdiff` and nothing else.  Without it, every table a program indexes must index in `ptrdiff`, which makes every table's index the same thing as every other's: a token index and a node id are both `ptrdiff`, so nothing notices when one is written where the other belongs.  With it, each table names its own index and still uses it.
+
+Three things the relation does **not** do, each on purpose:
+
+- **It does not run backwards.**  What stands in for a thing is not the thing, so a `ptrdiff` is not a `tok`.  A general index has to be *said* to be a token index; that is the check earning its keep.
+- **It is not shared between siblings.**  `tok` and `node` both stand in for `ptrdiff`, and neither stands in for the other.  This is the whole point: they are exactly as interchangeable as they should be, which is not at all.
+- **It does not rescale.**  A measure that stands in for another is relabelled, not converted — `unit tok → ptrdiff` says a token index *may be used as* a `ptrdiff`, not that one token is so many of them.  A conversion between scales of the same thing (`¤kilometer` and `¤meter`) is the separate mechanism above, and still checks that it is lossless.
+
+Arithmetic keeps the more specific measure where it can: `tok + 1` is a `tok`, and where two measures meet and one stands in for the other, the answer carries the one stood in for.  Two that stand in for the same third thing do not meet at all.
+
+The measure named must already be declared, so the relation cannot close on itself.  It is followed as far as it goes: if `a` stands in for `b` and `b` for `c`, then `a` goes where `c` is wanted.
+
 #### Comparison with Other Languages
 
 | Feature | Rust | C++ (proposed) | F# | NGPL |

@@ -2571,11 +2571,23 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
         if isinstance(defn, ASTUnitDef):
             from interp.units import eval_unit_formula, register_user_unit, Unit
             from fractions import Fraction
+            decay = None
+            if defn.decay is not None:
+                # A measure can only stand in for one that has been
+                # named, and a name that has not is a mistake to report
+                # where it is written rather than a traceback.
+                try:
+                    decay = eval_unit_formula(_ast.UnitName(defn.decay))
+                except TypeError:
+                    raise DefinitionError(
+                        f"'{defn.decay}' is no measure this file knows, so "
+                        f"'{defn.name}' cannot stand in for it",
+                        _node_pos(defn)) from None
             if defn.formula is not None:
                 unit = eval_unit_formula(defn.formula)
-                unit = Unit(unit.components, unit.factor, defn.name)
+                unit = Unit(unit.components, unit.factor, defn.name, decay)
             else:
-                unit = Unit({defn.name: 1}, Fraction(1), defn.name)
+                unit = Unit({defn.name: 1}, Fraction(1), defn.name, decay)
             register_user_unit(defn.name, unit)
 
     for defn in definitions:

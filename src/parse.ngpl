@@ -19,6 +19,7 @@ struct Parser:
     tanames : str[]      // the names standing for types, and what they stand for
     tatypes : i64[]
     unames : str[]       // the measures this file knows, builtin then defined
+    udecay : i64[]       // … and what each may stand in for
     umarks : str[]       // … and how each one prints
     snames : str[]       // struct names, pre-scanned so a struct may
                          // be written below whatever names it
@@ -1799,8 +1800,23 @@ impl Parser:
         if @dropunit(#self.unames) >= 125:
             self.err("this file names more than 125 measures")
             return
+        // `unit tok → ptrdiff` says a token index may go wherever a
+        // ptrdiff is wanted.  It stays its own measure -- a node id is
+        // still not one -- and the way back is not open: what stands in
+        // for a thing is not the thing.
+        let decay : mut i64 = 0
+        if self.peek() = TK_ARROW:
+            self.pos ← self.pos + 1
+            let dtok : i64 = self.pos
+            let dname := self.ttext(dtok)
+            _ ← self.eat_name("the measure this one stands in for")
+            decay ← self.unit_index(dname)
+            if decay = ⁻1:
+                self.err_at(dtok, "'" ⧺ dname ⧺ "' is no measure this file knows, so '" ⧺ name ⧺ "' cannot stand in for it")
+                return
         self.unames.push(name)
         self.umarks.push(name)
+        self.udecay.push(decay)
         self.end_stmt()
 
     // type Name = T: a name standing for a type, and nothing more --
@@ -2092,6 +2108,7 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
                                  extra: [], fns: [], builds: [], globals: [], structs: [],
                                  tanames: [], tatypes: [],
                                  unames: unit_names(), umarks: unit_marks(),
+                                 udecay: unit_decays(),
                                  snames: [], tts: [], ttl: [], tte: [],
                                  fae: [], fas: [],
                                  mel: [], mrr: [], mcc: [], mdd: [], minner: [],
@@ -2157,7 +2174,7 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
          fae: p.fae, fas: p.fas,
          mel: p.mel, mrr: p.mrr, mcc: p.mcc, mdd: p.mdd, minner: p.minner,
          lts: p.lts, ltl: p.ltl, lte: p.lte,
-         unames: p.unames, umarks: p.umarks,
+         unames: p.unames, umarks: p.umarks, udecay: p.udecay,
          enames: p.enames, ewidth: p.ewidth, estart: p.estart,
          ecount: p.ecount, eflag: p.eflag, emembers: p.emembers,
          evalues: p.evalues,

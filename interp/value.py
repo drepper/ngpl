@@ -2720,6 +2720,11 @@ def convert_unit_value(value: "UnitValue", target_unit, mk=None) -> "UnitValue":
     if mk is None:
         mk = mk_int
     if not value.unit.same_dimension(target_unit):
+        if value.unit.stands_in_for(target_unit):
+            # A measure that stands in for another is relabelled, not
+            # rescaled: `unit tok -> ptrdiff` says a token index may be
+            # used as a ptrdiff, not that one token is so many of them.
+            return UnitValue(value.inner, target_unit)
         raise TypeError(
             f"incompatible units: {value.unit.display_name} "
             f"and {target_unit.display_name}")

@@ -203,6 +203,7 @@ struct Ast:
     lte : i64[]          // … the parameter types then the answer, flattened
     unames : str[]       // the measures the file knows
     umarks : str[]       // … and how each one prints
+    udecay : i64[]       // … and what each may stand in for, 0 for nothing
     enames : str[]       // enums: the name of each
     ewidth : i64[]       // … the integer type its values are held in
     estart : i64[]       // … where its enumerators begin in emembers

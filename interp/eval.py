@@ -2845,6 +2845,15 @@ class Evaluator:
                 op_fn = self._ops[op]
                 return UnitValue(op_fn(l_inner, r_inner), r_unit)
             if not l_unit.same_dimension(r_unit):
+                # One side standing in for the other settles which
+                # measure the answer carries; neither doing so is two
+                # different things being added.
+                if l_unit.stands_in_for(r_unit):
+                    op_fn = self._ops[op]
+                    return UnitValue(op_fn(l_inner, r_inner), r_unit)
+                if r_unit.stands_in_for(l_unit):
+                    op_fn = self._ops[op]
+                    return UnitValue(op_fn(l_inner, r_inner), l_unit)
                 raise TypeError(
                     f"incompatible units for {op}: "
                     f"{l_unit.display_name} and {r_unit.display_name}")
@@ -2898,6 +2907,14 @@ class Evaluator:
                     result = result.ok_value
                 return UnitValue(result, r_unit)
             if not l_unit.same_dimension(r_unit):
+                if l_unit.stands_in_for(r_unit) or r_unit.stands_in_for(l_unit):
+                    wanted = r_unit if l_unit.stands_in_for(r_unit) else l_unit
+                    result = self._ops["%"](l_inner, r_inner)
+                    if isinstance(result, ExpectedValue):
+                        if not result.is_ok():
+                            return result
+                        result = result.ok_value
+                    return UnitValue(result, wanted)
                 raise TypeError(
                     f"incompatible units for %: "
                     f"{l_unit.display_name} and {r_unit.display_name}")
@@ -2953,9 +2970,14 @@ class Evaluator:
                         f"without unit with unit {r_unit.display_name}")
                 return self._ops[op](l_inner, r_inner)
             if not l_unit.same_dimension(r_unit):
-                raise TypeError(
-                    f"incompatible units for comparison: "
-                    f"{l_unit.display_name} and {r_unit.display_name}")
+                # Comparing is asking about one thing, so one side has
+                # to be able to stand where the other is asked for.
+                if not (l_unit.stands_in_for(r_unit)
+                        or r_unit.stands_in_for(l_unit)):
+                    raise TypeError(
+                        f"incompatible units for comparison: "
+                        f"{l_unit.display_name} and {r_unit.display_name}")
+                return self._ops[op](l_inner, r_inner)
             if l_unit == r_unit:
                 return self._ops[op](l_inner, r_inner)
             l_base = self._to_base_value(l_inner, l_unit)
@@ -2988,6 +3010,8 @@ class Evaluator:
         """Convert a UnitValue to a target unit, checking lossless for integers."""
         from fractions import Fraction
         if not value.unit.same_dimension(target_unit):
+            if value.unit.stands_in_for(target_unit):
+                return UnitValue(value.inner, target_unit)
             raise TypeError(
                 f"incompatible units: {value.unit.display_name} "
                 f"and {target_unit.display_name}")
@@ -3256,7 +3280,11 @@ class Evaluator:
         is_byte_array = arr.element_type in ("u8", "byte")
         required = BUILTIN_UNITS["byte"] if is_byte_array else BUILTIN_UNITS["ptrdiff"]
         if isinstance(iu, UnitValue):
-            if not iu.unit.same_dimension(required):
+            # An index measured in something that stands in for the
+            # array's own measure is an index: `unit tok -> ptrdiff`
+            # lets a token index reach the token arrays while staying
+            # something a node id is not.
+            if not iu.unit.stands_in_for(required):
                 raise TypeError(
                     f"array index requires unit {required.display_name}, "
                     f"got {iu.unit.display_name}")

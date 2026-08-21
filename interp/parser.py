@@ -1459,8 +1459,16 @@ class Parser:
         formula = None
         if self._try_eat("PUNCT", "="):
             formula = self._parse_unit_formula()
+        # `unit tok → ptrdiff` says a token index may go wherever a
+        # ptrdiff is wanted -- it is still its own measure, and still
+        # not a node id, but it stands in for the one it names.  The
+        # arrow is written → or ->, as it is everywhere else.
+        decay = None
+        if self._check("OP") and self._cur().value == "->":
+            self.pos += 1
+            decay = self._eat("IDENT").value
         self._try_eat("PUNCT", ";")
-        return self._set_pos(UnitDef(name_tok.value, formula), kw_tok)
+        return self._set_pos(UnitDef(name_tok.value, formula, decay), kw_tok)
 
     def _reject_unit_here(self):
         """Refuse a unit written where a unit cannot yet be said.

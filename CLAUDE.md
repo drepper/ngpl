@@ -106,10 +106,14 @@ build/sources.sh and the @build recipe in src/main.ngpl, which the
 bootstrap checks against each other by comparing stage 1 with stage 2.
 
 Units policy: every variable in the NGPL source carries a unit.  A
-count of bytes is ¤byte, an index into an array is ¤ptrdiff, an index
-into a table the file defines is that table's own measure -- ¤"shndx",
-¤"symndx", ¤"phndx" -- and something countable that has no measure yet
-gets one.  A variable without a unit is the exception and says why in a
+count of bytes is ¤byte, a bare array index is ¤ptrdiff, and an index
+into a table the file defines gets that table's own measure -- declared
+`unit tok → ptrdiff`, which says a token index goes wherever a ptrdiff
+is wanted while staying something a node id is not.  Declare the measure
+that way for every table worth telling apart; something countable that
+has no measure yet gets one.
+
+A variable without a unit is the exception and says why in a
 comment beside it: a bit pattern is not a quantity, a packed pair of
 codes is not a count, a value read straight from a foreign structure
 carries whatever that structure says.  The reason is that units are the

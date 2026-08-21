@@ -69,6 +69,13 @@ fn unit_names() → str[]:
      "kelvin", "mole", "candela", "kilobyte", "kibibyte", "megabyte",
      "mebibyte", "gigabyte", "gibibyte"]
 
+// What each measure may stand in for, by index; 0 is "nothing".  The
+// measures the language ships with stand in for nothing: a length is
+// not an index into anything.
+fn unit_decays() → i64[]:
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
 fn unit_marks() → str[]:
     ["", "ptrdiff", "B", "m", "s", "kg", "count",
      "distance", "km", "cm", "mm", "ms",

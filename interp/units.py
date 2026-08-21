@@ -15,13 +15,19 @@ class Unit:
     factor is a Fraction: 1 of this unit = factor of the base representation.
     """
 
-    __slots__ = ("components", "factor", "display_name")
+    __slots__ = ("components", "factor", "display_name", "decay")
 
     def __init__(self, components: dict[str, int], factor: Fraction,
-                 display_name: str):
+                 display_name: str, decay: "Unit | None" = None):
         self.components = components
         self.factor = factor
         self.display_name = display_name
+        # What this measure may stand in for.  `unit tok -> ptrdiff`
+        # says a token index goes wherever a ptrdiff is wanted; it is
+        # still its own measure, and still not a node id, so the other
+        # direction is not open and neither is the way between two that
+        # decay to the same thing.
+        self.decay = decay
 
     def same_dimension(self, other: "Unit") -> bool:
         # Measures are shared: the ¤byte two operands carry is one
@@ -32,6 +38,26 @@ class Unit:
         a = {k: v for k, v in self.components.items() if v != 0}
         b = {k: v for k, v in other.components.items() if v != 0}
         return a == b
+
+    def stands_in_for(self, wanted: "Unit") -> bool:
+        """Whether a value measured in self may go where `wanted` is asked.
+
+        Its own measure always may.  Otherwise the decay chain is
+        walked: a measure stands in for what it decays to, and for
+        whatever that decays to in turn.  The walk is bounded because a
+        declaration may only name a measure already declared, so the
+        chain cannot close on itself.
+        """
+        if self.same_dimension(wanted):
+            return True
+        seen = 0
+        step = self.decay
+        while step is not None and seen < 64:
+            if step.same_dimension(wanted):
+                return True
+            step = step.decay
+            seen += 1
+        return False
 
     def is_dimensionless(self) -> bool:
         return all(v == 0 for v in self.components.values())

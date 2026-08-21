@@ -811,11 +811,14 @@ class UnitExpr:
 
 
 class UnitDef:
-    """Top-level unit definition: unit name = formula."""
+    """Top-level unit definition: unit name [= formula] [→ decay]."""
 
-    def __init__(self, name: str, formula):
+    def __init__(self, name: str, formula, decay: str | None = None):
         self.name = name
         self.formula = formula
+        # What this measure may stand in for, where one is asked for and
+        # this is what there is.  None where it stands in for nothing.
+        self.decay = decay
 
 
 class UnitName:

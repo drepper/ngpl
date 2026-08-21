@@ -414,9 +414,11 @@ impl Checker:
             return self.mat_elem(t) = self.mat_elem(want) and self.mat_rank(t) = self.mat_rank(want) and (self.mat_rr(want) = ⁻1 or self.mat_rr(want) = self.mat_rr(t)) and (self.mat_cc(want) = ⁻1 or self.mat_cc(want) = self.mat_cc(t)) and (self.mat_dd(want) = ⁻1 or self.mat_dd(want) = self.mat_dd(t))
         if not (ty_is_int(t) and ty_is_int(want)):
             return false
-        if ty_unit(t) ≠ ty_unit(want) and ty_unit(t) ≠ 0:
+        if not self.stands_for(ty_unit(t), ty_unit(want)) and ty_unit(t) ≠ 0:
             // a measured value does not quietly drop or change its
-            // measure; @dropunit is the word for parting with one
+            // measure; @dropunit is the word for parting with one.  A
+            // measure that stands in for the one wanted is not a change
+            // of measure -- it is what the declaration said it was for.
             return false
         let widening : bool = ty_bits(want) > ty_bits(t) and not (ty_sgn(t) = 1 and ty_sgn(want) = 0)
         if not widening:
@@ -615,9 +617,16 @@ impl Checker:
                 self.derr(tok, "taking " ⧺ self.tn(tl) ⧺ " modulo " ⧺ self.tn(tr) ⧺ " makes a measure of its own, which core-2 cannot write down")
                 return 0
             return ul
-        // + - ⌈ ⌊ ⊞ ⊟: two of the same thing, or nothing
-        if ul ≠ ur:
-            self.derr(tok, "a value measured " ⧺ self.tn(tl) ⧺ " does not meet one measured " ⧺ self.tn(tr))
+        // + - ⌈ ⌊ ⊞ ⊟: two of the same thing, or nothing.  One side
+        // standing in for the other settles which measure the answer
+        // carries; neither doing so is two different things being added.
+        if ul = ur:
+            return ul
+        if self.stands_for(ul, ur):
+            return ur
+        if self.stands_for(ur, ul):
+            return ul
+        self.derr(tok, "a value measured " ⧺ self.tn(tl) ⧺ " does not meet one measured " ⧺ self.tn(tr))
         ul
 
     fn check_expr(&mut self, id : i64, want : i64):
@@ -1243,7 +1252,8 @@ impl Checker:
             let un2 : i64 = r if ty_sgn(l) = 1 else l
             if ty_bits(sg2) <= ty_bits(un2):
                 self.derr(tok, "signed and unsigned do not meet; " ⧺ self.tn(l) ⧺ " and " ⧺ self.tn(r))
-        elif ty_unit(l) ≠ ty_unit(r):
+        elif not (self.stands_for(ty_unit(l), ty_unit(r))
+                  or self.stands_for(ty_unit(r), ty_unit(l))):
             self.derr(tok, "a value measured " ⧺ self.tn(l) ⧺ " does not meet one measured " ⧺ self.tn(r))
         self.set_type(id, TY_BOOL)
 
@@ -1924,7 +1934,7 @@ impl Checker:
         if not ty_is_int(t):
             self.derr(tok, "a subscript is a number, not " ⧺ self.tn(t))
             return
-        if ty_unit(t) ≠ self.index_unit_of(arr_ty):
+        if not self.stands_for(ty_unit(t), self.index_unit_of(arr_ty)):
             let uname : str = "¤byte" if self.index_unit_of(arr_ty) = UNIT_BYTE else "¤ptrdiff"
             self.derr(tok, "this array's subscript is measured " ⧺ uname ⧺ ", but the index is " ⧺ self.tn(t))
 
@@ -2828,6 +2838,29 @@ impl Checker:
     // marks, and the checker carries the Ast.
     fn tn(&self, t : i64) → str:
         type_name_m(t, self.a.umarks)
+
+    // Whether a value measured `u` may go where `want` is asked for.
+    // Its own measure always may; beyond that the decay chain is
+    // walked, since `unit tok → ptrdiff` says a token index goes
+    // wherever a ptrdiff does.  The way back is not open, and two that
+    // stand in for the same thing do not stand in for each other.  The
+    // walk is bounded: a declaration may only name a measure already
+    // declared, so a chain cannot close on itself.
+    @post(r: r or u ≠ want)
+    fn stands_for(&self, u : i64, want : i64) → bool:
+        if u = want:
+            return true
+        let n : i64 = @dropunit(#self.a.udecay)
+        let step : mut i64 = u
+        let seen : mut i64 = 0
+        while seen < 64:
+            if step <= 0 or step >= n:
+                return false
+            step ← self.a.udecay[step × 1¤ptrdiff]
+            if step = want:
+                return true
+            seen ← seen + 1
+        false
 
     fn is_ignored_name(&self, name : str) → bool:
         if #self.a.ignored > 0:
