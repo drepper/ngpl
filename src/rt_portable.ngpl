@@ -142,6 +142,16 @@ impl RtB:
         self.o(IR_LABEL, l, 0, 0, 0, 0)
 
     // raw memory, the runtime's own privilege
+    fn bxor(&mut self, a : i64, b : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_BXORR, a, b, 0, d, 64 + 256)
+        d
+
+    fn bnot(&mut self, a : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_BNOTT, a, 0, 0, d, 64 + 256)
+        d
+
     fn ldn(&mut self, base : i64, off : i64, w : i64) → i64:
         let d : i64 = self.t()
         self.o(IR_LDN, base, off, 0, d, w)

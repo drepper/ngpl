@@ -413,6 +413,52 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.movimm(R_DI, 8 × a)
             em.jglobal(232, ⁻1, RT_ALLOC)
             em.store(R_AX, d)
+        elif o = IR_LDN:
+            // d ← mem[a + b], w bytes wide, w = 0 meaning a pointer and
+            // +256 meaning the bytes are read as signed.  The five
+            // widths are five spellings of one instruction; each was
+            // checked against llvm-mc before it was written down.
+            em.load(R_AX, a)
+            let lw : i64 = w & 255
+            let lsg : bool = (w » 8) & 1 = 1
+            if lw = 0 or lw = 8:
+                em.b3(72, 139, 128)          // mov rax, [rax+disp32]
+            elif lw = 4:
+                if lsg:
+                    em.b3(72, 99, 128)       // movsxd rax, [rax+disp32]
+                else:
+                    em.b2(139, 128)          // mov eax, [rax+disp32]
+            elif lw = 2:
+                if lsg:
+                    em.b4(72, 15, 191, 128)  // movsx rax, word [rax+disp32]
+                else:
+                    em.b3(15, 183, 128)      // movzx eax, word [rax+disp32]
+            else:
+                if lsg:
+                    em.b4(72, 15, 190, 128)  // movsx rax, byte [rax+disp32]
+                else:
+                    em.b3(15, 182, 128)      // movzx eax, byte [rax+disp32]
+            em.w32(b)
+            em.store(R_AX, d)
+        elif o = IR_STN:
+            // mem[a + b] ← c, w bytes of it
+            em.load(R_R10, a)
+            em.load(R_AX, c)
+            let sw : i64 = w & 255
+            if sw = 0 or sw = 8:
+                em.b3(73, 137, 130)          // mov [r10+disp32], rax
+            elif sw = 4:
+                em.b3(65, 137, 130)          // mov [r10+disp32], eax
+            elif sw = 2:
+                em.b4(102, 65, 137, 130)     // mov [r10+disp32], ax
+            else:
+                em.b3(65, 136, 130)          // mov [r10+disp32], al
+            em.w32(b)
+        elif o = IR_KADDR:
+            // the address of a block the runtime keeps in the data
+            // segment: 0 is the kernel's, 1 the allocator's
+            em.dref(R_AX, (em.k_args if a = 0 else em.k_alloc) + b)
+            em.store(R_AX, d)
         elif o = IR_FLD:
             em.load(R_AX, a)
             em.b3(72, 139, 128)              // mov rax, [rax+disp32]
