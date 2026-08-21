@@ -8728,9 +8728,30 @@ The interpreter reads a recipe with the same evaluator it runs everything else w
 
 The subset is where compile-time evaluation begins; Chapter 11 is where it goes.
 
+### The Bill of Materials
+
+Every binary the compiler writes says what it was made of.  There is no flag: a program that answers only where someone remembered to ask is a program nobody can check.
+
+The bill is a table in a section named `.sbom`, with its strings in `.sbomstr`.  A row is twelve bytes — a kind, then two byte offsets into `.sbomstr`, one for a name and one for the digest written out as sixty-four ASCII characters:
+
+| Kind | Name | Digest of |
+|------|------|-----------|
+| `compiler` | what the compiler calls itself | that name |
+| `source` | the source file, as it was named | that file's tokens |
+| `sources` | — | every source's tokens, in the order they were read |
+| `output` | — | the program itself |
+
+Both sections are read only and are loaded, in their own segment after the data: a program can read its own bill without asking the filesystem for the file it was started from, and a stripped binary still carries it, since nothing here lives in the parts a stripper removes.
+
+**A source's digest is over its tokens, not its text.**  A comment added, a line rewrapped, `->` written where `→` was: none of those change what the program is, and a digest that moved for them would say two builds differ when they do not.  What the lexer kept is exactly what the program is, so that is what is hashed — each token's kind, and its text or its value.
+
+**The program's own digest covers what the program is, not what the file says about it.**  The code, what it reads, what it writes, the entry point, the machine and the class go in.  The bill does not — that would be a digest of its own digest — and neither do the symbol names, the section headers, or the output's filename, because the same program deployed twice under two names is one program.
+
+The digests are SHA-256, computed with `std.sha256`.
+
 ### Roadmap
 
-Compilation units, imports, dependency resolution, and the SBOM written into the output are not yet designed.  What exists is the build function, which came first because the compiler's own sources needed it, and modules, which name and hide but do not yet divide a program into separately compiled pieces.
+Compilation units, imports, and dependency resolution are not yet designed.  What exists is the build function, which came first because the compiler's own sources needed it; modules, which name and hide but do not yet divide a program into separately compiled pieces; and the bill of materials above.
 
 
 Chapter 12: The Interpreter — The Interactive Read-Eval-Print Loop

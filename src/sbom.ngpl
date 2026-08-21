@@ -99,7 +99,7 @@ fn sbom_sources(t : Toks, src : byte[], files : Files) → SbomRow[]:
             whole ← whole ⧺ feed
             feed ← []
             fi ← fi + 1
-            hi ← files.off[(fi + 1) × 1¤ptrdiff] if fi + 1 < nf else total
+            hi ← files.off[fi + 1¤ptrdiff] if fi + 1 < nf else total
         token_bytes(t, src, i, &feed)
         i ← i + 1
     rows.push(SbomRow{kind: Sbomkind.source, name: files.names[fi],

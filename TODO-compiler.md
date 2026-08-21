@@ -179,23 +179,24 @@ Tooling
     if no optimized runtime is given, the portable rt functions can be called directly.
     Otherwise the optimized routine is emitted.
 
-[~] the compiler creates a hash for all the sources it compiles.  Done, behind --sbom: SHA-256
-    in src/sha256.ngpl, a token-based digest in src/sbom.ngpl (kind and content, so a comment,
-    a rewrap or -> for → does not move it), .sbom and .sbomstr in their own read-only segment,
-    last of what is loaded, with rows for the compiler, each source, all the sources, and the
-    program.  The program's own digest covers the code, what it reads, what it writes, the
-    entry point, the machine and the class -- not the bill, which would be a hash of its own
-    hash, and not the name, since the same program deployed twice is one program.
+[x] the compiler creates a hash for all the sources it compiles.  On by default, no flag:
+    a token-based digest in src/sbom.ngpl (kind and content, so a comment, a rewrap or -> for
+    → does not move it), .sbom and .sbomstr in their own read-only segment, last of what is
+    loaded, with rows for the compiler, each source, all the sources, and the program.  The
+    program's own digest covers the code, what it reads, what it writes, the entry point, the
+    machine and the class -- not the bill, which would be a hash of its own hash, and not the
+    name, since the same program deployed twice is one program.  Spec: chapter 8, "The Bill of
+    Materials".
 
-    Not on by default, and this is the one thing left.  SHA-256 written in NGPL runs at about
-    6 MB/s compiled, so the compiler bills its own 27 sources in 0.35s -- and at 2.4 KiB/s
-    under the interpreter, which would add some forty minutes to stage 1.  What fixes it is
-    what std.sha256 is for: hashlib under the interpreter (done, returns u8[32]) and a runtime
-    routine in the compiler.  The cheap way to get that routine is to teach the x86-64 emitter
-    IR_LDN, IR_STN and IR_KADDR -- the ops the portable runtime builders use and emit_fn does
-    not know -- so SHA-256 is written once as IR in rt_portable.ngpl and every target compiles
-    it, rather than once by hand for x86-64 and once as IR for the other five.  Then --sbom
-    becomes the default and the flag goes.
+    What made it affordable was std.sha256: hashlib under the interpreter, and RT_SHA256 in a
+    compiled program.  SHA-256 written in the language ran at 6 MB/s compiled and 2.4 KiB/s
+    interpreted, which would have added forty minutes to stage 1.  The routine is written once
+    as IR in src/rt_sha256.ngpl and compiled by all six targets -- the pioneer through emit_fn
+    and the other five through t_emit_fn -- rather than by hand for x86-64 and as IR for the
+    rest: it is arithmetic and nothing else, so there is nothing a hand-written version would
+    know that the IR does not.  Measured: stage 1 is 482 s with the bill and 485 s without, and
+    a native self-compile 0.35 s with and 0.22 s without, the difference being the feed the
+    digest is taken over rather than the digest.
 
 [ ] the original wording, for what the entry kinds are to grow into:  the hash is token-based,
     not purely text, so that irrelevant changes in layout, whist spaces, and spelling (e.g.,

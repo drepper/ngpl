@@ -149,11 +149,17 @@ def check_header(elf: Elf, path: str):
 
 
 def check_segments(elf: Elf, stack_size: int):
-    check(elf.e_phnum == 6, f"{elf.e_phnum} program headers, not 6")
+    check(elf.e_phnum == 7, f"{elf.e_phnum} program headers, not 7")
     loads = elf.segments(PT_LOAD)
-    check(len(loads) == 4, f"{len(loads)} PT_LOADs, not 4")
+    check(len(loads) == 5, f"{len(loads)} PT_LOADs, not 5")
 
-    headers, text, rodata, data = loads
+    # the bill's own segment comes last of what is loaded, so nothing
+    # writable ever sits above something read only
+    headers, text, rodata, data, bill = loads
+    check(bill["flags"] == PF_R,
+          f"the bill's segment is {flags_str(bill['flags'])}, not R")
+    check(bill["offset"] > data["offset"],
+          "the bill is loaded before the writable segment, not after it")
     check(headers["offset"] == 0 and headers["vaddr"] == IMAGE_BASE,
           "the first PT_LOAD does not map the file's own headers")
     check(headers["flags"] == PF_R,
@@ -214,8 +220,8 @@ def flags_str(f: int) -> str:
 
 
 def check_sections(elf: Elf):
-    want = ["", ".text", ".rodata", ".data", ".symtab", ".strtab",
-            ".shstrtab"]
+    want = ["", ".text", ".rodata", ".data", ".sbom", ".sbomstr", ".symtab",
+            ".strtab", ".shstrtab"]
     got = [sh["sname"] for sh in elf.shdrs]
     check(got == want, f"the sections are {got}, not {want}")
 
@@ -227,17 +233,29 @@ def check_sections(elf: Elf):
     check(data["flags"] == SHF_WRITE | SHF_ALLOC,
           ".data is not writable allocated")
 
-    symtab, strtab = elf.shdrs[4], elf.shdrs[5]
+    sbom, sbomstr = elf.shdrs[4], elf.shdrs[5]
+    check(sbom["type"] == SHT_PROGBITS, ".sbom is not program bits")
+    check(sbom["entsize"] == 12,
+          f".sbom's rows are {sbom['entsize']} bytes, not 12")
+    check(sbom["size"] % 12 == 0,
+          f".sbom is {sbom['size']} bytes, which is not whole rows")
+    check(sbomstr["type"] == SHT_STRTAB, ".sbomstr is not a string table")
+    for sh in (sbom, sbomstr):
+        check(sh["flags"] == SHF_ALLOC,
+              f"{sh['sname']} is not read-only allocated; a program has to "
+              f"be able to read its own bill, and never to write it")
+
+    symtab, strtab = elf.shdrs[6], elf.shdrs[7]
     check(symtab["type"] == SHT_SYMTAB, ".symtab is not a symbol table")
     check(symtab["entsize"] == 24,
           f".symtab's entries are {symtab['entsize']} bytes, not 24")
     check(symtab["size"] % 24 == 0,
           f".symtab is {symtab['size']} bytes, which is not whole entries")
-    check(symtab["link"] == 5,
+    check(symtab["link"] == 7,
           f".symtab's names are said to be in section {symtab['link']}, "
           f"not .strtab")
     check(strtab["type"] == SHT_STRTAB, ".strtab is not a string table")
-    check(elf.shdrs[6]["type"] == SHT_STRTAB, ".shstrtab is not a string "
+    check(elf.shdrs[8]["type"] == SHT_STRTAB, ".shstrtab is not a string "
                                               "table")
 
     for sh in elf.shdrs[1:]:
@@ -246,6 +264,75 @@ def check_sections(elf: Elf):
     loads = elf.segments(PT_LOAD)
     check(text["addr"] == loads[1]["vaddr"] and text["size"] == loads[1]["filesz"],
           ".text and the executable segment describe different runs of bytes")
+
+
+SBOM_COMPILER, SBOM_SOURCE, SBOM_SOURCES, SBOM_OUTPUT = 0, 1, 2, 3
+SBOM_KIND = {SBOM_COMPILER: "compiler", SBOM_SOURCE: "source",
+             SBOM_SOURCES: "sources", SBOM_OUTPUT: "output"}
+
+
+def sbom_rows(elf: Elf) -> list:
+    """The bill, as (kind, name, digest) in the order it was written."""
+    table, strs = elf.section(".sbom"), elf.section(".sbomstr")
+    blob = elf.raw[strs["offset"]:strs["offset"] + strs["size"]]
+    check(table["size"] % 12 == 0,
+          f".sbom is {table['size']} bytes, which is not whole 12-byte rows")
+
+    def txt(at):
+        check(at < len(blob), f"a row points {at} bytes into a "
+                              f"{len(blob)}-byte .sbomstr")
+        return Elf._str(blob, at)
+
+    out = []
+    for i in range(table["size"] // 12):
+        kind, name, digest = struct.unpack_from(
+            "<III", elf.raw, table["offset"] + i * 12)
+        check(kind in SBOM_KIND, f"row {i} says kind {kind}, which is none "
+                                 f"of the four")
+        out.append((SBOM_KIND[kind], txt(name), txt(digest)))
+    return out
+
+
+def check_sbom(elf: Elf, sources: list):
+    """Every binary says what it was made of, and there is no flag for it."""
+    rows = sbom_rows(elf)
+    kinds = [r[0] for r in rows]
+    want = ["compiler"] + ["source"] * len(sources) + ["sources", "output"]
+    check(kinds == want, f"the bill's rows are {kinds}, not {want}")
+
+    check(rows[0][1] != "", "the compiler row names no compiler")
+    named = [r[1] for r in rows if r[0] == "source"]
+    check(named == sources,
+          f"the bill names {named} as the sources, not {sources}")
+    # the two summary rows are about the whole thing and name nothing
+    check(rows[-1][1] == "" and rows[-2][1] == "",
+          "a summary row carries a name; the program and its sources "
+          "together are not named, only digested")
+
+    for kind, name, digest in rows:
+        check(len(digest) == 64,
+              f"the {kind} row's digest is {len(digest)} characters, not 64")
+        check(all(c in "0123456789abcdef" for c in digest),
+              f"the {kind} row's digest is not lowercase hex: {digest!r}")
+
+    # one source, so its digest and the digest of all the sources are the
+    # same message hashed twice -- and had better come out the same
+    if len(sources) == 1:
+        one = next(r[2] for r in rows if r[0] == "source")
+        allof = next(r[2] for r in rows if r[0] == "sources")
+        check(one == allof,
+              "with one source, that source's digest and the digest of all "
+              f"the sources disagree: {one} and {allof}")
+
+    # the bill is loaded, so a program can read it without opening a file
+    sbom = elf.section(".sbom")
+    inside = [p for p in elf.segments(PT_LOAD)
+              if p["offset"] <= sbom["offset"]
+              and sbom["offset"] + sbom["size"] <= p["offset"] + p["filesz"]]
+    check(inside, ".sbom is in no loaded segment")
+    check(inside[0]["flags"] == PF_R,
+          f"the bill's segment is {flags_str(inside[0]['flags'])}, not r--")
+    return f"the bill has {len(rows)} rows"
 
 
 def check_symbols(elf: Elf, exported: set, local: set, hashed: set):
@@ -434,6 +521,11 @@ def main() -> int:
         print(f"FAIL building the probes: {e}")
         return 1
 
+    def rel(p):
+        # the bill records a source under the name the compiler was
+        # given, which is the path these probes are compiled by
+        return p
+
     sym = Elf(open(sym_bin, "rb").read())
     wv = Elf(open(wv_bin, "rb").read())
 
@@ -462,6 +554,18 @@ def main() -> int:
          lambda: (check_header(wv, wv_bin),
                   check_segments(wv, 8 * 1024 * 1024),
                   check_sections(wv), None)[-1])
+    def multi_bill():
+        # a program from several files: the bill names each one, in the
+        # order they were read, and then all of them together
+        parts = [os.path.join("tests", "compile", "multi", "split", f)
+                 for f in ("a.ngpl", "b.ngpl", "c.ngpl")]
+        out = os.path.join(work, "probe_multi")
+        compile_probe(compiler, parts[0], out, parts[1:])
+        return check_sbom(Elf(open(out, "rb").read()), parts)
+
+    case("every binary carries its bill of materials",
+         lambda: check_sbom(sym, [rel(sym_src)]))
+    case("a bill of several sources keeps them in order", multi_bill)
     case("readelf reads it", lambda: check_readelf(sym_bin))
 
     def stack_option():
