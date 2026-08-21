@@ -93,6 +93,31 @@ divergent branches serialize execution.  Where a branch is semantically
 required (short-circuit evaluation, abort paths), keep the hot path
 straight-line and move the cold path out of it.
 
+File size policy: as soon as a source file of the compiler gets too
+large, split it.  Do not wait for a reason to; the size is the reason.
+Split along a seam that already exists -- a section banner, a phase, an
+architecture -- and cut contiguous slices so that concatenating them
+reproduces the original byte for byte, which makes the split checkable:
+the binaries compiled before and after must be identical on every
+target.  Two consequences to remember.  The order of the files is part
+of the program, since an enum and a unit must be declared before they
+are used while a struct need not; and the order lives in two places,
+build/sources.sh and the @build recipe in src/main.ngpl, which the
+bootstrap checks against each other by comparing stage 1 with stage 2.
+
+Units policy: every variable in the NGPL source carries a unit.  A
+count of bytes is ¤byte, an index into an array is ¤ptrdiff, an index
+into a table the file defines is that table's own measure -- ¤"shndx",
+¤"symndx", ¤"phndx" -- and something countable that has no measure yet
+gets one.  A variable without a unit is the exception and says why in a
+comment beside it: a bit pattern is not a quantity, a packed pair of
+codes is not a count, a value read straight from a foreign structure
+carries whatever that structure says.  The reason is that units are the
+one check that catches a whole class of mistake the type system cannot
+see -- a byte offset used as an element index has the right type and
+the wrong meaning -- and the compiler's own source is the largest
+program the language has to prove that on.
+
 
 Process
 -------
