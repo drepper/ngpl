@@ -86,15 +86,6 @@ fn hex_val(b : i64) → i64:
     if b >= 65 and b <= 70: return b - 55
     ⁻1
 
-// A column is counted in columns, and a conditional's arms each have
-// to say so.  A literal cannot carry a measure the file defined -- the
-// lexer settles a literal's measure before any `unit` line is read --
-// so the three the scan needs are named here.
-let LINE_FIRST ¤"line" : i64 = 1
-let COL_FIRST ¤"col" : i64 = 1
-let COL_ONE ¤"col" : i64 = 1
-let COL_NONE ¤"col" : i64 = 0
-
 struct Toks:
     kind : i64[]
     off : i64[]
@@ -183,12 +174,12 @@ impl Lexer:
                     if d = 10:
                         self.pos ← self.pos + 1
                         self.line ← self.line + 1
-                        self.col ← COL_FIRST
+                        self.col ← 1¤"col"
                     else:
                         // any byte, including inside a multi-byte
                         // character; the column counts lead bytes only
                         self.pos ← self.pos + 1
-                        self.col ← self.col + (COL_NONE if (d & 192) = 128 else COL_ONE)
+                        self.col ← self.col + (0¤"col" if (d & 192) = 128 else 1¤"col")
             else:
                 return true
         false
@@ -201,7 +192,7 @@ impl Lexer:
             self.emit(TK_INDENT, self.pos, 0, self.col, 0, 0)
         else:
             while width < self.indents[#self.indents - 1]:
-                _ ← self.indents.pop() ?? COL_NONE
+                _ ← self.indents.pop() ?? 0¤"col"
                 self.emit(TK_DEDENT, self.pos, 0, self.col, 0, 0)
             if width ≠ self.indents[#self.indents - 1]:
                 self.err("indentation does not match any enclosing block")
@@ -266,25 +257,32 @@ impl Lexer:
                 return
         if self.peek(0) = 194 and self.peek(1) = 164:
             // 1¤ptrdiff, 0¤byte: the literal states its measure, and
-            // an unstated width settles on i64
+            // an unstated width settles on i64.  The lexer runs before
+            // any 'unit' line is read, so it settles the measures the
+            // language ships with and hands anything else back: the ¤
+            // and the name are left to lex as themselves, and the
+            // parser -- which by then knows what the file declared --
+            // puts them on the literal.
+            // where to fall back to, if the measure is not one the
+            // lexer settles; the scan position is a plain count for now
+            let upos : i64 = self.pos
+            let ucol ¤"col" : i64 = self.col
             self.adv()
             self.adv()
             let usfx : mut str = ""
             while self.peek(0) ≠ ⁻1 and self.cls[self.peek(0) × 1¤ptrdiff] = CL_IDENT:
                 usfx ← usfx ⧺ (self.peek(0)).chr()
                 self.adv()
-            // the lexer runs before any 'unit' definition is read, so
-            // it knows the measures the language ships with and leaves
-            // the rest to the parser
             let names := unit_names()
             let u : mut i64 = ⁻1
             foreach i := 1…#names - 1:
                 if names[i] = usfx:
                     u ← @dropunit(i)
             if u = ⁻1:
-                self.err("'¤" ⧺ usfx ⧺ "' is no measure the language ships with; a literal takes one of those")
-                return
-            st ← ty_with_unit(st if st ≠ ⁻1 else TY_I64, u)
+                self.pos ← upos
+                self.col ← ucol
+            else:
+                st ← ty_with_unit(st if st ≠ ⁻1 else TY_I64, u)
         if st ≠ ⁻1:
             self.emit(TK_INT, spos, self.pos - spos, scol, v, big + st × 2)
             return
@@ -405,7 +403,7 @@ impl Lexer:
             else:
                 s ← s ⧺ b.chr()
                 self.pos ← self.pos + 1
-                self.col ← self.col + (COL_NONE if (b & 192) = 128 else COL_ONE)
+                self.col ← self.col + (0¤"col" if (b & 192) = 128 else 1¤"col")
         let idx : i64 = @dropunit(#self.strs)
         self.strs.push(s)
         self.emit(TK_STR, spos, self.pos - spos, scol, idx, 0)
@@ -501,7 +499,7 @@ fn lex(src : byte[]) → Toks:
                                 pos: 0, line: 1, col: 1, parens: 0,
                                 kind: [], off: [], len: [], tline: [],
                                 tcol: [], val: [], big: [], strs: [],
-                                indents: [COL_NONE], diags: []})
+                                indents: [0¤"col"], diags: []})
     let at_line_start : mut bool = true
     while lx.pos < lx.n and #lx.diags = 0:
         let more : bool = lx.skip_gaps()
@@ -549,7 +547,7 @@ fn lex(src : byte[]) → Toks:
     if not at_line_start and #lx.diags = 0:
         lx.emit(TK_NL, lx.n, 0, lx.col, 0, 0)
     while #lx.indents > 1:
-        _ ← lx.indents.pop() ?? COL_NONE
+        _ ← lx.indents.pop() ?? 0¤"col"
         lx.emit(TK_DEDENT, lx.n, 0, 1, 0, 0)
     lx.emit(TK_EOF, lx.n, 0, 1, 0, 0)
     // the token columns are parallel arrays; leaving out of step here

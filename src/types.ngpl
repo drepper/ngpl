@@ -311,9 +311,17 @@ fn names_int_type(name : str) → bool:
         nz ← nz ∨ cs[k] ≠ '0'
     nz
 
-// the name of a type, as a diagnostic writes it
+// The name of a type, as a diagnostic writes it.  A measure the file
+// declared can only be named by a caller holding the file's marks, so
+// type_name_m takes them; type_name is the same thing for a caller with
+// no file to ask, and names such a measure by its index rather than
+// pretending to know it.
 @post(r: #r > 0)
 fn type_name(t0 : i64) → str:
+    type_name_m(t0, unit_marks())
+
+@post(r: #r > 0)
+fn type_name_m(t0 : i64, marks : str[]) → str:
     let r : i64 = ty_ref_kind(t0)
     let t : i64 = ty_strip_ref(t0)
     let prefix : str = "" if r = 0 else ("&" if r = 1 else "&mut ")
@@ -339,9 +347,9 @@ fn type_name(t0 : i64) → str:
         let bn := builtin_enum_names()
         return prefix ⧺ (bn[ty_eidx(t) × 1¤ptrdiff] if ty_eidx(t) < @dropunit(#bn) else "enum #" ⧺ i64_str(ty_eidx(t)))
     if ty_is_tup(t): return prefix ⧺ "a tuple"
-    if ty_is_opt(t): return prefix ⧺ type_name(ty_opt_base(t)) ⧺ "?"
-    if ty_is_arr(t) and not ty_is_farr(t): return prefix ⧺ type_name(ty_elem(t)) ⧺ "[]"
-    if ty_is_hash(t): return prefix ⧺ "std.hash(" ⧺ type_name(ty_hkey(t)) ⧺ ", " ⧺ type_name(ty_hval(t)) ⧺ ")"
+    if ty_is_opt(t): return prefix ⧺ type_name_m(ty_opt_base(t), marks) ⧺ "?"
+    if ty_is_arr(t) and not ty_is_farr(t): return prefix ⧺ type_name_m(ty_elem(t), marks) ⧺ "[]"
+    if ty_is_hash(t): return prefix ⧺ "std.hash(" ⧺ type_name_m(ty_hkey(t), marks) ⧺ ", " ⧺ type_name_m(ty_hval(t), marks) ⧺ ")"
     if ty_is_tup(t): return prefix ⧺ "tuple #" ⧺ i64_str(ty_tidx(t))
     if ty_is_farr(t): return prefix ⧺ "sized array #" ⧺ i64_str(ty_fidx(t))
     if ty_is_iter(t): return prefix ⧺ "iterator #" ⧺ i64_str(ty_iidx(t))
@@ -349,9 +357,5 @@ fn type_name(t0 : i64) → str:
     let u : i64 = ty_unit(t)
     if u = 0:
         return base
-    // the marks the language ships with are spelled; a measure the
-    // file defined is named by its index, since this function has no
-    // file to ask
-    let marks := unit_marks()
     base ⧺ " ¤" ⧺ (marks[u × 1¤ptrdiff] if u < @dropunit(#marks) else "unit#" ⧺ i64_str(u))
 

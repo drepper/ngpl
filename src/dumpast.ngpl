@@ -84,7 +84,7 @@ fn dump_node(a : Ast, id : i64, depth : i64, src : byte[], toks : Toks):
             dump_node(a, a.extra[(na + 1 + i) × 1¤ptrdiff], depth + 1, src, toks)
             i ← i + 1
     elif k = NK_LET:
-        std.println("{}let {} mut={} ty={}", pad, ttext, nb, type_name(nc))
+        std.println("{}let {} mut={} ty={}", pad, ttext, nb, type_name_m(nc, a.umarks))
         dump_node(a, na, depth + 1, src, toks)
     elif k = NK_ASSIGN:
         std.println("{}assign {}", pad, ttext)
@@ -149,17 +149,17 @@ fn dump_node(a : Ast, id : i64, depth : i64, src : byte[], toks : Toks):
 @impure
 fn dump_ast(a : Ast, src : byte[], toks : Toks):
     foreach g := a.globals:
-        std.println("global {} mut={} ty={}", g.name, g.is_mut, type_name(g.ty))
+        std.println("global {} mut={} ty={}", g.name, g.is_mut, type_name_m(g.ty, a.umarks))
         dump_node(a, g.init, 1, src, toks)
     foreach f := a.fns:
         std.println("fn {} ret={} impure={} start={}", f.name,
-                    type_name(f.ret), f.is_impure, f.is_start)
+                    type_name_m(f.ret, a.umarks), f.is_impure, f.is_start)
         let np : i64 = a.extra[f.params_off × 1¤ptrdiff]
         let i : mut i64 = 0
         while i < np:
             let ptok : i64 = a.extra[(f.params_off + 1 + i × 2) × 1¤ptrdiff]
             let pty : i64 = a.extra[(f.params_off + 2 + i × 2) × 1¤ptrdiff]
-            std.println("  param {} : {}", run_str(src, toks.off[ptok × 1¤ptrdiff], toks.len[ptok × 1¤ptrdiff]), type_name(pty))
+            std.println("  param {} : {}", run_str(src, toks.off[ptok × 1¤ptrdiff], toks.len[ptok × 1¤ptrdiff]), type_name_m(pty, a.umarks))
             i ← i + 1
         dump_node(a, f.body, 1, src, toks)
     // the recipe is not among the functions, so it is shown apart from

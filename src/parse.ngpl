@@ -740,11 +740,23 @@ impl Parser:
             return self.parse_lambda(at)
         if k = TK_INT:
             self.pos ← self.pos + 1
+            // A measure the file declared reaches the literal here
+            // rather than in the lexer, which settled the built-in ones
+            // and left this one as a ¤ and a name of its own.
+            let big0 : i64 = self.toks.big[at × 1¤ptrdiff]
+            let big : mut i64 = big0
+            if self.peek() = TK_CURRENCY:
+                let u : i64 = self.parse_name_unit()
+                let st : i64 = big0 » 1
+                if not ty_is_int(st if st ≠ 0 else TY_I64):
+                    self.err("only an integer carries a unit")
+                else:
+                    big ← (big0 & 1) + ty_with_unit(st if st ≠ 0 else TY_I64, u) × 2
             let lit : i64 = self.mknode(NK_INT, at, self.toks.val[at × 1¤ptrdiff],
-                                        self.toks.big[at × 1¤ptrdiff], 0)
+                                        big, 0)
             // 'a'.ord() reads on; a number's method wants parentheses,
             // as the bootstrap has it
-            if self.toks.big[at × 1¤ptrdiff] » 1 = TY_CHAR:
+            if big » 1 = TY_CHAR:
                 return self.parse_postfix(lit)
             return lit
         if k = TK_TRUE or k = TK_FALSE:
@@ -1751,7 +1763,7 @@ impl Parser:
             // top of the range is written out where it would be needed
             let hi : i64 = 9223372036854775807 if bits - sgn >= 63 else (1 « (bits - sgn)) - 1
             if v < lo or (bits - sgn < 64 and v > hi):
-                self.err("enumerator '" ⧺ self.emembers[f × 1¤ptrdiff] ⧺ "' is " ⧺ i64_str(v) ⧺ ", which does not fit " ⧺ type_name(w) ⧺ ", the type the values are stored in")
+                self.err("enumerator '" ⧺ self.emembers[f × 1¤ptrdiff] ⧺ "' is " ⧺ i64_str(v) ⧺ ", which does not fit " ⧺ type_name_m(w, self.umarks) ⧺ ", the type the values are stored in")
                 return
             f ← f + 1
         let n : i64 = @dropunit(#self.emembers) - first
@@ -2114,7 +2126,7 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
             // nothing half-built is left where the recipe can call it
             if lenient and @dropunit(#p.diags) > d0 and @dropunit(#p.builds) = b0:
                 while @dropunit(#p.diags) > d0:
-                    _ ← p.diags.pop() ?? (Diag{line: LINE_FIRST, col: COL_FIRST, msg: ""})
+                    _ ← p.diags.pop() ?? (Diag{line: 1¤"line", col: 1¤"col", msg: ""})
                 while @dropunit(#p.fns) > f0:
                     _ ← p.fns.pop() ?? p.fns[0 × 1¤ptrdiff]
                 while @dropunit(#p.globals) > g0:
