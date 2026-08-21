@@ -844,11 +844,13 @@ Module System
     namespace rules with a period for the two colons.  A definition's whole name is its module
     and its own, and a function's object-file symbol carries that and the signature.  Nothing
     leaves a module without @export, and a module that exports nothing is refused.  Unqualified
-    names are looked for outward through the enclosing modules.  Bootstrap only so far: ngplc
-    refuses `module` by name.  tests/test_module.ngpl, spec Chapter 8.
+    names are looked for outward through the enclosing modules.  In both implementations, and
+    test_module is a shared test: compiled and run with --test, its output diffed against the
+    interpreter's.  tests/test_module.ngpl, spec Chapter 8.
 
-[ ] [FULL] the rest of the module system: importing a module under a shorter name, visibility
-    narrower than exported-or-not, and separate compilation -- which is what would make a
+[ ] [FULL] the rest of the module system: importing a module under a shorter name, asking a
+    module for something that is not a function (core-2 refuses `mod.name` unless it is
+    called), visibility narrower than exported-or-not, and separate compilation -- which is what would make a
     module a unit of anything but naming.  Name mangling with module prefix is done (the
     symbol is module.name(sig) → ret).
 

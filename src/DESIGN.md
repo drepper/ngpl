@@ -678,6 +678,34 @@ One seam the list does not hide: `impl Emit` is opened in both
 methods aarch64 writes words through.  The language allows a second
 `impl` block and this was already true inside the one file.
 
+## Modules
+
+A `module` line is a section marker: what follows belongs to it until
+the next one says otherwise.  Three things make it work in a compiler
+that reads a file once.
+
+The **modules are pre-scanned**, in the same sweep that gathers struct
+names, and for a sharper reason: `a.b.f()` reads as a field of `a`
+until it is known that `a.b` is a module, and the module may be
+declared further down the file.  The sweep replays the sectioning,
+since what a bare name means depends on the module in hand when it is
+read.
+
+A **qualified call is settled in the parser**: the longest run of
+identifiers that names a module is the module, what follows is the name
+asked of it, and the module is written down beside the call (`nb`, one
+past its index) so the checker looks it up there rather than walking
+out through the enclosing modules.
+
+**Two lookups, one tail.**  A bare name walks out through the modules
+it is written inside; a qualified one asks the module it named and is
+refused if that module did not export it.  Everything after -- purity,
+arity, each argument against its parameter -- is the same either way,
+so both go through `check_resolved`.
+
+The object-file symbol is the whole name and the signature:
+`shapes.solid.volume(i64, i64, i64) → i64`.
+
 ## Pipeline and Data Flow
 
 Unchanged in shape from attempt 1 — flat parallel arrays and ids

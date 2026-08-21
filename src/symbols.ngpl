@@ -118,7 +118,8 @@ fn fn_symbol(a : Ast, toks : Toks, src : byte[], f : i64) → str:
     let d := a.fns[f × 1¤ptrdiff]
     let np : i64 = a.extra[d.params_off × 1¤ptrdiff]
     let none : i64[] = []
-    let out : mut str = d.name ⧺ "("
+    // the whole name: the module it was written in, then its own
+    let out : mut str = (d.name if d.modname = "" else d.modname ⧺ "." ⧺ d.name) ⧺ "("
     let i : mut i64 = 0
     while i < np:
         out ← out ⧺ ("" if i = 0 else ", ") ⧺ sym_type(a, toks, src, a.extra[(d.params_off + 2 + i × 2) × 1¤ptrdiff], none)

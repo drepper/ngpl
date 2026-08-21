@@ -13,6 +13,10 @@ struct Parser:
     nc : i64[]
     extra : i64[]
     fns : FnDef[]
+    curmod : str         // the module the definitions being read live in
+    mods : str[]         // the modules declared so far, whole names
+    qmods : str[]        // the module each qualified call names
+    modtok : i64[]       // … and where each was written
     builds : FnDef[]     // the @build recipe, kept apart from the rest
     globals : GlobalDef[]
     structs : SDef[]
@@ -895,6 +899,13 @@ impl Parser:
             return self.mknode(NK_WRAP, at, e, 0, 0)
         if k = TK_IDENT:
             let name := self.ttext(at)
+            // `a.b.f(…)` where a.b is a module: the longest run of
+            // identifiers that names one is the module, and what
+            // follows it is the name being asked of it.  Read here
+            // because further on it would be a field of a.
+            let qn : i64 = self.module_prefix(at)
+            if qn ≠ ⁻1:
+                return self.parse_qualified(at, qn)
             if name = "std":
                 self.pos ← self.pos + 1
                 _ ← self.eat(TK_DOT, "'.' after std")
@@ -1669,14 +1680,14 @@ impl Parser:
             if ret ≠ TY_UNIT:
                 self.err_at(name_tok, "the @build function answers nothing; it declares a build by calling std.build")
                 return
-            self.builds.push(FnDef{name: name, tok: name_tok, params_off: params_off,
+            self.builds.push(FnDef{name: name, modname: self.curmod, tok: name_tok, params_off: params_off,
                                    ret: ret, body: body, is_export: false,
                                    is_replaceable: false, is_impure: false,
                                    is_start: false, is_noreturn: false,
                                    is_test: false,
                                    pre_off: pre_off, post_off: post_off})
             return
-        self.fns.push(FnDef{name: name, tok: name_tok, params_off: params_off,
+        self.fns.push(FnDef{name: name, modname: self.curmod, tok: name_tok, params_off: params_off,
                             ret: ret, body: body, is_export: (mods » 1) & 1 = 1,
                             is_replaceable: mods & 1 = 1,
                             is_impure: imp,
@@ -1826,6 +1837,78 @@ impl Parser:
                         step ← self.udecay[step × 1¤ptrdiff]
                         seen ← seen + 1
             j ← j + 1
+
+    // `module a` says where the definitions after it live, until the
+    // next such line says otherwise.  A bare name is read against the
+    // module in hand, a leading period starts again from the outside,
+    // and `module .` alone is the way back out to the global module --
+    // C++'s namespace rules with a period for the two colons.
+    // How many tokens from `at` name a module, or ⁻1 if none do.  The
+    // longest run wins, so a.b beats a where both are modules.
+    fn module_prefix(&self, at : i64) → i64:
+        if #self.mods = 0 or self.toks.kind[(at + 1) × 1¤ptrdiff] ≠ TK_DOT:
+            return ⁻1
+        let best : mut i64 = ⁻1
+        let path : mut str = self.ttext(at)
+        let j : mut i64 = at
+        while true:
+            if self.knows_module(path):
+                best ← j
+            if self.toks.kind[(j + 1) × 1¤ptrdiff] ≠ TK_DOT:
+                return best
+            if self.toks.kind[(j + 2) × 1¤ptrdiff] ≠ TK_IDENT:
+                return best
+            j ← j + 2
+            path ← path ⧺ "." ⧺ self.ttext(j)
+        best
+
+    // `mod.name(args)`: the module is written down beside the call, and
+    // the checker looks the name up in it rather than in scope.
+    fn parse_qualified(&mut self, at : i64, last : i64) → i64:
+        let path : mut str = self.ttext(at)
+        let j : mut i64 = at
+        while j < last:
+            j ← j + 2
+            path ← path ⧺ "." ⧺ self.ttext(j)
+        self.pos ← last + 1
+        _ ← self.eat(TK_DOT, "'.' and the name asked of the module")
+        let ntok : i64 = self.pos
+        _ ← self.eat_name("the name asked of the module")
+        if self.peek() ≠ TK_LPAR:
+            self.err_at(ntok, "core-2 asks a module for a function; '" ⧺ path ⧺ "." ⧺ self.ttext(ntok) ⧺ "' is named without being called")
+            return 0
+        let aoff : i64 = self.parse_args()
+        self.qmods.push(path)
+        self.mknode(NK_CALL, ntok, aoff, @dropunit(#self.qmods), 0)
+
+    fn parse_module_def(&mut self):
+        let kw : i64 = self.pos
+        self.pos ← self.pos + 1
+        let absolute : bool = self.peek() = TK_DOT
+        if absolute:
+            self.pos ← self.pos + 1
+        let path : mut str = ""
+        if not absolute or self.peek() = TK_IDENT:
+            path ← self.ttext(self.pos)
+            _ ← self.eat_name("the module's name")
+            while self.peek() = TK_DOT:
+                self.pos ← self.pos + 1
+                path ← path ⧺ "." ⧺ self.ttext(self.pos)
+                _ ← self.eat_name("the module's name")
+        let full : mut str = ""
+        if path ≠ "":
+            full ← path if absolute or self.curmod = "" else self.curmod ⧺ "." ⧺ path
+        // the sweep before parsing already wrote it down; this only
+        // moves the marker the definitions after it are read against
+        _ ← kw
+        self.curmod ← full
+        self.end_stmt()
+
+    fn knows_module(&self, name : str) → bool:
+        foreach m := self.mods:
+            if m = name:
+                return true
+        false
 
     fn parse_unit_def(&mut self):
         self.pos ← self.pos + 1
@@ -1989,7 +2072,7 @@ impl Parser:
             // @expect: parsed, remembered, left uncompiled
             self.ignored.push(self.ttext(tok))
             return
-        self.globals.push(GlobalDef{name: self.ttext(tok), tok: tok,
+        self.globals.push(GlobalDef{name: self.ttext(tok), modname: self.curmod, tok: tok,
                                     ty: self.nc[stmt × 1¤ptrdiff],
                                     is_mut: self.nb[stmt × 1¤ptrdiff] = 1,
                                     init: self.na[stmt × 1¤ptrdiff]})
@@ -2117,6 +2200,11 @@ impl Parser:
                 self.parse_struct(is_repr)
             else:
                 self.parse_impl()
+        elif self.peek() = TK_MODULE:
+            if imp or is_start or is_noreturn or is_test or is_repl or is_exp or #pres > 0 or #posts > 0:
+                self.err("a module carries no annotations; it says where what follows it lives")
+            else:
+                self.parse_module_def()
         elif self.peek() = TK_UNIT:
             self.parse_unit_def()
         elif self.peek() = TK_TYPE:
@@ -2129,7 +2217,7 @@ impl Parser:
             else:
                 self.parse_global(expects > 0)
         else:
-            self.err("core-2 has functions, structs, impl blocks, enums, type names and global bindings at the top level")
+            self.err("core-2 has modules, functions, structs, impl blocks, enums, type names and global bindings at the top level")
 
 // The whole file, every definition understood or reported.
 fn parse(toks : Toks, src : byte[]) → Ast:
@@ -2150,7 +2238,8 @@ fn parse_recipe(toks : Toks, src : byte[]) → Ast:
 fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
     let p : mut Parser = (Parser{toks: toks, src: src, pos: 0,
                                  nkind: [], ntok: [], na: [], nb: [], nc: [],
-                                 extra: [], fns: [], builds: [], globals: [], structs: [],
+                                 extra: [], fns: [], curmod: "", mods: [], modtok: [], qmods: [],
+                                 builds: [], globals: [], structs: [],
                                  tanames: [], tatypes: [],
                                  unames: unit_names(), umarks: unit_marks(),
                                  udecay: unit_decays(),
@@ -2172,10 +2261,34 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
     // are gathered in one sweep before anything is parsed
     let n : i64 = @dropunit(#toks.kind)
     let i : mut i64 = 0
+    // The modules are gathered in the same sweep, and for the same
+    // reason: a call may name one the file declares further down, and
+    // `a.b.f()` cannot be told from a field of a until it is known that
+    // a.b is a module.  The sweep replays the sectioning, since what a
+    // bare name means depends on the module in hand when it is read.
+    let here : mut str = ""
     while i + 1 < n:
         if toks.kind[i × 1¤ptrdiff] = TK_STRUCT and toks.kind[(i + 1) × 1¤ptrdiff] = TK_IDENT:
             p.snames.push(run_str(src, toks.off[(i + 1) × 1¤ptrdiff],
                                   toks.len[(i + 1) × 1¤ptrdiff]))
+        if toks.kind[i × 1¤ptrdiff] = TK_MODULE:
+            let kw : i64 = i
+            let j : mut i64 = i + 1
+            let absolute : bool = toks.kind[j × 1¤ptrdiff] = TK_DOT
+            if absolute:
+                j ← j + 1
+            let path : mut str = ""
+            while toks.kind[j × 1¤ptrdiff] = TK_IDENT:
+                path ← path ⧺ ("" if path = "" else ".") ⧺ run_str(src, toks.off[j × 1¤ptrdiff], toks.len[j × 1¤ptrdiff])
+                j ← j + 1
+                if toks.kind[j × 1¤ptrdiff] ≠ TK_DOT or toks.kind[(j + 1) × 1¤ptrdiff] ≠ TK_IDENT:
+                    j ← j
+                else:
+                    j ← j + 1
+            here ← "" if path = "" else (path if absolute or here = "" else here ⧺ "." ⧺ path)
+            if here ≠ "" and not p.knows_module(here):
+                p.mods.push(here)
+                p.modtok.push(kw)
         i ← i + 1
     while p.peek() ≠ TK_EOF:
         if p.peek() = TK_NL:
@@ -2216,7 +2329,8 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
         assert(#p.nkind = #p.ntok and #p.nkind = #p.na, "node arrays in step")
         assert(#p.nkind = #p.nb and #p.nkind = #p.nc, "node arrays in step")
     (Ast{nkind: p.nkind, ntok: p.ntok, na: p.na, nb: p.nb, nc: p.nc,
-         extra: p.extra, strs: p.toks.strs, fns: p.fns, builds: p.builds,
+         extra: p.extra, strs: p.toks.strs, fns: p.fns,
+         mods: p.mods, modtok: p.modtok, qmods: p.qmods, builds: p.builds,
          globals: p.globals,
          structs: p.structs, tts: p.tts, ttl: p.ttl, tte: p.tte,
          fae: p.fae, fas: p.fas,

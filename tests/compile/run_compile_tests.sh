@@ -184,6 +184,7 @@ shared_tests=(
     test_if
     test_iterator
     test_lambda
+    test_module
     test_noreturn
     test_reshape
     test_short_circuit

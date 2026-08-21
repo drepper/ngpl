@@ -8664,7 +8664,7 @@ A module whose own definitions are all private but which contains a module that 
 
 #### What Is Not Here Yet
 
-Modules are a bootstrap-language feature; the compiled subset refuses `module` by name.  What the design leaves for later: importing a module under a shorter name, visibility narrower than exported-or-not, and separate compilation, which is what would make a module a unit of anything but naming.
+What the design leaves for later: importing a module under a shorter name, asking a module for something that is not a function, visibility narrower than exported-or-not, and separate compilation — which is what would make a module a unit of anything but naming.
 
 ### The Build Function
 

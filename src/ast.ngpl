@@ -148,6 +148,7 @@ let TYNAMES : std.hash(str, i64) = (⸨
 
 struct FnDef:
     name : str
+    modname : str        // the module it was written in, "" for the global one
     tok : i64
     params_off : i64     // extra: [n, name-token, type, …]
     ret : i64
@@ -169,6 +170,7 @@ struct SDef:
 
 struct GlobalDef:
     name : str
+    modname : str        // the module it was written in, "" for the global one
     tok : i64
     ty : i64
     is_mut : bool
@@ -183,6 +185,9 @@ struct Ast:
     extra : i64[]
     strs : str[]
     fns : FnDef[]
+    mods : str[]         // the modules this file declares, whole names
+    modtok : i64[]       // … and where each was written
+    qmods : str[]        // the module each qualified call names
     builds : FnDef[]     // the @build recipe, read while the program is
                          // built and never written into the image
     globals : GlobalDef[]
