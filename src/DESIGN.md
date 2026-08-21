@@ -660,7 +660,7 @@ was written afterwards.
     tokens types diag lex ast parse dumpast check comptime ir lower
     emit symbols elf codegen main
     arch_x86_64 rt_x86_64 arch_a64 dispatch arch_rv64 arch_i386
-    arch_arm arch_rv32 tdriver rt_ir codegen_t
+    arch_arm arch_rv32 tdriver rt_portable codegen_t
 
 Build it with `ngplc --build src/main.ngpl`; the recipe in `main.ngpl`
 is a `@build` function, which generates no code and cannot be called.
@@ -946,7 +946,7 @@ truths in 64-bit fields.
 values, with ~40 operations.  The driver `t_emit_fn` composes every IR
 op from those once; the x86-64 emitter stays as the measure.
 
-**The runtime is written once as IR** (`rt_ir.ngpl`) and compiled by the
+**The runtime is written once as IR** (`rt_portable.ngpl`) and compiled by the
 same driver for whichever target is asked, so 47 routines exist in a
 single portable spelling.  This is why the sources hold an
 `rt_x86_64.ngpl` and no `rt_aarch64.ngpl`: the pioneer's runtime is

@@ -1,9 +1,15 @@
-// ---------------------------------------------------------------------------
-// The runtime, written once as IR and compiled by the driver above for
-// whichever target is asked for.  The x86-64 pioneer keeps its
-// hand-tuned routines; these are the same contracts in a portable
-// spelling, and the conformance suite holds the two to one behavior.
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// The portable runtime: written once as IR, for the five that share it
+// ===========================================================================
+//
+// The same routines rt_x86_64.ngpl writes out as machine code, in a
+// spelling no target owns: tdriver.ngpl compiles them for whichever is
+// asked for, so aarch64, arm, i386, riscv64 and riscv32 have one
+// runtime between them rather than five.  That is why there is no
+// rt_aarch64.ngpl -- there is no aarch64 runtime to put in it.
+//
+// The pioneer keeps its hand-tuned routines, and the conformance suite
+// holds the two spellings to one behaviour.
 
 struct RtB:
     op : i64[]

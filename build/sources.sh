@@ -38,10 +38,9 @@ NGPLC_SOURCES=(
     src/rt_x86_64.ngpl     # x86-64: the runtime, as machine code
 
     # The other five share one of everything.  Each names only how it
-    # spells the abstract operations -- there is no rt_aarch64.ngpl
-    # because there is no aarch64 runtime: the five have one runtime
-    # between them, written once as IR and compiled for whichever is
-    # asked for.
+    # spells the abstract operations; there is no rt_aarch64.ngpl
+    # because there is no aarch64 runtime -- rt_portable.ngpl is the one
+    # runtime the five have between them.
     src/arch_a64.ngpl      # the abstract machine, and aarch64's spellings
     src/dispatch.ngpl      # each abstract operation, dispatched on the target
     src/arch_rv64.ngpl     # riscv64's spellings
@@ -49,6 +48,6 @@ NGPLC_SOURCES=(
     src/arch_arm.ngpl      # arm's, 32-bit EABI
     src/arch_rv32.ngpl     # riscv32's
     src/tdriver.ngpl       # every IR op composed from those, once
-    src/rt_ir.ngpl         # the runtime those five share, written as IR
+    src/rt_portable.ngpl   # the runtime those five share, written as IR
     src/codegen_t.ngpl     # the pipeline for every target but the pioneer
 )

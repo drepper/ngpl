@@ -154,7 +154,7 @@ fn build():
                      "symbols", "elf", "codegen", "main",
                      "arch_x86_64", "rt_x86_64",
                      "arch_a64", "dispatch", "arch_rv64", "arch_i386",
-                     "arch_arm", "arch_rv32", "tdriver", "rt_ir",
+                     "arch_arm", "arch_rv32", "tdriver", "rt_portable",
                      "codegen_t"]:
         std.build.source(part ⧺ ".ngpl")
     std.build.output_dir("build")

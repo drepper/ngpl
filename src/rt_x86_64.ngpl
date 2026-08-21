@@ -3,9 +3,9 @@
 // ===========================================================================
 //
 // Routines over raw syscalls, no libc, written by hand for the pioneer.
-// Every other target gets the same routines from rt_ir.ngpl, which
-// builds them as IR and lets the driver spell them; these are what
-// that is checked against.
+// The other five targets get the same routines from rt_portable.ngpl,
+// which writes them once as IR and lets the driver spell them; these
+// are what those are checked against.
 
 fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64):
     // RT_PRINTI: rdi = signed value → decimal on fd 1
