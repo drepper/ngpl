@@ -974,6 +974,18 @@ truths in 64-bit fields.
 values, with ~40 operations.  The driver `t_emit_fn` composes every IR
 op from those once; the x86-64 emitter stays as the measure.
 
+**Only what a program reaches is emitted.**  Both drivers seed the set
+from the calls the program's own code made and close it: x86-64 over
+`rt_edges()`, a list kept by hand because its routines are machine code
+and cannot be asked; the retargetable driver by emitting in waves until
+a wave adds nothing, which catches the calls the driver itself puts in
+for an overflow or a bounds check and that no IR mentions.  A routine
+nobody reached is in no binary and is no symbol either, and the rest go
+into the symbol table by address, since a routine's id is its place in
+the list rather than in the code.  It is worth a good deal: a hello
+world for i386 went from 141 KB to 41 KB when the retargetable driver
+learned this.
+
 **The runtime is written once as IR** (`rt_portable.ngpl`) and compiled by the
 same driver for whichever target is asked, so 47 routines exist in a
 single portable spelling.  This is why the sources hold an

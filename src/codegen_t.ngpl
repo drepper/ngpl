@@ -121,12 +121,31 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             em.fn_off.push(em.here())
             t_emit_fn(&em, tgt, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs)
     assert(@dropunit(#em.fn_off) = nfns + g1 + 2 + @dropunit(#chk.lams) + @dropunit(#chk.psfn), "one code offset per function")
+    // What is emitted so far is the program's own, and the calls it
+    // made name the runtime it reaches for.  Emitting those reveals
+    // more calls -- a routine calls others, and the driver itself puts
+    // in a call where an overflow or a bounds check has to go -- so
+    // this runs in waves until a wave adds nothing.  Asking the IR
+    // which routines it calls would miss the second kind.
     let nrt : i64 = 52
-    foreach id0 := 0…nrt - 1:
-        em.rt_off.push(em.here())
-        let rid : i64 = 0 - @dropunit(id0) - 1
-        let np9 : i64 = rt_nargs(rid)
-        t_emit_fn(&em, tgt, rt_build(rid, tgt, &lw), np9, lw.strs)
+    foreach _ := 1…nrt:
+        em.rt_need.push(0)
+        em.rt_off.push(⁻1)
+    let more : mut bool = true
+    while more:
+        more ← false
+        if #em.cf_target > 0:
+            foreach i := 0…#em.cf_target - 1:
+                let t : i64 = em.cf_target[i]
+                if t < 0:
+                    em.rt_need[(0 - t - 1) × 1¤ptrdiff] ← 1
+        foreach id0 := 0…nrt - 1:
+            if em.rt_need[id0 × 1¤ptrdiff] = 1 and em.rt_off[id0 × 1¤ptrdiff] = ⁻1:
+                em.rt_off[id0 × 1¤ptrdiff] ← em.here()
+                let rid : i64 = 0 - @dropunit(id0) - 1
+                let np9 : i64 = rt_nargs(rid)
+                t_emit_fn(&em, tgt, rt_build(rid, tgt, &lw), np9, lw.strs)
+                more ← true
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:
         foreach i := 0…#em.cf_pos - 1:
@@ -240,11 +259,32 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         sname.push(synth[j])
         soffs.push(em.fn_off[(nfns + @dropunit(j)) × 1¤ptrdiff])
         sglob.push(false)
+    // A routine nobody reached is in no binary, and so is no symbol
+    // either.  The rest go in by address: a routine's id is its place
+    // in the list rather than in the code, and a symbol's size is the
+    // distance to the next one, which must never run backwards.
     let rtn := rt_names()
-    foreach i := 0…#em.rt_off - 1:
-        sname.push(rtn[i])
-        soffs.push(em.rt_off[i])
-        sglob.push(false)
+    let rname : mut str[] = []
+    let roff : mut i64[] = []
+    if #em.rt_off > 0:
+        foreach i := 0…#em.rt_off - 1:
+            if em.rt_off[i] ≠ ⁻1:
+                let at : i64 = em.rt_off[i]
+                let nm : str = rtn[i]
+                let k : mut i64 = @dropunit(#roff)
+                rname.push(nm)
+                roff.push(at)
+                while k > 0 and roff[(k - 1) × 1¤ptrdiff] > at:
+                    rname[k × 1¤ptrdiff] ← rname[(k - 1) × 1¤ptrdiff]
+                    roff[k × 1¤ptrdiff] ← roff[(k - 1) × 1¤ptrdiff]
+                    k ← k - 1
+                rname[k × 1¤ptrdiff] ← nm
+                roff[k × 1¤ptrdiff] ← at
+    if #roff > 0:
+        foreach i := 0…#roff - 1:
+            sname.push(rname[i])
+            soffs.push(roff[i])
+            sglob.push(false)
     let syms : mut Sym[] = []
     foreach i := 0…#sname - 1:
         let here ¤byte : i64 = soffs[i]
