@@ -73,6 +73,7 @@ KEYWORDS = {
     "catch": "CATCH",
     "comptime": "COMPTIME",
     "type": "TYPE",
+    "module": "MODULE",
     "unit": "UNIT",
     "impure": "IMPURE",
     "enumerate": "ENUMERATE",

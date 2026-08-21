@@ -2433,6 +2433,20 @@ def _int_type_range(type_name: str) -> tuple[int, int]:
     return 0, (1 << bits) - 1
 
 
+def _module_qualify(module: str, name: str) -> str:
+    """The whole name of something written in a module."""
+    return f"{module}.{name}" if module else name
+
+
+def _module_ancestors(module: str):
+    """A module and the ones it is written inside, innermost first."""
+    while True:
+        yield module
+        if not module:
+            return
+        module = module.rsplit(".", 1)[0] if "." in module else ""
+
+
 def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                         honor_start: bool = True,
                         redefine_vars: bool = False) -> LoadedProgram:
@@ -2563,6 +2577,31 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
     # Named types first: an alias, a sum, a global, or a signature
     # may refer to any of them, and each may be declared below
     # whatever names it.
+
+    # Which modules the program declares, and what each exports.  A
+    # module is a promise that something in it is worth naming from
+    # outside; one that exports nothing keeps that promise to nobody,
+    # and is a mistake rather than a place to put things.
+    declared: dict[str, object] = {}
+    exported: set[str] = set()
+    for defn in definitions:
+        if isinstance(defn, _ast.ModuleDef):
+            # `module .` names the global module, which is where a file
+            # starts and is nobody's to export from.
+            if defn.full:
+                declared.setdefault(defn.full, defn)
+        elif getattr(defn, "is_export", False):
+            exported.add(getattr(defn, "module", ""))
+    for name, where in declared.items():
+        # What a module inside it exports, it exports: a module holding
+        # nothing but a module that exports is doing its job.
+        if not any(e == name or e.startswith(name + ".") for e in exported):
+            raise DefinitionError(
+                f"module '{name}' exports nothing, so nothing outside it can "
+                f"name anything in it; mark what it is for with @export",
+                _node_pos(where))
+    from interp.eval import register_modules
+    register_modules(declared)
 
     # The measures a file names for itself register first: a global's
     # binding or a struct's field may state one, and both are installed
@@ -2757,7 +2796,9 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                           is_noreturn=defn.is_noreturn,
                           preconditions=defn.preconditions,
                           postconditions=defn.postconditions)
-            env.define(defn.name, fv)
+            fv.module = getattr(defn, "module", "")
+            fv.is_export = defn.is_export
+            env.define(_module_qualify(fv.module, defn.name), fv)
 
             if honor_start and defn.is_start:
                 if program.startup_func is not None:

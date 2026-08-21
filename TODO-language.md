@@ -838,8 +838,19 @@ Compile-Time and Metaprogramming
 Module System
 -------------
 
-[ ] [FULL] module system for composable programs and code reuse.  Name mangling with module prefix.
-    Import/export declarations.  Visibility control.
+[x] modules that name and hide: `module a` is a section marker, not a block -- what follows
+    belongs to it until the next says otherwise.  A bare name nests in the module in hand, a
+    leading period starts from the outside, `module .` returns to the global module; C++'s
+    namespace rules with a period for the two colons.  A definition's whole name is its module
+    and its own, and a function's object-file symbol carries that and the signature.  Nothing
+    leaves a module without @export, and a module that exports nothing is refused.  Unqualified
+    names are looked for outward through the enclosing modules.  Bootstrap only so far: ngplc
+    refuses `module` by name.  tests/test_module.ngpl, spec Chapter 8.
+
+[ ] [FULL] the rest of the module system: importing a module under a shorter name, visibility
+    narrower than exported-or-not, and separate compilation -- which is what would make a
+    module a unit of anything but naming.  Name mangling with module prefix is done (the
+    symbol is module.name(sig) → ret).
 
     The brief says the opposite of the mangling sentence above: since the language starts from
     scratch there is no reason to mangle, and a name in an object file can be the normalized,

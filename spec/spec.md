@@ -8603,6 +8603,69 @@ Two kinds are not free, because they are registered as they are read:
 
 So the order of the file list is significant, and a build that lists its sources alphabetically — as a shell glob would — is not the same program as one that lists them in dependency order.  This is a limitation of the present implementation and not a property the language wants; when the module system of this chapter's roadmap arrives, it subsumes it.
 
+### Modules
+
+A `module` line says where the definitions after it live:
+
+```
+module shapes
+
+@export
+fn area(w : i64, h : i64) → i64:
+    scaled(w) × h
+
+fn scaled(v : i64) → i64:            // not exported
+    v
+```
+
+It is **not a block**.  There is no indentation and nothing to close: everything below the line belongs to that module until another `module` line says otherwise.  A file that is one module says so once, at the top.
+
+#### Naming
+
+The keyword takes a name, and the name may be a path of identifiers separated by `.`.  What it means depends on how it starts:
+
+- **A bare name is read against the module in hand.**  `module solid` written while inside `shapes` is `shapes.solid`.
+- **A leading period starts again from the outside.**  `module .counts` is `counts` wherever it is written, however deep.
+- **`module .` alone is the way back out**, to the global module a file starts in.
+
+These are C++'s namespace rules with a period in place of the two colons; `.counts` is what C++ writes `::counts`.
+
+A definition's whole name is its module, a period, and the name it was given.  For a function the object file's symbol carries the signature too, as it already did:
+
+```
+shapes.solid.volume(i64, i64, i64) → i64
+```
+
+#### What Leaves a Module
+
+**Nothing, unless it says so.**  `@export` is what says so:
+
+```
+module shapes
+@export
+fn area(w : i64, h : i64) → i64:     // shapes.area, nameable outside
+    …
+fn scaled(v : i64) → i64:            // shapes.scaled, not
+    …
+```
+
+A name is written from outside by its whole path — `shapes.area(3, 4)`, `shapes.solid.volume(2, 3, 4)` — and a name that was not exported cannot be written that way at all.
+
+Within a module nothing is hidden.  A name written unqualified is looked for in the module in hand, then in the ones that module is written inside, then in the global module — so `shapes.solid` calls `area` without qualifying it, and reaches `shapes.scaled` although nothing outside can.  A module hides nothing from what is written inside it.
+
+**A module that exports nothing is refused.**  A module is a promise that something in it is worth naming from outside; one that exports nothing keeps that promise to nobody, and is a mistake rather than a place to put things:
+
+```
+error: module 'empty' exports nothing, so nothing outside it can name
+       anything in it; mark what it is for with @export
+```
+
+A module whose own definitions are all private but which contains a module that exports is doing its job, and is not refused.
+
+#### What Is Not Here Yet
+
+Modules are a bootstrap-language feature; the compiled subset refuses `module` by name.  What the design leaves for later: importing a module under a shorter name, visibility narrower than exported-or-not, and separate compilation, which is what would make a module a unit of anything but naming.
+
 ### The Build Function
 
 A program may carry one function annotated `@build`.  It is the build recipe: what the program is made of, and what should be done with it.
@@ -8654,7 +8717,7 @@ The subset is where compile-time evaluation begins; Chapter 11 is where it goes.
 
 ### Roadmap
 
-The module system proper — compilation units, imports, dependency resolution, and the SBOM written into the output — is not yet designed.  The build function is the part of this chapter that exists, and it exists first because the compiler's own sources needed it.
+Compilation units, imports, dependency resolution, and the SBOM written into the output are not yet designed.  What exists is the build function, which came first because the compiler's own sources needed it, and modules, which name and hide but do not yet divide a program into separately compiled pieces.
 
 
 Chapter 12: The Interpreter — The Interactive Read-Eval-Print Loop

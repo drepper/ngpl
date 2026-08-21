@@ -1,0 +1,14 @@
+// A module is a promise that something in it is worth naming from
+// outside.  One that exports nothing keeps that promise to nobody, so
+// it is refused where it is written rather than quietly being a place
+// to put things.
+
+@start
+@impure
+fn main():
+    std.println("unreached")
+
+module empty
+
+fn kept_to_itself() → i64:
+    1

@@ -22,7 +22,7 @@ from interp.ast import (
     LambdaExpr, ReshapeExpr, MapExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
     OperatorRef,
-    UnitExpr, UnitDef, UnitName, UnitBinOp, UnitSqrt, UnitLit, SumTypeDef,
+    UnitExpr, UnitDef, ModuleDef, UnitName, UnitBinOp, UnitSqrt, UnitLit, SumTypeDef,
     UnitOfExpr, UnitRefExpr,
     StructDef, ImplBlock, StructLit,
     MatchStmt, MatchArm, ExpErr,
@@ -39,7 +39,7 @@ from interp.lexer import Token, KEYWORDS
 DEFINITION_STARTERS = frozenset({
     "START", "BUILD", "REPLACEABLE", "TEST", "FLAG", "IMPURE", "EXPECT", "REPR",
     "HOT", "COLD", "LISTABLE", "NORETURN", "PRE", "POST",
-    "ENUM", "STRUCT", "IMPL", "UNIT", "TYPE", "FN", "LET",
+    "ENUM", "STRUCT", "IMPL", "UNIT", "TYPE", "FN", "LET", "MODULE",
     "MACRO", "MACRO_RULES", "COMPTIME",
 })
 
@@ -122,6 +122,11 @@ class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
         self.pos = 0
+        # The module the definitions being read belong to.  A `module`
+        # line is not a block: it says where what follows lives, until
+        # the next one says otherwise.  Empty is the global module,
+        # which is where a file starts.
+        self.current_module = ""
         # Whether what is being parsed is held rather than run, which
         # is the only place a $ may stand.
         self._in_quote = False
@@ -299,6 +304,11 @@ class Parser:
                 self.pos += 1
             definition = self._parse_definition()
             if definition is not None:
+                # Where a definition lives is a property of the
+                # definition, not of the order it is read in, so it is
+                # stamped here rather than worked out again later.
+                if not isinstance(definition, ModuleDef):
+                    definition.module = self.current_module
                 definitions.append(definition)
         return definitions
 
@@ -477,6 +487,9 @@ class Parser:
 
         if self._check("MACRO"):
             return self._parse_macro_func_def()
+
+        if self._check("MODULE"):
+            return self._parse_module_def()
 
         if self._check("UNIT"):
             return self._parse_unit_def()
@@ -1451,6 +1464,38 @@ class Parser:
 
         self._try_eat("PUNCT", ";")
         return self._set_pos(TypeDef(name_tok.value, target), kw_tok)
+
+    def _parse_module_def(self):
+        """`module a`, `module .a`, `module .a.b`: where what follows lives.
+
+        A bare name is read against the module in hand, so `module b`
+        inside `a` is `a.b`; a leading period starts again from the
+        outside, so `module .c` is `c` wherever it is written.  These
+        are C++'s namespace rules with a period for the two colons.
+        """
+        kw_tok = self._eat("MODULE")
+        absolute = False
+        if self._check("PUNCT", "."):
+            self._eat("PUNCT", ".")
+            absolute = True
+        # `module .` on its own is the way back out to the global
+        # module, which a section marker otherwise has no way to say.
+        parts = []
+        if not absolute or self._check("IDENT"):
+            parts.append(self._eat("IDENT").value)
+            while self._check("PUNCT", "."):
+                self._eat("PUNCT", ".")
+                parts.append(self._eat("IDENT").value)
+        self._try_eat("NEWLINE")
+        written = ("." if absolute else "") + ".".join(parts)
+        if not parts:
+            full = ""
+        elif absolute or not self.current_module:
+            full = ".".join(parts)
+        else:
+            full = self.current_module + "." + ".".join(parts)
+        self.current_module = full
+        return self._set_pos(ModuleDef(full, written), kw_tok)
 
     def _parse_unit_def(self):
         """Parse: unit name [= formula]"""

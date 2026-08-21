@@ -810,6 +810,20 @@ class UnitExpr:
         self.unit_spec = unit_spec
 
 
+class ModuleDef:
+    """`module a` or `module .a.b`: what follows belongs to this module.
+
+    Not a block.  The declaration says where the definitions after it
+    live, until the next one says otherwise, so `full` is the whole
+    path the parser worked out at the moment it was read.
+    """
+
+    def __init__(self, full: str, written: str):
+        self.full = full
+        # What the source said, for a message that quotes it back.
+        self.written = written
+
+
 class UnitDef:
     """Top-level unit definition: unit name [= formula] [→ decay]."""
 

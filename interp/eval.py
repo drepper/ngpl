@@ -1061,6 +1061,28 @@ _ARRAY_METHODS: dict[str, int] = {
 _NO_TEMPS: tuple = ()
 
 
+# The modules the program declares.  Program-wide rather than an
+# evaluator's own, as the units and the macros are: the definitions are
+# installed through one evaluator and the program runs through another,
+# and both have to see the same modules.
+MODULES: set = set()
+
+
+def register_modules(names) -> None:
+    """Record the modules a program declares, replacing any before."""
+    MODULES.clear()
+    MODULES.update(names)
+
+
+def _ancestors_of(module: str) -> list:
+    """A module and the ones it is written inside, innermost first."""
+    out = [module]
+    while module:
+        module = module.rsplit(".", 1)[0] if "." in module else ""
+        out.append(module)
+    return out
+
+
 class Evaluator:
     """Evaluates NGPL AST in a given environment.
 
@@ -1084,6 +1106,11 @@ class Evaluator:
         self._pure_func_name: str | None = None
         self._generic_map: dict[str, str] = {}
         self._comptime_vars: set[str] = set()
+        # The module the function now running was written in, and every
+        # module the program declares.  A name written unqualified is
+        # looked for in that module and then in the ones it is written
+        # inside, which is C++'s namespace lookup with a period.
+        self._cur_module: str = ""
         self._last_pos: tuple[int, int, int | None] | None = None
         # One entry per active call to a user-defined function, outermost
         # first.  Each is a mutable [name, position] pair whose position
@@ -3706,7 +3733,47 @@ class Evaluator:
         args = [self.eval_expr(a) for a in node.args]
         return self._call_func(node.name, args)
 
+    def _dotted_name(self, node):
+        """The name a chain of plain identifiers spells, or None."""
+        parts = []
+        n = node
+        while isinstance(n, GetAttr):
+            parts.append(n.attr)
+            n = n.obj
+        if not isinstance(n, VarRef):
+            return None
+        parts.append(n.name)
+        parts.reverse()
+        return ".".join(parts)
+
+    def _visible_from_here(self, module: str) -> bool:
+        """Whether this module hides nothing from where we are.
+
+        A module hides nothing from itself or from what is written
+        inside it; everywhere else sees only what it exports.
+        """
+        return module in _ancestors_of(self._cur_module)
+
     def _ee_MethodCall(self, node):
+        # `a.b.f(…)` is a call of f in module a.b when a.b is a module.
+        # It reads as a method on a.b until the name is looked at, which
+        # is why the modules a program declares are known here.
+        if MODULES:
+            qual = self._dotted_name(node.obj)
+            if qual is not None and qual in MODULES:
+                full = f"{qual}.{node.method}"
+                try:
+                    func = self.env.lookup(full)
+                except KeyError:
+                    raise TypeError(
+                        f"module '{qual}' defines no '{node.method}'") from None
+                if not getattr(func, "is_export", False) \
+                        and not self._visible_from_here(qual):
+                    raise TypeError(
+                        f"'{full}' is not exported from module '{qual}'; "
+                        f"@export says what a module lets others name")
+                args = [self.eval_expr(a) for a in node.args]
+                return self._do_call(func, args)
         if node.method in _ARRAY_MUTATORS:
             self._check_mutating_call(node)
         obj = self.eval_expr(node.obj)
@@ -5905,13 +5972,32 @@ class Evaluator:
     # Function calls
     # ------------------------------------------------------------------
 
+    def _module_lookup(self, name: str):
+        """A name written unqualified, found the way a module sees it.
+
+        The module in hand first, then the ones it is written inside,
+        then the global module.  Nothing found this way can be hidden:
+        every candidate is in the current module or one it is written
+        inside, and a module hides nothing from what it contains.
+        """
+        where = self._cur_module
+        while True:
+            cand = f"{where}.{name}" if where else name
+            try:
+                return self.env.lookup(cand)
+            except KeyError:
+                pass
+            if not where:
+                raise KeyError(f"undefined variable: {name}")
+            where = where.rsplit(".", 1)[0] if "." in where else ""
+
     def _call_func(self, name: str, args):
         """Call a function by name with given arguments.
 
         Looks up the function in the environment, dispatching to user-defined
         functions (FuncValue) or builtins (BuiltinFunc/BuiltinBoundMethod).
         """
-        func = self.env.lookup(name)
+        func = self._module_lookup(name) if MODULES else self.env.lookup(name)
         return self._do_call(func, args)
 
     def _call_method(self, obj: Value, method_name: str, args):
@@ -6433,6 +6519,7 @@ class Evaluator:
         old_frozen = self._frozen_vars
         old_generic_map = self._generic_map
         old_comptime_vars = self._comptime_vars
+        old_module = self._cur_module
         # The callee's frame starts fresh: a name the caller's loop or
         # borrow froze is not the callee's name, however it is spelled.
         self._frozen_vars = {}
@@ -6463,6 +6550,7 @@ class Evaluator:
             self.env = call_env
             self._current_ret_type = resolved_ret_type
             self._pure_func_name = None if func.is_impure else func.name
+            self._cur_module = func.module
             self._generic_map = generic_map
             # A copy, because a foreach inside the body adds its own
             # names to this and takes them out again; copying a
@@ -6499,6 +6587,7 @@ class Evaluator:
             self._frozen_vars = old_frozen
             self._generic_map = old_generic_map
             self._comptime_vars = old_comptime_vars
+            self._cur_module = old_module
 
     def _track_temporary(self, value):
         """Note a freshly produced resource so an unkept one can be released.

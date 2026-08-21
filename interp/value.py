@@ -944,7 +944,7 @@ class FuncValue(Value):
                  "pack_param", "param_units", "is_impure", "param_refs",
                  "param_muts", "source_label", "ret_unit", "is_listable",
                  "is_noreturn", "preconditions", "postconditions",
-                 "_has_generics", "_param_names")
+                 "_has_generics", "_param_names", "module", "is_export")
 
     def __init__(self, name, params, body, env, ret_type=None,
                  is_replaceable: bool = False,
@@ -987,6 +987,10 @@ class FuncValue(Value):
         # where the type predicates live.
         self._has_generics: bool | None = None
         self._param_names: frozenset | None = None
+        # The module the definition was written in, and whether it is
+        # exported from it.  Both are settled where it is installed.
+        self.module: str = ""
+        self.is_export: bool = False
         # Where the body was written.  None means the file the program
         # was loaded from; the REPL sets it to the entry that defined the
         # function, since each entry has its own line numbering.

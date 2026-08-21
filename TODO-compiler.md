@@ -165,3 +165,16 @@ Tooling
 
 [ ] all decision making and analysis details can be requested through log files.  In the final
     compiler version these details are also available through services like LSP.
+
+[ ] this depends on a module system being implemented.  make using rt_x86_64.ngpl optional.  add
+    a compile option.  implement a mechanism similar to zig ≥ 0.15 std.Build.option to allow
+    using -Doption=value on the build command line.  use the portable implementation for x86_64
+    by default as well, do not add rt_x86_64.ngpl to the source file list.  the build option,
+    perhaps named optimized-runtime, can be repeated, each copy naming one file to be used for
+    the runtime selection.  the files must contain a module with a name matching the file name.
+    the module must contain a function arch_match which takes a string and returns a bool.  The
+    parameter is the name of the architecture the binary is created for and the return value
+    indicates whether the optimized functions in the module apply to that architecture.
+    The compiler checks for all the needed runtime functions whether it is defined in the module.
+    if no optimized runtime is given, the portable rt functions can be called directly.
+    Otherwise the optimized routine is emitted.

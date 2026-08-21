@@ -1,0 +1,7 @@
+error: module 'empty' exports nothing, so nothing outside it can name anything in it; mark what it is for with @export
+  --> tests/output/module_no_exports.ngpl:11:1
+    |
+ 11 | module empty
+    | ^^^^^^
+ 12 | 
+    |
