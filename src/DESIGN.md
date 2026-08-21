@@ -1082,6 +1082,35 @@ Each batch was gated on the full suite and on the stage-1 binary
 staying byte-identical.  The arc: unbounded → 7 min → 4m10s → 2m58s
 → 2m18s.
 
+A second campaign, after the compiler had grown to twenty-five files,
+took another **12.8%** (8m40s → 7m34s, measured back to back on one
+machine, both halves producing the same binary byte for byte).  What
+it found was not where reading the code suggested it would be:
+
+- The first batch was drawn from reading the call path — per-call list
+  copies, a set comprehension rebuilt on each of eleven million calls
+  — and bought **0.25%**.  The cost is per *node*, not per call.
+- `cProfile` charges a fixed price to every call, and this workload
+  makes eleven million of them, so what it reports is partly a picture
+  of itself; a ninety-second window over a nine-minute run is also all
+  loading and lexing, and nearly sent the work after a `UnitValue`
+  path that the whole-run data showed was irrelevant to it.  A
+  two-millisecond **sampler** — a thread reading `sys._current_frames`
+  — costs nothing per call and covers the whole run, and every real
+  finding came from it.
+- What it found: `_is_bare_generic` ran `import re` and a
+  string-pattern `re.fullmatch` for **every parameter of every call
+  and every return**, 2.6% of the run in a program that names no
+  generic; every statement allocated a list to hold resources that
+  only files ever produce; fifty-five expression handlers computed a
+  source position the dispatcher had already recorded and none of them
+  read; `same_dimension` built two dictionaries to compare measures
+  that are usually the same shared object.
+
+The lesson is the one the first campaign also records, and it is worth
+keeping: measure the whole workload with an instrument that does not
+change it.
+
 ## Testing
 
 One suite (`tests/run_tests.sh`): bootstrap-language tests run under

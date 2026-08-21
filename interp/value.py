@@ -7,6 +7,14 @@ type checking and proper error messages.
 
 import functools as _functools
 import math
+import re
+
+
+class _WidthMiss:
+    """Absence in the width table, told apart from a stored None."""
+
+
+_WIDTH_MISS = _WidthMiss()
 
 
 # The discard target.  Assigning to it evaluates the right-hand side and
@@ -101,8 +109,9 @@ class _IntWidths:
         self._named = named
 
     def get(self, name, default=None):
-        if name in self._named:
-            return self._named[name]
+        got = self._named.get(name, _WIDTH_MISS)
+        if got is not _WIDTH_MISS:
+            return got
         bits = _parse_int_width(name) if isinstance(name, str) else None
         return default if bits is None else bits
 
@@ -934,7 +943,8 @@ class FuncValue(Value):
     __slots__ = ("name", "params", "body", "env", "ret_type", "is_replaceable",
                  "pack_param", "param_units", "is_impure", "param_refs",
                  "param_muts", "source_label", "ret_unit", "is_listable",
-                 "is_noreturn", "preconditions", "postconditions")
+                 "is_noreturn", "preconditions", "postconditions",
+                 "_has_generics", "_param_names")
 
     def __init__(self, name, params, body, env, ret_type=None,
                  is_replaceable: bool = False,
@@ -969,6 +979,14 @@ class FuncValue(Value):
         # What the function holds to on the way in and on the way out.
         self.preconditions = preconditions or []
         self.postconditions = postconditions or []
+        # Two things about the signature that a call would otherwise
+        # work out again every time it is made.  They depend on the
+        # function alone, so the first call settles them and the rest
+        # read them; None means not yet asked.  Whether the signature
+        # mentions a generic is decided in the evaluator, which is
+        # where the type predicates live.
+        self._has_generics: bool | None = None
+        self._param_names: frozenset | None = None
         # Where the body was written.  None means the file the program
         # was loaded from; the REPL sets it to the entry that defined the
         # function, since each entry has its own line numbering.
@@ -1780,14 +1798,12 @@ TRUE_VALUE = BoolValue(True)
 FALSE_VALUE = BoolValue(False)
 
 
-_NONE_VALUE = None
+# The one ∅ every answer that has none hands back.
+_NONE_VALUE = NoneValue()
 
 
 def none():
     """Get the singleton NoneValue."""
-    global _NONE_VALUE
-    if _NONE_VALUE is None:
-        _NONE_VALUE = NoneValue()
     return _NONE_VALUE
 
 
@@ -2119,6 +2135,9 @@ def _resolve_type_alias_uncached(type_name: str) -> str:
     return type_name
 
 
+_ARRAY_TYPE_RE = re.compile(r"(\w+(?:\.\w+)*|\(.*\))\[(\d*(?:,\d*)*)\]")
+
+
 @_functools.lru_cache(maxsize=None)
 def _parse_array_type(type_name: str) -> tuple[str, list[int | None]] | None:
     """Parse an array type string.
@@ -2128,13 +2147,12 @@ def _parse_array_type(type_name: str) -> tuple[str, list[int | None]] | None:
     it leaves it open.  `i32[]` is one open dimension, `i32[2,3]` two
     fixed ones, `i32[,3]` an open one over a fixed one.
     """
-    import re
     # An element type is a name or a tuple, and a tuple carries commas
     # and brackets of its own, so it is matched as a parenthesized run
     # rather than as a word.  A dotted name -- std.iovec -- is one name
     # for this purpose, since the dot belongs to the type and not to
     # the array written around it.
-    m = re.fullmatch(r"(\w+(?:\.\w+)*|\(.*\))\[(\d*(?:,\d*)*)\]", type_name)
+    m = _ARRAY_TYPE_RE.fullmatch(type_name)
     if m is None:
         return None
     return m.group(1), [int(d) if d else None for d in m.group(2).split(",")]
@@ -2218,7 +2236,6 @@ def declared_rank(type_name: str | None) -> int:
     reading it as no array at all would quietly make every generic
     array parameter unthreadable.
     """
-    import re
     if type_name is None:
         return 0
     name = resolve_type_alias(type_name)

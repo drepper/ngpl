@@ -2814,14 +2814,10 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 raise DefinitionError(
                     f"in {defn.name}: {strip_position_prefix(str(e))}",
                     extract_position(e) or _node_pos(defn)) from None
-            env._const_globals.discard(defn.name)
-            env._mutable_globals.discard(defn.name)
+            env.unmark_global(defn.name)
             env.define(defn.name, value,
                         Decl(evaluator._declared_type_of(defn, value), unit))
-            if defn.is_const:
-                env._const_globals.add(defn.name)
-            else:
-                env._mutable_globals.add(defn.name)
+            env.mark_global(defn.name, mutable=not defn.is_const)
 
     for defn in definitions:
         if isinstance(defn, ASTDestructureDef):
@@ -2843,13 +2839,9 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
             for name in _destructured_names(defn.names):
                 if name == DISCARD_NAME:
                     continue
-                env._const_globals.discard(name)
-                env._mutable_globals.discard(name)
+                env.unmark_global(name)
                 env.define(name, evaluator.env.lookup(name))
-                if defn.is_const:
-                    env._const_globals.add(name)
-                else:
-                    env._mutable_globals.add(name)
+                env.mark_global(name, mutable=not defn.is_const)
 
 
     # Every struct exists by now, so a @repr(C) layout can be checked even

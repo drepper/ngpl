@@ -917,3 +917,17 @@ class MatchStmt:
     def __init__(self, subject, arms: list[MatchArm]):
         self.subject = subject
         self.arms = arms
+
+
+# Every node may be asked where it was written, and the evaluator asks
+# tens of millions of times a run: once for each expression and each
+# statement it reaches.  A class-level default answers the ones the
+# parser never told, so the question is an attribute read rather than a
+# lookup with a fallback.  Classes that keep `pos` in __slots__ set it
+# in their own __init__ and are left alone.
+for _cls in list(globals().values()):
+    if isinstance(_cls, type) and _cls.__module__ == __name__ \
+            and "__slots__" not in _cls.__dict__ \
+            and "pos" not in _cls.__dict__:
+        _cls.pos = None
+del _cls

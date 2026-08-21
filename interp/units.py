@@ -24,6 +24,11 @@ class Unit:
         self.display_name = display_name
 
     def same_dimension(self, other: "Unit") -> bool:
+        # Measures are shared: the ¤byte two operands carry is one
+        # object, so asking whether it has its own dimension settles
+        # most of these without building anything.
+        if self is other:
+            return True
         a = {k: v for k, v in self.components.items() if v != 0}
         b = {k: v for k, v in other.components.items() if v != 0}
         return a == b

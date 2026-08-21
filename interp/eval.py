@@ -749,6 +749,11 @@ def _enum_meets_number(ev) -> bool:
 
 
 def _unwrap_operand(value):
+    # Most operands are already the plain thing an operator wants, and
+    # asking costs less than the two calls that answer the same.
+    t = type(value)
+    if t is IntValue or t is StrValue or t is BoolValue or t is CharValue:
+        return value
     v = unwrap_optional(value)
     if isinstance(v, UnitValue):
         return v.inner
@@ -974,10 +979,24 @@ def _extract_generic_name(type_str: str) -> str | None:
     return None
 
 
+_BARE_GENERIC_RE = re.compile(r"\w+'")
+_BARE_GENERIC_CACHE: dict = {}
+
+
 def _is_bare_generic(type_name: str) -> bool:
-    """Whether a type is nothing but a generic name, as T' is."""
-    import re
-    return re.fullmatch(r"\w+'", type_name) is not None
+    """Whether a type is nothing but a generic name, as T' is.
+
+    Asked of every parameter of every call and of every return, so a
+    program that names no generic at all still asks it tens of millions
+    of times.  The answer depends on nothing but the spelling, and a
+    program writes few spellings, so it is remembered; a stored False
+    is told from nothing stored because only truth values are stored.
+    """
+    got = _BARE_GENERIC_CACHE.get(type_name)
+    if got is None:
+        got = _BARE_GENERIC_RE.fullmatch(type_name) is not None
+        _BARE_GENERIC_CACHE[type_name] = got
+    return got
 
 
 def _resolve_concrete_for_generic(param_type: str, arg: Value) -> str:
@@ -1034,6 +1053,12 @@ _ARRAY_METHODS: dict[str, int] = {
     "get": 1,
     "iterate": 0,
 }
+
+
+# What a statement that has produced no resource holds: not None, so
+# that registration is still on, and empty, so that releasing has
+# nothing to do.  Shared, because it is never written to.
+_NO_TEMPS: tuple = ()
 
 
 class Evaluator:
@@ -3330,11 +3355,12 @@ class Evaluator:
         Returns:
             A Value instance.
         """
-        pos = getattr(node, "pos", None)
+        pos = node.pos
         if pos is not None:
             self._last_pos = pos
-            if self._call_stack:
-                self._call_stack[-1][1] = pos
+            cs = self._call_stack
+            if cs:
+                cs[-1][1] = pos
 
 
 
@@ -3545,36 +3571,31 @@ class Evaluator:
 
 
     def _ee_IntLit(self, node):
-        pos = getattr(node, "pos", None)
         return mk_int(node.value,
                       UNTYPED if node.width == "int" else node.width)
 
     def _ee_FloatLit(self, node):
-        pos = getattr(node, "pos", None)
         return mk_float(node.value, node.width)
 
     def _ee_CharLit(self, node):
-        pos = getattr(node, "pos", None)
         return CharValue(node.code)
 
     def _ee_StrLit(self, node):
-        pos = getattr(node, "pos", None)
         return mk_str(node.text)
 
     def _ee_BoolLit(self, node):
-        pos = getattr(node, "pos", None)
         return mk_bool(node.value)
 
     def _ee_NoneLit(self, node):
-        pos = getattr(node, "pos", None)
         return none()
 
     def _ee_VarRef(self, node):
-        pos = getattr(node, "pos", None)
         if node.name == DISCARD_NAME:
             raise TypeError(
                 "'_' discards the value assigned to it and cannot be read")
-        if self._frozen_vars.get(node.name) == "moved":
+        # Nothing is frozen in most functions, and an empty mapping says
+        # so for less than a lookup in it does.
+        if self._frozen_vars and self._frozen_vars.get(node.name) == "moved":
             raise TypeError(
                 f"use of moved value '{node.name}'")
         if (self._pure_func_name is not None
@@ -3635,7 +3656,6 @@ class Evaluator:
         return self._apply_operator(node.op, left, right)
 
     def _ee_UnaryOp(self, node):
-        pos = getattr(node, "pos", None)
         if node.op == "⁻" and isinstance(node.operand, IntLit):
             # A ⁻ written against an integer literal is part of the
             # literal rather than an operation on it, so ⁻128i8 is
@@ -3648,21 +3668,17 @@ class Evaluator:
         return self._apply_unary(node.op, operand)
 
     def _ee_OptSome(self, node):
-        pos = getattr(node, "pos", None)
         value = self.eval_expr(node.value)
         return some(value)
 
     def _ee_StructLit(self, node):
-        pos = getattr(node, "pos", None)
         return self._eval_struct_lit(node)
 
     def _ee_FuncCall(self, node):
-        pos = getattr(node, "pos", None)
         args = [self.eval_expr(a) for a in node.args]
         return self._call_func(node.name, args)
 
     def _ee_MethodCall(self, node):
-        pos = getattr(node, "pos", None)
         if node.method in _ARRAY_MUTATORS:
             self._check_mutating_call(node)
         obj = self.eval_expr(node.obj)
@@ -3682,7 +3698,6 @@ class Evaluator:
         return result
 
     def _ee_GetAttr(self, node):
-        pos = getattr(node, "pos", None)
         obj = self.eval_expr(node.obj)
         unwrapped = unwrap_optional(obj)
         if isinstance(unwrapped, EnumType):
@@ -3744,7 +3759,6 @@ class Evaluator:
         return obj
 
     def _ee_ArrayLit(self, node):
-        pos = getattr(node, "pos", None)
         elements = [self.eval_expr(e) for e in node.elements]
         settled, unit = _literal_element_type(elements)
         if settled is not None:
@@ -3754,7 +3768,6 @@ class Evaluator:
                                       element_unit=unit))
 
     def _ee_RangeExpr(self, node):
-        pos = getattr(node, "pos", None)
         s = unwrap_optional(self.eval_expr(node.start))
         e = unwrap_optional(self.eval_expr(node.end))
         if isinstance(s, UnitValue):
@@ -3774,13 +3787,11 @@ class Evaluator:
         return RangeValue(s.value, e.value, step)
 
     def _ee_IfExpr(self, node):
-        pos = getattr(node, "pos", None)
         if to_bool(self.eval_expr(node.cond)):
             return self.eval_expr(node.then_expr)
         return self.eval_expr(node.else_expr)
 
     def _ee_DropUnitExpr(self, node):
-        pos = getattr(node, "pos", None)
         val = self.eval_expr(node.expr)
         inner = val.inner if isinstance(val, UnitValue) else val
         if not isinstance(val, UnitValue):
@@ -3789,7 +3800,6 @@ class Evaluator:
         return inner
 
     def _ee_RefExpr(self, node):
-        pos = getattr(node, "pos", None)
         bound = self.env.lookup(node.name)
         if isinstance(bound, Reference):
             # A borrow of a borrow is the same borrow.  The name is
@@ -3801,7 +3811,6 @@ class Evaluator:
         return RefValue(self.env, node.name)
 
     def _ee_StaticAssert(self, node):
-        pos = getattr(node, "pos", None)
         for arg in node.args:
             if not _is_const_expr(arg):
                 raise TypeError(
@@ -3824,7 +3833,6 @@ class Evaluator:
         return none()
 
     def _ee_StaticAssertEq(self, node):
-        pos = getattr(node, "pos", None)
         if not _is_const_expr(node.expected) or not _is_const_expr(node.actual):
             raise TypeError(
                 "static_assert_eq requires compile-time constant expressions")
@@ -3876,7 +3884,6 @@ class Evaluator:
         return none()
 
     def _ee_UnitExpr(self, node):
-        pos = getattr(node, "pos", None)
         value = self.eval_expr(node.expr)
         from interp.units import eval_unit_formula
         unit = eval_unit_formula(node.unit_spec)
@@ -3885,11 +3892,9 @@ class Evaluator:
         return UnitValue(value, unit)
 
     def _ee_ExpErr(self, node):
-        pos = getattr(node, "pos", None)
         return ExpectedValue.err(self.eval_expr(node.value))
 
     def _ee_TryUnwrap(self, node):
-        pos = getattr(node, "pos", None)
         if not self._current_ret_type:
             raise TypeError(
                 "? operator requires enclosing function to have optional or expected return type")
@@ -3920,7 +3925,6 @@ class Evaluator:
         return val
 
     def _ee_HashLit(self, node):
-        pos = getattr(node, "pos", None)
         keys = [self.eval_expr(k) for k, _ in node.pairs]
         values = [self.eval_expr(v) for _, v in node.pairs]
         key_type, key_unit = _literal_element_type(keys)
@@ -3935,7 +3939,6 @@ class Evaluator:
         return ObjectValue(hash_value)
 
     def _ee_SetLit(self, node):
-        pos = getattr(node, "pos", None)
         values = [self.eval_expr(v) for v in node.elements]
         value_type, value_unit = _literal_element_type(values)
         set_value = SetValue(value_type=value_type)
@@ -3944,20 +3947,16 @@ class Evaluator:
         return ObjectValue(set_value)
 
     def _ee_EmptyCollectionLit(self, node):
-        pos = getattr(node, "pos", None)
         return ObjectValue(SetValue())
 
     def _ee_MultiSlice(self, node):
-        pos = getattr(node, "pos", None)
         arr_val = self.eval_expr(node.obj)
         return self._eval_multi_slice_read(arr_val, node.specs)
 
     def _ee_EnumerateExpr(self, node):
-        pos = getattr(node, "pos", None)
         raise TypeError("enumerate can only be used inside foreach")
 
     def _ee_TypeOfExpr(self, node):
-        pos = getattr(node, "pos", None)
         cached = getattr(node, "_cached_value", None)
         if cached is not None:
             return cached
@@ -3984,26 +3983,21 @@ class Evaluator:
         return result
 
     def _ee_LimitExpr(self, node):
-        pos = getattr(node, "pos", None)
         return self._eval_limit(node)
 
     def _ee_Quote(self, node):
-        pos = getattr(node, "pos", None)
         return self._eval_quote(node)
 
     def _ee_Reflect(self, node):
-        pos = getattr(node, "pos", None)
         import copy as _copy
         return SyntaxValue(node=_copy.deepcopy(node.tree))
 
     def _ee_Splice(self, node):
-        pos = getattr(node, "pos", None)
         raise TypeError(
             "$ puts a value into a piece of program, and there is no "
             "piece of program here")
 
     def _ee_SizeOfExpr(self, node):
-        pos = getattr(node, "pos", None)
         cached = getattr(node, "_cached_value", None)
         if cached is not None:
             return cached
@@ -4027,7 +4021,6 @@ class Evaluator:
         return result
 
     def _ee_ResultOfExpr(self, node):
-        pos = getattr(node, "pos", None)
         cached = getattr(node, "_cached_value", None)
         if cached is not None:
             return cached
@@ -4047,7 +4040,6 @@ class Evaluator:
         return result
 
     def _ee_UnitOfExpr(self, node):
-        pos = getattr(node, "pos", None)
         cached = getattr(node, "_cached_value", None)
         if cached is not None:
             return cached
@@ -4067,17 +4059,14 @@ class Evaluator:
         return result
 
     def _ee_UnitRefExpr(self, node):
-        pos = getattr(node, "pos", None)
         from interp.units import eval_unit_formula
         unit = eval_unit_formula(node.unit_spec)
         return UnitOfValue(unit)
 
     def _ee_LambdaExpr(self, node):
-        pos = getattr(node, "pos", None)
         return self._eval_lambda_expr(node)
 
     def _ee_TupleLit(self, node):
-        pos = getattr(node, "pos", None)
         elements = [self.eval_expr(e) for e in node.elements]
         if len(elements) > 1 and all(isinstance(e, TypeValue)
                                      for e in elements):
@@ -4089,22 +4078,18 @@ class Evaluator:
         return TupleValue(elements)
 
     def _ee_OperatorRef(self, node):
-        pos = getattr(node, "pos", None)
         return BuiltinFunc(
             node.op, 2,
             lambda args, op=node.op: self._apply_operator(op, args[0],
                                                           args[1]))
 
     def _ee_FoldExpr(self, node):
-        pos = getattr(node, "pos", None)
         return self._eval_fold(node)
 
     def _ee_MapExpr(self, node):
-        pos = getattr(node, "pos", None)
         return self._eval_map(node)
 
     def _ee_ReshapeExpr(self, node):
-        pos = getattr(node, "pos", None)
         shape = self.eval_expr(node.shape)
         data = self.eval_expr(node.data)
         return self._eval_reshape(shape, data)
@@ -4141,14 +4126,20 @@ class Evaluator:
         Returns:
             The last computed value, or a _ReturnSentinel for return statements.
         """
+        # Only a value holding an operating system resource is ever
+        # registered here, and a statement almost never produces one, so
+        # the list is not built until something needs it: _NO_TEMPS says
+        # "registration is on and nothing has come" without allocating.
         outer = self._temporaries
-        self._temporaries = []
+        self._temporaries = _NO_TEMPS
         try:
             result = self._eval_stmt(stmt)
-            self._release_temporaries(result)
+            if self._temporaries:
+                self._release_temporaries(result)
             return result
         except BaseException:
-            self._release_temporaries(None)
+            if self._temporaries:
+                self._release_temporaries(None)
             raise
         finally:
             self._temporaries = outer
@@ -4199,8 +4190,9 @@ class Evaluator:
         pos = getattr(stmt, "pos", None)
         if pos is not None:
             self._last_pos = pos
-            if self._call_stack:
-                self._call_stack[-1][1] = pos
+            cs = self._call_stack
+            if cs:
+                cs[-1][1] = pos
 
 
         handler = _STMT_DISPATCH.get(stmt.__class__)
@@ -4412,11 +4404,9 @@ class Evaluator:
 
 
     def _es_ExpectStmt(self, stmt):
-        pos = getattr(stmt, "pos", None)
         return self._eval_expect(stmt)
 
     def _es_VarDef(self, stmt):
-        pos = getattr(stmt, "pos", None)
         if stmt.type_annotation is not None:
             check_bootstrap_type(stmt.type_annotation,
                                  f"'{stmt.name}'")
@@ -4476,16 +4466,13 @@ class Evaluator:
         return none()
 
     def _es_DestructureDef(self, stmt):
-        pos = getattr(stmt, "pos", None)
         return self._eval_destructure(stmt)
 
     def _es_SumTypeDef(self, stmt):
-        pos = getattr(stmt, "pos", None)
         register_sum_type(stmt.name, stmt.alternatives)
         return none()
 
     def _es_TypeDef(self, stmt):
-        pos = getattr(stmt, "pos", None)
         target = stmt.target
         if self._generic_map and is_generic_type(target):
             target = _substitute_generics(target, self._generic_map)
@@ -4493,7 +4480,6 @@ class Evaluator:
         return none()
 
     def _es_ExprStmt(self, stmt):
-        pos = getattr(stmt, "pos", None)
         return self.eval_expr(stmt.expr)
 
     def _warn_discarded_lambda(self, value):
@@ -4520,27 +4506,21 @@ class Evaluator:
             print(f"{level}: {message}", file=_sys.stderr)
 
     def _es_IfStmt(self, stmt):
-        pos = getattr(stmt, "pos", None)
         return self._eval_if(stmt)
 
     def _es_WhileStmt(self, stmt):
-        pos = getattr(stmt, "pos", None)
         return self._eval_while(stmt)
 
     def _es_ForEachStmt(self, stmt):
-        pos = getattr(stmt, "pos", None)
         return self._eval_foreach(stmt)
 
     def _es_MatchStmt(self, stmt):
-        pos = getattr(stmt, "pos", None)
         return self._eval_match(stmt)
 
     def _es_CatchStmt(self, stmt):
-        pos = getattr(stmt, "pos", None)
         return self._eval_catch(stmt)
 
     def _es_ReturnStmt(self, stmt):
-        pos = getattr(stmt, "pos", None)
         if stmt.value is not None:
             value = self.eval_expr(stmt.value)
         else:
@@ -6236,20 +6216,38 @@ class Evaluator:
             if threaded is not None:
                 return threaded
 
-        regular_args = args[:n_regular]
-        pack_args = args[n_regular:] if has_pack else []
+        # Slicing copies, and the overwhelmingly common call has
+        # exactly the parameters it declares and no pack, where the
+        # slice would answer the list it was given.  Nothing below
+        # writes through it.
+        if has_pack:
+            regular_args = args[:n_regular]
+            pack_args = args[n_regular:]
+        else:
+            regular_args = args
+            pack_args = []
 
         resolved_params = func.params
         resolved_ret_type = func.ret_type
         resolved_pack_type = func.pack_param[1] if has_pack else None
 
-        all_typed_params = list(func.params)
-        if has_pack and func.pack_param[1] is not None:
-            all_typed_params.append(func.pack_param)
-
-        has_generics = any(
-            pt is not None and is_generic_type(pt) for _, pt in all_typed_params
-        ) or (func.ret_type is not None and is_generic_type(func.ret_type))
+        # Whether the signature mentions a generic depends on the
+        # signature and nothing else, so it is worked out at the first
+        # call and read at every one after.  It was being decided again
+        # on each of eleven million calls, over a fresh copy of the
+        # parameter list, for an answer that is no for almost every
+        # function ever written.
+        has_generics = func._has_generics
+        if has_generics is None:
+            all_typed_params = list(func.params)
+            if has_pack and func.pack_param[1] is not None:
+                all_typed_params.append(func.pack_param)
+            has_generics = any(
+                pt is not None and is_generic_type(pt)
+                for _, pt in all_typed_params
+            ) or (func.ret_type is not None
+                  and is_generic_type(func.ret_type))
+            func._has_generics = has_generics
 
         generic_map: dict[str, str] = {}
         if has_generics:
@@ -6423,17 +6421,26 @@ class Evaluator:
         returned: Value | None = None
         # Parameters hold values the caller owns, so leaving this scope
         # must not destroy them.
-        borrowed = {name for name, _ in func.params}
-        if has_pack:
-            borrowed.add(func.pack_param[0])
+        # The parameters' names, likewise settled once: the scope that
+        # is ending does not own them, and which they are cannot change
+        # between calls.
+        borrowed = func._param_names
+        if borrowed is None:
+            names = {name for name, _ in func.params}
+            if has_pack:
+                names.add(func.pack_param[0])
+            borrowed = frozenset(names)
+            func._param_names = borrowed
         try:
             self.env = call_env
             self._current_ret_type = resolved_ret_type
             self._pure_func_name = None if func.is_impure else func.name
             self._generic_map = generic_map
-            self._comptime_vars = {n for n, _ in func.params}
-            if has_pack:
-                self._comptime_vars.add(func.pack_param[0])
+            # A copy, because a foreach inside the body adds its own
+            # names to this and takes them out again; copying a
+            # frozenset is a great deal cheaper than walking the
+            # parameters to build one.
+            self._comptime_vars = set(borrowed)
             self._check_conditions(func, func.preconditions)
             result = self.eval_stmts(func.body)
             result = self._check_return_type(
@@ -6476,6 +6483,8 @@ class Evaluator:
         held = value.value if isinstance(value, SomeValue) else value
         if self._temporaries is not None and isinstance(held, ObjectValue):
             if callable(getattr(held.obj, "destroy", None)):
+                if self._temporaries is _NO_TEMPS:
+                    self._temporaries = []
                 self._temporaries.append(held.obj)
         return value
 
@@ -6516,7 +6525,7 @@ class Evaluator:
             except Exception as e:
                 self._warnings.append(f"releasing a temporary failed: {e}")
 
-    def _end_scope(self, call_env, returned, borrowed: set[str]):
+    def _end_scope(self, call_env, returned, borrowed: frozenset):
         """Destroy the resources a departing scope owns.
 
         A value that holds an operating system resource -- an open file,
@@ -6537,7 +6546,8 @@ class Evaluator:
         Args:
             call_env: the environment whose local frame is ending.
             returned: the value being handed to the caller, if any.
-            borrowed: names of bindings this scope does not own.
+            borrowed: names of bindings this scope does not own,
+                which the function it belongs to settled once.
         """
         frame = call_env._frames[-1]
         if not frame:

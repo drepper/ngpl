@@ -32,6 +32,11 @@ class Decl:
 _MISSING = object()
 
 
+# What an environment that has marked no global shares, so that a call
+# frame allocates nothing for a thing it will never use.
+_NO_MARKS: frozenset = frozenset()
+
+
 class Env:
     """Variable environment with nested scopes.
 
@@ -45,8 +50,13 @@ class Env:
         # the value, so a name's declaration lasts exactly as long as
         # the name does.
         self._decls: list[dict[str, Decl | None]] = [{}]
-        self._mutable_globals: set[str] = set()
-        self._const_globals: set[str] = set()
+        # A call frame never marks a global -- only the one environment
+        # the program was installed into does -- so both start as one
+        # shared empty set and become the frame's own the first time
+        # something is actually marked.  Two allocations on every call
+        # is two too many when calls are counted in millions.
+        self._mutable_globals = _NO_MARKS
+        self._const_globals = _NO_MARKS
         if parent is not None:
             self._parent = parent
         else:
@@ -121,14 +131,40 @@ class Env:
             KeyError: if the name is not found in any scope.
         """
         frames = self._frames
-        for i in range(len(frames) - 1, -1, -1):
-            v = frames[i].get(name, _MISSING)
+        if len(frames) == 1:
+            # A call frame that has opened no block of its own, which
+            # is most of them.
+            v = frames[0].get(name, _MISSING)
             if v is not _MISSING:
                 return v
+        else:
+            for frame in reversed(frames):
+                v = frame.get(name, _MISSING)
+                if v is not _MISSING:
+                    return v
         # Check parent environment (for imported modules).
-        if self._parent is not None:
-            return self._parent.lookup(name)
+        parent = self._parent
+        if parent is not None:
+            return parent.lookup(name)
         raise KeyError(f"undefined variable: {name}")
+
+    def mark_global(self, name: str, *, mutable: bool) -> None:
+        """Record that a global is mutable, or that it is const."""
+        if mutable:
+            if type(self._mutable_globals) is not set:
+                self._mutable_globals = set()
+            self._mutable_globals.add(name)
+        else:
+            if type(self._const_globals) is not set:
+                self._const_globals = set()
+            self._const_globals.add(name)
+
+    def unmark_global(self, name: str) -> None:
+        """Forget whatever was recorded about a global, as a redefinition does."""
+        if type(self._const_globals) is set:
+            self._const_globals.discard(name)
+        if type(self._mutable_globals) is set:
+            self._mutable_globals.discard(name)
 
     def has_local(self, name: str) -> bool:
         """Check if the name is defined in the current (innermost) frame."""
