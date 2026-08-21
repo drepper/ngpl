@@ -3746,9 +3746,9 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
         // left out --build, so the refusal says so rather than leaving
         // them to work it out.
         let why : str = "a @build recipe says how to build a program and is not one; --build reads it" if #a.builds > 0 else "no @start function and no @test; nothing would run"
-        c.diags.push(Diag{line: 1, col: 1, msg: why})
+        c.diags.push(Diag{line: LINE_FIRST, col: COL_FIRST, msg: why})
     if starts > 1:
-        c.diags.push(Diag{line: 1, col: 1, msg: "more than one @start function"})
+        c.diags.push(Diag{line: LINE_FIRST, col: COL_FIRST, msg: "more than one @start function"})
     if #a.fns > 0:
         foreach i := 0…#a.fns - 1:
             if not c.fn_is_generic(@dropunit(i)):

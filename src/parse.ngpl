@@ -252,9 +252,17 @@ impl Parser:
         let base : mut i64 = base0
         if self.peek() = TK_CURRENCY:
             self.pos ← self.pos + 1
-            let utok : i64 = self.pos
-            let uname := self.ttext(utok)
-            _ ← self.eat_word("the unit's name")
+            // ¤name for a measure the language knows and ¤"name" for
+            // one the file defined, the same two spellings a binding
+            // takes -- a return type and a field are written the way a
+            // parameter is or they are not written the same language
+            let uname : mut str = ""
+            if self.peek() = TK_STR:
+                uname ← self.toks.strs[self.toks.val[self.pos × 1¤ptrdiff] × 1¤ptrdiff]
+                self.pos ← self.pos + 1
+            else:
+                uname ← self.ttext(self.pos)
+                _ ← self.eat_word("the unit's name")
             if not ty_is_int(base):
                 self.err("only an integer carries a unit")
             else:
@@ -445,6 +453,26 @@ impl Parser:
             if self.unames[i] = name:
                 return @dropunit(i)
         ⁻1
+
+    // A measure written before the type measures what an array holds,
+    // the way it measures a bare number: `xs ¤meter : i64[]` is an
+    // array of lengths and not an array that is itself a length.  A
+    // binding, a parameter and a field all write it the same way, so
+    // they all settle it here.  `what` names the thing for the
+    // complaint, since a field's reads better than a binding's.
+    fn unit_on_type(&mut self, ty : i64, u : i64, what : str) → i64:
+        if ty_is_arr(ty) and not ty_is_farr(ty) and ty_is_int(ty_elem(ty)):
+            if ty_unit(ty_elem(ty)) ≠ 0 and ty_unit(ty_elem(ty)) ≠ u:
+                self.err("the name and the type say different units")
+                return ty
+            return mk_aty(ty_with_unit(ty_elem(ty), u))
+        if not ty_is_int(ty):
+            self.err("only an integer" ⧺ what ⧺ " carries a unit")
+            return ty
+        if ty_unit(ty) ≠ 0 and ty_unit(ty) ≠ u:
+            self.err("the name and the type say different units")
+            return ty
+        ty_with_unit(ty, u)
 
     fn parse_name_unit(&mut self) → i64:
         if self.peek() ≠ TK_CURRENCY:
@@ -1240,20 +1268,7 @@ impl Parser:
         let ty0 : i64 = self.parse_type(false)
         let ty : mut i64 = ty0
         if u ≠ UNIT_NONE:
-            // a measure written by the name measures what an array
-            // holds, as it measures a bare number: 'let d ¤meter :
-            // i64[]' is an array of lengths
-            if ty_is_arr(ty) and not ty_is_farr(ty) and ty_is_int(ty_elem(ty)):
-                if ty_unit(ty_elem(ty)) ≠ 0 and ty_unit(ty_elem(ty)) ≠ u:
-                    self.err("the name and the type say different units")
-                else:
-                    ty ← mk_aty(ty_with_unit(ty_elem(ty), u))
-            elif not ty_is_int(ty):
-                self.err("only an integer carries a unit")
-            elif ty_unit(ty) ≠ 0 and ty_unit(ty) ≠ u:
-                self.err("the name and the type say different units")
-            else:
-                ty ← ty_with_unit(ty, u)
+            ty ← self.unit_on_type(ty, u, "")
         _ ← self.eat(TK_EQ, "'=' and the initial value")
         let init : i64 = self.parse_expr()
         self.end_stmt()
@@ -1581,10 +1596,8 @@ impl Parser:
                         ty0 ← ty0a + 262144 × 3
                 let ty : mut i64 = ty0
                 if u ≠ UNIT_NONE:
-                    if not ty_is_int(ty_strip_ref(ty)):
-                        self.err("only an integer carries a unit")
-                    else:
-                        ty ← ty_with_unit(ty_strip_ref(ty), u) + 262144 × ty_ref_kind(ty)
+                    let rk : i64 = ty_ref_kind(ty)
+                    ty ← self.unit_on_type(ty_strip_ref(ty), u, "") + 262144 × rk
                 if ty_is_tup(ty_strip_ref(ty)):
                     self.err("a core-2 tuple is returned and taken apart; it does not travel as a parameter")
                 ptypes.push(ty)
@@ -1817,12 +1830,7 @@ impl Parser:
             _ ← self.eat(TK_COLON, "':' and the field's type")
             let ty : mut i64 = self.parse_type(false)
             if fu ≠ 0:
-                if not ty_is_int(ty):
-                    self.err("only an integer field carries a unit")
-                elif ty_unit(ty) ≠ 0:
-                    self.err("one unit per field: it is stated after the name or after the type, not both")
-                else:
-                    ty ← ty_with_unit(ty, fu)
+                ty ← self.unit_on_type(ty, fu, " field")
             if ty_is_tup(ty):
                 self.err("a tuple inside a struct is not core-2 yet")
             ftypes.push(ty)
@@ -2106,7 +2114,7 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
             // nothing half-built is left where the recipe can call it
             if lenient and @dropunit(#p.diags) > d0 and @dropunit(#p.builds) = b0:
                 while @dropunit(#p.diags) > d0:
-                    _ ← p.diags.pop() ?? (Diag{line: 1, col: 1, msg: ""})
+                    _ ← p.diags.pop() ?? (Diag{line: LINE_FIRST, col: COL_FIRST, msg: ""})
                 while @dropunit(#p.fns) > f0:
                     _ ← p.fns.pop() ?? p.fns[0 × 1¤ptrdiff]
                 while @dropunit(#p.globals) > g0:

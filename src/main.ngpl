@@ -22,9 +22,10 @@ fn dump_tokens(t : Toks, src : byte[], files : Files):
     foreach i := 0…#t.kind - 1:
         let k : i64 = t.kind[i]
         let text := run_str(src, t.off[i], t.len[i])
-        let f : i64 = file_of(starts, t.line[i])
-        std.println("{}:{}:{} {} {} '{}' {}", files.names[f × 1¤ptrdiff],
-                    t.line[i] - starts[f × 1¤ptrdiff] + 1, t.col[i], k,
+        let f ¤ptrdiff : i64 = file_of(starts, t.line[i])
+        std.println("{}:{}:{} {} {} '{}' {}", files.names[f],
+                    @dropunit(t.line[i] - starts[f] + 1),
+                    @dropunit(t.col[i]), k,
                     tok_name(k), text, t.val[i])
 
 @impure
@@ -35,23 +36,27 @@ fn report(diags : Diag[], files : Files, as_json : bool, src : byte[]):
     foreach d := diags:
         // the excerpt is taken with the line counted over the whole
         // text, which is what it is an index into; the file and the
-        // line within it are what get printed
-        let k : i64 = file_of(starts, d.line)
-        let file : str = files.names[k × 1¤ptrdiff]
-        let ln : i64 = d.line - starts[k × 1¤ptrdiff] + 1
+        // line within it are what get printed.  A measured value shows
+        // its measure when it is printed, and a diagnostic says a
+        // number, so each parts with its measure here and nowhere
+        // earlier -- the arithmetic above is checked, the printing is
+        // what it always was.
+        let k ¤ptrdiff : i64 = file_of(starts, d.line)
+        let file : str = files.names[k]
+        let ln ¤"line" : i64 = d.line - starts[k] + 1
         if as_json:
             std.println("{}\"file\": \"{}\", \"line\": {}, \"col\": {}, \"severity\": \"error\", \"message\": \"{}\"{}",
-                        "{", file, ln, d.col, d.msg, "}")
+                        "{", file, @dropunit(ln), @dropunit(d.col), d.msg, "}")
         else:
-            std.println("{}:{}:{}: error: {}", file, ln, d.col, d.msg)
-            let num := i64_str(ln)
+            std.println("{}:{}:{}: error: {}", file, @dropunit(ln), @dropunit(d.col), d.msg)
+            let num := i64_str(@dropunit(ln))
             let gut : mut str = ""
             let g ¤ptrdiff : mut i64 = 0
             while g < #num:
                 gut ← gut ⧺ " "
                 g ← g + 1
             let pad : mut str = ""
-            let c : mut i64 = 1
+            let c ¤"col" : mut i64 = 1
             while c < d.col:
                 pad ← pad ⧺ " "
                 c ← c + 1
@@ -347,11 +352,11 @@ fn main() → u8:
     // what is needed to give a diagnostic back the file it came from.
     let alloc := std.arena.allocator()
     let src : mut byte[] = []
-    let offs : mut i64[] = []
+    let offs ¤byte : mut i64[] = []
     foreach nm := inputs:
         let file := std.fs.cwd().open_file(nm) ?? missing_input(nm)
         let text := file.read_file(alloc)
-        offs.push(@dropunit(#src))
+        offs.push(#src)
         src ← src ⧺ text
         // a file ends its last line before the next one begins, or the
         // two would run together into a line spanning the boundary

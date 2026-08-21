@@ -2,9 +2,15 @@
 // Diagnostics
 // ===========================================================================
 
+// Where in the source something is.  A line number counts lines and a
+// column counts columns, which are different things from each other and
+// from the byte offset the lexer walks by, so each says which it is.
+unit line
+unit col
+
 struct Diag:
-    line : i64
-    col : i64
+    line ¤"line" : i64
+    col ¤"col" : i64
     msg : str
 
 // Where the sources begin in the one text they were read into.  A
@@ -18,25 +24,25 @@ struct Diag:
 // number costs a walk of the text.  The walk is done once, and only
 // where a diagnostic is actually being written.
 struct Files:
-    names : str[]    // as named on the command line, in order
-    off : i64[]      // the byte each one begins at
+    names : str[]
+    off ¤byte : i64[]    // the byte each one begins at
 
 // the line each source file begins on, counted from 1 over the whole
 @pre(#f.names > 0 and #f.names = #f.off)
 @post(r: #r = #f.names)
-fn file_lines(f : Files, src : byte[]) → i64[]:
-    let n : i64 = @dropunit(#src)
-    let nf : i64 = @dropunit(#f.off)
-    let out : mut i64[] = []
-    let line : mut i64 = 1
-    let i : mut i64 = 0
-    let k : mut i64 = 0
-    let one : i64 = 1
-    let zero : i64 = 0
+fn file_lines(f : Files, src : byte[]) → i64 ¤"line"[]:
+    let n ¤byte : i64 = #src
+    let nf ¤ptrdiff : i64 = #f.off
+    let out ¤"line" : mut i64[] = []
+    let line ¤"line" : mut i64 = 1
+    let i ¤byte : mut i64 = 0
+    let k ¤ptrdiff : mut i64 = 0
+    let one ¤"line" : i64 = 1
+    let zero ¤"line" : i64 = 0
     while k < nf:
-        let want : i64 = f.off[k × 1¤ptrdiff]
+        let want ¤byte : i64 = f.off[k]
         while i < want and i < n:
-            line ← line + (one if src[i × 1¤byte] = 10 else zero)
+            line ← line + (one if src[i] = 10 else zero)
             i ← i + 1
         out.push(line)
         k ← k + 1
@@ -44,25 +50,27 @@ fn file_lines(f : Files, src : byte[]) → i64[]:
 
 // which file line `want` came from, as an index into the names
 @pre(want >= 1 and #starts > 0)
-@post(r: r >= 0 and r < @dropunit(#starts))
-fn file_of(starts : i64[], want : i64) → i64:
+@post(r: r >= 0 and r < #starts)
+fn file_of(starts ¤"line" : i64[], want ¤"line" : i64) → i64 ¤ptrdiff:
     // the file a line belongs to is the last one that begins at or
     // before it; a compilation is a handful of files, so the walk back
     // finds it in fewer steps than a search would take to set up
-    let k : mut i64 = @dropunit(#starts) - 1
-    while k > 0 and starts[k × 1¤ptrdiff] > want:
+    let k ¤ptrdiff : mut i64 = #starts - 1
+    while k > 0 and starts[k] > want:
         k ← k - 1
     k
 
 // the text of source line n, decoded, for the excerpt under a diagnostic
 @pre(want >= 1)
-fn line_str(src : byte[], want : i64) → str:
-    let n : i64 = @dropunit(#src)
-    let line : mut i64 = 1
-    let i : mut i64 = 0
+fn line_str(src : byte[], want ¤"line" : i64) → str:
+    let n ¤byte : i64 = #src
+    let line ¤"line" : mut i64 = 1
+    let i ¤byte : mut i64 = 0
     let out : mut str = ""
     while i < n:
-        let b : i64 = src[i × 1¤byte]
+        // the value of a byte, which is a code and not a count of
+        // anything, so it carries no measure
+        let b : i64 = src[i]
         if b = 10:
             if line = want:
                 return out
@@ -75,19 +83,18 @@ fn line_str(src : byte[], want : i64) → str:
             out ← out ⧺ b.chr()
             i ← i + 1
         elif b < 224:
-            let b1 : i64 = src[(i + 1) × 1¤byte] if i + 1 < n else 0
+            let b1 : i64 = src[i + 1] if i + 1 < n else 0
             out ← out ⧺ ((b - 192) × 64 + (b1 & 63)).chr()
             i ← i + 2
         elif b < 240:
-            let b1 : i64 = src[(i + 1) × 1¤byte] if i + 1 < n else 0
-            let b2 : i64 = src[(i + 2) × 1¤byte] if i + 2 < n else 0
+            let b1 : i64 = src[i + 1] if i + 1 < n else 0
+            let b2 : i64 = src[i + 2] if i + 2 < n else 0
             out ← out ⧺ ((b - 224) × 4096 + (b1 & 63) × 64 + (b2 & 63)).chr()
             i ← i + 3
         else:
-            let b1 : i64 = src[(i + 1) × 1¤byte] if i + 1 < n else 0
-            let b2 : i64 = src[(i + 2) × 1¤byte] if i + 2 < n else 0
-            let b3 : i64 = src[(i + 3) × 1¤byte] if i + 3 < n else 0
+            let b1 : i64 = src[i + 1] if i + 1 < n else 0
+            let b2 : i64 = src[i + 2] if i + 2 < n else 0
+            let b3 : i64 = src[i + 3] if i + 3 < n else 0
             out ← out ⧺ ((b - 240) × 262144 + (b1 & 63) × 4096 + (b2 & 63) × 64 + (b3 & 63)).chr()
             i ← i + 4
     out
-

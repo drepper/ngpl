@@ -40,6 +40,20 @@ The Compiler
     for a module system, not the thing itself.  Note the order of the list is significant --
     an enum and a unit must be declared before use, though a struct need not be.
 
+[ ] a type carrying a measure the file defined prints as '¤unit#27' rather than '¤"line"'.
+    type_name() knows only the measures the language ships with; the ones a program declares
+    live in the parser's umarks and the Ast's, which type_name -- a free function taken by 122
+    call sites with nothing but a type code -- cannot see.  It did not matter while custom
+    measures were three names in the ELF writer; now that the compiler's own source is measured
+    throughout, every type error involving one reads worse than it should.  Threading the marks
+    to the checker's derr paths is the smallest fix that reaches what users see.
+
+[ ] a literal cannot carry a measure the file defined: '3¤"line"' is refused by the lexer,
+    which settles a literal's measure before any 'unit' line is read and so knows only the
+    built-in ones.  The interpreter accepts it.  The workaround is a named constant per value
+    (LINE_FIRST, COL_ONE), which is why those exist; carrying the suffix through the token to
+    the parser would remove the need.
+
 [ ] the compiler's own refusals have no home in the suite.  tests/compile/ requires every
     program to compile and tests/output/ drives the interpreter, so what ngplc says no to --
     a std.build outside a recipe, a recipe reaching past the subset, two @build functions --

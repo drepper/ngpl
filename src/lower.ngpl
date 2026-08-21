@@ -82,12 +82,14 @@ impl Lower:
         run_str(self.src, self.toks.off[tok × 1¤ptrdiff],
                 self.toks.len[tok × 1¤ptrdiff])
 
-    fn tok_line(&self, tok : i64) → i64:
+    fn tok_line(&self, tok : i64) → i64 ¤"line":
         self.toks.line[tok × 1¤ptrdiff]
 
     // what was decided and where, for the log a program can read
-    fn decide(&mut self, line : i64, what : str, detail : str):
-        self.dlog.push("{\"function\": \"" ⧺ self.cur_fname ⧺ "\", \"line\": " ⧺ i64_str(line) ⧺ ", \"decision\": \"" ⧺ what ⧺ "\"" ⧺ detail ⧺ "}")
+    fn decide(&mut self, line ¤"line" : i64, what : str, detail : str):
+        // the log says a number, as a diagnostic does, so the measure
+        // is parted with here and nowhere earlier
+        self.dlog.push("{\"function\": \"" ⧺ self.cur_fname ⧺ "\", \"line\": " ⧺ i64_str(@dropunit(line)) ⧺ ", \"decision\": \"" ⧺ what ⧺ "\"" ⧺ detail ⧺ "}")
 
     fn tof(&self, id : i64) → i64:
         self.ntype[id × 1¤ptrdiff]
@@ -1407,7 +1409,7 @@ impl Lower:
         d
 
     fn lower_assert(&mut self, nid : i64, tok : i64, args_off : i64, is_eq : bool):
-        let line : i64 = self.tok_line(tok)
+        let line ¤"line" : i64 = self.tok_line(tok)
         let lok : i64 = self.label()
         if is_eq:
             let x : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
@@ -1426,16 +1428,16 @@ impl Lower:
                 c ← self.tmp()
                 self.ir(IR_CEQ, av, bv, 0, c, width_of(self.tof(x)))
             self.ir(IR_JNZ, c, lok, 0, 0, 0)
-            let m : i64 = self.intern("assertion does not hold (line " ⧺ i64_str(line) ⧺ ")\n")
+            let m : i64 = self.intern("assertion does not hold (line " ⧺ i64_str(@dropunit(line)) ⧺ ")\n")
             self.ir(IR_ABORT, m, 0, 0, 0, 0)
         else:
             let cv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
             self.ir(IR_JNZ, cv, lok, 0, 0, 0)
             let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
-            let msg : mut str = "assertion does not hold (line " ⧺ i64_str(line) ⧺ ")\n"
+            let msg : mut str = "assertion does not hold (line " ⧺ i64_str(@dropunit(line)) ⧺ ")\n"
             if argc = 2:
                 let marg : i64 = self.a.extra[(args_off + 2) × 1¤ptrdiff]
-                msg ← "assertion does not hold (line " ⧺ i64_str(line) ⧺ "): " ⧺ self.a.strs[self.a.na[marg × 1¤ptrdiff] × 1¤ptrdiff] ⧺ "\n"
+                msg ← "assertion does not hold (line " ⧺ i64_str(@dropunit(line)) ⧺ "): " ⧺ self.a.strs[self.a.na[marg × 1¤ptrdiff] × 1¤ptrdiff] ⧺ "\n"
             let m : i64 = self.intern(msg)
             self.ir(IR_ABORT, m, 0, 0, 0, 0)
         self.ir(IR_LABEL, lok, 0, 0, 0, 0)
@@ -1955,7 +1957,7 @@ impl Lower:
             self.ir(IR_MOV, sv, 0, 0, dirv, 0)
             let lz : i64 = self.label()
             self.ir(IR_JNZ, dirv, lz, 0, 0, 0)
-            let m : i64 = self.intern("a foreach step of zero never arrives (line " ⧺ i64_str(self.tok_line(tok)) ⧺ ")\n")
+            let m : i64 = self.intern("a foreach step of zero never arrives (line " ⧺ i64_str(@dropunit(self.tok_line(tok))) ⧺ ")\n")
             self.ir(IR_ABORT, m, 0, 0, 0, 0)
             self.ir(IR_LABEL, lz, 0, 0, 0, 0)
         self.lower_range_loop(sid, lov, hiv, dirv, body, ret_ty)
@@ -2018,7 +2020,7 @@ impl Lower:
             self.ir(IR_FLD, rv, 2, 0, hi9, 0)
             let lz9 : i64 = self.label()
             self.ir(IR_JNZ, st9, lz9, 0, 0, 0)
-            let m9 : i64 = self.intern("range step must not be zero (line " ⧺ i64_str(self.tok_line(tok)) ⧺ ")\n")
+            let m9 : i64 = self.intern("range step must not be zero (line " ⧺ i64_str(@dropunit(self.tok_line(tok))) ⧺ ")\n")
             self.ir(IR_ABORT, m9, 0, 0, 0, 0)
             self.ir(IR_LABEL, lz9, 0, 0, 0, 0)
             self.lower_range_loop(sid, lo9, hi9, st9, body, ret_ty)

@@ -207,10 +207,10 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     assert(@dropunit(#data) = alloc_off + 16, "the data segment is as long as it was planned")
     let cdiags : mut Diag[] = []
     if em.max_frame > guard_size:
-        cdiags.push(Diag{line: 1, col: 1,
+        cdiags.push(Diag{line: LINE_FIRST, col: COL_FIRST,
                          msg: "a function claims " ⧺ i64_str(em.max_frame) ⧺ " bytes of stack, more than the " ⧺ i64_str(guard_size) ⧺ "-byte guard below it, which it could step over; raise --guard-size"})
     if em.max_frame >= stack_size:
-        cdiags.push(Diag{line: 1, col: 1,
+        cdiags.push(Diag{line: LINE_FIRST, col: COL_FIRST,
                          msg: "a function claims " ⧺ i64_str(em.max_frame) ⧺ " bytes of stack, and the whole stack is " ⧺ i64_str(stack_size) ⧺ "; raise --stack-size"})
     // the symbols, in address order: the entry point, the functions,
     // the synthetics, and the runtime, which here is emitted in id

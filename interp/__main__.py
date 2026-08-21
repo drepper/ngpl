@@ -2886,9 +2886,19 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                     raise TypeError(
                         f"in {defn.struct_name}.{method_def.name}: "
                         f"unknown return type '{method_def.ret_type}'")
+                # Everything the definition said about its parameters
+                # reaches the value, as it does for a function that is
+                # not a method: a measure on a parameter, a borrow, a
+                # pack, and whether the method may be replaced.  These
+                # were dropped here, so a method's parameter silently
+                # lost the unit it was declared with.
                 fv = FuncValue(method_def.name, method_def.params,
                                method_def.body, env, method_def.ret_type,
+                               method_def.is_replaceable,
+                               method_def.pack_param,
+                               method_def.param_units,
                                is_impure=method_def.is_impure,
+                               param_refs=method_def.param_refs,
                                param_muts=method_def.param_muts,
                                ret_unit=method_def.ret_unit,
                                is_listable=method_def.is_listable,
