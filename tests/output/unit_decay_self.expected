@@ -1,0 +1,7 @@
+error: a measure cannot stand in for itself, however far round it goes: a → a
+  --> tests/output/unit_decay_self.ngpl:3:1
+    |
+  3 | unit a -> a
+    | ^^^^
+  4 | 
+    |

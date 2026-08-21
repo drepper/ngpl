@@ -2567,28 +2567,50 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
     # The measures a file names for itself register first: a global's
     # binding or a struct's field may state one, and both are installed
     # in the passes below.
+    # Every measure is registered before any is asked what it stands in
+    # for, so one may stand in for another declared further down the
+    # file -- as a struct may be named before it is declared.
     for defn in definitions:
         if isinstance(defn, ASTUnitDef):
             from interp.units import eval_unit_formula, register_user_unit, Unit
             from fractions import Fraction
-            decay = None
-            if defn.decay is not None:
-                # A measure can only stand in for one that has been
-                # named, and a name that has not is a mistake to report
-                # where it is written rather than a traceback.
-                try:
-                    decay = eval_unit_formula(_ast.UnitName(defn.decay))
-                except TypeError:
-                    raise DefinitionError(
-                        f"'{defn.decay}' is no measure this file knows, so "
-                        f"'{defn.name}' cannot stand in for it",
-                        _node_pos(defn)) from None
             if defn.formula is not None:
                 unit = eval_unit_formula(defn.formula)
-                unit = Unit(unit.components, unit.factor, defn.name, decay)
+                unit = Unit(unit.components, unit.factor, defn.name)
             else:
-                unit = Unit({defn.name: 1}, Fraction(1), defn.name, decay)
+                unit = Unit({defn.name: 1}, Fraction(1), defn.name)
             register_user_unit(defn.name, unit)
+
+    for defn in definitions:
+        if isinstance(defn, ASTUnitDef) and defn.decay is not None:
+            from interp.units import eval_unit_formula, USER_UNITS
+            try:
+                decay = eval_unit_formula(_ast.UnitName(defn.decay))
+            except TypeError:
+                raise DefinitionError(
+                    f"'{defn.decay}' is no measure this file knows, so "
+                    f"'{defn.name}' cannot stand in for it",
+                    _node_pos(defn)) from None
+            USER_UNITS[defn.name].decay = decay
+
+    # Standing in for something is an order, and an order has no
+    # circles: a measure that reaches itself by standing in for things
+    # says nothing about which of them is the wider.
+    for defn in definitions:
+        if isinstance(defn, ASTUnitDef) and defn.decay is not None:
+            from interp.units import USER_UNITS
+            chain = [defn.name]
+            step = USER_UNITS[defn.name].decay
+            while step is not None:
+                chain.append(step.display_name)
+                if step.display_name == defn.name:
+                    raise DefinitionError(
+                        "a measure cannot stand in for itself, however far "
+                        "round it goes: " + " → ".join(chain),
+                        _node_pos(defn))
+                if len(chain) > len(USER_UNITS) + 2:
+                    break
+                step = step.decay
 
     for defn in definitions:
         if isinstance(defn, ASTEnumDef):

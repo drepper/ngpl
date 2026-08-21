@@ -20,6 +20,8 @@ struct Parser:
     tatypes : i64[]
     unames : str[]       // the measures this file knows, builtin then defined
     udecay : i64[]       // … and what each may stand in for
+    udname : str[]       // … as written, until the file has been read
+    udtok : i64[]        // … and where it was written
     umarks : str[]       // … and how each one prints
     snames : str[]       // struct names, pre-scanned so a struct may
                          // be written below whatever names it
@@ -1786,6 +1788,45 @@ impl Parser:
     // others -- a ratio of them, or a product -- is not core-2 yet:
     // what core-2 does with a measure is keep it apart from the
     // others, and that needs only its name.
+    // What each measure stands in for, settled once the whole file has
+    // been read so that one may name another declared further down.
+    //
+    // Standing in for something is an order, and an order has no
+    // circles: a measure that reaches itself by standing in for things
+    // says nothing about which of them is the wider.  A circle is
+    // looked for here because this is the first moment it could exist
+    // -- while the names were being read, the one closing it had not
+    // been written yet.
+    fn resolve_decays(&mut self):
+        let n : i64 = @dropunit(#self.unames)
+        let i : mut i64 = 0
+        while i < n:
+            let want : str = self.udname[i × 1¤ptrdiff]
+            if want ≠ "":
+                let d : i64 = self.unit_index(want)
+                if d = ⁻1:
+                    self.poisoned ← false
+                    self.err_at(self.udtok[i × 1¤ptrdiff], "'" ⧺ want ⧺ "' is no measure this file knows, so '" ⧺ self.unames[i × 1¤ptrdiff] ⧺ "' cannot stand in for it")
+                else:
+                    self.udecay[i × 1¤ptrdiff] ← d
+            i ← i + 1
+        let j : mut i64 = 0
+        while j < n:
+            if self.udecay[j × 1¤ptrdiff] ≠ 0:
+                let chain : mut str = self.unames[j × 1¤ptrdiff]
+                let step : mut i64 = self.udecay[j × 1¤ptrdiff]
+                let seen : mut i64 = 0
+                while step ≠ 0 and seen <= n:
+                    chain ← chain ⧺ " → " ⧺ self.unames[step × 1¤ptrdiff]
+                    if step = j:
+                        self.poisoned ← false
+                        self.err_at(self.udtok[j × 1¤ptrdiff], "a measure cannot stand in for itself, however far round it goes: " ⧺ chain)
+                        step ← 0
+                    else:
+                        step ← self.udecay[step × 1¤ptrdiff]
+                        seen ← seen + 1
+            j ← j + 1
+
     fn parse_unit_def(&mut self):
         self.pos ← self.pos + 1
         let name_tok : i64 = self.pos
@@ -1804,19 +1845,23 @@ impl Parser:
         // ptrdiff is wanted.  It stays its own measure -- a node id is
         // still not one -- and the way back is not open: what stands in
         // for a thing is not the thing.
-        let decay : mut i64 = 0
+        //
+        // The name is only written down here.  What it refers to is
+        // settled once the whole file has been read, so a measure may
+        // stand in for one declared further down, as a struct may be
+        // named before it is declared.
+        let dname : mut str = ""
+        let dtok : mut i64 = 0
         if self.peek() = TK_ARROW:
             self.pos ← self.pos + 1
-            let dtok : i64 = self.pos
-            let dname := self.ttext(dtok)
+            dtok ← self.pos
+            dname ← self.ttext(dtok)
             _ ← self.eat_name("the measure this one stands in for")
-            decay ← self.unit_index(dname)
-            if decay = ⁻1:
-                self.err_at(dtok, "'" ⧺ dname ⧺ "' is no measure this file knows, so '" ⧺ name ⧺ "' cannot stand in for it")
-                return
         self.unames.push(name)
         self.umarks.push(name)
-        self.udecay.push(decay)
+        self.udecay.push(0)
+        self.udname.push(dname)
+        self.udtok.push(dtok)
         self.end_stmt()
 
     // type Name = T: a name standing for a type, and nothing more --
@@ -2109,6 +2154,8 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
                                  tanames: [], tatypes: [],
                                  unames: unit_names(), umarks: unit_marks(),
                                  udecay: unit_decays(),
+                                 udname: unit_none_names(),
+                                 udtok: unit_decays(),
                                  snames: [], tts: [], ttl: [], tte: [],
                                  fae: [], fas: [],
                                  mel: [], mrr: [], mcc: [], mdd: [], minner: [],
@@ -2159,6 +2206,7 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
                         break
                     else:
                         p.pos ← p.pos + 1
+    p.resolve_decays()
     if #p.diags = 0 and not lenient:
         // the type table was built from the pre-scan; a parse that
         // succeeded must have seen the same structs in the same order.

@@ -1,0 +1,7 @@
+error: 'nosuch' is no measure this file knows, so 'a' cannot stand in for it
+  --> tests/output/unit_decay_unknown.ngpl:3:1
+    |
+  3 | unit a -> nosuch
+    | ^^^^
+  4 | 
+    |

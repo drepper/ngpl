@@ -76,6 +76,11 @@ fn unit_decays() → i64[]:
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
+// nothing written beside the measures the language ships with
+fn unit_none_names() → str[]:
+    ["", "", "", "", "", "", "", "", "", "", "", "", "", "",
+     "", "", "", "", "", "", "", "", "", "", "", "", ""]
+
 fn unit_marks() → str[]:
     ["", "ptrdiff", "B", "m", "s", "kg", "count",
      "distance", "km", "cm", "mm", "ms",

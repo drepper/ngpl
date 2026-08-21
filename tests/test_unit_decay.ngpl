@@ -17,6 +17,13 @@ unit tok -> ptrdiff
 unit node → ptrdiff          // → and -> say the same
 unit height
 
+// Standing in for something is followed as far as it goes, and the
+// measure named may be declared further down -- as a struct may be
+// named before it is declared.  A line number stands in for a source
+// position, which stands in for a ptrdiff, so a line number subscripts.
+unit lineno -> srcpos
+unit srcpos -> ptrdiff
+
 // ---------------------------------------------------------------------
 // What standing in for ptrdiff buys
 // ---------------------------------------------------------------------
@@ -104,6 +111,39 @@ fn error_a_measure_that_stands_in_for_nothing():
     let xs : i64[] = [10, 20, 30]
     let h ¤"height" : i64 = 1
     _ ← xs[h]
+
+// ---------------------------------------------------------------------
+// Standing in for something, as far as it goes
+// ---------------------------------------------------------------------
+
+@test
+fn test_a_chain_reaches_the_end():
+    let xs : i64[] = [10, 20, 30]
+    let l ¤"lineno" : i64 = 2
+    assert_eq(xs[l], 30)
+
+fn wants_srcpos(p ¤"srcpos" : i64) → i64:
+    @dropunit(p)
+
+@test
+fn test_a_chain_reaches_the_middle():
+    let l ¤"lineno" : i64 = 4
+    assert_eq(wants_srcpos(l), 4)
+
+fn wants_lineno(l ¤"lineno" : i64) → i64:
+    @dropunit(l)
+
+// Still one-way, however long the chain: what a line number stands in
+// for does not stand in for a line number.
+@expect error "lineno"
+fn error_a_chain_is_still_one_way():
+    let p ¤"srcpos" : i64 = 1
+    _ ← wants_lineno(p)
+
+// A circle is no order at all, and is refused where it is written,
+// which is before anything runs; tests/output/unit_decay_circle,
+// unit_decay_self and unit_decay_unknown hold those refusals, since a
+// file carrying one has nothing this suite could run.
 
 @start
 @impure

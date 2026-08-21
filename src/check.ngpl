@@ -2842,18 +2842,22 @@ impl Checker:
     // Whether a value measured `u` may go where `want` is asked for.
     // Its own measure always may; beyond that the decay chain is
     // walked, since `unit tok → ptrdiff` says a token index goes
-    // wherever a ptrdiff does.  The way back is not open, and two that
-    // stand in for the same thing do not stand in for each other.  The
-    // walk is bounded: a declaration may only name a measure already
-    // declared, so a chain cannot close on itself.
+    // wherever a ptrdiff does, and as far as it goes, since a measure
+    // may stand in for one that stands in for a third.  The way back is
+    // not open, and two that stand in for the same thing do not stand
+    // in for each other.  The walk ends because a circle among the
+    // declarations is refused where they are written.
     @post(r: r or u ≠ want)
     fn stands_for(&self, u : i64, want : i64) → bool:
         if u = want:
             return true
         let n : i64 = @dropunit(#self.a.udecay)
+        // A file names at most 125 measures and a circle among them is
+        // refused where they are declared, so a chain is shorter than
+        // this; the bound is a backstop and not the rule.
         let step : mut i64 = u
         let seen : mut i64 = 0
-        while seen < 64:
+        while seen < 128:
             if step <= 0 or step >= n:
                 return false
             step ← self.a.udecay[step × 1¤ptrdiff]

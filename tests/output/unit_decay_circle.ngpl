@@ -1,0 +1,13 @@
+// Standing in for something is an order, and an order has no circles.
+// A measure that reaches itself by standing in for things says nothing
+// about which of them is the wider, so the circle is refused where it
+// is written.
+
+unit a -> b
+unit b -> c
+unit c -> a
+
+@start
+@impure
+fn main():
+    std.println("unreached")

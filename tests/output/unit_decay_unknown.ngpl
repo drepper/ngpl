@@ -1,0 +1,8 @@
+// A measure can only stand in for one the file names.
+
+unit a -> nosuch
+
+@start
+@impure
+fn main():
+    std.println("unreached")

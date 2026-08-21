@@ -1,0 +1,8 @@
+// The shortest circle there is.
+
+unit a -> a
+
+@start
+@impure
+fn main():
+    std.println("unreached")

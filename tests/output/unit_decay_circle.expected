@@ -1,0 +1,7 @@
+error: a measure cannot stand in for itself, however far round it goes: a → b → c → a
+  --> tests/output/unit_decay_circle.ngpl:6:1
+    |
+  6 | unit a -> b
+    | ^^^^
+  7 | unit b -> c
+    |

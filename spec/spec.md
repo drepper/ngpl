@@ -8555,7 +8555,13 @@ Three things the relation does **not** do, each on purpose:
 
 Arithmetic keeps the more specific measure where it can: `tok + 1` is a `tok`, and where two measures meet and one stands in for the other, the answer carries the one stood in for.  Two that stand in for the same third thing do not meet at all.
 
-The measure named must already be declared, so the relation cannot close on itself.  It is followed as far as it goes: if `a` stands in for `b` and `b` for `c`, then `a` goes where `c` is wanted.
+The relation is followed as far as it goes: if `a` stands in for `b` and `b` for `c`, then `a` goes where `c` is wanted.  The measure named may be declared further down the file, as a struct may be named before it is declared.
+
+Standing in for something is an order, and an order has no circles.  A measure that reaches itself — `unit a → b`, `unit b → a`, or the shorter `unit a → a` — says nothing about which of them is the wider, and is refused where it is written, naming the whole way round:
+
+```
+error: a measure cannot stand in for itself, however far round it goes: a → b → c → a
+```
 
 #### Comparison with Other Languages
 
