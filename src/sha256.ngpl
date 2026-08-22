@@ -2,10 +2,10 @@
 // SHA-256, for the bill of materials
 // ===========================================================================
 //
-// FIPS 180-4.  The rounds themselves are not here: std.sha256 does
+// FIPS 180-4.  The rounds themselves are not here: std.hash does
 // them, which under the interpreter is the host's own implementation
-// and in a compiled compiler is RT_SHA256, written as IR once in
-// rt_sha256.ngpl and compiled for all six targets.  A bill of
+// and in a compiled compiler is the runtime written as IR once in
+// rt_hash.ngpl and rt_sha256.ngpl and compiled for all six targets.  A bill of
 // materials over this compiler's own sources is a quarter of a
 // megabyte of hashing, and doing it in the language cost forty minutes
 // under the interpreter -- which is what made the bill an option
@@ -43,12 +43,20 @@ fn sha_h0() → u32[]:
     [1779033703, 3144134277, 1013904242, 2773480762,
      1359893119, 2600822924,  528734635, 1541459225]
 
-// the digest as the sixty-four lowercase hex characters that name it
+// A digest as the sixty-four lowercase hex characters that name it.
+// Separate from computing one, because a digest fed a piece at a time
+// is spelled out at the end just the same.
+@pre(@dropunit(#d) = 32)
 @post(r: #r = 64)
-fn sha256_hex(data : byte[]) → str:
+fn hex_digest(d : u8[]) → str:
     let digits : str = "0123456789abcdef"
     let cs := digits.chars()
     let out : mut str = ""
-    foreach v := std.sha256(data):
+    foreach v := d:
         out ← out ⧺ cs[((v » 4) & 15) × 1¤ptrdiff] ⧺ cs[(v & 15) × 1¤ptrdiff]
     out
+
+// the same, for a message already in hand
+@post(r: #r = 64)
+fn sha256_hex(data : byte[]) → str:
+    hex_digest(std.hash.sha256.digest(data))

@@ -553,18 +553,20 @@ struct ElfPlan:
 // that differ only in what they say about themselves are one program.
 fn image_digest(tgt : Target, code : u8[], rodata : u8[], data : u8[],
                 entry ¤byte : i64) → str:
-    let feed : mut u8[] = []
-    foreach b := code:
-        feed.push(b)
-    foreach b := rodata:
-        feed.push(b)
-    foreach b := data:
-        feed.push(b)
-    push64(&feed, @dropunit(entry))
-    push32(&feed, tgt.machine.ord())
-    push32(&feed, 2 if tgt.is64 else 1)
-    push32(&feed, tgt.eflags)
-    sha256_hex(feed)
+    // The three segments go straight into the digest.  Copying them
+    // into one array first said the same thing and asked for a second
+    // copy of the whole image to say it.
+    let h : mut = std.hash.sha256.start()
+    h.update(code)
+    h.update(rodata)
+    h.update(data)
+    let tail : mut u8[] = []
+    push64(&tail, @dropunit(entry))
+    push32(&tail, tgt.machine.ord())
+    push32(&tail, 2 if tgt.is64 else 1)
+    push32(&tail, tgt.eflags)
+    h.update(tail)
+    hex_digest(h.digest())
 
 @pre(#code > 0 and stack_size > 0)
 @pre(relro_size >= 0)

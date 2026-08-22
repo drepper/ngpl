@@ -1,0 +1,148 @@
+// ===========================================================================
+// The hash handle: a digest computed a piece at a time
+// ===========================================================================
+//
+// What std.hash.<alg>.start() answers, and what update() and digest()
+// are.  A program should not have to hold the whole of what it is
+// hashing -- a file larger than memory, a stream that arrives over
+// time, or the case that brought this about, a compiler's bill of
+// materials, which is a quarter of a megabyte of tokens that would
+// otherwise be gathered into one array before any of it could be
+// hashed.
+//
+// Nothing here knows SHA-256.  What is generic is the absorbing: bytes
+// go into a block, and when the block is full it is compressed and the
+// count starts again.  Every sponge and every Merkle-Damgård hash
+// works that way, so what an algorithm has to say for itself is three
+// routines -- how it starts, how it compresses a block, and how it
+// finishes -- and the three places below that name SHA-256's are the
+// only places a second algorithm touches.
+//
+// Written once as IR and compiled by all six targets, like the digest
+// it drives; see rt_sha256.ngpl for why.
+//
+// The offsets below carry no unit.  They are immediates in a load or a
+// store instruction rather than quantities the program computes with,
+// and the builder takes them as the plain numbers the instruction
+// encodes.
+
+// Where things sit in a handle.  The buffer is as wide as the widest
+// block any algorithm here absorbs, so the layout does not move when
+// one is added; SHA-256's is 64 of its 136 bytes.
+let HS_ALG : i64 = 0        // which algorithm, or ⁻1 once the digest is taken
+let HS_TOTAL : i64 = 8      // how many bytes have been added
+let HS_FILL : i64 = 16      // how many of them are in the buffer, not yet absorbed
+let HS_BLK : i64 = 24       // how many bytes this algorithm absorbs at once
+let HS_H : i64 = 32         // the state, eight cells
+let HS_BUF : i64 = 96       // the block being filled, 136 bytes
+let HS_K : i64 = 232        // the round constants, sixty-four cells
+let HS_W : i64 = 744        // the message schedule, sixty-four cells
+let HS_SIZE : i64 = 1264    // what to allocate, sixteen-aligned
+
+// the widest block absorbed by any algorithm here
+let HS_MAXBLK : i64 = 136
+
+// The message the handle has already been spent, said the same way
+// wherever it is said.
+fn rt_hash_spent_msg() → str:
+    "a hash handle answers one digest, and this one already has\n"
+
+// (alg) → a handle.  The generic part is the bookkeeping; what the
+// algorithm has to say about starting it says itself.
+fn rt_hstart_ir() → IrFn:
+    let b : mut RtB = rtb(1)
+    let h : i64 = b.call1(RT_ALLOC, b.cst(HS_SIZE))
+    let z : i64 = b.cst(0)
+    // vreg 0 is the algorithm the caller asked for
+    b.stn(h, HS_ALG, 0, 8)
+    b.stn(h, HS_TOTAL, z, 8)
+    b.stn(h, HS_FILL, z, 8)
+    // one algorithm, so one call; a second adds a comparison here
+    _ ← b.call1(RT_SHA256INIT, h)
+    b.ret(h)
+    rtb_fn(b)
+
+// (h, arr): every byte of arr into the block, and the block absorbed
+// each time it fills.
+fn rt_hupdate_ir(lw : &mut Lower) → IrFn:
+    let b : mut RtB = rtb(2)
+    let z : i64 = b.cst(0)
+    let one : i64 = b.cst(1)
+    let three : i64 = b.cst(3)
+    let c255 : i64 = b.cst(255)
+    // a handle whose digest was taken holds nothing to add to
+    let dead : i64 = b.clts(b.ldn(0, HS_ALG, 8), z)
+    let lok : i64 = b.l()
+    b.jz(dead, lok)
+    b.abort_msg(lw.intern(rt_hash_spent_msg()))
+    b.lab(lok)
+    let n : i64 = b.ldn(1, 8, 8)
+    let slots : i64 = b.ldn(1, 0, 8)
+    let blk : i64 = b.ldn(0, HS_BLK, 8)
+    let fill : i64 = b.t()
+    b.mov(fill, b.ldn(0, HS_FILL, 8))
+    b.stn(0, HS_TOTAL, b.add(b.ldn(0, HS_TOTAL, 8), n), 8)
+    let ix : i64 = b.t()
+    b.mov(ix, z)
+    let ltop : i64 = b.l()
+    let lend : i64 = b.l()
+    let lroom : i64 = b.l()
+    b.lab(ltop)
+    b.jz(b.cltu(ix, n), lend)
+    let v : i64 = b.band(b.ldn(b.add(slots, b.shl(ix, three)), 0, 8), c255)
+    b.stn(b.add(0, fill), HS_BUF, v, 1)
+    b.mov(fill, b.add(fill, one))
+    b.jz(b.ceq(fill, blk), lroom)
+    b.stn(0, HS_FILL, fill, 8)
+    _ ← b.call1(RT_SHA256BLK, 0)
+    b.mov(fill, z)
+    b.lab(lroom)
+    b.mov(ix, b.add(ix, one))
+    b.jmp(ltop)
+    b.lab(lend)
+    b.stn(0, HS_FILL, fill, 8)
+    b.retn()
+    rtb_fn(b)
+
+// (h) → the digest, and the end of the handle.  What the handle held
+// is wiped here rather than left lying about: a bump allocator has
+// nothing to give back, so this is what freeing a hash can mean, and
+// it is the part that matters -- a message worth hashing is often a
+// message worth not leaving in memory afterwards.
+fn rt_hfinal_ir(lw : &mut Lower) → IrFn:
+    let b : mut RtB = rtb(1)
+    let z : i64 = b.cst(0)
+    let one : i64 = b.cst(1)
+    let three : i64 = b.cst(3)
+    let dead : i64 = b.clts(b.ldn(0, HS_ALG, 8), z)
+    let lok : i64 = b.l()
+    b.jz(dead, lok)
+    b.abort_msg(lw.intern(rt_hash_spent_msg()))
+    b.lab(lok)
+    // one algorithm, so one call; a second adds a comparison here
+    let out : i64 = b.call1(RT_SHA256FIN, 0)
+    b.stn(0, HS_ALG, b.cst(⁻1), 8)
+    b.stn(0, HS_FILL, z, 8)
+    b.stn(0, HS_TOTAL, z, 8)
+    let i : i64 = b.t()
+    b.mov(i, z)
+    let lst : i64 = b.l()
+    let lse : i64 = b.l()
+    b.lab(lst)
+    b.jz(b.cltu(i, b.cst(8)), lse)
+    b.stn(b.add(0, b.shl(i, three)), HS_H, z, 8)
+    b.mov(i, b.add(i, one))
+    b.jmp(lst)
+    b.lab(lse)
+    let j : i64 = b.t()
+    b.mov(j, z)
+    let lbt : i64 = b.l()
+    let lbe : i64 = b.l()
+    b.lab(lbt)
+    b.jz(b.cltu(j, b.cst(HS_MAXBLK)), lbe)
+    b.stn(b.add(0, j), HS_BUF, z, 1)
+    b.mov(j, b.add(j, one))
+    b.jmp(lbt)
+    b.lab(lbe)
+    b.ret(out)
+    rtb_fn(b)

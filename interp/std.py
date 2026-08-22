@@ -10,7 +10,7 @@ The std object exposes:
     args              → Command line parameters of the running program
     env               → Read access to the process environment
     sys               → CPU affinity, CPU counts, and memory sizes
-    sha256(data)      → SHA-256 digest as u8[32]
+    hash              → digests: hash.sha256.digest(x), hash.sha256.start()
     format(str, file?, fd?) → Format a string, optionally write to a file descriptor
     get_stdout()      → StdoutFile object wrapping stdout fd
 
@@ -1189,6 +1189,117 @@ class BuildModule:
         return mk_str(self._output_dir)
 
 
+# ---------------------------------------------------------------------------
+# std.hash — digests, one-shot and a byte at a time
+# ---------------------------------------------------------------------------
+
+def _hash_message(arg, who: str) -> bytes:
+    """The message an argument names: a string is its UTF-8, bytes are
+    themselves, and a u8[] is the low byte of each element."""
+    from interp.eval import unwrap_optional
+    from interp.value import ObjectValue, StrValue, IntValue, ArrayValue
+    a = unwrap_optional(arg)
+    if isinstance(a, ObjectValue):
+        if isinstance(a.obj, ArrayValue):
+            return bytes(e.value & 0xFF for e in a.obj.elements
+                         if isinstance(e, IntValue))
+        if isinstance(a.obj, Bytes):
+            return bytes(a.obj.data)
+        raise TypeError(f"{who} digests a string or its bytes, "
+                        f"got {type(a.obj).__name__}")
+    if isinstance(a, StrValue):
+        return a.value.encode("utf-8")
+    raise TypeError(f"{who} digests a string or its bytes, "
+                    f"got {type(a).__name__}")
+
+
+def _digest_value(raw: bytes):
+    """A digest as what a program can hold: its bytes, most significant
+    first.  Not a number -- no sized type the language has keeps 256
+    bits, so a program handed one as an integer could not keep it."""
+    from interp.value import ObjectValue, ArrayValue, mk_int
+    return ObjectValue(ArrayValue([mk_int(b, "u8") for b in raw],
+                                  element_type="u8", fixed_size=len(raw)))
+
+
+class HashHandle:
+    """One digest being computed, a piece at a time.
+
+    What start() answers.  The point of it is that a program need not
+    hold the whole of what it is hashing: a file larger than memory, a
+    stream that arrives over time, or -- the case that brought this
+    about -- a compiler's bill of materials, which is a quarter of a
+    megabyte of tokens that would otherwise be gathered into one array
+    before any of it could be hashed.
+    """
+
+    def __init__(self, name: str, ctor):
+        self.name = name
+        self._h = ctor()
+        self._spent = False
+
+    def _live(self, what: str):
+        if self._spent:
+            raise RuntimeError(
+                f"{what} on a {self.name} handle whose digest was already "
+                f"taken; digest() ends the handle")
+
+    def update(self, args):
+        """update(x) — add x to what is being digested."""
+        from interp.value import NoneValue
+        if len(args) != 1:
+            raise TypeError("update(x) takes exactly 1 argument")
+        self._live("update")
+        self._h.update(_hash_message(args[0], f"{self.name}.update"))
+        return NoneValue()
+
+    def digest(self, args):
+        """digest() — the digest of everything added, and the end of the
+        handle.  What it held is dropped here rather than whenever the
+        collector gets to it, so a message that was worth hashing is not
+        left lying about afterwards."""
+        if args:
+            raise TypeError("digest() takes no arguments")
+        self._live("digest")
+        raw = self._h.digest()
+        self._spent = True
+        self._h = None
+        return _digest_value(raw)
+
+
+class Sha256Algorithm:
+    """std.hash.sha256 — the algorithm, as a namespace.
+
+    Every algorithm answers the same two: digest(x) for a message
+    already in hand, and start() for one that is not.  Another
+    algorithm is another namespace beside this one, not two more names
+    inside std.hash.
+    """
+
+    name = "sha256"
+
+    def digest(self, args):
+        """digest(x) — the SHA-256 of x, as its thirty-two bytes."""
+        if len(args) != 1:
+            raise TypeError("digest(x) takes exactly 1 argument")
+        return _digest_value(
+            hashlib.sha256(_hash_message(args[0], "std.hash.sha256.digest")).digest())
+
+    def start(self, args):
+        """start() — a handle to feed a message to a piece at a time."""
+        from interp.value import ObjectValue
+        if args:
+            raise TypeError("start() takes no arguments")
+        return ObjectValue(HashHandle("sha256", hashlib.sha256))
+
+
+class HashModule:
+    """std.hash — one namespace per algorithm."""
+
+    def __init__(self):
+        self.sha256 = Sha256Algorithm()
+
+
 class StdModule:
     """The std module providing built-in runtime services.
 
@@ -1196,19 +1307,6 @@ class StdModule:
     NGPL programs. It is initialized once when the interpreter starts
     and its methods are registered as builtin functions in the global env.
     """
-
-    def _sha256(self, data: bytes) -> int:
-        """Compute SHA-256 hash of the given bytes.
-
-        Args:
-            data: The bytes to hash.
-
-        Returns:
-            An integer representing the 256-bit digest (H0<<224 | ... | H7).
-        """
-        h = hashlib.sha256(data).digest()
-        result = int.from_bytes(h, 'big')
-        return result
 
     # The tolerance the approximate comparisons use, following APL's
     # ⎕CT.  Two numbers are alike when they differ by no more than this
@@ -1229,6 +1327,7 @@ class StdModule:
         self.args = ArgsModule()
         self.implementation = ImplementationInfo()
         self.build = BuildModule()
+        self.hash = HashModule()
 
     @property
     def fs(self):
@@ -1401,42 +1500,6 @@ class StdModule:
         from interp.value import ObjectValue
         return ObjectValue(self._stdout_file)
 
-    def sha256(self, args):
-        """sha256(data) — the SHA-256 digest of data, as its 32 bytes.
-
-        The bytes rather than a number: a 256-bit digest does not fit
-        any sized type the language has, so a program that was handed
-        one could not hold it.  Thirty-two bytes it can hold, compare,
-        and write out however it likes.
-
-        Args:
-            args[0]: byte[] ArrayValue, Bytes, or StrValue object to hash.
-
-        Returns:
-            A u8[] of 32 bytes, most significant first.
-        """
-        from interp.eval import unwrap_optional
-        from interp.value import ObjectValue, StrValue, IntValue, ArrayValue, mk_int
-        if len(args) != 1:
-            raise TypeError("sha256(data) takes exactly 1 argument")
-        data_arg = unwrap_optional(args[0])
-        if isinstance(data_arg, ObjectValue):
-            if isinstance(data_arg.obj, ArrayValue):
-                data = bytes(e.value & 0xFF for e in data_arg.obj.elements
-                             if isinstance(e, IntValue))
-            elif isinstance(data_arg.obj, Bytes):
-                data = bytes(data_arg.obj.data)
-            else:
-                raise TypeError(f"sha256 expects byte[] or StrValue, got {type(data_arg.obj).__name__}")
-        elif isinstance(data_arg, StrValue):
-            data = data_arg.value.encode("utf-8")
-        else:
-            raise TypeError(f"sha256 expects byte[] or StrValue, got {type(data_arg).__name__}")
-        from interp.value import ArrayValue as _AV
-        digest = hashlib.sha256(data).digest()
-        return ObjectValue(_AV([mk_int(b, "u8") for b in digest],
-                               element_type="u8", fixed_size=32))
-
     # ------------------------------------------------------------------
     # Trigonometry
     # ------------------------------------------------------------------
@@ -1595,240 +1658,6 @@ class StdModule:
             NoneValue.
         """
         return self._write_formatted(args, "std.println", newline=True)
-
-    # ------------------------------------------------------------------
-    # SHA-256 helpers — byte-level ops and block compression.
-    # These provide the mutable-byte operations that NGPL cannot yet
-    # express without arrays or mutable state.  The message-schedule
-    # expansion (W[16..79]) is implemented in NGPL using bitwise
-    # operators (& | ^ ~ << >>) and recursion.
-    # ------------------------------------------------------------------
-
-    def sha256_pad(self, args):
-        """sha256_pad(data_handle) — pad input per SHA-256 spec.
-
-        Returns an ObjectValue wrapping the padded bytearray so NGPL code
-        can extract bytes via sha256_getbyte and words via sha256_getword.
-        """
-        if len(args) != 1:
-            raise TypeError("sha256_pad(handle) takes exactly 1 argument")
-
-        data_arg = unwrap_optional(args[0])
-        buf = None
-        if isinstance(data_arg, Bytes):
-            buf = bytearray(data_arg.data)
-        elif isinstance(data_arg, ObjectValue) and hasattr(data_arg.obj, 'data'):
-            buf = bytearray(data_arg.obj.data)
-        else:
-            raise TypeError("sha256_pad expects a Bytes object")
-
-        length = len(buf)
-        msg_bit_len = length * 8
-        padding_len = (56 - ((length + 1) % 64)) % 64 + 8
-        buf.append(0x80)
-        buf.extend(b'\x00' * padding_len)
-        buf += msg_bit_len.to_bytes(8, 'big')
-
-        result = Bytes(buf)
-        h = id(result)
-        self._sha256_handle_data[h] = buf
-        return ObjectValue(result)
-
-    def sha256_getbyte(self, args):
-        """sha256_getbyte(padded_handle, pos) — extract byte at offset.
-
-        Returns an IntValue with value 0..255.
-        """
-        if len(args) != 2:
-            raise TypeError("sha256_getbyte(handle, pos)")
-        handle_arg = unwrap_optional(args[0])
-        if not isinstance(handle_arg, IntValue):
-            raise TypeError("pos must be int")
-
-        pos = int(handle_arg.value)
-        buf = None
-        if isinstance(pos < 0 or pos >= 8):
-            return mk_int(0)
-
-        # First arg (args[0]) is the Bytes/ByteArray handle.
-        data_arg = unwrap_optional(args[0])
-        if isinstance(data_arg, Bytes):
-            buf = bytes(data_arg.data)
-        elif isinstance(data_arg, bytearray):
-            buf = bytes(data_arg)
-        elif isinstance(data_arg, int):
-            buf = bytes(self._sha256_handle_data.get(data_arg, b''))
-
-        pos = int(unwrap_optional(args[1]).value)
-        if buf is None or pos >= len(buf):
-            return mk_int(0)
-        return mk_int(buf[pos])
-
-    def sha256_getword(self, args):
-        """sha256_getword(handle, byte_offset) — extract 32-bit big-endian word.
-
-        Returns an IntValue.
-        """
-        if len(args) != 2:
-            raise TypeError("sha256_getword(handle, off)")
-
-        data_arg = unwrap_optional(args[0])
-        buf = None
-        if isinstance(data_arg, Bytes):
-            buf = bytes(data_arg.data)
-        elif isinstance(data_arg, bytearray):
-            buf = bytes(data_arg)
-        elif isinstance(data_arg, int):
-            buf = bytes(self._sha256_handle_data.get(data_arg, b''))
-
-        if buf is None:
-            return mk_int(0)
-
-        off = int(unwrap_optional(args[1]).value)
-        if off + 4 > len(buf):
-            return mk_int(0)
-        w = (buf[off] << 24) | (buf[off+1] << 16) | (buf[off+2] << 8) | buf[off+3]
-        return mk_int(w & 0xffffffff)
-
-    def sha256_compress(self, args):
-        """sha256_compress(padded_handle, offset, h0..h7) — compress one block.
-
-        Returns an IntValue with the updated 256-bit hash state packed as:
-          result = (a<<224)|(b<<192)|(c<<160)|(d<<128)|(e<<96)|(f<<64)|(g<<32)|h
-        """
-        if len(args) != 9:
-            raise TypeError("sha256_compress(handle, offset, h0..h7)")
-
-        buf = None
-        data_arg = unwrap_optional(args[0])
-        if isinstance(data_arg, Bytes):
-            buf = bytes(data_arg.data)
-        elif isinstance(data_arg, bytearray):
-            buf = bytes(data_arg)
-        elif isinstance(data_arg, int):
-            buf = bytes(self._sha256_handle_data.get(data_arg, b''))
-
-        offset = int(unwrap_optional(args[1]).value)
-        if buf is None or offset + 64 > len(buf):
-            # Return unchanged hash state.
-            h0 = int(unwrap_optional(args[2]).value) & 0xffffffff
-            h1 = int(unwrap_optional(args[3]).value) & 0xffffffff
-            h2 = int(unwrap_optional(args[4]).value) & 0xffffffff
-            h3 = int(unwrap_optional(args[5]).value) & 0xffffffff
-            h4 = int(unwrap_optional(args[6]).value) & 0xffffffff
-            h5 = int(unwrap_optional(args[7]).value) & 0xffffffff
-            h6 = int(unwrap_optional(args[8]).value) & 0xffffffff
-            result = (h0 << 224 | h1 << 192 | h2 << 160 | h3 << 128 |
-                      h4 << 96 | h5 << 64 | h6 << 32)
-            return mk_int(result & ((1 << 256) - 1))
-
-        # Standard SHA-256 block compression (FIPS 180-4 §4.2.2).
-        w = [0] * 80
-        for i in range(16):
-            idx = offset + i * 4
-            if idx + 4 <= len(buf):
-                w[i] = (buf[idx] << 24) | (buf[idx+1] << 16) | (buf[idx+2] << 8) | buf[idx+3]
-
-        for i in range(16, 80):
-            s0 = ((w[i-15] >> 7) | (w[i-15] << 25)) & 0xffffffff
-            s1 = ((w[i-2] >> 17) | (w[i-2] << 15)) & 0xffffffff
-            w[i] = (w[i-16] + s0 + w[i-7] + s1) & 0xffffffff
-
-        h_vals = [int(unwrap_optional(args[i]).value) & 0xffffffff for i in range(2, 9)]
-        a, b, c, d, e, f, g, hh = h_vals
-
-        K = [
-            0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
-            0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-            0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
-            0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-            0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
-            0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-            0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
-            0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-            0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
-            0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-            0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3,
-            0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-            0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
-            0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-            0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
-            0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
-        ]
-
-        for t in range(64):
-            S1 = (((e >> 6) | (e << 26)) ^ ((e >> 11) | (e << 21)) ^ ((e >> 25) | (e << 7))) & 0xffffffff
-            ch_val = (e & f) ^ ((~e & 0xffffffff) & g)
-            t1 = (hh + S1 + ch_val + K[t] + w[t]) & 0xffffffff
-            S0 = (((a >> 2) | (a << 30)) ^ ((a >> 13) | (a << 19)) ^ ((a >> 22) | (a << 10))) & 0xffffffff
-            maj_val = (a & b) ^ (a & c) ^ (b & c)
-            t2 = (S0 + maj_val) & 0xffffffff
-            a_new = (t1 + t2) & 0xffffffff
-            b_new = a; c_new = b; d_new = c
-            e_new = (d + t1) & 0xffffffff; f_new = e; g_new = f; hh = g
-            a, b, c, d, e, f, g, hh = a_new, b_new, c_new, d_new, e_new, f_new, g_new, hh
-
-        result = (((h_vals[0] + a) & 0xffffffff) << 224 |
-                  ((h_vals[1] + b) & 0xffffffff) << 192 |
-                  ((h_vals[2] + c) & 0xffffffff) << 160 |
-                  ((h_vals[3] + d) & 0xffffffff) << 128 |
-                  ((h_vals[4] + e) & 0xffffffff) << 96 |
-                  ((h_vals[5] + f) & 0xffffffff) << 64 |
-                  ((h_vals[6] + g) & 0xffffffff) << 32 |
-                  (h_vals[7] + hh) & 0xffffffff)
-        return mk_int(result & ((1 << 256) - 1))
-
-    def pack_message_schedule(self, args):
-        """Pack the 80-word message schedule for one SHA-256 block into a single large integer.
-
-        Reads 16 words from the padded buffer at the given offset, computes all 80 W values
-        using the standard FIPS 180-4 expansion formula, and packs them into a Python int
-        where each word occupies 32 consecutive bit positions [i*32 .. (i+1)*32 - 1].
-
-        This enables NGPL code to express the full message-schedule computation using
-        only bitwise shift-and-mask operations — no arrays or mutable state required.
-
-        Args:
-            args[0]: IntValue — byte offset into padded data.
-            args[1]: ObjectValue wrapping a Bytes object (the padded buffer).
-
-        Returns:
-            IntValue — packed 2560-bit integer holding all 80 W values.
-        """
-        if len(args) != 2:
-            raise TypeError("pack_message_schedule(offset, handle)")
-
-        offset = int(unwrap_optional(args[0]).value)
-        data_arg = unwrap_optional(args[1])
-        buf = None
-        if isinstance(data_arg, Bytes):
-            buf = bytes(data_arg.data)
-        elif isinstance(data_arg, bytearray):
-            buf = bytes(data_arg)
-        else:
-            raise TypeError("handle must be a Bytes object")
-
-        if offset + 64 > len(buf):
-            return mk_int(0)
-
-        # Read the initial 16 words from the block.
-        w = [0] * 80
-        for i in range(16):
-            idx = offset + i * 4
-            w[i] = (buf[idx] << 24) | (buf[idx + 1] << 16) | (buf[idx + 2] << 8) | buf[idx + 3]
-
-        # Compute W[16..79] using FIPS 180-4 §4.2.2 expansion.
-        for i in range(16, 80):
-            s0 = ((w[i - 15] >> 7) | (w[i - 15] << 25)) & 0xffffffff
-            s1 = ((w[i - 2] >> 17) | (w[i - 2] << 15)) & 0xffffffff
-            w[i] = (w[i - 16] + s0 + w[i - 7] + s1) & 0xffffffff
-
-        # Pack all 80 words into one integer: word i occupies bits [i*32 .. (i+1)*32 - 1].
-        packed = 0
-        for i in range(80):
-            packed |= w[i] << (i * 32)
-
-        return mk_int(packed)
 
 
 class SyntaxModule:

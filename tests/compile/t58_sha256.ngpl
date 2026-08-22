@@ -1,8 +1,8 @@
-// std.sha256, which is two implementations held to one answer: the
-// host's own under the interpreter, and RT_SHA256 -- written once as
-// IR in src/rt_sha256.ngpl and compiled for all six targets -- in a
-// compiled program.  The suite runs both and diffs them, so this file
-// is where the two meet.
+// std.hash, which is two implementations held to one answer: the
+// host's own under the interpreter, and the runtime -- written once as
+// IR in src/rt_hash.ngpl and src/rt_sha256.ngpl and compiled for all
+// six targets -- in a compiled program.  The suite runs both and diffs
+// them, so this file is where the two meet.
 //
 // The lengths are chosen for the padding, which is the part of
 // FIPS 180-4 that is easy to get wrong: 55 is the last length that
@@ -19,34 +19,90 @@ fn hex(d : u8[]) → str:
         out ← out ⧺ cs[((v » 4) & 15) × 1¤ptrdiff] ⧺ cs[(v & 15) × 1¤ptrdiff]
     out
 
+// what the byte at a given place of the test message is
+fn msg_byte(i : i64) → i64:
+    (i × 37 + 11) & 255
+
 // n bytes that are not all alike, so a digest that dropped one would
 // not land on the right answer anyway
 fn run_of(n : i64) → u8[]:
     let out : mut u8[] = []
     let i : mut i64 = 0
     while i < n:
-        out.push((i × 37 + 11) & 255)
+        out.push(msg_byte(i))
         i ← i + 1
     out
+
+// the same run, added a piece at a time rather than all at once
+fn in_pieces(n : i64, piece : i64) → str:
+    let h : mut = std.hash.sha256.start()
+    let at : mut i64 = 0
+    while at < n:
+        let take : i64 = piece ⌊ (n - at)
+        let part : mut u8[] = []
+        let i : mut i64 = 0
+        while i < take:
+            part.push(msg_byte(at + i))
+            i ← i + 1
+        h.update(part)
+        at ← at + take
+    hex(h.digest())
 
 @start
 @impure
 fn main():
     // FIPS 180-4's own vectors
-    std.println("{}", hex(std.sha256("")))
-    std.println("{}", hex(std.sha256("abc")))
-    std.println("{}", hex(std.sha256("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")))
+    std.println("{}", hex(std.hash.sha256.digest("")))
+    std.println("{}", hex(std.hash.sha256.digest("abc")))
+    std.println("{}", hex(std.hash.sha256.digest("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")))
     // a string and its bytes are the same message
     let s : str = "the quick brown fox"
-    let a : str = hex(std.sha256(s))
-    let b : str = hex(std.sha256(std.bytes(s)))
+    let a : str = hex(std.hash.sha256.digest(s))
+    let b : str = hex(std.hash.sha256.digest(std.bytes(s)))
     std.println("string and bytes agree: {}", a = b)
     // every length the padding turns a corner at
     let lens : i64[] = [0, 1, 54, 55, 56, 57, 63, 64, 65, 119, 120, 127, 128, 1000]
     foreach n := lens:
-        std.println("{} {}", n, hex(std.sha256(run_of(n))))
+        std.println("{} {}", n, hex(std.hash.sha256.digest(run_of(n))))
+
+    // ---------------------------------------------------------------
+    // the same messages, added a piece at a time
+    // ---------------------------------------------------------------
+    //
+    // Every piece size crosses the block boundary somewhere different,
+    // so between them they exercise a block that fills exactly, one
+    // that fills in the middle of a piece, and a handle asked for its
+    // digest with a part-filled block in hand.
+    let pieces : i64[] = [1, 7, 63, 64, 65, 128]
+    foreach p := pieces:
+        foreach n := lens:
+            if in_pieces(n, p) ≠ hex(std.hash.sha256.digest(run_of(n))):
+                std.println("{} bytes in pieces of {} disagree", n, p)
+    std.println("in pieces agrees with all at once")
+
+    // a handle answers the empty message when nothing was added
+    let e : mut = std.hash.sha256.start()
+    std.println("{}", hex(e.digest()))
+
+    // a string and bytes may be mixed into one handle
+    let m : mut = std.hash.sha256.start()
+    m.update("ab")
+    m.update(std.bytes("cd"))
+    m.update("bcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")
+    std.println("mixed pieces: {}", hex(m.digest()) = hex(std.hash.sha256.digest("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")))
+
+    // two handles at once do not disturb each other
+    let x : mut = std.hash.sha256.start()
+    let y : mut = std.hash.sha256.start()
+    x.update("a")
+    y.update("b")
+    x.update("bc")
+    y.update("cd")
+    std.println("two at once: {} {}", hex(x.digest()) = hex(std.hash.sha256.digest("abc")),
+                hex(y.digest()) = hex(std.hash.sha256.digest("bcd")))
+
     // a digest is thirty-two bytes, and each of them is a byte
-    let d : u8[] = std.sha256("abc")
+    let d : u8[] = std.hash.sha256.digest("abc")
     std.println("a digest is {} long", #d)
     let hi : mut i64 = 0
     foreach v := d:

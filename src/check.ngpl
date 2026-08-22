@@ -16,6 +16,8 @@ let MID_ITER : i64 = 10
 let MID_NEXT : i64 = 11
 let MID_DIRITER : i64 = 12
 let MID_WRITEV : i64 = 13
+let MID_HUPDATE : i64 = 14   // h.update(x): another piece of the message
+let MID_HDIGEST : i64 = 15   // h.digest(): the answer, and the end of the handle
 
 // The module a module is written inside; "" for one written at the top.
 fn mod_parent(m : str) → str:
@@ -2580,19 +2582,26 @@ impl Checker:
                     self.derr(tok, "std.bytes reads a string, not " ⧺ self.tn(self.ty_of(bs)))
             self.set_type(id, mk_aty(TY_U8))
             return
-        if sb = SB_SHA256:
-            // A string or its bytes.  Thirty-two bytes come back rather
-            // than a number, because no sized type the language has
-            // holds two hundred and fifty-six bits, so a program handed
-            // one could not keep it.
+        if sb = SB_HDIGEST or sb = SB_HSTART:
+            let algs := hash_algs()
+            let who : str = "std.hash." ⧺ algs[self.a.nc[id × 1¤ptrdiff] × 1¤ptrdiff]
+            if sb = SB_HSTART:
+                if argc ≠ 0:
+                    self.derr(tok, who ⧺ ".start() takes nothing; what is to be digested goes to update()")
+                self.set_type(id, TY_HASH)
+                return
+            // A string or its bytes.  The digest comes back as bytes
+            // rather than a number, because no sized type the language
+            // has holds two hundred and fifty-six bits, so a program
+            // handed one could not keep it.
             if argc ≠ 1:
-                self.derr(tok, "std.sha256 takes the one thing it is to digest")
+                self.derr(tok, who ⧺ ".digest takes the one thing it is to digest")
             else:
                 let hv : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
                 self.check_expr(hv, mk_aty(TY_U8))
                 let ht : i64 = ty_strip_ref(self.ty_of(hv))
                 if ht ≠ mk_aty(TY_U8) and ht ≠ TY_STR:
-                    self.derr(tok, "std.sha256 digests a string or its bytes, not " ⧺ self.tn(ht))
+                    self.derr(tok, who ⧺ ".digest digests a string or its bytes, not " ⧺ self.tn(ht))
             self.set_type(id, mk_aty(TY_U8))
             return
         if sb = SB_IOV:
@@ -2758,6 +2767,27 @@ impl Checker:
                 return
             self.a.nc[id × 1¤ptrdiff] ← MID_ORD
             self.set_type(id, TY_U32)
+            return
+        if t = TY_HASH and (m = "update" or m = "digest"):
+            // Hashing writes nothing anyone can see, so neither of
+            // these asks for @impure; what update changes is the
+            // handle it was reached through, which the caller owns.
+            if m = "update":
+                if argc0 ≠ 1:
+                    self.derr(tok, "update takes the next piece of the message")
+                else:
+                    let uv : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
+                    self.check_expr(uv, mk_aty(TY_U8))
+                    let ut : i64 = ty_strip_ref(self.ty_of(uv))
+                    if ut ≠ mk_aty(TY_U8) and ut ≠ TY_STR:
+                        self.derr(tok, "update adds a string or its bytes, not " ⧺ self.tn(ut))
+                self.a.nc[id × 1¤ptrdiff] ← MID_HUPDATE
+                self.set_type(id, TY_UNIT)
+                return
+            if argc0 ≠ 0:
+                self.derr(tok, "digest takes nothing; it answers what was added")
+            self.a.nc[id × 1¤ptrdiff] ← MID_HDIGEST
+            self.set_type(id, mk_aty(TY_U8))
             return
         if t = TY_FILE and m = "writev":
             if not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:

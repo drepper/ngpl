@@ -49,6 +49,17 @@ The Compiler
     -- for the parser, which by then knows what the file declared, to put on the literal.  This
     is what the interpreter always did, where ¤ is an ordinary operator.
 
+[ ] std.println's format is written before its arguments are worked out, in a compiled
+    program but not under the interpreter.  The compiler puts the literal run of a format down
+    as it reaches it and evaluates each {} when it gets there; the interpreter builds the whole
+    line and writes it once.  Nothing sees the difference unless an argument stops the
+    program -- an abort, a violated contract, a bounds check -- and then the compiled run has
+    left the literal prefix on stdout and the interpreted one has not.  tests/compile/
+    t95_hash_spent.ngpl was written around it and says so where it does.  Which one is right
+    is a question for the spec: writing as you go is what a program that formats a megabyte
+    wants, and formatting first is what makes a line atomic.  Whichever it is, both
+    implementations should do it.
+
 [ ] the compiler's own refusals have no home in the suite.  tests/compile/ requires every
     program to compile and tests/output/ drives the interpreter, so what ngplc says no to --
     a std.build outside a recipe, a recipe reaching past the subset, two @build functions --
@@ -188,13 +199,15 @@ Tooling
     name, since the same program deployed twice is one program.  Spec: chapter 8, "The Bill of
     Materials".
 
-    What made it affordable was std.sha256: hashlib under the interpreter, and RT_SHA256 in a
-    compiled program.  SHA-256 written in the language ran at 6 MB/s compiled and 2.4 KiB/s
+    What made it affordable was std.hash: the host's own implementation under the interpreter,
+    and the runtime in a compiled program.  SHA-256 written in the language ran at 6 MB/s compiled and 2.4 KiB/s
     interpreted, which would have added forty minutes to stage 1.  The routine is written once
-    as IR in src/rt_sha256.ngpl and compiled by all six targets -- the pioneer through emit_fn
-    and the other five through t_emit_fn -- rather than by hand for x86-64 and as IR for the
-    rest: it is arithmetic and nothing else, so there is nothing a hand-written version would
-    know that the IR does not.  Measured: stage 1 is 482 s with the bill and 485 s without, and
+    as IR in src/rt_hash.ngpl and src/rt_sha256.ngpl and compiled by all six targets -- the
+    pioneer through emit_fn and the other five through t_emit_fn -- rather than by hand for
+    x86-64 and as IR for the rest: it is arithmetic and nothing else, so there is nothing a
+    hand-written version would know that the IR does not.  The bill is fed as the tokens are
+    read rather than gathered into an array first, which is what std.hash.<alg>.start() is
+    for.  Measured: stage 1 is 482 s with the bill and 485 s without, and
     a native self-compile 0.35 s with and 0.22 s without, the difference being the feed the
     digest is taken over rather than the digest.
 

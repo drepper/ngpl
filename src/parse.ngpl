@@ -1015,15 +1015,39 @@ impl Parser:
                 if m = "iov":
                     let ioff : i64 = self.parse_args()
                     return self.mknode(NK_SCALL, at, SB_IOV, ioff, 0)
-                if m = "sha256":
+                if m = "hash":
+                    // std.hash.<alg>.<member>: the algorithm names a
+                    // namespace, so another algorithm is another
+                    // namespace beside this one rather than two more
+                    // names inside std.hash
+                    _ ← self.eat(TK_DOT, "'.' and which algorithm")
+                    let aname := self.ttext(self.pos)
+                    let algs := hash_algs()
+                    let alg : mut i64 = ⁻1
+                    foreach k := 0…#algs - 1:
+                        if algs[k] = aname:
+                            alg ← @dropunit(k)
+                    if alg = ⁻1:
+                        self.err("'std.hash." ⧺ aname ⧺ "' names no algorithm; " ⧺ hash_algs_named() ⧺ " does")
+                        return 0
+                    self.pos ← self.pos + 1
+                    _ ← self.eat(TK_DOT, "'.' and what the algorithm is asked")
+                    let hm := self.ttext(self.pos)
+                    let hsb : mut i64 = ⁻1
+                    if hm = "digest": hsb ← SB_HDIGEST
+                    elif hm = "start": hsb ← SB_HSTART
+                    else:
+                        self.err("'std.hash." ⧺ aname ⧺ "." ⧺ hm ⧺ "' is not core-2; digest() answers the digest of a message in hand and start() a handle to feed one that is not")
+                        return 0
+                    self.pos ← self.pos + 1
                     let hoff : i64 = self.parse_args()
-                    return self.mknode(NK_SCALL, at, SB_SHA256, hoff, 0)
+                    return self.mknode(NK_SCALL, at, hsb, hoff, alg)
                 let sb : mut i64 = ⁻1
                 if m = "println": sb ← SB_PRINTLN
                 elif m = "print": sb ← SB_PRINT
                 elif m = "exit": sb ← SB_EXIT
                 else:
-                    self.err("'std." ⧺ m ⧺ "' is not core-2; println, print, exit, args, env, process, fs, arena, bytes, iov, sha256, build and implementation are")
+                    self.err("'std." ⧺ m ⧺ "' is not core-2; println, print, exit, args, env, process, fs, arena, bytes, iov, hash, build and implementation are")
                     return 0
                 let off : i64 = self.parse_args()
                 return self.mknode(NK_SCALL, at, sb, off, 0)

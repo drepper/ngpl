@@ -460,20 +460,23 @@ impl Lower:
                 let d : i64 = self.tmp()
                 self.ir(IR_SBYTES, sv, 0, 0, d, 0)
                 return d
-            if na = SB_SHA256:
-                // the routine reads an array, so a string hands over
-                // its bytes first; the copy is a page at most and the
-                // alternative is a second runtime routine
-                let hn : i64 = self.a.extra[(nb + 1) × 1¤ptrdiff]
-                let ht : i64 = ty_strip_ref(self.tof(hn))
-                let hv0 : i64 = self.lower_expr(hn)
-                let hv : mut i64 = hv0
-                if ht = TY_STR:
-                    let bv : i64 = self.tmp()
-                    self.ir(IR_SBYTES, hv0, 0, 0, bv, 0)
-                    hv ← bv
+            if na = SB_HSTART:
+                let av : i64 = self.tmp()
+                self.ir(IR_CONST, self.a.nc[nid × 1¤ptrdiff], 0, 0, av, 0)
                 let d : i64 = self.tmp()
-                self.ir(IR_SHA256, hv, 0, 0, d, 0)
+                self.ir(IR_HSTART, av, 0, 0, d, 0)
+                return d
+            if na = SB_HDIGEST:
+                // A message already in hand is the same thing said in
+                // three steps, so it is: one implementation of the
+                // algorithm, not two that could drift apart.
+                let av : i64 = self.tmp()
+                self.ir(IR_CONST, self.a.nc[nid × 1¤ptrdiff], 0, 0, av, 0)
+                let hv : i64 = self.tmp()
+                self.ir(IR_HSTART, av, 0, 0, hv, 0)
+                self.ir(IR_HUPDATE, hv, self.lower_hash_arg(self.a.extra[(nb + 1) × 1¤ptrdiff]), 0, 0, 0)
+                let d : i64 = self.tmp()
+                self.ir(IR_HFINAL, hv, 0, 0, d, 0)
                 return d
             if na = SB_IOV:
                 return self.lower_iov(self.a.extra[(nb + 1) × 1¤ptrdiff])
@@ -847,6 +850,14 @@ impl Lower:
             let pv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
             self.ir(IR_WRITEV, av, pv, 0, 0, 0)
             return ⁻1
+        if mid = MID_HUPDATE:
+            let uv : i64 = self.lower_hash_arg(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            self.ir(IR_HUPDATE, av, uv, 0, 0, 0)
+            return ⁻1
+        if mid = MID_HDIGEST:
+            let d : i64 = self.tmp()
+            self.ir(IR_HFINAL, av, 0, 0, d, 0)
+            return d
         if mid = MID_DIRITER:
             let earr : i64 = self.tmp()
             self.ir(IR_DENTS, 0, 0, 0, earr, 0)
@@ -1154,6 +1165,18 @@ impl Lower:
     // struct with a layout is written out one field at a time, at the
     // offsets the layout gives, with what the layout skips written as
     // zeros so the same program twice produces the same file.
+    // What a hash is handed: an array of bytes.  A string gives up its
+    // bytes first, which costs a copy the runtime would otherwise need
+    // a second entry point to avoid.
+    fn lower_hash_arg(&mut self, hn : i64) → i64:
+        let ht : i64 = ty_strip_ref(self.tof(hn))
+        let hv : i64 = self.lower_expr(hn)
+        if ht ≠ TY_STR:
+            return hv
+        let bv : i64 = self.tmp()
+        self.ir(IR_SBYTES, hv, 0, 0, bv, 0)
+        bv
+
     fn lower_iov(&mut self, pe : i64) → i64:
         let pt : i64 = ty_strip_ref(self.tof(pe))
         let pv : i64 = self.lower_expr(pe)

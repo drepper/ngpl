@@ -8342,16 +8342,42 @@ Memory and page sizes carry the `byte` unit, so they combine correctly with `siz
 let pages : mut = std.sys.total_memory() ÷ std.sys.page_size()
 ```
 
-#### Digests (`std.sha256`)
+#### Digests (`std.hash`)
+
+Each algorithm is a namespace, and every one of them answers the same two things: `digest(x)` for a message already in hand, and `start()` for one that is not.
 
 ```
-let d : u8[] = std.sha256("abc")            // a string, as its UTF-8 bytes
-let e : u8[] = std.sha256(std.bytes("abc")) // the same message, the same digest
+let d : u8[] = std.hash.sha256.digest("abc")            // a string, as its UTF-8 bytes
+let e : u8[] = std.hash.sha256.digest(std.bytes("abc")) // the same message, the same digest
 ```
 
-`std.sha256(x)` answers the SHA-256 of `x` as its thirty-two bytes, most significant first, per FIPS 180-4.  `x` is a string — hashed as its UTF-8 bytes — or a `u8[]`/`byte[]`.
+`x` is a string — hashed as its UTF-8 bytes — or a `u8[]`/`byte[]`.  `sha256` follows FIPS 180-4 and answers thirty-two bytes, most significant first.
 
 The result is bytes rather than a number because no sized type the language has holds two hundred and fifty-six bits, so a program handed a digest as an integer could not keep it.  Thirty-two bytes it can hold, compare, index, and write out in whatever spelling it likes.
+
+##### A digest a piece at a time
+
+`start()` answers a handle, which takes the message in as many pieces as the program has it, and gives the digest back at the end:
+
+```
+let h : mut = std.hash.sha256.start()
+h.update("the quick ")
+h.update(std.bytes("brown fox"))
+let d : u8[] = h.digest()
+```
+
+| Member | Result | Description |
+|--------|--------|-------------|
+| `<alg>.digest(x)` | `u8[]` | the digest of the whole of `x` |
+| `<alg>.start()` | `std.hash.Hash` | a handle, with nothing added yet |
+| `h.update(x)` | ∅ | another piece of the message |
+| `h.digest()` | `u8[]` | the digest of every piece, and the end of `h` |
+
+A message added in pieces and the same message added at once give the same digest; where the pieces are cut makes no difference.
+
+**`digest()` ends the handle.**  What it held is dropped there rather than whenever the program happens to finish with it — a message worth hashing is often a message worth not leaving in memory afterwards — and asking a spent handle for anything stops the program rather than answering something that is no longer true.
+
+The reason to have this at all is that a program should not have to hold the whole of what it is hashing: a file larger than memory, a stream that arrives over time, or a compiler's bill of materials, which is a quarter of a megabyte of tokens that would otherwise be gathered into one array before any of it could be hashed.
 
 A digest is a name that cannot be forged, which is why the compiler uses this one to say what a program was built from; see the bill of materials in the chapter on modules and the build system.
 
@@ -8747,7 +8773,7 @@ Both sections are read only and are loaded, in their own segment after the data:
 
 **The program's own digest covers what the program is, not what the file says about it.**  The code, what it reads, what it writes, the entry point, the machine and the class go in.  The bill does not — that would be a digest of its own digest — and neither do the symbol names, the section headers, or the output's filename, because the same program deployed twice under two names is one program.
 
-The digests are SHA-256, computed with `std.sha256`.
+The digests are SHA-256, computed with `std.hash.sha256`, and the compiler feeds them as it reads rather than gathering the message first.
 
 ### Roadmap
 

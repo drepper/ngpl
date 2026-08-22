@@ -121,7 +121,25 @@ let SB_BOUTDN : i64 = 22    // std.build.output_directory() → str
 let SB_BPATHS : i64 = 23    // std.build.paths() → str[]
 let SB_BFLAGS : i64 = 24    // std.build.flags() → str[]
 
-let SB_SHA256 : i64 = 25    // std.sha256(x) → the digest of x, a u8[] of 32
+// std.hash.<alg>.<member>: which algorithm is in nc, so an algorithm
+// added later adds an entry to the table below and nothing else.
+let SB_HDIGEST : i64 = 25   // std.hash.<alg>.digest(x) → the digest of x, a u8[]
+let SB_HSTART : i64 = 26    // std.hash.<alg>.start() → a handle to feed
+
+// the algorithms, in the order hash_algs() names them
+let HALG_SHA256 : i64 = 0
+
+fn hash_algs() → str[]:
+    ["sha256"]
+
+// the same names as a diagnostic says them
+@post(r: #r > 0)
+fn hash_algs_named() → str:
+    let algs := hash_algs()
+    let out : mut str = ""
+    foreach k := 0…#algs - 1:
+        out ← out ⧺ ("" if k = 0 else ", ") ⧺ algs[k]
+    out
 
 // what the auxiliary vector is asked for, and under which key
 let PROC_PAGESIZE : i64 = 0

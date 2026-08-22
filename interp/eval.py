@@ -841,28 +841,6 @@ def _builtin_heap_alloc(args):
     return ObjectValue(std.get_allocator())
 
 
-def _builtin_sha256(args):
-    """sha256(data) — compute SHA-256 hash as arbitrary-width integer.
-
-    The data argument can be a Bytes object (from file.read_file) or a StrValue.
-    Returns an IntValue representing the 256-bit hash.
-    """
-    if len(args) != 1:
-        raise TypeError("sha256(data) takes exactly 1 argument")
-    data_arg = unwrap_optional(args[0])
-    if isinstance(data_arg, ObjectValue):
-        if isinstance(data_arg.obj, Bytes):
-            data = bytes(data_arg.obj.data)
-        else:
-            raise TypeError(f"sha256 expects Bytes or StrValue, got {type(data_arg.obj).__name__}")
-    elif isinstance(data_arg, StrValue):
-        data = data_arg.value.encode("utf-8")
-    else:
-        raise TypeError(f"sha256 expects Bytes or StrValue, got {type(data_arg).__name__}")
-    h = std._sha256(data)
-    return mk_int(h)
-
-
 def _builtin_format(args):
     """format(str, file_or_fd?, ...) → print to file if provided, else return string.
 

@@ -4,24 +4,27 @@
 //
 // Every other runtime routine is written twice -- by hand for the
 // pioneer in rt_x86_64.ngpl, as IR for the five in rt_portable.ngpl.
-// This one is written once.  A hash is two hundred instructions of
+// These are written once.  A hash is a few hundred instructions of
 // pure arithmetic with no calling convention and no kernel in it, so
 // there is nothing for a hand-tuned version to know that the driver
 // does not; writing it twice would only be two places to get FIPS
 // 180-4 wrong.  x86-64 compiles this IR through emit_fn exactly as
 // the other five compile it through t_emit_fn.
 //
-// It is the same algorithm sha256.ngpl spells in the language, and the
-// conformance suite holds the two to one answer.  The compiler needs
-// both: the digest it computes while running under the interpreter is
-// the language one, and the digest the compiled compiler computes is
-// this.
+// Three routines, which is what rt_hash.ngpl asks an algorithm for:
+// how it starts, how it compresses a block, and how it finishes.  A
+// second algorithm writes three of its own beside these and touches
+// nothing else.  The handle's layout -- the HS_* offsets -- belongs to
+// rt_hash.ngpl.
+//
+// The same algorithm tests/sha256.ngpl spells in the language, and the
+// conformance suite holds the two to one answer.
 //
 // The arithmetic is thirty-two bits wide and says so.  add32/shl32
 // leave the driver's t_canon to narrow what the operation widened,
-// which is exactly the `& 0xFFFFFFFF` the language version writes out
-// by hand at every step -- so the IR is shorter than the source it
-// mirrors, not longer.
+// which is exactly the `& 0xFFFFFFFF` a version written in the
+// language spells out at every step -- so the IR is shorter than the
+// source it mirrors, not longer.
 //
 // The numbers here are virtual register ids and label ids, which
 // measure nothing; they carry no unit, as everywhere else the IR is
@@ -35,21 +38,32 @@ fn sha_ir_rotr(b : &mut RtB, x : i64, n : i64) → i64:
 
 // the message schedule's word at a computed index; `three` holds the
 // shift that turns an index into a byte offset
-fn sha_ir_w(b : &mut RtB, scr : i64, idx : i64, three : i64) → i64:
-    b.ldn(b.add(scr, b.shl(idx, three)), 0, 8)
+fn sha_ir_w(b : &mut RtB, h : i64, idx : i64, three : i64) → i64:
+    b.ldn(b.add(h, b.shl(idx, three)), HS_W, 8)
 
-// The whole routine: (h) → the thirty-two bytes of the SHA-256 of the
-// u8[] h, most significant first.  Its one argument is an array
-// descriptor, so a string is turned into its bytes before the call.
-fn rt_sha256_ir() → IrFn:
+// (h): the state, the block size, and the round constants.  The
+// constants are laid down once per handle rather than once per block,
+// and they come from the same sha_k() the language version reads --
+// one table, not two.
+fn rt_sha256init_ir() → IrFn:
     let b : mut RtB = rtb(1)
-    let slots : i64 = b.ldn(0, 0, 8)
-    let n : i64 = b.ldn(0, 8, 8)
+    b.stn(0, HS_BLK, b.cst(64), 8)
+    let h0 : u32[] = sha_h0()
+    assert(@dropunit(#h0) = 8, "eight starting words")
+    foreach i := 0…7:
+        b.stn(0, HS_H + i × 8, b.cst(h0[i × 1¤ptrdiff]), 8)
+    let kt : u32[] = sha_k()
+    assert(@dropunit(#kt) = 64, "sixty-four round constants")
+    foreach i := 0…63:
+        b.stn(0, HS_K + i × 8, b.cst(kt[i × 1¤ptrdiff]), 8)
+    b.retn()
+    rtb_fn(b)
 
-    // The padded length: the message, one set bit, then the length in
-    // bits as eight bytes, rounded up to whole sixty-four-byte blocks.
-    // Sixty-four is a power of two, so the rounding is a mask.
-    let zero : i64 = b.cst(0)
+// (h): the sixty-four bytes in the handle's buffer, absorbed into its
+// state.  FIPS 180-4, section 6.2.2.
+fn rt_sha256blk_ir() → IrFn:
+    let b : mut RtB = rtb(1)
+    let z : i64 = b.cst(0)
     let one : i64 = b.cst(1)
     let two : i64 = b.cst(2)
     let three : i64 = b.cst(3)
@@ -57,33 +71,49 @@ fn rt_sha256_ir() → IrFn:
     let c8 : i64 = b.cst(8)
     let c16 : i64 = b.cst(16)
     let c64 : i64 = b.cst(64)
-    let c128 : i64 = b.cst(128)
-    let c255 : i64 = b.cst(255)
-    let total : i64 = b.band(b.add(n, b.cst(72)), b.cst(⁻64))
-    let msgbits : i64 = b.shl(n, three)
-    let lenat : i64 = b.sub(total, c8)
 
-    // One thousand and twenty-four bytes of scratch: the sixty-four
-    // words of the message schedule, then the sixty-four round
-    // constants.  The constants are laid down once per call rather
-    // than once per block, and they come from the same sha_k() the
-    // language version reads -- one table, not two.
-    let scr : i64 = b.call1(RT_ALLOC, b.cst(1024))
-    let kt : u32[] = sha_k()
-    assert(@dropunit(#kt) = 64, "sixty-four round constants")
-    foreach i := 0…63:
-        b.stn(scr, 512 + i × 8, b.cst(kt[i × 1¤ptrdiff]), 8)
+    // The block's first sixteen words, big-endian, out of one byte
+    // loop.  The word index only advances every fourth byte and the
+    // accumulator is thirty-two bits wide, so the store that lands
+    // last on a word is the one carrying that word's four bytes: the
+    // three before it wrote a value that is overwritten, and no branch
+    // is needed to tell them apart.
+    let bi : i64 = b.t()
+    let acc : i64 = b.t()
+    b.mov(bi, z)
+    b.mov(acc, z)
+    let lbt : i64 = b.l()
+    let lbe : i64 = b.l()
+    b.lab(lbt)
+    b.jz(b.cltu(bi, c64), lbe)
+    b.mov(acc, b.bor(b.shl32(acc, c8), b.ldn(b.add(0, bi), HS_BUF, 1)))
+    b.stn(b.add(0, b.shl(b.shr(bi, two), three)), HS_W, acc, 8)
+    b.mov(bi, b.add(bi, one))
+    b.jmp(lbt)
+    b.lab(lbe)
 
-    // the eight words the digest is made of, carried across blocks
-    let h0 : u32[] = sha_h0()
-    assert(@dropunit(#h0) = 8, "eight starting words")
-    let hs : mut i64[] = []
-    foreach i := 0…7:
-        let r : i64 = b.t()
-        b.mov(r, b.cst(h0[i × 1¤ptrdiff]))
-        hs.push(r)
+    // and the other forty-eight, worked out from those
+    let j : i64 = b.t()
+    b.mov(j, c16)
+    let ljt : i64 = b.l()
+    let lje : i64 = b.l()
+    b.lab(ljt)
+    b.jz(b.cltu(j, c64), lje)
+    let a15 : i64 = sha_ir_w(&b, 0, b.sub(j, b.cst(15)), three)
+    let a2 : i64 = sha_ir_w(&b, 0, b.sub(j, two), three)
+    let s0 : i64 = b.bxor(b.bxor(sha_ir_rotr(&b, a15, 7), sha_ir_rotr(&b, a15, 18)),
+                          b.shr32(a15, three))
+    let s1 : i64 = b.bxor(b.bxor(sha_ir_rotr(&b, a2, 17), sha_ir_rotr(&b, a2, 19)),
+                          b.shr32(a2, b.cst(10)))
+    let w16 : i64 = sha_ir_w(&b, 0, b.sub(j, c16), three)
+    let w7 : i64 = sha_ir_w(&b, 0, b.sub(j, seven), three)
+    b.stn(b.add(0, b.shl(j, three)), HS_W,
+          b.add32(b.add32(b.add32(w16, s0), w7), s1), 8)
+    b.mov(j, b.add(j, one))
+    b.jmp(ljt)
+    b.lab(lje)
 
-    // the working registers, allocated once and re-read each block
+    // the sixty-four rounds
     let va : i64 = b.t()
     let vb : i64 = b.t()
     let vc : i64 = b.t()
@@ -92,101 +122,26 @@ fn rt_sha256_ir() → IrFn:
     let vf : i64 = b.t()
     let vg : i64 = b.t()
     let vh : i64 = b.t()
-
-    let blk : i64 = b.t()
-    let bi : i64 = b.t()
-    let acc : i64 = b.t()
-    let j : i64 = b.t()
+    b.mov(va, b.ldn(0, HS_H, 8))
+    b.mov(vb, b.ldn(0, HS_H + 8, 8))
+    b.mov(vc, b.ldn(0, HS_H + 16, 8))
+    b.mov(vd, b.ldn(0, HS_H + 24, 8))
+    b.mov(ve, b.ldn(0, HS_H + 32, 8))
+    b.mov(vf, b.ldn(0, HS_H + 40, 8))
+    b.mov(vg, b.ldn(0, HS_H + 48, 8))
+    b.mov(vh, b.ldn(0, HS_H + 56, 8))
     let t : i64 = b.t()
-
-    b.mov(blk, zero)
-    let lblk : i64 = b.l()
-    let lblke : i64 = b.l()
-    b.lab(lblk)
-    b.jz(b.cltu(blk, total), lblke)
-
-    // -----------------------------------------------------------------
-    // the block's first sixteen words, from the padded message
-    // -----------------------------------------------------------------
-    //
-    // A byte at a time, shifted into an accumulator that is written to
-    // its word every time.  The word index only advances every fourth
-    // byte, and the accumulator is thirty-two bits, so the store that
-    // lands last on a word is the one carrying that word's four bytes:
-    // the three before it wrote a value that is overwritten, and no
-    // branch is needed to tell them apart.
-    b.mov(bi, zero)
-    b.mov(acc, zero)
-    let lbt : i64 = b.l()
-    let lbe : i64 = b.l()
-    b.lab(lbt)
-    b.jz(b.cltu(bi, c64), lbe)
-    let off : i64 = b.add(blk, bi)
-    // Which of the four things the padded message says here, computed
-    // rather than branched to.  The message's own bytes come first,
-    // then the one set bit, then the length, and zeros between.  The
-    // address read from is steered to the scratch when the offset is
-    // past the message, so nothing is read that was not allocated.
-    let inmsg : i64 = b.cltu(off, n)
-    let isone : i64 = b.ceq(off, n)
-    let inlen : i64 = b.cgeu(off, lenat)
-    let at : i64 = b.sel(inmsg, b.add(slots, b.shl(off, three)), scr)
-    let mbyte : i64 = b.band(b.ldn(at, 0, 8), c255)
-    // the length's bytes run most significant first; the shift is
-    // steered away from a negative count the same way
-    let k9 : i64 = b.sel(inlen, b.sub(off, lenat), zero)
-    let lbyte : i64 = b.band(b.shr(msgbits, b.shl(b.sub(seven, k9), three)), c255)
-    let v : i64 = b.sel(inmsg, mbyte, b.sel(isone, c128, b.sel(inlen, lbyte, zero)))
-    b.mov(acc, b.bor(b.shl32(acc, c8), v))
-    b.stn(b.add(scr, b.shl(b.shr(bi, two), three)), 0, acc, 8)
-    b.mov(bi, b.add(bi, one))
-    b.jmp(lbt)
-    b.lab(lbe)
-
-    // -----------------------------------------------------------------
-    // and the other forty-eight, worked out from those
-    // -----------------------------------------------------------------
-    b.mov(j, c16)
-    let ljt : i64 = b.l()
-    let lje : i64 = b.l()
-    b.lab(ljt)
-    b.jz(b.cltu(j, c64), lje)
-    let a15 : i64 = sha_ir_w(&b, scr, b.sub(j, b.cst(15)), three)
-    let a2 : i64 = sha_ir_w(&b, scr, b.sub(j, two), three)
-    let s0 : i64 = b.bxor(b.bxor(sha_ir_rotr(&b, a15, 7), sha_ir_rotr(&b, a15, 18)),
-                          b.shr32(a15, three))
-    let s1 : i64 = b.bxor(b.bxor(sha_ir_rotr(&b, a2, 17), sha_ir_rotr(&b, a2, 19)),
-                          b.shr32(a2, b.cst(10)))
-    let w16 : i64 = sha_ir_w(&b, scr, b.sub(j, c16), three)
-    let w7 : i64 = sha_ir_w(&b, scr, b.sub(j, seven), three)
-    let nw : i64 = b.add32(b.add32(b.add32(w16, s0), w7), s1)
-    b.stn(b.add(scr, b.shl(j, three)), 0, nw, 8)
-    b.mov(j, b.add(j, one))
-    b.jmp(ljt)
-    b.lab(lje)
-
-    // -----------------------------------------------------------------
-    // the sixty-four rounds
-    // -----------------------------------------------------------------
-    b.mov(va, hs[0 × 1¤ptrdiff])
-    b.mov(vb, hs[1 × 1¤ptrdiff])
-    b.mov(vc, hs[2 × 1¤ptrdiff])
-    b.mov(vd, hs[3 × 1¤ptrdiff])
-    b.mov(ve, hs[4 × 1¤ptrdiff])
-    b.mov(vf, hs[5 × 1¤ptrdiff])
-    b.mov(vg, hs[6 × 1¤ptrdiff])
-    b.mov(vh, hs[7 × 1¤ptrdiff])
-    b.mov(t, zero)
+    b.mov(t, z)
     let ltt : i64 = b.l()
     let lte : i64 = b.l()
     b.lab(ltt)
     b.jz(b.cltu(t, c64), lte)
-    let toff : i64 = b.shl(t, three)
+    let toff : i64 = b.add(0, b.shl(t, three))
     let big1 : i64 = b.bxor(b.bxor(sha_ir_rotr(&b, ve, 6), sha_ir_rotr(&b, ve, 11)),
                             sha_ir_rotr(&b, ve, 25))
     let ch : i64 = b.bxor(b.band(ve, vf), b.band(b.bnot32(ve), vg))
-    let kv : i64 = b.ldn(b.add(scr, toff), 512, 8)
-    let wv : i64 = b.ldn(b.add(scr, toff), 0, 8)
+    let kv : i64 = b.ldn(toff, HS_K, 8)
+    let wv : i64 = b.ldn(toff, HS_W, 8)
     let t1 : i64 = b.add32(b.add32(b.add32(b.add32(vh, big1), ch), kv), wv)
     let big0 : i64 = b.bxor(b.bxor(sha_ir_rotr(&b, va, 2), sha_ir_rotr(&b, va, 13)),
                             sha_ir_rotr(&b, va, 22))
@@ -206,24 +161,83 @@ fn rt_sha256_ir() → IrFn:
     b.jmp(ltt)
     b.lab(lte)
 
-    b.mov(hs[0 × 1¤ptrdiff], b.add32(hs[0 × 1¤ptrdiff], va))
-    b.mov(hs[1 × 1¤ptrdiff], b.add32(hs[1 × 1¤ptrdiff], vb))
-    b.mov(hs[2 × 1¤ptrdiff], b.add32(hs[2 × 1¤ptrdiff], vc))
-    b.mov(hs[3 × 1¤ptrdiff], b.add32(hs[3 × 1¤ptrdiff], vd))
-    b.mov(hs[4 × 1¤ptrdiff], b.add32(hs[4 × 1¤ptrdiff], ve))
-    b.mov(hs[5 × 1¤ptrdiff], b.add32(hs[5 × 1¤ptrdiff], vf))
-    b.mov(hs[6 × 1¤ptrdiff], b.add32(hs[6 × 1¤ptrdiff], vg))
-    b.mov(hs[7 × 1¤ptrdiff], b.add32(hs[7 × 1¤ptrdiff], vh))
-    b.mov(blk, b.add(blk, c64))
-    b.jmp(lblk)
-    b.lab(lblke)
+    b.stn(0, HS_H, b.add32(b.ldn(0, HS_H, 8), va), 8)
+    b.stn(0, HS_H + 8, b.add32(b.ldn(0, HS_H + 8, 8), vb), 8)
+    b.stn(0, HS_H + 16, b.add32(b.ldn(0, HS_H + 16, 8), vc), 8)
+    b.stn(0, HS_H + 24, b.add32(b.ldn(0, HS_H + 24, 8), vd), 8)
+    b.stn(0, HS_H + 32, b.add32(b.ldn(0, HS_H + 32, 8), ve), 8)
+    b.stn(0, HS_H + 40, b.add32(b.ldn(0, HS_H + 40, 8), vf), 8)
+    b.stn(0, HS_H + 48, b.add32(b.ldn(0, HS_H + 48, 8), vg), 8)
+    b.stn(0, HS_H + 56, b.add32(b.ldn(0, HS_H + 56, 8), vh), 8)
+    b.retn()
+    rtb_fn(b)
+
+// (h) → the thirty-two bytes of the digest.  The padding is a set bit,
+// then zeros, then the length in bits as eight bytes, arranged so the
+// message ends on a block boundary.  It is written through the same
+// buffer the message went through, so there is one path into the
+// compression rather than two.
+fn rt_sha256fin_ir() → IrFn:
+    let b : mut RtB = rtb(1)
+    let z : i64 = b.cst(0)
+    let one : i64 = b.cst(1)
+    let three : i64 = b.cst(3)
+    let seven : i64 = b.cst(7)
+    let c8 : i64 = b.cst(8)
+    let c56 : i64 = b.cst(56)
+    let c64 : i64 = b.cst(64)
+    let c255 : i64 = b.cst(255)
+    let bits : i64 = b.shl(b.ldn(0, HS_TOTAL, 8), three)
+    let fill : i64 = b.t()
+    b.mov(fill, b.ldn(0, HS_FILL, 8))
+
+    // the one bit that ends the message
+    b.stn(b.add(0, fill), HS_BUF, b.cst(128), 1)
+    b.mov(fill, b.add(fill, one))
+    let lf1 : i64 = b.l()
+    b.jz(b.ceq(fill, c64), lf1)
+    _ ← b.call1(RT_SHA256BLK, 0)
+    b.mov(fill, z)
+    b.lab(lf1)
+
+    // Zeros until eight bytes are left in the block.  Where this block
+    // has no room for the length the loop runs on into the next one,
+    // which is the whole of what the two-block case needs.
+    let lzt : i64 = b.l()
+    let lze : i64 = b.l()
+    let lz1 : i64 = b.l()
+    b.lab(lzt)
+    b.jz(b.cne(fill, c56), lze)
+    b.stn(b.add(0, fill), HS_BUF, z, 1)
+    b.mov(fill, b.add(fill, one))
+    b.jz(b.ceq(fill, c64), lz1)
+    _ ← b.call1(RT_SHA256BLK, 0)
+    b.mov(fill, z)
+    b.lab(lz1)
+    b.jmp(lzt)
+    b.lab(lze)
+
+    // the length in bits, most significant byte first
+    let i : i64 = b.t()
+    b.mov(i, z)
+    let llt : i64 = b.l()
+    let lle : i64 = b.l()
+    b.lab(llt)
+    b.jz(b.cltu(i, c8), lle)
+    b.stn(b.add(0, b.add(c56, i)), HS_BUF,
+          b.band(b.shr(bits, b.shl(b.sub(seven, i), three)), c255), 1)
+    b.mov(i, b.add(i, one))
+    b.jmp(llt)
+    b.lab(lle)
+    b.stn(0, HS_FILL, c64, 8)
+    _ ← b.call1(RT_SHA256BLK, 0)
 
     // the eight words as thirty-two bytes, most significant first
     let out : i64 = b.call1(RT_ARRNEW, b.cst(32))
     let shifts : i64[] = [24, 16, 8, 0]
-    foreach i := 0…7:
+    foreach k := 0…7:
+        let hv : i64 = b.ldn(0, HS_H + k × 8, 8)
         foreach s := shifts:
-            _ ← b.call2(RT_ARRPUSH, out,
-                        b.band(b.shr32(hs[i × 1¤ptrdiff], b.cst(s)), c255))
+            _ ← b.call2(RT_ARRPUSH, out, b.band(b.shr32(hv, b.cst(s)), c255))
     b.ret(out)
     rtb_fn(b)

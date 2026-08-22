@@ -38,6 +38,12 @@ fn sbom_compiler_name() → str:
 // Hashing what the program is, rather than how it was typed
 // ---------------------------------------------------------------------------
 
+// How much of the message is held before it is handed to the digests.
+// Large enough that the handing over is not what costs, small enough
+// that it is nothing beside the sources themselves.
+let SBOM_CHUNK ¤byte : i64 = 65536
+
+
 // The bytes a token contributes: what kind it is, and what it says.
 // Layout contributes nothing, and neither does a comment, since the
 // lexer kept neither.  A number is written out in decimal rather than
@@ -58,35 +64,25 @@ fn token_bytes(t : Toks, src : byte[], i ¤ptrdiff : i64, into : &mut u8[]):
             into.push(t.big[i] & 255)
     into.push(0)
 
-// The digest of the tokens that came from a run of the source: one
-// file, or all of it.
-@pre(lo >= 0 and hi >= lo)
-fn token_digest(t : Toks, src : byte[], lo ¤byte : i64, hi ¤byte : i64) → str:
-    let feed : mut u8[] = []
-    let n ¤ptrdiff : i64 = #t.kind
-    let i ¤ptrdiff : mut i64 = 0
-    while i < n:
-        let at ¤byte : i64 = t.off[i]
-        if at >= lo and at < hi:
-            token_bytes(t, src, i, &feed)
-        i ← i + 1
-    sha256_hex(feed)
-
 // The rows a program's sources make: one for each file, in the order
 // they were read, and one for all of them together.
 //
-// One pass.  The tokens are in the order they were read, so the file a
-// token belongs to only ever moves forward, and each file's bytes are
-// hashed as its last token goes by.  Walking every token once per file
-// would be the same answer for the length of the sources times the
-// number of them, which for this compiler is a quarter of a million
-// tokens twenty-seven times over.
+// One pass, and no array of the message.  The tokens are in the order
+// they were read, so the file a token belongs to only ever moves
+// forward, and two digests are fed as they go by: this file's, and
+// every file's together.  Gathering the message first would mean
+// holding a quarter of a million tokens' worth of bytes for this
+// compiler alone, and then copying all of it again for each file to
+// build the digest of them together -- which is what this used to do.
+// A handle is fed a chunk at a time instead, so what is held is
+// SBOM_CHUNK and never the message.
 fn sbom_sources(t : Toks, src : byte[], files : Files) → SbomRow[]:
     let rows : mut SbomRow[] = []
     let nf ¤ptrdiff : i64 = #files.names
     let ntok ¤ptrdiff : i64 = #t.kind
     let total ¤byte : i64 = #src
-    let whole : mut u8[] = []
+    let whole : mut = std.hash.sha256.start()
+    let one : mut = std.hash.sha256.start()
     let feed : mut u8[] = []
     let fi ¤ptrdiff : mut i64 = 0
     let hi ¤byte : mut i64 = files.off[1 × 1¤ptrdiff] if nf > 1 else total
@@ -94,17 +90,24 @@ fn sbom_sources(t : Toks, src : byte[], files : Files) → SbomRow[]:
     while i < ntok:
         let at ¤byte : i64 = t.off[i]
         while at >= hi and fi + 1 < nf:
-            rows.push(SbomRow{kind: Sbomkind.source, name: files.names[fi],
-                              hash: sha256_hex(feed)})
-            whole ← whole ⧺ feed
+            one.update(feed)
+            whole.update(feed)
             feed ← []
+            rows.push(SbomRow{kind: Sbomkind.source, name: files.names[fi],
+                              hash: hex_digest(one.digest())})
+            one ← std.hash.sha256.start()
             fi ← fi + 1
             hi ← files.off[fi + 1¤ptrdiff] if fi + 1 < nf else total
         token_bytes(t, src, i, &feed)
+        if #feed >= SBOM_CHUNK:
+            one.update(feed)
+            whole.update(feed)
+            feed ← []
         i ← i + 1
+    one.update(feed)
+    whole.update(feed)
     rows.push(SbomRow{kind: Sbomkind.source, name: files.names[fi],
-                      hash: sha256_hex(feed)})
-    whole ← whole ⧺ feed
+                      hash: hex_digest(one.digest())})
     rows.push(SbomRow{kind: Sbomkind.sources, name: "",
-                      hash: sha256_hex(whole)})
+                      hash: hex_digest(whole.digest())})
     rows

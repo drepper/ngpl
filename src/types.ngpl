@@ -47,6 +47,7 @@ fn builtin_enum_members() → str[]:
 fn builtin_enum_values() → i64[]:
     [0, 4096, 8192, 16384, 24576, 32768, 40960, 49152]
 let TY_IOVEC : i64 = 12     // one run of bytes waiting to be written: a base and a length
+let TY_HASH : i64 = 13      // std.hash.<alg>.start(): a digest being fed, a piece at a time
 let TY_UNT : i64 = 8
 let TY_EMPTY : i64 = 9       // a bare ∅, not yet settled on its optional
 let TY_U64 : i64 = 22        // 16 + 0 + 2×3, the widest unsigned
@@ -346,6 +347,7 @@ fn type_name_m(t0 : i64, marks : str[]) → str:
     if t = TY_DIR: return prefix ⧺ "std.fs.Dir"
     if t = TY_ENTRY: return prefix ⧺ "std.fs.Entry"
     if t = TY_IOVEC: return prefix ⧺ "std.iovec"
+    if t = TY_HASH: return prefix ⧺ "std.hash.Hash"
     if ty_is_mat(t): return prefix ⧺ "a matrix"
     if ty_is_rg(t): return prefix ⧺ "range"
     if ty_is_lam(t): return prefix ⧺ "a function"

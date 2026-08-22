@@ -660,7 +660,7 @@ was written afterwards.
     tokens types diag lex ast parse dumpast check comptime ir lower
     emit sha256 symbols sbom elf codegen main
     arch_x86_64 rt_x86_64 arch_a64 dispatch arch_rv64 arch_i386
-    arch_arm arch_rv32 tdriver rt_portable rt_sha256 codegen_t
+    arch_arm arch_rv32 tdriver rt_portable rt_hash rt_sha256 codegen_t
 
 Build it with `ngplc --build src/main.ngpl`; the recipe in `main.ngpl`
 is a `@build` function, which generates no code and cannot be called.
@@ -994,18 +994,26 @@ machine code written out for one target, and the other five have one
 runtime between them, which is named for how it is written rather than
 for any of them.
 
-**One routine is written once for all six.**  `RT_SHA256`
-(`rt_sha256.ngpl`) is arithmetic and nothing else — no kernel, no
-calling convention of its own — so there is nothing a hand-written
+**The hash routines are written once for all six.**  `rt_hash.ngpl`
+and `rt_sha256.ngpl` are arithmetic and nothing else — no kernel, no
+calling convention of their own — so there is nothing a hand-written
 version would know that the IR does not, and the pioneer compiles the
-same builder through `emit_fn` that the other five compile through
+same builders through `emit_fn` that the other five compile through
 `t_emit_fn`.  That is what `emit_fn` learning `IR_LDN`, `IR_STN` and
 `IR_KADDR` bought: the pioneer can now compile anything the portable
-builders write.  Its arithmetic is 32 bits wide and says so — `add32`
+builders write.  The arithmetic is 32 bits wide and says so — `add32`
 and `shl32` leave the driver's `t_canon` to do the narrowing that the
 same algorithm written in the language spells as `& 0xFFFFFFFF` at
 every step.  It is what makes a bill of materials free: 482 s for
-stage 1 with one and 485 s without.  What 64-bit hardware does in one instruction the
+stage 1 with one and 485 s without.
+
+The split between the two files is the seam an algorithm is added at.
+`rt_hash.ngpl` knows only that bytes go into a block and the block is
+absorbed when it fills, which is every sponge and every
+Merkle-Damgård hash; `rt_sha256.ngpl` answers the three questions the
+handle asks an algorithm — how it starts, how it compresses a block,
+and how it finishes.  A second algorithm writes three routines and
+touches three lines.  What 64-bit hardware does in one instruction the
 32-bit targets get as shared software: 64-bit divide/remainder
 (shift-and-subtract) and multiply-overflow (four half-products), as
 RT_*64 helpers the IR builders never recurse into.

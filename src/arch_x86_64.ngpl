@@ -601,10 +601,14 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.load(R_DI, a)
             em.jglobal(232, ⁻1, RT_SBYTES)
             em.store(R_AX, d)
-        elif o = IR_SHA256:
+        elif o = IR_HSTART or o = IR_HFINAL:
             em.load(R_DI, a)
-            em.jglobal(232, ⁻1, RT_SHA256)
+            em.jglobal(232, ⁻1, RT_HSTART if o = IR_HSTART else RT_HFINAL)
             em.store(R_AX, d)
+        elif o = IR_HUPDATE:
+            em.load(R_DI, a)
+            em.load(R_SI, b)
+            em.jglobal(232, ⁻1, RT_HUPDATE)
         elif o = IR_ACAT:
             em.load(R_DI, a)
             em.load(R_SI, b)
