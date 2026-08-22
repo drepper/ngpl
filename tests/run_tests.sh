@@ -122,6 +122,7 @@ all_tests=(
     "$testdir"/test_iterator.ngpl
     "$testdir"/test_walk_holds.ngpl
     "$testdir"/test_one_thing_twice.ngpl
+    "$testdir"/test_evaluation_order.ngpl
     "$testdir"/test_while_binding.ngpl
     "$testdir"/test_try_return_type.ngpl
     "$testdir"/test_match.ngpl

@@ -178,6 +178,7 @@ shared_tests=(
     test_byte
     test_callee_scope
     test_concat
+    test_evaluation_order
     test_exit_code
     test_generate
     test_hints

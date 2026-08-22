@@ -1061,6 +1061,11 @@ def _ancestors_of(module: str) -> list:
     return out
 
 
+# Says a target subexpression was not evaluated, which is every
+# target that has none: a bare name.
+_MISSING = object()
+
+
 class Evaluator:
     """Evaluates NGPL AST in a given environment.
 
@@ -4296,20 +4301,38 @@ class Evaluator:
             if target_pos is not None:
                 self._last_pos = target_pos
             self._check_assignable(target_ast)
+            # Left to right.  What is written stands to the left of the
+            # value, so the target's own subexpressions -- the thing
+            # being written into, and where in it -- are evaluated
+            # before the value is.  Held here so the code below reads
+            # them rather than evaluating them a second time, which
+            # would run their effects twice.
+            _pre_obj = _MISSING
+            _pre_idx = None
+            _pre_start = _pre_end = _MISSING
+            if isinstance(target_ast, (MultiSlice, SliceAccess, Subscript,
+                                       GetAttr)):
+                _pre_obj = self.eval_expr(target_ast.obj)
+                if isinstance(target_ast, SliceAccess):
+                    _pre_start = self.eval_expr(target_ast.start)
+                    _pre_end = self.eval_expr(target_ast.end)
+                elif isinstance(target_ast, Subscript):
+                    _pre_idx = [self.eval_expr(i)
+                                for i in target_ast.indices]
             rhs = self.eval_expr(rhs_ast)
             if isinstance(target_ast, VarRef):
                 self._check_assigned_kind(target_ast.name, rhs)
             if isinstance(target_ast, MultiSlice):
                 # arr[range, range, ...] ← matrix — multi-dim slice write.
-                arr_val = self.eval_expr(target_ast.obj)
+                arr_val = _pre_obj
                 self._eval_multi_slice_write(arr_val, target_ast.specs, rhs)
             elif isinstance(target_ast, SliceAccess):
                 # arr[s…e] ← rhs_array — copy elements into slice.
-                arr_val = self.eval_expr(target_ast.obj)
+                arr_val = _pre_obj
                 au = unwrap_optional(arr_val)
                 if isinstance(au, ObjectValue) and isinstance(au.obj, ArrayValue):
-                    s = unwrap_optional(self.eval_expr(target_ast.start))
-                    e = unwrap_optional(self.eval_expr(target_ast.end))
+                    s = unwrap_optional(_pre_start)
+                    e = unwrap_optional(_pre_end)
                     s = self._check_index_unit(s, au.obj)
                     e = self._check_index_unit(e, au.obj)
                     rhs_arr = self._as_array(rhs)
@@ -4318,10 +4341,10 @@ class Evaluator:
                             au.obj.set(s.value + i, rhs_arr.get(i))
             elif isinstance(target_ast, Subscript):
                 # arr[i] or arr[i, j, ...] ← value — mutate (nested) array element.
-                val = self.eval_expr(target_ast.obj)
-                for idx_node in target_ast.indices[:-1]:
+                val = _pre_obj
+                for _i, idx_node in enumerate(target_ast.indices[:-1]):
                     unwrapped = unwrap_optional(val)
-                    idx_val = self.eval_expr(idx_node)
+                    idx_val = _pre_idx[_i]
                     iu = unwrap_optional(idx_val)
                     if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
                         iu = self._check_index_unit(iu, unwrapped.obj)
@@ -4345,8 +4368,7 @@ class Evaluator:
                     # was there before: a dictionary has no length to run past
                     # and nothing to be out of range of.
                     hv = unwrapped.obj
-                    key = self._checked_key(
-                        self.eval_expr(last_idx_node), hv.key_type, None)
+                    key = self._checked_key(_pre_idx[-1], hv.key_type, None)
                     value = rhs
                     if hv.value_type is not None:
                         value = coerce_to_type(value, hv.value_type)
@@ -4358,8 +4380,7 @@ class Evaluator:
                                 f"a dictionary of {held} cannot hold {mismatch}")
                     hv.put(key, value)
                 elif isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
-                    idx_val = self.eval_expr(last_idx_node)
-                    iu = unwrap_optional(idx_val)
+                    iu = unwrap_optional(_pre_idx[-1])
                     iu = self._check_index_unit(iu, unwrapped.obj)
                     unwrapped.obj.set(iu.value, rhs)
                 else:
@@ -4367,7 +4388,7 @@ class Evaluator:
                         f"cannot write through a subscript of "
                         f"{runtime_type_of(unwrapped)}")
             elif isinstance(target_ast, GetAttr):
-                obj_val = self.eval_expr(target_ast.obj)
+                obj_val = _pre_obj
                 au = unwrap_optional(obj_val)
                 if isinstance(au, ObjectValue) and isinstance(au.obj, StructInstance):
                     inst = au.obj

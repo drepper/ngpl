@@ -106,17 +106,35 @@ that stores a borrow somewhere it outlives the call — cannot arise
 today, because a borrow can only be a parameter and an argument.  When
 that changes, this rule needs a lifetime to go with it.
 
-### A3. Evaluation order is never written down (**probed**)
+### A3. Evaluation order is never written down (**probed**) — ~~open~~ **settled**
 
 Arguments, binary operands, tuple elements.  Both implementations
-evaluate left-to-right (probed with impure functions printing their
-order), so today the order is de-facto defined — which is how C got
-where it is.  One paragraph in the spec fixes this permanently.  The
-same for short-circuit `and`/`or`: the keywords are *called*
-short-circuit, but no text states that a decided left side leaves the
-right side unevaluated.  The compiled implementation's eager
-evaluation of fault-free right sides is only sound if that guarantee
-is normative and the fault-free criterion is part of it.
+evaluated left-to-right (probed with impure functions printing their
+order), so the order was de-facto defined — which is how C got where it
+is.  The same for short-circuit `and`/`or`: the keywords were *called*
+short-circuit, but no text stated that a decided left side leaves the
+right side unevaluated, and the compiled implementation's eager
+evaluation of fault-free right sides was sound only if that guarantee
+were normative and the fault-free criterion part of it.
+
+**Settled.**  The spec's "Order of Evaluation" says left to right, with
+a row per construct; that a decided `and`/`or` does not read its right
+side, as a guarantee a program may rely on; that `∧`/`∨` and `⌈`/`⌊`
+read both sides always; and exactly what an implementation may evaluate
+anyway — a right side free of effects and free of faults, judged as
+written, which is the `speculatable` predicate the compiler's
+if-conversion already ran on.  `tests/test_evaluation_order.ngpl` holds
+both implementations to every row and runs in both suites.
+
+**Probing it found a row that was not agreed after all.**  `v[i] ← e`
+read the value before the index under the interpreter and after it
+under the compiler — Python's order against the written one — and no
+test had asked.  An assignment writes what is on the left, so the left
+is where the reading starts: the interpreter now evaluates a target's
+own subexpressions before the value.  It is the third divergence this
+review's probes have turned up that every gate had passed, and the
+second (after A1) that only existed because nobody had written the
+question down.
 
 ### A4. Stack exhaustion contradicts the spec (**probed**)
 
@@ -339,6 +357,6 @@ Three items need no discussion, only work:
 
 1. ~~Settle mutation-during-iteration (A1) — it is a live
    divergence.~~  Done; see A1 above.
-2. Write the evaluation-order and short-circuit paragraphs into the
-   spec (A3).
+2. ~~Write the evaluation-order and short-circuit paragraphs into the
+   spec (A3).~~  Done; see A3 above.
 3. ~~Add the ELF-invariants test file (B1).~~  Done; see B1 above.

@@ -1422,6 +1422,50 @@ let t1 := @wrap(v[7] + s1 + ch + K[t] + W[t])
 NGPL is alone in the row that matters: an unsigned type is not a modular counter unless the program says so.  The three others inherited C's rule, and it costs them the case where an unsigned subtraction goes below zero — the most common way a size or an index goes wrong, and the one their arithmetic cannot see.  Wrapping is still available and is written where it is used, which is Zig's `+%` and Rust's `Wrapping<T>` reached by a different spelling.  This avoids the undefined behavior of C while being less surprising than Rust's debug/release split, where a program means different things depending on how it was built.
 
 
+### Order of Evaluation
+
+**Every expression is evaluated left to right**, in the order the parts are written.  This holds wherever a program has more than one thing to evaluate:
+
+| Where | Order |
+|-------|-------|
+| `f(a, b, c)` | `a`, then `b`, then `c` |
+| `a + b`, and every other binary operator | `a`, then `b` |
+| `(a, b)` | `a`, then `b` |
+| `[a, b]` | `a`, then `b` |
+| `⸨a: b, c: d⸩` | `a`, `b`, `c`, `d` |
+| `S{f: a, g: b}` | `a`, then `b` |
+| `a[b]` | `a`, then `b` |
+| `a.m(b)` | `a`, then `b` |
+| `a ⧺ b` | `a`, then `b` |
+| `a[b] ← c` | `a`, then `b`, then `c` |
+| `a if c else b` | `c`, then whichever of `a` and `b` it chose |
+
+The last two are the ones a reader might guess otherwise.  An assignment writes what is on the left, so the left is where the reading starts too: `v[next()] ← next()` asks for the index first.  A conditional reads its condition before either arm, which is the only order that lets the arms be conditional at all.
+
+This is written down because it is the kind of thing that is easy to leave to the implementations and impossible to take back afterwards.  Two implementations that happen to agree have defined the language by accident, and a program that depends on the accident is a program that breaks when the accident does.  C left this open and has spent decades on it.
+
+#### `and` and `or` Read the Right Side Only If They Must
+
+```
+i < #v and v[i] > 0                     // safe: the index is not read when i is past the end
+p ≠ ∅ and p.n > 0
+```
+
+**If the left side settles the answer, the right side is not evaluated.**  `false and x` is `false` and `true or x` is `true` without `x` being looked at, whatever `x` would have done.  This is what makes the guard idiom above mean what it looks like, and it is a guarantee rather than an optimization: a program may rely on it, and may write a right side that would fault or would print without either happening.
+
+`∧` and `∨` are the other pair, and they read both sides always.  `and`/`or` and `∧`/`∨` are not two spellings of one thing: they differ exactly here.  Neither do `⌈` and `⌊` short-circuit; there is no answer to give without looking at both.
+
+#### What an Implementation May Do Instead
+
+An implementation may evaluate a right side that `and` or `or` was going to skip, but **only where doing so cannot be told apart from not doing it**.  That means the right side must be:
+
+- **free of effects** — it writes nothing, prints nothing, calls nothing `@impure`; and
+- **free of faults** — nothing in it can stop the program.  Checked arithmetic can overflow, an index can be out of range, a shift can run past the width, a division can be by zero: none of those may appear.  A name, a literal, a field, `#`, a comparison, `not`, and arithmetic written inside `@wrap` are all fault-free, and so are the logic operators over fault-free operands.
+
+Both conditions are on the *right side as written*, not on what it would have computed had it run.
+
+The point of the licence is that a short-circuit is a branch, and a branch that a machine cannot predict costs more than the work it saves.  `a and b` over two fault-free operands is three straight-line instructions with nothing to mispredict.  The point of the conditions is that this stays an implementation's business: no program can tell which was done, so no program depends on either.
+
 ### Dynamic Arrays as Parameters
 
 Function parameters can be annotated with dynamic array types using the `type[]` syntax:

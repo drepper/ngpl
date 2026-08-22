@@ -1,0 +1,176 @@
+// Every expression is evaluated left to right, and `and`/`or` do not
+// read a right side the left already settled.
+//
+// The specification's "Order of Evaluation" is the normative statement;
+// this is where both implementations are held to it.  It is written
+// down at all because it is the kind of thing that is easy to leave to
+// the implementations and impossible to take back afterwards: two that
+// happen to agree have defined the language by accident, and a program
+// that depends on the accident breaks when the accident does.
+//
+// One row of the table was an accident until this file was written.
+// `v[i] ← e` asked for the value before the index under one
+// implementation and after it under the other, and nothing noticed.
+
+// The order things were read in, as digits: a global string would say
+// it more plainly, but core-2 holds a global to a number, a truth value
+// or a dictionary of constants, and a number says it well enough.
+let LOG : mut i64 = 0
+
+// each of these notes that it was read, and answers what it was given
+@impure
+fn note(k : i64) → str:
+    LOG ← LOG × 10 + k
+    "x"
+
+@impure
+fn n(k : i64, v : i64) → i64:
+    LOG ← LOG × 10 + k
+    v
+
+@impure
+fn b(k : i64, v : bool) → bool:
+    LOG ← LOG × 10 + k
+    v
+
+fn two(x : i64, y : i64) → i64:
+    x + y
+
+struct P:
+    a : i64
+    b : i64
+
+@impure
+fn seen() → i64:
+    let s : i64 = LOG
+    LOG ← 0
+    s
+
+// ---------------------------------------------------------------------
+// Left to right, everywhere there is more than one thing to evaluate
+// ---------------------------------------------------------------------
+
+@test
+@impure
+fn test_arguments_left_to_right():
+    _ ← two(n(1, 1), n(2, 2))
+    assert_eq(seen(), 12)
+
+@test
+@impure
+fn test_binary_operands_left_to_right():
+    _ ← n(1, 1) + n(2, 2)
+    assert_eq(seen(), 12)
+
+@test
+@impure
+fn test_comparison_operands_left_to_right():
+    _ ← n(1, 1) < n(2, 2)
+    assert_eq(seen(), 12)
+
+@test
+@impure
+fn test_tuple_elements_left_to_right():
+    let p : (i64, i64) = (n(1, 1), n(2, 2))
+    _ ← p
+    assert_eq(seen(), 12)
+
+@test
+@impure
+fn test_array_elements_left_to_right():
+    let a : i64[] = [n(1, 1), n(2, 2)]
+    _ ← a
+    assert_eq(seen(), 12)
+
+@test
+@impure
+fn test_struct_fields_left_to_right():
+    let s : P = P{a: n(1, 1), b: n(2, 2)}
+    _ ← s
+    assert_eq(seen(), 12)
+
+@test
+@impure
+fn test_joining_left_to_right():
+    let s : str = note(1) ⧺ note(2)
+    _ ← s
+    assert_eq(seen(), 12)
+
+// An assignment writes what is on the left, so the left is where the
+// reading starts.  This is the row that was an accident.
+@test
+@impure
+fn test_a_store_reads_its_index_before_its_value():
+    let v : mut i64[] = [0, 0, 0]
+    v[n(1, 0) × 1¤ptrdiff] ← n(2, 7)
+    assert_eq(seen(), 12)
+    assert_eq(v[0 × 1¤ptrdiff], 7)
+
+// A conditional reads its condition before either arm, which is the
+// only order that lets the arms be conditional at all.
+@test
+@impure
+fn test_a_conditional_reads_its_condition_first():
+    _ ← n(1, 1) if b(3, true) else n(2, 2)
+    assert_eq(seen(), 31)
+
+@test
+@impure
+fn test_a_conditional_reads_only_the_arm_it_chose():
+    _ ← n(1, 1) if b(3, false) else n(2, 2)
+    assert_eq(seen(), 32)
+
+// ---------------------------------------------------------------------
+// and / or read the right side only if they must
+// ---------------------------------------------------------------------
+
+@test
+@impure
+fn test_and_stops_at_a_false_left():
+    _ ← b(1, false) and b(2, true)
+    assert_eq(seen(), 1)
+
+@test
+@impure
+fn test_or_stops_at_a_true_left():
+    _ ← b(1, true) or b(2, false)
+    assert_eq(seen(), 1)
+
+@test
+@impure
+fn test_and_reads_on_past_a_true_left():
+    _ ← b(1, true) and b(2, true)
+    assert_eq(seen(), 12)
+
+@test
+@impure
+fn test_or_reads_on_past_a_false_left():
+    _ ← b(1, false) or b(2, true)
+    assert_eq(seen(), 12)
+
+// The guard idiom is what the guarantee is for: the index is never
+// read, so it never runs past the end.
+@test
+fn test_a_guard_keeps_the_index_from_being_read():
+    let v : i64[] = [1]
+    let i : i64 = 5
+    assert_eq(i < @dropunit(#v) and v[i × 1¤ptrdiff] > 0, false)
+
+@test
+fn test_a_guard_keeps_the_divisor_from_being_used():
+    let d : i64 = 0
+    assert_eq(d ≠ 0 and ((10 ÷ d) ?? 0) > 1, false)
+
+// ∧ and ∨ are the other pair, and read both sides always.
+@test
+@impure
+fn test_logic_operators_read_both_sides():
+    _ ← b(1, false) ∧ b(2, true)
+    assert_eq(seen(), 12)
+    _ ← b(1, true) ∨ b(2, false)
+    assert_eq(seen(), 12)
+
+@start
+@impure
+fn main():
+    std.println("evaluation order tests passed")
