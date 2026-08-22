@@ -74,6 +74,20 @@ for t in "$testdir"/t*.ngpl; do
             fail=$((fail + 1))
             continue
         fi
+        # A stop leaves through exit with a status the runtime reserves,
+        # never through a signal, and both implementations use the same
+        # number.  Asserting only "nonzero" was how the 1-against-134
+        # fork stayed invisible for as long as it did.
+        if [ $interp_rc -ne $native_rc ]; then
+            echo "FAIL $name: stopped with different codes (interp $interp_rc, native $native_rc)"
+            fail=$((fail + 1))
+            continue
+        fi
+        if [ $native_rc -lt 64 ] || [ $native_rc -gt 127 ]; then
+            echo "FAIL $name: stopped with $native_rc, which is outside the 64-127 the runtime reserves"
+            fail=$((fail + 1))
+            continue
+        fi
     else
         if [ $interp_rc -ne $native_rc ]; then
             echo "FAIL $name: exit codes differ (interp $interp_rc, native $native_rc)"

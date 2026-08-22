@@ -49,6 +49,16 @@ The Compiler
     -- for the parser, which by then knows what the file declared, to put on the literal.  This
     is what the interpreter always did, where ¤ is an ordinary operator.
 
+[ ] the interpreter cannot always tell a program it refuses from a program that ran and
+    stopped.  It checks types as it evaluates, so both arrive at the same place as Python
+    exceptions, and the two leave with different statuses: a refusal 1, a stop the reserved
+    64.  The ones that are unmistakable carry it -- ContractError, OverflowError,
+    ProgramStop, RuntimeError -- and interp/errors.py's ProgramStop is where a stop says it
+    is one.  Everything else raised while evaluating is still taken for a refusal, which is
+    right for a type error and wrong for, say, an index past the end.  Converting the rest
+    is a raise-site-by-raise-site job; each one converted makes another t9N test comparable.
+    The compiler has no such trouble: it refuses before it runs.
+
 [ ] arm and riscv32 do not report a stack overflow.  The other four install a SIGSEGV
     handler at startup, on a sigaltstack, and compare the faulting address against the
     guard's bounds; these two cannot, because a handler is entered with the kernel's calling

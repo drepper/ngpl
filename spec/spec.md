@@ -9283,6 +9283,31 @@ backtrace (innermost call first):
   #1 main at program.ngpl:10:4
 ```
 
+### Exit Codes the Runtime Reserves
+
+A program the runtime stops **leaves through exit with a status, never through a signal.**  A signal is not a status: a shell reports one as 128 plus the number, which collides with whatever a program might have chosen to exit with, and a caller has to know to look for it.  A program that dies of a signal really did die of one.
+
+**64 through 127 are reserved** for stops the runtime reports.  That leaves the ranges either side to their owners:
+
+| Range | Whose |
+|-------|-------|
+| 0–63 | the program's own, from `@start`'s result or `std.exit` |
+| 64–127 | the runtime's, for a stop it reports |
+| 128–255 | a signal the program really died of, as the shell reports it |
+
+**64** is the general one: a stop the runtime has no more particular number for yet.  A stop that has one takes **64 plus its place in the `std.errors` runtime block**, so `stack_overflow` — 102, the third of that block — leaves with **66**.
+
+| Code | Stop |
+|------|------|
+| 64 | a stop the runtime reports and has no other number for |
+| 66 | the stack ran out (`std.errors.stack_overflow`) |
+
+The rest of the range is reserved rather than assigned: as each stop is given its own number it takes the one its `std.errors` code names, and nothing already assigned moves.
+
+Both implementations use these numbers, so a script that runs a program under either is told the same thing.
+
+Reserved means the runtime will not use a number outside its range and a program should not use one inside it: a program that exits 66 of its own accord cannot be told from a stack that ran out.  Neither implementation refuses such an exit today — a code that is computed cannot be checked before it is computed, and refusing only the constant case would be a rule that holds sometimes.  It is a range a program is asked to stay out of, not one it is stopped from entering.
+
 ### The Stack Running Out
 
 A program is given a stack of a stated size — `--stack-size`, eight mebibytes by default — with a guard below it: `--guard-size` bytes, sixty-four kibibytes by default, mapped so that touching them faults.  A program that recurses too deep walks off the bottom of its stack into the guard rather than into whatever the kernel put beneath, which is what makes running out of stack a stop rather than a corruption.

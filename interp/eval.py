@@ -4953,7 +4953,8 @@ class Evaluator:
                         raise TypeError("range step must be an integer")
                     stv = st.value
                     if stv == 0:
-                        raise TypeError("range step must not be zero")
+                        from interp.errors import ProgramStop
+                        raise ProgramStop("range step must not be zero")
                     if stv > 0:
                         sequences.append([mk_val(i) for i in range(sv, ev + 1, stv)])
                     else:
@@ -6064,7 +6065,7 @@ class Evaluator:
             if args:
                 raise TypeError("chr takes no arguments")
             return CharValue(
-                check_code_point(unwrapped.value, "chr"))
+                check_code_point(unwrapped.value, "chr", stop=True))
         if isinstance(unwrapped, Iterator):
             if method_name != "next":
                 raise AttributeError(

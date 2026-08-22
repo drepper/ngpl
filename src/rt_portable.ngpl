@@ -307,6 +307,10 @@ impl RtB:
     fn abort_msg(&mut self, strid : i64):
         self.o(IR_ABORT, strid, 0, 0, 0, 0)
 
+    // the same message, on the error stream, without the leaving
+    fn eprint_msg(&mut self, strid : i64):
+        self.o(IR_EPRINTS, strid, 0, 0, 0, 0)
+
 fn rtb_fn(b : RtB) → IrFn:
     (IrFn{op: b.op, ia: b.ia, ib: b.ib, ic: b.ic, id: b.idd, iw: b.iww,
           extra: b.extra, nvregs: b.ntmp, nlabels: b.nlab})
@@ -347,15 +351,11 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.retn()
         return rtb_fn(b)
     if id = RT_ABORT:
-        // (buf, len): say it, then die the abort's death
+        // (buf, len): say it, then leave through exit with a status
+        // rather than through a signal
         let b : mut RtB = rtb(2)
         _ ← b.call2(RT_WRITE2, 0, 1)
-        let pid : i64 = b.t()
-        let off0 : i64 = @dropunit(#b.extra)
-        b.extra.push(0)
-        b.o(IR_SYSC, SC_GETPID, off0, 0, pid, 0)
-        let sig : i64 = b.cst(6)
-        _ ← b.sys2(SC_KILL, pid, sig)
+        _ ← b.sys1(SC_EXIT, b.cst(EXIT_STOP))
         let spin : i64 = b.l()
         b.lab(spin)
         b.jmp(spin)

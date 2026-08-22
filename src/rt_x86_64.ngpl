@@ -56,18 +56,18 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.b2(15, 5)
     em.b1(195)
 
-    // RT_ABORT: rsi = message, rdx = its length
+    // RT_ABORT: rsi = message, rdx = its length.  Say it, then leave
+    // through exit with a status rather than through a signal: a
+    // signal is not a status, and a caller should not have to know to
+    // look for one.
     em.rt_begin(RT_ABORT)
     em.movimm(R_AX, 1)
     em.movimm(R_DI, 2)
-    em.b2(15, 5)
-    em.movimm(R_AX, 39)
-    em.b2(15, 5)
-    em.b3(72, 137, 199)             // mov rdi, rax
-    em.movimm(R_SI, 6)
-    em.movimm(R_AX, 62)
-    em.b2(15, 5)
-    em.b2(15, 11)                   // ud2
+    em.b2(15, 5)                    // write(2, rsi, rdx)
+    em.movimm(R_DI, EXIT_STOP)
+    em.movimm(R_AX, 60)
+    em.b2(15, 5)                    // exit
+    em.b2(15, 11)                   // ud2, which nothing reaches
 
     // RT_OV
     em.rt_begin(RT_OV)
@@ -1819,7 +1819,12 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     let ovm2 : i64 = lw.intern(stack_overflow_msg())
     em.sref(R_SI, ovm2)
     em.movimm(R_DX, str_len(lw.strs[ovm2 × 1¤ptrdiff]))
-    em.jglobal(233, ⁻1, RT_ABORT)
+    em.movimm(R_DI, 2)
+    em.movimm(R_AX, 1)
+    em.b2(15, 5)                    // write(2, msg, len)
+    em.movimm(R_DI, EXIT_STACK_OVERFLOW)
+    em.movimm(R_AX, 60)
+    em.b2(15, 5)                    // exit, with this stop's own number
     em.set_label(0)
     // not the guard: the default action, put back, and let it happen
     em.dref(R_R11, relro_off)

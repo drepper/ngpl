@@ -49,7 +49,8 @@ from interp.errors import (format_diagnostic, extract_position,
                            diagnostic_level, set_warnings_are_errors,
                            warnings_are_errors, set_contract_semantic,
                            set_source, CONTRACT_SEMANTICS,
-                           ProgramExit, ProgramAbort)
+                           ProgramExit, ProgramAbort, ProgramStop,
+                           ContractError)
 
 
 def _make_std_errors() -> EnumType:
@@ -2229,6 +2230,13 @@ def _borrow_base(expr) -> str | None:
 STACK_OVERFLOW_MESSAGE = (
     "stack overflow: the program ran past the bottom of its stack")
 
+# How a program the runtime stops leaves.  64 through 127 are reserved
+# for these; 64 is the general one and a particular stop takes 64 plus
+# its place in the std.errors runtime block.  The compiler's runtime
+# uses the same numbers, from src/emit.ngpl.
+EXIT_STOP = 64
+EXIT_STACK_OVERFLOW = 66
+
 
 def _static_borrow_check(func_def) -> str | None:
     """Refuse a container changed while something is walking it.
@@ -3828,12 +3836,22 @@ def main():
         _show_error(RuntimeError(STACK_OVERFLOW_MESSAGE), source,
                     source_path, evaluator,
                     show_backtrace=args.interpreter_backtrace)
-        sys.exit(1)
-    except AssertionError as e:
+        sys.exit(EXIT_STACK_OVERFLOW)
+    except (AssertionError, OverflowError, ContractError, ProgramStop,
+            RuntimeError) as e:
+        # A program that ran and could not go on: it leaves with a
+        # status the runtime reserves, the same one a compiled program
+        # leaves with.
         _show_error(e, source, source_path, evaluator,
                     show_backtrace=args.interpreter_backtrace)
-        sys.exit(1)
+        sys.exit(EXIT_STOP)
     except Exception as e:
+        # Not EXIT_STOP.  This implementation checks types as it
+        # evaluates, so a program it refuses -- a type error, a missing
+        # format -- arrives here beside a program that ran and stopped,
+        # and the two are not the same thing: one was never accepted.
+        # Until the refusals are told apart from the stops, only the
+        # ones that are unmistakably stops carry a stop's status.
         _show_error(e, source, source_path, evaluator,
                     show_backtrace=args.interpreter_backtrace)
         sys.exit(1)

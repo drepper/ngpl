@@ -136,7 +136,7 @@ review's probes have turned up that every gate had passed, and the
 second (after A1) that only existed because nobody had written the
 question down.
 
-### A4. Stack exhaustion contradicts the spec (**probed**) — ~~open~~ **mostly settled**
+### A4. Stack exhaustion contradicts the spec (**probed**) — ~~open~~ **settled, but for two machines**
 
 The spec defines `std.errors.stack_overflow` (code 102).  In fact the
 interpreter reported Python's "maximum recursion depth exceeded" and
@@ -170,11 +170,16 @@ need a trampoline of their own; until then a stack that runs out there
 dies of a plain fault, as it did everywhere before.  The gap is in the
 spec and in TODO-compiler.md rather than hidden.
 
-Not addressed: **exit codes on runtime errors**.  The interpreter exits
-1 where compiled binaries exit 134, and the abort-mode tests assert
-only "nonzero", so the fork is still invisible to the suite.  Stack
-exhaustion now goes through the same abort path as everything else,
-which makes it one fork rather than two, but the fork itself remains.
+**The exit-code half is settled too.**  A program the runtime stops now
+leaves through exit with a status, never through a signal — a signal is
+not a status, and 128-plus-the-number collides with what a program
+might have chosen.  64 through 127 are reserved for these stops: 64 is
+the general one, and a stop with a number of its own takes 64 plus its
+place in the `std.errors` runtime block, so stack exhaustion is 66.
+Both implementations use the same numbers, and the abort-mode tests now
+compare them and check the range rather than asserting "nonzero",
+which is how the 1-against-134 fork stayed invisible for as long as it
+did.  Spec: "Exit Codes the Runtime Reserves".
 
 ### A5. Enum distinctness (**probed**)
 
@@ -273,11 +278,14 @@ loops, calls) run through the existing both-mode harness would have
 found A1 and the unit-arithmetic laxity mechanically.  Highest-
 leverage single addition to the testing.
 
-### B3. Abort paths are thin
+### B3. Abort paths are thin — partly addressed
 
 Five t9x files, asserting only that both implementations fail.  Exit
-codes, abort messages, and *which* error fires are unasserted — the
-rc 1 vs 134 fork (A4) is invisible.  The spec's error-code table has
+codes, abort messages, and *which* error fires were unasserted — the
+rc 1 vs 134 fork (A4) was invisible.  The codes are asserted now: both
+implementations must stop with the same one, and it must be inside the
+64–127 the runtime reserves.  Abort messages and which error fires are
+still unasserted.  The spec's error-code table has
 no test at all.
 
 ### B4. The compiler's diagnostics have no coverage

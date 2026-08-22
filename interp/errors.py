@@ -423,6 +423,23 @@ def format_diagnostic(
     return "\n".join(parts)
 
 
+class ProgramStop(Exception):
+    """A running program stopped by the runtime.
+
+    Not the same thing as a program the language refuses.  A refusal
+    says the program was never acceptable; a stop says an acceptable
+    program ran and could not go on -- an index past the end, a value
+    that does not fit, a character that is not one.  They leave with
+    different statuses, and this is what tells them apart: everything
+    else this implementation raises while evaluating is a refusal,
+    because it checks as it evaluates.
+
+    Only some of the stops carry this today; the rest are still
+    ordinary TypeErrors and still leave as refusals do.  See
+    TODO-compiler.md.
+    """
+
+
 class ContractError(Exception):
     """A condition a function said it holds to did not hold.
 

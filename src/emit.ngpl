@@ -131,6 +131,25 @@ let SIGSEGV_NO : i64 = 11
 let SA_FLAGS_R : i64 = 201326596
 let SA_FLAGS_N : i64 = 134217732
 
+// ---------------------------------------------------------------------------
+// How a program stops
+// ---------------------------------------------------------------------------
+//
+// A program the runtime stops leaves through exit with a status, never
+// through a signal.  A signal is not a status: a shell reports it as
+// 128 plus the number, which collides with whatever a program might
+// have chosen to exit with, and a caller has to know to look for it.
+// Sixty-four through a hundred and twenty-seven are reserved for these
+// stops, which leaves 0…63 to the program and 128… to signals a
+// program really did die of.
+//
+// Sixty-four is the general one, for a stop with no more particular
+// number yet.  A particular stop takes 64 plus its place in the
+// std.errors runtime block, so stack exhaustion -- std.errors
+// .stack_overflow, which is 102 -- is 66.
+let EXIT_STOP : i64 = 64
+let EXIT_STACK_OVERFLOW : i64 = 66
+
 // what a program says when its stack runs out
 fn stack_overflow_msg() → str:
     "stack overflow: the program ran past the bottom of its stack\n"

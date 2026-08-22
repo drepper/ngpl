@@ -799,18 +799,28 @@ MAX_CODE_POINT = 0x10FFFF
 _SURROGATES = range(0xD800, 0xE000)
 
 
-def check_code_point(value: int, where: str) -> int:
-    """Check that a number names a character, or say why it does not."""
+def check_code_point(value: int, where: str, stop: bool = False) -> int:
+    """Check that a number names a character, or say why it does not.
+
+    The same question is asked of two different things.  A character
+    literal that is not a character is a program the language refuses,
+    and the answer is a refusal; `chr` of a number worked out while the
+    program runs is a program that ran and could not go on, and the
+    answer is a stop.  They leave with different statuses, so the
+    caller says which it is asking.
+    """
+    from interp.errors import ProgramStop
+    bad = ProgramStop if stop else TypeError
     if value < 0:
-        raise TypeError(
+        raise bad(
             f"{where}: {value} is not a code point; a character is "
             f"numbered from 0")
     if value > MAX_CODE_POINT:
-        raise TypeError(
+        raise bad(
             f"{where}: {value} is past the last code point, which is "
             f"{MAX_CODE_POINT} (0x10FFFF)")
     if value in _SURROGATES:
-        raise TypeError(
+        raise bad(
             f"{where}: {value} is a surrogate, which encodes half of a "
             f"character in UTF-16 rather than being one")
     return value
@@ -1232,7 +1242,8 @@ class RangeValue(Value):
         """Expand the range to a list of integers."""
         if self.step is not None:
             if self.step == 0:
-                raise TypeError("range step must not be zero")
+                from interp.errors import ProgramStop
+                raise ProgramStop("range step must not be zero")
             if self.step > 0:
                 return list(range(self.start, self.end + 1, self.step))
             return list(range(self.start, self.end - 1, self.step))
