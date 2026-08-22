@@ -117,7 +117,7 @@ fn test_other_falsy_elements():
 
 // An array holds values; ∅ is the absence of one, and an element that
 // could be mistaken for the end has no place in an array to begin with.
-@expect error "an array element is a value"
+@expect error 2741 "an array element is a value, but element 0 is ∅, the absence of one"
 fn error_none_is_not_an_element():
     let v : i64[] = [∅, 1]
     _ ← v
@@ -145,13 +145,13 @@ fn test_comparison_with_none_still_works():
         e ← it.next()
     assert_eq(count, 2)
 
-@expect error "iterator.next takes no arguments"
+@expect error 2256 "iterator.next takes no arguments"
 fn error_next_with_argument():
     let v : mut i64[] = [1]
     let it : mut = v.iterate()
     _ ← it.next(0)
 
-@expect error "answers only next"
+@expect error 2255 "an iterator has no method 'rewind'; it answers only next()"
 fn error_iterator_other_method():
     let v : mut i64[] = [1]
     let it : mut = v.iterate()

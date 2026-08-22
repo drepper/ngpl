@@ -109,14 +109,14 @@ fn test_a_zero_tolerance_is_exact():
 // ---------------------------------------------------------------------
 
 @test
-@expect error "integers are exact"
+@expect error 2226 "≅: an approximate comparison is for floating-point values; integers are exact, so compare them with the exact operator"
 fn error_approx_on_integers():
     let a : i32 = 1
     let b : i32 = 2
     assert(a ≅ b)
 
 @test
-@expect error "expects numbers"
+@expect error 2227 "≅: an approximate comparison expects numbers, got str and str"
 fn error_approx_on_strings():
     assert("a" ≅ "b")
 

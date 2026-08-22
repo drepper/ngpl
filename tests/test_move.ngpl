@@ -23,7 +23,7 @@ fn test_consume_ok():
 
 // Error: field access after consuming method.
 @test
-@expect error "moved"
+@expect error 2418 "use of moved value 'b'"
 fn test_field_after_consume():
     let b := Bag.new(5, "fruit")
     let n := b.take()
@@ -31,7 +31,7 @@ fn test_field_after_consume():
 
 // Error: method call after consuming method.
 @test
-@expect error "moved"
+@expect error 2418 "use of moved value 'b'"
 fn test_method_after_consume():
     let b := Bag.new(5, "fruit")
     b.take()

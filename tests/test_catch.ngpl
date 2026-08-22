@@ -52,14 +52,14 @@ fn test_catch_expected_success():
 // --- Error from function call is NOT caught (syntactic scope) ---
 
 @test
-@expect error "out of range"
+@expect error 2758 "array index 99 out of range (length 1)"
 fn test_catch_no_cross_call():
     try_call_fail()
 
 // --- Catch requires optional or expected return type ---
 
 @test
-@expect error "optional or expected"
+@expect error 2012 "catch requires enclosing function to have optional or expected return type"
 fn test_catch_requires_optional():
     catch:
         42

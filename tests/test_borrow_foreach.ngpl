@@ -145,7 +145,7 @@ fn test_shared_borrow_leaves_array_alone():
     assert_eq(nums[1], 2)
     assert_eq(nums[2], 3)
 
-@expect error "cannot assign to borrowed variable 'x'"
+@expect error 2412 "cannot assign to borrowed variable 'x'"
 fn error_assign_through_shared_borrow():
     let nums : mut i64[] = [1, 2, 3]
     foreach x := &nums:
@@ -156,19 +156,19 @@ fn error_assign_through_shared_borrow():
 // ---------------------------------------------------------------------
 
 // An immutable binding cannot be lent out for writing.
-@expect error "cannot mutably borrow let variable 'nums'"
+@expect error 2416 "cannot mutably borrow let variable 'nums'"
 fn error_mut_borrow_of_let():
     let nums : i64[] = [1, 2, 3]
     foreach x := &mut nums:
         x ← x + 1
 
-@expect error "foreach over &mut requires an array"
+@expect error 2417 "foreach over &mut requires an array, got i64"
 fn error_mut_borrow_of_non_array():
     let n : mut i64 = 5
     foreach x := &mut n:
         x ← x + 1
 
-@expect error "foreach over & requires an array"
+@expect error 2417 "foreach over & requires an array, got i64"
 fn error_shared_borrow_of_non_array():
     let n : mut i64 = 5
     foreach x := &n:
@@ -176,7 +176,7 @@ fn error_shared_borrow_of_non_array():
 
 // Destructuring a borrowed array has no meaning yet: it is unclear
 // whether the parts or the whole would be lent.
-@expect error "one variable per borrowed container"
+@expect error 2415 "foreach over a borrow needs one variable per borrowed container"
 fn error_borrow_with_destructuring():
     let pairs : mut = [(1i64, 2i64), (3i64, 4i64)]
     foreach a, b := &mut pairs:

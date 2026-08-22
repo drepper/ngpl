@@ -79,7 +79,7 @@ fn test_flag_enum_as_a_type():
 // What an enum type admits
 // ---------------------------------------------------------------------
 
-@expect error "expected Color, got Size"
+@expect error 2017 "paint: argument 'c' expected Color, got Size"
 fn error_other_enum_rejected():
     _ ← paint(Size.small)
 
@@ -92,11 +92,11 @@ fn test_a_member_value_becomes_the_member():
     let c : Color = 1
     assert_eq(c, Color.green)
 
-@expect error "holds exactly its members, and 7 is not one of them"
+@expect error 2830 "paint: argument 'c': 'Color' holds exactly its members, and 7 is not one of them"
 fn error_outside_number_rejected():
     _ ← paint(7)
 
-@expect error "holds exactly its members, and 3 is not one of them"
+@expect error 2828 "'Color' holds exactly its members, and 3 is not one of them"
 fn error_outside_number_rejected_at_a_binding():
     let c : Color = 3
     _ ← paint(c)
@@ -113,16 +113,16 @@ fn test_comparison_with_an_outside_number_answers_no():
 // A @flag enum's values are combinations of members, which a bare
 // number does not name, so a number is refused there regardless --
 // and the refusal says which of the two reasons it is.
-@expect error "'Perms' is a @flag enum, so its values are combinations"
+@expect error 2830 "count_perms: argument 'p': 'Perms' is a @flag enum, so its values are combinations of members that a bare number does not name"
 fn error_flag_enum_still_rejects_numbers():
     _ ← count_perms(1)
 
 // …and the same reason, in the same words, where one is compared
-@expect error "a bare number does not name"
+@expect error 2826 "'Perms' is a @flag enum, so its values are combinations of members that a bare number does not name; write .ord() to compare the bits"
 fn error_flag_enum_is_not_compared_with_a_number() → bool:
     Perms.read = 1
 
-@expect error "'Color' is an enum, but the value is Size"
+@expect error 2829 "'Color' is an enum, but the value is Size"
 fn error_binding_rejects_other_enum():
     let c : Color = Size.large
     _ ← paint(c)
@@ -151,7 +151,7 @@ fn test_sum_binding_with_an_enum():
     let p : Paint = Color.blue
     assert_eq(describe(p), "a colour")
 
-@expect error "'Paint' is Color . Circle, but the value is Size"
+@expect error 2271 "'Paint' is Color | Circle, but the value is Size"
 fn error_sum_rejects_other_enum():
     let p : Paint = Size.small
     _ ← describe(p)
@@ -243,7 +243,7 @@ fn test_array_fill_with_a_member_value():
     assert_eq(a[0], Color.red)
     assert_eq(a[2], Color.red)
 
-@expect error "holds exactly its members, and 9 is not one of them"
+@expect error 2828 "'Color' holds exactly its members, and 9 is not one of them"
 fn error_array_fill_outside_the_members():
     let a : Color[3] = 3 ⍴ 9
     _ ← a

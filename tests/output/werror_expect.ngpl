@@ -4,7 +4,7 @@
 // `@expect error` there.
 
 // The function-level form.
-@expect warning "'unused' is declared mut but is never modified"
+@expect warning 2418 "'unused' is declared mut but is never modified"
 fn warns_about_an_idle_mut():
     let unused : mut i64 = 5
     assert_eq(unused, 5)
@@ -12,7 +12,7 @@ fn warns_about_an_idle_mut():
 // The statement-level form, inside a test that runs.
 @test
 fn test_statement_level_expect():
-    @expect warning "'here' is declared mut but is never modified"
+    @expect warning 2418 "'here' is declared mut but is never modified"
     let here : mut i64 = 5
     assert_eq(here, 5)
 

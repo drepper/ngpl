@@ -20,13 +20,13 @@ fn test_pure_local_assign():
 
 // Pure function cannot assign to a mutable global.
 @test
-@expect error "pure function.*cannot assign to non-local"
+@expect error 2242 "pure function 'test_pure_rejects_global_write' cannot assign to non-local variable 'counter'"
 fn test_pure_rejects_global_write():
     counter ← 1
 
 // Pure function cannot read a mutable global.
 @test
-@expect error "pure function.*cannot read mutable global"
+@expect error 2239 "pure function 'test_pure_rejects_global_read' cannot read mutable global variable 'counter'"
 fn test_pure_rejects_global_read():
     let x : mut = counter
 
@@ -80,25 +80,25 @@ fn test_impurity_reaches_the_outer_caller():
 // A pure function that calls an impure one is refused, whether or not
 // it touches a global itself.
 @test
-@expect error "'bump_counter' is @impure, so a function that calls it says @impure too"
+@expect error 2513 "'bump_counter' is @impure, so a function that calls it says @impure too"
 fn test_pure_cannot_call_impure():
     bump_counter()
 
 // Writing to the program's output is a side effect the same way.
 @test
-@expect error "std.println writes where the rest of the program can see it"
+@expect error 2512 "std.println writes where the rest of the program can see it; a function that calls it says @impure"
 fn test_pure_cannot_write_output():
     std.println("from a pure function")
 
 @test
-@expect error "std.print writes where the rest of the program can see it"
+@expect error 2512 "std.print writes where the rest of the program can see it; a function that calls it says @impure"
 fn test_pure_cannot_write_output_without_a_newline():
     std.print("from a pure function")
 
 // A lambda is part of the function that writes it, so an effect
 // inside one is the surrounding function's effect.
 @test
-@expect error "'bump_counter' is @impure"
+@expect error 2513 "'bump_counter' is @impure, so a function that calls it says @impure too"
 fn test_a_lambda_does_not_hide_the_effect():
     let f := λ→ ∅: bump_counter()
     f()

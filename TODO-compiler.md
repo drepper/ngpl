@@ -49,16 +49,17 @@ The Compiler
     -- for the parser, which by then knows what the file declared, to put on the literal.  This
     is what the interpreter always did, where ¤ is an ordinary operator.
 
-[ ] the rest of the diagnostics want numbers.  An @expect names a diagnostic by number now
-    and the wording beside it is advisory, so a message can be improved without breaking the
-    suite -- but only for a diagnostic that has a number.  Roughly 370 of the 380 distinct
-    expectations still match by text, which means those wordings are still load-bearing.  The
-    work is: give the raise site a number from the block its area owns (spec: "What a
-    Diagnostic Is Known By"), then convert the expectation, which
-    tools/update_expectations.py finishes -- write the number with an empty message, run with
-    --expect-drift, apply.  ngplc does not check expectations at all today, so the numbers
-    live in the interpreter; when ngplc grows the check, the two must agree, and that is the
-    reason to keep a number meaning one diagnostic rather than one category.
+[ ] thirty expectations still match by text.  583 of 613 name their diagnostic by number
+    now; the rest are ones that never fired during the sweep that found the raise sites --
+    tests/test_float*.ngpl and tests/test_roots.ngpl wait on floats the interpreter does not
+    implement, and a few depend on the environment -- so there was no number to read off.
+    Each wants the same treatment: make the expectation fire, note which site raised it, give
+    that site a number from its block, and let tools/update_expectations.py fill the message.
+    Spec: "What a Diagnostic Is Known By".
+
+    ngplc still does not check expectations at all; it parses them and leaves the checking to
+    the interpreter, so the numbers live in one implementation.  When ngplc grows the check
+    the two must agree, which is why a number names one diagnostic rather than one category.
 
 [ ] the interpreter cannot always tell a program it refuses from a program that ran and
     stopped.  It checks types as it evaluates, so both arrive at the same place as Python

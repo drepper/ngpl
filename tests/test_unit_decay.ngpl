@@ -80,18 +80,18 @@ fn test_its_own_measure_passes():
 // ---------------------------------------------------------------------
 
 // Two measures standing in for the same thing are still two measures.
-@expect error "tok"
+@expect error 2327 "incompatible units: tok and node"
 fn error_a_sibling_is_not_it():
     let t ¤"tok" : i64 = 1
     let n ¤"node" : i64 = t
     _ ← n
 
-@expect error "tok"
+@expect error 2327 "incompatible units: node and tok"
 fn error_a_sibling_does_not_pass():
     let n ¤"node" : i64 = 1
     _ ← wants_tok(n)
 
-@expect error "tok"
+@expect error 2313 "incompatible units for +: tok and node"
 fn error_siblings_do_not_add():
     let t ¤"tok" : i64 = 1
     let n ¤"node" : i64 = 2
@@ -99,14 +99,14 @@ fn error_siblings_do_not_add():
 
 // The way back is not open: what stands in for a thing is not the
 // thing, so a plain ptrdiff is not a token index.
-@expect error "tok"
+@expect error 2327 "incompatible units: ptrdiff and tok"
 fn error_the_way_back_is_shut():
     let p ¤ptrdiff : i64 = 1
     let t ¤"tok" : i64 = p
     _ ← t
 
 // A measure that stands in for nothing stands in for nothing.
-@expect error "height"
+@expect error 2318 "array index requires unit ptrdiff, got height"
 fn error_a_measure_that_stands_in_for_nothing():
     let xs : i64[] = [10, 20, 30]
     let h ¤"height" : i64 = 1
@@ -135,7 +135,7 @@ fn wants_lineno(l ¤"lineno" : i64) → i64:
 
 // Still one-way, however long the chain: what a line number stands in
 // for does not stand in for a line number.
-@expect error "lineno"
+@expect error 2327 "incompatible units: srcpos and lineno"
 fn error_a_chain_is_still_one_way():
     let p ¤"srcpos" : i64 = 1
     _ ← wants_lineno(p)

@@ -67,12 +67,12 @@ fn test_binding_accepts_an_alternative():
     let b : Shape = Rect{w: 2.0, h: 3.0}
     assert_eq(area(a) + area(b), 9.0)
 
-@expect error "'Shape' is Circle . Rect, but the value is Tri"
+@expect error 2271 "'Shape' is Circle | Rect, but the value is Tri"
 fn error_binding_rejects_a_non_alternative():
     let s : Shape = Tri{b: 1.0, h: 2.0}
     _ ← area(s)
 
-@expect error "argument .s.: .Shape. is Circle . Rect, but the value is Tri"
+@expect error 2274 "area: argument 's': 'Shape' is Circle | Rect, but the value is Tri"
 fn error_argument_rejects_a_non_alternative():
     _ ← area(Tri{b: 1.0, h: 2.0})
 
@@ -80,26 +80,26 @@ fn error_argument_rejects_a_non_alternative():
 // Every alternative has to be reached
 // ---------------------------------------------------------------------
 
-@expect error "match has no arm for Rect"
+@expect error 2286 "match has no arm for Rect; add the missing pattern or a _ arm"
 fn error_match_not_exhaustive(s : Shape) → f64:
     match s:
         Circle(c):  c.r
 
-@expect error "'Tri' is not an alternative of 'Shape'"
+@expect error 2211 "'Tri' is not an alternative of 'Shape', which is Circle | Rect"
 fn error_arm_names_a_foreign_type(s : Shape) → f64:
     match s:
         Circle(c):  c.r
         Rect(v):    v.w
         Tri(t):     t.b
 
-@expect error "match repeats the .Circle.* pattern"
+@expect error 2283 "match repeats the 'Circle(...)' pattern; the second one can never be reached"
 fn error_repeated_alternative(s : Shape) → f64:
     match s:
         Circle(c):  c.r
         Circle(d):  d.r
         Rect(v):    v.w
 
-@expect error "cannot match 'Shape', which is Circle . Rect"
+@expect error 2285 "∅ cannot match 'Shape', which is Circle | Rect"
 fn error_optional_pattern_on_a_sum(s : Shape) → f64:
     match s:
         ∅:          0.0
@@ -139,7 +139,7 @@ fn width_kind(v : Widths) → i64:
         i32(n):  32
         i64(n):  64
 
-@expect error "could be i32 or i64; write the type meant"
+@expect error 2274 "width_kind: argument 'v': 'Widths' is i32 | i64, and this value could be i32 or i64; write the type meant"
 fn error_ambiguous_untyped_number():
     _ ← width_kind(5)
 
@@ -205,7 +205,7 @@ fn test_optional_sum_present():
 
 // What it holds, when it holds something, still has to be an
 // alternative.
-@expect error "'Shape' is Circle . Rect, but the value is Tri"
+@expect error 2271 "'Shape' is Circle | Rect, but the value is Tri"
 fn error_optional_sum_rejects_a_non_alternative():
     let s : Shape? = Tri{b: 1.0, h: 2.0}
     _ ← s
@@ -216,7 +216,7 @@ fn error_optional_sum_rejects_a_non_alternative():
 
 // A fill value has to be an alternative, and the diagnostic says what
 // it was rather than naming the element type back.
-@expect error "'Shape' is Circle . Rect, but the value is int"
+@expect error 2271 "'Shape' is Circle | Rect, but the value is int"
 fn error_array_fill_is_not_an_alternative():
     let a : Shape[3] = 3 ⍴ 0
     _ ← a

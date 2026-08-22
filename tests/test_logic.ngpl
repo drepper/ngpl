@@ -93,47 +93,47 @@ fn test_not_false():
 // The operands are truth values only.  An integer is refused by name,
 // pointing the writer at the comparison that asks the question.
 
-@expect error "takes truth values"
+@expect error 2229 "a logic operator takes truth values, but this operand is i32; a number asks its question with a comparison, as 'x ≠ 0'"
 fn error_and_refuses_an_integer():
     let a : i32 = 42
     let b : i32 = 7
     assert(a ∧ b)
 
-@expect error "takes truth values"
+@expect error 2229 "a logic operator takes truth values, but this operand is i32; a number asks its question with a comparison, as 'x ≠ 0'"
 fn error_or_refuses_an_integer():
     let a : i32 = 0
     let b : i32 = 1
     assert(a ∨ b)
 
-@expect error "takes truth values"
+@expect error 2229 "a logic operator takes truth values, but this operand is i32; a number asks its question with a comparison, as 'x ≠ 0'"
 fn error_xor_refuses_an_integer():
     let a : i32 = 5
     let b : i32 = 3
     assert(not (a ⊕ b))
 
-@expect error "takes truth values"
+@expect error 2229 "a logic operator takes truth values, but this operand is i32; a number asks its question with a comparison, as 'x ≠ 0'"
 fn error_nand_refuses_an_integer():
     let a : i32 = 1
     let b : i32 = 1
     assert(not (a ⊼ b))
 
-@expect error "takes truth values"
+@expect error 2229 "a logic operator takes truth values, but this operand is i32; a number asks its question with a comparison, as 'x ≠ 0'"
 fn error_nor_refuses_an_integer():
     let a : i32 = 0
     let b : i32 = 0
     assert(a ⊽ b)
 
-@expect error "takes truth values"
+@expect error 2229 "a logic operator takes truth values, but this operand is i32; a number asks its question with a comparison, as 'x ≠ 0'"
 fn error_not_refuses_an_integer():
     let x : i32 = 100
     assert(not (¬x))
 
-@expect error "takes truth values"
+@expect error 2229 "a logic operator takes truth values, but this operand is i32; a number asks its question with a comparison, as 'x ≠ 0'"
 fn error_not_keyword_refuses_an_integer():
     let x : i32 = 100
     assert(not x)
 
-@expect error "takes truth values"
+@expect error 2229 "a logic operator takes truth values, but this operand is u8; a number asks its question with a comparison, as 'x ≠ 0'"
 fn error_unsigned_is_refused_too():
     let a : u8 = 255
     assert(a ∧ a)
@@ -194,7 +194,7 @@ fn test_xor_array():
     assert(r[2])
 
 // The elements are held to the same rule as scalars.
-@expect error "takes truth values"
+@expect error 2229 "a logic operator takes truth values, but this operand is i32; a number asks its question with a comparison, as 'x ≠ 0'"
 fn error_integer_elements_are_refused():
     let a : mut i32[3] = 3 ⍴ 0
     a[0] ← 1

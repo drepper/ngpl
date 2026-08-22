@@ -95,14 +95,14 @@ fn test_the_prefix_binds_tighter_than_joining():
 // A number has no case, and its own reading of the glyph needs two
 // operands.
 @test
-@expect error "in front of an operand is the case of text"
+@expect error 2232 "⌈ in front of an operand is the case of text, and this one is i64; the larger and the smaller of two numbers are written between them"
 fn error_the_case_of_a_number():
     let n : mut = ⌈5i64
 
 // A character's case is asked for as its string, since one
 // character's upper case can be more than one character.
 @test
-@expect error "a character's case is written"
+@expect error 2725 "⌈ answers with a string, so it asks for one: a character's case is written ⌈c.str(), since the upper case of one character can be more than one character"
 fn error_the_case_of_a_character():
     let s : mut = ⌈'a'
 
@@ -162,16 +162,16 @@ fn test_an_untyped_operand_takes_the_other_width():
 // Both operands must be the same kind of number, as they must be for
 // addition: an exact comparison of an integer and a float is rarely
 // the question a program means to ask.
-@expect error "maximum.*requires matching types"
+@expect error 2234 "maximum (⌈) requires matching types, got untyped and float"
 fn error_int_with_float():
     let n : mut = 1 ⌈ 2.5
 
-@expect error "minimum.*requires matching types"
+@expect error 2235 "minimum (⌊) requires matching types, got float and untyped"
 fn error_float_with_int():
     let n : mut = 2.5 ⌊ 1
 
 // Only numbers are ordered.
-@expect error "maximum.*expected numeric types"
+@expect error 2011 "maximum (⌈) expected numeric types, got StrValue+StrValue"
 fn error_strings():
     let s : mut = "a" ⌈ "b"
 
@@ -205,7 +205,7 @@ fn test_an_untyped_operand_takes_the_unit():
     assert_eq(d ⌊ 3, 3¤meter)
 
 // The larger of a length and a duration is not a question.
-@expect error "incompatible units for ⌈"
+@expect error 2313 "incompatible units for ⌈: m and s"
 fn error_different_dimensions():
     let a ¤meter : i64 = 5
     let b ¤second : i64 = 3

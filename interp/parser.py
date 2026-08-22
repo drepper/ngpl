@@ -8,6 +8,7 @@ Blocks can use brace-delimited { ... } or layout-driven scoping with : and
 indentation (INDENT/DEDENT tokens).
 """
 
+from interp.errors import coded
 from interp.ast import (
     IntLit, FloatLit, StrLit, CharLit, BoolLit, NoneLit, VarRef, RefExpr, BorrowExpr,
     BinOp, UnaryOp,
@@ -974,7 +975,9 @@ class Parser:
                                is_comptime=is_comptime)
                 fdef.param_positions = param_positions
                 fdef.ret_type_pos = ret_type_pos
-                fdef._parse_error = str(e)
+                from interp.errors import Diagnostic
+                fdef._parse_error = Diagnostic(
+                    str(e), getattr(e, "diag_code", None))
                 fdef._self_is_ref = self_is_ref
                 self._set_pos(fdef, kw_tok)
                 self._skip_to_next_definition()
@@ -1354,9 +1357,9 @@ class Parser:
             if entry == "_":
                 continue
             if entry in seen:
-                raise ParseError(
+                raise coded(2019, ParseError(
                     f"the definition names '{entry}' twice; each element "
-                    f"needs a name of its own", kw_tok)
+                    f"needs a name of its own", kw_tok))
             seen.add(entry)
 
         type_annotation = None
@@ -1463,9 +1466,9 @@ class Parser:
 
         if not has_colon:
             if not (self._check("PUNCT") and self._cur().value == ":"):
-                raise ParseError(
+                raise coded(2020, ParseError(
                     f"{keyword} definition requires ':=' or ': [mut] type ='",
-                    self._cur())
+                    self._cur()))
             self._eat("PUNCT", ":")
         self._eat("PUNCT", "=")
         init_expr = self._parse_expr()
@@ -1580,10 +1583,10 @@ class Parser:
         raises and which is not answered yet.
         """
         if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
-            raise ParseError(
+            raise coded(2021, ParseError(
                 "a unit belongs to a binding or to what an array holds; "
                 "a type alias or a tuple element cannot state one yet",
-                self._cur())
+                self._cur()))
 
     def _unit_after_type(self, unit_spec, unit_tok):
         """Read a unit written against the element type, if one is there.
@@ -1597,10 +1600,10 @@ class Parser:
             return unit_spec
         tok = self._cur()
         if unit_spec is not None:
-            raise ParseError(
+            raise coded(2022, ParseError(
                 "the definition states a unit twice; write it once, "
                 "either after the name or against the element type",
-                unit_tok or tok)
+                unit_tok or tok))
         self.pos += 1
         return self._parse_unit_spec()
 
@@ -1963,7 +1966,7 @@ class Parser:
                 break
         if not last_has_type:
             if not (self._check("PUNCT") and self._cur().value == ":"):
-                raise ParseError("foreach without type annotation requires ':='", self._cur())
+                raise coded(2023, ParseError("foreach without type annotation requires ':='", self._cur()))
             self._eat("PUNCT", ":")
         self._eat("PUNCT", "=")
         iterables = []
@@ -2122,10 +2125,21 @@ class Parser:
                 raise ParseError(
                     f"expected 'error' or 'warning' after @expect, got '{level_tok.value}'",
                     level_tok)
-            if not self._check("STR"):
-                raise ParseError("expected string pattern after @expect level", self._cur())
-            pattern_tok = self._eat("STR")
-            expectations.append((level_tok.value, pattern_tok.value))
+            # the same two shapes a definition's @expect takes
+            if self._check("INT"):
+                code_tok = self._eat("INT")
+                said = self._eat("STR").value if self._check("STR") else None
+                expectations.append((level_tok.value, said, code_tok.value,
+                                     getattr(code_tok, "line", None)))
+            elif self._check("STR"):
+                pattern_tok = self._eat("STR")
+                expectations.append((level_tok.value, pattern_tok.value, None,
+                                     getattr(pattern_tok, "line", None)))
+            else:
+                raise ParseError(
+                    "@expect states the code it expects, and may state the "
+                    "message beside it; the older form states the message "
+                    "alone", self._cur())
             self._try_eat("NEWLINE")
             while self._try_eat("NEWLINE"):
                 pass
@@ -2158,8 +2172,8 @@ class Parser:
                 or (follows.type == "PUNCT" and follows.value == "("))
             if not (self._check("PUNCT") and self._cur().value == ":"
                     and names_type):
-                raise ParseError(
-                    f"lambda parameter '{name}' requires a type annotation", self._cur())
+                raise coded(2024, ParseError(
+                    f"lambda parameter '{name}' requires a type annotation", self._cur()))
             self._eat("PUNCT", ":")
             if self._at_tuple_type():
                 ptype = self._parse_tuple_type()
@@ -2182,10 +2196,10 @@ class Parser:
                 raise ParseError("expected '|' to close capture list", self._cur())
             self.pos += 1
             if not captures:
-                raise ParseError("empty capture list is not allowed", self._cur())
+                raise coded(2025, ParseError("empty capture list is not allowed", self._cur()))
 
         if not (self._check("OP") and self._cur().value == "->"):
-            raise ParseError("lambda requires a return type (-> type)", self._cur())
+            raise coded(2026, ParseError("lambda requires a return type (-> type)", self._cur()))
         self._eat("OP", "->")
         if not self._check("IDENT", "NONE"):
             raise ParseError("expected return type after '->'", self._cur())
@@ -2369,9 +2383,9 @@ class Parser:
             self._skip_nl()
             if self._check("OP") and self._cur().value in _OLD_CMP_SPELLINGS:
                 old = self._cur().value
-                raise ParseError(
+                raise coded(2027, ParseError(
                     f"'{old}' is not an operator; "
-                    f"{_OLD_CMP_SPELLINGS[old]}", self._cur())
+                    f"{_OLD_CMP_SPELLINGS[old]}", self._cur()))
             is_eq = self._check("PUNCT") and self._cur().value == "="
             if not (is_eq or (self._check("OP")
                               and self._cur().value in self._CMP_OPS)):
@@ -2979,7 +2993,7 @@ class Parser:
 
             return node
 
-        raise ParseError(f"unexpected token: {self._tok_display(tok)}", tok)
+        raise coded(2028, ParseError(f"unexpected token: {self._tok_display(tok)}", tok))
 
     def _is_struct_literal_start(self) -> bool:
         """Check if { starts a struct literal (vs. a brace block)."""

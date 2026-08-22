@@ -90,14 +90,14 @@ fn test_how_many_and_how_much():
 // ---------------------------------------------------------------------
 
 @test
-@expect error "is a question for an array, a string, a tuple"
+@expect error 2724 "#: how many things are in it is a question for an array, a string, a tuple, a dictionary or a set, and this is i64"
 fn error_how_many_things_are_in_a_number():
     let n : mut = #5i64
 
 // The member is gone: the two questions it answered are not the same
 // question and no longer share a word.
 @test
-@expect error "is not a member"
+@expect error 2742 ".sizeof is not a member; # is how many things are in a container -- an array, a string, a tuple -- and @sizeof is how much memory something takes"
 fn error_the_member_is_gone():
     let v : i64[] = [1, 2, 3]
     let n : mut = v.sizeof
@@ -111,13 +111,13 @@ fn error_the_member_is_gone():
 // many of one thing is what ⍴ is for, and saying so leaves the making
 // visible at the definition.
 @test
-@expect error "is not made from one value"
+@expect error 2740 "an array of 4 is not made from one value; write the elements out, or make them with 4 ⍴ <value>"
 fn error_an_array_from_one_value():
     let f : i32[4] = 0
     _ ← f[0]
 
 @test
-@expect error "the open dimension has nothing to take its extent from"
+@expect error 2739 "an array of ?×3 is not made from one value, and the open dimension has nothing to take its extent from; write the elements out"
 fn error_an_open_extent_from_one_value():
     let z : i32[,3] = 0
     _ ← z[0, 0]

@@ -290,11 +290,20 @@ a category code — which is all 100 slots would allow — would have made
 the tests stable by making them much weaker; a number has to name the
 diagnostic, not its kind, or `@expect` stops asserting anything.
 
-Converting the 617 annotations is mechanical and under way: this
-session's own diagnostics carry numbers and their expectations are
-converted, and the rest still match by text, which is what a diagnostic
-without a number falls back to.  A diagnostic with no number is not
-wrong — only its wording is still load-bearing until it has one.
+**The conversion is done but for thirty.**  583 of the 613 expectations
+name their diagnostic by number; 253 raise sites carry one.  The
+remaining 30 are expectations that never fired during the sweep that
+found the sites — float tests waiting on unimplemented floats, and a
+few whose diagnostic depends on the environment — so there was nothing
+to read a number off.  They still match by text, which is what a
+diagnostic without a number falls back to.
+
+The sites were found by instrumenting the matcher to record, for each
+expectation matched by text, which file and line raised the diagnostic;
+the numbers were then allocated per site from the block its area owns
+and written in by an AST rewrite, and the messages were filled in by
+the drift mechanism itself — write the number with an empty message,
+run with `--expect-drift`, apply.  Nobody read 583 messages.
 
 ### A9. Smaller items
 

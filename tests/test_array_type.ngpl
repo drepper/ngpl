@@ -66,7 +66,7 @@ fn test_element_width_two_dimensions():
 // A value that will not fit the declared element type is refused
 // wherever it sits, not only in the first row.
 @test
-@expect error "does not fit"
+@expect error 2279 "integer overflow: 300 does not fit in i8 (range -128..127)"
 @impure
 fn test_element_out_of_range_in_a_later_row():
     let m : i8[2,2] = [[1, 2], [3, 300]]
@@ -78,14 +78,14 @@ fn test_element_out_of_range_in_a_later_row():
 // initialized with its eight words, and the eight were quietly taken
 // as the elements of an array nobody had declared.
 @test
-@expect error "is not an array type"
+@expect error 2773 "'u32' is not an array type, but the value is 3 elements; an array type says its shape, as 'u32[]' or 'u32[3]'"
 @impure
 fn test_array_initializer_needs_an_array_type():
     let h : u32 = [1, 2, 3]
     std.println("{}", h)
 
 @test
-@expect error "is not an array type"
+@expect error 2773 "'i32' is not an array type, but the value is 2×2 elements; an array type says its shape, as 'i32[]' or 'i32[2]'"
 @impure
 fn test_nested_initializer_needs_an_array_type():
     let m : i32 = [[1, 2], [3, 4]]
@@ -94,7 +94,7 @@ fn test_nested_initializer_needs_an_array_type():
 // The same for a float element type, so the refusal is about the
 // missing brackets and not about integers.
 @test
-@expect error "is not an array type"
+@expect error 2773 "'f64' is not an array type, but the value is 2 elements; an array type says its shape, as 'f64[]' or 'f64[2]'"
 @impure
 fn test_float_scalar_refuses_an_array():
     let f : f64 = [1.0, 2.0]
@@ -105,7 +105,7 @@ fn takes_a_scalar(n : u32) → u32:
     n
 
 @test
-@expect error "is not an array type"
+@expect error 2765 "takes_a_scalar: argument 'n': 'u32' is not an array type, but the value is 3 elements; an array type says its shape, as 'u32[]' or 'u32[3]'"
 @impure
 fn test_scalar_parameter_refuses_an_array():
     std.println("{}", takes_a_scalar([1, 2, 3]))
@@ -119,7 +119,7 @@ fn hands_back_what_it_was_given(a : T') → u32:
     a
 
 @test
-@expect error "is not an array type"
+@expect error 2755 "hands_back_what_it_was_given: 'u32' is not an array type, but the value is 3 elements; an array type says its shape, as 'u32[]' or 'u32[3]'"
 @impure
 fn test_scalar_return_refuses_an_array():
     std.println("{}", hands_back_what_it_was_given([1, 2, 3]))
@@ -135,14 +135,14 @@ fn test_array_return_accepts_a_literal():
 // --- The extent still has to match ----------------------------------
 
 @test
-@expect error "array size mismatch"
+@expect error 2738 "array size mismatch: declared 3, got 2"
 @impure
 fn test_wrong_extent():
     let a : i32[3] = [1, 2]
     std.println("{}", a)
 
 @test
-@expect error "array size mismatch"
+@expect error 2738 "array size mismatch: declared 2×3, got 2×?"
 @impure
 fn test_wrong_inner_extent():
     let m : i32[2,3] = [[1, 2, 3], [4, 5]]

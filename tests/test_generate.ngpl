@@ -97,13 +97,13 @@ fn test_generate_slice():
 
 // Error: function returns ∅
 @test
-@expect error "must not return"
+@expect error 2254 "generate: function must not return ∅"
 fn test_generate_none_error():
   generate(λx : i64 → ∅: ∅, 1…3)
 
 // Error: second argument not a range
 @test
-@expect error "must be a range"
+@expect error 2253 "generate: second argument must be a range, got IntValue"
 fn test_generate_not_range():
   generate(λx : i64 → i64: x, 42)
 

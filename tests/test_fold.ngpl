@@ -104,14 +104,14 @@ fn test_right_fold_build():
 
 // Error: fold without init on empty container.
 @test
-@expect error "empty container requires an initial value"
+@expect error 2251 "fold on empty container requires an initial value"
 fn test_fold_empty_no_init():
     let result : mut = add ⌿ []
     result
 
 // Error: fold with non-iterable.
 @test
-@expect error "fold requires array or range"
+@expect error 2750 "fold requires array or range, got IntValue"
 fn test_fold_non_iterable():
     let result : mut = add ⌿ 42
     result

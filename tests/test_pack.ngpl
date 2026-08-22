@@ -61,22 +61,22 @@ fn test_apply_sum():
 // --- Type mismatch tests ------------------------------------------
 
 @test
-@expect error "expected i64.*got StrValue"
+@expect error 2015 "sum_all: argument 'rest[0]' expected i64, got StrValue"
 fn test_typed_pack_rejects_string():
     sum_all(1, "oops")
 
 @test
-@expect error "expected i64.*got BoolValue"
+@expect error 2015 "sum_all: argument 'rest[1]' expected i64, got BoolValue"
 fn test_typed_pack_rejects_bool():
     sum_all(1, 2, true)
 
 @test
-@expect error "expected i64.*got StrValue"
+@expect error 2015 "apply_sum: argument 'args[1]' expected i64, got StrValue"
 fn test_apply_sum_rejects_string():
     apply_sum(double, 1, "bad", 3)
 
 @test
-@expect error "expected i64.*got BoolValue"
+@expect error 2015 "apply_sum: argument 'args[1]' expected i64, got BoolValue"
 fn test_apply_sum_rejects_bool():
     apply_sum(double, 1, true)
 
@@ -141,7 +141,7 @@ fn test_prepend_and_sum():
     assert_eq(prepend_and_sum(100, 1, 2, 3), 106)
 
 @test
-@expect error "expected i64.*got StrValue"
+@expect error 2015 "prepend_and_sum: argument 'extra[0]' expected i64, got StrValue"
 fn test_prepend_and_sum_rejects_bad_pack():
     prepend_and_sum(100, "bad")
 
@@ -189,7 +189,7 @@ fn test_sizeof_pack_matches_dot():
 // its type occupies.  An untyped integer is unbounded and occupies
 // nothing definite.
 @test
-@expect error "arbitrary-precision"
+@expect error 2823 "@sizeof: type 'int' is arbitrary-precision and has no defined C representation; use a sized type such as i64"
 fn test_sizeof_of_an_untyped_int():
     @sizeof(42)
 

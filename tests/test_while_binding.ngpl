@@ -146,7 +146,7 @@ fn test_plain_binding_does_not_write_back():
 
 // mut is meaningless when the loop produces values with nowhere to
 // write them back to.
-@expect error "declared mut, but the loop produces values"
+@expect error 2245 "'x' is declared mut, but the loop produces values that cannot be written back"
 fn error_mut_on_a_plain_value():
     let v : mut i64[] = [1, 2]
     while x : mut = v.pop():
@@ -170,7 +170,7 @@ fn test_typed_binding():
 // ---------------------------------------------------------------------
 
 // It is rebound every iteration, so assigning to it would be discarded.
-@expect error "cannot assign to while variable 'e'"
+@expect error 2412 "cannot assign to while variable 'e'"
 fn error_assign_to_bound_variable():
     let v : mut i64[] = [1, 2]
     let it : mut = v.iterate()

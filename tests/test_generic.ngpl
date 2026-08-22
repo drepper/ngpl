@@ -65,7 +65,7 @@ fn test_generic_with_concrete_return():
 fn test_generic_type_mismatch():
     let a : i32 = 1
     let b : u32 = 2
-    @expect error "generic type T'"
+    @expect error 2258 "add_g: generic type T' resolved to 'i32' but argument 'b' has type 'u32'"
     add_g(a, b)
 
 @test
@@ -174,7 +174,7 @@ fn both(a : T', b : T') → T':
     a
 
 @test
-@expect error "generic type T' resolved to"
+@expect error 2258 "both: generic type T' resolved to 'i64' but argument 'b' has type 'str'"
 fn error_one_generic_two_types():
     let n : mut = both(1i64, "two")
 

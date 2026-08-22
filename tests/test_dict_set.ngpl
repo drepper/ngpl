@@ -58,7 +58,7 @@ fn test_an_empty_one_takes_its_type():
     assert_eq(#s, 0¤ptrdiff)
 
 @test
-@expect error "it says neither what it holds nor whether it is a dictionary or a set"
+@expect error 2775 "'e': ⸨⸩ is empty, so it says neither what it holds nor whether it is a dictionary or a set, and the binding says nothing either; state a type, as 'let e : std.dict(str, i64) = ⸨⸩'"
 fn error_an_empty_one_with_no_type():
     let e : mut = ⸨⸩
 
@@ -248,21 +248,21 @@ fn test_with_an_empty_set():
     assert_eq(#(a ∖ e), 2¤ptrdiff)
 
 @test
-@expect error "is asked of two sets"
+@expect error 2231 "∪: the right operand is std.dict(str,i64), and ∪ is asked of two sets"
 fn error_a_set_and_a_dict():
     let a : std.set(i64) = ⸨1⸩
     let h : std.dict(str, i64) = ⸨"x": 1⸩
     let u : mut = a ∪ h
 
 @test
-@expect error "is asked of two sets"
+@expect error 2231 "∪: the right operand is i64[2], and ∪ is asked of two sets"
 fn error_a_set_and_an_array():
     let a : std.set(i64) = ⸨1⸩
     let v : i64[] = [1, 2]
     let u : mut = a ∪ v
 
 @test
-@expect error "only where they hold the same"
+@expect error 2719 "∪: a set holds one type of value, so two are asked about together only where they hold the same, but the left holds i64 and the right holds str"
 fn error_sets_of_two_types():
     let a : std.set(i64) = ⸨1⸩
     let b : std.set(str) = ⸨"x"⸩
@@ -334,21 +334,21 @@ fn test_assert_eq_compares_them_too():
     assert_eq(d, e)
 
 @test
-@expect error "they hold different kinds of thing"
+@expect error 2230 "std.set(i64) and std.dict(str,i64) are not compared with each other: they hold different kinds of thing, so neither could be the other"
 fn error_comparing_a_set_with_a_dict():
     let a : std.set(i64) = ⸨1⸩
     let h : std.dict(str, i64) = ⸨"a": 1⸩
     let r : mut = a = h
 
 @test
-@expect error "they hold different kinds of thing"
+@expect error 2230 "std.set(i64) and i64[1] are not compared with each other: they hold different kinds of thing, so neither could be the other"
 fn error_comparing_a_set_with_an_array():
     let a : std.set(i64) = ⸨1⸩
     let v : i64[] = [1]
     let r : mut = a = v
 
 @test
-@expect error "only where they hold the same"
+@expect error 2718 "a set holds one type of value, so two are compared only where they hold the same, but the left holds i64 and the right holds str"
 fn error_comparing_sets_of_two_types():
     let a : std.set(i64) = ⸨1⸩
     let b : std.set(str) = ⸨"x"⸩
@@ -391,20 +391,20 @@ fn test_a_shared_key_keeps_its_place():
 // A set holds each value once, so joining two would keep nothing the
 // second one repeats -- which is what ∪ already answers.
 @test
-@expect error "which is what ∪ answers"
+@expect error 2726 "⧺: the left operand is a set, and a set holds each value once -- joining two would keep nothing the second one repeats, which is what ∪ answers"
 fn error_joining_two_sets():
     let s : std.set(i64) = ⸨1⸩
     let u : mut = s ⧺ s
 
 @test
-@expect error "a dictionary joins a dictionary"
+@expect error 2720 "⧺: the right operand is i64[1], and a dictionary joins a dictionary"
 fn error_joining_a_dict_and_an_array():
     let a : std.dict(str, i64) = ⸨"a": 1⸩
     let v : i64[] = [1]
     let j : mut = a ⧺ v
 
 @test
-@expect error "a dictionary holds one type of value"
+@expect error 2721 "⧺: a dictionary holds one type of value, so two joined hold the same one, but the left holds i64 and the right holds str"
 fn error_joining_dicts_of_two_value_types():
     let a : std.dict(str, i64) = ⸨"a": 1⸩
     let b : std.dict(str, str) = ⸨"a": "x"⸩
@@ -456,14 +456,14 @@ fn test_what_binds_tighter():
     assert(a ⊆ b ∧ a ⊂ b)
 
 @test
-@expect error "is asked of two sets"
+@expect error 2231 "⊆: the right operand is i64[1], and ⊆ is asked of two sets"
 fn error_a_subset_of_an_array():
     let a : std.set(i64) = ⸨1⸩
     let v : i64[] = [1]
     let r : mut = a ⊆ v
 
 @test
-@expect error "only where they hold the same"
+@expect error 2719 "⊆: a set holds one type of value, so two are asked about together only where they hold the same, but the left holds i64 and the right holds str"
 fn error_subsets_of_two_types():
     let a : std.set(i64) = ⸨1⸩
     let b : std.set(str) = ⸨"x"⸩
@@ -474,36 +474,36 @@ fn error_subsets_of_two_types():
 // ---------------------------------------------------------------------
 
 @test
-@expect error "an array holds one type of value"
+@expect error 2743 "an array holds one type of value, but element 0 is a string and element 1 is i64"
 fn error_keys_of_two_types():
     let d : mut = ⸨"a": 1i64, 2i64: 3⸩
 
 @test
-@expect error "an array holds one type of value"
+@expect error 2743 "an array holds one type of value, but element 0 is i64 and element 1 is a string"
 fn error_values_of_two_types():
     let d : mut = ⸨"a": 1i64, "b": "two"⸩
 
 @test
-@expect error "an array holds one type of value"
+@expect error 2743 "an array holds one type of value, but element 0 is i64 and element 1 is a string"
 fn error_a_set_of_two_types():
     let s : mut = ⸨1i64, "two"⸩
 
 // A key is remembered by what it is, so it has to be one of the things
 // the language compares exactly.
 @test
-@expect error "cannot be a key"
+@expect error 2815 "i64[2] cannot be a key: a key is remembered by what it is, so it has to be one of the things the language compares exactly -- a number, a character, a string, a truth value, an enum"
 fn error_a_key_that_cannot_be_remembered():
     let d : mut = ⸨[1i64, 2]: 1i64⸩
 
 @test
-@expect error "cannot hold a string"
+@expect error 2772 "'i64' cannot hold a string"
 fn error_writing_a_value_of_the_wrong_type():
     let d : mut std.dict(str, i64) = ⸨"a": 1⸩
     d["b"] ← "two"
 
 // A set holds values rather than answering about them by key.
 @test
-@expect error "a set holds values rather than answering about them by key"
+@expect error 2735 "a set holds values rather than answering about them by key; ∊ asks whether one is in it"
 fn error_reading_a_set_by_key():
     let s := ⸨1i64, 2⸩
     let v : mut = s[0]
@@ -511,26 +511,26 @@ fn error_reading_a_set_by_key():
 // A set holds values rather than holding them against keys, so it has
 // no keys to ask for.
 @test
-@expect error "so it has none to ask for"
+@expect error 2722 "⊃: a set holds values rather than holding them against keys, so it has none to ask for; ⊇ answers what is in it"
 fn error_asking_a_set_for_keys():
     let s : std.set(i64) = ⸨1⸩
     let k : mut = ⊃s
 
 @test
-@expect error "is a question for a dictionary"
+@expect error 2723 "⊃: what a dictionary holds is a question for a dictionary, and this is i64[1]"
 fn error_asking_an_array_for_keys():
     let v : i64[] = [1]
     let k : mut = ⊃v
 
 // The two that were members are operators now.
 @test
-@expect error "has no member"
+@expect error 2731 "a dictionary has no member 'keys'; it has remove, clear, ⊃ for its keys and ⊇ for what it holds against them, is read with [] where it is a dictionary, asked with ∊ whether something is in it, and counted with #"
 fn error_the_members_they_replaced():
     let d : mut std.dict(str, i64) = ⸨"a": 1⸩
     let k : mut = d.keys()
 
 @test
-@expect error "has no member"
+@expect error 2731 "a set has no member 'push'; it has insert, remove, clear, ⊇ for what is in it, is read with [] where it is a dictionary, asked with ∊ whether something is in it, and counted with #"
 fn error_a_member_neither_of_them_has():
     let s : mut std.set(i64) = ⸨1⸩
     let v : mut = s.push(2)

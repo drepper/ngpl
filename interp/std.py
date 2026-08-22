@@ -24,6 +24,8 @@ import hashlib
 import struct
 import math as _math
 import mmap
+
+from interp.errors import coded
 import os
 import sys
 
@@ -332,7 +334,7 @@ class DirFD:
     def _check_open(self, what: str):
         """Reject an operation on a directory that has already been closed."""
         if self._closed:
-            raise OSError(f"{what}: directory is closed")
+            raise coded(2269, OSError(f"{what}: directory is closed"))
 
     @property
     def is_closed(self) -> bool:
@@ -503,7 +505,7 @@ class FileStream:
     def _check_open(self, what: str):
         """Reject an operation on a file that has already been closed."""
         if self._closed:
-            raise OSError(f"{what}: file is closed")
+            raise coded(2270, OSError(f"{what}: file is closed"))
 
     @property
     def is_closed(self) -> bool:
@@ -1039,11 +1041,11 @@ def _render_template(fmt: str, args, where: str) -> str:
             if (isinstance(uv, LambdaValue)
                     and uv.partial_func is not None):
                 n = len(uv.params)
-                raise TypeError(
+                raise coded(2264, TypeError(
                     f"'{{}}' met a partial application of "
                     f"'{uv.partial_func.name}' that still waits for {n} "
                     f"argument{'s' if n != 1 else ''}, not a value; "
-                    f"apply the rest before printing")
+                    f"apply the rest before printing"))
             raise TypeError(
                 "'{}' met a function, not a value; a function is "
                 "applied, not written out")
@@ -1068,9 +1070,9 @@ def _render_template(fmt: str, args, where: str) -> str:
             if ":" in field:
                 spec = field.split(":", 1)[1]
             if arg_idx >= len(args):
-                raise TypeError(
+                raise coded(2265, TypeError(
                     f"{where}: not enough arguments (need at least {arg_idx + 1}, "
-                    f"got {len(args)})")
+                    f"got {len(args)})"))
             result.append(_fmt_value(args[arg_idx], spec))
             arg_idx += 1
             i = end + 1
@@ -1398,11 +1400,11 @@ class StdModule:
         if isinstance(code, IntValue):
             code = code.value
         if isinstance(code, bool) or not isinstance(code, int):
-            raise TypeError("std.exit: exit code must be an integer")
+            raise coded(2266, TypeError("std.exit: exit code must be an integer"))
         if not 0 <= code <= 255:
-            raise TypeError(
+            raise coded(2267, TypeError(
                 f"std.exit: exit code {code} is outside the range 0\N{HORIZONTAL ELLIPSIS}255 "
-                f"that a process can report")
+                f"that a process can report"))
         raise ProgramExit(code)
 
     def abort(self, signal_number=None):
@@ -1435,7 +1437,7 @@ class StdModule:
         if isinstance(signal_number, NoneValue) or signal_number is None:
             signal_number = 0
         if isinstance(signal_number, bool) or not isinstance(signal_number, int):
-            raise TypeError("std.abort: signal must be an integer")
+            raise coded(2268, TypeError("std.abort: signal must be an integer"))
         raise ProgramAbort(resolve_abort_signal(signal_number))
 
     def get_allocator(self):
@@ -1885,9 +1887,9 @@ class ArgsModule:
         """Return the parameter at the given zero-based index."""
         i = _as_index(index, "std.args.get")
         if not 0 <= i < len(self._params):
-            raise IndexError(
+            raise coded(2757, IndexError(
                 f"std.args.get: index {i} out of range "
-                f"(count {len(self._params)})")
+                f"(count {len(self._params)})"))
         from interp.value import mk_str
         return mk_str(self._params[i])
 

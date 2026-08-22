@@ -142,7 +142,7 @@ from interp.value import (
 from interp.env import Env, Decl
 from interp.std import (std, DirFD, FileStream, Bytes, MmapAllocator,
                        resolve_abort_signal)
-from interp.errors import (attach_backtrace, diagnostic_level,
+from interp.errors import (attach_backtrace, diagnostic_level, coded,
                           strip_position_prefix, ContractError,
                           contract_semantic, report_runtime_diagnostic,
                           ProgramAbort)
@@ -357,18 +357,18 @@ def _literal_element_type(elements):
             if unit is None:
                 unit, unit_by = element.unit, index
             elif not unit.same_dimension(element.unit):
-                raise TypeError(
+                raise coded(2320, TypeError(
                     f"an array holds one unit, but element {unit_by} is "
                     f"{unit.display_name} and element {index} is "
-                    f"{element.unit.display_name}")
+                    f"{element.unit.display_name}"))
         inner = element.inner if isinstance(element, UnitValue) else element
         if isinstance(inner, (NoneValue, SomeValue)):
             # An array holds values; ∅ is the absence of one and ∃ its
             # box, and neither is an element type an array can be of.
-            raise TypeError(
+            raise coded(2741, TypeError(
                 f"an array element is a value, but element {index} is "
                 + ("∅, the absence of one" if isinstance(inner, NoneValue)
-                   else "boxed; take ∃ apart before storing"))
+                   else "boxed; take ∃ apart before storing")))
         if isinstance(inner, (IntValue, FloatValue)):
             found_kind = "number"
         elif isinstance(inner, CharValue):
@@ -388,10 +388,10 @@ def _literal_element_type(elements):
         if kind is None:
             kind, kind_by = found_kind, index
         elif kind != found_kind:
-            raise TypeError(
+            raise coded(2743, TypeError(
                 f"an array holds one type of value, but element {kind_by} is "
                 f"{_element_kind(elements[kind_by])} and element {index} is "
-                f"{_element_kind(element)}")
+                f"{_element_kind(element)}"))
         if isinstance(inner, ObjectValue):
             # A row is settled by what is in it, and by what is in
             # every other row: one number saying what it is says it for
@@ -432,9 +432,9 @@ def _literal_element_type(elements):
         else:
             found = "bool"
         if width is not None and width != found:
-            raise TypeError(
+            raise coded(2744, TypeError(
                 f"an array holds one type of value, but element {said_by} is "
-                f"{width} and element {index} is {found}")
+                f"{width} and element {index} is {found}"))
         width, said_by = found, index
     if kind == "array" and width is not None:
         # What one element of this array is: a row of what the bottom
@@ -721,8 +721,8 @@ def unwrap_optional(value):
     if isinstance(value, ExpectedValue):
         if value.is_ok():
             return value.ok_value
-        raise TypeError(
-            f"unwrap of expected error: {value.err_value.display()}")
+        raise coded(2013, TypeError(
+            f"unwrap of expected error: {value.err_value.display()}"))
     # A reference stands for what it points at wherever a value is
     # wanted; only assignment and @typeof look at the reference itself.
     if isinstance(value, Reference):
@@ -741,10 +741,10 @@ def _enum_meets_number(ev) -> bool:
     bits, and asking for them is then written down.
     """
     if ev.enum_type.is_flag:
-        raise TypeError(
+        raise coded(2826, TypeError(
             f"'{ev.enum_type.name}' is a @flag enum, so its values are "
             f"combinations of members that a bare number does not name; "
-            f"write .ord() to compare the bits")
+            f"write .ord() to compare the bits"))
     return True
 
 
@@ -1232,10 +1232,10 @@ class Evaluator:
         # already has an answer for a result that will not fit -- the
         # operation is reported -- and nothing else has a range at all,
         # so neither has a saturating form.
-        raise TypeError(
+        raise coded(2224, TypeError(
             f"{op_name} is for integers, which state the range it holds "
             f"a result inside; got "
-            f"{runtime_type_of(lu)} and {runtime_type_of(ru)}")
+            f"{runtime_type_of(lu)} and {runtime_type_of(ru)}"))
 
     def _op_index_of(self, left, right):
         """Where in a container something is, counted from zero.
@@ -1255,18 +1255,18 @@ class Evaluator:
                 # A run of characters is where it starts.
                 found = container.value.find(wanted.value)
             else:
-                raise TypeError(
+                raise coded(2710, TypeError(
                     f"\N{APL FUNCTIONAL SYMBOL IOTA}: a string is searched "
                     f"for a character or a string, not for "
-                    f"{runtime_type_of(wanted)}")
+                    f"{runtime_type_of(wanted)}"))
             return (none() if found < 0
                     else some(self._sizeof_result(found)))
         array = self._as_array(container)
         if array is None:
-            raise TypeError(
+            raise coded(2711, TypeError(
                 f"\N{APL FUNCTIONAL SYMBOL IOTA}: the left operand is "
                 f"{self._value_type_name(container)}, and what is searched "
-                f"is an array or a string")
+                f"is an array or a string"))
         # What is searched for has to be the kind of thing the container
         # holds, as ∊ asks it: answering "nowhere" would let a program
         # that has made a mistake about one of the two carry on
@@ -1283,10 +1283,10 @@ class Evaluator:
                 # The comparison answered element-wise, so the element
                 # is itself a container: a position in it is not one
                 # number, and there is nothing honest to answer.
-                raise TypeError(
+                raise coded(2712, TypeError(
                     f"\N{APL FUNCTIONAL SYMBOL IOTA}: the left operand has "
                     f"more than one dimension, and a position in it is not "
-                    f"one number; a row of it is searched on its own")
+                    f"one number; a row of it is searched on its own"))
             if to_bool(same):
                 return some(self._sizeof_result(index, array.element_type))
         return none()
@@ -1329,9 +1329,9 @@ class Evaluator:
             return
         mismatch = _scalar_kind_mismatch(wanted, element_type)
         if mismatch is not None:
-            raise TypeError(
+            raise coded(2713, TypeError(
                 f"{op}: the container holds {element_type}, and what is "
-                f"looked for is {mismatch}")
+                f"looked for is {mismatch}"))
 
     @classmethod
     def _leaf_element_type(cls, array):
@@ -1355,10 +1355,10 @@ class Evaluator:
         whether.
         """
         if self._as_array(left) is not None:
-            raise TypeError(
+            raise coded(2714, TypeError(
                 f"\N{SMALL ELEMENT OF}: the left operand is an array, and "
                 f"what is looked for is one thing; each of them is asked "
-                f"about on its own")
+                f"about on its own"))
         wanted = _unwrap_operand(left)
         container = _unwrap_operand(right)
         if isinstance(container, StrValue):
@@ -1368,13 +1368,13 @@ class Evaluator:
                 # A string holds characters, so a run of them is not one
                 # of the things it holds.  Whether one is there is a
                 # question about where it starts, which ⍳ answers.
-                raise TypeError(
+                raise coded(2715, TypeError(
                     f"\N{SMALL ELEMENT OF}: a string holds characters, and a "
                     f"run of them is not one of them; "
-                    f"\N{APL FUNCTIONAL SYMBOL IOTA} says where a run starts")
-            raise TypeError(
+                    f"\N{APL FUNCTIONAL SYMBOL IOTA} says where a run starts"))
+            raise coded(2716, TypeError(
                 f"\N{SMALL ELEMENT OF}: a string holds characters, and what "
-                f"is looked for is {self._value_type_name(wanted)}")
+                f"is looked for is {self._value_type_name(wanted)}"))
         if isinstance(container, ObjectValue) \
                 and isinstance(container.obj, HashValue):
             # A hash is looked through by its keys, which is what it is
@@ -1385,10 +1385,10 @@ class Evaluator:
             return mk_bool(container.obj.has(wanted))
         array = self._as_array(container)
         if array is None:
-            raise TypeError(
+            raise coded(2717, TypeError(
                 f"\N{SMALL ELEMENT OF}: the right operand is "
                 f"{self._value_type_name(container)}, and what is looked "
-                f"through is a vector, a matrix, a string, a dictionary or a set")
+                f"through is a vector, a matrix, a string, a dictionary or a set"))
         self._check_looked_for(array, wanted, "\N{SMALL ELEMENT OF}")
         for element in self._leaves(array):
             # Compared the way == compares, as ⍳ compares, so a unit
@@ -1436,9 +1436,9 @@ class Evaluator:
                 return mk_float(float("nan"), width)
             return mk_float(l_val if (l_val >= r_val) == larger else r_val,
                             width)
-        raise TypeError(
+        raise coded(2011, TypeError(
             f"{op_name} expected numeric types, got "
-            f"{type(lu).__name__}+{type(ru).__name__}")
+            f"{type(lu).__name__}+{type(ru).__name__}"))
 
     def _op_sat_add(self, left, right):
         """Saturating addition."""
@@ -1528,8 +1528,8 @@ class Evaluator:
         if isinstance(lu, FloatValue) and isinstance(ru, IntValue):
             return self._float_power(lu.value, ru.value, lu.width)
         if isinstance(lu, IntValue) and isinstance(ru, FloatValue):
-            raise TypeError(
-                f"exponentiation requires matching types, got {lu.width} and {ru.width}")
+            raise coded(2225, TypeError(
+                f"exponentiation requires matching types, got {lu.width} and {ru.width}"))
         raise TypeError(
             f"exponentiation expected numeric operands, "
             f"got {type(lu).__name__} and {type(ru).__name__}")
@@ -1547,10 +1547,10 @@ class Evaluator:
         right_opt = isinstance(right, (SomeValue, NoneValue))
         if left_opt == right_opt:
             return
-        raise TypeError(
+        raise coded(2612, TypeError(
             f"{what}: cannot compare an optional with a plain value; write "
             f"\N{THERE EXISTS}(v) to compare against a present value, "
-            f"\N{EMPTY SET} against an absent one, or ?? to supply a default")
+            f"\N{EMPTY SET} against an absent one, or ?? to supply a default"))
 
     _APPROX_OPS = frozenset("≅≇⪅⪆⪉⪊")
 
@@ -1614,13 +1614,13 @@ class Evaluator:
         a, b, _ = self._promote_to_float(lu, ru)
         if a is None:
             if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-                raise TypeError(
+                raise coded(2226, TypeError(
                     f"{op}: an approximate comparison is for floating-point "
                     f"values; integers are exact, so compare them with the "
-                    f"exact operator")
-            raise TypeError(
+                    f"exact operator"))
+            raise coded(2227, TypeError(
                 f"{op}: an approximate comparison expects numbers, got "
-                f"{self._value_type_name(lu)} and {self._value_type_name(ru)}")
+                f"{self._value_type_name(lu)} and {self._value_type_name(ru)}"))
         alike = self._approx_alike(a, b)
         if op == "≅":
             return mk_bool(alike)
@@ -1664,9 +1664,9 @@ class Evaluator:
             return self._op_syntax_eq("=", lu, ru)
         if isinstance(lu, EnumValue) and isinstance(ru, EnumValue):
             if lu.enum_type is not ru.enum_type:
-                raise TypeError(
+                raise coded(2810, TypeError(
                     f"cannot compare enum '{lu.enum_type.name}' "
-                    f"with enum '{ru.enum_type.name}'")
+                    f"with enum '{ru.enum_type.name}'"))
             return mk_bool(lu.value == ru.value)
         if isinstance(lu, EnumValue) and isinstance(ru, IntValue):
             return mk_bool(_enum_meets_number(lu) and lu.value == ru.value)
@@ -1811,7 +1811,7 @@ class Evaluator:
                 raise TypeError(
                     f"cannot combine enum '{lu.enum_type.name}' with '{ru.enum_type.name}'")
             if not lu.enum_type.is_flag:
-                raise TypeError(f"bitwise operations require @flag enum, got '{lu.enum_type.name}'")
+                raise coded(2811, TypeError(f"bitwise operations require @flag enum, got '{lu.enum_type.name}'"))
             return EnumValue(lu.enum_type, lu.value & ru.value)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_int_wrap(lu.value & ru.value, resolve_width(lu.width, ru.width))
@@ -1826,7 +1826,7 @@ class Evaluator:
                 raise TypeError(
                     f"cannot combine enum '{lu.enum_type.name}' with '{ru.enum_type.name}'")
             if not lu.enum_type.is_flag:
-                raise TypeError(f"bitwise operations require @flag enum, got '{lu.enum_type.name}'")
+                raise coded(2812, TypeError(f"bitwise operations require @flag enum, got '{lu.enum_type.name}'"))
             return EnumValue(lu.enum_type, lu.value ^ ru.value)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_int_wrap(lu.value ^ ru.value, resolve_width(lu.width, ru.width))
@@ -1838,10 +1838,10 @@ class Evaluator:
         ru = _unwrap_operand(right)
         if isinstance(lu, EnumValue) and isinstance(ru, EnumValue):
             if lu.enum_type is not ru.enum_type:
-                raise TypeError(
-                    f"cannot combine enum '{lu.enum_type.name}' with '{ru.enum_type.name}'")
+                raise coded(2813, TypeError(
+                    f"cannot combine enum '{lu.enum_type.name}' with '{ru.enum_type.name}'"))
             if not lu.enum_type.is_flag:
-                raise TypeError(f"bitwise operations require @flag enum, got '{lu.enum_type.name}'")
+                raise coded(2814, TypeError(f"bitwise operations require @flag enum, got '{lu.enum_type.name}'"))
             return EnumValue(lu.enum_type, lu.value | ru.value)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             return mk_int_wrap(lu.value | ru.value, resolve_width(lu.width, ru.width))
@@ -1860,9 +1860,9 @@ class Evaluator:
         """
         bits = _TYPE_BITS.get(lu.width)
         if bits is None:
-            raise TypeError(
+            raise coded(2228, TypeError(
                 f"{op_name}: '{lu.width}' has no width to turn within; "
-                f"rotate a sized integer")
+                f"rotate a sized integer"))
         return bits, ru.value % bits
 
     def _op_rotl(self, left, right):
@@ -1900,10 +1900,10 @@ class Evaluator:
         if isinstance(val, BoolValue):
             return val.value
         from interp.value import runtime_type_of
-        raise TypeError(
+        raise coded(2229, TypeError(
             f"a logic operator takes truth values, but this operand is "
             f"{runtime_type_of(val)}; a number asks its question with a "
-            f"comparison, as 'x ≠ 0'")
+            f"comparison, as 'x ≠ 0'"))
 
     def _op_logic_and(self, left, right):
         lu = _unwrap_operand(left)
@@ -1934,11 +1934,11 @@ class Evaluator:
         """Measure a key against what the others were, and refuse one
         that cannot be remembered at all."""
         if hash_key(key) is None:
-            raise TypeError(
+            raise coded(2815, TypeError(
                 f"{self._value_type_name(key)} cannot be a key: a key is "
                 f"remembered by what it is, so it has to be one of the "
                 f"things the language compares exactly -- a number, a "
-                f"character, a string, a truth value, an enum")
+                f"character, a string, a truth value, an enum"))
         if key_type is not None:
             return coerce_to_type(key, key_type, key_unit, self._mk_int)
         return key
@@ -1974,11 +1974,11 @@ class Evaluator:
                 continue
             if first is None or second is None:
                 if strict:
-                    raise TypeError(
+                    raise coded(2230, TypeError(
                         f"{self._value_type_name(one)} and "
                         f"{self._value_type_name(other)} are not compared "
                         f"with each other: they hold different kinds of "
-                        f"thing, so neither could be the other")
+                        f"thing, so neither could be the other"))
                 return False
             if strict:
                 self._same_held(kind, first, second)
@@ -2006,10 +2006,10 @@ class Evaluator:
         for name, attr in attrs:
             one, other = getattr(first, attr), getattr(second, attr)
             if one is not None and other is not None and one != other:
-                raise TypeError(
+                raise coded(2718, TypeError(
                     f"a {what} holds one type of {name}, so two are compared "
                     f"only where they hold the same, but the left holds "
-                    f"{one} and the right holds {other}")
+                    f"{one} and the right holds {other}"))
 
     def _op_subset(self, op: str, left, right):
         """Whether everything in the one is in the other.
@@ -2033,18 +2033,18 @@ class Evaluator:
                     and isinstance(value.obj, SetValue):
                 sets.append(value.obj)
                 continue
-            raise TypeError(
+            raise coded(2231, TypeError(
                 f"{op}: the {side} operand is "
                 f"{self._value_type_name(value)}, and {op} is asked of two "
-                f"sets")
+                f"sets"))
         first, second = sets
         if first.value_type is not None and second.value_type is not None \
                 and first.value_type != second.value_type:
-            raise TypeError(
+            raise coded(2719, TypeError(
                 f"{op}: a set holds one type of value, so two are asked "
                 f"about together only where they hold the same, but the "
                 f"left holds {first.value_type} and the right holds "
-                f"{second.value_type}")
+                f"{second.value_type}"))
         return first, second
 
     def _op_set(self, op: str, left, right):
@@ -2091,17 +2091,17 @@ class Evaluator:
                     and isinstance(value.obj, HashValue):
                 sides.append(value.obj)
                 continue
-            raise TypeError(
+            raise coded(2720, TypeError(
                 f"\N{DOUBLE PLUS}: the {side} operand is "
-                f"{self._value_type_name(value)}, and a dictionary joins a dictionary")
+                f"{self._value_type_name(value)}, and a dictionary joins a dictionary"))
         first, second = sides
         for name, attr in (("key", "key_type"), ("value", "value_type")):
             one, other = getattr(first, attr), getattr(second, attr)
             if one is not None and other is not None and one != other:
-                raise TypeError(
+                raise coded(2721, TypeError(
                     f"\N{DOUBLE PLUS}: a dictionary holds one type of {name}, so "
                     f"two joined hold the same one, but the left holds "
-                    f"{one} and the right holds {other}")
+                    f"{one} and the right holds {other}"))
         built = HashValue(key_type=first.key_type or second.key_type,
                           value_type=first.value_type or second.value_type)
         for key, value in first.pairs():
@@ -2126,16 +2126,16 @@ class Evaluator:
                                           element_type=hv.value_type))
         if isinstance(held, ObjectValue) and isinstance(held.obj, SetValue):
             if op == "\N{SUPERSET OF}":
-                raise TypeError(
+                raise coded(2722, TypeError(
                     "\N{SUPERSET OF}: a set holds values rather than holding "
                     "them against keys, so it has none to ask for; "
-                    "\N{SUPERSET OF OR EQUAL TO} answers what is in it")
+                    "\N{SUPERSET OF OR EQUAL TO} answers what is in it"))
             return ObjectValue(ArrayValue(held.obj.values(),
                                           element_type=held.obj.value_type))
-        raise TypeError(
+        raise coded(2723, TypeError(
             f"{op}: what a dictionary holds is a question for a dictionary"
             f"{' or a set' if op == chr(0x2287) else ''}, and this is "
-            f"{self._value_type_name(held)}")
+            f"{self._value_type_name(held)}"))
 
     def _check_conditions(self, func, conditions, result=None):
         """Hold a function to what it said it holds to.
@@ -2174,10 +2174,10 @@ class Evaluator:
             if not isinstance(unwrapped, BoolValue):
                 # Not a violation but a mistake in the condition, which
                 # no semantic makes true and none is asked about.
-                raise TypeError(
+                raise coded(2613, TypeError(
                     f"{func.name}: a @{condition.which} says what is true, "
                     f"so it answers a truth value, and this one answers "
-                    f"{self._value_type_name(unwrapped)}")
+                    f"{self._value_type_name(unwrapped)}"))
             if unwrapped.value:
                 continue
             self._contract_violation(func, condition, semantic, None)
@@ -2219,7 +2219,7 @@ class Evaluator:
                                       level="warning",
                                       call_stack=self._call_stack)
             return
-        raise ContractError(message, condition.pos)
+        raise coded(2614, ContractError(message, condition.pos))
 
     @staticmethod
     def _ast_fields(node) -> tuple[str, ...]:
@@ -2376,10 +2376,10 @@ class Evaluator:
         array = self._as_array(unwrapped)
         if array is not None:
             return self._sizeof_result(array.sizeof, array.element_type)
-        raise TypeError(
+        raise coded(2724, TypeError(
             f"#: how many things are in it is a question for an array, a "
             f"string, a tuple, a dictionary or a set, and this is "
-            f"{self._value_type_name(unwrapped)}")
+            f"{self._value_type_name(unwrapped)}"))
 
     def _apply_unary(self, op: str, operand):
         """Apply a unary operator to the value it was given.
@@ -2420,17 +2420,17 @@ class Evaluator:
                 # One character's upper case can be more than one
                 # character -- ß is SS -- so what comes back is a
                 # string, and the operand says so too.
-                raise TypeError(
+                raise coded(2725, TypeError(
                     f"{op} answers with a string, so it asks for "
                     f"one: a character's case is written "
                     f"{op}c.str(), since the upper case of one "
-                    f"character can be more than one character")
+                    f"character can be more than one character"))
             if not isinstance(unwrapped, StrValue):
-                raise TypeError(
+                raise coded(2232, TypeError(
                     f"{op} in front of an operand is the case of "
                     f"text, and this one is "
                     f"{runtime_type_of(unwrapped)}; the larger and the "
-                    f"smaller of two numbers are written between them")
+                    f"smaller of two numbers are written between them"))
             return mk_str(unwrapped.value.upper()
                           if op == "\N{LEFT CEILING}"
                           else unwrapped.value.lower())
@@ -2443,8 +2443,8 @@ class Evaluator:
                 raise TypeError(f"bitwise-not expected int, got {type(inner).__name__}")
             if isinstance(unwrapped, EnumValue):
                 if not unwrapped.enum_type.is_flag:
-                    raise TypeError(
-                        f"bitwise-not requires @flag enum, got '{unwrapped.enum_type.name}'")
+                    raise coded(2816, TypeError(
+                        f"bitwise-not requires @flag enum, got '{unwrapped.enum_type.name}'"))
                 all_bits = 0
                 for v in unwrapped.enum_type.members.values():
                     all_bits |= v
@@ -2599,11 +2599,11 @@ class Evaluator:
         for side, value in (("left", lu), ("right", ru)):
             if isinstance(value, ObjectValue) \
                     and isinstance(value.obj, SetValue):
-                raise TypeError(
+                raise coded(2726, TypeError(
                     f"\N{DOUBLE PLUS}: the {side} operand is a set, and a set "
                     f"holds each value once -- joining two would keep "
                     f"nothing the second one repeats, which is what "
-                    f"\N{UNION} answers")
+                    f"\N{UNION} answers"))
         if _joins_as_text(lu) and _joins_as_text(ru):
             return mk_str(self._text_operand(lu, "left")
                           + self._text_operand(ru, "right"))
@@ -2616,21 +2616,21 @@ class Evaluator:
             # an array whose type was a lie about half of it.
             if (la.element_type is not None and ra.element_type is not None
                     and la.element_type != ra.element_type):
-                raise TypeError(
+                raise coded(2727, TypeError(
                     f"\N{DOUBLE PLUS}: an array holds one type of value, so "
                     f"two joined hold the same one, but the left operand "
                     f"holds {la.element_type} and the right holds "
-                    f"{ra.element_type}")
+                    f"{ra.element_type}"))
             lunit = la.element_unit
             runit = ra.element_unit
             if (lunit is None) != (runit is None) or (
                     lunit is not None and not lunit.same_dimension(runit)):
-                raise TypeError(
+                raise coded(2310, TypeError(
                     f"\N{DOUBLE PLUS}: an array holds one unit, so two "
                     f"joined hold the same one, but the left operand is "
                     f"{lunit.display_name if lunit else 'unmeasured'} and "
                     f"the right is "
-                    f"{runit.display_name if runit else 'unmeasured'}")
+                    f"{runit.display_name if runit else 'unmeasured'}"))
             etype = la.element_type or ra.element_type
             return ObjectValue(
                 ArrayValue(la.values() + ra.values(), element_type=etype,
@@ -2641,14 +2641,14 @@ class Evaluator:
             self._text_operand(lu, "left")
             self._text_operand(ru, "right")
         if la is None:
-            raise TypeError(
+            raise coded(2728, TypeError(
                 f"\N{DOUBLE PLUS}: the left operand is "
                 f"{runtime_type_of(lu)} and the right one is an array; "
-                f"an array joins an array, and text joins text")
-        raise TypeError(
+                f"an array joins an array, and text joins text"))
+        raise coded(2729, TypeError(
             f"\N{DOUBLE PLUS}: the left operand is an array and the right "
             f"one is {runtime_type_of(ru)}; an array joins an array, and "
-            f"text joins text")
+            f"text joins text"))
 
     @staticmethod
     def _text_operand(value, side: str) -> str:
@@ -2663,11 +2663,11 @@ class Evaluator:
             return value.value
         if isinstance(value, CharValue):
             return value.char
-        raise TypeError(
+        raise coded(2233, TypeError(
             f"\N{DOUBLE PLUS}: the {side} operand is "
             f"{runtime_type_of(value)}, which does not go together with "
             f"text; a number becomes the character it numbers with "
-            f".chr(), and its digits with std.format")
+            f".chr(), and its digits with std.format"))
 
     def _mk_int(self, value: int, width: str) -> IntValue:
         if self._wrapping:
@@ -2756,11 +2756,11 @@ class Evaluator:
         if isinstance(lu, FloatValue) and isinstance(ru, FloatValue):
             return lu.value, ru.value, resolve_float_width(lu.width, ru.width)
         if isinstance(lu, IntValue) and isinstance(ru, FloatValue):
-            raise TypeError(
-                f"{op_name} requires matching types, got {lu.width} and {ru.width}")
+            raise coded(2234, TypeError(
+                f"{op_name} requires matching types, got {lu.width} and {ru.width}"))
         if isinstance(lu, FloatValue) and isinstance(ru, IntValue):
-            raise TypeError(
-                f"{op_name} requires matching types, got {lu.width} and {ru.width}")
+            raise coded(2235, TypeError(
+                f"{op_name} requires matching types, got {lu.width} and {ru.width}"))
         return None
 
     # ------------------------------------------------------------------
@@ -2800,12 +2800,12 @@ class Evaluator:
         count = arrays[mapped[0]].sizeof
         for i in mapped[1:]:
             if arrays[i].sizeof != count:
-                raise TypeError(
+                raise coded(2236, TypeError(
                     f"{where}: the {noun} it threads over are taken apart "
                     f"together, so they must be the same length, but "
                     f"{names[mapped[0]]} has {count} element"
                     f"{'' if count == 1 else 's'} and {names[i]} has "
-                    f"{arrays[i].sizeof}")
+                    f"{arrays[i].sizeof}"))
         results = []
         for index in range(count):
             sub = list(args)
@@ -2841,17 +2841,17 @@ class Evaluator:
             if l_is_unit and not r_is_unit:
                 if isinstance(r_inner, IntValue) \
                         and not is_unwidthed(r_inner.width):
-                    raise TypeError(
+                    raise coded(2311, TypeError(
                         f"cannot {op} unit {l_unit.display_name} with "
-                        f"typed integer {r_inner.width} without unit")
+                        f"typed integer {r_inner.width} without unit"))
                 op_fn = self._ops[op]
                 return UnitValue(op_fn(l_inner, r_inner), l_unit)
             if r_is_unit and not l_is_unit:
                 if isinstance(l_inner, IntValue) \
                         and not is_unwidthed(l_inner.width):
-                    raise TypeError(
+                    raise coded(2312, TypeError(
                         f"cannot {op} typed integer {l_inner.width} "
-                        f"without unit with unit {r_unit.display_name}")
+                        f"without unit with unit {r_unit.display_name}"))
                 op_fn = self._ops[op]
                 return UnitValue(op_fn(l_inner, r_inner), r_unit)
             if not l_unit.same_dimension(r_unit):
@@ -2864,9 +2864,9 @@ class Evaluator:
                 if r_unit.stands_in_for(l_unit):
                     op_fn = self._ops[op]
                     return UnitValue(op_fn(l_inner, r_inner), l_unit)
-                raise TypeError(
+                raise coded(2313, TypeError(
                     f"incompatible units for {op}: "
-                    f"{l_unit.display_name} and {r_unit.display_name}")
+                    f"{l_unit.display_name} and {r_unit.display_name}"))
             if l_unit == r_unit:
                 op_fn = self._ops[op]
                 return UnitValue(op_fn(l_inner, r_inner), l_unit)
@@ -2968,25 +2968,25 @@ class Evaluator:
             if l_is_unit and not r_is_unit:
                 if isinstance(r_inner, IntValue) \
                         and not is_unwidthed(r_inner.width):
-                    raise TypeError(
+                    raise coded(2314, TypeError(
                         f"cannot compare unit {l_unit.display_name} with "
-                        f"typed integer {r_inner.width} without unit")
+                        f"typed integer {r_inner.width} without unit"))
                 return self._ops[op](l_inner, r_inner)
             if r_is_unit and not l_is_unit:
                 if isinstance(l_inner, IntValue) \
                         and not is_unwidthed(l_inner.width):
-                    raise TypeError(
+                    raise coded(2315, TypeError(
                         f"cannot compare typed integer {l_inner.width} "
-                        f"without unit with unit {r_unit.display_name}")
+                        f"without unit with unit {r_unit.display_name}"))
                 return self._ops[op](l_inner, r_inner)
             if not l_unit.same_dimension(r_unit):
                 # Comparing is asking about one thing, so one side has
                 # to be able to stand where the other is asked for.
                 if not (l_unit.stands_in_for(r_unit)
                         or r_unit.stands_in_for(l_unit)):
-                    raise TypeError(
+                    raise coded(2316, TypeError(
                         f"incompatible units for comparison: "
-                        f"{l_unit.display_name} and {r_unit.display_name}")
+                        f"{l_unit.display_name} and {r_unit.display_name}"))
                 return self._ops[op](l_inner, r_inner)
             if l_unit == r_unit:
                 return self._ops[op](l_inner, r_inner)
@@ -3071,11 +3071,11 @@ class Evaluator:
         fixed = value.obj.fixed_size
         if fixed is None:
             return
-        raise TypeError(
+        raise coded(2730, TypeError(
             f"{func.name}: parameter '{param_name}' is a by-reference "
             f"mutable '{param_type}', whose length the function may change, "
             f"but the argument is a fixed-size array of {fixed} element"
-            f"{'' if fixed == 1 else 's'}")
+            f"{'' if fixed == 1 else 's'}"))
 
     def _check_mutating_call(self, node):
         """Reject a method that changes an array held by a `let` binding.
@@ -3094,8 +3094,8 @@ class Evaluator:
         if kind == "moved":
             raise TypeError(f"use of moved value '{name}'")
         if kind is not None:
-            raise TypeError(
-                f"{node.method}: cannot modify {kind} variable '{name}'")
+            raise coded(2411, TypeError(
+                f"{node.method}: cannot modify {kind} variable '{name}'"))
         if self.env.is_const_global(name):
             raise TypeError(
                 f"{node.method}: cannot modify let variable '{name}'")
@@ -3117,11 +3117,11 @@ class Evaluator:
                      "\N{SUPERSET OF OR EQUAL TO} for what it holds against "
                      "them" if is_hash
                      else "\N{SUPERSET OF OR EQUAL TO} for what is in it")
-            raise AttributeError(
+            raise coded(2731, AttributeError(
                 f"a {what} has no member '{name}'; it has {known}, {asked}, "
                 f"is read with [] where it is a dictionary, asked with "
                 f"\N{SMALL ELEMENT OF} whether something is in it, and "
-                f"counted with #")
+                f"counted with #"))
         if len(args) != arities[name]:
             raise TypeError(
                 f"{what}.{name} takes {arities[name]} argument"
@@ -3154,9 +3154,9 @@ class Evaluator:
         """
         arity = _ARRAY_METHODS[name]
         if len(args) != arity:
-            raise TypeError(
+            raise coded(2732, TypeError(
                 f"array.{name} takes {arity} argument"
-                f"{'' if arity == 1 else 's'}, got {len(args)}")
+                f"{'' if arity == 1 else 's'}, got {len(args)}"))
 
         if name == "iterate":
             return ArrayIterator(array)
@@ -3200,16 +3200,16 @@ class Evaluator:
                     f"got {index.unit.display_name}")
             index = index.inner
         elif isinstance(index, IntValue) and not is_unwidthed(index.width):
-            raise TypeError(
+            raise coded(2317, TypeError(
                 f"string index requires unit {required.display_name}, "
-                f"got typed integer {index.width} without unit")
+                f"got typed integer {index.width} without unit"))
         if not isinstance(index, IntValue):
             raise TypeError("string index must be an integer")
         length = len(text.value)
         if index.value < 0 or index.value >= length:
-            raise IndexError(
+            raise coded(2733, IndexError(
                 f"string index {index.value} out of range "
-                f"(length {length})")
+                f"(length {length})"))
         return index.value
 
     def _string_index(self, text: StrValue, index: Value):
@@ -3224,7 +3224,7 @@ class Evaluator:
         function that asked.
         """
         if args:
-            raise TypeError("std.callstack takes no arguments")
+            raise coded(2237, TypeError("std.callstack takes no arguments"))
         frames = []
         for frame in reversed(self._call_stack):
             name, pos = frame[0], frame[1]
@@ -3243,14 +3243,14 @@ class Evaluator:
                 f"{struct_type.name}.offsetof takes one field name")
         name = unwrap_optional(args[0])
         if not isinstance(name, StrValue):
-            raise TypeError(
-                f"{struct_type.name}.offsetof: field name must be a str")
+            raise coded(2817, TypeError(
+                f"{struct_type.name}.offsetof: field name must be a str"))
         try:
             layout = struct_layout(struct_type, struct_lookup(self.env))
             offset = layout.offset_of(name.value)
         except LayoutError as e:
-            raise TypeError(f"{struct_type.name}.offsetof: {e}"
-                            if "no field" in str(e) else str(e))
+            raise coded(2818, TypeError(f"{struct_type.name}.offsetof: {e}"
+                            if "no field" in str(e) else str(e)))
         return UnitValue(mk_int(offset), BUILTIN_UNITS["byte"])
 
     def _struct_layout_attr(self, struct_type, attr: str):
@@ -3266,7 +3266,7 @@ class Evaluator:
         try:
             layout = struct_layout(struct_type, struct_lookup(self.env))
         except LayoutError as e:
-            raise TypeError(str(e))
+            raise coded(2819, TypeError(str(e)))
         value = layout.size if attr == "sizeof" else layout.align
         return UnitValue(mk_int(value), BUILTIN_UNITS["byte"])
 
@@ -3295,18 +3295,18 @@ class Evaluator:
             # lets a token index reach the token arrays while staying
             # something a node id is not.
             if not iu.unit.stands_in_for(required):
-                raise TypeError(
+                raise coded(2318, TypeError(
                     f"array index requires unit {required.display_name}, "
-                    f"got {iu.unit.display_name}")
+                    f"got {iu.unit.display_name}"))
             if not isinstance(iu.inner, IntValue):
                 raise TypeError("array index must be an integer")
             return iu.inner
         if isinstance(iu, IntValue):
             if is_unwidthed(iu.width):
                 return iu
-            raise TypeError(
+            raise coded(2319, TypeError(
                 f"array index requires unit {required.display_name}, "
-                f"got typed integer {iu.width} without unit")
+                f"got typed integer {iu.width} without unit"))
         raise TypeError("array index must be an integer")
 
     def _alloc_nested(self, sizes: list[int], fill: Value,
@@ -3442,9 +3442,9 @@ class Evaluator:
                 return TypeValue(written)
 
         if isinstance(node, Subscript) and any(i is None for i in node.indices):
-            raise TypeError(
+            raise coded(2734, TypeError(
                 "a subscript needs an index; an empty one is how an array "
-                "type leaves a dimension open, which is not a value")
+                "type leaves a dimension open, which is not a value"))
 
         if isinstance(node, Subscript):
             val = self.eval_expr(node.obj)
@@ -3461,10 +3461,10 @@ class Evaluator:
                     continue
                 if isinstance(unwrapped, ObjectValue) \
                         and isinstance(unwrapped.obj, SetValue):
-                    raise TypeError(
+                    raise coded(2735, TypeError(
                         "a set holds values rather than answering about "
                         "them by key; \N{SMALL ELEMENT OF} asks whether one "
-                        "is in it")
+                        "is in it"))
                 idx_val = self.eval_expr(idx_node)
                 iu = unwrap_optional(idx_val)
                 if isinstance(unwrapped, TupleValue):
@@ -3480,7 +3480,7 @@ class Evaluator:
                 elif isinstance(unwrapped, StrValue):
                     val = self._string_index(unwrapped, iu)
                 else:
-                    raise TypeError("multi-dimensional subscript requires nested arrays or tuples")
+                    raise coded(2736, TypeError("multi-dimensional subscript requires nested arrays or tuples"))
             return val
 
         # Slice read: arr[start…end] (inclusive).
@@ -3539,8 +3539,8 @@ class Evaluator:
         if isinstance(node, ArrayAlloc):
             etype = node.element_type
             if etype and etype in FAST_TYPES:
-                raise TypeError(
-                    f"fast type '{etype}' cannot be used as array element type")
+                raise coded(2737, TypeError(
+                    f"fast type '{etype}' cannot be used as array element type"))
             sizes = []
             for dim in [node.size_expr, *node.rest_dims]:
                 if dim is None:
@@ -3562,9 +3562,9 @@ class Evaluator:
                     if len(actual) != len(sizes) or any(
                             have is None or (want is not None and want != have)
                             for want, have in zip(sizes, actual)):
-                        raise TypeError(
+                        raise coded(2738, TypeError(
                             f"array size mismatch: declared {declared}, "
-                            f"got {format_shape(actual)}")
+                            f"got {format_shape(actual)}"))
                     # An empty extent takes the one the initializer had.
                     sizes = list(actual)
                     # The declared length travels with the value, so the
@@ -3588,18 +3588,18 @@ class Evaluator:
                     # An extent the type leaves open takes its length
                     # from the initializer, and one value has none to
                     # give.
-                    raise TypeError(
+                    raise coded(2739, TypeError(
                         f"an array of {shape} is not made from one value, "
                         f"and the open dimension has nothing to take its "
-                        f"extent from; write the elements out")
+                        f"extent from; write the elements out"))
                 made = (f"{sizes[0]} \N{APL FUNCTIONAL SYMBOL RHO} "
                         if len(sizes) == 1
                         else f"({', '.join(str(d) for d in sizes)}) "
                              f"\N{APL FUNCTIONAL SYMBOL RHO} ")
-                raise TypeError(
+                raise coded(2740, TypeError(
                     f"an array of {shape} is not made from one value; "
                     f"write the elements out, or make them with "
-                    f"{made}<value>")
+                    f"{made}<value>"))
 
         raise TypeError(f"unexpected expression: {type(node).__name__}")
 
@@ -3629,8 +3629,8 @@ class Evaluator:
 
     def _ee_VarRef(self, node):
         if node.name == DISCARD_NAME:
-            raise TypeError(
-                "'_' discards the value assigned to it and cannot be read")
+            raise coded(2238, TypeError(
+                "'_' discards the value assigned to it and cannot be read"))
         # Nothing is frozen in most functions, and an empty mapping says
         # so for less than a lookup in it does.
         if self._frozen_vars and self._frozen_vars.get(node.name) == "moved":
@@ -3639,9 +3639,9 @@ class Evaluator:
         if (self._pure_func_name is not None
                 and not self.env.has_local(node.name)
                 and self.env.is_mutable_global(node.name)):
-            raise TypeError(
+            raise coded(2239, TypeError(
                 f"pure function '{self._pure_func_name}' cannot "
-                f"read mutable global variable '{node.name}'")
+                f"read mutable global variable '{node.name}'"))
         try:
             val = self.env.lookup(node.name)
         except KeyError:
@@ -3748,13 +3748,13 @@ class Evaluator:
                 try:
                     func = self.env.lookup(full)
                 except KeyError:
-                    raise TypeError(
-                        f"module '{qual}' defines no '{node.method}'") from None
+                    raise coded(2910, TypeError(
+                        f"module '{qual}' defines no '{node.method}'")) from None
                 if not getattr(func, "is_export", False) \
                         and not self._visible_from_here(qual):
-                    raise TypeError(
+                    raise coded(2911, TypeError(
                         f"'{full}' is not exported from module '{qual}'; "
-                        f"@export says what a module lets others name")
+                        f"@export says what a module lets others name"))
                 args = [self.eval_expr(a) for a in node.args]
                 return self._do_call(func, args)
         if node.method in _ARRAY_MUTATORS:
@@ -3806,7 +3806,7 @@ class Evaluator:
                 raise AttributeError(_sizeof_is_gone(node.attr))
         if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
             if node.attr == "sizeof":
-                raise AttributeError(_sizeof_is_gone(node.attr))
+                raise coded(2742, AttributeError(_sizeof_is_gone(node.attr)))
             if node.attr == "shape":
                 # One extent per dimension, which is how a function
                 # reads the dimensions its parameter type left open.
@@ -3891,8 +3891,8 @@ class Evaluator:
     def _ee_StaticAssert(self, node):
         for arg in node.args:
             if not _is_const_expr(arg):
-                raise TypeError(
-                    "static_assert requires compile-time constant expressions")
+                raise coded(2615, TypeError(
+                    "static_assert requires compile-time constant expressions"))
         if not node.args:
             raise TypeError("static_assert requires at least 1 argument")
         cond = self.eval_expr(node.args[0])
@@ -3912,8 +3912,8 @@ class Evaluator:
 
     def _ee_StaticAssertEq(self, node):
         if not _is_const_expr(node.expected) or not _is_const_expr(node.actual):
-            raise TypeError(
-                "static_assert_eq requires compile-time constant expressions")
+            raise coded(2616, TypeError(
+                "static_assert_eq requires compile-time constant expressions"))
         expected = self.eval_expr(node.expected)
         actual = self.eval_expr(node.actual)
         eu = _as_type_value(unwrap_optional(expected))
@@ -4032,7 +4032,7 @@ class Evaluator:
         return self._eval_multi_slice_read(arr_val, node.specs)
 
     def _ee_EnumerateExpr(self, node):
-        raise TypeError("enumerate can only be used inside foreach")
+        raise coded(2820, TypeError("enumerate can only be used inside foreach"))
 
     def _ee_TypeOfExpr(self, node):
         cached = getattr(node, "_cached_value", None)
@@ -4040,9 +4040,9 @@ class Evaluator:
             return cached
         if not _is_comptime_expr(node.expr, self._comptime_vars) \
                 and not self._names_a_binding(node.expr):
-            raise TypeError(
+            raise coded(2240, TypeError(
                 "@typeof requires a compile-time constant, a name, or "
-                "an expression built from them")
+                "an expression built from them"))
         # Reading a name bound to a reference yields the referent, so
         # the binding itself is inspected to report the borrow.
         val = None
@@ -4105,7 +4105,7 @@ class Evaluator:
         try:
             func = self.env.lookup(node.name)
         except KeyError:
-            raise TypeError(f"@resultof: unknown function '{node.name}'")
+            raise coded(2110, TypeError(f"@resultof: unknown function '{node.name}'"))
         if isinstance(func, FuncValue):
             # Every parsed signature records a return type, ∅ where
             # none was written, so there is nothing to fall back to.
@@ -4359,9 +4359,9 @@ class Evaluator:
                     # UTF-8 than the one it replaces, so there is no
                     # writing in place to be had.  A new string is
                     # built instead.
-                    raise TypeError(
+                    raise coded(2745, TypeError(
                         "a string cannot be written through; build the "
-                        "string that is wanted, joining with \N{DOUBLE PLUS}")
+                        "string that is wanted, joining with \N{DOUBLE PLUS}"))
                 if isinstance(unwrapped, ObjectValue) \
                         and isinstance(unwrapped.obj, HashValue):
                     # Writing at a key puts it there, whether or not it
@@ -4432,18 +4432,18 @@ class Evaluator:
                     if kind == "moved":
                         del self._frozen_vars[target_ast.name]
                     else:
-                        raise TypeError(
+                        raise coded(2412, TypeError(
                             f"cannot assign to {kind} variable "
-                            f"'{target_ast.name}'")
+                            f"'{target_ast.name}'"))
                 if self.env.is_const_global(target_ast.name):
-                    raise TypeError(
+                    raise coded(2241, TypeError(
                         f"cannot assign to let variable "
-                        f"'{target_ast.name}'")
+                        f"'{target_ast.name}'"))
                 if (self._pure_func_name is not None
                         and not self.env.has_local(target_ast.name)):
-                    raise TypeError(
+                    raise coded(2242, TypeError(
                         f"pure function '{self._pure_func_name}' cannot "
-                        f"assign to non-local variable '{target_ast.name}'")
+                        f"assign to non-local variable '{target_ast.name}'"))
                 current = self.env.lookup(target_ast.name)
                 if isinstance(current, Reference):
                     current.set(rhs)
@@ -4505,8 +4505,8 @@ class Evaluator:
             check_bootstrap_type(stmt.type_annotation,
                                  f"'{stmt.name}'")
         if is_type_name(stmt.name):
-            raise TypeError(
-                f"'{stmt.name}' names a type and cannot name a variable")
+            raise coded(2243, TypeError(
+                f"'{stmt.name}' names a type and cannot name a variable"))
         if stmt.name == DISCARD_NAME:
             # `let _ := expr` discards too, so that a value can be
             # thrown away without inventing a name for it.
@@ -4515,11 +4515,12 @@ class Evaluator:
         if stmt.name in self._frozen_vars:
             kind = self._frozen_vars[stmt.name]
             if kind == "foreach":
-                self._warnings.append(
-                    f"redefinition of foreach variable '{stmt.name}'")
+                from interp.errors import Diagnostic
+                self._warnings.append(Diagnostic(
+                    f"redefinition of foreach variable '{stmt.name}'", 2420))
             elif not stmt.is_const:
-                raise TypeError(
-                    f"cannot redefine {kind} variable '{stmt.name}'")
+                raise coded(2244, TypeError(
+                    f"cannot redefine {kind} variable '{stmt.name}'"))
         value = self.eval_expr(stmt.init_expr)
         if stmt.type_annotation is None:
             # Naming a value settles it, and without a type written
@@ -4681,8 +4682,8 @@ class Evaluator:
         name, kind = source
         if kind is not None:
             if not stmt.is_const:
-                raise TypeError(
-                    f"cannot take a mutable view of {kind} variable '{name}'")
+                raise coded(2413, TypeError(
+                    f"cannot take a mutable view of {kind} variable '{name}'"))
             self._frozen_vars[stmt.name] = "borrowed"
         else:
             # The source may be written, so the view may be too, whether
@@ -4706,7 +4707,7 @@ class Evaluator:
         held = runtime_type_of(unwrap_optional(current))
         mismatch = _scalar_kind_mismatch(unwrap_optional(rhs), held)
         if mismatch is not None:
-            raise TypeError(f"'{name}' holds {held} and cannot take {mismatch}")
+            raise coded(2746, TypeError(f"'{name}' holds {held} and cannot take {mismatch}"))
 
     @staticmethod
     def _declared_type_of(stmt, value) -> str | None:
@@ -4769,18 +4770,18 @@ class Evaluator:
                 raise TypeError(
                     f"'{name}' holds {held} and cannot take {mismatch}")
         if decl.unit is None and isinstance(unwrap_optional(value), UnitValue):
-            raise TypeError(
+            raise coded(2321, TypeError(
                 f"'{name}' carries no unit, but the value is "
                 f"{unwrap_optional(value).unit.display_name}; "
-                f"use @dropunit to part with it")
+                f"use @dropunit to part with it"))
         if decl.unit is not None and self._carried_unit(value) is None:
             # A definition may measure a bare number, since it is the
             # definition that says what the number counts.  An
             # assignment says nothing, so what it stores has to arrive
             # measured or the measure would be invented for it.
-            raise TypeError(
+            raise coded(2322, TypeError(
                 f"cannot assign dimensionless value to '{name}' which has "
-                f"unit {decl.unit.display_name}")
+                f"unit {decl.unit.display_name}"))
         if decl.type_name is None:
             return apply_unit(value, decl.unit)
         ann = decl.type_name
@@ -4819,11 +4820,11 @@ class Evaluator:
         if kind == "moved":
             raise TypeError(f"use of moved value '{name}'")
         if kind is not None:
-            raise TypeError(
-                f"cannot assign to {part} of {kind} variable '{name}'")
+            raise coded(2414, TypeError(
+                f"cannot assign to {part} of {kind} variable '{name}'"))
         if self.env.is_const_global(name):
-            raise TypeError(
-                f"cannot assign to {part} of let variable '{name}'")
+            raise coded(2747, TypeError(
+                f"cannot assign to {part} of let variable '{name}'"))
 
     @staticmethod
     def _is_mine(signal, node) -> bool:
@@ -4881,9 +4882,9 @@ class Evaluator:
                 bound = value.value if isinstance(value, SomeValue) else value
                 if node.var_is_mut:
                     if not isinstance(bound, Reference):
-                        raise TypeError(
+                        raise coded(2245, TypeError(
                             f"'{name}' is declared mut, but the loop produces "
-                            f"values that cannot be written back")
+                            f"values that cannot be written back"))
                 elif isinstance(bound, Reference):
                     # A plain binding names the value, not the place it
                     # came from, so it holds a copy and its type is the
@@ -4982,14 +4983,14 @@ class Evaluator:
         var_names = [v[0] for v in node.vars]
         for var_name in var_names:
             if is_type_name(var_name):
-                raise TypeError(
+                raise coded(2246, TypeError(
                     f"'{var_name}' names a type and cannot name a "
-                    f"loop variable")
+                    f"loop variable"))
 
         if any(borrows) and (destructure or num_vars != num_iters):
-            raise TypeError(
+            raise coded(2415, TypeError(
                 "foreach over a borrow needs one variable per borrowed "
-                "container")
+                "container"))
 
         # A mutably borrowed variable is the one kind of loop variable
         # that may be assigned to, because assigning to it writes into
@@ -5062,8 +5063,8 @@ class Evaluator:
             name = expr.expr.name
             frozen = self._frozen_vars.get(name)
             if frozen is not None and frozen != "moved":
-                raise TypeError(
-                    f"cannot mutably borrow {frozen} variable '{name}'")
+                raise coded(2416, TypeError(
+                    f"cannot mutably borrow {frozen} variable '{name}'"))
             if self.env.is_const_global(name):
                 raise TypeError(
                     f"cannot mutably borrow let variable '{name}'")
@@ -5072,9 +5073,9 @@ class Evaluator:
         if not (isinstance(val, ObjectValue)
                 and isinstance(val.obj, ArrayValue)):
             kind = "&mut" if expr.is_mut else "&"
-            raise TypeError(
+            raise coded(2417, TypeError(
                 f"foreach over {kind} requires an array, got "
-                f"{self._value_type_name(val)}")
+                f"{self._value_type_name(val)}"))
         array = val.obj
         return [ElementRef(array, i, expr.is_mut)
                 for i in range(array.sizeof)]
@@ -5147,13 +5148,13 @@ class Evaluator:
         """Bind each name to its element, taking nested tuples apart."""
         inner = unwrap_optional(value)
         if not isinstance(inner, TupleValue):
-            raise TypeError(
+            raise coded(2821, TypeError(
                 f"a definition taking a tuple apart needs a tuple, but the "
-                f"value is {runtime_type_of(inner)}")
+                f"value is {runtime_type_of(inner)}"))
         if len(inner.elements) != len(names):
-            raise TypeError(
+            raise coded(2822, TypeError(
                 f"the definition names {len(names)} elements, but the "
-                f"tuple has {len(inner.elements)}")
+                f"tuple has {len(inner.elements)}"))
         for name, element in zip(names, inner.elements):
             if isinstance(name, list):
                 self._bind_destructured(name, element, stmt)
@@ -5189,24 +5190,49 @@ class Evaluator:
         try:
             self.eval_stmt(node.stmt)
         except Exception as e:
-            diagnostics.append(("error", str(e)))
+            from interp.errors import Diagnostic
+            diagnostics.append(
+                ("error", Diagnostic(str(e), getattr(e, "diag_code", None))))
         diagnostics.extend(("warning", w) for w in self._warnings)
         self._warnings = saved_warnings
         self._collect_warnings = saved_collect
 
         remaining = list(node.expectations)
         for level, msg in diagnostics:
-            for i, (exp_level, exp_pattern) in enumerate(remaining):
+            for i, exp in enumerate(remaining):
+                exp_level, exp_pattern, exp_code, exp_line = exp
                 # -Werror makes a warning an error, on both sides: an
                 # @expect written for one still accounts for it.
-                if (diagnostic_level(level) == diagnostic_level(exp_level)
-                        and re.search(exp_pattern, msg)):
-                    remaining.pop(i)
-                    break
+                if diagnostic_level(level) != diagnostic_level(exp_level):
+                    continue
+                if exp_code is not None:
+                    if getattr(msg, "code", None) != exp_code:
+                        continue
+                    if exp_pattern is not None and str(msg) != exp_pattern:
+                        from interp.errors import (
+                            _record_expect_drift, source_path_in_hand)
+                        _record_expect_drift(source_path_in_hand(), exp_line,
+                                             exp_code, exp_pattern, str(msg))
+                elif not re.search(exp_pattern, msg):
+                    continue
+                elif __import__("os").environ.get("NGPL_EXPECT_SITES"):
+                    import json
+                    from interp.errors import source_path_in_hand
+                    with open(__import__("os").environ["NGPL_EXPECT_SITES"],
+                              "a", encoding="utf-8") as fh:
+                        fh.write(json.dumps(
+                            {"expect_file": source_path_in_hand(),
+                             "expect_line": exp_line,
+                             "pattern": exp_pattern, "message": str(msg),
+                             "code": getattr(msg, "code", None)}) + "\n")
+                remaining.pop(i)
+                break
 
         if remaining:
             unmatched = "; ".join(
-                f"@expect {lv} \"{pat}\"" for lv, pat in remaining)
+                (f"@expect {lv} {code}" if code is not None
+                 else f"@expect {lv} \"{pat}\"")
+                for lv, pat, code, _ln in remaining)
             if diagnostics:
                 got = "; ".join(f"{lv}: {msg}" for lv, msg in diagnostics)
                 raise TypeError(
@@ -5250,9 +5276,9 @@ class Evaluator:
         described = {"some": "a present value",
                      "none": "\N{EMPTY SET}",
                      "err": "a failed result"}[shape]
-        raise TypeError(
+        raise coded(2247, TypeError(
             f"match has no arm for {described}; add the missing pattern "
-            f"or a _ arm")
+            f"or a _ arm"))
 
     @staticmethod
     def _written_type(expr) -> str | None:
@@ -5306,8 +5332,8 @@ class Evaluator:
             raise TypeError(
                 f"@{node.kind}: '{resolved}' is arbitrary-precision and has "
                 f"no {'smallest' if node.kind == 'min' else 'largest'} value")
-        raise TypeError(
-            f"@{node.kind}: '{type_name}' is not a numeric type")
+        raise coded(2248, TypeError(
+            f"@{node.kind}: '{type_name}' is not a numeric type"))
 
     def _memory_size(self, value):
         """How much memory a value takes, in bytes.
@@ -5355,7 +5381,7 @@ class Evaluator:
             size, _ = type_layout(type_name, struct_lookup(self.env),
                                   c_compatible=False)
         except LayoutError as e:
-            raise TypeError(f"@sizeof: {e}") from None
+            raise coded(2823, TypeError(f"@sizeof: {e}")) from None
         return UnitValue(mk_int(size), BUILTIN_UNITS["byte"])
 
     @staticmethod
@@ -5446,13 +5472,13 @@ class Evaluator:
             return
         inner = unwrap_optional(value)
         if not isinstance(inner, TupleValue):
-            raise TypeError(
+            raise coded(2748, TypeError(
                 f"the arm names the elements of a tuple, but the value "
-                f"matched is {runtime_type_of(inner)}")
+                f"matched is {runtime_type_of(inner)}"))
         if len(inner.elements) != len(names):
-            raise TypeError(
+            raise coded(2249, TypeError(
                 f"the arm names {len(names)} elements, but the value "
-                f"matched has {len(inner.elements)}")
+                f"matched has {len(inner.elements)}"))
         for name, element in zip(names, inner.elements):
             if name == DISCARD_NAME:
                 continue
@@ -5488,8 +5514,8 @@ class Evaluator:
                 "catch requires enclosing function to have optional or expected return type")
         _, opt_err = _split_optional_type(self._current_ret_type)
         if opt_err is None:
-            raise TypeError(
-                "catch requires enclosing function to have optional or expected return type")
+            raise coded(2012, TypeError(
+                "catch requires enclosing function to have optional or expected return type"))
 
         self._catch_depth += 1
         try:
@@ -5557,8 +5583,8 @@ class Evaluator:
 
         for d in dims:
             if d < 0:
-                raise TypeError(
-                    "\N{APL FUNCTIONAL SYMBOL RHO}: dimensions must be non-negative")
+                raise coded(2250, TypeError(
+                    "\N{APL FUNCTIONAL SYMBOL RHO}: dimensions must be non-negative"))
 
         source: list[Value]
         backing: list[Value] | None = None
@@ -5575,8 +5601,8 @@ class Evaluator:
                 backing = arr.elements
                 source = backing
             if not source:
-                raise TypeError(
-                    "\N{APL FUNCTIONAL SYMBOL RHO}: cannot reshape empty array")
+                raise coded(2749, TypeError(
+                    "\N{APL FUNCTIONAL SYMBOL RHO}: cannot reshape empty array"))
         elif isinstance(du, RangeValue):
             source = [mk_int(i) for i in du.to_list()]
             if not source:
@@ -5674,14 +5700,14 @@ class Evaluator:
         elif isinstance(cu, ObjectValue) and isinstance(cu.obj, ArrayValue):
             elements = cu.obj.values()
         else:
-            raise TypeError(
-                f"fold requires array or range, got {type(cu).__name__}")
+            raise coded(2750, TypeError(
+                f"fold requires array or range, got {type(cu).__name__}"))
 
         if node.init is not None:
             acc = self.eval_expr(node.init)
         else:
             if not elements:
-                raise TypeError("fold on empty container requires an initial value")
+                raise coded(2251, TypeError("fold on empty container requires an initial value"))
             if node.direction == "left":
                 acc = elements[0]
                 elements = elements[1:]
@@ -5834,8 +5860,8 @@ class Evaluator:
                 try:
                     val = self.env.lookup(name)
                 except KeyError:
-                    raise TypeError(
-                        f"lambda capture '{name}' is not defined")
+                    raise coded(2111, TypeError(
+                        f"lambda capture '{name}' is not defined"))
                 lambda_env.define(name, val)
 
         for name in refs:
@@ -5853,8 +5879,8 @@ class Evaluator:
                     raise TypeError(
                         f"lambda references '{name}' which is not "
                         f"in the capture list")
-                raise TypeError(
-                    f"lambda references '{name}' but has no capture list")
+                raise coded(2252, TypeError(
+                    f"lambda references '{name}' but has no capture list"))
 
         return LambdaValue(node.params, node.body, lambda_env,
                            captures=node.captures, ret_type=node.ret_type)
@@ -5918,15 +5944,15 @@ class Evaluator:
                 f"generate: first argument must be a function, "
                 f"got {type(func).__name__}")
         if not isinstance(range_val, RangeValue):
-            raise TypeError(
+            raise coded(2253, TypeError(
                 f"generate: second argument must be a range, "
-                f"got {type(range_val).__name__}")
+                f"got {type(range_val).__name__}"))
         elements: list[Value] = []
         for i in range_val.to_list():
             result = self._do_call(func, [mk_int(i)])
             if is_none(result):
-                raise TypeError(
-                    "generate: function must not return \N{EMPTY SET}")
+                raise coded(2254, TypeError(
+                    "generate: function must not return \N{EMPTY SET}"))
             elements.append(result)
         return ObjectValue(ArrayValue(elements))
 
@@ -5950,8 +5976,8 @@ class Evaluator:
                     found_type = ftype
                     break
             if found_type is None:
-                raise TypeError(
-                    f"struct '{node.name}' has no field '{field_name}'")
+                raise coded(2824, TypeError(
+                    f"struct '{node.name}' has no field '{field_name}'"))
             value = self.eval_expr(field_expr)
             funit = struct_type.field_unit(field_name)
             if funit is not None:
@@ -5964,8 +5990,8 @@ class Evaluator:
             field_values[field_name] = value
         for fname, ftype in struct_type.fields:
             if fname not in field_values:
-                raise TypeError(
-                    f"missing field '{fname}' in struct '{node.name}' literal")
+                raise coded(2825, TypeError(
+                    f"missing field '{fname}' in struct '{node.name}' literal"))
         return ObjectValue(StructInstance(struct_type, field_values))
 
     # ------------------------------------------------------------------
@@ -6037,9 +6063,9 @@ class Evaluator:
                 return ObjectValue(ArrayValue(
                     [CharValue(ord(c)) for c in unwrapped.value],
                     element_type="char"))
-            raise AttributeError(
+            raise coded(2751, AttributeError(
                 f"a string has no method '{method_name}'; it answers "
-                f"chars() with what it is made of")
+                f"chars() with what it is made of"))
         if isinstance(unwrapped, SyntaxValue):
             return self._call_syntax_method(unwrapped, method_name, args)
         if isinstance(unwrapped, CharValue):
@@ -6048,9 +6074,9 @@ class Evaluator:
                     raise TypeError("char.str takes no arguments")
                 return mk_str(unwrapped.char)
             if method_name != "ord":
-                raise AttributeError(
+                raise coded(2752, AttributeError(
                     f"a character has no method '{method_name}'; it answers "
-                    f"ord() with its number and str() with a string of one")
+                    f"ord() with its number and str() with a string of one"))
             if args:
                 raise TypeError("char.ord takes no arguments")
             return mk_int(unwrapped.code, "u32")
@@ -6068,11 +6094,11 @@ class Evaluator:
                 check_code_point(unwrapped.value, "chr", stop=True))
         if isinstance(unwrapped, Iterator):
             if method_name != "next":
-                raise AttributeError(
+                raise coded(2255, AttributeError(
                     f"an iterator has no method '{method_name}'; it answers "
-                    f"only next()")
+                    f"only next()"))
             if args:
-                raise TypeError("iterator.next takes no arguments")
+                raise coded(2256, TypeError("iterator.next takes no arguments"))
             return unwrapped.next()
         # callstack reads evaluator state, which a plain method on the
         # std object has no way to reach.
@@ -6100,10 +6126,10 @@ class Evaluator:
             # what does it to all of them, so an array needs no member
             # function saying the same thing a second way.
             fold = "\N{DOUBLE PLUS}\N{APL FUNCTIONAL SYMBOL SLASH BAR}"
-            raise AttributeError(
+            raise coded(2753, AttributeError(
                 f"an array does not answer str(); {fold} joins its "
                 f"characters into a string, and {fold} (chars, \"\") does "
-                f"so where the array may be empty")
+                f"so where the array may be empty"))
         if isinstance(unwrapped, ObjectValue) \
                 and isinstance(unwrapped.obj, (HashValue, SetValue)):
             return self._call_container_method(
@@ -6303,8 +6329,8 @@ class Evaluator:
             return LambdaValue(remaining, func.body, self.env,
                                partial_func=func, partial_args=list(args))
         if not has_pack and len(args) != n_regular:
-            raise TypeError(
-                f"{func.name} expects {n_regular} arguments, got {len(args)}")
+            raise coded(2257, TypeError(
+                f"{func.name} expects {n_regular} arguments, got {len(args)}"))
 
         if func.is_listable:
             # Threading is decided once the call is known to be one --
@@ -6374,10 +6400,10 @@ class Evaluator:
                 concrete = _resolve_concrete_for_generic(ptype, arg)
                 if gname in generic_map:
                     if generic_map[gname] != concrete:
-                        raise TypeError(
+                        raise coded(2258, TypeError(
                             f"{func.name}: generic type {gname} resolved to "
                             f"'{generic_map[gname]}' but argument '{pname}' "
-                            f"has type '{concrete}'")
+                            f"has type '{concrete}'"))
                 else:
                     generic_map[gname] = concrete
 
@@ -6443,9 +6469,9 @@ class Evaluator:
             is_ref_param = param_name in func.param_refs
             if is_ref_param:
                 if not isinstance(arg_value, RefValue):
-                    raise TypeError(
+                    raise coded(2259, TypeError(
                         f"{func.name}: parameter '{param_name}' is by-reference, "
-                        f"caller must pass &{param_name}")
+                        f"caller must pass &{param_name}"))
                 # Lent rather than given, so nothing is coerced -- what
                 # the callee writes goes into the caller's own array.
                 # That is the reason to measure it here: the type has
@@ -6457,13 +6483,13 @@ class Evaluator:
                         try:
                             coerce_arg(lent, param_type, func.name, param_name)
                         except (TypeError, OverflowError) as e:
-                            raise TypeError(strip_position_prefix(str(e))) from None
+                            raise coded(2754, TypeError(strip_position_prefix(str(e)))) from None
                 call_env.define(param_name, arg_value)
                 continue
             if isinstance(arg_value, RefValue):
-                raise TypeError(
+                raise coded(2260, TypeError(
                     f"{func.name}: parameter '{param_name}' is by-value, "
-                    f"caller must not pass a reference")
+                    f"caller must not pass a reference"))
             if param_name in func.param_muts:
                 arg_value = deep_copy_value(arg_value)
                 # The copy takes the parameter's shape: a dynamically-
@@ -6501,10 +6527,10 @@ class Evaluator:
                 param_unit = eval_unit_formula(func.param_units[param_name])
                 if isinstance(arg_value, IntValue) \
                         and not is_unwidthed(arg_value.width):
-                    raise TypeError(
+                    raise coded(2323, TypeError(
                         f"{func.name}: parameter '{param_name}' requires unit "
                         f"{param_unit.display_name}, got typed integer "
-                        f"{arg_value.width} without unit")
+                        f"{arg_value.width} without unit"))
                 # An array is measured by its elements, so the unit
                 # reaches them rather than the argument as a whole.
                 arg_value = apply_unit(arg_value, param_unit, self._mk_int)
@@ -6798,7 +6824,7 @@ class Evaluator:
         # a binding or a parameter.
         mismatch = array_type_mismatch(inner, check)
         if mismatch is not None:
-            raise TypeError(f"{func_name}: {mismatch}")
+            raise coded(2755, TypeError(f"{func_name}: {mismatch}"))
         if _parse_array_type(check) is not None:
             # And what the array holds is measured too, as it is at a
             # parameter: a return type naming an array of numbers is
@@ -6806,28 +6832,28 @@ class Evaluator:
             try:
                 settled = coerce_to_type(inner, check)
             except (TypeError, OverflowError) as e:
-                raise TypeError(
+                raise coded(2756, TypeError(
                     f"{func_name}: return type is {ret_type}, but "
-                    f"{strip_position_prefix(str(e))}") from None
+                    f"{strip_position_prefix(str(e))}")) from None
             return rewrap(settled) if rewrap is not None else settled
         if check in _TYPE_BITS or check == "int":
             if isinstance(inner, FloatValue):
-                raise TypeError(
+                raise coded(2261, TypeError(
                     f"{func_name}: return type is {ret_type} "
                     f"but body evaluates to "
-                    f"{self._value_type_name(inner)}")
+                    f"{self._value_type_name(inner)}"))
             if isinstance(inner, (StrValue, BoolValue)):
-                raise TypeError(
+                raise coded(2262, TypeError(
                     f"{func_name}: return type is {ret_type} "
-                    f"but body evaluates to {self._value_type_name(inner)}")
+                    f"but body evaluates to {self._value_type_name(inner)}"))
             if isinstance(inner, IntValue):
                 return coerce_to_type(inner, check) if opt_err is None else result
         elif check in FLOAT_TYPES:
             if isinstance(inner, IntValue):
-                raise TypeError(
+                raise coded(2263, TypeError(
                     f"{func_name}: return type is {ret_type} "
                     f"but body evaluates to "
-                    f"{self._value_type_name(inner)}")
+                    f"{self._value_type_name(inner)}"))
             if isinstance(inner, (StrValue, BoolValue)):
                 raise TypeError(
                     f"{func_name}: return type is {ret_type} "

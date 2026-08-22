@@ -166,7 +166,7 @@ fn test_pop_presence_not_truth():
     assert(¬absent)
 
 // Unlike get, a subscript out of range is still an error.
-@expect error "out of range"
+@expect error 2758 "array index 9 out of range (length 2)"
 fn error_subscript_still_checks():
     let v : mut i64[] = [1, 2]
     _ ← v[9]
@@ -175,17 +175,17 @@ fn error_subscript_still_checks():
 // Indices that name no element are a mistake, not an outcome
 // ---------------------------------------------------------------------
 
-@expect error "insert index 5 out of range"
+@expect error 2762 "insert index 5 out of range (length 2)"
 fn error_insert_past_end():
     let v : mut i64[] = [1, 2]
     v.insert(5, 9)
 
-@expect error "remove index 5 out of range"
+@expect error 2763 "remove index 5 out of range (length 2)"
 fn error_remove_past_end():
     let v : mut i64[] = [1, 2]
     _ ← v.remove(5)
 
-@expect error "remove index 0 out of range"
+@expect error 2763 "remove index 0 out of range (length 0)"
 fn error_remove_from_empty():
     let v : mut i64[] = []
     _ ← v.remove(0)
@@ -194,17 +194,17 @@ fn error_remove_from_empty():
 // Argument counts and element types
 // ---------------------------------------------------------------------
 
-@expect error "array.push takes 1 argument"
+@expect error 2732 "array.push takes 1 argument, got 2"
 fn error_push_two_values():
     let v : mut i64[] = [1]
     v.push(1, 2)
 
-@expect error "array.pop takes 0 arguments"
+@expect error 2732 "array.pop takes 0 arguments, got 1"
 fn error_pop_with_argument():
     let v : mut i64[] = [1]
     _ ← v.pop(0)
 
-@expect error "array.insert takes 2 arguments"
+@expect error 2732 "array.insert takes 2 arguments, got 1"
 fn error_insert_one_argument():
     let v : mut i64[] = [1]
     v.insert(0)
@@ -224,7 +224,7 @@ fn test_index_unit_is_accepted():
     let v : byte[] = std.bytes("abc")
     assert_eq(v.get(1¤byte), ∃(98))
 
-@expect error "array index requires unit"
+@expect error 2318 "array index requires unit B, got count"
 fn error_index_wrong_unit():
     let v : mut byte[] = std.bytes("abc")
     _ ← v.get(1¤count)
@@ -267,28 +267,28 @@ fn main():
 // much is there without tracing where it came from.  Resizing one would
 // make the type a lie.
 
-@expect error "push: cannot resize a fixed-size array"
+@expect error 2761 "push: cannot resize a fixed-size array; its type says it holds 3 elements"
 fn error_push_on_fixed_array():
     let v : mut i32[3] = [1, 2, 3]
     v.push(4)
 
-@expect error "pop: cannot resize a fixed-size array"
+@expect error 2761 "pop: cannot resize a fixed-size array; its type says it holds 3 elements"
 fn error_pop_on_fixed_array():
     let v : mut i32[3] = [1, 2, 3]
     _ ← v.pop()
 
-@expect error "insert: cannot resize a fixed-size array"
+@expect error 2761 "insert: cannot resize a fixed-size array; its type says it holds 3 elements"
 fn error_insert_on_fixed_array():
     let v : mut i32[3] = [1, 2, 3]
     v.insert(0, 9)
 
-@expect error "remove: cannot resize a fixed-size array"
+@expect error 2761 "remove: cannot resize a fixed-size array; its type says it holds 3 elements"
 fn error_remove_on_fixed_array():
     let v : mut i32[3] = [1, 2, 3]
     _ ← v.remove(0)
 
 // The message says how many the type promises.
-@expect error "holds 3 elements"
+@expect error 2761 "push: cannot resize a fixed-size array; its type says it holds 3 elements"
 fn error_message_names_the_length():
     let v : mut i32[3] = [1, 2, 3]
     v.push(4)
@@ -330,7 +330,7 @@ fn test_dynamic_array_still_resizes():
 fn receives_fixed(a : mut i32[3]):
     a.push(4)
 
-@expect error "cannot resize a fixed-size array"
+@expect error 2761 "push: cannot resize a fixed-size array; its type says it holds 3 elements"
 fn error_fixed_stays_fixed_when_passed():
     let v : mut i32[3] = [1, 2, 3]
     receives_fixed(v)
@@ -349,17 +349,17 @@ fn test_fixed_to_dynamic_becomes_dynamic():
 // Mutating methods obey the same rule as writing an element
 // ---------------------------------------------------------------------
 
-@expect error "push: cannot modify let variable 'v'"
+@expect error 2411 "push: cannot modify let variable 'v'"
 fn error_push_on_let_binding():
     let v : i64[] = [1, 2]
     v.push(3)
 
-@expect error "pop: cannot modify let variable 'v'"
+@expect error 2411 "pop: cannot modify let variable 'v'"
 fn error_pop_on_let_binding():
     let v : i64[] = [1, 2]
     _ ← v.pop()
 
-@expect error "cannot modify borrowed variable 'arr'"
+@expect error 2411 "push: cannot modify borrowed variable 'arr'"
 fn error_push_through_shared_borrow():
     let v : mut i64[] = [1, 2]
     pushes_through(&v)
@@ -386,7 +386,7 @@ fn test_fixed_into_mutable_dynamic_param_by_value():
     // The caller's array is untouched, and still fixed.
     assert_eq(#f, 3)
 
-@expect error "cannot resize a fixed-size array"
+@expect error 2761 "push: cannot resize a fixed-size array; its type says it holds 3 elements"
 fn error_caller_array_is_still_fixed():
     let f : mut i32[3] = [1, 2, 3]
     _ ← grows_by_copy(f)
@@ -398,7 +398,7 @@ fn error_caller_array_is_still_fixed():
 fn grows_by_reference(a : &mut i32[]):
     a.push(4)
 
-@expect error "by-reference mutable 'i32"
+@expect error 2730 "grows_by_reference: parameter 'a' is a by-reference mutable 'i32[]', whose length the function may change, but the argument is a fixed-size array of 3 elements"
 fn error_fixed_into_mutable_dynamic_ref_param():
     let f : mut i32[3] = [1, 2, 3]
     grows_by_reference(&f)

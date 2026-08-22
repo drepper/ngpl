@@ -47,38 +47,38 @@ fn test_static_assert_eq_arithmetic():
 
 // Error: static_assert with false.
 @test
-@expect error "static_assert failed"
+@expect error 2618 "static_assert failed"
 fn test_static_assert_false():
     static_assert(false)
 
 // Error: static_assert with zero.
 @test
-@expect error "static_assert failed"
+@expect error 2618 "static_assert failed: value is zero"
 fn test_static_assert_zero():
     static_assert(0)
 
 // Error: static_assert with message.
 @test
-@expect error "static_assert failed.*should be true"
+@expect error 2618 "static_assert failed: \"should be true\""
 fn test_static_assert_message():
     static_assert(false, "should be true")
 
 // Error: static_assert_eq with unequal values.
 @test
-@expect error "static_assert_eq failed"
+@expect error 2618 "static_assert_eq failed:\n  expected: 1\n  actual:   2"
 fn test_static_assert_eq_fail():
     static_assert_eq(1, 2)
 
 // Error: static_assert with non-constant expression.
 @test
-@expect error "compile-time constant"
+@expect error 2615 "static_assert requires compile-time constant expressions"
 fn test_static_assert_non_const():
     let x : mut i64 = 42
     static_assert(x)
 
 // Error: static_assert_eq with non-constant.
 @test
-@expect error "compile-time constant"
+@expect error 2616 "static_assert_eq requires compile-time constant expressions"
 fn test_static_assert_eq_non_const():
     let x : mut i64 = 10
     static_assert_eq(x, 10)

@@ -149,19 +149,19 @@ fn test_chr_and_ord_are_inverse():
 // Where the number is written down this is known before anything runs,
 // which is what tests/output/chr_negative_constant.ngpl shows.
 @test
-@expect error "chr: -1 is not a code point"
+@expect error 2280 "chr: -1 is not a code point; a character is numbered from 0"
 fn error_chr_of_a_negative_number():
     let n : i64 = ⁻1
     let c : char = n.chr()
 
 @test
-@expect error "is past the last code point"
+@expect error 2281 "chr: 1114112 is past the last code point, which is 1114111 (0x10FFFF)"
 fn error_chr_past_the_last_code_point():
     let n : i64 = 1114112
     let c : char = n.chr()
 
 @test
-@expect error "is a surrogate"
+@expect error 2282 "chr: 55296 is a surrogate, which encodes half of a character in UTF-16 rather than being one"
 fn error_chr_of_a_surrogate():
     let n : i64 = 55296
     let c : char = n.chr()
@@ -177,23 +177,23 @@ fn test_the_last_code_point():
 // ---------------------------------------------------------------------
 
 @test
-@expect error "'char' cannot hold an integer; a number becomes a character with .chr"
+@expect error 2772 "'char' cannot hold an integer; a number becomes a character with .chr()"
 fn error_a_number_is_not_a_character():
     let c : char = 5
 
 @test
-@expect error "'char' cannot hold a string"
+@expect error 2772 "'char' cannot hold a string"
 fn error_a_string_is_not_a_character():
     let c : char = "a"
 
 @test
-@expect error "'i64' cannot hold a character"
+@expect error 2772 "'i64' cannot hold a character"
 fn error_a_character_is_not_a_number():
     let a : u32 = 97
     let n : i64 = a.chr()
 
 @test
-@expect error "has no method 'nope'"
+@expect error 2752 "a character has no method 'nope'; it answers ord() with its number and str() with a string of one"
 fn error_a_character_has_no_other_method():
     let a : u32 = 97
     let n : mut = a.chr().nope()
@@ -244,7 +244,7 @@ fn test_a_character_parameter():
     assert(not is_digit('x'))
 
 @test
-@expect error "expected char, got str"
+@expect error 2014 "is_digit: argument 'c' expected char, got str"
 fn error_a_string_is_not_a_character_argument():
     let b : mut = is_digit("7")
 
@@ -314,7 +314,7 @@ fn test_an_empty_array_of_characters_makes_an_empty_string():
     assert((⧺⌿ (chars, "")) = "")
 
 @test
-@expect error "an array does not answer str"
+@expect error 2753 "an array does not answer str(); ⧺⌿ joins its characters into a string, and ⧺⌿ (chars, \"\") does so where the array may be empty"
 fn error_an_array_has_no_str():
     let chars : char[] = ['a']
     let s : mut = chars.str()
@@ -353,17 +353,17 @@ fn test_folding_code_points_into_a_string():
 // decide, so it is written down.
 
 @test
-@expect error "does not go together with text"
+@expect error 2233 "⧺: the right operand is int, which does not go together with text; a number becomes the character it numbers with .chr(), and its digits with std.format"
 fn error_a_number_does_not_join_text():
     let s : mut = 'a' ⧺ 98
 
 @test
-@expect error "a number becomes the character it numbers with .chr"
+@expect error 2233 "⧺: the right operand is int, which does not go together with text; a number becomes the character it numbers with .chr(), and its digits with std.format"
 fn error_joining_a_number_names_the_way_across():
     let s : mut = "n=" ⧺ 65
 
 @test
-@expect error "does not go together with text"
+@expect error 2233 "⧺: the right operand is f64, which does not go together with text; a number becomes the character it numbers with .chr(), and its digits with std.format"
 fn error_a_float_does_not_join_text():
     let s : mut = 'a' ⧺ 1.5f64
 
@@ -375,7 +375,7 @@ fn test_the_two_ways_a_number_joins_text():
     assert(("n=" ⧺ std.format(alloc, "{}", n)) = "n=65")
 
 @test
-@expect error "does not go together with text"
+@expect error 2233 "⧺: the left operand is i64, which does not go together with text; a number becomes the character it numbers with .chr(), and its digits with std.format"
 fn error_a_string_from_something_that_is_not_characters():
     let numbers : i64[] = [1, 2]
     let s : mut = ⧺⌿ numbers
@@ -430,26 +430,26 @@ fn test_an_index_may_be_a_measured_value():
     assert(s[i] = 'e')
 
 @test
-@expect error "string index requires unit ptrdiff"
+@expect error 2317 "string index requires unit ptrdiff, got typed integer i64 without unit"
 fn error_an_index_without_a_unit():
     let s := "hello"
     let i : i64 = 1
     let c : mut = s[i]
 
 @test
-@expect error "string index 9 out of range .length 5."
+@expect error 2733 "string index 9 out of range (length 5)"
 fn error_an_index_past_the_end():
     let s := "hello"
     let c : mut = s[9]
 
 @test
-@expect error "string index -1 out of range"
+@expect error 2733 "string index -1 out of range (length 5)"
 fn error_a_negative_index():
     let s := "hello"
     let c : mut = s[⁻1]
 
 @test
-@expect error "string index 9 out of range"
+@expect error 2733 "string index 9 out of range (length 5)"
 fn error_a_slice_past_the_end():
     let s := "hello"
     let sub : mut = s[1…9]
@@ -458,7 +458,7 @@ fn error_a_slice_past_the_end():
 // may take a different number of bytes than the one it replaces, so
 // there is no writing in place to be had.
 @test
-@expect error "a string cannot be written through"
+@expect error 2745 "a string cannot be written through; build the string that is wanted, joining with ⧺"
 fn error_writing_through_a_string():
     let s : mut str = "hello"
     s[0] ← 'x'
@@ -512,7 +512,7 @@ fn test_the_characters_can_be_worked_on_as_an_array():
     assert((⧺⌿ cs) = "abc")
 
 @test
-@expect error "a string has no method 'nope'"
+@expect error 2751 "a string has no method 'nope'; it answers chars() with what it is made of"
 fn error_a_string_has_no_other_method():
     let x : mut = "abc".nope()
 
@@ -551,7 +551,7 @@ fn test_what_a_conversion_answers_is_known_too():
 // A conversion that cannot be made is a mistake known at the same
 // time, so it is reported where it is written.
 @test
-@expect error "is past the last code point"
+@expect error 2281 "chr: 1114112 is past the last code point, which is 1114111 (0x10FFFF)"
 fn error_a_constant_conversion_that_cannot_be_made():
     static_assert((1114112).chr() = 'A')
 

@@ -57,12 +57,12 @@ fn test_concat_with_reshape():
 // ⧺ joins two arrays or two pieces of text, so one of each is
 // neither of those.
 @test
-@expect error "the left operand is int and the right one is an array"
+@expect error 2728 "⧺: the left operand is int and the right one is an array; an array joins an array, and text joins text"
 fn test_concat_left_not_array():
     _ ← 42 ⧺ [1]
 
 @test
-@expect error "the left operand is an array and the right one is int"
+@expect error 2729 "⧺: the left operand is an array and the right one is int; an array joins an array, and text joins text"
 fn test_concat_right_not_array():
     _ ← [1] ⧺ 42
 

@@ -30,7 +30,7 @@ fn test_a_scalar_reads_the_same_way():
 
 // Saying it twice is saying it once, twice -- not saying two things.
 @test
-@expect error "states a unit twice"
+@expect error 2022 "Line 35, col 10: the definition states a unit twice; write it once, either after the name or against the element type"
 fn error_the_unit_written_twice():
     let d ¤meter : i64 ¤meter[] = [1, 2]
 
@@ -99,7 +99,7 @@ fn test_a_definition_measures_bare_numbers():
 // An assignment says nothing, so what it stores has to arrive measured
 // or the measure would be invented for it.
 @test
-@expect error "cannot assign dimensionless value to 'd'"
+@expect error 2322 "cannot assign dimensionless value to 'd' which has unit m"
 fn error_assigning_bare_numbers_to_a_measured_array():
     let d ¤meter : mut i64[] = [1, 2]
     d ← [5, 6]
@@ -112,7 +112,7 @@ fn test_assigning_a_measured_array():
     assert_eq(d[0], 5¤meter)
 
 @test
-@expect error "incompatible units"
+@expect error 2327 "incompatible units: s and m"
 fn error_assigning_the_wrong_measure():
     let d ¤meter : mut i64[] = [1, 2]
     let e ¤second : i64[] = [5, 6]
@@ -121,21 +121,21 @@ fn error_assigning_the_wrong_measure():
 // What the definition said outlives the value: a name that has been
 // assigned once still holds to its declaration.
 @test
-@expect error "cannot take a string"
+@expect error 2746 "'a' holds i64 and cannot take a string"
 fn error_the_declaration_outlives_the_first_assignment():
     let a : mut i64 = 1
     a ← 2
     a ← "x"
 
 @test
-@expect error "cannot hold a string"
+@expect error 2772 "'i32' cannot hold a string"
 fn error_an_array_holds_to_its_element_type():
     let a : mut i32[] = [1, 2]
     let s : str[] = ["x", "y"]
     a ← s
 
 @test
-@expect error "carries no unit"
+@expect error 2321 "'x' carries no unit, but the value is m; use @dropunit to part with it"
 fn error_an_unmeasured_name_stays_unmeasured():
     let x : mut i64 = 5
     x ← 3¤meter
@@ -145,26 +145,26 @@ fn error_an_unmeasured_name_stays_unmeasured():
 // ---------------------------------------------------------------------
 
 @test
-@expect error "an array of i32 cannot hold a string"
+@expect error 2760 "an array of i32 cannot hold a string"
 fn error_pushing_the_wrong_kind():
     let a : mut i32[] = [1, 2, 3]
     a.push("smuggled")
 
 @test
-@expect error "an array of i32 cannot hold a boolean"
+@expect error 2760 "an array of i32 cannot hold a boolean"
 fn error_inserting_the_wrong_kind():
     let a : mut i32[] = [1, 2, 3]
     a.insert(0, true)
 
 @test
-@expect error "use @dropunit to part with it"
+@expect error 2324 "an array of i64 cannot hold m; use @dropunit to part with it"
 fn error_a_measured_value_in_an_unmeasured_array():
     let a : mut i64[] = [1, 2]
     let m ¤meter : i64 = 7
     a[0] ← m
 
 @test
-@expect error "cannot hold a number that measures nothing"
+@expect error 2325 "an array measured in m cannot hold a number that measures nothing"
 fn error_an_unmeasured_value_in_a_measured_array():
     let d ¤meter : mut i64[] = [1, 2]
     d.push(9)
@@ -186,7 +186,7 @@ fn test_a_width_still_converts():
     assert_eq(a[2], 7)
 
 @test
-@expect error "does not fit in i32"
+@expect error 2279 "integer overflow: 5000000000 does not fit in i32 (range -2147483648..2147483647)"
 fn error_a_value_the_element_type_cannot_hold():
     let a : mut i32[] = [1, 2]
     let x : i64 = 5000000000
@@ -195,14 +195,14 @@ fn error_a_value_the_element_type_cannot_hold():
 // A row is one of the things a matrix holds, so it is measured the way
 // any element is -- kind and length together.
 @test
-@expect error "cannot hold a string"
+@expect error 2772 "'i32' cannot hold a string"
 fn error_a_row_of_the_wrong_kind():
     let m : mut i32[2, 2] = [[1, 2], [3, 4]]
     let r : str[] = ["a", "b"]
     m[0] ← r
 
 @test
-@expect error "array size mismatch"
+@expect error 2774 "array size mismatch: type 'i32[2]' declares 2 elements, got 3"
 fn error_a_row_of_the_wrong_length():
     let m : mut i32[2, 2] = [[1, 2], [3, 4]]
     let r : i32[] = [9, 9, 9]
@@ -224,17 +224,17 @@ fn test_a_row_that_fits():
 // disagree are refused here rather than left for a type to sort out:
 // without a type nothing would ever sort them out.
 @test
-@expect error "element 0 is i64 and element 1 is a string"
+@expect error 2743 "an array holds one type of value, but element 0 is i64 and element 1 is a string"
 fn error_a_literal_of_two_kinds():
     let a : mut = [1i64, "two"]
 
 @test
-@expect error "element 0 is i64 and element 1 is i32"
+@expect error 2744 "an array holds one type of value, but element 0 is i64 and element 1 is i32"
 fn error_a_literal_of_two_widths():
     let a : mut = [1i64, 2i32]
 
 @test
-@expect error "element 0 is i64 and element 1 is a boolean"
+@expect error 2743 "an array holds one type of value, but element 0 is i64 and element 1 is a boolean"
 fn error_a_number_and_a_boolean():
     let a : mut = [1i64, true]
 
@@ -255,7 +255,7 @@ fn test_a_unit_settles_like_a_width():
     assert_eq(b[0], 2¤meter)
 
 @test
-@expect error "an array holds one unit"
+@expect error 2320 "an array holds one unit, but element 0 is m and element 1 is s"
 fn error_a_literal_of_two_units():
     let m ¤meter : i64 = 1
     let s ¤second : i64 = 2
@@ -276,7 +276,7 @@ fn hands_back_numbers() → i32[]:
     s
 
 @test
-@expect error "argument 'a': 'i32' cannot hold a string"
+@expect error 2770 "takes_numbers: argument 'a': 'i32' cannot hold a string"
 fn error_an_argument_of_the_wrong_element_type():
     let s : str[] = ["a", "b"]
     let n : mut = takes_numbers(s)
@@ -284,26 +284,26 @@ fn error_an_argument_of_the_wrong_element_type():
 // A lent array is written into where the caller holds it, so its type
 // has to be the caller's already.
 @test
-@expect error "argument 'a': 'i32' cannot hold a string"
+@expect error 2754 "lends: argument 'a': 'i32' cannot hold a string"
 fn error_lending_an_array_of_the_wrong_element_type():
     let s : mut str[] = ["a", "b"]
     lends(&s)
 
 @test
-@expect error "return type is i32"
+@expect error 2756 "hands_back_numbers: return type is i32[], but 'i32' cannot hold a string"
 fn error_a_return_of_the_wrong_element_type():
     let r : mut = hands_back_numbers()
 
 // Two arrays join into one, which holds one type of value.
 @test
-@expect error "the left operand holds i32 and the right holds str"
+@expect error 2727 "⧺: an array holds one type of value, so two joined hold the same one, but the left operand holds i32 and the right holds str"
 fn error_joining_arrays_of_two_types():
     let a : i32[] = [1, 2]
     let b : str[] = ["q"]
     let c : mut = a ⧺ b
 
 @test
-@expect error "an array holds one unit"
+@expect error 2310 "⧺: an array holds one unit, so two joined hold the same one, but the left operand is m and the right is unmeasured"
 fn error_joining_a_measured_array_to_a_bare_one():
     let d ¤meter : i64[] = [1, 2]
     let e : i64[] = [3]
@@ -325,7 +325,7 @@ fn test_joining_arrays_that_agree():
 // compound type it would have to belong to the type itself, which is
 // the question a sum or product type raises.
 @test
-@expect error "a type alias or a tuple element cannot state one yet"
+@expect error 2021 "Line 330, col 17: a unit belongs to a binding or to what an array holds; a type alias or a tuple element cannot state one yet"
 fn error_a_unit_in_a_tuple_element():
     let t : (i64 ¤meter, str) = (1, "a")
 

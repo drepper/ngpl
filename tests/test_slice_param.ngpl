@@ -64,18 +64,18 @@ fn test_vector_full_range_to_fixed():
 
 // The length checked is the range's, so a range of the wrong length is
 // rejected however long the source was.
-@expect error "length 3., got array of length 4"
+@expect error 2768 "sum_fixed3: argument 'a' expected i32[3] (length 3), got array of length 4"
 fn error_slice_wrong_length():
     let v : i32[] = [10, 20, 30, 40, 50, 60]
     _ ← sum_fixed3(v[1…4])
 
-@expect error "length 3., got array of length 2"
+@expect error 2768 "sum_fixed3: argument 'a' expected i32[3] (length 3), got array of length 2"
 fn error_slice_too_short():
     let v : i32[] = [10, 20, 30, 40, 50, 60]
     _ ← sum_fixed3(v[1…2])
 
 // A range that runs past the end is caught where it is taken.
-@expect error "out of range"
+@expect error 2758 "array index 3 out of range (length 3)"
 fn error_slice_past_end():
     let v : i32[] = [10, 20, 30]
     _ ← sum_dyn(v[1…5])
@@ -135,18 +135,18 @@ fn test_matrix_row_range_stays_two_dimensional():
 
 // A parameter naming one dimension does not take it, however many rows
 // were selected: the length it would check is not the length it has.
-@expect error "1 dimension., got a 2.4 array"
+@expect error 2766 "len_dyn: argument 'a' expected i32[] (1 dimension), got a 2×4 array"
 fn error_row_range_to_dynamic():
     let m : i64[,] = (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     _ ← len_dyn(m[0…1])
 
 // Not even when the row count is the one the parameter asks for.
-@expect error "1 dimension., got a 2.4 array"
+@expect error 2766 "rows_fixed2: argument 'm' expected i32[2] (1 dimension), got a 2×4 array"
 fn error_row_range_to_fixed():
     let m : i64[,] = (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     _ ← rows_fixed2(m[0…1])
 
-@expect error "1 dimension., got a 3.4 array"
+@expect error 2766 "rows_fixed2: argument 'm' expected i32[2] (1 dimension), got a 3×4 array"
 fn error_whole_matrix_to_fixed():
     let m : i64[,] = (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     _ ← rows_fixed2(m[0…2])
@@ -167,7 +167,7 @@ fn test_matrix_block():
     assert_eq(b[0, 0], 2)
     assert_eq(b[1, 1], 7)
 
-@expect error "1 dimension., got a 2.2 array"
+@expect error 2766 "rows_fixed2: argument 'm' expected i32[2] (1 dimension), got a 2×2 array"
 fn error_block_to_fixed_rows():
     let m : i64[,] = (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     _ ← rows_fixed2(m[0…1, 1…2])

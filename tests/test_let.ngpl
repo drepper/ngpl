@@ -69,26 +69,26 @@ fn main():
 // it, so a binding that cannot be reassigned cannot have its parts
 // assigned either.
 
-@expect error "cannot assign to element of let variable 'v'"
+@expect error 2414 "cannot assign to element of let variable 'v'"
 fn error_element_of_let_array():
     let v : i64[] = [1, 2, 3]
     v[0] ← 9
 
-@expect error "cannot assign to element of let variable 'v'"
+@expect error 2414 "cannot assign to element of let variable 'v'"
 fn error_slice_of_let_array():
     let v : i64[] = [1, 2, 3, 4]
     v[1…2] ← [8, 9]
 
 // Reaching through more than one subscript changes nothing: the write
 // still lands in what the binding names.
-@expect error "cannot assign to element of let variable 'm'"
+@expect error 2414 "cannot assign to element of let variable 'm'"
 fn error_nested_element_of_let_array():
     let m : i64[,] = [[1, 2], [3, 4]]
     m[0][1] ← 9
 
 let LET_ARRAY : i64[] = [1, 2, 3]
 
-@expect error "cannot assign to element of let variable 'LET_ARRAY'"
+@expect error 2747 "cannot assign to element of let variable 'LET_ARRAY'"
 fn error_element_of_let_global():
     LET_ARRAY[0] ← 9
 
@@ -110,7 +110,7 @@ fn test_nested_element_of_mut_array():
 fn writes_to_parameter(arr : i32[]):
     arr[0] ← 9
 
-@expect error "cannot assign to element of let variable 'arr'"
+@expect error 2414 "cannot assign to element of let variable 'arr'"
 fn error_element_of_parameter():
     let v : mut i64[] = [1, 2]
     writes_to_parameter(v)
@@ -145,7 +145,7 @@ fn test_shared_borrow_reads():
 fn writes_shared(arr : &i32[]):
     arr[0] ← 99
 
-@expect error "cannot assign to element of borrowed variable 'arr'"
+@expect error 2414 "cannot assign to element of borrowed variable 'arr'"
 fn error_write_through_shared_borrow():
     let a : mut i32[] = [10, 20]
     writes_shared(&a)
@@ -153,7 +153,7 @@ fn error_write_through_shared_borrow():
 fn rebinds_shared(arr : &i32[]):
     arr ← [1, 2]
 
-@expect error "cannot assign to borrowed variable 'arr'"
+@expect error 2412 "cannot assign to borrowed variable 'arr'"
 fn error_rebind_shared_borrow():
     let a : mut i32[] = [10, 20]
     rebinds_shared(&a)
@@ -184,7 +184,7 @@ fn mut_view_of_shared(arr : &i32[]):
     let m : mut = (2, 2) ⍴ arr
     m[0, 1] ← 42
 
-@expect error "cannot take a mutable view of borrowed variable 'arr'"
+@expect error 2413 "cannot take a mutable view of borrowed variable 'arr'"
 fn error_mut_view_of_shared_borrow():
     let a : mut i32[] = 4 ⍴ 0
     mut_view_of_shared(&a)
@@ -193,12 +193,12 @@ fn mut_view_of_immutable_param(arr : i32[]):
     let m : mut = (2, 2) ⍴ arr
     m[0, 1] ← 42
 
-@expect error "cannot take a mutable view of let variable 'arr'"
+@expect error 2413 "cannot take a mutable view of let variable 'arr'"
 fn error_mut_view_of_immutable_parameter():
     let a : mut i32[] = 4 ⍴ 0
     mut_view_of_immutable_param(a)
 
-@expect error "cannot take a mutable view of let variable 'a'"
+@expect error 2413 "cannot take a mutable view of let variable 'a'"
 fn error_mut_view_of_let_local():
     let a : i32[] = 4 ⍴ 0
     let m : mut = (2, 2) ⍴ a

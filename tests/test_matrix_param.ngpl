@@ -19,23 +19,23 @@ fn test_all_dimensions_fixed():
     assert_eq(corner_2x4(m), 1)
 
 // A matrix of the right rank but the wrong extent does not fit.
-@expect error "dimension 1 is 2., got a 3.4 array"
+@expect error 2769 "corner_2x4: argument 'm' expected i32[2,4] (dimension 1 is 2), got a 3×4 array"
 fn error_wrong_row_count():
     let m : i64[,] = (3, 4) ⍴ (1…12)
     _ ← corner_2x4(m)
 
-@expect error "dimension 2 is 4., got a 2.3 array"
+@expect error 2769 "corner_2x4: argument 'm' expected i32[2,4] (dimension 2 is 4), got a 2×3 array"
 fn error_wrong_column_count():
     let m : i64[,] = (2, 3) ⍴ (1…6)
     _ ← corner_2x4(m)
 
 // Nor does one of the wrong rank, whichever way it is wrong.
-@expect error "2 dimensions., got array of length 8"
+@expect error 2766 "corner_2x4: argument 'm' expected i32[2,4] (2 dimensions), got array of length 8"
 fn error_vector_for_matrix():
     let v : i32[] = [1, 2, 3, 4, 5, 6, 7, 8]
     _ ← corner_2x4(v)
 
-@expect error "1 dimension., got a 2.4 array"
+@expect error 2766 "len_dyn: argument 'a' expected i32[] (1 dimension), got a 2×4 array"
 fn error_matrix_for_vector():
     let m : i64[,] = (2, 4) ⍴ (1…8)
     _ ← len_dyn(m)
@@ -54,7 +54,7 @@ fn test_open_first_dimension():
     assert_eq(rows_of_four((3, 4) ⍴ (1…12)), 3)
 
 // The fixed dimension is still checked.
-@expect error "dimension 2 is 4., got a 2.3 array"
+@expect error 2769 "rows_of_four: argument 'm' expected i32[,4] (dimension 2 is 4), got a 2×3 array"
 fn error_open_rows_wrong_width():
     _ ← rows_of_four((2, 3) ⍴ (1…6))
 
@@ -67,7 +67,7 @@ fn test_open_second_dimension():
     assert_eq(two_rows((2, 3) ⍴ (1…6)), 3)
     assert_eq(two_rows((2, 5) ⍴ (1…10)), 5)
 
-@expect error "dimension 1 is 2., got a 3.4 array"
+@expect error 2769 "two_rows: argument 'm' expected i32[2,] (dimension 1 is 2), got a 3×4 array"
 fn error_two_rows_wrong_count():
     _ ← two_rows((3, 4) ⍴ (1…12))
 
@@ -85,7 +85,7 @@ fn test_both_dimensions_open():
     assert_eq(sum_matrix((2, 3) ⍴ (1…6)), 21)
 
 // Rank is still checked when every dimension is open.
-@expect error "2 dimensions., got array of length 4"
+@expect error 2766 "sum_matrix: argument 'm' expected i32[,] (2 dimensions), got array of length 4"
 fn error_vector_for_open_matrix():
     let v : i32[] = [1, 2, 3, 4]
     _ ← sum_matrix(v)
@@ -151,11 +151,11 @@ fn middle_two(t : i32[,2,]) → i32:
 fn test_three_dimensions_mixed():
     assert_eq(middle_two((2, 2, 3) ⍴ (1…12)), 5)
 
-@expect error "dimension 2 is 2., got a 2.3.4 array"
+@expect error 2769 "middle_two: argument 't' expected i32[,2,] (dimension 2 is 2), got a 2×3×4 array"
 fn error_middle_dimension_wrong():
     _ ← middle_two((2, 3, 4) ⍴ (1…24))
 
-@expect error "3 dimensions., got a 3.4 array"
+@expect error 2766 "any_cube: argument 't' expected i32[,,] (3 dimensions), got a 3×4 array"
 fn error_matrix_for_cube():
     _ ← any_cube((3, 4) ⍴ (1…12))
 
@@ -175,7 +175,7 @@ fn test_one_dimension_still_works():
     assert_eq(len_dyn(v), 3)
     assert_eq(sum_fixed3(v), 60)
 
-@expect error "length 3., got array of length 4"
+@expect error 2768 "sum_fixed3: argument 'a' expected i32[3] (length 3), got array of length 4"
 fn error_one_dimension_wrong_length():
     let v : i32[] = [10, 20, 30, 40]
     _ ← sum_fixed3(v)
@@ -192,12 +192,12 @@ fn test_variable_annotation():
     assert_eq(m.shape[0], 2)
     assert_eq(m.shape[1], 3)
 
-@expect error "declared 2.3, got 3.2"
+@expect error 2738 "array size mismatch: declared 2×3, got 3×2"
 fn error_annotation_shape_mismatch():
     let m : i32[2,3] = (3, 2) ⍴ (1…6)
     _ ← m[0, 0]
 
-@expect error "declared 2.3, got 6"
+@expect error 2738 "array size mismatch: declared 2×3, got 6"
 fn error_annotation_rank_mismatch():
     let m : i32[2,3] = [1, 2, 3, 4, 5, 6]
     _ ← m[0, 0]
@@ -261,7 +261,7 @@ fn test_nested_literal_as_argument():
     assert_eq(sum_matrix([[1, 2], [3, 4]]), 10)
     assert_eq(rows_of_four([[1, 2, 3, 4], [5, 6, 7, 8]]), 2)
 
-@expect error "dimension 2 is 4., got a 2.3 array"
+@expect error 2769 "corner_2x4: argument 'm' expected i32[2,4] (dimension 2 is 4), got a 2×3 array"
 fn error_nested_literal_wrong_width():
     _ ← corner_2x4([[1, 2, 3], [4, 5, 6]])
 
@@ -281,11 +281,11 @@ fn test_nested_literal_element_type():
 
 // An empty entry is one extent the type does not name, not the absence
 // of one, so a ragged argument does not fit even a wholly open type.
-@expect error "dimension 2 is one extent.*whose rows differ"
+@expect error 2767 "sum_matrix: argument 'm' expected i32[,] (dimension 2 is one extent), got a 2×? array whose rows differ in length"
 fn error_ragged_to_open_matrix():
     _ ← sum_matrix([[1, 2, 3], [4, 5]])
 
-@expect error "dimension 2 is one extent.*whose rows differ"
+@expect error 2767 "rows_of_four: argument 'm' expected i32[,4] (dimension 2 is one extent), got a 2×? array whose rows differ in length"
 fn error_ragged_to_fixed_width():
     _ ← rows_of_four([[1, 2, 3], [4, 5]])
 
@@ -304,24 +304,24 @@ fn test_let_open_extents():
     let c : i32[2,] = [[1, 2, 3], [4, 5, 6]]
     assert_eq(c.shape[1], 3)
 
-@expect error "declared .×3, got 2.2"
+@expect error 2738 "array size mismatch: declared ?×3, got 2×2"
 fn error_let_open_rows_wrong_width():
     let b : i32[,3] = [[1, 2], [3, 4]]
     _ ← b[0, 0]
 
-@expect error "declared 2.., got 3.2"
+@expect error 2738 "array size mismatch: declared 2×?, got 3×2"
 fn error_let_fixed_rows_wrong_count():
     let c : i32[2,] = [[1, 2], [3, 4], [5, 6]]
     _ ← c[0, 0]
 
-@expect error "declared ..., got 2.."
+@expect error 2738 "array size mismatch: declared ?×?, got 2×?"
 fn error_let_ragged():
     let r : i32[,] = [[1, 2, 3], [4, 5]]
     _ ← r[0, 0]
 
 // One value is not an array, and an open extent has nothing to take
 // its length from either.
-@expect error "the open dimension has nothing to take its extent from"
+@expect error 2739 "an array of ?×3 is not made from one value, and the open dimension has nothing to take its extent from; write the elements out"
 fn error_fill_with_open_extent():
     let z : i32[,3] = 0
     _ ← z[0, 0]
@@ -334,19 +334,19 @@ fn error_fill_with_open_extent():
 // asking what one occupies is a question with an answer -- when every
 // dimension has a size.  An open one leaves the size out of the type.
 @test
-@expect error "leaves a dimension open"
+@expect error 2823 "@sizeof: 'i32[]' leaves a dimension open, so how much it occupies is not part of its type; give every dimension a size, or ask a value with .sizeof"
 fn error_sizeof_of_a_dynamic_array_type():
     _ ← @sizeof(i32[])
 
 @test
-@expect error "leaves a dimension open"
+@expect error 2823 "@sizeof: 'i32[,3]' leaves a dimension open, so how much it occupies is not part of its type; give every dimension a size, or ask a value with .sizeof"
 fn error_sizeof_of_a_partly_open_type():
     _ ← @sizeof(i32[,3])
 
 // A value has no such reading: an empty subscript is how a type
 // leaves a dimension open, not how a value is indexed.
 @test
-@expect error "a subscript needs an index"
+@expect error 2734 "a subscript needs an index; an empty one is how an array type leaves a dimension open, which is not a value"
 fn error_empty_subscript_on_a_value():
     let a : i32[] = [1, 2, 3]
     _ ← a[]

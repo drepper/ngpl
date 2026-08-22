@@ -66,7 +66,7 @@ fn test_field_assign():
 
 // Error: field assignment on immutable variable.
 @test
-@expect error "cannot assign to field"
+@expect error 2414 "cannot assign to field 'x' of let variable 'p'"
 fn test_field_assign_immutable():
     let p := Point.new(1.0, 2.0)
     p.x ← 10.0
@@ -113,13 +113,13 @@ fn test_plain_struct():
 
 // Error: missing field in struct literal.
 @test
-@expect error "missing field"
+@expect error 2825 "missing field 'y' in struct 'Point' literal"
 fn test_missing_field():
     let p := Point { x: 1.0 }
 
 // Error: unknown field in struct literal.
 @test
-@expect error "has no field"
+@expect error 2824 "struct 'Point' has no field 'z'"
 fn test_unknown_field():
     let p := Point { x: 1.0, y: 2.0, z: 3.0 }
 
@@ -132,7 +132,7 @@ fn test_consume_self():
 
 // Error: use object after consuming method.
 @test
-@expect error "moved"
+@expect error 2418 "use of moved value 'p'"
 fn test_use_after_consume():
     let p := Point.new(3.0, 4.0)
     let s := p.sum_components()
@@ -140,7 +140,7 @@ fn test_use_after_consume():
 
 // Error: call method on consumed object.
 @test
-@expect error "moved"
+@expect error 2418 "use of moved value 'p'"
 fn test_method_after_consume():
     let p := Point.new(3.0, 4.0)
     p.sum_components()
@@ -186,23 +186,23 @@ fn test_a_binding_declared_with_a_struct_type():
 // The wrong struct is caught where it is passed, not later wherever a
 // field turns out to be missing.
 @test
-@expect error "argument 'p' expected Checked, got Other"
+@expect error 2016 "takes_checked: argument 'p' expected Checked, got Other"
 fn error_wrong_struct_argument():
     _ ← takes_checked(Other{y: 5})
 
 @test
-@expect error "argument 'p' expected Checked, got int"
+@expect error 2016 "takes_checked: argument 'p' expected Checked, got int"
 fn error_non_struct_argument():
     _ ← takes_checked(5)
 
 @test
-@expect error "'Checked' is a struct, but the value is Other"
+@expect error 2831 "'Checked' is a struct, but the value is Other"
 fn error_wrong_struct_binding():
     let a : Checked = Other{y: 5}
     _ ← a.x
 
 @test
-@expect error "'Checked' is a struct, but the value is str"
+@expect error 2831 "'Checked' is a struct, but the value is str"
 fn error_non_struct_binding():
     let a : Checked = "hi"
     _ ← a.x

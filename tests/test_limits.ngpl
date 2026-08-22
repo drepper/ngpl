@@ -92,22 +92,22 @@ enum Shade:
     light
 
 @test
-@expect error "'str' is not a numeric type"
+@expect error 2248 "@min: 'str' is not a numeric type"
 fn error_min_of_a_string():
     _ ← @min(str)
 
 @test
-@expect error "'bool' is not a numeric type"
+@expect error 2248 "@max: 'bool' is not a numeric type"
 fn error_max_of_a_bool():
     _ ← @max(bool)
 
 @test
-@expect error "'Point' is not a numeric type"
+@expect error 2248 "@max: 'Point' is not a numeric type"
 fn error_max_of_a_struct():
     _ ← @max(Point)
 
 @test
-@expect error "'Shade' is not a numeric type"
+@expect error 2248 "@max: 'Shade' is not a numeric type"
 fn error_max_of_an_enum():
     _ ← @max(Shade)
 

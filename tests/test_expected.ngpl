@@ -150,7 +150,7 @@ fn test_bang_param_err():
 
 // ---- error on unwrap of expected error -----------------------------------
 
-@expect error "expected error"
+@expect error 2013 "unwrap of expected error: errors.division_by_zero"
 fn error_unwrap_expected():
     let x : mut = 10 ÷ 0
     let y : mut = x + 1

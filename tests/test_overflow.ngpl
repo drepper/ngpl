@@ -5,23 +5,23 @@
 
 // ---- static: assignment overflow -----------------------------------------
 
-@expect error "integer overflow.*does not fit in i8"
+@expect error 2279 "integer overflow: 128 does not fit in i8 (range -128..127)"
 fn error_i8_too_large():
     let x : mut i8 = 128
 
-@expect error "integer underflow.*does not fit in i8"
+@expect error 2279 "integer underflow: -129 does not fit in i8 (range -128..127)"
 fn error_i8_too_small():
     let x : mut i8 = ⁻129
 
-@expect error "integer overflow.*does not fit in i16"
+@expect error 2279 "integer overflow: 32768 does not fit in i16 (range -32768..32767)"
 fn error_i16_too_large():
     let x : mut i16 = 32768
 
-@expect error "integer overflow.*does not fit in i32"
+@expect error 2279 "integer overflow: 2147483648 does not fit in i32 (range -2147483648..2147483647)"
 fn error_i32_too_large():
     let x : mut i32 = 2147483648
 
-@expect error "integer overflow.*does not fit in i64"
+@expect error 2279 "integer overflow: 9223372036854775808 does not fit in i64 (range -9223372036854775808..9223372036854775807)"
 fn error_i64_too_large():
     let x : mut i64 = 9223372036854775808
 
@@ -33,29 +33,29 @@ fn error_i64_too_large():
 // tests/output/integer_literal_uncalled.ngpl, since a function that
 // draws an error cannot also be a test.
 
-@expect error "integer overflow.*300 does not fit in u8"
+@expect error 2294 "integer overflow: 300 does not fit in u8 (range 0..255)"
 fn error_u8_literal():
     let x := 300u8
 
-@expect error "integer overflow.*128 does not fit in i8"
+@expect error 2294 "integer overflow: 128 does not fit in i8 (range -128..127)"
 fn error_i8_literal():
     let x := 128i8
 
-@expect error "integer overflow.*65536 does not fit in u16"
+@expect error 2294 "integer overflow: 65536 does not fit in u16 (range 0..65535)"
 fn error_u16_literal():
     let x := 65536u16
 
 // An arbitrary width answers the same way.
-@expect error "integer overflow.*8 does not fit in u3"
+@expect error 2294 "integer overflow: 8 does not fit in u3 (range 0..7)"
 fn error_u3_literal():
     let x := 8u3
 
 // The base a literal is written in does not change what it is worth.
-@expect error "integer overflow.*65535 does not fit in u8"
+@expect error 2294 "integer overflow: 65535 does not fit in u8 (range 0..255)"
 fn error_hex_literal():
     let x := 0xffffu8
 
-@expect error "integer overflow.*256 does not fit in u8"
+@expect error 2294 "integer overflow: 256 does not fit in u8 (range 0..255)"
 fn error_binary_literal():
     let x := 0b100000000u8
 
@@ -93,7 +93,7 @@ fn test_the_lowest_value_of_a_signed_type_can_be_written():
     assert_eq(c, ⁻2147483648)
 
 // One past it is still one past it.
-@expect error "integer underflow.*-129 does not fit in i8"
+@expect error 2294 "integer underflow: -129 does not fit in i8 (range -128..127)"
 fn error_below_the_lowest_i8():
     let x := ⁻129i8
 
@@ -106,47 +106,47 @@ fn test_a_negation_of_an_expression_is_still_a_negation():
 // ---- static: an unsigned type refuses what it cannot hold ---------------
 
 @test
-@expect error "integer overflow.*does not fit in u8"
+@expect error 2279 "integer overflow: 256 does not fit in u8 (range 0..255)"
 fn error_u8_too_large_on_assign():
     let x : u8 = 256
 
 @test
-@expect error "integer underflow.*does not fit in u8"
+@expect error 2279 "integer underflow: -1 does not fit in u8 (range 0..255)"
 fn error_u8_negative_on_assign():
     let x : u8 = ⁻1
 
 @test
-@expect error "integer overflow.*does not fit in u32"
+@expect error 2279 "integer overflow: 4294967296 does not fit in u32 (range 0..4294967295)"
 fn error_u32_too_large_on_assign():
     let x : u32 = 4294967296
 
 // ---- dynamic: signed arithmetic overflow ---------------------------------
 
-@expect error "integer overflow"
+@expect error 2279 "integer overflow: 128 does not fit in i8 (range -128..127)"
 fn error_i8_add_overflow():
     let x : mut i8 = 127
     let y : mut i8 = 1
     let z : mut = x + y
 
-@expect error "integer underflow"
+@expect error 2279 "integer underflow: -129 does not fit in i8 (range -128..127)"
 fn error_i8_sub_underflow():
     let x : mut i8 = ⁻128
     let y : mut i8 = 1
     let z : mut = x - y
 
-@expect error "integer overflow"
+@expect error 2279 "integer overflow: 40000 does not fit in i16 (range -32768..32767)"
 fn error_i16_mul_overflow():
     let x : mut i16 = 200
     let y : mut i16 = 200
     let z : mut = x × y
 
-@expect error "integer overflow"
+@expect error 2279 "integer overflow: 2147483648 does not fit in i32 (range -2147483648..2147483647)"
 fn error_i32_add_overflow():
     let x : mut i32 = 2147483647
     let y : mut i32 = 1
     let z : mut = x + y
 
-@expect error "integer overflow"
+@expect error 2279 "integer overflow: 2147483648 does not fit in i32 (range -2147483648..2147483647)"
 fn error_i32_negate_min():
     let x : mut i32 = ⁻2147483648
     let z : mut = ⁻x
@@ -159,28 +159,28 @@ fn error_i32_negate_min():
 // the diagnostic says "underflow" so that reads at once.
 
 @test
-@expect error "integer overflow.*does not fit in u8"
+@expect error 2279 "integer overflow: 256 does not fit in u8 (range 0..255)"
 fn error_u8_add_overflow():
     let x : u8 = 255
     let y : u8 = 1
     let z := x + y
 
 @test
-@expect error "integer underflow.*does not fit in u8"
+@expect error 2279 "integer underflow: -1 does not fit in u8 (range 0..255)"
 fn error_u8_sub_underflow():
     let x : u8 = 0
     let y : u8 = 1
     let z := x - y
 
 @test
-@expect error "integer overflow.*does not fit in u32"
+@expect error 2279 "integer overflow: 4294967296 does not fit in u32 (range 0..4294967295)"
 fn error_u32_add_overflow():
     let x : u32 = 4294967295
     let y : u32 = 1
     let z := x + y
 
 @test
-@expect error "integer overflow.*does not fit in u32"
+@expect error 2279 "integer overflow: 4294967296 does not fit in u32 (range 0..4294967295)"
 fn error_u32_mul_overflow():
     let x : u32 = 65536
     let y : u32 = 65536
@@ -277,13 +277,13 @@ fn test_shift_within_the_width():
 // out.  Where the count is written down and the type is declared, that
 // is settled before anything runs and is reported then.
 @test
-@expect error "moves every value bit out"
+@expect error 2289 "this shift moves every value bit out, so it can only fail; the count is too far for the type shifted"
 fn test_shift_past_the_width_is_a_compile_error():
     let b : byte = 3
     _ ← b « 8
 
 @test
-@expect error "moves every value bit out"
+@expect error 2289 "this shift moves every value bit out, so it can only fail; the count is too far for the type shifted"
 fn test_shift_right_past_the_width_is_a_compile_error():
     let u : u32 = 1
     _ ← u » 32
@@ -382,7 +382,7 @@ fn test_rotation_of_a_signed_type():
 
 // An untyped integer has no width for the bits to come round in.
 @test
-@expect error "has no width to turn within"
+@expect error 2228 "rotate-left: 'untyped' has no width to turn within; rotate a sized integer"
 fn error_rotation_without_a_width():
     // A literal has not settled on a width, and a rotation is about
     // the bits of one.
@@ -412,13 +412,13 @@ fn test_wider_types_keep_the_one_bit_difference():
     assert_eq(u « 31, 2147483648)
 
 @test
-@expect error "moves every value bit out"
+@expect error 2289 "this shift moves every value bit out, so it can only fail; the count is too far for the type shifted"
 fn test_signed_shift_stops_one_earlier():
     let i : i8 = 1
     _ ← i « 7
 
 @test
-@expect error "moves every value bit out"
+@expect error 2289 "this shift moves every value bit out, so it can only fail; the count is too far for the type shifted"
 fn test_signed_32_stops_one_earlier():
     let s : i32 = 1
     _ ← s « 31
@@ -431,7 +431,7 @@ fn test_signed_right_shift_within_range():
     assert_eq(i » 6, 1)
 
 @test
-@expect error "moves every value bit out"
+@expect error 2289 "this shift moves every value bit out, so it can only fail; the count is too far for the type shifted"
 fn test_signed_right_shift_stops_one_earlier():
     let i : i8 = 64
     _ ← i » 7

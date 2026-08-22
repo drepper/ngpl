@@ -6,7 +6,7 @@ fn returns_float_as_int() → i64:
   1.25
 
 @test
-@expect error "return type is i64 but body evaluates to float"
+@expect error 2261 "returns_float_as_int: return type is i64 but body evaluates to float"
 fn test_return_float_for_int():
   returns_float_as_int()
 
@@ -14,7 +14,7 @@ fn returns_int_as_float() → f64:
   42
 
 @test
-@expect error "return type is f64 but body evaluates to int"
+@expect error 2263 "returns_int_as_float: return type is f64 but body evaluates to int"
 fn test_return_int_for_float():
   returns_int_as_float()
 
@@ -22,7 +22,7 @@ fn returns_float_as_i32() → i32:
   3.14
 
 @test
-@expect error "return type is i32 but body evaluates to float"
+@expect error 2261 "returns_float_as_i32: return type is i32 but body evaluates to float"
 fn test_return_float_for_i32():
   returns_float_as_i32()
 
@@ -30,7 +30,7 @@ fn returns_int_as_f32() → f32:
   7
 
 @test
-@expect error "return type is f32 but body evaluates to int"
+@expect error 2263 "returns_int_as_f32: return type is f32 but body evaluates to int"
 fn test_return_int_for_f32():
   returns_int_as_f32()
 
@@ -76,7 +76,7 @@ fn early_return_float_as_int(x: i64) → i64:
   0
 
 @test
-@expect error "return type is i64 but body evaluates to float"
+@expect error 2261 "early_return_float_as_int: return type is i64 but body evaluates to float"
 fn test_early_return_mismatch():
   early_return_float_as_int(1)
 
@@ -86,7 +86,7 @@ fn returns_float_as_int_opt() → i64?:
   1.25
 
 @test
-@expect error "return type is i64.* but body evaluates to float"
+@expect error 2261 "returns_float_as_int_opt: return type is i64? but body evaluates to float"
 fn test_return_float_for_int_optional():
   returns_float_as_int_opt()
 
@@ -104,7 +104,7 @@ fn test_return_none_for_optional():
 // Lambda return type mismatch.
 
 @test
-@expect error "return type is i64 but body evaluates to float"
+@expect error 2261 "λ: return type is i64 but body evaluates to float"
 fn test_lambda_return_mismatch():
   let f : mut = λx : i64 → i64: 1.5
   f(0)
@@ -121,7 +121,7 @@ fn test_lambda_return_ok():
 // ends with, and says so: the last statement is not a return value.
 
 fn void_return():
-  @expect warning "the value of this statement is not used"
+  @expect warning 2292 "the value of this statement is not used; the signature hands nothing back, so the last statement is not a return value; name a return type, or write '_ ← …' to drop the value"
   42
 
 @test
@@ -131,57 +131,57 @@ fn test_void_return():
 // --- Mixed-type arithmetic rejection ---
 
 @test
-@expect error "matching types"
+@expect error 2234 "addition requires matching types, got untyped and float"
 fn test_add_int_float():
   let r : mut = 2 + 3.0
 
 @test
-@expect error "matching types"
+@expect error 2235 "addition requires matching types, got float and untyped"
 fn test_add_float_int():
   let r : mut = 3.0 + 2
 
 @test
-@expect error "matching types"
+@expect error 2234 "subtraction requires matching types, got untyped and float"
 fn test_sub_int_float():
   let r : mut = 5 - 1.0
 
 @test
-@expect error "matching types"
+@expect error 2235 "subtraction requires matching types, got float and untyped"
 fn test_sub_float_int():
   let r : mut = 5.0 - 1
 
 @test
-@expect error "matching types"
+@expect error 2234 "multiplication requires matching types, got untyped and float"
 fn test_mul_int_float():
   let r : mut = 3 × 2.5
 
 @test
-@expect error "matching types"
+@expect error 2235 "multiplication requires matching types, got float and untyped"
 fn test_mul_float_int():
   let r : mut = 2.5 × 3
 
 @test
-@expect error "matching types"
+@expect error 2234 "division requires matching types, got untyped and float"
 fn test_div_int_float():
   let r : mut = 10 ÷ 2.0
 
 @test
-@expect error "matching types"
+@expect error 2235 "division requires matching types, got float and untyped"
 fn test_div_float_int():
   let r : mut = 10.0 ÷ 2
 
 @test
-@expect error "matching types"
+@expect error 2234 "remainder requires matching types, got untyped and float"
 fn test_mod_int_float():
   let r : mut = 7 % 2.0
 
 @test
-@expect error "matching types"
+@expect error 2235 "remainder requires matching types, got float and untyped"
 fn test_mod_float_int():
   let r : mut = 7.0 % 2
 
 @test
-@expect error "matching types"
+@expect error 2225 "exponentiation requires matching types, got untyped and float"
 fn test_pow_int_float():
   let r : mut = 4 ↑ 0.5
 
@@ -219,7 +219,7 @@ fn foo(a : i64) → i64:
   a + co()
 
 @test
-@expect error "matching types"
+@expect error 2234 "addition requires matching types, got i64 and f32"
 fn test_mixed_via_call():
   foo(1)
 
@@ -257,40 +257,40 @@ fn test_conversions_within_a_kind_still_work():
     assert(b)
 
 @test
-@expect error "'i32' cannot hold a string"
+@expect error 2772 "'i32' cannot hold a string"
 fn error_string_into_a_number():
     let x : i32 = "hello"
 
 @test
-@expect error "'str' cannot hold an integer"
+@expect error 2772 "'str' cannot hold an integer"
 fn error_number_into_a_string():
     let s : str = 42
 
 @test
-@expect error "'f64' cannot hold a string"
+@expect error 2772 "'f64' cannot hold a string"
 fn error_string_into_a_float():
     let f : f64 = "hi"
 
 @test
-@expect error "'bool' cannot hold a number"
+@expect error 2772 "'bool' cannot hold a number"
 fn error_number_into_a_bool():
     let b : bool = 42
 
 @test
-@expect error "'u8' cannot hold a boolean"
+@expect error 2772 "'u8' cannot hold a boolean"
 fn error_bool_into_a_number():
     let x : u8 = true
 
 // The same holds where a value meets a type that is already fixed:
 // an assignment, an array element, a parameter, and a return.
 @test
-@expect error "holds i32 and cannot take a string"
+@expect error 2746 "'x' holds i32 and cannot take a string"
 fn error_assignment_changes_the_kind():
     let x : mut i32 = 5
     x ← "hello"
 
 @test
-@expect error "an array of i32 cannot hold a string"
+@expect error 2760 "an array of i32 cannot hold a string"
 fn error_element_changes_the_kind():
     let a : mut i32[] = [1, 2, 3]
     a[0] ← "x"
@@ -299,12 +299,12 @@ fn wants_a_number(x : i32):
     ∅
 
 @test
-@expect error "expected i32"
+@expect error 2015 "wants_a_number: argument 'x' expected i32, got StrValue"
 fn error_argument_of_another_kind():
     wants_a_number("hello")
 
 @test
-@expect error "return type is i32 but body evaluates to str"
+@expect error 2262 "error_returns_another_kind: return type is i32 but body evaluates to str"
 fn error_returns_another_kind() → i32:
     "hello"
 
@@ -313,27 +313,27 @@ fn error_returns_another_kind() → i32:
 // ---------------------------------------------------------------------
 
 @test
-@expect error "needs more significant bits than f32 has .24."
+@expect error 2277 "17000001 needs more significant bits than f32 has (24), so it would not survive the conversion"
 fn error_integer_too_wide_for_f32():
     let f : f32 = 17000001
 
 @test
-@expect error "needs more significant bits than f32 has"
+@expect error 2277 "16777217 needs more significant bits than f32 has (24), so it would not survive the conversion"
 fn error_just_past_the_f32_boundary():
     let f : f32 = 16777217
 
 @test
-@expect error "needs more significant bits than f16 has .11."
+@expect error 2277 "2049 needs more significant bits than f16 has (11), so it would not survive the conversion"
 fn error_integer_too_wide_for_f16():
     let f : f16 = 2049
 
 @test
-@expect error "needs more significant bits than bfloat16 has .8."
+@expect error 2277 "257 needs more significant bits than bfloat16 has (8), so it would not survive the conversion"
 fn error_integer_too_wide_for_bfloat16():
     let f : bfloat16 = 257
 
 @test
-@expect error "needs more significant bits than f64 has .53."
+@expect error 2277 "9007199254740993 needs more significant bits than f64 has (53), so it would not survive the conversion"
 fn error_integer_too_wide_for_f64():
     let f : f64 = 9007199254740993
 
@@ -342,7 +342,7 @@ fn takes_f32(x : f32):
     ∅
 
 @test
-@expect error "needs more significant bits than f32 has"
+@expect error 2273 "takes_f32: argument 'x' is 17000001, which needs more significant bits than f32 has (24)"
 fn error_argument_too_wide_for_f32():
     takes_f32(17000001)
 

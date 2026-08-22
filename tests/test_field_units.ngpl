@@ -36,7 +36,7 @@ fn test_a_read_carries_the_measure_into_arithmetic():
     let end ¤byte : i64 = s.off + s.len
     assert_eq(@dropunit(end), 32)
 
-@expect error "carries no unit"
+@expect error 2326 "Span: parameter 'tag' is i64, which carries no unit, but the argument is B; use @dropunit to part with it"
 fn error_a_plain_field_refuses_a_measured_value():
     let q ¤byte : i64 = 8
     let s : Span = Span{off: 0, len: 0, tag: q}

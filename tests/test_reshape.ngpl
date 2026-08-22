@@ -121,25 +121,25 @@ fn test_reshape_matrix_cycle():
 // --- Array bounds checking ---
 
 @test
-@expect error "out of range"
+@expect error 2759 "array index 3 out of range (length 3)"
 fn test_array_oob_write():
     let a : mut i64[] = [1, 2, 3]
     a[3] ← 4
 
 @test
-@expect error "out of range"
+@expect error 2758 "array index 3 out of range (length 3)"
 fn test_array_oob_read():
     let a : mut i64[] = [1, 2, 3]
     let x : mut = a[3]
 
 @test
-@expect error "out of range"
+@expect error 2759 "array index -1 out of range (length 3)"
 fn test_array_negative_write():
     let a : mut i64[] = [1, 2, 3]
     a[⁻1] ← 4
 
 @test
-@expect error "out of range"
+@expect error 2758 "array index -1 out of range (length 3)"
 fn test_array_negative_read():
     let a : mut i64[] = [1, 2, 3]
     let x : mut = a[⁻1]
@@ -147,12 +147,12 @@ fn test_array_negative_read():
 // --- ⍴ error conditions ---
 
 @test
-@expect error "non-negative"
+@expect error 2250 "⍴: dimensions must be non-negative"
 fn test_reshape_negative_dim():
     let a : mut = ⁻1 ⍴ 0
 
 @test
-@expect error "cannot reshape empty"
+@expect error 2749 "⍴: cannot reshape empty array"
 fn test_reshape_empty_source():
     let a : mut = 5 ⍴ []
 

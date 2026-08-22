@@ -109,7 +109,7 @@ fn test_curry_with_fold():
 
 // Too many arguments to a curried function.
 @test
-@expect error "expects 2 arguments, got 3"
+@expect error 2257 "multiply expects 2 arguments, got 3"
 fn test_curry_too_many_args():
     let f : mut = multiply(2)
     f(3, 4)
@@ -126,7 +126,7 @@ fn test_curry_too_many_args():
 fn addup3(a : i64, b : i64, c : i64) → i64:
     a + b + c
 
-@expect error "'addup3' was called with 2 of its 3 arguments"
+@expect error 2275 "'addup3' was called with 2 of its 3 arguments; a call this unfinished answers a function, not i64"
 fn error_partial_meets_a_binding():
     let bad : i64 = addup3(1, 2)
     _ ← bad
@@ -134,7 +134,7 @@ fn error_partial_meets_a_binding():
 fn takes_number(n : i64) → i64:
     n + 1
 
-@expect error "'addup3' was called with 1 of its 3 arguments"
+@expect error 2275 "'addup3' was called with 1 of its 3 arguments; a call this unfinished answers a function, not i64"
 fn error_partial_meets_a_parameter():
     _ ← takes_number(addup3(1))
 

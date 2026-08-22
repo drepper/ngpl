@@ -66,7 +66,7 @@ fn depth_plus_one() → i64:
 fn test_depth_grows_with_nesting():
     assert_eq(depth_plus_one(), depth() + 1)
 
-@expect error "takes no arguments"
+@expect error 2237 "std.callstack takes no arguments"
 fn error_callstack_with_argument():
     let frames : mut = std.callstack(1)
 

@@ -75,19 +75,19 @@ fn test_equiv_chained():
 // ---- out-of-bounds ------------------------------------------------------
 
 @test
-@expect error "out of range"
+@expect error 2758 "array index 2 out of range (length 2)"
 fn test_2d_oob_row():
     let m : mut i64[,] = (2, 3) ⍴ 0
     let x : mut = m[2, 0]
 
 @test
-@expect error "out of range"
+@expect error 2758 "array index 3 out of range (length 3)"
 fn test_2d_oob_col():
     let m : mut i64[,] = (2, 3) ⍴ 0
     let x : mut = m[0, 3]
 
 @test
-@expect error "out of range"
+@expect error 2759 "array index 3 out of range (length 3)"
 fn test_2d_write_oob():
     let m : mut i64[,] = (2, 3) ⍴ 0
     m[0, 3] ← 1
@@ -95,7 +95,7 @@ fn test_2d_write_oob():
 // ---- non-array inner dimension ------------------------------------------
 
 @test
-@expect error "requires nested arrays"
+@expect error 2736 "multi-dimensional subscript requires nested arrays or tuples"
 fn test_flat_multi_subscript():
     let a : mut i64[] = [1, 2, 3]
     let x : mut = a[0, 0]

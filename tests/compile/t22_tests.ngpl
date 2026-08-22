@@ -26,7 +26,7 @@ fn test_structs():
     observe(&t)
     assert(t.ran = 2)
 
-@expect error "does not fit"
+@expect error 2279 "integer overflow: 300 does not fit in u8 (range 0..255)"
 @test
 fn test_expected_refusal():
     let x : u8 = 300

@@ -27,28 +27,28 @@ fn bump() → i64:
 // ---------------------------------------------------------------------
 
 @test
-@expect error "the result of 'doubled' is not used"
+@expect error 2290 "the result of 'doubled' is not used; a function that hands back a value is called for it, so write '_ ← …' where the value is meant to be dropped"
 fn test_dropped_result():
     doubled(21)
     assert(true)
 
 // The complaint does not depend on where in the block the statement is.
 @test
-@expect error "the result of 'doubled' is not used"
+@expect error 2290 "the result of 'doubled' is not used; a function that hands back a value is called for it, so write '_ ← …' where the value is meant to be dropped"
 fn test_dropped_result_in_a_loop():
     foreach i := 1…3:
         doubled(i)
 
 // An expression that is not a call at all drops its value the same way.
 @test
-@expect error "the value of this statement is not used"
+@expect error 2291 "the value of this statement is not used; it computes something and nothing reads it"
 fn test_dropped_expression():
     let n := 3
     n + 1
     assert_eq(n, 3)
 
 @test
-@expect error "the value of this statement is not used"
+@expect error 2291 "the value of this statement is not used; it computes something and nothing reads it"
 fn test_a_bare_name_reads_nothing():
     let n := 3
     n
@@ -57,7 +57,7 @@ fn test_a_bare_name_reads_nothing():
 // The body of an if hands back nothing, so a value written there goes
 // nowhere even when the if is the last statement of the function.
 @test
-@expect error "the value of this statement is not used"
+@expect error 2291 "the value of this statement is not used; it computes something and nothing reads it"
 fn test_an_if_branch_hands_back_nothing():
     let n := 3
     if n > 0:
@@ -113,18 +113,18 @@ fn test_a_body_may_end_in_a_call():
 // program is well-formed and the missing piece is most likely the
 // return type rather than the statement.
 
-@expect warning "the signature hands nothing back"
+@expect warning 2292 "the value of this statement is not used; the signature hands nothing back, so the last statement is not a return value; name a return type, or write '_ ← …' to drop the value"
 fn warn_trailing_call():
     doubled(21)
 
-@expect warning "the signature hands nothing back"
+@expect warning 2292 "the value of this statement is not used; the signature hands nothing back, so the last statement is not a return value; name a return type, or write '_ ← …' to drop the value"
 fn warn_trailing_expression():
     let n := 3
     n + 1
 
 // A lambda says its return type the same way, and ∅ there means the
 // same thing.
-@expect warning "the signature hands nothing back"
+@expect warning 2292 "the value of this statement is not used; the signature hands nothing back, so the last statement is not a return value; name a return type, or write '_ ← …' to drop the value"
 fn warn_trailing_value_in_a_lambda():
     let f := λn : i64 → ∅:
         doubled(n)
@@ -149,7 +149,7 @@ fn test_an_empty_body_is_quiet():
 
 // The warning can be pinned to the one statement that draws it.
 fn ends_with_a_marked_value():
-    @expect warning "the signature hands nothing back"
+    @expect warning 2292 "the value of this statement is not used; the signature hands nothing back, so the last statement is not a return value; name a return type, or write '_ ← …' to drop the value"
     doubled(21)
 
 @test
@@ -203,7 +203,7 @@ impl Point:
         assert(self.x = self.x)
 
 @test
-@expect error "the result of 'x_value' is not used"
+@expect error 2290 "the result of 'x_value' is not used; a function that hands back a value is called for it, so write '_ ← …' where the value is meant to be dropped"
 fn test_a_dropped_method_result():
     let p := Point{x: 1}
     p.x_value()

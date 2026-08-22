@@ -51,7 +51,7 @@ fn test_wrap_u32_add():
 
 // ---- @wrap does not affect operations outside its scope -----------------
 
-@expect error "integer overflow"
+@expect error 2279 "integer overflow: 128 does not fit in i8 (range -128..127)"
 fn error_no_wrap_i8():
     let x : mut i8 = 127
     let y : mut i8 = 1

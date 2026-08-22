@@ -62,12 +62,12 @@ fn test_success_path():
 // A function that cannot report failure may not use ?
 // ---------------------------------------------------------------------
 
-@expect error "requires the enclosing function to return an optional"
+@expect error 2018 "? requires the enclosing function to return an optional or an expected type, but it returns 'i64'"
 fn error_plain_return_type() → i64:
     let q : mut = (10 ÷ 2)?
     q
 
-@expect error "requires the enclosing function to return an optional"
+@expect error 2018 "? requires the enclosing function to return an optional or an expected type, but it returns '∅'"
 fn error_void_return_type():
     let q : mut = (10 ÷ 2)?
     std.println("{}", q)
@@ -76,13 +76,13 @@ fn error_void_return_type():
 // The propagated error must be the one the function promises
 // ---------------------------------------------------------------------
 
-@expect error "propagates an error of type 'std.errors'"
+@expect error 2295 "? propagates an error of type 'std.errors', but the enclosing function returns errors of type 'MyErr'"
 fn error_mismatched_error_type() → i64?MyErr:
     let q : mut = (10 ÷ 0)?
     q
 
 // The mismatch is caught through a call as well as through division.
-@expect error "propagates an error of type 'std.errors'"
+@expect error 2295 "? propagates an error of type 'std.errors', but the enclosing function returns errors of type 'MyErr'"
 fn error_mismatched_through_call() → i64?MyErr:
     let q : mut = expected_matching(4)?
     q

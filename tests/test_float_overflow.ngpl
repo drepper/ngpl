@@ -16,26 +16,26 @@
 
 @test
 fn test_f32_binding():
-    @expect error "float overflow.*does not fit in f32"
+    @expect error 2293 "float overflow: 1e+39 does not fit in f32 (largest is 3.4028234663852886e+38)"
     let a : f32 = 1e39
     assert(true)
 
 @test
 fn test_f16_binding():
-    @expect error "float overflow.*does not fit in f16"
+    @expect error 2293 "float overflow: 70000.0 does not fit in f16 (largest is 65504.0)"
     let a : f16 = 70000.0
     assert(true)
 
 @test
 fn test_bfloat16_binding():
-    @expect error "float overflow.*does not fit in bfloat16"
+    @expect error 2293 "float overflow: 1e+39 does not fit in bfloat16 (largest is 3.3895313892515355e+38)"
     let a : bfloat16 = 1e39
     assert(true)
 
 // The sign does not change the answer.
 @test
 fn test_a_negative_value():
-    @expect error "float overflow.*does not fit in f32"
+    @expect error 2293 "float overflow: -1e+39 does not fit in f32 (largest is 3.4028234663852886e+38)"
     let a : f32 = ⁻1e39
     assert(true)
 
@@ -43,19 +43,19 @@ fn test_a_negative_value():
 // zero, and zero is what the narrower format would hold.
 @test
 fn test_f32_binding_underflows():
-    @expect error "float underflow.*too small for f32"
+    @expect error 2294 "float underflow: 1e-50 is not zero, but is too small for f32 to tell from zero (smallest is 1.401298464324817e-45)"
     let a : f32 = 1e-50
     assert(true)
 
 @test
 fn test_f16_binding_underflows():
-    @expect error "float underflow.*too small for f16"
+    @expect error 2294 "float underflow: 1e-09 is not zero, but is too small for f16 to tell from zero (smallest is 5.960464477539063e-08)"
     let a : f16 = 1e-9
     assert(true)
 
 @test
 fn test_bfloat16_binding_underflows():
-    @expect error "float underflow.*too small for bfloat16"
+    @expect error 2294 "float underflow: 1e-50 is not zero, but is too small for bfloat16 to tell from zero (smallest is 9.183549615799121e-41)"
     let a : bfloat16 = 1e-50
     assert(true)
 
@@ -103,7 +103,7 @@ fn test_a_struct_field():
 
 @test
 fn test_an_array_element():
-    @expect error "float overflow.*does not fit in f32"
+    @expect error 2293 "float overflow: 1e+39 does not fit in f32 (largest is 3.4028234663852886e+38)"
     let v : f32[] = [1.0, 1e39]
     assert(true)
 
@@ -159,19 +159,19 @@ fn test_a_return_type_settles_the_width():
 
 @test
 fn test_multiplication_overflows():
-    @expect error "float overflow.*does not fit in f64"
+    @expect error 2293 "float overflow: 3e+300 × 3e+300 does not fit in f64 (largest is 1.7976931348623157e+308)"
     let a := 3e300f64 × 3e300f64
     assert(true)
 
 @test
 fn test_addition_overflows():
-    @expect error "float overflow.*does not fit in f64"
+    @expect error 2293 "float overflow: 1e+308 + 1e+308 does not fit in f64 (largest is 1.7976931348623157e+308)"
     let a := 1e308f64 + 1e308f64
     assert(true)
 
 @test
 fn test_a_power_overflows():
-    @expect error "float overflow.*does not fit in f64"
+    @expect error 2293 "float overflow: 1e+300 ↑ 3.0 does not fit in f64 (largest is 1.7976931348623157e+308)"
     let a := 1e300f64 ↑ 3.0f64
     assert(true)
 
@@ -179,13 +179,13 @@ fn test_a_power_overflows():
 // are values f64 holds without trouble.
 @test
 fn test_a_narrow_format_overflows():
-    @expect error "float overflow.*does not fit in f32"
+    @expect error 2293 "float overflow: 3.0000000054977558e+38 × 3.0 does not fit in f32 (largest is 3.4028234663852886e+38)"
     let a := 3e38f32 × 3.0f32
     assert(true)
 
 @test
 fn test_f16_overflows():
-    @expect error "float overflow.*does not fit in f16"
+    @expect error 2293 "float overflow: 60000.0 + 60000.0 does not fit in f16 (largest is 65504.0)"
     let a := 60000f16 + 60000f16
     assert(true)
 
@@ -193,19 +193,19 @@ fn test_f16_overflows():
 // zero, and zero is what the format would hold.
 @test
 fn test_multiplication_underflows():
-    @expect error "float underflow.*too small for f64"
+    @expect error 2294 "float underflow: 1e-300 × 1e-300 is not zero, but is too small for f64 to tell from zero (smallest is 5e-324)"
     let a := 1e-300f64 × 1e-300f64
     assert(true)
 
 @test
 fn test_division_underflows():
-    @expect error "float underflow.*too small for f64"
+    @expect error 2294 "float underflow: 1e-300 ÷ 1e+300 is not zero, but is too small for f64 to tell from zero (smallest is 5e-324)"
     let a := 1e-300f64 ÷ 1e300f64
     assert(true)
 
 @test
 fn test_a_narrow_format_underflows():
-    @expect error "float underflow.*too small for f32"
+    @expect error 2294 "float underflow: 1.401298464324817e-45 × 0.0010000000474974513 is not zero, but is too small for f32 to tell from zero (smallest is 1.401298464324817e-45)"
     let a := 1e-45f32 × 0.001f32
     assert(true)
 

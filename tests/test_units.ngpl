@@ -125,13 +125,13 @@ fn test_lossless_reject():
 fn test_incompatible_add():
   let a ¤meter : i64 = 5
   let b ¤second : i64 = 3
-  @expect error "incompatible units"
+  @expect error 2313 "incompatible units for +: m and s"
   let c : mut = a + b
 
 @test
 fn test_incompatible_assign():
   let a ¤meter : mut i64 = 5
-  @expect error "incompatible units"
+  @expect error 2327 "incompatible units: s and m"
   a ← 3¤second
 
 // --- Dimensionless assignment rejection ---
@@ -139,7 +139,7 @@ fn test_incompatible_assign():
 @test
 fn test_dimensionless_assign():
   let a ¤meter : mut i64 = 5
-  @expect error "dimensionless"
+  @expect error 2322 "cannot assign dimensionless value to 'a' which has unit m"
   a ← 3
 
 // --- Dimensioned + dimensionless arithmetic ---

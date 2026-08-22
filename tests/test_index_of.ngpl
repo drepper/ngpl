@@ -142,13 +142,13 @@ fn test_matching_on_what_is_not_there():
 // ---------------------------------------------------------------------
 
 @test
-@expect error "a string is searched for a character or a string"
+@expect error 2710 "⍳: a string is searched for a character or a string, not for i64"
 fn error_searching_a_string_for_a_number():
     let s := "hello"
     let at : mut = s ⍳ 5i64
 
 @test
-@expect error "what is searched is an array or a string"
+@expect error 2711 "⍳: the left operand is i64, and what is searched is an array or a string"
 fn error_searching_something_that_is_not_a_container():
     let at : mut = 5i64 ⍳ 1i64
 
@@ -156,19 +156,19 @@ fn error_searching_something_that_is_not_a_container():
 // holds, as ∊ asks it.  Answering "nowhere" would let a program that
 // has made a mistake about one of the two carry on believing both.
 @test
-@expect error "the container holds i64, and what is looked for is a string"
+@expect error 2713 "⍳: the container holds i64, and what is looked for is a string"
 fn error_searching_for_a_string_among_numbers():
     let v : i64[] = [10, 20, 30]
     let at : mut = v ⍳ "x"
 
 @test
-@expect error "the container holds i64, and what is looked for is a character"
+@expect error 2713 "⍳: the container holds i64, and what is looked for is a character"
 fn error_searching_for_a_character_among_numbers():
     let v : i64[] = [10, 20, 30]
     let at : mut = v ⍳ 'c'
 
 @test
-@expect error "the container holds str, and what is looked for is an integer"
+@expect error 2713 "⍳: the container holds str, and what is looked for is an integer"
 fn error_searching_for_a_number_among_strings():
     let words : str[] = ["one", "two"]
     let at : mut = words ⍳ 5i64
@@ -186,7 +186,7 @@ fn test_what_the_kinds_still_admit():
 // A range is a pair of ends rather than something to look in, and the
 // refusal names it rather than the type of its ends.
 @test
-@expect error "the left operand is range"
+@expect error 2711 "⍳: the left operand is range, and what is searched is an array or a string"
 fn error_searching_a_range():
     let r := 10…20
     let at : mut = r ⍳ 12
@@ -195,7 +195,7 @@ fn error_searching_a_range():
 // not belong is refused here as it would be between the two operands
 // rather than quietly matching nothing.
 @test
-@expect error "cannot compare"
+@expect error 2315 "cannot compare typed integer i64 without unit with unit B"
 fn error_searching_for_a_unit_that_does_not_belong():
     let v : i64[] = [10, 20, 30]
     let at : mut = v ⍳ 20¤byte
@@ -203,7 +203,7 @@ fn error_searching_for_a_unit_that_does_not_belong():
 // A position in something with more than one dimension is not one
 // number, so there is nothing honest to answer.
 @test
-@expect error "more than one dimension"
+@expect error 2712 "⍳: the left operand has more than one dimension, and a position in it is not one number; a row of it is searched on its own"
 fn error_searching_a_matrix():
     let m : i64[2, 2] = [[1, 2], [3, 4]]
     let at : mut = m ⍳ 3

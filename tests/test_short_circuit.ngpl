@@ -53,12 +53,12 @@ fn test_and_guards_an_index():
 
 // A number is not an answer: the operands are truth values only, and
 // the question a number means is written as a comparison.
-@expect error "takes truth values"
+@expect error 2229 "a logic operator takes truth values, but this operand is int; a number asks its question with a comparison, as 'x ≠ 0'"
 fn error_and_refuses_a_number():
     let r := 5 and 3
     assert(r)
 
-@expect error "takes truth values"
+@expect error 2229 "a logic operator takes truth values, but this operand is int; a number asks its question with a comparison, as 'x ≠ 0'"
 fn error_or_refuses_a_number():
     let s := 0 or 7
     assert(s)

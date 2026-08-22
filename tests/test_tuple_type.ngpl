@@ -34,28 +34,28 @@ fn test_a_mutable_binding():
 // ---------------------------------------------------------------------
 
 @test
-@expect error "has 2 elements, but the value has 3"
+@expect error 2276 "'(i64, str)' has 2 elements, but the value has 3"
 fn error_too_many_elements():
     let t : (i64, str) = (1, "two", 3)
 
 @test
-@expect error "has 3 elements, but the value has 2"
+@expect error 2276 "'(i64, str, bool)' has 3 elements, but the value has 2"
 fn error_too_few_elements():
     let t : (i64, str, bool) = (1, "two")
 
 @test
-@expect error "'str' cannot hold an integer"
+@expect error 2772 "'str' cannot hold an integer"
 fn error_wrong_element_type():
     let t : (i64, str) = (1, 2)
 
 @test
-@expect error "is a tuple type, but the value is"
+@expect error 2771 "'(i64, str)' is a tuple type, but the value is int"
 fn error_not_a_tuple():
     let t : (i64, str) = 5
 
 // int and float are refused inside a tuple type as anywhere else.
 @test
-@expect error "'int' is an arbitrary-precision type"
+@expect error 2272 "'t': 'int' is an arbitrary-precision type, which the bootstrap implementation does not provide; use a sized type such as i64"
 fn error_arbitrary_precision_element():
     let t : (int, str) = (1, "two")
 
@@ -238,30 +238,30 @@ fn test_nested_destructuring():
 // --- what it refuses ---
 
 @test
-@expect error "needs a tuple, but the value is"
+@expect error 2821 "a definition taking a tuple apart needs a tuple, but the value is int"
 fn error_destructuring_a_value_that_is_not_a_tuple():
     let (a, b) := 5
 
 @test
-@expect error "names 3 elements, but the tuple has 2"
+@expect error 2822 "the definition names 3 elements, but the tuple has 2"
 fn error_destructuring_the_wrong_number_of_elements():
     let (a, b, c) : (i64, str) = (1, "two")
 
 @test
-@expect error "names 'a' twice"
+@expect error 2019 "Line 253, col 4: the definition names 'a' twice; each element needs a name of its own"
 fn error_destructuring_repeats_a_name():
     let (a, a) := (1i64, 2i64)
 
 // A name still settles a value, so an element that settled on nothing
 // is refused as it would be at any other binding.
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'a': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let a : i64 = …'"
 fn error_destructuring_an_unsettled_element():
     let (a, b) := (1, "two")
 
 // A name that is never modified draws the same warning it would
 // elsewhere.
-@expect warning "'b' is declared mut but is never modified"
+@expect warning 2418 "'b' is declared mut but is never modified"
 fn warn_destructured_mut_is_never_modified():
     let (a, b) : mut (i64, i64) = (1, 2)
     a ← 3
@@ -317,7 +317,7 @@ fn test_a_destructured_lambda_parameter():
 // --- what a destructured parameter refuses ---
 
 @test
-@expect error "is a tuple type, but the value is"
+@expect error 2764 "sum_of_pair: argument '(a, b)': '(i64, i64)' is a tuple type, but the value is i64"
 fn error_argument_is_not_a_tuple():
     let n : i64 = sum_of_pair(5i64)
 
@@ -325,7 +325,7 @@ fn wants_three((a, b, c) : (i64, i64, i64)) → i64:
     a
 
 @test
-@expect error "has 3 elements, but the value has 2"
+@expect error 2764 "wants_three: argument '(a, b, c)': '(i64, i64, i64)' has 3 elements, but the value has 2"
 fn error_argument_has_the_wrong_number_of_elements():
     let n : i64 = wants_three((1i64, 2i64))
 
@@ -398,7 +398,7 @@ fn test_an_arm_may_discard_an_element():
 
 // The names an arm binds live for the arm, as a single name does.
 @test
-@expect error "cannot assign to match variable"
+@expect error 2412 "cannot assign to match variable 'a'"
 fn error_assigning_to_a_destructured_arm_name():
     match maybe_pair(true):
         ∃((a, b)):
@@ -410,7 +410,7 @@ fn maybe_number() → i64?:
     ∃(5i64)
 
 @test
-@expect error "the arm names the elements of a tuple, but the value matched is"
+@expect error 2748 "the arm names the elements of a tuple, but the value matched is i64"
 fn error_arm_names_elements_of_something_that_is_not_a_tuple():
     match maybe_number():
         ∃((a, b)):
@@ -419,7 +419,7 @@ fn error_arm_names_elements_of_something_that_is_not_a_tuple():
             assert(true)
 
 @test
-@expect error "the arm names 3 elements, but the value matched has 2"
+@expect error 2249 "the arm names 3 elements, but the value matched has 2"
 fn error_arm_names_the_wrong_number_of_elements():
     match maybe_pair(true):
         ∃((a, b, c)):

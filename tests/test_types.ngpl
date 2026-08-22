@@ -124,13 +124,13 @@ fn test_equality_in_a_condition():
 // The old spelling is refused by name, since every program written
 // before the rename uses it.
 @test
-@expect error "'==' is not an operator; equality is written '='"
+@expect error 2027 "Line 130, col 20: '==' is not an operator; equality is written '='"
 fn error_the_old_spelling():
     let x : i64 = 5
     let b : mut = x == 5
 
 @test
-@expect error "'!=' is not an operator; inequality is written '≠'"
+@expect error 2027 "Line 136, col 20: '!=' is not an operator; inequality is written '≠'"
 fn error_the_old_spelling_of_inequality():
     let x : i64 = 5
     let b : mut = x != 5
@@ -147,7 +147,7 @@ fn test_inequality():
 // Storing is ← and nothing else, so a statement that compares computes
 // something nothing reads.
 @test
-@expect error "the value of this statement is not used"
+@expect error 2291 "the value of this statement is not used; it computes something and nothing reads it"
 fn error_comparing_where_a_store_was_meant():
     let x : mut i64 = 1
     x = 5

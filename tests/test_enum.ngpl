@@ -188,38 +188,38 @@ fn test_std_errors_grouping():
 
 // ---- invalid operations on non-flag enums --------------------------------
 
-@expect error "bitwise operations require @flag enum"
+@expect error 2814 "bitwise operations require @flag enum, got 'Color'"
 fn error_bitor_non_flag():
     let a : mut = Color.red
     let b : mut = Color.green
     let c : mut = a | b
 
-@expect error "bitwise operations require @flag enum"
+@expect error 2811 "bitwise operations require @flag enum, got 'Color'"
 fn error_bitand_non_flag():
     let a : mut = Color.red
     let b : mut = Color.green
     let c : mut = a & b
 
-@expect error "bitwise operations require @flag enum"
+@expect error 2812 "bitwise operations require @flag enum, got 'Color'"
 fn error_bitxor_non_flag():
     let a : mut = Color.red
     let b : mut = Color.green
     let c : mut = a ^ b
 
-@expect error "bitwise-not requires @flag enum"
+@expect error 2816 "bitwise-not requires @flag enum, got 'Color'"
 fn error_bitnot_non_flag():
     let a : mut = Color.red
     let b : mut = ~a
 
 // ---- cross-enum comparison error -----------------------------------------
 
-@expect error "cannot compare enum"
+@expect error 2810 "cannot compare enum 'Color' with enum 'Status'"
 fn error_cross_enum_compare():
     let a : mut = Color.red
     let b : mut = Status.ok
     let x : mut = a = b
 
-@expect error "cannot combine enum"
+@expect error 2813 "cannot combine enum 'Perms' with 'Flags'"
 fn error_cross_enum_bitor():
     let a : mut = Perms.read
     let b : mut = Flags.a

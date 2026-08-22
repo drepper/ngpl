@@ -110,19 +110,19 @@ fn test_the_answer_is_known_at_compile_time():
 // A program asking otherwise has made a mistake about one of the two,
 // so the question is refused rather than answered no.
 @test
-@expect error "the container holds i64, and what is looked for is a string"
+@expect error 2713 "∊: the container holds i64, and what is looked for is a string"
 fn error_looking_for_a_string_among_numbers():
     let v : i64[] = [10, 20, 30]
     let found : mut = "x" ∊ v
 
 @test
-@expect error "the container holds i64, and what is looked for is a character"
+@expect error 2713 "∊: the container holds i64, and what is looked for is a character"
 fn error_looking_for_a_character_among_numbers():
     let v : i64[] = [10, 20, 30]
     let found : mut = 'c' ∊ v
 
 @test
-@expect error "a string holds characters"
+@expect error 2716 "∊: a string holds characters, and what is looked for is i64"
 fn error_looking_for_a_number_in_a_string():
     let found : mut = 5i64 ∊ "hello"
 
@@ -130,37 +130,37 @@ fn error_looking_for_a_number_in_a_string():
 // it holds.  Whether one is there is a question about where it starts,
 // which ⍳ answers.
 @test
-@expect error "a run of them is not one of them"
+@expect error 2715 "∊: a string holds characters, and a run of them is not one of them; ⍳ says where a run starts"
 fn error_looking_for_a_run_of_characters():
     let found : mut = "ell" ∊ "hello"
 
 @test
-@expect error "a run of them is not one of them"
+@expect error 2715 "∊: a string holds characters, and a run of them is not one of them; ⍳ says where a run starts"
 fn error_looking_for_an_empty_run():
     let found : mut = "" ∊ "hello"
 
 // One thing is asked about at a time.  A container on the left is not
 // one thing, whatever it holds.
 @test
-@expect error "the left operand is an array"
+@expect error 2714 "∊: the left operand is an array, and what is looked for is one thing; each of them is asked about on its own"
 fn error_asking_about_several_at_once():
     let v : i64[] = [10, 20, 30]
     let found : mut = [10, 99] ∊ v
 
 @test
-@expect error "the left operand is an array"
+@expect error 2714 "∊: the left operand is an array, and what is looked for is one thing; each of them is asked about on its own"
 fn error_asking_about_the_characters_of_a_string():
     let found : mut = "helz".chars() ∊ "hello"
 
 @test
-@expect error "what is looked through is a vector, a matrix, a string"
+@expect error 2717 "∊: the right operand is i64, and what is looked through is a vector, a matrix, a string, a dictionary or a set"
 fn error_looking_through_something_that_holds_nothing():
     let found : mut = 20i64 ∊ 5i64
 
 // A range is a pair of ends rather than something to look through, and
 // the refusal names it rather than the type of its ends.
 @test
-@expect error "the right operand is range"
+@expect error 2717 "∊: the right operand is range, and what is looked through is a vector, a matrix, a string, a dictionary or a set"
 fn error_looking_through_a_range():
     let r := 1…5
     let found : mut = 3 ∊ r
@@ -168,7 +168,7 @@ fn error_looking_through_a_range():
 // An element is compared the way = compares it, so a unit that does
 // not belong is refused where it is written.
 @test
-@expect error "cannot compare"
+@expect error 2315 "cannot compare typed integer i64 without unit with unit B"
 fn error_a_unit_that_does_not_belong():
     let v : i64[] = [10, 20, 30]
     let found : mut = 20¤byte ∊ v

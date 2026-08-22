@@ -46,16 +46,16 @@ fn test_float_arithmetic():
 
 @test
 fn test_mixed_int_float_rejected():
-  @expect error "matching types"
+  @expect error 2234 "addition requires matching types, got untyped and float"
   let a : mut = 2 + 3.0
 
-  @expect error "matching types"
+  @expect error 2235 "addition requires matching types, got float and untyped"
   let b : mut f64 = 3.0 + 2
 
-  @expect error "matching types"
+  @expect error 2234 "multiplication requires matching types, got untyped and float"
   let c : mut = 3 × 2.5
 
-  @expect error "matching types"
+  @expect error 2235 "division requires matching types, got float and untyped"
   let d : mut f64 = 10.0 ÷ 4
 
 @test

@@ -43,22 +43,22 @@ fn test_untyped_arithmetic_keeps_its_precision():
 // ---------------------------------------------------------------------
 
 @test
-@expect error "'int' is an arbitrary-precision type"
+@expect error 2272 "'n': 'int' is an arbitrary-precision type, which the bootstrap implementation does not provide; use a sized type such as i64"
 fn error_int_binding():
     let n : int = 5
 
 @test
-@expect error "'float' is an arbitrary-precision type"
+@expect error 2272 "'f': 'float' is an arbitrary-precision type, which the bootstrap implementation does not provide; use a sized type such as f64"
 fn error_float_binding():
     let f : float = 1.5
 
 @test
-@expect error "use a sized type such as i64"
+@expect error 2272 "'n': 'int' is an arbitrary-precision type, which the bootstrap implementation does not provide; use a sized type such as i64"
 fn error_int_binding_names_the_replacement():
     let n : int = 5
 
 @test
-@expect error "use a sized type such as f64"
+@expect error 2272 "'f': 'float' is an arbitrary-precision type, which the bootstrap implementation does not provide; use a sized type such as f64"
 fn error_float_binding_names_the_replacement():
     let f : float = 1.5
 
@@ -69,12 +69,12 @@ fn error_float_binding_names_the_replacement():
 // A lambda declares types the same way, and is refused the same way.
 
 @test
-@expect error "λ: parameter 'x'.*arbitrary-precision"
+@expect error 2272 "λ: parameter 'x': 'int' is an arbitrary-precision type, which the bootstrap implementation does not provide; use a sized type such as i64"
 fn error_lambda_parameter():
     let f := λx : int → i64: 5
 
 @test
-@expect error "λ: return type.*arbitrary-precision"
+@expect error 2272 "λ: return type: 'int' is an arbitrary-precision type, which the bootstrap implementation does not provide; use a sized type such as i64"
 fn error_lambda_return():
     let f := λx : i64 → int: 5
 
@@ -83,24 +83,24 @@ fn error_lambda_return():
 // ---------------------------------------------------------------------
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'n': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let n : i64 = …'"
 fn error_untyped_binding():
     let n := 5
 
 @test
-@expect error "settles on 'float'"
+@expect error 2278 "'f': a binding with no type written down settles on 'float', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let f : f64 = …'"
 fn error_untyped_float_binding():
     let f := 1.5
 
 // mut changes nothing: the question is what type the value has.
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'n': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let n : i64 = …'"
 fn error_untyped_mut_binding():
     let n : mut = 5
 
 // The message names the type to write instead.
 @test
-@expect error "state a sized type, as 'let n : i64 = "
+@expect error 2278 "'n': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let n : i64 = …'"
 fn error_untyped_binding_names_the_replacement():
     let n := 5
 
@@ -128,26 +128,26 @@ fn test_a_sized_value_settles_nothing():
 // one element say what its numbers are.
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'a': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let a : i64[] = …'"
 fn error_untyped_array():
     let a := [1, 2, 3]
 
 @test
-@expect error "settles on 'float'"
+@expect error 2278 "'a': a binding with no type written down settles on 'float', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let a : f64[] = …'"
 fn error_untyped_float_array():
     let a := [1.5, 2.5]
 
 // The type it asks for is the one the program would write, brackets
 // and all.
 @test
-@expect error "state a sized type, as .let a : i64.. = "
+@expect error 2278 "'a': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let a : i64[] = …'"
 fn error_untyped_array_names_the_replacement():
     let a := [1, 2, 3]
 
 // A dimension is a comma inside one pair of brackets, so an array of
 // arrays is asked for as i64[,].
 @test
-@expect error "state a sized type, as .let m : i64.,. = "
+@expect error 2278 "'m': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let m : i64[,] = …'"
 fn error_untyped_nested_array_names_the_replacement():
     let m := [[1, 2], [3, 4]]
 
@@ -196,13 +196,13 @@ fn test_elements_that_already_have_a_type():
 // nothing, and one whose type is written down holds nothing of that
 // type.
 @test
-@expect error "an empty array says nothing about what it would hold"
+@expect error 2776 "'f': an empty array says nothing about what it would hold, and the binding says nothing either; state a type, as 'let f : i64[] = []'"
 fn error_an_untyped_empty_array():
     let f : mut = []
 
 // Rows of rows of nothing are still nothing.
 @test
-@expect error "an empty array says nothing about what it would hold"
+@expect error 2776 "'f': an empty array says nothing about what it would hold, and the binding says nothing either; state a type, as 'let f : i64[] = []'"
 fn error_untyped_rows_of_nothing():
     let f : mut = [[], []]
 
@@ -251,12 +251,12 @@ fn test_rows_of_different_lengths_still_settle():
     static_assert_eq(@typeof(d[1][0]), u8)
 
 @test
-@expect error "element 0 is u8 and element 1 is i64"
+@expect error 2744 "an array holds one type of value, but element 0 is u8 and element 1 is i64"
 fn error_two_rows_that_disagree():
     let d : mut = [[1u8, 2], [3, 4i64]]
 
 @test
-@expect error "element 0 is u8 and element 1 is an array"
+@expect error 2743 "an array holds one type of value, but element 0 is u8 and element 1 is an array"
 fn error_a_number_beside_a_row():
     let d : mut = [1u8, [2, 3]]
 
@@ -278,24 +278,24 @@ fn test_an_array_of_strings_settles_on_str():
 // tuple's type or every number states its own.
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'t': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let t : (i64, str) = …'"
 fn error_untyped_tuple():
     let t := (1, "two")
 
 @test
-@expect error "settles on 'float'"
+@expect error 2278 "'t': a binding with no type written down settles on 'float', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let t : (f64, str) = …'"
 fn error_untyped_float_tuple():
     let t := (1.5, "two")
 
 // One element saying what it is settles only itself.
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'t': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let t : (i64, i64) = …'"
 fn error_partly_typed_tuple():
     let t := (1i64, 2)
 
 // The type it asks for is the tuple's, written as its values are.
 @test
-@expect error "state a sized type, as .let t : .i64, str. = "
+@expect error 2278 "'t': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let t : (i64, str) = …'"
 fn error_untyped_tuple_names_the_replacement():
     let t := (1, "two")
 
@@ -321,7 +321,7 @@ fn test_a_tuple_without_numbers_settles_nothing():
 // The rule reaches a tuple inside an array, which is where a builtin
 // hands one back.
 @test
-@expect error "state a sized type, as .let pairs : .i64, i64... = "
+@expect error 2278 "'pairs': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let pairs : (i64, i64)[] = …'"
 fn error_array_of_untyped_tuples():
     let pairs := [(1, 2), (3, 4)]
 
@@ -349,13 +349,13 @@ fn test_a_builtin_tuple_is_already_settled():
 // every sized type would have to be kept as an int.
 
 @test
-@expect error "needs more bits than any sized type has"
+@expect error 2617 "println: argument 2: 1606938044258990275541962092341162602522202993782792835301376 needs more bits than any sized type has, and nothing here says which type it should have; the bootstrap implementation has no arbitrary-precision int for it to settle on"
 @impure
 fn error_untyped_argument_to_a_builtin():
     std.println("{}", 2 ↑ 200)
 
 @test
-@expect error "needs more bits than any sized type has"
+@expect error 2617 "assert_eq: argument 1: 1606938044258990275541962092341162602522202993782792835301376 needs more bits than any sized type has, and nothing here says which type it should have; the bootstrap implementation has no arbitrary-precision int for it to settle on"
 fn error_untyped_argument_to_an_assertion():
     assert_eq(2 ↑ 200, 0)
 
@@ -363,7 +363,7 @@ fn takes_anything(x : T') → i64:
     1i64
 
 @test
-@expect error "parameter 'x'.*needs more bits than any sized type has"
+@expect error 2617 "takes_anything: parameter 'x': 1606938044258990275541962092341162602522202993782792835301376 needs more bits than any sized type has, and nothing here says which type it should have; the bootstrap implementation has no arbitrary-precision int for it to settle on"
 fn error_untyped_argument_to_an_untyped_parameter():
     let n : i64 = takes_anything(2 ↑ 200)
 
@@ -401,7 +401,7 @@ fn test_a_stated_parameter_type_settles_the_argument():
 // --- shared by integers and floats ---
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'x': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : i64 = …'"
 fn error_untyped_add():
     let x := 1 + 2
 
@@ -411,7 +411,7 @@ fn test_sized_add():
     static_assert_eq(@typeof(a + 2), i64)
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'x': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : i64 = …'"
 fn error_untyped_subtract():
     let x := 3 - 1
 
@@ -421,7 +421,7 @@ fn test_sized_subtract():
     static_assert_eq(@typeof(a - 1), i64)
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'x': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : i64 = …'"
 fn error_untyped_multiply():
     let x := 2 × 3
 
@@ -431,7 +431,7 @@ fn test_sized_multiply():
     static_assert_eq(@typeof(a × 3), i64)
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'x': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : int = …'"
 fn error_untyped_divide():
     let x := 6 ÷ 3
 
@@ -442,7 +442,7 @@ fn test_sized_divide():
     assert_eq(q ?? ⁻1, 2)
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'x': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : int = …'"
 fn error_untyped_remainder():
     let x := 7 % 3
 
@@ -453,7 +453,7 @@ fn test_sized_remainder():
     assert_eq(r ?? ⁻1, 1)
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'x': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : i64 = …'"
 fn error_untyped_power():
     let x := 2 ↑ 3
 
@@ -463,12 +463,12 @@ fn test_sized_power():
     static_assert_eq(@typeof(a ↑ 3), i64)
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'x': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : i64 = …'"
 fn error_untyped_max():
     let x := 3 ⌈ 5
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'x': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : i64 = …'"
 fn error_untyped_min():
     let x := 3 ⌊ 5
 
@@ -479,7 +479,7 @@ fn test_sized_max_and_min():
     static_assert_eq(@typeof(a ⌊ 5), i64)
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'x': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : i64 = …'"
 fn error_untyped_negation():
     let x := ⁻5
 
@@ -491,17 +491,17 @@ fn test_sized_negation():
 // --- integers only ---
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'x': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : i64 = …'"
 fn error_untyped_saturating_add():
     let x := 1 ⊞ 2
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'x': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : i64 = …'"
 fn error_untyped_saturating_subtract():
     let x := 3 ⊟ 1
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'x': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : i64 = …'"
 fn error_untyped_saturating_multiply():
     let x := 2 ⊠ 3
 
@@ -512,12 +512,12 @@ fn test_sized_saturating():
     assert_eq(a ⊞ 1, 255)
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'x': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : i64 = …'"
 fn error_untyped_shift_left():
     let x := 1 « 4
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'x': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : i64 = …'"
 fn error_untyped_shift_right():
     let x := 16 » 2
 
@@ -534,22 +534,22 @@ fn test_sized_rotations():
     static_assert_eq(@typeof(a ↺ 1), u8)
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'x': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : i64 = …'"
 fn error_untyped_bitand():
     let x := 5 & 3
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'x': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : i64 = …'"
 fn error_untyped_bitor():
     let x := 5 | 3
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'x': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : i64 = …'"
 fn error_untyped_bitxor():
     let x := 5 ^ 3
 
 @test
-@expect error "settles on 'int'"
+@expect error 2278 "'x': a binding with no type written down settles on 'int', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : i64 = …'"
 fn error_untyped_bitnot():
     let x := ~5
 
@@ -564,37 +564,37 @@ fn test_sized_bitwise():
 // --- floats only ---
 
 @test
-@expect error "settles on 'float'"
+@expect error 2278 "'x': a binding with no type written down settles on 'float', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : f64 = …'"
 fn error_untyped_float_add():
     let x := 1.5 + 2.5
 
 @test
-@expect error "settles on 'float'"
+@expect error 2278 "'x': a binding with no type written down settles on 'float', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : f64 = …'"
 fn error_untyped_float_multiply():
     let x := 1.5 × 2.0
 
 @test
-@expect error "settles on 'float'"
+@expect error 2278 "'x': a binding with no type written down settles on 'float', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : f64 = …'"
 fn error_untyped_float_divide():
     let x := 3.0 ÷ 2.0
 
 @test
-@expect error "settles on 'float'"
+@expect error 2278 "'x': a binding with no type written down settles on 'float', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : f64 = …'"
 fn error_untyped_float_power():
     let x := 2.0 ↑ 3.0
 
 @test
-@expect error "settles on 'float'"
+@expect error 2278 "'x': a binding with no type written down settles on 'float', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : f64 = …'"
 fn error_untyped_square_root():
     let x := √4.0
 
 @test
-@expect error "settles on 'float'"
+@expect error 2278 "'x': a binding with no type written down settles on 'float', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : f64 = …'"
 fn error_untyped_cube_root():
     let x := ∛8.0
 
 @test
-@expect error "settles on 'float'"
+@expect error 2278 "'x': a binding with no type written down settles on 'float', which is an arbitrary-precision type the bootstrap implementation does not provide; state a sized type, as 'let x : f64 = …'"
 fn error_untyped_fourth_root():
     let x := ∜16.0
 

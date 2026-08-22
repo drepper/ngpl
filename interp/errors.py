@@ -423,6 +423,80 @@ def format_diagnostic(
     return "\n".join(parts)
 
 
+# Where a message that has drifted from its expectation is written
+# down.  Set by --expect-drift; None means the drift is reported and
+# not recorded.
+_EXPECT_DRIFT_PATH: str | None = None
+_EXPECT_DRIFT_SEEN: set = set()
+
+
+def set_expect_drift_path(path: str | None) -> None:
+    global _EXPECT_DRIFT_PATH
+    _EXPECT_DRIFT_PATH = path
+
+
+def _record_expect_drift(source_path: str, line, code: int,
+                         expected: str, said: str) -> None:
+    """An expectation whose code matched and whose words did not.
+
+    Not a failure.  The number is what says which diagnostic this is;
+    the words beside it are what it said when the expectation was
+    written, and saying it better is an improvement rather than a
+    break.  What is recorded is enough to put the new words in place
+    without a person reading them: the file, the line the expectation
+    is on, and both messages.
+    """
+    key = (source_path, line, code)
+    if key in _EXPECT_DRIFT_SEEN:
+        return
+    _EXPECT_DRIFT_SEEN.add(key)
+    print(f"note: @expect {code} on line {line} says \"{expected}\"",
+          file=sys.stderr)
+    print(f"      and the diagnostic now says \"{said}\"", file=sys.stderr)
+    if _EXPECT_DRIFT_PATH is None:
+        return
+    import json
+    with open(_EXPECT_DRIFT_PATH, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"file": source_path, "line": line,
+                             "code": code, "was": expected,
+                             "says": said}) + "\n")
+
+
+def source_path_in_hand() -> str:
+    """The file being read, for a diagnostic that needs to name it."""
+    return _source_path or "?"
+
+
+class Diagnostic(str):
+    """A message that remembers the number it is known by.
+
+    A diagnostic that travels as an exception carries its number on the
+    exception; one that travels as a string -- a parse error kept for
+    later, a warning collected rather than printed -- carries it here.
+    Everything that reads the message still reads a string.
+    """
+
+    __slots__ = ("code", "site")
+
+    def __new__(cls, message: str, code: int | None = None):
+        made = super().__new__(cls, message)
+        made.code = code
+        made.site = None
+        return made
+
+
+def coded(code: int, error: BaseException) -> BaseException:
+    """Tag a diagnostic with the number it is known by.
+
+    Written around the exception rather than replacing the raise, so a
+    raise site says what it always said and gains four characters and a
+    number.  The number is what an @expect matches; see the
+    specification, "What a Diagnostic Is Known By".
+    """
+    error.diag_code = code
+    return error
+
+
 class ProgramStop(Exception):
     """A running program stopped by the runtime.
 

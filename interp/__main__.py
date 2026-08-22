@@ -50,7 +50,8 @@ from interp.errors import (format_diagnostic, extract_position,
                            warnings_are_errors, set_contract_semantic,
                            set_source, CONTRACT_SEMANTICS,
                            ProgramExit, ProgramAbort, ProgramStop,
-                           ContractError)
+                           ContractError, coded, Diagnostic,
+                           set_expect_drift_path, _record_expect_drift)
 
 
 def _make_std_errors() -> EnumType:
@@ -194,8 +195,8 @@ def _builtin_assert_eq(args):
                 f"assert_eq failed:\n  expected: {_format_value(expected)}\n  actual:   {actual.display()}")
     elif isinstance(expected, IntValue) and isinstance(actual, IntValue):
         if expected.value != actual.value:
-            raise AssertionError(
-                f"assert_eq failed:\n  expected: {_format_value(expected)}\n  actual:   {_format_value(actual)}")
+            raise coded(2611, AssertionError(
+                f"assert_eq failed:\n  expected: {_format_value(expected)}\n  actual:   {_format_value(actual)}"))
     elif (isinstance(expected, ObjectValue) and isinstance(expected.obj, ArrayValue)
           and isinstance(actual, ObjectValue) and isinstance(actual.obj, ArrayValue)):
         ea, aa = expected.obj, actual.obj
@@ -646,45 +647,6 @@ E_ENUM_DUPLICATE = 2800  # two enumerators, one number
 E_ENUM_NO_SUCH = 2801    # an alias naming no enumerator above it
 
 
-# Where a message that has drifted from its expectation is written
-# down.  Set by --expect-drift; None means the drift is reported and
-# not recorded.
-_EXPECT_DRIFT_PATH: str | None = None
-_EXPECT_DRIFT_SEEN: set = set()
-
-
-def set_expect_drift_path(path: str | None) -> None:
-    global _EXPECT_DRIFT_PATH
-    _EXPECT_DRIFT_PATH = path
-
-
-def _record_expect_drift(source_path: str, line, code: int,
-                         expected: str, said: str) -> None:
-    """An expectation whose code matched and whose words did not.
-
-    Not a failure.  The number is what says which diagnostic this is;
-    the words beside it are what it said when the expectation was
-    written, and saying it better is an improvement rather than a
-    break.  What is recorded is enough to put the new words in place
-    without a person reading them: the file, the line the expectation
-    is on, and both messages.
-    """
-    key = (source_path, line, code)
-    if key in _EXPECT_DRIFT_SEEN:
-        return
-    _EXPECT_DRIFT_SEEN.add(key)
-    print(f"note: @expect {code} on line {line} says \"{expected}\"",
-          file=sys.stderr)
-    print(f"      and the diagnostic now says \"{said}\"", file=sys.stderr)
-    if _EXPECT_DRIFT_PATH is None:
-        return
-    import json
-    with open(_EXPECT_DRIFT_PATH, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps({"file": source_path, "line": line,
-                             "code": code, "was": expected,
-                             "says": said}) + "\n")
-
-
 def _says_nothing(ret_type) -> bool:
     """Whether a signature promises no value at all.
 
@@ -820,14 +782,14 @@ def _check_try_in(body, ret_type, env, *, in_lambda: bool = False) -> str | None
             return _Finding(
                 f"? requires the {where} to return an optional or an "
                 f"expected type, but it returns "
-                f"'{ret_type or chr(8709)}'", node)
+                f"'{ret_type or chr(8709)}'", node, 2018)
         if opt_err == "":
             continue
         source = _propagated_error_type(node.expr, env)
         if source is not None and source != opt_err:
             return _Finding(
                 f"? propagates an error of type '{source}', but the "
-                f"{where} returns errors of type '{opt_err}'", node)
+                f"{where} returns errors of type '{opt_err}'", node, 2295)
     return None
 
 
@@ -994,14 +956,14 @@ def _check_one_match(node, env, func_def=None) -> str | None:
         if key in seen:
             return _Finding(
                 f"match repeats the {_arm_pattern(arm)} pattern; "
-                f"the second one can never be reached", arm)
+                f"the second one can never be reached", arm, 2283)
         seen.add(key)
         if arm.kind == "wildcard" and index != len(node.arms) - 1:
             # The arm that cannot run is the one after _, so that is
             # the one to point at.
             return _Finding(
                 "match has arms after _, which can never be reached",
-                node.arms[index + 1])
+                node.arms[index + 1], 2284)
 
     subject = _match_subject_kind(node.subject, env, func_def)
     if subject is None:
@@ -1015,19 +977,19 @@ def _check_one_match(node, env, func_def=None) -> str | None:
             if arm.kind != "type":
                 return _Finding(
                     f"{_arm_pattern(arm)} cannot match '{subject}', "
-                    f"which is {' | '.join(alternatives)}", arm)
+                    f"which is {' | '.join(alternatives)}", arm, 2285)
             if arm.type_name not in alternatives:
                 return _Finding(
                     f"'{arm.type_name}' is not an alternative of "
                     f"'{subject}', which is "
-                    f"{' | '.join(alternatives)}", arm)
+                    f"{' | '.join(alternatives)}", arm, 2211)
         if "wildcard" in seen:
             return None
         missing = [a for a in alternatives if a not in seen]
         if missing:
             return _Finding("match has no arm for "
                             + " or ".join(missing)
-                            + "; add the missing pattern or a _ arm", node)
+                            + "; add the missing pattern or a _ arm", node, 2286)
         return None
 
     shapes = _SUBJECT_SHAPES[subject]
@@ -1041,7 +1003,7 @@ def _check_one_match(node, env, func_def=None) -> str | None:
         # failure to be written some other way would misdirect.
         hint = _WRONG_ARM_HINT.get((subject, arm.kind), "")
         return _Finding(f"{_arm_pattern(arm)} cannot match "
-                        f"{_SUBJECT_NAME[subject]}{hint}", arm)
+                        f"{_SUBJECT_NAME[subject]}{hint}", arm, 2287)
 
     if "wildcard" in seen:
         return None
@@ -1049,7 +1011,7 @@ def _check_one_match(node, env, func_def=None) -> str | None:
     if missing:
         return _Finding("match has no arm for "
                         + " or ".join(_ARM_SUBJECT[m] for m in missing)
-                        + "; add the missing pattern or a _ arm", node)
+                        + "; add the missing pattern or a _ arm", node, 2288)
     return None
 
 
@@ -1116,7 +1078,7 @@ def _static_shift_check(node, checker) -> str | None:
         return None
     return _Finding(
         "this shift moves every value bit out, so it can only fail; "
-        "the count is too far for the type shifted", node)
+        "the count is too far for the type shifted", node, 2289)
 
 
 def _static_assert_check(func_def, env) -> str | None:
@@ -1169,7 +1131,7 @@ def _static_assert_check(func_def, env) -> str | None:
             checker.eval_expr(node)
         except TypeError as e:
             if "static_assert" in str(e) and "failed" in str(e):
-                return _Finding(str(e), node)
+                return _Finding(str(e), node, 2618)
         except Exception:
             # Not answerable from declarations alone; it runs instead.
             pass
@@ -1715,8 +1677,8 @@ def _unreachable_warnings(func_def, env) -> list[tuple[str, tuple | None]]:
             if _never_returns(stmt, env) and index + 1 < len(body):
                 after = body[index + 1]
                 warnings.append((
-                    "this statement cannot be reached: the one above it "
-                    "does not come back",
+                    Diagnostic("this statement cannot be reached: the one "
+                               "above it does not come back", 2291),
                     _stmt_pos(after)))
             for attr in ("body", "cons", "alt"):
                 walk(getattr(stmt, attr, None))
@@ -1758,9 +1720,10 @@ def _unused_loop_label_warnings(func_def) -> list[tuple[str, tuple | None]]:
                     and stmt.label is not None \
                     and stmt.label not in takers(stmt.body):
                 warnings.append((
-                    f"the loop is named '{stmt.label}' and nothing inside "
-                    f"it takes the name; a break or a continue reaches an "
-                    f"outer loop by naming it",
+                    Diagnostic(
+                        f"the loop is named '{stmt.label}' and nothing "
+                        f"inside it takes the name; a break or a continue "
+                        f"reaches an outer loop by naming it", 2911),
                     stmt.label_pos))
             for attr in ("body", "cons", "alt"):
                 walk(getattr(stmt, attr, None))
@@ -1799,8 +1762,8 @@ def _unused_mut_warnings(func_def) -> list[tuple[str, tuple | None]]:
         param_name = name[0] if isinstance(name, tuple) else name
         if param_name in func_def.param_muts and param_name not in modified:
             warnings.append((
-                f"parameter '{param_name}' is declared mut but is never "
-                f"modified",
+                Diagnostic(f"parameter '{param_name}' is declared mut but "
+                           f"is never modified", 2419),
                 func_def.param_positions.get(param_name)))
 
     # A statement the programmer marked with @expect handles its own
@@ -1813,7 +1776,8 @@ def _unused_mut_warnings(func_def) -> list[tuple[str, tuple | None]]:
             for name in _destructured_names(node.names):
                 if name == DISCARD_NAME or name in modified:
                     continue
-                message = f"'{name}' is declared mut but is never modified"
+                message = Diagnostic(
+                    f"'{name}' is declared mut but is never modified", 2418)
                 if id(node) in marked:
                     node.static_warnings = (
                         list(getattr(node, "static_warnings", ())) + [message])
@@ -1843,7 +1807,8 @@ def _unused_mut_warnings(func_def) -> list[tuple[str, tuple | None]]:
             continue
         if node.name in modified:
             continue
-        message = f"'{node.name}' is declared mut but is never modified"
+        message = Diagnostic(
+            f"'{node.name}' is declared mut but is never modified", 2418)
         if id(node) in marked:
             # Read back by the evaluator when the @expect runs.
             node.static_warnings = [message]
@@ -1988,12 +1953,12 @@ def _static_purity_check(func_def, env, struct_vars) -> str | None:
             return _Finding(
                 f"{written} writes where the rest of the program can see "
                 f"it; a function that calls it says @impure",
-                _call_site(node))
+                _call_site(node), 2512)
         callee = _called_func(node, env, struct_vars)
         if callee is not None and callee.is_impure:
             return _Finding(
                 f"'{callee.name}' is @impure, so a function that calls it "
-                f"says @impure too", _call_site(node))
+                f"says @impure too", _call_site(node), 2513)
     return None
 
 
@@ -2044,10 +2009,10 @@ def _dropped_value_finding(expr, env, struct_vars) -> str | None:
         return _Finding(
             f"the result of '{callee.name}' is not used; a function that "
             f"hands back a value is called for it, so write '_ ← …' where "
-            f"the value is meant to be dropped", _call_site(expr))
+            f"the value is meant to be dropped", _call_site(expr), 2290)
     return _Finding(
         "the value of this statement is not used; it computes something "
-        "and nothing reads it", expr)
+        "and nothing reads it", expr, 2291)
 
 
 def _check_unused_values(stmts, env, struct_vars,
@@ -2157,11 +2122,12 @@ def _trailing_value_warning(body, env, struct_vars,
         return
     if _dropped_value_finding(stmt.expr, env, struct_vars) is None:
         return
-    message = ("the value of this statement is not used; the signature "
-               "hands nothing back, so the last statement is not a return "
-               "value; name a return type, or write "
-               "'_ \N{LEFTWARDS ARROW} \N{HORIZONTAL ELLIPSIS}' to drop "
-               "the value")
+    message = Diagnostic(
+        "the value of this statement is not used; the signature "
+        "hands nothing back, so the last statement is not a return "
+        "value; name a return type, or write "
+        "'_ \N{LEFTWARDS ARROW} \N{HORIZONTAL ELLIPSIS}' to drop "
+        "the value", 2292)
     if marked:
         # Read back by the evaluator when the @expect runs.
         stmt.static_warnings = (
@@ -2277,14 +2243,14 @@ def _static_loop_check(func_def) -> str | None:
             word = "break" if isinstance(stmt, _ast.BreakStmt) else "continue"
             if not labels:
                 return _Finding(f"{word} is written outside any loop, so "
-                                f"there is no loop for it to act on", stmt)
+                                f"there is no loop for it to act on", stmt, 2292)
             if stmt.label is not None and stmt.label not in labels:
                 named = ", ".join(sorted(l for l in labels if l is not None))
                 where = (f"the loops here are named {named}" if named
                          else "no loop here is named")
                 return _Finding(f"{word} names the loop '{stmt.label}', "
                                 f"which is not one it is inside; {where}",
-                                stmt)
+                                stmt, 2293)
             return None
         if isinstance(stmt, (_ast.WhileStmt, _ast.ForEachStmt)):
             return walk(stmt.body, labels + (stmt.label,))
@@ -2734,7 +2700,7 @@ def _static_literal_check(func_def) -> str | None:
         try:
             check_int(value, node.width or "int")
         except OverflowError as e:
-            return _Finding(str(e), node)
+            return _Finding(str(e), node, 2294)
     return None
 
 
@@ -2757,7 +2723,7 @@ def _static_check_moves(stmts: list, env,
             for name in _expr_var_refs(expr):
                 if name in moved:
                     return _Finding(f"use of moved value '{name}'",
-                                    _var_ref_node(expr, name))
+                                    _var_ref_node(expr, name), 2418)
 
         if isinstance(stmt, ASTVarDef):
             st = _infer_struct_type(stmt.init_expr, env, struct_vars)

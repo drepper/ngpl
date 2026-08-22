@@ -9,6 +9,7 @@ based on indentation changes, enabling layout-driven scoping.
 """
 
 import math
+from interp.errors import coded
 import re
 
 
@@ -283,7 +284,8 @@ def _check_float_literal_range(value: float, width: str, text: str, base: int,
     if math.isinf(value) or float_overflows(value, width):
         # The value is an infinity because the text overflowed, so the
         # text is what the complaint has to name.
-        raise LexerError(float_overflow_message(text, width), line, col)
+        raise coded(2293, LexerError(
+            float_overflow_message(text, width), line, col))
     if _literal_digits_are_zero(text, base):
         return
     if value == 0.0 or float_underflows(value, width):

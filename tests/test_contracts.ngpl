@@ -33,7 +33,7 @@ fn test_several_of_each():
     assert_eq(biggest(7, 3), 7)
 
 @test
-@expect error "a precondition does not hold"
+@expect error 2614 "biggest: a precondition does not hold, so the caller did not keep to what biggest says it needs"
 fn error_the_second_precondition():
     let n : mut = biggest(1, 0)
 
@@ -44,7 +44,7 @@ fn error_the_second_precondition():
 // A precondition is read where the parameters are bound, so it says
 // what the caller has to have got right.
 @test
-@expect error "the caller did not keep to what divide says it needs"
+@expect error 2614 "divide: a precondition does not hold, so the caller did not keep to what divide says it needs"
 fn error_a_precondition():
     let n : mut = divide(8, 0)
 
@@ -54,7 +54,7 @@ fn claims_too_much(n : i64) → i64:
     n
 
 @test
-@expect error "the function did not keep to what claims_too_much says it needs"
+@expect error 2614 "claims_too_much: a postcondition does not hold, so the function did not keep to what claims_too_much says it needs"
 fn error_a_postcondition():
     let n : mut = claims_too_much(1)
 
@@ -97,7 +97,7 @@ fn test_a_method_holds_to_them():
     assert_eq(c.above(5), 15)
 
 @test
-@expect error "a precondition does not hold"
+@expect error 2614 "above: a precondition does not hold, so the caller did not keep to what above says it needs"
 fn error_a_method_precondition():
     let c := Counter{base: 10}
     let n : mut = c.above(0)
@@ -112,7 +112,7 @@ fn not_a_condition(n : i64) → i64:
     n
 
 @test
-@expect error "so it answers a truth value"
+@expect error 2613 "not_a_condition: a @pre says what is true, so it answers a truth value, and this one answers i64"
 fn error_a_condition_that_is_not_one():
     let n : mut = not_a_condition(1)
 

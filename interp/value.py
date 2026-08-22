@@ -8,6 +8,7 @@ type checking and proper error messages.
 import functools as _functools
 import math
 import re
+from interp.errors import coded, Diagnostic
 
 
 class _WidthMiss:
@@ -213,11 +214,11 @@ def check_bootstrap_argument(value: "Value", where: str):
     if _int_range(f"i{MAX_INT_BITS - 1}")[0] <= inner.value \
             <= _int_range(f"u{MAX_INT_BITS}")[1]:
         return
-    raise TypeError(
+    raise coded(2617, TypeError(
         f"{where}: {inner.value} needs more bits than any sized type "
         f"has, and nothing here says which type it should have; the "
         f"bootstrap implementation has no arbitrary-precision int for "
-        f"it to settle on")
+        f"it to settle on"))
 
 
 def suggested_type(value: "Value") -> str:
@@ -296,16 +297,16 @@ def check_binding_settles(value: "Value", name: str):
     inner = value.value if isinstance(value, SomeValue) else value
     if isinstance(inner, ObjectValue) and isinstance(inner.obj, (HashValue,
                                                                  SetValue)):
-        raise TypeError(
+        raise coded(2775, TypeError(
             f"'{name}': \N{LEFT DOUBLE PARENTHESIS}\N{RIGHT DOUBLE PARENTHESIS} "
             f"is empty, so it says neither what it holds nor whether it is a "
             f"dictionary or a set, and the binding says nothing either; state a "
             f"type, as 'let {name} : std.dict(str, i64) = "
-            f"\N{LEFT DOUBLE PARENTHESIS}\N{RIGHT DOUBLE PARENTHESIS}'")
-    raise TypeError(
+            f"\N{LEFT DOUBLE PARENTHESIS}\N{RIGHT DOUBLE PARENTHESIS}'"))
+    raise coded(2776, TypeError(
         f"'{name}': an empty array says nothing about what it would "
         f"hold, and the binding says nothing either; state a type, as "
-        f"'let {name} : i64[] = []'")
+        f"'let {name} : i64[] = []'"))
 
 
 def check_bootstrap_binding(value: "Value", name: str):
@@ -321,12 +322,12 @@ def check_bootstrap_binding(value: "Value", name: str):
     kind = unsettled_kind(value)
     if kind is None:
         return
-    raise TypeError(
+    raise coded(2278, TypeError(
         f"'{name}': a binding with no type written down settles on "
         f"'{kind}', which is an arbitrary-precision type the bootstrap "
         f"implementation does not provide; state a sized type, as "
         f"'let {name} : {suggested_type(value)} = "
-        f"\N{HORIZONTAL ELLIPSIS}'")
+        f"\N{HORIZONTAL ELLIPSIS}'"))
 
 
 def settle_untyped(value: "Value") -> "Value":
@@ -430,9 +431,9 @@ def check_int(value: int, width: str) -> int:
         # left below far more often than above, and "underflow" says
         # at once that the subtraction went past zero.
         which = "underflow" if value < lo else "overflow"
-        raise OverflowError(
+        raise coded(2279, OverflowError(
             f"integer {which}: {value} does not fit in {width} "
-            f"(range {lo}..{hi})")
+            f"(range {lo}..{hi})"))
     return value
 
 
@@ -627,11 +628,11 @@ def check_float_arith(value: float, width: str, symbol: str,
     """
     held = _clamp_float(value, _float_check_width(width))
     if math.isinf(held) and math.isfinite(left) and math.isfinite(right):
-        raise OverflowError(
-            float_overflow_message(f"{left!r} {symbol} {right!r}", width))
+        raise coded(2293, OverflowError(
+            float_overflow_message(f"{left!r} {symbol} {right!r}", width)))
     if may_underflow and held == 0.0 and left != 0.0 and right != 0.0:
-        raise OverflowError(
-            float_underflow_message(f"{left!r} {symbol} {right!r}", width))
+        raise coded(2294, OverflowError(
+            float_underflow_message(f"{left!r} {symbol} {right!r}", width)))
     return value
 
 
@@ -669,9 +670,11 @@ def check_float(value: float, width: str) -> float:
     result of inf or 0 much later -- is the outcome worth preventing.
     """
     if float_overflows(value, width):
-        raise OverflowError(float_overflow_message(repr(value), width))
+        raise coded(2293, OverflowError(
+            float_overflow_message(repr(value), width)))
     if float_underflows(value, width):
-        raise OverflowError(float_underflow_message(repr(value), width))
+        raise coded(2294, OverflowError(
+            float_underflow_message(repr(value), width)))
     return value
 
 
@@ -690,18 +693,20 @@ def _untyped_width_note(width: str) -> str:
 
 def float_overflow_message(written: str, width: str) -> str:
     """What to say about a number a float format cannot hold."""
-    return (f"float overflow: {written} does not fit in "
-            f"{_float_named_width(width)}{_float_largest_note(width)}"
-            f"{_untyped_width_note(width)}")
+    return Diagnostic(
+           f"float overflow: {written} does not fit in "
+           f"{_float_named_width(width)}{_float_largest_note(width)}"
+           f"{_untyped_width_note(width)}", 2293)
 
 
 def float_underflow_message(written: str, width: str) -> str:
     """What to say about a number a float format cannot tell from zero."""
     smallest = float_smallest(width)
     note = "" if smallest is None else f" (smallest is {smallest!r})"
-    return (f"float underflow: {written} is not zero, but is too small for "
-            f"{_float_named_width(width)} to tell from zero{note}"
-            f"{_untyped_width_note(width)}")
+    return Diagnostic(
+           f"float underflow: {written} is not zero, but is too small for "
+           f"{_float_named_width(width)} to tell from zero{note}"
+           f"{_untyped_width_note(width)}", 2294)
 
 
 class FloatValue(Value):
@@ -812,17 +817,17 @@ def check_code_point(value: int, where: str, stop: bool = False) -> int:
     from interp.errors import ProgramStop
     bad = ProgramStop if stop else TypeError
     if value < 0:
-        raise bad(
+        raise coded(2280, bad(
             f"{where}: {value} is not a code point; a character is "
-            f"numbered from 0")
+            f"numbered from 0"))
     if value > MAX_CODE_POINT:
-        raise bad(
+        raise coded(2281, bad(
             f"{where}: {value} is past the last code point, which is "
-            f"{MAX_CODE_POINT} (0x10FFFF)")
+            f"{MAX_CODE_POINT} (0x10FFFF)"))
     if value in _SURROGATES:
-        raise bad(
+        raise coded(2282, bad(
             f"{where}: {value} is a surrogate, which encodes half of a "
-            f"character in UTF-16 rather than being one")
+            f"character in UTF-16 rather than being one"))
     return value
 
 
@@ -1469,8 +1474,8 @@ class ArrayValue(Value):
             if self._backing is not None:
                 return self._backing[self._offset + index]
             return self.elements[index]
-        raise IndexError(
-            f"array index {index} out of range (length {n})")
+        raise coded(2758, IndexError(
+            f"array index {index} out of range (length {n})"))
 
     @property
     def sizeof(self) -> int:
@@ -1494,8 +1499,8 @@ class ArrayValue(Value):
         value = self._checked(value)
         n = self.sizeof
         if index < 0 or index >= n:
-            raise IndexError(
-                f"array index {index} out of range (length {n})")
+            raise coded(2759, IndexError(
+                f"array index {index} out of range (length {n})"))
         if self._backing is not None:
             self._backing[self._offset + index] = value
         else:
@@ -1522,20 +1527,20 @@ class ArrayValue(Value):
                 if is_unwidthed(held):
                     held = None
         if unit is None and isinstance(value, UnitValue):
-            raise TypeError(
+            raise coded(2324, TypeError(
                 f"an array of {held or 'unmeasured numbers'} cannot hold "
-                f"{value.unit.display_name}; use @dropunit to part with it")
+                f"{value.unit.display_name}; use @dropunit to part with it"))
         if unit is not None and not isinstance(value, UnitValue):
-            raise TypeError(
+            raise coded(2325, TypeError(
                 f"an array measured in {unit.display_name} cannot hold a "
-                f"number that measures nothing")
+                f"number that measures nothing"))
         if held is None:
             return apply_unit(value, unit) if unit is not None else value
         mismatch = _scalar_kind_mismatch(
             value.inner if isinstance(value, UnitValue) else value, held)
         if mismatch is not None:
-            raise TypeError(
-                f"an array of {held} cannot hold {mismatch}")
+            raise coded(2760, TypeError(
+                f"an array of {held} cannot hold {mismatch}"))
         return coerce_to_type(value, held, unit)
 
     def _check_resizable(self, op: str):
@@ -1552,10 +1557,10 @@ class ArrayValue(Value):
         if self._backing is not None:
             raise TypeError(f"{op}: cannot resize a view into another array")
         if self.fixed_size is not None:
-            raise TypeError(
+            raise coded(2761, TypeError(
                 f"{op}: cannot resize a fixed-size array; its type says it "
                 f"holds {self.fixed_size} element"
-                f"{'' if self.fixed_size == 1 else 's'}")
+                f"{'' if self.fixed_size == 1 else 's'}"))
 
     def push(self, value: Value):
         """Append a value to the end of the array."""
@@ -1577,8 +1582,8 @@ class ArrayValue(Value):
         self._check_resizable("insert")
         n = len(self.elements)
         if index < 0 or index > n:
-            raise IndexError(
-                f"insert index {index} out of range (length {n})")
+            raise coded(2762, IndexError(
+                f"insert index {index} out of range (length {n})"))
         self.elements.insert(index, self._checked(value))
 
     def remove(self, index: int) -> Value:
@@ -1586,8 +1591,8 @@ class ArrayValue(Value):
         self._check_resizable("remove")
         n = len(self.elements)
         if index < 0 or index >= n:
-            raise IndexError(
-                f"remove index {index} out of range (length {n})")
+            raise coded(2763, IndexError(
+                f"remove index {index} out of range (length {n})"))
         return self.elements.pop(index)
 
     def display(self) -> str:
@@ -2004,16 +2009,16 @@ def enum_admit(name: str, value: "Value") -> "Value":
             # The same reason the comparison gives, said in the same
             # words: a flag enum's values are combinations, and no bare
             # number names one.
-            raise TypeError(
+            raise coded(2827, TypeError(
                 f"'{name}' is a @flag enum, so its values are combinations "
-                f"of members that a bare number does not name")
+                f"of members that a bare number does not name"))
         if value.value in et.values_to_names:
             return EnumValue(et, value.value)
-        raise TypeError(
+        raise coded(2828, TypeError(
             f"'{name}' holds exactly its members, and {value.value} is "
-            f"not one of them")
-    raise TypeError(
-        f"'{name}' is an enum, but the value is {runtime_type_of(value)}")
+            f"not one of them"))
+    raise coded(2829, TypeError(
+        f"'{name}' is an enum, but the value is {runtime_type_of(value)}"))
 
 
 def is_enum_type(name: str) -> bool:
@@ -2118,9 +2123,9 @@ def sum_type_settle(name: str, value: "Value") -> "Value":
                 f"could be {' or '.join(a for a, _ in candidates)}; "
                 f"write the type meant")
 
-    raise TypeError(
+    raise coded(2271, TypeError(
         f"'{name}' is {' | '.join(alternatives)}, "
-        f"but the value is {actual}")
+        f"but the value is {actual}"))
 
 
 _type_memo: dict = {}
@@ -2335,10 +2340,10 @@ def check_bootstrap_type(type_name: str, where: str):
     sized = _FULL_LANGUAGE_TYPES.get(base)
     if sized is None:
         return
-    raise TypeError(
+    raise coded(2272, TypeError(
         f"{where}: '{base}' is an arbitrary-precision type, which the "
         f"bootstrap implementation does not provide; use a sized type "
-        f"such as {sized}")
+        f"such as {sized}"))
 
 
 @_functools.lru_cache(maxsize=None)
@@ -2472,10 +2477,10 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
         # what it asked for; the type describes what holds the number.
         return coerce_to_type(value, param_type, unit)
     if isinstance(value, UnitValue):
-        raise TypeError(
+        raise coded(2326, TypeError(
             f"{func_name}: parameter '{param_name}' is {param_type}, which "
             f"carries no unit, but the argument is "
-            f"{value.unit.display_name}; use @dropunit to part with it")
+            f"{value.unit.display_name}; use @dropunit to part with it"))
     base, opt_err = _split_optional_type(param_type)
     if opt_err is not None and opt_err == "":
         if isinstance(value, NoneValue):
@@ -2498,8 +2503,8 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
         try:
             return coerce_to_type(value, param_type)
         except TypeError as e:
-            raise TypeError(
-                f"{func_name}: argument '{param_name}': {e}") from None
+            raise coded(2764, TypeError(
+                f"{func_name}: argument '{param_name}': {e}")) from None
 
     if param_type == "fn":
         if not isinstance(value, (FuncValue, LambdaValue, BuiltinFunc,
@@ -2532,9 +2537,9 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
 
     if param_type == "char":
         if not isinstance(value, CharValue):
-            raise TypeError(
+            raise coded(2014, TypeError(
                 f"{func_name}: argument '{param_name}' expected char, "
-                f"got {runtime_type_of(value)}")
+                f"got {runtime_type_of(value)}"))
         return value
 
     if param_type == "\N{EMPTY SET}":
@@ -2549,8 +2554,8 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
     unwrapped_arg = value.value if isinstance(value, SomeValue) else value
     mismatch = array_type_mismatch(unwrapped_arg, param_type)
     if mismatch is not None:
-        raise TypeError(
-            f"{func_name}: argument '{param_name}': {mismatch}")
+        raise coded(2765, TypeError(
+            f"{func_name}: argument '{param_name}': {mismatch}"))
 
     arr_info = _parse_array_type(param_type)
     if arr_info is not None:
@@ -2568,33 +2573,33 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
             if len(actual) != len(declared):
                 got = (f"array of length {actual[0]}" if len(actual) == 1
                        else f"a {format_shape(actual)} array")
-                raise TypeError(
+                raise coded(2766, TypeError(
                     f"{func_name}: argument '{param_name}' expected "
                     f"{param_type} "
                     f"({len(declared)} dimension"
                     f"{'' if len(declared) == 1 else 's'}), "
-                    f"got {got}")
+                    f"got {got}"))
             for axis, (want, have) in enumerate(zip(declared, actual)):
                 if have is None:
                     # An open dimension is one extent the type does not
                     # name, not the absence of one, so rows of differing
                     # lengths are not a dimension at all.
-                    raise TypeError(
+                    raise coded(2767, TypeError(
                         f"{func_name}: argument '{param_name}' expected "
                         f"{param_type} (dimension {axis + 1} is one extent), "
                         f"got a {format_shape(actual)} array whose rows "
-                        f"differ in length")
+                        f"differ in length"))
                 if want is None or want == have:
                     continue
                 if len(declared) == 1:
-                    raise TypeError(
+                    raise coded(2768, TypeError(
                         f"{func_name}: argument '{param_name}' expected "
                         f"{param_type} (length {want}), "
-                        f"got array of length {have}")
-                raise TypeError(
+                        f"got array of length {have}"))
+                raise coded(2769, TypeError(
                     f"{func_name}: argument '{param_name}' expected "
                     f"{param_type} (dimension {axis + 1} is {want}), "
-                    f"got a {format_shape(actual)} array")
+                    f"got a {format_shape(actual)} array"))
             # The shape is right; what it holds still has to be.  A
             # parameter states an element type the way a binding does,
             # and until now only the shape was ever measured -- so a
@@ -2603,9 +2608,9 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
             try:
                 return coerce_to_type(unwrapped, param_type)
             except (TypeError, OverflowError) as e:
-                raise TypeError(
+                raise coded(2770, TypeError(
                     f"{func_name}: argument '{param_name}': "
-                    f"{e}") from None
+                    f"{e}")) from None
         if isinstance(unwrapped, ObjectValue) and hasattr(unwrapped.obj, "data"):
             raw = bytes(unwrapped.obj.data)
             elements = [mk_int(b, elem_type) for b in raw]
@@ -2620,18 +2625,18 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
                 f"{func_name}: argument '{param_name}' expected {param_type}, "
                 f"got {type(value).__name__}")
         if not isinstance(value, IntValue):
-            raise TypeError(
+            raise coded(2015, TypeError(
                 f"{func_name}: argument '{param_name}' expected {param_type}, "
-                f"got {type(value).__name__}")
+                f"got {type(value).__name__}"))
         return coerce_to_type(value, param_type)
 
     if param_type in FLOAT_TYPES:
         if isinstance(value, IntValue):
             if not _int_is_exact_in_float(value.value, param_type):
-                raise TypeError(
+                raise coded(2273, TypeError(
                     f"{func_name}: argument '{param_name}' is {value.value}, "
                     f"which needs more significant bits than {param_type} "
-                    f"has ({_SIGNIFICAND_BITS[param_type]})")
+                    f"has ({_SIGNIFICAND_BITS[param_type]})"))
             return mk_float(float(value.value), param_type)
         if isinstance(value, FloatValue):
             try:
@@ -2649,9 +2654,9 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
 
     if param_type in _STRUCT_TYPES:
         if not struct_type_admits(param_type, value):
-            raise TypeError(
+            raise coded(2016, TypeError(
                 f"{func_name}: argument '{param_name}' expected "
-                f"{param_type}, got {runtime_type_of(value)}")
+                f"{param_type}, got {runtime_type_of(value)}"))
         return value
 
     if param_type in _ENUM_TYPES:
@@ -2661,21 +2666,21 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
             try:
                 return enum_admit(param_type, value)
             except TypeError as e:
-                raise TypeError(
-                    f"{func_name}: argument '{param_name}': {e}") from None
+                raise coded(2830, TypeError(
+                    f"{func_name}: argument '{param_name}': {e}")) from None
         if not (isinstance(value, EnumValue)
                 and value.enum_type.name == param_type):
-            raise TypeError(
+            raise coded(2017, TypeError(
                 f"{func_name}: argument '{param_name}' expected "
-                f"{param_type}, got {runtime_type_of(value)}")
+                f"{param_type}, got {runtime_type_of(value)}"))
         return value
 
     if param_type in _SUM_TYPES:
         try:
             return sum_type_settle(param_type, value)
         except TypeError as e:
-            raise TypeError(
-                f"{func_name}: argument '{param_name}': {e}") from None
+            raise coded(2274, TypeError(
+                f"{func_name}: argument '{param_name}': {e}")) from None
 
     if param_type in _USER_TYPES:
         return value
@@ -2740,9 +2745,9 @@ def convert_unit_value(value: "UnitValue", target_unit, mk=None) -> "UnitValue":
             # rescaled: `unit tok -> ptrdiff` says a token index may be
             # used as a ptrdiff, not that one token is so many of them.
             return UnitValue(value.inner, target_unit)
-        raise TypeError(
+        raise coded(2327, TypeError(
             f"incompatible units: {value.unit.display_name} "
-            f"and {target_unit.display_name}")
+            f"and {target_unit.display_name}"))
     ratio = value.unit.factor / target_unit.factor
     inner = value.inner
     if isinstance(inner, IntValue):
@@ -2860,10 +2865,10 @@ def refuse_partial_application(value: Value, target: str):
     if (isinstance(value, LambdaValue) and value.partial_func is not None
             and not is_generic_type(target)):
         func = value.partial_func
-        raise TypeError(
+        raise coded(2275, TypeError(
             f"'{func.name}' was called with {len(value.partial_args)} of "
             f"its {len(func.params)} arguments; a call this unfinished "
-            f"answers a function, not {target}")
+            f"answers a function, not {target}"))
 
 
 def _coerce_to_type(value: Value, target_width: str, unit=None) -> Value:
@@ -2885,7 +2890,7 @@ def _coerce_to_type(value: Value, target_width: str, unit=None) -> Value:
         # value settles on it rather than staying uncommitted.
         return settle_untyped(value)
     if not validate_type(target_width):
-        raise TypeError(f"unknown type '{target_width}'")
+        raise coded(2112, TypeError(f"unknown type '{target_width}'"))
 
     container = parse_container_type(target_width)
     if container is not None:
@@ -2898,13 +2903,13 @@ def _coerce_to_type(value: Value, target_width: str, unit=None) -> Value:
         # own.
         inner = value.value if isinstance(value, SomeValue) else value
         if not isinstance(inner, TupleValue):
-            raise TypeError(
+            raise coded(2771, TypeError(
                 f"'{target_width}' is a tuple type, but the value is "
-                f"{runtime_type_of(inner)}")
+                f"{runtime_type_of(inner)}"))
         if len(inner.elements) != len(elements):
-            raise TypeError(
+            raise coded(2276, TypeError(
                 f"'{target_width}' has {len(elements)} elements, but the "
-                f"value has {len(inner.elements)}")
+                f"value has {len(inner.elements)}"))
         return TupleValue([coerce_to_type(v, t)
                            for v, t in zip(inner.elements, elements)])
 
@@ -2923,8 +2928,8 @@ def _coerce_to_type(value: Value, target_width: str, unit=None) -> Value:
     # widths involved.
     mismatch = _scalar_kind_mismatch(value, target_width)
     if mismatch is not None:
-        raise TypeError(
-            f"'{target_width}' cannot hold {mismatch}")
+        raise coded(2772, TypeError(
+            f"'{target_width}' cannot hold {mismatch}"))
 
     # A type states no unit, so a value carrying one is not that type.
     # Parting with a unit is a real change and is said with @dropunit
@@ -2941,9 +2946,9 @@ def _coerce_to_type(value: Value, target_width: str, unit=None) -> Value:
 
     if scalar and target_width in _STRUCT_TYPES:
         if not struct_type_admits(target_width, value):
-            raise TypeError(
+            raise coded(2831, TypeError(
                 f"'{target_width}' is a struct, "
-                f"but the value is {runtime_type_of(value)}")
+                f"but the value is {runtime_type_of(value)}"))
         return value
 
     if scalar and target_width in _ENUM_TYPES:
@@ -2961,10 +2966,10 @@ def _coerce_to_type(value: Value, target_width: str, unit=None) -> Value:
         # that names one decides it.
         if isinstance(value, IntValue):
             if not _int_is_exact_in_float(value.value, target_width):
-                raise TypeError(
+                raise coded(2277, TypeError(
                     f"{value.value} needs more significant bits than "
                     f"{target_width} has ({_SIGNIFICAND_BITS[target_width]}), "
-                    f"so it would not survive the conversion")
+                    f"so it would not survive the conversion"))
             return mk_float(float(value.value), target_width)
         if isinstance(value, FloatValue):
             return mk_float(check_float(value.value, target_width),
@@ -2985,15 +2990,15 @@ def _coerce_to_type(value: Value, target_width: str, unit=None) -> Value:
         arr = value.obj
         arr_info = _parse_array_type(target_width)
         if arr_info is None:
-            raise TypeError(array_type_mismatch(value, target_width))
+            raise coded(2773, TypeError(array_type_mismatch(value, target_width)))
         # T[] says dynamic and T[n] says fixed; either way the target
         # decides, not the source.
         elem_type, dims = arr_info
         declared = dims[0]
         if declared is not None and arr.sizeof != declared:
-            raise TypeError(
+            raise coded(2774, TypeError(
                 f"array size mismatch: type '{target_width}' declares "
-                f"{declared} elements, got {arr.sizeof}")
+                f"{declared} elements, got {arr.sizeof}"))
         # A dimension the target still has describes the rows, so what
         # each element is measured against is the type with that one
         # dimension taken off.

@@ -37,12 +37,12 @@ fn test_wide_widths():
 // A signed type spends one bit on the sign, so i7 reaches 63 and not
 // 127.  Going past is an overflow, as it is for the named types.
 @test
-@expect error "does not fit in i7 .range -64..63."
+@expect error 2279 "integer overflow: 64 does not fit in i7 (range -64..63)"
 fn error_signed_above_its_range():
     let a : i7 = 64
 
 @test
-@expect error "does not fit in i7 .range -64..63."
+@expect error 2279 "integer underflow: -65 does not fit in i7 (range -64..63)"
 fn error_signed_below_its_range():
     let a : i7 = ⁻65
 
@@ -56,14 +56,14 @@ fn test_unsigned_range_is_its_width():
 
 // One past the top of an odd width is refused like any other.
 @test
-@expect error "integer overflow.*does not fit in u7"
+@expect error 2279 "integer overflow: 128 does not fit in u7 (range 0..127)"
 fn error_u7_too_large():
     let a : u7 = 128
 
 // A signed type spends a bit on the sign, so a one-bit one would
 // have none left for the value and names no type.
 @test
-@expect error "unknown type 'i1'"
+@expect error 2112 "unknown type 'i1'"
 fn error_one_bit_signed():
     let a : i1 = 0
 
@@ -71,12 +71,12 @@ fn error_one_bit_signed():
 // that, so u128 is the widest unsigned type and i127 the widest
 // signed one.
 @test
-@expect error "unknown type 'u129'"
+@expect error 2112 "unknown type 'u129'"
 fn error_wider_than_a_variable():
     let a : u129 = 0
 
 @test
-@expect error "unknown type 'i128'"
+@expect error 2112 "unknown type 'i128'"
 fn error_signed_wider_than_a_variable():
     let a : i128 = 0
 
@@ -111,14 +111,14 @@ fn test_shift_within_the_value_bits():
     assert_eq(b « 5, 32)
 
 @test
-@expect error "moves every value bit out"
+@expect error 2289 "this shift moves every value bit out, so it can only fail; the count is too far for the type shifted"
 fn error_shift_past_an_unsigned_width():
     let a : u7 = 1
     _ ← a « 7
 
 // A signed type has one value bit fewer, so it stops one earlier.
 @test
-@expect error "moves every value bit out"
+@expect error 2289 "this shift moves every value bit out, so it can only fail; the count is too far for the type shifted"
 fn error_shift_past_a_signed_width():
     let a : i7 = 1
     _ ← a « 6
@@ -145,13 +145,13 @@ fn test_type_name_and_sizeof_of_a_binding():
 // A stated width names a type, so it is not available for anything
 // else.
 @test
-@expect error "'u7' names a type and cannot name a variable"
+@expect error 2243 "'u7' names a type and cannot name a variable"
 fn error_width_cannot_name_a_variable():
     let u7 := 5
 
 // A width of zero holds no values, so it names no type.
 @test
-@expect error "unknown type 'u0'"
+@expect error 2112 "unknown type 'u0'"
 fn error_zero_width():
     let a : u0 = 0
 

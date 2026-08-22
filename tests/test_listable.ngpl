@@ -256,7 +256,7 @@ fn test_std_sin_scalar_unchanged():
 // element to pair the extra ones with, and answering the shorter of
 // the two would be answering a question that was not asked.
 @test
-@expect error "must be the same length, but 'a' has 3 elements and 'b' has 2"
+@expect error 2236 "add: the arguments it threads over are taken apart together, so they must be the same length, but 'a' has 3 elements and 'b' has 2"
 fn error_lengths_that_disagree():
     let a : i64[] = [1, 2, 3]
     let b : i64[] = [10, 20]

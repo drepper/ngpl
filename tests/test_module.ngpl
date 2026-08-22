@@ -63,11 +63,11 @@ fn test_two_modules_may_hold_the_same_name():
     assert_eq(counts.twice(2), 4)
 
 // What a module did not export cannot be named from outside it.
-@expect error "not exported"
+@expect error 2911 "'shapes.scaled' is not exported from module 'shapes'; @export says what a module lets others name"
 fn error_what_is_not_exported_stays_in():
     _ ← shapes.scaled(1)
 
-@expect error "defines no"
+@expect error 2910 "module 'shapes' defines no 'perimeter'"
 fn error_a_name_the_module_does_not_have():
     _ ← shapes.perimeter(1)
 

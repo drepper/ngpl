@@ -111,13 +111,13 @@ fn test_precedence_matches_the_exact_operators():
 // A float answers overflow with an infinity, so it has no edge for a
 // saturating operator to hold it at.
 @test
-@expect error "is for integers"
+@expect error 2224 "saturating addition (⊞) is for integers, which state the range it holds a result inside; got float and float"
 @impure
 fn test_float_has_no_saturating_form():
     std.println("{}", 1.5 ⊞ 2.5)
 
 @test
-@expect error "is for integers"
+@expect error 2224 "saturating addition (⊞) is for integers, which state the range it holds a result inside; got str and str"
 @impure
 fn test_string_has_no_saturating_form():
     std.println("{}", "a" ⊞ "b")
@@ -158,7 +158,7 @@ fn test_the_three_answers_differ_only_at_the_edge():
     assert_eq(@wrap(a + 1), 0)
 
 @test
-@expect error "integer overflow"
+@expect error 2279 "integer overflow: 256 does not fit in u8 (range 0..255)"
 @impure
 fn test_the_exact_operator_still_reports():
     let a : u8 = 255

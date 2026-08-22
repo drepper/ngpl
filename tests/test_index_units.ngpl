@@ -75,49 +75,49 @@ fn test_byte_sizeof_index():
 // ---- typed integers without unit rejected (indexing) ---------------------
 
 @test
-@expect error "requires unit ptrdiff"
+@expect error 2319 "array index requires unit ptrdiff, got typed integer i32 without unit"
 fn test_reject_i32_index_read():
     let arr : mut i64[] = [1, 2, 3]
     let idx : mut i32 = 0
     let x : mut = arr[idx]
 
 @test
-@expect error "requires unit ptrdiff"
+@expect error 2319 "array index requires unit ptrdiff, got typed integer i32 without unit"
 fn test_reject_i32_index_write():
     let arr : mut i64[] = [1, 2, 3]
     let idx : mut i32 = 0
     arr[idx] ← 99
 
 @test
-@expect error "requires unit ptrdiff"
+@expect error 2319 "array index requires unit ptrdiff, got typed integer u32 without unit"
 fn test_reject_u32_index():
     let arr : mut i64[] = [1, 2, 3]
     let idx : mut u32 = 0
     let x : mut = arr[idx]
 
 @test
-@expect error "requires unit ptrdiff"
+@expect error 2319 "array index requires unit ptrdiff, got typed integer u32fast without unit"
 fn test_reject_u32fast_index():
     let arr : mut i64[] = [1, 2, 3]
     let idx : mut u32fast = 0
     let x : mut = arr[idx]
 
 @test
-@expect error "requires unit B"
+@expect error 2319 "array index requires unit B, got typed integer i32 without unit"
 fn test_reject_i32_byte_index_read():
     let buf : mut u8[3] = 3 ⍴ 0
     let idx : mut i32 = 0
     let x : mut = buf[idx]
 
 @test
-@expect error "requires unit B"
+@expect error 2319 "array index requires unit B, got typed integer i32 without unit"
 fn test_reject_i32_byte_index_write():
     let buf : mut u8[3] = 3 ⍴ 0
     let idx : mut i32 = 0
     buf[idx] ← 99
 
 @test
-@expect error "requires unit ptrdiff"
+@expect error 2319 "array index requires unit ptrdiff, got typed integer i32 without unit"
 fn test_reject_foreach_typed_index():
     let arr : mut i64[] = [10, 20, 30]
     foreach i : i32 = 0…2:
@@ -132,14 +132,14 @@ fn needs_byte(buf : byte[], off ¤byte : usize) → u8:
     buf[off]
 
 @test
-@expect error "requires unit ptrdiff"
+@expect error 2323 "needs_ptrdiff: parameter 'idx' requires unit ptrdiff, got typed integer i32 without unit"
 fn test_reject_typed_int_param_ptrdiff():
     let arr : mut i64[] = [1, 2, 3]
     let idx : mut i32 = 0
     needs_ptrdiff(arr, idx)
 
 @test
-@expect error "requires unit B"
+@expect error 2323 "needs_byte: parameter 'off' requires unit B, got typed integer usize without unit"
 fn test_reject_typed_int_param_byte():
     let buf : mut u8[3] = 3 ⍴ 0
     buf[0] ← 10
@@ -147,7 +147,7 @@ fn test_reject_typed_int_param_byte():
     needs_byte(buf, off)
 
 @test
-@expect error "requires unit ptrdiff"
+@expect error 2323 "needs_ptrdiff: parameter 'idx' requires unit ptrdiff, got typed integer u32 without unit"
 fn test_reject_u32_param():
     let arr : mut i64[] = [1, 2, 3]
     let idx : mut u32 = 1
@@ -188,19 +188,19 @@ fn test_typed_with_byte():
 // ---- wrong unit rejected ------------------------------------------------
 
 @test
-@expect error "requires unit ptrdiff"
+@expect error 2318 "array index requires unit ptrdiff, got B"
 fn test_reject_byte_for_general():
     let arr : mut i64[] = [1, 2, 3]
     let x : mut = arr[0 ¤byte]
 
 @test
-@expect error "requires unit B"
+@expect error 2318 "array index requires unit B, got ptrdiff"
 fn test_reject_ptrdiff_for_byte():
     let buf : mut u8[3] = 3 ⍴ 0
     let x : mut = buf[0 ¤ptrdiff]
 
 @test
-@expect error "requires unit ptrdiff"
+@expect error 2318 "array index requires unit ptrdiff, got m"
 fn test_reject_meter_for_general():
     let arr : mut i64[] = [1, 2, 3]
     let x : mut = arr[0 ¤meter]
@@ -209,7 +209,7 @@ fn test_reject_meter_for_general():
 
 // addition: typed int + unit → error
 @test
-@expect error "cannot .+ typed integer"
+@expect error 2312 "cannot + typed integer i32 without unit with unit ptrdiff"
 fn test_arith_typed_plus_unit():
     let a : mut i32 = 5
     let b ¤ptrdiff : mut i32 = 3
@@ -217,7 +217,7 @@ fn test_arith_typed_plus_unit():
 
 // addition: unit + typed int → error
 @test
-@expect error "cannot .+ unit .+ with typed integer"
+@expect error 2311 "cannot + unit ptrdiff with typed integer i32 without unit"
 fn test_arith_unit_plus_typed():
     let a ¤ptrdiff : mut i32 = 3
     let b : mut i32 = 5
@@ -225,7 +225,7 @@ fn test_arith_unit_plus_typed():
 
 // subtraction: unit - typed int → error
 @test
-@expect error "cannot - unit .+ with typed integer"
+@expect error 2311 "cannot - unit ptrdiff with typed integer i32 without unit"
 fn test_arith_unit_minus_typed():
     let a ¤ptrdiff : mut i32 = 3
     let b : mut i32 = 1
@@ -263,7 +263,7 @@ fn test_arith_typed_times_unit():
 
 // comparison: unit = typed int → error
 @test
-@expect error "cannot compare unit .+ with typed integer"
+@expect error 2314 "cannot compare unit ptrdiff with typed integer i32 without unit"
 fn test_cmp_unit_eq_typed():
     let a ¤ptrdiff : mut i32 = 3
     let b : mut i32 = 3
@@ -271,7 +271,7 @@ fn test_cmp_unit_eq_typed():
 
 // comparison: typed int < unit → error
 @test
-@expect error "cannot compare typed integer .+ without unit with unit"
+@expect error 2315 "cannot compare typed integer i32 without unit with unit ptrdiff"
 fn test_cmp_typed_lt_unit():
     let a : mut i32 = 1
     let b ¤ptrdiff : mut i32 = 3

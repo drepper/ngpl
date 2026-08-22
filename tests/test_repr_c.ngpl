@@ -106,7 +106,7 @@ fn test_layout_results_are_bytes():
     assert_eq(Point.alignof + 8¤byte, 16)
     assert_eq(Point.offsetof("y") + 8¤byte, 16)
 
-@expect error "incompatible units"
+@expect error 2313 "incompatible units for +: B and count"
 fn error_layout_is_not_a_count():
     let n : mut = @sizeof(Point) + 8¤count
 
@@ -145,15 +145,15 @@ struct Loose:
     a : i32
     b : i64
 
-@expect error "has no defined layout"
+@expect error 2823 "@sizeof: struct 'Loose' has no defined layout; annotate it with @repr(C) to give it one"
 fn error_sizeof_without_repr():
     let n : mut = @sizeof(Loose)
 
-@expect error "has no defined layout"
+@expect error 2819 "struct 'Loose' has no defined layout; annotate it with @repr(C) to give it one"
 fn error_alignof_without_repr():
     let n : mut = Loose.alignof
 
-@expect error "has no defined layout"
+@expect error 2818 "struct 'Loose' has no defined layout; annotate it with @repr(C) to give it one"
 fn error_offsetof_without_repr():
     let n : mut = Loose.offsetof("a")
 
@@ -168,11 +168,11 @@ fn test_loose_struct_still_works():
 // Field name errors
 // ---------------------------------------------------------------------
 
-@expect error "no field 'z'"
+@expect error 2818 "Point.offsetof: no field 'z'"
 fn error_offsetof_unknown_field():
     let n : mut = Point.offsetof("z")
 
-@expect error "field name must be a str"
+@expect error 2817 "Point.offsetof: field name must be a str"
 fn error_offsetof_not_a_string():
     let n : mut = Point.offsetof(0)
 

@@ -70,10 +70,10 @@ fn test_float_pow_zero():
 
 @test
 fn test_mixed_pow_rejected():
-  @expect error "matching types"
+  @expect error 2225 "exponentiation requires matching types, got untyped and float"
   let a : mut = 4 ↑ 0.5
 
-  @expect error "matching types"
+  @expect error 2225 "exponentiation requires matching types, got untyped and float"
   let b : mut = 8 ↑ (1.0 ÷ 3.0)
 
 // --- Right associativity ---
@@ -103,7 +103,7 @@ fn test_precedence_neg():
 @test
 fn test_overflow():
   let x: i8 = 2
-  @expect error "overflow"
+  @expect error 2279 "integer overflow: 256 does not fit in i8 (range -128..127)"
   let r : mut = x ↑ 8
 
 // --- Power with units ---

@@ -27,8 +27,16 @@ from collections import defaultdict
 
 
 def _escape(message: str) -> str:
-    """The message as an NGPL string literal's contents."""
-    return message.replace("\\", "\\\\").replace('"', '\\"')
+    """The message as an NGPL string literal's contents.
+
+    A diagnostic may say more than one line -- an assertion shows what
+    it expected under what it got -- and an expectation states it on
+    one, so the breaks are written rather than taken.
+    """
+    return (message.replace("\\", "\\\\")
+                   .replace('"', '\\"')
+                   .replace("\n", "\\n")
+                   .replace("\t", "\\t"))
 
 
 def _apply(path: str, drifts: list, dry_run: bool) -> int:
