@@ -1247,15 +1247,25 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let z : i64 = b.cst(0)
         let r : mut i64 = z
         let soff : mut i64 = tg.stat_size
-        if tg.id = TGT_RV32:
-            // RV32 has no fstat; statx reads the size instead.  An
-            // empty path with AT_EMPTY_PATH means "the descriptor".
-            let empty : i64 = b.call1(RT_ALLOC, b.cst(1))
-            b.stn(empty, 0, z, 1)
-            r ← b.sys5(SC_STATX, 0, empty, b.cst(4096), b.cst(2048), st)
-            soff ← tg.stx_size
-        else:
-            r ← b.sys2(SC_FSTAT, 0, st)
+        // How this machine is asked a file's size.  Written out per
+        // machine rather than as "riscv32, and everything else", so a
+        // seventh has to answer the question rather than inherit an
+        // answer: whether it has fstat is a property of that kernel,
+        // and riscv32 is the one that already says no.
+        match tg.id:
+            Tgt.rv32:
+                // RV32 has no fstat; statx reads the size instead.  An
+                // empty path with AT_EMPTY_PATH means "the descriptor".
+                let empty : i64 = b.call1(RT_ALLOC, b.cst(1))
+                b.stn(empty, 0, z, 1)
+                r ← b.sys5(SC_STATX, 0, empty, b.cst(4096), b.cst(2048), st)
+                soff ← tg.stx_size
+            Tgt.rv64: r ← b.sys2(SC_FSTAT, 0, st)
+            Tgt.a64: r ← b.sys2(SC_FSTAT, 0, st)
+            Tgt.a32: r ← b.sys2(SC_FSTAT, 0, st)
+            Tgt.i386: r ← b.sys2(SC_FSTAT, 0, st)
+            // x86-64 has its own RT_FREAD in rt_x86_64.ngpl
+            Tgt.x64: g_pioneer()
         let bad : i64 = b.clts(r, z)
         let lok : i64 = b.l()
         b.jz(bad, lok)
