@@ -187,6 +187,13 @@ impl RtB:
     fn stn(&mut self, base : i64, off : i64, v : i64, w : i64):
         self.o(IR_STN, base, off, v, 0, w)
 
+    // the address of a runtime routine, for the one thing that wants
+    // one rather than a jump to it: handing a handler to the kernel
+    fn faddr(&mut self, target : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_FADDR, target, 0, 0, d, 0)
+        d
+
     fn kaddr(&mut self, which : i64, off : i64) → i64:
         let d : i64 = self.t()
         self.o(IR_KADDR, which, off, 0, d, 0)
@@ -315,6 +322,8 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
     if id = RT_SHA256INIT: return rt_sha256init_ir()
     if id = RT_SHA256BLK: return rt_sha256blk_ir()
     if id = RT_SHA256FIN: return rt_sha256fin_ir()
+    if id = RT_SIGINIT: return rt_siginit_ir(tg)
+    if id = RT_SEGV: return rt_segv_ir(tg, &lw)
     if id = RT_WRITE1 or id = RT_WRITE2:
         // (buf, len): the loop puts every byte down or dies trying
         let b : mut RtB = rtb(2)

@@ -53,5 +53,6 @@ NGPLC_SOURCES=(
     src/rt_portable.ngpl   # the runtime those five share, written as IR
     src/rt_hash.ngpl       # the hash handle, fed a piece at a time
     src/rt_sha256.ngpl     # SHA-256 as IR, which all six compile
+    src/rt_signal.ngpl     # catching the stack running out, as IR
     src/codegen_t.ngpl     # the pipeline for every target but the pioneer
 )

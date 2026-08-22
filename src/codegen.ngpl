@@ -284,7 +284,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                               skipping: 0, rt_need: [],
                               rx: [], rx_pos: [], rx_off: [],
                               tf_pos: [], tf_lab: [], tf_form: [],
-                              ff_pos: [], ff_fn: [], k_args: 0, k_alloc: 0})
+                              ff_pos: [], ff_fn: [], k_args: 0, k_alloc: 0, k_sig: 0})
     let nglobals : i64 = @dropunit(#a.globals)
     // The data a program carries falls into three kinds.  One is never
     // written and rides with the other read-only things.  One is
@@ -311,8 +311,9 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // what the kernel handed over is written once, at the very top of
     // the program, so it belongs with the rest of the relro
     let args_off : i64 = 8 × n_relro
-    let relro_size : i64 = align_up(args_off + 32, PAGE)
-    let alloc_off : i64 = relro_size + 8 × n_rw
+    let relro_size : i64 = align_up(args_off + KB_SIZE, PAGE)
+    // the signal structures sit at the head of the writable data
+    let alloc_off : i64 = relro_size + SIG_SIZE + 8 × n_rw
     let k_ro : mut i64 = 0
     let k_relro : mut i64 = 0
     let k_rw : mut i64 = 0
@@ -320,7 +321,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         foreach i := 0…nglobals - 1:
             if a.globals[i × 1¤ptrdiff].is_mut:
                 em.gseg.push(1)
-                em.gmap.push(relro_size + 8 × k_rw)
+                em.gmap.push(relro_size + SIG_SIZE + 8 × k_rw)
                 k_rw ← k_rw + 1
             elif is_relro[i × 1¤ptrdiff] = 1:
                 em.gseg.push(1)
@@ -393,6 +394,14 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     em.movimm(R_AX, guard_size + stack_size)
     em.b3(72, 1, 216)               // add rax, rbx: the head of the region
     em.b3(72, 137, 196)             // mov rsp, rax: and the program stands
+    // Where the guard is, for the handler to compare a faulting
+    // address against.  Written here because here is where it is
+    // known, and sealed with the rest of the relro straight after.
+    em.dref(R_R11, args_off)
+    em.b4(73, 137, 91, KB_GLO)      // mov [r11+KB_GLO], rbx
+    em.movimm(R_AX, guard_size)
+    em.b3(72, 1, 216)               // add rax, rbx
+    em.b4(73, 137, 67, KB_GHI)      // mov [r11+KB_GHI], rax
     em.jlocal(⁻1, 1)
     em.set_label(0)
     let smsg : i64 = lw.intern("the stack could not be reserved\n")
@@ -400,6 +409,65 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     em.movimm(R_DX, str_len("the stack could not be reserved\n"))
     em.jglobal(232, ⁻1, RT_ABORT)
     em.set_label(1)
+    em.resolve_locals()
+    // ------------------------------------------------------------------
+    // Catching the stack running out
+    // ------------------------------------------------------------------
+    //
+    // A program that recurses too deep walks off the bottom of its
+    // stack into the guard, which is mapped unreadable, and the kernel
+    // sends SIGSEGV.  Without a handler that is a bare "Segmentation
+    // fault" from the shell, which says nothing about which of the two
+    // things it was.  With one, and with the guard's bounds to compare
+    // the faulting address against, the program can say so itself.
+    //
+    // The handler needs a stack of its own -- the one that ran out is
+    // no place to put a frame -- so a small region is mapped for it
+    // and sigaltstack is told about it.
+    em.begin_fn(1)
+    em.b2(49, 255)                  // xor edi, edi
+    em.movimm(R_SI, SIGALT_BYTES)
+    em.movimm(R_DX, 3)              // PROT_READ|PROT_WRITE
+    em.movimm(R_R10, 16418)         // PRIVATE|ANONYMOUS|NORESERVE
+    em.movimm(R_R8, ⁻1)
+    em.b3(69, 49, 201)              // xor r9d, r9d
+    em.movimm(R_AX, 9)
+    em.b2(15, 5)                    // mmap
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(136, 0)               // js: no handler stack, so no handler
+    em.dref(R_R11, relro_size)
+    em.b4(73, 137, 67, SIG_ALT)     // mov [r11+SIG_ALT], rax: ss_sp
+    em.b3(72, 49, 192)              // xor rax, rax
+    em.b4(73, 137, 67, SIG_ALT + 8) // ss_flags
+    em.movimm(R_AX, SIGALT_BYTES)
+    em.b4(73, 137, 67, SIG_ALT + 16)  // ss_size
+    em.b3(73, 141, 123)
+    em.b1(SIG_ALT)                  // lea rdi, [r11+SIG_ALT]
+    em.b3(72, 49, 246)              // xor rsi, rsi
+    em.movimm(R_AX, tgt.sc_sigaltstack)
+    em.b2(15, 5)
+    // the action: the handler's own address, the flags that ask for
+    // the faulting address and for the handler's own stack, and a
+    // restorer, which x86-64 will not take a handler without
+    em.dref(R_R11, relro_size)
+    em.b3(72, 141, 5)               // lea rax, [rip+disp32]
+    em.gref_code(RT_SEGV)
+    em.b4(73, 137, 67, SIG_ACT)     // sa_handler
+    em.movimm(R_AX, SA_FLAGS_R)
+    em.b4(73, 137, 67, SIG_ACT + 8)   // sa_flags
+    em.b3(72, 141, 5)
+    em.gref_code(RT_SIGRET)
+    em.b4(73, 137, 67, SIG_ACT + 16)  // sa_restorer
+    em.b3(72, 49, 192)
+    em.b4(73, 137, 67, SIG_ACT + 24)  // sa_mask
+    em.movimm(R_DI, SIGSEGV_NO)
+    em.b3(73, 141, 115)
+    em.b1(SIG_ACT)                  // lea rsi, [r11+SIG_ACT]
+    em.b3(72, 49, 210)              // xor rdx, rdx
+    em.movimm(R_R10, 8)             // the mask is eight bytes
+    em.movimm(R_AX, tgt.sc_rt_sigaction)
+    em.b2(15, 5)
+    em.set_label(0)
     em.resolve_locals()
     let ninit : i64 = @dropunit(#chk.ginit)
     let g1 : i64 = 1 if ninit > 0 else 0
@@ -465,7 +533,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // What the program calls, and what that calls in turn.  Everything
     // emitted so far is the program's own; the calls it made name the
     // runtime it needs, and the edge list closes over the rest.
-    let nrt : i64 = 58
+    let nrt : i64 = 61
     foreach _ := 1…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
@@ -487,7 +555,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             if em.rt_need[from × 1¤ptrdiff] = 1 and em.rt_need[to × 1¤ptrdiff] = 0:
                 em.rt_need[to × 1¤ptrdiff] ← 1
                 changed ← true
-    emit_runtime(&em, &lw, alloc_off, args_off)
+    emit_runtime(&em, &lw, alloc_off, args_off, relro_size)
     em.skipping ← 0
     if #em.rt_off > 0:
         foreach i := 0…nrt - 1:
@@ -571,10 +639,14 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         foreach i := 0…nglobals - 1:
             if em.gseg[i × 1¤ptrdiff] = 1 and em.gmap[i × 1¤ptrdiff] < relro_size:
                 push64(&data, chk.gvals[i × 1¤ptrdiff])
-    // argc, argv, envp and the auxiliary vector, then the page's rest
-    foreach _ := 1…32:
+    // argc, argv, envp, the auxiliary vector and the guard's two
+    // bounds, then the page's rest
+    foreach _ := 1…KB_SIZE:
         data.push(0)
     while @dropunit(#data) < relro_size:
+        data.push(0)
+    // the structures the kernel is handed when the handler is installed
+    foreach _ := 1…SIG_SIZE:
         data.push(0)
     if nglobals > 0:
         foreach i := 0…nglobals - 1:

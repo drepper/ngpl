@@ -1,0 +1,108 @@
+// ===========================================================================
+// Catching the stack running out
+// ===========================================================================
+//
+// A program that recurses too deep walks off the bottom of its stack
+// into the guard, which is mapped unreadable, and the kernel sends
+// SIGSEGV.  Without a handler that is a bare "Segmentation fault" from
+// the shell, which says nothing about which of the two things it was
+// and is the one runtime stop this language does not report in its own
+// voice.  With a handler, and with the guard's bounds to compare the
+// faulting address against, the program can say what happened.
+//
+// Two routines, written as IR and compiled by the five; the pioneer
+// writes its own in rt_x86_64.ngpl, because its startup is machine
+// code and its kernel wants a restorer nobody else does.
+//
+// The one thing that has to be right is that the handler runs on a
+// stack of its own.  The stack that ran out is no place to put a
+// frame, and a handler that tried would fault again inside the
+// handler, which the kernel answers by killing the program outright.
+// That is what sigaltstack is for.
+//
+// Offsets here are immediates in a load or a store, not quantities the
+// program computes with, so they carry no unit -- as everywhere the IR
+// is built.
+
+// Where the mask sits in the kernel's struct sigaction.  Three
+// architectures put a restorer between the flags and the mask and
+// three do not, and the field is there or not there in the layout
+// whether or not the flag that uses it is set.
+fn sa_mask_off(tg : Target) → i64:
+    if tg.sa_restorer_off >= 0:
+        return tg.sa_restorer_off + tg.ptr
+    2 × tg.ptr
+
+// Where the faulting address sits in the siginfo the kernel hands
+// over: past the signal number, the errno and the code, which are
+// three ints, and past the padding a 64-bit machine adds to them.
+fn si_addr_off(tg : Target) → i64:
+    16 if tg.is64 else 12
+
+// () → nothing.  Called from the startup once the stack is standing
+// and the guard's bounds are written down, since both of those are
+// what the handler will want.
+fn rt_siginit_ir(tg : Target) → IrFn:
+    let pw : i64 = tg.ptr
+    let b : mut RtB = rtb(0)
+    let z : i64 = b.cst(0)
+    let s : i64 = b.kaddr(2, 0)
+    // A stack for the handler.  If the kernel will not give one there
+    // is no handler to install: a handler without a stack is worse
+    // than none, because it turns a report into a second fault.
+    let m : i64 = b.sys6(SC_MMAP, z, b.cst(SIGALT_BYTES), b.cst(3),
+                         b.cst(16418), b.cst(⁻1), z)
+    let bad : i64 = b.clts(m, z)
+    let lout : i64 = b.l()
+    b.jnz(bad, lout)
+    b.stn(s, SIG_ALT, m, pw)
+    b.stn(s, SIG_ALT + pw, z, 4)
+    b.stn(s, SIG_ALT + 2 × pw, b.cst(SIGALT_BYTES), pw)
+    _ ← b.sys2(SC_SIGALTSTACK, b.add(s, b.cst(SIG_ALT)), z)
+    // and the action: the handler, and the flags that ask for the
+    // faulting address and for the handler's own stack
+    let h : i64 = b.faddr(RT_SEGV)
+    b.stn(s, SIG_ACT, h, pw)
+    b.stn(s, SIG_ACT + pw, b.cst(SA_FLAGS_N), pw)
+    b.stn(s, SIG_ACT + sa_mask_off(tg), z, 8)
+    _ ← b.sys4(SC_RT_SIGACTION, b.cst(SIGSEGV_NO),
+               b.add(s, b.cst(SIG_ACT)), z, b.cst(8))
+    b.lab(lout)
+    b.retn()
+    rtb_fn(b)
+
+// (signum, siginfo, ucontext), entered by the kernel on the stack
+// above.  One comparison is what makes it worth having: the faulting
+// address against the guard's bounds.
+//
+// Inside them the program walked off the bottom of its stack, and it
+// says so and stops the way every other runtime stop does.  Outside
+// them it is an ordinary fault in a program that had a bug, and the
+// best thing to do is get out of the way: put the default action back
+// and return, so the faulting instruction runs again and the program
+// dies of it exactly as it would have, core dump and all.
+fn rt_segv_ir(tg : Target, lw : &mut Lower) → IrFn:
+    let pw : i64 = tg.ptr
+    let b : mut RtB = rtb(3)
+    let z : i64 = b.cst(0)
+    let k : i64 = b.kaddr(0, 0)
+    // Where the siginfo the kernel handed over is.  A routine here
+    // takes its arguments in eight-byte cells whatever the machine's
+    // word is, and the kernel hands a handler three words: on a 64-bit
+    // machine those line up one to a cell, and on a 32-bit machine the
+    // kernel's three words fill one and a half cells, so the second of
+    // them -- the siginfo -- is the high half of the first.
+    let info : i64 = 1 if tg.is64 else b.shr(0, b.cst(32))
+    let at : i64 = b.ldn(info, si_addr_off(tg), pw)
+    let lnot : i64 = b.l()
+    b.jnz(b.cltu(at, b.ldn(k, KB_GLO, 8)), lnot)
+    b.jnz(b.cgeu(at, b.ldn(k, KB_GHI, 8)), lnot)
+    b.abort_msg(lw.intern(stack_overflow_msg()))
+    b.lab(lnot)
+    let s : i64 = b.kaddr(2, 0)
+    b.stn(s, SIG_ACT, z, pw)
+    b.stn(s, SIG_ACT + pw, z, pw)
+    _ ← b.sys4(SC_RT_SIGACTION, b.cst(SIGSEGV_NO),
+               b.add(s, b.cst(SIG_ACT)), z, b.cst(8))
+    b.retn()
+    rtb_fn(b)

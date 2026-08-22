@@ -608,7 +608,7 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
             let pos : i64 = g_absref(&em, tg, RG_A)
             if em.skipping = 0:
                 em.df_pos.push(pos)
-                em.df_off.push((em.k_args if a = 0 else em.k_alloc) + b)
+                em.df_off.push((em.k_args if a = 0 else (em.k_alloc if a = 1 else em.k_sig)) + b)
             g_sts(&em, tg, RG_A, d)
         else:
             assert(false, "an IR op the driver knows")

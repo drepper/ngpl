@@ -136,18 +136,45 @@ review's probes have turned up that every gate had passed, and the
 second (after A1) that only existed because nobody had written the
 question down.
 
-### A4. Stack exhaustion contradicts the spec (**probed**)
+### A4. Stack exhaustion contradicts the spec (**probed**) — ~~open~~ **mostly settled**
 
 The spec defines `std.errors.stack_overflow` (code 102).  In fact the
-interpreter reports Python's "maximum recursion depth exceeded" and
-compiled binaries die of SIGSEGV on the guard page.  Neither produces
-error 102.  Either the spec should say "resource exhaustion
-terminates the program; the guard makes it immediate and safe," or
-the compiled runtime needs a SIGSEGV handler that recognizes the
-guard page and reports in the language's own voice.  Related:
-**exit codes on runtime errors are unspecified** — the interpreter
-exits 1 where compiled binaries exit 134 (SIGABRT), and the abort-mode
-tests assert only "nonzero," so the fork is invisible to the suite.
+interpreter reported Python's "maximum recursion depth exceeded" and
+compiled binaries died of SIGSEGV on the guard page.  Neither produced
+error 102.
+
+**Settled, for four of the six machines and for the interpreter.**  A
+compiled program installs a SIGSEGV handler at startup, on a stack of
+its own — the one that ran out is no place to put a frame, which is
+what sigaltstack is for — and the handler compares the faulting address
+against the guard's two bounds, which the startup writes into the
+kernel block when it makes them.  Inside them, the program says
+
+```
+stack overflow: the program ran past the bottom of its stack
+```
+
+and stops the way every other runtime stop does.  Outside them it is an
+ordinary fault in a program that had a bug: the handler puts the
+default action back and returns, so the faulting instruction runs again
+and the program dies of it exactly as it would have, core dump and all.
+The interpreter, which has no guard page to fault on, catches Python's
+`RecursionError` and says the same sentence.
+
+x86-64, i386, aarch64 and riscv64 report it.  **arm and riscv32 do
+not**, and this is the part that is not settled: a handler is entered
+with the kernel's calling convention, and those two take a routine's
+arguments on the stack where the kernel puts them in registers, so a
+handler would read whatever the alternate stack happened to hold.  They
+need a trampoline of their own; until then a stack that runs out there
+dies of a plain fault, as it did everywhere before.  The gap is in the
+spec and in TODO-compiler.md rather than hidden.
+
+Not addressed: **exit codes on runtime errors**.  The interpreter exits
+1 where compiled binaries exit 134, and the abort-mode tests assert
+only "nonzero", so the fork is still invisible to the suite.  Stack
+exhaustion now goes through the same abort path as everything else,
+which makes it one fork rather than two, but the fork itself remains.
 
 ### A5. Enum distinctness (**probed**)
 

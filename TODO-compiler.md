@@ -49,6 +49,18 @@ The Compiler
     -- for the parser, which by then knows what the file declared, to put on the literal.  This
     is what the interpreter always did, where ¤ is an ordinary operator.
 
+[ ] arm and riscv32 do not report a stack overflow.  The other four install a SIGSEGV
+    handler at startup, on a sigaltstack, and compare the faulting address against the
+    guard's bounds; these two cannot, because a handler is entered with the kernel's calling
+    convention and they take a routine's arguments on the stack where the kernel puts them
+    in registers -- so what the handler would read is whatever the alternate stack happened
+    to hold.  x86-64 and i386 pass on the stack (i386 by an accident that lines the kernel's
+    three words up with the first argument cell and a half), and the 64-bit machines pass one
+    argument to a register, which is why those four manage.  What these two need is a
+    trampoline entered by the kernel that puts r0/r1 -- a0/a1 on rv32 -- where the runtime's
+    prologue looks for them, and then calls RT_SEGV.  Spec: "The Stack Running Out", where
+    the gap is written down.
+
 [ ] a copy at a call, for the types that have none.  By value means a copy, elided
     wherever nothing can change the original during the call -- which is everywhere but a
     &mut of the same binding in the same call.  There the copy is made, and an array of

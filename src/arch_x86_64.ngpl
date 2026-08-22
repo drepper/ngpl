@@ -457,7 +457,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
         elif o = IR_KADDR:
             // the address of a block the runtime keeps in the data
             // segment: 0 is the kernel's, 1 the allocator's
-            em.dref(R_AX, (em.k_args if a = 0 else em.k_alloc) + b)
+            em.dref(R_AX, (em.k_args if a = 0 else (em.k_alloc if a = 1 else em.k_sig)) + b)
             em.store(R_AX, d)
         elif o = IR_FLD:
             em.load(R_AX, a)

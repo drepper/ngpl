@@ -7,7 +7,8 @@
 // which writes them once as IR and lets the driver spell them; these
 // are what those are checked against.
 
-fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64):
+fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64,
+                relro_off : i64):
     // RT_PRINTI: rdi = signed value → decimal on fd 1
     em.rt_begin(RT_PRINTI)
     em.begin_fn(3)
@@ -1792,3 +1793,52 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     emit_fn(&em, rt_sha256blk_ir(), 1, lw.strs)
     em.rt_begin(RT_SHA256FIN)
     emit_fn(&em, rt_sha256fin_ir(), 1, lw.strs)
+
+    // ------------------------------------------------------------------
+    // The stack running out
+    // ------------------------------------------------------------------
+    //
+    // RT_SEGV(signum, siginfo, ucontext), entered by the kernel on its
+    // own stack.  What makes it worth having is one comparison: the
+    // faulting address against the guard's bounds.  Inside them, the
+    // program walked off the bottom of its stack, and it says so in
+    // its own voice and stops the way every other runtime stop does.
+    // Outside them it is an ordinary fault in a program that had a
+    // bug, and the best thing to do is get out of the way -- put the
+    // default action back and return, and the faulting instruction
+    // runs again and dies of it, core dump and all.
+    em.rt_begin(RT_SEGV)
+    em.b4(72, 139, 70, 16)          // mov rax, [rsi+16]: si_addr
+    em.dref(R_R11, args_off)
+    em.b4(73, 139, 75, KB_GLO)      // mov rcx, [r11+KB_GLO]
+    em.b3(72, 57, 200)              // cmp rax, rcx
+    em.jlocal(130, 0)               // jb: below the guard
+    em.b4(73, 139, 75, KB_GHI)      // mov rcx, [r11+KB_GHI]
+    em.b3(72, 57, 200)              // cmp rax, rcx
+    em.jlocal(131, 0)               // jae: above it, so in the stack proper
+    let ovm2 : i64 = lw.intern(stack_overflow_msg())
+    em.sref(R_SI, ovm2)
+    em.movimm(R_DX, str_len(lw.strs[ovm2 × 1¤ptrdiff]))
+    em.jglobal(233, ⁻1, RT_ABORT)
+    em.set_label(0)
+    // not the guard: the default action, put back, and let it happen
+    em.dref(R_R11, relro_off)
+    em.b3(72, 49, 192)              // xor rax, rax
+    em.b4(73, 137, 67, SIG_ACT)     // sa_handler ← SIG_DFL
+    em.b4(73, 137, 67, SIG_ACT + 8) // sa_flags ← 0
+    em.movimm(R_DI, SIGSEGV_NO)
+    em.b3(73, 141, 115)
+    em.b1(SIG_ACT)                  // lea rsi, [r11+SIG_ACT]
+    em.b3(72, 49, 210)              // xor rdx, rdx
+    em.movimm(R_R10, 8)
+    em.movimm(R_AX, 13)             // rt_sigaction
+    em.b2(15, 5)
+    em.b1(195)                      // ret: through the restorer, and again
+    em.resolve_locals()
+
+    // The trampoline the kernel returns through.  x86-64 will not
+    // install a handler without one, and returning from the handler
+    // above is how an ordinary fault gets to happen twice.
+    em.rt_begin(RT_SIGRET)
+    em.movimm(R_AX, 15)             // rt_sigreturn
+    em.b2(15, 5)

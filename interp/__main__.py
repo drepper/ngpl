@@ -2224,6 +2224,12 @@ def _borrow_base(expr) -> str | None:
         return None
 
 
+# What a program says when its stack runs out.  The compiler's runtime
+# says the same, from src/emit.ngpl's stack_overflow_msg().
+STACK_OVERFLOW_MESSAGE = (
+    "stack overflow: the program ran past the bottom of its stack")
+
+
 def _static_borrow_check(func_def) -> str | None:
     """Refuse a container changed while something is walking it.
 
@@ -3813,6 +3819,16 @@ def main():
         sys.exit(e.code)
     except ProgramAbort as e:
         _report_abort(e, source_path, args.interpreter_backtrace)
+    except RecursionError as e:
+        # The stack running out, which a compiled program reports by
+        # catching the fault on its guard page.  Python says it in its
+        # own words -- "maximum recursion depth exceeded" -- and the
+        # program that ran out has no idea what Python is, so it is
+        # said here the way the other implementation says it.
+        _show_error(RuntimeError(STACK_OVERFLOW_MESSAGE), source,
+                    source_path, evaluator,
+                    show_backtrace=args.interpreter_backtrace)
+        sys.exit(1)
     except AssertionError as e:
         _show_error(e, source, source_path, evaluator,
                     show_backtrace=args.interpreter_backtrace)

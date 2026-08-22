@@ -1,0 +1,25 @@
+// A stack that runs out says so.
+//
+// A compiled program that recurses too deep walks off the bottom of
+// its stack into the guard, which is mapped unreadable, and the kernel
+// sends SIGSEGV.  Without a handler that is a bare "Segmentation
+// fault" from the shell -- the one runtime stop this language did not
+// report in its own voice.  With one, and with the guard's bounds to
+// compare the faulting address against, the program says what
+// happened and stops the way every other runtime stop does.
+//
+// The interpreter has no guard page to fault on; it runs out of
+// Python's stack instead, and says the same sentence rather than
+// Python's.
+//
+// Both runs print the prefix below and then fail, which is what a t9N
+// file asks for.  What they say afterwards goes to the error stream.
+
+fn down(n : i64) → i64:
+    1 + down(n + 1)
+
+@start
+@impure
+fn main():
+    std.println("going down")
+    std.println("{}", down(0))

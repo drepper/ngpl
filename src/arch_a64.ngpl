@@ -25,7 +25,7 @@ let CC_GE : i64 = 5
 let IR_SYSC : i64 = 108    // d ← syscall a (an SC_* index); extra b: [argc, arg vregs…]
 let IR_LDN : i64 = 109     // d ← mem[vreg a + imm b]; w = width in bytes, 0 for a pointer, +256 for signed
 let IR_STN : i64 = 110     // mem[vreg a + imm b] ← vreg c; w = width, 0 for a pointer
-let IR_KADDR : i64 = 111   // d ← a data address: a = 0 the kernel block, 1 the allocator's; b = byte offset
+let IR_KADDR : i64 = 111   // d ← a data address: a = 0 the kernel block, 1 the allocator's, 2 the signal block; b = byte offset
 
 // what the runtime asks of the kernel, named so the builders stay
 // architecture-blind; the target row resolves each to its number
@@ -42,6 +42,8 @@ let SC_EXIT : i64 = 9
 let SC_GETDENTS : i64 = 10
 let SC_OPENAT : i64 = 11
 let SC_STATX : i64 = 12
+let SC_RT_SIGACTION : i64 = 13
+let SC_SIGALTSTACK : i64 = 14
 
 fn sc_number(tg : Target, id : i64) → i64:
     if id = SC_READ: return tg.sc_read
@@ -56,6 +58,8 @@ fn sc_number(tg : Target, id : i64) → i64:
     if id = SC_EXIT: return tg.sc_exit
     if id = SC_GETDENTS: return tg.sc_getdents
     if id = SC_OPENAT: return tg.sc_openat
+    if id = SC_RT_SIGACTION: return tg.sc_rt_sigaction
+    if id = SC_SIGALTSTACK: return tg.sc_sigaltstack
     assert(id = SC_STATX, "a syscall the table knows")
     tg.sc_statx
 

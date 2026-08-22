@@ -67,6 +67,16 @@ struct Target:
     stat_size : i64      // where st_size sits in what fstat fills in
     o_directory : i64    // O_DIRECTORY: x86 and the generic table disagree
     sc_statx : i64       // where an fstat-less arch (rv32) reads a size
+    // What a program needs to catch its own stack running out: a
+    // handler, and a stack for the handler to run on, since the one
+    // that ran out is no place to put a frame.
+    sc_rt_sigaction : i64
+    sc_sigaltstack : i64
+    // Where the restorer goes in the kernel's struct sigaction, or ⁻1
+    // where the architecture has none and the mask follows the flags.
+    // x86-64, i386 and arm carry one; aarch64 and riscv do not, and
+    // their struct is shorter by a word because of it.
+    sa_restorer_off : i64
     stx_size : i64       // …and where st_size sits in what it fills
 
 fn targets() → Target[]:
@@ -76,37 +86,37 @@ fn targets() → Target[]:
                   sc_read: 0, sc_write: 1, sc_close: 3, sc_fstat: 5,
                   sc_mmap: 9, sc_mprotect: 10, sc_writev: 20,
                   sc_getpid: 39, sc_kill: 62, sc_exit: 60,
-                  sc_getdents: 217, sc_openat: 257, stat_size: 48, o_directory: 65536, sc_statx: 291, stx_size: 40})
+                  sc_getdents: 217, sc_openat: 257, stat_size: 48, o_directory: 65536, sc_statx: 291, stx_size: 40, sc_rt_sigaction: 13, sc_sigaltstack: 131, sa_restorer_off: 16})
     t.push(Target{id: TGT_I386, name: "i386", machine: Em.i386, is64: false,
                   eflags: 0, ptr: 4,
                   sc_read: 3, sc_write: 4, sc_close: 6, sc_fstat: 197,
                   sc_mmap: 192, sc_mprotect: 125, sc_writev: 146,
                   sc_getpid: 20, sc_kill: 37, sc_exit: 1,
-                  sc_getdents: 220, sc_openat: 295, stat_size: 44, o_directory: 65536, sc_statx: 383, stx_size: 40})
+                  sc_getdents: 220, sc_openat: 295, stat_size: 44, o_directory: 65536, sc_statx: 383, stx_size: 40, sc_rt_sigaction: 174, sc_sigaltstack: 186, sa_restorer_off: 8})
     t.push(Target{id: TGT_A64, name: "aarch64", machine: Em.aarch64, is64: true,
                   eflags: 0, ptr: 8,
                   sc_read: 63, sc_write: 64, sc_close: 57, sc_fstat: 80,
                   sc_mmap: 222, sc_mprotect: 226, sc_writev: 66,
                   sc_getpid: 172, sc_kill: 129, sc_exit: 93,
-                  sc_getdents: 61, sc_openat: 56, stat_size: 48, o_directory: 16384, sc_statx: 291, stx_size: 40})
+                  sc_getdents: 61, sc_openat: 56, stat_size: 48, o_directory: 16384, sc_statx: 291, stx_size: 40, sc_rt_sigaction: 134, sc_sigaltstack: 132, sa_restorer_off: ⁻1})
     t.push(Target{id: TGT_A32, name: "arm", machine: Em.arm, is64: false,
                   eflags: EF_ARM_EABI_VER5 | EF_ARM_ABI_FLOAT_SOFT, ptr: 4,
                   sc_read: 3, sc_write: 4, sc_close: 6, sc_fstat: 197,
                   sc_mmap: 192, sc_mprotect: 125, sc_writev: 146,
                   sc_getpid: 20, sc_kill: 37, sc_exit: 1,
-                  sc_getdents: 217, sc_openat: 322, stat_size: 48, o_directory: 16384, sc_statx: 397, stx_size: 40})
+                  sc_getdents: 217, sc_openat: 322, stat_size: 48, o_directory: 16384, sc_statx: 397, stx_size: 40, sc_rt_sigaction: 174, sc_sigaltstack: 186, sa_restorer_off: 8})
     t.push(Target{id: TGT_RV64, name: "riscv64", machine: Em.riscv, is64: true,
                   eflags: 0, ptr: 8,
                   sc_read: 63, sc_write: 64, sc_close: 57, sc_fstat: 80,
                   sc_mmap: 222, sc_mprotect: 226, sc_writev: 66,
                   sc_getpid: 172, sc_kill: 129, sc_exit: 93,
-                  sc_getdents: 61, sc_openat: 56, stat_size: 48, o_directory: 65536, sc_statx: 291, stx_size: 40})
+                  sc_getdents: 61, sc_openat: 56, stat_size: 48, o_directory: 65536, sc_statx: 291, stx_size: 40, sc_rt_sigaction: 134, sc_sigaltstack: 132, sa_restorer_off: ⁻1})
     t.push(Target{id: TGT_RV32, name: "riscv32", machine: Em.riscv, is64: false,
                   eflags: 0, ptr: 4,
                   sc_read: 63, sc_write: 64, sc_close: 57, sc_fstat: 80,
                   sc_mmap: 222, sc_mprotect: 226, sc_writev: 66,
                   sc_getpid: 172, sc_kill: 129, sc_exit: 93,
-                  sc_getdents: 61, sc_openat: 56, stat_size: 48, o_directory: 65536, sc_statx: 291, stx_size: 40})
+                  sc_getdents: 61, sc_openat: 56, stat_size: 48, o_directory: 65536, sc_statx: 291, stx_size: 40, sc_rt_sigaction: 134, sc_sigaltstack: 132, sa_restorer_off: ⁻1})
     t
 
 // The architecture this compiler is running on, which is what a

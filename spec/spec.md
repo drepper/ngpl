@@ -9283,6 +9283,23 @@ backtrace (innermost call first):
   #1 main at program.ngpl:10:4
 ```
 
+### The Stack Running Out
+
+A program is given a stack of a stated size — `--stack-size`, eight mebibytes by default — with a guard below it: `--guard-size` bytes, sixty-four kibibytes by default, mapped so that touching them faults.  A program that recurses too deep walks off the bottom of its stack into the guard rather than into whatever the kernel put beneath, which is what makes running out of stack a stop rather than a corruption.
+
+**Running out of stack is reported in the language's own voice**, not as a bare fault from the shell:
+
+```
+going down
+stack overflow: the program ran past the bottom of its stack
+```
+
+and the program stops the way every other runtime stop does.  A compiled program does this by catching the fault: it installs a handler for it at startup, on a stack of its own — the one that ran out is no place to put a frame — and the handler compares the faulting address against the guard's two bounds, which the startup wrote down when it made them.  An address inside them is the stack running out; anything else is an ordinary fault in a program that had a bug, and the handler puts the default action back and returns, so the program dies of it exactly as it would have, core dump and all.
+
+The guard has to be at least as deep as the deepest single frame, or a function could claim its whole frame in one step and land past the guard without touching it.  The compiler checks this and refuses a program whose deepest frame is larger than the guard, naming the size to raise `--guard-size` to.
+
+> **Where this works.**  x86-64, i386, aarch64 and riscv64 report it.  arm and riscv32 do not yet — a handler is entered with the kernel's calling convention rather than the language's, and on those two the two do not line up without a trampoline that has not been written.  There a stack that runs out dies of a plain fault, as it did everywhere before.  The guard is there on all six; only the report is missing on two.
+
 ### Backtraces
 
 When a program ends abnormally the interpreter prints the chain of calls that led there, innermost first:

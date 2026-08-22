@@ -34,7 +34,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                               skipping: 0, rt_need: [],
                               rx: [], rx_pos: [], rx_off: [],
                               tf_pos: [], tf_lab: [], tf_form: [],
-                              ff_pos: [], ff_fn: [], k_args: 0, k_alloc: 0})
+                              ff_pos: [], ff_fn: [], k_args: 0, k_alloc: 0, k_sig: 0})
     let nglobals : i64 = @dropunit(#a.globals)
     // the same three kinds of data the x86-64 path sorts out, placed
     // with the same offsets
@@ -52,10 +52,12 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             elif is_relro[i × 1¤ptrdiff] = 1:
                 n_relro ← n_relro + 1
     let args_off : i64 = 8 × n_relro
-    let relro_size : i64 = align_up(args_off + 32, PAGE)
-    let alloc_off : i64 = relro_size + 8 × n_rw
+    let relro_size : i64 = align_up(args_off + KB_SIZE, PAGE)
+    // the signal structures sit at the head of the writable data
+    let alloc_off : i64 = relro_size + SIG_SIZE + 8 × n_rw
     em.k_args ← args_off
     em.k_alloc ← alloc_off
+    em.k_sig ← relro_size
     let k_ro : mut i64 = 0
     let k_relro : mut i64 = 0
     let k_rw : mut i64 = 0
@@ -63,7 +65,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         foreach i := 0…nglobals - 1:
             if a.globals[i × 1¤ptrdiff].is_mut:
                 em.gseg.push(1)
-                em.gmap.push(relro_size + 8 × k_rw)
+                em.gmap.push(relro_size + SIG_SIZE + 8 × k_rw)
                 k_rw ← k_rw + 1
             elif is_relro[i × 1¤ptrdiff] = 1:
                 em.gseg.push(1)
@@ -128,7 +130,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // in a call where an overflow or a bounds check has to go -- so
     // this runs in waves until a wave adds nothing.  Asking the IR
     // which routines it calls would miss the second kind.
-    let nrt : i64 = 58
+    let nrt : i64 = 61
     foreach _ := 1…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
@@ -138,6 +140,14 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         if #em.cf_target > 0:
             foreach i := 0…#em.cf_target - 1:
                 let t : i64 = em.cf_target[i]
+                if t < 0:
+                    em.rt_need[(0 - t - 1) × 1¤ptrdiff] ← 1
+        // a routine whose address was taken is reached as surely as one
+        // that was called, and the address has nowhere to point if it
+        // was left out
+        if #em.ff_fn > 0:
+            foreach i := 0…#em.ff_fn - 1:
+                let t : i64 = em.ff_fn[i]
                 if t < 0:
                     em.rt_need[(0 - t - 1) × 1¤ptrdiff] ← 1
         foreach id0 := 0…nrt - 1:
@@ -158,7 +168,10 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // a function's address, taken as a value
     if #em.ff_pos > 0:
         foreach i := 0…#em.ff_pos - 1:
-            g_patch_abs(&em, tgt, em.ff_pos[i], IMAGE_BASE + PAGE + em.fn_off[em.ff_fn[i] × 1¤ptrdiff])
+            let ff : i64 = em.ff_fn[i]
+            let fat : i64 = em.fn_off[ff × 1¤ptrdiff] if ff >= 0 else em.rt_off[(0 - ff - 1) × 1¤ptrdiff]
+            assert(fat ≠ ⁻1, "the address taken is of a routine that was emitted")
+            g_patch_abs(&em, tgt, em.ff_pos[i], IMAGE_BASE + PAGE + fat)
     // rodata: the strings' bytes, then their descriptors, then the
     // tables -- the same layout the x86-64 path writes
     let text_size : i64 = em.here()
@@ -214,9 +227,14 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         foreach i := 0…nglobals - 1:
             if em.gseg[i × 1¤ptrdiff] = 1 and em.gmap[i × 1¤ptrdiff] < relro_size:
                 push64(&data, chk.gvals[i × 1¤ptrdiff])
-    foreach _ := 1…32:
+    // argc, argv, envp, the auxiliary vector and the guard's two
+    // bounds, then the page's rest
+    foreach _ := 1…KB_SIZE:
         data.push(0)
     while @dropunit(#data) < relro_size:
+        data.push(0)
+    // the structures the kernel is handed when the handler is installed
+    foreach _ := 1…SIG_SIZE:
         data.push(0)
     if nglobals > 0:
         foreach i := 0…nglobals - 1:
@@ -349,6 +367,17 @@ fn rv_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
     rv_movimm(&em, 11, str_len("the stack could not be reserved\n"))
     rvg_call(&em, tg, RT_ABORT)
     em.set_label(2)
+    // Where the guard is, for the handler to compare a faulting
+    // address against, and then the handler itself.  Both before the
+    // relro is sealed: the bounds live in it.
+    let gpos : i64 = rv_absref(&em, RV_RA)
+    em.df_pos.push(gpos)
+    em.df_off.push(args_off)
+    rv_S(&em, KB_GLO, RV_RB, RV_RA, 3)
+    rv_movimm(&em, RV_RC, guard_size)
+    rv_R(&em, 0, RV_RB, RV_RC, 0, RV_RC, 51)
+    rv_S(&em, KB_GHI, RV_RC, RV_RA, 3)
+    rvg_call(&em, tg, RT_SIGINIT)
     if ginit >= 0:
         rvg_call(&em, tg, ginit)
     rvg_call(&em, tg, RT_RELRO)
@@ -442,6 +471,23 @@ fn i3_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
     em.set_label(2)
     em.b2(131, 236)
     em.b1(96)                        // sub esp, 96: the door's own outgoing area
+    // Where the guard is, for the handler to compare a faulting
+    // address against, and then the handler itself.  Both before the
+    // relro is sealed: the bounds live in it.
+    let gpos : i64 = em.here() + 1
+    i3_movimm(&em, 6, 0)             // mov esi, args-block (patched)
+    em.df_pos.push(gpos)
+    em.df_off.push(args_off)
+    em.b3(137, 126, KB_GLO)          // mov [esi+KB_GLO], edi
+    em.b3(199, 70, KB_GLO + 4)
+    em.w32(0)                        // the cell's high half
+    em.b2(137, 248)                  // mov eax, edi
+    em.b1(5)
+    em.w32(guard_size)               // add eax, guard
+    em.b3(137, 70, KB_GHI)           // mov [esi+KB_GHI], eax
+    em.b3(199, 70, KB_GHI + 4)
+    em.w32(0)
+    i3_call(&em, RT_SIGINIT)
     if ginit >= 0:
         i3_call(&em, ginit)
     i3_call(&em, RT_RELRO)
@@ -526,6 +572,15 @@ fn a32_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
     em.set_label(2)
     a32_movimm(&em, 12, 256)
     a32_dp(&em, A32_SUB, 13, 13, 12)             // room for outgoing args
+    // No handler here yet.  A handler is entered with the kernel's own
+    // calling convention, and this target takes a routine's arguments
+    // on the stack where the kernel puts them in registers, so what the
+    // handler would read is whatever the alternate stack happened to
+    // hold.  x86-64 and i386 pass on the stack and 64-bit machines pass
+    // one argument to a register, which is why the other four manage;
+    // these two want a trampoline of their own first.  Until then a
+    // stack that runs out here dies the way it always has, of a plain
+    // SIGSEGV.  See TODO-compiler.md.
     if ginit >= 0:
         a32_call(&em, ginit)
     a32_call(&em, RT_RELRO)
@@ -597,6 +652,15 @@ fn r32_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
     rv_movimm(&em, 17, sc_number(tg, SC_EXIT))
     em.aw(115)
     em.set_label(2)
+    // No handler here yet.  A handler is entered with the kernel's own
+    // calling convention, and this target takes a routine's arguments
+    // on the stack where the kernel puts them in registers, so what the
+    // handler would read is whatever the alternate stack happened to
+    // hold.  x86-64 and i386 pass on the stack and 64-bit machines pass
+    // one argument to a register, which is why the other four manage;
+    // these two want a trampoline of their own first.  Until then a
+    // stack that runs out here dies the way it always has, of a plain
+    // SIGSEGV.  See TODO-compiler.md.
     if ginit >= 0:
         r32_call(&em, ginit)
     r32_call(&em, RT_RELRO)
@@ -632,6 +696,8 @@ fn rt_nargs(id : i64) → i64:
     if id = RT_HSTART or id = RT_HFINAL: return 1
     if id = RT_HUPDATE: return 2
     if id = RT_SHA256INIT or id = RT_SHA256BLK or id = RT_SHA256FIN: return 1
+    if id = RT_SEGV: return 3
+    if id = RT_SIGINIT: return 0
     0
 
 // the door of the program: keep what the kernel handed over, stand up
@@ -705,6 +771,17 @@ fn t_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
     a64_movimm(&em, 1, str_len("the stack could not be reserved\n"))
     a64_call(&em, RT_ABORT)
     em.set_label(2)
+    // Where the guard is, for the handler to compare a faulting
+    // address against, and then the handler itself.  Both before the
+    // relro is sealed: the bounds live in it.
+    let gpos : i64 = a64_absref(&em, A64_T0)
+    em.df_pos.push(gpos)
+    em.df_off.push(args_off)
+    a64_sto(&em, A64_RB, A64_T0, KB_GLO)
+    a64_movimm(&em, A64_T1, guard_size)
+    a64_addr_(&em, A64_T1, A64_T1, A64_RB)
+    a64_sto(&em, A64_T1, A64_T0, KB_GHI)
+    a64_call(&em, RT_SIGINIT)
     if ginit >= 0:
         a64_call(&em, ginit)
     a64_call(&em, RT_RELRO)
