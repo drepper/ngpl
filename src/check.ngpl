@@ -17,6 +17,15 @@ let MID_NEXT : i64 = 11
 let MID_DIRITER : i64 = 12
 let MID_WRITEV : i64 = 13
 let MID_HUPDATE : i64 = 14   // h.update(x): another piece of the message
+
+// What is left of a binding while something else borrows it.  A borrow
+// is a claim on the thing borrowed, and the binding is what the claim
+// is taken out of: while a shared borrow is outstanding the binding may
+// be read and not changed, and while a mutable one is outstanding the
+// binding is not a way to reach the thing at all, because the borrow is.
+let HOLD_FREE : i64 = 0
+let HOLD_READ : i64 = 1
+let HOLD_NONE : i64 = 2
 let MID_HDIGEST : i64 = 15   // h.digest(): the answer, and the end of the handle
 
 // The module a module is written inside; "" for one written at the top.
@@ -192,6 +201,19 @@ struct Checker:
     stype : i64[]
     smut : i64[]
     sslot : i64[]
+    // What a binding has lent out, and so what is left of it:
+    // HOLD_FREE while nothing borrows it, HOLD_READ while something
+    // is reading it and it may only be read, HOLD_NONE while
+    // something has it mutably and the name reaches nothing at all.
+    sheld : i64[]
+    // Every hold taken, and what the binding said before it was taken,
+    // so the scope that took a hold is the scope that gives it back.
+    // A borrow ends where the thing borrowing it ends: a walk's at the
+    // end of its body, an iterator's at the end of the block it was
+    // made in, since nothing in the language says sooner.
+    hslot : i64[]
+    hback : i64[]
+    hmark : i64[]
     marks : i64[]
     nslots : i64
     loop_depth : i64
@@ -401,18 +423,28 @@ impl Checker:
         self.stype.push(ty)
         self.smut.push(is_mut)
         self.sslot.push(slot)
+        self.sheld.push(HOLD_FREE)
         slot
 
     fn push_scope(&mut self):
         self.marks.push(@dropunit(#self.snames))
+        self.hmark.push(@dropunit(#self.hslot))
 
     fn pop_scope(&mut self):
+        // the holds this scope took, given back in the order they were
+        // taken, so two walks over one array unwind to what was there
+        let hlow : i64 = self.hmark.pop() ?? 0
+        while @dropunit(#self.hslot) > hlow:
+            let hs : i64 = self.hslot.pop() ?? 0
+            let hb : i64 = self.hback.pop() ?? 0
+            self.sheld[hs × 1¤ptrdiff] ← hb
         let low : i64 = self.marks.pop() ?? 0
         while @dropunit(#self.snames) > low:
             _ ← self.snames.pop() ?? ""
             _ ← self.stype.pop() ?? 0
             _ ← self.smut.pop() ?? 0
             _ ← self.sslot.pop() ?? 0
+            _ ← self.sheld.pop() ?? 0
 
     fn is_open(&self, t : i64) → bool:
         t = TY_UNT or t = TY_EMPTY
@@ -1340,6 +1372,8 @@ impl Checker:
             return
         let s : i64 = self.lookup(name)
         if s ≠ ⁻1:
+            if self.sheld[s × 1¤ptrdiff] = HOLD_NONE:
+                self.derr(tok, "'" ⧺ name ⧺ "' is lent out to be changed, so the name reaches nothing until the borrow ends; what the walk binds is the way in")
             let st0 : i64 = self.stype[s × 1¤ptrdiff]
             let base0 : i64 = ty_strip_ref(st0)
             self.set_type(id, base0)
@@ -2227,9 +2261,21 @@ impl Checker:
         let sv_slot : mut i64[] = []
         foreach v := self.sslot:
             sv_slot.push(v)
+        let sv_held : mut i64[] = []
+        foreach v := self.sheld:
+            sv_held.push(v)
         let sv_marks : mut i64[] = []
         foreach v := self.marks:
             sv_marks.push(v)
+        let sv_hslot : mut i64[] = []
+        foreach v := self.hslot:
+            sv_hslot.push(v)
+        let sv_hback : mut i64[] = []
+        foreach v := self.hback:
+            sv_hback.push(v)
+        let sv_hmark : mut i64[] = []
+        foreach v := self.hmark:
+            sv_hmark.push(v)
         let sv_nslots : i64 = self.nslots
         let sv_cur : i64 = self.cur_fn
         let sv_loop : i64 = self.loop_depth
@@ -2243,8 +2289,14 @@ impl Checker:
             _ ← self.stype.pop() ?? 0
             _ ← self.smut.pop() ?? 0
             _ ← self.sslot.pop() ?? 0
+            _ ← self.sheld.pop() ?? 0
         while #self.marks > 0:
             _ ← self.marks.pop() ?? 0
+        while #self.hslot > 0:
+            _ ← self.hslot.pop() ?? 0
+            _ ← self.hback.pop() ?? 0
+        while #self.hmark > 0:
+            _ ← self.hmark.pop() ?? 0
         foreach v := sv_names:
             self.snames.push(v)
         foreach v := sv_type:
@@ -2253,8 +2305,16 @@ impl Checker:
             self.smut.push(v)
         foreach v := sv_slot:
             self.sslot.push(v)
+        foreach v := sv_held:
+            self.sheld.push(v)
         foreach v := sv_marks:
             self.marks.push(v)
+        foreach v := sv_hslot:
+            self.hslot.push(v)
+        foreach v := sv_hback:
+            self.hback.push(v)
+        foreach v := sv_hmark:
+            self.hmark.push(v)
         self.nslots ← sv_nslots
         self.cur_fn ← sv_cur
         self.loop_depth ← sv_loop
@@ -2864,6 +2924,14 @@ impl Checker:
                 ii ← mi
                 self.ite.push(ie)
             self.a.nc[id × 1¤ptrdiff] ← MID_ITER
+            // An iterator keeps the array it was made from, and there
+            // is nothing in the language that says when the iterator
+            // is done with, so the borrow runs to the end of the scope
+            // the iterator was made in.  That is stricter than it has
+            // to be and never wrong: what it costs is changing an
+            // array later in the same scope, and what it buys is that
+            // an iterator never walks a thing that moved under it.
+            self.hold(na, HOLD_READ)
             self.set_type(id, 30720 + ii)
             return
         if ty_is_iter(t) and m = "next":
@@ -3021,6 +3089,31 @@ impl Checker:
         let f : i64 = self.fn_index(self.text(self.a.ntok[e × 1¤ptrdiff]))
         f ≠ ⁻1 and self.a.fns[f × 1¤ptrdiff].is_noreturn
 
+    // The binding an expression is reaching into, or ⁻1 where it
+    // reaches into no binding: a walk over `s.f` or `m[i]` borrows `s`
+    // and `m`, and a walk over something freshly made borrows nothing
+    // that has a name to lose.
+    fn base_slot(&self, e : i64) → i64:
+        if self.kind_of(e) = NK_FIELD or self.kind_of(e) = NK_INDEX:
+            return self.base_slot(self.a.na[e × 1¤ptrdiff])
+        if self.kind_of(e) ≠ NK_VAR:
+            return ⁻1
+        self.lookup(self.text(self.a.ntok[e × 1¤ptrdiff]))
+
+    // Lend what something is walking, for as long as the scope in hand
+    // lasts.  What was there before is kept beside the hold, so a walk
+    // inside a walk gives back the outer walk's claim and not none at
+    // all; and a walk already inside a borrow keeps the stricter of the
+    // two, which is what walking one array twice over has to mean.
+    @pre(how = HOLD_READ or how = HOLD_NONE)
+    fn hold(&mut self, e : i64, how : i64):
+        let s : i64 = self.base_slot(e)
+        if s = ⁻1:
+            return
+        self.hslot.push(s)
+        self.hback.push(self.sheld[s × 1¤ptrdiff])
+        self.sheld[s × 1¤ptrdiff] ← self.sheld[s × 1¤ptrdiff] ⌈ how
+
     fn require_mut_base(&mut self, base : i64, tok : i64):
         if self.kind_of(base) = NK_FIELD or self.kind_of(base) = NK_INDEX:
             self.require_mut_base(self.a.na[base × 1¤ptrdiff], tok)
@@ -3034,6 +3127,10 @@ impl Checker:
             let g : i64 = self.global_index(name)
             if g ≠ ⁻1 and not self.a.globals[g × 1¤ptrdiff].is_mut:
                 self.derr(tok, "'" ⧺ name ⧺ "' is not mut, so nothing may change it")
+            return
+        let hd : i64 = self.sheld[s × 1¤ptrdiff]
+        if hd ≠ HOLD_FREE:
+            self.derr(tok, "'" ⧺ name ⧺ "' is lent out " ⧺ ("for reading" if hd = HOLD_READ else "to be changed") ⧺ " and cannot be changed until the borrow ends; a walk holds what it walks for the whole of its body")
             return
         let pt : i64 = self.stype[s × 1¤ptrdiff]
         if ty_ref_kind(pt) = 1:
@@ -3492,7 +3589,12 @@ impl Checker:
                     self.require_mut_base(fiter, tok)
                 self.a.na[id × 1¤ptrdiff] ← fiter
                 self.a.nc[id × 1¤ptrdiff] ← frk
+                // The walk holds what it walks.  Lending the elements
+                // mutably lends the array, so its name reaches nothing
+                // for the body; lending them for reading leaves the
+                // name readable and nothing more.
                 self.push_scope()
+                self.hold(fiter, HOLD_NONE if frk = 2 else HOLD_READ)
                 let rslot : i64 = self.declare(tok, self.elem_of(ft0) + 262144 × frk, 1 if frk = 2 else 0)
                 self.nslot[id × 1¤ptrdiff] ← rslot
                 self.loop_depth ← self.loop_depth + 1
@@ -3505,7 +3607,11 @@ impl Checker:
             if not ty_is_arr(t) and t ≠ TY_STR and not ty_is_mat(t) and not ty_is_rg(t):
                 self.derr(tok, "foreach walks an array, a string or a range; this is " ⧺ self.tn(t))
                 return
+            // a walk that copies each element still reads the whole of
+            // what it walks, turn by turn, so the body may read it and
+            // not change it
             self.push_scope()
+            self.hold(na, HOLD_READ)
             let slot : i64 = self.declare(tok, TY_CHAR if t = TY_STR else (ty_rgelem(t) if ty_is_rg(t) else self.elem_of(t)), 0)
             self.nslot[id × 1¤ptrdiff] ← slot
             self.loop_depth ← self.loop_depth + 1
@@ -3703,8 +3809,14 @@ impl Checker:
             _ ← self.stype.pop() ?? 0
             _ ← self.smut.pop() ?? 0
             _ ← self.sslot.pop() ?? 0
+            _ ← self.sheld.pop() ?? 0
         while #self.marks > 0:
             _ ← self.marks.pop() ?? 0
+        while #self.hslot > 0:
+            _ ← self.hslot.pop() ?? 0
+            _ ← self.hback.pop() ?? 0
+        while #self.hmark > 0:
+            _ ← self.hmark.pop() ?? 0
         let d := self.a.fns[f × 1¤ptrdiff]
         self.push_scope()
         let np : i64 = self.a.extra[d.params_off × 1¤ptrdiff]
@@ -3848,7 +3960,8 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
                                    ntype: ntype, nslot: nslot, ncvt: ncvt,
                                    fslots: [],
                                    diags: [], snames: [], stype: [], smut: [],
-                                   sslot: [], marks: [], nslots: 0,
+                                   sslot: [], sheld: [], hslot: [], hback: [],
+                                   hmark: [], marks: [], nslots: 0,
                                    loop_depth: 0, cur_fn: 0,
                                    in_contract: false,
                                    scope_floor: 0, lams: [], lamns: [],

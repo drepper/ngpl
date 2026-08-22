@@ -189,6 +189,7 @@ shared_tests=(
     test_reshape
     test_short_circuit
     test_stepped_range
+    test_walk_holds
     test_while_binding
     test_wrap
 )

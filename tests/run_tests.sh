@@ -120,6 +120,7 @@ all_tests=(
     "$testdir"/test_borrow_foreach.ngpl
     "$testdir"/test_array_methods.ngpl
     "$testdir"/test_iterator.ngpl
+    "$testdir"/test_walk_holds.ngpl
     "$testdir"/test_while_binding.ngpl
     "$testdir"/test_try_return_type.ngpl
     "$testdir"/test_match.ngpl

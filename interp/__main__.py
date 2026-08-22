@@ -2197,6 +2197,172 @@ def _static_loop_check(func_def) -> str | None:
     return None
 
 
+# What a binding has lent out, and so what is left of it.
+_HOLD_FREE, _HOLD_READ, _HOLD_NONE = 0, 1, 2
+
+# The methods that change what they are asked of.  Everything else a
+# container answers only reads it, so only these are refused while it
+# is lent out; a method not named here that turns out to change its
+# receiver belongs on this list.
+_MUTATING_METHODS = frozenset((
+    "push", "pop", "insert", "remove", "clear", "put", "extend",
+))
+
+
+def _borrow_base(expr) -> str | None:
+    """The binding an expression reaches into, or None.
+
+    A walk over `s.f` or `m[i]` borrows `s` and `m`; a walk over
+    something freshly made borrows nothing that has a name to lose.
+    """
+    while True:
+        if isinstance(expr, _ast.VarRef):
+            return expr.name
+        if isinstance(expr, (_ast.Subscript, _ast.GetAttr)):
+            expr = expr.obj
+            continue
+        return None
+
+
+def _static_borrow_check(func_def) -> str | None:
+    """Refuse a container changed while something is walking it.
+
+    A walk borrows what it walks for the whole of the loop, and while
+    that borrow is outstanding the container's own name is limited to
+    what the borrow leaves: a shared borrow leaves reading, and a
+    mutable borrow leaves nothing, because the borrow is the way in.
+    An iterator holds its array the same way, to the end of the block
+    it was made in, since nothing says when an iterator is done with.
+
+    Written down because the alternative had no answer.  `foreach x :=
+    v: v.push(…)` visited three elements under this implementation and
+    four under the compiled one, and every answer was defensible --
+    which is exactly the kind of question this language exists not to
+    ask.  See the specification, "What a Walk Holds".
+    """
+
+    def change(name: str, held: dict, node):
+        state = held.get(name, _HOLD_FREE)
+        if state == _HOLD_FREE:
+            return None
+        how = ("for reading" if state == _HOLD_READ else "to be changed")
+        return _Finding(
+            f"'{name}' is lent out {how} and cannot be changed until the "
+            f"borrow ends; a walk holds what it walks for the whole of "
+            f"its body", node)
+
+    def read(name: str, held: dict, node):
+        if held.get(name, _HOLD_FREE) != _HOLD_NONE:
+            return None
+        return _Finding(
+            f"'{name}' is lent out to be changed, so the name reaches "
+            f"nothing until the borrow ends; what the walk binds is the "
+            f"way in", node)
+
+    def in_expr(expr, held: dict):
+        """Every use of a held name inside an expression."""
+        if expr is None or not held:
+            return None
+        for node in _iter_ast([expr] if not isinstance(expr, list) else expr):
+            if isinstance(node, _ast.MethodCall):
+                base = _borrow_base(node.obj)
+                if base is not None and node.method in _MUTATING_METHODS:
+                    found = change(base, held, node)
+                    if found is not None:
+                        return found
+            if isinstance(node, (_ast.RefExpr, _ast.BorrowExpr)):
+                # a borrow handed to something else: whether it is the
+                # mutable kind is the callee's business, so this asks
+                # only the question both kinds share
+                base = (node.name if isinstance(node, _ast.RefExpr)
+                        else _borrow_base(node.expr))
+                if base is not None:
+                    found = read(base, held, node)
+                    if found is not None:
+                        return found
+            if isinstance(node, _ast.VarRef):
+                found = read(node.name, held, node)
+                if found is not None:
+                    return found
+        return None
+
+    def walk(body, held: dict):
+        if not isinstance(body, list):
+            return None
+        # a block's own holds end with the block
+        held = dict(held)
+        for stmt in body:
+            found = visit(stmt, held)
+            if found is not None:
+                return found
+        return None
+
+    def visit(stmt, held: dict):
+        if isinstance(stmt, tuple) and stmt and stmt[0] == "assign_stmt":
+            _, lhs, rhs = stmt
+            base = _borrow_base(lhs)
+            if base is not None:
+                found = change(base, held, lhs)
+                if found is not None:
+                    return found
+            return in_expr(rhs, held)
+        if isinstance(stmt, _ast.ForEachStmt):
+            inner = dict(held)
+            for it in stmt.iterables:
+                found = in_expr(it.expr if isinstance(it, _ast.BorrowExpr)
+                                else it, held)
+                if found is not None:
+                    return found
+                is_mut = isinstance(it, _ast.BorrowExpr) and it.is_mut
+                target = (it.expr if isinstance(it, _ast.BorrowExpr) else it)
+                base = _borrow_base(target)
+                if base is not None:
+                    want = _HOLD_NONE if is_mut else _HOLD_READ
+                    inner[base] = max(inner.get(base, _HOLD_FREE), want)
+            return walk(stmt.body, inner)
+        if isinstance(stmt, _ast.VarDef):
+            found = in_expr(stmt.init_expr, held)
+            if found is not None:
+                return found
+            # an iterator keeps the array it was made from, and the
+            # borrow runs to the end of the block it was made in
+            init = stmt.init_expr
+            if isinstance(init, _ast.MethodCall) and init.method == "iterate":
+                base = _borrow_base(init.obj)
+                if base is not None:
+                    held[base] = max(held.get(base, _HOLD_FREE), _HOLD_READ)
+            return None
+        # everything else: its own expressions, then whatever bodies it has
+        for attr in ("expr", "cond", "value", "init_expr"):
+            inner = getattr(stmt, attr, None)
+            if inner is not None and not isinstance(inner, list):
+                found = in_expr(inner, held)
+                if found is not None:
+                    return found
+        for attr in ("body", "cons"):
+            inner = getattr(stmt, attr, None)
+            if isinstance(inner, list):
+                found = walk(inner, held)
+                if found is not None:
+                    return found
+        alt = getattr(stmt, "alt", None)
+        if isinstance(alt, list):
+            found = walk(alt, held)
+            if found is not None:
+                return found
+        elif isinstance(alt, tuple) and len(alt) == 2:
+            found = in_expr(alt[0], held) or walk(alt[1], held)
+            if found is not None:
+                return found
+        for arm in getattr(stmt, "arms", ()) or ():
+            found = walk(getattr(arm, "body", None), held)
+            if found is not None:
+                return found
+        return None
+
+    return walk(func_def.body, {})
+
+
 def _static_listable_check(func_def) -> str | None:
     """Refuse a @listable function that cannot be threaded.
 
@@ -3035,6 +3201,10 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 if loop_err is not None:
                     raise DefinitionError(f"in {defn.name}: {loop_err}",
                                           _finding_pos(loop_err) or _node_pos(defn))
+                borrow_err = _static_borrow_check(defn)
+                if borrow_err is not None:
+                    raise DefinitionError(f"in {defn.name}: {borrow_err}",
+                                          _finding_pos(borrow_err) or _node_pos(defn))
                 literal_err = _static_literal_check(defn)
                 if literal_err is not None:
                     raise DefinitionError(f"in {defn.name}: {literal_err}",
@@ -3325,6 +3495,9 @@ def main():
             loop_err = _static_loop_check(defn)
             if loop_err is not None:
                 errors_produced.append(("error", loop_err))
+            borrow_err = _static_borrow_check(defn)
+            if borrow_err is not None:
+                errors_produced.append(("error", borrow_err))
             literal_err = _static_literal_check(defn)
             if literal_err is not None:
                 errors_produced.append(("error", literal_err))

@@ -1,18 +1,29 @@
-// core-2: iterators -- born of iterate(), stepped by next(), the
-// walk live against the array it walks -- and std.bytes.
+// core-2: iterators -- born of iterate(), stepped by next(), holding
+// the array they were made from until the block they were made in
+// ends -- and std.bytes.
+//
+// This file used to change the array while an iterator was live and
+// print what the iterator made of it.  That is refused now: an
+// iterator borrows its array for reading, so the array may be read and
+// not changed while the iterator lives.  See the specification's
+// "What a Walk Holds"; tests/test_walk_holds.ngpl holds both
+// implementations to the rule, and this shows the borrow ending.
 
 @start
 @impure
 fn main():
     let v : mut i64[] = [1i64, 2]
-    let it := v.iterate()
-    let a : i64 = it.next() ?? ⁻1
+    let a : mut i64 = 0
+    let b : mut i64 = 0
+    let c : mut i64 = 0
+    if true:
+        let it := v.iterate()
+        a ← it.next() ?? ⁻1
+        b ← it.next() ?? ⁻1
+        c ← it.next() ?? ⁻1
+    // the iterator went with its block, so the array is free again
     v.push(3)
-    let b : i64 = it.next() ?? ⁻1
-    let c : i64 = it.next() ?? ⁻1
-    let d : i64 = it.next() ?? ⁻1
-    let e : i64 = it.next() ?? ⁻1
-    std.println("{} {} {} {} {}", a, b, c, d, e)
+    std.println("{} {} {} {}", a, b, c, @dropunit(#v))
 
     let ss : str[] = ["x", "y"]
     let sit := ss.iterate()

@@ -58,14 +58,28 @@ fn test_array_iterators_are_independent():
     assert_eq(a.next(), ∃(2))
     assert_eq(b.next(), ∃(1))
 
-// An iterator reads the array as it is now, not as it was.
-@test
-fn test_array_iterator_sees_later_writes():
+// An iterator borrows the array it was made from, so the array may be
+// read and not changed while the iterator lives.  There is no question
+// of whether a write is seen, because there is no write: the change is
+// refused where it is written.  This test said the opposite until the
+// rule was settled -- it asserted that a later write *was* seen -- and
+// the two implementations did not agree on the neighbouring case.
+@expect error "lent out for reading"
+fn error_changing_an_array_an_iterator_holds():
     let v : mut i64[] = [1, 2]
+    v.push(3)                 // fine: nothing holds it yet
+    let it := v.iterate()
+    v[1] ← 99                 // refused: the iterator holds it
+    _ ← it
+
+// Reading it is fine, which is what the borrow leaves.
+@test
+fn test_reading_an_array_an_iterator_holds():
+    let v : i64[] = [1, 2]
     let it := v.iterate()
     assert_eq(it.next(), ∃(1))
-    v[1] ← 99
-    assert_eq(it.next(), ∃(99))
+    assert_eq(#v, 2)
+    assert_eq(it.next(), ∃(2))
 
 // Iterating a byte array yields its bytes.
 @test

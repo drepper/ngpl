@@ -4370,6 +4370,8 @@ foreach val := data:
 /* total is 100 */
 ```
 
+**The walk borrows the container for the whole of the loop**, so the body may read it and not change it; see [What a Walk Holds](#what-a-walk-holds), which is where that rule and its reasons are written down.
+
 This works with any array, including dynamic arrays passed as parameters:
 
 ```
@@ -4638,6 +4640,101 @@ foreach a, b := &mut pairs:
 
 error: foreach over a borrow needs one variable per borrowed container
 ```
+
+#### What a Walk Holds
+
+A walk borrows the container for the whole of the loop, and while that borrow is outstanding the container's own name is limited to what the borrow leaves.  This is the general rule of borrowing in this language, stated here because a loop is where it first has teeth:
+
+> **While a borrow of something is outstanding, the thing itself may be used only in the ways the borrow leaves room for.**  A shared borrow leaves reading, and the thing may be read and not changed.  A mutable borrow leaves nothing at all: while it is outstanding the borrow *is* the way to the thing, and the thing's own name reaches nothing.
+
+The three forms of walk borrow differently, so they leave the body different room:
+
+| The walk | What it borrows the container for | What the body may do with the container |
+|----------|-----------------------------------|-----------------------------------------|
+| `foreach x := v` | reading | read it |
+| `foreach x := &v` | reading | read it |
+| `foreach x := &mut v` | changing | nothing — the name reaches nothing |
+
+`foreach x := v` copies each element, but it reads the container to do so, turn after turn, so it holds the same shared borrow `&v` does.
+
+```
+let v : mut i64[] = [1, 2, 3]
+
+foreach x := v:
+    std.println("{} of {}", x, #v)      // reading is fine
+
+foreach x := v:
+    v.push(x)
+
+error: 'v' is lent out for reading and cannot be changed until the
+       borrow ends; a walk holds what it walks for the whole of its body
+
+foreach x := &mut v:
+    std.println("{}", #v)
+
+error: 'v' is lent out to be changed, so the name reaches nothing until
+       the borrow ends; what the walk binds is the way in
+```
+
+**Reading** is `#v`, `v[i]`, walking it again, passing `&v` where a `&` is wanted — anything that does not change it.  **Changing** is `v.push(…)`, `v.pop()`, `v[i] ← …`, `v ← …`, and passing `&mut v` to something that takes one.
+
+The borrow ends where the loop ends.  After the loop the name is whatever it was before, and a program that wants to change a container it has just walked walks it first and changes it after:
+
+```
+foreach x := v:
+    std.println("{}", x)
+v.push(4)                               // fine: the walk is over
+```
+
+A walk inside a walk of the same container is two shared borrows at once, which is allowed — reading does not conflict with reading.  A walk inside a `&mut` walk of the same container is not, because the outer walk already left the name reaching nothing.
+
+#### Why a Walk Holds What It Walks
+
+Because the alternative is a program whose meaning nobody can state.  Given
+
+```
+let v : mut i64[] = [1, 2, 3]
+let n : mut i64 = 0
+foreach x := v:
+    n ← n + 1
+    if x = 1:
+        v.push(99)
+```
+
+every answer for `n` is defensible.  Three, if the walk fixed the length when it began; four, if it reads the length each turn and reaches the element that was appended; something else again if the array had to move to grow and the walk was left looking at where it used to be.  Two implementations of this language answered three and four respectively before the rule above was written down, and no test noticed, because the question had never been asked.
+
+It is not a question worth answering.  Whichever answer is chosen, a reader has to know which one to know what the loop does, and that is exactly the kind of knowledge this language exists to make unnecessary.  So the program is refused instead, where it is written, by both implementations.
+
+The same reasoning covers the container that grows out from under a walk in the far worse way: an array that reallocates while something holds a pointer into it. Refusing the mutation is what makes the walk's own pointer safe for its whole life, which is why the rule is about the *borrow* rather than about lengths.
+
+#### An Iterator Holds It Too
+
+An iterator made by `.iterate()` keeps the array it was made from, so the array is borrowed for reading as long as the iterator can still be asked for a value:
+
+```
+let v : mut i64[] = [1, 2, 3]
+let it : mut = v.iterate()
+while e := it.next():
+    std.println("{} of {}", e, #v)      // reading is fine
+    v.push(e)
+
+error: 'v' is lent out for reading and cannot be changed until the
+       borrow ends; a walk holds what it walks for the whole of its body
+```
+
+Nothing in the language says when an iterator is finished with, so **the borrow runs to the end of the block the iterator was made in**.  That is stricter than it has to be and never wrong; where a program wants the array back sooner, it gives the iterator a block of its own:
+
+```
+if true:
+    let it : mut = v.iterate()
+    while e := it.next():
+        std.println("{}", e)
+v.push(4)                               // fine: the iterator is gone
+```
+
+#### Borrows That Nothing Can Observe
+
+A borrow passed to a function — `f(&v)`, `f(&mut v)` — begins and ends inside the call.  There is no point at which the caller can reach `v` while that borrow is outstanding, so no rule is needed and none is stated; the restriction above is about borrows that outlive the expression that took them, which in this language are the walk and the iterator.
 
 #### Why the Distinction Is Explicit
 
@@ -5723,7 +5820,9 @@ The result is used directly as the condition; there is no need to compare it wit
 
 That is the whole protocol.  An iterator is anything that can answer `next()`, which keeps the concept small enough that a container can provide one without implementing a trait, and keeps a consumer working for any container that does.
 
-An iterator holds its own position, so several over the same container advance independently.  It reads the container as it is at the time of the call rather than taking a snapshot: a write to an element the iterator has not reached yet is seen when it gets there.
+An iterator holds its own position, so several over the same container advance independently — and several may exist at once, because each borrows the container only for reading.
+
+**An iterator borrows the container it was made from, so the container may be read and not changed while the iterator lives.**  There is no snapshot and no question of whether a later write is seen, because there is no later write: the borrow runs to the end of the block the iterator was made in, and a change to the container inside that block is refused where it is written.  See [What a Walk Holds](#what-a-walk-holds), which is the same rule the foreach loop is under and for the same reason.
 
 #### Arrays
 

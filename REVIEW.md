@@ -20,7 +20,7 @@ The specification's central claim (spec.md line 10) is that there is
 *no undefined behavior or unpredictable output except when concurrency
 comes into play*.  Audited against that standard:
 
-### A1. Mutation during iteration is unspecified — and the implementations disagree today (**probed**)
+### A1. Mutation during iteration is unspecified — and the implementations disagree today (**probed**) — ~~open~~ **settled**
 
 ```
 let v : mut i64[] = [1, 2, 3]
@@ -32,15 +32,28 @@ foreach x := v:
 std.println("{} {}", n, #v)
 ```
 
-The interpreter prints `3 4` (three elements visited); the compiled
-binary prints `4 4` (it re-reads the length every turn and visits the
-appended element).  This is a live conformance break that the
-byte-diff methodology has never caught, because no test writes it.
-The spec says nothing.  The clean resolution, given the borrow
-machinery already present: **walking a container holds a shared
-borrow, so mutating it during the walk is refused** — statically
-where visible, dynamically otherwise.  Whatever is chosen, it must be
-chosen; this is the exact shape of bug the language exists to remove.
+The interpreter printed `3 4` (three elements visited); the compiled
+binary printed `4 4` (it re-read the length every turn and visited the
+appended element).  A live conformance break that the byte-diff
+methodology never caught, because no test wrote it.
+
+**Settled as the review proposed, and further.**  A walk borrows what
+it walks for the whole of the loop, and while that borrow is
+outstanding the container's own name is limited to what the borrow
+leaves: a shared borrow leaves reading, a mutable borrow leaves
+nothing at all.  An iterator made by `.iterate()` holds its array the
+same way, to the end of the block the iterator was made in.  Both
+implementations refuse the program above, statically, with the same
+wording.
+
+The spec chapter is "What a Walk Holds", under Borrowing in a Foreach
+Loop; `tests/test_walk_holds.ngpl` holds both implementations to it as
+a shared conformance test.  One existing test had to be turned around:
+`test_array_iterator_sees_later_writes` asserted that a write through
+the array while an iterator was live *was* seen by the iterator, and
+the spec's iterator section said the same in prose.  Both were wrong
+in the same way — they answered a question that should not have been
+askable — and both now say the borrow forbids the write.
 
 ### A2. Borrow exclusivity is discipline, not law (**probed**)
 
@@ -176,7 +189,8 @@ runtime routine absent) would lock in roughly ten hard-won properties.
 ### B2. No differential fuzzing
 
 The A1 divergence survived every gate because both suites contain
-only programs someone thought to write.  The project's whole method
+only programs someone thought to write (it is settled now, but it took
+a review rather than a test to find).  The project's whole method
 is byte-diffing two implementations; a small random-program generator
 (even ~200 lines emitting well-typed core-2: arithmetic, arrays,
 loops, calls) run through the existing both-mode harness would have
@@ -292,7 +306,8 @@ Actionable Without Design Debate
 
 Three items need no discussion, only work:
 
-1. Settle mutation-during-iteration (A1) — it is a live divergence.
+1. ~~Settle mutation-during-iteration (A1) — it is a live
+   divergence.~~  Done; see A1 above.
 2. Write the evaluation-order and short-circuit paragraphs into the
    spec (A3).
 3. ~~Add the ELF-invariants test file (B1).~~  Done; see B1 above.

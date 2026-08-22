@@ -1,0 +1,129 @@
+// What a walk holds.
+//
+// A walk borrows the container for the whole of the loop, and while
+// that borrow is outstanding the container's own name is limited to
+// what the borrow leaves: a shared borrow leaves reading, a mutable
+// borrow leaves nothing at all.  The specification's "What a Walk
+// Holds" is the normative statement; this is where both
+// implementations are held to it.
+//
+// The rule was written because the alternative had no answer.  Given
+//
+//     foreach x := v:
+//         if x = 1:
+//             v.push(99)
+//
+// the interpreter visited three elements and the compiled program
+// visited four, and both were defensible: one fixed the length when
+// the walk began, the other read it again each turn.  No test noticed,
+// because the question had never been asked.  It is not a question
+// worth answering, so the program is refused instead.
+
+// ---------------------------------------------------------------------
+// What a shared borrow leaves: reading
+// ---------------------------------------------------------------------
+
+@test
+fn test_reading_what_is_being_walked():
+    let v : i64[] = [1, 2, 3]
+    let n : mut i64 = 0
+    foreach x := v:
+        n ← n + x + @dropunit(#v)
+    assert_eq(n, 15)
+
+@test
+fn test_indexing_what_is_being_walked():
+    let v : i64[] = [10, 20]
+    let n : mut i64 = 0
+    foreach x := v:
+        n ← n + x + v[0 × 1¤ptrdiff]
+    assert_eq(n, 50)
+
+// Two walks over one container are two shared borrows, and reading
+// does not conflict with reading.
+@test
+fn test_walking_one_container_twice_over():
+    let v : i64[] = [1, 2]
+    let n : mut i64 = 0
+    foreach x := v:
+        foreach y := v:
+            n ← n + x × y
+    assert_eq(n, 9)
+
+// The borrow ends with the loop, so what was walked is free after it.
+@test
+fn test_free_again_when_the_walk_is_over():
+    let v : mut i64[] = [1, 2]
+    let n : mut i64 = 0
+    foreach x := v:
+        n ← n + x
+    v.push(3)
+    assert_eq(@dropunit(#v), 3)
+    assert_eq(n, 3)
+
+// Walking one container says nothing about another.
+@test
+fn test_changing_something_else_while_walking():
+    let v : i64[] = [1, 2, 3]
+    let w : mut i64[] = []
+    foreach x := v:
+        w.push(x × 2)
+    assert_eq(@dropunit(#w), 3)
+
+// ---------------------------------------------------------------------
+// What a shared borrow refuses: changing
+// ---------------------------------------------------------------------
+
+@expect error "lent out for reading"
+fn error_growing_what_is_being_walked():
+    let v : mut i64[] = [1, 2, 3]
+    foreach x := v:
+        v.push(x)
+
+@expect error "lent out for reading"
+fn error_writing_an_element_of_what_is_being_walked():
+    let v : mut i64[] = [1, 2, 3]
+    foreach x := v:
+        v[0 × 1¤ptrdiff] ← x
+
+@expect error "lent out for reading"
+fn error_rebinding_what_is_being_walked():
+    let v : mut i64[] = [1, 2, 3]
+    foreach x := v:
+        v ← [x]
+
+@expect error "lent out for reading"
+fn error_growing_what_a_shared_walk_lends():
+    let v : mut i64[] = [1, 2, 3]
+    foreach x := &v:
+        v.push(x)
+
+// ---------------------------------------------------------------------
+// What a mutable borrow leaves: nothing
+// ---------------------------------------------------------------------
+
+@test
+fn test_a_mutable_walk_writes_through():
+    let v : mut i64[] = [1, 2, 3]
+    foreach x := &mut v:
+        x ← x + 1
+    assert_eq(v[0 × 1¤ptrdiff], 2)
+    assert_eq(v[2 × 1¤ptrdiff], 4)
+
+@expect error "reaches nothing"
+fn error_reading_what_a_mutable_walk_holds():
+    let v : mut i64[] = [1, 2, 3]
+    foreach x := &mut v:
+        x ← @dropunit(#v)
+
+@expect error "reaches nothing"
+fn error_walking_again_inside_a_mutable_walk():
+    let v : mut i64[] = [1, 2, 3]
+    foreach x := &mut v:
+        foreach y := v:
+            x ← y
+
+@start
+@impure
+fn main():
+    std.println("walk tests passed")

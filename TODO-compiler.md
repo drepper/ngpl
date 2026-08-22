@@ -49,6 +49,14 @@ The Compiler
     -- for the parser, which by then knows what the file declared, to put on the literal.  This
     is what the interpreter always did, where ¤ is an ordinary operator.
 
+[ ] ngplc stops with "index out of range" on `_ ← it.next()` -- an iterator's next()
+    discarded rather than bound.  The lowering reaches lower_mcall with a node id of ⁻1
+    (src/lower.ngpl:98, through lower_expr_i:521).  The interpreter runs the same program.
+    Found while probing the walk-borrow rule; the shape is a discarded method call whose
+    result is an optional, so `_ ← v.pop()` is worth trying too.  A crash rather than a
+    diagnostic is the worst kind of refusal, so this one is worth a look before the next
+    feature.
+
 [ ] std.println's format is written before its arguments are worked out, in a compiled
     program but not under the interpreter.  The compiler puts the literal run of a format down
     as it reaches it and evaluates each {} when it gets there; the interpreter builds the whole
