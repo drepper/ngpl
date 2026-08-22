@@ -19,7 +19,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                                 shimbase: 0,
                                 cur_ret: 0, post_label: ⁻1,
                                 res_vreg: ⁻1, cur_fname: "", dlog: [],
-                                argcopy: chk.argcopy, fbytes: 0¤byte})
+                                argcopy: chk.argcopy, fbytes: 0¤byte, sret: ⁻1})
     let em : mut Emit = (Emit{code: [], cf_pos: [], cf_target: [],
                               sf_pos: [], sf_str: [], sd_pos: [], sd_str: [],
                               df_pos: [], df_off: [], labels: [],
@@ -93,7 +93,8 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // trimmed here yet, since the IR-built routines call each other
     foreach i := 0…#a.fns - 1:
         let f : i64 = @dropunit(i)
-        let np : i64 = a.extra[a.fns[i].params_off × 1¤ptrdiff]
+        // the space for a sized answer arrives as one more argument
+        let np : i64 = a.extra[a.fns[i].params_off × 1¤ptrdiff] + (1 if ty_is_farr(a.fns[i].ret) else 0)
         if chk.skipfn[i] = 1:
             let sir := lower_stub_fn(&lw, np)
             em.fn_off.push(em.here())
@@ -693,9 +694,11 @@ fn rt_nargs(id : i64) → i64:
     if id = RT_ENVG or id = RT_AUXV: return 1
     if id = RT_DIVU64 or id = RT_MODU64 or id = RT_DIVS64 or id = RT_MODS64: return 2
     if id = RT_MULOV64: return 3
-    if id = RT_HSTART or id = RT_HFINAL: return 1
+    if id = RT_HSTART: return 1
+    if id = RT_HFINAL: return 2
     if id = RT_HUPDATE: return 2
-    if id = RT_SHA256INIT or id = RT_SHA256BLK or id = RT_SHA256FIN: return 1
+    if id = RT_SHA256INIT or id = RT_SHA256BLK: return 1
+    if id = RT_SHA256FIN: return 2
     if id = RT_SEGV: return 3
     if id = RT_SIGINIT: return 0
     0

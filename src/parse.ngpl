@@ -34,6 +34,7 @@ struct Parser:
     tte : i64[]
     fae : i64[]
     fas : i64[]
+    hdty : i64[]         // the type digest() answers, per algorithm
     mel : i64[]
     mrr : i64[]
     mcc : i64[]
@@ -402,6 +403,14 @@ impl Parser:
         self.fae.push(elem)
         self.fas.push(size)
         m
+
+    // u8[W] for every algorithm there is, so a digest's type is there
+    // whichever one a program asks for
+    fn intern_digest_types(&mut self):
+        if #self.hdty > 0:
+            return
+        foreach w := hash_digest_bytes():
+            self.hdty.push(mk_fty(self.farr_intern(TY_U8, w)))
 
     // equal lambda signatures share one type code, as tuple shapes do
     fn lam_intern(&mut self, pts : i64[], ret : i64) → i64:
@@ -1059,6 +1068,11 @@ impl Parser:
                         self.err("'std.hash." ⧺ aname ⧺ "." ⧺ hm ⧺ "' is not core-2; digest() answers the digest of a message in hand and start() a handle to feed one that is not")
                         return 0
                     self.pos ← self.pos + 1
+                    // What a digest is: a fixed count of bytes, which
+                    // is part of the type it answers.  The shape is
+                    // interned here because interning is the parser's,
+                    // and the checker only reads what it finds.
+                    self.intern_digest_types()
                     let hoff : i64 = self.parse_args()
                     return self.mknode(NK_SCALL, at, hsb, hoff, alg)
                 let sb : mut i64 = ⁻1
@@ -2371,7 +2385,7 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
                                  udname: unit_none_names(),
                                  udtok: unit_decays(),
                                  snames: [], tts: [], ttl: [], tte: [],
-                                 fae: [], fas: [],
+                                 fae: [], fas: [], hdty: [],
                                  mel: [], mrr: [], mcc: [], mdd: [], minner: [],
                                  lts: [], ltl: [], lte: [],
                                  enames: builtin_enum_names(),
@@ -2459,7 +2473,7 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
          mods: p.mods, modtok: p.modtok, qmods: p.qmods, builds: p.builds,
          globals: p.globals,
          structs: p.structs, tts: p.tts, ttl: p.ttl, tte: p.tte,
-         fae: p.fae, fas: p.fas,
+         fae: p.fae, fas: p.fas, hdty: p.hdty,
          mel: p.mel, mrr: p.mrr, mcc: p.mcc, mdd: p.mdd, minner: p.minner,
          lts: p.lts, ltl: p.ltl, lte: p.lte,
          unames: p.unames, umarks: p.umarks, udecay: p.udecay,

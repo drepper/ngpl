@@ -46,9 +46,16 @@ fn sha_h0() → u32[]:
 // A digest as the sixty-four lowercase hex characters that name it.
 // Separate from computing one, because a digest fed a piece at a time
 // is spelled out at the end just the same.
+//
+// The parameter is u8[32] and not u8[], because a digest is a fixed
+// width and its type says so.  The two are laid out differently -- the
+// one its elements packed, the other a header and a slot apiece -- so
+// one does not go where the other is wanted.  The precondition below
+// is now something the type already carries; it stays as the statement
+// of what this depends on.
 @pre(@dropunit(#d) = 32)
 @post(r: #r = 64)
-fn hex_digest(d : u8[]) → str:
+fn hex_digest(d : u8[32]) → str:
     let digits : str = "0123456789abcdef"
     let cs := digits.chars()
     let out : mut str = ""

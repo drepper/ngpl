@@ -1786,13 +1786,13 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.rt_begin(RT_HUPDATE)
     emit_fn(&em, rt_hupdate_ir(&lw), 2, lw.strs)
     em.rt_begin(RT_HFINAL)
-    emit_fn(&em, rt_hfinal_ir(&lw), 1, lw.strs)
+    emit_fn(&em, rt_hfinal_ir(&lw), 2, lw.strs)
     em.rt_begin(RT_SHA256INIT)
     emit_fn(&em, rt_sha256init_ir(), 1, lw.strs)
     em.rt_begin(RT_SHA256BLK)
     emit_fn(&em, rt_sha256blk_ir(), 1, lw.strs)
     em.rt_begin(RT_SHA256FIN)
-    emit_fn(&em, rt_sha256fin_ir(), 1, lw.strs)
+    emit_fn(&em, rt_sha256fin_ir(), 2, lw.strs)
 
     // ------------------------------------------------------------------
     // The stack running out

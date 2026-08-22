@@ -132,6 +132,12 @@ let HALG_SHA256 : i64 = 0
 fn hash_algs() → str[]:
     ["sha256"]
 
+// How many bytes each answers.  The width is part of what digest()
+// hands back -- a u8[32], not a u8[] -- so it has to be known while
+// the program is being read, not while it runs.
+fn hash_digest_bytes() → i64[]:
+    [32]
+
 // the same names as a diagnostic says them
 @post(r: #r > 0)
 fn hash_algs_named() → str:
@@ -217,6 +223,7 @@ struct Ast:
     tte : i64[]          // … the element types, flattened
     fae : i64[]          // sized arrays: the element type per shape
     fas : i64[]          // … and the size
+    hdty : i64[]         // the type digest() answers, per hash algorithm
     mel : i64[]          // matrices: the element type per shape
     mrr : i64[]          // … the first extent, ⁻1 where the type leaves it open
     mcc : i64[]          // … the second, likewise

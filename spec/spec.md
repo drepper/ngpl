@@ -8782,11 +8782,13 @@ let pages : mut = std.sys.total_memory() ÷ std.sys.page_size()
 Each algorithm is a namespace, and every one of them answers the same two things: `digest(x)` for a message already in hand, and `start()` for one that is not.
 
 ```
-let d : u8[] = std.hash.sha256.digest("abc")            // a string, as its UTF-8 bytes
-let e : u8[] = std.hash.sha256.digest(std.bytes("abc")) // the same message, the same digest
+let d : u8[32] = std.hash.sha256.digest("abc")            // a string, as its UTF-8 bytes
+let e : u8[32] = std.hash.sha256.digest(std.bytes("abc")) // the same message, the same digest
 ```
 
 `x` is a string — hashed as its UTF-8 bytes — or a `u8[]`/`byte[]`.  `sha256` follows FIPS 180-4 and answers thirty-two bytes, most significant first.
+
+**A digest is a fixed width, and says so.**  `sha256` answers `u8[32]`, not `u8[]`: the count is a property of the algorithm, so it belongs in the type rather than in a length word beside the bytes.  What comes back is thirty-two bytes and an address — see "What a Sized Array Is Made Of" — written into space the caller already has, so taking a digest allocates nothing at all.  `W` in the table below is whatever width the algorithm answers.
 
 The result is bytes rather than a number because no sized type the language has holds two hundred and fifty-six bits, so a program handed a digest as an integer could not keep it.  Thirty-two bytes it can hold, compare, index, and write out in whatever spelling it likes.
 
@@ -8798,15 +8800,15 @@ The result is bytes rather than a number because no sized type the language has 
 let h : mut = std.hash.sha256.start()
 h.update("the quick ")
 h.update(std.bytes("brown fox"))
-let d : u8[] = h.digest()
+let d : u8[32] = h.digest()
 ```
 
 | Member | Result | Description |
 |--------|--------|-------------|
-| `<alg>.digest(x)` | `u8[]` | the digest of the whole of `x` |
+| `<alg>.digest(x)` | `u8[W]` | the digest of the whole of `x` |
 | `<alg>.start()` | `std.hash.Hash` | a handle, with nothing added yet |
 | `h.update(x)` | ∅ | another piece of the message |
-| `h.digest()` | `u8[]` | the digest of every piece, and the end of `h` |
+| `h.digest()` | `u8[W]` | the digest of every piece, and the end of `h` |
 
 A message added in pieces and the same message added at once give the same digest; where the pieces are cut makes no difference.
 

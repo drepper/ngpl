@@ -269,7 +269,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                                 shimbase: 0,
                                 cur_ret: 0, post_label: ⁻1,
                                 res_vreg: ⁻1, cur_fname: "", dlog: [],
-                                argcopy: chk.argcopy, fbytes: 0¤byte})
+                                argcopy: chk.argcopy, fbytes: 0¤byte, sret: ⁻1})
     let em : mut Emit = (Emit{code: [], cf_pos: [], cf_target: [],
                               sf_pos: [], sf_str: [], sd_pos: [], sd_str: [],
                               df_pos: [], df_off: [], labels: [],
@@ -497,7 +497,8 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // the runtime that follows carries only what is reached.
     foreach i := 0…#a.fns - 1:
         let f : i64 = @dropunit(i)
-        let np : i64 = a.extra[a.fns[i].params_off × 1¤ptrdiff]
+        // the space for a sized answer arrives as one more argument
+        let np : i64 = a.extra[a.fns[i].params_off × 1¤ptrdiff] + (1 if ty_is_farr(a.fns[i].ret) else 0)
         if chk.skipfn[i] = 1:
             // a generic no call shaped: an empty body stands in
             let sir := lower_stub_fn(&lw, np)

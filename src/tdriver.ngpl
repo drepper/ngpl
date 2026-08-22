@@ -423,7 +423,12 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
             g_argld(&em, tg, 1, b)
             g_call(&em, tg, RT_CONCAT if o = IR_SCCAT else RT_STREQ)
             g_retst(&em, tg, d)
-        elif o = IR_SLENV or o = IR_CHARS or o = IR_CHARSTR or o = IR_SBYTES or o = IR_HSTART or o = IR_HFINAL or o = IR_TORAW or o = IR_FREAD or o = IR_FOPEN:
+        elif o = IR_HFINAL:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_call(&em, tg, RT_HFINAL)
+            g_retst(&em, tg, d)
+        elif o = IR_SLENV or o = IR_CHARS or o = IR_CHARSTR or o = IR_SBYTES or o = IR_HSTART or o = IR_TORAW or o = IR_FREAD or o = IR_FOPEN:
             g_argld(&em, tg, 0, a)
             if o = IR_SLENV:
                 g_call(&em, tg, RT_STRCHARS)
@@ -435,8 +440,6 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
                 g_call(&em, tg, RT_SBYTES)
             elif o = IR_HSTART:
                 g_call(&em, tg, RT_HSTART)
-            elif o = IR_HFINAL:
-                g_call(&em, tg, RT_HFINAL)
             elif o = IR_TORAW:
                 g_call(&em, tg, RT_TORAW)
             elif o = IR_FREAD:

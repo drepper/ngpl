@@ -17,5 +17,5 @@ fn main():
     // format down before it works out what goes in the {}, so an
     // argument that stops the program leaves that much on stdout and
     // the interpreter, which formats the whole line first, does not.
-    let second : u8[] = h.digest()
+    let second : u8[32] = h.digest()
     std.println("second: {}", #second)

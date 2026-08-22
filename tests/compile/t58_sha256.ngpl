@@ -11,7 +11,11 @@
 // say the same at the next boundary.  Zero is here because an empty
 // message is still a whole block of padding.
 
-fn hex(d : u8[]) → str:
+// A digest is a fixed width, so the thing that renders one says so.
+// A u8[32] does not go where a u8[] is wanted: the two are laid out
+// differently, and passing one as the other would mean a conversion
+// the call does not say is happening.
+fn hex(d : u8[32]) → str:
     let digits : str = "0123456789abcdef"
     let cs := digits.chars()
     let out : mut str = ""
@@ -102,7 +106,7 @@ fn main():
                 hex(y.digest()) = hex(std.hash.sha256.digest("bcd")))
 
     // a digest is thirty-two bytes, and each of them is a byte
-    let d : u8[] = std.hash.sha256.digest("abc")
+    let d : u8[32] = std.hash.sha256.digest("abc")
     std.println("a digest is {} long", #d)
     let hi : mut i64 = 0
     foreach v := d:

@@ -34,6 +34,7 @@ struct Lower:
     dlog : str[]         // one JSON line per code-shaping decision
     argcopy : i64[]      // arguments whose copy by value cannot be elided
     fbytes ¤byte : i64   // frame taken by objects that live in the frame
+    sret : i64           // where a sized answer is to be written, ⁻1 for none
 
 @post(r: (r & 255) >= 8 and (r & 255) <= 64)
 fn width_of(t : i64) → i64:
@@ -504,8 +505,9 @@ impl Lower:
                 let hv : i64 = self.tmp()
                 self.ir(IR_HSTART, av, 0, 0, hv, 0)
                 self.ir(IR_HUPDATE, hv, self.lower_hash_arg(self.a.extra[(nb + 1) × 1¤ptrdiff]), 0, 0, 0)
+                let dst : i64 = self.farr_new(self.tof(nid))
                 let d : i64 = self.tmp()
-                self.ir(IR_HFINAL, hv, 0, 0, d, 0)
+                self.ir(IR_HFINAL, hv, dst, 0, d, 0)
                 return d
             if na = SB_IOV:
                 return self.lower_iov(self.a.extra[(nb + 1) × 1¤ptrdiff])
@@ -884,8 +886,11 @@ impl Lower:
             self.ir(IR_HUPDATE, av, uv, 0, 0, 0)
             return ⁻1
         if mid = MID_HDIGEST:
+            // the digest is a fixed width, so the space for it is the
+            // caller's and nothing is allocated for the answer
+            let dst : i64 = self.farr_new(self.tof(nid))
             let d : i64 = self.tmp()
-            self.ir(IR_HFINAL, av, 0, 0, d, 0)
+            self.ir(IR_HFINAL, av, dst, 0, d, 0)
             return d
         if mid = MID_DIRITER:
             let earr : i64 = self.tmp()
@@ -1478,11 +1483,16 @@ impl Lower:
             let an : i64 = self.a.extra[(args_off + 1 + i) × 1¤ptrdiff]
             vregs.push(self.copied_arg(an, self.lower_expr(an)))
             i ← i + 1
+        let f : i64 = self.fname_index(name)
+        // a callee that answers a sized array is given the space to
+        // answer into, as a last argument the source never wrote
+        let rt : i64 = self.tof(nid)
+        if ty_is_farr(rt):
+            vregs.push(self.farr_new(rt))
         let off : i64 = @dropunit(#self.extra)
-        self.extra.push(argc)
+        self.extra.push(@dropunit(#vregs))
         foreach v := vregs:
             self.extra.push(v)
-        let f : i64 = self.fname_index(name)
         let d : i64 = self.tmp()
         self.ir(IR_CALL, f, off, 0, d, 0)
         d
@@ -1658,6 +1668,16 @@ impl Lower:
         self.lower_ret(v)
 
     fn lower_ret(&mut self, v : i64):
+        if self.sret ≠ ⁻1 and ty_is_farr(self.cur_ret):
+            // the frame this was computed in ends at the return, so
+            // the elements go where the caller said before that
+            self.farr_copy(self.sret, v, self.cur_ret)
+            if self.post_label ≠ ⁻1:
+                self.ir(IR_MOV, self.sret, 0, 0, self.res_vreg, 0)
+                self.ir(IR_JMP, self.post_label, 0, 0, 0, 0)
+            else:
+                self.ir(IR_RET, self.sret, 0, 0, 0, 0)
+            return
         if self.post_label ≠ ⁻1:
             self.ir(IR_MOV, v, 0, 0, self.res_vreg, 0)
             self.ir(IR_JMP, self.post_label, 0, 0, 0, 0)
@@ -2183,6 +2203,20 @@ impl Lower:
         self.farr_loop_close(iv, ltop, lend)
         fb
 
+    // Copy one sized array's elements over another's.  This is what a
+    // return is: the answer is written into the space the caller
+    // handed over, since the frame it was computed in is about to go.
+    @pre(ty_is_farr(t))
+    fn farr_copy(&mut self, dst : i64, src : i64, t : i64):
+        let (iv, ltop, lend) := self.farr_loop_open(t)
+        let sa : i64 = self.farr_addr_at(src, t, iv)
+        let et : i64 = self.elem_of(t)
+        let ev : i64 = self.tmp()
+        self.ir(IR_LDN, sa, 0, 0, ev, self.farr_esize(t) + 256 × ty_sgn(et))
+        let da : i64 = self.farr_addr_at(dst, t, iv)
+        self.ir(IR_STN, da, 0, ev, 0, self.farr_esize(t))
+        self.farr_loop_close(iv, ltop, lend)
+
     // An operand where a T[] is wanted: a sized array is laid out
     // afresh, anything else is itself.  This is the only place the two
     // representations meet, so it is the only place that has to be
@@ -2623,14 +2657,31 @@ fn lower_fn(lw : &mut Lower, a : Ast, chk : Chk, f : i64) → IrFn:
         _ ← lw.extra.pop() ?? 0
     lw.nlabels ← 0
     lw.fbytes ← 0¤byte
-    lw.tbase ← chk.fslots[f × 1¤ptrdiff]
+    // A function that answers a sized array is handed the space to
+    // answer into, in a slot past the parameters -- the same place a
+    // lambda's box rides.  The checker knew nothing of it and may have
+    // put a local there, so the pointer is parked in a temporary
+    // before a line of the body runs, which is before that local is
+    // ever written.
+    // A temporary would not do: tnext falls back to tbase at every
+    // statement, so anything taken from there is written over by the
+    // first thing the body computes.  The pointer gets a slot of its
+    // own, below where the temporaries begin.
+    let np0 : i64 = a.extra[d.params_off × 1¤ptrdiff]
+    let sized_ret : bool = ty_is_farr(d.ret)
+    let sbase : i64 = chk.fslots[f × 1¤ptrdiff] ⌈ (np0 + 1)
+    lw.tbase ← sbase + 1 if sized_ret else chk.fslots[f × 1¤ptrdiff]
     lw.tnext ← lw.tbase
     lw.tmax ← lw.tbase
     lw.in_wrap ← 0
     lw.cur_ret ← d.ret
     lw.post_label ← ⁻1
     lw.res_vreg ← ⁻1
+    lw.sret ← ⁻1
     lw.cur_fname ← d.name
+    if sized_ret:
+        lw.ir(IR_MOV, np0, 0, 0, sbase, 0)
+        lw.sret ← sbase
     if d.pre_off ≠ ⁻1:
         let n : i64 = a.extra[d.pre_off × 1¤ptrdiff]
         let j : mut i64 = 0

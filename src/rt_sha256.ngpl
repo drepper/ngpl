@@ -178,7 +178,7 @@ fn rt_sha256blk_ir() → IrFn:
 // buffer the message went through, so there is one path into the
 // compression rather than two.
 fn rt_sha256fin_ir() → IrFn:
-    let b : mut RtB = rtb(1)
+    let b : mut RtB = rtb(2)
     let z : i64 = b.cst(0)
     let one : i64 = b.cst(1)
     let three : i64 = b.cst(3)
@@ -232,12 +232,16 @@ fn rt_sha256fin_ir() → IrFn:
     b.stn(0, HS_FILL, c64, 8)
     _ ← b.call1(RT_SHA256BLK, 0)
 
-    // the eight words as thirty-two bytes, most significant first
-    let out : i64 = b.call1(RT_ARRNEW, b.cst(32))
+    // The eight words as thirty-two bytes, most significant first,
+    // written where the caller said.  They used to be an array: a
+    // header, a growable allocation and thirty-two eight-byte slots
+    // to hold thirty-two bytes.  A digest is a fixed width, so the
+    // answer is the bytes themselves and the caller owns the space.
     let shifts : i64[] = [24, 16, 8, 0]
     foreach k := 0…7:
-        let hv : i64 = b.ldn(0, HS_H + k × 8, 8)
-        foreach s := shifts:
-            _ ← b.call2(RT_ARRPUSH, out, b.band(b.shr32(hv, b.cst(s)), c255))
-    b.ret(out)
+        let hv : i64 = b.ldn(0, HS_H + @dropunit(k) × 8, 8)
+        foreach si := 0…3:
+            b.stn(1, @dropunit(k) × 4 + @dropunit(si),
+                  b.band(b.shr32(hv, b.cst(shifts[si × 1¤ptrdiff])), c255), 1)
+    b.ret(1)
     rtb_fn(b)

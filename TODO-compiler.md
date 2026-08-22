@@ -57,6 +57,22 @@ The Compiler
     that site a number from its block, and let tools/update_expectations.py fill the message.
     Spec: "What a Diagnostic Is Known By".
 
+[ ] a sized array cannot be handed to a T[] parameter.  The two are laid out differently
+    -- a T[N] is its elements packed, a T[] a header and a slot apiece -- so the call would
+    have to convert, and ngplc refuses it rather than convert silently.  The interpreter
+    allows it, so this is ngplc being the stricter of the two, which is the permitted
+    direction; but it means a digest cannot be given to a helper written against u8[], and
+    tests/compile/t58_sha256.ngpl had to say u8[32] where it said u8[].  Converting at the
+    call, for a by-value or shared parameter only, would cost one lay-out and is worth it
+    if this turns out to bite.  A &mut parameter could never take one: writes through the
+    conversion would reach nothing.  Spec: "What a Sized Array Is Made Of".
+
+[ ] the hash handle's type does not say which algorithm made it.  digest() has to answer a
+    fixed width, and with one algorithm it reads the width from the only entry there is.
+    check.ngpl asserts #hash_algs() = 1 at that point, so a second algorithm stops the
+    compiler rather than answering the wrong width -- but what it wants is for TY_HASH to
+    carry the algorithm, which is a band in the type encoding rather than a bare code.
+
 [ ] ngplc answers for twenty of the numbers.  It checks every @expect definition now and
     holds it to the numbers it names, but only where it draws that number itself --
     diag_codes() in src/check.ngpl is the list, and tests/compile/run_compile_tests.sh

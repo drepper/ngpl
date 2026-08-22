@@ -1446,6 +1446,14 @@ impl Checker:
     fn farr_size(&self, t : i64) → i64:
         self.a.fas[ty_fidx(t) × 1¤ptrdiff]
 
+    // What digest() answers for one algorithm: a fixed count of bytes,
+    // interned by the parser where it met std.hash.
+    @pre(alg >= 0)
+    @post(r: ty_is_farr(r))
+    fn digest_type(&self, alg : i64) → i64:
+        assert(alg × 1¤ptrdiff < #self.a.hdty, "the parser interned every algorithm's digest")
+        self.a.hdty[alg × 1¤ptrdiff]
+
     // the checker interns a named function's signature when it turns
     // into a value, as the parser interns a written-out λ's
     fn lam_intern(&mut self, pts : i64[], ret : i64) → i64:
@@ -2779,7 +2787,7 @@ impl Checker:
                 let ht : i64 = ty_strip_ref(self.ty_of(hv))
                 if ht ≠ mk_aty(TY_U8) and ht ≠ TY_STR:
                     self.derr(tok, who ⧺ ".digest digests a string or its bytes, not " ⧺ self.tn(ht))
-            self.set_type(id, mk_aty(TY_U8))
+            self.set_type(id, self.digest_type(self.a.nc[id × 1¤ptrdiff]))
             return
         if sb = SB_IOV:
             if argc ≠ 1:
@@ -2964,7 +2972,12 @@ impl Checker:
             if argc0 ≠ 0:
                 self.derr(tok, "digest takes nothing; it answers what was added")
             self.a.nc[id × 1¤ptrdiff] ← MID_HDIGEST
-            self.set_type(id, mk_aty(TY_U8))
+            // The handle's type does not say which algorithm made it,
+            // and with one algorithm it does not have to.  A second
+            // would have to be told apart here, so the day one arrives
+            // this stops rather than answering the wrong width.
+            assert(#hash_algs() = 1, "a second hash algorithm wants the handle's type to carry which it is")
+            self.set_type(id, self.digest_type(0))
             return
         if t = TY_FILE and m = "writev":
             if not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:

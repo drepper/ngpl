@@ -104,13 +104,13 @@ fn rt_hupdate_ir(lw : &mut Lower) → IrFn:
     b.retn()
     rtb_fn(b)
 
-// (h) → the digest, and the end of the handle.  What the handle held
+// (h, dst) → the digest written at dst, and the end of the handle.  What the handle held
 // is wiped here rather than left lying about: a bump allocator has
 // nothing to give back, so this is what freeing a hash can mean, and
 // it is the part that matters -- a message worth hashing is often a
 // message worth not leaving in memory afterwards.
 fn rt_hfinal_ir(lw : &mut Lower) → IrFn:
-    let b : mut RtB = rtb(1)
+    let b : mut RtB = rtb(2)
     let z : i64 = b.cst(0)
     let one : i64 = b.cst(1)
     let three : i64 = b.cst(3)
@@ -120,7 +120,7 @@ fn rt_hfinal_ir(lw : &mut Lower) → IrFn:
     b.abort_msg(lw.intern(rt_hash_spent_msg()))
     b.lab(lok)
     // one algorithm, so one call; a second adds a comparison here
-    let out : i64 = b.call1(RT_SHA256FIN, 0)
+    let out : i64 = b.call2(RT_SHA256FIN, 0, 1)
     b.stn(0, HS_ALG, b.cst(⁻1), 8)
     b.stn(0, HS_FILL, z, 8)
     b.stn(0, HS_TOTAL, z, 8)
