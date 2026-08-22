@@ -421,6 +421,16 @@ fn r32g_syscall(em : &mut Emit, tg : Target, scid : i64):
 fn r32g_sysret(em : &mut Emit, tg : Target, r : i64):
     r32_stpair(&em, 10, 11, r32_cello(r))
 
+// see i3g_frameaddr; a slot sits at sp + 160 + 8×s, upward
+@pre(off >= 0)
+fn r32g_frameaddr(em : &mut Emit, tg : Target, nvregs : i64, nobj : i64, off : i64, r : i64):
+    _ ← nobj
+    let at : i64 = 160 + 8 × nvregs + off
+    r32_movimm(&em, 11, at)
+    rv_R(&em, 0, 11, 2, 0, 10, 51)                   // add a0, sp, a1
+    r32_movimm(&em, 11, 0)
+    r32_stpair(&em, 10, 11, r32_cello(r))
+
 fn r32g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64):
     let frame : i64 = align_up(160 + 8 × nvregs, 16)
     em.max_frame ← em.max_frame ⌈ (frame + 16)

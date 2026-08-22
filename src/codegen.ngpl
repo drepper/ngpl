@@ -60,7 +60,7 @@ fn lw_snapshot(lw : &Lower) → IrFn:
         foreach v := lw.extra:
             exc.push(v)
     (IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
-          extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels})
+          extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels, fbytes: lw.fbytes})
 
 // std.args.all()'s answer: the kernel's arguments with the test
 // harness's own options taken out, as the interpreter takes out its
@@ -247,7 +247,7 @@ fn lower_ginit(lw : &mut Lower, a : Ast, chk : Chk) → IrFn:
         foreach v := lw.extra:
             exc.push(v)
     (IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
-          extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels})
+          extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels, fbytes: lw.fbytes})
 
 @pre(stack_size >= PAGE and guard_size >= PAGE)
 @pre((stack_size % PAGE ?? 1) = 0 and (guard_size % PAGE ?? 1) = 0)
@@ -269,7 +269,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                                 shimbase: 0,
                                 cur_ret: 0, post_label: ⁻1,
                                 res_vreg: ⁻1, cur_fname: "", dlog: [],
-                                argcopy: chk.argcopy})
+                                argcopy: chk.argcopy, fbytes: 0¤byte})
     let em : mut Emit = (Emit{code: [], cf_pos: [], cf_target: [],
                               sf_pos: [], sf_str: [], sd_pos: [], sd_str: [],
                               df_pos: [], df_off: [], labels: [],

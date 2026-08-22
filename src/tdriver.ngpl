@@ -34,7 +34,9 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
     let n : i64 = @dropunit(#ir.op)
     em.begin_fn(ir.nlabels + 6 × n + 8)
     let sl : mut i64 = ir.nlabels
-    g_prologue(&em, tg, ir.nvregs, np)
+    // the objects that live in the frame take the slots past the vregs
+    let nobj : i64 = (@dropunit(ir.fbytes) + 7) ÷ 8 ?? 0
+    g_prologue(&em, tg, ir.nvregs + nobj, np)
     let i : mut i64 = 0
     while i < n:
         let o : i64 = ir.op[i × 1¤ptrdiff]
@@ -611,6 +613,9 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
             g_lds(&em, tg, RG_A, a)
             g_lds(&em, tg, RG_B, c)
             g_sto(&em, tg, RG_B, RG_A, b, bits)
+        elif o = IR_FRAME:
+            g_frameaddr(&em, tg, ir.nvregs, nobj, a, RG_A)
+            g_sts(&em, tg, RG_A, d)
         elif o = IR_KADDR:
             let pos : i64 = g_absref(&em, tg, RG_A)
             if em.skipping = 0:

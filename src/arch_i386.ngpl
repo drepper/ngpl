@@ -492,6 +492,18 @@ fn i3g_syscall(em : &mut Emit, tg : Target, scid : i64):
 fn i3g_sysret(em : &mut Emit, tg : Target, r : i64):
     i3_stpair(&em, 0, 2, i3_cello(r))
 
+// The address of the frame's object region, plus off.  The region
+// takes the slots just past the vregs; here the slots run downward
+// from ebp, so the region's lowest address is the last of them.  A
+// pointer is half a cell wide, and the high half is nought.
+@pre(off >= 0)
+fn i3g_frameaddr(em : &mut Emit, tg : Target, nvregs : i64, nobj : i64, off : i64, r : i64):
+    let at : i64 = 0 - 32 - 8 × (nvregs + nobj) + off
+    em.b2(141, 133)                  // lea eax, [ebp+disp32]
+    em.w32(at)
+    i3_movimm(&em, 2, 0)
+    i3_stpair(&em, 0, 2, i3_cello(r))
+
 fn i3g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64):
     let frame : i64 = 32 + 8 × nvregs + 128
     em.max_frame ← em.max_frame ⌈ (frame + 16)

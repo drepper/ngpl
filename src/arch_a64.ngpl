@@ -541,6 +541,16 @@ fn a64g_sysret(em : &mut Emit, tg : Target, r : i64):
 
 // the frame: save the caller's, claim the slots and the outgoing
 // argument room, spill the incoming arguments to their slots
+// The address of the frame's object region, plus off.  The region
+// takes the slots just past the vregs, so the slot formula gives it:
+// slot s sits at sp + 8×(4+s), and the region begins at slot nvregs.
+@pre(off >= 0)
+fn a64g_frameaddr(em : &mut Emit, tg : Target, nvregs : i64, nobj : i64, off : i64, r : i64):
+    _ ← nobj
+    let at : i64 = 32 + 8 × nvregs + off
+    assert(at >= 0 and at < 4096, "the frame offset fits the immediate")
+    em.aw(2432696320 + (at « 10) + (31 « 5) + a64_ar(r))   // add xr, sp, #at
+
 fn a64g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64):
     let frame : i64 = align_up(32 + 8 × nvregs, 16)
     em.max_frame ← em.max_frame ⌈ (frame + 16)

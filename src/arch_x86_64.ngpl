@@ -38,7 +38,10 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
     em.b1(85)                       // push rbp
     em.b3(72, 137, 229)             // mov rbp, rsp
     em.b3(72, 129, 236)             // sub rsp, imm32
-    let frame : i64 = 8 × ir.nvregs + 8
+    // a slot for every vreg, then the objects that live in the frame
+    // outright, which take the slots just past them
+    let nobj : i64 = (@dropunit(ir.fbytes) + 7) ÷ 8 ?? 0
+    let frame : i64 = 8 × (ir.nvregs + nobj) + 8
     em.max_frame ← em.max_frame ⌈ (frame + 16)
     em.w32(frame)
     let j : mut i64 = 0
@@ -429,6 +432,12 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             while e2 < span:
                 em.pj_labels.push(ir.extra[(b + 3 + e2) × 1¤ptrdiff])
                 e2 ← e2 + 1
+        elif o = IR_FRAME:
+            // the object region sits below the slots, and a is an
+            // offset from its bottom, which is the bottom of the frame
+            em.b3(72, 141, 133)             // lea rax, [rbp+imm32]
+            em.w32(0 - 8 × (ir.nvregs + nobj) + a)
+            em.store(R_AX, d)
         elif o = IR_SNEW:
             em.movimm(R_DI, 8 × a)
             em.jglobal(232, ⁻1, RT_ALLOC)

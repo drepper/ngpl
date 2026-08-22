@@ -103,6 +103,12 @@ let IR_WRITEV : i64 = 107  // file a takes the runs held in array b
 let IR_HSTART : i64 = 112  // d ← a handle for the algorithm a, ready to be fed
 let IR_HUPDATE : i64 = 113 // handle a takes the bytes of the array b
 let IR_HFINAL : i64 = 114  // d ← handle a's digest, and the end of the handle
+// A function's frame carries two regions: a slot for every vreg, and
+// below them the objects that live in the frame outright -- a sized
+// array is its elements and nothing else, and the elements are here.
+// The offset counts from the bottom of the region, so it does not move
+// when a later object is added.
+let IR_FRAME : i64 = 115   // d ← the address of this frame's bytes at offset a
 let IR_CALLI : i64 = 100   // d ← call the address in vreg a, args at extra b
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
 let IR_FLD : i64 = 67      // d ← field b of struct a
@@ -118,4 +124,5 @@ struct IrFn:
     extra : i64[]
     nvregs : i64
     nlabels : i64
+    fbytes ¤byte : i64   // how much frame the objects below the slots take
 

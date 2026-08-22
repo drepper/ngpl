@@ -694,6 +694,21 @@ fn g_sysret(em : &mut Emit, tg : Target, r : i64):
         return
     r32g_sysret(&em, tg, r)
 
+fn g_frameaddr(em : &mut Emit, tg : Target, nvregs : i64, nobj : i64, off : i64, r : i64):
+    if tg.id = TGT_A64:
+        a64g_frameaddr(&em, tg, nvregs, nobj, off, r)
+        return
+    if tg.id = TGT_RV64:
+        rvg_frameaddr(&em, tg, nvregs, nobj, off, r)
+        return
+    if tg.id = TGT_I386:
+        i3g_frameaddr(&em, tg, nvregs, nobj, off, r)
+        return
+    if tg.id = TGT_A32:
+        a32g_frameaddr(&em, tg, nvregs, nobj, off, r)
+        return
+    r32g_frameaddr(&em, tg, nvregs, nobj, off, r)
+
 fn g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64):
     if tg.id = TGT_A64:
         a64g_prologue(&em, tg, nvregs, np)

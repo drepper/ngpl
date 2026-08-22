@@ -19,7 +19,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                                 shimbase: 0,
                                 cur_ret: 0, post_label: ⁻1,
                                 res_vreg: ⁻1, cur_fname: "", dlog: [],
-                                argcopy: chk.argcopy})
+                                argcopy: chk.argcopy, fbytes: 0¤byte})
     let em : mut Emit = (Emit{code: [], cf_pos: [], cf_target: [],
                               sf_pos: [], sf_str: [], sd_pos: [], sd_str: [],
                               df_pos: [], df_off: [], labels: [],

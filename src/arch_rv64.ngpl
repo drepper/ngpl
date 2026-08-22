@@ -355,6 +355,14 @@ fn rvg_syscall(em : &mut Emit, tg : Target, scid : i64):
 fn rvg_sysret(em : &mut Emit, tg : Target, r : i64):
     rv_mv(&em, rv_r(r), 10)
 
+// see a64g_frameaddr; here a slot sits at sp + 32 + 8×s
+@pre(off >= 0)
+fn rvg_frameaddr(em : &mut Emit, tg : Target, nvregs : i64, nobj : i64, off : i64, r : i64):
+    _ ← nobj
+    let at : i64 = 32 + 8 × nvregs + off
+    assert(at >= 0 and at < 2048, "the frame offset fits the immediate")
+    rv_I(&em, at, 2, 0, rv_r(r), 19)                        // addi xr, sp, at
+
 fn rvg_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64):
     let frame : i64 = align_up(32 + 8 × nvregs, 16)
     em.max_frame ← em.max_frame ⌈ (frame + 16)

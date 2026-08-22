@@ -313,7 +313,7 @@ impl RtB:
 
 fn rtb_fn(b : RtB) → IrFn:
     (IrFn{op: b.op, ia: b.ia, ib: b.ib, ic: b.ic, id: b.idd, iw: b.iww,
-          extra: b.extra, nvregs: b.ntmp, nlabels: b.nlab})
+          extra: b.extra, nvregs: b.ntmp, nlabels: b.nlab, fbytes: 0¤byte})
 
 // each runtime routine, one builder; the id picks it
 fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:

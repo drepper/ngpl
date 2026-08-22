@@ -30,3 +30,27 @@ fn main():
     std.println("{}", g.row[3])
     let sl : i64[] = f[0…1]
     std.println("{}", #sl)
+    // The elements and nothing else.  A sized array carries no length
+    // and no capacity: the type says how many there are, so #x is a
+    // constant, x[i] is checked against a constant, and the whole
+    // thing is bytes in the frame rather than a header and a second
+    // allocation somewhere else.  These exercise the paths where that
+    // representation has to meet the other one.
+    let wide : u8[8] = [1, 2, 3, 4, 5, 6, 7, 8]
+    std.println("{} {} {}", #wide, wide[0], wide[7])
+    let joined : u8[] = wide ⧺ wide
+    std.println("{} {} {}", #joined, joined[0], joined[15])
+    let cut : u8[] = wide[2¤byte…4¤byte]
+    std.println("{} {} {}", #cut, cut[0], cut[2])
+    // every element written through, then read back
+    let filled : mut i16[6] = 6 ⍴ 0i16
+    let k : mut i64 = 0
+    while k < 6:
+        let v16 : i16 = k × 3
+        filled[k × 1¤ptrdiff] ← v16
+        k ← k + 1
+    std.println("{} {} {}", #filled, filled[0], filled[5])
+    let tot : mut i64 = 0
+    foreach e := filled:
+        tot ← tot + e
+    std.println("{}", tot)

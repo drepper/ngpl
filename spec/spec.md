@@ -6048,6 +6048,52 @@ iterates twice.  This is the same mechanism that makes an element of `0` a value
 Rust and Zig arrive at the same shape as this, and for the same reason: an end signalled by the return value needs no second call to test for it, no sentinel object to compare against, and no exception for a condition that is not exceptional.  C++'s pair of iterators is the outlier, and it is the one form where the two halves can be mismatched.
 
 
+### What a Sized Array Is Made Of
+
+A `T[]` and a `T[N]` say different things, and are made of different
+things.
+
+A `T[]` may be any length, and a program that holds one has to be able
+to ask.  So the value is a pointer to a header — where the elements
+are, how many there are, how many there is room for — and the elements
+live somewhere else again.  Reading `v[i]` loads the length to check
+against, then loads the base, then loads the element.
+
+A `T[N]` states its length in its type.  Nothing needs to be asked,
+because the answer is written down, and nothing may grow it, because
+`push` and `pop` are not offered on one.  So a sized array is **the
+memory for its elements and nothing else**: no length, no capacity, no
+second allocation. The elements are laid out exactly as `@repr(C)`
+lays them out, which is what a sized array inside a C structure has
+always been — a `u8[32]` is thirty-two bytes.
+
+The consequences are worth stating, because they are the reason:
+
+| | `u8[32]` as `T[]` | `u8[32]` as `T[N]` |
+|---|---|---|
+| the elements | 256 bytes, a slot each | 32 bytes, packed |
+| the header | 24 bytes elsewhere | none |
+| allocations | two | none — it is frame |
+| `#x` | a load | a constant |
+| `x[i]` | load the length, compare | compare against a constant |
+| `x[2]` | the same | nothing at all |
+
+A local sized array lives in the frame, so it costs no allocation and
+is gone when the function is. That is what makes it the right answer
+for a digest: `u8[32]` of frame, filled in place.
+
+**Where the two meet.** A sized array used where a `T[]` is wanted —
+joined with `⧺`, sliced, printed — is laid out afresh as a `T[]`,
+because the two layouts are genuinely different and one slot per
+element is what the other side expects. This is the only conversion,
+and it goes one way: a `T[]` cannot become a `T[N]`, since its length
+is not something the type could check.
+
+**The bound is a constant, so it is often not a check at all.**  An
+index that is written out is compared against the size while the
+program is being compiled; the code that results has no comparison in
+it, and an index that cannot be right is refused there and then.
+
 ### Array Concatenation (`⧺`)
 
 The `⧺` operator (U+29FA, DOUBLE PLUS) concatenates two arrays at the outermost dimension.

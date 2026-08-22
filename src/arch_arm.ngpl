@@ -484,6 +484,17 @@ fn a32g_syscall(em : &mut Emit, tg : Target, scid : i64):
 fn a32g_sysret(em : &mut Emit, tg : Target, r : i64):
     a32_stpair(&em, 0, 1, a32_cello(r))
 
+// see i3g_frameaddr; here a slot sits at sp + 160 + 8×s, upward, so
+// the region begins at slot nvregs
+@pre(off >= 0)
+fn a32g_frameaddr(em : &mut Emit, tg : Target, nvregs : i64, nobj : i64, off : i64, r : i64):
+    _ ← nobj
+    let at : i64 = 160 + 8 × nvregs + off
+    a32_movimm(&em, 12, at)
+    a32_dp(&em, A32_ADD, 0, 13, 12)                  // r0 ← sp + at
+    a32_movimm(&em, 1, 0)
+    a32_stpair(&em, 0, 1, a32_cello(r))
+
 fn a32g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64):
     let frame : i64 = 160 + 8 × nvregs
     em.max_frame ← em.max_frame ⌈ (frame + 16)
