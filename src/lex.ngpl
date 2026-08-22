@@ -28,11 +28,17 @@ let CL_APOS : i64 = 15       // a character literal
 
 // The class table, built once per run.  An entry of kind+100 is a
 // complete single-byte token.
-@post(t: #t = 256)
-fn mkcls() → i64[]:
-    let t : mut i64[] = []
-    foreach _ := 0…255:
-        t.push(0)
+//
+// It is a sized array and not a T[] because its size is not in
+// question: a byte has two hundred and fifty-six values and the table
+// has an entry for each.  Saying so in the type is what makes it the
+// elements and nothing else -- no length beside them, no capacity, no
+// second allocation -- and turns the two hundred and fifty-six push
+// calls that used to fill it into one fill of the caller's own space.
+// Every self.cls[b] below then checks against a constant rather than
+// against a length it has to load first.
+fn mkcls() → i64[256]:
+    let t : mut i64[256] = 256 ⍴ 0
     t[32] ← CL_WS
     t[10] ← CL_NL
     t[9] ← CL_TAB
@@ -100,7 +106,7 @@ struct Toks:
 struct Lexer:
     src : byte[]
     n : i64
-    cls : i64[]
+    cls : i64[256]
     pos : i64
     line ¤"line" : i64
     col ¤"col" : i64

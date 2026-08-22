@@ -6082,6 +6082,27 @@ A local sized array lives in the frame, so it costs no allocation and
 is gone when the function is. That is what makes it the right answer
 for a digest: `u8[32]` of frame, filled in place.
 
+**Which sized arrays this describes.**  An element has to be something
+a load can move for the elements to *be* the value: an integer, a truth
+value, an enumerator.  A `P[2]` of structs and a `str[2]` keep the
+representation every other array has, and the size in their type is a
+check rather than a layout — `#x` is still a constant and the bound is
+still settled, but there is a header and the elements are a slot
+apiece.  Nothing about writing them changes; this is a statement about
+what they cost.
+
+**Answering one.**  A sized array is written into space the caller
+provides, because the frame it was computed in ends at the return.  A
+function answering `u8[32]` costs the caller thirty-two bytes of its
+own frame and nothing else — no allocation on either side.
+
+**Keeping one.**  A struct is the one thing that can hold a sized array
+— an array of them, a dictionary of them and a global of one are all
+refused — and a struct outlives the frame it was made in, so storing
+one into a field keeps the elements where the struct's own memory is.
+This is the one place a sized array costs an allocation, and it is the
+one place it has to.
+
 **Where the two meet.** A sized array used where a `T[]` is wanted —
 joined with `⧺`, sliced, printed — is laid out afresh as a `T[]`,
 because the two layouts are genuinely different and one slot per

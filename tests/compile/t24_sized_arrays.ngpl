@@ -1,6 +1,14 @@
 // core-2: sized arrays -- the length is part of the type -- and ⍴
 // fills, scalar copies and cycled elements both.
 
+// A sized array is the elements and nothing else only where an element
+// is something a load can move.  A P[2] is two structs, and a struct is
+// not; it keeps the representation every other array has, and the size
+// in its type is a check rather than a layout.
+struct P:
+    x : i64
+    y : i64
+
 struct Grid:
     row : i64[4]
 
@@ -11,6 +19,15 @@ struct Grid:
 fn made(k : i64) → i64[4]:
     let v : i64[4] = [k, k + 1, k + 2, k + 3]
     v
+
+// A struct is the one thing that can hold a sized array -- an array of
+// them, a dictionary of them and a global of one are all refused -- and
+// a struct outlives the frame it was made in, so the elements have to
+// be kept where the struct's own memory is.  Held to here for the same
+// reason as `made`: without it the field points at a frame that ended.
+fn held() → Grid:
+    let g : Grid = Grid{row: [11, 12, 13, 14]}
+    g
 
 // something to overwrite the frame `made` just left, if it were the
 // frame the answer lived in
@@ -72,3 +89,11 @@ fn main():
     let _ignored : i64 = clobbers(7)
     std.println("{} {} {} {}", answered[0], answered[1],
                 answered[2], answered[3])
+    let kept : Grid = held()
+    let _also : i64 = clobbers(8)
+    std.println("{} {} {} {}", kept.row[0], kept.row[1],
+                kept.row[2], kept.row[3])
+    let pairs : P[2] = [P{x: 1, y: 2}, P{x: 3, y: 4}]
+    std.println("{} {} {}", #pairs, pairs[0].x, pairs[1].y)
+    let words : str[2] = ["one", "two"]
+    std.println("{} {}", #words, words[1])

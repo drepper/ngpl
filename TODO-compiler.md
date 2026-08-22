@@ -57,6 +57,33 @@ The Compiler
     that site a number from its block, and let tools/update_expectations.py fill the message.
     Spec: "What a Diagnostic Is Known By".
 
+[ ] a T[] whose size is settled and which never leaves the function could be packed too.
+    It would be a representation and not a type: the binding stays T[], everything legal on
+    it stays legal, and a use a packed array could not serve -- push, being handed to a T[]
+    parameter, being returned, being stored into a struct -- disqualifies it.  Measured
+    first, because it decides how much machinery is worth building: of 162 T[] locals in
+    the compiler's own source, 159 are `= []` filled by push and 3 have a settled literal.
+    So the inference would fire almost nowhere here, and what pays for this codebase is
+    saying the size outright where it is known, which is the item below.  It would still
+    pay for programs that are not this one.
+
+[ ] more of the compiler's own tables could say their size.  src/lex.ngpl's class table
+    did: it was 256 push calls into a T[] and is now `256 ⍴ 0` into an i64[256], which is
+    one fill of the caller's own space and a bound every self.cls[b] checks against a
+    constant.  A sweep for the rest found targets() (six pushes of a struct) and
+    plan_elf's phdrs/shdrs (four each), none of which pack, because a sized array is the
+    elements and nothing else only where an element is something a load can move -- see
+    farr_is_packed in check.ngpl.  What would make those pay is packing a T[N] of
+    @repr(C) structs, which needs a struct value to have a C layout as well as the slot
+    layout it has now.
+
+[ ] a sized array stored into a struct field is copied into the struct's own memory, every
+    time.  It has to be: the struct outlives the frame.  But where the struct itself
+    provably does not outlive the frame the copy is waste, and where the field is built in
+    place -- Ident{mag: [127, 69, 76, 70]} -- the elements could be written into the
+    struct's memory outright rather than into the frame and then copied.  The second is
+    the same "answer into space the caller provides" the return path already does.
+
 [ ] a sized array cannot be handed to a T[] parameter.  The two are laid out differently
     -- a T[N] is its elements packed, a T[] a header and a slot apiece -- so the call would
     have to convert, and ngplc refuses it rather than convert silently.  The interpreter

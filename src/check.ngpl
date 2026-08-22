@@ -135,6 +135,19 @@ fn c_layout(a : Ast, t0 : i64, depth : i64) → (i64, i64):
         return c_struct_layout(a, ty_sidx(t), depth)
     c_none()
 
+// A sized array is its elements and nothing else only where an element
+// is something a load can move: an integer, a truth value, an
+// enumerator.  A T[N] of anything else -- a struct, a string -- keeps
+// the representation every other array has, and the size in its type
+// is a check rather than a layout.  The line is drawn here because it
+// is where it can be drawn once: the lowering asks this and nothing
+// else about which of the two a sized array is.
+fn farr_is_packed(a : Ast, t : i64) → bool:
+    if not ty_is_farr(t):
+        return false
+    let e : i64 = a.fae[ty_fidx(t) × 1¤ptrdiff]
+    e = TY_BOOL or ty_is_int(e) or ty_is_enum(e)
+
 @post(r: r[0] = ⁻1 or (r[1] >= 1 and (r[0] % r[1] ?? 1) = 0))
 fn c_struct_layout(a : Ast, si : i64, depth : i64) → (i64, i64):
     let d := a.structs[si × 1¤ptrdiff]
