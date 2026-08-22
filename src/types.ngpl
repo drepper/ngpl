@@ -11,7 +11,7 @@
 //   1024 + i         the struct whose definition came i-th
 //   2048 + base      an optional holding a base-typed value, or ∅
 //   4096 + elem      an array of elem-typed things (integers, structs)
-//   8192 + 2048k + v a hash from key-palette entry k to v-typed values
+//   8192 + 2048k + v a dictionary from key-palette entry k to v-typed values
 //
 // A parameter's type may add 262144×r: r = 1 for a & borrow, 2 for &mut.
 
@@ -363,7 +363,7 @@ fn type_name_m(t0 : i64, marks : str[]) → str:
     if ty_is_tup(t): return prefix ⧺ "a tuple"
     if ty_is_opt(t): return prefix ⧺ type_name_m(ty_opt_base(t), marks) ⧺ "?"
     if ty_is_arr(t) and not ty_is_farr(t): return prefix ⧺ type_name_m(ty_elem(t), marks) ⧺ "[]"
-    if ty_is_hash(t): return prefix ⧺ "std.hash(" ⧺ type_name_m(ty_hkey(t), marks) ⧺ ", " ⧺ type_name_m(ty_hval(t), marks) ⧺ ")"
+    if ty_is_hash(t): return prefix ⧺ "std.dict(" ⧺ type_name_m(ty_hkey(t), marks) ⧺ ", " ⧺ type_name_m(ty_hval(t), marks) ⧺ ")"
     if ty_is_tup(t): return prefix ⧺ "tuple #" ⧺ i64_str(ty_tidx(t))
     if ty_is_farr(t): return prefix ⧺ "sized array #" ⧺ i64_str(ty_fidx(t))
     if ty_is_iter(t): return prefix ⧺ "iterator #" ⧺ i64_str(ty_iidx(t))

@@ -45,7 +45,7 @@ fn every_kind(a : i32, b : u8, c : bool, d : str, e : char) -> i64:
     n ← n + e.ord()
     return n
 
-fn containers(v : &i64[], m : i32[,], h : &std.hash(str, i64), label : str) -> i64:
+fn containers(v : &i64[], m : i32[,], h : &std.dict(str, i64), label : str) -> i64:
     return @dropunit(#v) + @dropunit(#m) + @dropunit(#h) + @dropunit(#label)
 
 fn optionals(o : i64?, s : str?) -> i64?:
@@ -68,7 +68,7 @@ fn main():
     std.println("{}", every_kind(10i32, 5u8, true, "abc", 'A'))
     let v : i64[] = [1, 2]
     let m : i32[,] = [[1, 2, 3], [4, 5, 6]]
-    let h : std.hash(str, i64) = (⸨"k": 7⸩)
+    let h : std.dict(str, i64) = (⸨"k": 7⸩)
     std.println("{}", containers(&v, m, &h, "xy"))
     std.println("{} {}", optionals(∃(5), ∃("ab")) ?? ⁻1, optionals(∅, ∅) ?? ⁻1)
     nothing()

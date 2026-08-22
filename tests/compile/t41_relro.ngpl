@@ -13,7 +13,7 @@ let LIMIT : i64 = 42
 let GREETING : bool = true
 
 // built before @start and never after: read-only from there on
-let TABLE : std.hash(str, i64) = (⸨"one": 1, "two": 2, "three": 3⸩)
+let TABLE : std.dict(str, i64) = (⸨"one": 1, "two": 2, "three": 3⸩)
 
 fn double(x : i64) -> i64:
     return x × 2

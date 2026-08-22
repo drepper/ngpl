@@ -30,13 +30,13 @@ fn bump3(b : &mut Box):
 fn bump2(b : &mut Box):
     bump1(&b)
 
-fn put1(h : &mut std.hash(str, i64)):
+fn put1(h : &mut std.dict(str, i64)):
     h["k"] ← 7
 
-fn put3(h : &mut std.hash(str, i64)):
+fn put3(h : &mut std.dict(str, i64)):
     put2(&h)
 
-fn put2(h : &mut std.hash(str, i64)):
+fn put2(h : &mut std.dict(str, i64)):
     put1(&h)
 
 // a shared borrow travels as far, and still only reads
@@ -60,7 +60,7 @@ fn main():
     bump3(&b)
     bump3(&b)
     std.println("{}", b.n)
-    let h : mut std.hash(str, i64) = (⸨⸩)
+    let h : mut std.dict(str, i64) = (⸨⸩)
     put3(&h)
     std.println("{} {}", h["k"] ?? 0, #h)
     std.println("{}", count3(&v))

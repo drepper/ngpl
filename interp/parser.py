@@ -1002,15 +1002,25 @@ class Parser:
     def _parse_base_type_name(self) -> str:
         """Read the name a type starts with, container types and all.
 
-        Only std.hash, std.set and std.iovec take the dot: every other
+        Only std.dict, std.set and std.iovec take the dot: every other
         type is one name, and a dot after one means something else.
         """
         name = self._eat("IDENT").value
+        # std.hash was this type's name until std.hash became digests.
+        # Saying so beats letting the dot fall through to whatever
+        # comes next and complaining about that.
+        if (self._check("PUNCT") and self._cur().value == "."
+                and self.pos + 1 < len(self.tokens)
+                and self.tokens[self.pos + 1].type == "IDENT"
+                and f"{name}.{self.tokens[self.pos + 1].value}" == "std.hash"):
+            raise ParseError(
+                "'std.hash' is the digests now; the type that maps keys to "
+                "values is 'std.dict(K, V)'", self._cur())
         if (self._check("PUNCT") and self._cur().value == "."
                 and self.pos + 1 < len(self.tokens)
                 and self.tokens[self.pos + 1].type == "IDENT"
                 and f"{name}.{self.tokens[self.pos + 1].value}"
-                in ("std.hash", "std.set", "std.iovec")):
+                in ("std.dict", "std.set", "std.iovec")):
             self.pos += 1
             name += "." + self._eat("IDENT").value
             return self._parse_type_arguments(name)
@@ -1019,23 +1029,23 @@ class Parser:
     def _parse_type_arguments(self, name: str) -> str:
         """Read the types a container type is written with.
 
-        `std.hash(K, V)` and `std.set(V)` say what they hold the way a
+        `std.dict(K, V)` and `std.set(V)` say what they hold the way a
         program writes any other type, and what they hold are types, so
         they are read as types.
         """
-        if name not in ("std.hash", "std.set"):
+        if name not in ("std.dict", "std.set"):
             return name
         if not (self._check("PUNCT") and self._cur().value == "("):
             raise ParseError(
                 f"'{name}' says what it holds: write "
-                f"{'std.hash(K, V)' if name == 'std.hash' else 'std.set(V)'}",
+                f"{'std.dict(K, V)' if name == 'std.dict' else 'std.set(V)'}",
                 self._cur())
         self._eat("PUNCT", "(")
         args = [self._parse_type()]
         while self._try_eat("PUNCT", ","):
             args.append(self._parse_type())
         self._eat("PUNCT", ")")
-        want = 2 if name == "std.hash" else 1
+        want = 2 if name == "std.dict" else 1
         if len(args) != want:
             raise ParseError(
                 f"'{name}' is written with {want} type"

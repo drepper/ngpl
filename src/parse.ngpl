@@ -210,23 +210,27 @@ impl Parser:
             _ ← self.eat(TK_DOT, "'.' after std")
             let m := self.ttext(self.pos)
             _ ← self.eat_word("the std type's name")
-            if m = "hash":
-                _ ← self.eat(TK_LPAR, "'(' after std.hash")
+            if m = "dict":
+                _ ← self.eat(TK_LPAR, "'(' after std.dict")
                 let kt : i64 = self.parse_type(false)
                 _ ← self.eat(TK_COMMA, "',' between the key and value types")
                 let vt : i64 = self.parse_type(false)
-                _ ← self.eat(TK_RPAR, "')' closing std.hash")
+                _ ← self.eat(TK_RPAR, "')' closing std.dict")
                 if not ((ty_is_int(kt) and ty_unit(kt) = 0) or kt = TY_STR):
-                    self.err("a core-2 hash key is a plain integer or a string")
+                    self.err("a core-2 dictionary key is a plain integer or a string")
                     return TY_I64
                 if not ((ty_is_int(vt) and ty_unit(vt) = 0) or vt = TY_BOOL or vt = TY_STR or ty_is_struct(vt)):
-                    self.err("a core-2 hash holds integers, truth values, strings or structs")
+                    self.err("a core-2 dictionary holds integers, truth values, strings or structs")
                     return TY_I64
                 if refk ≠ 0:
                     return mk_hty(kt, vt) + 262144 × refk
                 return mk_hty(kt, vt)
+            if m = "hash":
+                // this type's name until std.hash became the digests
+                self.err("'std.hash' is the digests now; the type that maps keys to values is 'std.dict(K, V)'")
+                return TY_I64
             if m ≠ "iovec":
-                self.err("'std." ⧺ m ⧺ "' is not a core-2 type; std.hash(K, V) and std.iovec are")
+                self.err("'std." ⧺ m ⧺ "' is not a core-2 type; std.dict(K, V) and std.iovec are")
                 return TY_I64
             // a run of bytes waiting to be written; what it holds is
             // settled where it is made, not where it is named, so the
@@ -340,11 +344,11 @@ impl Parser:
                 self.err("an optional array is not core-2 yet")
                 return TY_I64
             if ty_is_hash(base):
-                self.err("an optional hash is not core-2 yet")
+                self.err("an optional dictionary is not core-2 yet")
                 return TY_I64
             base ← mk_oty(base)
         if refk ≠ 0 and not ty_is_arr(base) and not ty_is_struct(base) and not ty_is_hash(base):
-            self.err("core-2 borrows arrays, structs and hashes; a scalar travels by value")
+            self.err("core-2 borrows arrays, structs and dictionaries; a scalar travels by value")
             return TY_I64
         base + 262144 × refk
 
@@ -818,7 +822,7 @@ impl Parser:
                     items.push(self.parse_expr())
                     if self.failed(): return 0
                     if self.peek() ≠ TK_COLON:
-                        self.err("a set is not core-2 yet; a hash writes key: value")
+                        self.err("a set is not core-2 yet; a dictionary writes key: value")
                         return 0
                     self.pos ← self.pos + 1
                     items.push(self.parse_expr())
@@ -827,7 +831,7 @@ impl Parser:
                         self.pos ← self.pos + 1
                     else:
                         break
-            _ ← self.eat(TK_RHASH, "'⸩' closing the hash literal")
+            _ ← self.eat(TK_RHASH, "'⸩' closing the dictionary literal")
             let off : i64 = @dropunit(#self.extra)
             self.extra.push((@dropunit(#items) ÷ 2) ?? 0)
             foreach it := items:

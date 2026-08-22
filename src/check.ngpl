@@ -777,7 +777,7 @@ impl Checker:
                 self.set_type(id, mk_oty(TY_I64))
                 return
             if ty_is_hash(it):
-                self.derr(tok, "an optional hash is not core-2 yet")
+                self.derr(tok, "an optional dictionary is not core-2 yet")
                 self.set_type(id, mk_oty(TY_I64))
                 return
             if ty_is_opt(it) or it = TY_EMPTY:
@@ -800,7 +800,7 @@ impl Checker:
             elif ty_is_hash(t) or ty_is_tup(t) or ty_is_mat(t):
                 self.set_type(id, ty_with_unit(TY_I64, UNIT_PTRDIFF))
             else:
-                self.derr(tok, "# counts an array, a hash, a tuple or a string; this is " ⧺ self.tn(t))
+                self.derr(tok, "# counts an array, a dictionary, a tuple or a string; this is " ⧺ self.tn(t))
                 self.set_type(id, TY_I64)
         elif k = NK_CALL:
             self.check_call(id, tok, na)
@@ -1177,7 +1177,7 @@ impl Checker:
             self.check_expr(nb, TY_UNIT)
             let ht : i64 = self.ty_of(nb)
             if not ty_is_hash(ht):
-                self.derr(tok, "∊ asks a hash in core-2; this is " ⧺ self.tn(ht))
+                self.derr(tok, "∊ asks a dictionary in core-2; this is " ⧺ self.tn(ht))
                 self.check_expr(na, TY_UNIT)
                 self.set_type(id, TY_BOOL)
                 return
@@ -1942,9 +1942,9 @@ impl Checker:
             self.set_type(id, TY_I64)
 
     fn check_hlit(&mut self, id : i64, tok : i64, off : i64, want : i64):
-        // the binding says what a hash holds; the literal fills it
+        // the binding says what a dictionary holds; the literal fills it
         if not ty_is_hash(ty_strip_ref(want)):
-            self.derr(tok, "state the hash's type where it is bound, as ': std.hash(K, V) ='")
+            self.derr(tok, "state the dictionary's type where it is bound, as ': std.dict(K, V) ='")
             self.set_type(id, mk_hty(TY_I64, TY_I64))
             return
         let kt : i64 = ty_hkey(ty_strip_ref(want))
@@ -1967,14 +1967,14 @@ impl Checker:
             i ← i + 1
         self.set_type(id, ty_strip_ref(want))
 
-    // a hash key meets the declared key type
+    // a dictionary key meets the declared key type
     fn check_hash_key(&mut self, tok : i64, hty : i64, ke : i64):
         let kt : i64 = ty_hkey(hty)
         self.check_expr(ke, kt)
         if self.is_open(self.ty_of(ke)):
             self.adopt(ke, kt)
         elif not self.try_fit(ke, kt):
-            self.derr(tok, "this hash's keys are " ⧺ self.tn(kt) ⧺ ", not " ⧺ self.tn(self.ty_of(ke)))
+            self.derr(tok, "this dictionary's keys are " ⧺ self.tn(kt) ⧺ ", not " ⧺ self.tn(self.ty_of(ke)))
 
     fn index_unit_of(&self, arr_ty : i64) → i64:
         if ty_is_mat(arr_ty):
@@ -2030,12 +2030,12 @@ impl Checker:
             self.set_type(id, TY_CHAR)
             return
         if ty_is_hash(t):
-            // asking a hash answers an optional: absence is ordinary
+            // asking a dictionary answers an optional: absence is ordinary
             self.check_hash_key(tok, t, nb)
             self.set_type(id, mk_oty(ty_hval(t)))
             return
         if not ty_is_arr(t) and not ty_is_mat(t):
-            self.derr(tok, "only an array, a hash or a string is subscripted; this is " ⧺ self.tn(t))
+            self.derr(tok, "only an array, a dictionary or a string is subscripted; this is " ⧺ self.tn(t))
             self.set_type(id, TY_I64)
             return
         self.check_index_expr(tok, t, nb)
@@ -3160,7 +3160,7 @@ impl Checker:
                     _ ← self.declare(tok, TY_I64, nb)
                     return
                 if ty_is_hash(it) and nb = 1 and self.kind_of(na) ≠ NK_HLIT:
-                    self.derr(tok, "a mut hash binding is born from its literal; borrow with &mut to change a shared one")
+                    self.derr(tok, "a mut dictionary binding is born from its literal; borrow with &mut to change a shared one")
                     _ ← self.declare(tok, it, nb)
                     return
                 if ty_is_arr(it) and nb = 1 and self.kind_of(na) ≠ NK_ARRLIT and self.kind_of(na) ≠ NK_CALL and self.kind_of(na) ≠ NK_MCALL and self.kind_of(na) ≠ NK_RESHAPE and self.kind_of(na) ≠ NK_CCAT and self.kind_of(na) ≠ NK_SLICE and self.kind_of(na) ≠ NK_SCALL:
@@ -3174,7 +3174,7 @@ impl Checker:
                 return
             if ty_is_hash(nc):
                 if nb = 1 and self.kind_of(na) ≠ NK_HLIT:
-                    self.derr(tok, "a mut hash binding is born from its literal; borrow with &mut to change a shared one")
+                    self.derr(tok, "a mut dictionary binding is born from its literal; borrow with &mut to change a shared one")
                 self.check_expr(na, nc)
                 if self.kind_of(na) ≠ NK_HLIT and self.ty_of(na) ≠ nc:
                     self.derr(tok, "the binding says " ⧺ self.tn(nc) ⧺ " but the value is " ⧺ self.tn(self.ty_of(na)))
@@ -3310,7 +3310,7 @@ impl Checker:
             if ty_is_struct(ty_strip_ref(st)) and not self.is_fresh_struct(na):
                 self.derr(tok, "a struct binding takes a fresh struct; the fields change in place")
             if ty_is_hash(ty_strip_ref(st)):
-                self.derr(tok, "a core-2 hash is built once and changed in place")
+                self.derr(tok, "a core-2 dictionary is built once and changed in place")
             if (ty_is_arr(ty_strip_ref(st)) or ty_is_mat(ty_strip_ref(st))) and not (self.kind_of(na) = NK_ARRLIT or self.kind_of(na) = NK_CALL or self.kind_of(na) = NK_MCALL or self.kind_of(na) = NK_RESHAPE or self.kind_of(na) = NK_CCAT or self.kind_of(na) = NK_SLICE):
                 self.derr(tok, "a mut array binding takes a fresh array; borrow with &mut to change a shared one")
             if self.smut[s × 1¤ptrdiff] = 0:
@@ -3332,7 +3332,7 @@ impl Checker:
                 if self.is_open(self.ty_of(nc)):
                     self.adopt(nc, vt)
                 elif not self.try_fit(nc, vt):
-                    self.derr(tok, "the hash holds " ⧺ self.tn(vt) ⧺ ", not " ⧺ self.tn(self.ty_of(nc)))
+                    self.derr(tok, "the dictionary holds " ⧺ self.tn(vt) ⧺ ", not " ⧺ self.tn(self.ty_of(nc)))
                 self.set_type(id, bt0)
                 return
             if ty_is_tup(bt0):
@@ -3361,7 +3361,7 @@ impl Checker:
                 self.set_type(id, bt0)
                 return
             if not ty_is_arr(bt0):
-                self.derr(tok, "only an array or a hash is written by element; this is " ⧺ self.tn(bt0))
+                self.derr(tok, "only an array or a dictionary is written by element; this is " ⧺ self.tn(bt0))
                 self.check_expr(nc, TY_UNIT)
                 return
             self.require_mut_base(na, tok)
@@ -3786,12 +3786,12 @@ impl Checker:
             self.gvals.push(0)
             return
         if ty_is_hash(gd.ty):
-            // an immutable hash global: its literal of constants is
+            // an immutable dictionary global: its literal of constants is
             // built by init code before the start function runs
             if gd.is_mut:
-                self.derr(gd.tok, "a global hash is immutable; build a mut one where it is used")
+                self.derr(gd.tok, "a global dictionary is immutable; build a mut one where it is used")
             if self.kind_of(gd.init) ≠ NK_HLIT:
-                self.derr(gd.tok, "a global hash is born from its literal")
+                self.derr(gd.tok, "a global dictionary is born from its literal")
                 self.gvals.push(0)
                 return
             self.check_expr(gd.init, gd.ty)
@@ -3802,15 +3802,15 @@ impl Checker:
                 let ke : i64 = self.a.extra[(hoff + 1 + hi × 2) × 1¤ptrdiff]
                 let ve : i64 = self.a.extra[(hoff + 2 + hi × 2) × 1¤ptrdiff]
                 if self.kind_of(ke) ≠ NK_INT and self.kind_of(ke) ≠ NK_STR:
-                    self.derr(gd.tok, "a global hash holds constants the compiler can see")
+                    self.derr(gd.tok, "a global dictionary holds constants the compiler can see")
                 if self.kind_of(ve) ≠ NK_INT and self.kind_of(ve) ≠ NK_STR and self.kind_of(ve) ≠ NK_BOOL:
-                    self.derr(gd.tok, "a global hash holds constants the compiler can see")
+                    self.derr(gd.tok, "a global dictionary holds constants the compiler can see")
                 hi ← hi + 1
             self.gvals.push(0)
             self.ginit.push(g)
             return
         if ty_is_arr(gd.ty) or gd.ty = TY_STR or ty_is_tup(gd.ty):
-            self.derr(gd.tok, "a core-2 global is a number, a truth value or a hash of constants")
+            self.derr(gd.tok, "a core-2 global is a number, a truth value or a dictionary of constants")
             self.gvals.push(0)
             return
         // fold the initializer to the constant the image carries

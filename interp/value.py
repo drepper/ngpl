@@ -299,8 +299,8 @@ def check_binding_settles(value: "Value", name: str):
         raise TypeError(
             f"'{name}': \N{LEFT DOUBLE PARENTHESIS}\N{RIGHT DOUBLE PARENTHESIS} "
             f"is empty, so it says neither what it holds nor whether it is a "
-            f"hash or a set, and the binding says nothing either; state a "
-            f"type, as 'let {name} : std.hash(str, i64) = "
+            f"dictionary or a set, and the binding says nothing either; state a "
+            f"type, as 'let {name} : std.dict(str, i64) = "
             f"\N{LEFT DOUBLE PARENTHESIS}\N{RIGHT DOUBLE PARENTHESIS}'")
     raise TypeError(
         f"'{name}': an empty array says nothing about what it would "
@@ -1258,14 +1258,14 @@ MAX_TENSOR_RANK: int = 8
 
 @_functools.lru_cache(maxsize=None)
 def parse_container_type(type_name: str):
-    """Take `std.hash(K,V)` or `std.set(V)` apart, or answer None.
+    """Take `std.dict(K,V)` or `std.set(V)` apart, or answer None.
 
     The inverse of how a program writes them, and the one place the
     spelling is read, so nothing else has to know it.
     """
     if not isinstance(type_name, str) or not type_name.endswith(")"):
         return None
-    for kind, want in (("std.hash", 2), ("std.set", 1)):
+    for kind, want in (("std.dict", 2), ("std.set", 1)):
         head = kind + "("
         if not type_name.startswith(head):
             continue
@@ -1375,7 +1375,7 @@ class SetValue:
     """The values that are in it, kept in the order they arrived.
 
     One type of value, and each of them once.  Everything said about a
-    hash's keys is said about these, a set being a hash that answers
+    dictionary's keys is said about these, a set being a dictionary that answers
     only whether.
     """
 
@@ -1882,7 +1882,7 @@ def runtime_type_of(value: "Value") -> str:
             return et + "[]"
         if isinstance(value.obj, HashValue):
             held = value.obj
-            return (f"std.hash({held.key_type or '?'},"
+            return (f"std.dict({held.key_type or '?'},"
                     f"{held.value_type or '?'})")
         if isinstance(value.obj, SetValue):
             return f"std.set({value.obj.value_type or '?'})"
@@ -2775,7 +2775,7 @@ def apply_unit(value: Value, unit, mk=None) -> Value:
 
 
 def _coerce_container(value: Value, target_width: str, container) -> Value:
-    """Measure a hash or a set against the type that says what it holds.
+    """Measure a dictionary or a set against the type that says what it holds.
 
     An empty one takes the type and holds nothing of it, which is what
     lets ⸨⸩ be written at all: it says neither what it holds nor which
@@ -2783,8 +2783,8 @@ def _coerce_container(value: Value, target_width: str, container) -> Value:
     """
     kind, args = container
     inner = value.value if isinstance(value, SomeValue) else value
-    want = HashValue if kind == "std.hash" else SetValue
-    other = "a set" if kind == "std.hash" else "a hash"
+    want = HashValue if kind == "std.dict" else SetValue
+    other = "a set" if kind == "std.dict" else "a dictionary"
     if isinstance(inner, ObjectValue) and isinstance(inner.obj, (HashValue,
                                                                  SetValue)):
         held = inner.obj
@@ -2793,9 +2793,9 @@ def _coerce_container(value: Value, target_width: str, container) -> Value:
                 held = want()
             else:
                 raise TypeError(
-                    f"'{target_width}' is {'a hash' if want is HashValue else 'a set'}, "
+                    f"'{target_width}' is {'a dictionary' if want is HashValue else 'a set'}, "
                     f"but the value is {other}")
-        if kind == "std.hash":
+        if kind == "std.dict":
             built = HashValue(key_type=args[0], value_type=args[1])
             for key, held_value in held.pairs():
                 built.put(coerce_to_type(key, args[0]),
@@ -2806,7 +2806,7 @@ def _coerce_container(value: Value, target_width: str, container) -> Value:
                 built.put(coerce_to_type(held_value, args[0]))
         return ObjectValue(built)
     raise TypeError(
-        f"'{target_width}' is {'a hash' if want is HashValue else 'a set'}, "
+        f"'{target_width}' is {'a dictionary' if want is HashValue else 'a set'}, "
         f"but the value is {runtime_type_of(inner)}")
 
 

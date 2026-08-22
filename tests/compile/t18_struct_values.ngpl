@@ -45,7 +45,7 @@ fn main():
     let f : Tok = brightest(Tok{kind: 3, off: 1}, Tok{kind: 4, off: 2})
     std.println("{} {}", f.kind, f.off)
 
-    // an optional, a hash and a tuple hold the struct itself
+    // an optional, a dictionary and a tuple hold the struct itself
     let o : Tok? = ∃(d)
     d.kind ← 1000
     match o:
@@ -53,7 +53,7 @@ fn main():
             std.println("{} {}", s.kind, d.kind)
         ∅:
             std.println("none")
-    let h : mut std.hash(str, Tok) = ⸨⸩
+    let h : mut std.dict(str, Tok) = ⸨⸩
     h["x"] ← d
     d.off ← 1
     match h["x"]:

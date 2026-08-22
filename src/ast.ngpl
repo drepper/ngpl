@@ -32,7 +32,7 @@ let NK_SLICE : i64 = 59     // v[a…b]: na = base, nb = lo, nc = hi
 let NK_RESHAPE : i64 = 60   // n ⍴ x: na = the count, nb = the filler
 let NK_WHILEB : i64 = 61    // while x := e: na = e, nb = body; name token
 let NK_TYPEOF : i64 = 62    // @typeof(e): folds to the type's spelling
-let NK_ELEMOF : i64 = 43    // key ∊ hash
+let NK_ELEMOF : i64 = 43    // key ∊ dictionary
 let NK_ADD : i64 = 20
 let NK_SUB : i64 = 21
 let NK_MUL : i64 = 22
@@ -161,7 +161,7 @@ fn proc_key(m : i64) → i64:
     31
 
 // the base type names, one probe instead of a ladder
-let TYNAMES : std.hash(str, i64) = (⸨
+let TYNAMES : std.dict(str, i64) = (⸨
     "i8": 17, "i16": 19, "i32": 21, "i64": 23,
     "u8": 16, "u16": 18, "u32": 20, "u64": 22,
     "bool": 2, "str": 3, "char": 4, "byte": 16⸩)

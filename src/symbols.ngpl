@@ -77,7 +77,7 @@ fn sym_type(a : Ast, toks : Toks, src : byte[], t0 : i64, seen : i64[]) → str:
     if ty_is_struct(t): return pre ⧺ struct_sym(a, toks, src, ty_sidx(t), seen)
     if ty_is_opt(t): return pre ⧺ sym_type(a, toks, src, ty_opt_base(t), seen) ⧺ "?"
     if ty_is_rg(t): return pre ⧺ "range(" ⧺ sym_type(a, toks, src, ty_rgelem(t), seen) ⧺ ")"
-    if ty_is_hash(t): return pre ⧺ "std.hash(" ⧺ sym_type(a, toks, src, ty_hkey(t), seen) ⧺ ", " ⧺ sym_type(a, toks, src, ty_hval(t), seen) ⧺ ")"
+    if ty_is_hash(t): return pre ⧺ "std.dict(" ⧺ sym_type(a, toks, src, ty_hkey(t), seen) ⧺ ", " ⧺ sym_type(a, toks, src, ty_hval(t), seen) ⧺ ")"
     if ty_is_mat(t):
         let mr : i64 = a.mrr[ty_midx(t) × 1¤ptrdiff]
         let mc : i64 = a.mcc[ty_midx(t) × 1¤ptrdiff]

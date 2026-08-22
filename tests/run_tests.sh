@@ -134,7 +134,7 @@ all_tests=(
     "$testdir"/test_listable.ngpl
     "$testdir"/test_array_units.ngpl
     "$testdir"/test_length.ngpl
-    "$testdir"/test_hash_set.ngpl
+    "$testdir"/test_dict_set.ngpl
     "$testdir"/test_noreturn.ngpl
     "$testdir"/test_contracts.ngpl
     "$testdir"/test_loop_labels.ngpl

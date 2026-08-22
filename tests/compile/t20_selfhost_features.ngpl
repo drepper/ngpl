@@ -1,10 +1,10 @@
-// core-2: what self-hosting asked for -- global hashes built before
+// core-2: what self-hosting asked for -- global dictionaries built before
 // @start, structs inside structs with stores through their paths,
 // containers as parameters and returns, and @dropunit.
 
-let NAMES : std.hash(str, i64) = (⸨
+let NAMES : std.dict(str, i64) = (⸨
     "one": 1, "two": 2, "three": 3⸩)
-let CODES : std.hash(i64, str) = ⸨10: "ten", 20: "twenty"⸩
+let CODES : std.dict(i64, str) = ⸨10: "ten", 20: "twenty"⸩
 
 struct Inner:
     vals : i64[]

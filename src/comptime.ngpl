@@ -103,7 +103,7 @@ struct Cev:
 // names what was written rather than a node number
 fn ev_spell(k : i64) → str:
     if k = NK_MCALL: return "a method call"
-    if k = NK_HLIT: return "a hash literal"
+    if k = NK_HLIT: return "a dictionary literal"
     if k = NK_SLIT: return "a struct literal"
     if k = NK_FIELD: return "a field"
     if k = NK_TUPLE: return "a tuple"

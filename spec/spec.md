@@ -1640,22 +1640,22 @@ v ⍳ n + 10                      /* what is looked for is the sum */
 The glyph is APL's and the answer is Rust's.  One operator serves an array and a string, so a program that has learned it for one has learned it for the other; there is no separate `.find` for text.
 
 
-### Hashes and Sets
+### Dictionaries and Sets
 
-A **hash** maps keys to values and a **set** holds values, each once.  Both are written between `⸨` (U+2E28) and `⸩` (U+2E29), and a colon after the first entry is what says the entries have two halves:
+A **dictionary** maps keys to values and a **set** holds values, each once.  Both are written between `⸨` (U+2E28) and `⸩` (U+2E29), and a colon after the first entry is what says the entries have two halves:
 
 ```
-let d : std.hash(str, i64) = ⸨"a": 1, "b": 2⸩
+let d : std.dict(str, i64) = ⸨"a": 1, "b": 2⸩
 let s : std.set(i64) = ⸨1, 2, 3⸩
 ```
 
-The types are written `std.hash(K, V)` and `std.set(V)`.
+The types are written `std.dict(K, V)` and `std.set(V)`.  A dictionary is a hash table underneath, and the type was spelled `std.hash` until that name was wanted for digests; naming it for what it is rather than for how it is built is the better name in any case.
 
 The delimiters are not `{ }` because those are taken: `{` begins a struct literal and a braced block, so a value written with them could not be told from either.
 
 #### One Type of Key, One Type of Value
 
-A hash holds one type of key and one type of value, and a set one type of value — what a container holds is what its type says, as for an array, and the entries have to agree before there is anything for the type to say:
+A dictionary holds one type of key and one type of value, and a set one type of value — what a container holds is what its type says, as for an array, and the entries have to agree before there is anything for the type to say:
 
 ```
 ⸨"a": 1i64, 2i64: 3⸩
@@ -1676,16 +1676,16 @@ character, a string, a truth value, an enum
 
 #### The Empty One
 
-`⸨⸩` says neither what it holds nor which of the two it is, so a type says both.  Being empty is not the objection — a hash and a set are allowed to hold nothing:
+`⸨⸩` says neither what it holds nor which of the two it is, so a type says both.  Being empty is not the objection — a dictionary and a set are allowed to hold nothing:
 
 ```
-let d : std.hash(str, i64) = ⸨⸩     /* holds nothing of that type */
+let d : std.dict(str, i64) = ⸨⸩     /* holds nothing of that type */
 
 let e := ⸨⸩
 
 error: 'e': ⸨⸩ is empty, so it says neither what it holds nor whether it
-is a hash or a set, and the binding says nothing either; state a type,
-as 'let e : std.hash(str, i64) = ⸨⸩'
+is a dictionary or a set, and the binding says nothing either; state a type,
+as 'let e : std.dict(str, i64) = ⸨⸩'
 ```
 
 #### Reading, Writing, Asking
@@ -1701,7 +1701,7 @@ match d["a"]:
     ∅: …
 ```
 
-Writing at a key puts it there whether or not it was there before; a hash has no length to run past and nothing to be out of range of.  `∊` asks whether something is in one — a hash is looked through by its **keys**, which is what it is asked about, and what it holds against them is read with `[]`.  `#` counts the entries.
+Writing at a key puts it there whether or not it was there before; a dictionary has no length to run past and nothing to be out of range of.  `∊` asks whether something is in one — a dictionary is looked through by its **keys**, which is what it is asked about, and what it holds against them is read with `[]`.  `#` counts the entries.
 
 ```
 d["c"] ← 3
@@ -1712,7 +1712,7 @@ d["c"] ← 3
 
 #### Walking One
 
-The entries keep the order they arrived in.  A hash has no order of its own, and walking one in whatever order the implementation happened to use would make a program's output depend on something nobody wrote down.
+The entries keep the order they arrived in.  A dictionary has no order of its own, and walking one in whatever order the implementation happened to use would make a program's output depend on something nobody wrote down.
 
 An entry is its key and what is held against it, which is a pair, so both halves are named the way any tuple is taken apart:
 
@@ -1726,7 +1726,7 @@ foreach v := s:
 
 #### Whether Two Hold the Same Things
 
-`=` and `≠` compare two hashes or two sets, and **order is not part of it**.  What a hash and a set keep is the order things arrived in, so that walking one is repeatable; two that hold the same things are the same whichever way each was built up:
+`=` and `≠` compare two dictionaries or two sets, and **order is not part of it**.  What a dictionary and a set keep is the order things arrived in, so that walking one is repeatable; two that hold the same things are the same whichever way each was built up:
 
 ```
 ⸨1, 2⸩ = ⸨2, 1⸩                          /* true */
@@ -1734,20 +1734,20 @@ foreach v := s:
 ⸨"a": 1⸩ = ⸨"a": 9⸩                      /* false */
 ```
 
-The answer is **one** truth value for the whole of it, not one for each thing in it: a hash and a set are the operand rather than a stand-in for what is in them, so they are not threaded — where two arrays compared with `=` answer element by element, these answer once.  The comparison reaches as deep as what is held, so a hash of arrays compares the arrays.
+The answer is **one** truth value for the whole of it, not one for each thing in it: a dictionary and a set are the operand rather than a stand-in for what is in them, so they are not threaded — where two arrays compared with `=` answer element by element, these answer once.  The comparison reaches as deep as what is held, so a dictionary of arrays compares the arrays.
 
-Two are compared only where they could hold the same, so a hash against a set, or a set against an array, or two sets holding different types, are all refused:
+Two are compared only where they could hold the same, so a dictionary against a set, or a set against an array, or two sets holding different types, are all refused:
 
 ```
 a = h
 
-error: std.set(i64) and std.hash(str,i64) are not compared with each
+error: std.set(i64) and std.dict(str,i64) are not compared with each
 other: they hold different kinds of thing, so neither could be the other
 ```
 
-#### Joining Two Hashes
+#### Joining Two Dictionaries
 
-`⧺` joins two hashes, and where both hold the same key the **right-hand** value is the answer:
+`⧺` joins two dictionaries, and where both hold the same key the **right-hand** value is the answer:
 
 ```
 ⸨"a": 1, "b": 2⸩ ⧺ ⸨"b": 9, "c": 3⸩     /* ⸨"a": 1, "b": 9, "c": 3⸩ */
@@ -1755,9 +1755,9 @@ other: they hold different kinds of thing, so neither could be the other
 defaults ⧺ overrides                    /* which is what the order is for */
 ```
 
-A key keeps the place it first had: what the right operand says is what the key holds, not where it sits.  Two hashes join only where they hold the same type of key and the same type of value.
+A key keeps the place it first had: what the right operand says is what the key holds, not where it sits.  Two dictionaries join only where they hold the same type of key and the same type of value.
 
-Choosing is the one thing joining says that `∪` does not.  `∪` answers what two sets hold between them and never has to choose, because a set holds no more about a value than that it is there; a hash does, so one of the two values has to be the answer.
+Choosing is the one thing joining says that `∪` does not.  `∪` answers what two sets hold between them and never has to choose, because a set holds no more about a value than that it is there; a dictionary does, so one of the two values has to be the answer.
 
 For that reason a **set** is not joined with `⧺`.  A set holds each value once, so joining two would keep nothing the second one repeats — which is `∪`, spelled a second way:
 
@@ -1809,14 +1809,14 @@ They answer a `bool`, so they sit where the comparisons do: what *makes* a set b
 
 `∩` binds tighter than `∪`, as `×` does than `+`, so `a ∪ b ∩ c` is `a ∪ (b ∩ c)`.  Both operands are the container rather than a stand-in for what is in it, so these are not threaded, as `⧺` and `∊` are not.
 
-A set holds one type of value, so two of them make one only where they hold the same; and what these make is a set, so a hash or an array on either side is refused.  The order is kept — what came from the left comes first, in the order it was in.
+A set holds one type of value, so two of them make one only where they hold the same; and what these make is a set, so a dictionary or an array on either side is refused.  The order is kept — what came from the left comes first, in the order it was in.
 
 #### What It Holds: `⊃` and `⊇`
 
-`⊃` (U+2283) asks a hash for its **keys** and `⊇` (U+2287) for what it holds **against** them.  Both are written in front of their operand, as `#` is, and both answer an array in the order the entries arrived:
+`⊃` (U+2283) asks a dictionary for its **keys** and `⊇` (U+2287) for what it holds **against** them.  Both are written in front of their operand, as `#` is, and both answer an array in the order the entries arrived:
 
 ```
-let d : std.hash(str, i64) = ⸨"a": 1, "b": 2⸩
+let d : std.dict(str, i64) = ⸨"a": 1, "b": 2⸩
 
 ⊃d                              /* ["a", "b"] */
 ⊇d                              /* [1, 2] */
@@ -1828,7 +1828,7 @@ let d : std.hash(str, i64) = ⸨"a": 1, "b": 2⸩
 
 These are the glyphs TinyAPL uses to ask a dictionary the same two questions, which is why they are the ones taken here: a reader coming from an array language finds the question already spelled the way they know it.
 
-Note that `⊂` and `⊆` are *infix* and ask whether one set is inside another, while `⊃` and `⊇` are *prefix* and ask what a hash holds.  A reader who expects the second pair to be the mirror of the first — supersets — will not find that here; a superset is `b ⊆ a` with the operands the other way round.
+Note that `⊂` and `⊆` are *infix* and ask whether one set is inside another, while `⊃` and `⊇` are *prefix* and ask what a dictionary holds.  A reader who expects the second pair to be the mirror of the first — supersets — will not find that here; a superset is `b ⊆ a` with the operands the other way round.
 
 #### Members
 
@@ -9321,7 +9321,7 @@ An operator is what its expression applies, exactly as a function is what a call
 | `1i64`, `1u8` | `※i64`, `※u8` | the type the literal states |
 | `1`, `1.0` | `※int`, `※float` | what a literal that states no width is |
 | `"x"`, `'c'`, `true`, `∅` | `※str`, `※char`, `※bool`, `※∅` | |
-| `[1, 2]`, `(a, b)`, `⸨…⸩` | `※array`, `※tuple`, `※hash` | |
+| `[1, 2]`, `(a, b)`, `⸨…⸩` | `※array`, `※tuple`, `※dict` | |
 | `λ…` | `※fn` | |
 | `a`, `std.π` | `※name` | see below |
 

@@ -74,7 +74,7 @@ Attempt 3 grows core-1 to **core-2** with structs:
   the array machinery carries over unchanged; `v[i].f` reads and
   stores, whole-element replacement by a fresh literal, `&`-borrowed
   walks, and an element's own array growing through `v[i].items.push`.
-- **hashes** `std.hash(K, V)` — K a plain integer type or `str`, V any
+- **dictionaries** `std.dict(K, V)` — K a plain integer type or `str`, V any
   core scalar, `str`, or struct: born from a typed literal
   `⸨k: v, …⸩`, read by `h[k]` answering `V?` (absence composes with
   `??` and `match` for free), written by `h[k] ← v` on a `mut` binding
@@ -96,7 +96,7 @@ Attempt 3 grows core-1 to **core-2** with structs:
   and zero new runtime code.  Shapes intern into a table in the Ast
   (band `26624 + tidx`), so type equality stays one integer compare.
   A tuple travels by value and never by parameter, borrow, global,
-  optional, array, hash or struct field — each refused by name.
+  optional, array, dictionary or struct field — each refused by name.
 - **width suffixes** `7i64`, `200u8`: the lexer closes the literal's
   type (the code rides in the token as `big + 2×type`), the checker
   adopts it through the same range check as contextual settling.  The
@@ -113,13 +113,13 @@ Attempt 3 grows core-1 to **core-2** with structs:
   a string's characters; `⧺` joins characters into strings; the six
   comparisons order by code point through the ordinary signed path
   (code points stay below 2^21).  Character arrays and tuple elements
-  ride the existing machinery; hashes of them wait.
+  ride the existing machinery; dictionaries of them wait.
 - **struct values travel**: the bootstrap's structs are references —
   every probe shows one struct behind however many names — and the
   compiled pointer representation is the same thing, so structs now
   pass by value as parameters, return from any expression, and a
   read-only binding may name a struct held in an array element, a
-  hash, a tuple, an optional or another binding, all with zero new
+  dictionary, a tuple, an optional or another binding, all with zero new
   code.  The discipline that remains: a `mut` struct binding and a
   struct reassignment must be born fresh (a literal or a call), so a
   let whose right side visibly names shared data cannot create a
@@ -131,18 +131,18 @@ Attempt 3 grows core-1 to **core-2** with structs:
   suffixed or self-stating literal, any settled expression — while
   what states nothing is refused with the stated-form cure spelled
   out (`settles on 'int'; state a sized type, as 'let x : i64 = …'`).
-  The per-kind birth rules ride along unchanged: hashes and arrays
+  The per-kind birth rules ride along unchanged: dictionaries and arrays
   are still born from their literals, a mut struct binding still
   born fresh.
 - **what self-hosting asked for**: containers travel like structs do
-  (arrays and hashes as by-value parameters and returns — the same
+  (arrays and dictionaries as by-value parameters and returns — the same
   reference-semantics argument, the same non-mut discipline on
   bindings); structs may hold structs, and a store reaches through
   any postfix path (`self.a.nkind[id] ← v` — the statement parser now
   parses the expression first and turns a following `←` into the
   store its shape names, retiring the old name-only target ladder);
   `@dropunit` passes a measured number through unmeasured; and an
-  immutable global hash of constants is built by a synthesized init
+  immutable global dictionary of constants is built by a synthesized init
   function the image runs before `@start` — the one runtime-
   initialized global kind, because the compiler's own keyword and
   glyph tables want exactly that.
@@ -400,7 +400,7 @@ Attempt 3 grows core-1 to **core-2** with structs:
   is also why `return` inside a lambda answers the lambda: its body
   lowers in its own function.  A `:=` global may now be born of any
   function value — the box is built by the same init code that
-  builds global hashes — and calls through a global's box mirror
+  builds global dictionaries — and calls through a global's box mirror
   calls through a binding's, currying included.  Lambda shapes an
   @expect means to refuse (a parameter without a type, a missing
   return type, the empty capture list) parse and are refused by the
@@ -453,7 +453,7 @@ Attempt 3 grows core-1 to **core-2** with structs:
   carries `¤byte`, as the spec has them.
 - **three kinds of data, and a program that seals its own**: a
   global that is never written rides in the read-only segment with
-  the strings; one the initializer builds — a hash, a function
+  the strings; one the initializer builds — a dictionary, a function
   value — is written before `@start` and never after, and sits at
   the head of the writable segment together with what the kernel
   handed over (argc, argv, envp, the auxiliary vector), padded to a
@@ -479,7 +479,7 @@ Attempt 3 grows core-1 to **core-2** with structs:
   str, char) -> i64`.  Parameter names are a reader's business and
   are left out; the types that *are* the signature are kept, spelled
   the way the language spells them (`&i64[]`, `i32[,]`,
-  `std.hash(str, i64)`, `str?`, `i64` with its unit, and the empty
+  `std.dict(str, i64)`, `str?`, `i64` with its unit, and the empty
   set for nothing).  A named type carries a hash of what it is
   defined to be -- `Point#fdbb58f9c5cba14c` -- taken as FNV-1a over
   a normalized definition: the name, then each field's name and type
@@ -1162,7 +1162,7 @@ self-compile attempts either looped or crawled:
   (memoized type parsing, element types stamped in place) and the
   by-value array copy (read-only parameters alias; every write path
   through them is refused, so the copy bought nothing)
-- the two fifty-case `isinstance` ladders became one-probe dict
+- the two fifty-case `isinstance` ladders became one-probe dictionary
   dispatch on the node's class, the handlers extracted mechanically
   by an `ast` analysis that accepts only blocks whose every path
   returns or raises

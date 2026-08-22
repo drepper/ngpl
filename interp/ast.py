@@ -447,7 +447,7 @@ class Condition:
 
 
 class HashLit:
-    """Hash literal: ⸨key: value, …⸩."""
+    """Dictionary literal: ⸨key: value, …⸩."""
 
     def __init__(self, pairs):
         self.pairs = pairs  # list of (key expr, value expr)

@@ -1,7 +1,7 @@
 // core-2: @test functions run before @start and leave their marks;
 // an @expect definition is parsed and left uncompiled.
 
-let ORDER : std.hash(str, i64) = ⸨"seed": 7⸩
+let ORDER : std.dict(str, i64) = ⸨"seed": 7⸩
 
 struct Tally:
     ran : i64

@@ -196,7 +196,7 @@ def _alike_trees(a, b) -> bool:
 # type the literal states.
 _HEAD_OF_KIND = {
     "StrLit": "str", "CharLit": "char", "BoolLit": "bool",
-    "ArrayLit": "array", "TupleLit": "tuple", "HashLit": "hash",
+    "ArrayLit": "array", "TupleLit": "tuple", "HashLit": "dict",
     "SetLit": "set", "EmptyCollectionLit": "collection",
     "LambdaExpr": "fn", "RangeExpr": "range",
     # A name's type is not knowable here: a macro runs before anything
@@ -266,7 +266,7 @@ _EMPTY_MEASURE = object()
 
 
 def _is_keyed_container(value) -> bool:
-    """Whether a value is a hash or a set."""
+    """Whether a value is a dictionary or a set."""
     return (isinstance(value, ObjectValue)
             and isinstance(value.obj, (HashValue, SetValue)))
 
@@ -1383,7 +1383,7 @@ class Evaluator:
             raise TypeError(
                 f"\N{SMALL ELEMENT OF}: the right operand is "
                 f"{self._value_type_name(container)}, and what is looked "
-                f"through is a vector, a matrix, a string, a hash or a set")
+                f"through is a vector, a matrix, a string, a dictionary or a set")
         self._check_looked_for(array, wanted, "\N{SMALL ELEMENT OF}")
         for element in self._leaves(array):
             # Compared the way == compares, as ⍳ compares, so a unit
@@ -1939,7 +1939,7 @@ class Evaluator:
         return key
 
     def _op_container_eq(self, op: str, left, right):
-        """Whether two hashes or two sets hold the same things.
+        """Whether two dictionaries or two sets hold the same things.
 
         Order is not part of it.  A hash and a set have no order of
         their own -- what they keep is the order things arrived in, so
@@ -1997,7 +1997,7 @@ class Evaluator:
         """Refuse comparing two containers that cannot hold the same."""
         attrs = ((("key", "key_type"), ("value", "value_type"))
                  if kind is HashValue else (("value", "value_type"),))
-        what = "hash" if kind is HashValue else "set"
+        what = "dictionary" if kind is HashValue else "set"
         for name, attr in attrs:
             one, other = getattr(first, attr), getattr(second, attr)
             if one is not None and other is not None and one != other:
@@ -2068,9 +2068,9 @@ class Evaluator:
         return ObjectValue(built)
 
     def _concat_hashes(self, lu, ru):
-        """Join two hashes, the right-hand value winning a shared key.
+        """Join two dictionaries, the right-hand value winning a shared key.
 
-        That is the one thing joining two hashes says: ∪ answers what
+        That is the one thing joining two dictionaries says: ∪ answers what
         two sets hold between them and never has to choose, because a
         set holds no more about a value than that it is there.  A hash
         does, so where both hold the same key one of the two values has
@@ -2088,13 +2088,13 @@ class Evaluator:
                 continue
             raise TypeError(
                 f"\N{DOUBLE PLUS}: the {side} operand is "
-                f"{self._value_type_name(value)}, and a hash joins a hash")
+                f"{self._value_type_name(value)}, and a dictionary joins a dictionary")
         first, second = sides
         for name, attr in (("key", "key_type"), ("value", "value_type")):
             one, other = getattr(first, attr), getattr(second, attr)
             if one is not None and other is not None and one != other:
                 raise TypeError(
-                    f"\N{DOUBLE PLUS}: a hash holds one type of {name}, so "
+                    f"\N{DOUBLE PLUS}: a dictionary holds one type of {name}, so "
                     f"two joined hold the same one, but the left holds "
                     f"{one} and the right holds {other}")
         built = HashValue(key_type=first.key_type or second.key_type,
@@ -2106,7 +2106,7 @@ class Evaluator:
         return ObjectValue(built)
 
     def _op_halves(self, op: str, operand):
-        """What a hash holds: ⊃ its keys, ⊇ what it holds against them.
+        """What a dictionary holds: ⊃ its keys, ⊇ what it holds against them.
 
         Both answer an array, in the order the entries arrived, so what
         comes back is walked and indexed the way anything else is.
@@ -2128,7 +2128,7 @@ class Evaluator:
             return ObjectValue(ArrayValue(held.obj.values(),
                                           element_type=held.obj.value_type))
         raise TypeError(
-            f"{op}: what a hash holds is a question for a hash"
+            f"{op}: what a dictionary holds is a question for a dictionary"
             f"{' or a set' if op == chr(0x2287) else ''}, and this is "
             f"{self._value_type_name(held)}")
 
@@ -2373,7 +2373,7 @@ class Evaluator:
             return self._sizeof_result(array.sizeof, array.element_type)
         raise TypeError(
             f"#: how many things are in it is a question for an array, a "
-            f"string, a tuple, a hash or a set, and this is "
+            f"string, a tuple, a dictionary or a set, and this is "
             f"{self._value_type_name(unwrapped)}")
 
     def _apply_unary(self, op: str, operand):
@@ -2582,7 +2582,7 @@ class Evaluator:
         at a time, and it is the same operation joining arrays does --
         the operands go together in the order they are written.
 
-        Two hashes join as well, which is the one thing joining says
+        Two dictionaries join as well, which is the one thing joining says
         that ∪ does not: what happens where both hold the same key.
         """
         lu = _unwrap_operand(left)
@@ -3096,14 +3096,14 @@ class Evaluator:
                 f"{node.method}: cannot modify let variable '{name}'")
 
     def _call_container_method(self, held, name: str, args):
-        """The members of a hash and of a set.
+        """The members of a dictionary and of a set.
 
         What is read with [] and asked with ∊ is not repeated here: a
         member is for what those cannot say -- the keys, the values,
         and taking something out.
         """
         is_hash = isinstance(held, HashValue)
-        what = "hash" if is_hash else "set"
+        what = "dictionary" if is_hash else "set"
         arities = {"remove": 1, "insert": 1, "clear": 0}
         if name not in arities or (name == "insert" and is_hash):
             known = ("remove, clear" if is_hash
@@ -3114,7 +3114,7 @@ class Evaluator:
                      else "\N{SUPERSET OF OR EQUAL TO} for what is in it")
             raise AttributeError(
                 f"a {what} has no member '{name}'; it has {known}, {asked}, "
-                f"is read with [] where it is a hash, asked with "
+                f"is read with [] where it is a dictionary, asked with "
                 f"\N{SMALL ELEMENT OF} whether something is in it, and "
                 f"counted with #")
         if len(args) != arities[name]:
@@ -4342,7 +4342,7 @@ class Evaluator:
                 if isinstance(unwrapped, ObjectValue) \
                         and isinstance(unwrapped.obj, HashValue):
                     # Writing at a key puts it there, whether or not it
-                    # was there before: a hash has no length to run past
+                    # was there before: a dictionary has no length to run past
                     # and nothing to be out of range of.
                     hv = unwrapped.obj
                     key = self._checked_key(
@@ -4355,7 +4355,7 @@ class Evaluator:
                         mismatch = _scalar_kind_mismatch(value, held)
                         if mismatch is not None:
                             raise TypeError(
-                                f"a hash of {held} cannot hold {mismatch}")
+                                f"a dictionary of {held} cannot hold {mismatch}")
                     hv.put(key, value)
                 elif isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
                     idx_val = self.eval_expr(last_idx_node)

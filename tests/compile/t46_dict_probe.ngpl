@@ -1,4 +1,4 @@
-// core-2: a hash answers the same whatever the probe underneath it
+// core-2: a dictionary answers the same whatever the probe underneath it
 // does.  The table reads sixteen control bytes at a time now, so what
 // this asks is what a group probe could get wrong: keys that land in
 // the same group and have to be told apart, a table that grows while
@@ -9,7 +9,7 @@
 @start
 fn main():
     // more keys than a group holds, so the table grows several times
-    let g : mut std.hash(i64, i64) = (⸨⸩)
+    let g : mut std.dict(i64, i64) = (⸨⸩)
     foreach i := 1…500:
         g[i × 7] ← i
     std.println("{}", #g)
@@ -31,7 +31,7 @@ fn main():
     std.println("{} {}", g[7] ?? 0, #g)
 
     // string keys, told apart by their bytes and not their length
-    let s : mut std.hash(str, i64) = (⸨⸩)
+    let s : mut std.dict(str, i64) = (⸨⸩)
     s["a"] ← 1
     s["b"] ← 2
     s["ab"] ← 3
@@ -42,5 +42,5 @@ fn main():
     std.println("{} {} {}", #s, "ab" ∊ s, "ac" ∊ s)
 
     // a literal table still answers
-    let lit : std.hash(str, i64) = (⸨"one": 1, "two": 2, "three": 3⸩)
+    let lit : std.dict(str, i64) = (⸨"one": 1, "two": 2, "three": 3⸩)
     std.println("{} {} {}", lit["one"] ?? 0, lit["three"] ?? 0, lit["four"] ?? ⁻1)
