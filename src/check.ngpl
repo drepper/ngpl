@@ -69,6 +69,11 @@ struct Chk:
     psk : i64[]
     psnp : i64[]
     skipfn : i64[]       // 1 where a generic was never shaped by a call
+    // Arguments whose copy by value cannot be elided: a by-value
+    // parameter beside a &mut of the same thing in the same call.
+    // Nearly always empty, which is why lowering asks its length
+    // before it asks anything else.
+    argcopy : i64[]
     diags : Diag[]
 
 // ---------------------------------------------------------------------------
@@ -228,6 +233,7 @@ struct Checker:
     fdone : i64[]        // per function: 0 unchecked, 1 checked, 2 being checked
     skipfn : i64[]       // 1 where a generic was never shaped by a call
     lam_ret : i64        // the lambda under check answers this; ⁻1 outside
+    argcopy : i64[]      // see Chk
 
 impl Checker:
     fn derr(&mut self, tok : i64, m : str):
@@ -2489,24 +2495,46 @@ impl Checker:
     // Whether handing this type over by value hands over the thing
     // itself.  A number is copied and two parameters holding one are
     // two numbers; an array, a dictionary, a matrix and a struct are
-    // reached through, so two parameters holding one are one thing
-    // under two names.
+    // reached through, so passing one costs nothing and the callee sees
+    // the caller's own -- which is fine while nothing can change it, and
+    // is why the copy is elided.
     fn shares_by_value(&self, t : i64) → bool:
         let b : i64 = ty_strip_ref(t)
         ty_is_arr(b) or ty_is_hash(b) or ty_is_mat(b) or ty_is_struct(b)
 
+    // Whether a value of this type can be copied at a call, for the one
+    // case where the copy cannot be elided.  An array of numbers,
+    // characters or strings can: its elements are values, so copying
+    // the slots copies the array.  An array of arrays or of structs
+    // cannot, because copying the slots would leave the elements
+    // shared, and neither can a struct or a dictionary, for want of
+    // anything to copy them with.  Those are refused rather than
+    // half-copied; see TODO-compiler.md.
+    fn copyable_by_value(&self, t : i64) → bool:
+        let b : i64 = ty_strip_ref(t)
+        if not ty_is_arr(b):
+            return false
+        let e : i64 = self.elem_of(b)
+        ty_is_int(e) or e = TY_BOOL or e = TY_CHAR or e = TY_STR
+
     // Two parameters that reach one binding, where at least one of them
     // may change it.
     //
-    // A function is written as though its parameters were separate
-    // things, and every line of it is read that way.  Handed the same
-    // thing twice with one of them writable, they are not separate, and
-    // nothing the body does can be relied on: `a.push(1)` may move what
-    // `b` points at, and a compiler that assumed otherwise -- as any
-    // optimizer eventually will -- would be right to and wrong anyway.
-    // There is no way to write the callee that makes this safe, so it
-    // is refused at the call, which is the one place both arguments can
-    // be seen at once.
+    // Two borrows are refused.  A function is written as though its
+    // parameters were separate things, and every line of it is read
+    // that way; handed one thing twice with a writer among them they
+    // are not separate, and nothing the body does can be relied on --
+    // `a.push(1)` may move what `b` points at.  There is no way to
+    // write the callee that makes this safe, so it is refused at the
+    // call, which is the one place both arguments can be seen at once.
+    //
+    // A by-value parameter is a different matter, because by value
+    // means a copy.  The copy is elided everywhere it cannot be
+    // noticed -- which is everywhere a `&mut` of the same thing is not
+    // in the same call, since a `mut` container parameter is refused
+    // and so a by-value one is never written through.  Here it can be
+    // noticed, so here the copy is made, and lower_call makes it.
+    // What is refused is only the type the compiler has no copy for.
     //
     // Two shared borrows of one thing are fine: reading does not
     // conflict with reading.
@@ -2519,11 +2547,15 @@ impl Checker:
         // what each parameter reaches, and whether it may change it
         let bases : mut i64[] = []
         let muts : mut i64[] = []
+        let refs : mut i64[] = []
+        let ptys : mut i64[] = []
         if self_n = 1:
             let rty : i64 = self.a.extra[(params_off + 2) × 1¤ptrdiff]
             let rrk : i64 = ty_ref_kind(rty)
             bases.push(self.base_slot(recv) if rrk ≠ 0 or self.shares_by_value(rty) else ⁻1)
             muts.push(1 if rrk = 2 else 0)
+            refs.push(1 if rrk ≠ 0 else 0)
+            ptys.push(rty)
         foreach j := 0…argc - 1:
             let arg : i64 = self.a.extra[(args_off + 1 + j) × 1¤ptrdiff]
             let pty : i64 = self.a.extra[(params_off + 2 + (@dropunit(j) + self_n) × 2) × 1¤ptrdiff]
@@ -2531,12 +2563,24 @@ impl Checker:
             let inner : i64 = self.a.na[arg × 1¤ptrdiff] if self.kind_of(arg) = NK_REF else arg
             bases.push(self.base_slot(inner) if rk ≠ 0 or self.shares_by_value(pty) else ⁻1)
             muts.push(1 if rk = 2 else 0)
+            refs.push(1 if rk ≠ 0 else 0)
+            ptys.push(pty)
         assert(@dropunit(#bases) = n, "one claim per parameter")
         foreach a := 0…n - 2:
             foreach b := a + 1…n - 1:
                 let ba : i64 = bases[a × 1¤ptrdiff]
                 if ba ≠ ⁻1 and ba = bases[b × 1¤ptrdiff] and (muts[a × 1¤ptrdiff] = 1 or muts[b × 1¤ptrdiff] = 1):
-                    self.derr(tok, self.arg_word(a, self_n) ⧺ " and " ⧺ self.arg_word(b, self_n) ⧺ " of '" ⧺ name ⧺ "' are both '" ⧺ self.snames[ba × 1¤ptrdiff] ⧺ "', and one of them may change it; a function is written as though its parameters were separate things, and two names for one thing that may change is not something the body can be written against")
+                    // one of the two is by value: it is a copy, so the
+                    // two are separate after all -- provided a copy can
+                    // be made
+                    let bycopy : i64 = (a if muts[a × 1¤ptrdiff] = 0 else b) if muts[a × 1¤ptrdiff] = 0 or muts[b × 1¤ptrdiff] = 0 else ⁻1
+                    if bycopy ≠ ⁻1 and refs[bycopy × 1¤ptrdiff] = 0:
+                        if not self.copyable_by_value(ptys[bycopy × 1¤ptrdiff]):
+                            self.derr(tok, self.arg_word(bycopy, self_n) ⧺ " of '" ⧺ name ⧺ "' is '" ⧺ self.snames[ba × 1¤ptrdiff] ⧺ "' by value and " ⧺ self.arg_word(a if bycopy = b else b, self_n) ⧺ " may change it, so the copy that by value means cannot be elided -- and " ⧺ self.tn(ptys[bycopy × 1¤ptrdiff]) ⧺ " is a type this compiler has no copy for yet")
+                        elif bycopy >= self_n:
+                            self.argcopy.push(self.a.extra[(args_off + 1 + bycopy - self_n) × 1¤ptrdiff])
+                    else:
+                        self.derr(tok, self.arg_word(a, self_n) ⧺ " and " ⧺ self.arg_word(b, self_n) ⧺ " of '" ⧺ name ⧺ "' are both '" ⧺ self.snames[ba × 1¤ptrdiff] ⧺ "', and one of them may change it; a function is written as though its parameters were separate things, and two names for one thing that may change is not something the body can be written against")
 
     fn arg_word(&self, i : i64, self_n : i64) → str:
         if self_n = 1 and i = 0:
@@ -4026,7 +4070,8 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
                                    in_contract: false,
                                    scope_floor: 0, lams: [], lamns: [],
                                    psfn: [], psk: [], psnp: [],
-                                   fdone: [], skipfn: [], lam_ret: ⁻1})
+                                   fdone: [], skipfn: [], lam_ret: ⁻1,
+                                   argcopy: []})
     if #a.structs > 0:
         foreach i := 0…#a.structs - 1:
             let sd := a.structs[i]
@@ -4133,5 +4178,6 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     (Chk{ntype: c.ntype, nslot: c.nslot, ncvt: c.ncvt, fslots: c.fslots,
          gvals: c.gvals, ginit: c.ginit, lams: c.lams, lamns: c.lamns,
          psfn: c.psfn, psk: c.psk, psnp: c.psnp, skipfn: c.skipfn,
+         argcopy: c.argcopy,
          diags: c.diags})
 

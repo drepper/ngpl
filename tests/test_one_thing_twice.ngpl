@@ -33,6 +33,13 @@ fn adds(a : i64, b : i64) → i64:
 fn counts(a : i64[], b : i64[]) → i64:
     @dropunit(#a) + @dropunit(#b)
 
+struct Box:
+    n : i64
+
+fn box_by_value(a : Box, b : &mut Box) → i64:
+    b.n ← 9
+    a.n
+
 // ---------------------------------------------------------------------
 // What is refused
 // ---------------------------------------------------------------------
@@ -46,11 +53,6 @@ fn error_two_writers_of_one_array():
 fn error_a_writer_and_a_reader_of_one_array():
     let v : mut i64[] = [1]
     _ ← writes_one(&v, &v)
-
-@expect error "may change it"
-fn error_by_value_beside_a_writer_of_the_same():
-    let v : mut i64[] = [1]
-    _ ← by_value_beside_a_writer(v, &v)
 
 // A mutable borrow is a promise to write, so it may only be taken of
 // something writable -- refused where the borrow is taken rather than
@@ -80,6 +82,26 @@ fn test_two_writers_of_two_arrays():
     writes_both(&v, &w)
     assert_eq(@dropunit(#v), 1)
     assert_eq(@dropunit(#w), 1)
+
+// By value means a copy, so a by-value parameter beside a &mut of the
+// same thing is not two names for one thing: it is the thing and a
+// copy of the thing, and the copy was taken before the call ran.  The
+// copy is elided everywhere it cannot be seen, which is everywhere
+// else, since a mut container parameter is refused and so a by-value
+// one is never written through.
+@test
+fn test_by_value_beside_a_writer_of_the_same():
+    let v : mut i64[] = [1]
+    assert_eq(by_value_beside_a_writer(v, &v), 1)
+    assert_eq(@dropunit(#v), 2)
+
+// A struct, an array of arrays and a dictionary have no copy the
+// implementations can make, so the call is refused rather than
+// half-copied.  A limitation, not a rule; see the specification.
+@expect error "no copy for"
+fn error_a_struct_by_value_beside_a_writer():
+    let s : mut Box = Box{n: 1}
+    _ ← box_by_value(s, &s)
 
 // A number handed over twice is two numbers.
 @test

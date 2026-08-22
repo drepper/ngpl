@@ -3801,7 +3801,7 @@ This follows Rust's convention where `fn foo(x: i32)` produces an immutable bind
 
 ### Call-by-Value and Call-by-Reference
 
-By default, function parameters are passed **by value**.  Scalar values (integers, floats, booleans, strings) are immutable and naturally passed by value without copying; a compound value such as an array or a struct is today reached through rather than copied by both implementations, which is what [Two Parameters, One Thing](#two-parameters-one-thing) is about and is recorded there as an open question.
+By default, function parameters are passed **by value**: the callee is handed a copy, and what the caller holds is untouched by anything the callee does.  Scalar values (integers, floats, booleans, strings) are immutable and are copied by being passed at all.  For a compound value the copy is real but usually not made — see [By Value Is a Copy](#by-value-is-a-copy), which says when it can be skipped and when it cannot.
 
 To pass a parameter **by reference**, prefix the type annotation with `&`.  A bare `&` lends the value for reading; `&mut` lends it for writing:
 
@@ -3843,7 +3843,7 @@ fill_zeros(&data)
 
 #### Two Parameters, One Thing
 
-**A call may not hand one thing to two parameters where either of them may change it.**
+**A call may not hand one thing to two parameters that both borrow it, where either borrow may change it.**
 
 ```
 fn both(a : &mut i64[], b : &mut i64[]):
@@ -3869,25 +3869,39 @@ fn total(a : &i64[], b : &i64[]) → i64:
 total(&v, &v)                           // accepted
 ```
 
-**What counts as the same thing** is the binding an argument names.  An argument is written `&name` rather than `&expression`, so there is no borrow of a field or an element to compare against the whole; the comparison is between names.  What counts as *may change it* is a `&mut` parameter.
+**What counts as the same thing** is the binding an argument names.  An argument is written `&name` rather than `&expression`, so there is no borrow of a field or an element to compare against the whole; the comparison is between names.
 
-**A by-value parameter of a type that is reached through counts too.**  An array, a dictionary, a matrix and a struct handed over by value are the thing itself, not a copy of it — see the note below — so a by-value array beside a `&mut` of the same array is the same hazard under a different spelling, and is refused the same way:
+#### By Value Is a Copy
+
+A by-value parameter is not a borrow and is never part of the refusal above, because **by value means a copy**:
 
 ```
 fn f(a : i64[], b : &mut i64[]) → i64:
     b.push(7)
-    #a                                  // how many? the push may have moved it
+    #a                                  // 1: `a` is a copy, taken before the push
 
-f(u, &u)
-
-error: argument 1 and argument 2 of 'f' are both 'u', and one of them may
-       change it
+let u : mut i64[] = [1]
+f(u, &u)                                // 1, and afterwards #u is 2
 ```
 
-A number handed over twice is two numbers and is never refused.
+`a` is the array as it was when the call was made, whatever the call does to `u` through `b`.  That is what by value means, and it is what makes a by-value parameter something a reader can reason about without looking at the other arguments.
 
-> **Open question.**  This section and the paragraph opening *Call-by-Value and Call-by-Reference* disagree, and the implementations settle it the way this section describes: a container or a struct passed by value is reached through rather than copied, and a `&mut` of it that a callee also holds by value is visible through both.  Whether the language should instead copy is a design decision that has not been made.  Until it is, the rule above is safe under either answer — it refuses a hazard if the thing is shared and a harmless call if it is copied.
+**Passing without copying is an optimization**, and the language performs it wherever the difference cannot be seen — which is almost everywhere.  Two things make that safe:
 
+- A `mut` container parameter is refused (*"a mut container parameter changes the caller's own; write &mut"*), so a by-value container parameter is never written by the callee.
+- Every other write path to a by-value parameter is refused too.
+
+So the only thing that can change the original while a by-value parameter holds it is a `&mut` of the same binding **in the same call**, and that is exactly where the copy is made.  Everywhere else the callee is handed the caller's own and cannot tell, which for an array parameter is the difference between a call and a call plus a copy of the input.
+
+> **A limitation, not a rule.**  Where the copy must be made, it is made for an array of numbers, characters or strings — copying the slots copies the array, because the elements are values.  For an array of arrays or of structs, for a struct, and for a dictionary, copying the slots would leave the elements shared, and the implementations have nothing that copies them properly; such a call is refused rather than half-copied:
+>
+> ```
+> error: argument 1 of 'f' is 's' by value and argument 2 may change it, so
+>        the copy that by value means cannot be elided -- and struct Box is a
+>        type this compiler has no copy for yet
+> ```
+>
+> The rule above is the language; this is what is built of it so far.
 
 #### A Reshape Inherits `&` and `mut` from Its Source
 

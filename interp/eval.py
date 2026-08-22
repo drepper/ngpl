@@ -6392,6 +6392,19 @@ class Evaluator:
                 resolved_pack_type = _substitute_generics(resolved_pack_type, written)
 
         call_env = func.env.copy_for_call()
+        # By value means a copy.  The copy is elided wherever it cannot
+        # be noticed -- see the by-value branch below, which is the
+        # common case -- but here it can: a &mut of the same thing in
+        # the same call would otherwise let the callee watch its own
+        # by-value argument change under it.  Nearly every call answers
+        # this in one comparison, because nearly every call lends
+        # nothing.
+        _lent_mutably = [
+            id(unwrap_optional(a.get()).obj)
+            for (pn, _pt), a in zip(resolved_params, regular_args)
+            if pn in func.param_muts and isinstance(a, RefValue)
+            and isinstance(unwrap_optional(a.get()), ObjectValue)
+        ]
         for (param_name, param_type), arg_value in zip(resolved_params, regular_args):
             if isinstance(param_name, tuple):
                 # The parameter names the elements of a tuple rather
@@ -6439,6 +6452,13 @@ class Evaluator:
                     declared = _parse_array_type(param_type)
                     if declared is not None:
                         arg_value.obj.fixed_size = declared[1][0]
+            elif isinstance(arg_value, ObjectValue) \
+                    and id(arg_value.obj) in _lent_mutably:
+                # …unless this very call lends the same thing mutably,
+                # in which case the copy is the whole difference
+                # between what the callee was handed and what it would
+                # see.
+                arg_value = deep_copy_value(arg_value)
             elif isinstance(arg_value, ObjectValue) \
                     and isinstance(arg_value.obj, ArrayValue):
                 # A by-value parameter that cannot be written through

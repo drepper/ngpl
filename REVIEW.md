@@ -71,27 +71,35 @@ and an immutable binding lent mutably — the last two under the
 interpreter only, which the compiler had always refused.  The effective
 rule was that borrows are advisory.
 
-**Settled.**  A call may not hand one thing to two parameters where
-either of them may change it; two shared borrows of one thing stay
-fine, because reading does not conflict with reading.  A by-value
-parameter of a type that is reached through — an array, a dictionary, a
-matrix, a struct — counts as one of the two, since handing such a thing
-over by value hands over the thing.  A number handed over twice is two
-numbers and is never refused.  Both implementations now refuse the same
-calls, statically, in the same words, and the interpreter's two holes
-are closed with the compiler's own wording.
+**Settled.**  A call may not hand one thing to two parameters that both
+borrow it where either borrow may change it; two shared borrows of one
+thing stay fine, because reading does not conflict with reading.  A
+by-value parameter is not a borrow and is never part of it, because by
+value means a copy — see below.  Both implementations now refuse the
+same calls, statically, in the same words, and the interpreter's two
+holes are closed with the compiler's own wording.
 
 The spec chapter is "Two Parameters, One Thing", under Call-by-Value
 and Call-by-Reference; `tests/test_one_thing_twice.ngpl` holds both
 implementations to it as a shared conformance test.
 
-Two things the work turned up, both recorded rather than decided here.
-The spec said a compound argument is deep-copied and both
-implementations share it instead, which is now marked as an open design
-question where it matters — the rule above is safe under either answer.
-And an argument is written `&name` rather than `&expression`, so `&s.f`
-beside `&mut s` is not a case that can arise; the aliasing comparison is
-between names, and the parser refuses the borrow of a field first.
+The work turned up a question the spec had answered two ways, and it
+has now been decided: **by value means a copy**.  Passing without
+copying is an optimization, valid exactly where nothing can change the
+original during the call — which, because a `mut` container parameter
+is refused, is everywhere but a `&mut` of the same binding in the same
+call.  So `f(a : i64[], b : &mut i64[])` called as `f(u, &u)` is
+accepted, `a` is the array as it was, and `#a` answers 1 while the
+caller's own goes to 2.  Both implementations make the copy there and
+elide it everywhere else.  Where the copy is needed and the type has no
+copy the implementations can make — an array of arrays, a struct, a
+dictionary — the call is refused rather than half-copied, which is a
+limitation and is written down as one.
+
+Also turned up: an argument is written `&name` rather than
+`&expression`, so `&s.f` beside `&mut s` is not a case that can arise;
+the aliasing comparison is between names, and the parser refuses the
+borrow of a field first.
 
 What is *not* settled: exclusivity across a call boundary — a function
 that stores a borrow somewhere it outlives the call — cannot arise

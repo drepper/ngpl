@@ -32,6 +32,7 @@ struct Lower:
     res_vreg : i64
     cur_fname : str
     dlog : str[]         // one JSON line per code-shaping decision
+    argcopy : i64[]      // arguments whose copy by value cannot be elided
 
 @post(r: (r & 255) >= 8 and (r & 255) <= 64)
 fn width_of(t : i64) → i64:
@@ -1435,7 +1436,8 @@ impl Lower:
         let vregs : mut i64[] = []
         let i : mut i64 = 0
         while i < argc:
-            vregs.push(self.lower_expr(self.a.extra[(args_off + 1 + i) × 1¤ptrdiff]))
+            let an : i64 = self.a.extra[(args_off + 1 + i) × 1¤ptrdiff]
+            vregs.push(self.copied_arg(an, self.lower_expr(an)))
             i ← i + 1
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(argc)
@@ -1444,6 +1446,31 @@ impl Lower:
         let f : i64 = self.fname_index(name)
         let d : i64 = self.tmp()
         self.ir(IR_CALL, f, off, 0, d, 0)
+        d
+
+    // By value means a copy.  The copy is elided wherever it cannot be
+    // noticed, which is everywhere but here: a &mut of the same thing
+    // in the same call, where the callee would otherwise watch its own
+    // argument change under it.  The checker found these and said
+    // which; this is where the copy is made.  Cycling an array to its
+    // own length is a fresh array of the same elements, which is what
+    // the language already has for the job.
+    fn copied_arg(&mut self, node : i64, v : i64) → i64:
+        if #self.argcopy = 0:
+            return v
+        let n : i64 = @dropunit(#self.argcopy)
+        let i : mut i64 = 0
+        let want : mut bool = false
+        while i < n:
+            if self.argcopy[i × 1¤ptrdiff] = node:
+                want ← true
+            i ← i + 1
+        if not want:
+            return v
+        let len : i64 = self.tmp()
+        self.ir(IR_ALEN, v, 0, 0, len, 0)
+        let d : i64 = self.tmp()
+        self.ir(IR_ACYC, len, v, 0, d, 0)
         d
 
     fn lower_assert(&mut self, nid : i64, tok : i64, args_off : i64, is_eq : bool):

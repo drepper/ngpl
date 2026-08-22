@@ -2363,15 +2363,36 @@ def _static_borrow_check(func_def) -> str | None:
     return walk(func_def.body, {})
 
 
+def _copyable_by_value(type_name) -> bool:
+    """Whether a value of this type can be copied at a call, for the one
+    case where the copy cannot be elided.
+
+    An array of numbers, characters or strings can: its elements are
+    values, so copying the slots copies the array.  An array of arrays
+    or of structs cannot, because copying the slots would leave the
+    elements shared, and neither can a struct or a dictionary, for want
+    of anything to copy them with that the compiler also has.  Those
+    are refused rather than half-copied, in both implementations, so
+    that the two go on refusing the same programs.
+    """
+    if type_name is None:
+        return False
+    name = str(type_name).strip()
+    if not name.endswith("[]"):
+        return False
+    return name[:-2].strip() in _SCALAR_TYPE_NAMES
+
+
 def _shares_by_value(type_name) -> bool:
     """Whether handing this type over by value hands over the thing.
 
     A number is copied and two parameters holding one are two numbers;
     an array, a dictionary, a matrix and a struct are reached through,
-    so two parameters holding one are one thing under two names.  A
-    parameter with no written type says nothing, so it is taken as
-    sharing: the refusal is about a hazard, and guessing wrong the
-    other way lets one through.
+    so passing one costs nothing and the callee sees the caller's own --
+    which is fine while nothing can change it, and is why the copy is
+    elided.  A parameter with no written type says nothing, so it is
+    taken as sharing: the refusal is about a hazard, and guessing wrong
+    the other way lets one through.
     """
     if type_name is None:
         return True
@@ -2435,18 +2456,33 @@ def _static_alias_check(func_def, env) -> str | None:
             pname = param[0] if isinstance(param, (tuple, list)) else param
             ptype = (param[1] if isinstance(param, (tuple, list))
                      and len(param) > 1 else None)
-            seen.append(claim(arg, pname, ptype, callee))
+            is_ref = pname in callee.param_refs
+            seen.append(claim(arg, pname, ptype, callee) + (is_ref, ptype))
         for i in range(len(seen)):
             for j in range(i + 1, len(seen)):
-                (bi, mi), (bj, mj) = seen[i], seen[j]
-                if bi is not None and bi == bj and (mi or mj):
+                bi, mi, ri, ti = seen[i]
+                bj, mj, rj, tj = seen[j]
+                if bi is None or bi != bj or not (mi or mj):
+                    continue
+                # One of the two by value is a copy, so the two are
+                # separate after all -- provided a copy can be made.
+                by = i if not mi else (j if not mj else None)
+                if by is not None and not seen[by][2]:
+                    if _copyable_by_value(seen[by][3]):
+                        continue
                     return _Finding(
-                        f"argument {i + 1} and argument {j + 1} of "
-                        f"'{callee.name}' are both '{bi}', and one of them "
-                        f"may change it; a function is written as though "
-                        f"its parameters were separate things, and two "
-                        f"names for one thing that may change is not "
-                        f"something the body can be written against", node)
+                        f"argument {by + 1} of '{callee.name}' is '{bi}' by "
+                        f"value and argument {(j if by == i else i) + 1} may "
+                        f"change it, so the copy that by value means cannot "
+                        f"be elided -- and '{seen[by][3]}' is a type this "
+                        f"implementation has no copy for yet", node)
+                return _Finding(
+                    f"argument {i + 1} and argument {j + 1} of "
+                    f"'{callee.name}' are both '{bi}', and one of them "
+                    f"may change it; a function is written as though "
+                    f"its parameters were separate things, and two "
+                    f"names for one thing that may change is not "
+                    f"something the body can be written against", node)
         return None
 
     # What may be lent mutably here: a parameter the signature wrote
