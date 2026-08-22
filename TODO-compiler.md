@@ -49,6 +49,15 @@ The Compiler
     -- for the parser, which by then knows what the file declared, to put on the literal.  This
     is what the interpreter always did, where ¤ is an ordinary operator.
 
+[ ] a compound argument passed by value: copied, or the thing itself?  The spec's
+    Call-by-Value paragraph said "the interpreter creates a deep copy"; both implementations
+    hand over the thing, so `fn f(a : i64[], b : &mut i64[])` called as `f(u, &u)` sees the
+    push through `a`.  Probed both ways.  The aliasing rule (spec: "Two Parameters, One
+    Thing") is written to be safe under either answer, and the spec now says so where it
+    matters, but the question is open: copying is what "by value" reads as, and sharing is
+    what a fat pointer costs nothing to do.  Whichever is chosen, both implementations and
+    the spec should say it once.
+
 [ ] ngplc stops with "index out of range" on `_ ← it.next()` -- an iterator's next()
     discarded rather than bound.  The lowering reaches lower_mcall with a node id of ⁻1
     (src/lower.ngpl:98, through lower_expr_i:521).  The interpreter runs the same program.

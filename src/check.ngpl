@@ -2153,6 +2153,7 @@ impl Checker:
             let pty : i64 = self.a.extra[(callee.params_off + 2 + j × 2) × 1¤ptrdiff]
             self.check_one_arg(tok, name, j + 1, arg, pty)
             j ← j + 1
+        self.check_alias(tok, name, ⁻1, args_off, argc, callee.params_off, 0)
         self.set_type(id, callee.ret)
 
     // `mod.name(args)`: the module says where to look, so the walk out
@@ -2244,6 +2245,7 @@ impl Checker:
             else:
                 self.check_one_arg(tok, callee.name, j + 1, arg, pty)
             j ← j + 1
+        self.check_alias(tok, callee.name, ⁻1, args_off, argc, callee.params_off, 0)
         if ty_is_var(callee.ret):
             let rix : i64 = callee.ret - 194048
             if vmap[rix × 1¤ptrdiff] ≠ ⁻1:
@@ -2483,6 +2485,63 @@ impl Checker:
         self.psk.push(argc)
         self.psnp.push(np)
         self.set_type(id, mk_lty(self.lam_intern(rem, self.lam_ret(lt))))
+
+    // Whether handing this type over by value hands over the thing
+    // itself.  A number is copied and two parameters holding one are
+    // two numbers; an array, a dictionary, a matrix and a struct are
+    // reached through, so two parameters holding one are one thing
+    // under two names.
+    fn shares_by_value(&self, t : i64) → bool:
+        let b : i64 = ty_strip_ref(t)
+        ty_is_arr(b) or ty_is_hash(b) or ty_is_mat(b) or ty_is_struct(b)
+
+    // Two parameters that reach one binding, where at least one of them
+    // may change it.
+    //
+    // A function is written as though its parameters were separate
+    // things, and every line of it is read that way.  Handed the same
+    // thing twice with one of them writable, they are not separate, and
+    // nothing the body does can be relied on: `a.push(1)` may move what
+    // `b` points at, and a compiler that assumed otherwise -- as any
+    // optimizer eventually will -- would be right to and wrong anyway.
+    // There is no way to write the callee that makes this safe, so it
+    // is refused at the call, which is the one place both arguments can
+    // be seen at once.
+    //
+    // Two shared borrows of one thing are fine: reading does not
+    // conflict with reading.
+    fn check_alias(&mut self, tok : i64, name : str, recv : i64,
+                   args_off : i64, argc : i64, params_off : i64,
+                   self_n : i64):
+        let n : i64 = argc + self_n
+        if n < 2:
+            return
+        // what each parameter reaches, and whether it may change it
+        let bases : mut i64[] = []
+        let muts : mut i64[] = []
+        if self_n = 1:
+            let rty : i64 = self.a.extra[(params_off + 2) × 1¤ptrdiff]
+            let rrk : i64 = ty_ref_kind(rty)
+            bases.push(self.base_slot(recv) if rrk ≠ 0 or self.shares_by_value(rty) else ⁻1)
+            muts.push(1 if rrk = 2 else 0)
+        foreach j := 0…argc - 1:
+            let arg : i64 = self.a.extra[(args_off + 1 + j) × 1¤ptrdiff]
+            let pty : i64 = self.a.extra[(params_off + 2 + (@dropunit(j) + self_n) × 2) × 1¤ptrdiff]
+            let rk : i64 = ty_ref_kind(pty)
+            let inner : i64 = self.a.na[arg × 1¤ptrdiff] if self.kind_of(arg) = NK_REF else arg
+            bases.push(self.base_slot(inner) if rk ≠ 0 or self.shares_by_value(pty) else ⁻1)
+            muts.push(1 if rk = 2 else 0)
+        assert(@dropunit(#bases) = n, "one claim per parameter")
+        foreach a := 0…n - 2:
+            foreach b := a + 1…n - 1:
+                let ba : i64 = bases[a × 1¤ptrdiff]
+                if ba ≠ ⁻1 and ba = bases[b × 1¤ptrdiff] and (muts[a × 1¤ptrdiff] = 1 or muts[b × 1¤ptrdiff] = 1):
+                    self.derr(tok, self.arg_word(a, self_n) ⧺ " and " ⧺ self.arg_word(b, self_n) ⧺ " of '" ⧺ name ⧺ "' are both '" ⧺ self.snames[ba × 1¤ptrdiff] ⧺ "', and one of them may change it; a function is written as though its parameters were separate things, and two names for one thing that may change is not something the body can be written against")
+
+    fn arg_word(&self, i : i64, self_n : i64) → str:
+        if self_n = 1 and i = 0:
+            return "the receiver"
+        "argument " ⧺ i64_str(i + 1 - self_n)
 
     fn check_one_arg(&mut self, tok : i64, name : str, num : i64,
                      arg : i64, pty : i64):
@@ -3031,6 +3090,7 @@ impl Checker:
             let pty : i64 = self.a.extra[(callee.params_off + 2 + (j + self_n) × 2) × 1¤ptrdiff]
             self.check_one_arg(tok, fname, j + 1, arg, pty)
             j ← j + 1
+        self.check_alias(tok, fname, na, args_off, argc, callee.params_off, self_n)
         // lowering finds the function and whether a receiver travels
         self.a.nc[id × 1¤ptrdiff] ← 1000 + 2 × f + (1 if instance else 0)
         self.set_type(id, callee.ret)

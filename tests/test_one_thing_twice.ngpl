@@ -1,0 +1,100 @@
+// Two parameters, one thing.
+//
+// A call may not hand one thing to two parameters where either of them
+// may change it.  A function is written as though its parameters were
+// separate things, and every line of it is read that way; handed one
+// thing twice with a writer among them they are not separate, and
+// nothing the body does can be relied on -- `a.push(1)` may move the
+// storage `b` points at, so the next line reads freed memory.  The
+// callee cannot see that it happened, so there is nothing it could be
+// written to do about it, and the refusal belongs at the call.
+//
+// The specification's "Two Parameters, One Thing" is the normative
+// statement; this is where both implementations are held to it.
+
+fn writes_both(a : &mut i64[], b : &mut i64[]):
+    a.push(1)
+    b.push(2)
+
+fn writes_one(a : &mut i64[], b : &i64[]) → i64:
+    a.push(9)
+    @dropunit(#b)
+
+fn reads_both(a : &i64[], b : &i64[]) → i64:
+    @dropunit(#a) + @dropunit(#b)
+
+fn by_value_beside_a_writer(a : i64[], b : &mut i64[]) → i64:
+    b.push(7)
+    @dropunit(#a)
+
+fn adds(a : i64, b : i64) → i64:
+    a + b
+
+fn counts(a : i64[], b : i64[]) → i64:
+    @dropunit(#a) + @dropunit(#b)
+
+// ---------------------------------------------------------------------
+// What is refused
+// ---------------------------------------------------------------------
+
+@expect error "may change it"
+fn error_two_writers_of_one_array():
+    let v : mut i64[] = []
+    writes_both(&v, &v)
+
+@expect error "may change it"
+fn error_a_writer_and_a_reader_of_one_array():
+    let v : mut i64[] = [1]
+    _ ← writes_one(&v, &v)
+
+@expect error "may change it"
+fn error_by_value_beside_a_writer_of_the_same():
+    let v : mut i64[] = [1]
+    _ ← by_value_beside_a_writer(v, &v)
+
+// A mutable borrow is a promise to write, so it may only be taken of
+// something writable -- refused where the borrow is taken rather than
+// where the write happens.  (An argument is written `&name`, so `&s.f`
+// beside `&mut s` is not a case that can arise: the parser refuses the
+// borrow of a field before the aliasing rule is reached.)
+@expect error "not mut, so &mut cannot hand it over"
+fn error_lending_an_immutable_binding_mutably():
+    let v : i64[] = [1]
+    let w : mut i64[] = []
+    writes_both(&v, &w)
+
+// ---------------------------------------------------------------------
+// What is not
+// ---------------------------------------------------------------------
+
+// Reading does not conflict with reading.
+@test
+fn test_two_readers_of_one_array():
+    let v : i64[] = [1, 2]
+    assert_eq(reads_both(&v, &v), 4)
+
+@test
+fn test_two_writers_of_two_arrays():
+    let v : mut i64[] = []
+    let w : mut i64[] = []
+    writes_both(&v, &w)
+    assert_eq(@dropunit(#v), 1)
+    assert_eq(@dropunit(#w), 1)
+
+// A number handed over twice is two numbers.
+@test
+fn test_one_number_handed_over_twice():
+    let x : i64 = 21
+    assert_eq(adds(x, x), 42)
+
+// And two by-value containers with no writer between them are two
+// readers, which is the same as two shared borrows.
+@test
+fn test_one_array_handed_over_twice_with_no_writer():
+    let v : i64[] = [1, 2, 3]
+    assert_eq(counts(v, v), 6)
+
+@start
+@impure
+fn main():
+    std.println("aliasing tests passed")

@@ -2363,6 +2363,129 @@ def _static_borrow_check(func_def) -> str | None:
     return walk(func_def.body, {})
 
 
+def _shares_by_value(type_name) -> bool:
+    """Whether handing this type over by value hands over the thing.
+
+    A number is copied and two parameters holding one are two numbers;
+    an array, a dictionary, a matrix and a struct are reached through,
+    so two parameters holding one are one thing under two names.  A
+    parameter with no written type says nothing, so it is taken as
+    sharing: the refusal is about a hazard, and guessing wrong the
+    other way lets one through.
+    """
+    if type_name is None:
+        return True
+    name = str(type_name).strip()
+    if name.endswith("]") or name.endswith("[]"):
+        return True
+    if name.startswith(("std.dict", "std.set")):
+        return True
+    return name not in _SCALAR_TYPE_NAMES
+
+
+_SCALAR_TYPE_NAMES = frozenset((
+    "i8", "i16", "i32", "i64", "int", "u8", "u16", "u32", "u64",
+    "f32", "f64", "float", "bool", "char", "str", "byte", "∅",
+))
+
+
+def _static_alias_check(func_def, env) -> str | None:
+    """Refuse a call that hands one thing to two parameters, where at
+    least one of them may change it.
+
+    A function is written as though its parameters were separate
+    things, and every line of it is read that way.  Handed the same
+    thing twice with one of them writable they are not separate, and
+    nothing the body does can be relied on -- `a.push(1)` may move what
+    `b` points at.  There is no way to write the callee that makes this
+    safe, so it is refused at the call, which is the one place both
+    arguments can be seen at once.
+
+    Two shared borrows of one thing are fine: reading does not conflict
+    with reading.
+    """
+
+    def callee_of(name):
+        try:
+            found = env.lookup(name)
+        except Exception:
+            return None
+        return found if isinstance(found, FuncValue) else None
+
+    def claim(arg, pname, ptype, callee):
+        """What a parameter reaches, and whether it may change it."""
+        is_ref = pname in callee.param_refs
+        is_mut = pname in callee.param_muts
+        inner = arg.expr if isinstance(arg, _ast.BorrowExpr) else arg
+        if isinstance(arg, _ast.RefExpr):
+            return arg.name, is_mut
+        if is_ref or _shares_by_value(ptype):
+            return _borrow_base(inner), is_mut
+        return None, is_mut
+
+    def check_call(node):
+        callee = callee_of(getattr(node, "name", None))
+        if callee is None or len(callee.params) < 2:
+            return None
+        args = node.args
+        if len(args) != len(callee.params):
+            return None
+        seen = []
+        for arg, param in zip(args, callee.params):
+            pname = param[0] if isinstance(param, (tuple, list)) else param
+            ptype = (param[1] if isinstance(param, (tuple, list))
+                     and len(param) > 1 else None)
+            seen.append(claim(arg, pname, ptype, callee))
+        for i in range(len(seen)):
+            for j in range(i + 1, len(seen)):
+                (bi, mi), (bj, mj) = seen[i], seen[j]
+                if bi is not None and bi == bj and (mi or mj):
+                    return _Finding(
+                        f"argument {i + 1} and argument {j + 1} of "
+                        f"'{callee.name}' are both '{bi}', and one of them "
+                        f"may change it; a function is written as though "
+                        f"its parameters were separate things, and two "
+                        f"names for one thing that may change is not "
+                        f"something the body can be written against", node)
+        return None
+
+    # What may be lent mutably here: a parameter the signature wrote
+    # &mut, and a binding declared mut.  Everything else is refused
+    # where the borrow is taken rather than where the write happens,
+    # which is the point at which the promise is made.
+    lendable = set(func_def.param_muts)
+    for node in _iter_ast(func_def.body):
+        if isinstance(node, _ast.VarDef) and not node.is_const:
+            lendable.add(node.name)
+        if isinstance(node, _ast.ForEachStmt):
+            for var in node.vars:
+                lendable.add(var[0] if isinstance(var, (tuple, list)) else var)
+
+    def check_mut_borrow(node):
+        callee = callee_of(getattr(node, "name", None))
+        if callee is None or len(node.args) != len(callee.params):
+            return None
+        for arg, param in zip(node.args, callee.params):
+            pname = param[0] if isinstance(param, (tuple, list)) else param
+            if pname not in callee.param_muts:
+                continue
+            if not isinstance(arg, _ast.RefExpr):
+                continue
+            if arg.name in lendable:
+                continue
+            return _Finding(
+                f"'{arg.name}' is not mut, so &mut cannot hand it over",
+                node)
+        return None
+
+    for node in _iter_ast(func_def.body):
+        if isinstance(node, _ast.FuncCall):
+            found = check_call(node) or check_mut_borrow(node)
+            if found is not None:
+                return found
+    return None
+
+
 def _static_listable_check(func_def) -> str | None:
     """Refuse a @listable function that cannot be threaded.
 
@@ -3205,6 +3328,10 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 if borrow_err is not None:
                     raise DefinitionError(f"in {defn.name}: {borrow_err}",
                                           _finding_pos(borrow_err) or _node_pos(defn))
+                alias_err = _static_alias_check(defn, env)
+                if alias_err is not None:
+                    raise DefinitionError(f"in {defn.name}: {alias_err}",
+                                          _finding_pos(alias_err) or _node_pos(defn))
                 literal_err = _static_literal_check(defn)
                 if literal_err is not None:
                     raise DefinitionError(f"in {defn.name}: {literal_err}",
@@ -3498,6 +3625,9 @@ def main():
             borrow_err = _static_borrow_check(defn)
             if borrow_err is not None:
                 errors_produced.append(("error", borrow_err))
+            alias_err = _static_alias_check(defn, env)
+            if alias_err is not None:
+                errors_produced.append(("error", alias_err))
             literal_err = _static_literal_check(defn)
             if literal_err is not None:
                 errors_produced.append(("error", literal_err))

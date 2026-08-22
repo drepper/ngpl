@@ -3801,7 +3801,7 @@ This follows Rust's convention where `fn foo(x: i32)` produces an immutable bind
 
 ### Call-by-Value and Call-by-Reference
 
-By default, function parameters are passed **by value**.  For mutable compound values such as arrays, the interpreter creates a deep copy of the argument so that modifications inside the function do not affect the caller.  Scalar values (integers, floats, booleans, strings) are immutable and naturally passed by value without copying.
+By default, function parameters are passed **by value**.  Scalar values (integers, floats, booleans, strings) are immutable and naturally passed by value without copying; a compound value such as an array or a struct is today reached through rather than copied by both implementations, which is what [Two Parameters, One Thing](#two-parameters-one-thing) is about and is recorded there as an open question.
 
 To pass a parameter **by reference**, prefix the type annotation with `&`.  A bare `&` lends the value for reading; `&mut` lends it for writing:
 
@@ -3840,6 +3840,54 @@ fill_zeros(&data)
 - **Mutable by-reference parameters** (`&mut T`) receive a reference the callee may write.  Assignments to the parameter, including element mutation, are visible to the caller after the function returns.
 - Passing a non-reference argument to a `&`-parameter is a type error: *"parameter 'x' is by-reference, caller must pass &x"*.
 - Passing a `&`-argument to a by-value parameter is a type error: *"parameter 'x' is by-value, caller must not pass a reference"*.
+
+#### Two Parameters, One Thing
+
+**A call may not hand one thing to two parameters where either of them may change it.**
+
+```
+fn both(a : &mut i64[], b : &mut i64[]):
+    a.push(1)
+    b.push(2)
+
+both(&v, &v)
+
+error: argument 1 and argument 2 of 'both' are both 'v', and one of them
+       may change it; a function is written as though its parameters were
+       separate things, and two names for one thing that may change is not
+       something the body can be written against
+```
+
+A function is written as though its parameters were separate things, and every line of it is read that way.  Handed one thing twice with a writer among them they are not separate, and nothing the body does can be relied on: `a.push(1)` may move the storage `b` points at, so the very next line reads freed memory.  There is no way to write the callee that makes this safe — the callee cannot see that it happened — so it is refused at the call, which is the one place both arguments can be seen at once.
+
+Two shared borrows of one thing are fine.  Reading does not conflict with reading:
+
+```
+fn total(a : &i64[], b : &i64[]) → i64:
+    #a + #b
+
+total(&v, &v)                           // accepted
+```
+
+**What counts as the same thing** is the binding an argument names.  An argument is written `&name` rather than `&expression`, so there is no borrow of a field or an element to compare against the whole; the comparison is between names.  What counts as *may change it* is a `&mut` parameter.
+
+**A by-value parameter of a type that is reached through counts too.**  An array, a dictionary, a matrix and a struct handed over by value are the thing itself, not a copy of it — see the note below — so a by-value array beside a `&mut` of the same array is the same hazard under a different spelling, and is refused the same way:
+
+```
+fn f(a : i64[], b : &mut i64[]) → i64:
+    b.push(7)
+    #a                                  // how many? the push may have moved it
+
+f(u, &u)
+
+error: argument 1 and argument 2 of 'f' are both 'u', and one of them may
+       change it
+```
+
+A number handed over twice is two numbers and is never refused.
+
+> **Open question.**  This section and the paragraph opening *Call-by-Value and Call-by-Reference* disagree, and the implementations settle it the way this section describes: a container or a struct passed by value is reached through rather than copied, and a `&mut` of it that a callee also holds by value is visible through both.  Whether the language should instead copy is a design decision that has not been made.  Until it is, the rule above is safe under either answer — it refuses a hazard if the thing is shared and a harmless call if it is copied.
+
 
 #### A Reshape Inherits `&` and `mut` from Its Source
 

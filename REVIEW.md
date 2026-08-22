@@ -55,7 +55,7 @@ the spec's iterator section said the same in prose.  Both were wrong
 in the same way — they answered a question that should not have been
 askable — and both now say the borrow forbids the write.
 
-### A2. Borrow exclusivity is discipline, not law (**probed**)
+### A2. Borrow exclusivity is discipline, not law (**probed**) — ~~open~~ **settled**
 
 ```
 fn both(a : &mut i64[], b : &mut i64[]):
@@ -65,15 +65,38 @@ fn both(a : &mut i64[], b : &mut i64[]):
 both(&v, &v)        // accepted by both implementations
 ```
 
-Two mutable borrows of one array in one call are accepted.  Add the
-two recorded interpreter holes (a `&` borrow passed where `&mut` is
-wanted, with the write going through; an immutable binding lent
-mutably — see ANALYSIS.md) and the effective rule today is that
-borrows are advisory.  Nothing miscompiles yet, because containers
-are pointers in both implementations, but the freshness rules and the
-planned ownership system both assume an exclusivity no normative text
-defines.  The spec needs an aliasing chapter before any optimizer is
-allowed to assume no-alias.
+Two mutable borrows of one array in one call were accepted, as were a
+`&` borrow passed where `&mut` was wanted with the write going through,
+and an immutable binding lent mutably — the last two under the
+interpreter only, which the compiler had always refused.  The effective
+rule was that borrows are advisory.
+
+**Settled.**  A call may not hand one thing to two parameters where
+either of them may change it; two shared borrows of one thing stay
+fine, because reading does not conflict with reading.  A by-value
+parameter of a type that is reached through — an array, a dictionary, a
+matrix, a struct — counts as one of the two, since handing such a thing
+over by value hands over the thing.  A number handed over twice is two
+numbers and is never refused.  Both implementations now refuse the same
+calls, statically, in the same words, and the interpreter's two holes
+are closed with the compiler's own wording.
+
+The spec chapter is "Two Parameters, One Thing", under Call-by-Value
+and Call-by-Reference; `tests/test_one_thing_twice.ngpl` holds both
+implementations to it as a shared conformance test.
+
+Two things the work turned up, both recorded rather than decided here.
+The spec said a compound argument is deep-copied and both
+implementations share it instead, which is now marked as an open design
+question where it matters — the rule above is safe under either answer.
+And an argument is written `&name` rather than `&expression`, so `&s.f`
+beside `&mut s` is not a case that can arise; the aliasing comparison is
+between names, and the parser refuses the borrow of a field first.
+
+What is *not* settled: exclusivity across a call boundary — a function
+that stores a borrow somewhere it outlives the call — cannot arise
+today, because a borrow can only be a parameter and an argument.  When
+that changes, this rule needs a lifetime to go with it.
 
 ### A3. Evaluation order is never written down (**probed**)
 
