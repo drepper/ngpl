@@ -664,10 +664,10 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let cdiags : mut Diag[] = []
     if em.max_frame > guard_size:
         cdiags.push(Diag{line: 1¤"line", col: 1¤"col",
-                         msg: "a function claims " ⧺ i64_str(em.max_frame) ⧺ " bytes of stack, more than the " ⧺ i64_str(guard_size) ⧺ "-byte guard below it, which it could step over; raise --guard-size"})
+                         msg: "a function claims " ⧺ i64_str(em.max_frame) ⧺ " bytes of stack, more than the " ⧺ i64_str(guard_size) ⧺ "-byte guard below it, which it could step over; raise --guard-size", level: DIAG_ERROR, code: DIAG_NONE})
     if em.max_frame >= stack_size:
         cdiags.push(Diag{line: 1¤"line", col: 1¤"col",
-                         msg: "a function claims " ⧺ i64_str(em.max_frame) ⧺ " bytes of stack, and the whole stack is " ⧺ i64_str(stack_size) ⧺ "; raise --stack-size"})
+                         msg: "a function claims " ⧺ i64_str(em.max_frame) ⧺ " bytes of stack, and the whole stack is " ⧺ i64_str(stack_size) ⧺ "; raise --stack-size", level: DIAG_ERROR, code: DIAG_NONE})
     // The symbols, in the order the code lays them out: the entry
     // point, the program's own functions, the ones the compiler
     // synthesized behind them, and the runtime last, which is where

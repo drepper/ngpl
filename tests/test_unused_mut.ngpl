@@ -9,7 +9,7 @@
 // The warning fires
 // ---------------------------------------------------------------------
 
-@expect warning 2418 "'unused' is declared mut but is never modified"
+@expect warning 2405 "'unused' is declared mut but is never modified"
 fn warn_let_never_modified():
     let unused : mut = 5
     assert_eq(unused, 5)
@@ -28,7 +28,7 @@ fn warn_parameter_never_modified(n : mut i32):
 
 @test
 fn test_statement_level_expect():
-    @expect warning 2418 "'here' is declared mut but is never modified"
+    @expect warning 2405 "'here' is declared mut but is never modified"
     let here : mut i64 = 5
     assert_eq(here, 5)
 
@@ -36,7 +36,7 @@ fn test_statement_level_expect():
 // draws nothing; an unmarked and unmodified one would still be reported.
 @test
 fn test_statement_level_expect_is_local():
-    @expect warning 2418 "'marked' is declared mut but is never modified"
+    @expect warning 2405 "'marked' is declared mut but is never modified"
     let marked : mut i64 = 1
     let changed : mut i64 = 2
     changed ← 3

@@ -53,6 +53,12 @@ struct Parser:
     braces : i64         // statements end at ';' inside a brace block
     ignored : str[]
     igtests : str[]
+    // Definitions marked @expect: kept, so the checker can draw the
+    // diagnostics they were written to draw and hold them to what they
+    // say.  expoff points at [n, level, code, …] in extra.
+    expects : FnDef[]
+    expoff : i64[]
+    pending_exp : i64    // the offset the definition being parsed will take
     diags : Diag[]
     poisoned : bool      // the statement at hand already misparsed
 
@@ -76,14 +82,23 @@ impl Parser:
         if not self.poisoned:
             let at ¤ptrdiff : i64 = tok
             self.diags.push(Diag{line: self.toks.line[at],
-                                 col: self.toks.col[at], msg: m})
+                                 col: self.toks.col[at], msg: m, level: DIAG_ERROR, code: DIAG_NONE})
+        self.poisoned ← true
+
+    // the same, saying which complaint it is; see Checker.derrc
+    @pre(code > 0)
+    fn errc_at(&mut self, tok : i64, code : i64, m : str):
+        if not self.poisoned:
+            let at ¤ptrdiff : i64 = tok
+            self.diags.push(Diag{line: self.toks.line[at],
+                                 col: self.toks.col[at], msg: m, level: DIAG_ERROR, code: code})
         self.poisoned ← true
 
     fn err(&mut self, m : str):
         if not self.poisoned:
             let at ¤ptrdiff : i64 = self.pos
             self.diags.push(Diag{line: self.toks.line[at],
-                                 col: self.toks.col[at], msg: m})
+                                 col: self.toks.col[at], msg: m, level: DIAG_ERROR, code: DIAG_NONE})
         self.poisoned ← true
         if #self.diags >= 20:
             // enough; parking on the closing EOF stops everything
@@ -1698,14 +1713,24 @@ impl Parser:
                 self.extra.push(post_toks[i])
                 self.extra.push(posts[i])
         if ignored:
-            // @expect: the definition is expected to draw diagnostics,
-            // so it is not checked, not compiled, and not run --
-            // remembered only so a reference to it can say why
+            // @expect: the definition is expected to draw diagnostics.
+            // No code is written for it -- a.fns is the emission
+            // schedule and this is not scheduled -- but it is kept, so
+            // the checker can draw what it draws and hold it to what
+            // the @expect lines said.
             self.ignored.push(name)
             // every @expect'd function is reported as a test of the
             // expectation itself, @test or not, as the interpreter
             // reports them
             self.igtests.push(name)
+            self.expects.push(FnDef{name: name, modname: self.curmod, tok: name_tok,
+                                    params_off: params_off,
+                                    ret: ret, body: body, is_export: false,
+                                    is_replaceable: false, is_impure: imp,
+                                    is_start: false, is_noreturn: is_noreturn,
+                                    is_test: false,
+                                    pre_off: pre_off, post_off: post_off})
+            self.expoff.push(self.pending_exp)
             return
         if mods & 4 = 4:
             // The recipe is read while the program is built and nothing
@@ -2164,6 +2189,8 @@ impl Parser:
         let is_fl : mut bool = false
         let is_build : mut bool = false
         let expects : mut i64 = 0
+        let exp_lvl : mut i64[] = []
+        let exp_code : mut i64[] = []
         let pres : mut i64[] = []
         let post_toks : mut i64[] = []
         let posts : mut i64[] = []
@@ -2223,10 +2250,15 @@ impl Parser:
                 // @expect <level> <code> ["message"], or the older
                 // <level> "message"
                 if self.peek() = TK_INT:
+                    exp_lvl.push(DIAG_WARNING if lvl = "warning" else DIAG_ERROR)
+                    exp_code.push(self.toks.val[self.pos × 1¤ptrdiff])
                     self.pos ← self.pos + 1
                     if self.peek() = TK_STR:
                         self.pos ← self.pos + 1
                 elif self.peek() = TK_STR:
+                    // the older form names no number, so there is
+                    // nothing here to match on; the interpreter matches
+                    // it by its words
                     self.pos ← self.pos + 1
                 else:
                     self.err("@expect states the code it expects, and may state the message beside it; the older form states the message alone")
@@ -2264,6 +2296,16 @@ impl Parser:
             self.err("the @build function carries no other annotation; it is read at compile time and no code for it is written")
             return
         if self.peek() = TK_FN:
+            // A signature is held to twelve parameters here, so what
+            // the @expect lines said travels on the parser rather than
+            // as a thirteenth.
+            self.pending_exp ← ⁻1
+            if #exp_code > 0:
+                self.pending_exp ← @dropunit(#self.extra)
+                self.extra.push(@dropunit(#exp_code))
+                foreach i := 0…#exp_code - 1:
+                    self.extra.push(exp_lvl[i])
+                    self.extra.push(exp_code[i])
             self.parse_fn(imp, is_start, is_noreturn, is_test,
                           (1 if is_repl else 0) + (2 if is_exp else 0)
                               + (4 if is_build else 0),
@@ -2339,6 +2381,7 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
                                  evalues: builtin_enum_values(),
                                  tvn: [], braces: 0,
                                  ignored: [], igtests: [],
+                                 expects: [], expoff: [], pending_exp: ⁻1,
                                  diags: [], poisoned: false})
     // a struct may be written below whatever names it, so the names
     // are gathered in one sweep before anything is parsed
@@ -2386,7 +2429,7 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
             // nothing half-built is left where the recipe can call it
             if lenient and @dropunit(#p.diags) > d0 and @dropunit(#p.builds) = b0:
                 while @dropunit(#p.diags) > d0:
-                    _ ← p.diags.pop() ?? (Diag{line: 1¤"line", col: 1¤"col", msg: ""})
+                    _ ← p.diags.pop() ?? (Diag{line: 1¤"line", col: 1¤"col", msg: "", level: DIAG_ERROR, code: DIAG_NONE})
                 while @dropunit(#p.fns) > f0:
                     _ ← p.fns.pop() ?? p.fns[0 × 1¤ptrdiff]
                 while @dropunit(#p.globals) > g0:
@@ -2423,5 +2466,6 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
          enames: p.enames, ewidth: p.ewidth, estart: p.estart,
          ecount: p.ecount, eflag: p.eflag, emembers: p.emembers,
          evalues: p.evalues,
-         ignored: p.ignored, igtests: p.igtests, diags: p.diags})
+         ignored: p.ignored, igtests: p.igtests,
+         expects: p.expects, expoff: p.expoff, diags: p.diags})
 

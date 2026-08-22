@@ -1678,7 +1678,7 @@ def _unreachable_warnings(func_def, env) -> list[tuple[str, tuple | None]]:
                 after = body[index + 1]
                 warnings.append((
                     Diagnostic("this statement cannot be reached: the one "
-                               "above it does not come back", 2291),
+                               "above it does not come back", 2201),
                     _stmt_pos(after)))
             for attr in ("body", "cons", "alt"):
                 walk(getattr(stmt, attr, None))
@@ -1723,7 +1723,7 @@ def _unused_loop_label_warnings(func_def) -> list[tuple[str, tuple | None]]:
                     Diagnostic(
                         f"the loop is named '{stmt.label}' and nothing "
                         f"inside it takes the name; a break or a continue "
-                        f"reaches an outer loop by naming it", 2911),
+                        f"reaches an outer loop by naming it", 2204),
                     stmt.label_pos))
             for attr in ("body", "cons", "alt"):
                 walk(getattr(stmt, attr, None))
@@ -1777,7 +1777,7 @@ def _unused_mut_warnings(func_def) -> list[tuple[str, tuple | None]]:
                 if name == DISCARD_NAME or name in modified:
                     continue
                 message = Diagnostic(
-                    f"'{name}' is declared mut but is never modified", 2418)
+                    f"'{name}' is declared mut but is never modified", 2405)
                 if id(node) in marked:
                     node.static_warnings = (
                         list(getattr(node, "static_warnings", ())) + [message])
@@ -1808,7 +1808,7 @@ def _unused_mut_warnings(func_def) -> list[tuple[str, tuple | None]]:
         if node.name in modified:
             continue
         message = Diagnostic(
-            f"'{node.name}' is declared mut but is never modified", 2418)
+            f"'{node.name}' is declared mut but is never modified", 2405)
         if id(node) in marked:
             # Read back by the evaluator when the @expect runs.
             node.static_warnings = [message]
@@ -2243,14 +2243,14 @@ def _static_loop_check(func_def) -> str | None:
             word = "break" if isinstance(stmt, _ast.BreakStmt) else "continue"
             if not labels:
                 return _Finding(f"{word} is written outside any loop, so "
-                                f"there is no loop for it to act on", stmt, 2292)
+                                f"there is no loop for it to act on", stmt, 2202)
             if stmt.label is not None and stmt.label not in labels:
                 named = ", ".join(sorted(l for l in labels if l is not None))
                 where = (f"the loops here are named {named}" if named
                          else "no loop here is named")
                 return _Finding(f"{word} names the loop '{stmt.label}', "
                                 f"which is not one it is inside; {where}",
-                                stmt, 2293)
+                                stmt, 2203)
             return None
         if isinstance(stmt, (_ast.WhileStmt, _ast.ForEachStmt)):
             return walk(stmt.body, labels + (stmt.label,))

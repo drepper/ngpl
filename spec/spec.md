@@ -6967,6 +6967,63 @@ A source file cannot ask for `-Werror`.  Whether a warning is worth stopping for
 - In normal mode, function-level `@expect` tests are verified silently on success.  If any `@expect` test fails, the program terminates with exit code 1 before running the `@start` function.
 - The `--skip-tests` flag does **not** suppress function-level `@expect` verification — these are compile-time checks, not runtime tests.
 
+#### What `@expect` Means to the Compiler
+
+The compiler reads `@expect` too, and it has to, because an annotation
+only one implementation honours is an annotation that drifts.  It reads
+it differently, though, and the difference is worth stating, because it
+follows from what a compiler is.
+
+**The definition is checked and not compiled.**  A definition carrying
+`@expect` never joins the emission schedule.  It is put on it to be
+checked, the diagnostics it draws are taken down, and it is taken off
+again, so a program compiles to the same bytes whether the definition
+is there or not.  The point is that a deliberately-wrong definition is
+kept beside the rule it is wrong about, in a file that still builds and
+still runs.
+
+**The match is by number, and only by number.**  Where an expectation
+names a number, that number must appear among what the definition drew.
+The wording is not compared at all — not even to note a drift, as the
+interpreter does — because the two implementations word the same
+refusal differently on purpose and always will:
+
+```
+@expect error 2292 "the value of this statement is not used; the signature hands nothing back, …"
+```
+
+is drawn by the interpreter saying exactly that, and by the compiler
+saying `the value of this statement is not used; bind it or write '_ ← …'`.
+Same refusal, same number, two voices, and neither has to be rewritten
+when the other improves.  This is what holds the two to the same
+warnings: a warning the interpreter makes and the compiler quietly
+dropped fails here, by number, without anyone having to read a message.
+
+**A number the compiler does not draw is passed over.**  The
+interpreter refuses `v[3]` on an array of three by running the program
+and finding the index out of range; the compiler is not looking there,
+and never will be for an index it cannot know.  So an expectation
+naming a diagnostic the compiler does not make is not a failure — it is
+a statement about the interpreter, and the compiler has nothing to say
+about it.  The set the compiler answers for is the set of numbers it
+draws, and it grows as diagnostics are given numbers.
+
+**What a definition draws beyond what was asked is not reported.**  The
+definition is deliberately wrong, so every further complaint about it
+is noise; and a compiler is allowed to refuse more than the interpreter
+does, which is the permitted direction between them.
+
+**`-Werror`** applies to the compiler as it does to the interpreter: a
+warning is printed as an error and the compilation stops with status 1.
+A warning that an `@expect` accounts for is accounted for either way,
+so a file that pins its own diagnostics compiles clean under `-Werror`
+without being rewritten.
+
+**One thing an `@expect` does still cost.**  Its message is a string
+literal in the source, and an unused string literal reaches the
+program's read-only data whether it is an `@expect` message or a line
+in a function nobody calls.  No instruction is generated for either.
+
 #### Design Rationale
 
 | Feature | Rust | LLVM FileCheck | NGPL |

@@ -238,7 +238,21 @@ struct Checker:
 impl Checker:
     fn derr(&mut self, tok : i64, m : str):
         self.diags.push(Diag{line: self.toks.line[tok × 1¤ptrdiff],
-                             col: self.toks.col[tok × 1¤ptrdiff], msg: m})
+                             col: self.toks.col[tok × 1¤ptrdiff], msg: m, level: DIAG_ERROR, code: DIAG_NONE})
+
+    // The same complaint, saying which one it is.  A number is what an
+    // @expect matches on and what a reader looks up; the words beside
+    // it are free to improve without anything having to be rewritten.
+    @pre(code > 0)
+    fn derrc(&mut self, tok : i64, code : i64, m : str):
+        self.diags.push(Diag{line: self.toks.line[tok × 1¤ptrdiff],
+                             col: self.toks.col[tok × 1¤ptrdiff], msg: m, level: DIAG_ERROR, code: code})
+
+    // A warning does not refuse the program; -Werror makes it one.
+    @pre(code > 0)
+    fn dwarn(&mut self, tok : i64, code : i64, m : str):
+        self.diags.push(Diag{line: self.toks.line[tok × 1¤ptrdiff],
+                             col: self.toks.col[tok × 1¤ptrdiff], msg: m, level: DIAG_WARNING, code: code})
 
     fn text(&self, tok : i64) → str:
         run_str(self.src, self.toks.off[tok × 1¤ptrdiff],
@@ -994,7 +1008,7 @@ impl Checker:
             let ncap9 : i64 = self.a.extra[(loff + 1 + np9 × 2) × 1¤ptrdiff]
             let lret : i64 = self.a.extra[(loff + 2 + np9 × 2 + ncap9) × 1¤ptrdiff]
             if lret = TY_UNIT:
-                self.derr(tok, "a lambda must not return ∅; it answers a value")
+                self.derrc(tok, 2254, "a lambda must not return ∅; it answers a value")
                 self.set_type(id, TY_I64)
                 return
             // captures resolve outside, before the floor closes: their
@@ -1009,7 +1023,7 @@ impl Checker:
                     if cs = ⁻1:
                         let cf : i64 = self.fn_index(self.text(ctok))
                         if cf = ⁻1:
-                            self.derr(ctok, "'" ⧺ self.text(ctok) ⧺ "' is not here to capture")
+                            self.derrc(ctok, 2111, "'" ⧺ self.text(ctok) ⧺ "' is not here to capture")
                             self.set_type(id, TY_I64)
                             return
                         // a captured function is its value in the box,
@@ -1088,11 +1102,11 @@ impl Checker:
             self.set_type(id, mk_lty(nc))
         elif k = NK_BADLAM:
             if na = 1:
-                self.derr(tok, "an empty capture list says nothing; a lambda with no captures leaves the bars off")
+                self.derrc(tok, 2025, "an empty capture list says nothing; a lambda with no captures leaves the bars off")
             elif na = 2:
-                self.derr(tok, "a lambda's parameter requires a type")
+                self.derrc(tok, 2024, "a lambda's parameter requires a type")
             else:
-                self.derr(tok, "a lambda states its return type after '→'")
+                self.derrc(tok, 2026, "a lambda states its return type after '→'")
             self.set_type(id, TY_I64)
         elif k = NK_TRY:
             let rw9 : i64 = self.lam_ret if self.lam_ret ≠ ⁻1 else self.a.fns[self.cur_fn × 1¤ptrdiff].ret
@@ -1231,7 +1245,7 @@ impl Checker:
                 self.check_expr(nb, mk_aty(ce))
                 let cr0 : i64 = self.ty_of(nb)
                 if not ty_is_arr(cr0):
-                    self.derr(tok, "an array joins an array; the right side is " ⧺ self.tn(cr0))
+                    self.derrc(tok, 2729, "an array joins an array; the right side is " ⧺ self.tn(cr0))
                 elif self.elem_of(cr0) ≠ ce:
                     self.derr(tok, "one array holds one element type; " ⧺ self.tn(ce) ⧺ " does not join " ⧺ self.tn(self.elem_of(cr0)))
                 self.set_type(id, mk_aty(ce))
@@ -1239,7 +1253,7 @@ impl Checker:
             self.check_expr(nb, TY_UNIT)
             let cr : i64 = self.ty_of(nb)
             if not ((cl = TY_STR or cl = TY_CHAR) and (cr = TY_STR or cr = TY_CHAR)):
-                self.derr(tok, "⧺ joins strings, characters and arrays in core-2")
+                self.derrc(tok, 2728, "⧺ joins strings, characters and arrays in core-2")
             self.set_type(id, TY_STR)
         else:
             // + - × ÷ % « » & | ^ ⌈ ⌊ over integers.  A sum is of two
@@ -1355,7 +1369,7 @@ impl Checker:
 
     fn want_bool(&mut self, id : i64, what : str):
         if self.ty_of(id) ≠ TY_BOOL:
-            self.derr(self.a.ntok[id × 1¤ptrdiff],
+            self.derrc(self.a.ntok[id × 1¤ptrdiff], 2229,
                       what ⧺ " takes truth values, but this operand is " ⧺ self.tn(self.ty_of(id)) ⧺ "; a number asks its question with a comparison, as 'x ≠ 0'")
 
     fn want_truthy(&mut self, id : i64, what : str):
@@ -1379,7 +1393,7 @@ impl Checker:
         let s : i64 = self.lookup(name)
         if s ≠ ⁻1:
             if self.sheld[s × 1¤ptrdiff] = HOLD_NONE:
-                self.derr(tok, "'" ⧺ name ⧺ "' is lent out to be changed, so the name reaches nothing until the borrow ends; what the walk binds is the way in")
+                self.derrc(tok, 2401, "'" ⧺ name ⧺ "' is lent out to be changed, so the name reaches nothing until the borrow ends; what the walk binds is the way in")
             let st0 : i64 = self.stype[s × 1¤ptrdiff]
             let base0 : i64 = ty_strip_ref(st0)
             self.set_type(id, base0)
@@ -1828,7 +1842,7 @@ impl Checker:
             if self.ty_of(e) = TY_UNT:
                 self.adopt(e, settled)
             elif not self.try_fit(e, settled):
-                self.derr(tok, "one array, one element type; " ⧺ self.tn(self.ty_of(e)) ⧺ " is not " ⧺ self.tn(settled))
+                self.derrc(tok, 2741, "one array, one element type; " ⧺ self.tn(self.ty_of(e)) ⧺ " is not " ⧺ self.tn(settled))
             j ← j + 1
         self.set_type(id, ty_strip_ref(want) if ty_is_farr(ty_strip_ref(want)) else mk_aty(settled))
 
@@ -2171,7 +2185,7 @@ impl Checker:
         let whole : str = path ⧺ "." ⧺ name
         let f : i64 = self.fn_in(whole)
         if f = ⁻1:
-            self.derr(tok, "module '" ⧺ path ⧺ "' defines no '" ⧺ name ⧺ "'")
+            self.derrc(tok, 2910, "module '" ⧺ path ⧺ "' defines no '" ⧺ name ⧺ "'")
             let i : mut i64 = 0
             while i < argc:
                 self.check_expr(self.a.extra[(args_off + 1 + i) × 1¤ptrdiff], TY_UNIT)
@@ -2179,7 +2193,7 @@ impl Checker:
             self.set_type(id, TY_I64)
             return
         if not self.a.fns[f × 1¤ptrdiff].is_export and not mod_within(self.curmod, path):
-            self.derr(tok, "'" ⧺ whole ⧺ "' is not exported from module '" ⧺ path ⧺ "'; @export says what a module lets others name")
+            self.derrc(tok, 2911, "'" ⧺ whole ⧺ "' is not exported from module '" ⧺ path ⧺ "'; @export says what a module lets others name")
         self.check_resolved(id, tok, name, args_off, argc, f)
 
     // f(a) with fewer arguments than 'f' has parameters: a partial,
@@ -2441,7 +2455,7 @@ impl Checker:
         self.check_expr(re, pt)
         let rt : i64 = self.ty_of(re)
         if not ty_is_rg(rt):
-            self.derr(tok, "generate's second argument must be a range; this is " ⧺ self.tn(rt))
+            self.derrc(tok, 2253, "generate's second argument must be a range; this is " ⧺ self.tn(rt))
         elif ty_rgelem(rt) ≠ pt:
             self.derr(tok, "the range counts " ⧺ self.tn(ty_rgelem(rt)) ⧺ ", but the function takes " ⧺ self.tn(pt))
         self.a.nc[id × 1¤ptrdiff] ← 2
@@ -2576,11 +2590,11 @@ impl Checker:
                     let bycopy : i64 = (a if muts[a × 1¤ptrdiff] = 0 else b) if muts[a × 1¤ptrdiff] = 0 or muts[b × 1¤ptrdiff] = 0 else ⁻1
                     if bycopy ≠ ⁻1 and refs[bycopy × 1¤ptrdiff] = 0:
                         if not self.copyable_by_value(ptys[bycopy × 1¤ptrdiff]):
-                            self.derr(tok, self.arg_word(bycopy, self_n) ⧺ " of '" ⧺ name ⧺ "' is '" ⧺ self.snames[ba × 1¤ptrdiff] ⧺ "' by value and " ⧺ self.arg_word(a if bycopy = b else b, self_n) ⧺ " may change it, so the copy that by value means cannot be elided -- and " ⧺ self.tn(ptys[bycopy × 1¤ptrdiff]) ⧺ " is a type this compiler has no copy for yet")
+                            self.derrc(tok, 2403, self.arg_word(bycopy, self_n) ⧺ " of '" ⧺ name ⧺ "' is '" ⧺ self.snames[ba × 1¤ptrdiff] ⧺ "' by value and " ⧺ self.arg_word(a if bycopy = b else b, self_n) ⧺ " may change it, so the copy that by value means cannot be elided -- and " ⧺ self.tn(ptys[bycopy × 1¤ptrdiff]) ⧺ " is a type this compiler has no copy for yet")
                         elif bycopy >= self_n:
                             self.argcopy.push(self.a.extra[(args_off + 1 + bycopy - self_n) × 1¤ptrdiff])
                     else:
-                        self.derr(tok, self.arg_word(a, self_n) ⧺ " and " ⧺ self.arg_word(b, self_n) ⧺ " of '" ⧺ name ⧺ "' are both '" ⧺ self.snames[ba × 1¤ptrdiff] ⧺ "', and one of them may change it; a function is written as though its parameters were separate things, and two names for one thing that may change is not something the body can be written against")
+                        self.derrc(tok, 2402, self.arg_word(a, self_n) ⧺ " and " ⧺ self.arg_word(b, self_n) ⧺ " of '" ⧺ name ⧺ "' are both '" ⧺ self.snames[ba × 1¤ptrdiff] ⧺ "', and one of them may change it; a function is written as though its parameters were separate things, and two names for one thing that may change is not something the body can be written against")
 
     fn arg_word(&self, i : i64, self_n : i64) → str:
         if self_n = 1 and i = 0:
@@ -2617,7 +2631,7 @@ impl Checker:
             let name := self.text(self.a.ntok[inner × 1¤ptrdiff])
             let s : i64 = self.lookup(name)
             if s ≠ ⁻1 and self.smut[s × 1¤ptrdiff] = 0 and ty_ref_kind(self.stype[s × 1¤ptrdiff]) ≠ 2:
-                self.derr(atok, "'" ⧺ name ⧺ "' is not mut, so &mut cannot hand it over")
+                self.derrc(atok, 2404, "'" ⧺ name ⧺ "' is not mut, so &mut cannot hand it over")
         self.set_type(arg, base)
 
     fn check_assert(&mut self, id : i64, tok : i64, args_off : i64, argc : i64,
@@ -3039,7 +3053,7 @@ impl Checker:
             return
         if ty_is_iter(t) and m = "next":
             if argc0 ≠ 0:
-                self.derr(tok, "next takes nothing")
+                self.derrc(tok, 2256, "next takes nothing")
             self.a.nc[id × 1¤ptrdiff] ← MID_NEXT
             let ne : i64 = self.ite[ty_iidx(t) × 1¤ptrdiff]
             self.set_type(id, ne if under_default else mk_oty(ne))
@@ -3234,7 +3248,7 @@ impl Checker:
             return
         let hd : i64 = self.sheld[s × 1¤ptrdiff]
         if hd ≠ HOLD_FREE:
-            self.derr(tok, "'" ⧺ name ⧺ "' is lent out " ⧺ ("for reading" if hd = HOLD_READ else "to be changed") ⧺ " and cannot be changed until the borrow ends; a walk holds what it walks for the whole of its body")
+            self.derrc(tok, 2400, "'" ⧺ name ⧺ "' is lent out " ⧺ ("for reading" if hd = HOLD_READ else "to be changed") ⧺ " and cannot be changed until the borrow ends; a walk holds what it walks for the whole of its body")
             return
         let pt : i64 = self.stype[s × 1¤ptrdiff]
         if ty_ref_kind(pt) = 1:
@@ -3493,6 +3507,16 @@ impl Checker:
                 self.nslot[id × 1¤ptrdiff] ← 0 - g - 2
                 return
             let st : i64 = self.stype[s × 1¤ptrdiff]
+            // Rebinding the name is a change like any other, and a
+            // walk holds what it walks: `foreach x := v: v ← [x]`
+            // replaces the array under the walk that is reading it.
+            // The element paths below consult the hold through
+            // require_mut_base; this one has no base to ask about.
+            let hd0 : i64 = self.sheld[s × 1¤ptrdiff]
+            if hd0 ≠ HOLD_FREE:
+                self.derrc(tok, 2400, "'" ⧺ name ⧺ "' is lent out " ⧺ ("for reading" if hd0 = HOLD_READ else "to be changed") ⧺ " and cannot be changed until the borrow ends; a walk holds what it walks for the whole of its body")
+                self.check_expr(na, TY_UNIT)
+                return
             if ty_ref_kind(st) = 2 and not ty_is_arr(ty_strip_ref(st)) and not ty_is_hash(ty_strip_ref(st)) and not ty_is_struct(ty_strip_ref(st)):
                 // through the element's address, back into the array
                 self.check_expr(na, ty_strip_ref(st))
@@ -3663,7 +3687,7 @@ impl Checker:
             if wmut = 1 and not (ismc and wmid = MID_NEXT):
                 // only an iterator's next hands an element to write
                 // back through; everything else hands values
-                self.derr(tok, "a mut while binding writes back through the element; this loop hands values")
+                self.derrc(tok, 2245, "a mut while binding writes back through the element; this loop hands values")
             let wsty : i64 = self.a.extra[(nc + 1) × 1¤ptrdiff]
             if wsty ≠ ⁻1 and wsty ≠ wbt:
                 self.derr(tok, "the binding says " ⧺ self.tn(wsty) ⧺ " but the loop answers " ⧺ self.tn(wbt))
@@ -3800,7 +3824,7 @@ impl Checker:
                 if t ≠ TY_UNIT and self.kind_of(na) ≠ NK_EMPTYV:
                     // a bare ∅ says "nothing here", which is exactly
                     // what a unit position holds
-                    self.derr(tok, "the value of this statement is not used; bind it or write '_ ← …'")
+                    self.dwarn(tok, 2292, "the value of this statement is not used; bind it or write '_ ← …'")
         else:
             self.derr(tok, "this statement kind escaped the checker; that is an ngplc bug")
 
@@ -4042,6 +4066,112 @@ impl Checker:
             self.derr(gd.tok, "a global begins at a constant the compiler can see")
             self.gvals.push(0)
 
+// The numbers this compiler draws.  An @expect naming one of these
+// says something this compiler is answerable for; an @expect naming
+// any other number is one the interpreter draws and this compiler does
+// not -- at run time, mostly, where a compiler is not looking -- and
+// is passed over rather than failed.  Keep this in step with the
+// derrc/dwarn calls; tests/compile/run_compile_tests.sh checks it.
+fn diag_codes() → i64[]:
+    [2024, 2025, 2026, 2111, 2229, 2245, 2253, 2254, 2256, 2292,
+     2400, 2401, 2402, 2403, 2404, 2728, 2729, 2741, 2910, 2911]
+
+fn draws_code(code : i64) → bool:
+    foreach c := diag_codes():
+        if c = code:
+            return true
+    false
+
+// Hold each @expect definition to what it said.
+//
+// The check is by number: where an expectation names a number this
+// compiler draws -- diag_codes() says which -- that number must appear
+// among what the definition drew.  This is what holds the two
+// implementations to the same warnings.  A warning the interpreter
+// makes and this compiler quietly dropped fails here, by number,
+// without anyone having to read a message, and the wording of the two
+// need not agree at all.
+//
+// Two things are deliberately *not* checked.
+//
+// A definition may draw more than it was asked about, and none of it
+// is reported.  The definition is deliberately wrong, so every further
+// complaint about it is noise, and a compiler is allowed to be
+// stricter than the interpreter -- that direction is the permitted
+// one.
+//
+// And a definition that draws nothing at all is not failed.  It would
+// be the check worth having, since a program the interpreter refuses
+// must not compile, but a compiler cannot tell a diagnostic it is
+// missing from one the interpreter only finds by running: `v[3]` on an
+// array of three is refused by the interpreter and is not something
+// this compiler looks for.  The coverage is therefore exactly
+// diag_codes(), and it grows as numbers are assigned.
+//
+// No code is written for any of them.  They are put on the schedule to
+// be checked and taken off again, so what the emission sees is what it
+// always saw.
+fn check_expectations(c : &mut Checker, a : Ast):
+    if #a.expects = 0:
+        return
+    foreach i := 0…#a.expects - 1:
+        let n_fns ¤ptrdiff : i64 = #c.a.fns
+        let n_slots ¤ptrdiff : i64 = #c.fslots
+        let n_lams ¤ptrdiff : i64 = #c.lams
+        let n_psfn ¤ptrdiff : i64 = #c.psfn
+        let n_diags ¤ptrdiff : i64 = #c.diags
+        c.a.fns.push(a.expects[i])
+        c.fslots.push(0)
+        c.fdone.push(0)
+        c.skipfn.push(0)
+        c.check_fn(@dropunit(n_fns))
+
+        // what it drew: the numbers, and whether anything refused
+        let drew : mut i64[] = []
+        let d ¤ptrdiff : mut i64 = n_diags
+        while d < #c.diags:
+            drew.push(c.diags[d].code)
+            d ← d + 1
+
+        // take it back off the schedule; nothing of it is written, so
+        // nothing of it may be left behind
+        while #c.diags > n_diags:
+            _ ← c.diags.pop() ?? Diag{line: 1¤"line", col: 1¤"col", msg: "", level: DIAG_ERROR, code: DIAG_NONE}
+        while #c.a.fns > n_fns:
+            _ ← c.a.fns.pop() ?? a.expects[i]
+        while #c.fslots > n_slots:
+            _ ← c.fslots.pop() ?? 0
+            _ ← c.fdone.pop() ?? 0
+            _ ← c.skipfn.pop() ?? 0
+        while #c.lams > n_lams:
+            _ ← c.lams.pop() ?? 0
+            _ ← c.lamns.pop() ?? 0
+        while #c.psfn > n_psfn:
+            _ ← c.psfn.pop() ?? 0
+            _ ← c.psk.pop() ?? 0
+            _ ← c.psnp.pop() ?? 0
+
+        c.hold_expectation(a, @dropunit(i), drew)
+    assert(#c.fslots = #c.a.fns, "the expectations left the schedule as they found it")
+
+impl Checker:
+    // The judgement on one @expect definition, given the numbers it
+    // drew and whether anything it drew refuses.
+    fn hold_expectation(&mut self, a : Ast, i : i64, drew : i64[]):
+        let f := a.expects[i × 1¤ptrdiff]
+        let off : i64 = a.expoff[i × 1¤ptrdiff]
+        let want : i64 = a.extra[off × 1¤ptrdiff] if off ≠ ⁻1 else 0
+        let w : mut i64 = 0
+        while w < want:
+            let wc : i64 = a.extra[(off + 2 + 2 × w) × 1¤ptrdiff]
+            if wc ≠ DIAG_NONE and draws_code(wc):
+                let got : mut bool = false
+                foreach g := drew:
+                    got ← got or g = wc
+                if not got:
+                    self.derr(f.tok, "'" ⧺ f.name ⧺ "' says it draws " ⧺ i64_str(wc) ⧺ " and this compiler drew no such thing; the interpreter draws it, so leaving it out is a warning this implementation is missing")
+            w ← w + 1
+
 fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     let fnames : mut str[] = []
     foreach f := a.fns:
@@ -4154,16 +4284,16 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
             if not seen:
                 let mt ¤ptrdiff : i64 = a.modtok[mi]
                 c.diags.push(Diag{line: toks.line[mt], col: toks.col[mt],
-                                  msg: "module '" ⧺ mname ⧺ "' exports nothing, so nothing outside it can name anything in it; mark what it is for with @export"})
+                                  msg: "module '" ⧺ mname ⧺ "' exports nothing, so nothing outside it can name anything in it; mark what it is for with @export", level: DIAG_ERROR, code: DIAG_NONE})
     if starts = 0 and ntests = 0 and #a.igtests = 0:
         // a recipe is not a program: it says how to build one.  Someone
         // compiling a file that holds only a recipe has almost always
         // left out --build, so the refusal says so rather than leaving
         // them to work it out.
         let why : str = "a @build recipe says how to build a program and is not one; --build reads it" if #a.builds > 0 else "no @start function and no @test; nothing would run"
-        c.diags.push(Diag{line: 1¤"line", col: 1¤"col", msg: why})
+        c.diags.push(Diag{line: 1¤"line", col: 1¤"col", msg: why, level: DIAG_ERROR, code: DIAG_NONE})
     if starts > 1:
-        c.diags.push(Diag{line: 1¤"line", col: 1¤"col", msg: "more than one @start function"})
+        c.diags.push(Diag{line: 1¤"line", col: 1¤"col", msg: "more than one @start function", level: DIAG_ERROR, code: DIAG_NONE})
     if #a.fns > 0:
         foreach i := 0…#a.fns - 1:
             if not c.fn_is_generic(@dropunit(i)):
@@ -4172,6 +4302,26 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
         foreach i := 0…#a.fns - 1:
             if c.fdone[i] = 0:
                 c.skipfn[i] ← 1
+    // ------------------------------------------------------------------
+    // The definitions marked @expect
+    // ------------------------------------------------------------------
+    //
+    // Each is checked, and what it draws is held to what its @expect
+    // lines said rather than reported.  A diagnostic an expectation
+    // names is accounted for and goes no further; one nothing names is
+    // reported, because a definition that draws something nobody asked
+    // for is a definition nobody has read lately.
+    //
+    // An expectation that draws nothing is *not* an error here, and
+    // that is the difference between a compiler and an interpreter:
+    // the interpreter runs the definition and can see an index run off
+    // the end, and the compiler does not run anything.  An expectation
+    // this compiler cannot draw is one the interpreter will.
+    //
+    // No code is written for any of them.  They are appended to the
+    // schedule to be checked and taken off again, so what the emission
+    // sees is what it always saw.
+    check_expectations(&c, a)
     if #c.diags = 0:
         assert(#c.fslots = #a.fns, "one slot count per function")
         assert(#c.gvals = #a.globals, "one folded value per global")

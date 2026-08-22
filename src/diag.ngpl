@@ -8,10 +8,24 @@
 unit line
 unit col
 
+// What a diagnostic is: where it is, what it says, how bad it is, and
+// which one it is.
+//
+// The number is what an @expect matches, so the words are free to
+// improve; a diagnostic with no number yet carries DIAG_NONE, which no
+// expectation names.  The level says whether the program is refused or
+// merely remarked on -- a warning is reported and the program still
+// compiles, unless --Werror says otherwise.
+let DIAG_ERROR : i64 = 0
+let DIAG_WARNING : i64 = 1
+let DIAG_NONE : i64 = 0      // no number yet
+
 struct Diag:
     line ¤"line" : i64
     col ¤"col" : i64
     msg : str
+    level : i64
+    code : i64
 
 // Where the sources begin in the one text they were read into.  A
 // diagnostic counts its line from the start of the whole, since that

@@ -177,7 +177,7 @@ impl Cev:
     fn derr(&mut self, tok : i64, m : str):
         let at ¤ptrdiff : i64 = tok
         self.diags.push(Diag{line: self.toks.line[at],
-                             col: self.toks.col[at], msg: m})
+                             col: self.toks.col[at], msg: m, level: DIAG_ERROR, code: DIAG_NONE})
 
     // One diagnostic ends the recipe.  Unlike the parser and the
     // checker, which recover and go on, a recipe that has gone wrong

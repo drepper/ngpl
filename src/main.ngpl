@@ -28,6 +28,16 @@ fn dump_tokens(t : Toks, src : byte[], files : Files):
                     @dropunit(t.col[i]), k,
                     tok_name(k), text, t.val[i])
 
+// Whether anything said here refuses the program.  A warning does not:
+// it is reported and the program still compiles, which is what makes it
+// a warning.  -Werror says to treat every one as a refusal, as the
+// interpreter's does.
+fn any_refusal(diags : Diag[], werror : bool) → bool:
+    foreach d := diags:
+        if d.level = DIAG_ERROR or werror:
+            return true
+    false
+
 @impure
 fn report(diags : Diag[], files : Files, as_json : bool, src : byte[]):
     // one walk of the text, here where something is being reported
@@ -44,11 +54,16 @@ fn report(diags : Diag[], files : Files, as_json : bool, src : byte[]):
         let k ¤ptrdiff : i64 = file_of(starts, d.line)
         let file : str = files.names[k]
         let ln ¤"line" : i64 = d.line - starts[k] + 1
+        // A warning says the program compiles and something in it is
+        // worth a look; an error says it does not.  The number, where
+        // the diagnostic has one, is what an @expect names.
+        let sev : str = "warning" if d.level = DIAG_WARNING else "error"
+        let named : str = sev if d.code = DIAG_NONE else sev ⧺ "[" ⧺ i64_str(d.code) ⧺ "]"
         if as_json:
-            std.println("{}\"file\": \"{}\", \"line\": {}, \"col\": {}, \"severity\": \"error\", \"message\": \"{}\"{}",
-                        "{", file, @dropunit(ln), @dropunit(d.col), d.msg, "}")
+            std.println("{}\"file\": \"{}\", \"line\": {}, \"col\": {}, \"severity\": \"{}\", \"code\": {}, \"message\": \"{}\"{}",
+                        "{", file, @dropunit(ln), @dropunit(d.col), sev, d.code, d.msg, "}")
         else:
-            std.println("{}:{}:{}: error: {}", file, @dropunit(ln), @dropunit(d.col), d.msg)
+            std.println("{}:{}:{}: {}: {}", file, @dropunit(ln), @dropunit(d.col), named, d.msg)
             let num := i64_str(@dropunit(ln))
             let gut : mut str = ""
             let g ¤ptrdiff : mut i64 = 0
@@ -252,7 +267,7 @@ fn read_build(path : str, json : bool) → Recipe:
 fn main() → u8:
     let argv := std.args.all()
     if #argv = 0:
-        std.println("usage: ngplc <source.ngpl>… [-o out] [--target=A] [--stack-size=N] [--guard-size=N] [--dump-tokens] [--dump-ast] [--diag=json] [--log=json]")
+        std.println("usage: ngplc <source.ngpl>… [-o out] [--target=A] [--stack-size=N] [--guard-size=N] [-Werror] [--dump-tokens] [--dump-ast] [--diag=json] [--log=json]")
         std.println("       ngplc --build <recipe.ngpl> [-o out] [--target=A] …")
         std.println("targets: {} (default: the architecture this compiler runs on)", target_names())
         return 1
@@ -261,6 +276,7 @@ fn main() → u8:
     let build_file : mut str = ""
     let want_tokens : mut bool = false
     let want_ast : mut bool = false
+    let werror : mut bool = false
     let want_log : mut bool = false
     let json : mut bool = false
     let stack_size : mut i64 = STACK_DEFAULT
@@ -318,6 +334,8 @@ fn main() → u8:
             json ← true
         elif a = "--log=json":
             want_log ← true
+        elif a = "-Werror":
+            werror ← true
         else:
             inputs.push(a)
         i ← i + 1
@@ -387,7 +405,8 @@ fn main() → u8:
     let chk := check(ast, toks, src)
     if #chk.diags > 0:
         report(chk.diags, files, json, src)
-        return 1
+        if any_refusal(chk.diags, werror):
+            return 1
 
     // The recipe is read whenever the program carries one, not only
     // under --build.  The interpreter runs it at load with no flag

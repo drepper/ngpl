@@ -57,9 +57,27 @@ The Compiler
     that site a number from its block, and let tools/update_expectations.py fill the message.
     Spec: "What a Diagnostic Is Known By".
 
-    ngplc still does not check expectations at all; it parses them and leaves the checking to
-    the interpreter, so the numbers live in one implementation.  When ngplc grows the check
-    the two must agree, which is why a number names one diagnostic rather than one category.
+[ ] ngplc answers for twenty of the numbers.  It checks every @expect definition now and
+    holds it to the numbers it names, but only where it draws that number itself --
+    diag_codes() in src/check.ngpl is the list, and tests/compile/run_compile_tests.sh
+    checks the list against the derrc/dwarn calls.  Everything else ngplc refuses is still
+    numberless, so an expectation naming it is passed over rather than checked.  The work is
+    the same for each: give the site a number from its block, matching the interpreter's
+    number for the same refusal, and add it to diag_codes().  Spec: "What `@expect` Means to
+    the Compiler".
+
+[ ] a definition marked @expect error that ngplc does not refuse is not caught.  It is the
+    check worth having -- a program the interpreter refuses must not compile -- but a
+    compiler cannot tell a diagnostic it is missing from one the interpreter only finds by
+    running, and tests/test_reshape.ngpl has five of the latter.  It becomes checkable once
+    an expectation can say which of the two it is, or once every compile-time refusal has a
+    number and the run-time ones are the remainder.
+
+[ ] an unused string literal reaches .rodata.  The pool comes from the lexer, so every
+    literal in the source is emitted whether anything reads it or not -- an @expect message,
+    a line in a function nobody calls.  No instruction is generated for either, so this is
+    size and not correctness, but the tests carry forty-two @expect messages they have no
+    use for.  Emitting only the strings something references fixes both.
 
 [ ] the interpreter cannot always tell a program it refuses from a program that ran and
     stopped.  It checks types as it evaluates, so both arrive at the same place as Python

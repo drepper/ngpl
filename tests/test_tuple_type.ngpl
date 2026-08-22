@@ -261,7 +261,7 @@ fn error_destructuring_an_unsettled_element():
 
 // A name that is never modified draws the same warning it would
 // elsewhere.
-@expect warning 2418 "'b' is declared mut but is never modified"
+@expect warning 2405 "'b' is declared mut but is never modified"
 fn warn_destructured_mut_is_never_modified():
     let (a, b) : mut (i64, i64) = (1, 2)
     a ← 3

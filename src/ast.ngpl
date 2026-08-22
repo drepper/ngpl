@@ -238,5 +238,11 @@ struct Ast:
     evalues : i64[]      // … and what each one stands for
     ignored : str[]      // names @expect left uncompiled
     igtests : str[]      // the @test names among them, in source order
+    // Definitions marked @expect: no code is written for them, and the
+    // checker draws what they draw so the @expect lines can be held to.
+    // expoff points at [n, level, code, …] in extra, or ⁻1 where the
+    // definition named no number.
+    expects : FnDef[]
+    expoff : i64[]
     diags : Diag[]
 
