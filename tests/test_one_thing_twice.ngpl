@@ -44,12 +44,12 @@ fn box_by_value(a : Box, b : &mut Box) → i64:
 // What is refused
 // ---------------------------------------------------------------------
 
-@expect error "may change it"
+@expect error 2402 "argument 1 and argument 2 of 'writes_both' are both 'v', and one of them may change it; a function is written as though its parameters were separate things, and two names for one thing that may change is not something the body can be written against"
 fn error_two_writers_of_one_array():
     let v : mut i64[] = []
     writes_both(&v, &v)
 
-@expect error "may change it"
+@expect error 2402 "argument 1 and argument 2 of 'writes_one' are both 'v', and one of them may change it; a function is written as though its parameters were separate things, and two names for one thing that may change is not something the body can be written against"
 fn error_a_writer_and_a_reader_of_one_array():
     let v : mut i64[] = [1]
     _ ← writes_one(&v, &v)
@@ -59,7 +59,7 @@ fn error_a_writer_and_a_reader_of_one_array():
 // where the write happens.  (An argument is written `&name`, so `&s.f`
 // beside `&mut s` is not a case that can arise: the parser refuses the
 // borrow of a field before the aliasing rule is reached.)
-@expect error "not mut, so &mut cannot hand it over"
+@expect error 2404 "'v' is not mut, so &mut cannot hand it over"
 fn error_lending_an_immutable_binding_mutably():
     let v : i64[] = [1]
     let w : mut i64[] = []
@@ -98,7 +98,7 @@ fn test_by_value_beside_a_writer_of_the_same():
 // A struct, an array of arrays and a dictionary have no copy the
 // implementations can make, so the call is refused rather than
 // half-copied.  A limitation, not a rule; see the specification.
-@expect error "no copy for"
+@expect error 2403 "argument 1 of 'box_by_value' is 's' by value and argument 2 may change it, so the copy that by value means cannot be elided -- and 'Box' is a type this implementation has no copy for yet"
 fn error_a_struct_by_value_beside_a_writer():
     let s : mut Box = Box{n: 1}
     _ ← box_by_value(s, &s)

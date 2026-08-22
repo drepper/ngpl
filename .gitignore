@@ -5,3 +5,4 @@ build/*
 !build/.gitignore
 __pycache__/
 a.out
+expect-drift.jsonl

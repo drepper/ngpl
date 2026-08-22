@@ -294,6 +294,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("-Werror", dest="werror", action="store_true",
                        help="treat every warning as an error, and read an "
                             "@expect warning as @expect error")
+    parser.add_argument("--expect-drift", metavar="FILE", default=None,
+                       help="where to record an @expect whose code matched "
+                            "and whose message did not: one JSON line per "
+                            "drift, enough to put the new wording in place "
+                            "with tools/update_expectations.py")
     parser.add_argument("--contracts", metavar="SEMANTIC",
                        choices=CONTRACT_SEMANTICS, default="enforce",
                        help="what a @pre or @post that does not hold does: "
@@ -563,10 +568,121 @@ class _Finding(str):
 
     pos: tuple[int, int, int | None] | None
 
-    def __new__(cls, message: str, node=None):
+    def __new__(cls, message: str, node=None, code: int | None = None):
         finding = super().__new__(cls, message)
         finding.pos = getattr(node, "pos", None) if node is not None else None
+        # The number this diagnostic is known by, where it has one.  An
+        # @expect matches the number rather than the words, so a
+        # diagnostic can be said better without the suite noticing;
+        # see the specification, "What a Diagnostic Is Known By".
+        finding.code = code
         return finding
+
+
+def diagnostic_code(message) -> int | None:
+    """The number a diagnostic is known by, or None where it has none."""
+    return getattr(message, "code", None)
+
+
+def _carrying_code(message: str, source) -> str:
+    """A message that keeps the code its source carried.
+
+    A diagnostic that arrives as an exception loses everything but its
+    words when it is turned into text, and the number is the part the
+    suite matches on, so it is carried across here.
+    """
+    code = getattr(source, "diag_code", None)
+    if code is None:
+        return message
+    return _Finding(message, None, code)
+
+
+def refuse(code: int, message: str, *rest, cls=TypeError):
+    """Raise a diagnostic that says which one it is.
+
+    The number is what an @expect matches, so it is what makes the
+    words free to improve.  A raise site with no number yet is not
+    wrong, only unmatched by number: it is still matched by its text,
+    which is what every expectation did before there were numbers.
+
+    Whatever follows the message is handed to the exception as it
+    stands -- a position, most often, which the diagnostic is nothing
+    like as useful without.
+    """
+    error = cls(message, *rest)
+    error.diag_code = code
+    raise error
+
+
+# ---------------------------------------------------------------------------
+# What a diagnostic is known by
+# ---------------------------------------------------------------------------
+#
+# A number, so that an @expect can say which diagnostic it means
+# without saying it in the diagnostic's own words.  The words are then
+# free to improve: a message that has drifted from what an expectation
+# records is noted and not failed.
+#
+# The blocks say what the diagnostic is about, so a number is readable
+# on its own.  std.errors' own 200-299 is a different thing -- values a
+# running program holds -- and these do not live in it.
+#
+#   2000-2099  reading the text: lexing and parsing
+#   2100-2199  names, and what a name may be
+#   2200-2299  types
+#   2300-2399  units
+#   2400-2499  mutability, borrows, aliasing
+#   2500-2599  purity and effects
+#   2600-2699  contracts and assertions
+#   2700-2799  arrays, dictionaries, strings
+#   2800-2899  enums, structs, layout
+#   2900-2999  attributes, modules, the build recipe
+E_WALK_CHANGE = 2400     # a walk holds what it walks: changing it
+E_WALK_READ = 2401       # ...and a mutable walk leaves nothing to read
+E_ALIAS_PARAMS = 2402    # one thing, two parameters, one of them a writer
+E_ALIAS_NO_COPY = 2403   # ...and by value cannot copy that type yet
+E_NOT_MUT_LEND = 2404    # &mut of something that is not mut
+E_ENUM_DUPLICATE = 2800  # two enumerators, one number
+E_ENUM_NO_SUCH = 2801    # an alias naming no enumerator above it
+
+
+# Where a message that has drifted from its expectation is written
+# down.  Set by --expect-drift; None means the drift is reported and
+# not recorded.
+_EXPECT_DRIFT_PATH: str | None = None
+_EXPECT_DRIFT_SEEN: set = set()
+
+
+def set_expect_drift_path(path: str | None) -> None:
+    global _EXPECT_DRIFT_PATH
+    _EXPECT_DRIFT_PATH = path
+
+
+def _record_expect_drift(source_path: str, line, code: int,
+                         expected: str, said: str) -> None:
+    """An expectation whose code matched and whose words did not.
+
+    Not a failure.  The number is what says which diagnostic this is;
+    the words beside it are what it said when the expectation was
+    written, and saying it better is an improvement rather than a
+    break.  What is recorded is enough to put the new words in place
+    without a person reading them: the file, the line the expectation
+    is on, and both messages.
+    """
+    key = (source_path, line, code)
+    if key in _EXPECT_DRIFT_SEEN:
+        return
+    _EXPECT_DRIFT_SEEN.add(key)
+    print(f"note: @expect {code} on line {line} says \"{expected}\"",
+          file=sys.stderr)
+    print(f"      and the diagnostic now says \"{said}\"", file=sys.stderr)
+    if _EXPECT_DRIFT_PATH is None:
+        return
+    import json
+    with open(_EXPECT_DRIFT_PATH, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"file": source_path, "line": line,
+                             "code": code, "was": expected,
+                             "says": said}) + "\n")
 
 
 def _says_nothing(ret_type) -> bool:
@@ -2263,7 +2379,7 @@ def _static_borrow_check(func_def) -> str | None:
         return _Finding(
             f"'{name}' is lent out {how} and cannot be changed until the "
             f"borrow ends; a walk holds what it walks for the whole of "
-            f"its body", node)
+            f"its body", node, E_WALK_CHANGE)
 
     def read(name: str, held: dict, node):
         if held.get(name, _HOLD_FREE) != _HOLD_NONE:
@@ -2271,7 +2387,7 @@ def _static_borrow_check(func_def) -> str | None:
         return _Finding(
             f"'{name}' is lent out to be changed, so the name reaches "
             f"nothing until the borrow ends; what the walk binds is the "
-            f"way in", node)
+            f"way in", node, E_WALK_READ)
 
     def in_expr(expr, held: dict):
         """Every use of a held name inside an expression."""
@@ -2489,14 +2605,16 @@ def _static_alias_check(func_def, env) -> str | None:
                         f"value and argument {(j if by == i else i) + 1} may "
                         f"change it, so the copy that by value means cannot "
                         f"be elided -- and '{seen[by][3]}' is a type this "
-                        f"implementation has no copy for yet", node)
+                        f"implementation has no copy for yet", node,
+                        E_ALIAS_NO_COPY)
                 return _Finding(
                     f"argument {i + 1} and argument {j + 1} of "
                     f"'{callee.name}' are both '{bi}', and one of them "
                     f"may change it; a function is written as though "
                     f"its parameters were separate things, and two "
                     f"names for one thing that may change is not "
-                    f"something the body can be written against", node)
+                    f"something the body can be written against", node,
+                    E_ALIAS_PARAMS)
         return None
 
     # What may be lent mutably here: a parameter the signature wrote
@@ -2525,7 +2643,7 @@ def _static_alias_check(func_def, env) -> str | None:
                 continue
             return _Finding(
                 f"'{arg.name}' is not mut, so &mut cannot hand it over",
-                node)
+                node, E_NOT_MUT_LEND)
         return None
 
     for node in _iter_ast(func_def.body):
@@ -3001,12 +3119,12 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
             for member_name, explicit_value in defn.members:
                 if isinstance(explicit_value, _EnumAlias):
                     if explicit_value.name not in members:
-                        raise DefinitionError(
+                        refuse(E_ENUM_NO_SUCH,
                             f"enum '{defn.name}': '{explicit_value.name}' is "
                             f"not an enumerator this enum has already named; "
                             f"an enumerator stands for a written-out number, "
                             f"or for one named above it",
-                            getattr(defn, "pos", None))
+                            getattr(defn, "pos", None), cls=DefinitionError)
                     # An alias, said out loud: two names for one value
                     # are allowed exactly when the second says it is
                     # the first.
@@ -3018,12 +3136,12 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 # different, so it is refused where it is written.
                 for other, taken in members.items():
                     if taken == value:
-                        raise DefinitionError(
+                        refuse(E_ENUM_DUPLICATE,
                             f"enum '{defn.name}': '{member_name}' stands for "
                             f"the same number as '{other}', so '=' would "
                             f"answer true for the two of them; an enum that "
                             f"means that writes '{member_name} = {other}'",
-                            getattr(defn, "pos", None))
+                            getattr(defn, "pos", None), cls=DefinitionError)
                 members[member_name] = value
                 if defn.is_flag:
                     next_val = value << 1
@@ -3488,6 +3606,7 @@ def main():
     args = _parse_args()
 
     set_warnings_are_errors(args.werror)
+    set_expect_drift_path(args.expect_drift)
     set_contract_semantic(args.contracts)
 
     # The forward-progress watchdog covers everything from here on --
@@ -3650,7 +3769,7 @@ def main():
                         validate_param_type(param_type, defn.name,
                                             _param_display(param_name))
             except (TypeError, ValueError) as e:
-                errors_produced.append(("error", str(e)))
+                errors_produced.append(("error", _carrying_code(str(e), e)))
 
         if not errors_produced:
             move_err = _static_check_moves(defn.body, env)
@@ -3734,7 +3853,7 @@ def main():
             try:
                 eval_inst._call_user_func(fv, [])
             except Exception as e:
-                errors_produced.append(("error", str(e)))
+                errors_produced.append(("error", _carrying_code(str(e), e)))
             errors_produced.extend(("warning", w) for w in eval_inst._warnings)
 
         # Added last: a non-empty list above skips running the function,
@@ -3749,18 +3868,36 @@ def main():
                                    defn, env, _struct_vars_of(defn, env))))
 
         remaining = list(defn.expect_annotations)
-        matched: list[tuple[str, str]] = []
+        matched: list = []
         for level, msg in errors_produced:
-            for i, (exp_level, exp_pattern) in enumerate(remaining):
-                if (diagnostic_level(level) == diagnostic_level(exp_level)
-                        and re.search(exp_pattern, msg)):
-                    matched.append(remaining.pop(i))
-                    break
+            for i, exp in enumerate(remaining):
+                exp_level, exp_pattern, exp_code, exp_line = exp
+                if diagnostic_level(level) != diagnostic_level(exp_level):
+                    continue
+                if exp_code is not None:
+                    if diagnostic_code(msg) != exp_code:
+                        continue
+                    # The code is what was matched.  The message beside
+                    # it is what the diagnostic said when the
+                    # expectation was written, and a diagnostic is
+                    # allowed to say it better later: a message that has
+                    # drifted is recorded rather than failed.
+                    if exp_pattern is not None:
+                        said = str(msg)
+                        if said != exp_pattern:
+                            _record_expect_drift(source_path, exp_line,
+                                                 exp_code, exp_pattern, said)
+                elif not re.search(exp_pattern, msg):
+                    continue
+                matched.append(remaining.pop(i))
+                break
 
         if remaining:
             expect_failed += 1
             unmatched_desc = "; ".join(
-                f"@expect {lv} \"{pat}\"" for lv, pat in remaining)
+                (f"@expect {lv} {code}" if code is not None
+                 else f"@expect {lv} \"{pat}\"")
+                for lv, pat, code, _ln in remaining)
             if errors_produced:
                 got_desc = "; ".join(f"{lv}: {msg}" for lv, msg in errors_produced)
                 print(f"test {defn.name} ... {_RED}{_BOLD}FAILED{_RESET}",

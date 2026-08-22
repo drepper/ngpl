@@ -446,10 +446,34 @@ class Parser:
                     raise ParseError(
                         f"expected 'error' or 'warning' after @expect, got '{level_tok.value}'",
                         level_tok)
-                if not self._check("STR"):
-                    raise ParseError("expected string pattern after @expect level", self._cur())
-                pattern_tok = self._eat("STR")
-                expect_annotations.append((level_tok.value, pattern_tok.value))
+                # @expect <level> <code> ["message"] -- the code is what
+                # is matched, and the message beside it is what the
+                # diagnostic said when the expectation was written.  A
+                # message that has drifted is recorded rather than
+                # failed, so wording can be improved without breaking
+                # the suite; see --expect-drift.
+                #
+                # @expect <level> "pattern" is the older form and still
+                # matches by text, for the expectations not yet given a
+                # code.
+                if self._check("INT"):
+                    code_tok = self._eat("INT")
+                    said = None
+                    if self._check("STR"):
+                        said = self._eat("STR").value
+                    expect_annotations.append(
+                        (level_tok.value, said, code_tok.value,
+                         getattr(code_tok, "line", None)))
+                elif self._check("STR"):
+                    pattern_tok = self._eat("STR")
+                    expect_annotations.append(
+                        (level_tok.value, pattern_tok.value, None,
+                         getattr(pattern_tok, "line", None)))
+                else:
+                    raise ParseError(
+                        "@expect states the code it expects, and may state "
+                        "the message beside it; the older form states the "
+                        "message alone", self._cur())
                 self._try_eat("NEWLINE")
             else:
                 break

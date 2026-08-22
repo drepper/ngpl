@@ -202,8 +202,16 @@ passed=0
 failed=0
 failures=()
 
+# Where an @expect whose code matched and whose message did not is
+# written down.  A drifted message is not a failure -- the code is what
+# says which diagnostic it is, and the words beside it are free to
+# improve -- so what the run leaves behind is the list of wordings to
+# bring up to date, which tools/update_expectations.py does.
+drift=$(mktemp) || exit 1
+trap 'rm -f "$drift"' EXIT
+
 for t in "${tests[@]}"; do
-    if python -m interp --test "$t" 2>&1; then
+    if python -m interp --test --expect-drift="$drift" "$t" 2>&1; then
         ((passed++))
     else
         ((failed++))
@@ -211,6 +219,16 @@ for t in "${tests[@]}"; do
     fi
     echo
 done
+
+if [[ -s $drift ]]; then
+    n=$(wc -l < "$drift")
+    echo "note: $n expectation(s) record wording a diagnostic no longer uses."
+    echo "      The codes matched, so nothing failed.  To bring the wording"
+    echo "      up to date:  tools/update_expectations.py <drift file>"
+    cp "$drift" "${NGPL_EXPECT_DRIFT:-expect-drift.jsonl}"
+    echo "      This run's drift is in ${NGPL_EXPECT_DRIFT:-expect-drift.jsonl}"
+    echo
+fi
 
 echo "========================================"
 echo "files: $((passed + failed))  passed: $passed  failed: $failed"

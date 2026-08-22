@@ -1413,10 +1413,20 @@ impl Parser:
                 if lvl = "error":
                     wants_err ← 1
                 self.pos ← self.pos + 1
-                if self.peek() ≠ TK_STR:
-                    self.err("@expect states the message it expects, as a string")
+                // @expect <level> <code> ["message"], or the older
+                // <level> "message".  Which diagnostic it was is the
+                // interpreter's to check, so both shapes are read and
+                // dropped here; what this needs to know is only that
+                // the definition is expected to draw one.
+                if self.peek() = TK_INT:
+                    self.pos ← self.pos + 1
+                    if self.peek() = TK_STR:
+                        self.pos ← self.pos + 1
+                elif self.peek() = TK_STR:
+                    self.pos ← self.pos + 1
+                else:
+                    self.err("@expect states the code it expects, and may state the message beside it; the older form states the message alone")
                     return 0
-                self.pos ← self.pos + 1
                 while self.peek() = TK_NL:
                     self.pos ← self.pos + 1
             let inner : i64 = self.parse_stmt()
@@ -2210,10 +2220,17 @@ impl Parser:
                     self.err("@expect names a level, error or warning")
                     return
                 self.pos ← self.pos + 1
-                if self.peek() ≠ TK_STR:
-                    self.err("@expect states the message it expects, as a string")
+                // @expect <level> <code> ["message"], or the older
+                // <level> "message"
+                if self.peek() = TK_INT:
+                    self.pos ← self.pos + 1
+                    if self.peek() = TK_STR:
+                        self.pos ← self.pos + 1
+                elif self.peek() = TK_STR:
+                    self.pos ← self.pos + 1
+                else:
+                    self.err("@expect states the code it expects, and may state the message beside it; the older form states the message alone")
                     return
-                self.pos ← self.pos + 1
                 expects ← expects + 1
             elif name = "pre":
                 _ ← self.eat(TK_LPAR, "'(' after @pre")

@@ -64,7 +64,7 @@ fn test_array_iterators_are_independent():
 // refused where it is written.  This test said the opposite until the
 // rule was settled -- it asserted that a later write *was* seen -- and
 // the two implementations did not agree on the neighbouring case.
-@expect error "lent out for reading"
+@expect error 2400 "'v' is lent out for reading and cannot be changed until the borrow ends; a walk holds what it walks for the whole of its body"
 fn error_changing_an_array_an_iterator_holds():
     let v : mut i64[] = [1, 2]
     v.push(3)                 // fine: nothing holds it yet

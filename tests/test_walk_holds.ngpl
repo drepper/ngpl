@@ -74,25 +74,25 @@ fn test_changing_something_else_while_walking():
 // What a shared borrow refuses: changing
 // ---------------------------------------------------------------------
 
-@expect error "lent out for reading"
+@expect error 2400 "'v' is lent out for reading and cannot be changed until the borrow ends; a walk holds what it walks for the whole of its body"
 fn error_growing_what_is_being_walked():
     let v : mut i64[] = [1, 2, 3]
     foreach x := v:
         v.push(x)
 
-@expect error "lent out for reading"
+@expect error 2400 "'v' is lent out for reading and cannot be changed until the borrow ends; a walk holds what it walks for the whole of its body"
 fn error_writing_an_element_of_what_is_being_walked():
     let v : mut i64[] = [1, 2, 3]
     foreach x := v:
         v[0 × 1¤ptrdiff] ← x
 
-@expect error "lent out for reading"
+@expect error 2400 "'v' is lent out for reading and cannot be changed until the borrow ends; a walk holds what it walks for the whole of its body"
 fn error_rebinding_what_is_being_walked():
     let v : mut i64[] = [1, 2, 3]
     foreach x := v:
         v ← [x]
 
-@expect error "lent out for reading"
+@expect error 2400 "'v' is lent out for reading and cannot be changed until the borrow ends; a walk holds what it walks for the whole of its body"
 fn error_growing_what_a_shared_walk_lends():
     let v : mut i64[] = [1, 2, 3]
     foreach x := &v:
@@ -110,13 +110,13 @@ fn test_a_mutable_walk_writes_through():
     assert_eq(v[0 × 1¤ptrdiff], 2)
     assert_eq(v[2 × 1¤ptrdiff], 4)
 
-@expect error "reaches nothing"
+@expect error 2401 "'v' is lent out to be changed, so the name reaches nothing until the borrow ends; what the walk binds is the way in"
 fn error_reading_what_a_mutable_walk_holds():
     let v : mut i64[] = [1, 2, 3]
     foreach x := &mut v:
         x ← @dropunit(#v)
 
-@expect error "reaches nothing"
+@expect error 2401 "'v' is lent out to be changed, so the name reaches nothing until the borrow ends; what the walk binds is the way in"
 fn error_walking_again_inside_a_mutable_walk():
     let v : mut i64[] = [1, 2, 3]
     foreach x := &mut v:

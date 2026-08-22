@@ -259,14 +259,42 @@ but never addresses overflow of the conversion multiply.  One
 implementation converting while the other refuses is a standing fork
 that needs a decision, not just a record.
 
-### A8. Diagnostics are load-bearing but owned by nobody
+### A8. Diagnostics are load-bearing but owned by nobody — **mechanism done, conversion under way**
 
-`@expect` matches message *text*.  Dozens of expectations couple the
-suite to exact wording no document specifies, so any rewording is a
-silent test break.  The spec already defines stable error codes
-(100–106 runtime, 200–299 compile-time) — **nothing emits or checks
-them**.  Matching expectations by code instead of text would make
-messages freely improvable.
+`@expect` matched message *text*.  380 distinct expectations over 617
+annotations coupled the suite to exact wording no document specified,
+so any rewording was a silent test break.
+
+**An expectation can name the diagnostic by number now**, and state the
+message beside it:
+
+```
+@expect error 2400 "'v' is lent out for reading and cannot be changed …"
+```
+
+The number is matched; the message is not.  A message that has drifted
+is **noted and not failed**, and — with `--expect-drift=FILE` — written
+down in a form that puts the new wording in place without a person
+reading it: `tools/update_expectations.py` rewrites the expectations,
+checking the number on the line against the number in the record before
+it writes.  `tests/run_tests.sh` passes the file and says what drifted.
+Spec: "What a Diagnostic Is Known By", with the blocks a number is
+allocated from.
+
+Two things the review's framing got wrong, worth recording.  The spec's
+`std.errors` 200–299 cannot hold 380 diagnostics, and it should not
+try: that enum numbers errors a *running program* holds, and these
+number refusals about a program's text, which a program never sees.
+They are a separate space, 2000–2999, blocked by area.  And matching by
+a category code — which is all 100 slots would allow — would have made
+the tests stable by making them much weaker; a number has to name the
+diagnostic, not its kind, or `@expect` stops asserting anything.
+
+Converting the 617 annotations is mechanical and under way: this
+session's own diagnostics carry numbers and their expectations are
+converted, and the rest still match by text, which is what a diagnostic
+without a number falls back to.  A diagnostic with no number is not
+wrong — only its wording is still load-bearing until it has one.
 
 ### A9. Smaller items
 

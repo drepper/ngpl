@@ -6787,6 +6787,64 @@ The `@expect` annotation allows writing tests that verify the interpreter/compil
 
 `@expect` can be applied at two levels: **function-level** (before a function definition) and **statement-level** (before an individual statement inside a function body).
 
+
+#### What a Diagnostic Is Known By
+
+An expectation may name the diagnostic **by number**, and state the message beside it:
+
+```
+@expect error 2400 "'v' is lent out for reading and cannot be changed until the borrow ends; a walk holds what it walks for the whole of its body"
+fn error_growing_what_is_being_walked():
+    let v : mut i64[] = [1, 2, 3]
+    foreach x := v:
+        v.push(x)
+```
+
+**The number is what is matched.**  The message beside it is what the diagnostic said when the expectation was written, and it is not matched: a diagnostic is allowed to say the same thing better, and doing so is an improvement rather than a break.
+
+A message that has drifted from what an expectation records is **noted, not failed**:
+
+```
+note: @expect 2400 on line 77 says "…"
+      and the diagnostic now says "…"
+```
+
+and, where `--expect-drift=FILE` is given, written to that file — one line per drift, saying which file and line the expectation is on, which number, what it said and what it says now.  That is enough to put the new wording in place without a person reading it:
+
+```
+python -m interp --expect-drift=drift.jsonl tests/whatever.ngpl
+tools/update_expectations.py drift.jsonl
+```
+
+The updater checks the number on the line against the number in the record before it writes, so an expectation that has since moved or been rewritten is left alone rather than overwritten.
+
+**Why a number.**  Matching a message means the wording is load-bearing: any rewording is a silent test break, and a diagnostic that could be said more clearly is one nobody wants to touch.  A number says which diagnostic is meant and nothing about how it reads, so the two questions come apart — *is this the right refusal* is asserted, and *is this the best wording for it* is left free.
+
+**The blocks.**  A number says what area the diagnostic is about, so it can be read on its own:
+
+| Block | About |
+|-------|-------|
+| 2000–2099 | reading the text: lexing and parsing |
+| 2100–2199 | names, and what a name may be |
+| 2200–2299 | types |
+| 2300–2399 | units |
+| 2400–2499 | mutability, borrows, aliasing |
+| 2500–2599 | purity and effects |
+| 2600–2699 | contracts and assertions |
+| 2700–2799 | arrays, dictionaries, strings |
+| 2800–2899 | enums, structs, layout |
+| 2900–2999 | attributes, modules, the build recipe |
+
+These are not `std.errors`.  That enum numbers the errors a *running program* holds and passes around; these number the refusals an implementation reports about a program's text, which a program never sees.
+
+**The older form still works.**
+
+```
+@expect error "pattern"
+```
+
+matches the message as a regular expression, as it always did, and is what an expectation that has not been given a number yet still uses.  A diagnostic without a number is not wrong, only unmatchable by number — which is to say its wording is still load-bearing until it has one.
+
 #### Function-Level Syntax
 
 ```
