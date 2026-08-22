@@ -194,6 +194,7 @@ shared_tests=(
     test_concat
     test_evaluation_order
     test_enum_distinct
+    test_division_failure
     test_exit_code
     test_generate
     test_hints

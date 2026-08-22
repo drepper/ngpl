@@ -1,0 +1,65 @@
+// The two ways a division can fail, and the one that only looks like
+// it can.
+//
+// A zero divisor is a question with no answer, and the caller usually
+// has one in mind: it is the absent value, and `??` supplies the
+// answer.  The quotient of the least integer and minus one is a
+// question whose answer exists and will not fit, which is what happens
+// to `+` and `×` too: the program stops for it, and `??` does not
+// catch it, because it is not the absence `??` is about.
+//
+// The remainder is neither.  `x % ⁻1` is nought for every x, at every
+// width, and nought fits everywhere.  Some machines fault on it
+// because they work the quotient and the remainder out with one
+// instruction and the quotient is what will not fit; that is the
+// machine's difficulty and not the language's.  This file is where
+// both implementations are held to answering nought -- one of them
+// passed the fault on until it was written down.
+//
+// The specification's "The Other Way a Division Fails" is the
+// normative statement.
+
+fn least() → i64:
+    ⁻9223372036854775807 - 1
+
+@test
+fn test_a_zero_divisor_is_absent():
+    let z : i64 = 0
+    assert_eq((5 ÷ z) ?? 7, 7)
+    assert_eq((least() ÷ z) ?? 7, 7)
+
+@test
+fn test_a_zero_modulus_is_absent():
+    let z : i64 = 0
+    assert_eq((5 % z) ?? 7, 7)
+    assert_eq((least() % z) ?? 7, 7)
+
+@test
+fn test_the_remainder_by_minus_one_is_nought():
+    let m1 : i64 = ⁻1
+    assert_eq((least() % m1) ?? 7, 0)
+    assert_eq((5 % m1) ?? 7, 0)
+    assert_eq((⁻5 % m1) ?? 7, 0)
+
+@test
+fn test_the_remainder_by_minus_one_is_nought_at_every_width():
+    let a8 : i8 = ⁻128
+    let b8 : i8 = ⁻1
+    assert_eq((a8 % b8) ?? 7, 0)
+    let a16 : i16 = ⁻32768
+    let b16 : i16 = ⁻1
+    assert_eq((a16 % b16) ?? 7, 0)
+    let a32 : i32 = ⁻2147483648
+    let b32 : i32 = ⁻1
+    assert_eq((a32 % b32) ?? 7, 0)
+
+// And the quotient that does fit is unremarkable.
+@test
+fn test_the_least_divided_by_one():
+    let one : i64 = 1
+    assert_eq((least() ÷ one) ?? 7, least())
+
+@start
+@impure
+fn main():
+    std.println("division tests passed")

@@ -220,12 +220,35 @@ both implementations to it and runs in both suites;
 own thirty sources have no duplicate enumerator anywhere, so nothing
 had to change to satisfy it.
 
-### A6. Division's second failure mode (**probed**)
+### A6. Division's second failure mode (**probed**) — ~~open~~ **settled**
 
 `INT_MIN ÷ ⁻1` is caught by both implementations (as integer
-overflow — correct), but the division chapter discusses only the zero
+overflow — correct), but the division chapter discussed only the zero
 divisor.  The overflow case, and which error it raises, belongs in
 the text.
+
+**Settled, and probing it turned up a divergence the original probe had
+not reached.**  The spec now says both failures and why they are
+reported differently: a zero divisor is a question with no answer, so
+it is the absent value and `??` supplies one; the quotient of the least
+integer and minus one is a question whose answer exists and will not
+fit, which is an integer overflow like `+` or `×` overflowing, and the
+program stops for it because `??` is about absence and this is not
+absence.
+
+The divergence: **`INT_MIN % ⁻1`**.  The interpreter answered 0 and the
+compiler stopped for integer overflow.  0 is right — `x % ⁻1` is nought
+for every `x`, at every width, and nought fits everywhere.  The machine
+faults only because `idiv` works the quotient and the remainder out at
+once and the quotient is what will not fit; that is the machine's
+difficulty and not the language's.  Both code paths answer nought now,
+the hand-written one and the shared driver, on all six targets.  C
+leaves this undefined and several languages stop for it; here the
+answer exists, so it is given.
+
+`tests/test_division_failure.ngpl` holds both implementations to every
+row in both suites, including the remainder at i8, i16 and i32, and
+`tests/compile/t97_div_overflow.ngpl` pins the stop.
 
 ### A7. Unit conversion is a semantic fork and an overflow risk
 

@@ -3600,6 +3600,37 @@ fn compute(x : int) → int!:
     q + 10
 ```
 
+#### The Other Way a Division Fails
+
+A zero divisor is not the only thing that can go wrong, and the second is not recoverable the way the first is.
+
+**The quotient of the least integer and minus one does not exist in the type.**  `⁻2⁶³ ÷ ⁻1` is `2⁶³`, one past what an `i64` holds, and the same at every signed width: `⁻128 ÷ ⁻1` is `128`, one past `i8`.  That is an **integer overflow** — the same stop as `x × y` running off the end, and reported the same way:
+
+```
+let lo : i64 = ⁻9223372036854775807 - 1
+(lo ÷ ⁻1) ?? 7
+
+integer overflow
+```
+
+The two failures differ in kind, and that is why they are reported differently.  A zero divisor is a question with no answer, and the caller usually has one in mind — hence the expected value and `??`.  An overflow is a question whose answer exists but will not fit, which is the same thing that happens to `+`, `×` and the rest, and this language stops for it rather than delivering a wrong number.  `??` does not catch it, because it is not the absence the `??` is about.
+
+**The remainder is a different matter: it is nought, and does not overflow.**
+
+```
+(lo % ⁻1) ?? 7                  // 0
+(5 % ⁻1) ?? 7                   // 0
+```
+
+`x % ⁻1` is nought for every `x`, at every width, and nought fits everywhere.  Some machines fault on it all the same, because they work the quotient and the remainder out with one instruction and the quotient is what will not fit; that is the machine's difficulty and not the language's, and an implementation is expected to answer nought rather than pass the fault on.  C leaves this undefined and several languages stop for it; here the answer exists, so it is given.
+
+The zero case is the same for both: `x ÷ 0` and `x % 0` are both the absent value, because neither has an answer.
+
+| | `÷` | `%` |
+|---|---|---|
+| divisor is zero | absent, recoverable with `??` | absent, recoverable with `??` |
+| least integer and `⁻1` | integer overflow, the program stops | nought |
+
 #### The `?` Operator on Expected Values
 
 The `?` postfix operator works on both optional and expected values:

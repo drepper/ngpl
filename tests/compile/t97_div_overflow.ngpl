@@ -1,0 +1,15 @@
+// The quotient of the least integer and minus one exists and will not
+// fit, which is an integer overflow like any other: the program stops
+// for it, and ?? does not catch it, because it is not the absence ??
+// is about.  The remainder of the same pair is nought and is answered,
+// which tests/test_division_failure.ngpl covers.
+//
+// Both runs print the prefix and then stop.
+
+@start
+@impure
+fn main():
+    let lo : i64 = ⁻9223372036854775807 - 1
+    let m1 : i64 = ⁻1
+    std.println("about to divide the least by minus one")
+    std.println("{}", (lo ÷ m1) ?? 7)

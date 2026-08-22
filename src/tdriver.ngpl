@@ -188,7 +188,14 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
                 g_const(&em, tg, RG_C, ⁻1)
                 g_cmp3(&em, tg, RG_C, RG_B, RG_C, CC_NE, 0)
                 g_jnz(&em, tg, RG_C, sl)
-                g_call(&em, tg, RT_OV)
+                if o = IR_DIVV:
+                    g_call(&em, tg, RT_OV)
+                else:
+                    // the remainder is nought and always was; the
+                    // machine faults only because it works the
+                    // quotient out at the same time
+                    g_const(&em, tg, RG_A, 0)
+                    g_jmp(&em, tg, lend9)
                 g_label(&em, tg, sl)
                 sl ← sl + 1
             if o = IR_DIVV:

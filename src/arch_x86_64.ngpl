@@ -185,6 +185,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             let p2 : i64 = em.here()
             em.w32(0)
             em.patch32(p1, em.here() - (p1 + 4))
+            let p6 : mut i64 = ⁻1
             if sgn = 1:
                 if bits = 64:
                     em.movimm(R_R10, ⁻9223372036854775807 - 1)
@@ -194,7 +195,24 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
                     em.w32(0)
                     em.b3(72, 131, 249)      // cmp rcx, ⁻1
                     em.b1(255)
-                    em.jglobal(0, 132, RT_OV)    // je
+                    if o = IR_MODD:
+                        // The least integer divided by minus one has
+                        // no quotient this type can hold, and the
+                        // machine faults working the quotient and the
+                        // remainder out at once.  The remainder is
+                        // nought though, and always was: x % ⁻1 is
+                        // nought for every x.  So this is the one the
+                        // machine cannot answer and the language can.
+                        em.b2(15, 133)       // jne, on past
+                        let p4 : i64 = em.here()
+                        em.w32(0)
+                        em.b3(72, 49, 192)   // xor rax, rax
+                        em.b1(233)           // jmp to the end
+                        p6 ← em.here()
+                        em.w32(0)
+                        em.patch32(p4, em.here() - (p4 + 4))
+                    else:
+                        em.jglobal(0, 132, RT_OV)    // je
                     em.patch32(p3, em.here() - (p3 + 4))
                 em.b2(72, 153)               // cqo
                 em.b3(72, 247, 249)          // idiv rcx
@@ -206,6 +224,8 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             if sgn = 1 and bits ≠ 64:
                 em.range_check(w)
             em.patch32(p2, em.here() - (p2 + 4))
+            if p6 ≠ ⁻1:
+                em.patch32(p6, em.here() - (p6 + 4))
             em.raxbar()
             em.store(R_AX, d)
         elif o = IR_JMP:
