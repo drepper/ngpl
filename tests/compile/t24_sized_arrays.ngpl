@@ -35,6 +35,9 @@ fn clobbers(a : i64) → i64:
     let junk : i64[4] = [999, 998, 997, 996]
     junk[0] + a
 
+fn takes_any(v : i64[]) → i64:
+    @dropunit(#v)
+
 fn total(v : &i64[3]) → i64:
     let s : mut i64 = 0
     foreach x := v:
@@ -97,3 +100,23 @@ fn main():
     std.println("{} {} {}", #pairs, pairs[0].x, pairs[1].y)
     let words : str[2] = ["one", "two"]
     std.println("{} {}", #words, words[1])
+    // A T[] whose length is settled where it is written, and which
+    // never leaves the function, is laid out the way a T[N] is.  Its
+    // type does not change and nothing legal on it becomes illegal;
+    // what changes is that there is no header beside the elements and
+    // nothing is allocated for them.  Whether it leaves is decided by
+    // counting: every read of the name is counted, and the reads in the
+    // places a packed array serves are counted again, so a use nobody
+    // anticipated disqualifies the binding rather than miscompiling it.
+    let settled : i64[] = [3, 5, 7, 9]
+    let acc : mut i64 = 0
+    foreach s := settled:
+        acc ← acc + s
+    std.println("{} {} {}", acc, #settled, settled[2])
+    // this one is handed to a function, so it keeps its header
+    let handed : i64[] = [2, 4, 6]
+    std.println("{} {}", takes_any(handed), handed[0])
+    // and this one is written to again, so its length is not settled
+    let rebound : mut i64[] = [1, 1]
+    rebound ← [1, 2, 3]
+    std.println("{} {}", #rebound, rebound[2])

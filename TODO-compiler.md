@@ -57,15 +57,17 @@ The Compiler
     that site a number from its block, and let tools/update_expectations.py fill the message.
     Spec: "What a Diagnostic Is Known By".
 
-[ ] a T[] whose size is settled and which never leaves the function could be packed too.
-    It would be a representation and not a type: the binding stays T[], everything legal on
-    it stays legal, and a use a packed array could not serve -- push, being handed to a T[]
-    parameter, being returned, being stored into a struct -- disqualifies it.  Measured
-    first, because it decides how much machinery is worth building: of 162 T[] locals in
-    the compiler's own source, 159 are `= []` filled by push and 3 have a settled literal.
-    So the inference would fire almost nowhere here, and what pays for this codebase is
-    saying the size outright where it is known, which is the item below.  It would still
-    pay for programs that are not this one.
+[ ] the packing analysis clears four reads, and could clear more.  A T[] whose length is
+    settled and which never leaves the function is laid out as a T[N] is; whether it
+    leaves is decided by counting every read of the name against the reads in the places
+    a packed array serves -- an element read, an element write, #, a walk.  Anything else
+    disqualifies it, which is why it is safe, and also why ⧺ and a slice disqualify it
+    when they need only be laid out afresh the way a T[N] operand already is.  Adding
+    them is two calls to pack_safe.  Being handed to a function is the one worth having
+    and the one that needs more than a call: the callee would have to be known not to
+    keep it.  Of 162 T[] locals in the compiler's own source 159 are `= []` filled by
+    push, so what the analysis finds here is small; it is for programs that are not this
+    one.
 
 [ ] more of the compiler's own tables could say their size.  src/lex.ngpl's class table
     did: it was 256 push calls into a T[] and is now `256 ⍴ 0` into an i64[256], which is

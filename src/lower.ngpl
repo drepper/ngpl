@@ -9,6 +9,7 @@ struct Lower:
     ntype : i64[]
     nslot : i64[]
     ncvt : i64[]
+    nrep : i64[]
     strs : str[]
     op : i64[]
     ia : i64[]
@@ -224,25 +225,26 @@ impl Lower:
         if k = NK_RESHAPE:
             if ty_is_mat(self.tof(nid)):
                 return self.lower_mreshape(nid, na, nb)
-            let rfa : bool = farr_is_packed(self.a, self.tof(nid))
+            let rpn : i64 = self.packed_n(nid)
+            let rfa : bool = rpn >= 0
             let nv : i64 = self.lower_expr(na)
             if ty_is_rg(self.tof(nb)):
                 let fvr : i64 = self.lower_rg_arr(nb)
                 let dr : i64 = self.tmp()
                 self.ir(IR_ACYC, nv, fvr, 0, dr, 0)
-                return self.arr_to_farr(dr, self.tof(nid)) if rfa else dr
+                return self.arr_to_farr(dr, self.tof(nid), rpn) if rfa else dr
             let fv : i64 = self.lower_arr_operand(nb) if ty_is_arr(self.tof(nb)) else self.lower_expr(nb)
             if rfa and not ty_is_arr(self.tof(nb)):
                 // n ⍴ scalar into a sized binding: no array is built
                 // for it, the frame is filled where it stands
                 _ ← nv
-                return self.farr_fill(self.tof(nid), fv)
+                return self.farr_fill(self.tof(nid), rpn, fv)
             let d : i64 = self.tmp()
             if ty_is_arr(self.tof(nb)):
                 self.ir(IR_ACYC, nv, fv, 0, d, 0)
             else:
                 self.ir(IR_AFILL, nv, fv, 0, d, 0)
-            return self.arr_to_farr(d, self.tof(nid)) if rfa else d
+            return self.arr_to_farr(d, self.tof(nid), rpn) if rfa else d
         if k = NK_TUPLE:
             let n : i64 = self.a.extra[na × 1¤ptrdiff]
             let d : i64 = self.tmp()
@@ -398,11 +400,12 @@ impl Lower:
                 let d1 : i64 = self.tmp()
                 self.ir(IR_SIDX, av1, iv1, 0, d1, w)
                 return d1
-            if farr_is_packed(self.a, self.tof(na)):
+            let pni : i64 = self.packed_n(na)
+            if pni >= 0:
                 let fav : i64 = self.lower_expr(na)
                 let ki : i64 = self.const_index(nb)
                 let fiv : i64 = 0 if ki ≠ ⁻1 else self.lower_expr(nb)
-                return self.farr_load(fav, self.tof(na), fiv, ki)
+                return self.farr_load(fav, self.tof(na), pni, fiv, ki)
             let av : i64 = self.lower_expr(na)
             let iv : i64 = self.lower_expr(nb)
             let d : i64 = self.tmp()
@@ -420,9 +423,9 @@ impl Lower:
                 self.ir(IR_HLEN, av, 0, 0, d, w)
             elif ty_is_tup(self.tof(na)):
                 self.ir(IR_CONST, self.tup_len(self.tof(na)), 0, 0, d, w)
-            elif ty_is_farr(self.tof(na)):
-                // the type says how many, so nothing is read
-                self.ir(IR_CONST, self.farr_size(self.tof(na)), 0, 0, d, w)
+            elif self.packed_n(na) >= 0:
+                // how many is settled, so nothing is read
+                self.ir(IR_CONST, self.packed_n(na), 0, 0, d, w)
             else:
                 self.ir(IR_ALEN, av, 0, 0, d, w)
             return d
@@ -506,7 +509,7 @@ impl Lower:
                 let hv : i64 = self.tmp()
                 self.ir(IR_HSTART, av, 0, 0, hv, 0)
                 self.ir(IR_HUPDATE, hv, self.lower_hash_arg(self.a.extra[(nb + 1) × 1¤ptrdiff]), 0, 0, 0)
-                let dst : i64 = self.farr_new(self.tof(nid))
+                let dst : i64 = self.farr_new(self.tof(nid), self.packed_ty_n(self.tof(nid)))
                 let d : i64 = self.tmp()
                 self.ir(IR_HFINAL, hv, dst, 0, d, 0)
                 return d
@@ -889,7 +892,7 @@ impl Lower:
         if mid = MID_HDIGEST:
             // the digest is a fixed width, so the space for it is the
             // caller's and nothing is allocated for the answer
-            let dst : i64 = self.farr_new(self.tof(nid))
+            let dst : i64 = self.farr_new(self.tof(nid), self.packed_ty_n(self.tof(nid)))
             let d : i64 = self.tmp()
             self.ir(IR_HFINAL, av, dst, 0, d, 0)
             return d
@@ -1308,7 +1311,7 @@ impl Lower:
             let cnt : i64 = self.a.fas[ty_fidx(ty) × 1¤ptrdiff]
             let ei : mut i64 = 0
             while ei < cnt:
-                let ev : i64 = self.farr_load(v, ty, 0, ei)
+                let ev : i64 = self.farr_load(v, ty, cnt, 0, ei)
                 pos ← self.pack_val(buf, et, ev, pos)
                 ei ← ei + 1
             return pos
@@ -1369,14 +1372,16 @@ impl Lower:
     fn lower_arrlit(&mut self, nid : i64, off : i64) → i64:
         let n : i64 = self.a.extra[off × 1¤ptrdiff]
         let ty : i64 = self.tof(nid)
-        if farr_is_packed(self.a, ty):
+        let pn : i64 = self.packed_n(nid)
+        if pn >= 0:
             // the elements go straight into the frame; there is no
             // header to make and nothing to allocate
-            let fb : i64 = self.farr_new(ty)
+            assert(pn = n, "the literal has as many elements as the binding holds")
+            let fb : i64 = self.farr_new(ty, pn)
             let j : mut i64 = 0
             while j < n:
                 let ev : i64 = self.lower_expr(self.a.extra[(off + 1 + j) × 1¤ptrdiff])
-                self.farr_store(fb, ty, 0, j, ev)
+                self.farr_store(fb, ty, pn, 0, j, ev)
                 j ← j + 1
             return fb
         let d : i64 = self.tmp()
@@ -1488,8 +1493,9 @@ impl Lower:
         // a callee that answers a sized array is given the space to
         // answer into, as a last argument the source never wrote
         let rt : i64 = self.tof(nid)
-        if farr_is_packed(self.a, rt):
-            vregs.push(self.farr_new(rt))
+        let rn : i64 = self.packed_ty_n(rt)
+        if rn >= 0:
+            vregs.push(self.farr_new(rt, rn))
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(@dropunit(#vregs))
         foreach v := vregs:
@@ -1669,10 +1675,10 @@ impl Lower:
         self.lower_ret(v)
 
     fn lower_ret(&mut self, v : i64):
-        if self.sret ≠ ⁻1 and farr_is_packed(self.a, self.cur_ret):
+        if self.sret ≠ ⁻1 and self.packed_ty_n(self.cur_ret) >= 0:
             // the frame this was computed in ends at the return, so
             // the elements go where the caller said before that
-            self.farr_copy(self.sret, v, self.cur_ret)
+            self.farr_copy(self.sret, v, self.cur_ret, self.packed_ty_n(self.cur_ret))
             if self.post_label ≠ ⁻1:
                 self.ir(IR_MOV, self.sret, 0, 0, self.res_vreg, 0)
                 self.ir(IR_JMP, self.post_label, 0, 0, 0, 0)
@@ -1759,11 +1765,12 @@ impl Lower:
             self.ir(IR_FSTO, bv, nc, vv, 0, 0)
         elif k = NK_STOREIDXP:
             let bv : i64 = self.lower_expr(na)
-            if farr_is_packed(self.a, self.tof(na)):
+            let pns : i64 = self.packed_n(na)
+            if pns >= 0:
                 let fk : i64 = self.const_index(nb)
                 let fi : i64 = 0 if fk ≠ ⁻1 else self.lower_expr(nb)
                 let fv : i64 = self.lower_expr(nc)
-                self.farr_store(bv, self.tof(na), fi, fk, fv)
+                self.farr_store(bv, self.tof(na), pns, fi, fk, fv)
                 return
             let iv : i64 = self.lower_expr(nb)
             let vv : i64 = self.lower_expr(nc)
@@ -2084,6 +2091,22 @@ impl Lower:
             return ⁻1 if l = ⁻1 or r = ⁻1 else l × r
         ⁻1
 
+    // How many elements an array's value is, where the value is the
+    // elements themselves and nothing else.  A T[N] says so in its
+    // type; a T[] says so where the checker settled that its length
+    // never changes and it never leaves the function.  ⁻1 where the
+    // array is an ordinary one, header and all.
+    @post(r: r >= ⁻1)
+    fn packed_n(&self, id : i64) → i64:
+        let t : i64 = self.tof(id)
+        self.farr_size(t) if farr_is_packed(self.a, t) else self.nrep[id × 1¤ptrdiff]
+
+    // the same for a type alone, where there is no node to ask: a
+    // return type, a field's type
+    @post(r: r >= ⁻1)
+    fn packed_ty_n(&self, t : i64) → i64:
+        self.farr_size(t) if farr_is_packed(self.a, t) else ⁻1
+
     @post(r: r > 0)
     fn farr_esize(&self, t : i64) → i64:
         let (es, ea) := c_layout(self.a, self.elem_of(t), 0)
@@ -2091,10 +2114,10 @@ impl Lower:
         es
 
     // the frame space for one, its address in a fresh vreg
-    @pre(farr_is_packed(self.a, t))
-    fn farr_new(&mut self, t : i64) → i64:
+    @pre(n >= 0)
+    fn farr_new(&mut self, t : i64, n : i64) → i64:
         let (es, ea) := c_layout(self.a, self.elem_of(t), 0)
-        let at : i64 = self.frame_alloc(es × self.farr_size(t), ea)
+        let at : i64 = self.frame_alloc(es × n, ea)
         let d : i64 = self.tmp()
         self.ir(IR_FRAME, at, 0, 0, d, 0)
         d
@@ -2103,7 +2126,6 @@ impl Lower:
     // the type states; a constant index is checked here instead
     // base + i×element, with nothing checked: for a walk that already
     // holds the index inside the bound
-    @pre(farr_is_packed(self.a, t))
     fn farr_addr_at(&mut self, base : i64, t : i64, iv : i64) → i64:
         let sc : i64 = self.tmp()
         self.ir(IR_CONST, self.farr_esize(t), 0, 0, sc, 0)
@@ -2113,9 +2135,8 @@ impl Lower:
         self.ir(IR_ADD, base, byteoff, 0, d, 64 + 256)
         d
 
-    @pre(farr_is_packed(self.a, t))
-    fn farr_addr(&mut self, base : i64, t : i64, iv : i64, kidx : i64) → i64:
-        let n : i64 = self.farr_size(t)
+    @pre(n >= 0)
+    fn farr_addr(&mut self, base : i64, t : i64, n : i64, iv : i64, kidx : i64) → i64:
         let es : i64 = self.farr_esize(t)
         if kidx ≠ ⁻1 and (kidx < 0 or kidx >= n):
             // written out and outside: the bound fails here, always
@@ -2139,17 +2160,17 @@ impl Lower:
         _ ← es
         self.farr_addr_at(base, t, iv)
 
-    @pre(farr_is_packed(self.a, t))
-    fn farr_load(&mut self, base : i64, t : i64, iv : i64, kidx : i64) → i64:
-        let ad : i64 = self.farr_addr(base, t, iv, kidx)
+    @pre(n >= 0)
+    fn farr_load(&mut self, base : i64, t : i64, n : i64, iv : i64, kidx : i64) → i64:
+        let ad : i64 = self.farr_addr(base, t, n, iv, kidx)
         let et : i64 = self.elem_of(t)
         let d : i64 = self.tmp()
         self.ir(IR_LDN, ad, 0, 0, d, self.farr_esize(t) + 256 × ty_sgn(et))
         d
 
-    @pre(farr_is_packed(self.a, t))
-    fn farr_store(&mut self, base : i64, t : i64, iv : i64, kidx : i64, vv : i64):
-        let ad : i64 = self.farr_addr(base, t, iv, kidx)
+    @pre(n >= 0)
+    fn farr_store(&mut self, base : i64, t : i64, n : i64, iv : i64, kidx : i64, vv : i64):
+        let ad : i64 = self.farr_addr(base, t, n, iv, kidx)
         self.ir(IR_STN, ad, 0, vv, 0, self.farr_esize(t))
 
     // A loop from nought to the size, answering the index vreg and the
@@ -2157,15 +2178,15 @@ impl Lower:
     // runs over one of these rather than writing the size out N times,
     // which for a u8[32] is the difference between one loop and
     // thirty-two unrolled stores.
-    @pre(farr_is_packed(self.a, t))
-    fn farr_loop_open(&mut self, t : i64) → (i64, i64, i64):
+    @pre(n >= 0)
+    fn farr_loop_open(&mut self, n : i64) → (i64, i64, i64):
         let iv : i64 = self.tmp()
         self.ir(IR_CONST, 0, 0, 0, iv, 0)
         let ltop : i64 = self.label()
         let lend : i64 = self.label()
         self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
         let nv : i64 = self.tmp()
-        self.ir(IR_CONST, self.farr_size(t), 0, 0, nv, 0)
+        self.ir(IR_CONST, n, 0, 0, nv, 0)
         let c : i64 = self.tmp()
         self.ir(IR_CLT, iv, nv, 0, c, 64 + 256)
         self.ir(IR_JZ, c, lend, 0, 0, 0)
@@ -2181,10 +2202,10 @@ impl Lower:
         self.ir(IR_LABEL, lend, 0, 0, 0, 0)
 
     // every element set to one value, written where it lies
-    @pre(farr_is_packed(self.a, t))
-    fn farr_fill(&mut self, t : i64, vv : i64) → i64:
-        let fb : i64 = self.farr_new(t)
-        let (iv, ltop, lend) := self.farr_loop_open(t)
+    @pre(n >= 0)
+    fn farr_fill(&mut self, t : i64, n : i64, vv : i64) → i64:
+        let fb : i64 = self.farr_new(t, n)
+        let (iv, ltop, lend) := self.farr_loop_open(n)
         let ad : i64 = self.farr_addr_at(fb, t, iv)
         self.ir(IR_STN, ad, 0, vv, 0, self.farr_esize(t))
         self.farr_loop_close(iv, ltop, lend)
@@ -2193,10 +2214,10 @@ impl Lower:
     // The other way: a T[] that a sized binding is to hold.  ⍴ builds
     // its answer as a T[] whatever it is for, so what it built is
     // copied into the frame and the header falls away with it.
-    @pre(farr_is_packed(self.a, t))
-    fn arr_to_farr(&mut self, av : i64, t : i64) → i64:
-        let fb : i64 = self.farr_new(t)
-        let (iv, ltop, lend) := self.farr_loop_open(t)
+    @pre(n >= 0)
+    fn arr_to_farr(&mut self, av : i64, t : i64, n : i64) → i64:
+        let fb : i64 = self.farr_new(t, n)
+        let (iv, ltop, lend) := self.farr_loop_open(n)
         let ev : i64 = self.tmp()
         self.ir(IR_AIDX, av, iv, 0, ev, 0)
         let ad : i64 = self.farr_addr_at(fb, t, iv)
@@ -2211,25 +2232,26 @@ impl Lower:
     // so the elements are copied where the struct's own memory comes
     // from.  Without this the field points at a frame that has ended,
     // and reads whatever the next call put there.
-    @pre(farr_is_packed(self.a, t))
-    fn farr_to_arena(&mut self, v : i64, t : i64) → i64:
-        let bytes : i64 = self.farr_esize(t) × self.farr_size(t)
+    @pre(n >= 0)
+    fn farr_to_arena(&mut self, v : i64, t : i64, n : i64) → i64:
+        let bytes : i64 = self.farr_esize(t) × n
         let d : i64 = self.tmp()
         self.ir(IR_SNEW, (bytes + 7) ÷ 8 ?? 0, 0, 0, d, 0)
-        self.farr_copy(d, v, t)
+        self.farr_copy(d, v, t, n)
         d
 
     // the value a field is to hold: kept where the struct's memory is
     // when it is a sized array, and itself otherwise
     fn field_val(&mut self, v : i64, ft : i64) → i64:
-        self.farr_to_arena(v, ft) if farr_is_packed(self.a, ft) else v
+        let pn : i64 = self.packed_ty_n(ft)
+        self.farr_to_arena(v, ft, pn) if pn >= 0 else v
 
     // Copy one sized array's elements over another's.  This is what a
     // return is: the answer is written into the space the caller
     // handed over, since the frame it was computed in is about to go.
-    @pre(farr_is_packed(self.a, t))
-    fn farr_copy(&mut self, dst : i64, src : i64, t : i64):
-        let (iv, ltop, lend) := self.farr_loop_open(t)
+    @pre(n >= 0)
+    fn farr_copy(&mut self, dst : i64, src : i64, t : i64, n : i64):
+        let (iv, ltop, lend) := self.farr_loop_open(n)
         let sa : i64 = self.farr_addr_at(src, t, iv)
         let et : i64 = self.elem_of(t)
         let ev : i64 = self.tmp()
@@ -2242,20 +2264,20 @@ impl Lower:
     // afresh, anything else is itself.  This is the only place the two
     // representations meet, so it is the only place that has to be
     // right about the difference.
-    fn lower_arr_operand(&mut self, n : i64) → i64:
-        let v : i64 = self.lower_expr(n)
-        self.farr_to_arr(v, self.tof(n)) if farr_is_packed(self.a, self.tof(n)) else v
+    fn lower_arr_operand(&mut self, nd : i64) → i64:
+        let v : i64 = self.lower_expr(nd)
+        let pn : i64 = self.packed_n(nd)
+        self.farr_to_arr(v, self.tof(nd), pn) if pn >= 0 else v
 
     // What a sized array has to become where a T[] is wanted -- ⧺,
     // a slice, printing.  Every element is read and pushed, because
     // the two layouts are not the same: a T[] holds a slot apiece.
-    @pre(farr_is_packed(self.a, t))
-    fn farr_to_arr(&mut self, base : i64, t : i64) → i64:
-        let n : i64 = self.farr_size(t)
+    @pre(n >= 0)
+    fn farr_to_arr(&mut self, base : i64, t : i64, n : i64) → i64:
         let et : i64 = self.elem_of(t)
         let d : i64 = self.tmp()
         self.ir(IR_ANEW, n ⌈ 4, 0, 0, d, 0)
-        let (iv, ltop, lend) := self.farr_loop_open(t)
+        let (iv, ltop, lend) := self.farr_loop_open(n)
         let ad : i64 = self.farr_addr_at(base, t, iv)
         let ev : i64 = self.tmp()
         self.ir(IR_LDN, ad, 0, 0, ev, self.farr_esize(t) + 256 × ty_sgn(et))
@@ -2421,22 +2443,23 @@ impl Lower:
         let ltop : i64 = self.label()
         let lcont : i64 = self.label()
         let lend : i64 = self.label()
-        let fa : bool = farr_is_packed(self.a, self.tof(arr))
+        let pnw : i64 = self.packed_n(arr)
+        let fa : bool = pnw >= 0
         self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
         let n : i64 = self.tmp()
         if fa:
             // the type says how many, so the walk asks nothing
-            self.ir(IR_CONST, self.farr_size(self.tof(arr)), 0, 0, n, 0)
+            self.ir(IR_CONST, pnw, 0, 0, n, 0)
         else:
             self.ir(IR_ALEN, desc, 0, 0, n, 0)
         let c : i64 = self.tmp()
         self.ir(IR_CLT, iv, n, 0, c, 64 + 256)
         self.ir(IR_JZ, c, lend, 0, 0, 0)
         if fa and self.a.nc[sid × 1¤ptrdiff] ≠ 0:
-            let ad : i64 = self.farr_addr(desc, self.tof(arr), iv, ⁻1)
+            let ad : i64 = self.farr_addr(desc, self.tof(arr), pnw, iv, ⁻1)
             self.ir(IR_MOV, ad, 0, 0, evar, 0)
         elif fa:
-            let ev : i64 = self.farr_load(desc, self.tof(arr), iv, ⁻1)
+            let ev : i64 = self.farr_load(desc, self.tof(arr), pnw, iv, ⁻1)
             self.ir(IR_MOV, ev, 0, 0, evar, 0)
         elif self.a.nc[sid × 1¤ptrdiff] ≠ 0:
             self.ir(IR_AREF, desc, iv, 0, evar, 0)

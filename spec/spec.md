@@ -6110,6 +6110,31 @@ element is what the other side expects. This is the only conversion,
 and it goes one way: a `T[]` cannot become a `T[N]`, since its length
 is not something the type could check.
 
+**A `T[]` can be the same thing without saying so.**  A binding born
+from a literal or a fill has a length settled where it is written.  If
+nothing ever changes that length and the value never leaves the
+function, the header beside the elements is never read for anything,
+and the compiler lays the binding out the way it lays out a `T[N]`:
+
+```
+let shifts : i64[] = [24, 16, 8, 0]   // still i64[]
+foreach s := shifts:                   // still everything a i64[] does
+    …
+```
+
+The type does not change and nothing legal on it becomes illegal — this
+is a statement about what the binding costs, not about what it is. What
+decides it is counting rather than a list of what would count as
+leaving: every read of the name is counted, and the reads in the places
+a packed array can serve — an element, a count, a walk — are counted
+again. Equal, and the header goes; unequal, and some read wanted it. A
+use nobody anticipated lands in the first count and not the second, so
+the answer is no.
+
+Handing the binding to a function, answering it, keeping it in a struct
+or writing the name itself all leave it as an ordinary array, because
+each of those is a use the second count does not include.
+
 **The bound is a constant, so it is often not a check at all.**  An
 index that is written out is compared against the size while the
 program is being compiled; the code that results has no comparison in

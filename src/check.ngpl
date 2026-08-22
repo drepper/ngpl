@@ -60,6 +60,12 @@ struct Chk:
     ntype : i64[]
     nslot : i64[]
     ncvt : i64[]
+    // Per node: where an array's value is the elements themselves,
+    // how many; ⁻1 where it is an ordinary array.  A T[N] does not
+    // need this -- its type says so -- and this is where a T[] whose
+    // length never changes and which never leaves the function comes
+    // to say the same thing without its type changing.
+    nrep : i64[]
     fslots : i64[]
     gvals : i64[]        // the folded initial value of every global
     ginit : i64[]        // globals whose value is built as the run begins
@@ -213,6 +219,19 @@ struct Checker:
     ntype : i64[]
     nslot : i64[]
     ncvt : i64[]
+    nrep : i64[]         // see Chk
+    // Packing a T[] whose length never changes and which never leaves
+    // the function.  Per slot of the function under check: how many
+    // elements it was born with (⁻1 for no candidate), how many times
+    // the name was read, and how many of those reads were somewhere a
+    // packed array can serve.  The two counts are compared rather than
+    // the uses enumerated, so a use nobody thought of disqualifies the
+    // binding instead of miscompiling it.
+    pcnt : i64[]
+    puse : i64[]
+    psafe : i64[]
+    pnode_slot : i64[]   // the nodes to mark, if it comes to that
+    pnode_id : i64[]
     fslots : i64[]
     diags : Diag[]
     snames : str[]
@@ -854,8 +873,10 @@ impl Checker:
             self.set_type(id, want if ty_is_opt(want) else TY_EMPTY)
         elif k = NK_INDEX:
             self.check_index(id, tok, na, nb)
+            self.pack_safe(na)
         elif k = NK_LEN:
             self.check_expr(na, TY_UNIT)
+            self.pack_safe(na)
             let t : i64 = self.ty_of(na)
             if t = TY_STR:
                 self.set_type(id, ty_with_unit(TY_I64, UNIT_PTRDIFF))
@@ -1397,6 +1418,106 @@ impl Checker:
             self.derr(self.a.ntok[id × 1¤ptrdiff],
                       what ⧺ " wants a truth value, but this is " ⧺ self.tn(t))
 
+    // ------------------------------------------------------------------
+    // A T[] that is the elements and nothing else
+    // ------------------------------------------------------------------
+    //
+    // A binding born from a literal or a fill has a length settled
+    // where it is written.  If nothing ever changes that length and the
+    // value never leaves the function, the header beside the elements
+    // is never read for anything, and the binding can be laid out the
+    // way a T[N] is -- while staying a T[], so nothing legal on it
+    // becomes illegal and the interpreter needs to know nothing of it.
+    //
+    // Whether it never leaves is decided by counting rather than by
+    // listing what would count as leaving: every read of the name is
+    // counted, and the reads in the four places a packed array can
+    // serve are counted again.  Equal, and it stays; unequal, and some
+    // read wanted the header.  A use nobody anticipated lands in the
+    // first count and not the second, so the answer is no.
+
+    fn pack_reset(&mut self, nslots : i64):
+        while #self.pcnt > 0:
+            _ ← self.pcnt.pop() ?? 0
+            _ ← self.puse.pop() ?? 0
+            _ ← self.psafe.pop() ?? 0
+        while #self.pnode_slot > 0:
+            _ ← self.pnode_slot.pop() ?? 0
+            _ ← self.pnode_id.pop() ?? 0
+        let i : mut i64 = 0
+        while i < nslots:
+            self.pcnt.push(⁻1)
+            self.puse.push(0)
+            self.psafe.push(0)
+            i ← i + 1
+
+    fn pack_room(&mut self, s : i64):
+        while #self.pcnt <= s × 1¤ptrdiff:
+            self.pcnt.push(⁻1)
+            self.puse.push(0)
+            self.psafe.push(0)
+
+    // how many elements a binding is born with, or ⁻1 where that is
+    // not something the text settles: a literal says so outright, and
+    // `n ⍴ x` says so when n is written out
+    fn born_count(&self, na : i64) → i64:
+        let k : i64 = self.kind_of(na)
+        if k = NK_ARRLIT:
+            return self.a.extra[self.a.na[na × 1¤ptrdiff] × 1¤ptrdiff]
+        if k = NK_RESHAPE:
+            let cn : i64 = self.a.na[na × 1¤ptrdiff]
+            if self.kind_of(cn) = NK_INT and self.a.nb[cn × 1¤ptrdiff] = 0:
+                return self.a.na[cn × 1¤ptrdiff]
+        ⁻1
+
+    fn pack_note(&mut self, id : i64, s : i64, ty : i64, na : i64):
+        if s < 0 or ty_is_farr(ty) or not ty_is_arr(ty):
+            return
+        let e : i64 = ty_elem(ty)
+        if not (e = TY_BOOL or ty_is_int(e) or ty_is_enum(e)):
+            return
+        let n : i64 = self.born_count(na)
+        if n < 0:
+            return
+        self.pack_room(s)
+        self.pcnt[s × 1¤ptrdiff] ← n
+        self.pnode_slot.push(s)
+        self.pnode_id.push(na)
+
+    fn pack_used(&mut self, s : i64, id : i64):
+        if s < 0:
+            return
+        self.pack_room(s)
+        self.puse[s × 1¤ptrdiff] ← self.puse[s × 1¤ptrdiff] + 1
+        self.pnode_slot.push(s)
+        self.pnode_id.push(id)
+
+    // a read in one of the four places a packed array serves
+    fn pack_safe(&mut self, na : i64):
+        if self.kind_of(na) ≠ NK_VAR:
+            return
+        let s : i64 = self.nslot[na × 1¤ptrdiff]
+        if s < 0 or s × 1¤ptrdiff >= #self.psafe:
+            return
+        self.psafe[s × 1¤ptrdiff] ← self.psafe[s × 1¤ptrdiff] + 1
+
+    // the name itself is written to, so its length is not settled
+    fn pack_kill(&mut self, s : i64):
+        if s >= 0 and s × 1¤ptrdiff < #self.pcnt:
+            self.pcnt[s × 1¤ptrdiff] ← ⁻1
+
+    // what survived: every node of a surviving slot is told how many
+    fn pack_settle(&mut self):
+        if #self.pnode_slot = 0:
+            return
+        let i : mut i64 = 0
+        while i × 1¤ptrdiff < #self.pnode_slot:
+            let s : i64 = self.pnode_slot[i × 1¤ptrdiff]
+            let n : i64 = self.pcnt[s × 1¤ptrdiff]
+            if n >= 0 and self.puse[s × 1¤ptrdiff] = self.psafe[s × 1¤ptrdiff]:
+                self.nrep[self.pnode_id[i × 1¤ptrdiff] × 1¤ptrdiff] ← n
+            i ← i + 1
+
     fn check_var(&mut self, id : i64, tok : i64):
         let name := self.text(tok)
         if name = "_":
@@ -1411,6 +1532,8 @@ impl Checker:
             let base0 : i64 = ty_strip_ref(st0)
             self.set_type(id, base0)
             self.nslot[id × 1¤ptrdiff] ← self.sslot[s × 1¤ptrdiff]
+            if ty_is_arr(base0):
+                self.pack_used(self.sslot[s × 1¤ptrdiff], id)
             // an element reference holds the element's address: a read
             // of the name reaches through it
             if ty_ref_kind(st0) ≠ 0 and ty_ref_kind(st0) ≠ 3 and not ty_is_arr(base0) and not ty_is_hash(base0) and not ty_is_struct(base0):
@@ -3412,6 +3535,7 @@ impl Checker:
                     self.derr(tok, "a mut struct binding is born fresh, from its literal or a call; borrow with &mut to change a shared one")
                 let islot : i64 = self.declare(tok, it, nb)
                 self.nslot[id × 1¤ptrdiff] ← islot
+                self.pack_note(id, islot, it, na)
                 return
             if ty_is_hash(nc):
                 if nb = 1 and self.kind_of(na) ≠ NK_HLIT:
@@ -3448,6 +3572,7 @@ impl Checker:
                     self.check_expr(na, nc)
                     let slot9 : i64 = self.declare(tok, nc, nb)
                     self.nslot[id × 1¤ptrdiff] ← slot9
+                    self.pack_note(id, slot9, nc, na)
                     return
                 if self.kind_of(na) ≠ NK_ARRLIT:
                     // a call answers a fresh array; any other right side
@@ -3470,6 +3595,7 @@ impl Checker:
                     self.derr(tok, "the binding says " ⧺ self.tn(nc) ⧺ " but the value is " ⧺ self.tn(self.ty_of(na)))
             let slot : i64 = self.declare(tok, nc, nb)
             self.nslot[id × 1¤ptrdiff] ← slot
+            self.pack_note(id, slot, nc, na)
         elif k = NK_LETT:
             let n : i64 = self.a.extra[nc × 1¤ptrdiff]
             let styp : i64 = self.a.extra[(nc + 1) × 1¤ptrdiff]
@@ -3514,6 +3640,7 @@ impl Checker:
         elif k = NK_ASSIGN:
             let name := self.text(tok)
             let s : i64 = self.lookup(name)
+            self.pack_kill(self.sslot[s × 1¤ptrdiff] if s ≠ ⁻1 else ⁻1)
             if s = ⁻1:
                 let g : i64 = self.global_index(name)
                 if g = ⁻1:
@@ -3574,6 +3701,7 @@ impl Checker:
             self.nslot[id × 1¤ptrdiff] ← self.sslot[s × 1¤ptrdiff]
         elif k = NK_STOREIDXP:
             self.check_expr(na, TY_UNIT)
+            self.pack_safe(na)
             let bt0 : i64 = ty_strip_ref(self.ty_of(na))
             if ty_is_hash(bt0):
                 self.require_mut_base(na, tok)
@@ -3726,6 +3854,7 @@ impl Checker:
             self.loop_depth ← self.loop_depth - 1
             self.pop_scope()
         elif k = NK_FOREACHA:
+            self.pack_safe(na)
             let frk : mut i64 = 0
             let fiter : mut i64 = na
             if self.kind_of(na) = NK_REF:
@@ -3956,6 +4085,7 @@ impl Checker:
     fn check_fn(&mut self, f : i64):
         self.cur_fn ← f
         self.curmod ← self.a.fns[f × 1¤ptrdiff].modname
+        self.pack_reset(0)
         self.nslots ← 0
         self.loop_depth ← 0
         while #self.snames > 0:
@@ -4026,6 +4156,9 @@ impl Checker:
             if not last_is_value and not self.block_returns(d.body):
                 self.derr(d.tok, "'" ⧺ d.name ⧺ "' answers " ⧺ self.tn(d.ret) ⧺ " but not on every path")
         self.fslots[f × 1¤ptrdiff] ← self.nslots
+        // the bindings whose every read was somewhere a packed array
+        // serves are told how many they hold, and become the elements
+        self.pack_settle()
         self.fdone[f × 1¤ptrdiff] ← 1
 
     fn check_global(&mut self, g : i64):
@@ -4209,15 +4342,20 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     let ntype : mut i64[] = []
     let nslot : mut i64[] = []
     let ncvt : mut i64[] = []
+    let nrep : mut i64[] = []
     let zi : mut i64 = 0
     while zi < nnodes:
         ntype.push(0)
         nslot.push(⁻1)
         ncvt.push(0)
+        nrep.push(⁻1)
         zi ← zi + 1
     let c : mut Checker = (Checker{a: a, toks: toks, src: src, fnames: fnames, curmod: "",
                                    gnames: gnames, gvals: [], ginit: [], ite: [],
                                    ntype: ntype, nslot: nslot, ncvt: ncvt,
+                                   nrep: nrep,
+                                   pcnt: [], puse: [], psafe: [],
+                                   pnode_slot: [], pnode_id: [],
                                    fslots: [],
                                    diags: [], snames: [], stype: [], smut: [],
                                    sslot: [], sheld: [], hslot: [], hback: [],
@@ -4351,7 +4489,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     if #c.diags = 0:
         assert(#c.fslots = #a.fns, "one slot count per function")
         assert(#c.gvals = #a.globals, "one folded value per global")
-    (Chk{ntype: c.ntype, nslot: c.nslot, ncvt: c.ncvt, fslots: c.fslots,
+    (Chk{ntype: c.ntype, nslot: c.nslot, ncvt: c.ncvt, nrep: c.nrep, fslots: c.fslots,
          gvals: c.gvals, ginit: c.ginit, lams: c.lams, lamns: c.lamns,
          psfn: c.psfn, psk: c.psk, psnp: c.psnp, skipfn: c.skipfn,
          argcopy: c.argcopy,
