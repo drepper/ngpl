@@ -705,25 +705,13 @@ fn rt_nargs(id : i64) → i64:
 
 // the door of the program: keep what the kernel handed over, stand up
 // the guarded stack, run the phases, and leave through exit
-fn t_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
-             stack_size : i64, guard_size : i64, ginit : i64,
-             tdriver : i64, start_fn : i64, sret : bool):
-    if tg.id = TGT_RV64:
-        rv_startup(&em, &lw, tg, args_off, stack_size, guard_size,
-                   ginit, tdriver, start_fn, sret)
-        return
-    if tg.id = TGT_I386:
-        i3_startup(&em, &lw, tg, args_off, stack_size, guard_size,
-                   ginit, tdriver, start_fn, sret)
-        return
-    if tg.id = TGT_A32:
-        a32_startup(&em, &lw, tg, args_off, stack_size, guard_size,
-                    ginit, tdriver, start_fn, sret)
-        return
-    if tg.id = TGT_RV32:
-        r32_startup(&em, &lw, tg, args_off, stack_size, guard_size,
-                    ginit, tdriver, start_fn, sret)
-        return
+// aarch64's own startup.  It was written inline as the one the
+// dispatch below fell through to, which made it the machine a
+// seventh would have been given; a match wants every arm to name
+// something, so it names this.
+fn a64_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
+               stack_size : i64, guard_size : i64, ginit : i64,
+               tdriver : i64, start_fn : i64, sret : bool):
     em.begin_fn(4)
     // the kernel block: argc, argv, envp, auxv as four 8-byte cells
     let pos : i64 = a64_absref(&em, A64_RB)
@@ -796,3 +784,19 @@ fn t_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
     a64_movimm(&em, 8, sc_number(tg, SC_EXIT))
     a64_svc(&em)
     a64_resolve(&em)
+
+fn t_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
+             stack_size : i64, guard_size : i64, ginit : i64,
+             tdriver : i64, start_fn : i64, sret : bool):
+    match tg.id:
+        Tgt.a64: a64_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+                              ginit, tdriver, start_fn, sret)
+        Tgt.rv64: rv_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+                              ginit, tdriver, start_fn, sret)
+        Tgt.i386: i3_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+                              ginit, tdriver, start_fn, sret)
+        Tgt.a32: a32_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+                              ginit, tdriver, start_fn, sret)
+        Tgt.rv32: r32_startup(&em, &lw, tg, args_off, stack_size, guard_size,
+                               ginit, tdriver, start_fn, sret)
+        Tgt.x64: g_pioneer()

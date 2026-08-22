@@ -57,17 +57,6 @@ The Compiler
     that site a number from its block, and let tools/update_expectations.py fill the message.
     Spec: "What a Diagnostic Is Known By".
 
-[ ] t_startup still dispatches on the target with a chain.  Every g_* in dispatch.ngpl is
-    a match over Tgt now, so a seventh machine stops all fifty-two of them; t_startup in
-    codegen_t.ngpl is the same five-way dispatch and would quietly hand a seventh machine
-    the aarch64 startup, because aarch64 is the fall-through.  What stands in the way is
-    that the other four are calls -- rv_startup, i3_startup, a32_startup, r32_startup --
-    and aarch64's is written inline, so the arm has nothing to name.  Lifting it into an
-    a64_startup beside the others makes the whole thing symmetric and the match trivial.
-
-    rt_portable.ngpl's `if tg.id = TGT_RV32` is not this: it is one machine differing at
-    one point rather than a dispatch over all of them, and a match would only add a `_`.
-
 [ ] the packing analysis does not follow a binding into a call.  A T[] whose length is
     settled and which never leaves the function is laid out as a T[N] is; whether it
     leaves is decided by counting every read of the name against the reads somewhere a
