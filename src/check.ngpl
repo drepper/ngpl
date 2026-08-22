@@ -1239,6 +1239,8 @@ impl Checker:
                 self.check_expr(nc, TY_UNIT)
                 self.set_type(id, mk_aty(TY_I64))
                 return
+            if ty_is_arr(bt2):
+                self.pack_safe(na)
             self.check_index_expr(tok, bt2, nb)
             self.check_index_expr(tok, bt2, nc)
             if ty_is_mat(bt2):
@@ -1282,6 +1284,8 @@ impl Checker:
                     self.derrc(tok, 2729, "an array joins an array; the right side is " ⧺ self.tn(cr0))
                 elif self.elem_of(cr0) ≠ ce:
                     self.derr(tok, "one array holds one element type; " ⧺ self.tn(ce) ⧺ " does not join " ⧺ self.tn(self.elem_of(cr0)))
+                self.pack_safe(na)
+                self.pack_safe(nb)
                 self.set_type(id, mk_aty(ce))
                 return
             self.check_expr(nb, TY_UNIT)
@@ -1492,7 +1496,11 @@ impl Checker:
         self.pnode_slot.push(s)
         self.pnode_id.push(id)
 
-    // a read in one of the four places a packed array serves
+    // A read somewhere a packed array serves.  Two kinds: the places
+    // that read the elements where they lie -- an element, a count, a
+    // walk -- and the places that lay them out afresh, which is what a
+    // T[N] operand of ⧺, a slice or ⍴ already does.  Both are reads
+    // that never want the header, which is the only question here.
     fn pack_safe(&mut self, na : i64):
         if self.kind_of(na) ≠ NK_VAR:
             return
@@ -1860,6 +1868,7 @@ impl Checker:
             self.set_type(id, w if wantish else mk_aty(ty_rgelem(ft)))
         elif ty_is_arr(ft):
             // the filler's elements cycle to the count
+            self.pack_safe(nb)
             if wantish and self.elem_of(ft) ≠ self.elem_of(w):
                 self.derr(tok, "the filler holds " ⧺ self.tn(self.elem_of(ft)) ⧺ ", but the binding wants " ⧺ self.tn(self.elem_of(w)))
             self.set_type(id, w if wantish else mk_aty(self.elem_of(ft)))

@@ -113,6 +113,15 @@ fn main():
     foreach s := settled:
         acc ← acc + s
     std.println("{} {} {}", acc, #settled, settled[2])
+    // ⧺, a slice and ⍴ read a packed array by laying it out afresh,
+    // which is what they already do to a T[N], so they do not want the
+    // header either and the binding keeps its packing through them
+    let both : i64[] = settled ⧺ settled
+    std.println("{} {} {}", #both, both[0], both[7])
+    let part : i64[] = settled[1…2]
+    std.println("{} {} {}", #part, part[0], part[1])
+    let cycled : i64[] = 6 ⍴ settled
+    std.println("{} {} {}", #cycled, cycled[4], cycled[5])
     // this one is handed to a function, so it keeps its header
     let handed : i64[] = [2, 4, 6]
     std.println("{} {}", takes_any(handed), handed[0])

@@ -57,17 +57,17 @@ The Compiler
     that site a number from its block, and let tools/update_expectations.py fill the message.
     Spec: "What a Diagnostic Is Known By".
 
-[ ] the packing analysis clears four reads, and could clear more.  A T[] whose length is
+[ ] the packing analysis does not follow a binding into a call.  A T[] whose length is
     settled and which never leaves the function is laid out as a T[N] is; whether it
-    leaves is decided by counting every read of the name against the reads in the places
-    a packed array serves -- an element read, an element write, #, a walk.  Anything else
-    disqualifies it, which is why it is safe, and also why ⧺ and a slice disqualify it
-    when they need only be laid out afresh the way a T[N] operand already is.  Adding
-    them is two calls to pack_safe.  Being handed to a function is the one worth having
-    and the one that needs more than a call: the callee would have to be known not to
-    keep it.  Of 162 T[] locals in the compiler's own source 159 are `= []` filled by
-    push, so what the analysis finds here is small; it is for programs that are not this
-    one.
+    leaves is decided by counting every read of the name against the reads somewhere a
+    packed array serves -- an element read, an element write, #, a walk, and the three
+    that lay it out afresh anyway: ⧺, a slice, ⍴.  Anything else disqualifies it, which
+    is why it is safe.  Being handed to a function is the one left worth having, and the
+    one that needs more than a call to pack_safe: the callee would have to be known not
+    to keep what it was given, which is an escape question about the callee and not
+    about this binding.  Of 162 T[] locals in the compiler's own source 159 are `= []`
+    filled by push, so what the analysis finds here is small; it is for programs that are
+    not this one.
 
 [ ] more of the compiler's own tables could say their size.  src/lex.ngpl's class table
     did: it was 256 push calls into a T[] and is now `256 ⍴ 0` into an i64[256], which is

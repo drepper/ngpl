@@ -6125,11 +6125,16 @@ foreach s := shifts:                   // still everything a i64[] does
 The type does not change and nothing legal on it becomes illegal — this
 is a statement about what the binding costs, not about what it is. What
 decides it is counting rather than a list of what would count as
-leaving: every read of the name is counted, and the reads in the places
-a packed array can serve — an element, a count, a walk — are counted
-again. Equal, and the header goes; unequal, and some read wanted it. A
-use nobody anticipated lands in the first count and not the second, so
-the answer is no.
+leaving: every read of the name is counted, and the reads somewhere a
+packed array can serve are counted again. Equal, and the header goes;
+unequal, and some read wanted it. A use nobody anticipated lands in the
+first count and not the second, so the answer is no.
+
+A packed array serves two kinds of read. Those that take the elements
+where they lie — an element, a count, a walk — and those that lay them
+out afresh, which is what `⧺`, a slice and `⍴` already do to a `T[N]`
+operand. Neither wants the header, which is the only question being
+asked.
 
 Handing the binding to a function, answering it, keeping it in a struct
 or writing the name itself all leave it as an ordinary array, because
