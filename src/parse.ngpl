@@ -1765,20 +1765,55 @@ impl Parser:
                 m ← m + 1
             // an enumerator may say what it stands for; the ones that
             // follow count on from there, as they count from zero
+            let alias : mut bool = false
+            // what the next enumerator would have counted on to, kept
+            // because an alias is a nickname and does not count
+            let keep : i64 = next_val
             if self.peek() = TK_EQ:
                 self.pos ← self.pos + 1
                 let neg : mut i64 = 1
                 if self.peek() = TK_NEG:
                     self.pos ← self.pos + 1
                     neg ← ⁻1
-                if self.peek() ≠ TK_INT or self.toks.big[self.pos × 1¤ptrdiff] ≠ 0:
-                    self.err("an enumerator stands for a written-out number")
-                    return
-                next_val ← neg × self.toks.val[self.pos × 1¤ptrdiff]
-                self.pos ← self.pos + 1
+                if self.peek() = TK_IDENT and neg = 1:
+                    // An enumerator standing for one this enum already
+                    // names is another name for it, and says so.  That
+                    // is the only way two names share a value, because
+                    // sharing one silently is what makes '=' answer
+                    // true for two things a reader took for different.
+                    let aname := self.ttext(self.pos)
+                    let av : mut i64 = 0
+                    let found : mut bool = false
+                    let q : mut i64 = first
+                    while q < @dropunit(#self.emembers):
+                        if self.emembers[q × 1¤ptrdiff] = aname:
+                            av ← self.evalues[q × 1¤ptrdiff]
+                            found ← true
+                        q ← q + 1
+                    if not found:
+                        self.err("'" ⧺ aname ⧺ "' is not an enumerator this enum has already named; an enumerator stands for a written-out number, or for one named above it")
+                        return
+                    self.pos ← self.pos + 1
+                    next_val ← av
+                    alias ← true
+                else:
+                    if self.peek() ≠ TK_INT or self.toks.big[self.pos × 1¤ptrdiff] ≠ 0:
+                        self.err("an enumerator stands for a written-out number, or for one this enum named above it")
+                        return
+                    next_val ← neg × self.toks.val[self.pos × 1¤ptrdiff]
+                    self.pos ← self.pos + 1
+            if not alias:
+                let d : mut i64 = first
+                while d < @dropunit(#self.emembers):
+                    if self.evalues[d × 1¤ptrdiff] = next_val:
+                        self.err("'" ⧺ mname ⧺ "' stands for the same number as '" ⧺ self.emembers[d × 1¤ptrdiff] ⧺ "', so '=' would answer true for the two of them; an enum that means that writes '" ⧺ mname ⧺ " = " ⧺ self.emembers[d × 1¤ptrdiff] ⧺ "'")
+                        return
+                    d ← d + 1
             self.emembers.push(mname)
             self.evalues.push(next_val)
-            if is_flag:
+            if alias:
+                next_val ← keep
+            elif is_flag:
                 next_val ← @wrap(next_val « 1) if next_val ≠ 0 else 1
             else:
                 next_val ← next_val + 1

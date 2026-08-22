@@ -181,7 +181,7 @@ compare them and check the range rather than asserting "nonzero",
 which is how the 1-against-134 fork stayed invisible for as long as it
 did.  Spec: "Exit Codes the Runtime Reserves".
 
-### A5. Enum distinctness (**probed**)
+### A5. Enum distinctness (**probed**) — ~~open~~ **settled**
 
 ```
 enum E:
@@ -189,11 +189,36 @@ enum E:
     b = 1
 ```
 
-Accepted by both implementations, and `E.a = E.b` answers `true`.
-The spec does not say whether an enumerator is its name or its
-number.  If two names may share a value, equality silently conflates
-them; for this language the right answer is probably to refuse
-duplicate values unless explicitly blessed.
+Accepted by both implementations, and `E.a = E.b` answered `true`.  The
+spec did not say whether an enumerator is its name or its number.
+
+**Settled the way the review proposed: refused, unless blessed** — and
+the blessing turned out not to need an attribute.  An enumerator stands
+for a written-out number, *or for an enumerator the enum has already
+named*, and only the second form lets two names share a value:
+
+```
+enum Sht : u32:
+    strtab = 3
+    dynstr = strtab             // deliberately the same section type
+```
+
+Written that way the sharing is in the text, at the place it happens,
+and a reader who sees `E.dynstr = E.strtab` answer `true` has been told
+why.  Two `1`s in different places, neither mentioning the other, told
+them nothing.
+
+An alias does not count: auto-numbering carries on from the last
+enumerator that stood for a number of its own.  That was worth pinning
+— the first implementation of this advanced the counter past an alias
+in the compiler and not in the interpreter, which would have been a
+fresh divergence of exactly the kind this review exists to find.
+
+Spec: "One Value, One Name".  `tests/test_enum_distinct.ngpl` holds
+both implementations to it and runs in both suites;
+`tests/output/enum_duplicate_value` pins the refusal.  The compiler's
+own thirty sources have no duplicate enumerator anywhere, so nothing
+had to change to satisfy it.
 
 ### A6. Division's second failure mode (**probed**)
 

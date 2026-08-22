@@ -7259,6 +7259,44 @@ enum Level:
     critical    /* 11 */
 ```
 
+#### One Value, One Name
+
+**Two enumerators of one enum may not stand for the same number**, unless the second says it is another name for the first.
+
+```
+enum E:
+    a = 1
+    b = 1
+
+error: 'b' stands for the same number as 'a', so '=' would answer true
+       for the two of them; an enum that means that writes 'b = a'
+```
+
+An enum is a set of things a program tells apart, and `=` on two enumerators compares the numbers they stand for.  Two names quietly sharing one number make `E.a = E.b` answer `true` for two things the reader took for different — and nothing in the text says so, because the two `1`s are in different places and neither mentions the other.  That is a mistake the reader cannot see, which is the kind this language refuses.
+
+Where two names for one value are meant, the second **names the first** rather than repeating its number:
+
+```
+enum Sht : u32:
+    progbits = 1
+    symtab = 2
+    strtab = 3
+    dynstr = strtab             // deliberately the same section type
+```
+
+An enumerator may therefore stand for a written-out number, or for an enumerator the enum has already named — and only the second form makes two names share a value.  Written that way the sharing is in the text, at the place it happens, and a reader who sees `E.dynstr = E.strtab` answer `true` has been told why.
+
+**An alias does not count.**  Auto-numbering carries on from the last enumerator that stood for a number of its own, so an alias in the middle of a list changes nothing after it:
+
+```
+enum E:
+    a = 1
+    x = 5
+    b = a                       // 1
+    c                           // 6, counting on from x
+
+```
+
 #### Member Access
 
 Enum members are accessed through the enum's name, not as bare identifiers:

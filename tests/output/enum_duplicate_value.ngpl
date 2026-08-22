@@ -1,0 +1,13 @@
+// Two enumerators may not stand for the same number.  An enum is a set
+// of things a program tells apart, and two names quietly sharing one
+// number make '=' answer true for two of them with nothing in the text
+// saying so.  Where it is meant, the second names the first.
+
+enum E : u32:
+    a = 1
+    b = 1
+
+@start
+@impure
+fn main():
+    std.println("{}", E.a.ord())

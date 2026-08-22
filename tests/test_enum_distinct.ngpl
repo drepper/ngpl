@@ -1,0 +1,56 @@
+// One value, one name.
+//
+// Two enumerators of one enum may not stand for the same number,
+// unless the second says it is another name for the first.  An enum is
+// a set of things a program tells apart, and `=` on two enumerators
+// compares the numbers they stand for; two names quietly sharing one
+// make `E.a = E.b` answer true for two things the reader took for
+// different, with nothing in the text saying so, because the two
+// numbers are in different places and neither mentions the other.
+//
+// The specification's "One Value, One Name" is the normative
+// statement; this is where both implementations are held to it.
+
+enum Colour : u32:
+    red = 1
+    green = 2
+    blue = 3
+
+// Where two names for one value are meant, the second names the first.
+enum Sht : u32:
+    progbits = 1
+    symtab = 2
+    strtab = 3
+    dynstr = strtab
+
+// An alias does not count: the numbering carries on from the last
+// enumerator that stood for a number of its own.
+enum Gapped : u32:
+    a = 1
+    x = 5
+    b = a
+    c
+
+@test
+fn test_distinct_enumerators_are_distinct():
+    assert_eq(Colour.red.ord(), 1)
+    assert_eq(Colour.blue.ord(), 3)
+    assert_eq(Colour.red = Colour.blue, false)
+
+@test
+fn test_an_alias_is_the_thing_it_names():
+    assert_eq(Sht.dynstr.ord(), 3)
+    assert_eq(Sht.dynstr = Sht.strtab, true)
+    assert_eq(Sht.dynstr = Sht.symtab, false)
+
+@test
+fn test_an_alias_does_not_count():
+    assert_eq(Gapped.a.ord(), 1)
+    assert_eq(Gapped.x.ord(), 5)
+    assert_eq(Gapped.b.ord(), 1)
+    assert_eq(Gapped.c.ord(), 6)
+
+@start
+@impure
+fn main():
+    std.println("enum tests passed")

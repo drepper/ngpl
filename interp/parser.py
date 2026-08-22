@@ -116,6 +116,19 @@ def _as_names(names):
     return tuple(_as_names(n) if isinstance(n, list) else n for n in names)
 
 
+class _EnumAlias:
+    """An enumerator written as another enumerator's name.
+
+    Carried through to where the values are settled, which is the only
+    place the name can be looked up.
+    """
+
+    __slots__ = ("name",)
+
+    def __init__(self, name: str):
+        self.name = name
+
+
 class Parser:
     """Recursive descent parser."""
 
@@ -1092,12 +1105,21 @@ class Parser:
                     negate = True
                     self.pos += 1
                     val_tok = self._cur()
-                if val_tok.type != "INT":
+                if val_tok.type == "IDENT" and not negate:
+                    # An enumerator standing for one named above it is
+                    # another name for it, and says so.  That is the
+                    # only way two names share a value.
+                    self.pos += 1
+                    explicit_value = _EnumAlias(val_tok.value)
+                elif val_tok.type != "INT":
                     raise ParseError(
-                        f"expected integer value for enum member '{member_name_tok.value}'",
+                        f"an enumerator stands for a written-out number, "
+                        f"or for one this enum named above it; "
+                        f"'{member_name_tok.value}' has neither",
                         val_tok)
-                self.pos += 1
-                explicit_value = -val_tok.value if negate else val_tok.value
+                else:
+                    self.pos += 1
+                    explicit_value = -val_tok.value if negate else val_tok.value
             members.append((member_name_tok.value, explicit_value))
             self._try_eat("PUNCT", ",")
             self._try_eat("PUNCT", ";")

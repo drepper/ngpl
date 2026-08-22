@@ -1,0 +1,7 @@
+error: enum 'E': 'b' stands for the same number as 'a', so '=' would answer true for the two of them; an enum that means that writes 'b = a'
+  --> tests/output/enum_duplicate_value.ngpl:6:1
+    |
+  6 | enum E : u32:
+    | ^^^^
+  7 |     a = 1
+    |

@@ -193,6 +193,7 @@ shared_tests=(
     test_callee_scope
     test_concat
     test_evaluation_order
+    test_enum_distinct
     test_exit_code
     test_generate
     test_hints

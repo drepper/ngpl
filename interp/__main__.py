@@ -2997,19 +2997,38 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 next_val = 1
             else:
                 next_val = 0
+            from interp.parser import _EnumAlias
             for member_name, explicit_value in defn.members:
-                if explicit_value is not None:
-                    members[member_name] = explicit_value
-                    if defn.is_flag:
-                        next_val = explicit_value << 1
-                    else:
-                        next_val = explicit_value + 1
+                if isinstance(explicit_value, _EnumAlias):
+                    if explicit_value.name not in members:
+                        raise DefinitionError(
+                            f"enum '{defn.name}': '{explicit_value.name}' is "
+                            f"not an enumerator this enum has already named; "
+                            f"an enumerator stands for a written-out number, "
+                            f"or for one named above it",
+                            getattr(defn, "pos", None))
+                    # An alias, said out loud: two names for one value
+                    # are allowed exactly when the second says it is
+                    # the first.
+                    members[member_name] = members[explicit_value.name]
+                    continue
+                value = next_val if explicit_value is None else explicit_value
+                # Two names quietly sharing a value is what makes '='
+                # answer true for two things a reader took for
+                # different, so it is refused where it is written.
+                for other, taken in members.items():
+                    if taken == value:
+                        raise DefinitionError(
+                            f"enum '{defn.name}': '{member_name}' stands for "
+                            f"the same number as '{other}', so '=' would "
+                            f"answer true for the two of them; an enum that "
+                            f"means that writes '{member_name} = {other}'",
+                            getattr(defn, "pos", None))
+                members[member_name] = value
+                if defn.is_flag:
+                    next_val = value << 1
                 else:
-                    members[member_name] = next_val
-                    if defn.is_flag:
-                        next_val = next_val << 1
-                    else:
-                        next_val += 1
+                    next_val = value + 1
             if defn.is_flag and 0 not in members.values():
                 members["nil"] = 0
             # Every member has to fit the type the values are stored
