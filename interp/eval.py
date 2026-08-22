@@ -5261,6 +5261,10 @@ class Evaluator:
         if any(arm.kind == "type" for arm in node.arms):
             return self._eval_match_by_type(node, subject)
 
+        # An enumeration is matched by naming a value of it.
+        if any(arm.kind == "enum" for arm in node.arms):
+            return self._eval_match_by_enum(node, subject)
+
         shape, inner = self._match_shape(subject)
 
         for arm in node.arms:
@@ -5279,6 +5283,41 @@ class Evaluator:
         raise coded(2247, TypeError(
             f"match has no arm for {described}; add the missing pattern "
             f"or a _ arm"))
+
+    def _eval_match_by_enum(self, node: MatchStmt, subject):
+        """Dispatch on which value of an enumeration the subject is.
+
+        An enumerator holds nothing beside which one it is, so an arm
+        binds nothing.  Which arms there must be is settled before the
+        program runs -- see _static_match_check -- so reaching the end
+        here means the subject was not a value the enumeration has,
+        which a number admitted into an enum-typed binding cannot be.
+        """
+        from interp.value import EnumValue
+        val = unwrap_optional(subject)
+        if not isinstance(val, EnumValue):
+            raise coded(2248, TypeError(
+                f"match names values of an enumeration, but the subject "
+                f"is {runtime_type_of(val)}"))
+        wildcard = None
+        for arm in node.arms:
+            if arm.kind == "wildcard":
+                wildcard = wildcard if wildcard is not None else arm
+                continue
+            if arm.kind != "enum":
+                continue
+            if arm.type_name != val.enum_type.name:
+                raise coded(2249, TypeError(
+                    f"the subject is {val.enum_type.name} and this arm "
+                    f"names {arm.type_name}.{arm.member}"))
+            if val.enum_type.members.get(arm.member) == val.value:
+                return self.eval_stmts(arm.body)
+        if wildcard is not None:
+            return self.eval_stmts(wildcard.body)
+        shown = val.enum_type.values_to_names.get(val.value, str(val.value))
+        raise coded(2250, TypeError(
+            f"match has no arm for {val.enum_type.name}.{shown}; add the "
+            f"missing pattern or a _ arm"))
 
     @staticmethod
     def _written_type(expr) -> str | None:

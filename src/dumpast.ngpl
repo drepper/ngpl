@@ -119,6 +119,22 @@ fn dump_node(a : Ast, id : i64, depth : i64, src : byte[], toks : Toks):
         std.println("{}foreacha {}", pad, ttext)
         dump_node(a, na, depth + 1, src, toks)
         dump_node(a, nb, depth + 1, src, toks)
+    elif k = NK_MATCHE:
+        std.println("{}match-enum", pad)
+        dump_node(a, na, depth + 1, src, toks)
+        let mn : i64 = a.extra[nb × 1¤ptrdiff]
+        let mi : mut i64 = 0
+        while mi < mn:
+            let et : i64 = a.extra[(nb + 2 + mi × 3) × 1¤ptrdiff]
+            let mt : i64 = a.extra[(nb + 3 + mi × 3) × 1¤ptrdiff]
+            std.println("{}  arm {}.{}", pad,
+                        run_str(src, toks.off[et × 1¤ptrdiff], toks.len[et × 1¤ptrdiff]),
+                        run_str(src, toks.off[mt × 1¤ptrdiff], toks.len[mt × 1¤ptrdiff]))
+            dump_node(a, a.extra[(nb + 4 + mi × 3) × 1¤ptrdiff], depth + 2, src, toks)
+            mi ← mi + 1
+        if a.extra[(nb + 1) × 1¤ptrdiff] ≠ ⁻1:
+            std.println("{}  arm _", pad)
+            dump_node(a, a.extra[(nb + 1) × 1¤ptrdiff], depth + 2, src, toks)
     elif k = NK_RETURN:
         std.println("{}return", pad)
         if na ≠ ⁻1:

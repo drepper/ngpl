@@ -2136,6 +2136,79 @@ impl Checker:
             i ← i + 1
         ⁻1
 
+    // ------------------------------------------------------------------
+    // match over an enumeration
+    // ------------------------------------------------------------------
+    //
+    // Every value the enumeration has must have an arm, or there must
+    // be a `_`.  That is the whole point of writing it this way rather
+    // than as a chain of comparisons: a value added to the enumeration
+    // later stops every match that does not say what to do with it,
+    // where a chain would quietly take whichever branch came last.
+    //
+    // Coverage is over the values and not the names, so an enumerator
+    // that is another name for one already covered is covered too --
+    // two names standing for one number are one case.
+    fn check_matche(&mut self, id : i64, tok : i64, na : i64, nb : i64, trailing : bool):
+        self.check_expr(na, TY_UNIT)
+        let n : i64 = self.a.extra[nb × 1¤ptrdiff]
+        let dflt : i64 = self.a.extra[(nb + 1) × 1¤ptrdiff]
+        let ename := self.text(self.a.extra[(nb + 2) × 1¤ptrdiff])
+        let ei : i64 = self.enum_index(ename)
+        if ei = ⁻1:
+            self.derr(tok, "'" ⧺ ename ⧺ "' is not an enumeration")
+            return
+        self.a.nc[id × 1¤ptrdiff] ← ei
+        let st : i64 = ty_strip_ref(self.ty_of(na))
+        if st ≠ mk_ety(ei):
+            self.derr(tok, "the arms name values of " ⧺ ename ⧺ ", but the subject is " ⧺ self.tn(st))
+        // which values the arms account for
+        let ecount : i64 = self.a.ecount[ei × 1¤ptrdiff]
+        let est : i64 = self.a.estart[ei × 1¤ptrdiff]
+        let taken : mut i64[] = []
+        let ci : mut i64 = 0
+        while ci < ecount:
+            taken.push(0)
+            ci ← ci + 1
+        let i : mut i64 = 0
+        while i < n:
+            let etok : i64 = self.a.extra[(nb + 2 + i × 3) × 1¤ptrdiff]
+            let mtok : i64 = self.a.extra[(nb + 3 + i × 3) × 1¤ptrdiff]
+            let blk : i64 = self.a.extra[(nb + 4 + i × 3) × 1¤ptrdiff]
+            if self.text(etok) ≠ ename:
+                self.derr(etok, "one match asks about one enumeration; this arm names " ⧺ self.text(etok) ⧺ " and the first named " ⧺ ename)
+            let m := self.text(mtok)
+            let k : i64 = self.enum_member(ei, m)
+            if k = ⁻1:
+                self.derr(mtok, "'" ⧺ ename ⧺ "' does not hold '" ⧺ m ⧺ "'")
+            else:
+                let v : i64 = self.a.evalues[(est + k) × 1¤ptrdiff]
+                // by value, so an arm for one name of a value covers
+                // every other name of it -- and repeats that value
+                let j : mut i64 = 0
+                while j < ecount:
+                    if self.a.evalues[(est + j) × 1¤ptrdiff] = v:
+                        if taken[j × 1¤ptrdiff] = 1 and j = k:
+                            self.derr(mtok, "match repeats '" ⧺ ename ⧺ "." ⧺ m ⧺ "'; the second arm can never be reached")
+                        taken[j × 1¤ptrdiff] ← 1
+                    j ← j + 1
+            // An arm that leaves rather than falls through -- a
+            // return, or a call to something @noreturn -- has no value
+            // to hand on, so a trailing match does not ask it for one.
+            self.check_block(blk, trailing and not self.block_returns(blk))
+            i ← i + 1
+        if dflt ≠ ⁻1:
+            self.check_block(dflt, trailing and not self.block_returns(dflt))
+        else:
+            let missing : mut str = ""
+            let mi : mut i64 = 0
+            while mi < ecount:
+                if taken[mi × 1¤ptrdiff] = 0:
+                    missing ← missing ⧺ ("" if missing = "" else " or ") ⧺ ename ⧺ "." ⧺ self.a.emembers[(est + mi) × 1¤ptrdiff]
+                mi ← mi + 1
+            if missing ≠ "":
+                self.derr(tok, "match has no arm for " ⧺ missing ⧺ "; add the missing pattern or a _ arm")
+
     fn check_entry_field(&mut self, id : i64, tok : i64):
         let fname := self.text(tok)
         if fname = "name":
@@ -3821,6 +3894,8 @@ impl Checker:
                     self.derr(tok, "the ∃ arm answers nothing on some path")
                 if not self.block_yields(empty_blk):
                     self.derr(tok, "the ∅ arm answers nothing on some path")
+        elif k = NK_MATCHE:
+            self.check_matche(id, tok, na, nb, trailing)
         elif k = NK_FOREACH:
             self.check_foreach(id, tok, na, nb)
         elif k = NK_WHILEB:
@@ -4055,6 +4130,20 @@ impl Checker:
         if k = NK_MATCH:
             let nb : i64 = self.a.nb[id × 1¤ptrdiff]
             return self.block_returns(self.a.extra[nb × 1¤ptrdiff]) and self.block_returns(self.a.extra[(nb + 1) × 1¤ptrdiff])
+        if k = NK_MATCHE:
+            // every value has an arm, so the arms are every way out:
+            // if each of them leaves, so does the match
+            let mb : i64 = self.a.nb[id × 1¤ptrdiff]
+            let mn : i64 = self.a.extra[mb × 1¤ptrdiff]
+            let md : i64 = self.a.extra[(mb + 1) × 1¤ptrdiff]
+            if md ≠ ⁻1 and not self.block_returns(md):
+                return false
+            let mi : mut i64 = 0
+            while mi < mn:
+                if not self.block_returns(self.a.extra[(mb + 4 + mi × 3) × 1¤ptrdiff]):
+                    return false
+                mi ← mi + 1
+            return true
         if k = NK_BLOCK:
             return self.block_returns(id)
         false

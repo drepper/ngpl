@@ -1991,6 +1991,11 @@ def register_enum_type(name: str, underlying: str | None = None, obj=None):
     _clear_type_memos()
 
 
+def enum_object(name: str):
+    """The enum of that name, or None where the name is not one."""
+    return _ENUM_OBJECTS.get(name)
+
+
 def enum_admit(name: str, value: "Value") -> "Value":
     """What an enum-typed target accepts.
 

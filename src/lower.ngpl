@@ -1807,6 +1807,8 @@ impl Lower:
             _ ← self.conts.pop() ?? 0
             self.ir(IR_JMP, ltop, 0, 0, 0, 0)
             self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        elif k = NK_MATCHE:
+            self.lower_matche(sid, na, nb, nc, ret_ty)
         elif k = NK_MATCH:
             let v : i64 = self.lower_expr(na)
             let bind : i64 = self.nslot[sid × 1¤ptrdiff]
@@ -2025,6 +2027,93 @@ impl Lower:
             self.lower_block(default_blk, false, ret_ty)
         self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         true
+
+    // ------------------------------------------------------------------
+    // match over an enumeration
+    // ------------------------------------------------------------------
+    //
+    // The checker has already seen that every value has an arm, so
+    // there is nothing to decide here beyond how to get to the right
+    // one.  An enumeration's values are usually a dense little run,
+    // which is the case a jump table is for -- one bounds check and one
+    // indirect jump, whatever the arm count -- and the same span test
+    // the if-ladder uses says when it is not worth it.
+    fn lower_matche(&mut self, sid : i64, na : i64, nb : i64, ei : i64, ret_ty : i64):
+        let n : i64 = self.a.extra[nb × 1¤ptrdiff]
+        let dflt : i64 = self.a.extra[(nb + 1) × 1¤ptrdiff]
+        let est : i64 = self.a.estart[ei × 1¤ptrdiff]
+        let ecount : i64 = self.a.ecount[ei × 1¤ptrdiff]
+        // what each arm stands for, and where it goes
+        let ks : mut i64[] = []
+        let blks : mut i64[] = []
+        let i : mut i64 = 0
+        while i < n:
+            let mtok : i64 = self.a.extra[(nb + 3 + i × 3) × 1¤ptrdiff]
+            let m := self.text(mtok)
+            let mi : mut i64 = 0
+            while mi < ecount:
+                if self.a.emembers[(est + mi) × 1¤ptrdiff] = m:
+                    ks.push(self.a.evalues[(est + mi) × 1¤ptrdiff])
+                    mi ← ecount
+                else:
+                    mi ← mi + 1
+            blks.push(self.a.extra[(nb + 4 + i × 3) × 1¤ptrdiff])
+            i ← i + 1
+        assert(#ks = #blks, "one value per arm")
+        let sv : i64 = self.lower_expr(na)
+        let lend : i64 = self.label()
+        let ldef : i64 = self.label()
+        let case_labels : mut i64[] = []
+        let ci : mut i64 = 0
+        while ci < n:
+            case_labels.push(self.label())
+            ci ← ci + 1
+        let lo : mut i64 = ks[0 × 1¤ptrdiff]
+        let hi : mut i64 = ks[0 × 1¤ptrdiff]
+        foreach kv := ks:
+            lo ← lo ⌊ kv
+            hi ← hi ⌈ kv
+        let span : i64 = hi - lo + 1
+        let shape : str = ", \"cases\": " ⧺ i64_str(n) ⧺ ", \"span\": " ⧺ i64_str(span)
+        let tabled : bool = n >= 4 and span <= 3 × n and span <= 1024
+        if tabled:
+            let off : i64 = @dropunit(#self.extra)
+            self.extra.push(lo)
+            self.extra.push(span)
+            self.extra.push(ldef)
+            let s : mut i64 = 0
+            while s < span:
+                let target : mut i64 = ldef
+                let j : mut i64 = 0
+                while j < n:
+                    if ks[j × 1¤ptrdiff] = lo + s:
+                        target ← case_labels[j × 1¤ptrdiff]
+                    j ← j + 1
+                self.extra.push(target)
+                s ← s + 1
+            self.decide(self.tok_line(self.a.ntok[sid × 1¤ptrdiff]), "match-jump-table", shape)
+            self.ir(IR_JTAB, sv, off, 0, 0, 0)
+        else:
+            self.decide(self.tok_line(self.a.ntok[sid × 1¤ptrdiff]), "match-ladder", shape)
+            let j : mut i64 = 0
+            while j < n:
+                let kv : i64 = self.tmp()
+                self.ir(IR_CONST, ks[j × 1¤ptrdiff], 0, 0, kv, 0)
+                let c : i64 = self.tmp()
+                self.ir(IR_CEQ, sv, kv, 0, c, 64 + 256)
+                self.ir(IR_JNZ, c, case_labels[j × 1¤ptrdiff], 0, 0, 0)
+                j ← j + 1
+            self.ir(IR_JMP, ldef, 0, 0, 0, 0)
+        let b : mut i64 = 0
+        while b < n:
+            self.ir(IR_LABEL, case_labels[b × 1¤ptrdiff], 0, 0, 0, 0)
+            self.lower_block(blks[b × 1¤ptrdiff], false, ret_ty)
+            self.ir(IR_JMP, lend, 0, 0, 0, 0)
+            b ← b + 1
+        self.ir(IR_LABEL, ldef, 0, 0, 0, 0)
+        if dflt ≠ ⁻1:
+            self.lower_block(dflt, false, ret_ty)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
 
     // the constant a block returns, or the impossible sentinel
     fn block_ret_const(&self, blk : i64) → i64:

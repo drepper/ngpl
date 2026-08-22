@@ -916,16 +916,19 @@ class MatchArm:
 
     kind is "some" (∃(name), binding the contained value), "err"
     (∄(name)), "none" (∅), "type" (Type(name), one alternative of a sum
-    type), or "wildcard" (_).  name is the bound name, set for every
-    kind that binds; type_name is set only for "type".
+    type), "enum" (Enum.member, one value of an enumeration), or
+    "wildcard" (_).  name is the bound name, set for every kind that
+    binds; type_name is set for "type" and holds the enumeration's name
+    for "enum", whose member name is in member.
     """
 
     def __init__(self, kind: str, name: str | None, body,
-                 type_name: str | None = None):
+                 type_name: str | None = None, member: str | None = None):
         self.kind = kind
         self.name = name
         self.body = body
         self.type_name = type_name
+        self.member = member
 
 
 class MatchStmt:

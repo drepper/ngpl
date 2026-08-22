@@ -110,7 +110,7 @@ fn ev_spell(k : i64) → str:
     if k = NK_LAMBDA or k = NK_BADLAM: return "a λ"
     if k = NK_FNVAL or k = NK_CALLV: return "a function value"
     if k = NK_SOME or k = NK_EMPTYV or k = NK_DEFAULT or k = NK_TRY: return "an optional"
-    if k = NK_MATCH: return "a match"
+    if k = NK_MATCH or k = NK_MATCHE: return "a match"
     if k = NK_REF: return "a borrow"
     if k = NK_SLICE or k = NK_MSLICE: return "a slice"
     if k = NK_RESHAPE: return "a reshape"

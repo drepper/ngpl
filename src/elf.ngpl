@@ -25,12 +25,25 @@ enum Em : u16:
     aarch64 = 183
     riscv = 243
 
-let TGT_X64 : i64 = 0
-let TGT_I386 : i64 = 1
-let TGT_A64 : i64 = 2
-let TGT_A32 : i64 = 3
-let TGT_RV64 : i64 = 4
-let TGT_RV32 : i64 = 5
+// Which machine, as an enumeration rather than a run of numbers.  What
+// this buys is that a match over it is held to having an arm for every
+// one of them: adding a seventh stops every dispatcher that does not
+// say what to do with it, where a chain of comparisons would quietly
+// send it wherever the last branch went.
+enum Tgt : u32:
+    x64 = 0
+    i386 = 1
+    a64 = 2
+    a32 = 3
+    rv64 = 4
+    rv32 = 5
+
+let TGT_X64 : Tgt = Tgt.x64
+let TGT_I386 : Tgt = Tgt.i386
+let TGT_A64 : Tgt = Tgt.a64
+let TGT_A32 : Tgt = Tgt.a32
+let TGT_RV64 : Tgt = Tgt.rv64
+let TGT_RV32 : Tgt = Tgt.rv32
 
 // e_flags is the one header field whose meaning belongs to the machine
 // rather than to ELF: what a bit says for arm it says for nothing else,
@@ -42,7 +55,7 @@ let EF_ARM_EABI_VER5 : i64 = 83886080      // 0x05000000, in the ABI byte
 let EF_ARM_ABI_FLOAT_SOFT : i64 = 512      // the runtime touches no float register
 
 struct Target:
-    id : i64
+    id : Tgt
     name : str           // the canonical spelling --target accepts
     machine : Em         // ELF e_machine
     is64 : bool          // ELFCLASS64: 8-byte kernel words

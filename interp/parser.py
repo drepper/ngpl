@@ -2055,10 +2055,21 @@ class Parser:
             self.pos += 1
             kind = "wildcard"
         elif self._check("IDENT"):
-            # Type(name): an alternative of a sum type, binding the
-            # value under the type that says which alternative it is.
             type_tok = self._eat("IDENT")
             type_name = type_tok.value
+            if self._check("PUNCT") and self._cur().value == ".":
+                # Enum.member: one value of an enumeration.  It binds
+                # nothing, because an enumerator holds nothing beside
+                # which one it is.
+                self.pos += 1
+                member = self._eat("IDENT").value
+                body = self._parse_block()
+                return self._set_pos(
+                    MatchArm("enum", None, body, type_name=type_name,
+                             member=member),
+                    pattern_tok)
+            # Type(name): an alternative of a sum type, binding the
+            # value under the type that says which alternative it is.
             name = self._parse_arm_binding()
             kind = "type"
             body = self._parse_block()
@@ -2069,7 +2080,7 @@ class Parser:
             raise ParseError(
                 "expected a match pattern: \N{THERE EXISTS}(name), "
                 "\N{THERE DOES NOT EXIST}(name), \N{EMPTY SET}, "
-                "Type(name), or _",
+                "Type(name), Enum.member, or _",
                 self._cur())
         body = self._parse_block()
         return self._set_pos(MatchArm(kind, name, body), pattern_tok)

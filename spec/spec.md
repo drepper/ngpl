@@ -3343,6 +3343,73 @@ The name is bound only within its arm and cannot be assigned to: it names the va
 
 A falsy value is still a present one, so `∃(x)` takes an element of `0` — the arm chosen depends on whether there was a value, not on what it was.
 
+#### Matching an Enumeration
+
+An enumeration is a set of things a program tells apart, and `match`
+asks which one a value is:
+
+```
+match tg.id:
+    Tgt.a64:  emit_aarch64()
+    Tgt.rv64: emit_riscv64()
+    Tgt.i386: emit_i386()
+    Tgt.a32:  emit_arm()
+    Tgt.rv32: emit_riscv32()
+    Tgt.x64:  pioneer()
+```
+
+An arm names a value with `Enum.member` and binds nothing, because an
+enumerator holds nothing beside which one it is. One `match` asks about
+one enumeration; arms naming two is refused.
+
+**Every value must have an arm, or there must be a `_`.**  This is the
+whole reason to write it this way rather than as a chain of
+comparisons. A chain has a last branch, and the last branch is what a
+value nobody thought about takes — silently, and only where that value
+arises. A `match` cannot be left incomplete:
+
+```
+match c:
+    Colour.red: paint(c)
+    Colour.green: paint(c)
+
+error: match has no arm for Colour.blue; add the missing pattern or a _ arm
+```
+
+So a value added to an enumeration stops every `match` over it that
+does not say what to do with the new one. That is what the statement is
+for: the enumeration and the code that dispatches on it are kept in
+step by the compiler rather than by whoever remembers.
+
+`_` is the way to say the rest are alike, and it is a statement rather
+than an omission — a `match` that has one is complete by saying so.
+
+**Coverage is over the values, not the names.**  Two enumerators
+standing for one number are one case, so an arm for either covers
+both:
+
+```
+enum Sht : u32:
+    strtab = 3
+    dynstr = strtab      // another name for 3
+
+match s:
+    Sht.progbits: …
+    Sht.symtab: …
+    Sht.strtab: …        // covers dynstr too, being the same value
+```
+
+Repeating a value is refused, since the second arm could never run, and
+naming a member the enumeration does not have is refused where it is
+written.
+
+**What it compiles to.**  An enumeration's values are usually a dense
+run, which is the case a jump table is for: one bounds check and one
+indirect jump, whatever the arm count. Where they are sparse enough
+that a table would be mostly holes, the comparisons are emitted
+instead. Which was chosen is in the decision log under `match-jump-table`
+or `match-ladder`.
+
 #### Matching a Result
 
 The same statement handles a result, with `∄(name)` binding the error:

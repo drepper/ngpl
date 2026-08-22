@@ -1402,6 +1402,42 @@ impl Parser:
             self.extra.push(t2)
         self.mknode(NK_LETT, name_tok, init, is_mut, toff)
 
+    fn parse_match_enum(&mut self, subject : i64) → i64:
+        let arms : mut i64[] = []
+        let default_blk : mut i64 = ⁻1
+        while self.peek() ≠ TK_DEDENT and not self.failed():
+            if self.peek() = TK_NL:
+                self.pos ← self.pos + 1
+            elif self.peek() = TK_IDENT and self.ttext(self.pos) = "_":
+                if default_blk ≠ ⁻1:
+                    self.err("match repeats the _ arm")
+                    return 0
+                self.pos ← self.pos + 1
+                default_blk ← self.parse_block()
+            elif self.peek() = TK_IDENT:
+                let etok : i64 = self.pos
+                self.pos ← self.pos + 1
+                _ ← self.eat(TK_DOT, "'.' and the value's name")
+                let mtok : i64 = self.pos
+                _ ← self.eat_name("the value's name")
+                let blk : i64 = self.parse_block()
+                arms.push(etok)
+                arms.push(mtok)
+                arms.push(blk)
+            else:
+                self.err("a match arm over an enumeration is Name.value or _")
+                return 0
+        _ ← self.eat(TK_DEDENT, "the end of the match")
+        if #arms = 0:
+            self.err("match over an enumeration wants an arm naming a value of it")
+            return 0
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(@dropunit(#arms) ÷ 3 ?? 0)
+        self.extra.push(default_blk)
+        foreach v := arms:
+            self.extra.push(v)
+        self.mknode(NK_MATCHE, self.pos, subject, off, ⁻1)
+
     fn parse_stmt(&mut self) → i64:
         let k : i64 = self.peek()
         let at : i64 = self.pos
@@ -1534,12 +1570,27 @@ impl Parser:
             self.extra.push(self.nc[e1 × 1¤ptrdiff])
             self.extra.push(self.nb[e1 × 1¤ptrdiff])
             return self.mknode(NK_FOREACH, name_tok, off, body, 0)
+    // match over an enumeration.  The arms name values of it, one
+    // apiece, and `_` stands for the rest; the indent has been taken
+    // and the subject read, so this reads arms until the dedent.
         if k = TK_MATCH:
             self.pos ← self.pos + 1
             let subject : i64 = self.parse_expr()
             _ ← self.eat(TK_COLON, "':' after the subject")
             _ ← self.eat(TK_NL, "the arms on their own lines")
             _ ← self.eat(TK_INDENT, "an indented arm list")
+            // An identifier where a pattern goes says this match is
+            // over an enumeration: the arms name its values, and there
+            // is no ∃ or ∅ about it.
+            let mut_pos : i64 = self.pos
+            let is_enum : mut bool = false
+            while self.peek() = TK_NL:
+                self.pos ← self.pos + 1
+            if self.peek() = TK_IDENT:
+                is_enum ← true
+            self.pos ← mut_pos
+            if is_enum:
+                return self.parse_match_enum(subject)
             let some_blk : mut i64 = ⁻1
             let empty_blk : mut i64 = ⁻1
             let bind_tok : mut i64 = ⁻1

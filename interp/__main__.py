@@ -879,7 +879,54 @@ def _arm_pattern(arm) -> str:
     """How an arm's pattern is written, for a diagnostic about it."""
     if arm.kind == "type":
         return f"'{arm.type_name}(...)'"
+    if arm.kind == "enum":
+        return f"'{arm.type_name}.{arm.member}'"
     return _ARM_PATTERN[arm.kind]
+
+
+def _check_enum_match(node, arms) -> "_Finding | None":
+    """Every value of the enumeration has an arm, or there is a `_`.
+
+    Which enumeration is being matched comes from the arms rather than
+    from the subject: the arms name it outright, and what the subject
+    turns out to be is a question the arms cannot answer and do not
+    need to.  Coverage is over the *values*, not the names, so an
+    enumerator that is another name for one already covered is
+    covered too -- two names standing for one number are one case.
+    """
+    from interp.value import enum_object
+    named = {a.type_name for a in arms if a.kind == "enum"}
+    if len(named) > 1:
+        return _Finding(
+            "match names values of " + " and ".join(sorted(named))
+            + "; one match asks about one enumeration",
+            node, 2251)
+    enum_name = next(iter(named))
+    obj = enum_object(enum_name)
+    if obj is None:
+        return _Finding(f"'{enum_name}' is not an enumeration", node, 2252)
+    for arm in node.arms:
+        if arm.kind == "wildcard":
+            continue
+        if arm.kind != "enum":
+            return _Finding(
+                f"{_arm_pattern(arm)} cannot match '{enum_name}', which "
+                f"is an enumeration; an arm of one names a value of it",
+                arm, 2253)
+        if arm.member not in obj.members:
+            return _Finding(
+                f"'{enum_name}' has no member '{arm.member}'", arm, 2254)
+    if any(a.kind == "wildcard" for a in node.arms):
+        return None
+    covered = {obj.members[a.member] for a in node.arms if a.kind == "enum"}
+    missing = [name for value, name in sorted(obj.values_to_names.items())
+               if value not in covered]
+    if missing:
+        return _Finding(
+            "match has no arm for "
+            + " or ".join(f"{enum_name}.{m}" for m in missing)
+            + "; add the missing pattern or a _ arm", node, 2255)
+    return None
 
 
 def _user_defines_method(name: str, env) -> bool:
@@ -952,7 +999,9 @@ def _check_one_match(node, env, func_def=None) -> str | None:
     # so a type arm is identified by the type it names.
     seen: set[str] = set()
     for index, arm in enumerate(node.arms):
-        key = arm.type_name if arm.kind == "type" else arm.kind
+        key = (arm.type_name if arm.kind == "type"
+               else f"{arm.type_name}.{arm.member}" if arm.kind == "enum"
+               else arm.kind)
         if key in seen:
             return _Finding(
                 f"match repeats the {_arm_pattern(arm)} pattern; "
@@ -964,6 +1013,12 @@ def _check_one_match(node, env, func_def=None) -> str | None:
             return _Finding(
                 "match has arms after _, which can never be reached",
                 node.arms[index + 1], 2284)
+
+    # An enumeration says which one it is in the arms, so the check
+    # does not have to work out what the subject is.
+    enum_arms = [a for a in node.arms if a.kind == "enum"]
+    if enum_arms:
+        return _check_enum_match(node, enum_arms)
 
     subject = _match_subject_kind(node.subject, env, func_def)
     if subject is None:

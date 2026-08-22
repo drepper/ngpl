@@ -57,6 +57,7 @@ all_tests=(
     "$testdir"/test_stepped_range.ngpl
     "$testdir"/test_types.ngpl
     "$testdir"/test_lambda.ngpl
+    "$testdir"/test_match_enum.ngpl
     "$testdir"/test_generate.ngpl
     "$testdir"/test_reshape.ngpl
     "$testdir"/test_catch.ngpl

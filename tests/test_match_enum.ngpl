@@ -1,0 +1,124 @@
+// match over an enumeration.
+//
+// An enumeration is a set of things a program tells apart, and asking
+// which one a value is has until now meant a chain of comparisons.  A
+// chain has a last branch, and the last branch is what a value nobody
+// thought about takes -- silently, and only where that value arises.
+//
+// `match` over an enumeration is the same question asked so that the
+// answer must be complete: every value has an arm, or there is a `_`
+// saying outright that the rest are alike.  A value added to the
+// enumeration afterwards stops every match that does not say what to
+// do with it, which is the whole reason to write it this way.
+//
+// The specification's "Matching an Enumeration" is the normative
+// statement; this is where both implementations are held to it.
+
+enum Colour : u32:
+    red = 0
+    green = 1
+    blue = 2
+
+// two names, one number: an arm for either covers both
+enum Sht : u32:
+    progbits = 1
+    symtab = 2
+    strtab = 3
+    dynstr = strtab
+
+fn name_of(c : Colour) → str:
+    match c:
+        Colour.red: return "red"
+        Colour.green: return "green"
+        Colour.blue: return "blue"
+
+@test
+fn test_every_value_has_an_arm():
+    assert_eq(name_of(Colour.red), "red")
+    assert_eq(name_of(Colour.green), "green")
+    assert_eq(name_of(Colour.blue), "blue")
+
+@test
+fn test_an_arm_may_be_a_block():
+    let c : Colour = Colour.green
+    let n : mut i64 = 0
+    match c:
+        Colour.red:
+            n ← 1
+        Colour.green:
+            n ← 2
+            n ← n + 20
+        Colour.blue:
+            n ← 3
+    assert_eq(n, 22)
+
+// `_` says the rest are alike, which is a statement and not an omission
+@test
+fn test_the_rest_are_alike():
+    let c : Colour = Colour.blue
+    let n : mut i64 = 0
+    match c:
+        Colour.red: n ← 1
+        _: n ← 99
+    assert_eq(n, 99)
+
+// Coverage is over the values, not the names.  Two names standing for
+// one number are one case, so an arm for either covers both.
+@test
+fn test_two_names_one_value():
+    let s : Sht = Sht.dynstr
+    let n : mut i64 = 0
+    match s:
+        Sht.progbits: n ← 1
+        Sht.symtab: n ← 2
+        Sht.strtab: n ← 3
+    assert_eq(n, 3)
+
+// a match on a value held in a struct, which is what the compiler's
+// own dispatchers do
+struct Machine:
+    id : Colour
+
+@test
+fn test_on_a_field():
+    let m : Machine = Machine{id: Colour.green}
+    let n : mut i64 = 0
+    match m.id:
+        Colour.red: n ← 1
+        Colour.green: n ← 2
+        Colour.blue: n ← 3
+    assert_eq(n, 2)
+
+// ---------------------------------------------------------------------
+// What it refuses
+// ---------------------------------------------------------------------
+
+@expect error "match has no arm for Colour.blue; add the missing pattern or a _ arm"
+fn error_a_value_with_no_arm():
+    let c : Colour = Colour.red
+    match c:
+        Colour.red: std.println("red")
+        Colour.green: std.println("green")
+
+@expect error "match repeats"
+fn error_the_same_value_twice():
+    let c : Colour = Colour.red
+    match c:
+        Colour.red: std.println("red")
+        Colour.red: std.println("again")
+        Colour.green: std.println("green")
+        Colour.blue: std.println("blue")
+
+@expect error "has no member 'chartreuse'"
+fn error_no_such_value():
+    let c : Colour = Colour.red
+    match c:
+        Colour.red: std.println("red")
+        Colour.chartreuse: std.println("?")
+        Colour.green: std.println("green")
+        Colour.blue: std.println("blue")
+
+@start
+@impure
+fn main():
+    std.println("match tests passed")

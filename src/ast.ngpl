@@ -86,6 +86,10 @@ let NK_CALLV : i64 = 90     // applying a value: na = callee expr, nb = args
 let NK_EXPECTS : i64 = 93   // @expect over one statement: na = it, nb = 1 when an error is expected
 let NK_HINTED : i64 = 94    // @likely/@unlikely over an if: na = it, nb = 1 when unlikely
 let NK_SIZEOF : i64 = 96    // @sizeof(T) or @sizeof(e): folds to a count of bytes
+// match over an enumeration: na = subject, nb = extra
+//   [n, default block or ⁻1, then n × (enum token, member token, block)]
+// and nc = which enum, settled by the checker
+let NK_MATCHE : i64 = 97
 let NK_MSLICE : i64 = 95    // m[rows, cols]: na = matrix, nb = extra [rlo, rhi, clo, chi], nc = 1 for a column
 let NK_TRY : i64 = 91       // e?: ∅ answers the function early, a value unwraps
 let NK_BADLAM : i64 = 92    // a λ the checker refuses: na says why

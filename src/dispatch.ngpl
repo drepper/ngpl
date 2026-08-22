@@ -11,776 +11,489 @@
 // instruction layers, because the split of this compiler into files was
 // cut from one text without moving a line of it, and this is where the
 // dispatchers were.
+//
+// Each is a match over Tgt, and every one of them names all six.  That
+// is the point of the match rather than a chain of comparisons: a
+// seventh machine added to Tgt stops every dispatcher here that does
+// not say what to do with it.  A chain answered the last branch by
+// falling through to it, so a machine nobody had thought about would
+// have been emitted as riscv32 -- silently, and only on that machine.
+//
+// x86-64 is named too, and what it says is that it does not come here.
+
+// The arm every dispatcher gives x86-64.  It has its own emitter in
+// x86.ngpl and never reaches these, so this is not a case to handle
+// but a statement that the case cannot arise -- written down because
+// the match asks for all six and this is the honest sixth.
+@noreturn
+fn g_pioneer():
+    assert(false, "x86-64 has its own emitter and does not come through the dispatchers")
 
 fn g_lds(em : &mut Emit, tg : Target, r : i64, slot : i64):
-    if tg.id = TGT_A64:
-        a64g_lds(&em, tg, r, slot)
-        return
-    if tg.id = TGT_RV64:
-        rvg_lds(&em, tg, r, slot)
-        return
-    if tg.id = TGT_I386:
-        i3g_lds(&em, tg, r, slot)
-        return
-    if tg.id = TGT_A32:
-        a32g_lds(&em, tg, r, slot)
-        return
-    r32g_lds(&em, tg, r, slot)
+    match tg.id:
+        Tgt.a64: a64g_lds(&em, tg, r, slot)
+        Tgt.rv64: rvg_lds(&em, tg, r, slot)
+        Tgt.i386: i3g_lds(&em, tg, r, slot)
+        Tgt.a32: a32g_lds(&em, tg, r, slot)
+        Tgt.rv32: r32g_lds(&em, tg, r, slot)
+        Tgt.x64: g_pioneer()
 
 fn g_sts(em : &mut Emit, tg : Target, r : i64, slot : i64):
-    if tg.id = TGT_A64:
-        a64g_sts(&em, tg, r, slot)
-        return
-    if tg.id = TGT_RV64:
-        rvg_sts(&em, tg, r, slot)
-        return
-    if tg.id = TGT_I386:
-        i3g_sts(&em, tg, r, slot)
-        return
-    if tg.id = TGT_A32:
-        a32g_sts(&em, tg, r, slot)
-        return
-    r32g_sts(&em, tg, r, slot)
+    match tg.id:
+        Tgt.a64: a64g_sts(&em, tg, r, slot)
+        Tgt.rv64: rvg_sts(&em, tg, r, slot)
+        Tgt.i386: i3g_sts(&em, tg, r, slot)
+        Tgt.a32: a32g_sts(&em, tg, r, slot)
+        Tgt.rv32: r32g_sts(&em, tg, r, slot)
+        Tgt.x64: g_pioneer()
 
 fn g_const(em : &mut Emit, tg : Target, r : i64, v : i64):
-    if tg.id = TGT_A64:
-        a64g_const(&em, tg, r, v)
-        return
-    if tg.id = TGT_RV64:
-        rvg_const(&em, tg, r, v)
-        return
-    if tg.id = TGT_I386:
-        i3g_const(&em, tg, r, v)
-        return
-    if tg.id = TGT_A32:
-        a32g_const(&em, tg, r, v)
-        return
-    r32g_const(&em, tg, r, v)
+    match tg.id:
+        Tgt.a64: a64g_const(&em, tg, r, v)
+        Tgt.rv64: rvg_const(&em, tg, r, v)
+        Tgt.i386: i3g_const(&em, tg, r, v)
+        Tgt.a32: a32g_const(&em, tg, r, v)
+        Tgt.rv32: r32g_const(&em, tg, r, v)
+        Tgt.x64: g_pioneer()
 
 fn g_mov2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
-    if tg.id = TGT_A64:
-        a64g_mov2(&em, tg, rd, rs)
-        return
-    if tg.id = TGT_RV64:
-        rvg_mov2(&em, tg, rd, rs)
-        return
-    if tg.id = TGT_I386:
-        i3g_mov2(&em, tg, rd, rs)
-        return
-    if tg.id = TGT_A32:
-        a32g_mov2(&em, tg, rd, rs)
-        return
-    r32g_mov2(&em, tg, rd, rs)
+    match tg.id:
+        Tgt.a64: a64g_mov2(&em, tg, rd, rs)
+        Tgt.rv64: rvg_mov2(&em, tg, rd, rs)
+        Tgt.i386: i3g_mov2(&em, tg, rd, rs)
+        Tgt.a32: a32g_mov2(&em, tg, rd, rs)
+        Tgt.rv32: r32g_mov2(&em, tg, rd, rs)
+        Tgt.x64: g_pioneer()
 
 fn g_add3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
-    if tg.id = TGT_A64:
-        a64g_add3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_RV64:
-        rvg_add3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_I386:
-        i3g_add3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_A32:
-        a32g_add3(&em, tg, rd, rx, ry)
-        return
-    r32g_add3(&em, tg, rd, rx, ry)
+    match tg.id:
+        Tgt.a64: a64g_add3(&em, tg, rd, rx, ry)
+        Tgt.rv64: rvg_add3(&em, tg, rd, rx, ry)
+        Tgt.i386: i3g_add3(&em, tg, rd, rx, ry)
+        Tgt.a32: a32g_add3(&em, tg, rd, rx, ry)
+        Tgt.rv32: r32g_add3(&em, tg, rd, rx, ry)
+        Tgt.x64: g_pioneer()
 
 fn g_sub3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
-    if tg.id = TGT_A64:
-        a64g_sub3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_RV64:
-        rvg_sub3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_I386:
-        i3g_sub3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_A32:
-        a32g_sub3(&em, tg, rd, rx, ry)
-        return
-    r32g_sub3(&em, tg, rd, rx, ry)
+    match tg.id:
+        Tgt.a64: a64g_sub3(&em, tg, rd, rx, ry)
+        Tgt.rv64: rvg_sub3(&em, tg, rd, rx, ry)
+        Tgt.i386: i3g_sub3(&em, tg, rd, rx, ry)
+        Tgt.a32: a32g_sub3(&em, tg, rd, rx, ry)
+        Tgt.rv32: r32g_sub3(&em, tg, rd, rx, ry)
+        Tgt.x64: g_pioneer()
 
 fn g_mul3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
-    if tg.id = TGT_A64:
-        a64g_mul3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_RV64:
-        rvg_mul3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_I386:
-        i3g_mul3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_A32:
-        a32g_mul3(&em, tg, rd, rx, ry)
-        return
-    r32g_mul3(&em, tg, rd, rx, ry)
+    match tg.id:
+        Tgt.a64: a64g_mul3(&em, tg, rd, rx, ry)
+        Tgt.rv64: rvg_mul3(&em, tg, rd, rx, ry)
+        Tgt.i386: i3g_mul3(&em, tg, rd, rx, ry)
+        Tgt.a32: a32g_mul3(&em, tg, rd, rx, ry)
+        Tgt.rv32: r32g_mul3(&em, tg, rd, rx, ry)
+        Tgt.x64: g_pioneer()
 
 fn g_and3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
-    if tg.id = TGT_A64:
-        a64g_and3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_RV64:
-        rvg_and3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_I386:
-        i3g_and3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_A32:
-        a32g_and3(&em, tg, rd, rx, ry)
-        return
-    r32g_and3(&em, tg, rd, rx, ry)
+    match tg.id:
+        Tgt.a64: a64g_and3(&em, tg, rd, rx, ry)
+        Tgt.rv64: rvg_and3(&em, tg, rd, rx, ry)
+        Tgt.i386: i3g_and3(&em, tg, rd, rx, ry)
+        Tgt.a32: a32g_and3(&em, tg, rd, rx, ry)
+        Tgt.rv32: r32g_and3(&em, tg, rd, rx, ry)
+        Tgt.x64: g_pioneer()
 
 fn g_or3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
-    if tg.id = TGT_A64:
-        a64g_or3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_RV64:
-        rvg_or3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_I386:
-        i3g_or3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_A32:
-        a32g_or3(&em, tg, rd, rx, ry)
-        return
-    r32g_or3(&em, tg, rd, rx, ry)
+    match tg.id:
+        Tgt.a64: a64g_or3(&em, tg, rd, rx, ry)
+        Tgt.rv64: rvg_or3(&em, tg, rd, rx, ry)
+        Tgt.i386: i3g_or3(&em, tg, rd, rx, ry)
+        Tgt.a32: a32g_or3(&em, tg, rd, rx, ry)
+        Tgt.rv32: r32g_or3(&em, tg, rd, rx, ry)
+        Tgt.x64: g_pioneer()
 
 fn g_xor3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
-    if tg.id = TGT_A64:
-        a64g_xor3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_RV64:
-        rvg_xor3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_I386:
-        i3g_xor3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_A32:
-        a32g_xor3(&em, tg, rd, rx, ry)
-        return
-    r32g_xor3(&em, tg, rd, rx, ry)
+    match tg.id:
+        Tgt.a64: a64g_xor3(&em, tg, rd, rx, ry)
+        Tgt.rv64: rvg_xor3(&em, tg, rd, rx, ry)
+        Tgt.i386: i3g_xor3(&em, tg, rd, rx, ry)
+        Tgt.a32: a32g_xor3(&em, tg, rd, rx, ry)
+        Tgt.rv32: r32g_xor3(&em, tg, rd, rx, ry)
+        Tgt.x64: g_pioneer()
 
 fn g_not2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
-    if tg.id = TGT_A64:
-        a64g_not2(&em, tg, rd, rs)
-        return
-    if tg.id = TGT_RV64:
-        rvg_not2(&em, tg, rd, rs)
-        return
-    if tg.id = TGT_I386:
-        i3g_not2(&em, tg, rd, rs)
-        return
-    if tg.id = TGT_A32:
-        a32g_not2(&em, tg, rd, rs)
-        return
-    r32g_not2(&em, tg, rd, rs)
+    match tg.id:
+        Tgt.a64: a64g_not2(&em, tg, rd, rs)
+        Tgt.rv64: rvg_not2(&em, tg, rd, rs)
+        Tgt.i386: i3g_not2(&em, tg, rd, rs)
+        Tgt.a32: a32g_not2(&em, tg, rd, rs)
+        Tgt.rv32: r32g_not2(&em, tg, rd, rs)
+        Tgt.x64: g_pioneer()
 
 fn g_neg2(em : &mut Emit, tg : Target, rd : i64, rs : i64):
-    if tg.id = TGT_A64:
-        a64g_neg2(&em, tg, rd, rs)
-        return
-    if tg.id = TGT_RV64:
-        rvg_neg2(&em, tg, rd, rs)
-        return
-    if tg.id = TGT_I386:
-        i3g_neg2(&em, tg, rd, rs)
-        return
-    if tg.id = TGT_A32:
-        a32g_neg2(&em, tg, rd, rs)
-        return
-    r32g_neg2(&em, tg, rd, rs)
+    match tg.id:
+        Tgt.a64: a64g_neg2(&em, tg, rd, rs)
+        Tgt.rv64: rvg_neg2(&em, tg, rd, rs)
+        Tgt.i386: i3g_neg2(&em, tg, rd, rs)
+        Tgt.a32: a32g_neg2(&em, tg, rd, rs)
+        Tgt.rv32: r32g_neg2(&em, tg, rd, rs)
+        Tgt.x64: g_pioneer()
 
 fn g_shl3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
-    if tg.id = TGT_A64:
-        a64g_shl3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_RV64:
-        rvg_shl3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_I386:
-        i3g_shl3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_A32:
-        a32g_shl3(&em, tg, rd, rx, ry)
-        return
-    r32g_shl3(&em, tg, rd, rx, ry)
+    match tg.id:
+        Tgt.a64: a64g_shl3(&em, tg, rd, rx, ry)
+        Tgt.rv64: rvg_shl3(&em, tg, rd, rx, ry)
+        Tgt.i386: i3g_shl3(&em, tg, rd, rx, ry)
+        Tgt.a32: a32g_shl3(&em, tg, rd, rx, ry)
+        Tgt.rv32: r32g_shl3(&em, tg, rd, rx, ry)
+        Tgt.x64: g_pioneer()
 
 fn g_shr3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
-    if tg.id = TGT_A64:
-        a64g_shr3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_RV64:
-        rvg_shr3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_I386:
-        i3g_shr3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_A32:
-        a32g_shr3(&em, tg, rd, rx, ry)
-        return
-    r32g_shr3(&em, tg, rd, rx, ry)
+    match tg.id:
+        Tgt.a64: a64g_shr3(&em, tg, rd, rx, ry)
+        Tgt.rv64: rvg_shr3(&em, tg, rd, rx, ry)
+        Tgt.i386: i3g_shr3(&em, tg, rd, rx, ry)
+        Tgt.a32: a32g_shr3(&em, tg, rd, rx, ry)
+        Tgt.rv32: r32g_shr3(&em, tg, rd, rx, ry)
+        Tgt.x64: g_pioneer()
 
 fn g_sar3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
-    if tg.id = TGT_A64:
-        a64g_sar3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_RV64:
-        rvg_sar3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_I386:
-        i3g_sar3(&em, tg, rd, rx, ry)
-        return
-    if tg.id = TGT_A32:
-        a32g_sar3(&em, tg, rd, rx, ry)
-        return
-    r32g_sar3(&em, tg, rd, rx, ry)
+    match tg.id:
+        Tgt.a64: a64g_sar3(&em, tg, rd, rx, ry)
+        Tgt.rv64: rvg_sar3(&em, tg, rd, rx, ry)
+        Tgt.i386: i3g_sar3(&em, tg, rd, rx, ry)
+        Tgt.a32: a32g_sar3(&em, tg, rd, rx, ry)
+        Tgt.rv32: r32g_sar3(&em, tg, rd, rx, ry)
+        Tgt.x64: g_pioneer()
 
 fn g_shl3i(em : &mut Emit, tg : Target, rd : i64, rs : i64, imm : i64):
-    if tg.id = TGT_A64:
-        a64g_shl3i(&em, tg, rd, rs, imm)
-        return
-    if tg.id = TGT_RV64:
-        rvg_shl3i(&em, tg, rd, rs, imm)
-        return
-    if tg.id = TGT_I386:
-        i3g_shl3i(&em, tg, rd, rs, imm)
-        return
-    if tg.id = TGT_A32:
-        a32g_shl3i(&em, tg, rd, rs, imm)
-        return
-    r32g_shl3i(&em, tg, rd, rs, imm)
+    match tg.id:
+        Tgt.a64: a64g_shl3i(&em, tg, rd, rs, imm)
+        Tgt.rv64: rvg_shl3i(&em, tg, rd, rs, imm)
+        Tgt.i386: i3g_shl3i(&em, tg, rd, rs, imm)
+        Tgt.a32: a32g_shl3i(&em, tg, rd, rs, imm)
+        Tgt.rv32: r32g_shl3i(&em, tg, rd, rs, imm)
+        Tgt.x64: g_pioneer()
 
 fn g_cmp3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64):
-    if tg.id = TGT_A64:
-        a64g_cmp3(&em, tg, rd, rx, ry, cond, sgn)
-        return
-    if tg.id = TGT_RV64:
-        rvg_cmp3(&em, tg, rd, rx, ry, cond, sgn)
-        return
-    if tg.id = TGT_I386:
-        i3g_cmp3(&em, tg, rd, rx, ry, cond, sgn)
-        return
-    if tg.id = TGT_A32:
-        a32g_cmp3(&em, tg, rd, rx, ry, cond, sgn)
-        return
-    r32g_cmp3(&em, tg, rd, rx, ry, cond, sgn)
+    match tg.id:
+        Tgt.a64: a64g_cmp3(&em, tg, rd, rx, ry, cond, sgn)
+        Tgt.rv64: rvg_cmp3(&em, tg, rd, rx, ry, cond, sgn)
+        Tgt.i386: i3g_cmp3(&em, tg, rd, rx, ry, cond, sgn)
+        Tgt.a32: a32g_cmp3(&em, tg, rd, rx, ry, cond, sgn)
+        Tgt.rv32: r32g_cmp3(&em, tg, rd, rx, ry, cond, sgn)
+        Tgt.x64: g_pioneer()
 
 fn g_sel4(em : &mut Emit, tg : Target, rd : i64, rc : i64, rx : i64, ry : i64):
-    if tg.id = TGT_A64:
-        a64g_sel4(&em, tg, rd, rc, rx, ry)
-        return
-    if tg.id = TGT_RV64:
-        rvg_sel4(&em, tg, rd, rc, rx, ry)
-        return
-    if tg.id = TGT_I386:
-        i3g_sel4(&em, tg, rd, rc, rx, ry)
-        return
-    if tg.id = TGT_A32:
-        a32g_sel4(&em, tg, rd, rc, rx, ry)
-        return
-    r32g_sel4(&em, tg, rd, rc, rx, ry)
+    match tg.id:
+        Tgt.a64: a64g_sel4(&em, tg, rd, rc, rx, ry)
+        Tgt.rv64: rvg_sel4(&em, tg, rd, rc, rx, ry)
+        Tgt.i386: i3g_sel4(&em, tg, rd, rc, rx, ry)
+        Tgt.a32: a32g_sel4(&em, tg, rd, rc, rx, ry)
+        Tgt.rv32: r32g_sel4(&em, tg, rd, rc, rx, ry)
+        Tgt.x64: g_pioneer()
 
 fn g_div3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
-    if tg.id = TGT_A64:
-        a64g_div3(&em, tg, rd, rx, ry, sgn)
-        return
-    if tg.id = TGT_RV64:
-        rvg_div3(&em, tg, rd, rx, ry, sgn)
-        return
-    if tg.id = TGT_I386:
-        i3g_div3(&em, tg, rd, rx, ry, sgn)
-        return
-    if tg.id = TGT_A32:
-        a32g_div3(&em, tg, rd, rx, ry, sgn)
-        return
-    r32g_div3(&em, tg, rd, rx, ry, sgn)
+    match tg.id:
+        Tgt.a64: a64g_div3(&em, tg, rd, rx, ry, sgn)
+        Tgt.rv64: rvg_div3(&em, tg, rd, rx, ry, sgn)
+        Tgt.i386: i3g_div3(&em, tg, rd, rx, ry, sgn)
+        Tgt.a32: a32g_div3(&em, tg, rd, rx, ry, sgn)
+        Tgt.rv32: r32g_div3(&em, tg, rd, rx, ry, sgn)
+        Tgt.x64: g_pioneer()
 
 fn g_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
-    if tg.id = TGT_A64:
-        a64g_mod3(&em, tg, rd, rx, ry, sgn)
-        return
-    if tg.id = TGT_RV64:
-        rvg_mod3(&em, tg, rd, rx, ry, sgn)
-        return
-    if tg.id = TGT_I386:
-        i3g_mod3(&em, tg, rd, rx, ry, sgn)
-        return
-    if tg.id = TGT_A32:
-        a32g_mod3(&em, tg, rd, rx, ry, sgn)
-        return
-    r32g_mod3(&em, tg, rd, rx, ry, sgn)
+    match tg.id:
+        Tgt.a64: a64g_mod3(&em, tg, rd, rx, ry, sgn)
+        Tgt.rv64: rvg_mod3(&em, tg, rd, rx, ry, sgn)
+        Tgt.i386: i3g_mod3(&em, tg, rd, rx, ry, sgn)
+        Tgt.a32: a32g_mod3(&em, tg, rd, rx, ry, sgn)
+        Tgt.rv32: r32g_mod3(&em, tg, rd, rx, ry, sgn)
+        Tgt.x64: g_pioneer()
 
 fn g_addov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64):
-    if tg.id = TGT_A64:
-        a64g_addov(&em, tg, rd, rf, rx, ry, sgn)
-        return
-    if tg.id = TGT_RV64:
-        rvg_addov(&em, tg, rd, rf, rx, ry, sgn)
-        return
-    if tg.id = TGT_I386:
-        i3g_addov(&em, tg, rd, rf, rx, ry, sgn)
-        return
-    if tg.id = TGT_A32:
-        a32g_addov(&em, tg, rd, rf, rx, ry, sgn)
-        return
-    r32g_addov(&em, tg, rd, rf, rx, ry, sgn)
+    match tg.id:
+        Tgt.a64: a64g_addov(&em, tg, rd, rf, rx, ry, sgn)
+        Tgt.rv64: rvg_addov(&em, tg, rd, rf, rx, ry, sgn)
+        Tgt.i386: i3g_addov(&em, tg, rd, rf, rx, ry, sgn)
+        Tgt.a32: a32g_addov(&em, tg, rd, rf, rx, ry, sgn)
+        Tgt.rv32: r32g_addov(&em, tg, rd, rf, rx, ry, sgn)
+        Tgt.x64: g_pioneer()
 
 fn g_subov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64):
-    if tg.id = TGT_A64:
-        a64g_subov(&em, tg, rd, rf, rx, ry, sgn)
-        return
-    if tg.id = TGT_RV64:
-        rvg_subov(&em, tg, rd, rf, rx, ry, sgn)
-        return
-    if tg.id = TGT_I386:
-        i3g_subov(&em, tg, rd, rf, rx, ry, sgn)
-        return
-    if tg.id = TGT_A32:
-        a32g_subov(&em, tg, rd, rf, rx, ry, sgn)
-        return
-    r32g_subov(&em, tg, rd, rf, rx, ry, sgn)
+    match tg.id:
+        Tgt.a64: a64g_subov(&em, tg, rd, rf, rx, ry, sgn)
+        Tgt.rv64: rvg_subov(&em, tg, rd, rf, rx, ry, sgn)
+        Tgt.i386: i3g_subov(&em, tg, rd, rf, rx, ry, sgn)
+        Tgt.a32: a32g_subov(&em, tg, rd, rf, rx, ry, sgn)
+        Tgt.rv32: r32g_subov(&em, tg, rd, rf, rx, ry, sgn)
+        Tgt.x64: g_pioneer()
 
 fn g_mulov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64):
-    if tg.id = TGT_A64:
-        a64g_mulov(&em, tg, rd, rf, rx, ry, sgn)
-        return
-    if tg.id = TGT_RV64:
-        rvg_mulov(&em, tg, rd, rf, rx, ry, sgn)
-        return
-    if tg.id = TGT_I386:
-        i3g_mulov(&em, tg, rd, rf, rx, ry, sgn)
-        return
-    if tg.id = TGT_A32:
-        a32g_mulov(&em, tg, rd, rf, rx, ry, sgn)
-        return
-    r32g_mulov(&em, tg, rd, rf, rx, ry, sgn)
+    match tg.id:
+        Tgt.a64: a64g_mulov(&em, tg, rd, rf, rx, ry, sgn)
+        Tgt.rv64: rvg_mulov(&em, tg, rd, rf, rx, ry, sgn)
+        Tgt.i386: i3g_mulov(&em, tg, rd, rf, rx, ry, sgn)
+        Tgt.a32: a32g_mulov(&em, tg, rd, rf, rx, ry, sgn)
+        Tgt.rv32: r32g_mulov(&em, tg, rd, rf, rx, ry, sgn)
+        Tgt.x64: g_pioneer()
 
 fn g_ext2(em : &mut Emit, tg : Target, r : i64, bits : i64, sgn : i64):
-    if tg.id = TGT_A64:
-        a64g_ext2(&em, tg, r, bits, sgn)
-        return
-    if tg.id = TGT_RV64:
-        rvg_ext2(&em, tg, r, bits, sgn)
-        return
-    if tg.id = TGT_I386:
-        i3g_ext2(&em, tg, r, bits, sgn)
-        return
-    if tg.id = TGT_A32:
-        a32g_ext2(&em, tg, r, bits, sgn)
-        return
-    r32g_ext2(&em, tg, r, bits, sgn)
+    match tg.id:
+        Tgt.a64: a64g_ext2(&em, tg, r, bits, sgn)
+        Tgt.rv64: rvg_ext2(&em, tg, r, bits, sgn)
+        Tgt.i386: i3g_ext2(&em, tg, r, bits, sgn)
+        Tgt.a32: a32g_ext2(&em, tg, r, bits, sgn)
+        Tgt.rv32: r32g_ext2(&em, tg, r, bits, sgn)
+        Tgt.x64: g_pioneer()
 
 fn g_ldo(em : &mut Emit, tg : Target, rd : i64, rbase : i64, off : i64, width : i64, sgn : i64):
-    if tg.id = TGT_A64:
-        a64g_ldo(&em, tg, rd, rbase, off, width, sgn)
-        return
-    if tg.id = TGT_RV64:
-        rvg_ldo(&em, tg, rd, rbase, off, width, sgn)
-        return
-    if tg.id = TGT_I386:
-        i3g_ldo(&em, tg, rd, rbase, off, width, sgn)
-        return
-    if tg.id = TGT_A32:
-        a32g_ldo(&em, tg, rd, rbase, off, width, sgn)
-        return
-    r32g_ldo(&em, tg, rd, rbase, off, width, sgn)
+    match tg.id:
+        Tgt.a64: a64g_ldo(&em, tg, rd, rbase, off, width, sgn)
+        Tgt.rv64: rvg_ldo(&em, tg, rd, rbase, off, width, sgn)
+        Tgt.i386: i3g_ldo(&em, tg, rd, rbase, off, width, sgn)
+        Tgt.a32: a32g_ldo(&em, tg, rd, rbase, off, width, sgn)
+        Tgt.rv32: r32g_ldo(&em, tg, rd, rbase, off, width, sgn)
+        Tgt.x64: g_pioneer()
 
 fn g_sto(em : &mut Emit, tg : Target, rs : i64, rbase : i64, off : i64, width : i64):
-    if tg.id = TGT_A64:
-        a64g_sto(&em, tg, rs, rbase, off, width)
-        return
-    if tg.id = TGT_RV64:
-        rvg_sto(&em, tg, rs, rbase, off, width)
-        return
-    if tg.id = TGT_I386:
-        i3g_sto(&em, tg, rs, rbase, off, width)
-        return
-    if tg.id = TGT_A32:
-        a32g_sto(&em, tg, rs, rbase, off, width)
-        return
-    r32g_sto(&em, tg, rs, rbase, off, width)
+    match tg.id:
+        Tgt.a64: a64g_sto(&em, tg, rs, rbase, off, width)
+        Tgt.rv64: rvg_sto(&em, tg, rs, rbase, off, width)
+        Tgt.i386: i3g_sto(&em, tg, rs, rbase, off, width)
+        Tgt.a32: a32g_sto(&em, tg, rs, rbase, off, width)
+        Tgt.rv32: r32g_sto(&em, tg, rs, rbase, off, width)
+        Tgt.x64: g_pioneer()
 
 fn g_jmp(em : &mut Emit, tg : Target, lab : i64):
-    if tg.id = TGT_A64:
-        a64g_jmp(&em, tg, lab)
-        return
-    if tg.id = TGT_RV64:
-        rvg_jmp(&em, tg, lab)
-        return
-    if tg.id = TGT_I386:
-        i3g_jmp(&em, tg, lab)
-        return
-    if tg.id = TGT_A32:
-        a32g_jmp(&em, tg, lab)
-        return
-    r32g_jmp(&em, tg, lab)
+    match tg.id:
+        Tgt.a64: a64g_jmp(&em, tg, lab)
+        Tgt.rv64: rvg_jmp(&em, tg, lab)
+        Tgt.i386: i3g_jmp(&em, tg, lab)
+        Tgt.a32: a32g_jmp(&em, tg, lab)
+        Tgt.rv32: r32g_jmp(&em, tg, lab)
+        Tgt.x64: g_pioneer()
 
 fn g_jz(em : &mut Emit, tg : Target, r : i64, lab : i64):
-    if tg.id = TGT_A64:
-        a64g_jz(&em, tg, r, lab)
-        return
-    if tg.id = TGT_RV64:
-        rvg_jz(&em, tg, r, lab)
-        return
-    if tg.id = TGT_I386:
-        i3g_jz(&em, tg, r, lab)
-        return
-    if tg.id = TGT_A32:
-        a32g_jz(&em, tg, r, lab)
-        return
-    r32g_jz(&em, tg, r, lab)
+    match tg.id:
+        Tgt.a64: a64g_jz(&em, tg, r, lab)
+        Tgt.rv64: rvg_jz(&em, tg, r, lab)
+        Tgt.i386: i3g_jz(&em, tg, r, lab)
+        Tgt.a32: a32g_jz(&em, tg, r, lab)
+        Tgt.rv32: r32g_jz(&em, tg, r, lab)
+        Tgt.x64: g_pioneer()
 
 fn g_jnz(em : &mut Emit, tg : Target, r : i64, lab : i64):
-    if tg.id = TGT_A64:
-        a64g_jnz(&em, tg, r, lab)
-        return
-    if tg.id = TGT_RV64:
-        rvg_jnz(&em, tg, r, lab)
-        return
-    if tg.id = TGT_I386:
-        i3g_jnz(&em, tg, r, lab)
-        return
-    if tg.id = TGT_A32:
-        a32g_jnz(&em, tg, r, lab)
-        return
-    r32g_jnz(&em, tg, r, lab)
+    match tg.id:
+        Tgt.a64: a64g_jnz(&em, tg, r, lab)
+        Tgt.rv64: rvg_jnz(&em, tg, r, lab)
+        Tgt.i386: i3g_jnz(&em, tg, r, lab)
+        Tgt.a32: a32g_jnz(&em, tg, r, lab)
+        Tgt.rv32: r32g_jnz(&em, tg, r, lab)
+        Tgt.x64: g_pioneer()
 
 fn g_label(em : &mut Emit, tg : Target, lab : i64):
-    if tg.id = TGT_A64:
-        a64g_label(&em, tg, lab)
-        return
-    if tg.id = TGT_RV64:
-        rvg_label(&em, tg, lab)
-        return
-    if tg.id = TGT_I386:
-        i3g_label(&em, tg, lab)
-        return
-    if tg.id = TGT_A32:
-        a32g_label(&em, tg, lab)
-        return
-    r32g_label(&em, tg, lab)
+    match tg.id:
+        Tgt.a64: a64g_label(&em, tg, lab)
+        Tgt.rv64: rvg_label(&em, tg, lab)
+        Tgt.i386: i3g_label(&em, tg, lab)
+        Tgt.a32: a32g_label(&em, tg, lab)
+        Tgt.rv32: r32g_label(&em, tg, lab)
+        Tgt.x64: g_pioneer()
 
 fn g_call(em : &mut Emit, tg : Target, target : i64):
-    if tg.id = TGT_A64:
-        a64g_call(&em, tg, target)
-        return
-    if tg.id = TGT_RV64:
-        rvg_call(&em, tg, target)
-        return
-    if tg.id = TGT_I386:
-        i3g_call(&em, tg, target)
-        return
-    if tg.id = TGT_A32:
-        a32g_call(&em, tg, target)
-        return
-    r32g_call(&em, tg, target)
+    match tg.id:
+        Tgt.a64: a64g_call(&em, tg, target)
+        Tgt.rv64: rvg_call(&em, tg, target)
+        Tgt.i386: i3g_call(&em, tg, target)
+        Tgt.a32: a32g_call(&em, tg, target)
+        Tgt.rv32: r32g_call(&em, tg, target)
+        Tgt.x64: g_pioneer()
 
 fn g_calli(em : &mut Emit, tg : Target, r : i64):
-    if tg.id = TGT_A64:
-        a64g_calli(&em, tg, r)
-        return
-    if tg.id = TGT_RV64:
-        rvg_calli(&em, tg, r)
-        return
-    if tg.id = TGT_I386:
-        i3g_calli(&em, tg, r)
-        return
-    if tg.id = TGT_A32:
-        a32g_calli(&em, tg, r)
-        return
-    r32g_calli(&em, tg, r)
+    match tg.id:
+        Tgt.a64: a64g_calli(&em, tg, r)
+        Tgt.rv64: rvg_calli(&em, tg, r)
+        Tgt.i386: i3g_calli(&em, tg, r)
+        Tgt.a32: a32g_calli(&em, tg, r)
+        Tgt.rv32: r32g_calli(&em, tg, r)
+        Tgt.x64: g_pioneer()
 
 fn g_ijmp(em : &mut Emit, tg : Target, r : i64):
-    if tg.id = TGT_A64:
-        a64g_ijmp(&em, tg, r)
-        return
-    if tg.id = TGT_RV64:
-        rvg_ijmp(&em, tg, r)
-        return
-    if tg.id = TGT_I386:
-        i3g_ijmp(&em, tg, r)
-        return
-    if tg.id = TGT_A32:
-        a32g_ijmp(&em, tg, r)
-        return
-    r32g_ijmp(&em, tg, r)
+    match tg.id:
+        Tgt.a64: a64g_ijmp(&em, tg, r)
+        Tgt.rv64: rvg_ijmp(&em, tg, r)
+        Tgt.i386: i3g_ijmp(&em, tg, r)
+        Tgt.a32: a32g_ijmp(&em, tg, r)
+        Tgt.rv32: r32g_ijmp(&em, tg, r)
+        Tgt.x64: g_pioneer()
 
 fn g_argld(em : &mut Emit, tg : Target, k : i64, slot : i64):
-    if tg.id = TGT_A64:
-        a64g_argld(&em, tg, k, slot)
-        return
-    if tg.id = TGT_RV64:
-        rvg_argld(&em, tg, k, slot)
-        return
-    if tg.id = TGT_I386:
-        i3g_argld(&em, tg, k, slot)
-        return
-    if tg.id = TGT_A32:
-        a32g_argld(&em, tg, k, slot)
-        return
-    r32g_argld(&em, tg, k, slot)
+    match tg.id:
+        Tgt.a64: a64g_argld(&em, tg, k, slot)
+        Tgt.rv64: rvg_argld(&em, tg, k, slot)
+        Tgt.i386: i3g_argld(&em, tg, k, slot)
+        Tgt.a32: a32g_argld(&em, tg, k, slot)
+        Tgt.rv32: r32g_argld(&em, tg, k, slot)
+        Tgt.x64: g_pioneer()
 
 fn g_argconst(em : &mut Emit, tg : Target, k : i64, v : i64):
-    if tg.id = TGT_A64:
-        a64g_argconst(&em, tg, k, v)
-        return
-    if tg.id = TGT_RV64:
-        rvg_argconst(&em, tg, k, v)
-        return
-    if tg.id = TGT_I386:
-        i3g_argconst(&em, tg, k, v)
-        return
-    if tg.id = TGT_A32:
-        a32g_argconst(&em, tg, k, v)
-        return
-    r32g_argconst(&em, tg, k, v)
+    match tg.id:
+        Tgt.a64: a64g_argconst(&em, tg, k, v)
+        Tgt.rv64: rvg_argconst(&em, tg, k, v)
+        Tgt.i386: i3g_argconst(&em, tg, k, v)
+        Tgt.a32: a32g_argconst(&em, tg, k, v)
+        Tgt.rv32: r32g_argconst(&em, tg, k, v)
+        Tgt.x64: g_pioneer()
 
 fn g_argmov(em : &mut Emit, tg : Target, k : i64, r : i64):
-    if tg.id = TGT_A64:
-        a64g_argmov(&em, tg, k, r)
-        return
-    if tg.id = TGT_RV64:
-        rvg_argmov(&em, tg, k, r)
-        return
-    if tg.id = TGT_I386:
-        i3g_argmov(&em, tg, k, r)
-        return
-    if tg.id = TGT_A32:
-        a32g_argmov(&em, tg, k, r)
-        return
-    r32g_argmov(&em, tg, k, r)
+    match tg.id:
+        Tgt.a64: a64g_argmov(&em, tg, k, r)
+        Tgt.rv64: rvg_argmov(&em, tg, k, r)
+        Tgt.i386: i3g_argmov(&em, tg, k, r)
+        Tgt.a32: a32g_argmov(&em, tg, k, r)
+        Tgt.rv32: r32g_argmov(&em, tg, k, r)
+        Tgt.x64: g_pioneer()
 
 fn g_retst(em : &mut Emit, tg : Target, slot : i64):
-    if tg.id = TGT_A64:
-        a64g_retst(&em, tg, slot)
-        return
-    if tg.id = TGT_RV64:
-        rvg_retst(&em, tg, slot)
-        return
-    if tg.id = TGT_I386:
-        i3g_retst(&em, tg, slot)
-        return
-    if tg.id = TGT_A32:
-        a32g_retst(&em, tg, slot)
-        return
-    r32g_retst(&em, tg, slot)
+    match tg.id:
+        Tgt.a64: a64g_retst(&em, tg, slot)
+        Tgt.rv64: rvg_retst(&em, tg, slot)
+        Tgt.i386: i3g_retst(&em, tg, slot)
+        Tgt.a32: a32g_retst(&em, tg, slot)
+        Tgt.rv32: r32g_retst(&em, tg, slot)
+        Tgt.x64: g_pioneer()
 
 fn g_retld(em : &mut Emit, tg : Target, slot : i64):
-    if tg.id = TGT_A64:
-        a64g_retld(&em, tg, slot)
-        return
-    if tg.id = TGT_RV64:
-        rvg_retld(&em, tg, slot)
-        return
-    if tg.id = TGT_I386:
-        i3g_retld(&em, tg, slot)
-        return
-    if tg.id = TGT_A32:
-        a32g_retld(&em, tg, slot)
-        return
-    r32g_retld(&em, tg, slot)
+    match tg.id:
+        Tgt.a64: a64g_retld(&em, tg, slot)
+        Tgt.rv64: rvg_retld(&em, tg, slot)
+        Tgt.i386: i3g_retld(&em, tg, slot)
+        Tgt.a32: a32g_retld(&em, tg, slot)
+        Tgt.rv32: r32g_retld(&em, tg, slot)
+        Tgt.x64: g_pioneer()
 
 fn g_retmov(em : &mut Emit, tg : Target, r : i64):
-    if tg.id = TGT_A64:
-        a64g_retmov(&em, tg, r)
-        return
-    if tg.id = TGT_RV64:
-        rvg_retmov(&em, tg, r)
-        return
-    if tg.id = TGT_I386:
-        i3g_retmov(&em, tg, r)
-        return
-    if tg.id = TGT_A32:
-        a32g_retmov(&em, tg, r)
-        return
-    r32g_retmov(&em, tg, r)
+    match tg.id:
+        Tgt.a64: a64g_retmov(&em, tg, r)
+        Tgt.rv64: rvg_retmov(&em, tg, r)
+        Tgt.i386: i3g_retmov(&em, tg, r)
+        Tgt.a32: a32g_retmov(&em, tg, r)
+        Tgt.rv32: r32g_retmov(&em, tg, r)
+        Tgt.x64: g_pioneer()
 
 fn g_absref(em : &mut Emit, tg : Target, r : i64) → i64:
-    if tg.id = TGT_A64:
-        return a64g_absref(&em, tg, r)
-    if tg.id = TGT_RV64:
-        return rvg_absref(&em, tg, r)
-    if tg.id = TGT_I386:
-        return i3g_absref(&em, tg, r)
-    if tg.id = TGT_A32:
-        return a32g_absref(&em, tg, r)
-    r32g_absref(&em, tg, r)
+    match tg.id:
+        Tgt.a64: return a64g_absref(&em, tg, r)
+        Tgt.rv64: return rvg_absref(&em, tg, r)
+        Tgt.i386: return i3g_absref(&em, tg, r)
+        Tgt.a32: return a32g_absref(&em, tg, r)
+        Tgt.rv32: return r32g_absref(&em, tg, r)
+        Tgt.x64: g_pioneer()
 
 fn g_absref_arg(em : &mut Emit, tg : Target, k : i64) → i64:
-    if tg.id = TGT_A64:
-        return a64g_absref_arg(&em, tg, k)
-    if tg.id = TGT_RV64:
-        return rvg_absref_arg(&em, tg, k)
-    if tg.id = TGT_I386:
-        return i3g_absref_arg(&em, tg, k)
-    if tg.id = TGT_A32:
-        return a32g_absref_arg(&em, tg, k)
-    r32g_absref_arg(&em, tg, k)
+    match tg.id:
+        Tgt.a64: return a64g_absref_arg(&em, tg, k)
+        Tgt.rv64: return rvg_absref_arg(&em, tg, k)
+        Tgt.i386: return i3g_absref_arg(&em, tg, k)
+        Tgt.a32: return a32g_absref_arg(&em, tg, k)
+        Tgt.rv32: return r32g_absref_arg(&em, tg, k)
+        Tgt.x64: g_pioneer()
 
 fn g_sysarg(em : &mut Emit, tg : Target, k : i64, slot : i64):
-    if tg.id = TGT_A64:
-        a64g_sysarg(&em, tg, k, slot)
-        return
-    if tg.id = TGT_RV64:
-        rvg_sysarg(&em, tg, k, slot)
-        return
-    if tg.id = TGT_I386:
-        i3g_sysarg(&em, tg, k, slot)
-        return
-    if tg.id = TGT_A32:
-        a32g_sysarg(&em, tg, k, slot)
-        return
-    r32g_sysarg(&em, tg, k, slot)
+    match tg.id:
+        Tgt.a64: a64g_sysarg(&em, tg, k, slot)
+        Tgt.rv64: rvg_sysarg(&em, tg, k, slot)
+        Tgt.i386: i3g_sysarg(&em, tg, k, slot)
+        Tgt.a32: a32g_sysarg(&em, tg, k, slot)
+        Tgt.rv32: r32g_sysarg(&em, tg, k, slot)
+        Tgt.x64: g_pioneer()
 
 fn g_sysimm(em : &mut Emit, tg : Target, k : i64, v : i64):
-    if tg.id = TGT_A64:
-        a64g_sysimm(&em, tg, k, v)
-        return
-    if tg.id = TGT_RV64:
-        rvg_sysimm(&em, tg, k, v)
-        return
-    if tg.id = TGT_I386:
-        i3g_sysimm(&em, tg, k, v)
-        return
-    if tg.id = TGT_A32:
-        a32g_sysimm(&em, tg, k, v)
-        return
-    r32g_sysimm(&em, tg, k, v)
+    match tg.id:
+        Tgt.a64: a64g_sysimm(&em, tg, k, v)
+        Tgt.rv64: rvg_sysimm(&em, tg, k, v)
+        Tgt.i386: i3g_sysimm(&em, tg, k, v)
+        Tgt.a32: a32g_sysimm(&em, tg, k, v)
+        Tgt.rv32: r32g_sysimm(&em, tg, k, v)
+        Tgt.x64: g_pioneer()
 
 fn g_sysmov(em : &mut Emit, tg : Target, k : i64, r : i64):
-    if tg.id = TGT_A64:
-        a64g_sysmov(&em, tg, k, r)
-        return
-    if tg.id = TGT_RV64:
-        rvg_sysmov(&em, tg, k, r)
-        return
-    if tg.id = TGT_I386:
-        i3g_sysmov(&em, tg, k, r)
-        return
-    if tg.id = TGT_A32:
-        a32g_sysmov(&em, tg, k, r)
-        return
-    r32g_sysmov(&em, tg, k, r)
+    match tg.id:
+        Tgt.a64: a64g_sysmov(&em, tg, k, r)
+        Tgt.rv64: rvg_sysmov(&em, tg, k, r)
+        Tgt.i386: i3g_sysmov(&em, tg, k, r)
+        Tgt.a32: a32g_sysmov(&em, tg, k, r)
+        Tgt.rv32: r32g_sysmov(&em, tg, k, r)
+        Tgt.x64: g_pioneer()
 
 fn g_syscall(em : &mut Emit, tg : Target, scid : i64):
-    if tg.id = TGT_A64:
-        a64g_syscall(&em, tg, scid)
-        return
-    if tg.id = TGT_RV64:
-        rvg_syscall(&em, tg, scid)
-        return
-    if tg.id = TGT_I386:
-        i3g_syscall(&em, tg, scid)
-        return
-    if tg.id = TGT_A32:
-        a32g_syscall(&em, tg, scid)
-        return
-    r32g_syscall(&em, tg, scid)
+    match tg.id:
+        Tgt.a64: a64g_syscall(&em, tg, scid)
+        Tgt.rv64: rvg_syscall(&em, tg, scid)
+        Tgt.i386: i3g_syscall(&em, tg, scid)
+        Tgt.a32: a32g_syscall(&em, tg, scid)
+        Tgt.rv32: r32g_syscall(&em, tg, scid)
+        Tgt.x64: g_pioneer()
 
 fn g_sysret(em : &mut Emit, tg : Target, r : i64):
-    if tg.id = TGT_A64:
-        a64g_sysret(&em, tg, r)
-        return
-    if tg.id = TGT_RV64:
-        rvg_sysret(&em, tg, r)
-        return
-    if tg.id = TGT_I386:
-        i3g_sysret(&em, tg, r)
-        return
-    if tg.id = TGT_A32:
-        a32g_sysret(&em, tg, r)
-        return
-    r32g_sysret(&em, tg, r)
+    match tg.id:
+        Tgt.a64: a64g_sysret(&em, tg, r)
+        Tgt.rv64: rvg_sysret(&em, tg, r)
+        Tgt.i386: i3g_sysret(&em, tg, r)
+        Tgt.a32: a32g_sysret(&em, tg, r)
+        Tgt.rv32: r32g_sysret(&em, tg, r)
+        Tgt.x64: g_pioneer()
 
 fn g_frameaddr(em : &mut Emit, tg : Target, nvregs : i64, nobj : i64, off : i64, r : i64):
-    if tg.id = TGT_A64:
-        a64g_frameaddr(&em, tg, nvregs, nobj, off, r)
-        return
-    if tg.id = TGT_RV64:
-        rvg_frameaddr(&em, tg, nvregs, nobj, off, r)
-        return
-    if tg.id = TGT_I386:
-        i3g_frameaddr(&em, tg, nvregs, nobj, off, r)
-        return
-    if tg.id = TGT_A32:
-        a32g_frameaddr(&em, tg, nvregs, nobj, off, r)
-        return
-    r32g_frameaddr(&em, tg, nvregs, nobj, off, r)
+    match tg.id:
+        Tgt.a64: a64g_frameaddr(&em, tg, nvregs, nobj, off, r)
+        Tgt.rv64: rvg_frameaddr(&em, tg, nvregs, nobj, off, r)
+        Tgt.i386: i3g_frameaddr(&em, tg, nvregs, nobj, off, r)
+        Tgt.a32: a32g_frameaddr(&em, tg, nvregs, nobj, off, r)
+        Tgt.rv32: r32g_frameaddr(&em, tg, nvregs, nobj, off, r)
+        Tgt.x64: g_pioneer()
 
 fn g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64):
-    if tg.id = TGT_A64:
-        a64g_prologue(&em, tg, nvregs, np)
-        return
-    if tg.id = TGT_RV64:
-        rvg_prologue(&em, tg, nvregs, np)
-        return
-    if tg.id = TGT_I386:
-        i3g_prologue(&em, tg, nvregs, np)
-        return
-    if tg.id = TGT_A32:
-        a32g_prologue(&em, tg, nvregs, np)
-        return
-    r32g_prologue(&em, tg, nvregs, np)
+    match tg.id:
+        Tgt.a64: a64g_prologue(&em, tg, nvregs, np)
+        Tgt.rv64: rvg_prologue(&em, tg, nvregs, np)
+        Tgt.i386: i3g_prologue(&em, tg, nvregs, np)
+        Tgt.a32: a32g_prologue(&em, tg, nvregs, np)
+        Tgt.rv32: r32g_prologue(&em, tg, nvregs, np)
+        Tgt.x64: g_pioneer()
 
 fn g_epilogue(em : &mut Emit, tg : Target):
-    if tg.id = TGT_A64:
-        a64g_epilogue(&em, tg)
-        return
-    if tg.id = TGT_RV64:
-        rvg_epilogue(&em, tg)
-        return
-    if tg.id = TGT_I386:
-        i3g_epilogue(&em, tg)
-        return
-    if tg.id = TGT_A32:
-        a32g_epilogue(&em, tg)
-        return
-    r32g_epilogue(&em, tg)
+    match tg.id:
+        Tgt.a64: a64g_epilogue(&em, tg)
+        Tgt.rv64: rvg_epilogue(&em, tg)
+        Tgt.i386: i3g_epilogue(&em, tg)
+        Tgt.a32: a32g_epilogue(&em, tg)
+        Tgt.rv32: r32g_epilogue(&em, tg)
+        Tgt.x64: g_pioneer()
 
 fn g_resolve(em : &mut Emit, tg : Target):
-    if tg.id = TGT_A64:
-        a64g_resolve(&em, tg)
-        return
-    if tg.id = TGT_RV64:
-        rvg_resolve(&em, tg)
-        return
-    if tg.id = TGT_I386:
-        i3g_resolve(&em, tg)
-        return
-    if tg.id = TGT_A32:
-        a32g_resolve(&em, tg)
-        return
-    r32g_resolve(&em, tg)
+    match tg.id:
+        Tgt.a64: a64g_resolve(&em, tg)
+        Tgt.rv64: rvg_resolve(&em, tg)
+        Tgt.i386: i3g_resolve(&em, tg)
+        Tgt.a32: a32g_resolve(&em, tg)
+        Tgt.rv32: r32g_resolve(&em, tg)
+        Tgt.x64: g_pioneer()
 
 fn g_patch_abs(em : &mut Emit, tg : Target, pos : i64, v : i64):
-    if tg.id = TGT_A64:
-        a64g_patch_abs(&em, tg, pos, v)
-        return
-    if tg.id = TGT_RV64:
-        rvg_patch_abs(&em, tg, pos, v)
-        return
-    if tg.id = TGT_I386:
-        i3g_patch_abs(&em, tg, pos, v)
-        return
-    if tg.id = TGT_A32:
-        a32g_patch_abs(&em, tg, pos, v)
-        return
-    r32g_patch_abs(&em, tg, pos, v)
+    match tg.id:
+        Tgt.a64: a64g_patch_abs(&em, tg, pos, v)
+        Tgt.rv64: rvg_patch_abs(&em, tg, pos, v)
+        Tgt.i386: i3g_patch_abs(&em, tg, pos, v)
+        Tgt.a32: a32g_patch_abs(&em, tg, pos, v)
+        Tgt.rv32: r32g_patch_abs(&em, tg, pos, v)
+        Tgt.x64: g_pioneer()
 
 fn g_patch_call(em : &mut Emit, tg : Target, pos : i64, dest : i64):
-    if tg.id = TGT_A64:
-        a64g_patch_call(&em, tg, pos, dest)
-        return
-    if tg.id = TGT_RV64:
-        rvg_patch_call(&em, tg, pos, dest)
-        return
-    if tg.id = TGT_I386:
-        i3g_patch_call(&em, tg, pos, dest)
-        return
-    if tg.id = TGT_A32:
-        a32g_patch_call(&em, tg, pos, dest)
-        return
-    r32g_patch_call(&em, tg, pos, dest)
+    match tg.id:
+        Tgt.a64: a64g_patch_call(&em, tg, pos, dest)
+        Tgt.rv64: rvg_patch_call(&em, tg, pos, dest)
+        Tgt.i386: i3g_patch_call(&em, tg, pos, dest)
+        Tgt.a32: a32g_patch_call(&em, tg, pos, dest)
+        Tgt.rv32: r32g_patch_call(&em, tg, pos, dest)
+        Tgt.x64: g_pioneer()
 
