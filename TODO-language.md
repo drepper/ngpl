@@ -1130,6 +1130,9 @@ Macros and Reflection
     expression that produced no value being no expression.  What tells it from an if
     statement is the line break: an if goes on with an expression only where the token in
     front of it is not one.
+    Withdrawn.  An if hands back the value of the branch that runs, which says the same
+    thing and also holds a branch of several statements, so `if c: a else: b` is the one
+    spelling and this one draws a sentence pointing at it.
 
 [x] check that the two branches of a conditional expression agree in type.  Only what the
     program writes down is read -- a literal, a name's declaration, a struct field, a

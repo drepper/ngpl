@@ -190,13 +190,13 @@ fn i64_str(n : i64) → str:
     let neg : bool = n < 0
     // work below zero, where every i64 has a home; the remainders come
     // out non-positive and are flipped digit by digit
-    let v : mut i64 = n if neg else @wrap(0 - n)
+    let v : mut i64 = if neg: n else: @wrap(0 - n)
     let s : mut str = ""
     while v ≠ 0:
         let digit : i64 = @wrap(0 - (v % 10 ?? 0))
         s ← (48 + digit).chr() ⧺ s
         v ← (v ÷ 10 ?? 0)
-    ("-" ⧺ s) if neg else s
+    if neg: ("-" ⧺ s) else: s
 
 // The text of a byte run, for identifiers, keywords and messages.
 @pre(off >= 0 and n >= 0)

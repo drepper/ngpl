@@ -57,8 +57,8 @@ fn report(diags : Diag[], files : Files, as_json : bool, src : byte[]):
         // A warning says the program compiles and something in it is
         // worth a look; an error says it does not.  The number, where
         // the diagnostic has one, is what an @expect names.
-        let sev : str = "warning" if d.level = DIAG_WARNING else "error"
-        let named : str = sev if d.code = DIAG_NONE else sev ⧺ "[" ⧺ i64_str(d.code) ⧺ "]"
+        let sev : str = if d.level = DIAG_WARNING: "warning" else: "error"
+        let named : str = if d.code = DIAG_NONE: sev else: sev ⧺ "[" ⧺ i64_str(d.code) ⧺"]"
         if as_json:
             std.println("{}\"file\": \"{}\", \"line\": {}, \"col\": {}, \"severity\": \"{}\", \"code\": {}, \"message\": \"{}\"{}",
                         "{", file, @dropunit(ln), @dropunit(d.col), sev, d.code, d.msg, "}")
@@ -207,12 +207,12 @@ fn resolve_source(name : str, base : str, paths : str[]) → str:
     let cs := name.chars()
     if #cs > 0 and cs[0 × 1¤ptrdiff] = '/':
         return name
-    let here : str = name if base = "" else base ⧺ "/" ⧺ name
+    let here : str = if base = "": name else: base ⧺ "/" ⧺ name
     if can_open(here):
         return here
     foreach d := paths:
         let dc := d.chars()
-        let root : str = d if (#dc > 0 and dc[0 × 1¤ptrdiff] = '/') or base = "" else base ⧺ "/" ⧺ d
+        let root : str = if (#dc > 0 and dc[0 × 1¤ptrdiff] = '/') or base = "": d else: base ⧺ "/" ⧺ d
         let cand : str = root ⧺ "/" ⧺ name
         if can_open(cand):
             return cand
@@ -368,7 +368,7 @@ fn main() → u8:
             continue
         if opt_matches(a, "--stack-size") or opt_matches(a, "--guard-size"):
             let is_stack : bool = opt_matches(a, "--stack-size")
-            let which : str = "--stack-size" if is_stack else "--guard-size"
+            let which : str = if is_stack: "--stack-size" else: "--guard-size"
             let raw : str = opt_value(a, which)
             let v : i64 = parse_size(raw)
             if v = ⁻1:
@@ -410,7 +410,7 @@ fn main() → u8:
     if build_file ≠ "" and #inputs > 0:
         std.println("ngplc: --build reads the source list from the recipe; '{}' names a file besides", inputs[0 × 1¤ptrdiff])
         return 1
-    let plan : Recipe = read_build(build_file, json) if build_file ≠ "" else empty_recipe()
+    let plan : Recipe = if build_file ≠ "": read_build(build_file, json) else: empty_recipe()
     if build_file ≠ "":
         if #plan.sources = 0:
             std.println("ngplc: the @build recipe in '{}' names no source", build_file)
@@ -420,7 +420,7 @@ fn main() → u8:
         foreach s := plan.sources:
             inputs.push(resolve_source(s, dir_of(build_file), plan.paths))
         if output = "" and plan.output ≠ "":
-            output ← plan.output if plan.output_dir = "" else plan.output_dir ⧺ "/" ⧺ plan.output
+            output ← if plan.output_dir = "": plan.output else: plan.output_dir ⧺ "/" ⧺ plan.output
         foreach f := plan.flags:
             std.println("ngplc: the build recipe asks for flag '{}', which this compiler does not have", f)
             return 1
@@ -497,7 +497,7 @@ fn main() → u8:
             std.println("{}", l)
 
     // as every Unix compiler has it: a.out unless -o names the file
-    let outname : str = output if output ≠ "" else "a.out"
+    let outname : str = if output ≠ "": output else: "a.out"
     let outf := std.fs.cwd().create_file(outname, 493)
     // one plan, and the class picks how wide its fields are written;
     // one run for each thing the file is made of, and the kernel

@@ -185,7 +185,7 @@ impl Lexer:
                         // any byte, including inside a multi-byte
                         // character; the column counts lead bytes only
                         self.pos ← self.pos + 1
-                        self.col ← self.col + (0¤"col" if (d & 192) = 128 else 1¤"col")
+                        self.col ← self.col + (if (d & 192) = 128: 0¤"col" else: 1¤"col")
             else:
                 return true
         false
@@ -288,7 +288,7 @@ impl Lexer:
                 self.pos ← upos
                 self.col ← ucol
             else:
-                st ← ty_with_unit(st if st ≠ ⁻1 else TY_I64, u)
+                st ← ty_with_unit(if st ≠ ⁻1: st else: TY_I64, u)
         if st ≠ ⁻1:
             self.emit(TK_INT, spos, self.pos - spos, scol, v, big + st × 2)
             return
@@ -409,7 +409,7 @@ impl Lexer:
             else:
                 s ← s ⧺ b.chr()
                 self.pos ← self.pos + 1
-                self.col ← self.col + (0¤"col" if (b & 192) = 128 else 1¤"col")
+                self.col ← self.col + (if (b & 192) = 128: 0¤"col" else: 1¤"col")
         let idx : i64 = @dropunit(#self.strs)
         self.strs.push(s)
         self.emit(TK_STR, spos, self.pos - spos, scol, idx, 0)

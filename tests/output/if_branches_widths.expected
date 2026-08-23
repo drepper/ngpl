@@ -1,0 +1,7 @@
+error: in main: an if is one value, so its branches say one type between them; this one says i32 on one branch and i64 on another
+  --> tests/output/if_branches_widths.ngpl:8:19
+    |
+  8 |     let chosen := if true: a else: b
+    |                   ^^
+  9 |     std.println("{}", chosen)
+    |

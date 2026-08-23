@@ -745,8 +745,9 @@ lead-byte test `(b & 0xC0) ≠ 0x80`.
   combine with `and`/`or`/`xor`.
 - `⌈` and `⌊` are `cmp` + `cmovcc`, signedness-aware, always — their
   operands are evaluated regardless, so nothing is speculated.
-- `a if c else b` becomes a `cmov` select when both sides are **safe
-  to speculate**: no effects and no faults.  The legality rule follows
+- `if c: a else: b` becomes a `cmov` select when both branches are one
+  expression apiece and both are **safe to speculate**: no effects and
+  no faults.  The legality rule follows
   what real compilers use: variables, constants, `@wrap` arithmetic,
   bitwise ops, comparisons and selects of such pass; checked
   arithmetic (may abort), array indexing (bounds abort), and calls do

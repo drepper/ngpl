@@ -164,7 +164,7 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
         elif o = IR_MAXX or o = IR_MINN:
             g_lds(&em, tg, RG_A, a)
             g_lds(&em, tg, RG_B, b)
-            g_cmp3(&em, tg, RG_C, RG_A, RG_B, CC_GE if o = IR_MAXX else CC_LE, sgn)
+            g_cmp3(&em, tg, RG_C, RG_A, RG_B, if o = IR_MAXX: CC_GE else: CC_LE, sgn)
             g_sel4(&em, tg, RG_A, RG_C, RG_A, RG_B)
             g_sts(&em, tg, RG_A, d)
         elif o = IR_SEL:
@@ -246,10 +246,10 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
                 em.sf_pos.push(pos)
                 em.sf_str.push(a)
             g_argconst(&em, tg, 1, str_len(strs[a × 1¤ptrdiff]))
-            g_call(&em, tg, RT_WRITE1 if o = IR_PRINTS else (RT_WRITE2 if o = IR_EPRINTS else RT_ABORT))
+            g_call(&em, tg, if o = IR_PRINTS: RT_WRITE1 else: (if o = IR_EPRINTS: RT_WRITE2 else: RT_ABORT))
         elif o = IR_PRINTI or o = IR_PRINTU:
             g_argld(&em, tg, 0, a)
-            g_call(&em, tg, RT_PRINTI if o = IR_PRINTI else RT_PRINTU)
+            g_call(&em, tg, if o = IR_PRINTI: RT_PRINTI else: RT_PRINTU)
         elif o = IR_PRINTSV:
             g_argld(&em, tg, 0, a)
             g_call(&em, tg, RT_PRINTSTR)
@@ -257,7 +257,7 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
             g_sysarg(&em, tg, 0, a)
             g_syscall(&em, tg, SC_EXIT)
         elif o = IR_GLOAD or o = IR_GSTORE:
-            let gg : i64 = a if o = IR_GLOAD else a
+            let gg : i64 = if o = IR_GLOAD: a else: a
             let pos : i64 = g_absref(&em, tg, RG_B)
             if em.skipping = 0:
                 if em.gseg[gg × 1¤ptrdiff] = 0:
@@ -397,7 +397,7 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
         elif o = IR_HGET or o = IR_HELEM:
             g_argld(&em, tg, 0, a)
             g_argld(&em, tg, 1, b)
-            g_call(&em, tg, RT_HGET if o = IR_HGET else RT_HELEM)
+            g_call(&em, tg, if o = IR_HGET: RT_HGET else: RT_HELEM)
             g_retst(&em, tg, d)
         elif o = IR_CHR:
             g_lds(&em, tg, RG_A, a)
@@ -425,7 +425,7 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
         elif o = IR_SCCAT or o = IR_SEQV:
             g_argld(&em, tg, 0, a)
             g_argld(&em, tg, 1, b)
-            g_call(&em, tg, RT_CONCAT if o = IR_SCCAT else RT_STREQ)
+            g_call(&em, tg, if o = IR_SCCAT: RT_CONCAT else: RT_STREQ)
             g_retst(&em, tg, d)
         elif o = IR_HFINAL:
             g_argld(&em, tg, 0, a)
@@ -489,7 +489,7 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
         elif o = IR_FWRITE or o = IR_WRITEV or o = IR_HUPDATE:
             g_argld(&em, tg, 0, a)
             g_argld(&em, tg, 1, b)
-            g_call(&em, tg, RT_HUPDATE if o = IR_HUPDATE else (RT_FWRITE if o = IR_FWRITE else RT_WRITEV))
+            g_call(&em, tg, if o = IR_HUPDATE: RT_HUPDATE else: (if o = IR_FWRITE: RT_FWRITE else: RT_WRITEV))
         elif o = IR_FCLOSE:
             g_sysarg(&em, tg, 0, a)
             g_syscall(&em, tg, SC_CLOSE)
@@ -627,7 +627,7 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
             let pos : i64 = g_absref(&em, tg, RG_A)
             if em.skipping = 0:
                 em.df_pos.push(pos)
-                em.df_off.push((em.k_args if a = 0 else (em.k_alloc if a = 1 else em.k_sig)) + b)
+                em.df_off.push((if a = 0: em.k_args else: (if a = 1: em.k_alloc else: em.k_sig)) + b)
             g_sts(&em, tg, RG_A, d)
         else:
             assert(false, "an IR op the driver knows")
@@ -702,7 +702,7 @@ fn t_emit_sat(em : &mut Emit, tg : Target, o : i64, w : i64, a : i64, b : i64, d
     g_jz(&em, tg, RG_C, sl + 1)
     g_const(&em, tg, RG_C, 0)
     // an overflowed add went the way of b; a subtract the other way
-    g_cmp3(&em, tg, RG_T, RG_B, RG_C, CC_LT if o = IR_SATADD else CC_GT, 1)
+    g_cmp3(&em, tg, RG_T, RG_B, RG_C, if o = IR_SATADD: CC_LT else: CC_GT, 1)
     g_const(&em, tg, RG_A, 9223372036854775807)
     g_jz(&em, tg, RG_T, sl + 1)
     g_const(&em, tg, RG_A, ⁻9223372036854775807 - 1)

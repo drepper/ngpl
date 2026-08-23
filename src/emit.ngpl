@@ -295,7 +295,7 @@ impl Emit:
             if self.rax_slot = slot:
                 return
             self.rax_slot ← slot
-        self.b1(72 + (4 if reg >= 8 else 0))
+        self.b1(72 + (if reg >= 8: 4 else: 0))
         self.b1(139)
         self.b1(133 + ((reg & 7) « 3))
         self.w32(0 - 8 × (slot + 1))
@@ -306,7 +306,7 @@ impl Emit:
         elif slot = self.rax_slot:
             // another register overwrites the slot rax mirrors
             self.rax_slot ← ⁻1
-        self.b1(72 + (4 if reg >= 8 else 0))
+        self.b1(72 + (if reg >= 8: 4 else: 0))
         self.b1(137)
         self.b1(133 + ((reg & 7) « 3))
         self.w32(0 - 8 × (slot + 1))
@@ -318,7 +318,7 @@ impl Emit:
     fn movimm(&mut self, reg : i64, v : i64):
         if reg = 0:
             self.rax_slot ← ⁻1
-        self.b1(72 + (1 if reg >= 8 else 0))
+        self.b1(72 + (if reg >= 8: 1 else: 0))
         self.b1(184 + (reg & 7))
         self.w64(v)
 
@@ -388,7 +388,7 @@ impl Emit:
     fn sref(&mut self, reg : i64, stridx : i64):
         if reg = 0:
             self.rax_slot ← ⁻1
-        self.b1(72 + (1 if reg >= 8 else 0))
+        self.b1(72 + (if reg >= 8: 1 else: 0))
         self.b1(184 + (reg & 7))
         if self.skipping = 0:
             self.sf_pos.push(self.here())
@@ -398,7 +398,7 @@ impl Emit:
     fn sdref(&mut self, reg : i64, stridx : i64):
         if reg = 0:
             self.rax_slot ← ⁻1
-        self.b1(72 + (1 if reg >= 8 else 0))
+        self.b1(72 + (if reg >= 8: 1 else: 0))
         self.b1(184 + (reg & 7))
         if self.skipping = 0:
             self.sd_pos.push(self.here())
@@ -406,7 +406,7 @@ impl Emit:
         self.w64(0)
 
     fn jtref(&mut self, reg : i64, id : i64):
-        self.b1(72 + (1 if reg >= 8 else 0))
+        self.b1(72 + (if reg >= 8: 1 else: 0))
         self.b1(184 + (reg & 7))
         if self.skipping = 0:
             self.jt_pos.push(self.here())
@@ -461,7 +461,7 @@ impl Emit:
             self.rt_off[k × 1¤ptrdiff] ← self.here()
 
     fn dref(&mut self, reg : i64, off : i64):
-        self.b1(72 + (1 if reg >= 8 else 0))
+        self.b1(72 + (if reg >= 8: 1 else: 0))
         self.b1(184 + (reg & 7))
         if self.skipping = 0:
             self.df_pos.push(self.here())
@@ -471,7 +471,7 @@ impl Emit:
     // a table the runtime reads is constant, so it rides in rodata
     // beside the strings; this is where its address is asked for
     fn rxref(&mut self, reg : i64, off : i64):
-        self.b1(72 + (1 if reg >= 8 else 0))
+        self.b1(72 + (if reg >= 8: 1 else: 0))
         self.b1(184 + (reg & 7))
         if self.skipping = 0:
             self.rx_pos.push(self.here())
@@ -481,7 +481,7 @@ impl Emit:
     // a global that is never written lives with the other read-only
     // things, so its address is fixed against rodata instead
     fn groref(&mut self, reg : i64, off : i64):
-        self.b1(72 + (1 if reg >= 8 else 0))
+        self.b1(72 + (if reg >= 8: 1 else: 0))
         self.b1(184 + (reg & 7))
         if self.skipping = 0:
             self.gr_pos.push(self.here())

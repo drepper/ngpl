@@ -1,5 +1,0 @@
-1i64 if true else 2i64
-1i64 if false else 2i64
-"a" if 0 else "b"
-let v : i64[] = [7, 8]
-v[0] if true else v[9]

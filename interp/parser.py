@@ -27,7 +27,6 @@ from interp.ast import (
     UnitOfExpr, UnitRefExpr,
     StructDef, ImplBlock, StructLit,
     MatchStmt, MatchArm, ExpErr,
-    IfExpr,
     MacroRulesDef, MacroRule, MetaVar, MacroFuncDef,
     MacroCall, Quote, Splice, Reflect,
     set_pos,
@@ -128,6 +127,22 @@ class _EnumAlias:
 
     def __init__(self, name: str):
         self.name = name
+
+
+
+def _has_else(node) -> bool:
+    """Whether an if chain ends in an else rather than running out.
+
+    The chain is nested tuples, each (condition, body) or (condition,
+    body, rest), and the else is the one whose condition is None.  It
+    can only be last, so finding it is walking to the end.
+    """
+    alt = node.alt
+    while alt is not None:
+        if alt[0] is None:
+            return True
+        alt = alt[2] if len(alt) == 3 else None
+    return False
 
 
 class Parser:
@@ -2275,37 +2290,44 @@ class Parser:
             self.pos += 1
 
     def _parse_expr(self):
-        """expr → or_expr ['if' or_expr 'else' expr]
+        """expr → if_expr | or_expr
 
-        The conditional binds loosest of everything, so `1 + 2 if c
-        else 3` chooses between `1 + 2` and `3`.  What follows `else`
-        is another expression rather than an operand, so a chain of
-        them groups to the right: `a if b else c if d else e` is
-        `a if b else (c if d else e)`.
+        An `if` at the head is the statement form standing where a
+        value is wanted.  One in the middle is the spelling that has
+        been withdrawn, and saying so is all that is left of it.
         """
+        # An `if` at the head of an expression is the statement form
+        # standing where a value is wanted: it takes blocks rather than
+        # operands, and its value is the value of whichever block runs.
+        # Nothing else can begin with `if` here -- the statement level
+        # takes its own -- so the two never have to be told apart.
+        if self._check("IF"):
+            if_tok = self._cur()
+            node = self._parse_if_stmt()
+            node.is_value = True
+            if not _has_else(node):
+                raise ParseError(
+                    "an if standing where a value is wanted says what the "
+                    "value is either way, so else and a further block "
+                    "follow", if_tok)
+            return self._set_pos(node, if_tok)
         left = self._parse_or_expr()
-        if not self._at_conditional_if():
-            return left
-        if_tok = self._eat("IF")
-        cond = self._parse_or_expr()
-        if not self._check("ELSE"):
+        if self._at_conditional_if():
             raise ParseError(
-                "a conditional expression says what the value is either "
-                "way, so else and a second value follow", self._cur())
-        self._eat("ELSE")
-        return self._set_pos(
-            IfExpr(cond, left, self._parse_expr()), if_tok)
+                "`a if c else b` is no longer how a value is chosen; an if "
+                "hands back the value of the branch that runs, so this is "
+                "written `if c: a else: b`", self._cur())
+        return left
 
     def _at_conditional_if(self) -> bool:
         """Whether an `if` here goes on with the expression.
 
-        An expression that ends a line leaves the parser past the
-        newline, since the levels below skip newlines looking for an
-        operator and do not put them back.  So the `if` of the next
-        statement would be found sitting here, and what tells the two
-        apart is that one has a newline in front of it and the other
-        does not.  Inside brackets there are no newlines at all, which
-        is what lets a conditional be written across lines there.
+        Nothing does any more, the middle `if` having been withdrawn.
+        What is left is telling that `if` from the one that opens the
+        next statement, so that the refusal lands on the first and not
+        on the second: an expression that ends a line leaves the parser
+        past the newline, so the `if` below would otherwise be found
+        sitting here.
         """
         return (self._check("IF") and self.pos > 0
                 and self.tokens[self.pos - 1].type != "NEWLINE")

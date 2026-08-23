@@ -1438,7 +1438,7 @@ NGPL is alone in the row that matters: an unsigned type is not a modular counter
 | `a.m(b)` | `a`, then `b` |
 | `a ⧺ b` | `a`, then `b` |
 | `a[b] ← c` | `a`, then `b`, then `c` |
-| `a if c else b` | `c`, then whichever of `a` and `b` it chose |
+| `if c: a else: b` | `c`, then whichever of `a` and `b` it chose |
 
 The last two are the ones a reader might guess otherwise.  An assignment writes what is on the left, so the left is where the reading starts too: `v[next()] ← next()` asks for the index first.  A conditional reads its condition before either arm, which is the only order that lets the arms be conditional at all.
 
@@ -4244,90 +4244,110 @@ The rule is one token of lookahead past the brace and needs no knowledge of whic
 The dual-mode approach draws from Haskell's optional layout rule while using Python's `:` syntax for familiarity.  The key advantage over Python is that braces remain available — useful for single-line blocks, machine-generated code, and situations where explicit delimiters reduce ambiguity.  The key advantage over Rust is that the common case of simple, sequential blocks needs no closing delimiter.
 
 
-### Choosing a Value: `a if c else b`
+### An `if` Is a Value
 
-An `if` statement branches; a conditional expression **chooses a value**:
+An `if` hands back the value of whichever branch runs, and a branch's value is the value of the last statement of its block.  It is the same `if` either way — nothing in the writing marks one as a statement and the other as a value — and what differs is only whether anything reads what comes back.
+
+Standing last in a body, that value is what the function answers, so `return` is written only to leave early:
 
 ```
-let n : i64 = x if x > 0 else ⁻x
+fn classify(x : i64) → str:
+    if x > 10:
+        "big"
+    elif x > 5:
+        "middling"
+    else:
+        "small"
 ```
 
-The value is the first expression where the condition holds and the third where it does not.  The spelling is Python's, condition in the middle.
+Standing where a value is wanted — a definition's value, an argument, an operand — it is that value:
+
+```
+let step : i64 = if wide { 8 } else { 4 }
+let sign : i64 = if x < 0: ⁻1 else: 1
+```
+
+Both block forms are available, as they are everywhere else, and the one-line form puts the whole of it on a line.  An `if` is not an operand, so one written inside an operator stands in brackets, which is where the operand is looked for:
+
+```
+1 + (if c: 2 else: 30)
+```
 
 #### Only the Branch Taken Is Read
 
-The other side is not evaluated at all, which is what lets a conditional stand in front of the thing it guards against:
+The other side is not evaluated at all, which is what lets an `if` stand in front of the thing it guards against:
 
 ```
 let v : i64[] = [1, 2, 3]
-0 if n >= #v else v[n]          // v[n] is never read where n is past the end
+if n >= #v: 0 else: v[n]        // v[n] is never read where n is past the end
 ```
 
-#### How It Groups
+Where both branches are one expression apiece and neither can come to harm from being read, an implementation may read both and choose between them rather than branch — a conditional move, or a lane select on a machine that has one.  That is a choice about instructions and not about meaning: nothing observable follows from it, which is why it is allowed only where nothing can.
 
-It binds looser than every operator, so what is written on either side is gathered up before the choice is made:
+#### The Condition
 
-```
-1 + 2 if c else 3               // (1 + 2) if c else 3
-1 + (2 if c else 30)            // brackets put one inside an operator
-```
-
-What follows `else` is another expression rather than an operand, so a chain groups to the right and reads as a list of cases:
+The condition is read for truth the way an `if` statement's own is: a number is true where it is not zero, a string where it is not empty, an optional where it holds something.  An `if` written as a condition stands in brackets, being an operand there like any other:
 
 ```
-"one" if n = 1 else "two" if n = 2 else "many"
+if (if c: p else: q):
+    …
 ```
 
-The condition itself is *not* a conditional unless it is bracketed, which is Python's rule and keeps `a if b if c else d else e` from being written by accident.
+#### Every Branch Supplies One
 
-#### The Condition, and the Two Branches
-
-The condition is read for truth the same way an `if` statement reads its own: a number is true where it is not zero, a string where it is not empty, an optional where it holds something.
-
-A conditional is **one value**, so its two sides have to say one type between them.  Two that cannot be the same value are refused at the definition, whether or not the line is ever reached:
+Where the value is read, every path through the `if` has to arrive with one.  So an `else` is required — an `if` that can fall past its branches has nothing to hand back — and each block ends in a value rather than in a definition or an assignment:
 
 ```
-1i64 if c else "x"
+let n : i64 = if x > 0: 1
 
-error: a conditional is one value, so its two sides say one type between
-them; this one says i64 where the condition holds and str where it does
-not
+error: an if standing where a value is wanted says what the value is
+either way; else and a further block follow
 ```
 
-Three things count as agreeing.  A number with **no width stated** settles on what it is asked for, so it agrees with any other number — `1 if c else 2.5` is fine, and a `f64` binding makes both `f64`.  An **absent value** agrees with what holds it, since an optional is the type that holds both: `7 if c else ∅` is an `i64?`.  And two types that otherwise disagree are one value where a **sum type says they belong together**, which is the whole of what a sum type is for:
+A branch that does not arrive at all supplies nothing and is not held to this.  A `return`, a `break`, an `@noreturn` call: the branch leaves, so there is no value from it to agree with, and the other side alone says what the `if` is:
+
+```
+let v : i64 = if c { 7 } else { give_up() }      // give_up is @noreturn
+```
+
+#### One Type Between Them
+
+The branches are one value, so they say one type between them.  Two that cannot be the same value are refused at the definition, whether or not the line is ever reached:
+
+```
+if c: 1i64 else: "x"
+
+error: an if is one value, so its branches say one type between them;
+this one says i64 on one branch and str on another
+```
+
+The type is settled the way an array literal settles its element type: from what the surrounding text asks for where it asks for anything, and from the first branch that states one otherwise.  Three things then count as agreeing.
+
+A number with **no width stated** settles on what it is asked for, so it agrees with any other number — `if c: 1 else: 2.5` is fine, and an `f64` binding makes both `f64`:
+
+```
+let b : i8 = if c: 1 else: ⁻2                    // both are i8
+```
+
+An **absent value** agrees with what holds it, since an optional is the type that holds both: `if c: 7 else: ∅` is an `i64?`.
+
+And two types that otherwise disagree are one value where a **sum type says they belong together**, which is the whole of what a sum type is for:
 
 ```
 type Width = i32 | i64
 
-let w : Width = a if c else b       // an i32 and an i64: one Width
+let w : Width = if c: a else: b     // an i32 and an i64: one Width
 ```
 
 Without that declaration the same line is refused, which is the honest answer: the two are one value only because something said so.
 
-Only what the program writes down is read — a literal, a name's declaration, a struct field, a comparison — so a pair is judged only where **both** sides say what they are.  Where either says nothing, the conditional is left alone; it is one value at runtime whatever this could not work out.
-
-`else` is required.  A conditional says what the value is either way, and leaving the second value off leaves the expression unfinished:
+An `elif` is a block holding one `if`, and that `if` is its block's value.  So a chain of any length is a stack of two-sided choices, and the rule above is applied once per step rather than once over the whole chain, which is what lets a chain read as a list of cases:
 
 ```
-"positive" if n > 0
-
-error: a conditional expression says what the value is either way, so
-else and a second value follow
+if n = 1: "one" else: if n = 2: "two" else: "many"
 ```
 
-#### A Statement's `if` Is Still a Statement
-
-A statement that begins with `if` is an `if` statement; a conditional has its `if` in the middle.  The two are told apart by the line break, so an expression that ends a line is finished and the `if` below it opens a statement:
-
-```
-foo()
-if bar:                         // a statement, not a continuation of foo()
-    …
-```
-
-Inside `( … )` there are no line breaks to speak of, so a conditional may be written across lines there.
-
-`@likely` and `@unlikely` apply to an `if` statement and not to a conditional expression; there is no branch here for a reader to be told about, only a value.
+`@likely` and `@unlikely` say the same thing here that they say of an `if` that is only a statement: there is a branch, and which way it is expected to go.
 
 #### Comparison with Other Languages
 
@@ -4336,12 +4356,11 @@ Inside `( … )` there are no line breaks to speak of, so a conditional may be w
 | C, C++ | `c ? a : b` |
 | Rust | `if c { a } else { b }` — every block is an expression |
 | Haskell, ML | `if c then a else b` |
-| Python | `a if c else b` |
+| Python | `a if c else b`, beside a separate `if` statement |
 | APL, BQN | `c⊃b‿a`, or a guard |
-| NGPL | `a if c else b` |
+| NGPL | `if c: a else: b` — the `if` statement, read for its value |
 
-Python's order is the one adopted.  C's `?:` would spend two glyphs, and `?` is already the optional suffix.  Rust's answer is the more general one — make every block an expression and the statement form disappears — but it is a much larger question than choosing between two values, and it would change what every `if` in the language means.  Reaching for that later is not foreclosed by this: `a if c else b` would remain the short way to write the common case, as it does in Python beside its own `if` statement.
-
+Rust's is the answer adopted: rather than a second construct for choosing between two values, the one `if` the language already has hands back what its branches hand back.  Python's `a if c else b` was written here once and has been withdrawn — two spellings for one thing is one more than a reader should have to know, and the one that survives is the one that also holds a branch of several statements.  C's `?:` would spend two glyphs, and `?` is already the optional suffix.
 
 ### While Loop
 
@@ -6537,7 +6556,7 @@ What comes back need not hold what went in.  The answers are what `f` said, what
 
 ```
 fn describe(n : i64) → str:
-    "even" if n % 2 = 0 else "odd"
+    if n % 2 = 0: "even" else: "odd"
 
 describe¨v                      // ["odd", "even", "odd"]
 ```
@@ -10003,7 +10022,7 @@ A macro is an ordinary function that runs while the program is being installed. 
 // The factors of an expression, however deeply the parser nested them.
 @listable
 comptime fn factors(e : syntax) → syntax[]:
-    [e] if e.head() ≠ ※× else ⧺⌿ factors(e.arguments())
+    if e.head() ≠ ※×: [e] else: ⧺⌿ factors(e.arguments())
 
 macro sin(e : syntax) → syntax:
     let rest : mut syntax[] = []
@@ -10116,7 +10135,7 @@ as `comptime fn helper` to have it there in time
 ```
 @listable
 comptime fn factors(e : syntax) → syntax[]:
-    [e] if e.head() ≠ ※× else ⧺⌿ factors(e.arguments())      // itself
+    if e.head() ≠ ※×: [e] else: ⧺⌿ factors(e.arguments())      // itself
 ```
 
 This is what recursion over the program's text is written with.  A macro is one function and cannot be two, so a walk that has to descend either carries its own worklist or calls something that recurses; `comptime fn` is how the second is spelled.

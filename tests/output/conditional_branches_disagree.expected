@@ -1,6 +1,0 @@
-error: in main: a conditional is one value, so its two sides say one type between them; this one says i64 where the condition holds and str where it does not
-  --> tests/output/conditional_branches_disagree.ngpl:7:28
-    |
-  7 |     std.println("{}", 1i64 if true else "x")
-    |                            ^^
-    |

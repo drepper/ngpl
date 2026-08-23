@@ -146,11 +146,6 @@ fn dump_node(a : Ast, id : i64, depth : i64, src : byte[], toks : Toks):
     elif k = NK_EXPRSTMT:
         std.println("{}exprstmt", pad)
         dump_node(a, na, depth + 1, src, toks)
-    elif k = NK_COND:
-        std.println("{}cond", pad)
-        dump_node(a, nb, depth + 1, src, toks)
-        dump_node(a, na, depth + 1, src, toks)
-        dump_node(a, nc, depth + 1, src, toks)
     elif k = NK_WRAP:
         std.println("{}wrap", pad)
         dump_node(a, na, depth + 1, src, toks)

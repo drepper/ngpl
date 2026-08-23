@@ -1,0 +1,184 @@
+// An if hands back a value.
+//
+// The value of an if is the value of the last statement of whichever
+// branch runs.  It is the same if either way -- nothing in the writing
+// marks one as a statement and another as a value -- and what differs
+// is only whether anything reads what comes back.  Standing last in a
+// body it is what the function answers; standing where a value is
+// wanted it is that value.
+//
+// Two rules follow, and both are pinned below.  Every path through an
+// if whose value is read has to arrive with one, so an else is
+// required and each branch ends in a value; a branch that leaves
+// instead -- a return, a @noreturn call -- arrives nowhere and is not
+// held to it.  And the branches are one value, so they say one type
+// between them, settled from what the surrounding text asks for where
+// it asks for anything and from the first branch that states one
+// otherwise, with untyped numbers taking the answer.
+//
+// The specification's "An `if` Is a Value" is the normative statement.
+
+// ---------------------------------------------------------------------
+// Standing last in a body
+// ---------------------------------------------------------------------
+
+fn sign(x : i64) → i64:
+    if x < 0:
+        ⁻1
+    elif x > 0:
+        1
+    else:
+        0
+
+fn classify(x : i64) → str:
+    if x > 10:
+        "big"
+    elif x > 5:
+        "middling"
+    else:
+        "small"
+
+// braces, and the whole of it on one line
+fn step(wide : bool) → i64 { if wide { 8 } else { 4 } }
+
+fn nudge(up : bool) → i64:
+    if up: 1 else: ⁻1
+
+@test
+fn test_a_body_that_ends_in_an_if():
+    assert_eq(sign(⁻5), ⁻1)
+    assert_eq(sign(0), 0)
+    assert_eq(sign(5), 1)
+
+@test
+fn test_a_chain_of_any_length():
+    assert_eq(classify(20), "big")
+    assert_eq(classify(7), "middling")
+    assert_eq(classify(1), "small")
+
+@test
+fn test_both_block_forms():
+    assert_eq(step(true), 8)
+    assert_eq(step(false), 4)
+    assert_eq(nudge(true), 1)
+    assert_eq(nudge(false), ⁻1)
+
+// An early return still leaves early; what changes is that the last
+// statement no longer needs one.
+fn guarded(x : i64) → i64:
+    if x < 0:
+        return 0
+    if x > 100:
+        100
+    else:
+        x
+
+@test
+fn test_return_is_for_leaving_early():
+    assert_eq(guarded(⁻1), 0)
+    assert_eq(guarded(500), 100)
+    assert_eq(guarded(50), 50)
+
+// ---------------------------------------------------------------------
+// Standing where a value is wanted
+// ---------------------------------------------------------------------
+
+@test
+fn test_an_if_as_a_value():
+    let wide : bool = true
+    let braced : i64 = if wide { 8 } else { 4 }
+    let one_line : i64 = if wide: 8 else: 4
+    let laid : i64 = if wide:
+        8
+    else:
+        4
+    assert_eq(braced, 8)
+    assert_eq(one_line, 8)
+    assert_eq(laid, 8)
+
+// A branch is a block, so it may do work before it arrives.
+@test
+fn test_a_branch_that_is_more_than_its_value():
+    let c : bool = true
+    let v : i64 = if c:
+        let base : i64 = 20
+        let bump : i64 = 1
+        base + bump
+    else:
+        0
+    assert_eq(v, 21)
+
+@test
+fn test_an_if_inside_an_if():
+    let a : bool = true
+    let b : bool = false
+    let v : i64 = if a:
+        if b { 1 } else { 2 }
+    else:
+        3
+    assert_eq(v, 2)
+
+@test
+fn test_an_if_as_an_operand():
+    let c : bool = true
+    assert_eq(1 + (if c { 10 } else { 20 }), 11)
+
+// ---------------------------------------------------------------------
+// One type between them
+// ---------------------------------------------------------------------
+
+// The binding asks for i8, so both untyped numbers are i8.
+@test
+fn test_untyped_numbers_take_the_answer():
+    let c : bool = true
+    let narrow : i8 = if c: 1 else: ⁻2
+    assert_eq(narrow, 1)
+
+// Nothing asks, so the first branch that states a type settles it.
+@test
+fn test_the_first_branch_that_states_one_settles_it():
+    let c : bool = false
+    let w : i16 = 300
+    let v : i16 = if c: w else: 7
+    assert_eq(v, 7)
+
+@test
+fn test_strings_are_a_value_too():
+    let c : bool = false
+    let s : str = if c { "yes" } else { "no" }
+    assert_eq(s, "no")
+
+// ---------------------------------------------------------------------
+// A branch that arrives nowhere
+// ---------------------------------------------------------------------
+
+@noreturn
+@impure
+fn give_up():
+    std.exit(3)
+
+@impure
+fn take_or_stop(c : bool) → i64:
+    if c { 7 } else { give_up() }
+
+@test
+@impure
+fn test_a_branch_that_leaves_states_no_type():
+    assert_eq(take_or_stop(true), 7)
+
+// ---------------------------------------------------------------------
+// What is refused
+// ---------------------------------------------------------------------
+
+@expect error "an if is one value, so its branches say one type between them; this one says str on one branch and i64 on another"
+fn error_branches_that_disagree():
+    let c : bool = true
+    let n : i64 = 1
+    let s : str = "x"
+    let v : str = if c { s } else { n }
+    assert_eq(v, "x")
+
+@start
+@impure
+fn main():
+    std.println("if-value tests passed")

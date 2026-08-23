@@ -104,7 +104,7 @@ fn token_bytes(t : Toks, src : byte[], i ¤ptrdiff : i64, into : &mut u8[]):
         // an identifier and a string say their text; a number says the
         // value the lexer read, and whether it needed all sixty-four
         // bits to hold it
-        let what : str = t.strs[t.val[i] × 1¤ptrdiff] if k0 = TK_STR else (i64_str(t.val[i]) if k0 = TK_INT else run_str(src, t.off[i], t.len[i]))
+        let what : str = if k0 = TK_STR: t.strs[t.val[i] × 1¤ptrdiff] else: (if k0 = TK_INT: i64_str(t.val[i]) else: run_str(src, t.off[i], t.len[i]))
         foreach b := std.bytes(what):
             into.push(b)
         if k0 = TK_INT:
@@ -150,7 +150,7 @@ fn sbom_sources(a : Ast, t : Toks, src : byte[], files : Files) → SbomRow[]:
     let one : mut = std.hash.sha256.start()
     let feed : mut u8[] = []
     let fi ¤ptrdiff : mut i64 = 0
-    let hi ¤byte : mut i64 = files.off[1 × 1¤ptrdiff] if nf > 1 else total
+    let hi ¤byte : mut i64 = if nf > 1: files.off[1 × 1¤ptrdiff] else: total
     let held : mut i64 = 0
     let prev : mut i64 = 0
     // and the function the token falls in, if any: the definitions are
@@ -177,7 +177,7 @@ fn sbom_sources(a : Ast, t : Toks, src : byte[], files : Files) → SbomRow[]:
                               hash: hex_digest(one.digest())})
             one ← std.hash.sha256.start()
             fi ← fi + 1
-            hi ← files.off[fi + 1¤ptrdiff] if fi + 1 < nf else total
+            hi ← if fi + 1 < nf: files.off[fi + 1¤ptrdiff] else: total
         // a function begins here?
         while fnext < nfn and a.fns[fnext].tok_lo × 1¤ptrdiff <= i:
             if a.fns[fnext].tok_hi × 1¤ptrdiff > i and not fopen:
@@ -206,7 +206,7 @@ fn sbom_sources(a : Ast, t : Toks, src : byte[], files : Files) → SbomRow[]:
                 fnh.update(ffeed)
                 ffeed ← []
                 let d := a.fns[fnext - 1¤ptrdiff]
-                let nm : str = d.name if d.modname = "" else d.modname ⧺ "." ⧺ d.name
+                let nm : str = if d.modname = "": d.name else: d.modname ⧺ "." ⧺ d.name
                 fnrows.push(SbomRow{kind: Sbomkind.function, name: nm,
                                     hash: hex_digest(fnh.digest())})
                 fopen ← false

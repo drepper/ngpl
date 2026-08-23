@@ -12,7 +12,7 @@ impl Point:
         self.x + self.y
 
     fn larger(&self) → i64:
-        self.x if self.x >= self.y else self.y
+        if self.x >= self.y: self.x else: self.y
 
     fn shift(&mut self, dx : i64, dy : i64):
         self.x ← self.x + dx
@@ -76,4 +76,4 @@ fn main():
     std.println("active {}", t.active)
 
     // a field read is safe to read on both sides of a choice
-    std.println("pick {}", p.x if t.total > 2 else p.y)
+    std.println("pick {}", if t.total > 2: p.x else: p.y)

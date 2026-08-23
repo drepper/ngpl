@@ -31,13 +31,13 @@ type Row = i64[]
 type Shade = Color
 
 fn describe(c : Color) -> Count:
-    return 1 if c = Color.red else (2 if c = Color.green else 3)
+    return if c = Color.red: 1 else: (if c = Color.green: 2 else: 3)
 
 fn is_bad(s : Status) -> bool:
     return s = Status.failed
 
 fn label(c : Shade) -> Name:
-    return "red" if c = Color.red else "other"
+    return if c = Color.red: "red" else: "other"
 
 @impure
 @start

@@ -31,5 +31,5 @@ fn main():
     let r := 1…5
     let viar := generate(λx : i64 → i64: x + 1, r)
     std.println("{} {}", viar[0], viar[4])
-    let strl := λc : char → i64: 7 if c = 'x' else 8
+    let strl := λc : char → i64: if c = 'x': 7 else: 8
     std.println("{} {}", strl('x'), strl('y'))

@@ -5,7 +5,7 @@ fn clamp(v : i64, lo : i64, hi : i64) → i64:
     (v ⌈ lo) ⌊ hi
 
 fn pick_u(c : bool, a : u64, b : u64) → u64:
-    a if c else b
+    if c: a else: b
 
 @start
 @impure
@@ -74,4 +74,4 @@ fn main():
     std.println("sel {}", pick_u(true, big, small_u))
     std.println("sel {}", pick_u(false, big, small_u))
     let n : i64 = 42
-    std.println("abs {}", n if n >= 0 else ⁻n)
+    std.println("abs {}", if n >= 0: n else: ⁻n)

@@ -470,7 +470,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     em.set_label(0)
     em.resolve_locals()
     let ninit : i64 = @dropunit(#chk.ginit)
-    let g1 : i64 = 1 if ninit > 0 else 0
+    let g1 : i64 = if ninit > 0: 1 else: 0
     // past the user's functions sit the synthetics: the global init,
     // the argument filter, the test driver
     lw.argsfix ← nfns + g1
@@ -498,7 +498,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     foreach i := 0…#a.fns - 1:
         let f : i64 = @dropunit(i)
         // the space for a sized answer arrives as one more argument
-        let np : i64 = a.extra[a.fns[i].params_off × 1¤ptrdiff] + (1 if farr_is_packed(a, a.fns[i].ret) else 0)
+        let np : i64 = a.extra[a.fns[i].params_off × 1¤ptrdiff] + (if farr_is_packed(a, a.fns[i].ret): 1 else: 0)
         if chk.skipfn[i] = 1:
             // a generic no call shaped: an empty body stands in
             let sir := lower_stub_fn(&lw, np)
@@ -566,7 +566,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         foreach i := 0…#em.cf_pos - 1:
             let pos : i64 = em.cf_pos[i]
             let t : i64 = em.cf_target[i]
-            let dest : i64 = em.fn_off[t × 1¤ptrdiff] if t >= 0 else em.rt_off[(0 - t - 1) × 1¤ptrdiff]
+            let dest : i64 = if t >= 0: em.fn_off[t × 1¤ptrdiff] else: em.rt_off[(0 - t - 1) × 1¤ptrdiff]
             // a call whose target was passed over means the edge list
             // does not say everything the emitter does
             assert(dest ≠ ⁻1, "every call reaches a routine that was emitted")
@@ -604,8 +604,8 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     if #em.jt_starts > 0:
         foreach t := 0…#em.jt_starts - 1:
             let lo2 : i64 = em.jt_starts[t]
-            let hi2 : i64 = em.jt_starts[t + 1] if t + 1 < #em.jt_starts else @dropunit(#em.jt_entries)
-            let base2 : i64 = IMAGE_BASE + PAGE if em.jt_is_code[t] = 1 else 0
+            let hi2 : i64 = if t + 1 < #em.jt_starts: em.jt_starts[t + 1] else: @dropunit(#em.jt_entries)
+            let base2 : i64 = if em.jt_is_code[t] = 1: IMAGE_BASE + PAGE else: 0
             let e3 : mut i64 = lo2
             while e3 < hi2:
                 push64(&rodata, base2 + em.jt_entries[e3 × 1¤ptrdiff])
@@ -738,7 +738,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let syms : mut Sym[] = []
     foreach i := 0…#sname - 1:
         let here ¤byte : i64 = soffs[i]
-        let next ¤byte : i64 = soffs[i + 1] if i + 1 < #soffs else text_size
+        let next ¤byte : i64 = if i + 1 < #soffs: soffs[i + 1] else: text_size
         // in address order, so a symbol's size is the distance to the
         // next one and never a distance backwards
         assert(next >= here, "the symbols run up the text")

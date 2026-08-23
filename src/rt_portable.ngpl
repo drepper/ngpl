@@ -331,7 +331,7 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
     if id = RT_WRITE1 or id = RT_WRITE2:
         // (buf, len): the loop puts every byte down or dies trying
         let b : mut RtB = rtb(2)
-        let fd : i64 = b.cst(1 if id = RT_WRITE1 else 2)
+        let fd : i64 = b.cst(if id = RT_WRITE1: 1 else: 2)
         let done : i64 = b.t()
         let z : i64 = b.cst(0)
         b.mov(done, z)
@@ -1086,7 +1086,7 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let k : i64 = b.kaddr(0, 0)
         let out : i64 = b.call1(RT_ARRNEW, b.cst(4))
         let vptr : i64 = b.t()
-        b.mov(vptr, b.ldn(k, 8 if id = RT_ARGS else 16, 8))
+        b.mov(vptr, b.ldn(k, if id = RT_ARGS: 8 else: 16, 8))
         let left : i64 = b.t()
         if id = RT_ARGS:
             b.mov(left, b.ldn(k, 0, 8))
@@ -1246,8 +1246,8 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let ty : i64 = b.ldn(ph, 0, 4)
         let isrelro : i64 = b.ceq(ty, b.cst(1685382482))
         b.jz(isrelro, lnext)
-        let vaddr : i64 = b.ldn(ph, 16 if tg.is64 else 8, 0)
-        let memsz : i64 = b.ldn(ph, 40 if tg.is64 else 20, 0)
+        let vaddr : i64 = b.ldn(ph, if tg.is64: 16 else: 8, 0)
+        let memsz : i64 = b.ldn(ph, if tg.is64: 40 else: 20, 0)
         // both ends inward to a page
         let p4 : i64 = b.cst(4095)
         let pmask : i64 = b.cst(⁻4096)
@@ -1263,7 +1263,7 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.retn()
         return rtb_fn(b)
     if id = RT_FOPEN or id = RT_FCREATE:
-        let b : mut RtB = rtb(2 if id = RT_FCREATE else 1)
+        let b : mut RtB = rtb(if id = RT_FCREATE: 2 else: 1)
         let n : i64 = b.ldn(0, 8, 8)
         let one : i64 = b.cst(1)
         let p : i64 = b.call1(RT_ALLOC, b.add(n, one))
@@ -1713,7 +1713,7 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(lskip)
         b.jmp(ltop)
         b.lab(lend)
-        b.ret(q if id = RT_DIVU64 else r)
+        b.ret(if id = RT_DIVU64: q else: r)
         return rtb_fn(b)
     if id = RT_DIVS64 or id = RT_MODS64:
         // signs peeled off, the unsigned helper asked, the signs put

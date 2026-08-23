@@ -50,6 +50,7 @@ all_tests=(
     "$testdir"/test_foreach.ngpl
     "$testdir"/test_layout.ngpl
     "$testdir"/test_block_forms.ngpl
+    "$testdir"/test_if_value.ngpl
     "$testdir"/test_logic.ngpl
     "$testdir"/test_overflow.ngpl
     "$testdir"/test_wrap.ngpl
@@ -146,7 +147,7 @@ all_tests=(
     "$testdir"/test_contracts.ngpl
     "$testdir"/test_loop_labels.ngpl
     "$testdir"/test_macros.ngpl
-    "$testdir"/test_conditional_expr.ngpl
+    "$testdir"/test_branch_taken.ngpl
     "$testdir"/test_map.ngpl
 )
 

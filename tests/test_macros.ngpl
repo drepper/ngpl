@@ -33,7 +33,7 @@
 // descend.
 @listable
 comptime fn factors(e : syntax) → syntax[]:
-    [e] if e.head() ≠ ※× else ⧺⌿ factors(e.arguments())
+    if e.head() ≠ ※×: [e] else: ⧺⌿ factors(e.arguments())
 
 // sin(x×π) has to round x×π first, and π is not a number f64 holds, so
 // the answer is near zero rather than zero.  std.sinpi takes the turns

@@ -159,7 +159,7 @@ fn target_names() → str:
     let ts := targets()
     let out : mut str = ""
     foreach i := 0…#ts - 1:
-        out ← out ⧺ ("" if i = 0 else ", ") ⧺ ts[i].name
+        out ← out ⧺ (if i = 0: "" else: ", ") ⧺ ts[i].name
     out
 
 let IMAGE_BASE : i64 = 4194304
@@ -586,7 +586,7 @@ fn image_digest(tgt : Target, code : u8[], rodata : u8[], data : u8[],
     let tail : mut u8[] = []
     push64(&tail, @dropunit(entry))
     push32(&tail, tgt.machine.ord())
-    push32(&tail, 2 if tgt.is64 else 1)
+    push32(&tail, if tgt.is64: 2 else: 1)
     push32(&tail, tgt.eflags)
     h.update(tail)
     hex_digest(h.digest())
@@ -597,10 +597,10 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
             stack_size ¤byte : i64, relro_size ¤byte : i64,
             syms : Sym[], bom : SbomRow[]) → ElfPlan:
     // how wide this class's own bookkeeping is
-    let ehsize ¤byte : i64 = @sizeof(Elf64_Ehdr) if tgt.is64 else @sizeof(Elf32_Ehdr)
-    let phent ¤byte : i64 = @sizeof(Elf64_Phdr) if tgt.is64 else @sizeof(Elf32_Phdr)
-    let shent ¤byte : i64 = @sizeof(Elf64_Shdr) if tgt.is64 else @sizeof(Elf32_Shdr)
-    let syment ¤byte : i64 = @sizeof(Elf64_Sym) if tgt.is64 else @sizeof(Elf32_Sym)
+    let ehsize ¤byte : i64 = if tgt.is64: @sizeof(Elf64_Ehdr) else: @sizeof(Elf32_Ehdr)
+    let phent ¤byte : i64 = if tgt.is64: @sizeof(Elf64_Phdr) else: @sizeof(Elf32_Phdr)
+    let shent ¤byte : i64 = if tgt.is64: @sizeof(Elf64_Shdr) else: @sizeof(Elf32_Shdr)
+    let syment ¤byte : i64 = if tgt.is64: @sizeof(Elf64_Sym) else: @sizeof(Elf32_Sym)
     let page ¤byte : i64 = PAGE
     let image ¤byte : i64 = IMAGE_BASE
     let text_off ¤byte : i64 = PAGE
@@ -646,7 +646,7 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
         sbomstr.push(0)
         sbom.push(Sbom_Entry{kind: r.kind, name: nat, hash: hat})
     let sbent ¤byte : i64 = @sizeof(Sbom_Entry)
-    let bom_off ¤byte : i64 = align_up_b(d_off + d_size, page) if #rows > 0 else d_off + d_size
+    let bom_off ¤byte : i64 = if #rows > 0: align_up_b(d_off + d_size, page) else: d_off + d_size
     let bom_vaddr ¤byte : i64 = image + bom_off
     let bom_size ¤byte : i64 = sbent × @dropunit(#sbom)
     let bstr_off ¤byte : i64 = bom_off + bom_size
@@ -667,8 +667,8 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
     let nlocal ¤"symndx" : mut i64 = 0
     foreach want := 0…1:
         foreach sy := syms:
-            if (1 if sy.is_global else 0) = want:
-                let bind : Stb = Stb.global if sy.is_global else Stb.local
+            if (if sy.is_global: 1 else: 0) = want:
+                let bind : Stb = if sy.is_global: Stb.global else: Stb.local
                 symtab.push(Elf64_Sym{st_name: #strtab,
                                       st_info: sym_info(bind, Stt.func),
                                       st_other: Stv.default,
@@ -699,13 +699,13 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
             shstr.push(b)
         shstr.push(0)
     // where the ones that are always there sit in that list
-    let n_sym ¤ptrdiff : i64 = 5 if #rows > 0 else 3
+    let n_sym ¤ptrdiff : i64 = if #rows > 0: 5 else: 3
     let n_str ¤ptrdiff : i64 = n_sym + 1
     let n_shs ¤ptrdiff : i64 = n_sym + 2
     // which section header the symbol table's names are in: the null
     // one, the three that are always loaded, the bill's two when there
     // is one, then the symbols and their strings
-    let strtab_ndx ¤"shndx" : i64 = 7 if #rows > 0 else 5
+    let strtab_ndx ¤"shndx" : i64 = if #rows > 0: 7 else: 5
 
     // Past the last thing the kernel loads: the symbol table, the
     // strings its names live in, and the section headers that say
@@ -771,7 +771,7 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
                     #shstr, 0, 0, 1, 0))
     let nsh ¤"shndx" : i64 = @dropunit(#shdrs)
 
-    let cls : Elfclass = Elfclass.class64 if tgt.is64 else Elfclass.class32
+    let cls : Elfclass = if tgt.is64: Elfclass.class64 else: Elfclass.class32
     let ehdr : Elf64_Ehdr = (Elf64_Ehdr{
         e_ident: elf_ident(cls, Elfdata.lsb, Elfosabi.sysv),
         e_type: Et.exec, e_machine: tgt.machine,

@@ -1,5 +1,12 @@
 # Choosing a Value
 
+> **Withdrawn.**  The spelling this note settled on, `a if c else b`,
+> is no longer in the language: an `if` hands back the value of the
+> branch that runs, so the same thing is written `if c: a else: b`.
+> What was decided here survives in that form and the reasoning still
+> holds; see [Status](#status) at the end.  The examples below are as
+> they were written, which is to say in a spelling that is now refused.
+
 ## The Question
 
 The language could branch and could not choose.  Every `if` was a
@@ -142,9 +149,47 @@ more case.
 
 ## Status
 
-Implemented: the expression in every position a value is wanted;
-right-grouping chains; the condition read for truth as an `if`
-statement reads its own; `else` required; a conditional built from
-constants counted as a constant, so `@typeof` and the other
-compile-time forms answer for one; and the two sides refused at the
-definition where they cannot be one value.
+**Withdrawn.**  The larger answer this note set aside — Rust's, make
+the block an expression — was taken afterwards, and an `if` now hands
+back the value of whichever branch runs.  That covers everything below
+and covers the case this spelling could not: a branch of several
+statements.  With it in the language, `a if c else b` was a second way
+to say one thing, so it was removed rather than kept beside it, and
+writing one now draws a sentence pointing at the other:
+
+```
+let n : i64 = x if x > 0 else ⁻x
+
+error: `a if c else b` is no longer how a value is chosen; an if hands
+back the value of the branch that runs, so this is written
+`if c: a else: b`
+```
+
+What was decided here survives in the new form, and the reasoning above
+is why it does.  The question this note opens is still the question,
+and its answer is still no mutable name and two assignments:
+
+```
+let n : i64 = if x > 0: x else: ⁻x
+```
+
+Only the branch taken is read; `else` is required; the branches say one
+type between them, with unwidthed numbers, `∅` and sum types agreeing
+as they do below; and one built from constants is a constant.  The
+`cmov` select is still taken where both sides are safe to speculate,
+which is what "The Hazard Worth Writing Down" below was protecting.
+
+The hazard itself is gone with the spelling: nothing follows an
+expression that may be an `if` any more, so the newline no longer has
+to tell a conditional from a statement.  The `if` at the head of an
+expression is unambiguous, the statement level having taken its own
+already.
+
+The specification's "An `if` Is a Value" is the normative statement.
+
+What was implemented before the withdrawal: the expression in every
+position a value is wanted; right-grouping chains; the condition read
+for truth as an `if` statement reads its own; `else` required; a
+conditional built from constants counted as a constant, so `@typeof`
+and the other compile-time forms answer for one; and the two sides
+refused at the definition where they cannot be one value.

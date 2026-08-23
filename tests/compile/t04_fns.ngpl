@@ -25,7 +25,7 @@ fn gcd(a : i64, b : i64) → i64:
     gcd(b, (a % b) ?? 0)
 
 fn pick(c : bool, a : i64, b : i64) → i64:
-    a if c else b
+    if c: a else: b
 
 @start
 @impure

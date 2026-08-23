@@ -114,6 +114,11 @@ class IfStmt:
           or None for a plain else without a new condition
     """
 
+    # Set where the if was written as an expression rather than a
+    # statement.  Both are the same node -- what differs is that a
+    # value was wanted, so every branch has to supply one.
+    is_value = False
+
     def __init__(self, cond, cons, alt=None, hint: str | None = None):
         self.cond = cond       # expression
         self.cons = cons       # list of statements
@@ -124,18 +129,32 @@ class IfStmt:
         self.hint = hint
 
 
-class IfExpr:
-    """`a if c else b` -- the value a where c holds and b where it does not.
+def if_branch_bodies(node):
+    """Every branch of an if chain, as a list of statements.
 
-    Only the branch taken is evaluated, which is what makes it usable
-    as a guard: the other side may be something that could not be run.
+    The chain is nested tuples, each (condition, body) or (condition,
+    body, rest); an else is the one whose condition is None.  A branch
+    that is not there -- an if with no else -- is not a branch, and
+    nothing is yielded for it.
     """
+    yield node.cons
+    alt = node.alt
+    while alt is not None:
+        yield alt[1]
+        alt = alt[2] if len(alt) == 3 else None
 
-    def __init__(self, cond, then_expr, else_expr):
-        self.cond = cond
-        self.then_expr = then_expr
-        self.else_expr = else_expr
-        self.pos = None
+
+def if_branch_values(node):
+    """The expression each branch of an if hands back.
+
+    A branch that ends in something else -- a return, a loop -- hands
+    nothing back, and nothing is yielded for it.  What is yielded is
+    the value of the if where that branch runs, which is what lets a
+    walk that knows about expressions see through one.
+    """
+    for body in if_branch_bodies(node):
+        if body and isinstance(body[-1], ExprStmt):
+            yield body[-1].expr
 
 
 class WhileStmt:

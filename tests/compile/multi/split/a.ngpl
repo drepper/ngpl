@@ -8,7 +8,7 @@ enum Level:
     loud
 
 fn greeting(l : Level) → str:
-    "hello" if l = Level.quiet else "HELLO"
+    if l = Level.quiet: "hello" else: "HELLO"
 
 @build
 fn build():

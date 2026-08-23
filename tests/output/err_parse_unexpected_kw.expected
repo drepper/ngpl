@@ -1,6 +1,6 @@
-error: unexpected token: 'if'
+error: unexpected token: 'while'
   --> tests/output/err_parse_unexpected_kw.ngpl:3:19
     |
-  3 |     let x : i32 = if
-    |                   ^^
+  3 |     let x : i32 = while
+    |                   ^^^^^
     |

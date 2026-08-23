@@ -17,13 +17,13 @@ fn main():
     let held : mut i64 = 0
     foreach i := 1…500:
         sum ← sum + (g[i × 7] ?? 0)
-        held ← held + (1 if (i × 7) ∊ g else 0)
+        held ← held + (if (i × 7) ∊ g: 1 else: 0)
     std.println("{} {}", sum, held)
 
     // what was never put in is absent, and says so
     let missing : mut i64 = 0
     foreach i := 1…500:
-        missing ← missing + (1 if (i × 7 + 1) ∊ g else 0)
+        missing ← missing + (if (i × 7 + 1) ∊ g: 1 else: 0)
     std.println("{} {}", missing, g[3] ?? ⁻1)
 
     // a key put twice is one key

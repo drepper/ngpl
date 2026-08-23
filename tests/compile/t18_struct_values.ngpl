@@ -10,7 +10,7 @@ fn pick(v : &Tok[], i : i64 ¤ptrdiff) → Tok:
     return v[i]
 
 fn brightest(a : Tok, b : Tok) → Tok:
-    return a if a.kind >= b.kind else b
+    return if a.kind >= b.kind: a else: b
 
 @start
 @impure

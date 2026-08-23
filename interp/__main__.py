@@ -1282,10 +1282,12 @@ def _static_type_of(expr, types: dict, structs: dict) -> str | None:
     if isinstance(expr, _ast.UnaryOp) and expr.op in ("not",
                                                       "\N{NOT SIGN}"):
         return "bool"
-    if isinstance(expr, _ast.IfExpr):
-        one = _static_type_of(expr.then_expr, types, structs)
-        other = _static_type_of(expr.else_expr, types, structs)
-        return one if one == other else None
+    if isinstance(expr, _ast.IfStmt):
+        # Whichever branch runs is the value, so what the if says is
+        # what every branch says and nothing where they differ.
+        said = {_static_type_of(e, types, structs)
+                for e in _ast.if_branch_values(expr)}
+        return said.pop() if len(said) == 1 else None
     return None
 
 
@@ -1319,8 +1321,17 @@ def _types_agree(one: str, other: str) -> bool:
     if "\N{EMPTY SET}" in (one, other) or one.endswith("?") \
             or other.endswith("?"):
         return True
-    numeric = {"int", "float"} | set(_TYPE_BITS) | set(FLOAT_TYPES)
-    if one in numeric and other in numeric \
+    # Asked rather than enumerated: the width table answers for every
+    # sized name, including the ones it generates on demand, and only
+    # the ones it was written with survive being made into a set.  With
+    # a set here `i16` was not a number, so a width beside an unwidthed
+    # literal read as a disagreement -- and the compiler, which settles
+    # the literal on the width as it is meant to, accepted what this
+    # refused.
+    def numeric(name: str) -> bool:
+        return (name in _UNWIDTHED or name in _TYPE_BITS
+                or name in FLOAT_TYPES)
+    if numeric(one) and numeric(other) \
             and (one in _UNWIDTHED or other in _UNWIDTHED):
         return True
     return a_sum_holds_both(one, other)
@@ -1360,17 +1371,28 @@ def _static_conditional_check(definition, structs: dict | None = None) -> str | 
         if param_type:
             types[_param_display(name)] = param_type
     for node in _iter_ast(definition):
-        if not isinstance(node, _ast.IfExpr):
-            continue
-        one = _static_type_of(node.then_expr, types, structs)
-        other = _static_type_of(node.else_expr, types, structs)
-        if one is None or other is None or _types_agree(one, other):
-            continue
-        return _Finding(
-            f"a conditional is one value, so its two sides say one type "
-            f"between them; this one says {one} where the condition holds "
-            f"and {other} where it does not", node)
+        if isinstance(node, _ast.IfStmt) and node.is_value:
+            # The branches of an if written as a value are that one
+            # value, so they say one type between them, exactly as the
+            # two sides of `a if c else b` do.  Only branches that say
+            # what they are are read; where one says nothing the pair
+            # is left alone rather than guessed at.
+            said: str | None = None
+            for body in _ast.if_branch_values(node):
+                what = _static_type_of(body, types, structs)
+                if what is None:
+                    continue
+                if said is None:
+                    said = what
+                elif not _types_agree(said, what):
+                    return _Finding(
+                        f"an if is one value, so its branches say one type "
+                        f"between them; this one says {said} on one branch "
+                        f"and {what} on another", node)
     return None
+
+
+
 
 
 def _field_rank(expr, structs: dict) -> int | None:
@@ -1434,11 +1456,11 @@ def _least_rank(expr, ranks: dict, structs: dict | None = None) -> int | None:
     if isinstance(expr, _ast.UnaryOp) \
             and expr.op in Evaluator._LISTABLE_UNOPS:
         return _least_rank(expr.operand, ranks, structs)
-    if isinstance(expr, _ast.IfExpr):
-        # Whichever branch runs is the answer, so only what both say is
-        # something this can say.
-        sides = [_least_rank(expr.then_expr, ranks, structs),
-                 _least_rank(expr.else_expr, ranks, structs)]
+    if isinstance(expr, _ast.IfStmt):
+        # Whichever branch runs is the answer, so only what every
+        # branch says is something this can say.
+        sides = [_least_rank(e, ranks, structs)
+                 for e in _ast.if_branch_values(expr)] or [None]
         if None in sides:
             return None
         return min(sides)
@@ -2081,9 +2103,10 @@ def _check_unused_values(stmts, env, struct_vars,
 
     keeps_value says whether the last statement of this block is what
     the block hands back.  A function body hands back its last
-    statement, and so do the arms of a match and the body of a catch
-    standing in that position; the body of an if, a while, or a foreach
-    hands back nothing, so every statement in one is checked.
+    statement, and so do the branches of an if, the arms of a match and
+    the body of a catch standing in that position; the body of a while
+    or a foreach hands back nothing, so every statement in one is
+    checked.
     """
     for index, stmt in enumerate(stmts):
         finding = _check_one_unused_value(
@@ -2111,12 +2134,17 @@ def _check_one_unused_value(stmt, env, struct_vars,
             return None
         return _dropped_value_finding(stmt.expr, env, struct_vars)
     if isinstance(stmt, _ast.IfStmt):
-        finding = _check_unused_values(stmt.cons, env, struct_vars, False)
+        # An if standing where a value is wanted hands on each branch's
+        # last value, as a match does, so the branches are in value
+        # position exactly when the if is.
+        finding = _check_unused_values(stmt.cons, env, struct_vars,
+                                       in_value_position)
         if finding is not None:
             return finding
         alt = stmt.alt
         while alt is not None:
-            finding = _check_unused_values(alt[1], env, struct_vars, False)
+            finding = _check_unused_values(alt[1], env, struct_vars,
+                                           in_value_position)
             if finding is not None:
                 return finding
             alt = alt[2] if len(alt) == 3 else None
@@ -2178,6 +2206,13 @@ def _trailing_value_warning(body, env, struct_vars,
     last = body[-1]
     marked = isinstance(last, _ast.ExpectStmt)
     stmt = last.stmt if marked else last
+    if isinstance(stmt, _ast.IfStmt):
+        # An if hands back the value of whichever branch runs, so a
+        # body that ends in one ends in each of its branches, and each
+        # is asked the same question this is asking.
+        for branch in _ast.if_branch_bodies(stmt):
+            _trailing_value_warning(branch, env, struct_vars, warnings)
+        return
     if not isinstance(stmt, _ast.ExprStmt):
         return
     if _dropped_value_finding(stmt.expr, env, struct_vars) is None:

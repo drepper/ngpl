@@ -53,6 +53,9 @@ struct Parser:
     tvn : str[]          // type-variable spellings, interned file-wide
     braces : i64         // statements end at ';' inside a brace block
     lent : i64           // the statement's terminator belongs to the block
+    ifexpr : i64         // an if is being parsed where a value is wanted,
+                         // so a one-line block inside it ends at the
+                         // clause after it and not at the line's end
     ignored : str[]
     igtests : str[]
     // Definitions marked @expect: kept, so the checker can draw the
@@ -310,7 +313,7 @@ impl Parser:
                 self.err("a type variable travels by value")
                 return TY_I64
             return tv
-        let base0 : i64 = stdbase if stdbase ≠ ⁻1 else (TYNAMES[name] ?? self.sindex_ty(name))
+        let base0 : i64 = if stdbase ≠ ⁻1: stdbase else: (TYNAMES[name] ?? self.sindex_ty(name))
         if base0 = ⁻1:
             self.err("'" ⧺ name ⧺ "' is not a core-2 type")
             return TY_I64
@@ -659,7 +662,7 @@ impl Parser:
                 self.pos ← self.pos + 1
             else:
                 ret ← self.parse_type(false)
-                let rb : i64 = ty_opt_base(ret) if ty_is_opt(ret) else ret
+                let rb : i64 = if ty_is_opt(ret): ty_opt_base(ret) else: ret
                 if not ((ty_is_int(rb) and ty_unit(rb) = 0) or rb = TY_BOOL or rb = TY_CHAR or rb = TY_STR):
                     self.err("a core-2 lambda answers a plain integer, a truth value, a character or a string")
                     return self.mknode(NK_INT, at, 0, 0, 0)
@@ -827,10 +830,10 @@ impl Parser:
             if self.peek() = TK_CURRENCY:
                 let u : i64 = self.parse_name_unit()
                 let st : i64 = big0 » 1
-                if not ty_is_int(st if st ≠ 0 else TY_I64):
+                if not ty_is_int(if st ≠ 0: st else: TY_I64):
                     self.err("only an integer carries a unit")
                 else:
-                    big ← (big0 & 1) + ty_with_unit(st if st ≠ 0 else TY_I64, u) × 2
+                    big ← (big0 & 1) + ty_with_unit(if st ≠ 0: st else: TY_I64, u) × 2
             let lit : i64 = self.mknode(NK_INT, at, self.toks.val[at × 1¤ptrdiff],
                                         big, 0)
             // 'a'.ord() reads on; a number's method wants parentheses,
@@ -840,7 +843,7 @@ impl Parser:
             return lit
         if k = TK_TRUE or k = TK_FALSE:
             self.pos ← self.pos + 1
-            return self.mknode(NK_BOOL, at, 1 if k = TK_TRUE else 0, 0, 0)
+            return self.mknode(NK_BOOL, at, if k = TK_TRUE: 1 else: 0, 0, 0)
         if k = TK_STR:
             self.pos ← self.pos + 1
             return self.parse_postfix(self.mknode(NK_STR, at, self.toks.val[at × 1¤ptrdiff], 0, 0))
@@ -1296,17 +1299,27 @@ impl Parser:
         lhs
 
     fn parse_expr(&mut self) → i64:
+        // An `if` here is the statement form standing where a value is
+        // wanted: it takes blocks rather than operands, and its value
+        // is the value of whichever block runs.  Nothing else begins
+        // an expression with `if`, the statement level having taken
+        // its own already, so the two never have to be told apart.
+        if self.peek() = TK_IF:
+            let owed : i64 = self.ifexpr
+            self.ifexpr ← 1
+            let e : i64 = self.parse_if_node()
+            self.ifexpr ← owed
+            return e
         let v : i64 = self.parse_bin(2)
         if self.failed(): return v
         if self.peek() ≠ TK_IF:
             return v
-        // v if cond else w — only the side taken is read
-        let at : i64 = self.pos
-        self.pos ← self.pos + 1
-        let cond : i64 = self.parse_bin(2)
-        _ ← self.eat(TK_ELSE, "'else' after the condition of a conditional expression")
-        let w : i64 = self.parse_expr()
-        self.mknode(NK_COND, at, v, cond, w)
+        // `v if cond else w` was how a value was chosen once.  An if
+        // hands back the value of the branch that runs, which says the
+        // same thing and says it the one way, so this spelling is gone
+        // and what is left of it is the sentence pointing at the other.
+        self.err("`a if c else b` is no longer how a value is chosen; an if hands back the value of the branch that runs, so this is written `if c: a else: b`")
+        v
 
     // ------------------------------------------------------------------
     // Statements and blocks
@@ -1343,7 +1356,7 @@ impl Parser:
             // ends at the line's end, and an `elif` on the next line
             // is found only once that newline has been eaten
             let inside : i64 = 1
-            self.lent ← inside if outer > 0 else owed
+            self.lent ← if outer > 0 or self.ifexpr ≠ 0: inside else: owed
             stmts.push(self.parse_stmt())
             self.braces ← outer
             self.lent ← owed
@@ -1397,6 +1410,11 @@ impl Parser:
         if self.peek() = TK_NL:
             self.pos ← self.pos + 1
         elif self.peek() = TK_DEDENT or self.peek() = TK_EOF:
+            let _nothing_to_do : i64 = 0
+        elif self.peek() = TK_ELSE or self.peek() = TK_ELIF:
+            // `if c: a else: b` -- the one statement of a one-line
+            // block ends where the next clause begins, and the clause
+            // is the if's to take
             let _nothing_to_do : i64 = 0
         elif self.pos > 0 and self.toks.kind[(self.pos - 1) × 1¤ptrdiff] = TK_DEDENT:
             // a lambda's layout body closed the line already
@@ -1552,7 +1570,7 @@ impl Parser:
                 self.err("@" ⧺ hname ⧺ " applies to an if statement, but none follows")
                 return 0
             let inner : i64 = self.parse_stmt()
-            return self.mknode(NK_HINTED, at, inner, 1 if hname = "unlikely" else 0, 0)
+            return self.mknode(NK_HINTED, at, inner, if hname = "unlikely": 1 else: 0, 0)
         if k = TK_AT and self.ttext(self.pos + 1) = "expect":
             // @expect level "pattern" over the one statement that
             // follows: what it says is expected to be drawn, so what
@@ -1590,17 +1608,7 @@ impl Parser:
         if k = TK_LET:
             return self.parse_let()
         if k = TK_IF:
-            self.pos ← self.pos + 1
-            let cond : i64 = self.parse_expr()
-            let then_blk : i64 = self.parse_block()
-            let else_blk : mut i64 = ⁻1
-            self.skip_nl_before_else()
-            if self.peek() = TK_ELIF:
-                else_blk ← self.parse_elif_chain()
-            elif self.peek() = TK_ELSE:
-                self.pos ← self.pos + 1
-                else_blk ← self.parse_block()
-            return self.mknode(NK_IF, at, cond, then_blk, else_blk)
+            return self.parse_if_node()
         if k = TK_WHILE:
             self.pos ← self.pos + 1
             if self.peek() = TK_IDENT and (self.peek2() = TK_DEFINE or (self.peek2() = TK_COLON and self.toks.kind[(self.pos + 2) × 1¤ptrdiff] ≠ TK_NL)):
@@ -1759,6 +1767,26 @@ impl Parser:
         self.end_stmt()
         self.mknode(NK_EXPRSTMT, at, e, 0, 0)
 
+    // if cond block (elif cond block)* (else block)? -- one shape,
+    // whether the if stands as a statement or where a value is
+    // wanted.  Which of the two it is is not the parser's question:
+    // the node is the same either way and what differs is only
+    // whether anything reads the value, which is the checker's to
+    // know.
+    fn parse_if_node(&mut self) → i64:
+        let at : i64 = self.pos
+        self.pos ← self.pos + 1
+        let cond : i64 = self.parse_expr()
+        let then_blk : i64 = self.parse_block()
+        let else_blk : mut i64 = ⁻1
+        self.skip_nl_before_else()
+        if self.peek() = TK_ELIF:
+            else_blk ← self.parse_elif_chain()
+        elif self.peek() = TK_ELSE:
+            self.pos ← self.pos + 1
+            else_blk ← self.parse_block()
+        self.mknode(NK_IF, at, cond, then_blk, else_blk)
+
     fn parse_elif_chain(&mut self) → i64:
         let at : i64 = self.pos
         self.pos ← self.pos + 1
@@ -1791,7 +1819,7 @@ impl Parser:
         _ ← self.eat(TK_FN, "'fn'")
         let name_tok : i64 = self.pos
         let name0 := self.ttext(name_tok)
-        let name : str = name0 if prefix = "" else prefix ⧺ "." ⧺ name0
+        let name : str = if prefix = "": name0 else: prefix ⧺ "." ⧺ name0
         _ ← self.eat_name("the function's name")
         _ ← self.eat(TK_LPAR, "'(' and the parameters")
         let ptoks : mut i64[] = []
@@ -1943,7 +1971,7 @@ impl Parser:
         let first : i64 = @dropunit(#self.emembers)
         // a flag's members are bits, so the automatic values double
         // where an ordinary enum's count on
-        let next_val : mut i64 = 1 if is_flag else 0
+        let next_val : mut i64 = if is_flag: 1 else: 0
         while self.peek() ≠ TK_DEDENT and self.peek() ≠ TK_EOF and not self.failed():
             if self.peek() = TK_NL:
                 self.pos ← self.pos + 1
@@ -2007,7 +2035,7 @@ impl Parser:
             if alias:
                 next_val ← keep
             elif is_flag:
-                next_val ← @wrap(next_val « 1) if next_val ≠ 0 else 1
+                next_val ← if next_val ≠ 0: @wrap(next_val « 1) else: 1
             else:
                 next_val ← next_val + 1
             if self.peek() = TK_NL:
@@ -2031,10 +2059,10 @@ impl Parser:
         let f : mut i64 = first
         while f < @dropunit(#self.emembers):
             let v : i64 = self.evalues[f × 1¤ptrdiff]
-            let lo : i64 = 0 - (1 « (bits - 1)) if sgn = 1 and bits < 64 else (⁻9223372036854775807 - 1 if sgn = 1 else 0)
+            let lo : i64 = if sgn = 1 and bits < 64: 0 - (1 « (bits - 1)) else: (if sgn = 1: ⁻9223372036854775807 - 1 else: 0)
             // a shift of 63 is past what a signed count allows, so the
             // top of the range is written out where it would be needed
-            let hi : i64 = 9223372036854775807 if bits - sgn >= 63 else (1 « (bits - sgn)) - 1
+            let hi : i64 = if bits - sgn >= 63: 9223372036854775807 else: (1 « (bits - sgn)) - 1
             if v < lo or (bits - sgn < 64 and v > hi):
                 self.err("enumerator '" ⧺ self.emembers[f × 1¤ptrdiff] ⧺ "' is " ⧺ i64_str(v) ⧺ ", which does not fit " ⧺ type_name_m(w, self.umarks) ⧺ ", the type the values are stored in")
                 return
@@ -2050,7 +2078,7 @@ impl Parser:
         self.ewidth.push(w)
         self.estart.push(first)
         self.ecount.push(n)
-        self.eflag.push(1 if is_flag else 0)
+        self.eflag.push(if is_flag: 1 else: 0)
 
     // unit name: a measure of the file's own, standing for nothing but
     // itself.  It is written ¤"name" where a shipped one is written
@@ -2156,7 +2184,7 @@ impl Parser:
                 _ ← self.eat_name("the module's name")
         let full : mut str = ""
         if path ≠ "":
-            full ← path if absolute or self.curmod = "" else self.curmod ⧺ "." ⧺ path
+            full ← if absolute or self.curmod = "": path else: self.curmod ⧺ "." ⧺ path
         // the sweep before parsing already wrote it down; this only
         // moves the marker the definitions after it are read against
         _ ← kw
@@ -2411,7 +2439,7 @@ impl Parser:
                 // @expect <level> <code> ["message"], or the older
                 // <level> "message"
                 if self.peek() = TK_INT:
-                    exp_lvl.push(DIAG_WARNING if lvl = "warning" else DIAG_ERROR)
+                    exp_lvl.push(if lvl = "warning": DIAG_WARNING else: DIAG_ERROR)
                     exp_code.push(self.toks.val[self.pos × 1¤ptrdiff])
                     self.pos ← self.pos + 1
                     if self.peek() = TK_STR:
@@ -2468,8 +2496,8 @@ impl Parser:
                     self.extra.push(exp_lvl[i])
                     self.extra.push(exp_code[i])
             self.parse_fn(imp, is_start, is_noreturn, is_test,
-                          (1 if is_repl else 0) + (2 if is_exp else 0)
-                              + (4 if is_build else 0),
+                          (if is_repl: 1 else: 0) + (if is_exp: 2 else: 0)
+                              + (if is_build: 4 else: 0),
                           expects > 0,
                           pres, post_toks, posts, "", 0)
         elif is_exp:
@@ -2540,7 +2568,7 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
                                  estart: [0], ecount: [8], eflag: [0],
                                  emembers: builtin_enum_members(),
                                  evalues: builtin_enum_values(),
-                                 tvn: [], braces: 0, lent: 0,
+                                 tvn: [], braces: 0, lent: 0, ifexpr: 0,
                                  ignored: [], igtests: [],
                                  expects: [], expoff: [], pending_exp: ⁻1, def_start: 0,
                                  diags: [], poisoned: false})
@@ -2566,13 +2594,13 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
                 j ← j + 1
             let path : mut str = ""
             while toks.kind[j × 1¤ptrdiff] = TK_IDENT:
-                path ← path ⧺ ("" if path = "" else ".") ⧺ run_str(src, toks.off[j × 1¤ptrdiff], toks.len[j × 1¤ptrdiff])
+                path ← path ⧺ (if path = "": "" else: ".") ⧺ run_str(src, toks.off[j × 1¤ptrdiff], toks.len[j × 1¤ptrdiff])
                 j ← j + 1
                 if toks.kind[j × 1¤ptrdiff] ≠ TK_DOT or toks.kind[(j + 1) × 1¤ptrdiff] ≠ TK_IDENT:
                     j ← j
                 else:
                     j ← j + 1
-            here ← "" if path = "" else (path if absolute or here = "" else here ⧺ "." ⧺ path)
+            here ← if path = "": "" else: (if absolute or here = "": path else: here ⧺ "." ⧺ path)
             if here ≠ "" and not p.knows_module(here):
                 p.mods.push(here)
                 p.modtok.push(kw)

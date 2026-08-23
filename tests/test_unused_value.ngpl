@@ -54,14 +54,29 @@ fn test_a_bare_name_reads_nothing():
     n
     assert_eq(n, 3)
 
-// The body of an if hands back nothing, so a value written there goes
-// nowhere even when the if is the last statement of the function.
+// An if hands back the value of whichever branch runs, so a body that
+// ends in one ends in each of its branches.  Where the signature hands
+// nothing back that value goes nowhere, and what is likely wrong is
+// the signature -- which is the warning a bare trailing value draws,
+// not the error a dropped one does.
 @test
-@expect error 2291 "the value of this statement is not used; it computes something and nothing reads it"
-fn test_an_if_branch_hands_back_nothing():
-    let n := 3
+@expect warning 2292 "the value of this statement is not used; the signature hands nothing back, so the last statement is not a return value; name a return type, or write '_ ← …' to drop the value"
+fn test_a_trailing_if_branch_is_a_trailing_value():
+    let n : i64 = 3
     if n > 0:
         n + 1
+    else:
+        0
+
+// An if that is not the last statement hands its value nowhere, so
+// what a branch computes there is dropped, and that is the error.
+@test
+@expect error 2291 "the value of this statement is not used; it computes something and nothing reads it"
+fn test_an_if_branch_that_is_not_last():
+    let n : i64 = 3
+    if n > 0:
+        n + 1
+    assert_eq(n, 3)
 
 // A statement-level @expect covers the one statement it marks.
 @test

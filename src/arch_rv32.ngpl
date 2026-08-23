@@ -17,11 +17,11 @@ fn r32_sloto(slot : i64) → i64:
 fn r32_ld(em : &mut Emit, rd : i64, off : i64):
     let base : i64 = rv_slotaddr(&em, off)
     let zero : i64 = 0
-    rv_I(&em, off if base = 2 else zero, base, 2, rd, 3)   // lw
+    rv_I(&em, if base = 2: off else: zero, base, 2, rd, 3)   // lw
 fn r32_st(em : &mut Emit, rs : i64, off : i64):
     let base : i64 = rv_slotaddr(&em, off)
     let zero : i64 = 0
-    rv_S(&em, off if base = 2 else zero, rs, base, 2)      // sw
+    rv_S(&em, if base = 2: off else: zero, rs, base, 2)      // sw
 fn r32_ldpair(em : &mut Emit, lo : i64, hi : i64, off : i64):
     r32_ld(&em, lo, off)
     r32_ld(&em, hi, off + 4)
@@ -191,11 +191,11 @@ fn r32g_cmp3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, cond : i
     // the high halves decide unless equal; a signed test on the top,
     // an unsigned on the bottom
     let flip : bool = cond = CC_GT or cond = CC_LE
-    let xl : i64 = 12 if flip else 10
-    let xh : i64 = 13 if flip else 11
-    let yl : i64 = 10 if flip else 12
-    let yh : i64 = 11 if flip else 13
-    let hf3 : i64 = 2 if sgn = 1 else 3
+    let xl : i64 = if flip: 12 else: 10
+    let xh : i64 = if flip: 13 else: 11
+    let yl : i64 = if flip: 10 else: 12
+    let yh : i64 = if flip: 11 else: 13
+    let hf3 : i64 = if sgn = 1: 2 else: 3
     rv_R(&em, 0, yh, xh, hf3, 5, 51)            // t0 = hi < hi'
     rv_R(&em, 0, xh, yh, hf3, 6, 51)            // t1 = hi > hi'
     rv_R(&em, 0, yl, xl, 3, 7, 51)              // t2 = lo <u lo'
@@ -233,9 +233,9 @@ fn r32g_sel4(em : &mut Emit, tg : Target, rd : i64, rc : i64, rx : i64, ry : i64
     r32_stpair(&em, 10, 11, r32_cello(rd))
 
 fn r32g_div3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
-    r32_helper2(&em, rd, rx, ry, RT_DIVS64 if sgn = 1 else RT_DIVU64)
+    r32_helper2(&em, rd, rx, ry, if sgn = 1: RT_DIVS64 else: RT_DIVU64)
 fn r32g_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
-    r32_helper2(&em, rd, rx, ry, RT_MODS64 if sgn = 1 else RT_MODU64)
+    r32_helper2(&em, rd, rx, ry, if sgn = 1: RT_MODS64 else: RT_MODU64)
 fn r32_helper2(em : &mut Emit, rd : i64, rx : i64, ry : i64, target : i64):
     r32_ldpair(&em, 10, 11, r32_cello(rx))
     r32_stpair(&em, 10, 11, 0)
@@ -304,7 +304,7 @@ fn r32g_ext2(em : &mut Emit, tg : Target, r : i64, bits : i64, sgn : i64):
     if bits < 32:
         let sh : i64 = 32 - bits
         rv_I(&em, sh, 10, 1, 10, 19)            // slli
-        let ab : i64 = 1024 if sgn = 1 else 0
+        let ab : i64 = if sgn = 1: 1024 else: 0
         rv_I(&em, sh + ab, 10, 5, 10, 19)
     if sgn = 1:
         rv_I(&em, 31 + 1024, 10, 5, 11, 19)     // srai a1, a0, 31
@@ -313,7 +313,7 @@ fn r32g_ext2(em : &mut Emit, tg : Target, r : i64, bits : i64, sgn : i64):
     r32_stpair(&em, 10, 11, r32_cello(r))
 
 fn r32g_ldo(em : &mut Emit, tg : Target, rd : i64, rbase : i64, off : i64, width : i64, sgn : i64):
-    let wd : i64 = tg.ptr if width = 0 else width
+    let wd : i64 = if width = 0: tg.ptr else: width
     r32_ld(&em, 12, r32_cello(rbase))
     if off ≠ 0:
         r32_movimm(&em, 5, off)
@@ -322,7 +322,7 @@ fn r32g_ldo(em : &mut Emit, tg : Target, rd : i64, rbase : i64, off : i64, width
         rv_I(&em, 0, 12, 2, 10, 3)
         rv_I(&em, 4, 12, 2, 11, 3)
     else:
-        let f3 : i64 = 2 if wd = 4 else (1 if wd = 2 and sgn = 1 else (5 if wd = 2 else (0 if sgn = 1 else 4)))
+        let f3 : i64 = if wd = 4: 2 else: (if wd = 2 and sgn = 1: 1 else: (if wd = 2: 5 else: (if sgn = 1: 0 else: 4)))
         rv_I(&em, 0, 12, f3, 10, 3)
         if sgn = 1:
             rv_I(&em, 31 + 1024, 10, 5, 11, 19)
@@ -331,7 +331,7 @@ fn r32g_ldo(em : &mut Emit, tg : Target, rd : i64, rbase : i64, off : i64, width
     r32_stpair(&em, 10, 11, r32_cello(rd))
 
 fn r32g_sto(em : &mut Emit, tg : Target, rs : i64, rbase : i64, off : i64, width : i64):
-    let wd : i64 = tg.ptr if width = 0 else width
+    let wd : i64 = if width = 0: tg.ptr else: width
     r32_ld(&em, 12, r32_cello(rbase))
     if off ≠ 0:
         r32_movimm(&em, 5, off)
@@ -341,7 +341,7 @@ fn r32g_sto(em : &mut Emit, tg : Target, rs : i64, rbase : i64, off : i64, width
         rv_S(&em, 0, 10, 12, 2)
         rv_S(&em, 4, 11, 12, 2)
     else:
-        let f3 : i64 = 2 if wd = 4 else (1 if wd = 2 else 0)
+        let f3 : i64 = if wd = 4: 2 else: (if wd = 2: 1 else: 0)
         rv_S(&em, 0, 10, 12, f3)
 
 fn r32g_jmp(em : &mut Emit, tg : Target, lab : i64):

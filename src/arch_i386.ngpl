@@ -174,7 +174,7 @@ fn i3g_cmp3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, cond : i6
         em.b2(49, 200)               // xor eax, ecx
         em.b2(49, 218)               // xor edx, ebx
         em.b2(9, 208)                // or eax, edx
-        em.b3(15, 148 if cond = CC_EQ else 149, 192)
+        em.b3(15, if cond = CC_EQ: 148 else: 149, 192)
         em.b4(15, 182, 192, 144)     // movzx eax, al; nop
     else:
         // the swapped pair asks the mirrored question
@@ -187,7 +187,7 @@ fn i3g_cmp3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, cond : i6
         em.b2(57, 200)               // cmp eax, ecx
         em.b3(15, 146, 192)          // setb al: the low words decide
         em.b2(235, 4)                // jmp join (+4)
-        em.b3(15, 156 if sgn = 1 else 146, 192)   // setl / setb on the high
+        em.b3(15, if sgn = 1: 156 else: 146, 192)   // setl / setb on the high
         em.b1(144)                   // nop
         em.b4(15, 182, 192, 144)     // movzx eax, al; nop
         if cond = CC_GE or cond = CC_LE:
@@ -205,10 +205,10 @@ fn i3g_sel4(em : &mut Emit, tg : Target, rd : i64, rc : i64, rx : i64, ry : i64)
     i3_stpair(&em, 0, 2, i3_cello(rd))
 
 fn i3g_div3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
-    i3_helper2(&em, rd, rx, ry, RT_DIVS64 if sgn = 1 else RT_DIVU64)
+    i3_helper2(&em, rd, rx, ry, if sgn = 1: RT_DIVS64 else: RT_DIVU64)
 
 fn i3g_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
-    i3_helper2(&em, rd, rx, ry, RT_MODS64 if sgn = 1 else RT_MODU64)
+    i3_helper2(&em, rd, rx, ry, if sgn = 1: RT_MODS64 else: RT_MODU64)
 
 // a two-argument helper call: the cells staged, the answer stored
 fn i3_helper2(em : &mut Emit, rd : i64, rx : i64, ry : i64, target : i64):
@@ -229,7 +229,7 @@ fn i3g_addov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64
     i3_binprep(&em, rx, ry)
     em.b2(1, 200)                    // add eax, ecx
     em.b2(17, 218)                   // adc edx, ebx
-    em.b3(15, 144 if sgn = 1 else 146, 193)   // seto cl / setb cl
+    em.b3(15, if sgn = 1: 144 else: 146, 193)   // seto cl / setb cl
     em.b4(15, 182, 201, 144)         // movzx ecx, cl
     em.b2(49, 219)                   // xor ebx, ebx
     i3_stpair(&em, 0, 2, i3_cello(rd))
@@ -239,7 +239,7 @@ fn i3g_subov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64
     i3_binprep(&em, rx, ry)
     em.b2(41, 200)                   // sub eax, ecx
     em.b2(25, 218)                   // sbb edx, ebx
-    em.b3(15, 144 if sgn = 1 else 146, 193)
+    em.b3(15, if sgn = 1: 144 else: 146, 193)
     em.b4(15, 182, 201, 144)
     em.b2(49, 219)
     i3_stpair(&em, 0, 2, i3_cello(rd))
@@ -291,9 +291,9 @@ fn i3g_ext2(em : &mut Emit, tg : Target, r : i64, bits : i64, sgn : i64):
         return
     i3_ldpair(&em, 0, 2, i3_cello(r))
     if bits = 8:
-        em.b3(15, 190 if sgn = 1 else 182, 192)   // movsx/movzx eax, al
+        em.b3(15, if sgn = 1: 190 else: 182, 192)   // movsx/movzx eax, al
     elif bits = 16:
-        em.b3(15, 191 if sgn = 1 else 183, 192)   // movsx/movzx eax, ax
+        em.b3(15, if sgn = 1: 191 else: 183, 192)   // movsx/movzx eax, ax
     if sgn = 1:
         em.b1(153)                   // cdq
     else:
@@ -301,7 +301,7 @@ fn i3g_ext2(em : &mut Emit, tg : Target, r : i64, bits : i64, sgn : i64):
     i3_stpair(&em, 0, 2, i3_cello(r))
 
 fn i3g_ldo(em : &mut Emit, tg : Target, rd : i64, rbase : i64, off : i64, width : i64, sgn : i64):
-    let wd : i64 = tg.ptr if width = 0 else width
+    let wd : i64 = if width = 0: tg.ptr else: width
     i3_rm(&em, 139, 0, i3_cello(rbase))       // mov eax, base.lo
     if off ≠ 0:
         em.b1(5)
@@ -319,14 +319,14 @@ fn i3g_ldo(em : &mut Emit, tg : Target, rd : i64, rbase : i64, off : i64, width 
         else:
             em.b2(49, 219)
     elif wd = 2:
-        em.b3(15, 191 if sgn = 1 else 183, 8)     // movsx/movzx ecx, word [eax]
+        em.b3(15, if sgn = 1: 191 else: 183, 8)     // movsx/movzx ecx, word [eax]
         if sgn = 1:
             em.b2(137, 203)
             em.b3(193, 251, 31)
         else:
             em.b2(49, 219)
     else:
-        em.b3(15, 190 if sgn = 1 else 182, 8)     // …byte [eax]
+        em.b3(15, if sgn = 1: 190 else: 182, 8)     // …byte [eax]
         if sgn = 1:
             em.b2(137, 203)
             em.b3(193, 251, 31)
@@ -335,7 +335,7 @@ fn i3g_ldo(em : &mut Emit, tg : Target, rd : i64, rbase : i64, off : i64, width 
     i3_stpair(&em, 1, 3, i3_cello(rd))
 
 fn i3g_sto(em : &mut Emit, tg : Target, rs : i64, rbase : i64, off : i64, width : i64):
-    let wd : i64 = tg.ptr if width = 0 else width
+    let wd : i64 = if width = 0: tg.ptr else: width
     i3_rm(&em, 139, 0, i3_cello(rbase))
     if off ≠ 0:
         em.b1(5)

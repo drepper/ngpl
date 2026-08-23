@@ -5,7 +5,7 @@ fn make_adder(n : i32) -> T':
     return λx : i64 |n| → i64: x + n
 
 fn pick(a : T', b : T') -> T':
-    return a if a > b else b
+    return if a > b: a else: b
 
 @replaceable
 fn mutable_fn(x : i32) -> i32:

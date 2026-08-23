@@ -137,9 +137,30 @@ impl Lower:
             return self.wrap_speculatable(na)
         if k = NK_EQ or k = NK_NE or k = NK_LT or k = NK_LE or k = NK_GT or k = NK_GE or k = NK_LAND or k = NK_LOR or k = NK_AND or k = NK_OR or k = NK_MAXOP or k = NK_MINOP:
             return self.speculatable(na) and self.speculatable(nb)
-        if k = NK_COND:
-            return self.speculatable(na) and self.speculatable(nb) and self.speculatable(nc)
+        if k = NK_IF:
+            // An if written for its value: safe to read where its
+            // condition is and both its branches are, each branch
+            // being the one expression its block is.  A branch that is
+            // more than that is not read ahead of the test.
+            if nc = ⁻1:
+                return false
+            let tv : i64 = self.block_value_of(nb)
+            let ev : i64 = self.block_value_of(nc)
+            if tv = ⁻1 or ev = ⁻1:
+                return false
+            return self.speculatable(na) and self.speculatable(tv) and self.speculatable(ev)
         false
+
+    // The one expression a block is, where it is exactly one and
+    // nothing else; ⁻1 where the block does more than answer.
+    fn block_value_of(&self, blk : i64) → i64:
+        let off : i64 = self.a.na[blk × 1¤ptrdiff]
+        if self.a.extra[off × 1¤ptrdiff] ≠ 1:
+            return ⁻1
+        let only : i64 = self.a.extra[(off + 1) × 1¤ptrdiff]
+        if self.kof(only) ≠ NK_EXPRSTMT:
+            return ⁻1
+        self.a.na[only × 1¤ptrdiff]
 
     fn wrap_speculatable(&self, id : i64) → bool:
         // inside @wrap the arithmetic cannot abort; shifts still can
@@ -202,7 +223,7 @@ impl Lower:
             let cap : mut i64 = 16
             while cap × 7 < (n + 1) × 8:
                 cap ← cap × 2
-            let keystr : i64 = 1 if ty_hkey(self.tof(nid)) = TY_STR else 0
+            let keystr : i64 = if ty_hkey(self.tof(nid)) = TY_STR: 1 else: 0
             let d : i64 = self.tmp()
             self.ir(IR_HNEW, cap, keystr, 0, d, 0)
             let i : mut i64 = 0
@@ -233,8 +254,8 @@ impl Lower:
                 let fvr : i64 = self.lower_rg_arr(nb)
                 let dr : i64 = self.tmp()
                 self.ir(IR_ACYC, nv, fvr, 0, dr, 0)
-                return self.arr_to_farr(dr, self.tof(nid), rpn) if rfa else dr
-            let fv : i64 = self.lower_arr_operand(nb) if ty_is_arr(self.tof(nb)) else self.lower_expr(nb)
+                return if rfa: self.arr_to_farr(dr, self.tof(nid), rpn) else: dr
+            let fv : i64 = if ty_is_arr(self.tof(nb)): self.lower_arr_operand(nb) else: self.lower_expr(nb)
             if rfa and not ty_is_arr(self.tof(nb)):
                 // n ⍴ scalar into a sized binding: no array is built
                 // for it, the frame is filled where it stands
@@ -245,7 +266,7 @@ impl Lower:
                 self.ir(IR_ACYC, nv, fv, 0, d, 0)
             else:
                 self.ir(IR_AFILL, nv, fv, 0, d, 0)
-            return self.arr_to_farr(d, self.tof(nid), rpn) if rfa else d
+            return if rfa: self.arr_to_farr(d, self.tof(nid), rpn) else: d
         if k = NK_TUPLE:
             let n : i64 = self.a.extra[na × 1¤ptrdiff]
             let d : i64 = self.tmp()
@@ -315,7 +336,7 @@ impl Lower:
                 let zd9 : i64 = self.tmp()
                 self.ir(IR_CONST, 0, 0, 0, zd9, 0)
                 let dq9 : i64 = self.tmp()
-                self.ir(IR_DIVV if self.kof(na) = NK_DIV else IR_MODD, av9t, bv9t, zd9, dq9, width_of(self.tof(na)))
+                self.ir(if self.kof(na) = NK_DIV: IR_DIVV else: IR_MODD, av9t, bv9t, zd9, dq9, width_of(self.tof(na)))
                 return dq9
             let bx9 : i64 = self.lower_expr(na)
             let lok9b : i64 = self.label()
@@ -405,7 +426,7 @@ impl Lower:
             if pni >= 0:
                 let fav : i64 = self.lower_expr(na)
                 let ki : i64 = self.const_index(nb)
-                let fiv : i64 = 0 if ki ≠ ⁻1 else self.lower_expr(nb)
+                let fiv : i64 = if ki ≠ ⁻1: 0 else: self.lower_expr(nb)
                 return self.farr_load(fav, self.tof(na), pni, fiv, ki)
             let av : i64 = self.lower_expr(na)
             let iv : i64 = self.lower_expr(nb)
@@ -560,7 +581,7 @@ impl Lower:
         if k = NK_NEG:
             let v : i64 = self.lower_expr(na)
             let d : i64 = self.tmp()
-            self.ir(IR_NEGW if self.in_wrap > 0 else IR_NEG, v, 0, 0, d, w)
+            self.ir(if self.in_wrap > 0: IR_NEGW else: IR_NEG, v, 0, 0, d, w)
             return d
         if k = NK_BNOT:
             let v : i64 = self.lower_expr(na)
@@ -597,8 +618,8 @@ impl Lower:
             let v : i64 = self.lower_expr(na)
             self.in_wrap ← self.in_wrap - 1
             return v
-        if k = NK_COND:
-            return self.lower_cond(nid, na, nb, nc, w)
+        if k = NK_IF:
+            return self.lower_ife(nid, na, nb, nc)
         if k = NK_DEFAULT:
             return self.lower_default(nid, na, nb)
         if k = NK_AND or k = NK_OR:
@@ -664,15 +685,15 @@ impl Lower:
         // signed, and the signed side's width carries the compare
         let ow : mut i64 = owa
         if (owa » 8) ≠ (owb » 8):
-            ow ← owa if (owa » 8) = 1 else owb
+            ow ← if (owa » 8) = 1: owa else: owb
         elif (owb & 255) > (owa & 255):
             ow ← owb
         if k = NK_ADD:
-            self.ir(IR_ADDW if self.in_wrap > 0 else IR_ADD, av, bv, 0, d, w)
+            self.ir(if self.in_wrap > 0: IR_ADDW else: IR_ADD, av, bv, 0, d, w)
         elif k = NK_SUB:
-            self.ir(IR_SUBW if self.in_wrap > 0 else IR_SUB, av, bv, 0, d, w)
+            self.ir(if self.in_wrap > 0: IR_SUBW else: IR_SUB, av, bv, 0, d, w)
         elif k = NK_MUL:
-            self.ir(IR_MULW if self.in_wrap > 0 else IR_MUL, av, bv, 0, d, w)
+            self.ir(if self.in_wrap > 0: IR_MULW else: IR_MUL, av, bv, 0, d, w)
         elif k = NK_SHL:
             self.ir(IR_SHLL, av, bv, 0, d, w)
         elif k = NK_SHR:
@@ -697,17 +718,17 @@ impl Lower:
             self.ir(IR_CGE, av, bv, 0, d, ow)
         elif k = NK_LAND or k = NK_LOR:
             // both sides are bools already; one and or or does it
-            self.ir(IR_BAND if k = NK_LAND else IR_BORR, av, bv, 0, d, 64)
+            self.ir(if k = NK_LAND: IR_BAND else: IR_BORR, av, bv, 0, d, 64)
         elif k = NK_LXOR:
             self.ir(IR_CNE, av, bv, 0, d, 64)
         elif k = NK_LNAND or k = NK_LNOR:
             let tt : i64 = self.tmp()
-            self.ir(IR_BAND if k = NK_LNAND else IR_BORR, av, bv, 0, tt, 64)
+            self.ir(if k = NK_LNAND: IR_BAND else: IR_BORR, av, bv, 0, tt, 64)
             let c1 : i64 = self.tmp()
             self.ir(IR_CONST, 1, 0, 0, c1, 64)
             self.ir(IR_BXORR, tt, c1, 0, d, 64)
         elif k = NK_IOTA:
-            let sf : i64 = 1 if self.elem_of(self.tof(na)) = TY_STR else 0
+            let sf : i64 = if self.elem_of(self.tof(na)) = TY_STR: 1 else: 0
             self.ir(IR_AFIND, av, bv, sf, d, 0)
         elif k = NK_SATADD:
             self.ir(IR_SATADD, av, bv, 0, d, w)
@@ -721,47 +742,89 @@ impl Lower:
             self.ir(IR_MINN, av, bv, 0, d, w)
         return d
 
-    fn lower_cond(&mut self, nid : i64, na : i64, nb : i64, nc : i64, w : i64) → i64:
-        // a select when both sides may be read; branches otherwise
+    fn lower_ife(&mut self, nid : i64, na : i64, nb : i64, nc : i64) → i64:
+        // Where each branch is one expression and both may be read
+        // without harm, neither is worth a jump: read both and choose.
+        // That is what the machine's conditional move is for, and it
+        // is why an if written for its value costs no branch when it
+        // is the small kind.
+        let tv0 : i64 = self.block_value_of(nb)
+        let ev0 : i64 = self.block_value_of(nc)
+        let sel : bool = tv0 ≠ ⁻1 and ev0 ≠ ⁻1 and self.speculatable(tv0) and self.speculatable(ev0)
         self.decide(self.tok_line(self.a.ntok[nid × 1¤ptrdiff]),
-                    "select" if self.speculatable(na) and self.speculatable(nc) else "branched-conditional", "")
-        if self.speculatable(na) and self.speculatable(nc):
-            let cv : i64 = self.lower_expr(nb)
-            let tv : i64 = self.lower_expr(na)
-            let ev : i64 = self.lower_expr(nc)
+                    if sel: "select" else: "branched-conditional", "")
+        if sel:
+            let cv : i64 = self.lower_expr(na)
+            let tv : i64 = self.lower_expr(tv0)
+            let ev : i64 = self.lower_expr(ev0)
             let d : i64 = self.tmp()
-            self.ir(IR_SEL, cv, tv, ev, d, w)
+            self.ir(IR_SEL, cv, tv, ev, d, width_of(self.tof(nid)))
             return d
         let d : i64 = self.tmp()
         let lelse : i64 = self.label()
         let lend : i64 = self.label()
-        let cv : i64 = self.lower_expr(nb)
+        let cv : i64 = self.lower_expr(na)
         self.ir(IR_JZ, cv, lelse, 0, 0, 0)
-        let tv : i64 = self.lower_expr(na)
-        self.ir(IR_MOV, tv, 0, 0, d, 0)
+        self.lower_block_value(nb, d)
         self.ir(IR_JMP, lend, 0, 0, 0, 0)
         self.ir(IR_LABEL, lelse, 0, 0, 0, 0)
-        let ev : i64 = self.lower_expr(nc)
-        self.ir(IR_MOV, ev, 0, 0, d, 0)
+        self.lower_block_value(nc, d)
         self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         d
+
+    // Whether an if answers with a choice rather than a branch: it
+    // has both sides, each is one expression, and neither can come to
+    // harm from being read where the other was chosen.
+    fn if_selectable(&mut self, sid : i64) → bool:
+        let nc : i64 = self.a.nc[sid × 1¤ptrdiff]
+        if nc = ⁻1:
+            return false
+        let tv : i64 = self.block_value_of(self.a.nb[sid × 1¤ptrdiff])
+        let ev : i64 = self.block_value_of(nc)
+        if tv = ⁻1 or ev = ⁻1:
+            return false
+        self.speculatable(tv) and self.speculatable(ev)
+
+
+    // One branch of such an if: every statement but the last as
+    // itself, and the last written into the destination.  A branch
+    // that leaves rather than answering writes nothing, having
+    // nowhere to arrive from.
+    fn lower_block_value(&mut self, blk : i64, d : i64):
+        let off : i64 = self.a.na[blk × 1¤ptrdiff]
+        let n : i64 = self.a.extra[off × 1¤ptrdiff]
+        let i : mut i64 = 0
+        while i + 1 < n:
+            self.lower_stmt(self.a.extra[(off + 1 + i) × 1¤ptrdiff], false, TY_UNIT)
+            i ← i + 1
+        if n > 0:
+            let last : i64 = self.a.extra[(off + n) × 1¤ptrdiff]
+            let lk : i64 = self.kof(last)
+            if lk = NK_EXPRSTMT:
+                let v : i64 = self.lower_expr(self.a.na[last × 1¤ptrdiff])
+                self.ir(IR_MOV, v, 0, 0, d, 0)
+            elif lk = NK_IF:
+                let v : i64 = self.lower_expr(last)
+                self.ir(IR_MOV, v, 0, 0, d, 0)
+            else:
+                self.lower_stmt(last, false, TY_UNIT)
 
     fn lower_andor(&mut self, nid : i64, k : i64, na : i64, nb : i64) → i64:
         // a pure, fault-free right side may be read eagerly, and the
         // whole answer becomes three straight-line instructions
         self.decide(self.tok_line(self.a.ntok[nid × 1¤ptrdiff]),
-                    "eager-logic" if self.speculatable(nb) else "short-circuit", "")
+                    if self.speculatable(nb): "eager-logic" else: "short-circuit", "")
         if self.speculatable(nb):
             let av : i64 = self.lower_expr(na)
             let bv : i64 = self.lower_expr(nb)
             let d : i64 = self.tmp()
-            self.ir(IR_BAND if k = NK_AND else IR_BORR, av, bv, 0, d, 64)
+            self.ir(if k = NK_AND: IR_BAND else: IR_BORR, av, bv, 0, d, 64)
             return d
         let d : i64 = self.tmp()
         let lend : i64 = self.label()
         let av : i64 = self.lower_expr(na)
-        self.ir(IR_CONST, 0 if k = NK_AND else 1, 0, 0, d, 64)
-        self.ir(IR_JZ if k = NK_AND else IR_JNZ, av, lend, 0, 0, 0)
+        self.ir(IR_CONST, if k = NK_AND: 0 else: 1, 0, 0, d, 64)
+        self.ir(if k = NK_AND: IR_JZ else: IR_JNZ, av, lend, 0, 0, 0)
         let bv : i64 = self.lower_expr(nb)
         self.ir(IR_MOV, bv, 0, 0, d, 0)
         self.ir(IR_LABEL, lend, 0, 0, 0, 0)
@@ -814,7 +877,7 @@ impl Lower:
             let bv : i64 = self.lower_expr(self.a.nb[na × 1¤ptrdiff])
             let dv : i64 = self.lower_expr(nb)
             let d : i64 = self.tmp()
-            self.ir(IR_DIVV if ik = NK_DIV else IR_MODD, av, bv, dv, d,
+            self.ir(if ik = NK_DIV: IR_DIVV else: IR_MODD, av, bv, dv, d,
                     width_of(self.tof(na)))
             return d
         if ik = NK_MCALL and self.a.nc[na × 1¤ptrdiff] < 1000:
@@ -1120,7 +1183,7 @@ impl Lower:
         let c : i64 = self.a.na[self.a.extra[(toff + 2) × 1¤ptrdiff] × 1¤ptrdiff]
         // a cube is planes of rows: the last two extents make the plane,
         // and the first counts them
-        let d3 : i64 = 1 if rank = 2 else self.a.na[self.a.extra[(toff + 3) × 1¤ptrdiff] × 1¤ptrdiff]
+        let d3 : i64 = if rank = 2: 1 else: self.a.na[self.a.extra[(toff + 3) × 1¤ptrdiff] × 1¤ptrdiff]
         let nall : i64 = self.tmp()
         self.ir(IR_CONST, r × c × d3, 0, 0, nall, 0)
         let flat : i64 = self.tmp()
@@ -1447,7 +1510,7 @@ impl Lower:
         if self.a.nc[nid × 1¤ptrdiff] = 3 or self.a.nc[nid × 1¤ptrdiff] = 4:
             // a partial: the shim's address, then the bound values,
             // then -- for a closure source -- the source box itself
-            let isclo : i64 = 1 if self.a.nc[nid × 1¤ptrdiff] = 4 else 0
+            let isclo : i64 = if self.a.nc[nid × 1¤ptrdiff] = 4: 1 else: 0
             let vb9 : mut i64[] = []
             let bi9 : mut i64 = 0
             while bi9 < argc:
@@ -1659,7 +1722,7 @@ impl Lower:
             let zd9 : i64 = self.tmp()
             self.ir(IR_CONST, 0, 0, 0, zd9, 0)
             let q9 : i64 = self.tmp()
-            self.ir(IR_DIVV if self.kof(na) = NK_DIV else IR_MODD, av9, bv9, zd9, q9, width_of(self.tof(na)))
+            self.ir(if self.kof(na) = NK_DIV: IR_DIVV else: IR_MODD, av9, bv9, zd9, q9, width_of(self.tof(na)))
             let bb9 : i64 = self.tmp()
             self.ir(IR_SNEW, 1, 0, 0, bb9, 0)
             self.ir(IR_FSTO, bb9, 0, q9, 0, 0)
@@ -1705,24 +1768,27 @@ impl Lower:
         let nc : i64 = self.a.nc[sid × 1¤ptrdiff]
         let lelse : i64 = self.label()
         let cv : i64 = self.lower_expr(na)
+        // An if standing last in a body hands each branch's value on
+        // as the function's answer, so a branch is trailing exactly
+        // when the if is.
         if unlikely = 1 and nc ≠ ⁻1:
             let lend2 : i64 = self.label()
             self.ir(IR_JNZ, cv, lelse, 0, 0, 0)
-            self.lower_block(nc, false, ret_ty)
+            self.lower_block(nc, trailing, ret_ty)
             self.ir(IR_JMP, lend2, 0, 0, 0, 0)
             self.ir(IR_LABEL, lelse, 0, 0, 0, 0)
-            self.lower_block(nb, false, ret_ty)
+            self.lower_block(nb, trailing, ret_ty)
             self.ir(IR_LABEL, lend2, 0, 0, 0, 0)
             return
         self.ir(IR_JZ, cv, lelse, 0, 0, 0)
-        self.lower_block(nb, false, ret_ty)
+        self.lower_block(nb, trailing, ret_ty)
         if nc = ⁻1:
             self.ir(IR_LABEL, lelse, 0, 0, 0, 0)
         else:
             let lend : i64 = self.label()
             self.ir(IR_JMP, lend, 0, 0, 0, 0)
             self.ir(IR_LABEL, lelse, 0, 0, 0, 0)
-            self.lower_block(nc, false, ret_ty)
+            self.lower_block(nc, trailing, ret_ty)
             self.ir(IR_LABEL, lend, 0, 0, 0, 0)
 
     fn lower_stmt(&mut self, sid : i64, trailing : bool, ret_ty : i64):
@@ -1768,7 +1834,7 @@ impl Lower:
             let pns : i64 = self.packed_n(na)
             if pns >= 0:
                 let fk : i64 = self.const_index(nb)
-                let fi : i64 = 0 if fk ≠ ⁻1 else self.lower_expr(nb)
+                let fi : i64 = if fk ≠ ⁻1: 0 else: self.lower_expr(nb)
                 let fv : i64 = self.lower_expr(nc)
                 self.farr_store(bv, self.tof(na), pns, fi, fk, fv)
                 return
@@ -1793,7 +1859,16 @@ impl Lower:
         elif k = NK_HINTED:
             self.lower_if(na, nb, trailing, ret_ty)
         elif k = NK_IF:
-            self.lower_if(sid, 0, trailing, ret_ty)
+            // Standing last in a body with both sides small enough to
+            // be read without harm, the whole if is one value and the
+            // answer is given once, chosen rather than branched to --
+            // which is what the same thing written `a if c else b`
+            // used to do, and there is no reason for the spelling to
+            // cost a branch.
+            if trailing and ret_ty ≠ TY_UNIT and self.if_selectable(sid):
+                self.lower_ret_value(sid)
+            else:
+                self.lower_if(sid, 0, trailing, ret_ty)
         elif k = NK_WHILE:
             let ltop : i64 = self.label()
             let lend : i64 = self.label()
@@ -2136,7 +2211,7 @@ impl Lower:
     fn elem_of(&self, t : i64) → i64:
         if ty_is_mat(t):
             return self.a.minner[ty_midx(t) × 1¤ptrdiff]
-        self.a.fae[ty_fidx(t) × 1¤ptrdiff] if ty_is_farr(t) else ty_elem(t)
+        if ty_is_farr(t): self.a.fae[ty_fidx(t) × 1¤ptrdiff] else: ty_elem(t)
 
     fn farr_size(&self, t : i64) → i64:
         self.a.fas[ty_fidx(t) × 1¤ptrdiff]
@@ -2171,13 +2246,13 @@ impl Lower:
         let na : i64 = self.a.na[id × 1¤ptrdiff]
         let nb : i64 = self.a.nb[id × 1¤ptrdiff]
         if k = NK_INT:
-            return ⁻1 if nb ≠ 0 or na < 0 else na
+            return if nb ≠ 0 or na < 0: ⁻1 else: na
         if k = NK_DROPU:
             return self.const_index(na)
         if k = NK_MUL:
             let l : i64 = self.const_index(na)
             let r : i64 = self.const_index(nb)
-            return ⁻1 if l = ⁻1 or r = ⁻1 else l × r
+            return if l = ⁻1 or r = ⁻1: ⁻1 else: l × r
         ⁻1
 
     // How many elements an array's value is, where the value is the
@@ -2188,13 +2263,13 @@ impl Lower:
     @post(r: r >= ⁻1)
     fn packed_n(&self, id : i64) → i64:
         let t : i64 = self.tof(id)
-        self.farr_size(t) if farr_is_packed(self.a, t) else self.nrep[id × 1¤ptrdiff]
+        if farr_is_packed(self.a, t): self.farr_size(t) else: self.nrep[id × 1¤ptrdiff]
 
     // the same for a type alone, where there is no node to ask: a
     // return type, a field's type
     @post(r: r >= ⁻1)
     fn packed_ty_n(&self, t : i64) → i64:
-        self.farr_size(t) if farr_is_packed(self.a, t) else ⁻1
+        if farr_is_packed(self.a, t): self.farr_size(t) else: ⁻1
 
     @post(r: r > 0)
     fn farr_esize(&self, t : i64) → i64:
@@ -2333,7 +2408,7 @@ impl Lower:
     // when it is a sized array, and itself otherwise
     fn field_val(&mut self, v : i64, ft : i64) → i64:
         let pn : i64 = self.packed_ty_n(ft)
-        self.farr_to_arena(v, ft, pn) if pn >= 0 else v
+        if pn >= 0: self.farr_to_arena(v, ft, pn) else: v
 
     // Copy one sized array's elements over another's.  This is what a
     // return is: the answer is written into the space the caller
@@ -2356,7 +2431,7 @@ impl Lower:
     fn lower_arr_operand(&mut self, nd : i64) → i64:
         let v : i64 = self.lower_expr(nd)
         let pn : i64 = self.packed_n(nd)
-        self.farr_to_arr(v, self.tof(nd), pn) if pn >= 0 else v
+        if pn >= 0: self.farr_to_arr(v, self.tof(nd), pn) else: v
 
     // What a sized array has to become where a T[] is wanted -- ⧺,
     // a slice, printing.  Every element is read and pushed, because
@@ -2387,7 +2462,7 @@ impl Lower:
         self.a.mdd[ty_midx(t) × 1¤ptrdiff]
 
     fn mat_rank(&self, t : i64) → i64:
-        2 if self.a.mdd[ty_midx(t) × 1¤ptrdiff] = ⁻2 else 3
+        if self.a.mdd[ty_midx(t) × 1¤ptrdiff] = ⁻2: 2 else: 3
 
     fn tup_len(&self, t : i64) → i64:
         self.a.ttl[ty_tidx(t) × 1¤ptrdiff]
@@ -2839,7 +2914,7 @@ fn lower_fn(lw : &mut Lower, a : Ast, chk : Chk, f : i64) → IrFn:
     let np0 : i64 = a.extra[d.params_off × 1¤ptrdiff]
     let sized_ret : bool = farr_is_packed(a, d.ret)
     let sbase : i64 = chk.fslots[f × 1¤ptrdiff] ⌈ (np0 + 1)
-    lw.tbase ← sbase + 1 if sized_ret else chk.fslots[f × 1¤ptrdiff]
+    lw.tbase ← if sized_ret: sbase + 1 else: chk.fslots[f × 1¤ptrdiff]
     lw.tnext ← lw.tbase
     lw.tmax ← lw.tbase
     lw.in_wrap ← 0

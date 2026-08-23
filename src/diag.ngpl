@@ -56,7 +56,7 @@ fn file_lines(f : Files, src : byte[]) → i64 ¤"line"[]:
     while k < nf:
         let want ¤byte : i64 = f.off[k]
         while i < want and i < n:
-            line ← line + (one if src[i] = 10 else zero)
+            line ← line + (if src[i] = 10: one else: zero)
             i ← i + 1
         out.push(line)
         k ← k + 1
@@ -97,18 +97,18 @@ fn line_str(src : byte[], want ¤"line" : i64) → str:
             out ← out ⧺ b.chr()
             i ← i + 1
         elif b < 224:
-            let b1 : i64 = src[i + 1] if i + 1 < n else 0
+            let b1 : i64 = if i + 1 < n: src[i + 1] else: 0
             out ← out ⧺ ((b - 192) × 64 + (b1 & 63)).chr()
             i ← i + 2
         elif b < 240:
-            let b1 : i64 = src[i + 1] if i + 1 < n else 0
-            let b2 : i64 = src[i + 2] if i + 2 < n else 0
+            let b1 : i64 = if i + 1 < n: src[i + 1] else: 0
+            let b2 : i64 = if i + 2 < n: src[i + 2] else: 0
             out ← out ⧺ ((b - 224) × 4096 + (b1 & 63) × 64 + (b2 & 63)).chr()
             i ← i + 3
         else:
-            let b1 : i64 = src[i + 1] if i + 1 < n else 0
-            let b2 : i64 = src[i + 2] if i + 2 < n else 0
-            let b3 : i64 = src[i + 3] if i + 3 < n else 0
+            let b1 : i64 = if i + 1 < n: src[i + 1] else: 0
+            let b2 : i64 = if i + 2 < n: src[i + 2] else: 0
+            let b3 : i64 = if i + 3 < n: src[i + 3] else: 0
             out ← out ⧺ ((b - 240) × 262144 + (b1 & 63) × 4096 + (b2 & 63) × 64 + (b3 & 63)).chr()
             i ← i + 4
     out

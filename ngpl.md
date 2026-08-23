@@ -54,7 +54,7 @@ what it is.
   expansion cannot happen before parsing, and two designs built on
   branches of their own
 - [Choosing a Value](design/conditional-expression/README.md) —
-  `a if c else b`, why the branch not taken is not read, and the line
-  break that tells it from an `if` statement
+  `a if c else b`, why the branch not taken is not read, and why the
+  spelling was withdrawn once an `if` handed back a value of its own
 - [Asking Something of Each](design/map/README.md) — `f ¨ v`, and why
   a function marked `@listable` does not make it unnecessary

@@ -197,7 +197,7 @@ procedural macros.
 // The factors of an expression, however deeply the parser nested them.
 @listable
 comptime fn factors(e : syntax) → syntax[]:
-    [e] if e.head() ≠ ※× else ⧺⌿ factors(e.arguments())
+    if e.head() ≠ ※×: [e] else: ⧺⌿ factors(e.arguments())
 
 macro sin(e : syntax) → syntax:
     let rest : mut syntax[] = []
@@ -277,7 +277,7 @@ other.
 
 **Strengths.**  `factors` recurses, so `2×π`, `π×2`, `2×π×3`, `2×3×π`,
 `π×2×3`, `2×(3×π)` and `π` are all handled by one line written once —
-`a if c else b` choosing without branching, `@listable` answering the
+`if c: a else: b` choosing without branching, `@listable` answering the
 factors of each of a product's arguments, and `⧺⌿` joining them.
 Everything on the brief's list is ordinary code.
 

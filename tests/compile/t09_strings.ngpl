@@ -39,5 +39,5 @@ fn main():
     assert(#joined = 3)
 
     // a string chooses like any other value
-    let mode : str = "yes" if #joined > 2 else "no"
+    let mode : str = if #joined > 2: "yes" else: "no"
     std.println("{}", mode)

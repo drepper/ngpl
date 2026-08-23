@@ -37,7 +37,7 @@ fn sa_mask_off(tg : Target) → i64:
 // over: past the signal number, the errno and the code, which are
 // three ints, and past the padding a 64-bit machine adds to them.
 fn si_addr_off(tg : Target) → i64:
-    16 if tg.is64 else 12
+    if tg.is64: 16 else: 12
 
 // () → nothing.  Called from the startup once the stack is standing
 // and the guard's bounds are written down, since both of those are
@@ -92,7 +92,7 @@ fn rt_segv_ir(tg : Target, lw : &mut Lower) → IrFn:
     // machine those line up one to a cell, and on a 32-bit machine the
     // kernel's three words fill one and a half cells, so the second of
     // them -- the siginfo -- is the high half of the first.
-    let info : i64 = 1 if tg.is64 else b.shr(0, b.cst(32))
+    let info : i64 = if tg.is64: 1 else: b.shr(0, b.cst(32))
     let at : i64 = b.ldn(info, si_addr_off(tg), pw)
     let lnot : i64 = b.l()
     b.jnz(b.cltu(at, b.ldn(k, KB_GLO, 8)), lnot)

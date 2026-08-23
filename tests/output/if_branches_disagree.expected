@@ -1,0 +1,6 @@
+error: in main: an if is one value, so its branches say one type between them; this one says i64 on one branch and str on another
+  --> tests/output/if_branches_disagree.ngpl:7:23
+    |
+  7 |     std.println("{}", if true: 1i64 else: "x")
+    |                       ^^
+    |

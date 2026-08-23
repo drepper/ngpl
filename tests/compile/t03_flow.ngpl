@@ -52,4 +52,4 @@ fn main():
         std.println("nonzero")
     std.println("land {}", true ∧ false)
     std.println("lor {}", true ∨ false)
-    std.println("cond {}", 5 if total > 10 else 6)
+    std.println("cond {}", if total > 10: 5 else: 6)

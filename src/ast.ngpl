@@ -59,7 +59,10 @@ let NK_CCAT : i64 = 42      // ⧺ on strings
 let NK_NEG : i64 = 50       // ⁻
 let NK_NOT : i64 = 51       // not, ¬
 let NK_BNOT : i64 = 52      // ~
-let NK_COND : i64 = 55      // na = then-value, nb = condition, nc = else-value
+// 55 was NK_COND, `a if c else b`.  An if hands back what its branch
+// hands back, so the node went with the spelling; the number is left
+// where it was rather than moved onto, these being the compiler's own
+// and worth nothing to renumber.
 let NK_WRAP : i64 = 56      // na = inner
 let NK_DEFAULT : i64 = 57   // na = the result-shaped thing, nb = default
 // statements
@@ -148,7 +151,7 @@ fn hash_algs_named() → str:
     let algs := hash_algs()
     let out : mut str = ""
     foreach k := 0…#algs - 1:
-        out ← out ⧺ ("" if k = 0 else ", ") ⧺ algs[k]
+        out ← out ⧺ (if k = 0: "" else: ", ") ⧺ algs[k]
     out
 
 // what the auxiliary vector is asked for, and under which key

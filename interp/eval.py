@@ -99,7 +99,7 @@ def report_fn_stats(limit: int = 30) -> None:
 
 from interp.ast import (
     IntLit, FloatLit, StrLit, CharLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
-    IfStmt, IfExpr, WhileStmt, ReturnStmt, FuncDef, VarDef, DestructureDef,
+    IfStmt, if_branch_values, WhileStmt, ReturnStmt, FuncDef, VarDef, DestructureDef,
     ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
@@ -634,9 +634,10 @@ def _is_const_expr(node) -> bool:
         return _is_const_expr(node.operand)
     # A choice between two constants, made by a constant, is one too --
     # which is what lets @typeof answer for one.
-    if isinstance(node, IfExpr):
-        return (_is_const_expr(node.cond) and _is_const_expr(node.then_expr)
-                and _is_const_expr(node.else_expr))
+    if isinstance(node, IfStmt):
+        branches = list(if_branch_values(node))
+        return (len(branches) > 1 and _is_const_expr(node.cond)
+                and all(_is_const_expr(e) for e in branches))
     if isinstance(node, ArrayLit):
         return all(_is_const_expr(e) for e in node.elements)
     if isinstance(node, TupleLit):
@@ -3881,11 +3882,6 @@ class Evaluator:
             step = st.value
         return RangeValue(s.value, e.value, step)
 
-    def _ee_IfExpr(self, node):
-        if to_bool(self.eval_expr(node.cond)):
-            return self.eval_expr(node.then_expr)
-        return self.eval_expr(node.else_expr)
-
     def _ee_DropUnitExpr(self, node):
         val = self.eval_expr(node.expr)
         inner = val.inner if isinstance(val, UnitValue) else val
@@ -4640,17 +4636,24 @@ class Evaluator:
         raise _ReturnSentinel(value)
 
     def _eval_if(self, node: IfStmt):
-        """Evaluate an if/elif/else statement."""
+        """Evaluate an if/elif/else statement.
+
+        The branch that runs hands back the value of its last
+        statement, as a match arm does, so an if standing where a value
+        is wanted is that value.  Where nothing wants it the caller
+        drops it, which costs a return rather than a branch.  A false
+        condition with no else has no branch to take its value from and
+        answers nothing; that is refused where a value was wanted, and
+        is refused before anything runs.
+        """
         cond = to_bool(self.eval_expr(node.cond))
         if cond:
-            self.eval_stmts(node.cons)
-            return none()
+            return self.eval_stmts(node.cons)
         alt = node.alt
         while alt is not None:
             alt_cond, alt_body, *rest = alt
             if alt_cond is None or to_bool(self.eval_expr(alt_cond)):
-                self.eval_stmts(alt_body)
-                return none()
+                return self.eval_stmts(alt_body)
             alt = rest[0] if rest else None
         return none()
 
@@ -7029,7 +7032,7 @@ _EXPR_DISPATCH = {
     GetAttr: Evaluator._ee_GetAttr,
     ArrayLit: Evaluator._ee_ArrayLit,
     RangeExpr: Evaluator._ee_RangeExpr,
-    IfExpr: Evaluator._ee_IfExpr,
+    IfStmt: Evaluator._eval_if,
     DropUnitExpr: Evaluator._ee_DropUnitExpr,
     RefExpr: Evaluator._ee_RefExpr,
     StaticAssert: Evaluator._ee_StaticAssert,

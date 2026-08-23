@@ -17,7 +17,7 @@ fn last_reading(ok : bool) → Reading?:
 fn describe(x : i64?) → str:
     match x:
         ∃(v):
-            "present" if v >= 0 else "negative"
+            if v >= 0: "present" else: "negative"
         ∅:
             "absent"
 

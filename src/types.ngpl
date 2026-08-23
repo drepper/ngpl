@@ -94,7 +94,7 @@ fn unit_marks() → str[]:
 // carries, and a measure is an index into the file's list of them.
 @pre(bits = 8 or bits = 16 or bits = 32 or bits = 64)
 fn width_index(bits : i64) → i64:
-    0 if bits = 8 else (1 if bits = 16 else (2 if bits = 32 else 3))
+    if bits = 8: 0 else: (if bits = 16: 1 else: (if bits = 32: 2 else: 3))
 
 @pre(sgn = 0 or sgn = 1)
 @pre(bits = 8 or bits = 16 or bits = 32 or bits = 64)
@@ -135,10 +135,10 @@ fn ty_is_opt(t : i64) → bool:
     t >= 2048 and t < 4096 or (t >= 198176 and t < 202272)
 
 fn mk_oty(base : i64) → i64:
-    198176 + ty_tidx(base) if ty_is_tup(base) else 2048 + base
+    if ty_is_tup(base): 198176 + ty_tidx(base) else: 2048 + base
 
 fn ty_opt_base(t : i64) → i64:
-    mk_tty(t - 198176) if t >= 198176 else t - 2048
+    if t >= 198176: mk_tty(t - 198176) else: t - 2048
 
 @pre(sidx >= 0 and sidx < 768)
 @post(r: ty_is_struct(r))
@@ -158,7 +158,7 @@ fn ty_unit(t : i64) → i64:
     (t - 16) » 3
 
 fn ty_drop_unit(t : i64) → i64:
-    t - 8 × ty_unit(t) if ty_is_int(t) else t
+    if ty_is_int(t): t - 8 × ty_unit(t) else: t
 
 fn ty_with_unit(t : i64, u : i64) → i64:
     ty_drop_unit(t) + 8 × u
@@ -170,7 +170,7 @@ fn ty_is_arr(t : i64) → bool:
     t >= 4096 and t < 8192 or t >= 32768 and t < 65536
 
 fn ty_elem(t : i64) → i64:
-    t - 7168 if t >= 7168 and t < 8192 else t - 4096
+    if t >= 7168 and t < 8192: t - 7168 else: t - 4096
 
 @pre(elem >= 0 and elem < 4096)
 fn mk_aty(elem : i64) → i64:
@@ -185,7 +185,7 @@ fn ty_is_hash(t : i64) → bool:
 fn hkey_index(t : i64) → i64:
     if t = TY_STR: return 8
     let b : i64 = ty_bits(t)
-    ty_sgn(t) × 4 + (0 if b = 8 else (1 if b = 16 else (2 if b = 32 else 3)))
+    ty_sgn(t) × 4 + (if b = 8: 0 else: (if b = 16: 1 else: (if b = 32: 2 else: 3)))
 
 @pre(ki >= 0 and ki <= 8)
 fn hkey_code(ki : i64) → i64:
@@ -308,7 +308,7 @@ fn ty_strip_ref(t : i64) → i64:
 // a function travels as a value when its answer is a plain scalar,
 // or an optional of one -- absence rides the box either way
 fn fnval_ret_ok(r : i64) → bool:
-    let b : i64 = ty_opt_base(r) if ty_is_opt(r) else r
+    let b : i64 = if ty_is_opt(r): ty_opt_base(r) else: r
     (ty_is_int(b) and ty_unit(b) = 0) or b = TY_BOOL or b = TY_CHAR or b = TY_STR
 
 // whether a name is the bootstrap's to keep: i or u and a nonzero
@@ -337,7 +337,7 @@ fn type_name(t0 : i64) → str:
 fn type_name_m(t0 : i64, marks : str[]) → str:
     let r : i64 = ty_ref_kind(t0)
     let t : i64 = ty_strip_ref(t0)
-    let prefix : str = "" if r = 0 else ("&" if r = 1 else "&mut ")
+    let prefix : str = if r = 0: "" else: (if r = 1: "&" else: "&mut ")
     if t = TY_UNIT: return "∅"
     if t = TY_BOOL: return prefix ⧺ "bool"
     if t = TY_STR: return prefix ⧺ "str"
@@ -359,7 +359,7 @@ fn type_name_m(t0 : i64, marks : str[]) → str:
         // a builtin enum has a name every file knows; a file's own is
         // named by its place, since this function has no file to ask
         let bn := builtin_enum_names()
-        return prefix ⧺ (bn[ty_eidx(t) × 1¤ptrdiff] if ty_eidx(t) < @dropunit(#bn) else "enum #" ⧺ i64_str(ty_eidx(t)))
+        return prefix ⧺ (if ty_eidx(t) < @dropunit(#bn): bn[ty_eidx(t) × 1¤ptrdiff] else: "enum #" ⧺ i64_str(ty_eidx(t)))
     if ty_is_tup(t): return prefix ⧺ "a tuple"
     if ty_is_opt(t): return prefix ⧺ type_name_m(ty_opt_base(t), marks) ⧺ "?"
     if ty_is_arr(t) and not ty_is_farr(t): return prefix ⧺ type_name_m(ty_elem(t), marks) ⧺ "[]"
@@ -367,9 +367,9 @@ fn type_name_m(t0 : i64, marks : str[]) → str:
     if ty_is_tup(t): return prefix ⧺ "tuple #" ⧺ i64_str(ty_tidx(t))
     if ty_is_farr(t): return prefix ⧺ "sized array #" ⧺ i64_str(ty_fidx(t))
     if ty_is_iter(t): return prefix ⧺ "iterator #" ⧺ i64_str(ty_iidx(t))
-    let base : str = ("i" if ty_sgn(t) = 1 else "u") ⧺ i64_str(ty_bits(t))
+    let base : str = (if ty_sgn(t) = 1: "i" else: "u") ⧺ i64_str(ty_bits(t))
     let u : i64 = ty_unit(t)
     if u = 0:
         return base
-    base ⧺ " ¤" ⧺ (marks[u × 1¤ptrdiff] if u < @dropunit(#marks) else "unit#" ⧺ i64_str(u))
+    base ⧺ " ¤" ⧺ (if u < @dropunit(#marks): marks[u × 1¤ptrdiff] else: "unit#" ⧺ i64_str(u))
 

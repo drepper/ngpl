@@ -5,5 +5,5 @@
 fn main():
     let a : i32 = 1
     let b : i64 = 2
-    let chosen := a if true else b
+    let chosen := if true: a else: b
     std.println("{}", chosen)

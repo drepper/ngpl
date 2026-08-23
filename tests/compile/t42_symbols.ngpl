@@ -40,7 +40,7 @@ fn depth(r : &Rec) -> i64:
 fn every_kind(a : i32, b : u8, c : bool, d : str, e : char) -> i64:
     let n : mut i64 = a
     n ← n + b
-    n ← n + (1 if c else 0)
+    n ← n + (if c: 1 else: 0)
     n ← n + @dropunit(#d)
     n ← n + e.ord()
     return n

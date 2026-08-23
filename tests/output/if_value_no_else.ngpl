@@ -1,0 +1,8 @@
+// An if standing where a value is wanted says what the value is either
+// way, so an else and a further block follow.  Without one it can fall
+// past its branches with nothing to hand back.
+@start
+@impure
+fn main():
+    let n : i64 = 1
+    std.println("{}", if n > 0: "positive")

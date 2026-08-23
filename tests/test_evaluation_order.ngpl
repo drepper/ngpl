@@ -111,13 +111,13 @@ fn test_a_store_reads_its_index_before_its_value():
 @test
 @impure
 fn test_a_conditional_reads_its_condition_first():
-    _ ← n(1, 1) if b(3, true) else n(2, 2)
+    _ ← if b(3, true): n(1, 1) else: n(2, 2)
     assert_eq(seen(), 31)
 
 @test
 @impure
 fn test_a_conditional_reads_only_the_arm_it_chose():
-    _ ← n(1, 1) if b(3, false) else n(2, 2)
+    _ ← if b(3, false): n(1, 1) else: n(2, 2)
     assert_eq(seen(), 32)
 
 // ---------------------------------------------------------------------

@@ -1,7 +1,7 @@
 // The third file completes the program.
 
 fn shout(l : Level) → str:
-    "world" if l = Level.quiet else "WORLD"
+    if l = Level.quiet: "world" else: "WORLD"
 
 @start
 @impure

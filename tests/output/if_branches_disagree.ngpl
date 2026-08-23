@@ -1,0 +1,7 @@
+// An if is one value, so its branches have to say one type between
+// them.  A number and a string cannot be the same value, and nothing
+// here declares a sum type that says they belong together.
+@start
+@impure
+fn main():
+    std.println("{}", if true: 1i64 else: "x")

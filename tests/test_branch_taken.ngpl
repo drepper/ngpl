@@ -1,15 +1,20 @@
-// Tests for the conditional expression, `a if c else b`.
+// How an if that is a value is read.
 //
-// The value is a where c holds and b where it does not.  It is an
-// expression, so it stands wherever a value is wanted; and only the
-// branch taken is read, which is what makes it usable as a guard.
+// The value is the branch the condition chooses, and only that branch
+// is read -- the other side is not evaluated at all, which is what
+// makes an if usable as a guard in front of the thing it guards
+// against.  This file is about that reading: which branch runs, what
+// is left alone, how a chain is walked, and where an if may stand.
+//
+// What the branches are and what type they say between them is
+// [[test_if_value]]'s subject; this one takes those as given.
 
 // ---------------------------------------------------------------------
 // Both branches
 // ---------------------------------------------------------------------
 
 fn absolute(x : i64) → i64:
-    x if x > 0 else ⁻x
+    if x > 0: x else: ⁻x
 
 @test
 fn test_the_value_is_the_branch_the_condition_chooses():
@@ -21,8 +26,8 @@ fn test_the_value_is_the_branch_the_condition_chooses():
 fn test_either_branch_may_be_any_expression():
     let a : i64 = 3
     let b : i64 = 4
-    assert_eq(a + b if true else a × b, 7)
-    assert_eq(a + b if false else a × b, 12)
+    assert_eq(if true: a + b else: a × b, 7)
+    assert_eq(if false: a + b else: a × b, 12)
 
 // ---------------------------------------------------------------------
 // Only the branch taken is read
@@ -33,8 +38,8 @@ fn test_either_branch_may_be_any_expression():
 @test
 fn test_the_branch_not_taken_is_not_read():
     let v : i64[] = [7, 8]
-    assert_eq(v[0] if true else v[9], 7)
-    assert_eq(v[9] if false else v[1], 8)
+    assert_eq(if true: v[0] else: v[9], 7)
+    assert_eq(if false: v[9] else: v[1], 8)
 
 // Which is what lets a conditional stand in front of the thing it
 // guards against.
@@ -42,39 +47,40 @@ fn test_the_branch_not_taken_is_not_read():
 fn test_a_conditional_guards_what_follows_it():
     let v : i64[] = [1, 2, 3]
     let n : i64 ¤ptrdiff = 5¤ptrdiff
-    assert_eq(0 if n >= #v else v[n], 0)
+    assert_eq(if n >= #v: 0 else: v[n], 0)
 
 // ---------------------------------------------------------------------
 // How it groups
 // ---------------------------------------------------------------------
 
-// It binds loosest of everything, so the arithmetic on either side is
-// gathered up before the choice is made.
+// A branch is a whole expression and needs nothing to close it: the
+// `else:` says where one ends and the next begins, so the arithmetic
+// on either side is gathered up before the choice is made.
 @test
-fn test_it_binds_looser_than_the_arithmetic():
-    assert_eq(1 + 2 if false else 3, 3)
-    assert_eq(1 + 2 if true else 3, 3)
-    assert_eq(2 × 3 if true else 0, 6)
+fn test_a_branch_is_a_whole_expression():
+    assert_eq(if false: 1 + 2 else: 3, 3)
+    assert_eq(if true: 1 + 2 else: 3, 3)
+    assert_eq(if true: 2 × 3 else: 0, 6)
 
 // A chain groups to the right, so the second condition is asked only
 // where the first does not hold.
 @test
 fn test_a_chain_groups_to_the_right():
     let n : i64 = 2
-    assert_eq("one" if n = 1 else "two" if n = 2 else "many", "two")
-    assert_eq("one" if n = 1 else ("two" if n = 2 else "many"), "two")
+    assert_eq(if n = 1: "one" else: if n = 2: "two" else: "many", "two")
+    assert_eq(if n = 1: "one" else: (if n = 2: "two" else: "many"), "two")
 
 @test
 fn test_a_chain_reaches_its_last_branch():
     let n : i64 = 7
-    assert_eq("one" if n = 1 else "two" if n = 2 else "many", "many")
+    assert_eq(if n = 1: "one" else: if n = 2: "two" else: "many", "many")
 
-// Written inside an operator it needs brackets, since the conditional
-// would otherwise take the whole of what surrounds it.
+// An if is not an operand, so standing inside an operator it stands
+// in brackets, which is where the operator's operand is looked for.
 @test
 fn test_brackets_put_one_inside_an_operator():
-    assert_eq(1 + (2 if true else 30), 3)
-    assert_eq(1 + (2 if false else 30), 31)
+    assert_eq(1 + (if true: 2 else: 30), 3)
+    assert_eq(1 + (if false: 2 else: 30), 31)
 
 // ---------------------------------------------------------------------
 // Everywhere a value is wanted
@@ -85,27 +91,27 @@ fn twice(n : i64) → i64:
 
 @test
 fn test_as_an_argument():
-    assert_eq(twice(4 if true else 5), 8)
+    assert_eq(twice(if true: 4 else: 5), 8)
 
 @test
 fn test_in_an_array():
-    let v : i64[] = [1 if true else 9, 2 if false else 9]
+    let v : i64[] = [if true: 1 else: 9, if false: 2 else: 9]
     assert_eq(v[0], 1)
     assert_eq(v[1], 9)
 
 @test
 fn test_as_a_binding_with_a_type_stated():
-    let n : i64 = 4 if true else 5
+    let n : i64 = if true: 4 else: 5
     assert_eq(n, 4)
 
 @test
 fn test_as_what_an_assignment_stores():
     let n : mut i64 = 0
-    n ← 4 if true else 5
+    n ← if true: 4 else: 5
     assert_eq(n, 4)
 
 fn signum(x : i64) → i64:
-    return 0 if x = 0 else (1 if x > 0 else ⁻1)
+    return if x = 0: 0 else: (if x > 0: 1 else: ⁻1)
 
 @test
 fn test_as_what_a_return_hands_back():
@@ -118,7 +124,7 @@ fn test_as_what_a_loop_walks():
     let a : i64[] = [1, 2]
     let b : i64[] = [10, 20, 30]
     let total : mut i64 = 0
-    foreach x := a if false else b:
+    foreach x := if false: a else: b:
         total ← total + x
     assert_eq(total, 60)
 
@@ -131,15 +137,15 @@ fn test_as_what_a_loop_walks():
 @test
 fn test_a_number_as_the_condition():
     let n : i64 = 3
-    assert_eq("some" if n else "none", "some")
+    assert_eq(if n: "some" else: "none", "some")
     let z : i64 = 0
-    assert_eq("some" if z else "none", "none")
+    assert_eq(if z: "some" else: "none", "none")
 
 @test
 fn test_an_optional_as_the_condition():
     let v : i64[] = [4, 5]
-    assert_eq("found" if v ⍳ 5 else "missing", "found")
-    assert_eq("found" if v ⍳ 6 else "missing", "missing")
+    assert_eq(if v ⍳ 5: "found" else: "missing", "found")
+    assert_eq(if v ⍳ 6: "found" else: "missing", "missing")
 
 // A conditional is one value, so its two sides have to say one type
 // between them.  Two that cannot be the same value are refused at the
@@ -149,7 +155,7 @@ fn test_an_optional_as_the_condition():
 fn test_the_branches_agree():
     let n : i64 = 1
     let m : i64 = 2
-    let chosen := n if true else m
+    let chosen := if true: n else: m
     assert_eq(chosen, 1)
     assert_eq(@typeof(chosen), i64)
 
@@ -157,16 +163,16 @@ fn test_the_branches_agree():
 // agrees with any other number.
 @test
 fn test_a_number_with_no_width_settles():
-    let d : f64 = 1 if false else 2.5
+    let d : f64 = if false: 1 else: 2.5
     assert_eq(d, 2.5)
-    let i : i64 = 1 if true else 2
+    let i : i64 = if true: 1 else: 2
     assert_eq(i, 1)
 
 // Nothing agrees with an absent value but an absent value, since an
 // optional is what holds both.
 @test
 fn test_an_absent_value_agrees_with_what_holds_it():
-    let found : i64? = 7 if true else ∅
+    let found : i64? = if true: 7 else: ∅
     assert_eq(found ?? 0, 7)
 
 // A sum type says two types belong together, which is the whole of
@@ -178,7 +184,7 @@ type Width = i32 | i64
 fn test_a_sum_type_says_the_two_belong_together():
     let a : i32 = 1
     let b : i64 = 2
-    let w : Width = a if true else b
+    let w : Width = if true: a else: b
     assert_eq(@typeof(w), i32)
 
 // ---------------------------------------------------------------------
@@ -214,12 +220,13 @@ fn test_an_if_statement_after_a_nested_block():
         seen ← 3
     assert_eq(seen, 3)
 
-// And an if statement whose condition is itself a conditional, which
-// is unusual to write and unambiguous to read.
+// And an if statement whose condition is itself an if, which is
+// unusual to write and reads plainly enough in brackets -- where an
+// if standing as an operand stands anyway.
 @test
-fn test_a_statement_condition_that_is_a_conditional():
+fn test_a_statement_condition_that_is_an_if():
     let seen : mut i64 = 0
-    if true if false else false:
+    if (if false: true else: false):
         seen ← 1
     else:
         seen ← 2

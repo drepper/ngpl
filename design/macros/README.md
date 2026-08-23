@@ -171,7 +171,7 @@ procedural macros, Julia's `macro`, and Nim:
 // The factors of an expression, however deeply the parser nested them.
 @listable
 comptime fn factors(e : syntax) → syntax[]:
-    [e] if e.head() ≠ ※× else ⧺⌿ factors(e.arguments())
+    if e.head() ≠ ※×: [e] else: ⧺⌿ factors(e.arguments())
 
 macro sin(e : syntax) → syntax:
     let rest : mut syntax[] = []
@@ -275,7 +275,7 @@ it does with them.
 
 That line is worth reading twice, because every part of it is the
 language saying something rather than a loop spelling it out.
-`a if c else b` chooses without branching; `@listable` makes
+`if c: a else: b` chooses without branching; `@listable` makes
 `factors(e.arguments())` answer the factors of *each* of the things the
 product applies `×` to; and `⧺⌿` joins those into one array.  Written
 the plain way — a guard clause, an array carried along, and a loop
