@@ -1358,7 +1358,6 @@ fn rt_build3(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let three : i64 = b.cst(3)
         let iv : i64 = b.t()
         let entw : i64 = b.cst(2 × pw)
-        let sixteen : i64 = b.cst(16)
         b.mov(iv, b.call1(RT_ALLOC, b.mul(n, entw)))
         let slots : i64 = b.ldn(1, 0, 8)
         let ix : i64 = b.t()

@@ -755,7 +755,6 @@ impl Parser:
                 self.pos ← self.pos + 1
                 e ← self.mknode(NK_TRY, at, e, 0, 0)
             elif self.peek() = TK_DOT:
-                let at : i64 = self.pos
                 self.pos ← self.pos + 1
                 let mtok : i64 = self.pos
                 _ ← self.eat_word("the member's name")
@@ -1314,10 +1313,10 @@ impl Parser:
         if self.peek() = TK_NL:
             self.pos ← self.pos + 1
         elif self.peek() = TK_DEDENT or self.peek() = TK_EOF:
-            let keep : i64 = 0
+            let _nothing_to_do : i64 = 0
         elif self.pos > 0 and self.toks.kind[(self.pos - 1) × 1¤ptrdiff] = TK_DEDENT:
             // a lambda's layout body closed the line already
-            let keep : i64 = 0
+            let _nothing_to_do : i64 = 0
         else:
             self.err("the statement has ended but the line has more on it")
 

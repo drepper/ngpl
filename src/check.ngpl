@@ -80,6 +80,11 @@ struct Chk:
     // Nearly always empty, which is why lowering asks its length
     // before it asks anything else.
     argcopy : i64[]
+    // One line per binding whose scope ended, saying how long it
+    // lived.  Written under --log=json beside the lowering's own
+    // decisions: a lifetime is something the compiler worked out, and
+    // the way to see what it worked out is to ask.
+    log : str[]
     diags : Diag[]
 
 // ---------------------------------------------------------------------------
@@ -232,7 +237,22 @@ struct Checker:
     psafe : i64[]
     pnode_slot : i64[]   // the nodes to mark, if it comes to that
     pnode_id : i64[]
+    // How long each binding lives.  Statements are numbered as they
+    // are walked, so a lifetime is the number of the statement that
+    // declared it and the number of the last that used it; the two
+    // being equal means nothing ever read what was bound.  lesc says
+    // the end is not the last use but the end of the scope, which is
+    // what happens where a callee may have kept what it was handed.
+    stmt_seq : i64
+    cur_stmt : i64       // which kind of statement is being checked
+    lbirth : i64[]
+    llast : i64[]
+    luse : i64[]         // how many times it was read
+    lesc : i64[]
+    lwarn : i64[]        // 1 where nothing reading it is worth saying
+    ltok : i64[]
     fslots : i64[]
+    log : str[]
     diags : Diag[]
     snames : str[]
     stype : i64[]
@@ -476,7 +496,40 @@ impl Checker:
         self.smut.push(is_mut)
         self.sslot.push(slot)
         self.sheld.push(HOLD_FREE)
+        self.life_born(slot, tok)
         slot
+
+fn begins_underscore(nm : str) → bool:
+    let cs := nm.chars()
+    #cs > 0 and cs[0 × 1¤ptrdiff] = '_'
+
+impl Checker:
+    // A binding leaves its scope here, so this is where its lifetime
+    // is settled and where anything worth saying about it is said.
+    // What is worth saying is that nothing read it: born and last used
+    // at the same statement, and never handed anywhere that might have
+    // kept it.
+    fn life_ends(&mut self, slot : i64):
+        if slot < 0 or slot × 1¤ptrdiff >= #self.lbirth:
+            return
+        let born : i64 = self.lbirth[slot × 1¤ptrdiff]
+        let tok : i64 = self.ltok[slot × 1¤ptrdiff]
+        if tok = ⁻1:
+            return
+        let nm := self.text(tok)
+        let esc : i64 = self.lesc[slot × 1¤ptrdiff]
+        // Where something may have kept it, the last use here says
+        // nothing about when it stops being needed, and the worst case
+        // is the whole scope -- which ends at the statement being left.
+        let last : i64 = self.stmt_seq if esc = 1 else self.llast[slot × 1¤ptrdiff]
+        self.log.push("{\"function\": \"" ⧺ self.a.fns[self.cur_fn × 1¤ptrdiff].name ⧺ "\", \"line\": " ⧺ i64_str(@dropunit(self.toks.line[tok × 1¤ptrdiff])) ⧺ ", \"decision\": \"lifetime\", \"name\": \"" ⧺ nm ⧺ "\", \"born\": " ⧺ i64_str(born) ⧺ ", \"last\": " ⧺ i64_str(last) ⧺ ", \"escapes\": " ⧺ ("true" if esc = 1 else "false") ⧺ "}")
+        // A name beginning with _ says the binding is meant to go
+        // unread, which is the one answer to this warning that is not
+        // a change to the code.
+        let unread : bool = self.luse[slot × 1¤ptrdiff] = 0 and esc = 0
+        let worth : bool = self.lwarn[slot × 1¤ptrdiff] = 1 and nm ≠ "_" and not begins_underscore(nm)
+        if unread and worth:
+            self.dwarn(tok, 2421, "'" ⧺ nm ⧺ "' is bound and never read; its lifetime begins and ends at the statement that declares it. Name it '_" ⧺ nm ⧺ "' if that is meant")
 
     fn push_scope(&mut self):
         self.marks.push(@dropunit(#self.snames))
@@ -492,6 +545,7 @@ impl Checker:
             self.sheld[hs × 1¤ptrdiff] ← hb
         let low : i64 = self.marks.pop() ?? 0
         while @dropunit(#self.snames) > low:
+            self.life_ends(self.sslot[(#self.snames - 1¤ptrdiff)])
             _ ← self.snames.pop() ?? ""
             _ ← self.stype.pop() ?? 0
             _ ← self.smut.pop() ?? 0
@@ -704,8 +758,6 @@ impl Checker:
             return tl
         // two typed operands: wider wins, and what measure the result
         // carries is the operator's own business
-        let ul : i64 = ty_unit(tl)
-        let ur : i64 = ty_unit(tr)
         let ru : i64 = self.unit_meet(tok, k, tl, tr)
         if ty_sgn(tl) ≠ ty_sgn(tr):
             // an unsigned value narrower than the signed side widens
@@ -1540,6 +1592,7 @@ impl Checker:
             let base0 : i64 = ty_strip_ref(st0)
             self.set_type(id, base0)
             self.nslot[id × 1¤ptrdiff] ← self.sslot[s × 1¤ptrdiff]
+            self.life_used(self.sslot[s × 1¤ptrdiff])
             if ty_is_arr(base0):
                 self.pack_used(self.sslot[s × 1¤ptrdiff], id)
             // an element reference holds the element's address: a read
@@ -2400,6 +2453,8 @@ impl Checker:
             self.check_one_arg(tok, name, j + 1, arg, pty)
             j ← j + 1
         self.check_alias(tok, name, ⁻1, args_off, argc, callee.params_off, 0)
+        self.call_escapes(args_off, argc, callee.params_off, ⁻1, 0,
+                          callee.is_impure, callee.ret)
         self.set_type(id, callee.ret)
 
     // `mod.name(args)`: the module says where to look, so the walk out
@@ -2492,6 +2547,8 @@ impl Checker:
                 self.check_one_arg(tok, callee.name, j + 1, arg, pty)
             j ← j + 1
         self.check_alias(tok, callee.name, ⁻1, args_off, argc, callee.params_off, 0)
+        self.call_escapes(args_off, argc, callee.params_off, ⁻1, 0,
+                          callee.is_impure, callee.ret)
         if ty_is_var(callee.ret):
             let rix : i64 = callee.ret - 194048
             if vmap[rix × 1¤ptrdiff] ≠ ⁻1:
@@ -3380,6 +3437,8 @@ impl Checker:
             self.check_one_arg(tok, fname, j + 1, arg, pty)
             j ← j + 1
         self.check_alias(tok, fname, na, args_off, argc, callee.params_off, self_n)
+        self.call_escapes(args_off, argc, callee.params_off, na, self_n,
+                          callee.is_impure, callee.ret)
         // lowering finds the function and whether a receiver travels
         self.a.nc[id × 1¤ptrdiff] ← 1000 + 2 × f + (1 if instance else 0)
         self.set_type(id, callee.ret)
@@ -3565,8 +3624,121 @@ impl Checker:
             i ← i + 1
         self.pop_scope()
 
+    // ------------------------------------------------------------------
+    // How long a binding lives
+    // ------------------------------------------------------------------
+    //
+    // A lifetime runs from the statement that declared the binding to
+    // the statement that last used it.  Statements are numbered as
+    // they are walked, so the numbering is of the text and not of what
+    // a run does with it -- which is what is wanted: this is a question
+    // about the program, and a loop body is walked once.
+    //
+    // Where the two numbers are the same, nothing ever read what was
+    // bound, and that is worth saying.
+
+    fn life_born(&mut self, slot : i64, tok : i64):
+        while #self.lbirth <= slot × 1¤ptrdiff:
+            self.lbirth.push(⁻1)
+            self.llast.push(⁻1)
+            self.luse.push(0)
+            self.lesc.push(0)
+            self.lwarn.push(0)
+            self.ltok.push(⁻1)
+        self.lbirth[slot × 1¤ptrdiff] ← self.stmt_seq
+        self.llast[slot × 1¤ptrdiff] ← self.stmt_seq
+        self.luse[slot × 1¤ptrdiff] ← 0
+        self.lesc[slot × 1¤ptrdiff] ← 0
+        self.ltok[slot × 1¤ptrdiff] ← tok
+        // Only a let is worth saying this about.  A parameter's
+        // lifetime does not begin at a statement at all, and a uniform
+        // signature -- every dispatcher taking a Target whether it
+        // reads it or not -- is a shape and not an oversight; a
+        // contract's result name is read inside the very statement
+        // that binds it, which no let can do.
+        self.lwarn[slot × 1¤ptrdiff] ← 1 if self.cur_stmt = NK_LET else 0
+
+    fn life_used(&mut self, slot : i64):
+        if slot >= 0 and slot × 1¤ptrdiff < #self.llast:
+            self.llast[slot × 1¤ptrdiff] ← self.stmt_seq
+            self.luse[slot × 1¤ptrdiff] ← self.luse[slot × 1¤ptrdiff] + 1
+
+    // What a call does to the lifetimes of what it was handed.
+    //
+    // A binding handed over as a &mut is one the callee may do more
+    // with than read.  Three answers, and which one depends on the
+    // callee rather than on the call:
+    //
+    //   - an impure callee may put a reference to it somewhere that
+    //     outlives the call -- a global, a structure it was also
+    //     handed -- and nothing here can see where.  The lifetime runs
+    //     to the end of the scope.
+    //
+    //   - a pure callee cannot store it, but it can answer it: if what
+    //     the callee answers could hold what it was handed, the value
+    //     leaves through the return and the lifetime runs to the end
+    //     of the scope as well.  Answering a plain number cannot carry
+    //     an array or a structure out, so that case is left alone.
+    //
+    //   - otherwise the call is a use like any other, and the lifetime
+    //     ends there if nothing later reads it.
+    //
+    // The worst case is the end of the scope, and both of the first
+    // two take it; what the distinction buys is that a pure function
+    // answering a number does not extend anything.
+    fn call_escapes(&mut self, args_off : i64, argc : i64, params_off : i64,
+                    recv : i64, self_n : i64, imp : bool, ret : i64):
+        if self_n = 1:
+            let rty : i64 = self.a.extra[(params_off + 2) × 1¤ptrdiff]
+            if ty_ref_kind(rty) = 2:
+                self.arg_escapes(recv, rty, imp, ret)
+        let j : mut i64 = 0
+        while j < argc:
+            let arg : i64 = self.a.extra[(args_off + 1 + j) × 1¤ptrdiff]
+            let pty : i64 = self.a.extra[(params_off + 2 + (j + self_n) × 2) × 1¤ptrdiff]
+            if ty_ref_kind(pty) = 2:
+                self.arg_escapes(arg, pty, imp, ret)
+            j ← j + 1
+
+    fn arg_escapes(&mut self, arg : i64, pty : i64, imp : bool, ret : i64):
+        let inner : i64 = self.a.na[arg × 1¤ptrdiff] if self.kind_of(arg) = NK_REF else arg
+        let s : i64 = self.base_slot(inner)
+        if s < 0:
+            return
+        if imp or self.carries_out(ty_strip_ref(pty), ret):
+            self.life_escapes(s)
+        else:
+            self.life_used(s)
+
+    // Whether what a function answers could be, or could hold, what it
+    // was handed.  A number cannot carry an array out; an array of the
+    // same elements can, and so can a structure, which may have a
+    // field of it.  The question is asked of the shapes and not of the
+    // body, so the answer is the careful one.
+    fn carries_out(&self, held : i64, ret : i64) → bool:
+        let r : i64 = ty_strip_ref(ret)
+        if r = TY_UNIT:
+            return false
+        if r = held:
+            return true
+        if ty_is_struct(r) or ty_is_tup(r) or ty_is_hash(r):
+            return true
+        if ty_is_arr(r) or ty_is_farr(r) or ty_is_mat(r):
+            return true
+        if ty_is_opt(r):
+            return self.carries_out(held, ty_opt_base(r))
+        false
+
+    // The callee may have kept it, so the last use here is not the end.
+    fn life_escapes(&mut self, slot : i64):
+        if slot >= 0 and slot × 1¤ptrdiff < #self.lesc:
+            self.lesc[slot × 1¤ptrdiff] ← 1
+            self.llast[slot × 1¤ptrdiff] ← self.stmt_seq
+
     fn check_stmt(&mut self, id : i64, trailing : bool):
+        self.stmt_seq ← self.stmt_seq + 1
         let k : i64 = self.kind_of(id)
+        self.cur_stmt ← k
         let tok : i64 = self.a.ntok[id × 1¤ptrdiff]
         let na : i64 = self.a.na[id × 1¤ptrdiff]
         let nb : i64 = self.a.nb[id × 1¤ptrdiff]
@@ -3722,6 +3894,7 @@ impl Checker:
         elif k = NK_ASSIGN:
             let name := self.text(tok)
             let s : i64 = self.lookup(name)
+            self.life_used(self.sslot[s × 1¤ptrdiff] if s ≠ ⁻1 else ⁻1)
             self.pack_kill(self.sslot[s × 1¤ptrdiff] if s ≠ ⁻1 else ⁻1)
             if s = ⁻1:
                 let g : i64 = self.global_index(name)
@@ -4211,10 +4384,6 @@ impl Checker:
         assert(self.nslots >= np, "every parameter took a slot")
         if np > 12:
             self.derr(d.tok, "more than twelve parameters is not core-2 yet")
-        let pi : mut i64 = 0
-        while pi < np:
-            let pty : i64 = self.a.extra[(d.params_off + 2 + pi × 2) × 1¤ptrdiff]
-            pi ← pi + 1
         self.in_contract ← true
         if d.pre_off ≠ ⁻1:
             let n : i64 = self.a.extra[d.pre_off × 1¤ptrdiff]
@@ -4331,7 +4500,7 @@ impl Checker:
 // derrc/dwarn calls; tests/compile/run_compile_tests.sh checks it.
 fn diag_codes() → i64[]:
     [2024, 2025, 2026, 2111, 2229, 2245, 2253, 2254, 2256, 2292,
-     2400, 2401, 2402, 2403, 2404, 2728, 2729, 2741, 2910, 2911]
+     2400, 2401, 2402, 2403, 2404, 2421, 2728, 2729, 2741, 2910, 2911]
 
 fn draws_code(code : i64) → bool:
     foreach c := diag_codes():
@@ -4454,6 +4623,9 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
                                    nrep: nrep,
                                    pcnt: [], puse: [], psafe: [],
                                    pnode_slot: [], pnode_id: [],
+                                   stmt_seq: 0, cur_stmt: ⁻1,
+                                   lbirth: [], llast: [], luse: [],
+                                   lesc: [], lwarn: [], ltok: [], log: [],
                                    fslots: [],
                                    diags: [], snames: [], stype: [], smut: [],
                                    sslot: [], sheld: [], hslot: [], hback: [],
@@ -4587,7 +4759,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     if #c.diags = 0:
         assert(#c.fslots = #a.fns, "one slot count per function")
         assert(#c.gvals = #a.globals, "one folded value per global")
-    (Chk{ntype: c.ntype, nslot: c.nslot, ncvt: c.ncvt, nrep: c.nrep, fslots: c.fslots,
+    (Chk{ntype: c.ntype, nslot: c.nslot, ncvt: c.ncvt, nrep: c.nrep, log: c.log, fslots: c.fslots,
          gvals: c.gvals, ginit: c.ginit, lams: c.lams, lamns: c.lamns,
          psfn: c.psfn, psk: c.psk, psnp: c.psnp, skipfn: c.skipfn,
          argcopy: c.argcopy,

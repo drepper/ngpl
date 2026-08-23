@@ -490,6 +490,9 @@ fn main() → u8:
         report(compiled.diags, files, json, src)
         return 1
     if want_log:
+        // what the checker worked out, then what the lowering did
+        foreach l := chk.log:
+            std.println("{}", l)
         foreach l := compiled.log:
             std.println("{}", l)
 

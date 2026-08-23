@@ -269,6 +269,47 @@ done
 # runtime routines that a program out of reach of them does not carry.
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
+# What the compiler worked out about how long each binding lives.  The
+# program's output says nothing about this -- the three answers all run
+# the same -- so the decision log is what tells them apart, and this is
+# where the three are pinned:  a &mut handed to a pure function
+# answering a number does not extend anything, and one handed to an
+# impure function or to a pure function that could answer it back runs
+# to the end of the scope.
+# ---------------------------------------------------------------------------
+echo
+lifelog=$(ngplc --log=json "$topdir"/tests/compile/t59_lifetimes.ngpl \
+                -o "$workdir"/t59.life 2>/dev/null \
+          | grep '"decision": "lifetime"' | grep '"function": "main"')
+life_ok=1
+for want in '"name": "a",.*"escapes": false' \
+            '"name": "b",.*"escapes": true' \
+            '"name": "c",.*"escapes": true'; do
+    if ! echo "$lifelog" | grep -qE "$want"; then
+        echo "FAIL lifetimes: no line matching $want"
+        life_ok=0
+    fi
+done
+# and the one nothing reads is warned about, by number
+if ! ngplc "$topdir"/tests/compile/t59_lifetimes.ngpl -o "$workdir"/t59.life 2>&1 \
+     | grep -q 'warning\[2421\]'; then
+    : # t97 has no unused binding of its own; the warning is pinned below
+fi
+unused=$(printf '@start\n@impure\nfn main():\n    let idle : i64 = 1\n    std.println("x")\n' \
+         > "$workdir"/unused.ngpl; ngplc "$workdir"/unused.ngpl -o "$workdir"/unused.bin 2>&1 \
+         | grep -c 'warning\[2421\]')
+if [ "$unused" != "1" ]; then
+    echo "FAIL lifetimes: a binding nothing reads drew $unused warnings, wanted 1"
+    life_ok=0
+fi
+if [ $life_ok -eq 1 ]; then
+    echo "ok   lifetimes: the three &mut answers, and the binding nothing reads"
+    pass=$((pass + 1))
+else
+    fail=$((fail + 1))
+fi
+
+# ---------------------------------------------------------------------------
 # diag_codes() is what @expect is held to, and it is a hand-written
 # list beside hand-written derrc/dwarn calls.  A number drawn but not
 # listed is an expectation that would quietly pass; a number listed but

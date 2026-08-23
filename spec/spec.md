@@ -6115,6 +6115,64 @@ iterates twice.  This is the same mechanism that makes an element of `0` a value
 Rust and Zig arrive at the same shape as this, and for the same reason: an end signalled by the return value needs no second call to test for it, no sentinel object to compare against, and no exception for a condition that is not exceptional.  C++'s pair of iterators is the outlier, and it is the one form where the two halves can be mismatched.
 
 
+### How Long a Binding Lives
+
+Every binding has a lifetime, and the compiler works it out: it runs
+from the statement that declares the binding to the statement that last
+uses it. Statements are numbered as they are read, so the numbering is
+of the text — a loop body is numbered once, because this is a question
+about the program rather than about what a run does with it.
+
+**A lifetime that begins and ends at the same statement is a binding
+nothing read**, and that is worth saying:
+
+```
+let idle : i64 = 1
+
+warning: 'idle' is bound and never read; its lifetime begins and ends
+at the statement that declares it. Name it '_idle' if that is meant
+```
+
+A name beginning with `_` says the binding is meant to go unread, and
+is the one answer to this that is not a change to the code. `_` alone
+is the discard and is never warned about.
+
+#### What a `&mut` Does to a Lifetime
+
+Handing a binding over as a `&mut` is where the question stops being
+about this function, because the callee may do more with it than read
+it. Which answer applies depends on the callee and not on the call:
+
+| The callee | What it may do | Where the lifetime ends |
+|---|---|---|
+| impure | put a reference somewhere that outlives the call | the end of the scope |
+| pure, answering something that could hold it | hand it back out | the end of the scope |
+| pure, answering something that could not | neither | the call, like any other use |
+
+The first two cannot be told apart from outside the callee — nothing at
+the call site can see where an impure function put what it was given —
+so both take the worst case, which is the whole scope. The third is
+what the distinction buys: a pure function answering a number can carry
+neither an array nor a structure out of itself, so a binding handed to
+one is not kept alive past the call on that account.
+
+"Could hold it" is asked of the shapes and not of the body, so the
+answer is the careful one: a structure, a tuple, a dictionary, an array
+or a matrix could all have the value inside them, and an optional is
+asked about what it holds.
+
+**Seeing what was worked out.**  A lifetime is not visible in what a
+program does — the three answers above all run the same — so
+`--log=json` writes one line for each binding as its scope ends:
+
+```
+{"function": "main", "line": 16, "decision": "lifetime",
+ "name": "a", "born": 6, "last": 12, "escapes": false}
+```
+
+`escapes` is whether the end is the end of the scope rather than the
+last use, and `last` is the statement the lifetime reaches either way.
+
 ### What a Sized Array Is Made Of
 
 A `T[]` and a `T[N]` say different things, and are made of different

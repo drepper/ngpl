@@ -1,0 +1,60 @@
+// How long a binding lives.
+//
+// A lifetime runs from the statement that declares a binding to the
+// statement that last uses it.  Statements are numbered as the checker
+// walks them, so the numbering is of the text: a loop body is walked
+// once, and this is a question about the program rather than about
+// what a run does with it.
+//
+// Where the two numbers are the same, nothing ever read what was
+// bound, and the compiler says so.
+//
+// Handing a binding over as a &mut is where the question stops being
+// about this function.  Three answers, and which one depends on the
+// callee:
+//
+//   - an impure callee may put a reference somewhere that outlives the
+//     call, and nothing here can see where.  The end is the end of the
+//     scope.
+//   - a pure callee cannot store it, but it can answer it: if what it
+//     answers could hold what it was handed, the value leaves through
+//     the return, and the end is the end of the scope again.
+//   - a pure callee answering a number can do neither, so the call is
+//     a use like any other.
+//
+// --log=json writes what was worked out, which is how the three are
+// told apart from outside.
+
+fn pure_number(v : &mut i64[]) → i64:
+    v.push(1)
+    @dropunit(#v)
+
+@impure
+fn impure_one(v : &mut i64[]):
+    v.push(2)
+
+fn pure_array(v : &mut i64[]) → i64[]:
+    v.push(3)
+    [9]
+
+// A binding read later lives until that read; one read at once lives
+// no longer than its own statement.
+fn spans() → i64:
+    let early : i64 = 1
+    let mid : i64 = early + 1
+    let late : i64 = mid + 1
+    late
+
+@start
+@impure
+fn main():
+    // pure, answering a number: the call is a use and nothing more
+    let a : mut i64[] = []
+    let _n : i64 = pure_number(&a)
+    // impure: it may have kept a reference, so the scope is the answer
+    let b : mut i64[] = []
+    impure_one(&b)
+    // pure, but what it answers could hold what it was handed
+    let c : mut i64[] = []
+    let _r : i64[] = pure_array(&c)
+    std.println("{} {} {} {}", @dropunit(#a), @dropunit(#b), @dropunit(#c), spans())

@@ -1564,7 +1564,6 @@ impl Lower:
         self.ir(IR_LABEL, lok, 0, 0, 0, 0)
 
     fn lower_scall(&mut self, nid : i64, tok : i64, sb : i64, args_off : i64):
-        let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
         if sb = SB_EXIT:
             let v : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
             self.ir(IR_EXIT, v, 0, 0, 0, 0)
