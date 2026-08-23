@@ -1,0 +1,31 @@
+// The same program as t61_layout_braces.ngpl, laid out the other way.
+//
+// A block can be written by indenting it, or in braces with semicolons
+// between the statements, and they are the same program.  So are one
+// statement to a line and several.  The bill of materials hashes what a
+// function is rather than how it was typed, so the two files must agree
+// on every function's hash -- which is what the conformance runner
+// checks, since nothing a program prints could show it.
+//
+// Named function bodies are layout-only in this language; a lambda's
+// may be either.  So the two forms live inside these functions rather
+// than around them, which is the strongest form of the comparison the
+// language can express today.
+
+fn work(n : i64) → i64:
+    let step := λx : i64 → i64:
+        let y : i64 = x + 1
+        let z : i64 = y × 2
+        z
+    step(n)
+
+fn twice(n : i64) → i64:
+    let pair := λx : i64 → i64:
+        let a : i64 = x × 2
+        a
+    pair(pair(n))
+
+@start
+@impure
+fn main():
+    std.println("{} {}", work(3), twice(5))

@@ -1,0 +1,16 @@
+// The same program as t60_layout_indent.ngpl, laid out the other way:
+// braces where that one indents, and several statements to a line where
+// that one gives each its own.  See the note there.
+
+fn work(n : i64) → i64:
+    let step := λx : i64 → i64: { let y : i64 = x + 1; let z : i64 = y × 2; z }
+    step(n)
+
+fn twice(n : i64) → i64:
+    let pair := λx : i64 → i64: { let a : i64 = x × 2; a }
+    pair(pair(n))
+
+@start
+@impure
+fn main():
+    std.println("{} {}", work(3), twice(5))

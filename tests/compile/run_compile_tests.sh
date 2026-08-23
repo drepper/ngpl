@@ -269,6 +269,21 @@ done
 # runtime routines that a program out of reach of them does not carry.
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
+# The same program, laid out two ways, hashes its functions the same.
+# Nothing either program prints could show this, so the bill of
+# materials is what is compared.
+# ---------------------------------------------------------------------------
+echo
+ngplc "$topdir"/tests/compile/t60_layout_indent.ngpl -o "$workdir"/lay_a >/dev/null 2>&1
+ngplc "$topdir"/tests/compile/t61_layout_braces.ngpl -o "$workdir"/lay_b >/dev/null 2>&1
+if python "$topdir"/tests/compile/check_layout_hashes.py \
+        "$workdir"/lay_a "$workdir"/lay_b; then
+    pass=$((pass + 1))
+else
+    fail=$((fail + 1))
+fi
+
+# ---------------------------------------------------------------------------
 # What the compiler worked out about how long each binding lives.  The
 # program's output says nothing about this -- the three answers all run
 # the same -- so the decision log is what tells them apart, and this is

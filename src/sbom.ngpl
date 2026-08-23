@@ -20,6 +20,11 @@ enum Sbomkind : u32:
     source           // one of the sources it was built from
     sources          // all of them together, in the order they were read
     output           // the program itself
+    // Appended rather than slotted in beside `source`, because the
+    // numbers are a wire format: a bill is read out of a file by
+    // whoever wants to know, and renumbering what they already read
+    // would be a worse thing than an odd order here.
+    function         // one function, over the tokens it is written in
 
 // A row before it is laid out: the strings still strings.
 struct SbomRow:
@@ -44,25 +49,85 @@ fn sbom_compiler_name() → str:
 let SBOM_CHUNK ¤byte : i64 = 65536
 
 
+// ---------------------------------------------------------------------------
+// The same program, however it was laid out
+// ---------------------------------------------------------------------------
+//
+// A block can be written two ways -- indented, or in braces with
+// semicolons between the statements -- and they are the same program.
+// So are one statement to a line and several.  A hash that moved for
+// any of that would say two builds differ when they do not, which is
+// the one thing a bill of materials must not do.
+//
+// The three pairs that say the same thing are folded onto one code
+// each: a block opens, a block closes, a statement ends.  What is left
+// is the shape, which does differ between programs that differ.
+//
+// The separator needs more than folding, because the two ways of
+// writing a block put them in different places.  Layout writes a
+// newline before the indent and before the dedent, where braces write
+// none; and a dedent is followed straight away by the next statement,
+// where a closing brace needs a newline after it, because the dedent
+// ended the statement and the brace did not.
+//
+// So a separator is held rather than written, and written only when
+// what follows is not a block edge and what preceded was not one
+// either.  A block edge already says a statement ended, and a run of
+// blank lines says nothing at all.
+
+let TC_OPEN : i64 = 1        // an indent, or {
+let TC_CLOSE : i64 = 2       // a dedent, or }
+let TC_SEP : i64 = 3         // a newline, or ;
+
+@post(r: r >= 0)
+fn canon_kind(k : i64) → i64:
+    if k = TK_INDENT or k = TK_LBRACE:
+        return TC_OPEN
+    if k = TK_DEDENT or k = TK_RBRACE:
+        return TC_CLOSE
+    if k = TK_NL or k = TK_SEMI:
+        return TC_SEP
+    // the rest keep their own kind, moved past the three codes above
+    k + 8
+
 // The bytes a token contributes: what kind it is, and what it says.
 // Layout contributes nothing, and neither does a comment, since the
 // lexer kept neither.  A number is written out in decimal rather than
 // as it was spelled, so 0x10 and 16 hash alike if the lexer read them
 // alike.
 fn token_bytes(t : Toks, src : byte[], i ¤ptrdiff : i64, into : &mut u8[]):
-    let k : i64 = t.kind[i]
+    let k0 : i64 = t.kind[i]
+    let k : i64 = canon_kind(k0)
     into.push(k & 255)
     into.push((k » 8) & 255)
-    if k = TK_IDENT or k = TK_INT or k = TK_STR:
+    if k0 = TK_IDENT or k0 = TK_INT or k0 = TK_STR:
         // an identifier and a string say their text; a number says the
         // value the lexer read, and whether it needed all sixty-four
         // bits to hold it
-        let what : str = t.strs[t.val[i] × 1¤ptrdiff] if k = TK_STR else (i64_str(t.val[i]) if k = TK_INT else run_str(src, t.off[i], t.len[i]))
+        let what : str = t.strs[t.val[i] × 1¤ptrdiff] if k0 = TK_STR else (i64_str(t.val[i]) if k0 = TK_INT else run_str(src, t.off[i], t.len[i]))
         foreach b := std.bytes(what):
             into.push(b)
-        if k = TK_INT:
+        if k0 = TK_INT:
             into.push(t.big[i] & 255)
     into.push(0)
+
+// One token into the message, with the separator rule above applied.
+// `held` says a separator is waiting; `prev` is the last code written,
+// so that a separator just inside a block opening is dropped as one
+// just before a closing is.  Both are answered back.
+fn feed_token(c : i64, ready : u8[], held : i64, prev : i64,
+              into : &mut u8[]) → (i64, i64):
+    if c = TC_SEP:
+        return (1, prev)
+    let edge : bool = c = TC_OPEN or c = TC_CLOSE
+    let after : bool = prev = TC_OPEN or prev = TC_CLOSE or prev = 0
+    if held = 1 and not edge and not after:
+        into.push(TC_SEP)
+        into.push(0)
+        into.push(0)
+    foreach b := ready:
+        into.push(b)
+    (0, c)
 
 // The rows a program's sources make: one for each file, in the order
 // they were read, and one for all of them together.
@@ -76,7 +141,7 @@ fn token_bytes(t : Toks, src : byte[], i ¤ptrdiff : i64, into : &mut u8[]):
 // build the digest of them together -- which is what this used to do.
 // A handle is fed a chunk at a time instead, so what is held is
 // SBOM_CHUNK and never the message.
-fn sbom_sources(t : Toks, src : byte[], files : Files) → SbomRow[]:
+fn sbom_sources(a : Ast, t : Toks, src : byte[], files : Files) → SbomRow[]:
     let rows : mut SbomRow[] = []
     let nf ¤ptrdiff : i64 = #files.names
     let ntok ¤ptrdiff : i64 = #t.kind
@@ -86,6 +151,21 @@ fn sbom_sources(t : Toks, src : byte[], files : Files) → SbomRow[]:
     let feed : mut u8[] = []
     let fi ¤ptrdiff : mut i64 = 0
     let hi ¤byte : mut i64 = files.off[1 × 1¤ptrdiff] if nf > 1 else total
+    let held : mut i64 = 0
+    let prev : mut i64 = 0
+    // and the function the token falls in, if any: the definitions are
+    // in the order they were parsed, which is the order of the tokens,
+    // so this only ever moves forward
+    let fnrows : mut SbomRow[] = []
+    let fnh : mut = std.hash.sha256.start()
+    let ffeed : mut u8[] = []
+    let fheld : mut i64 = 0
+    let fprev : mut i64 = 0
+    let fopen : mut bool = false
+    let fend : mut i64 = ⁻1
+    let fnext ¤ptrdiff : mut i64 = 0
+    let nfn ¤ptrdiff : i64 = #a.fns
+    let ready : mut u8[] = []
     let i ¤ptrdiff : mut i64 = 0
     while i < ntok:
         let at ¤byte : i64 = t.off[i]
@@ -98,7 +178,41 @@ fn sbom_sources(t : Toks, src : byte[], files : Files) → SbomRow[]:
             one ← std.hash.sha256.start()
             fi ← fi + 1
             hi ← files.off[fi + 1¤ptrdiff] if fi + 1 < nf else total
-        token_bytes(t, src, i, &feed)
+        // a function begins here?
+        while fnext < nfn and a.fns[fnext].tok_lo × 1¤ptrdiff <= i:
+            if a.fns[fnext].tok_hi × 1¤ptrdiff > i and not fopen:
+                fnh ← std.hash.sha256.start()
+                ffeed ← []
+                fheld ← 0
+                fprev ← 0
+                fopen ← true
+                fend ← a.fns[fnext].tok_hi
+                fnext ← fnext + 1¤ptrdiff
+            else:
+                fnext ← fnext + 1¤ptrdiff
+        // the token's own bytes, read once however many digests want them
+        let c : i64 = canon_kind(t.kind[i])
+        ready ← []
+        if c ≠ TC_SEP:
+            token_bytes(t, src, i, &ready)
+        let (h2, p2) : (i64, i64) = feed_token(c, ready, held, prev, &feed)
+        held ← h2
+        prev ← p2
+        if fopen:
+            let (h3, p3) : (i64, i64) = feed_token(c, ready, fheld, fprev, &ffeed)
+            fheld ← h3
+            fprev ← p3
+            if i + 1¤ptrdiff >= fend × 1¤ptrdiff:
+                fnh.update(ffeed)
+                ffeed ← []
+                let d := a.fns[fnext - 1¤ptrdiff]
+                let nm : str = d.name if d.modname = "" else d.modname ⧺ "." ⧺ d.name
+                fnrows.push(SbomRow{kind: Sbomkind.function, name: nm,
+                                    hash: hex_digest(fnh.digest())})
+                fopen ← false
+            elif #ffeed >= SBOM_CHUNK:
+                fnh.update(ffeed)
+                ffeed ← []
         if #feed >= SBOM_CHUNK:
             one.update(feed)
             whole.update(feed)
@@ -110,4 +224,6 @@ fn sbom_sources(t : Toks, src : byte[], files : Files) → SbomRow[]:
                       hash: hex_digest(one.digest())})
     rows.push(SbomRow{kind: Sbomkind.sources, name: "",
                       hash: hex_digest(whole.digest())})
+    foreach r := fnrows:
+        rows.push(r)
     rows

@@ -191,6 +191,11 @@ struct FnDef:
     is_test : bool
     pre_off : i64        // extra: [n, expr…] or ⁻1
     post_off : i64       // extra: [n, name-token, expr, …] or ⁻1
+    // Which tokens the definition is written in, from its first
+    // annotation to the last token of its body.  The bill of materials
+    // hashes these: what a function is, rather than how it was typed.
+    tok_lo : i64
+    tok_hi : i64
 
 struct SDef:
     name : str

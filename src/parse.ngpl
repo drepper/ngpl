@@ -60,6 +60,7 @@ struct Parser:
     expects : FnDef[]
     expoff : i64[]
     pending_exp : i64    // the offset the definition being parsed will take
+    def_start : i64      // where the definition being parsed began
     diags : Diag[]
     poisoned : bool      // the statement at hand already misparsed
 
@@ -1798,7 +1799,8 @@ impl Parser:
                                     is_replaceable: false, is_impure: imp,
                                     is_start: false, is_noreturn: is_noreturn,
                                     is_test: false,
-                                    pre_off: pre_off, post_off: post_off})
+                                    pre_off: pre_off, post_off: post_off,
+                            tok_lo: self.def_start, tok_hi: self.pos})
             self.expoff.push(self.pending_exp)
             return
         if mods & 4 = 4:
@@ -1820,7 +1822,8 @@ impl Parser:
                                    is_replaceable: false, is_impure: false,
                                    is_start: false, is_noreturn: false,
                                    is_test: false,
-                                   pre_off: pre_off, post_off: post_off})
+                                   pre_off: pre_off, post_off: post_off,
+                            tok_lo: self.def_start, tok_hi: self.pos})
             return
         self.fns.push(FnDef{name: name, modname: self.curmod, tok: name_tok, params_off: params_off,
                             ret: ret, body: body, is_export: (mods » 1) & 1 = 1,
@@ -1828,7 +1831,8 @@ impl Parser:
                             is_impure: imp,
                             is_start: is_start, is_noreturn: is_noreturn,
                             is_test: is_test,
-                            pre_off: pre_off, post_off: post_off})
+                            pre_off: pre_off, post_off: post_off,
+                            tok_lo: self.def_start, tok_hi: self.pos})
 
     // enum Name [: width]: one enumerator to a line.  What a value
     // holds is its place in the list; what it is called is kept so a
@@ -2248,6 +2252,9 @@ impl Parser:
                                     init: self.na[stmt × 1¤ptrdiff]})
 
     fn parse_toplevel(&mut self):
+        // where this definition begins, which is its first annotation
+        // and not the `fn`: a contract is part of what a function is
+        self.def_start ← self.pos
         let imp : mut bool = false
         let is_start : mut bool = false
         let is_noreturn : mut bool = false
@@ -2450,7 +2457,7 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
                                  evalues: builtin_enum_values(),
                                  tvn: [], braces: 0,
                                  ignored: [], igtests: [],
-                                 expects: [], expoff: [], pending_exp: ⁻1,
+                                 expects: [], expoff: [], pending_exp: ⁻1, def_start: 0,
                                  diags: [], poisoned: false})
     // a struct may be written below whatever names it, so the names
     // are gathered in one sweep before anything is parsed

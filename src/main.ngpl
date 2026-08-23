@@ -513,7 +513,7 @@ fn main() → u8:
     let bom : mut SbomRow[] = []
     bom.push(SbomRow{kind: Sbomkind.compiler, name: sbom_compiler_name(),
                      hash: sha256_hex(std.bytes(sbom_compiler_name()))})
-    foreach r := sbom_sources(toks, src, files):
+    foreach r := sbom_sources(ast, toks, src, files):
         bom.push(r)
     let pl := plan_elf(tgt, compiled.code, compiled.rodata, compiled.data,
                        stack_size × 1¤byte, compiled.relro_size × 1¤byte,

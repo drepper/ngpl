@@ -267,8 +267,10 @@ def check_sections(elf: Elf):
 
 
 SBOM_COMPILER, SBOM_SOURCE, SBOM_SOURCES, SBOM_OUTPUT = 0, 1, 2, 3
+SBOM_FUNCTION = 4
 SBOM_KIND = {SBOM_COMPILER: "compiler", SBOM_SOURCE: "source",
-             SBOM_SOURCES: "sources", SBOM_OUTPUT: "output"}
+             SBOM_SOURCES: "sources", SBOM_OUTPUT: "output",
+             SBOM_FUNCTION: "function"}
 
 
 def sbom_rows(elf: Elf) -> list:
@@ -288,7 +290,7 @@ def sbom_rows(elf: Elf) -> list:
         kind, name, digest = struct.unpack_from(
             "<III", elf.raw, table["offset"] + i * 12)
         check(kind in SBOM_KIND, f"row {i} says kind {kind}, which is none "
-                                 f"of the four")
+                                 f"of the ones a bill has")
         out.append((SBOM_KIND[kind], txt(name), txt(digest)))
     return out
 
@@ -297,15 +299,25 @@ def check_sbom(elf: Elf, sources: list):
     """Every binary says what it was made of, and there is no flag for it."""
     rows = sbom_rows(elf)
     kinds = [r[0] for r in rows]
-    want = ["compiler"] + ["source"] * len(sources) + ["sources", "output"]
+    nfn = kinds.count("function")
+    want = (["compiler"] + ["source"] * len(sources) + ["sources"]
+            + ["function"] * nfn + ["output"])
     check(kinds == want, f"the bill's rows are {kinds}, not {want}")
+    check(nfn > 0, "the bill names no function; a bill that cannot say "
+                   "which function differs is only worth comparing")
 
     check(rows[0][1] != "", "the compiler row names no compiler")
     named = [r[1] for r in rows if r[0] == "source"]
     check(named == sources,
           f"the bill names {named} as the sources, not {sources}")
-    # the two summary rows are about the whole thing and name nothing
-    check(rows[-1][1] == "" and rows[-2][1] == "",
+    # every function row names one, and no two name the same
+    fnames = [r[1] for r in rows if r[0] == "function"]
+    check(all(n != "" for n in fnames), "a function row names no function")
+    check(len(set(fnames)) == len(fnames),
+          f"two function rows name the same function: {fnames}")
+    # the summary rows are about the whole thing and name nothing
+    summaries = [r for r in rows if r[0] in ("sources", "output")]
+    check(all(r[1] == "" for r in summaries),
           "a summary row carries a name; the program and its sources "
           "together are not named, only digested")
 

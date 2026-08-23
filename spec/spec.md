@@ -9379,10 +9379,23 @@ The bill is a table in a section named `.sbom`, with its strings in `.sbomstr`. 
 | `source` | the source file, as it was named | that file's tokens |
 | `sources` | — | every source's tokens, in the order they were read |
 | `output` | — | the program itself |
+| `function` | the function, module-qualified where it has one | that function's tokens |
 
 Both sections are read only and are loaded, in their own segment after the data: a program can read its own bill without asking the filesystem for the file it was started from, and a stripped binary still carries it, since nothing here lives in the parts a stripper removes.
 
-**A source's digest is over its tokens, not its text.**  A comment added, a line rewrapped, `->` written where `→` was: none of those change what the program is, and a digest that moved for them would say two builds differ when they do not.  What the lexer kept is exactly what the program is, so that is what is hashed — each token's kind, and its text or its value.
+**A digest is over tokens, not text.**  A comment added, a line rewrapped, `->` written where `→` was: none of those change what the program is, and a digest that moved for them would say two builds differ when they do not.  What the lexer kept is exactly what the program is, so that is what is hashed — each token's kind, and its text or its value.
+
+**And over the same tokens however the blocks were written.**  A block can be indented, or written in braces with semicolons between its statements; several statements can share a line or have one each.  These are the same program, so the three pairs that say the same thing are folded onto one code apiece before hashing — a block opens, a block closes, a statement ends:
+
+| Written | Or written | Hashed as |
+|---------|-----------|-----------|
+| an indent | `{` | a block opens |
+| a dedent | `}` | a block closes |
+| a newline | `;` | a statement ends |
+
+Folding alone is not enough, because the two forms put the separators in different places: layout writes a newline before the indent and before the dedent where braces write none, and a dedent is followed straight away by the next statement where a closing brace needs a newline after it.  So a separator is held rather than written, and written only when what follows is not a block edge and what preceded was not one either.  A block edge already says a statement ended, and a run of blank lines says nothing at all.
+
+**A row for every function.**  A file's digest says a build differs; a function's says *where*.  Two builds of a program that changed in one place agree on every row but one, which is what makes a bill worth reading rather than only worth comparing.  A function's digest covers the tokens it is written in, from its first annotation — a contract is part of what a function is — to the last token of its body.
 
 **The program's own digest covers what the program is, not what the file says about it.**  The code, what it reads, what it writes, the entry point, the machine and the class go in.  The bill does not — that would be a digest of its own digest — and neither do the symbol names, the section headers, or the output's filename, because the same program deployed twice under two names is one program.
 
