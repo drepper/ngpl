@@ -131,7 +131,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // in a call where an overflow or a bounds check has to go -- so
     // this runs in waves until a wave adds nothing.  Asking the IR
     // which routines it calls would miss the second kind.
-    let nrt : i64 = 61
+    let nrt : i64 = 62
     foreach _ := 1…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
@@ -241,9 +241,11 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         foreach i := 0…nglobals - 1:
             if em.gseg[i × 1¤ptrdiff] = 1 and em.gmap[i × 1¤ptrdiff] >= relro_size:
                 push64(&data, chk.gvals[i × 1¤ptrdiff])
-    foreach _ := 1…16:
+    // the allocator's bump pointer, the limit it runs to, and the
+    // free lists a block given back is put on
+    foreach _ := 1…AL_SIZE:
         data.push(0)
-    assert(@dropunit(#data) = alloc_off + 16, "the data segment is as long as it was planned")
+    assert(@dropunit(#data) = alloc_off + AL_SIZE, "the data segment is as long as it was planned")
     let cdiags : mut Diag[] = []
     if em.max_frame > guard_size:
         cdiags.push(Diag{line: 1¤"line", col: 1¤"col",
@@ -701,6 +703,7 @@ fn rt_nargs(id : i64) → i64:
     if id = RT_SHA256FIN: return 2
     if id = RT_SEGV: return 3
     if id = RT_SIGINIT: return 0
+    if id = RT_FREE: return 2
     0
 
 // the door of the program: keep what the kernel handed over, stand up

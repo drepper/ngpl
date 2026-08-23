@@ -534,7 +534,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // What the program calls, and what that calls in turn.  Everything
     // emitted so far is the program's own; the calls it made name the
     // runtime it needs, and the edge list closes over the rest.
-    let nrt : i64 = 61
+    let nrt : i64 = 62
     foreach _ := 1…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
@@ -653,10 +653,11 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         foreach i := 0…nglobals - 1:
             if em.gseg[i × 1¤ptrdiff] = 1 and em.gmap[i × 1¤ptrdiff] >= relro_size:
                 push64(&data, chk.gvals[i × 1¤ptrdiff])
-    // the allocator's bump pointer and the limit it runs to
-    foreach _ := 1…16:
+    // the allocator's bump pointer, the limit it runs to, and the
+    // free lists a block given back is put on
+    foreach _ := 1…AL_SIZE:
         data.push(0)
-    assert(@dropunit(#data) = alloc_off + 16, "the data segment is as long as it was planned")
+    assert(@dropunit(#data) = alloc_off + AL_SIZE, "the data segment is as long as it was planned")
     // A frame deeper than the guard could be claimed in one 'sub rsp'
     // that steps clean over it, and the overflow would land on
     // whatever lies below instead of faulting.  The compiler knows

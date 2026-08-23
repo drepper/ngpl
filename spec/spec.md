@@ -4915,6 +4915,8 @@ This is why the rule is about the object rather than the name.  `v.push(x)` and 
 
 **The object outlives the name.**  After the assignment the original is reachable only from the walk, and the walk is what keeps it: it stays whole until the loop ends, and becomes unreachable there.  A walk under a `&mut` borrow is the same — what it binds is a way into the object it started on, and writes through it go there whatever the name has since come to hold.
 
+Becoming unreachable is not yet becoming reclaimed.  The allocator can take a block back — see [Memory a Program Gives Back](#memory-a-program-gives-back) — but the only place that hands one over so far is an array outgrowing its slots.  A walked object whose name was written over is reclaimable at the end of the walk and is not yet reclaimed there.
+
 #### Why a Walk Holds What It Walks
 
 Because the alternative is a program whose meaning nobody can state.  Given
@@ -9389,6 +9391,20 @@ A recipe is a program, not a list — the example above computed its sources —
 The interpreter reads a recipe with the same evaluator it runs everything else with, so it accepts recipes the compiler does not.  The compiler **refuses what it cannot do, by name**, rather than ignoring it — a recipe that the compiler accepts means the same thing under both, and a recipe that reaches past the subset is told which construct did it.
 
 The subset is where compile-time evaluation begins; Chapter 11 is where it goes.
+
+### Memory a Program Gives Back
+
+A program's memory comes from an allocator that hands out blocks and takes them back.  Taking one back is not a thing a program says: there is no `free`, and a program that could say it could say it twice, or say it of something still in use.  It is a thing the compiler works out and emits, at a place where nothing can be holding the block any longer.
+
+**One such place exists today: an array outgrowing its slots.**  When an array has no room left it takes a larger run of slots, copies what it held across, and the run it copied *out of* is unreachable the moment the copy is done — nothing may hold a pointer into an array while it grows, which is what a walk refusing to let its container change is for.  So those slots go back.
+
+That one place is most of what a program throws away: building an array of *n* elements by pushing them touches about *2n* slots and keeps *n*.
+
+**How the allocator keeps them.**  A block given back goes on a list of blocks of its size, and holds that list in its own first two words — which is why nothing smaller than two words is ever taken back.  The lists are found by a table indexed by a hash of the size, and a block is handed out again only when the size asked for is exactly the size found: a block that is nearly big enough is a block used as two things at once, so the check is exact and never a range.
+
+The hash matters more than it looks.  The sizes a program has most of are an array's capacities, and those double — so indexing by the low bits of the size sends every large one to the same place, and large blocks are exactly the ones worth reusing.  A multiply and a shift spread the doubling sizes across the whole table.
+
+**What is not given back yet**: an array that goes out of scope, a string that is replaced, a structure nothing names.  Each needs the same thing — a place where the compiler knows nothing else holds it — and [How Long a Binding Lives](#how-long-a-binding-lives) is where that knowledge begins.
 
 ### The Bill of Materials
 

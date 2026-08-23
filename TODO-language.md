@@ -776,6 +776,9 @@ Control Flow and Expressions
 [ ] [FULL] lazy evaluation support: lazy attribute on expressions/functions, with eager as default.
     Interaction with coroutines for opportunistic evaluation.
 
+[ ] [FULL] Implement tail recursion as a loop.  The language guarantees this.  Add appropriate
+    wording to the specification.
+
 
 Functions and Combinators
 -------------------------

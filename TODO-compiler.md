@@ -57,16 +57,15 @@ The Compiler
     that site a number from its block, and let tools/update_expectations.py fill the message.
     Spec: "What a Diagnostic Is Known By".
 
-[ ] a walk is what keeps the object it walks alive, and nothing acts on that yet.  Since
-    `foreach x := v: v ← …` is allowed, the object the walk took can lose its last name
-    while the walk is still going, and what keeps it whole until the loop ends is the
-    walk's own hold on it.  The interpreter already does the right thing, because Python
-    counts references and drops the array when the walk lets go.  The compiled runtime
-    does nothing, because its allocator is a bump over mmap regions and gives nothing
-    back -- so the requirement is met by there being no freeing at all rather than by
-    freeing at the right moment.  When an allocator that frees arrives, the end of a walk
-    is where a walked object with no name left becomes reclaimable, and the lifetime the
-    checker already computes is where that would be read off.  Spec: "Writing the Name Is
+[ ] the allocator can give a block back now, and only one place does.  RT_FREE and the
+    free lists exist, and RT_ARRPUSH gives back the slots it copied out of -- which is
+    the garbage a program makes most of, and provably dead the moment the copy is done.
+    What is not given back: an array that goes out of scope, a string that is replaced, a
+    structure nothing names.  Each of those needs the same thing, which is a place where
+    the compiler knows nothing else can be holding it, and the lifetime the checker
+    already computes is the beginning of that.  The walked object of
+    `foreach x := v: v ← …` is one of them: the walk is what keeps it, and the end of the
+    walk is where it becomes reclaimable.  Spec: "Writing the Name Is
     Not Writing the Object".
 
 [ ] the packing analysis does not follow a binding into a call.  A T[] whose length is
@@ -242,6 +241,11 @@ Code Generation
     brief requires the result to be the same however many contexts ran it, which makes the split
     part of the semantics rather than of the schedule.  (The memory-model item in
     TODO-language.md is the other half of this.)
+
+[ ] The language has its own calling conventions unless needed for interoperability with code
+    written in other languages.  The compiler is free to create and call functions that take
+    parameters in other registers and/or preserve or not different registers than those the
+    defined the the architecture ABI.
 
 
 Object Files and Linking

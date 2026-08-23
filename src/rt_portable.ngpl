@@ -376,12 +376,30 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.abort_msg(lw.intern(msg))
         return rtb_fn(b)
     if id = RT_ALLOC:
-        // (size) → address; sixteen-aligned bump over mmap regions
+        // (size) → address; a block given back of exactly this size,
+        // and otherwise a sixteen-aligned bump over mmap regions
         let b : mut RtB = rtb(1)
         let fifteen : i64 = b.cst(15)
         let mask : i64 = b.cst(⁻16)
         let sz : i64 = b.band(b.add(0, fifteen), mask)
         let k : i64 = b.kaddr(1, 0)
+        // the slot this size maps to, and the block at its head
+        let hd : i64 = b.add(k, b.add(b.cst(AL_FREE),
+                                      b.shl(b.band(b.shr(b.mul(b.shr(sz, b.cst(4)),
+                                                               b.cst(AL_MIX)),
+                                                         b.cst(AL_SHIFT)),
+                                                   b.cst(AL_SLOTS - 1)),
+                                            b.cst(3))))
+        let first : i64 = b.ldn(hd, 0, 8)
+        let lbump : i64 = b.l()
+        b.jz(first, lbump)
+        // exactly this size, or it is not this block: a slot holds
+        // whatever sizes map to it, and handing back a block that is
+        // too small is the one mistake that must not happen here
+        b.jz(b.ceq(b.ldn(first, FB_SIZE, 8), sz), lbump)
+        b.stn(hd, 0, b.ldn(first, FB_NEXT, 8), 8)
+        b.ret(first)
+        b.lab(lbump)
         let nxt : i64 = b.ldn(k, 0, 8)
         let lim : i64 = b.ldn(k, 8, 8)
         let want : i64 = b.add(nxt, sz)
@@ -413,6 +431,30 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         let n2 : i64 = b.add(r, sz)
         b.stn(k, 0, n2, 8)
         b.ret(r)
+        return rtb_fn(b)
+    if id = RT_FREE:
+        // (ptr, size): the block goes on the list for its size, and
+        // holds the list in its own first two words.  Nothing smaller
+        // than those two words is taken back, since there would be
+        // nowhere to keep them.
+        let b : mut RtB = rtb(2)
+        let fifteen : i64 = b.cst(15)
+        let mask : i64 = b.cst(⁻16)
+        let sz : i64 = b.band(b.add(1, fifteen), mask)
+        let lout : i64 = b.l()
+        b.jz(b.cltu(b.cst(15), sz), lout)
+        let k : i64 = b.kaddr(1, 0)
+        let hd : i64 = b.add(k, b.add(b.cst(AL_FREE),
+                                      b.shl(b.band(b.shr(b.mul(b.shr(sz, b.cst(4)),
+                                                               b.cst(AL_MIX)),
+                                                         b.cst(AL_SHIFT)),
+                                                   b.cst(AL_SLOTS - 1)),
+                                            b.cst(3))))
+        b.stn(0, FB_NEXT, b.ldn(hd, 0, 8), 8)
+        b.stn(0, FB_SIZE, sz, 8)
+        b.stn(hd, 0, 0, 8)
+        b.lab(lout)
+        b.ret(0)
         return rtb_fn(b)
     if id = RT_ARRNEW:
         // (cap) → descriptor {slots, len, cap}, the slots in line
@@ -459,6 +501,17 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.mov(ix, b.add(ix, one))
         b.jmp(lcp)
         b.lab(lcpe)
+        // The slots just copied out of are unreachable the moment the
+        // copy is done -- nothing may hold a pointer into an array
+        // while it grows, which is what a walk refusing to let its
+        // container change is for.  So they go back, unless they are
+        // the ones RT_ARRNEW laid inside the descriptor, which cannot
+        // be given back on their own.
+        let inline0 : i64 = b.add(0, b.cst(24))
+        let lkeep : i64 = b.l()
+        b.jz(b.cne(old, inline0), lkeep)
+        _ ← b.call2(RT_FREE, old, b.shl(cap, three))
+        b.lab(lkeep)
         b.stn(0, 0, nb, 8)
         b.stn(0, 16, ncap, 8)
         b.lab(lroom)
