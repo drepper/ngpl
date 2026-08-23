@@ -109,6 +109,9 @@ let IR_HFINAL : i64 = 114  // d ← handle a's digest, and the end of the handle
 // The offset counts from the bottom of the region, so it does not move
 // when a later object is added.
 let IR_FRAME : i64 = 115   // d ← the address of this frame's bytes at offset a
+// The block at vreg a, of b bytes, goes back to the allocator.  Emitted
+// only where the compiler has worked out that nothing holds it.
+let IR_GIVEBACK : i64 = 116
 let IR_CALLI : i64 = 100   // d ← call the address in vreg a, args at extra b
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
 let IR_FLD : i64 = 67      // d ← field b of struct a

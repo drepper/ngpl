@@ -438,6 +438,10 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.b3(72, 141, 133)             // lea rax, [rbp+imm32]
             em.w32(0 - 8 × (ir.nvregs + nobj) + a)
             em.store(R_AX, d)
+        elif o = IR_GIVEBACK:
+            em.load(R_DI, a)
+            em.load(R_SI, b)
+            em.jglobal(232, ⁻1, RT_FREE)
         elif o = IR_SNEW:
             em.movimm(R_DI, 8 × a)
             em.jglobal(232, ⁻1, RT_ALLOC)

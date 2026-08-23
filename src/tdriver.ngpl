@@ -276,6 +276,10 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
             g_argconst(&em, tg, 0, a)
             g_call(&em, tg, RT_ARRNEW)
             g_retst(&em, tg, d)
+        elif o = IR_GIVEBACK:
+            g_argld(&em, tg, 0, a)
+            g_argld(&em, tg, 1, b)
+            g_call(&em, tg, RT_FREE)
         elif o = IR_SNEW:
             g_argconst(&em, tg, 0, 8 × a)
             g_call(&em, tg, RT_ALLOC)

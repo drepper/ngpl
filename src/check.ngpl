@@ -66,6 +66,9 @@ struct Chk:
     // length never changes and which never leaves the function comes
     // to say the same thing without its type changing.
     nrep : i64[]
+    // Per walk: 1 where what it walked is nobody's by the time it
+    // ends, so the walk is where the memory goes back.
+    nfree : i64[]
     fslots : i64[]
     gvals : i64[]        // the folded initial value of every global
     ginit : i64[]        // globals whose value is built as the run begins
@@ -225,6 +228,7 @@ struct Checker:
     nslot : i64[]
     ncvt : i64[]
     nrep : i64[]         // see Chk
+    nfree : i64[]        // see Chk
     // Packing a T[] whose length never changes and which never leaves
     // the function.  Per slot of the function under check: how many
     // elements it was born with (⁻1 for no candidate), how many times
@@ -235,6 +239,14 @@ struct Checker:
     pcnt : i64[]
     puse : i64[]
     psafe : i64[]
+    // The same counting for a different question.  Packing asks
+    // whether a read wanted the header, and a push does -- it changes
+    // the length.  Giving memory back asks whether a read could have
+    // kept the object somewhere, and a push could not: it writes into
+    // what is already there and keeps nothing.  Two questions, two
+    // counts.
+    kuse : i64[]
+    ksafe : i64[]
     pnode_slot : i64[]   // the nodes to mark, if it comes to that
     pnode_id : i64[]
     // How long each binding lives.  Statements are numbered as they
@@ -251,6 +263,16 @@ struct Checker:
     lesc : i64[]
     lwarn : i64[]        // 1 where nothing reading it is worth saying
     ltok : i64[]
+    // Whether every value a binding has held was allocated where it
+    // was written -- a literal, a ⍴, a ⧺, a slice.  A call is not
+    // among them: a function may answer an array it was only lent,
+    // and giving that back would be giving back someone else's.
+    lown : i64[]
+    // The walks in progress, and whether the name each walks has been
+    // written over inside it.  A walk that loses its name is holding
+    // the last reference to what it walks.
+    wslot : i64[]
+    wreb : i64[]
     fslots : i64[]
     log : str[]
     diags : Diag[]
@@ -1512,6 +1534,8 @@ impl Checker:
             self.pcnt.push(⁻1)
             self.puse.push(0)
             self.psafe.push(0)
+            self.kuse.push(0)
+            self.ksafe.push(0)
 
     // how many elements a binding is born with, or ⁻1 where that is
     // not something the text settles: a literal says so outright, and
@@ -1545,6 +1569,7 @@ impl Checker:
             return
         self.pack_room(s)
         self.puse[s × 1¤ptrdiff] ← self.puse[s × 1¤ptrdiff] + 1
+        self.kuse[s × 1¤ptrdiff] ← self.kuse[s × 1¤ptrdiff] + 1
         self.pnode_slot.push(s)
         self.pnode_id.push(id)
 
@@ -1560,6 +1585,17 @@ impl Checker:
         if s < 0 or s × 1¤ptrdiff >= #self.psafe:
             return
         self.psafe[s × 1¤ptrdiff] ← self.psafe[s × 1¤ptrdiff] + 1
+        self.ksafe[s × 1¤ptrdiff] ← self.ksafe[s × 1¤ptrdiff] + 1
+
+    // A read that could not have kept the object, though it is not one
+    // a packed array could serve: push and pop write into what is
+    // already there.
+    fn keep_safe(&mut self, na : i64):
+        if self.kind_of(na) ≠ NK_VAR:
+            return
+        let s : i64 = self.nslot[na × 1¤ptrdiff]
+        if s >= 0 and s × 1¤ptrdiff < #self.ksafe:
+            self.ksafe[s × 1¤ptrdiff] ← self.ksafe[s × 1¤ptrdiff] + 1
 
     // the name itself is written to, so its length is not settled
     fn pack_kill(&mut self, s : i64):
@@ -3367,6 +3403,7 @@ impl Checker:
             return
         if m = "push":
             self.require_mut_base(na, tok)
+            self.keep_safe(na)
             if argc ≠ 1:
                 self.derr(tok, "push takes the one element to append")
             else:
@@ -3380,6 +3417,7 @@ impl Checker:
             self.set_type(id, TY_UNIT)
         elif m = "pop":
             self.require_mut_base(na, tok)
+            self.keep_safe(na)
             if argc ≠ 0:
                 self.derr(tok, "pop takes nothing")
             self.a.nc[id × 1¤ptrdiff] ← MID_POP
@@ -3637,6 +3675,78 @@ impl Checker:
     // Where the two numbers are the same, nothing ever read what was
     // bound, and that is worth saying.
 
+    // ------------------------------------------------------------------
+    // Giving back what a walk was the last to hold
+    // ------------------------------------------------------------------
+    //
+    // `foreach x := v: v ← …` leaves the object the walk took with no
+    // name: the walk is the only thing still holding it, and at the end
+    // of the walk nothing holds it at all.  That is a place the memory
+    // can go back, and this works out where it is one.
+    //
+    // Three things have to be true, and the third is why this is narrow.
+    // The name must be written over inside the walk, or the object is
+    // still its.  Every value the name has held must have been
+    // allocated where it was written -- a call is not enough, since a
+    // function may answer an array it was only lent.  And every read of
+    // the name must have been somewhere that keeps nothing: an element,
+    // a count, a walk, a ⧺, a slice.  A read anywhere else may have put
+    // the object somewhere this cannot see.
+
+    // whether an expression certainly allocates what it answers
+    fn allocates(&self, na : i64) → bool:
+        let k : i64 = self.kind_of(na)
+        k = NK_ARRLIT or k = NK_RESHAPE or k = NK_CCAT or k = NK_SLICE
+
+    fn own_note(&mut self, slot : i64, na : i64):
+        if slot < 0:
+            return
+        while #self.lown <= slot × 1¤ptrdiff:
+            self.lown.push(0)
+        self.lown[slot × 1¤ptrdiff] ← 1 if self.allocates(na) else 0
+
+    // a later value the name takes on has to be as certainly its own
+    fn own_keep(&mut self, slot : i64, na : i64):
+        if slot >= 0 and slot × 1¤ptrdiff < #self.lown and not self.allocates(na):
+            self.lown[slot × 1¤ptrdiff] ← 0
+
+    // The slot a walk walks, where what it walks is a bare name of a
+    // mut binding.  Anything else -- a field, an element, something
+    // freshly made -- answers ⁻1 and is never given back here.
+    fn walked_slot(&self, na : i64) → i64:
+        if self.kind_of(na) ≠ NK_VAR:
+            return ⁻1
+        let s : i64 = self.lookup(self.text(self.a.ntok[na × 1¤ptrdiff]))
+        if s = ⁻1 or self.smut[s × 1¤ptrdiff] = 0:
+            return ⁻1
+        self.sslot[s × 1¤ptrdiff]
+
+    fn walk_open(&mut self, slot : i64):
+        self.wslot.push(slot)
+        self.wreb.push(0)
+
+    // the name a walk walks, written over inside it
+    fn walk_wrote(&mut self, slot : i64):
+        if slot < 0:
+            return
+        let i : mut i64 = 0
+        while i × 1¤ptrdiff < #self.wslot:
+            if self.wslot[i × 1¤ptrdiff] = slot:
+                self.wreb[i × 1¤ptrdiff] ← 1
+            i ← i + 1
+
+    @post(r: r = 0 or r = 1)
+    fn walk_close(&mut self) → i64:
+        let slot : i64 = self.wslot.pop() ?? ⁻1
+        let reb : i64 = self.wreb.pop() ?? 0
+        if reb = 0 or slot < 0:
+            return 0
+        if slot × 1¤ptrdiff >= #self.lown or self.lown[slot × 1¤ptrdiff] = 0:
+            return 0
+        if slot × 1¤ptrdiff >= #self.kuse or self.kuse[slot × 1¤ptrdiff] ≠ self.ksafe[slot × 1¤ptrdiff]:
+            return 0
+        1
+
     fn life_born(&mut self, slot : i64, tok : i64):
         while #self.lbirth <= slot × 1¤ptrdiff:
             self.lbirth.push(⁻1)
@@ -3790,6 +3900,7 @@ impl Checker:
                 let islot : i64 = self.declare(tok, it, nb)
                 self.nslot[id × 1¤ptrdiff] ← islot
                 self.pack_note(id, islot, it, na)
+                self.own_note(islot, na)
                 return
             if ty_is_hash(nc):
                 if nb = 1 and self.kind_of(na) ≠ NK_HLIT:
@@ -3827,6 +3938,7 @@ impl Checker:
                     let slot9 : i64 = self.declare(tok, nc, nb)
                     self.nslot[id × 1¤ptrdiff] ← slot9
                     self.pack_note(id, slot9, nc, na)
+                    self.own_note(slot9, na)
                     return
                 if self.kind_of(na) ≠ NK_ARRLIT:
                     // a call answers a fresh array; any other right side
@@ -3850,6 +3962,7 @@ impl Checker:
             let slot : i64 = self.declare(tok, nc, nb)
             self.nslot[id × 1¤ptrdiff] ← slot
             self.pack_note(id, slot, nc, na)
+            self.own_note(slot, na)
         elif k = NK_LETT:
             let n : i64 = self.a.extra[nc × 1¤ptrdiff]
             let styp : i64 = self.a.extra[(nc + 1) × 1¤ptrdiff]
@@ -3894,8 +4007,11 @@ impl Checker:
         elif k = NK_ASSIGN:
             let name := self.text(tok)
             let s : i64 = self.lookup(name)
-            self.life_used(self.sslot[s × 1¤ptrdiff] if s ≠ ⁻1 else ⁻1)
-            self.pack_kill(self.sslot[s × 1¤ptrdiff] if s ≠ ⁻1 else ⁻1)
+            let asl : i64 = self.sslot[s × 1¤ptrdiff] if s ≠ ⁻1 else ⁻1
+            self.life_used(asl)
+            self.pack_kill(asl)
+            self.own_keep(asl, na)
+            self.walk_wrote(asl)
             if s = ⁻1:
                 let g : i64 = self.global_index(name)
                 if g = ⁻1:
@@ -4128,7 +4244,9 @@ impl Checker:
                 let rslot : i64 = self.declare(tok, self.elem_of(ft0) + 262144 × frk, 1 if frk = 2 else 0)
                 self.nslot[id × 1¤ptrdiff] ← rslot
                 self.loop_depth ← self.loop_depth + 1
+                self.walk_open(self.walked_slot(fiter))
                 self.check_block(nb, false)
+                self.nfree[id × 1¤ptrdiff] ← self.walk_close()
                 self.loop_depth ← self.loop_depth - 1
                 self.pop_scope()
                 return
@@ -4145,7 +4263,9 @@ impl Checker:
             let slot : i64 = self.declare(tok, TY_CHAR if t = TY_STR else (ty_rgelem(t) if ty_is_rg(t) else self.elem_of(t)), 0)
             self.nslot[id × 1¤ptrdiff] ← slot
             self.loop_depth ← self.loop_depth + 1
+            self.walk_open(self.walked_slot(na) if ty_is_arr(t) else ⁻1)
             self.check_block(nb, false)
+            self.nfree[id × 1¤ptrdiff] ← self.walk_close()
             self.loop_depth ← self.loop_depth - 1
             self.pop_scope()
         elif k = NK_RETURN:
@@ -4600,22 +4720,25 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     let nslot : mut i64[] = []
     let ncvt : mut i64[] = []
     let nrep : mut i64[] = []
+    let nfree : mut i64[] = []
     let zi : mut i64 = 0
     while zi < nnodes:
         ntype.push(0)
         nslot.push(⁻1)
         ncvt.push(0)
         nrep.push(⁻1)
+        nfree.push(0)
         zi ← zi + 1
     let c : mut Checker = (Checker{a: a, toks: toks, src: src, fnames: fnames, curmod: "",
                                    gnames: gnames, gvals: [], ginit: [], ite: [],
                                    ntype: ntype, nslot: nslot, ncvt: ncvt,
-                                   nrep: nrep,
-                                   pcnt: [], puse: [], psafe: [],
+                                   nrep: nrep, nfree: nfree,
+                                   pcnt: [], puse: [], psafe: [], kuse: [], ksafe: [],
                                    pnode_slot: [], pnode_id: [],
                                    stmt_seq: 0, cur_stmt: ⁻1,
                                    lbirth: [], llast: [], luse: [],
                                    lesc: [], lwarn: [], ltok: [], log: [],
+                                   lown: [], wslot: [], wreb: [],
                                    fslots: [],
                                    diags: [], snames: [], stype: [], smut: [],
                                    sslot: [], sheld: [], hslot: [], hback: [],
@@ -4749,7 +4872,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     if #c.diags = 0:
         assert(#c.fslots = #a.fns, "one slot count per function")
         assert(#c.gvals = #a.globals, "one folded value per global")
-    (Chk{ntype: c.ntype, nslot: c.nslot, ncvt: c.ncvt, nrep: c.nrep, log: c.log, fslots: c.fslots,
+    (Chk{ntype: c.ntype, nslot: c.nslot, ncvt: c.ncvt, nrep: c.nrep, nfree: c.nfree, log: c.log, fslots: c.fslots,
          gvals: c.gvals, ginit: c.ginit, lams: c.lams, lamns: c.lamns,
          psfn: c.psfn, psk: c.psk, psnp: c.psnp, skipfn: c.skipfn,
          argcopy: c.argcopy,

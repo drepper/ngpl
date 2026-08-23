@@ -10,6 +10,7 @@ struct Lower:
     nslot : i64[]
     ncvt : i64[]
     nrep : i64[]
+    nfree : i64[]
     strs : str[]
     op : i64[]
     ia : i64[]
@@ -2566,6 +2567,42 @@ impl Lower:
         self.ir(IR_MOV, ni, 0, 0, iv, 0)
         self.ir(IR_JMP, ltop, 0, 0, 0, 0)
         self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        // What the walk walked is nobody's now: the checker saw the
+        // name written over inside the loop, and saw that nothing else
+        // could be holding what the walk took.  So the slots go back.
+        // Not the descriptor -- it does not record how big its own
+        // block was -- and not slots that RT_ARRNEW laid inside the
+        // descriptor, which are not a block of their own.
+        if self.nfree[sid × 1¤ptrdiff] = 1:
+            let lkeep : i64 = self.label()
+            // Whether the name was written over is not something the
+            // text settles: the loop may have run no turns at all, and
+            // the writing may have been under an if that did not go
+            // that way.  What settles it is the name itself -- if it
+            // still holds what the walk took, the walk was not the
+            // last to hold it, and nothing goes back.  One comparison,
+            // and it is right however the loop ran.
+            let cur : i64 = self.lower_expr(arr)
+            let held : i64 = self.tmp()
+            self.ir(IR_CEQ, cur, desc, 0, held, 64 + 256)
+            self.ir(IR_JNZ, held, lkeep, 0, 0, 0)
+            let dsl : i64 = self.tmp()
+            self.ir(IR_FLD, desc, 0, 0, dsl, 0)
+            let hoff : i64 = self.tmp()
+            self.ir(IR_CONST, 24, 0, 0, hoff, 0)
+            let inl : i64 = self.tmp()
+            self.ir(IR_ADD, desc, hoff, 0, inl, 64 + 256)
+            let same : i64 = self.tmp()
+            self.ir(IR_CEQ, dsl, inl, 0, same, 64 + 256)
+            self.ir(IR_JNZ, same, lkeep, 0, 0, 0)
+            let dcp : i64 = self.tmp()
+            self.ir(IR_FLD, desc, 2, 0, dcp, 0)
+            let three : i64 = self.tmp()
+            self.ir(IR_CONST, 3, 0, 0, three, 0)
+            let nby : i64 = self.tmp()
+            self.ir(IR_SHLL, dcp, three, 0, nby, 64 + 256)
+            self.ir(IR_GIVEBACK, dsl, nby, 0, 0, 0)
+            self.ir(IR_LABEL, lkeep, 0, 0, 0, 0)
         self.tbase ← saved_base
 
 // one λ becomes one function: the parameters arrive in the argument
