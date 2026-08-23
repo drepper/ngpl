@@ -5,6 +5,8 @@ import re
 import signal
 import sys
 import os
+import time
+import atexit
 from collections import defaultdict
 
 from interp.lexer import tokenize, process_indentation
@@ -295,6 +297,9 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("-Werror", dest="werror", action="store_true",
                        help="treat every warning as an error, and read an "
                             "@expect warning as @expect error")
+    parser.add_argument("--times", action="store_true",
+                       help="write what each phase of the run cost, and the "
+                            "whole of it, to standard error")
     parser.add_argument("--expect-drift", metavar="FILE", default=None,
                        help="where to record an @expect whose code matched "
                             "and whose message did not: one JSON line per "
@@ -3615,6 +3620,34 @@ def _check_locale():
         sys.exit(1)
 
 
+# Where the time went.  A phase is timed by name and reported at the
+# end under --times, so that a change meant to make the interpreter
+# faster can be held to having done so rather than believed.
+_PHASES: list = []
+_phase_t0 = [None]
+
+
+def phase_end(name: str):
+    """Close the phase that was running and open the next."""
+    now = time.perf_counter()
+    if _phase_t0[0] is not None:
+        _PHASES.append((name, now - _phase_t0[0]))
+    _phase_t0[0] = now
+
+
+def report_times(total: float) -> None:
+    """What each phase cost, and what the whole run did."""
+    print(f"{'phase':<24}{'seconds':>10}{'share':>8}", file=sys.stderr)
+    named = 0.0
+    for name, dt in _PHASES:
+        named += dt
+        print(f"{name:<24}{dt:>10.3f}{100 * dt / total:>7.1f}%", file=sys.stderr)
+    rest = total - named
+    print(f"{'(the rest)':<24}{rest:>10.3f}{100 * rest / total:>7.1f}%",
+          file=sys.stderr)
+    print(f"{'total':<24}{total:>10.3f}{100.0:>7.1f}%", file=sys.stderr)
+
+
 def main():
     """Run the NGPL interpreter on a source file."""
     # The evaluator spends several Python frames per NGPL call, so
@@ -3624,7 +3657,13 @@ def main():
     # resource budget, so it is raised rather than worked around.
     sys.setrecursionlimit(200_000)
     _check_locale()
+    started = time.perf_counter()
     args = _parse_args()
+    if args.times:
+        # every way out of here ends in sys.exit, so the report is
+        # registered rather than written at one of them
+        _phase_t0[0] = started
+        atexit.register(lambda: report_times(time.perf_counter() - started))
 
     set_warnings_are_errors(args.werror)
     set_expect_drift_path(args.expect_drift)
@@ -3697,6 +3736,7 @@ def main():
         # finds the text to point into here rather than being handed it.
         set_source(source, source_path, starts, source_paths)
 
+        phase_end("start")
         try:
             tokens = process_indentation(tokenize(source))
         except Exception as e:
@@ -3704,6 +3744,7 @@ def main():
                         show_backtrace=args.interpreter_backtrace)
             sys.exit(1)
 
+        phase_end("read the sources")
         try:
             parser = Parser(tokens)
             definitions = parser.parse()
@@ -3723,6 +3764,7 @@ def main():
     setup_std_env(env, source_path or "", args.program_args)
 
     evaluator = Evaluator(env)
+    phase_end("parse")
     try:
         program = install_definitions(definitions, env, evaluator,
                                       honor_start=args.start is None)
@@ -3753,6 +3795,7 @@ def main():
         # -Werror: what was reported are errors, and errors stop the run.
         sys.exit(1)
 
+    phase_end("check the definitions")
     startup_func = program.startup_func
     standalone_tests = program.standalone_tests
     referenced_tests = program.referenced_tests

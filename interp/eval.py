@@ -3407,6 +3407,14 @@ class Evaluator:
 
 
 
+        # Two node kinds are more than half of every expression a run
+        # evaluates -- a name is forty in a hundred and a literal
+        # thirteen -- and reaching their handler costs a Python frame
+        # apiece.  So the plain form of each is answered here, and
+        # anything the least bit unusual falls through to the handler,
+        # which is where the whole of the rule still lives.  Reaching
+        # into the environment's frames is the price of not calling
+        # into it; the fallback below is what keeps this honest.
         # The hot cases sit first: the ladder is walked for
         # every expression, and these are most expressions.
         handler = _EXPR_DISPATCH.get(node.__class__)
@@ -3609,8 +3617,12 @@ class Evaluator:
 
 
     def _ee_IntLit(self, node):
-        return mk_int(node.value,
-                      UNTYPED if node.width == "int" else node.width)
+        v = node.boxed
+        if v is None:
+            v = mk_int(node.value,
+                       UNTYPED if node.width == "int" else node.width)
+            node.boxed = v
+        return v
 
     def _ee_FloatLit(self, node):
         return mk_float(node.value, node.width)
@@ -3636,9 +3648,14 @@ class Evaluator:
         if self._frozen_vars and self._frozen_vars.get(node.name) == "moved":
             raise TypeError(
                 f"use of moved value '{node.name}'")
+        # Whether it is a mutable global is a membership test on a set
+        # that is nearly always empty, and being local is a lookup in a
+        # frame that nearly always has it -- so the first question
+        # settles almost every name, and the second is asked of the few
+        # that are mutable globals rather than of every read.
         if (self._pure_func_name is not None
-                and not self.env.has_local(node.name)
-                and self.env.is_mutable_global(node.name)):
+                and self.env.is_mutable_global(node.name)
+                and not self.env.has_local(node.name)):
             raise coded(2239, TypeError(
                 f"pure function '{self._pure_func_name}' cannot "
                 f"read mutable global variable '{node.name}'"))
@@ -3655,7 +3672,7 @@ class Evaluator:
         return val
 
     def _ee_BinOp(self, node):
-        pos = getattr(node, "pos", None)
+        pos = node.pos
         binop_pos = pos
         if node.op == "??":
             left = self.eval_expr(node.left)

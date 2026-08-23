@@ -123,6 +123,10 @@ class _IntWidths:
         return bits
 
     def __contains__(self, name):
+        # the named widths are most of the questions, and answering
+        # from the table costs less than the call that would
+        if name in self._named:
+            return True
         return self.get(name) is not None
 
     def __iter__(self):
@@ -2884,6 +2888,14 @@ def _coerce_to_type(value: Value, target_width: str, unit=None) -> Value:
     Returns the value unchanged if no coercion is needed.
     Raises OverflowError if the value does not fit.
     """
+    # Already exactly the type asked for.  An integer of that width has
+    # nothing left to settle, and every question below is about a value
+    # that is not it -- a container, a tuple, an optional, a unit, a
+    # kind that does not match.  This is most coercions, an i64 handed
+    # where an i64 was wanted, so it is asked before any of them.
+    if type(value) is IntValue and value.width == target_width \
+            and target_width != "int":
+        return value
     target_width = resolve_type_alias(target_width)
     refuse_partial_application(value, target_width)
     arr_ty = _parse_array_type(target_width)

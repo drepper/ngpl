@@ -20,6 +20,12 @@ class IntLit:
     def __init__(self, value: int, width: str = "int"):
         self.value = value
         self.width = width
+        # The boxed value, made when the literal is first read and kept
+        # after.  A literal is the same value however often it is read
+        # and a boxed integer is never changed in place, so one box
+        # serves every reading; in a loop this is the difference
+        # between one allocation and one for every turn.
+        self.boxed = None
 
 
 class FloatLit:
