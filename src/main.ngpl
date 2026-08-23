@@ -262,14 +262,80 @@ fn read_build(path : str, json : bool) → Recipe:
         recipe_failed()
     plan
 
+// A size as this help writes it, which is the spelling --stack-size
+// takes back: the largest of G, M and K that divides it exactly.
+fn size_str(n : i64) → str:
+    if (n % 1073741824 ?? 1) = 0:
+        return i64_str(n ÷ 1073741824 ?? 0) ⧺ "G"
+    if (n % 1048576 ?? 1) = 0:
+        return i64_str(n ÷ 1048576 ?? 0) ⧺ "M"
+    if (n % 1024 ?? 1) = 0:
+        return i64_str(n ÷ 1024 ?? 0) ⧺ "K"
+    i64_str(n)
+
+// Every option there is, grouped by what it is for and laid out the way
+// argp lays one out: the usage line, the groups each under a heading,
+// and the description of each option starting at the same column.  The
+// defaults and the machine list are read from where they are defined
+// rather than written again here, so they cannot come to disagree.
+@impure
+fn help():
+    std.println("Usage: ngplc [OPTION...] SOURCE.ngpl...")
+    std.println("   or: ngplc [OPTION...] --build RECIPE.ngpl")
+    std.println("Compile NGPL source into a static executable.")
+    std.println("")
+    std.println(" Naming what to compile:")
+    std.println("      --build FILE           Take the source list from FILE's @build")
+    std.println("                             recipe rather than from the command line")
+    std.println("")
+    std.println(" Output:")
+    std.println("  -o FILE                    Write the executable to FILE")
+    std.println("      --target=MACHINE       Compile for MACHINE rather than for the")
+    std.println("                             machine this compiler runs on")
+    std.println("")
+    std.println(" The program that comes out:")
+    std.println("      --stack-size=SIZE      Reserve SIZE for its stack")
+    std.println("      --guard-size=SIZE      Leave SIZE unmapped below the stack, so")
+    std.println("                             running off the bottom is caught")
+    std.println("")
+    std.println(" Diagnostics:")
+    std.println("  -Werror                    Treat every warning as an error")
+    std.println("      --diag=json            Write diagnostics as JSON, one to a line")
+    std.println("")
+    std.println(" What the compiler did:")
+    std.println("      --dump-tokens          Write the token stream and stop")
+    std.println("      --dump-ast             Write the syntax tree and stop")
+    std.println("      --log=json             Write one JSON line for each decision")
+    std.println("                             taken about the shape of the code")
+    std.println("")
+    std.println("      --help                 Give this help list")
+    std.println("")
+    std.println("Mandatory or optional arguments to long options are also mandatory or optional")
+    std.println("for any corresponding short options.")
+    std.println("")
+    std.println("A SIZE is a number of bytes, or a number and K, M or G; the stack")
+    std.println("holds {} and the guard {} unless they are said otherwise.",
+                size_str(STACK_DEFAULT), size_str(GUARD_DEFAULT))
+    std.println("")
+    std.println("MACHINE is one of: {}.", target_names())
+    std.println("")
+    std.println("Report bugs to <https://github.com/drepper/ngpl/issues>.")
+
 @start
 @impure
 fn main() → u8:
     let argv := std.args.all()
+    // --help is answered wherever it appears and before anything else
+    // is judged, so that a command line with a mistake in it can still
+    // be asked what it should have said.
+    foreach a := argv:
+        if a = "--help":
+            help()
+            return 0
     if #argv = 0:
-        std.println("usage: ngplc <source.ngpl>… [-o out] [--target=A] [--stack-size=N] [--guard-size=N] [-Werror] [--dump-tokens] [--dump-ast] [--diag=json] [--log=json]")
-        std.println("       ngplc --build <recipe.ngpl> [-o out] [--target=A] …")
-        std.println("targets: {} (default: the architecture this compiler runs on)", target_names())
+        std.println("Usage: ngplc [OPTION...] SOURCE.ngpl...")
+        std.println("   or: ngplc [OPTION...] --build RECIPE.ngpl")
+        std.println("Try 'ngplc --help' for more information.")
         return 1
     let inputs : mut str[] = []
     let output : mut str = ""
