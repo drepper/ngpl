@@ -672,9 +672,17 @@ def tokenize(src: str):
 def process_indentation(tokens: list[Token]) -> list[Token]:
     """Insert INDENT and DEDENT tokens based on indentation changes.
 
-    Indentation processing is suppressed inside () and [] nesting.
+    Indentation processing is suppressed inside (), [] and {} nesting.
     A line ending with a binary operator is treated as a continuation;
     no INDENT/DEDENT is emitted for the following line.
+
+    Braces are among them because a struct literal is written with
+    them, and one worth spreading over several lines -- a machine
+    description, a header -- must not have its own lines read as a
+    block.  The cost is that layout cannot be nested inside braces: a
+    block written in braces holds statements separated by ';', and a
+    block inside it is written in braces too.  The compiler makes the
+    same trade, and the two have to agree about what a program means.
     """
     result: list[Token] = []
     indent_stack = [0]
@@ -684,13 +692,13 @@ def process_indentation(tokens: list[Token]) -> list[Token]:
     while i < len(tokens):
         tok = tokens[i]
 
-        if tok.type == "PUNCT" and tok.value in ("(", "["):
+        if tok.type == "PUNCT" and tok.value in ("(", "[", "{"):
             nesting += 1
             result.append(tok)
             i += 1
             continue
 
-        if tok.type == "PUNCT" and tok.value in (")", "]"):
+        if tok.type == "PUNCT" and tok.value in (")", "]", "}"):
             if nesting > 0:
                 nesting -= 1
             result.append(tok)

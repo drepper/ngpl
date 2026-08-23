@@ -1692,15 +1692,27 @@ class Parser:
             stmt = self._parse_statement()
             if stmt is not None:
                 stmts.append(stmt)
+            # A statement that is itself a block -- an if, a while, a
+            # walk -- ends at its own '}' and has no separator of its
+            # own to eat, where a plain one has already eaten the ';'.
+            while self._check("PUNCT") and self._cur().value == ";":
+                self.pos += 1
         self._eat("PUNCT", "}")
         return stmts
 
     def _parse_layout_block(self):
-        """Parse a layout-driven block: : INDENT stmts DEDENT.
+        """Parse a block introduced by a colon.
 
-        A single statement on the same line as the colon is also accepted.
+        Either form may follow the colon and they mean the same thing:
+        an indented run of statements, or braces with semicolons between
+        them.  A single statement on the same line as the colon is also
+        accepted.  Every block a colon introduces comes through here --
+        a function's body, an if's, a while's, a walk's -- so the two
+        forms are equal everywhere by being made equal once.
         """
         self._eat("PUNCT", ":")
+        if self._check("PUNCT") and self._cur().value == "{":
+            return self._parse_brace_block()
         while self._try_eat("NEWLINE"):
             pass
         if not self._check("INDENT"):

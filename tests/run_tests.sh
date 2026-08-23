@@ -49,6 +49,7 @@ all_tests=(
     "$testdir"/test_fast.ngpl
     "$testdir"/test_foreach.ngpl
     "$testdir"/test_layout.ngpl
+    "$testdir"/test_block_forms.ngpl
     "$testdir"/test_logic.ngpl
     "$testdir"/test_overflow.ngpl
     "$testdir"/test_wrap.ngpl

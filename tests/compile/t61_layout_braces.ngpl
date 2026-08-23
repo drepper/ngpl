@@ -2,15 +2,19 @@
 // braces where that one indents, and several statements to a line where
 // that one gives each its own.  See the note there.
 
-fn work(n : i64) → i64:
-    let step := λx : i64 → i64: { let y : i64 = x + 1; let z : i64 = y × 2; z }
-    step(n)
+fn work(n : i64) → i64: { let step := λx : i64 → i64: { let y : i64 = x + 1; let z : i64 = y × 2; z }; step(n) }
 
-fn twice(n : i64) → i64:
-    let pair := λx : i64 → i64: { let a : i64 = x × 2; a }
-    pair(pair(n))
+fn grade(n : i64) → str: { if n > 10: { return "big" }; if n > 0: { return "small" }; "none" }
+
+fn total(n : i64) → i64: {
+    let t : mut i64 = 0;
+    let i : mut i64 = 0;
+    while i < n: { if i > 1: { t ← t + i }; i ← i + 1 };
+    t
+}
+
+fn walked(v : i64[]) → i64: { let s : mut i64 = 0; foreach x := v: { s ← s + x × 2 }; s }
 
 @start
 @impure
-fn main():
-    std.println("{} {}", work(3), twice(5))
+fn main(): { let v : i64[] = [1, 2, 3]; std.println("{} {} {} {}", work(3), grade(20), total(5), walked(v)) }

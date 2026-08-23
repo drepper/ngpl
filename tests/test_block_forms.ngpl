@@ -1,0 +1,209 @@
+// The two ways to write a block, and that they are one thing.
+//
+// A block is indented after a colon, with a statement to a line, or it
+// is in braces with ';' between the statements.  Every construct that
+// takes a block takes either -- a function's body, an if's, an else's,
+// a while's, a walk's, a lambda's -- and the choice says nothing about
+// what the program means.  This is where both implementations are held
+// to that, form by form, by running the same computation written each
+// way and requiring the same answer.
+//
+// Three things about the braces are not obvious and are pinned below.
+//
+// Indentation is suppressed inside them, as it is inside `(` and `[`,
+// because a struct literal is written with braces and one spread over
+// several lines must not have its own lines read as a block.  So a
+// colon block inside braces is the single-line form.
+//
+// That single statement takes its terminator from the block around it:
+// in `{ if c: return a; b }` the ';' stands after the if, which is
+// where a reader puts it, and not after the return.
+//
+// And a '{' after a name may open either a struct literal or a block.
+// What stands just inside decides: nothing, or a field's name and its
+// ':', opens a literal; anything else opens a block.  Without that
+// rule `while n < x {` reads as a literal of type x and the loop's
+// body is lost.
+//
+// The specification's "Blocks and Layout" is the normative statement.
+
+// ---------------------------------------------------------------------
+// A function's body
+// ---------------------------------------------------------------------
+
+fn body_layout(x : i64) → i64:
+    x + 1
+
+fn body_brace(x : i64) → i64 { x + 1 }
+
+fn body_brace_lines(x : i64) → i64 {
+    let y : i64 = x + 1;
+    y
+}
+
+// The braces may also stand where the block would, after the colon.
+fn body_colon_brace(x : i64) → i64: { x + 1 }
+
+@test
+fn test_a_body_either_way():
+    assert_eq(body_layout(1), 2)
+    assert_eq(body_brace(1), 2)
+    assert_eq(body_brace_lines(1), 2)
+    assert_eq(body_colon_brace(1), 2)
+
+// ---------------------------------------------------------------------
+// if and else
+// ---------------------------------------------------------------------
+
+fn grade_layout(x : i64) → i64:
+    if x > 10:
+        return 2
+    elif x > 5:
+        return 1
+    else:
+        return 0
+
+fn grade_brace(x : i64) → i64 {
+    if x > 10 { return 2 } elif x > 5 { return 1 } else { return 0 }
+}
+
+// braces for the if inside an indented body
+fn grade_mixed(x : i64) → i64:
+    if x > 10 {
+        return 2
+    }
+    if x > 5 {
+        return 1
+    }
+    0
+
+// and the colon form inside a braced body, which is the single-line
+// form lending its terminator to the block around it
+fn grade_mixed2(x : i64) → i64 {
+    if x > 10: return 2;
+    if x > 5: return 1;
+    0
+}
+
+// The `else` of a brace body stands on the line after the '}', which
+// is where a reader puts it; the line's end between them ends nothing.
+fn grade_mixed3(x : i64) → i64:
+    if x > 10 {
+        return 2
+    }
+    elif x > 5 {
+        return 1
+    }
+    else {
+        return 0
+    }
+
+@test
+fn test_a_choice_either_way():
+    assert_eq(grade_layout(20), 2)
+    assert_eq(grade_brace(20), 2)
+    assert_eq(grade_mixed(20), 2)
+    assert_eq(grade_mixed2(20), 2)
+    assert_eq(grade_mixed3(20), 2)
+    assert_eq(grade_layout(7), 1)
+    assert_eq(grade_brace(7), 1)
+    assert_eq(grade_mixed(7), 1)
+    assert_eq(grade_mixed2(7), 1)
+    assert_eq(grade_mixed3(7), 1)
+    assert_eq(grade_layout(1), 0)
+    assert_eq(grade_brace(1), 0)
+    assert_eq(grade_mixed(1), 0)
+    assert_eq(grade_mixed2(1), 0)
+    assert_eq(grade_mixed3(1), 0)
+
+// ---------------------------------------------------------------------
+// while
+// ---------------------------------------------------------------------
+
+fn count_layout(x : i64) → i64:
+    let n : mut i64 = 0
+    while n < x:
+        n ← n + 1
+    n
+
+fn count_brace(x : i64) → i64 {
+    let n : mut i64 = 0;
+    while n < x { n ← n + 1 };
+    n
+}
+
+// the condition ends at a name, so the '{' has to be read as a block
+fn count_mixed(x : i64) → i64:
+    let n : mut i64 = 0
+    while n < x {
+        n ← n + 1
+    }
+    n
+
+@test
+fn test_a_loop_either_way():
+    assert_eq(count_layout(4), 4)
+    assert_eq(count_brace(4), 4)
+    assert_eq(count_mixed(4), 4)
+
+// ---------------------------------------------------------------------
+// A walk
+// ---------------------------------------------------------------------
+
+fn total_layout(v : i64[]) → i64:
+    let n : mut i64 = 0
+    foreach e := v:
+        n ← n + e
+    n
+
+fn total_brace(v : i64[]) → i64 {
+    let n : mut i64 = 0;
+    foreach e := v { n ← n + e };
+    n
+}
+
+@test
+fn test_a_walk_either_way():
+    let v : i64[] = [1, 2, 3, 4]
+    assert_eq(total_layout(v), 10)
+    assert_eq(total_brace(v), 10)
+
+// ---------------------------------------------------------------------
+// A lambda's body
+// ---------------------------------------------------------------------
+
+@test
+fn test_a_lambda_either_way():
+    let v : i64[] = [1, 2, 3]
+    let laid : i64[] = (λx : i64 → i64: x + 1)¨v
+    let braced : i64[] = (λx : i64 → i64: { x + 1 })¨v
+    assert_eq(laid[0 × 1¤ptrdiff], 2)
+    assert_eq(braced[0 × 1¤ptrdiff], 2)
+    assert_eq(laid[2 × 1¤ptrdiff], 4)
+    assert_eq(braced[2 × 1¤ptrdiff], 4)
+
+// ---------------------------------------------------------------------
+// A brace after a name
+// ---------------------------------------------------------------------
+
+struct Point:
+    x : i64
+    y : i64
+
+@test
+fn test_a_literal_is_still_a_literal():
+    let p : Point = Point{x: 1, y: 2}
+    assert_eq(p.x + p.y, 3)
+
+// A literal spread over several lines: the indentation inside the
+// braces is not read as a block, which is why braces suppress it.
+@test
+fn test_a_literal_over_several_lines():
+    let p : Point = Point{x: 1,
+                          y: 2}
+    assert_eq(p.x + p.y, 3)
+
+@start
+@impure
+fn main():
+    std.println("block form tests passed")

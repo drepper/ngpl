@@ -4160,7 +4160,7 @@ fn abs(x : int) → int {
 }
 ```
 
-Braces enclose zero or more statements.  Statements are separated by newlines or semicolons.  Indentation inside braces is not significant — it is conventional but not enforced by the parser.
+Braces enclose zero or more statements, separated by `;`.  A statement that is itself a block ends at its own `}` and needs no separator of its own, so `{ if c { a } b }` is two statements.  Indentation inside braces is not significant — it is conventional but not enforced by the parser.
 
 #### Layout-Driven Blocks
 
@@ -4191,7 +4191,13 @@ The rules are:
            W[j - 7] + expand_s1(W[j - 2])
    ```
 
-6. **Nesting suppression.**  Inside parentheses `()` and brackets `[]`, indentation changes are ignored — no block boundaries are introduced.  This allows multi-line function arguments and array literals to be freely indented.
+6. **Nesting suppression.**  Inside parentheses `()`, brackets `[]` and braces `{}`, indentation changes are ignored — no block boundaries are introduced.  This allows multi-line function arguments, array literals and struct literals to be freely indented.
+
+   Braces are among them because a struct literal is written with them, and one worth spreading over several lines — a machine description, a header — must not have its own lines read as a block.  The consequence is that inside braces only the single-line form of a layout block (rule 4) is available, and it takes its terminator from the block around it rather than carrying one:
+   ```
+   { if x > 10: return x - 10; y }
+   ```
+   A block of several statements written inside braces is written in braces too.
 
 #### Mixed Mode
 
@@ -4212,6 +4218,18 @@ fn mixed2(x : int) → int {
 ```
 
 This flexibility allows programmers to choose the style that best fits each situation — layout for clean, short blocks; braces for complex nesting or when explicit delimiters improve readability.
+
+#### A Brace After a Name
+
+`{` begins a struct literal as well as a block, and after an identifier either is possible: `Point{x: 1}` is a value, while `while n < x { … }` is a loop whose condition happens to end in a name.  The two are told apart by what stands just inside the brace.  It opens a struct literal when the brace is empty, or when a field's name and its `:` follow; otherwise it opens a block:
+
+```
+let p : Point = Point{}          // a literal
+let q : Point = Point{x: 1}      // a literal
+while n < x { n ← n + 1 }        // a block; the condition ends at x
+```
+
+The rule is one token of lookahead past the brace and needs no knowledge of which names are types, so it is the same rule wherever a brace can follow a name.
 
 #### Design Rationale
 
