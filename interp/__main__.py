@@ -2456,11 +2456,17 @@ def _static_borrow_check(func_def) -> str | None:
     def visit(stmt, held: dict):
         if isinstance(stmt, tuple) and stmt and stmt[0] == "assign_stmt":
             _, lhs, rhs = stmt
-            base = _borrow_base(lhs)
-            if base is not None:
-                found = change(base, held, lhs)
-                if found is not None:
-                    return found
+            # Writing the name itself is not writing what it holds.  A
+            # walk holds the *object*, so `v ← …` inside one gives the
+            # name something else and leaves the walk where it was; it
+            # is `v[i] ← …` and `v.push(…)`, which reach through the
+            # name into the object being walked, that a walk refuses.
+            if not isinstance(lhs, _ast.VarRef):
+                base = _borrow_base(lhs)
+                if base is not None:
+                    found = change(base, held, lhs)
+                    if found is not None:
+                        return found
             return in_expr(rhs, held)
         if isinstance(stmt, _ast.ForEachStmt):
             inner = dict(held)

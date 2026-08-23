@@ -1,11 +1,15 @@
 // What a walk holds.
 //
-// A walk borrows the container for the whole of the loop, and while
-// that borrow is outstanding the container's own name is limited to
-// what the borrow leaves: a shared borrow leaves reading, a mutable
-// borrow leaves nothing at all.  The specification's "What a Walk
-// Holds" is the normative statement; this is where both
-// implementations are held to it.
+// A walk borrows the object for the whole of the loop, and while that
+// borrow is outstanding the object may be used only in the ways the
+// borrow leaves: a shared borrow leaves reading, a mutable borrow
+// leaves nothing at all.
+//
+// The object, not the name.  Giving the name something else does not
+// touch the object the walk took, so a walk does not refuse it; what
+// it refuses is reaching through the name into that object.  The
+// specification's "What a Walk Holds" is the normative statement;
+// this is where both implementations are held to it.
 //
 // The rule was written because the alternative had no answer.  Given
 //
@@ -87,16 +91,48 @@ fn error_writing_an_element_of_what_is_being_walked():
         v[0 × 1¤ptrdiff] ← x
 
 @expect error 2400 "'v' is lent out for reading and cannot be changed until the borrow ends; a walk holds what it walks for the whole of its body"
-fn error_rebinding_what_is_being_walked():
-    let v : mut i64[] = [1, 2, 3]
-    foreach x := v:
-        v ← [x]
-
-@expect error 2400 "'v' is lent out for reading and cannot be changed until the borrow ends; a walk holds what it walks for the whole of its body"
 fn error_growing_what_a_shared_walk_lends():
     let v : mut i64[] = [1, 2, 3]
     foreach x := &v:
         v.push(x)
+
+// ---------------------------------------------------------------------
+// What a shared borrow does not refuse: writing the name
+// ---------------------------------------------------------------------
+//
+// A walk holds the *object*, not the binding.  Writing the name gives
+// it something else and leaves the walk where it was: the object it
+// started on is still there, still whole, and still what the walk is
+// walking.  What the walk refuses is reaching *through* the name into
+// that object -- growing it, writing an element -- because those change
+// what is being walked, which is the question with no good answer.
+//
+// The object outlives the name that held it, until the walk ends.
+
+@test
+fn test_writing_the_name_leaves_the_walk_alone():
+    let v : mut i64[] = [1, 2, 3]
+    let seen : mut i64 = 0
+    foreach x := v:
+        seen ← seen + x
+        v ← [x × 10]
+    // all three of the original elements were visited
+    assert_eq(seen, 6)
+    // and the name holds the last thing written to it
+    assert_eq(@dropunit(#v), 1)
+    assert_eq(v[0 × 1¤ptrdiff], 30)
+
+@test
+fn test_writing_the_name_under_a_mutable_walk():
+    let v : mut i64[] = [1, 2, 3]
+    let seen : mut i64 = 0
+    foreach x := &mut v:
+        x ← x + 1
+        seen ← seen + x
+        v ← [99]
+    // the walk wrote through to the object it started on
+    assert_eq(seen, 9)
+    assert_eq(@dropunit(#v), 1)
 
 // ---------------------------------------------------------------------
 // What a mutable borrow leaves: nothing

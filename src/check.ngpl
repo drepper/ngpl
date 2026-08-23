@@ -3915,16 +3915,6 @@ impl Checker:
                 self.nslot[id × 1¤ptrdiff] ← 0 - g - 2
                 return
             let st : i64 = self.stype[s × 1¤ptrdiff]
-            // Rebinding the name is a change like any other, and a
-            // walk holds what it walks: `foreach x := v: v ← [x]`
-            // replaces the array under the walk that is reading it.
-            // The element paths below consult the hold through
-            // require_mut_base; this one has no base to ask about.
-            let hd0 : i64 = self.sheld[s × 1¤ptrdiff]
-            if hd0 ≠ HOLD_FREE:
-                self.derrc(tok, 2400, "'" ⧺ name ⧺ "' is lent out " ⧺ ("for reading" if hd0 = HOLD_READ else "to be changed") ⧺ " and cannot be changed until the borrow ends; a walk holds what it walks for the whole of its body")
-                self.check_expr(na, TY_UNIT)
-                return
             if ty_ref_kind(st) = 2 and not ty_is_arr(ty_strip_ref(st)) and not ty_is_hash(ty_strip_ref(st)) and not ty_is_struct(ty_strip_ref(st)):
                 // through the element's address, back into the array
                 self.check_expr(na, ty_strip_ref(st))

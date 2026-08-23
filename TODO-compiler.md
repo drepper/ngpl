@@ -57,6 +57,18 @@ The Compiler
     that site a number from its block, and let tools/update_expectations.py fill the message.
     Spec: "What a Diagnostic Is Known By".
 
+[ ] a walk is what keeps the object it walks alive, and nothing acts on that yet.  Since
+    `foreach x := v: v ← …` is allowed, the object the walk took can lose its last name
+    while the walk is still going, and what keeps it whole until the loop ends is the
+    walk's own hold on it.  The interpreter already does the right thing, because Python
+    counts references and drops the array when the walk lets go.  The compiled runtime
+    does nothing, because its allocator is a bump over mmap regions and gives nothing
+    back -- so the requirement is met by there being no freeing at all rather than by
+    freeing at the right moment.  When an allocator that frees arrives, the end of a walk
+    is where a walked object with no name left becomes reclaimable, and the lifetime the
+    checker already computes is where that would be read off.  Spec: "Writing the Name Is
+    Not Writing the Object".
+
 [ ] the packing analysis does not follow a binding into a call.  A T[] whose length is
     settled and which never leaves the function is laid out as a T[N] is; whether it
     leaves is decided by counting every read of the name against the reads somewhere a

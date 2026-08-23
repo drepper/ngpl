@@ -4574,7 +4574,7 @@ foreach val := data:
 /* total is 100 */
 ```
 
-**The walk borrows the container for the whole of the loop**, so the body may read it and not change it; see [What a Walk Holds](#what-a-walk-holds), which is where that rule and its reasons are written down.
+**The walk borrows the container — the object, not the name — for the whole of the loop**, so the body may read it and not change it; see [What a Walk Holds](#what-a-walk-holds), which is where that rule and its reasons are written down.
 
 This works with any array, including dynamic arrays passed as parameters:
 
@@ -4847,9 +4847,11 @@ error: foreach over a borrow needs one variable per borrowed container
 
 #### What a Walk Holds
 
-A walk borrows the container for the whole of the loop, and while that borrow is outstanding the container's own name is limited to what the borrow leaves.  This is the general rule of borrowing in this language, stated here because a loop is where it first has teeth:
+A walk borrows **the object**, not the name that holds it, for the whole of the loop; and while that borrow is outstanding the object may be used only in the ways the borrow leaves.  This is the general rule of borrowing in this language, stated here because a loop is where it first has teeth:
 
 > **While a borrow of something is outstanding, the thing itself may be used only in the ways the borrow leaves room for.**  A shared borrow leaves reading, and the thing may be read and not changed.  A mutable borrow leaves nothing at all: while it is outstanding the borrow *is* the way to the thing, and the thing's own name reaches nothing.
+
+The thing borrowed is the object.  Giving the *name* something else is not touching the object at all, so it is not a use of the borrow and the walk goes on exactly as it was — see [Writing the Name Is Not Writing the Object](#writing-the-name-is-not-writing-the-object).
 
 The three forms of walk borrow differently, so they leave the body different room:
 
@@ -4880,7 +4882,7 @@ error: 'v' is lent out to be changed, so the name reaches nothing until
        the borrow ends; what the walk binds is the way in
 ```
 
-**Reading** is `#v`, `v[i]`, walking it again, passing `&v` where a `&` is wanted — anything that does not change it.  **Changing** is `v.push(…)`, `v.pop()`, `v[i] ← …`, `v ← …`, and passing `&mut v` to something that takes one.
+**Reading** is `#v`, `v[i]`, walking it again, passing `&v` where a `&` is wanted — anything that does not change it.  **Changing** is `v.push(…)`, `v.pop()`, `v[i] ← …`, and passing `&mut v` to something that takes one: each of those reaches through the name into the object the walk is walking.  `v ← …` is not among them, and the next section says why.
 
 The borrow ends where the loop ends.  After the loop the name is whatever it was before, and a program that wants to change a container it has just walked walks it first and changes it after:
 
@@ -4891,6 +4893,27 @@ v.push(4)                               // fine: the walk is over
 ```
 
 A walk inside a walk of the same container is two shared borrows at once, which is allowed — reading does not conflict with reading.  A walk inside a `&mut` walk of the same container is not, because the outer walk already left the name reaching nothing.
+
+#### Writing the Name Is Not Writing the Object
+
+`v ← …` inside a walk over `v` is allowed:
+
+```
+let v : mut i64[] = [1, 2, 3]
+let seen : mut i64 = 0
+foreach x := v:
+    seen ← seen + x
+    v ← [x × 10]
+
+// seen is 6: all three of the original elements were visited
+// v is [30]: the name holds the last thing written to it
+```
+
+A name and the object it holds are two things.  The walk took the object; `v ← [x × 10]` gives the *name* a different object and leaves the first one exactly as it was — still whole, still three elements long, still what the walk is walking.  Nothing about the walk has been disturbed, so there is nothing to refuse.
+
+This is why the rule is about the object rather than the name.  `v.push(x)` and `v[i] ← x` reach *through* the name into the object being walked and change it under the walk; `v ← …` does not reach into it at all.
+
+**The object outlives the name.**  After the assignment the original is reachable only from the walk, and the walk is what keeps it: it stays whole until the loop ends, and becomes unreachable there.  A walk under a `&mut` borrow is the same — what it binds is a way into the object it started on, and writes through it go there whatever the name has since come to hold.
 
 #### Why a Walk Holds What It Walks
 
