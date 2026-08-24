@@ -279,12 +279,12 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.b1(201)
             em.b1(195)
         elif o = IR_PRINTS:
-            em.sref(R_SI, a)
-            em.movimm(R_DX, str_len(strs[a × 1¤ptrdiff]))
+            em.sref(R_DI, a)
+            em.movimm(R_SI, str_len(strs[a × 1¤ptrdiff]))
             em.jglobal(232, ⁻1, RT_WRITE1)
         elif o = IR_EPRINTS:
-            em.sref(R_SI, a)
-            em.movimm(R_DX, str_len(strs[a × 1¤ptrdiff]))
+            em.sref(R_DI, a)
+            em.movimm(R_SI, str_len(strs[a × 1¤ptrdiff]))
             em.jglobal(232, ⁻1, RT_WRITE2)
         elif o = IR_PRINTI:
             em.load(R_DI, a)
