@@ -6733,9 +6733,14 @@ class Evaluator:
                         arg_value = deep_copy_value(arg_value)
                         arg_value.obj.fixed_size = declared[1][0]
             param_unit = None
-            if param_name in func.param_units:
+            pspec = func.param_units.get(param_name)
+            if pspec is None and param_type is not None:
+                # A parameter is a binding like any other, so an alias
+                # that says what it measures says it here too.
+                pspec = alias_unit_spec(param_type)
+            if pspec is not None:
                 from interp.units import eval_unit_formula
-                param_unit = eval_unit_formula(func.param_units[param_name])
+                param_unit = eval_unit_formula(pspec)
                 if isinstance(arg_value, IntValue) \
                         and not is_unwidthed(arg_value.width):
                     raise coded(2323, TypeError(
@@ -6815,16 +6820,21 @@ class Evaluator:
             # parameters to build one.
             self._comptime_vars = set(borrowed)
             self._check_conditions(func, func.preconditions)
+            # An alias that says what it measures says it of the answer
+            # too, a return being as much a stated type as a binding.
+            ret_unit = func.ret_unit
+            if ret_unit is None and resolved_ret_type is not None:
+                ret_unit = alias_unit_spec(resolved_ret_type)
             olds = self._read_olds(func)
             result = self.eval_stmts(func.body)
             result = self._check_return_type(
-                result, resolved_ret_type, func.name, func.ret_unit)
+                result, resolved_ret_type, func.name, ret_unit)
             returned = self._wrap_optional_return(result, resolved_ret_type)
             self._check_conditions(func, func.postconditions, returned, olds)
             return returned
         except _ReturnSentinel as e:
             checked = self._check_return_type(
-                e.value, resolved_ret_type, func.name, func.ret_unit)
+                e.value, resolved_ret_type, func.name, ret_unit)
             returned = self._wrap_optional_return(checked, resolved_ret_type)
             self._check_conditions(func, func.postconditions, returned, olds)
             return returned

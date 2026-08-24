@@ -477,12 +477,13 @@ Completed
     element definition rather than to the variable, unless every member is numeric and none
     carries one.  A unit written in a tuple element or a type alias is refused by name today,
     which is where this starts.
-    Half done in the interpreter, on branch todo/unit-in-element: a type alias may state one --
-    `type Duration = i64 ¤sec` -- and every binding of the alias counts in it without
-    repeating it, the nearest alias in a chain winning.  A tuple element still refuses one:
-    what a unit on a product type means where the members are not all numeric is the question
-    the note raises and it is not answered by the alias half.  ngplc does not accept it
-    either.
+    Half done in both: a type alias may state one -- `type Duration = i64 ¤sec` -- and every
+    binding of the alias counts in it without repeating it, the nearest alias in a chain
+    winning.  A parameter and a return are bindings too and count in it as well.  ngplc had
+    the alias half already, units being part of a type there rather than a note beside one;
+    what the branch added was the interpreter's side of it.  A tuple element still refuses a
+    unit in both: what a unit on a product type means where the members are not all numeric
+    is the question the note raises, and the alias half does not answer it.
 
 [ ] a stated width must match exactly, rather than converting, when a value is stored into a
     declared array or binding.  Arguably the truer reading of "one type", but it is a separate

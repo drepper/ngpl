@@ -38,6 +38,26 @@ fn error_two_measures_do_not_mix():
     let b : Length = 3
     assert_eq(@dropunit(a - b), 2)
 
+// A parameter and a return are bindings too, so an alias says what it
+// measures there as well.
+fn twice(d : Duration) → Duration:
+    d + d
+
+@test
+fn test_a_parameter_and_a_return_count_in_it():
+    let a : Duration = 5
+    let t : Duration = twice(a)
+    assert_eq(@dropunit(t), 10)
+
+// An alias of an alias: the nearest one that says, says.
+type Wait = Duration
+
+@test
+fn test_through_a_second_alias():
+    let a : Duration = 5
+    let w : Wait = 4
+    assert_eq(@dropunit(a + w), 9)
+
 // An alias that says nothing measures nothing, as before.
 type Plain = i64
 

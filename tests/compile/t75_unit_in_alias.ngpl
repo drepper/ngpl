@@ -1,0 +1,43 @@
+// A unit written into a type rather than at every binding of it.
+//
+// A unit belongs to what a number counts.  Written at a binding it has
+// to be written at every binding of that type; written into the alias
+// it is said once, and every binding of the alias counts in it:
+//
+//     type Duration = i64 ¤sec
+//
+// The compiler encodes a unit in the type itself, so an alias to a
+// measured type carries the measure without anything further being
+// arranged.  This is here so that stays true.
+
+unit sec
+unit metre
+
+type Duration = i64 ¤sec
+type Length = i64 ¤metre
+// an alias of an alias: the nearest one that says, says
+type Wait = Duration
+type Plain = i64
+
+fn twice(d : Duration) → Duration:
+    d + d
+
+@start
+@impure
+fn main():
+    let a : Duration = 5
+    // the same measure a binding could have written for itself
+    let b : i64 ¤sec = 3
+    let sum : Duration = a + b
+    // through the second alias
+    let w : Wait = 4
+    let both : Duration = a + w
+    // an alias that says nothing measures nothing
+    let p : Plain = 7
+    let q : i64 = p + 1
+    // and it travels through a call
+    let t : Duration = twice(a)
+    let far : Length = 12
+    std.println("{} {} {} {} {}",
+                @dropunit(sum), @dropunit(both), q,
+                @dropunit(t), @dropunit(far))
