@@ -57,6 +57,7 @@ all_tests=(
     "$testdir"/test_comptime_pre.ngpl
     "$testdir"/test_type_invariant.ngpl
     "$testdir"/test_unit_in_alias.ngpl
+    "$testdir"/test_value_meets_type.ngpl
     "$testdir"/test_logic.ngpl
     "$testdir"/test_overflow.ngpl
     "$testdir"/test_wrap.ngpl

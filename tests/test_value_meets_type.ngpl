@@ -1,0 +1,92 @@
+// A value meets a type someone stated.
+//
+// The wider type wins in an expression, and everywhere else a value
+// meets a stated type the same reading applies.  A width says what a
+// value is, not what may be done with it, and a language that reads
+// `a + b` without a word from the programmer has no business asking
+// for one at `let b : i32 = a`.
+//
+// The specification's "A Value Meets a Stated Type" is the normative
+// statement.
+
+fn takes(o : i64?) → i64:
+    o ?? 0
+
+fn answers(n : i64) → i64?:
+    n
+
+@test
+fn test_carried_at_a_binding():
+    let a : u8 = 200
+    let b : i32 = a
+    let c : i64 = b
+    assert_eq(b, 200)
+    assert_eq(c, 200)
+
+@test
+fn test_carried_at_an_argument_and_an_answer():
+    let a : u8 = 200
+    assert_eq(takes(a), 200)
+    assert_eq(answers(7) ?? 0, 7)
+
+@test
+fn test_carried_into_a_container():
+    let a : u8 = 200
+    let v : mut i64[] = [1]
+    v[0 × 1¤ptrdiff] ← a
+    v.push(a)
+    assert_eq(v[0 × 1¤ptrdiff] + v[1 × 1¤ptrdiff], 400)
+
+// ---------------------------------------------------------------------
+// An optional is met by being held
+// ---------------------------------------------------------------------
+
+struct P:
+    held : i64?
+
+@test
+fn test_held_at_a_binding():
+    let o : i64? = 5
+    assert_eq(o ?? 0, 5)
+
+@test
+fn test_held_after_being_carried():
+    let a : u8 = 200
+    let o : i64? = a
+    assert_eq(o ?? 0, 200)
+
+@test
+fn test_held_at_a_field_and_an_assignment():
+    let p : P = P{held: 3}
+    let m : mut i64? = ∅
+    m ← 9
+    assert_eq(p.held ?? 0, 3)
+    assert_eq(m ?? 0, 9)
+
+// ∅ is already one of an optional's values and is held by nothing, so
+// an optional of an optional is never made by accident.
+@test
+fn test_absence_is_held_by_nothing():
+    let o : i64? = ∅
+    assert_eq(o ?? 7, 7)
+
+@test
+fn test_one_already_held_is_left_alone():
+    let a : i64? = answers(4)
+    let b : i64? = a
+    assert_eq(b ?? 0, 4)
+
+// ---------------------------------------------------------------------
+// Narrowing is admitted and checked where it happens
+// ---------------------------------------------------------------------
+
+@test
+fn test_a_narrowing_that_fits():
+    let big : i64 = 200
+    let small : u8 = big
+    assert_eq(small, 200)
+
+@start
+@impure
+fn main():
+    std.println("value-meets-type tests passed")

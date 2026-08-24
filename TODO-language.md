@@ -485,9 +485,17 @@ Completed
     unit in both: what a unit on a product type means where the members are not all numeric
     is the question the note raises, and the alias half does not answer it.
 
-[ ] a stated width must match exactly, rather than converting, when a value is stored into a
+[x] a stated width must match exactly, rather than converting, when a value is stored into a
     declared array or binding.  Arguably the truer reading of "one type", but it is a separate
     question from homogeneity and changes scalar assignment as well.
+    Decided against, and the branch that tried it is gone.  It is inconsistent to read `a + b`
+    over two widths without a word from the programmer and then ask for one at
+    `let b : i32 = a`, so a value is carried to the type it meets everywhere a type is stated:
+    binding, assignment, argument, field, element, answer.  Widening is silent; narrowing and
+    sign-crossing are admitted and checked where they happen, which is the rule arithmetic
+    already follows.  An optional is met by being held, in those same positions -- which is
+    what ngplc was missing, the interpreter having allowed it all along.
+    The specification's "A Value Meets a Stated Type" is the statement of it.
 
 [x] a ragged nested literal is a shape question and is left to the shape checks; whether
     `[[1,2],[3]]` should be refused where no type states a shape is open.  It does not arise:

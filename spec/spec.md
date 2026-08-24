@@ -254,6 +254,50 @@ error: type 'u7' has no C counterpart: C has an integer type of 8, 16,
 
 This is a restriction on matching a C layout, not on the type: `u7` is usable everywhere else, including in a struct without `@repr(C)`.
 
+### A Value Meets a Stated Type
+
+The wider type wins in an expression: `u7 + u13` is a `u13`, and a `u8` beside an `i32` is read as an `i32`.  Everywhere else a value meets a type someone stated — a binding, an assignment, an argument, a struct field, an array element, a function's answer — the same reading applies.  The value is carried to the type it meets:
+
+```
+let a : u8  = 200
+let b : i32 = a                 // carried, as it would be in a + b
+let c : i64 = b
+
+fn f(n : i64) → i64: n
+f(a)                            // the argument is carried too
+
+let v : mut i64[] = [1]
+v[0 × 1¤ptrdiff] ← a
+v.push(b)
+```
+
+There is nothing to write.  A width says what a value is, not what may be done with it, and a language that reads `a + b` without a word from the programmer has no business asking for one at `let b : i32 = a`.
+
+**Widening is silent.**  Where every value of the type the value has is a value of the type it meets — a narrower signed into a wider signed, a narrower unsigned into a wider unsigned or into a signed type wide enough to hold it — nothing can go wrong and nothing is reported.
+
+**Narrowing and sign-crossing are checked when they happen.**  The other direction is written the same way and admitted the same way, because the value may well fit; what cannot be promised is that it always does.  So the check is made where the value is, and a value that does not fit stops the program:
+
+```
+let big  : i64 = 300
+let tiny : u8  = big
+
+error: the value does not fit the type it meets
+```
+
+This is the rule arithmetic already follows.  `u8 + u8` may leave `u8`, and that is an error when it happens rather than a reason to refuse the addition.
+
+**An optional is met by being held.**  An optional is the type that holds a value and the absence of one, so a value meets it by being held in one — in every position, as above:
+
+```
+let o : i64? = 5                // ∃5
+let p : i64? = a                // carried to i64, then held
+
+fn g(o : i64?) → i64: o ?? 0
+g(7)
+```
+
+`∅` is already one of an optional's values and is held by nothing.  An optional of an optional is not a type, so a value that is already an optional is left as it is.
+
 ### Untyped Integer Constants
 
 Integer literals in source code are of type **`untyped int`**.  An untyped integer is not yet committed to any specific integer type — it is a compile-time value that can be implicitly coerced to any integer type whose range can represent the value.
@@ -3301,7 +3345,7 @@ Unlike `?` which propagates `∅`, `??` recovers from it.  This is the right cho
 
 #### Type Widening on Assignment
 
-When the unwrapped value has a narrower unsigned type than the target variable, implicit widening is permitted.  For example, `get_padded_byte` returns `u8?`; after `??` or `?` produces a `u8` value, assigning it to a `u32` variable widens it.  This is safe because every `u8` value is representable as `u32`.
+A value carried out of an optional meets a stated type like any other value: `get_padded_byte` answers `u8?`, and after `??` or `?` has produced a `u8` it may be bound to a `u32` with nothing written.  See "A Value Meets a Stated Type" for the whole of the rule, which is not about optionals in particular.
 
 
 ### Naming a Present Optional (`∃`)

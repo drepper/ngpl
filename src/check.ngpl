@@ -71,6 +71,10 @@ struct Chk:
     // arguments a listable call is threaded over, and a call by name
     // has no node for the callee to read them from.
     nlam : i64[]
+    // Per node: 1 where what it answers is held in an optional on the
+    // way out -- a value meeting a stated optional type, which is how
+    // an optional is written.
+    nhold : i64[]
     // Per walk: 1 where what it walked is nobody's by the time it
     // ends, so the walk is where the memory goes back.
     nfree : i64[]
@@ -239,6 +243,7 @@ struct Checker:
     ncvt : i64[]
     nrep : i64[]         // see Chk
     nlam : i64[]         // see Chk
+    nhold : i64[]        // see Chk
     nfree : i64[]        // see Chk
     // Packing a T[] whose length never changes and which never leaves
     // the function.  Per slot of the function under check: how many
@@ -642,6 +647,19 @@ impl Checker:
         let want : i64 = ty_strip_ref(want0)
         if t = want:
             return true
+        if ty_is_opt(want) and not ty_is_opt(t):
+            // An optional is the type that holds a value and the
+            // absence of one, so a value meets it by being held.  ∅ is
+            // already one of its values and is held by nothing.  This
+            // is the same reading as a wider type meeting a narrower
+            // value: what is written is the value, and the type it
+            // meets says what is done with it on the way in.
+            if t = TY_EMPTY:
+                return true
+            if not self.try_fit(e, ty_opt_base(want)):
+                return false
+            self.nhold[e × 1¤ptrdiff] ← 1
+            return true
         if ty_is_mat(t) and ty_is_mat(want):
             // a stated extent fits an open one; an open one fits only
             // openness, since nothing vouches for its size
@@ -668,6 +686,12 @@ impl Checker:
                           "∅ is the absent optional; " ⧺ self.tn(t) ⧺ " holds no absence")
             return
         if self.ty_of(id) ≠ TY_UNT:
+            return
+        if ty_is_opt(t):
+            // a number written where an optional is wanted settles on
+            // what the optional holds, and is held on the way in
+            self.adopt(id, ty_opt_base(t))
+            self.nhold[id × 1¤ptrdiff] ← 1
             return
         if ty_is_enum(t) and self.kind_of(id) = NK_INT:
             // an enum holds exactly its members, so a written-out
@@ -4681,7 +4705,12 @@ impl Checker:
                 // read without harm, and choose rather than branch.
                 let tv : i64 = self.block_value_node(nb)
                 if tv ≠ ⁻1:
-                    self.set_type(id, self.ty_of(tv))
+                    if self.nhold[tv × 1¤ptrdiff] = 1:
+                        // the branch is held on its way out, so what the
+                        // if hands on is the optional, already made
+                        self.set_type(id, mk_oty(self.ty_of(tv)))
+                    else:
+                        self.set_type(id, self.ty_of(tv))
         elif k = NK_WHILE:
             self.check_expr(na, TY_UNIT)
             self.want_truthy(na, "the condition")
@@ -5420,6 +5449,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     let ncvt : mut i64[] = []
     let nrep : mut i64[] = []
     let nlam : mut i64[] = []
+    let nhold : mut i64[] = []
     let nfree : mut i64[] = []
     let zi : mut i64 = 0
     while zi < nnodes:
@@ -5428,12 +5458,13 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
         ncvt.push(0)
         nrep.push(⁻1)
         nlam.push(⁻1)
+        nhold.push(0)
         nfree.push(0)
         zi ← zi + 1
     let c : mut Checker = (Checker{a: a, toks: toks, src: src, fnames: fnames, curmod: "",
                                    gnames: gnames, gvals: [], ginit: [], ite: [],
                                    ntype: ntype, nslot: nslot, ncvt: ncvt,
-                                   nrep: nrep, nlam: nlam, nfree: nfree,
+                                   nrep: nrep, nlam: nlam, nhold: nhold, nfree: nfree,
                                    pcnt: [], puse: [], psafe: [], kuse: [], ksafe: [],
                                    pnode_slot: [], pnode_id: [],
                                    stmt_seq: 0, cur_stmt: ⁻1,
@@ -5577,7 +5608,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     if #c.diags = 0:
         assert(#c.fslots = #a.fns, "one slot count per function")
         assert(#c.gvals = #a.globals, "one folded value per global")
-    (Chk{ntype: c.ntype, nslot: c.nslot, ncvt: c.ncvt, nrep: c.nrep, nlam: c.nlam, nfree: c.nfree, log: c.log, fslots: c.fslots,
+    (Chk{ntype: c.ntype, nslot: c.nslot, ncvt: c.ncvt, nrep: c.nrep, nlam: c.nlam, nhold: c.nhold, nfree: c.nfree, log: c.log, fslots: c.fslots,
          gvals: c.gvals, ginit: c.ginit, lams: c.lams, lamns: c.lamns,
          psfn: c.psfn, psk: c.psk, psnp: c.psnp, skipfn: c.skipfn,
          argcopy: c.argcopy,

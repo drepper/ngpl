@@ -1,0 +1,59 @@
+// A value meets a type someone stated.
+//
+// The wider type wins in an expression -- `u8 + i32` is an i32 -- and
+// everywhere else a value meets a stated type the same reading
+// applies: a binding, an assignment, an argument, a struct field, an
+// array element, a function's answer.  The value is carried to the
+// type it meets, and there is nothing to write.
+//
+// An optional is the type that holds a value and the absence of one,
+// so a value meets it by being held.  That too is every position, not
+// only the ones that happened to be wired.
+
+fn takes(o : i64?) → i64:
+    o ?? 0
+
+fn answers(n : i64) → i64?:
+    n
+
+fn narrower(b : u8) → i64?:
+    b
+
+fn branchy(c : bool, n : i64) → i64?:
+    if c: n else: ∅
+
+struct P:
+    held : i64?
+    wide : i64
+
+@start
+@impure
+fn main():
+    let a : u8 = 200
+    let s : i32 = 7
+
+    // carried, in every position
+    let w1 : i64 = a
+    let w2 : i64 = s
+    let arr : mut i64[] = [1]
+    arr[0 × 1¤ptrdiff] ← a
+    arr.push(s)
+
+    // held, in every position
+    let lit : i64? = 5
+    let val : i64? = w1
+    let carried : i64? = a          // carried to i64, then held
+    let p : P = P{held: 3, wide: s}
+    let m : mut i64? = ∅
+    m ← a
+
+    // and through calls, answers and branches
+    let through : i64 = takes(a) + (answers(s) ?? 0) + (narrower(a) ?? 0) + (branchy(true, 4) ?? 0)
+
+    // an optional compares as one however it was written
+    let same : i64 = if val = answers(w1): 1 else: 0
+
+    std.println("{} {} {} {} {} {} {} {} {} {} {}",
+                w1, w2, arr[0 × 1¤ptrdiff] + arr[1 × 1¤ptrdiff],
+                lit ?? 0, val ?? 0, carried ?? 0,
+                p.held ?? 0, p.wide, m ?? 0, through, same)
