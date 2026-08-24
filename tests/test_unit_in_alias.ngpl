@@ -1,0 +1,53 @@
+// A unit written into a type rather than at every binding of it.
+//
+// A unit belongs to what a number counts.  Written at a binding it has
+// to be written at every binding; written into the type it is said
+// once, and every binding of that type counts in it:
+//
+//     type Duration = i64 ¤sec
+//
+// This is the first half of the larger question -- a unit on a sum or
+// product type -- and the half that has an obvious answer: an alias is
+// another name for a type, so a unit on the alias is a unit on that
+// type wherever the name is used.
+
+unit sec
+unit m
+
+type Duration = i64 ¤sec
+type Length = i64 ¤m
+
+@test
+fn test_a_binding_of_the_alias_counts_in_its_unit():
+    let a : Duration = 5
+    let b : Duration = 3
+    assert_eq(@dropunit(a + b), 8)
+
+// And it is the same unit a binding could have written for itself.
+@test
+fn test_the_alias_and_the_written_unit_agree():
+    let a : Duration = 5
+    let b : i64 ¤sec = 3
+    assert_eq(@dropunit(a + b), 8)
+
+// Two aliases that measure different things do not mix, which is the
+// whole reason for saying what a number counts.
+@expect error "incompatible units for -: sec and m"
+fn error_two_measures_do_not_mix():
+    let a : Duration = 5
+    let b : Length = 3
+    assert_eq(@dropunit(a - b), 2)
+
+// An alias that says nothing measures nothing, as before.
+type Plain = i64
+
+@test
+fn test_an_alias_that_says_nothing():
+    let a : Plain = 5
+    let b : i64 = 3
+    assert_eq(a + b, 8)
+
+@start
+@impure
+fn main():
+    std.println("unit-in-alias tests passed")

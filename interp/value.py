@@ -1983,10 +1983,35 @@ def register_user_type(name: str):
     _clear_type_memos()
 
 
-def register_type_alias(name: str, target: str):
-    """Register a user-defined type alias."""
+# What each alias measures, where the alias itself said so.  A unit
+# written into the alias belongs to the type rather than to every
+# binding of it, which is the point of writing it there.
+_ALIAS_UNITS: dict[str, object] = {}
+
+
+def register_type_alias(name: str, target: str, unit_spec=None):
+    """Register a user-defined type alias, and what it measures."""
     _TYPE_ALIASES[name] = target
+    if unit_spec is not None:
+        _ALIAS_UNITS[name] = unit_spec
     _clear_type_memos()
+
+
+def alias_unit_spec(type_name: str):
+    """What an alias measures, following the chain of aliases.
+
+    A binding of `Duration` counts seconds because Duration says so,
+    not because the binding repeated it -- so the unit is looked for
+    here, at the type, and the nearest one wins.
+    """
+    seen: set[str] = set()
+    while type_name in _TYPE_ALIASES and type_name not in seen:
+        got = _ALIAS_UNITS.get(type_name)
+        if got is not None:
+            return got
+        seen.add(type_name)
+        type_name = _TYPE_ALIASES[type_name]
+    return _ALIAS_UNITS.get(type_name)
 
 
 # Enum type names, so that a type written in a signature can be
