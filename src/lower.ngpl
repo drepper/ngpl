@@ -789,6 +789,34 @@ impl Lower:
             ow ← if (owa » 8) = 1: owa else: owb
         elif (owb & 255) > (owa & 255):
             ow ← owb
+        if ty_is_bigint(self.tof(na)) and not ty_is_bigint(self.tof(nid)):
+            // Comparing two ints answers a truth value, so the width
+            // settled above says nothing about the operands and the
+            // ordinary compare would ask its question of two addresses.
+            // The runtime compares them and answers ⁻1, 0 or 1, and the
+            // ordering is then asked of that, where a width does mean
+            // something.
+            assert(k = NK_EQ or k = NK_NE or k = NK_LT or k = NK_LE or k = NK_GT or k = NK_GE,
+                   "an int whose answer is not an int was compared")
+            let c : i64 = self.rt2(RT_BIGCMP, av, bv)
+            let z : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, z, 64)
+            let op : i64 = if k = NK_EQ:
+                IR_CEQ
+            elif k = NK_NE:
+                IR_CNE
+            elif k = NK_LT:
+                IR_CLT
+            elif k = NK_LE:
+                IR_CLE
+            elif k = NK_GT:
+                IR_CGT
+            else:
+                IR_CGE
+            // signed: the answer is ⁻1, 0 or 1, and unsigned would read
+            // the ⁻1 as the largest number there is
+            self.ir(op, c, z, 0, d, 64 + 256)
+            return d
         if ty_is_bigint(self.tof(nid)):
             // int carries its own arithmetic, in the runtime: there is
             // no width here for a machine instruction to work at
@@ -1907,6 +1935,16 @@ impl Lower:
                 let bv0 : i64 = self.lower_expr(y)
                 c ← self.tmp()
                 self.ir(IR_SEQV, av0, bv0, 0, c, 64)
+            elif ty_is_bigint(self.tof(x)):
+                // two ints are equal when they say so, not when they
+                // are the same block
+                let av1 : i64 = self.lower_expr(x)
+                let bv1 : i64 = self.lower_expr(y)
+                let cc : i64 = self.rt2(RT_BIGCMP, av1, bv1)
+                let zz : i64 = self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, zz, 64)
+                c ← self.tmp()
+                self.ir(IR_CEQ, cc, zz, 0, c, 64 + 256)
             else:
                 let av : i64 = self.lower_expr(x)
                 let bv : i64 = self.lower_expr(y)
