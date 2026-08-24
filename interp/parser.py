@@ -2169,8 +2169,8 @@ class Parser:
         stmt = self._parse_statement()
         return ExpectStmt(expectations, stmt)
 
-    def _parse_lambda(self):
-        """Parse: λ [param1 : type1 [, paramN : typeN]] [|capture1 [, captureN]|] -> ret_type : expr"""
+    def _parse_lambda(self, is_listable: bool = False):
+        """Parse: [@listable] λ [param : type, …] [|captures|] -> ret_type : expr"""
         lambda_tok = self._cur()
         self._eat("LAMBDA")
         params: list[tuple[str, str]] = []
@@ -2263,7 +2263,8 @@ class Parser:
         else:
             body = self._parse_expr()
         return self._set_pos(
-            LambdaExpr(params, captures, ret_type, body), lambda_tok)
+            LambdaExpr(params, captures, ret_type, body, is_listable),
+            lambda_tok)
 
     # ------------------------------------------------------------------
     # Expression parsing (precedence climbing)
@@ -2778,9 +2779,19 @@ class Parser:
         """
         tok = self._cur()
 
-        # Lambda expression: λparams |captures|: body
+        # Lambda expression: λparams |captures|: body, with @listable
+        # in front of it where it threads.  A lambda is a function like
+        # any other; what it lacked was somewhere to say so.
         if tok.type == "LAMBDA":
             return self._parse_lambda()
+        if tok.type == "LISTABLE":
+            self._eat("LISTABLE")
+            self._skip_nl()
+            if not self._check("LAMBDA"):
+                raise ParseError(
+                    "@listable in front of a value marks a lambda as one "
+                    "that threads, so a λ follows it", self._cur())
+            return self._parse_lambda(True)
 
         # Literals.
         if tok.type == "INT":
