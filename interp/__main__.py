@@ -2304,12 +2304,97 @@ def _needs_a_type(func_name: str, param_name: str) -> str:
             f"says the function takes whatever it is handed")
 
 
-def _static_noreturn_check(func_def) -> str | None:
-    """Refuse a @noreturn function that says it hands something back.
+def _leaves_for_good(stmt, gone: frozenset) -> bool:
+    """Whether control never passes this statement.
+
+    `gone` names the functions that do not come back, so a call to one
+    of them is a way out like `return` and `std.exit`.  A loop whose
+    test never fails and which is never left is another: a `break`
+    belongs to the innermost loop around it, so one written inside a
+    nested loop leaves that one and not this.
+    """
+    if isinstance(stmt, _ast.ExpectStmt):
+        return _leaves_for_good(stmt.stmt, gone)
+    if isinstance(stmt, _ast.ReturnStmt):
+        return True
+    if isinstance(stmt, _ast.ExprStmt):
+        call = stmt.expr
+        if isinstance(call, _ast.MethodCall) and call.method == "exit" \
+                and isinstance(call.obj, _ast.VarRef) and call.obj.name == "std":
+            return True
+        if isinstance(call, _ast.FuncCall) and call.name == "assert" \
+                and call.args and isinstance(call.args[0], _ast.BoolLit) \
+                and not call.args[0].value:
+            # `assert(false, …)` says the place cannot be reached, and
+            # stops the program if it ever is; either way nothing goes
+            # on from here
+            return True
+        return isinstance(call, _ast.FuncCall) and call.name in gone
+    if isinstance(stmt, _ast.IfStmt):
+        if not _ast.if_has_else(stmt):
+            return False
+        return all(_block_leaves(b, gone) for b in _ast.if_branch_bodies(stmt))
+    if isinstance(stmt, _ast.MatchStmt):
+        return all(_block_leaves(arm.body, gone) for arm in stmt.arms)
+    if isinstance(stmt, _ast.WhileStmt):
+        endless = (isinstance(stmt.cond, _ast.BoolLit)
+                   and stmt.cond.value and stmt.var_name is None)
+        return endless and not _block_breaks(stmt.body)
+    return False
+
+
+def _block_leaves(body, gone: frozenset) -> bool:
+    """Whether a block leaves for good rather than falling off its end.
+
+    Any statement that never passes control on is enough: what follows
+    it is unreachable, which is worth saying elsewhere but is not a way
+    back to the caller.
+    """
+    return any(_leaves_for_good(s, gone) for s in body)
+
+
+def _block_breaks(body) -> bool:
+    """Whether a block holds a break that leaves the loop around it.
+
+    A loop inside it owns its own breaks, so those are not this one's.
+    """
+    for stmt in body:
+        if isinstance(stmt, _ast.ExpectStmt):
+            stmt = stmt.stmt
+        if isinstance(stmt, _ast.BreakStmt):
+            return True
+        if isinstance(stmt, (_ast.WhileStmt, _ast.ForEachStmt)):
+            continue
+        if isinstance(stmt, _ast.IfStmt):
+            if any(_block_breaks(b) for b in _ast.if_branch_bodies(stmt)):
+                return True
+        elif isinstance(stmt, _ast.MatchStmt):
+            if any(_block_breaks(arm.body) for arm in stmt.arms):
+                return True
+    return False
+
+
+def _gone_for_good(definitions) -> frozenset:
+    """The names of the functions that do not come back.
+
+    A call to one of them is a way out of a body, so a @noreturn
+    function may end in one and still keep its word.
+    """
+    return frozenset(d.name for d in definitions
+                     if isinstance(d, _ast.FuncDef) and d.is_noreturn)
+
+
+def _static_noreturn_check(func_def, gone: frozenset = frozenset()) -> str | None:
+    """Refuse a @noreturn function that comes back after all.
 
     Stating a return type says what the caller receives, and @noreturn
     says the caller receives nothing because it is never reached again.
     A function cannot say both.
+
+    Nor can it say @noreturn and then fall off the end of its body,
+    which is a way back to the caller like any other -- and the one the
+    annotation is most often wrong about, since a body that leaves on
+    every path it thought of still comes back on the one it did not.
     """
     if not func_def.is_noreturn:
         return None
@@ -2317,6 +2402,9 @@ def _static_noreturn_check(func_def) -> str | None:
             and func_def.ret_type != "\N{EMPTY SET}":
         return (f"{func_def.name} is @noreturn, so nothing comes back from "
                 f"it, but its return type says {func_def.ret_type} does")
+    if not _block_leaves(func_def.body, gone):
+        return (f"{func_def.name} is @noreturn, so it does not come back, "
+                f"but this body can fall off its end and come back")
     return None
 
 
@@ -3546,6 +3634,7 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 if getattr(method_def, "_self_is_ref", False):
                     st._ref_self_methods.add(method_def.name)
 
+    gone = _gone_for_good(definitions)
     for defn in definitions:
         if isinstance(defn, ASTFuncDef) and not defn.expect_annotations:
             if not getattr(defn, "_parse_error", None):
@@ -3573,7 +3662,7 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 if return_err is not None:
                     raise DefinitionError(f"in {defn.name}: {return_err}",
                                           _finding_pos(return_err) or _node_pos(defn))
-                noreturn_err = _static_noreturn_check(defn)
+                noreturn_err = _static_noreturn_check(defn, gone)
                 if noreturn_err is not None:
                     raise DefinitionError(noreturn_err, _node_pos(defn))
                 listable_err = _static_listable_check(defn)
@@ -3865,6 +3954,7 @@ def main():
     # Process @expect-annotated functions: verify expected errors/warnings.
     expect_passed = 0
     expect_failed = 0
+    gone = _gone_for_good(definitions)
     for defn in expect_funcs:
         errors_produced: list[tuple[str, str]] = []
 
@@ -3911,9 +4001,11 @@ def main():
                 errors_produced.append(("error", return_err))
 
         if not errors_produced:
-            noreturn_err = _static_noreturn_check(defn)
+            noreturn_err = _static_noreturn_check(defn, gone)
             if noreturn_err is not None:
-                raise DefinitionError(noreturn_err, _node_pos(defn))
+                # collected rather than raised, so an @expect may name
+                # it as it names the other findings about a definition
+                errors_produced.append(("error", noreturn_err))
             listable_err = _static_listable_check(defn)
             if listable_err is not None:
                 raise DefinitionError(listable_err, _node_pos(defn))

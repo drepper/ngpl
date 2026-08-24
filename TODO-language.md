@@ -329,8 +329,12 @@ Completed
     Rust's ! and Zig's noreturn are types the compiler verifies, which is the answer to move
     to when the type system can carry it.
 
-[ ] a @noreturn function whose body falls off the end is not reported.  It wants the flow
+[x] a @noreturn function whose body falls off the end is not reported.  It wants the flow
     analysis that would also tell an if-with-both-arms-dying from a body that simply forgot.
+    Done: the analysis was already there for "answers but not on every path", and now answers
+    this too.  A way out is a return, std.exit, a call to another @noreturn function,
+    `assert(false, …)`, an if whose every branch leaves, a match whose every arm does, and a
+    loop whose test never fails and which no break leaves.
 
 [x] ⊃ and ⊇ ask a hash for its keys and for what it holds against them, replacing .keys and
     .values.  Prefix, where # is, and answering arrays: those two are asked often enough to be
@@ -350,8 +354,9 @@ Completed
     reaches as deep as what is held, which needed a structural equality arrays do not have,
     since = on two arrays never answers one bool.  assert_eq knows them too.
 
-[ ] a hash or a set cannot be a key: neither is rememberable, which is the question a struct
-    raises as well.
+[x] a hash or a set cannot be a key: neither is rememberable, which is the question a struct
+    raises as well.  Refused by name: "std.set(i64) cannot be a key: a key is remembered by
+    what it is, so it has to be one of the things the language compares exactly".
 
 [x] an array type may be written where a type is compared against: `static_assert_eq(@typeof(e),
     i8[3])`.  A bare name and a tuple type already could, so the spelling @typeof answers with

@@ -34,6 +34,61 @@ fn test_what_follows_a_call_that_comes_back_is_reached():
     seen ← guarded(2)
     assert_eq(seen, 4)
 
+// ---------------------------------------------------------------------
+// A body that comes back after all
+// ---------------------------------------------------------------------
+//
+// @noreturn says the caller is never reached again, and falling off
+// the end of a body is a way back to the caller like any other.  It is
+// the one the annotation is most often wrong about: a body that leaves
+// on every path it thought of still comes back on the one it did not.
+
+// These keep their word, each in its own way.
+@noreturn
+@impure
+fn by_exit():
+    std.exit(3)
+
+@noreturn
+@impure
+fn by_another():
+    by_exit()
+
+@noreturn
+@impure
+fn by_looping():
+    while true:
+        std.println("on and on")
+
+// `assert(false, …)` says the place cannot be reached and stops the
+// program if it ever is; either way nothing goes on from it.
+@noreturn
+fn by_saying_it_cannot_happen():
+    assert(false, "this cannot arise")
+
+// Every way out of the if is a way out of the body, so this one keeps
+// its word too -- which is the flow analysis, not a special case.
+@noreturn
+@impure
+fn by_every_branch(n : i64):
+    if n > 0:
+        std.exit(1)
+    else:
+        std.exit(2)
+
+@test
+@impure
+fn test_the_ones_that_keep_their_word_are_quiet():
+    // reaching here at all is the claim: none of the above was refused
+    assert_eq(1, 1)
+
+@expect error "error_falling_off is @noreturn, so it does not come back, but this body can fall off its end and come back"
+@noreturn
+@impure
+fn error_falling_off(n : i64):
+    if n > 0:
+        std.exit(1)
+
 @start
 @impure
 fn main():

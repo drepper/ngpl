@@ -4688,7 +4688,13 @@ impl Checker:
             if ek = NK_SCALL and self.a.na[e × 1¤ptrdiff] = SB_EXIT:
                 return true
             if ek = NK_CALL:
-                let f : i64 = self.fn_index(self.text(self.a.ntok[e × 1¤ptrdiff]))
+                let nm := self.text(self.a.ntok[e × 1¤ptrdiff])
+                if nm = "assert" and self.asserts_false(e):
+                    // `assert(false, …)` is a statement that the place
+                    // cannot be reached, and it stops the program if it
+                    // ever is; either way nothing goes on from here
+                    return true
+                let f : i64 = self.fn_index(nm)
                 if f ≠ ⁻1:
                     return self.a.fns[f × 1¤ptrdiff].is_noreturn
             return false
@@ -4696,26 +4702,105 @@ impl Checker:
             let nc : i64 = self.a.nc[id × 1¤ptrdiff]
             if nc = ⁻1:
                 return false
-            return self.block_returns(self.a.nb[id × 1¤ptrdiff]) and self.block_returns(nc)
+            return self.block_leaves(self.a.nb[id × 1¤ptrdiff]) and self.block_leaves(nc)
         if k = NK_MATCH:
             let nb : i64 = self.a.nb[id × 1¤ptrdiff]
-            return self.block_returns(self.a.extra[nb × 1¤ptrdiff]) and self.block_returns(self.a.extra[(nb + 1) × 1¤ptrdiff])
+            return self.block_leaves(self.a.extra[nb × 1¤ptrdiff]) and self.block_leaves(self.a.extra[(nb + 1) × 1¤ptrdiff])
         if k = NK_MATCHE:
             // every value has an arm, so the arms are every way out:
             // if each of them leaves, so does the match
             let mb : i64 = self.a.nb[id × 1¤ptrdiff]
             let mn : i64 = self.a.extra[mb × 1¤ptrdiff]
             let md : i64 = self.a.extra[(mb + 1) × 1¤ptrdiff]
-            if md ≠ ⁻1 and not self.block_returns(md):
+            if md ≠ ⁻1 and not self.block_leaves(md):
                 return false
             let mi : mut i64 = 0
             while mi < mn:
-                if not self.block_returns(self.a.extra[(mb + 4 + mi × 3) × 1¤ptrdiff]):
+                if not self.block_leaves(self.a.extra[(mb + 4 + mi × 3) × 1¤ptrdiff]):
                     return false
                 mi ← mi + 1
             return true
         if k = NK_BLOCK:
-            return self.block_returns(id)
+            return self.block_leaves(id)
+        if k = NK_WHILE:
+            return self.loop_forever(id)
+        false
+
+    // Whether a block leaves for good rather than falling off its end.
+    // Any statement that never passes control on is enough: what
+    // follows it is unreachable, which is worth saying elsewhere but
+    // is not a way back to the caller.
+    fn block_leaves(&self, blk : i64) → bool:
+        let off : i64 = self.a.na[blk × 1¤ptrdiff]
+        let n : i64 = self.a.extra[off × 1¤ptrdiff]
+        let i : mut i64 = 0
+        while i < n:
+            if self.always_returns(self.a.extra[(off + 1 + i) × 1¤ptrdiff]):
+                return true
+            i ← i + 1
+        false
+
+    fn asserts_false(&self, e : i64) → bool:
+        let ao : i64 = self.a.na[e × 1¤ptrdiff]
+        if self.a.extra[ao × 1¤ptrdiff] < 1:
+            return false
+        let a0 : i64 = self.a.extra[(ao + 1) × 1¤ptrdiff]
+        self.kind_of(a0) = NK_BOOL and self.a.na[a0 × 1¤ptrdiff] = 0
+
+    // A loop whose test never fails and which is never left runs on
+    // for ever, so nothing after it is reached.  A break belongs to
+    // the innermost loop around it -- core-2 has no break that names
+    // an outer one -- so a break written inside a loop nested here
+    // leaves that one and not this.
+    fn loop_forever(&self, id : i64) → bool:
+        let na : i64 = self.a.na[id × 1¤ptrdiff]
+        if self.kind_of(na) ≠ NK_BOOL or self.a.na[na × 1¤ptrdiff] = 0:
+            return false
+        not self.block_breaks(self.a.nb[id × 1¤ptrdiff])
+
+    fn block_breaks(&self, blk : i64) → bool:
+        let off : i64 = self.a.na[blk × 1¤ptrdiff]
+        let n : i64 = self.a.extra[off × 1¤ptrdiff]
+        let i : mut i64 = 0
+        while i < n:
+            if self.stmt_breaks(self.a.extra[(off + 1 + i) × 1¤ptrdiff]):
+                return true
+            i ← i + 1
+        false
+
+    fn stmt_breaks(&self, id : i64) → bool:
+        let k : i64 = self.kind_of(id)
+        if k = NK_BREAK:
+            return true
+        if k = NK_WHILE or k = NK_WHILEB or k = NK_FOREACH or k = NK_FOREACHA:
+            // its breaks are its own
+            return false
+        if k = NK_HINTED:
+            return self.stmt_breaks(self.a.na[id × 1¤ptrdiff])
+        if k = NK_BLOCK:
+            return self.block_breaks(id)
+        if k = NK_IF:
+            let nc : i64 = self.a.nc[id × 1¤ptrdiff]
+            if self.block_breaks(self.a.nb[id × 1¤ptrdiff]):
+                return true
+            if nc = ⁻1:
+                return false
+            return self.block_breaks(nc)
+        if k = NK_MATCH:
+            let nb : i64 = self.a.nb[id × 1¤ptrdiff]
+            return self.block_breaks(self.a.extra[nb × 1¤ptrdiff]) or self.block_breaks(self.a.extra[(nb + 1) × 1¤ptrdiff])
+        if k = NK_MATCHE:
+            let mb : i64 = self.a.nb[id × 1¤ptrdiff]
+            let mn : i64 = self.a.extra[mb × 1¤ptrdiff]
+            let md : i64 = self.a.extra[(mb + 1) × 1¤ptrdiff]
+            if md ≠ ⁻1 and self.block_breaks(md):
+                return true
+            let mi : mut i64 = 0
+            while mi < mn:
+                if self.block_breaks(self.a.extra[(mb + 4 + mi × 3) × 1¤ptrdiff]):
+                    return true
+                mi ← mi + 1
+            return false
         false
 
     // whether a block's last statement hands a value on or returns
@@ -4874,6 +4959,13 @@ impl Checker:
                     last_is_value ← true
             if not last_is_value and not self.block_returns(d.body):
                 self.derr(d.tok, "'" ⧺ d.name ⧺ "' answers " ⧺ self.tn(d.ret) ⧺ " but not on every path")
+        if d.is_noreturn and not self.block_leaves(d.body):
+            // @noreturn says the caller is never reached again, and
+            // falling off the end of a body is a way back to it like
+            // any other -- the one the annotation is most often wrong
+            // about, a body leaving on every path it thought of still
+            // coming back on the one it did not.
+            self.derr(d.tok, "'" ⧺ d.name ⧺ "' is @noreturn, so it does not come back, but this body can fall off its end and come back")
         self.fslots[f × 1¤ptrdiff] ← self.nslots
         // the bindings whose every read was somewhere a packed array
         // serves are told how many they hold, and become the elements
