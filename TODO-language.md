@@ -451,10 +451,16 @@ Completed
     only arrays that hold the same thing rather than stamping the left operand's type on the
     right operand's values.  A width still converts with the range check, as at a definition.
 
-[ ] a unit on a sum or product type used as an array's element type.  The unit attaches to the
+[~] a unit on a sum or product type used as an array's element type.  The unit attaches to the
     element definition rather than to the variable, unless every member is numeric and none
     carries one.  A unit written in a tuple element or a type alias is refused by name today,
     which is where this starts.
+    Half done in the interpreter, on branch todo/unit-in-element: a type alias may state one --
+    `type Duration = i64 ¤sec` -- and every binding of the alias counts in it without
+    repeating it, the nearest alias in a chain winning.  A tuple element still refuses one:
+    what a unit on a product type means where the members are not all numeric is the question
+    the note raises and it is not answered by the alias half.  ngplc does not accept it
+    either.
 
 [ ] a stated width must match exactly, rather than converting, when a value is stored into a
     declared array or binding.  Arguably the truer reading of "one type", but it is a separate

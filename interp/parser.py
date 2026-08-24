@@ -1493,7 +1493,13 @@ class Parser:
         else:
             self.pos += 1
             target = type_tok.value
-        self._reject_unit_here()
+        # An alias may say what it measures.  Written here the unit
+        # belongs to the type, so every binding of the alias counts in
+        # it without repeating it.
+        alias_unit = None
+        if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+            self.pos += 1
+            alias_unit = self._parse_unit_spec()
         target += self._parse_array_suffix()
         if self._check("OP") and self._cur().value == "?":
             self.pos += 1
@@ -1522,7 +1528,8 @@ class Parser:
                 SumTypeDef(name_tok.value, alternatives), kw_tok)
 
         self._try_eat("PUNCT", ";")
-        return self._set_pos(TypeDef(name_tok.value, target), kw_tok)
+        return self._set_pos(
+            TypeDef(name_tok.value, target, None, alias_unit), kw_tok)
 
     def _parse_module_def(self):
         """`module a`, `module .a`, `module .a.b`: where what follows lives.

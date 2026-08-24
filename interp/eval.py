@@ -135,7 +135,7 @@ from interp.value import (
     _scalar_kind_mismatch,
     CharValue, check_code_point, TRUE_VALUE, FALSE_VALUE,
     UnitValue, RefValue, Reference, ElementRef, Iterator, ArrayIterator,
-    deep_copy_value, register_type_alias, DISCARD_NAME,
+    deep_copy_value, register_type_alias, alias_unit_spec, DISCARD_NAME,
     register_sum_type, sum_type_alternatives, sum_type_admits,
     SyntaxValue,
 )
@@ -4543,9 +4543,14 @@ class Evaluator:
             check_bootstrap_binding(value, stmt.name)
             value = settle_untyped(value)
         unit = None
-        if stmt.unit_spec is not None:
+        spec = stmt.unit_spec
+        if spec is None and stmt.type_annotation is not None:
+            # The alias may say what it measures, and then every
+            # binding of it counts in that without repeating it.
+            spec = alias_unit_spec(stmt.type_annotation)
+        if spec is not None:
             from interp.units import eval_unit_formula
-            unit = eval_unit_formula(stmt.unit_spec)
+            unit = eval_unit_formula(spec)
         if stmt.type_annotation is not None \
                 and not isinstance(stmt.init_expr, ArrayAlloc):
             # An array declaration writes its shape in brackets that

@@ -813,12 +813,20 @@ class SumTypeDef:
 
 
 class TypeDef:
-    """Type alias definition at top level: type NAME = TARGET [DESCRIPTION]."""
+    """Type alias definition at top level: type NAME = TARGET [DESCRIPTION].
 
-    def __init__(self, name: str, target: str, description: str | None = None):
+    `unit_spec` is what the alias measures, where the alias itself said
+    so -- `type Duration = i64 ¤sec`.  Written there it belongs to the
+    type rather than to every binding of it, which is the point of
+    writing it there rather than at each one.
+    """
+
+    def __init__(self, name: str, target: str, description: str | None = None,
+                 unit_spec=None):
         self.name = name
         self.target = target
         self.description = description
+        self.unit_spec = unit_spec
 
 
 class EnumDef:

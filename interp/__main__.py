@@ -3366,7 +3366,8 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                                      f"type alias '{defn.name}'")
             except TypeError as e:
                 raise DefinitionError(str(e), _node_pos(defn)) from None
-            register_type_alias(defn.name, defn.target)
+            register_type_alias(defn.name, defn.target,
+                                getattr(defn, "unit_spec", None))
 
     # Functions install before globals: a file may write its
     # functions in any order, and a global binding may call one
