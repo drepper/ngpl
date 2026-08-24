@@ -1,0 +1,54 @@
+// int, the integer that does not overflow.
+//
+// int is arbitrary precision: it grows to hold whatever it is given, so
+// there is no width to run past and no wrapping to reason about.  The
+// arithmetic is carried in limbs of 31 bits, which is why the values
+// below are chosen to sit on that seam and on the 64-bit one -- a carry
+// that goes wrong shows itself there and nowhere else.
+//
+// The bootstrap interpreter does not have int, so this is a t8N file:
+// only the compiled program runs.  Its printed output is pinned in
+// t81_int.expected, because writing an int out is a routine of its own
+// and an assertion would not notice if it wrote nothing at all.
+
+fn pow(base : int, n : i64) → int:
+    let acc : mut int = 1
+    if n > 0:
+        foreach _ := 0…n - 1:
+            acc ← acc × base
+    acc
+
+@start
+@impure
+fn main():
+    // a limb holds 31 bits, so these two stand either side of the seam
+    let a : int = 2147483647
+    let b : int = 2147483648
+    assert_eq(a + 1, b)
+    assert_eq(b - 1, a)
+    assert_eq(a × b, 4611686016279904256)
+
+    // past what any fixed width would hold
+    let big : int = 1000000000000000000
+    assert_eq(big × big, pow(10, 36))
+    assert_eq(pow(3, 100), pow(pow(3, 50), 2))
+
+    // a difference that turns negative, and one that lands on zero
+    assert_eq(a - b, ⁻1)
+    assert_eq(big - big, 0)
+    assert_eq(big - big × 2 + big, 0)
+
+    // mixed with a fixed width, the int is what the two become
+    assert_eq(a + 1i64, b)
+
+    // ordering, which asks the same question the subtraction does
+    assert(a < b, "the limb boundary orders as it should")
+    assert(big × big > big, "a product of positives grows")
+    assert(big - big × 2 < 0, "past zero is below it")
+
+    // and what it writes, which is pinned
+    std.println("{}", a)
+    std.println("{}", big × big)
+    std.println("{}", pow(3, 100))
+    std.println("{}", big - big × 2)
+    std.println("{}", big - big)
