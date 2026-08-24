@@ -7,6 +7,36 @@
 // which writes them once as IR and lets the driver spell them; these
 // are what those are checked against.
 
+// A write takes (buf, len) in the ordinary argument registers -- the
+// way every other routine takes its arguments, and the way
+// rt_portable.ngpl writes this one for the other five targets.  It once
+// took rsi and rdx, the syscall's own registers, because its only
+// caller was the emitter for IR_PRINTS, which had them at hand; the
+// first IR-built routine to call it handed rdi and rsi and wrote
+// nothing.  RT_ABORT still keeps that private convention, stated where
+// it is written, because nothing reaches it except by hand.
+//
+// The loop is the other half of the agreement: write says how much it
+// took, and a pipe is free to take less than it was offered.
+fn emit_write(em : &mut Emit, fd : i64):
+    em.begin_fn(2)
+    em.b3(72, 137, 242)             // mov rdx, rsi -- what is left
+    em.b3(72, 137, 254)             // mov rsi, rdi -- where it stands
+    em.movimm(R_DI, fd)
+    em.set_label(0)
+    em.b3(72, 133, 210)             // test rdx, rdx
+    em.jlocal(132, 1)               // jz: nothing left
+    em.movimm(R_AX, 1)              // SYS_write
+    em.b2(15, 5)                    // syscall
+    em.b3(72, 133, 192)             // test rax, rax
+    em.jlocal(142, 1)               // jle: an error, or nothing taken
+    em.b3(72, 1, 198)               // add rsi, rax
+    em.b3(72, 41, 194)              // sub rdx, rax
+    em.jlocal(⁻1, 0)
+    em.set_label(1)
+    em.b1(195)
+    em.resolve_locals()
+
 fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64,
                 relro_off : i64):
     // RT_PRINTI: rdi = signed value → decimal on fd 1
@@ -49,12 +79,9 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.b1(195)
     em.resolve_locals()
 
-    // RT_WRITE1: rsi = buf, rdx = len
+    // RT_WRITE1: (buf, len) onto the output stream
     em.rt_begin(RT_WRITE1)
-    em.movimm(R_AX, 1)
-    em.movimm(R_DI, 1)
-    em.b2(15, 5)
-    em.b1(195)
+    emit_write(&em, 1)
 
     // RT_ABORT: rsi = message, rdx = its length.  Say it, then leave
     // through exit with a status rather than through a signal: a
@@ -1267,12 +1294,9 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     em.movimm(R_DX, str_len(lw.strs[bfm × 1¤ptrdiff]))
     em.jglobal(233, ⁻1, RT_ABORT)
 
-    // RT_WRITE2: rsi = buf, rdx = len, onto the error stream
+    // RT_WRITE2: (buf, len) onto the error stream
     em.rt_begin(RT_WRITE2)
-    em.movimm(R_AX, 1)
-    em.movimm(R_DI, 2)
-    em.b2(15, 5)
-    em.b1(195)
+    emit_write(&em, 2)
 
     // RT_AFIND: rdi = descriptor, rsi = wanted, rdx = 1 for string
     // elements → rax = the position boxed, or the null ∅
