@@ -364,6 +364,7 @@ class Parser:
         is_noreturn = False
         preconditions: list = []
         postconditions: list = []
+        invariants: list = []
         hint: str | None = None
         repr_kind: str | None = None
         test_refs: list[str] = []
@@ -420,6 +421,14 @@ class Parser:
                 preconditions.append(self._parse_condition("pre"))
             elif self._check("POST"):
                 postconditions.append(self._parse_condition("post"))
+            elif self._check("INVARIANT"):
+                self._eat("INVARIANT")
+                self._eat("PUNCT", "(")
+                self._skip_nl()
+                invariants.append(self._parse_expr())
+                self._skip_nl()
+                self._eat("PUNCT", ")")
+                self._try_eat("NEWLINE")
             elif self._check("LIKELY") or self._check("UNLIKELY"):
                 tok = self._cur()
                 raise ParseError(
@@ -510,7 +519,11 @@ class Parser:
             return self._parse_enum_def(is_flag)
 
         if self._check("STRUCT"):
-            return self._parse_struct_def(repr_kind)
+            return self._parse_struct_def(repr_kind, invariants)
+        if invariants:
+            raise ParseError(
+                "@invariant states what is always true of one of a type, "
+                "but no struct follows", self._cur())
 
         if repr_kind is not None:
             raise ParseError(
@@ -1175,7 +1188,8 @@ class Parser:
         self._eat("PUNCT", ")")
         return kind_tok.value
 
-    def _parse_struct_def(self, repr_kind: str | None = None):
+    def _parse_struct_def(self, repr_kind: str | None = None,
+                          invariants=None):
         """Parse: struct Name: INDENT field_definitions DEDENT"""
         kw_tok = self._eat("STRUCT")
         name_tok = self._eat("IDENT")
@@ -1224,7 +1238,7 @@ class Parser:
                 while self._try_eat("NEWLINE"):
                     pass
             self._eat("DEDENT")
-        sdef = StructDef(name, fields, repr_kind, field_units)
+        sdef = StructDef(name, fields, repr_kind, field_units, invariants)
         sdef.field_positions = field_positions
         return self._set_pos(sdef, kw_tok)
 

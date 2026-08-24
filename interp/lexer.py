@@ -102,6 +102,8 @@ AT_KEYWORDS: dict[str, str] = {
     "noreturn": "NORETURN",
     "pre": "PRE",
     "post": "POST",
+    # @invariant(e) on a struct: what is always true of one.
+    "invariant": "INVARIANT",
     # @build heads the build recipe the interpreter reads for search
     # paths and flags; the bare word stays available as a name.
     "build": "BUILD",

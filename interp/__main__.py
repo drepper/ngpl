@@ -3341,7 +3341,8 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                         str(e), _field_pos(defn, field_name)) from None
             register_struct_type(defn.name)
             st = StructType(defn.name, defn.fields, repr_kind=defn.repr_kind,
-                            field_units=getattr(defn, "field_units", None))
+                            field_units=getattr(defn, "field_units", None),
+                            invariants=getattr(defn, "invariants", None))
             env.define(defn.name, st)
 
     # Every struct and enum exists by now, so an alternative may be
