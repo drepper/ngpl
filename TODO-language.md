@@ -460,8 +460,12 @@ Completed
     declared array or binding.  Arguably the truer reading of "one type", but it is a separate
     question from homogeneity and changes scalar assignment as well.
 
-[ ] a ragged nested literal is a shape question and is left to the shape checks; whether
-    `[[1,2],[3]]` should be refused where no type states a shape is open.
+[x] a ragged nested literal is a shape question and is left to the shape checks; whether
+    `[[1,2],[3]]` should be refused where no type states a shape is open.  It does not arise:
+    a nested literal is a matrix literal and there is nowhere to write one without a type
+    stating a shape -- an untyped binding refuses it for saying no type, a plain array type
+    refuses it for having two dimensions, and a matrix type refuses ragged rows, the wholly
+    open `T[,]` included ("rows of differing lengths are not a dimension; 2 then 1").
 
 [x] @listable threads a function over what it is handed: a parameter given something deeper
     than it asked for is given a container of what it asked for, so the function is asked of
