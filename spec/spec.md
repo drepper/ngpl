@@ -60,7 +60,7 @@ Sections describing a feature outside the bootstrap subset are marked:
 
 #### Arbitrary-Precision Numbers
 
-`int` and `float` are the arbitrary-precision types, and are **full language** only.  A variable, parameter, return type, field, alias, or lambda parameter naming one is refused by the bootstrap:
+`int` and `float` are the arbitrary-precision types, and are **full language** only.  A variable, parameter, return type, field, alias, or lambda parameter naming one is refused by the bootstrap (the compiler is further along than that, and [`int` in the Compiler](#int-in-the-compiler) below says how far):
 
 ```
 let n : int = 5
@@ -134,6 +134,39 @@ arbitrary-precision int for it to settle on
 ```
 
 The widest sized types are `u128` and `i127`, so those are what a number is measured against.  A number that fits one is left alone — what the bootstrap lacks is the arbitrary precision, not the not-yet-settledness — so `std.println("{}", 1 « 40)` and `assert_eq(1 + 1, 2)` are unaffected.  Where the parameter does state a type, the argument settles on it and the question does not arise.
+
+#### `int` in the Compiler
+
+The compiler provides `int`; the interpreter does not.  That is not the
+boundary above moving.  The bootstrap language is what `interp/`
+implements, and by that measure `int` is still full language and is
+still marked so here; what has changed is that one of the two
+implementations of the full language now has it.
+
+The compiler's own sources may not use it, and that is not a matter of
+taste.  Stage 1 of the bootstrap is the compiler run under the
+interpreter, so everything the compiler is written in has to be a
+program the interpreter accepts.  `int` is available to programs the
+compiler compiles, and not to the compiler.
+
+What it provides is a value that stays arbitrary-precision wherever one
+can be named — a binding, a parameter, a return type, a field, an
+optional — with `+`, `-` and `×` over it, the six comparisons,
+`assert_eq` and `std.println`, and any fixed-width value made into one
+where an `int` is wanted:
+
+```
+let a : int = 2147483647
+let b : int = a × a × a     // 9903520300447984150353281023
+let c : int? = a + 1i64     // a fixed width meets an int and is made one
+```
+
+The rest is refused by name, as everything outside a subset is.  `float`
+is provided by neither implementation.  `÷` and `%` want the long
+division that is not written yet.  A unary `⁻` before an expression, an
+array of `int`, and a binding with no type written down are each refused
+saying what they would need — the last of them in the same words the
+interpreter uses, since on that point the two agree.
 
 ### The Compiler
 
