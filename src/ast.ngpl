@@ -192,6 +192,8 @@ struct FnDef:
     is_start : bool
     is_noreturn : bool
     is_test : bool
+    is_listable : bool   // handed a container where it asked for one of the
+                         // things in it, it is asked of each of them
     pre_off : i64        // extra: [n, expr…] or ⁻1
     post_off : i64       // extra: [n, name-token, expr, …] or ⁻1
     // Which tokens the definition is written in, from its first
@@ -245,6 +247,10 @@ struct Ast:
     lts : i64[]          // lambda signatures: start into lte per shape
     ltl : i64[]          // … how many parameters
     lte : i64[]          // … the parameter types then the answer, flattened
+    ltf : i64[]          // … 1 where the lambda threads, 0 where it does not.
+                         // Part of the shape rather than beside it: a lambda
+                         // that threads and one that does not behave
+                         // differently at every call, so they are not one type.
     unames : str[]       // the measures the file knows
     umarks : str[]       // … and how each one prints
     udecay : i64[]       // … and what each may stand in for, 0 for nothing

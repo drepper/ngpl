@@ -66,6 +66,11 @@ struct Chk:
     // length never changes and which never leaves the function comes
     // to say the same thing without its type changing.
     nrep : i64[]
+    // Per call through a binding that holds a lambda: that lambda's
+    // type.  Lowering needs the parameter types to know which
+    // arguments a listable call is threaded over, and a call by name
+    // has no node for the callee to read them from.
+    nlam : i64[]
     // Per walk: 1 where what it walked is nobody's by the time it
     // ends, so the walk is where the memory goes back.
     nfree : i64[]
@@ -228,6 +233,7 @@ struct Checker:
     nslot : i64[]
     ncvt : i64[]
     nrep : i64[]         // see Chk
+    nlam : i64[]         // see Chk
     nfree : i64[]        // see Chk
     // Packing a T[] whose length never changes and which never leaves
     // the function.  Per slot of the function under check: how many
@@ -1145,7 +1151,7 @@ impl Checker:
                             return
                         couter.push(0 - cf - 1)
                         ctoks.push(ctok)
-                        ctys.push(mk_lty(self.lam_intern(cpts, cd.ret)))
+                        ctys.push(mk_lty(self.lam_intern(cpts, cd.ret, if cd.is_listable: 1 else: 0)))
                     else:
                         let cty0 : i64 = self.stype[cs × 1¤ptrdiff]
                         if ty_ref_kind(cty0) ≠ 0 or not (ty_is_int(cty0) or cty0 = TY_BOOL or cty0 = TY_CHAR or cty0 = TY_STR or ty_is_lam(cty0)):
@@ -1646,7 +1652,7 @@ impl Checker:
                     return
                 self.a.nkind[id × 1¤ptrdiff] ← NK_FNVAL
                 self.a.na[id × 1¤ptrdiff] ← fidx
-                self.set_type(id, mk_lty(self.lam_intern(pts9, fd.ret)))
+                self.set_type(id, mk_lty(self.lam_intern(pts9, fd.ret, if fd.is_listable: 1 else: 0)))
                 return
             if self.is_ignored_name(name):
                 self.derr(tok, "'" ⧺ name ⧺ "' expects errors under @expect and was left uncompiled")
@@ -1680,12 +1686,14 @@ impl Checker:
 
     // the checker interns a named function's signature when it turns
     // into a value, as the parser interns a written-out λ's
-    fn lam_intern(&mut self, pts : i64[], ret : i64) → i64:
+    // A lambda that threads and one that does not are not one type:
+    // handed the same argument they do different things.
+    fn lam_intern(&mut self, pts : i64[], ret : i64, lstb : i64) → i64:
         let n : i64 = @dropunit(#pts)
         let m : i64 = @dropunit(#self.a.ltl)
         let sh : mut i64 = 0
         while sh < m:
-            if self.a.ltl[sh × 1¤ptrdiff] = n:
+            if self.a.ltl[sh × 1¤ptrdiff] = n and self.a.ltf[sh × 1¤ptrdiff] = lstb:
                 let st : i64 = self.a.lts[sh × 1¤ptrdiff]
                 let same : mut bool = self.a.lte[(st + n) × 1¤ptrdiff] = ret
                 let i : mut i64 = 0
@@ -1697,12 +1705,17 @@ impl Checker:
             sh ← sh + 1
         self.a.lts.push(@dropunit(#self.a.lte))
         self.a.ltl.push(n)
+        self.a.ltf.push(lstb)
         let j : mut i64 = 0
         while j < n:
             self.a.lte.push(pts[j × 1¤ptrdiff])
             j ← j + 1
         self.a.lte.push(ret)
         m
+
+    // Whether a lambda of this type threads over a container.
+    fn lam_listable(&self, t : i64) → bool:
+        self.a.ltf[ty_lidx(t) × 1¤ptrdiff] = 1
 
     fn lam_np(&self, t : i64) → i64:
         self.a.ltl[ty_lidx(t) × 1¤ptrdiff]
@@ -2730,14 +2743,28 @@ impl Checker:
             self.set_type(id, callee.ret)
             return
         let j : mut i64 = 0
+        let threads : mut bool = false
         while j < np:
             let arg : i64 = self.a.extra[(args_off + 1 + j) × 1¤ptrdiff]
             let pty : i64 = self.a.extra[(callee.params_off + 2 + j × 2) × 1¤ptrdiff]
-            self.check_one_arg(tok, name, j + 1, arg, pty)
+            if callee.is_listable:
+                let one : bool = self.check_listable_arg(tok, name, j + 1, arg, pty)
+                threads ← threads or one
+            else:
+                self.check_one_arg(tok, name, j + 1, arg, pty)
             j ← j + 1
         self.check_alias(tok, name, ⁻1, args_off, argc, callee.params_off, 0)
         self.call_escapes(args_off, argc, callee.params_off, ⁻1, 0,
                           callee.is_impure, callee.ret)
+        if threads:
+            // what the return type states is what one element answers,
+            // and the caller receives a container of them
+            if ty_is_arr(callee.ret):
+                self.derr(tok, "'" ⧺ name ⧺ "' is @listable and answers " ⧺ self.tn(callee.ret) ⧺ "; a listable answer is one element's, so an array of arrays is not core-2")
+                self.set_type(id, callee.ret)
+                return
+            self.set_type(id, mk_aty(callee.ret))
+            return
         self.set_type(id, callee.ret)
 
     // `mod.name(args)`: the module says where to look, so the walk out
@@ -2793,7 +2820,7 @@ impl Checker:
         self.psfn.push(f)
         self.psk.push(argc)
         self.psnp.push(np)
-        self.set_type(id, mk_lty(self.lam_intern(rem, callee.ret)))
+        self.set_type(id, mk_lty(self.lam_intern(rem, callee.ret, if callee.is_listable: 1 else: 0)))
 
     // the one call that reaches a generic first gives it its shape:
     // each type variable takes its argument's type, the body is then
@@ -2953,7 +2980,7 @@ impl Checker:
         self.psfn.push(⁻1)
         self.psk.push(argc)
         self.psnp.push(np)
-        self.set_type(id, mk_lty(self.lam_intern(rem, self.lam_ret(lt))))
+        self.set_type(id, mk_lty(self.lam_intern(rem, self.lam_ret(lt), if self.lam_listable(lt): 1 else: 0)))
 
     fn check_lcall(&mut self, id : i64, tok : i64, args_off : i64,
                    argc : i64, vs : i64):
@@ -2963,18 +2990,31 @@ impl Checker:
             self.derr(tok, "this function wants " ⧺ i64_str(np) ⧺ " arguments, not " ⧺ i64_str(argc))
             self.set_type(id, self.lam_ret(lt))
             return
+        let threads : mut bool = false
         if argc > 0:
             foreach j := 0…argc - 1:
                 let arg : i64 = self.a.extra[(args_off + 1 + j) × 1¤ptrdiff]
                 let pt : i64 = self.lam_pt(lt, j)
-                self.check_expr(arg, pt)
-                if self.is_open(self.ty_of(arg)):
-                    self.adopt(arg, pt)
-                elif not self.fit_arg(arg, pt):
-                    self.derr(tok, "argument " ⧺ i64_str(j + 1) ⧺ " is " ⧺ self.tn(self.ty_of(arg)) ⧺ ", but the function takes " ⧺ self.tn(pt))
+                if self.lam_listable(lt):
+                    let one : bool = self.check_listable_arg(tok, "this function", @dropunit(j) + 1, arg, pt)
+                    threads ← threads or one
+                else:
+                    self.check_expr(arg, pt)
+                    if self.is_open(self.ty_of(arg)):
+                        self.adopt(arg, pt)
+                    elif not self.fit_arg(arg, pt):
+                        self.derr(tok, "argument " ⧺ i64_str(j + 1) ⧺ " is " ⧺ self.tn(self.ty_of(arg)) ⧺ ", but the function takes " ⧺ self.tn(pt))
         if argc = np:
             self.a.nc[id × 1¤ptrdiff] ← 1
             self.nslot[id × 1¤ptrdiff] ← self.sslot[vs × 1¤ptrdiff]
+            self.nlam[id × 1¤ptrdiff] ← lt
+            if threads:
+                if ty_is_arr(self.lam_ret(lt)):
+                    self.derr(tok, "this function is @listable and answers " ⧺ self.tn(self.lam_ret(lt)) ⧺ "; a listable answer is one element's, so an array of arrays is not core-2")
+                    self.set_type(id, self.lam_ret(lt))
+                    return
+                self.set_type(id, mk_aty(self.lam_ret(lt)))
+                return
             self.set_type(id, self.lam_ret(lt))
             return
         if argc = 0:
@@ -2993,7 +3033,7 @@ impl Checker:
         self.psfn.push(⁻1)
         self.psk.push(argc)
         self.psnp.push(np)
-        self.set_type(id, mk_lty(self.lam_intern(rem, self.lam_ret(lt))))
+        self.set_type(id, mk_lty(self.lam_intern(rem, self.lam_ret(lt), if self.lam_listable(lt): 1 else: 0)))
 
     // generate(f, r): f maps each of the range's steps to an element
     fn check_generate(&mut self, id : i64, tok : i64, args_off : i64, argc : i64):
@@ -3070,7 +3110,7 @@ impl Checker:
         self.psfn.push(⁻1)
         self.psk.push(argc)
         self.psnp.push(np)
-        self.set_type(id, mk_lty(self.lam_intern(rem, self.lam_ret(lt))))
+        self.set_type(id, mk_lty(self.lam_intern(rem, self.lam_ret(lt), if self.lam_listable(lt): 1 else: 0)))
 
     // Whether handing this type over by value hands over the thing
     // itself.  A number is copied and two parameters holding one are
@@ -3166,6 +3206,31 @@ impl Checker:
         if self_n = 1 and i = 0:
             return "the receiver"
         "argument " ⧺ i64_str(i + 1 - self_n)
+
+    // One argument of a listable call.  Answers whether it is one of
+    // the containers the call is threaded over: an array where the
+    // parameter asked for one of the things in it.  A borrowed
+    // parameter is never threaded -- what it borrows is the thing
+    // itself -- and neither is an argument that is already what was
+    // asked for.
+    fn check_listable_arg(&mut self, tok : i64, name : str, num : i64,
+                          arg : i64, pty : i64) → bool:
+        let base : i64 = ty_strip_ref(pty)
+        if ty_ref_kind(pty) ≠ 0 or self.kind_of(arg) = NK_REF:
+            self.check_one_arg(tok, name, num, arg, pty)
+            return false
+        self.check_expr(arg, base)
+        let at : i64 = ty_strip_ref(self.ty_of(arg))
+        if ty_is_arr(at) and not ty_is_arr(base):
+            let et : i64 = self.elem_of(at)
+            if et ≠ base:
+                self.derr(tok, "argument " ⧺ i64_str(num) ⧺ " of '" ⧺ name ⧺ "' holds " ⧺ self.tn(et) ⧺ ", and the parameter says " ⧺ self.tn(base) ⧺ "; a listable call is asked of each of the things in a container")
+            return true
+        if self.is_open(self.ty_of(arg)):
+            self.adopt(arg, base)
+        elif not self.fit_arg(arg, base):
+            self.derr(tok, "argument " ⧺ i64_str(num) ⧺ " of '" ⧺ name ⧺ "' is " ⧺ self.tn(self.ty_of(arg)) ⧺ ", but the parameter says " ⧺ self.tn(base))
+        false
 
     fn check_one_arg(&mut self, tok : i64, name : str, num : i64,
                      arg : i64, pty : i64):
@@ -5158,6 +5223,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     let nslot : mut i64[] = []
     let ncvt : mut i64[] = []
     let nrep : mut i64[] = []
+    let nlam : mut i64[] = []
     let nfree : mut i64[] = []
     let zi : mut i64 = 0
     while zi < nnodes:
@@ -5165,12 +5231,13 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
         nslot.push(⁻1)
         ncvt.push(0)
         nrep.push(⁻1)
+        nlam.push(⁻1)
         nfree.push(0)
         zi ← zi + 1
     let c : mut Checker = (Checker{a: a, toks: toks, src: src, fnames: fnames, curmod: "",
                                    gnames: gnames, gvals: [], ginit: [], ite: [],
                                    ntype: ntype, nslot: nslot, ncvt: ncvt,
-                                   nrep: nrep, nfree: nfree,
+                                   nrep: nrep, nlam: nlam, nfree: nfree,
                                    pcnt: [], puse: [], psafe: [], kuse: [], ksafe: [],
                                    pnode_slot: [], pnode_id: [],
                                    stmt_seq: 0, cur_stmt: ⁻1,
@@ -5311,7 +5378,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     if #c.diags = 0:
         assert(#c.fslots = #a.fns, "one slot count per function")
         assert(#c.gvals = #a.globals, "one folded value per global")
-    (Chk{ntype: c.ntype, nslot: c.nslot, ncvt: c.ncvt, nrep: c.nrep, nfree: c.nfree, log: c.log, fslots: c.fslots,
+    (Chk{ntype: c.ntype, nslot: c.nslot, ncvt: c.ncvt, nrep: c.nrep, nlam: c.nlam, nfree: c.nfree, log: c.log, fslots: c.fslots,
          gvals: c.gvals, ginit: c.ginit, lams: c.lams, lamns: c.lamns,
          psfn: c.psfn, psk: c.psk, psnp: c.psnp, skipfn: c.skipfn,
          argcopy: c.argcopy,

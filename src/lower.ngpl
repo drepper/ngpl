@@ -10,6 +10,7 @@ struct Lower:
     nslot : i64[]
     ncvt : i64[]
     nrep : i64[]
+    nlam : i64[]
     nfree : i64[]
     strs : str[]
     op : i64[]
@@ -1597,6 +1598,16 @@ impl Lower:
             while ix9 < argc:
                 vr9.push(self.lower_expr(self.a.extra[(args_off + 1 + ix9) × 1¤ptrdiff]))
                 ix9 ← ix9 + 1
+            let bt9 : i64 = self.nlam[nid × 1¤ptrdiff]
+            if bt9 ≠ ⁻1 and self.lam_listable(bt9):
+                let pts9 : mut i64[] = []
+                let pk9 : mut i64 = 0
+                while pk9 < argc:
+                    pts9.push(self.lam_pt(bt9, pk9))
+                    pk9 ← pk9 + 1
+                let thr9 : i64[] = self.thread_mask(args_off, argc, pts9)
+                if self.threads_any(thr9):
+                    return self.lower_thread(thr9, vr9, ⁻1, box9)
             let off9 : i64 = @dropunit(#self.extra)
             self.extra.push(argc + 1)
             foreach v := vr9:
@@ -1614,6 +1625,17 @@ impl Lower:
             vregs.push(self.copied_arg(an, self.lower_expr(an)))
             i ← i + 1
         let f : i64 = self.fname_index(name)
+        if f ≠ ⁻1 and self.a.fns[f × 1¤ptrdiff].is_listable:
+            let pts : mut i64[] = []
+            let po : i64 = self.a.fns[f × 1¤ptrdiff].params_off
+            let pn : i64 = self.a.extra[po × 1¤ptrdiff]
+            let pk : mut i64 = 0
+            while pk < pn:
+                pts.push(self.a.extra[(po + 2 + pk × 2) × 1¤ptrdiff])
+                pk ← pk + 1
+            let thr : i64[] = self.thread_mask(args_off, argc, pts)
+            if self.threads_any(thr):
+                return self.lower_thread(thr, vregs, f, ⁻1)
         // a callee that answers a sized array is given the space to
         // answer into, as a last argument the source never wrote
         let rt : i64 = self.tof(nid)
@@ -1626,6 +1648,115 @@ impl Lower:
             self.extra.push(v)
         let d : i64 = self.tmp()
         self.ir(IR_CALL, f, off, 0, d, 0)
+        d
+
+    // Which arguments of a listable call are the containers it is
+    // threaded over.  The checker settled the call's type on the same
+    // reading -- an array where the parameter asked for one of the
+    // things in it -- so the two agree without either being told.
+    // the same two readers the checker has, over the same tables
+    fn lam_listable(&self, t : i64) → bool:
+        self.a.ltf[ty_lidx(t) × 1¤ptrdiff] = 1
+
+    fn lam_pt(&self, t : i64, i : i64) → i64:
+        self.a.lte[(self.a.lts[ty_lidx(t) × 1¤ptrdiff] + i) × 1¤ptrdiff]
+
+    fn thread_mask(&mut self, args_off : i64, argc : i64, pts : i64[]) → i64[]:
+        let thr : mut i64[] = []
+        let i : mut i64 = 0
+        while i < argc:
+            let an : i64 = self.a.extra[(args_off + 1 + i) × 1¤ptrdiff]
+            let at : i64 = ty_strip_ref(self.tof(an))
+            let pb : i64 = ty_strip_ref(pts[i × 1¤ptrdiff])
+            if ty_is_arr(at) and not ty_is_arr(pb) and ty_ref_kind(pts[i × 1¤ptrdiff]) = 0:
+                thr.push(1)
+            else:
+                thr.push(0)
+            i ← i + 1
+        thr
+
+    fn threads_any(&self, thr : i64[]) → bool:
+        let any : mut bool = false
+        foreach f := thr:
+            any ← any or f = 1
+        any
+
+    // The loop a listable call is: each turn indexes the threaded
+    // arguments, leaves the others as they are, and pushes what the
+    // call answers onto a fresh array.  How many turns the first
+    // threaded argument says, and every other one is asked to agree --
+    // element against element is what threading means, and two lengths
+    // would leave the odd elements with nothing to meet.
+    //
+    // boxv is ⁻1 for a call by name and the box for one through a
+    // binding, which is the only difference between the two.
+    fn lower_thread(&mut self, thr : i64[], vals : i64[], f : i64,
+                    boxv : i64) → i64:
+        let argc : i64 = @dropunit(#thr)
+        let d : i64 = self.tmp()
+        self.ir(IR_ANEW, 4, 0, 0, d, 0)
+        let n : i64 = self.tmp()
+        let seen : mut bool = false
+        let j0 : mut i64 = 0
+        while j0 < argc:
+            if thr[j0 × 1¤ptrdiff] = 1:
+                if seen:
+                    // a second container: its length has to be the first's
+                    let n2 : i64 = self.tmp()
+                    self.ir(IR_ALEN, vals[j0 × 1¤ptrdiff], 0, 0, n2, 0)
+                    let same : i64 = self.tmp()
+                    self.ir(IR_CEQ, n, n2, 0, same, 64 + 256)
+                    let lok : i64 = self.label()
+                    self.ir(IR_JNZ, same, lok, 0, 0, 0)
+                    let m : i64 = self.intern("a listable call meets element against element, and its containers are of different lengths\n")
+                    self.ir(IR_ABORT, m, 0, 0, 0, 0)
+                    self.ir(IR_LABEL, lok, 0, 0, 0, 0)
+                else:
+                    self.ir(IR_ALEN, vals[j0 × 1¤ptrdiff], 0, 0, n, 0)
+                    seen ← true
+            j0 ← j0 + 1
+        assert(seen, "a threaded call has a container to thread over")
+        let iv : i64 = self.tmp()
+        self.ir(IR_CONST, 0, 0, 0, iv, 0)
+        let ltop : i64 = self.label()
+        let lend : i64 = self.label()
+        self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+        let c : i64 = self.tmp()
+        self.ir(IR_CLT, iv, n, 0, c, 64 + 256)
+        self.ir(IR_JZ, c, lend, 0, 0, 0)
+        let cargs : mut i64[] = []
+        let j : mut i64 = 0
+        while j < argc:
+            if thr[j × 1¤ptrdiff] = 1:
+                let e : i64 = self.tmp()
+                self.ir(IR_AIDX, vals[j × 1¤ptrdiff], iv, 0, e, 0)
+                cargs.push(e)
+            else:
+                cargs.push(vals[j × 1¤ptrdiff])
+            j ← j + 1
+        let off : i64 = @dropunit(#self.extra)
+        if boxv = ⁻1:
+            self.extra.push(argc)
+        else:
+            self.extra.push(argc + 1)
+        foreach v := cargs:
+            self.extra.push(v)
+        let r : i64 = self.tmp()
+        if boxv = ⁻1:
+            self.ir(IR_CALL, f, off, 0, r, 0)
+        else:
+            self.extra.push(boxv)
+            let ad : i64 = self.tmp()
+            self.ir(IR_FLD, boxv, 0, 0, ad, 0)
+            self.ir(IR_CALLI, ad, off, 0, r, 0)
+        self.ir(IR_APUSH, d, r, 0, 0, 0)
+        let one : i64 = self.tmp()
+        self.ir(IR_CONST, 1, 0, 0, one, 0)
+        let ni : i64 = self.tmp()
+        self.ir(IR_ADDW, iv, one, 0, ni, 64 + 256)
+        self.ir(IR_MOV, ni, 0, 0, iv, 0)
+        self.ir(IR_JMP, ltop, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         d
 
     // By value means a copy.  The copy is elided wherever it cannot be

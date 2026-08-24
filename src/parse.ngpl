@@ -43,6 +43,7 @@ struct Parser:
     lts : i64[]
     ltl : i64[]
     lte : i64[]
+    ltf : i64[]          // 1 where the lambda threads
     enames : str[]
     ewidth : i64[]
     estart : i64[]
@@ -454,12 +455,15 @@ impl Parser:
             self.hdty.push(mk_fty(self.farr_intern(TY_U8, w)))
 
     // equal lambda signatures share one type code, as tuple shapes do
-    fn lam_intern(&mut self, pts : i64[], ret : i64) → i64:
+    // A lambda that threads and one that does not are not one type:
+    // handed the same argument they do different things, so the flag
+    // is part of the shape and not a note beside it.
+    fn lam_intern(&mut self, pts : i64[], ret : i64, lstb : i64) → i64:
         let n : i64 = @dropunit(#pts)
         let m : i64 = @dropunit(#self.ltl)
         let sh : mut i64 = 0
         while sh < m:
-            if self.ltl[sh × 1¤ptrdiff] = n:
+            if self.ltl[sh × 1¤ptrdiff] = n and self.ltf[sh × 1¤ptrdiff] = lstb:
                 let st : i64 = self.lts[sh × 1¤ptrdiff]
                 let same : mut bool = self.lte[(st + n) × 1¤ptrdiff] = ret
                 let i : mut i64 = 0
@@ -471,6 +475,7 @@ impl Parser:
             sh ← sh + 1
         self.lts.push(@dropunit(#self.lte))
         self.ltl.push(n)
+        self.ltf.push(lstb)
         let j : mut i64 = 0
         while j < n:
             self.lte.push(pts[j × 1¤ptrdiff])
@@ -607,7 +612,7 @@ impl Parser:
     // postfix: indexing and method calls chain off a primary
     // λx : T, y : T |cap| → R: expr — the captures are read where the
     // lambda is written, by value, and the body is one expression
-    fn parse_lambda(&mut self, at : i64) → i64:
+    fn parse_lambda(&mut self, at : i64, lstb : i64) → i64:
         self.pos ← self.pos + 1
         // shapes an @expect means to refuse still have to parse; the
         // checker is where they are refused, so 'bad' rides along
@@ -678,7 +683,7 @@ impl Parser:
             body ← self.parse_expr()
         if bad ≠ 0:
             return self.mknode(NK_BADLAM, at, bad, 0, 0)
-        let li : i64 = self.lam_intern(pts, ret)
+        let li : i64 = self.lam_intern(pts, ret, lstb)
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(@dropunit(#pts))
         foreach i := 0…#pts - 1:
@@ -819,7 +824,7 @@ impl Parser:
         let k : i64 = self.peek()
         let at : i64 = self.pos
         if k = TK_LAMBDA:
-            return self.parse_lambda(at)
+            return self.parse_lambda(at, 0)
         if k = TK_INT:
             self.pos ← self.pos + 1
             // A measure the file declared reaches the literal here
@@ -964,8 +969,17 @@ impl Parser:
                 let e0 : i64 = self.parse_expr()
                 _ ← self.eat(TK_RPAR, "')' closing @dropunit")
                 return self.mknode(NK_DROPU, at, e0, 0, 0)
+            if name = "listable":
+                // A lambda is a function like any other and threads the
+                // same way; the annotation goes in front of the λ,
+                // which is the only place it could go.
+                self.pos ← self.pos + 1
+                if self.peek() ≠ TK_LAMBDA:
+                    self.err("@listable in front of a value marks a lambda as one that threads, so a λ follows it")
+                    return 0
+                return self.parse_lambda(self.pos, 1)
             if name ≠ "wrap":
-                self.err("'@" ⧺ name ⧺ "' is not core-2; @wrap, @dropunit and @sizeof are the expression annotations")
+                self.err("'@" ⧺ name ⧺ "' is not core-2; @wrap, @dropunit, @sizeof and @listable are the expression annotations")
                 return 0
             self.pos ← self.pos + 1
             _ ← self.eat(TK_LPAR, "'(' after @wrap")
@@ -1821,9 +1835,9 @@ impl Parser:
     // Definitions
     // ------------------------------------------------------------------
 
-    // mods: bit 0 says @replaceable, bit 1 says @export -- two bits
-    // rather than two parameters, the subset holding a signature to
-    // twelve of them
+    // mods: bit 0 says @replaceable, bit 1 @export, bit 2 @build and
+    // bit 3 @listable -- bits rather than parameters, the subset
+    // holding a signature to twelve of them
     fn parse_fn(&mut self, imp : bool, is_start : bool, is_noreturn : bool,
                 is_test : bool, mods : i64, ignored : bool,
                 pres : i64[], post_toks : i64[], posts : i64[],
@@ -1924,6 +1938,7 @@ impl Parser:
                                     is_replaceable: false, is_impure: imp,
                                     is_start: false, is_noreturn: is_noreturn,
                                     is_test: false,
+                                    is_listable: false,
                                     pre_off: pre_off, post_off: post_off,
                             tok_lo: self.def_start, tok_hi: self.pos})
             self.expoff.push(self.pending_exp)
@@ -1947,6 +1962,7 @@ impl Parser:
                                    is_replaceable: false, is_impure: false,
                                    is_start: false, is_noreturn: false,
                                    is_test: false,
+                                   is_listable: false,
                                    pre_off: pre_off, post_off: post_off,
                             tok_lo: self.def_start, tok_hi: self.pos})
             return
@@ -1956,6 +1972,7 @@ impl Parser:
                             is_impure: imp,
                             is_start: is_start, is_noreturn: is_noreturn,
                             is_test: is_test,
+                            is_listable: (mods » 3) & 1 = 1,
                             pre_off: pre_off, post_off: post_off,
                             tok_lo: self.def_start, tok_hi: self.pos})
 
@@ -2389,6 +2406,7 @@ impl Parser:
         let is_repr : mut bool = false
         let is_fl : mut bool = false
         let is_build : mut bool = false
+        let is_lstb : mut bool = false
         let expects : mut i64 = 0
         let exp_lvl : mut i64[] = []
         let exp_code : mut i64[] = []
@@ -2419,6 +2437,8 @@ impl Parser:
                 // says where to spend effort, never what to compute.
                 let noted : i64 = 0
                 _ ← noted
+            elif name = "listable":
+                is_lstb ← true
             elif name = "export":
                 is_exp ← true
             elif name = "flag":
@@ -2509,7 +2529,8 @@ impl Parser:
                     self.extra.push(exp_code[i])
             self.parse_fn(imp, is_start, is_noreturn, is_test,
                           (if is_repl: 1 else: 0) + (if is_exp: 2 else: 0)
-                              + (if is_build: 4 else: 0),
+                              + (if is_build: 4 else: 0)
+                              + (if is_lstb: 8 else: 0),
                           expects > 0,
                           pres, post_toks, posts, "", 0)
         elif is_exp:
@@ -2574,7 +2595,7 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
                                  snames: [], tts: [], ttl: [], tte: [],
                                  fae: [], fas: [], hdty: [],
                                  mel: [], mrr: [], mcc: [], mdd: [], minner: [],
-                                 lts: [], ltl: [], lte: [],
+                                 lts: [], ltl: [], lte: [], ltf: [],
                                  enames: builtin_enum_names(),
                                  ewidth: builtin_enum_widths(),
                                  estart: [0], ecount: [8], eflag: [0],
@@ -2662,7 +2683,7 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
          structs: p.structs, tts: p.tts, ttl: p.ttl, tte: p.tte,
          fae: p.fae, fas: p.fas, hdty: p.hdty,
          mel: p.mel, mrr: p.mrr, mcc: p.mcc, mdd: p.mdd, minner: p.minner,
-         lts: p.lts, ltl: p.ltl, lte: p.lte,
+         lts: p.lts, ltl: p.ltl, lte: p.lte, ltf: p.ltf,
          unames: p.unames, umarks: p.umarks, udecay: p.udecay,
          enames: p.enames, ewidth: p.ewidth, estart: p.estart,
          ecount: p.ecount, eflag: p.eflag, emembers: p.emembers,

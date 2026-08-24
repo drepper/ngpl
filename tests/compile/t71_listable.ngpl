@@ -1,0 +1,50 @@
+// A @listable function threads over a container.
+//
+// Handed something deeper than a parameter asked for, a listable
+// function is asked of each of the things in the container instead,
+// and what the caller receives is a container of the answers.  What
+// the return type states is one element's answer.
+//
+// A lambda is a function like any other and threads the same way; the
+// annotation goes in front of the λ, which is the only place it could
+// go.
+
+@listable
+fn twice(n : i64) → i64:
+    n × 2
+
+@listable
+fn add(a : i64, b : i64) → i64:
+    a + b
+
+@start
+@impure
+fn main():
+    let v : i64[] = [1, 2, 3]
+    let w : i64[] = [10, 20, 30]
+
+    // a named one, threaded and not
+    let t : i64[] = twice(v)
+    let one : i64 = twice(21)
+
+    // two containers, element against element
+    let s : i64[] = add(v, w)
+    // and a scalar beside a container, threaded against every element
+    let b : i64[] = add(v, 100)
+
+    // the same, written as a lambda
+    let lt := @listable λx : i64 → i64: x × 3
+    let l : i64[] = lt(v)
+    let lone : i64 = lt(7)
+
+    // a partly applied listable lambda still threads: what is called
+    // in the end is the lambda, and it is the lambda that says so
+    let la := @listable λa : i64, b : i64 → i64: a + b
+    let plus100 := la(100)
+    let p : i64[] = plus100(v)
+
+    std.println("{} {} {} {} {} {} {} {} {} {}",
+                t[0 × 1¤ptrdiff], t[2 × 1¤ptrdiff], one,
+                s[0 × 1¤ptrdiff], s[2 × 1¤ptrdiff],
+                b[0 × 1¤ptrdiff], b[2 × 1¤ptrdiff],
+                l[1 × 1¤ptrdiff], lone, p[2 × 1¤ptrdiff])
