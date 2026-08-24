@@ -79,9 +79,18 @@ for t in "$testdir"/t*.ngpl; do
     native_rc=$?
 
     if [ $native_only -eq 1 ]; then
+        # Leaving with 0 is the whole of the check, unless the test
+        # pins what it writes: a routine that writes nothing passes
+        # every assertion, so what is printed has to be looked at.
         if [ $native_rc -ne 0 ]; then
             echo "FAIL $name: the compiled program stopped with $native_rc"
             sed 's/^/    /' "$workdir/$name.native.out" | head -5
+            fail=$((fail + 1))
+        elif [ -f "$testdir/$name.expected" ] \
+                && ! diff -u "$testdir/$name.expected" \
+                        "$workdir/$name.native.out" > "$workdir/$name.diff"; then
+            echo "FAIL $name: not what it says it writes"
+            sed 's/^/    /' "$workdir/$name.diff" | head -8
             fail=$((fail + 1))
         else
             echo "ok   $name"

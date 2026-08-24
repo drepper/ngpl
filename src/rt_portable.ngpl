@@ -326,6 +326,11 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
     if id = RT_SHA256INIT: return rt_sha256init_ir()
     if id = RT_SHA256BLK: return rt_sha256blk_ir()
     if id = RT_SHA256FIN: return rt_sha256fin_ir()
+    if id = RT_BIGFROM: return rt_bigfrom_ir()
+    if id = RT_BIGCMP: return rt_bigcmp_ir()
+    if id = RT_BIGADD: return rt_bigadd_ir()
+    if id = RT_BIGMUL: return rt_bigmul_ir()
+    if id = RT_BIGPRINT: return rt_bigprint_ir()
     if id = RT_SIGINIT: return rt_siginit_ir(tg)
     if id = RT_SEGV: return rt_segv_ir(tg, &lw)
     if id = RT_WRITE1 or id = RT_WRITE2:

@@ -24,8 +24,15 @@ let TY_FILE : i64 = 5       // an open file, its descriptor inside
 let TY_ALLOC : i64 = 6      // std.arena.allocator(): a token, nothing more
 let TY_DIR : i64 = 7        // std.fs.cwd(): a directory, a token likewise
 let TY_ENTRY : i64 = 10     // one directory entry: a name and a kind
-// 11 was std.filetype, which is an enumeration now and needs no
-// type code of its own
+// int: the arbitrary-precision integer.  Not one of the sized types --
+// it has no width to be wider or narrower than -- so ty_is_int does
+// not answer for it and every place that meets one says so by name.
+// 11 was std.filetype, which is an enumeration now and had no further
+// use for the number.
+let TY_INT : i64 = 11
+
+fn ty_is_bigint(t : i64) → bool:
+    t = TY_INT
 
 // std.filetype is an enumeration like any other, and the first one
 // every file holds.  It is reached through std, never by its bare
@@ -342,6 +349,7 @@ fn type_name_m(t0 : i64, marks : str[]) → str:
     if t = TY_BOOL: return prefix ⧺ "bool"
     if t = TY_STR: return prefix ⧺ "str"
     if t = TY_CHAR: return prefix ⧺ "char"
+    if t = TY_INT: return prefix ⧺ "int"
     if t = TY_FILE: return prefix ⧺ "std.fs.File"
     if t = TY_ALLOC: return prefix ⧺ "std.arena.Allocator"
     if t = TY_DIR: return prefix ⧺ "std.fs.Dir"

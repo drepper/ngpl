@@ -131,7 +131,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // in a call where an overflow or a bounds check has to go -- so
     // this runs in waves until a wave adds nothing.  Asking the IR
     // which routines it calls would miss the second kind.
-    let nrt : i64 = 62
+    let nrt : i64 = 67
     foreach _ := 1…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
@@ -716,6 +716,11 @@ fn rt_nargs(id : i64) → i64:
     if id = RT_SEGV: return 3
     if id = RT_SIGINIT: return 0
     if id = RT_FREE: return 2
+    if id = RT_BIGFROM: return 1
+    if id = RT_BIGCMP: return 2
+    if id = RT_BIGADD: return 3
+    if id = RT_BIGMUL: return 2
+    if id = RT_BIGPRINT: return 1
     0
 
 // the door of the program: keep what the kernel handed over, stand up

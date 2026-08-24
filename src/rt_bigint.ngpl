@@ -1,0 +1,414 @@
+// ===========================================================================
+// int: the arbitrary-precision integer, at run time
+// ===========================================================================
+//
+// A value that outgrows every fixed width has to live somewhere that
+// grows, so an int is a block the allocator hands out:
+//
+//     [0] sign   ⁻1, 0 or 1 -- zero is the only value whose sign is 0
+//     [8] n      how many limbs are in use
+//     [16…]      the limbs, least significant first
+//
+// The limbs are base 2^31 rather than 2^32 or 2^64, which spends a bit
+// of every word to buy something worth more than the space: the
+// product of two limbs is under 2^62, so every intermediate in the
+// multiply and the divide fits an i64 with room over, and none of the
+// arithmetic below has to think about its own overflow.  A wider limb
+// would mean carrying the high half of a product by hand, in six
+// backends, for a value nobody has yet complained about the size of.
+//
+// The routines are arithmetic and nothing else -- no kernel, no
+// calling convention of their own -- so they are written once here and
+// every target emits them, as the hash and sha256 routines are.
+
+let BIG_SHIFT : i64 = 31
+let BIG_MASK : i64 = 2147483647      // 2^31 - 1
+let BIG_BASE : i64 = 2147483648      // 2^31
+let BIG_HDR : i64 = 16               // sign and length, before the limbs
+
+// A block for n limbs.  The limbs are not cleared: every routine here
+// writes each one it counts.
+fn big_new(b : &mut RtB, n : i64) → i64:
+    let sz : i64 = b.add(b.shl(n, b.cst(3)), b.cst(BIG_HDR))
+    b.call1(RT_ALLOC, sz)
+
+fn big_limb(b : &mut RtB, base : i64, i : i64) → i64:
+    b.ldn(b.add(base, b.shl(i, b.cst(3))), BIG_HDR, 8)
+
+fn big_set(b : &mut RtB, base : i64, i : i64, v : i64):
+    b.stn(b.add(base, b.shl(i, b.cst(3))), BIG_HDR, v, 8)
+
+// Drop the leading zero limbs a computation left behind, and settle the
+// sign: a magnitude of nothing is zero, whatever the sign was going to
+// be.  `want` is the sign to take where anything is left.
+fn big_settle(b : &mut RtB, h : i64, n : i64, want : i64):
+    let ltop : i64 = b.l()
+    let lend : i64 = b.l()
+    b.lab(ltop)
+    b.jz(n, lend)
+    let top : i64 = big_limb(&b, h, b.sub(n, b.cst(1)))
+    b.jnz(top, lend)
+    b.mov(n, b.sub(n, b.cst(1)))
+    b.jmp(ltop)
+    b.lab(lend)
+    b.stn(h, 8, n, 8)
+    b.stn(h, 0, b.sel(b.ceq(n, b.cst(0)), b.cst(0), want), 8)
+
+// (v) → the int that v is.  Three limbs hold every i64, the top one
+// holding two bits: 31 + 31 + 2.  The magnitude of the least i64 does
+// not fit an i64, so it is taken as a bit pattern and masked apart --
+// which is what the masks do for every other value as well, so there
+// is no special case to get wrong.
+fn rt_bigfrom_ir() → IrFn:
+    let b : mut RtB = rtb(1)
+    let neg : i64 = b.clts(0, b.cst(0))
+    let m : i64 = b.sel(neg, b.sub(b.cst(0), 0), 0)
+    let h : i64 = big_new(&b, b.cst(3))
+    big_set(&b, h, b.cst(0), b.band(m, b.cst(BIG_MASK)))
+    big_set(&b, h, b.cst(1), b.band(b.shr(m, b.cst(BIG_SHIFT)), b.cst(BIG_MASK)))
+    big_set(&b, h, b.cst(2), b.band(b.shr(m, b.cst(62)), b.cst(3)))
+    let n : i64 = b.t()
+    b.mov(n, b.cst(3))
+    big_settle(&b, h, n, b.sel(neg, b.cst(⁻1), b.cst(1)))
+    b.ret(h)
+    rtb_fn(b)
+
+// (a, b) → ⁻1, 0 or 1.  Sign first, then how many limbs, then the
+// limbs from the top: the first difference decides, and for two
+// negatives it decides the other way about.
+fn rt_bigcmp_ir() → IrFn:
+    let b : mut RtB = rtb(2)
+    let out : i64 = b.t()
+    let ldone : i64 = b.l()
+    let sa : i64 = b.ldn(0, 0, 8)
+    let sb : i64 = b.ldn(1, 0, 8)
+    let lsame : i64 = b.l()
+    b.mov(out, b.sel(b.clts(sa, sb), b.cst(⁻1), b.cst(1)))
+    b.jz(b.cne(sa, sb), lsame)
+    b.jmp(ldone)
+    b.lab(lsame)
+    b.mov(out, b.cst(0))
+    b.jz(sa, ldone)
+    // one magnitude against the other
+    let mag : i64 = b.t()
+    b.mov(mag, b.cst(0))
+    let na : i64 = b.ldn(0, 8, 8)
+    let nb : i64 = b.ldn(1, 8, 8)
+    let lsize : i64 = b.l()
+    let lloop : i64 = b.l()
+    let lmagdone : i64 = b.l()
+    b.mov(mag, b.sel(b.cltu(na, nb), b.cst(⁻1), b.cst(1)))
+    b.jz(b.cne(na, nb), lsize)
+    b.jmp(lmagdone)
+    b.lab(lsize)
+    let i : i64 = b.t()
+    b.mov(i, na)
+    b.mov(mag, b.cst(0))
+    b.lab(lloop)
+    b.jz(i, lmagdone)
+    b.mov(i, b.sub(i, b.cst(1)))
+    let la : i64 = big_limb(&b, 0, i)
+    let lb : i64 = big_limb(&b, 1, i)
+    let lnext : i64 = b.l()
+    b.mov(mag, b.sel(b.cltu(la, lb), b.cst(⁻1), b.cst(1)))
+    b.jz(b.cne(la, lb), lnext)
+    b.jmp(lmagdone)
+    b.lab(lnext)
+    b.mov(mag, b.cst(0))
+    b.jmp(lloop)
+    b.lab(lmagdone)
+    // two negatives compare the other way about
+    b.mov(out, b.sel(b.clts(sa, b.cst(0)), b.sub(b.cst(0), mag), mag))
+    b.lab(ldone)
+    b.ret(out)
+    rtb_fn(b)
+
+// (a, b, negb) → a + b, with b's sign flipped first where negb says
+// so.  One routine for both, since a subtraction is an addition of the
+// other sign and everything below this line is about magnitudes.
+//
+// Same signs add the magnitudes; different signs take the smaller from
+// the larger and keep the larger's sign.  Which is larger is what
+// RT_BIGCMP already answers, asked of the magnitudes by lending both
+// the same sign.
+fn rt_bigadd_ir() → IrFn:
+    let b : mut RtB = rtb(3)
+    let sa : i64 = b.ldn(0, 0, 8)
+    let sb0 : i64 = b.ldn(1, 0, 8)
+    let sb : i64 = b.sel(2, b.sub(b.cst(0), sb0), sb0)
+    let out : i64 = b.t()
+    let ldone : i64 = b.l()
+    // b nothing: the answer is a, and an int is never written into,
+    // so it may be shared rather than copied
+    b.mov(out, 0)
+    b.jz(sb0, ldone)
+    // a nothing: the answer is b under the sign the flag asked for,
+    // which is a copy where the flag flipped it
+    let lanz : i64 = b.l()
+    b.jnz(sa, lanz)
+    let ncp : i64 = b.ldn(1, 8, 8)
+    let hcp : i64 = big_new(&b, ncp)
+    b.stn(hcp, 0, sb, 8)
+    b.stn(hcp, 8, ncp, 8)
+    let ck : i64 = b.t()
+    b.mov(ck, b.cst(0))
+    let lk1 : i64 = b.l()
+    let lk2 : i64 = b.l()
+    b.lab(lk1)
+    b.jz(b.cltu(ck, ncp), lk2)
+    big_set(&b, hcp, ck, big_limb(&b, 1, ck))
+    b.mov(ck, b.add(ck, b.cst(1)))
+    b.jmp(lk1)
+    b.lab(lk2)
+    b.mov(out, hcp)
+    b.jmp(ldone)
+    b.lab(lanz)
+    let na : i64 = b.ldn(0, 8, 8)
+    let nb : i64 = b.ldn(1, 8, 8)
+    // p is the longer, q the shorter, and each keeps its own length
+    let lsame : i64 = b.l()
+    let ldiff : i64 = b.l()
+    b.jz(b.cne(sa, sb), lsame)
+    b.jmp(ldiff)
+
+    // ---- same sign: the magnitudes add, and a carry may make it longer
+    b.lab(lsame)
+    let nmax : i64 = b.sel(b.cltu(na, nb), nb, na)
+    let h : i64 = big_new(&b, b.add(nmax, b.cst(1)))
+    let i : i64 = b.t()
+    let carry : i64 = b.t()
+    b.mov(i, b.cst(0))
+    b.mov(carry, b.cst(0))
+    let lt1 : i64 = b.l()
+    let le1 : i64 = b.l()
+    b.lab(lt1)
+    b.jz(b.cltu(i, nmax), le1)
+    let va : i64 = b.sel(b.cltu(i, na), big_limb(&b, 0, i), b.cst(0))
+    let vb : i64 = b.sel(b.cltu(i, nb), big_limb(&b, 1, i), b.cst(0))
+    let s : i64 = b.add(b.add(va, vb), carry)
+    big_set(&b, h, i, b.band(s, b.cst(BIG_MASK)))
+    b.mov(carry, b.shr(s, b.cst(BIG_SHIFT)))
+    b.mov(i, b.add(i, b.cst(1)))
+    b.jmp(lt1)
+    b.lab(le1)
+    big_set(&b, h, nmax, carry)
+    let n1 : i64 = b.t()
+    b.mov(n1, b.add(nmax, b.cst(1)))
+    big_settle(&b, h, n1, sa)
+    b.mov(out, h)
+    b.jmp(ldone)
+
+    // ---- different signs: the smaller magnitude comes off the larger
+    b.lab(ldiff)
+    let c : i64 = b.call2(RT_BIGCMP, 0, 1)
+    let cm : i64 = b.sel(b.clts(sa, b.cst(0)), b.sub(b.cst(0), c), c)
+    let hz : i64 = big_new(&b, b.cst(1))
+    b.stn(hz, 0, b.cst(0), 8)
+    b.stn(hz, 8, b.cst(0), 8)
+    b.mov(out, hz)
+    b.jz(cm, ldone)
+    // p the larger magnitude, q the smaller
+    let pbig : i64 = b.clts(b.cst(0), cm)
+    let p : i64 = b.sel(pbig, 0, 1)
+    let q : i64 = b.sel(pbig, 1, 0)
+    let sp : i64 = b.sel(pbig, sa, sb)
+    let np : i64 = b.ldn(p, 8, 8)
+    let nq : i64 = b.ldn(q, 8, 8)
+    let h2 : i64 = big_new(&b, np)
+    let j : i64 = b.t()
+    let borrow : i64 = b.t()
+    b.mov(j, b.cst(0))
+    b.mov(borrow, b.cst(0))
+    let lt2 : i64 = b.l()
+    let le2 : i64 = b.l()
+    b.lab(lt2)
+    b.jz(b.cltu(j, np), le2)
+    let wa : i64 = big_limb(&b, p, j)
+    let wb : i64 = b.sel(b.cltu(j, nq), big_limb(&b, q, j), b.cst(0))
+    let d : i64 = b.sub(b.sub(wa, wb), borrow)
+    let under : i64 = b.clts(d, b.cst(0))
+    big_set(&b, h2, j, b.sel(under, b.add(d, b.cst(BIG_BASE)), d))
+    b.mov(borrow, b.sel(under, b.cst(1), b.cst(0)))
+    b.mov(j, b.add(j, b.cst(1)))
+    b.jmp(lt2)
+    b.lab(le2)
+    let n2 : i64 = b.t()
+    b.mov(n2, np)
+    big_settle(&b, h2, n2, sp)
+    b.mov(out, h2)
+    b.lab(ldone)
+    b.ret(out)
+    rtb_fn(b)
+
+// (a, b) → a × b.  Schoolbook: every limb of one against every limb of
+// the other, the carry riding along.  A limb is under 2^31, so a
+// product is under 2^62 and the running sum of one against a whole
+// row, carry and all, stays inside an i64.
+fn rt_bigmul_ir() → IrFn:
+    let b : mut RtB = rtb(2)
+    let sa : i64 = b.ldn(0, 0, 8)
+    let sb : i64 = b.ldn(1, 0, 8)
+    let out : i64 = b.t()
+    let ldone : i64 = b.l()
+    let hz : i64 = big_new(&b, b.cst(1))
+    b.stn(hz, 0, b.cst(0), 8)
+    b.stn(hz, 8, b.cst(0), 8)
+    b.mov(out, hz)
+    b.jz(sa, ldone)
+    b.jz(sb, ldone)
+    let na : i64 = b.ldn(0, 8, 8)
+    let nb : i64 = b.ldn(1, 8, 8)
+    let nt : i64 = b.add(na, nb)
+    let h : i64 = big_new(&b, nt)
+    // clear, since every limb is added into rather than written
+    let z : i64 = b.t()
+    b.mov(z, b.cst(0))
+    let lz1 : i64 = b.l()
+    let lz2 : i64 = b.l()
+    b.lab(lz1)
+    b.jz(b.cltu(z, nt), lz2)
+    big_set(&b, h, z, b.cst(0))
+    b.mov(z, b.add(z, b.cst(1)))
+    b.jmp(lz1)
+    b.lab(lz2)
+    let i : i64 = b.t()
+    b.mov(i, b.cst(0))
+    let lo1 : i64 = b.l()
+    let lo2 : i64 = b.l()
+    b.lab(lo1)
+    b.jz(b.cltu(i, na), lo2)
+    let va : i64 = big_limb(&b, 0, i)
+    let j : i64 = b.t()
+    let carry : i64 = b.t()
+    b.mov(j, b.cst(0))
+    b.mov(carry, b.cst(0))
+    let li1 : i64 = b.l()
+    let li2 : i64 = b.l()
+    b.lab(li1)
+    b.jz(b.cltu(j, nb), li2)
+    let at : i64 = b.add(i, j)
+    let cur : i64 = b.add(b.add(big_limb(&b, h, at), b.mul(va, big_limb(&b, 1, j))), carry)
+    big_set(&b, h, at, b.band(cur, b.cst(BIG_MASK)))
+    b.mov(carry, b.shr(cur, b.cst(BIG_SHIFT)))
+    b.mov(j, b.add(j, b.cst(1)))
+    b.jmp(li1)
+    b.lab(li2)
+    // the carry out of the row lands past it, where nothing has added yet
+    big_set(&b, h, b.add(i, nb), carry)
+    b.mov(i, b.add(i, b.cst(1)))
+    b.jmp(lo1)
+    b.lab(lo2)
+    let n : i64 = b.t()
+    b.mov(n, nt)
+    big_settle(&b, h, n, b.mul(sa, sb))
+    b.mov(out, h)
+    b.lab(ldone)
+    b.ret(out)
+    rtb_fn(b)
+
+// (a) → written to stdout.  Nine decimal digits at a time: 10^9 is
+// under 2^30, so dividing the whole number by it is one pass down the
+// limbs with a remainder that never leaves an i64 -- `rem × 2^31 +
+// limb` is under 2^61.  The digits come out backwards and are written
+// from the far end of a buffer, as RT_PRINTI does with an i64.
+//
+// The limbs are copied first: a divide is destructive and an int is
+// not, since the value being printed is very often about to be used
+// again.
+fn rt_bigprint_ir() → IrFn:
+    let b : mut RtB = rtb(1)
+    let ldone : i64 = b.l()
+    let sign : i64 = b.ldn(0, 0, 8)
+    // zero has no digits to divide out, so it is written as itself
+    let lnz : i64 = b.l()
+    b.jnz(sign, lnz)
+    let zb : i64 = b.call1(RT_ALLOC, b.cst(8))
+    b.stn(zb, 0, b.cst(48), 1)
+    _ ← b.call2(RT_WRITE1, zb, b.cst(1))
+    b.jmp(ldone)
+    b.lab(lnz)
+    let n0 : i64 = b.ldn(0, 8, 8)
+    // the working copy, and the digits
+    let w : i64 = big_new(&b, n0)
+    let ci : i64 = b.t()
+    b.mov(ci, b.cst(0))
+    let lc1 : i64 = b.l()
+    let lc2 : i64 = b.l()
+    b.lab(lc1)
+    b.jz(b.cltu(ci, n0), lc2)
+    big_set(&b, w, ci, big_limb(&b, 0, ci))
+    b.mov(ci, b.add(ci, b.cst(1)))
+    b.jmp(lc1)
+    b.lab(lc2)
+    // a limb is 31 bits, so ten limbs is under 10^94: ten digits a limb
+    // is room and to spare, and one more byte for the sign
+    let cap : i64 = b.add(b.mul(n0, b.cst(10)), b.cst(2))
+    let buf : i64 = b.call1(RT_ALLOC, cap)
+    let ix : i64 = b.t()
+    b.mov(ix, cap)
+    let n : i64 = b.t()
+    b.mov(n, n0)
+    let billion : i64 = b.cst(1000000000)
+    let ten : i64 = b.cst(10)
+    let lg1 : i64 = b.l()
+    let lg2 : i64 = b.l()
+    b.lab(lg1)
+    b.jz(n, lg2)
+    // one pass down the limbs: the whole number divided by 10^9
+    let rem : i64 = b.t()
+    b.mov(rem, b.cst(0))
+    let k : i64 = b.t()
+    b.mov(k, n)
+    let ld1 : i64 = b.l()
+    let ld2 : i64 = b.l()
+    b.lab(ld1)
+    b.jz(k, ld2)
+    b.mov(k, b.sub(k, b.cst(1)))
+    let cur : i64 = b.add(b.mul(rem, b.cst(BIG_BASE)), big_limb(&b, w, k))
+    big_set(&b, w, k, b.udiv(cur, billion))
+    b.mov(rem, b.umod(cur, billion))
+    b.jmp(ld1)
+    b.lab(ld2)
+    // the top limbs may have gone to nothing
+    let lt1 : i64 = b.l()
+    let lt2 : i64 = b.l()
+    b.lab(lt1)
+    b.jz(n, lt2)
+    let top : i64 = big_limb(&b, w, b.sub(n, b.cst(1)))
+    b.jnz(top, lt2)
+    b.mov(n, b.sub(n, b.cst(1)))
+    b.jmp(lt1)
+    b.lab(lt2)
+    // nine digits of this group, or as many as are left where it is
+    // the last one: a leading zero inside the number is a digit, and
+    // one in front of it is not
+    let cnt : i64 = b.t()
+    b.mov(cnt, b.cst(0))
+    let lq1 : i64 = b.l()
+    let lq2 : i64 = b.l()
+    b.lab(lq1)
+    b.mov(ix, b.sub(ix, b.cst(1)))
+    b.stn(b.add(buf, ix), 0, b.add(b.umod(rem, ten), b.cst(48)), 1)
+    b.mov(rem, b.udiv(rem, ten))
+    b.mov(cnt, b.add(cnt, b.cst(1)))
+    // nine of them and the group is done however much is left
+    b.jz(b.cltu(cnt, b.cst(9)), lq2)
+    // more of this group to write
+    b.jnz(rem, lq1)
+    // the group is out; where the number is out too, so is this
+    b.jz(n, lq2)
+    // otherwise it is an inner group and is padded to nine, a zero
+    // inside a number being a digit like any other
+    b.jmp(lq1)
+    b.lab(lq2)
+    b.jmp(lg1)
+    b.lab(lg2)
+    let lpos : i64 = b.l()
+    b.jz(b.clts(sign, b.cst(0)), lpos)
+    b.mov(ix, b.sub(ix, b.cst(1)))
+    b.stn(b.add(buf, ix), 0, b.cst(45), 1)
+    b.lab(lpos)
+    _ ← b.call2(RT_WRITE1, b.add(buf, ix), b.sub(cap, ix))
+    b.lab(ldone)
+    b.retn()
+    rtb_fn(b)

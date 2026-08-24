@@ -195,6 +195,42 @@ impl Lower:
     // Expressions
     // ------------------------------------------------------------------
 
+    // A call to a runtime routine, which the backends know by its
+    // negative id.  Lowering reaches for one where the work is the
+    // runtime's rather than the machine's: int's arithmetic is all of
+    // it so far.
+    fn iconst(&mut self, v : i64) → i64:
+        let d : i64 = self.tmp()
+        self.ir(IR_CONST, v, 0, 0, d, 0)
+        d
+
+    fn rt1(&mut self, target : i64, a0 : i64) → i64:
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(1)
+        self.extra.push(a0)
+        let d : i64 = self.tmp()
+        self.ir(IR_CALL, target, off, 0, d, 0)
+        d
+
+    fn rt2(&mut self, target : i64, a0 : i64, a1 : i64) → i64:
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(2)
+        self.extra.push(a0)
+        self.extra.push(a1)
+        let d : i64 = self.tmp()
+        self.ir(IR_CALL, target, off, 0, d, 0)
+        d
+
+    fn rt3(&mut self, target : i64, a0 : i64, a1 : i64, a2 : i64) → i64:
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(3)
+        self.extra.push(a0)
+        self.extra.push(a1)
+        self.extra.push(a2)
+        let d : i64 = self.tmp()
+        self.ir(IR_CALL, target, off, 0, d, 0)
+        d
+
     fn lower_expr(&mut self, nid : i64) → i64:
         let v0 : i64 = self.lower_expr_i(nid)
         let v : mut i64 = v0
@@ -206,6 +242,10 @@ impl Lower:
             let d : i64 = self.tmp()
             self.ir(IR_NARROW, v, 0, 0, d, width_of(cw))
             v ← d
+        if self.nhold[nid × 1¤ptrdiff] = 2:
+            // made into an int: every fixed width fits one, and a
+            // number written down is one where an int was wanted
+            return self.rt1(RT_BIGFROM, v)
         if self.nhold[nid × 1¤ptrdiff] = 0:
             return v
         // A value meeting a stated optional type is held in one.  Every
@@ -749,6 +789,46 @@ impl Lower:
             ow ← if (owa » 8) = 1: owa else: owb
         elif (owb & 255) > (owa & 255):
             ow ← owb
+        if ty_is_bigint(self.tof(na)) and not ty_is_bigint(self.tof(nid)):
+            // Comparing two ints answers a truth value, so the width
+            // settled above says nothing about the operands and the
+            // ordinary compare would ask its question of two addresses.
+            // The runtime compares them and answers ⁻1, 0 or 1, and the
+            // ordering is then asked of that, where a width does mean
+            // something.
+            assert(k = NK_EQ or k = NK_NE or k = NK_LT or k = NK_LE or k = NK_GT or k = NK_GE,
+                   "an int whose answer is not an int was compared")
+            let c : i64 = self.rt2(RT_BIGCMP, av, bv)
+            let z : i64 = self.tmp()
+            self.ir(IR_CONST, 0, 0, 0, z, 64)
+            let op : i64 = if k = NK_EQ:
+                IR_CEQ
+            elif k = NK_NE:
+                IR_CNE
+            elif k = NK_LT:
+                IR_CLT
+            elif k = NK_LE:
+                IR_CLE
+            elif k = NK_GT:
+                IR_CGT
+            else:
+                IR_CGE
+            // signed: the answer is ⁻1, 0 or 1, and unsigned would read
+            // the ⁻1 as the largest number there is
+            self.ir(op, c, z, 0, d, 64 + 256)
+            return d
+        if ty_is_bigint(self.tof(nid)):
+            // int carries its own arithmetic, in the runtime: there is
+            // no width here for a machine instruction to work at
+            if k = NK_ADD:
+                return self.rt3(RT_BIGADD, av, bv, self.iconst(0))
+            if k = NK_SUB:
+                return self.rt3(RT_BIGADD, av, bv, self.iconst(1))
+            if k = NK_MUL:
+                return self.rt2(RT_BIGMUL, av, bv)
+            // ÷ and % over an int are not written yet; the checker
+            // says so before this is reached
+            return av
         if k = NK_ADD:
             self.ir(if self.in_wrap > 0: IR_ADDW else: IR_ADD, av, bv, 0, d, w)
         elif k = NK_SUB:
@@ -1855,6 +1935,16 @@ impl Lower:
                 let bv0 : i64 = self.lower_expr(y)
                 c ← self.tmp()
                 self.ir(IR_SEQV, av0, bv0, 0, c, 64)
+            elif ty_is_bigint(self.tof(x)):
+                // two ints are equal when they say so, not when they
+                // are the same block
+                let av1 : i64 = self.lower_expr(x)
+                let bv1 : i64 = self.lower_expr(y)
+                let cc : i64 = self.rt2(RT_BIGCMP, av1, bv1)
+                let zz : i64 = self.tmp()
+                self.ir(IR_CONST, 0, 0, 0, zz, 64)
+                c ← self.tmp()
+                self.ir(IR_CEQ, cc, zz, 0, c, 64 + 256)
             else:
                 let av : i64 = self.lower_expr(x)
                 let bv : i64 = self.lower_expr(y)
@@ -1930,6 +2020,9 @@ impl Lower:
             self.ir(IR_LABEL, lfalse, 0, 0, 0, 0)
             self.ir(IR_PRINTS, mf, 0, 0, 0, 0)
             self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        elif ty_is_bigint(t):
+            let v : i64 = self.lower_expr(arg)
+            _ ← self.rt1(RT_BIGPRINT, v)
         else:
             let v : i64 = self.lower_expr(arg)
             if ty_sgn(t) = 1:
