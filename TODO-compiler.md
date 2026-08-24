@@ -129,11 +129,17 @@ The Compiler
     an expectation can say which of the two it is, or once every compile-time refusal has a
     number and the run-time ones are the remainder.
 
-[ ] an unused string literal reaches .rodata.  The pool comes from the lexer, so every
+[x] an unused string literal reaches .rodata.  The pool comes from the lexer, so every
     literal in the source is emitted whether anything reads it or not -- an @expect message,
     a line in a function nobody calls.  No instruction is generated for either, so this is
     size and not correctness, but the tests carry forty-two @expect messages they have no
     use for.  Emitting only the strings something references fixes both.
+    Done: what refers to a string is a pointer patch or a descriptor patch, so those two
+    lists are the reference set (str_uses in emit.ngpl).  Only the referenced ones get bytes
+    and a descriptor, and the descriptor table is packed densely with the patch remapped, so
+    an unread string costs nothing at all rather than sixteen bytes.  Both drivers do it.
+    An @expect message is gone from the image; a line in a function nobody calls is not,
+    that function still being emitted -- dropping uncalled functions is its own item.
 
 [ ] the interpreter cannot always tell a program it refuses from a program that ran and
     stopped.  It checks types as it evaluates, so both arrive at the same place as Python

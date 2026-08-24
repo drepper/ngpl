@@ -541,6 +541,24 @@ fn str_len(s : str) → i64:
 
 // the runtime's own routines, in the order their ids run, so a symbol
 // table can name the code they occupy
+// Which strings of the pool something in the image reads.  A pointer
+// patch names one, and so does a descriptor patch; a literal no patch
+// names is a literal nothing reads, and its bytes need not be in the
+// image at all.  Answers one flag per string, in the pool's own order.
+fn str_uses(em : &Emit, n : i64) → i64[]:
+    let used : mut i64[] = []
+    let i : mut i64 = 0
+    while i < n:
+        used.push(0)
+        i ← i + 1
+    if #em.sf_str > 0:
+        foreach k := 0…#em.sf_str - 1:
+            used[em.sf_str[k] × 1¤ptrdiff] ← 1
+    if #em.sd_str > 0:
+        foreach k := 0…#em.sd_str - 1:
+            used[em.sd_str[k] × 1¤ptrdiff] ← 1
+    used
+
 fn rt_names() → str[]:
     [
     "RT_PRINTI",

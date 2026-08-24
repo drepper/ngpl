@@ -574,32 +574,49 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // rodata: the strings' bytes, then their descriptors
     let text_size : i64 = em.here()
     let ro_vaddr : i64 = IMAGE_BASE + align_up(PAGE + text_size, PAGE)
+    // The pool holds every literal the source wrote, and .rodata holds
+    // the ones something reads.  A message an @expect names, a line in
+    // a function nobody calls: no instruction refers to either, so the
+    // bytes would sit in the image saying nothing.  What refers to a
+    // string is a pointer patch or a descriptor patch, and those are
+    // the two lists asked here.
+    let used : mut i64[] = str_uses(&em, @dropunit(#lw.strs))
     let stroffs : mut i64[] = []
+    let descidx : mut i64[] = []
     let acc : mut i64 = 0
-    foreach s := lw.strs:
-        stroffs.push(acc)
-        acc ← acc + str_len(s)
+    let nstr : mut i64 = 0
+    if #lw.strs > 0:
+        foreach i := 0…#lw.strs - 1:
+            stroffs.push(acc)
+            descidx.push(nstr)
+            if used[i] = 1:
+                acc ← acc + str_len(lw.strs[i])
+                nstr ← nstr + 1
     let descbase : i64 = align_up(acc, 8)
-    let jt_base : i64 = descbase + 16 × @dropunit(#lw.strs)
+    let jt_base : i64 = descbase + 16 × nstr
     if #em.sf_pos > 0:
         foreach i := 0…#em.sf_pos - 1:
             em.patch64(em.sf_pos[i], ro_vaddr + stroffs[em.sf_str[i] × 1¤ptrdiff])
     if #em.sd_pos > 0:
         foreach i := 0…#em.sd_pos - 1:
-            em.patch64(em.sd_pos[i], ro_vaddr + descbase + 16 × em.sd_str[i])
+            em.patch64(em.sd_pos[i], ro_vaddr + descbase + 16 × descidx[em.sd_str[i] × 1¤ptrdiff])
     if #em.jt_pos > 0:
         foreach i := 0…#em.jt_pos - 1:
             em.patch64(em.jt_pos[i], ro_vaddr + jt_base + 8 × em.jt_starts[em.jt_id[i] × 1¤ptrdiff])
     assert(#stroffs = #lw.strs, "one offset per string")
     let rodata : mut u8[] = []
-    foreach s := lw.strs:
-        foreach c := s:
-            rodata.push(c.ord() & 255)
+    if #lw.strs > 0:
+        foreach i := 0…#lw.strs - 1:
+            if used[i] = 1:
+                foreach c := lw.strs[i]:
+                    rodata.push(c.ord() & 255)
     while @dropunit(#rodata) < descbase:
         rodata.push(0)
-    foreach i := 0…#lw.strs - 1:
-        push64(&rodata, ro_vaddr + stroffs[i])
-        push64(&rodata, str_len(lw.strs[i]))
+    if #lw.strs > 0:
+        foreach i := 0…#lw.strs - 1:
+            if used[i] = 1:
+                push64(&rodata, ro_vaddr + stroffs[i])
+                push64(&rodata, str_len(lw.strs[i]))
     // a jump table holds code addresses, a value table its data
     if #em.jt_starts > 0:
         foreach t := 0…#em.jt_starts - 1:
