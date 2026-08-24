@@ -313,8 +313,13 @@ Completed
 
 [ ] a condition on a type rather than on a function -- an invariant.
 
-[ ] a precondition whose arguments are known before anything runs could be settled then.  The
+[x] a precondition whose arguments are known before anything runs could be settled then.  The
     machinery is static_assert's; joining them up is its own piece of work.
+    Done in the interpreter, on branch todo/comptime-pre: a call written with constants --
+    literals or arithmetic over them -- has the callee's @pre read where the call is written,
+    and a wrong one is reported whether or not that call is ever reached.  Nothing is settled
+    where an argument is not known, and nothing at all under the ignore semantic.  ngplc does
+    not do it yet, which is the permitted direction.
 
 [x] @noreturn says control does not come back from a function, and what follows a call to one
     cannot be reached.  A return already says that for what follows it and needs no attribute,

@@ -7,7 +7,7 @@ warning: scaled: a precondition does not hold, so the caller did not keep to wha
     |
 backtrace (innermost call first):
   #0 scaled at tests/output/contract_observe.ngpl:5:5
-  #1 main at tests/output/contract_observe.ngpl:18:32
+  #1 main at tests/output/contract_observe.ngpl:26:32
 0
 warning: first_of: a precondition could not be read, so what it claims is not known to hold: array index 3 out of range (length 2)
   --> tests/output/contract_observe.ngpl:11:1
@@ -18,6 +18,6 @@ warning: first_of: a precondition could not be read, so what it claims is not kn
     |
 backtrace (innermost call first):
   #0 first_of at tests/output/contract_observe.ngpl:11:7
-  #1 main at tests/output/contract_observe.ngpl:20:31
+  #1 main at tests/output/contract_observe.ngpl:28:31
 7
 the program ran to the end

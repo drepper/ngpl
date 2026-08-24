@@ -38,7 +38,8 @@ from interp.value import (
     _parse_array_type, format_shape, is_generic_type, declared_rank,
     a_sum_holds_both,
 )
-from interp.eval import Evaluator, unwrap_optional, _ARRAY_MUTATORS
+from interp.eval import (Evaluator, unwrap_optional, _ARRAY_MUTATORS,
+                        _is_const_expr)
 
 # Methods that only look at their object, whatever its type turns out
 # to be.  Every other method may reach a &mut self and change it.
@@ -50,6 +51,7 @@ from interp.errors import (format_diagnostic, extract_position,
                            strip_position_prefix, format_backtrace,
                            diagnostic_level, set_warnings_are_errors,
                            warnings_are_errors, set_contract_semantic,
+                           contract_semantic,
                            set_source, CONTRACT_SEMANTICS,
                            ProgramExit, ProgramAbort, ProgramStop,
                            ContractError, coded, Diagnostic,
@@ -1195,6 +1197,65 @@ def _static_assert_check(func_def, env) -> str | None:
         except Exception:
             # Not answerable from declarations alone; it runs instead.
             pass
+    return None
+
+
+def _static_precondition_check(func_def, env, funcs) -> str | None:
+    """Settle a precondition whose arguments are known before anything runs.
+
+    A call written with constants says everything the callee's `@pre`
+    needs, so the condition can be read here rather than at the first
+    call that reaches it -- and a wrong one is then reported whether or
+    not that call is ever reached, which is the whole point of saying
+    it early.
+
+    The machinery is static_assert's: an evaluator over what the text
+    already says.  What is new is only which expression it is asked --
+    the callee's condition, with the parameters standing for the
+    arguments written at the call.
+    """
+    if contract_semantic() == "ignore":
+        return None
+    checker = None
+    for node in _iter_ast(func_def.body):
+        if not isinstance(node, _ast.FuncCall):
+            continue
+        callee = funcs.get(node.name)
+        if callee is None or not callee.preconditions:
+            continue
+        if callee is func_def:
+            # a recursion's own call: the arguments it is written with
+            # are this call's, not the caller's
+            continue
+        if len(node.args) != len(callee.params):
+            continue
+        if not all(_is_const_expr(a) for a in node.args):
+            continue
+        if checker is None:
+            checker = Evaluator(Env(parent=env))
+        known = Env(parent=env)
+        try:
+            for param, arg in zip(callee.params, node.args):
+                pname = param[0] if isinstance(param, tuple) else param
+                known.define(pname, checker.eval_expr(arg))
+        except Exception:
+            # Not answerable from what is written; it runs instead.
+            continue
+        saved = checker.env
+        checker.env = known
+        try:
+            for condition in callee.preconditions:
+                try:
+                    held = unwrap_optional(checker.eval_expr(condition.expr))
+                except Exception:
+                    continue
+                if isinstance(held, BoolValue) and not held.value:
+                    return _Finding(
+                        f"{callee.name}: a precondition does not hold for "
+                        f"this call, whose arguments are known before "
+                        f"anything runs", node, 2619)
+        finally:
+            checker.env = saved
     return None
 
 
@@ -2372,6 +2433,16 @@ def _block_breaks(body) -> bool:
             if any(_block_breaks(arm.body) for arm in stmt.arms):
                 return True
     return False
+
+
+def _functions_by_name(definitions) -> dict:
+    """The functions a call could name, by name.
+
+    A call written with constants can have the callee's conditions read
+    where the call is written; finding the callee is what this is for.
+    """
+    return {d.name: d for d in definitions
+            if isinstance(d, _ast.FuncDef)}
 
 
 def _gone_for_good(definitions) -> frozenset:
@@ -3635,6 +3706,7 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                     st._ref_self_methods.add(method_def.name)
 
     gone = _gone_for_good(definitions)
+    by_name = _functions_by_name(definitions)
     for defn in definitions:
         if isinstance(defn, ASTFuncDef) and not defn.expect_annotations:
             if not getattr(defn, "_parse_error", None):
@@ -3662,6 +3734,10 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 if return_err is not None:
                     raise DefinitionError(f"in {defn.name}: {return_err}",
                                           _finding_pos(return_err) or _node_pos(defn))
+                pre_err = _static_precondition_check(defn, env, by_name)
+                if pre_err is not None:
+                    raise DefinitionError(pre_err, _finding_pos(pre_err)
+                                          or _node_pos(defn))
                 noreturn_err = _static_noreturn_check(defn, gone)
                 if noreturn_err is not None:
                     raise DefinitionError(noreturn_err, _node_pos(defn))
@@ -3955,6 +4031,7 @@ def main():
     expect_passed = 0
     expect_failed = 0
     gone = _gone_for_good(definitions)
+    by_name = _functions_by_name(definitions)
     for defn in expect_funcs:
         errors_produced: list[tuple[str, str]] = []
 
@@ -4001,6 +4078,9 @@ def main():
                 errors_produced.append(("error", return_err))
 
         if not errors_produced:
+            pre_err = _static_precondition_check(defn, env, by_name)
+            if pre_err is not None:
+                errors_produced.append(("error", pre_err))
             noreturn_err = _static_noreturn_check(defn, gone)
             if noreturn_err is not None:
                 # collected rather than raised, so an @expect may name

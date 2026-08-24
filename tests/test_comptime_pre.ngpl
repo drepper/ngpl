@@ -1,0 +1,51 @@
+// A precondition whose arguments are known before anything runs.
+//
+// A call written with constants says everything the callee's `@pre`
+// needs, so the condition can be read where the call is written rather
+// than at the first call that reaches it.  A wrong one is then
+// reported whether or not that call is ever reached, which is the
+// whole point of saying it early.
+//
+// The machinery is static_assert's -- an evaluator over what the text
+// already says.  What is new is only which expression it is asked: the
+// callee's condition, with the parameters standing for the arguments
+// written at the call.
+
+@pre(n > 0)
+fn root(n : i64) → i64:
+    n
+
+@test
+fn test_a_call_that_keeps_to_it_is_quiet():
+    assert_eq(root(4), 4)
+
+// Arithmetic is as known as a literal is.
+@test
+fn test_arithmetic_is_known_too():
+    assert_eq(root(2 + 3), 5)
+
+// Where the argument is not known before anything runs, the condition
+// is read at the call as it always was.
+@impure
+fn chosen() → i64:
+    7
+
+@test
+@impure
+fn test_an_argument_that_is_not_known_runs():
+    assert_eq(root(chosen()), 7)
+
+@test
+@expect error 2619 "root: a precondition does not hold for this call, whose arguments are known before anything runs"
+fn error_a_call_that_cannot_keep_to_it():
+    let n : mut = root(⁻1)
+
+@test
+@expect error 2619 "root: a precondition does not hold for this call, whose arguments are known before anything runs"
+fn error_the_arithmetic_settles_it():
+    let n : mut = root(2 - 5)
+
+@start
+@impure
+fn main():
+    std.println("comptime precondition tests passed")
