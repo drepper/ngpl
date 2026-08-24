@@ -639,12 +639,18 @@ class LambdaExpr:
     body is either a single expression node or a list of statement nodes.
     """
 
+    # Set where `@listable` was written in front of the λ.  A lambda
+    # is a function like any other and threads over a container the
+    # same way; what it lacked was somewhere to say so.
+    is_listable = False
+
     def __init__(self, params: list[tuple[str, str]], captures: list[str] | None,
-                 ret_type: str, body):
+                 ret_type: str, body, is_listable: bool = False):
         self.params = params
         self.captures = captures
         self.ret_type = ret_type
         self.body = body
+        self.is_listable = is_listable
 
 
 class MapExpr:

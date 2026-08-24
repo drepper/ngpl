@@ -5942,7 +5942,8 @@ class Evaluator:
                     f"lambda references '{name}' but has no capture list"))
 
         return LambdaValue(node.params, node.body, lambda_env,
-                           captures=node.captures, ret_type=node.ret_type)
+                           captures=node.captures, ret_type=node.ret_type,
+                           is_listable=node.is_listable)
 
     def _call_lambda(self, lam: LambdaValue, args):
         """Call a lambda value with given arguments."""
@@ -5956,11 +5957,34 @@ class Evaluator:
                 new_env = Env(parent=lam.env)
                 for (pname, _ptype), arg in zip(lam.params, args):
                     new_env.define(pname, arg)
+                # A partly applied listable lambda still threads: what
+                # is called in the end is the lambda, and it is the
+                # lambda that says it does.
                 return LambdaValue(remaining, lam.body, new_env,
-                                   captures=lam.captures, ret_type=lam.ret_type)
+                                   captures=lam.captures, ret_type=lam.ret_type,
+                                   is_listable=lam.is_listable)
             raise TypeError(
                 f"lambda expects {len(lam.params)} arguments, "
                 f"got {len(args)}")
+
+        if lam.is_listable:
+            # Threading is decided once the call is known to be one --
+            # after too few arguments have had their chance to curry,
+            # and before anything is bound, so each element meets the
+            # parameter for itself.  What the return type states is
+            # what one element answers, as it does for a named one.
+            threaded = self._thread_level(
+                "\N{GREEK SMALL LETTER LAMDA}",
+                [f"'{_names_display(name) if isinstance(name, tuple) else name}'"
+                 for name, _ in lam.params],
+                list(args),
+                [declared_rank(ptype) for _, ptype in lam.params],
+                lambda sub: self._call_lambda(lam, sub),
+                collect=(lam.ret_type is not None
+                         and lam.ret_type != "\N{EMPTY SET}"),
+                fallback_type=lam.ret_type)
+            if threaded is not None:
+                return threaded
 
         call_env = Env(parent=lam.env)
         for (pname, ptype), arg in zip(lam.params, args):

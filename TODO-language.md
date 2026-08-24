@@ -484,9 +484,13 @@ Completed
     silently, tagged its answer with the operands' type, and sat below the unit rules.  ⧺, ⍳
     and ∊ are not listable, each taking a container as its operand.
 
-[ ] a lambda cannot be @listable, there being nowhere to write an annotation on one.  A
+[x] a lambda cannot be @listable, there being nowhere to write an annotation on one.  A
     partly applied listable function still threads, since the named function is what is
     called in the end.
+    Done in the interpreter, on branch todo/listable-lambda: `@listable λx : i64 → i64: …`,
+    the annotation in front of the λ being the only place it could go.  A partly applied
+    listable lambda still threads, for the same reason a named one does.  ngplc does not
+    accept it yet, which is the permitted direction; the compiler side is what is left.
 
 [x] ⍳ refuses what the container cannot hold, as ∊ does, both going through one check.  It
     answered ∅ before, on the grounds that = answers false between two values of unrelated
