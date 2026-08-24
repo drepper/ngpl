@@ -54,12 +54,31 @@ fn rv_bshort(em : &mut Emit, f3 : i64, rs1 : i64, rs2 : i64, delta : i64):
 fn rv_mv(em : &mut Emit, rd : i64, rs : i64):
     rv_I(&em, 0, rs, 0, rd, 19)
 
+// The 2048 values at the very top of the positive 32-bit range are the
+// ones the ordinary pair gets wrong: rounding carries hi to 0x80000, so
+// lui writes 0x80000000, and on rv64 that sign-extends -- the pair
+// answers v - 2³² rather than v.  Nothing had asked for one of them
+// until int's limb mask, 0x7FFFFFFF, did.
+//
+// Build them from below instead, starting at 0x7FFFF000, where bit 31
+// is never set and so the two word sizes agree: rv32 shares this
+// routine, and a shift of 32 to clear a high half it does not have
+// would be no instruction at all there.
+fn rv_top32(em : &mut Emit, rd : i64, v : i64):
+    rv_U(&em, 524287, rd, 55)                               // lui rd, 0x7FFFF
+    rv_I(&em, 1024, rd, 0, rd, 19)
+    rv_I(&em, 1024, rd, 0, rd, 19)                          // now 0x7FFFF800
+    rv_I(&em, v - 2147481600, rd, 0, rd, 19)                // and the rest
+
 fn rv_movimm(em : &mut Emit, rd : i64, v : i64):
     if v >= ⁻2048 and v < 2048:
         rv_I(&em, v, 0, 0, rd, 19)                          // addi rd, x0, v
         return
     if v >= ⁻2147483648 and v < 2147483648:
         let hi : i64 = (v + 2048) » 12
+        if hi = 524288:
+            rv_top32(&em, rd, v)
+            return
         rv_U(&em, hi, rd, 55)                               // lui
         rv_I(&em, v - (hi « 12), rd, 0, rd, 19)             // lui+addi
         return
@@ -76,6 +95,9 @@ fn rv_movimm32(em : &mut Emit, rd : i64, v : i64):
         rv_I(&em, v, 0, 0, rd, 19)
         return
     let hi : i64 = (v + 2048) » 12
+    if hi = 524288:
+        rv_top32(&em, rd, v)
+        return
     rv_U(&em, hi, rd, 55)
     rv_I(&em, v - (hi « 12), rd, 0, rd, 19)
 
