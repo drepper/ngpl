@@ -647,6 +647,10 @@ impl Checker:
         let want : i64 = ty_strip_ref(want0)
         if t = want:
             return true
+        if ty_is_bigint(want) and ty_is_int(t):
+            // every fixed width fits an int, which has none to leave
+            self.nhold[e × 1¤ptrdiff] ← 2
+            return true
         if ty_is_opt(want) and not ty_is_opt(t):
             // An optional is the type that holds a value and the
             // absence of one, so a value meets it by being held.  ∅ is
@@ -692,6 +696,12 @@ impl Checker:
             // what the optional holds, and is held on the way in
             self.adopt(id, ty_opt_base(t))
             self.nhold[id × 1¤ptrdiff] ← 1
+            return
+        if ty_is_bigint(t):
+            // int has no width to settle on, so a number written where
+            // one is wanted is made into one on the way in
+            self.set_type(id, TY_INT)
+            self.nhold[id × 1¤ptrdiff] ← 2
             return
         if ty_is_enum(t) and self.kind_of(id) = NK_INT:
             // an enum holds exactly its members, so a written-out
@@ -816,6 +826,21 @@ impl Checker:
         let nb : i64 = self.a.nb[id × 1¤ptrdiff]
         if tl = TY_UNT and tr = TY_UNT:
             return TY_UNT
+        if ty_is_bigint(tl) or ty_is_bigint(tr):
+            // an accumulator is not narrowed by what is added to it:
+            // int is wider than any fixed width, so the other side is
+            // made into one and the answer is an int
+            if k ≠ NK_ADD and k ≠ NK_SUB and k ≠ NK_MUL:
+                // what an int can be worked with so far.  A division
+                // wants the long division this has not written yet,
+                // and a bit operation wants a width int has not got.
+                self.derr(tok, "an int is added, subtracted and multiplied so far; this operator does not reach one yet")
+                return TY_INT
+            if not ty_is_bigint(tl):
+                self.to_bigint(na, tl)
+            if not ty_is_bigint(tr):
+                self.to_bigint(nb, tr)
+            return TY_INT
         if tl = TY_UNT:
             self.adopt(na, tr)
             return tr
@@ -1444,7 +1469,7 @@ impl Checker:
                     self.derr(tok, "bit operations take a @flag enum; '" ⧺ self.a.enames[ty_eidx(tl) × 1¤ptrdiff] ⧺ "' counts rather than combines")
                 self.set_type(id, tl)
                 return
-            if not (tl = TY_UNT or ty_is_int(tl)) or not (tr = TY_UNT or ty_is_int(tr)):
+            if not (tl = TY_UNT or ty_is_int(tl) or ty_is_bigint(tl)) or not (tr = TY_UNT or ty_is_int(tr) or ty_is_bigint(tr)):
                 self.derr(tok, "this operator works numbers; the sides are " ⧺ self.tn(tl) ⧺ " and " ⧺ self.tn(tr))
                 self.set_type(id, TY_I64)
                 return
@@ -1471,9 +1496,28 @@ impl Checker:
         self.a.nb[id × 1¤ptrdiff] ← 0
         self.set_type(id, TY_UNT)
 
+    // Make this operand an int: a number written down settles on one,
+    // and a value of a fixed width is made into one where it stands.
+    fn to_bigint(&mut self, e : i64, t : i64):
+        if t = TY_UNT:
+            self.adopt(e, TY_INT)
+            return
+        if ty_is_int(t):
+            self.nhold[e × 1¤ptrdiff] ← 2
+            self.set_type(e, TY_INT)
+            return
+        self.derr(self.a.ntok[e × 1¤ptrdiff], "an int meets numbers; this is " ⧺ self.tn(t))
+
     fn check_cmp_operands(&mut self, id : i64, tok : i64, k : i64, na : i64, nb : i64):
         let tl : i64 = self.ty_of(na)
         let tr : i64 = self.ty_of(nb)
+        if ty_is_bigint(tl) or ty_is_bigint(tr):
+            if not ty_is_bigint(tl):
+                self.to_bigint(na, tl)
+            if not ty_is_bigint(tr):
+                self.to_bigint(nb, tr)
+            self.set_type(id, TY_BOOL)
+            return
         if tl = TY_UNT and tr = TY_UNT:
             if self.kind_of(na) = NK_INT and self.kind_of(nb) = NK_INT:
                 self.fold_bin(id, k, tok, self.a.na[na × 1¤ptrdiff],
@@ -3697,7 +3741,7 @@ impl Checker:
             let t : i64 = self.ty_of(arg)
             if t = TY_UNT:
                 self.adopt(arg, TY_I64)
-            elif not ty_is_int(t) and t ≠ TY_BOOL and t ≠ TY_STR and t ≠ TY_CHAR:
+            elif not ty_is_int(t) and not ty_is_bigint(t) and t ≠ TY_BOOL and t ≠ TY_STR and t ≠ TY_CHAR:
                 self.derr(tok, "println writes numbers, truth values, characters and strings; this is " ⧺ self.tn(t))
             i ← i + 1
         self.set_type(id, TY_UNIT)

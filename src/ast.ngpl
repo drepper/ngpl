@@ -182,7 +182,8 @@ fn proc_key(m : i64) → i64:
 let TYNAMES : std.dict(str, i64) = (⸨
     "i8": 17, "i16": 19, "i32": 21, "i64": 23,
     "u8": 16, "u16": 18, "u32": 20, "u64": 22,
-    "bool": 2, "str": 3, "char": 4, "byte": 16⸩)
+    "bool": 2, "str": 3, "char": 4, "byte": 16,
+    "int": 11⸩)
 
 struct FnDef:
     name : str
