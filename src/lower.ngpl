@@ -242,12 +242,19 @@ impl Lower:
             let d : i64 = self.tmp()
             self.ir(IR_NARROW, v, 0, 0, d, width_of(cw))
             v ← d
-        if self.nhold[nid × 1¤ptrdiff] = 2:
+        // Two things can be wanted of a value on its way into a
+        // stated type, and `int?` wants both, so nhold says them
+        // separately: bit 1 to be made into an int, bit 0 to be held in
+        // an optional.  In that order -- what is held is what the
+        // optional holds, which is the int and not the number it was.
+        let hv : i64 = self.nhold[nid × 1¤ptrdiff]
+        let vh : mut i64 = v
+        if (hv & 2) = 2:
             // made into an int: every fixed width fits one, and a
             // number written down is one where an int was wanted
-            return self.rt1(RT_BIGFROM, v)
-        if self.nhold[nid × 1¤ptrdiff] = 0:
-            return v
+            vh ← self.rt1(RT_BIGFROM, v)
+        if (hv & 1) = 0:
+            return vh
         // A value meeting a stated optional type is held in one.  Every
         // position where a value meets a stated type comes through
         // here, so saying it once says it for the binding, the
@@ -256,7 +263,7 @@ impl Lower:
         // asked for.
         let b : i64 = self.tmp()
         self.ir(IR_SNEW, 1, 0, 0, b, 0)
-        self.ir(IR_FSTO, b, 0, v, 0, 0)
+        self.ir(IR_FSTO, b, 0, vh, 0, 0)
         b
 
     fn lower_expr_i(&mut self, nid : i64) → i64:
@@ -971,7 +978,7 @@ impl Lower:
     // on the way out: only where the if answers one and the branch
     // does not -- ∅ is already an optional's own value.
     fn holds(&self, toopt : bool, e : i64) → bool:
-        toopt and not ty_is_opt(self.tof(e)) and self.tof(e) ≠ TY_EMPTY and self.nhold[e × 1¤ptrdiff] = 0
+        toopt and not ty_is_opt(self.tof(e)) and self.tof(e) ≠ TY_EMPTY and (self.nhold[e × 1¤ptrdiff] & 1) = 0
 
     fn lower_into(&mut self, v : i64, d : i64, hold : bool):
         if not hold:
@@ -2123,7 +2130,7 @@ impl Lower:
         // nhold says the checker already had it held on the way out of
         // lower_expr; holding it again would make an optional of an
         // optional, which is nobody's value.
-        if ty_is_opt(self.cur_ret) and not ty_is_opt(self.tof(na)) and self.nhold[na × 1¤ptrdiff] = 0:
+        if ty_is_opt(self.cur_ret) and not ty_is_opt(self.tof(na)) and (self.nhold[na × 1¤ptrdiff] & 1) = 0:
             let b9 : i64 = self.tmp()
             self.ir(IR_SNEW, 1, 0, 0, b9, 0)
             self.ir(IR_FSTO, b9, 0, v, 0, 0)
@@ -3153,7 +3160,7 @@ fn lower_lambda_fn(lw : &mut Lower, a : Ast, chk : Chk, j : i64) → IrFn:
         lw.lower_block(bodyn, true, ret)
     else:
         let rv : i64 = lw.lower_expr(bodyn)
-        if ty_is_opt(ret) and not ty_is_opt(lw.tof(bodyn)) and lw.nhold[bodyn × 1¤ptrdiff] = 0:
+        if ty_is_opt(ret) and not ty_is_opt(lw.tof(bodyn)) and (lw.nhold[bodyn × 1¤ptrdiff] & 1) = 0:
             // a bare value under an optional answer boxes itself, where
             // the checker did not already have it held on the way out
             let bb : i64 = lw.tmp()

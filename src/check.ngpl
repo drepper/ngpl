@@ -662,7 +662,10 @@ impl Checker:
                 return true
             if not self.try_fit(e, ty_opt_base(want)):
                 return false
-            self.nhold[e × 1¤ptrdiff] ← 1
+            // what the optional holds may itself have asked something
+            // of the value -- an int? asks for both -- so this adds the
+            // holding rather than replacing what is already said
+            self.nhold[e × 1¤ptrdiff] ← self.nhold[e × 1¤ptrdiff] | 1
             return true
         if ty_is_mat(t) and ty_is_mat(want):
             // a stated extent fits an open one; an open one fits only
@@ -695,7 +698,7 @@ impl Checker:
             // a number written where an optional is wanted settles on
             // what the optional holds, and is held on the way in
             self.adopt(id, ty_opt_base(t))
-            self.nhold[id × 1¤ptrdiff] ← 1
+            self.nhold[id × 1¤ptrdiff] ← self.nhold[id × 1¤ptrdiff] | 1
             return
         if ty_is_bigint(t):
             // int has no width to settle on, so a number written where
@@ -4749,7 +4752,7 @@ impl Checker:
                 // read without harm, and choose rather than branch.
                 let tv : i64 = self.block_value_node(nb)
                 if tv ≠ ⁻1:
-                    if self.nhold[tv × 1¤ptrdiff] = 1:
+                    if (self.nhold[tv × 1¤ptrdiff] & 1) = 1:
                         // the branch is held on its way out, so what the
                         // if hands on is the optional, already made
                         self.set_type(id, mk_oty(self.ty_of(tv)))

@@ -18,6 +18,12 @@ fn pow(base : int, n : i64) → int:
             acc ← acc × base
     acc
 
+// An if with no else answers an optional, and the branch's value is an
+// int, so what comes back is an int held in one.
+fn holds(c : bool) → bool?:
+    let yes : bool = true
+    if c: yes
+
 @start
 @impure
 fn main():
@@ -46,9 +52,22 @@ fn main():
     assert(big × big > big, "a product of positives grows")
     assert(big - big × 2 < 0, "past zero is below it")
 
+    // held in an optional.  A number written where an int? is wanted
+    // is asked two things at once -- be made into an int, and be held
+    // -- and saying only the second of them left the number itself
+    // where a block belonged.
+    let one : int? = 5
+    let none : int? = ∅
+    let wide : int? = big × big
+    assert_eq(one ?? 0, 5)
+    assert_eq(none ?? 99, 99)
+    assert_eq(wide ?? 0, pow(10, 36))
+    assert(holds(true) ?? false, "a branch that answers hands its int on")
+
     // and what it writes, which is pinned
     std.println("{}", a)
     std.println("{}", big × big)
     std.println("{}", pow(3, 100))
     std.println("{}", big - big × 2)
     std.println("{}", big - big)
+    std.println("{}", wide ?? 0)
