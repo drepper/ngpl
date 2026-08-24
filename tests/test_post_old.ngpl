@@ -1,0 +1,78 @@
+// A postcondition can say what a parameter was on entry.
+//
+// A postcondition is read where the answer is, by which time the body
+// may have changed a parameter.  `@old(e)` is how it says what e was
+// rather than what it has become: the expression is read once, before
+// a statement of the body has run, and the postcondition sees that.
+//
+// Eiffel spells it `old` and Ada `'Old`; the annotation form is this
+// language's, and keeps the word available as a name.
+
+@post(r: r = @old(n) × 2)
+fn twice(n : mut i64) → i64:
+    // the body changes n, and the condition still means the n it was
+    // handed
+    n ← n + 1
+    (n - 1) × 2
+
+@test
+fn test_a_condition_reads_what_the_call_began_with():
+    assert_eq(twice(21), 42)
+
+// More than one, and an expression rather than a bare name.
+@post(r: r = @old(a + b))
+fn total(a : mut i64, b : mut i64) → i64:
+    let sum : i64 = a + b
+    a ← 0
+    b ← 0
+    sum
+
+@test
+fn test_more_than_a_bare_name():
+    assert_eq(total(3, 4), 7)
+
+// Each call reads its own, so a recursion is not confused by the one
+// inside it.
+@post(r: r = @old(n) + 1)
+fn step(n : mut i64) → i64:
+    if n = 0:
+        n ← 99
+        1
+    else:
+        let inner : i64 = step(0)
+        n ← n + inner
+        n + 1 - inner
+
+@test
+fn test_each_call_reads_its_own():
+    assert_eq(step(5), 6)
+
+// A condition that does not hold is caught as any other is -- this one
+// answers twice what n became rather than twice what it was.
+@post(r: r = @old(n) × 2)
+fn wrong(n : mut i64) → i64:
+    n ← n + 1
+    n × 2
+
+@test
+@expect error 2614 "wrong: a postcondition does not hold, so the function did not keep to what wrong says it needs"
+fn error_a_condition_that_does_not_hold():
+    let r : mut = wrong(21)
+
+// ---------------------------------------------------------------------
+// Where it may not be written
+// ---------------------------------------------------------------------
+
+@expect error "early: @old says what a value was when the call began, and a @pre is read before the call has changed anything; it belongs in a @post"
+@pre(@old(n) > 0)
+fn early(n : i64) → i64:
+    n
+
+@expect error "inside: @old says what a value was when the call began, and a body is where things become what they are; it belongs in a @post"
+fn inside(n : i64) → i64:
+    @old(n)
+
+@start
+@impure
+fn main():
+    std.println("post-old tests passed")

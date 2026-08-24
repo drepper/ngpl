@@ -99,7 +99,7 @@ def report_fn_stats(limit: int = 30) -> None:
 
 from interp.ast import (
     IntLit, FloatLit, StrLit, CharLit, BoolLit, NoneLit, VarRef, BinOp, UnaryOp,
-    IfStmt, if_branch_values, WhileStmt, ReturnStmt, FuncDef, VarDef, DestructureDef,
+    IfStmt, if_branch_values, OldExpr, WhileStmt, ReturnStmt, FuncDef, VarDef, DestructureDef,
     ExprStmt,
     FuncCall, MethodCall, OptSome, GetAttr,
     ArrayLit, Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
@@ -1079,6 +1079,9 @@ class Evaluator:
         self._test_hooks = test_hooks or {}
         self._tests_run: set[str] = set()
         self._current_ret_type: str | None = None
+        # What `@old(…)` saw when the call whose postcondition is being
+        # read began; None outside a postcondition that has any.
+        self._olds: dict | None = None
         self._frozen_vars: dict[str, str] = {}
         self._warnings: list[str] = []
         # True while an @expect body runs: its warnings are collected
@@ -2138,7 +2141,58 @@ class Evaluator:
             f"{' or a set' if op == chr(0x2287) else ''}, and this is "
             f"{self._value_type_name(held)}"))
 
-    def _check_conditions(self, func, conditions, result=None):
+    def _old_nodes(self, func):
+        """Every `@old(…)` written in this function's postconditions.
+
+        Worked out once and kept on the definition: a recursion reads
+        the same list every time round, and walking the conditions on
+        each call would cost more than the conditions themselves.
+        """
+        nodes = getattr(func, "_old_node_cache", None)
+        if nodes is None:
+            nodes = []
+            for condition in func.postconditions or ():
+                stack = [condition.expr]
+                while stack:
+                    n = stack.pop()
+                    if isinstance(n, (list, tuple)):
+                        stack.extend(n)
+                        continue
+                    if type(n).__module__ != "interp.ast":
+                        continue
+                    if isinstance(n, OldExpr):
+                        nodes.append(n)
+                    for name in getattr(type(n), "__slots__", ()) or vars(n):
+                        child = getattr(n, name, None)
+                        if child is not None:
+                            stack.append(child)
+            try:
+                func._old_node_cache = nodes
+            except AttributeError:
+                pass
+        return nodes
+
+    def _read_olds(self, func):
+        """Read the `@old(…)` expressions, before a statement has run.
+
+        A postcondition is read where the answer is, by which time the
+        body may have changed a parameter.  What `@old` says is what
+        the call began with, so it is read here and nowhere else.
+        """
+        nodes = self._old_nodes(func)
+        if not nodes:
+            return None
+        return {id(n): self.eval_expr(n.expr) for n in nodes}
+
+    def _ee_OldExpr(self, node):
+        seen = self._olds
+        if seen is None or id(node) not in seen:
+            raise coded(2614, TypeError(
+                "@old says what a value was when the call began, which is "
+                "only known inside a @post of that call"))
+        return seen[id(node)]
+
+    def _check_conditions(self, func, conditions, result=None, olds=None):
         """Hold a function to what it said it holds to.
 
         A precondition is read where the parameters are bound, so it
@@ -2159,6 +2213,14 @@ class Evaluator:
         # said.
         if semantic == "ignore":
             return
+        was = self._olds
+        self._olds = olds
+        try:
+            self._check_each(func, conditions, result, semantic)
+        finally:
+            self._olds = was
+
+    def _check_each(self, func, conditions, result, semantic: str):
         for condition in conditions:
             if condition.name is not None:
                 self.env.define(condition.name, result)
@@ -6663,17 +6725,18 @@ class Evaluator:
             # parameters to build one.
             self._comptime_vars = set(borrowed)
             self._check_conditions(func, func.preconditions)
+            olds = self._read_olds(func)
             result = self.eval_stmts(func.body)
             result = self._check_return_type(
                 result, resolved_ret_type, func.name, func.ret_unit)
             returned = self._wrap_optional_return(result, resolved_ret_type)
-            self._check_conditions(func, func.postconditions, returned)
+            self._check_conditions(func, func.postconditions, returned, olds)
             return returned
         except _ReturnSentinel as e:
             checked = self._check_return_type(
                 e.value, resolved_ret_type, func.name, func.ret_unit)
             returned = self._wrap_optional_return(checked, resolved_ret_type)
-            self._check_conditions(func, func.postconditions, returned)
+            self._check_conditions(func, func.postconditions, returned, olds)
             return returned
         except _PropagatedError as pe:
             raise pe.original from pe
@@ -7033,6 +7096,7 @@ _EXPR_DISPATCH = {
     ArrayLit: Evaluator._ee_ArrayLit,
     RangeExpr: Evaluator._ee_RangeExpr,
     IfStmt: Evaluator._eval_if,
+    OldExpr: Evaluator._ee_OldExpr,
     MatchStmt: Evaluator._eval_match,
     DropUnitExpr: Evaluator._ee_DropUnitExpr,
     RefExpr: Evaluator._ee_RefExpr,

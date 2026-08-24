@@ -17,7 +17,7 @@ from interp.ast import (
     ArrayLit, HashLit, SetLit, EmptyCollectionLit, Condition,
     BreakStmt, ContinueStmt,
     Subscript, SliceAccess, MultiSlice, ArrayAlloc, TryUnwrap,
-    DropUnitExpr,
+    DropUnitExpr, OldExpr,
     LimitExpr,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, TypeDef, EnumDef,
     LambdaExpr, ReshapeExpr, MapExpr, TupleLit, CatchStmt, EnumerateExpr,
@@ -2737,6 +2737,14 @@ class Parser:
             self._skip_nl()
             self._eat("PUNCT", ")")
             return self._parse_postfix(LimitExpr(kind, expr))
+        if self._check("OLD"):
+            old_tok = self._cur()
+            self._eat("OLD")
+            self._eat("PUNCT", "(")
+            expr = self._parse_expr()
+            self._skip_nl()
+            self._eat("PUNCT", ")")
+            return self._parse_postfix(self._set_pos(OldExpr(expr), old_tok))
         if self._check("DROPUNIT"):
             self._eat("DROPUNIT")
             self._eat("PUNCT", "(")
