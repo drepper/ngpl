@@ -42,6 +42,10 @@ struct Lower:
     // falls back to tbase at every statement and the body runs between
     // the reading and the postcondition that asks.
     old_base : i64
+    // The one an @invariant is being asked about, while it is asked.
+    // A field of it is read out of this, so the condition is written
+    // once and read wherever one of the type is made or changed.
+    inv_subject : i64
     tail_label : i64
     tail_fn : i64        // which function that is, by index
     tail_np : i64        // how many parameters it takes
@@ -301,6 +305,9 @@ impl Lower:
                 let ev : i64 = self.field_val(self.lower_expr(fen), self.tof(fen))
                 self.ir(IR_FSTO, d, fidx, ev, 0, 0)
                 i ← i + 1
+            // one of these has just been made, so what the type says is
+            // always true of one has to be true of it
+            self.lower_invariants(ty_strip_ref(self.tof(nid)), d)
             return d
         if k = NK_LAMBDA:
             let loff : i64 = na
@@ -633,6 +640,10 @@ impl Lower:
             return v
         if k = NK_IF:
             return self.lower_ife(nid, na, nb, nc)
+        if k = NK_IFIELD:
+            let d : i64 = self.tmp()
+            self.ir(IR_FLD, self.inv_subject, na, 0, d, width_of(self.tof(nid)))
+            return d
         if k = NK_OLD:
             // read before the body ran, and kept in a slot of its own
             return self.old_base + nb
@@ -1658,6 +1669,30 @@ impl Lower:
         self.ir(IR_CALL, f, off, 0, d, 0)
         d
 
+    // What the type says is always true of one, asked of this one.  A
+    // condition that does not hold stops the program: there is no such
+    // value, so there is nothing to carry on with.
+    fn lower_invariants(&mut self, sty : i64, subject : i64):
+        if not ty_is_struct(sty):
+            return
+        let d := self.a.structs[ty_sidx(sty) × 1¤ptrdiff]
+        if d.inv_off = ⁻1:
+            return
+        let n : i64 = self.a.extra[d.inv_off × 1¤ptrdiff]
+        let saved : i64 = self.inv_subject
+        self.inv_subject ← subject
+        let j : mut i64 = 0
+        while j < n:
+            let c : i64 = self.a.extra[(d.inv_off + 1 + j) × 1¤ptrdiff]
+            let cv : i64 = self.lower_expr(c)
+            let lok : i64 = self.label()
+            self.ir(IR_JNZ, cv, lok, 0, 0, 0)
+            let m : i64 = self.intern("invariant of '" ⧺ d.name ⧺ "' does not hold\n")
+            self.ir(IR_ABORT, m, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lok, 0, 0, 0, 0)
+            j ← j + 1
+        self.inv_subject ← saved
+
     // Which arguments of a listable call are the containers it is
     // threaded over.  The checker settled the call's type on the same
     // reading -- an array where the parameter asked for one of the
@@ -2078,6 +2113,9 @@ impl Lower:
             let bv : i64 = self.lower_expr(na)
             let vv : i64 = self.field_val(self.lower_expr(nb), self.tof(nb))
             self.ir(IR_FSTO, bv, nc, vv, 0, 0)
+            // and again once it has changed, or there would be a way to
+            // have one that does not keep to what its type says
+            self.lower_invariants(ty_strip_ref(self.tof(na)), bv)
         elif k = NK_STOREIDXP:
             let bv : i64 = self.lower_expr(na)
             let pns : i64 = self.packed_n(na)

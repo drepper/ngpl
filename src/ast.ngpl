@@ -63,6 +63,11 @@ let NK_BNOT : i64 = 52      // ~
 // number rather than another gap being opened: na = the expression,
 // nb = which @old of this function's postconditions it is.
 let NK_OLD : i64 = 55
+// A field named inside an @invariant.  The condition is written once
+// and read wherever one of the type is made or changed, so its field
+// references cannot be slots of any one frame: na is the field's
+// index, and what it is read out of is whatever the site has to hand.
+let NK_IFIELD : i64 = 98
 let NK_WRAP : i64 = 56      // na = inner
 let NK_DEFAULT : i64 = 57   // na = the result-shaped thing, nb = default
 // statements
@@ -211,6 +216,9 @@ struct SDef:
     tok : i64
     fields_off : i64     // extra: [n, field-token, type, …]
     is_repr_c : bool     // @repr(C): the fields sit where C would put them
+    inv_off : i64        // extra: [n, condition…] or ⁻1.  What is always
+                         // true of one of these: asked wherever one is
+                         // made and wherever a field of one is written.
 
 struct GlobalDef:
     name : str

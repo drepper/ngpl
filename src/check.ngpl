@@ -938,6 +938,11 @@ impl Checker:
             self.a.na[id × 1¤ptrdiff] ← @dropunit(#self.a.strs) - 1
             self.a.nb[id × 1¤ptrdiff] ← 0
             self.set_type(id, TY_STR)
+        elif k = NK_IFIELD:
+            // a field of the one being asked about; what it is read out
+            // of is whatever the site has to hand
+            let sd := self.a.structs[nb × 1¤ptrdiff]
+            self.set_type(id, self.a.extra[(sd.fields_off + 2 + na × 2) × 1¤ptrdiff])
         elif k = NK_OLD:
             // What a value was when the call began.  A @pre is read
             // before the call has changed anything and a body is where
@@ -3371,6 +3376,56 @@ impl Checker:
             return if k = NK_DIV: (a ÷ b) ?? 0 else: (a % b) ?? 0
         PRE_UNKNOWN
 
+    // What is always true of one of a type.  The condition names the
+    // fields, and it is read wherever one of these is made or changed
+    // rather than in any one frame -- so a field's name is turned into
+    // a reference by index, which every site can answer for itself.
+    fn check_invariants(&mut self, si : i64):
+        let d := self.a.structs[si × 1¤ptrdiff]
+        if d.inv_off = ⁻1:
+            return
+        let n : i64 = self.a.extra[d.inv_off × 1¤ptrdiff]
+        let sty : i64 = mk_sty(si)
+        let j : mut i64 = 0
+        while j < n:
+            let c : i64 = self.a.extra[(d.inv_off + 1 + j) × 1¤ptrdiff]
+            self.bind_ifields(c, si)
+            self.check_expr(c, TY_UNIT)
+            self.want_truthy(c, "@invariant")
+            j ← j + 1
+        _ ← sty
+
+    // Turn every bare name the condition uses that is a field of this
+    // struct into a reference to that field by index.  A walk of the
+    // written expression: a name is a leaf, so what has to be reached
+    // is every child of every node the condition can be made of.
+    fn bind_ifields(&mut self, e : i64, si : i64):
+        if e = ⁻1:
+            return
+        let k : i64 = self.kind_of(e)
+        if k = NK_VAR:
+            let nm := self.text(self.a.ntok[e × 1¤ptrdiff])
+            let fi : i64 = self.field_index(si, nm)
+            if fi ≠ ⁻1:
+                self.a.nkind[e × 1¤ptrdiff] ← NK_IFIELD
+                self.a.na[e × 1¤ptrdiff] ← fi
+                self.a.nb[e × 1¤ptrdiff] ← si
+            return
+        if k = NK_IFIELD or k = NK_INT or k = NK_BOOL or k = NK_STR:
+            return
+        self.bind_ifields(self.a.na[e × 1¤ptrdiff], si)
+        self.bind_ifields(self.a.nb[e × 1¤ptrdiff], si)
+
+    fn field_index(&self, si : i64, nm : str) → i64:
+        let d := self.a.structs[si × 1¤ptrdiff]
+        let nf : i64 = self.a.extra[d.fields_off × 1¤ptrdiff]
+        let i : mut i64 = 0
+        while i < nf:
+            if self.text(self.a.extra[(d.fields_off + 1 + i × 2) × 1¤ptrdiff]) = nm:
+                return i
+            i ← i + 1
+        ⁻1
+
     fn check_one_arg(&mut self, tok : i64, name : str, num : i64,
                      arg : i64, pty : i64):
         let rk : i64 = ty_ref_kind(pty)
@@ -5488,6 +5543,9 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
         c.diags.push(Diag{line: 1¤"line", col: 1¤"col", msg: why, level: DIAG_ERROR, code: DIAG_NONE})
     if starts > 1:
         c.diags.push(Diag{line: 1¤"line", col: 1¤"col", msg: "more than one @start function", level: DIAG_ERROR, code: DIAG_NONE})
+    if #a.structs > 0:
+        foreach i := 0…#a.structs - 1:
+            c.check_invariants(@dropunit(i))
     if #a.fns > 0:
         foreach i := 0…#a.fns - 1:
             if not c.fn_is_generic(@dropunit(i)):

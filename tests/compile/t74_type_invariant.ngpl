@@ -1,0 +1,40 @@
+// A condition on a type rather than on a function.
+//
+// `@pre` and `@post` say what a function holds to.  An `@invariant`
+// says what is always true of one of a type: it is asked wherever one
+// is made and wherever a field of one is written, so there is no way
+// to come by one that does not keep to it.
+//
+// The condition names the fields, and it is read wherever one of these
+// is made or changed rather than in any one frame -- so a field's name
+// is a reference by index, which every site answers for itself out of
+// whatever it has to hand.
+
+@invariant(lo <= hi)
+struct Span:
+    lo : i64
+    hi : i64
+
+@invariant(w > 0)
+@invariant(h > 0)
+struct Box:
+    w : i64
+    h : i64
+
+fn widen(s : Span) → Span:
+    Span{lo: s.lo - 1, hi: s.hi + 1}
+
+@start
+@impure
+fn main():
+    let a : Span = Span{lo: 1, hi: 5}
+    // the empty span is one of these too: the condition says <=
+    let e : Span = Span{lo: 3, hi: 3}
+    // a write that keeps it is allowed
+    let m : mut Span = Span{lo: 1, hi: 5}
+    m.hi ← 9
+    // one made inside a function is asked the same question
+    let w : Span = widen(a)
+    let b : Box = Box{w: 2, h: 3}
+    std.println("{} {} {} {} {} {}",
+                a.hi - a.lo, e.hi - e.lo, m.hi, w.lo, w.hi, b.w × b.h)
