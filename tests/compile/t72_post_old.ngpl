@@ -1,0 +1,49 @@
+// A postcondition can say what a parameter was on entry.
+//
+// A postcondition is read where the answer is, by which time the body
+// may have changed a parameter.  `@old(e)` is how it says what e was
+// rather than what it has become: the expression is read once, after
+// the preconditions and before a statement of the body has run, and
+// the postcondition sees that.
+//
+// It is kept in a slot of its own rather than a temporary, since the
+// body runs between the reading and the asking.  Each call has its own
+// frame and so its own slot, which is why a recursion is not confused
+// by the one inside it.
+
+@post(r: r = @old(n) × 2)
+fn twice(n : mut i64) → i64:
+    n ← n + 1
+    (n - 1) × 2
+
+// any expression, not only a bare parameter
+@post(r: r = @old(a + b))
+fn total(a : mut i64, b : mut i64) → i64:
+    let sum : i64 = a + b
+    a ← 0
+    b ← 0
+    sum
+
+// the inner call reads its own, and the outer one keeps its own
+@post(r: r = @old(n) + 1)
+fn step(n : mut i64) → i64:
+    if n = 0:
+        n ← 99
+        1
+    else:
+        let inner : i64 = step(0)
+        n ← n + inner
+        n + 1 - inner
+
+// a precondition beside it: both are asked, in that order
+@pre(n > 0)
+@post(r: r = @old(n) - 1)
+fn down(n : mut i64) → i64:
+    let was : i64 = n
+    n ← n × 10
+    was - 1
+
+@start
+@impure
+fn main():
+    std.println("{} {} {} {}", twice(21), total(3, 4), step(5), down(9))

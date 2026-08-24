@@ -44,6 +44,7 @@ struct Parser:
     ltl : i64[]
     lte : i64[]
     ltf : i64[]          // 1 where the lambda threads
+    olds : i64[]         // the @old nodes of the definition being read
     enames : str[]
     ewidth : i64[]
     estart : i64[]
@@ -969,6 +970,17 @@ impl Parser:
                 let e0 : i64 = self.parse_expr()
                 _ ← self.eat(TK_RPAR, "')' closing @dropunit")
                 return self.mknode(NK_DROPU, at, e0, 0, 0)
+            if name = "old":
+                // What a value was when the call began.  Read once,
+                // before a statement of the body runs, and only a
+                // postcondition is in a position to ask.
+                self.pos ← self.pos + 1
+                _ ← self.eat(TK_LPAR, "'(' after @old")
+                let oe : i64 = self.parse_expr()
+                _ ← self.eat(TK_RPAR, "')' closing @old")
+                let on : i64 = self.mknode(NK_OLD, at, oe, @dropunit(#self.olds), 0)
+                self.olds.push(on)
+                return on
             if name = "listable":
                 // A lambda is a function like any other and threads the
                 // same way; the annotation goes in front of the λ,
@@ -979,7 +991,7 @@ impl Parser:
                     return 0
                 return self.parse_lambda(self.pos, 1)
             if name ≠ "wrap":
-                self.err("'@" ⧺ name ⧺ "' is not core-2; @wrap, @dropunit, @sizeof and @listable are the expression annotations")
+                self.err("'@" ⧺ name ⧺ "' is not core-2; @wrap, @dropunit, @sizeof, @listable and @old are the expression annotations")
                 return 0
             self.pos ← self.pos + 1
             _ ← self.eat(TK_LPAR, "'(' after @wrap")
@@ -1914,6 +1926,9 @@ impl Parser:
         let pre_off : mut i64 = ⁻1
         if #pres > 0:
             pre_off ← self.push_list(pres)
+        let olds_off : mut i64 = ⁻1
+        if #self.olds > 0:
+            olds_off ← self.push_list(self.olds)
         let post_off : mut i64 = ⁻1
         if #posts > 0:
             post_off ← @dropunit(#self.extra)
@@ -1939,6 +1954,7 @@ impl Parser:
                                     is_start: false, is_noreturn: is_noreturn,
                                     is_test: false,
                                     is_listable: false,
+                                    olds_off: ⁻1,
                                     pre_off: pre_off, post_off: post_off,
                             tok_lo: self.def_start, tok_hi: self.pos})
             self.expoff.push(self.pending_exp)
@@ -1963,6 +1979,7 @@ impl Parser:
                                    is_start: false, is_noreturn: false,
                                    is_test: false,
                                    is_listable: false,
+                                   olds_off: ⁻1,
                                    pre_off: pre_off, post_off: post_off,
                             tok_lo: self.def_start, tok_hi: self.pos})
             return
@@ -1973,6 +1990,7 @@ impl Parser:
                             is_start: is_start, is_noreturn: is_noreturn,
                             is_test: is_test,
                             is_listable: (mods » 3) & 1 = 1,
+                            olds_off: olds_off,
                             pre_off: pre_off, post_off: post_off,
                             tok_lo: self.def_start, tok_hi: self.pos})
 
@@ -2397,6 +2415,9 @@ impl Parser:
         // where this definition begins, which is its first annotation
         // and not the `fn`: a contract is part of what a function is
         self.def_start ← self.pos
+        // the @old nodes belong to the definition being read
+        while #self.olds > 0:
+            _ ← self.olds.pop() ?? 0
         let imp : mut bool = false
         let is_start : mut bool = false
         let is_noreturn : mut bool = false
@@ -2595,7 +2616,7 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
                                  snames: [], tts: [], ttl: [], tte: [],
                                  fae: [], fas: [], hdty: [],
                                  mel: [], mrr: [], mcc: [], mdd: [], minner: [],
-                                 lts: [], ltl: [], lte: [], ltf: [],
+                                 lts: [], ltl: [], lte: [], ltf: [], olds: [],
                                  enames: builtin_enum_names(),
                                  ewidth: builtin_enum_widths(),
                                  estart: [0], ecount: [8], eflag: [0],

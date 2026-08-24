@@ -304,6 +304,7 @@ struct Checker:
     loop_depth : i64
     cur_fn : i64
     in_contract : bool
+    in_post : bool       // @old may be written here and nowhere else
     scope_floor : i64    // a lambda's body sees nothing below this
     lams : i64[]         // every λ node, in the order lowered
     lamns : i64[]        // … and the slot count its frame must cover
@@ -932,6 +933,23 @@ impl Checker:
             self.a.na[id × 1¤ptrdiff] ← @dropunit(#self.a.strs) - 1
             self.a.nb[id × 1¤ptrdiff] ← 0
             self.set_type(id, TY_STR)
+        elif k = NK_OLD:
+            // What a value was when the call began.  A @pre is read
+            // before the call has changed anything and a body is where
+            // things become what they are, so a @post is the only
+            // place in a position to ask.
+            if not self.in_post:
+                self.derr(tok, "@old says what a value was when the call began, and only a @post is in a position to ask; a @pre is read before the call has changed anything, and a body is where things become what they are")
+                self.check_expr(na, TY_UNIT)
+                self.set_type(id, TY_I64)
+                return
+            self.check_expr(na, want)
+            let ot : i64 = self.ty_of(na)
+            if ty_is_arr(ot) or ty_is_hash(ot) or ty_is_struct(ot):
+                self.derr(tok, "@old keeps what a value was, and keeping " ⧺ self.tn(ot) ⧺ " is keeping what it points at; a plain value is what core-2 remembers")
+                self.set_type(id, TY_I64)
+                return
+            self.set_type(id, ot)
         elif k = NK_DROPU:
             self.check_expr(na, TY_UNIT)
             let dt : i64 = self.ty_of(na)
@@ -5011,7 +5029,9 @@ impl Checker:
             let j : mut i64 = 0
             while j < n:
                 let c : i64 = self.a.extra[(d.post_off + 2 + j × 2) × 1¤ptrdiff]
+                self.in_post ← true
                 self.check_expr(c, TY_UNIT)
+                self.in_post ← false
                 self.want_truthy(c, "@post")
                 j ← j + 1
             self.pop_scope()
@@ -5249,7 +5269,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
                                    sslot: [], sheld: [], hslot: [], hback: [],
                                    hmark: [], marks: [], nslots: 0,
                                    loop_depth: 0, cur_fn: 0,
-                                   in_contract: false,
+                                   in_contract: false, in_post: false,
                                    scope_floor: 0, lams: [], lamns: [],
                                    psfn: [], psk: [], psnp: [],
                                    fdone: [], skipfn: [], lam_ret: ⁻1,

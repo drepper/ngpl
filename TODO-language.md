@@ -310,11 +310,13 @@ Completed
 
 [x] a postcondition cannot say what a parameter was on entry: Eiffel's `old` and Ada's 'Old.
     Wants a copy taken before the body runs and a name for it.
-    Done in the interpreter, on branch todo/post-old: `@old(e)` reads e once, before a
-    statement of the body has run, and the postcondition sees that.  Any expression, not only
-    a bare parameter; each call reads its own, so a recursion is not confused by the one
-    inside it; refused statically anywhere but a @post.  ngplc does not accept it yet, which
-    is the permitted direction; the compiler side is what is left.
+    Done in both: `@old(e)` reads e once, after the preconditions and before a statement of
+    the body has run, and the postcondition sees that.  Any expression, not only a bare
+    parameter; each call reads its own, so a recursion is not confused by the one inside it;
+    refused anywhere but a @post.  In ngplc it is kept in a slot of its own below the
+    temporaries, a temporary being written over by the first thing the body computes; core-2
+    remembers a plain value, an array or a struct being a thing it points at rather than a
+    value to keep.
 
 [ ] a condition on a type rather than on a function -- an invariant.
 

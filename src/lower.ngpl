@@ -37,6 +37,11 @@ struct Lower:
     // is a loop rather than a call: the parameters take the new values
     // and the body starts again.  tail_label is where it starts again,
     // or ⁻1 where this function is not one that may be turned round.
+    // Where the @old values of this function are kept.  A slot each,
+    // below the temporaries: a temporary would not do, since tnext
+    // falls back to tbase at every statement and the body runs between
+    // the reading and the postcondition that asks.
+    old_base : i64
     tail_label : i64
     tail_fn : i64        // which function that is, by index
     tail_np : i64        // how many parameters it takes
@@ -628,6 +633,9 @@ impl Lower:
             return v
         if k = NK_IF:
             return self.lower_ife(nid, na, nb, nc)
+        if k = NK_OLD:
+            // read before the body ran, and kept in a slot of its own
+            return self.old_base + nb
         if k = NK_MATCHE:
             let dm : i64 = self.tmp()
             self.lower_matche(nid, na, nb, nc, TY_UNIT, false, dm)
@@ -3175,7 +3183,10 @@ fn lower_fn(lw : &mut Lower, a : Ast, chk : Chk, f : i64) → IrFn:
     let np0 : i64 = a.extra[d.params_off × 1¤ptrdiff]
     let sized_ret : bool = farr_is_packed(a, d.ret)
     let sbase : i64 = chk.fslots[f × 1¤ptrdiff] ⌈ (np0 + 1)
-    lw.tbase ← if sized_ret: sbase + 1 else: chk.fslots[f × 1¤ptrdiff]
+    let obase : i64 = if sized_ret: sbase + 1 else: chk.fslots[f × 1¤ptrdiff]
+    let nolds : i64 = if d.olds_off = ⁻1: 0 else: a.extra[d.olds_off × 1¤ptrdiff]
+    lw.old_base ← obase
+    lw.tbase ← obase + nolds
     lw.tnext ← lw.tbase
     lw.tmax ← lw.tbase
     lw.in_wrap ← 0
@@ -3218,6 +3229,18 @@ fn lower_fn(lw : &mut Lower, a : Ast, chk : Chk, f : i64) → IrFn:
             lw.ir(IR_ABORT, m, 0, 0, 0, 0)
             lw.ir(IR_LABEL, lok, 0, 0, 0, 0)
             j ← j + 1
+    // What @old says is what the call began with, so it is read here:
+    // after the preconditions, before a statement of the body.
+    if d.olds_off ≠ ⁻1:
+        let no : i64 = a.extra[d.olds_off × 1¤ptrdiff]
+        let oi : mut i64 = 0
+        while oi < no:
+            lw.tnext ← lw.tbase
+            let on : i64 = a.extra[(d.olds_off + 1 + oi) × 1¤ptrdiff]
+            let ov : i64 = lw.lower_expr(a.na[on × 1¤ptrdiff])
+            lw.ir(IR_MOV, ov, 0, 0, obase + a.nb[on × 1¤ptrdiff], 0)
+            oi ← oi + 1
+        lw.tnext ← lw.tbase
     if d.post_off ≠ ⁻1 and d.ret ≠ TY_UNIT:
         lw.post_label ← lw.label()
         // the checker gave the result's name the slot after the

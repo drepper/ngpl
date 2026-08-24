@@ -59,10 +59,10 @@ let NK_CCAT : i64 = 42      // ⧺ on strings
 let NK_NEG : i64 = 50       // ⁻
 let NK_NOT : i64 = 51       // not, ¬
 let NK_BNOT : i64 = 52      // ~
-// 55 was NK_COND, `a if c else b`.  An if hands back what its branch
-// hands back, so the node went with the spelling; the number is left
-// where it was rather than moved onto, these being the compiler's own
-// and worth nothing to renumber.
+// 55 was NK_COND, `a if c else b`, which was withdrawn.  @old took the
+// number rather than another gap being opened: na = the expression,
+// nb = which @old of this function's postconditions it is.
+let NK_OLD : i64 = 55
 let NK_WRAP : i64 = 56      // na = inner
 let NK_DEFAULT : i64 = 57   // na = the result-shaped thing, nb = default
 // statements
@@ -194,6 +194,10 @@ struct FnDef:
     is_test : bool
     is_listable : bool   // handed a container where it asked for one of the
                          // things in it, it is asked of each of them
+    olds_off : i64       // extra: [n, @old node…] or ⁻1.  Read before a
+                         // statement of the body runs, so a postcondition
+                         // may say what a parameter was rather than what
+                         // it has become.
     pre_off : i64        // extra: [n, expr…] or ⁻1
     post_off : i64       // extra: [n, name-token, expr, …] or ⁻1
     // Which tokens the definition is written in, from its first
