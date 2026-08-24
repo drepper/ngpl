@@ -2962,6 +2962,38 @@ fn abs(x : int) → int { if x < 0 { return -x; } x }
 ```
 
 
+### A Tail Call Spends No Stack
+
+A call standing in tail position to the function making it is a loop, not a call: the parameters take the new values and the body starts again, and no frame is stacked.  This is a guarantee of the language and not an optimisation an implementation may decline — a recursion written this way runs in the space of one call, at any depth.
+
+Tail position is where the call's value is the function's answer and nothing is left to do with it: the last statement of the body, a `return` of the call, and — since both hand back the value of whichever part runs — the corresponding place in a branch of an `if` or an arm of a `match` standing there.  A function that answers nothing ends at its last statement all the same, so a call to itself there is a tail call too.
+
+```
+fn down(n : i64, acc : i64) → i64:
+    if n = 0:
+        acc
+    else:
+        down(n - 1, acc + 1)        // a loop; five million deep costs one frame
+```
+
+A call whose value is worked on afterwards is not in tail position and is not turned round, the frame still being needed:
+
+```
+fn fact(n : i64) → i64:
+    if n <= 1:
+        1
+    else:
+        n × fact(n - 1)             // the multiplication follows the call
+```
+
+Every argument is worked out before any parameter is written, so an argument may still read a parameter it is about to replace: `f(b, a)` swaps them rather than putting one value in both.
+
+A precondition is asked afresh on each turn, as a fresh call would be asked.  A function stating a **postcondition** is left as an ordinary recursion: a condition relating the answer to the arguments is stated once per call, and a loop has one call where the source has many, so turning it round would ask it of the last arguments alone.  Where the guarantee matters and the condition does too, the recursion is written as a loop in the source.
+
+Only a call to the function making it is covered.  Mutual recursion between two functions is not, each being an ordinary call to the other.
+
+The bootstrap interpreter does not implement this; a program that relies on it is one the compiler runs and the interpreter cannot.
+
 ### Bindings: `let` and `mut`
 
 The `let` keyword introduces a binding.  By default, bindings are **immutable** — they cannot be reassigned after initialization.  Adding `mut` to the type makes the binding mutable.
@@ -3519,6 +3551,48 @@ a _ arm
 ```
 
 Where it is not known — a name bound from an expression, or an untyped parameter — no static claim is made and the gap is found when the `match` runs.  A name declared twice with types that disagree is left alone too: which declaration a `match` meets depends on where it sits, and that is more than this reads.  This is the weaker half of the check and will shrink as type inference grows; nothing is reported wrongly in the meantime, since an undetermined type produces no diagnostic rather than a guess.
+
+#### A `match` Is a Value
+
+A `match` hands back the value of the last statement of whichever arm runs, exactly as an `if` hands back the value of the branch that runs.  It is the same `match` either way — nothing in the writing marks one as a statement and another as a value — and what differs is only whether anything reads what comes back.
+
+Standing last in a body, that value is what the function answers:
+
+```
+fn name(c : Colour) → str:
+    match c:
+        Colour.red: "red"
+        Colour.green: "green"
+        Colour.blue: "blue"
+```
+
+Standing where a value is wanted, it is that value:
+
+```
+let n : str = match c:
+    Colour.red: "red"
+    Colour.green: "green"
+    Colour.blue: "blue"
+```
+
+Every value has an arm — that is the coverage rule above, checked where the `match` is written — so a `match` whose arms answer answers on every path.  Each arm ends in a value rather than in a definition or an assignment; an arm that leaves instead, by a `return` or an `@noreturn` call, arrives nowhere and is not held to it:
+
+```
+match c:
+    Colour.red: 10
+    _: give_up()                     // give_up is @noreturn
+```
+
+The arms are one value, so they say one type between them.  It is settled the way an array literal settles its element type and an `if`'s branches settle theirs: from what the surrounding text asks for where it asks for anything, and from the first arm that states one otherwise, with untyped numbers taking the answer.  An arm that says `∅` says the one value is an optional.
+
+```
+let v : i64 = match c:
+    Colour.red: 1
+    Colour.green: "two"
+
+error: a match is one value, so its arms say one type between them;
+str is not i64
+```
 
 #### Choosing Between `match`, `??`, and `while`
 
@@ -4295,19 +4369,36 @@ if (if c: p else: q):
 
 #### Every Branch Supplies One
 
-Where the value is read, every path through the `if` has to arrive with one.  So an `else` is required — an `if` that can fall past its branches has nothing to hand back — and each block ends in a value rather than in a definition or an assignment:
-
-```
-let n : i64 = if x > 0: 1
-
-error: an if standing where a value is wanted says what the value is
-either way; else and a further block follow
-```
+Where the value is read, each block ends in a value rather than in a definition or an assignment.
 
 A branch that does not arrive at all supplies nothing and is not held to this.  A `return`, a `break`, an `@noreturn` call: the branch leaves, so there is no value from it to agree with, and the other side alone says what the `if` is:
 
 ```
 let v : i64 = if c { 7 } else { give_up() }      // give_up is @noreturn
+```
+
+#### No `else`, and the Value Is Optional
+
+An `else` is not required.  An `if` without one can fall past its branch, and what it hands back there is nothing — so it answers on every path all the same, and what it answers is an optional: `∃` the branch's value where the condition holds, `∅` where it does not.
+
+```
+fn positive(x : i64) → i64?:
+    if x > 0:
+        x
+
+let step : i64? = if wide: 8
+```
+
+A chain that runs out is the same thing: the last `elif` is the last branch, and falling past it answers `∅`.  A branch that already answers an optional is that optional — nothing is held a second time, an optional of an optional being no more a type here than it is after `∃`.
+
+The branch still has to arrive with something for `∃` to hold.  One that leaves instead is the old mistake and is still one:
+
+```
+fn f(c : bool) → i64:
+    if c:
+        return 1
+
+error: 'f' answers i64 but not on every path
 ```
 
 #### One Type Between Them

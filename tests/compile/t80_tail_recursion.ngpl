@@ -1,0 +1,76 @@
+// A tail call spends no stack.
+//
+// The language guarantees that a call in tail position to the function
+// making it is a loop: the parameters take the new values and the body
+// starts again, with no frame stacked.  So a recursion of any depth
+// runs in the space of one call, and this counts down five million
+// times to say so -- a depth no stack would hold.
+//
+// The bootstrap interpreter does not implement the guarantee, which is
+// why this is a t8N file: only the compiled program is run, and it
+// says whether it is right by asserting.
+
+// The plain shape: an accumulator carried down.
+fn down(n : i64, acc : i64) → i64:
+    if n = 0:
+        acc
+    else:
+        down(n - 1, acc + 1)
+
+// Arguments that read the parameters they are about to replace.  Every
+// argument is worked out before any parameter is written, so this
+// swaps rather than putting the same value in both.
+fn swap(a : i64, b : i64, n : i64) → i64:
+    if n = 0:
+        a × 100 + b
+    else:
+        swap(b, a, n - 1)
+
+// A function that answers nothing ends at its last statement all the
+// same, so a call to itself there is a tail call too.
+@impure
+fn spin(n : i64):
+    if n > 0:
+        spin(n - 1)
+
+// Through a match arm, which is as much a tail position as a branch.
+fn hold(x : i64) → i64?:
+    if x >= 0: x
+
+fn walk(n : i64?, acc : i64) → i64:
+    match n:
+        ∃(x):
+            if x = 0:
+                acc
+            else:
+                walk(hold(x - 1), acc + 1)
+        ∅: acc
+
+// Written with return, which is the same tail position said aloud.
+fn told(n : i64, acc : i64) → i64:
+    if n = 0:
+        return acc
+    return told(n - 1, acc + n)
+
+// A recursion that is not a tail call is left as it is -- what follows
+// the call is the multiplication, so the frame is still needed.
+fn fact(n : i64) → i64:
+    if n <= 1:
+        1
+    else:
+        n × fact(n - 1)
+
+@start
+@impure
+fn main():
+    // five million deep, which no stack would hold
+    assert_eq(down(5000000, 0), 5000000)
+    spin(3000000)
+    assert_eq(walk(hold(2000000), 0), 2000000)
+    assert_eq(told(1000000, 0), 500000500000)
+    // and the small cases, for what they compute
+    assert_eq(down(10, 0), 10)
+    assert_eq(swap(1, 2, 1), 201)
+    assert_eq(swap(1, 2, 2), 102)
+    assert_eq(fact(10), 3628800)
+    std.println("tail recursion holds")

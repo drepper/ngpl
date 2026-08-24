@@ -7033,6 +7033,7 @@ _EXPR_DISPATCH = {
     ArrayLit: Evaluator._ee_ArrayLit,
     RangeExpr: Evaluator._ee_RangeExpr,
     IfStmt: Evaluator._eval_if,
+    MatchStmt: Evaluator._eval_match,
     DropUnitExpr: Evaluator._ee_DropUnitExpr,
     RefExpr: Evaluator._ee_RefExpr,
     StaticAssert: Evaluator._ee_StaticAssert,

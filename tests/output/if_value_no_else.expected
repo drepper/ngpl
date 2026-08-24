@@ -1,6 +1,0 @@
-error: an if standing where a value is wanted says what the value is either way, so else and a further block follow
-  --> tests/output/if_value_no_else.ngpl:8:23
-    |
-  8 |     std.println("{}", if n > 0: "positive")
-    |                       ^^
-    |

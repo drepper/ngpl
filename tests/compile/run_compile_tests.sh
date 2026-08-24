@@ -50,12 +50,22 @@ fail=0
 for t in "$testdir"/t*.ngpl; do
     name=$(basename "$t" .ngpl)
     expect_abort=0
+    native_only=0
     case "$name" in
         t9*) expect_abort=1 ;;
+        # t8N: what only a compiled program can do.  The language
+        # guarantees a tail call spends no stack, and the bootstrap
+        # interpreter does not implement that, so there is nothing to
+        # compare against here: the program says whether it is right by
+        # asserting, and leaving with 0 is the whole of the check.
+        t8*) native_only=1 ;;
     esac
 
-    python -m interp --skip-tests "$t" > "$workdir/$name.interp.out" 2>/dev/null
-    interp_rc=$?
+    interp_rc=0
+    if [ $native_only -eq 0 ]; then
+        python -m interp --skip-tests "$t" > "$workdir/$name.interp.out" 2>/dev/null
+        interp_rc=$?
+    fi
 
     if ! ngplc "$t" -o "$workdir/$name.bin" \
             > "$workdir/$name.ngplc.out" 2>&1; then
@@ -67,6 +77,18 @@ for t in "$testdir"/t*.ngpl; do
 
     "$workdir/$name.bin" > "$workdir/$name.native.out" 2>/dev/null
     native_rc=$?
+
+    if [ $native_only -eq 1 ]; then
+        if [ $native_rc -ne 0 ]; then
+            echo "FAIL $name: the compiled program stopped with $native_rc"
+            sed 's/^/    /' "$workdir/$name.native.out" | head -5
+            fail=$((fail + 1))
+        else
+            echo "ok   $name"
+            pass=$((pass + 1))
+        fi
+        continue
+    fi
 
     if [ $expect_abort -eq 1 ]; then
         if [ $interp_rc -eq 0 ] || [ $native_rc -eq 0 ]; then

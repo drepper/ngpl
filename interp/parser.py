@@ -130,21 +130,6 @@ class _EnumAlias:
 
 
 
-def _has_else(node) -> bool:
-    """Whether an if chain ends in an else rather than running out.
-
-    The chain is nested tuples, each (condition, body) or (condition,
-    body, rest), and the else is the one whose condition is None.  It
-    can only be last, so finding it is walking to the end.
-    """
-    alt = node.alt
-    while alt is not None:
-        if alt[0] is None:
-            return True
-        alt = alt[2] if len(alt) == 3 else None
-    return False
-
-
 class Parser:
     """Recursive descent parser."""
 
@@ -2305,12 +2290,17 @@ class Parser:
             if_tok = self._cur()
             node = self._parse_if_stmt()
             node.is_value = True
-            if not _has_else(node):
-                raise ParseError(
-                    "an if standing where a value is wanted says what the "
-                    "value is either way, so else and a further block "
-                    "follow", if_tok)
+            # No else is not an unfinished expression: the if can fall
+            # past its branch, and what it hands back there is nothing,
+            # so its value is optional -- ∃ the branch's value where
+            # the condition holds and ∅ where it does not.
             return self._set_pos(node, if_tok)
+        # A match here is the statement form standing where a value is
+        # wanted, as an if is: its arms are their own block each, and
+        # the value is the value of whichever arm runs.
+        if self._check("MATCH"):
+            match_tok = self._cur()
+            return self._set_pos(self._parse_match_stmt(), match_tok)
         left = self._parse_or_expr()
         if self._at_conditional_if():
             raise ParseError(

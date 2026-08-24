@@ -7,14 +7,18 @@
 // body it is what the function answers; standing where a value is
 // wanted it is that value.
 //
-// Two rules follow, and both are pinned below.  Every path through an
-// if whose value is read has to arrive with one, so an else is
-// required and each branch ends in a value; a branch that leaves
-// instead -- a return, a @noreturn call -- arrives nowhere and is not
-// held to it.  And the branches are one value, so they say one type
-// between them, settled from what the surrounding text asks for where
-// it asks for anything and from the first branch that states one
-// otherwise, with untyped numbers taking the answer.
+// Two rules follow, and both are pinned below.  Each branch ends in a
+// value, and a branch that leaves instead -- a return, a @noreturn
+// call -- arrives nowhere and is not held to it.  And the branches are
+// one value, so they say one type between them, settled from what the
+// surrounding text asks for where it asks for anything and from the
+// first branch that states one otherwise, with untyped numbers taking
+// the answer.
+//
+// An else is not required.  An if without one can fall past its
+// branch, and what it hands back there is nothing, so its value is
+// optional: ∃ the branch's value where the condition holds and ∅ where
+// it does not.
 //
 // The specification's "An `if` Is a Value" is the normative statement.
 
@@ -165,6 +169,68 @@ fn take_or_stop(c : bool) → i64:
 @impure
 fn test_a_branch_that_leaves_states_no_type():
     assert_eq(take_or_stop(true), 7)
+
+// ---------------------------------------------------------------------
+// No else: the value is optional
+// ---------------------------------------------------------------------
+//
+// An if with no else can fall past its branch, and what it hands back
+// there is nothing.  So it does answer on every path -- ∃ the branch's
+// value where the condition holds, ∅ where it does not -- and its type
+// is the optional of what the branch says.
+
+fn positive(x : i64) → i64?:
+    if x > 0:
+        x
+
+@test
+fn test_no_else_answers_an_optional():
+    assert_eq(positive(5) ?? ⁻1, 5)
+    assert_eq(positive(⁻5) ?? ⁻1, ⁻1)
+
+@test
+fn test_no_else_where_a_value_is_wanted():
+    let c : bool = true
+    let d : bool = false
+    let a : i64? = if c: 7
+    let b : i64? = if d: 7
+    assert_eq(a ?? 0, 7)
+    assert_eq(b ?? 0, 0)
+
+// A chain that runs out is the same thing: the last elif is the last
+// branch, and falling past it answers ∅.
+fn grade(x : i64) → str?:
+    if x > 10:
+        "big"
+    elif x > 5:
+        "middling"
+
+@test
+fn test_a_chain_that_runs_out():
+    assert_eq(grade(20) ?? "-", "big")
+    assert_eq(grade(7) ?? "-", "middling")
+    assert_eq(grade(1) ?? "-", "-")
+
+// A branch that already answers an optional is that optional; nothing
+// is held a second time.
+fn inner(c : bool) → i64?:
+    if c: 7 else: ∅
+
+fn outer(c : bool) → i64?:
+    if c: inner(c)
+
+@test
+fn test_an_optional_branch_is_not_held_twice():
+    assert_eq(outer(true) ?? 0, 7)
+    assert_eq(outer(false) ?? 0, 0)
+
+// And where one branch says ∅ outright, the one value is the optional
+// that holds both.
+@test
+fn test_a_branch_that_says_nothing():
+    let c : bool = false
+    let v : i64? = if c: 5 else: ∅
+    assert_eq(v ?? 9, 9)
 
 // ---------------------------------------------------------------------
 // What is refused

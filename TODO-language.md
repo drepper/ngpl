@@ -86,6 +86,18 @@ otherwise.
     command line overrides the annotation -- the precedence the brief asks for.  The return type
     settles the exit status: `∅` exits 0, `u8` and `i8` hand their value out.
 
+[x] the `match` statement returns a value. the value is that of the last expression of each arm.
+    all arms must return a value of the same type.  Settled the way an array literal settles its
+    element type: from what the surrounding text asks for where it asks, and from the first arm
+    that states one otherwise, with untyped numbers taking the answer.  An arm that leaves
+    rather than arriving states nothing for the others to agree with.
+
+[x] the `if` statement returns a value. the value is that of the last expression of each arm,
+    all arms must return a valu of the same type.  If an `if` statement does not have an `else`
+    arm the value returned in an `optional` value.  Otherwise it is of the actual type.
+    A branch that leaves rather than arriving -- a return, a @noreturn call -- states no type;
+    with no else, the branch still has to arrive with something for ∃ to hold.
+
 
 Execution Modes
 ---------------
@@ -776,8 +788,16 @@ Control Flow and Expressions
 [ ] [FULL] lazy evaluation support: lazy attribute on expressions/functions, with eager as default.
     Interaction with coroutines for opportunistic evaluation.
 
-[ ] [FULL] Implement tail recursion as a loop.  The language guarantees this.  Add appropriate
-    wording to the specification.
+[x] [FULL] Implement tail recursion as a loop.  The language guarantees this.  Add appropriate
+    wording to the specification.  The specification's "A Tail Call Spends No Stack" is it.
+    A function stating a @post is left as an ordinary recursion, a condition relating the answer
+    to the arguments being stated once per call; so is one answering a sized array.
+
+[x] [FULL] the full language guarantees tail recursion to be implemented without stack use. i.e.,
+    tail recursion is implemented with a loop. the interpreter does not support this.  add tests
+    and update the specification.  tests/compile/t80_tail_recursion.ngpl is the test, and t8N is
+    the naming for a file only the compiled program is run for, the interpreter having nothing
+    to say about it.
 
 
 Functions and Combinators

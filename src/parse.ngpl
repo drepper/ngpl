@@ -1310,6 +1310,11 @@ impl Parser:
             let e : i64 = self.parse_if_node()
             self.ifexpr ← owed
             return e
+        // A match here is the statement form standing where a value is
+        // wanted, as an if is.  Its arms are their own block each, and
+        // the value is the value of whichever arm runs.
+        if self.peek() = TK_MATCH:
+            return self.parse_match_node()
         let v : i64 = self.parse_bin(2)
         if self.failed(): return v
         if self.peek() ≠ TK_IF:
@@ -1511,6 +1516,65 @@ impl Parser:
     // ended: a diagnostic about the match has to point at the match,
     // and after the dedent the position is already past it -- past the
     // end of the file, for the last match in one.
+    // match subject: arms -- one shape, whether the match stands as a
+    // statement or where a value is wanted.  Which of the two it is is
+    // not the parser's question: the node is the same either way and
+    // what differs is only whether anything reads the value.
+    fn parse_match_node(&mut self) → i64:
+        let at : i64 = self.pos
+        self.pos ← self.pos + 1
+        let subject : i64 = self.parse_expr()
+        _ ← self.eat(TK_COLON, "':' after the subject")
+        _ ← self.eat(TK_NL, "the arms on their own lines")
+        _ ← self.eat(TK_INDENT, "an indented arm list")
+        // An identifier where a pattern goes says this match is
+        // over an enumeration: the arms name its values, and there
+        // is no ∃ or ∅ about it.
+        let mut_pos : i64 = self.pos
+        let is_enum : mut bool = false
+        while self.peek() = TK_NL:
+            self.pos ← self.pos + 1
+        if self.peek() = TK_IDENT:
+            is_enum ← true
+        self.pos ← mut_pos
+        if is_enum:
+            return self.parse_match_enum(at, subject)
+        let some_blk : mut i64 = ⁻1
+        let empty_blk : mut i64 = ⁻1
+        let bind_tok : mut i64 = ⁻1
+        while self.peek() ≠ TK_DEDENT and not self.failed():
+            if self.peek() = TK_EXISTS:
+                if some_blk ≠ ⁻1:
+                    self.err("match repeats the ∃ pattern")
+                    return 0
+                self.pos ← self.pos + 1
+                _ ← self.eat(TK_LPAR, "'(' after ∃")
+                bind_tok ← self.pos
+                _ ← self.eat_name("the name ∃ binds")
+                _ ← self.eat(TK_RPAR, "')' closing the pattern")
+                some_blk ← self.parse_block()
+            elif self.peek() = TK_EMPTY:
+                if empty_blk ≠ ⁻1:
+                    self.err("match repeats the ∅ pattern")
+                    return 0
+                self.pos ← self.pos + 1
+                empty_blk ← self.parse_block()
+            elif self.peek() = TK_NL:
+                self.pos ← self.pos + 1
+            else:
+                self.err("a core-2 match arm is ∃(name) or ∅")
+                return 0
+        _ ← self.eat(TK_DEDENT, "the end of the match")
+        if some_blk = ⁻1:
+            self.err("match has no arm for ∃")
+            return 0
+        if empty_blk = ⁻1:
+            self.err("match has no arm for ∅")
+            return 0
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(some_blk)
+        self.extra.push(empty_blk)
+        return self.mknode(NK_MATCH, bind_tok, subject, off, 0)
     fn parse_match_enum(&mut self, at : i64, subject : i64) → i64:
         let arms : mut i64[] = []
         let default_blk : mut i64 = ⁻1
@@ -1671,59 +1735,7 @@ impl Parser:
             self.extra.push(self.nb[e1 × 1¤ptrdiff])
             return self.mknode(NK_FOREACH, name_tok, off, body, 0)
         if k = TK_MATCH:
-            self.pos ← self.pos + 1
-            let subject : i64 = self.parse_expr()
-            _ ← self.eat(TK_COLON, "':' after the subject")
-            _ ← self.eat(TK_NL, "the arms on their own lines")
-            _ ← self.eat(TK_INDENT, "an indented arm list")
-            // An identifier where a pattern goes says this match is
-            // over an enumeration: the arms name its values, and there
-            // is no ∃ or ∅ about it.
-            let mut_pos : i64 = self.pos
-            let is_enum : mut bool = false
-            while self.peek() = TK_NL:
-                self.pos ← self.pos + 1
-            if self.peek() = TK_IDENT:
-                is_enum ← true
-            self.pos ← mut_pos
-            if is_enum:
-                return self.parse_match_enum(at, subject)
-            let some_blk : mut i64 = ⁻1
-            let empty_blk : mut i64 = ⁻1
-            let bind_tok : mut i64 = ⁻1
-            while self.peek() ≠ TK_DEDENT and not self.failed():
-                if self.peek() = TK_EXISTS:
-                    if some_blk ≠ ⁻1:
-                        self.err("match repeats the ∃ pattern")
-                        return 0
-                    self.pos ← self.pos + 1
-                    _ ← self.eat(TK_LPAR, "'(' after ∃")
-                    bind_tok ← self.pos
-                    _ ← self.eat_name("the name ∃ binds")
-                    _ ← self.eat(TK_RPAR, "')' closing the pattern")
-                    some_blk ← self.parse_block()
-                elif self.peek() = TK_EMPTY:
-                    if empty_blk ≠ ⁻1:
-                        self.err("match repeats the ∅ pattern")
-                        return 0
-                    self.pos ← self.pos + 1
-                    empty_blk ← self.parse_block()
-                elif self.peek() = TK_NL:
-                    self.pos ← self.pos + 1
-                else:
-                    self.err("a core-2 match arm is ∃(name) or ∅")
-                    return 0
-            _ ← self.eat(TK_DEDENT, "the end of the match")
-            if some_blk = ⁻1:
-                self.err("match has no arm for ∃")
-                return 0
-            if empty_blk = ⁻1:
-                self.err("match has no arm for ∅")
-                return 0
-            let off : i64 = @dropunit(#self.extra)
-            self.extra.push(some_blk)
-            self.extra.push(empty_blk)
-            return self.mknode(NK_MATCH, bind_tok, subject, off, 0)
+            return self.parse_match_node()
         if k = TK_RETURN:
             self.pos ← self.pos + 1
             let v : mut i64 = ⁻1

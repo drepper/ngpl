@@ -144,6 +144,21 @@ def if_branch_bodies(node):
         alt = alt[2] if len(alt) == 3 else None
 
 
+def if_has_else(node) -> bool:
+    """Whether an if chain ends in an else rather than running out.
+
+    One that runs out can fall past every branch, so what it hands back
+    where it does is nothing, and its value is optional rather than
+    whatever its branches say.
+    """
+    alt = node.alt
+    while alt is not None:
+        if alt[0] is None:
+            return True
+        alt = alt[2] if len(alt) == 3 else None
+    return False
+
+
 def if_branch_values(node):
     """The expression each branch of an if hands back.
 

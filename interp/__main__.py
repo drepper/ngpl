@@ -1284,7 +1284,12 @@ def _static_type_of(expr, types: dict, structs: dict) -> str | None:
         return "bool"
     if isinstance(expr, _ast.IfStmt):
         # Whichever branch runs is the value, so what the if says is
-        # what every branch says and nothing where they differ.
+        # what every branch says and nothing where they differ.  One
+        # that can fall past every branch says nothing here either:
+        # what it hands back is an optional, which this walk has no
+        # spelling for.
+        if not _ast.if_has_else(expr):
+            return None
         said = {_static_type_of(e, types, structs)
                 for e in _ast.if_branch_values(expr)}
         return said.pop() if len(said) == 1 else None

@@ -32,6 +32,13 @@ struct Lower:
     cur_ret : i64
     post_label : i64
     res_vreg : i64
+    // A call to the function being lowered, standing in tail position,
+    // is a loop rather than a call: the parameters take the new values
+    // and the body starts again.  tail_label is where it starts again,
+    // or ⁻1 where this function is not one that may be turned round.
+    tail_label : i64
+    tail_fn : i64        // which function that is, by index
+    tail_np : i64        // how many parameters it takes
     cur_fname : str
     dlog : str[]         // one JSON line per code-shaping decision
     argcopy : i64[]      // arguments whose copy by value cannot be elided
@@ -620,6 +627,26 @@ impl Lower:
             return v
         if k = NK_IF:
             return self.lower_ife(nid, na, nb, nc)
+        if k = NK_MATCHE:
+            let dm : i64 = self.tmp()
+            self.lower_matche(nid, na, nb, nc, TY_UNIT, false, dm)
+            return dm
+        if k = NK_MATCH:
+            // ∃ binds what the optional holds; ∅ is the other way out
+            let dv : i64 = self.tmp()
+            let sv : i64 = self.lower_expr(na)
+            let bind : i64 = self.nslot[nid × 1¤ptrdiff]
+            let lempty : i64 = self.label()
+            let lend : i64 = self.label()
+            let toopt : bool = ty_is_opt(self.tof(nid))
+            self.ir(IR_JZ, sv, lempty, 0, 0, 0)
+            self.ir(IR_FLD, sv, 0, 0, bind, 0)
+            self.lower_block_value(self.a.extra[nb × 1¤ptrdiff], dv, toopt)
+            self.ir(IR_JMP, lend, 0, 0, 0, 0)
+            self.ir(IR_LABEL, lempty, 0, 0, 0, 0)
+            self.lower_block_value(self.a.extra[(nb + 1) × 1¤ptrdiff], dv, toopt)
+            self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+            return dv
         if k = NK_DEFAULT:
             return self.lower_default(nid, na, nb)
         if k = NK_AND or k = NK_OR:
@@ -749,7 +776,9 @@ impl Lower:
         // is why an if written for its value costs no branch when it
         // is the small kind.
         let tv0 : i64 = self.block_value_of(nb)
-        let ev0 : i64 = self.block_value_of(nc)
+        let ev0 : mut i64 = ⁻1
+        if nc ≠ ⁻1:
+            ev0 ← self.block_value_of(nc)
         let sel : bool = tv0 ≠ ⁻1 and ev0 ≠ ⁻1 and self.speculatable(tv0) and self.speculatable(ev0)
         self.decide(self.tok_line(self.a.ntok[nid × 1¤ptrdiff]),
                     if sel: "select" else: "branched-conditional", "")
@@ -760,15 +789,26 @@ impl Lower:
             let d : i64 = self.tmp()
             self.ir(IR_SEL, cv, tv, ev, d, width_of(self.tof(nid)))
             return d
+        // With no else the value is optional and the fall-through is
+        // ∅, which is how an if that can fall past its branch still
+        // answers on every path.
+        let noelse : bool = nc = ⁻1
+        // Where the if answers an optional, a branch that answers the
+        // base type is held on the way out; one that already answers
+        // an optional, or says ∅, is what it is.
+        let toopt : bool = ty_is_opt(self.tof(nid))
         let d : i64 = self.tmp()
         let lelse : i64 = self.label()
         let lend : i64 = self.label()
         let cv : i64 = self.lower_expr(na)
         self.ir(IR_JZ, cv, lelse, 0, 0, 0)
-        self.lower_block_value(nb, d)
+        self.lower_block_value(nb, d, toopt)
         self.ir(IR_JMP, lend, 0, 0, 0, 0)
         self.ir(IR_LABEL, lelse, 0, 0, 0, 0)
-        self.lower_block_value(nc, d)
+        if noelse:
+            self.ir(IR_CONST, 0, 0, 0, d, 0)
+        else:
+            self.lower_block_value(nc, d, toopt)
         self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         d
 
@@ -790,7 +830,7 @@ impl Lower:
     // itself, and the last written into the destination.  A branch
     // that leaves rather than answering writes nothing, having
     // nowhere to arrive from.
-    fn lower_block_value(&mut self, blk : i64, d : i64):
+    fn lower_block_value(&mut self, blk : i64, d : i64, toopt : bool):
         let off : i64 = self.a.na[blk × 1¤ptrdiff]
         let n : i64 = self.a.extra[off × 1¤ptrdiff]
         let i : mut i64 = 0
@@ -801,13 +841,32 @@ impl Lower:
             let last : i64 = self.a.extra[(off + n) × 1¤ptrdiff]
             let lk : i64 = self.kof(last)
             if lk = NK_EXPRSTMT:
-                let v : i64 = self.lower_expr(self.a.na[last × 1¤ptrdiff])
-                self.ir(IR_MOV, v, 0, 0, d, 0)
+                let e : i64 = self.a.na[last × 1¤ptrdiff]
+                let v : i64 = self.lower_expr(e)
+                self.lower_into(v, d, self.holds(toopt, e))
             elif lk = NK_IF:
                 let v : i64 = self.lower_expr(last)
-                self.ir(IR_MOV, v, 0, 0, d, 0)
+                self.lower_into(v, d, self.holds(toopt, last))
             else:
                 self.lower_stmt(last, false, TY_UNIT)
+
+    // What a branch hands to the destination: the value itself, or ∃
+    // of it where the if has no else and what it answers is therefore
+    // optional.
+    // Whether what this branch answers has to be held in an optional
+    // on the way out: only where the if answers one and the branch
+    // does not -- ∅ is already an optional's own value.
+    fn holds(&self, toopt : bool, e : i64) → bool:
+        toopt and not ty_is_opt(self.tof(e)) and self.tof(e) ≠ TY_EMPTY
+
+    fn lower_into(&mut self, v : i64, d : i64, hold : bool):
+        if not hold:
+            self.ir(IR_MOV, v, 0, 0, d, 0)
+            return
+        let b : i64 = self.tmp()
+        self.ir(IR_SNEW, 1, 0, 0, b, 0)
+        self.ir(IR_FSTO, b, 0, v, 0, 0)
+        self.ir(IR_MOV, b, 0, 0, d, 0)
 
     fn lower_andor(&mut self, nid : i64, k : i64, na : i64, nb : i64) → i64:
         // a pure, fault-free right side may be read eagerly, and the
@@ -1709,7 +1768,57 @@ impl Lower:
 
     // what a return hands over: a bare value under an optional answer
     // boxes itself, and a bare ÷ or % answers ∅ for the zero divisor
+    // Whether this is a call, in tail position, to the very function
+    // being lowered -- a plain call by name, with the parameters it
+    // takes, and this function one that may be turned round at all.
+    fn tail_call_here(&mut self, na : i64) → bool:
+        if self.tail_label = ⁻1 or self.kof(na) ≠ NK_CALL:
+            return false
+        if self.a.nc[na × 1¤ptrdiff] ≠ 0:
+            // through a binding's box, a partial, a generate: not the
+            // plain call this turns
+            return false
+        if self.fname_index(self.text(self.a.ntok[na × 1¤ptrdiff])) ≠ self.tail_fn:
+            return false
+        self.a.extra[self.a.na[na × 1¤ptrdiff] × 1¤ptrdiff] = self.tail_np
+
+    // The call as a loop.  Every argument is worked out before any
+    // parameter is written, since an argument may still read a
+    // parameter the write would have destroyed -- `f(b, a)` is the
+    // plain case of it.  Nothing after the call reads a local, tail
+    // position being what that means, so the frame is used again
+    // rather than stacked.
+    fn lower_tail(&mut self, na : i64):
+        let args_off : i64 = self.a.na[na × 1¤ptrdiff]
+        let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
+        let vals : mut i64[] = []
+        let i : mut i64 = 0
+        while i < argc:
+            let an : i64 = self.a.extra[(args_off + 1 + i) × 1¤ptrdiff]
+            let v0 : i64 = self.copied_arg(an, self.lower_expr(an))
+            let v : mut i64 = v0
+            if v0 >= 0 and v0 < self.tail_np:
+                // A bare parameter is not a copy of itself: it is the
+                // slot, and the slots are what is about to be written.
+                // `f(b, a)` is where that shows -- without this, a is
+                // written before b is read and both come out the same.
+                let s : i64 = self.tmp()
+                self.ir(IR_MOV, v0, 0, 0, s, 0)
+                v ← s
+            vals.push(v)
+            i ← i + 1
+        assert(@dropunit(#vals) = argc, "one value per argument")
+        self.decide(self.tok_line(self.a.ntok[na × 1¤ptrdiff]), "tail-call-loop", "")
+        let j : mut i64 = 0
+        while j < argc:
+            self.ir(IR_MOV, vals[j × 1¤ptrdiff], 0, 0, j, 0)
+            j ← j + 1
+        self.ir(IR_JMP, self.tail_label, 0, 0, 0, 0)
+
     fn lower_ret_value(&mut self, na : i64):
+        if self.tail_call_here(na):
+            self.lower_tail(na)
+            return
         if ty_is_opt(self.cur_ret) and (self.kof(na) = NK_DIV or self.kof(na) = NK_MOD) and not ty_is_opt(self.tof(na)):
             let av9 : i64 = self.lower_expr(self.a.na[na × 1¤ptrdiff])
             let bv9 : i64 = self.lower_expr(self.a.nb[na × 1¤ptrdiff])
@@ -1847,7 +1956,12 @@ impl Lower:
         elif k = NK_DISCARD:
             _ ← self.lower_expr(na)
         elif k = NK_EXPRSTMT:
-            if trailing and ret_ty ≠ TY_UNIT:
+            if trailing and self.tail_call_here(na):
+                // a function that answers nothing still ends at its
+                // last statement, so a call to itself there is a tail
+                // call like any other
+                self.lower_tail(na)
+            elif trailing and ret_ty ≠ TY_UNIT:
                 self.lower_ret_value(na)
             else:
                 _ ← self.lower_expr(na)
@@ -1865,7 +1979,12 @@ impl Lower:
             // which is what the same thing written `a if c else b`
             // used to do, and there is no reason for the spelling to
             // cost a branch.
-            if trailing and ret_ty ≠ TY_UNIT and self.if_selectable(sid):
+            // An if with no else answers an optional, which the
+            // checker settled a type for; that is the signal that the
+            // whole if is the value rather than a branch apiece.
+            let ncs : i64 = self.a.nc[sid × 1¤ptrdiff]
+            let whole : bool = self.if_selectable(sid) or (ncs = ⁻1 and self.tof(sid) ≠ TY_UNIT)
+            if trailing and ret_ty ≠ TY_UNIT and whole:
                 self.lower_ret_value(sid)
             else:
                 self.lower_if(sid, 0, trailing, ret_ty)
@@ -1883,7 +2002,7 @@ impl Lower:
             self.ir(IR_JMP, ltop, 0, 0, 0, 0)
             self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         elif k = NK_MATCHE:
-            self.lower_matche(sid, na, nb, nc, ret_ty)
+            self.lower_matche(sid, na, nb, nc, ret_ty, trailing, ⁻1)
         elif k = NK_MATCH:
             let v : i64 = self.lower_expr(na)
             let bind : i64 = self.nslot[sid × 1¤ptrdiff]
@@ -2113,7 +2232,10 @@ impl Lower:
     // which is the case a jump table is for -- one bounds check and one
     // indirect jump, whatever the arm count -- and the same span test
     // the if-ladder uses says when it is not worth it.
-    fn lower_matche(&mut self, sid : i64, na : i64, nb : i64, ei : i64, ret_ty : i64):
+    // dest is ⁻1 where the match stands as a statement, and the place
+    // the value goes where it stands as a value: each arm writes what
+    // it answers there and the ways out meet at the end.
+    fn lower_matche(&mut self, sid : i64, na : i64, nb : i64, ei : i64, ret_ty : i64, trailing : bool, dest : i64):
         let n : i64 = self.a.extra[nb × 1¤ptrdiff]
         let dflt : i64 = self.a.extra[(nb + 1) × 1¤ptrdiff]
         let est : i64 = self.a.estart[ei × 1¤ptrdiff]
@@ -2179,15 +2301,22 @@ impl Lower:
                 self.ir(IR_JNZ, c, case_labels[j × 1¤ptrdiff], 0, 0, 0)
                 j ← j + 1
             self.ir(IR_JMP, ldef, 0, 0, 0, 0)
+        let toopt : bool = dest ≠ ⁻1 and ty_is_opt(self.tof(sid))
         let b : mut i64 = 0
         while b < n:
             self.ir(IR_LABEL, case_labels[b × 1¤ptrdiff], 0, 0, 0, 0)
-            self.lower_block(blks[b × 1¤ptrdiff], false, ret_ty)
+            if dest ≠ ⁻1:
+                self.lower_block_value(blks[b × 1¤ptrdiff], dest, toopt)
+            else:
+                self.lower_block(blks[b × 1¤ptrdiff], trailing, ret_ty)
             self.ir(IR_JMP, lend, 0, 0, 0, 0)
             b ← b + 1
         self.ir(IR_LABEL, ldef, 0, 0, 0, 0)
         if dflt ≠ ⁻1:
-            self.lower_block(dflt, false, ret_ty)
+            if dest ≠ ⁻1:
+                self.lower_block_value(dflt, dest, toopt)
+            else:
+                self.lower_block(dflt, trailing, ret_ty)
         self.ir(IR_LABEL, lend, 0, 0, 0, 0)
 
     // the constant a block returns, or the impossible sentinel
@@ -2926,6 +3055,24 @@ fn lower_fn(lw : &mut Lower, a : Ast, chk : Chk, f : i64) → IrFn:
     if sized_ret:
         lw.ir(IR_MOV, np0, 0, 0, sbase, 0)
         lw.sret ← sbase
+    // Where this function calls itself in tail position, the call is a
+    // loop: the parameters take the new values and the body starts
+    // again here, so the recursion spends no stack at all and the
+    // language's guarantee is kept.
+    //
+    // The top is above the preconditions rather than below them, so
+    // that each turn is asked what a fresh call would have been asked.
+    // A function with a postcondition is left alone: a condition
+    // relating the answer to the arguments is stated once per call,
+    // and a loop has one call where the source has many.  So is one
+    // answering a sized array, whose caller hands it the room to
+    // answer into and whose recursion is not the shape this turns.
+    lw.tail_fn ← f
+    lw.tail_np ← np0
+    lw.tail_label ← ⁻1
+    if not sized_ret and d.post_off = ⁻1:
+        lw.tail_label ← lw.label()
+        lw.ir(IR_LABEL, lw.tail_label, 0, 0, 0, 0)
     if d.pre_off ≠ ⁻1:
         let n : i64 = a.extra[d.pre_off × 1¤ptrdiff]
         let j : mut i64 = 0

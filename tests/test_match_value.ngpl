@@ -1,0 +1,135 @@
+// A match hands back a value.
+//
+// The value of a match is the value of the last statement of whichever
+// arm runs, exactly as an if's is the value of the branch that runs.
+// It is the same match either way -- nothing in the writing marks one
+// as a statement and another as a value -- and what differs is only
+// whether anything reads what comes back.
+//
+// Every value has an arm, which is checked where the match is written,
+// so a match that answers answers on every path.  The arms are one
+// value, so they say one type between them, settled from what the
+// surrounding text asks for where it asks for anything and from the
+// first arm that states one otherwise; untyped numbers take the
+// answer.  An arm that leaves rather than arriving -- a return, a
+// @noreturn call -- states nothing for the others to agree with.
+//
+// The specification's "A `match` Is a Value" is the normative
+// statement.
+
+enum Colour : u32:
+    red = 1
+    green = 2
+    blue = 3
+
+// ---------------------------------------------------------------------
+// Standing last in a body
+// ---------------------------------------------------------------------
+
+fn name(c : Colour) → str:
+    match c:
+        Colour.red: "red"
+        Colour.green: "green"
+        Colour.blue: "blue"
+
+@test
+fn test_a_body_that_ends_in_a_match():
+    assert_eq(name(Colour.red), "red")
+    assert_eq(name(Colour.green), "green")
+    assert_eq(name(Colour.blue), "blue")
+
+fn held(o : i64?) → i64:
+    match o:
+        ∃(x): x × 2
+        ∅: 0
+
+fn held_if(x : i64) → i64?:
+    if x > 0: x
+
+@test
+fn test_an_optional_match_as_the_answer():
+    assert_eq(held(held_if(5)), 10)
+    assert_eq(held(held_if(⁻5)), 0)
+
+// ---------------------------------------------------------------------
+// Standing where a value is wanted
+// ---------------------------------------------------------------------
+
+@test
+fn test_a_match_as_a_value():
+    let c : Colour = Colour.green
+    let n : str = match c:
+        Colour.red: "red"
+        Colour.green: "green"
+        Colour.blue: "blue"
+    assert_eq(n, "green")
+
+@test
+fn test_an_optional_match_as_a_value():
+    let v : i64 = match held_if(5):
+        ∃(x): x + 1
+        ∅: 0
+    let w : i64 = match held_if(⁻1):
+        ∃(x): x + 1
+        ∅: 99
+    assert_eq(v, 6)
+    assert_eq(w, 99)
+
+// An arm is a block, so it may do work before it arrives.
+@test
+fn test_an_arm_that_is_more_than_its_value():
+    let c : Colour = Colour.blue
+    let v : i64 = match c:
+        Colour.red: 1
+        Colour.green: 2
+        Colour.blue:
+            let base : i64 = 10
+            base + 3
+    assert_eq(v, 13)
+
+// A _ arm answers for everything left over.
+@test
+fn test_a_wildcard_arm():
+    let c : Colour = Colour.blue
+    let v : i64 = match c:
+        Colour.red: 1
+        _: 9
+    assert_eq(v, 9)
+
+// ---------------------------------------------------------------------
+// One type between them
+// ---------------------------------------------------------------------
+
+@test
+fn test_untyped_numbers_take_the_answer():
+    let c : Colour = Colour.green
+    let narrow : i8 = match c:
+        Colour.red: 1
+        Colour.green: ⁻2
+        Colour.blue: 3
+    assert_eq(narrow, ⁻2)
+
+// ---------------------------------------------------------------------
+// An arm that arrives nowhere
+// ---------------------------------------------------------------------
+
+@noreturn
+@impure
+fn give_up():
+    std.exit(3)
+
+@impure
+fn only_red(c : Colour) → i64:
+    match c:
+        Colour.red: 10
+        _: give_up()
+
+@test
+@impure
+fn test_an_arm_that_leaves_states_no_type():
+    assert_eq(only_red(Colour.red), 10)
+
+@start
+@impure
+fn main():
+    std.println("match-value tests passed")
