@@ -32,8 +32,10 @@ fn test_several_of_each():
     assert_eq(biggest(3, 7), 7)
     assert_eq(biggest(7, 3), 7)
 
+// Written with constants, so it is settled before anything runs --
+// which is why the finding is the earlier one rather than the call's.
 @test
-@expect error 2614 "biggest: a precondition does not hold, so the caller did not keep to what biggest says it needs"
+@expect error 2619 "biggest: a precondition does not hold for this call, whose arguments are known before anything runs"
 fn error_the_second_precondition():
     let n : mut = biggest(1, 0)
 
@@ -44,9 +46,21 @@ fn error_the_second_precondition():
 // A precondition is read where the parameters are bound, so it says
 // what the caller has to have got right.
 @test
-@expect error 2614 "divide: a precondition does not hold, so the caller did not keep to what divide says it needs"
+@expect error 2619 "divide: a precondition does not hold for this call, whose arguments are known before anything runs"
 fn error_a_precondition():
     let n : mut = divide(8, 0)
+
+// And where the argument is not known before anything runs, the
+// condition is read at the call, as it always was.
+@impure
+fn zero() → i64:
+    0
+
+@test
+@impure
+@expect error 2614 "divide: a precondition does not hold, so the caller did not keep to what divide says it needs"
+fn error_a_precondition_at_the_call():
+    let n : mut = divide(8, zero())
 
 // A postcondition is read where the answer is, and may name it.
 @post(r: r > 100)

@@ -12,10 +12,18 @@ fn scaled(a : i64, b : i64) → i64:
 fn first_of(v : i64[]) → i64:
     v[0]
 
+// The scale comes from a call rather than from the text, so what the
+// condition says about it is a question for the run.  Written as a
+// constant it would be settled before anything ran, which is a
+// different thing and is tested where that is the subject.
+@impure
+fn none_at_all() → i64:
+    0
+
 @start
 @impure
 fn main():
-    std.println("{}", scaled(3, 0))
+    std.println("{}", scaled(3, none_at_all()))
     let v : i64[] = [7, 8]
     std.println("{}", first_of(v))
     std.println("the program ran to the end")

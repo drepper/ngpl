@@ -7,4 +7,4 @@ error: scaled: a precondition does not hold, so the caller did not keep to what 
     |
 backtrace (innermost call first):
   #0 scaled at tests/output/contract_enforce.ngpl:5:5
-  #1 main at tests/output/contract_enforce.ngpl:18:32
+  #1 main at tests/output/contract_enforce.ngpl:26:32
