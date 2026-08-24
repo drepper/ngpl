@@ -308,8 +308,13 @@ Completed
     rather than at the arithmetic that broke it, with a backtrace to the call.  A condition
     that does not answer a bool is refused.
 
-[ ] a postcondition cannot say what a parameter was on entry: Eiffel's `old` and Ada's 'Old.
+[x] a postcondition cannot say what a parameter was on entry: Eiffel's `old` and Ada's 'Old.
     Wants a copy taken before the body runs and a name for it.
+    Done in the interpreter, on branch todo/post-old: `@old(e)` reads e once, before a
+    statement of the body has run, and the postcondition sees that.  Any expression, not only
+    a bare parameter; each call reads its own, so a recursion is not confused by the one
+    inside it; refused statically anywhere but a @post.  ngplc does not accept it yet, which
+    is the permitted direction; the compiler side is what is left.
 
 [ ] a condition on a type rather than on a function -- an invariant.
 

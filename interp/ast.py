@@ -548,6 +548,23 @@ class LimitExpr:
         self.expr = expr
 
 
+class OldExpr:
+    """@old(expr) -- what expr was when the call began.
+
+    A postcondition is read where the answer is, by which time a
+    parameter may have been changed by the body.  `@old` is how it says
+    what the parameter was rather than what it has become: the
+    expression is read once, before a statement of the body runs, and
+    the postcondition sees that.
+
+    Eiffel spells it `old`, Ada `\'Old`; the annotation form is this
+    language\'s, and keeps the word available as a name.
+    """
+
+    def __init__(self, expr):
+        self.expr = expr
+
+
 class DropUnitExpr:
     """@dropunit(expr): the value without the unit it carries.
 

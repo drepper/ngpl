@@ -2374,6 +2374,28 @@ def _block_breaks(body) -> bool:
     return False
 
 
+def _static_old_check(func_def) -> str | None:
+    """Refuse `@old` anywhere but a postcondition.
+
+    What it says is what a value was when the call began, and a
+    postcondition is the only place in a position to ask: a
+    precondition is read before anything has become anything else, and
+    a body is where things become what they are.
+    """
+    for condition in getattr(func_def, "preconditions", None) or ():
+        for node in _iter_ast(condition.expr):
+            if isinstance(node, _ast.OldExpr):
+                return (f"{func_def.name}: @old says what a value was when "
+                        f"the call began, and a @pre is read before the "
+                        f"call has changed anything; it belongs in a @post")
+    for node in _iter_ast(func_def.body):
+        if isinstance(node, _ast.OldExpr):
+            return (f"{func_def.name}: @old says what a value was when the "
+                    f"call began, and a body is where things become what "
+                    f"they are; it belongs in a @post")
+    return None
+
+
 def _gone_for_good(definitions) -> frozenset:
     """The names of the functions that do not come back.
 
@@ -3662,6 +3684,9 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 if return_err is not None:
                     raise DefinitionError(f"in {defn.name}: {return_err}",
                                           _finding_pos(return_err) or _node_pos(defn))
+                old_err = _static_old_check(defn)
+                if old_err is not None:
+                    raise DefinitionError(old_err, _node_pos(defn))
                 noreturn_err = _static_noreturn_check(defn, gone)
                 if noreturn_err is not None:
                     raise DefinitionError(noreturn_err, _node_pos(defn))
@@ -4001,6 +4026,9 @@ def main():
                 errors_produced.append(("error", return_err))
 
         if not errors_produced:
+            old_err = _static_old_check(defn)
+            if old_err is not None:
+                errors_produced.append(("error", old_err))
             noreturn_err = _static_noreturn_check(defn, gone)
             if noreturn_err is not None:
                 # collected rather than raised, so an @expect may name

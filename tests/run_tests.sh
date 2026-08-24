@@ -53,6 +53,7 @@ all_tests=(
     "$testdir"/test_if_value.ngpl
     "$testdir"/test_match_value.ngpl
     "$testdir"/test_listable_lambda.ngpl
+    "$testdir"/test_post_old.ngpl
     "$testdir"/test_logic.ngpl
     "$testdir"/test_overflow.ngpl
     "$testdir"/test_wrap.ngpl

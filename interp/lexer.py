@@ -91,6 +91,8 @@ AT_KEYWORDS: dict[str, str] = {
     "sizeof": "SIZEOF",
     "unitof": "UNITOF",
     "dropunit": "DROPUNIT",
+    # @old(e) in a postcondition: what e was when the call began.
+    "old": "OLD",
     "min": "MIN",
     "max": "MAX",
     "repr": "REPR",
