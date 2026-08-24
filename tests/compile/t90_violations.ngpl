@@ -5,9 +5,17 @@
 fn divide(a : i64, b : i64) → i64:
     (a ÷ b) ?? 0
 
+// The divisor comes from a call rather than from the text, so what the
+// condition says about it is a question for the run.  Written as a
+// constant it would be settled before anything ran, which is a
+// different thing and is tested where that is the subject.
+@impure
+fn none_at_all() → i64:
+    0
+
 @start
 @impure
 fn main():
     std.println("before")
-    let x : i64 = divide(1, 0)
+    let x : i64 = divide(1, none_at_all())
     std.println("never {}", x)

@@ -95,6 +95,11 @@ struct Chk:
     log : str[]
     diags : Diag[]
 
+// What a precondition answers where nothing readable says: the least
+// i64 halved, a value no arithmetic here reaches, so it stands for
+// "not known" without standing for a number too.
+let PRE_UNKNOWN : i64 = ⁻4611686018427387904
+
 // ---------------------------------------------------------------------------
 // The C layout of a @repr(C) struct
 // ---------------------------------------------------------------------------
@@ -2774,6 +2779,7 @@ impl Checker:
         self.check_alias(tok, name, ⁻1, args_off, argc, callee.params_off, 0)
         self.call_escapes(args_off, argc, callee.params_off, ⁻1, 0,
                           callee.is_impure, callee.ret)
+        self.settle_pre(tok, name, f, args_off, argc)
         if threads:
             // what the return type states is what one element answers,
             // and the caller receives a container of them
@@ -3249,6 +3255,121 @@ impl Checker:
         elif not self.fit_arg(arg, base):
             self.derr(tok, "argument " ⧺ i64_str(num) ⧺ " of '" ⧺ name ⧺ "' is " ⧺ self.tn(self.ty_of(arg)) ⧺ ", but the parameter says " ⧺ self.tn(base))
         false
+
+    // A call written with constants says everything the callee's @pre
+    // needs, so the condition can be read where the call is written
+    // rather than at the first call that reaches it -- and a wrong one
+    // is then reported whether or not that call is ever reached.
+    //
+    // The machinery is static_assert's: the arguments have been folded
+    // by the time they are looked at, so what is left is to read the
+    // condition with the parameters standing for them.
+    fn settle_pre(&mut self, tok : i64, name : str, f : i64,
+                  args_off : i64, argc : i64):
+        let callee := self.a.fns[f × 1¤ptrdiff]
+        if callee.pre_off = ⁻1:
+            return
+        let np : i64 = self.a.extra[callee.params_off × 1¤ptrdiff]
+        if argc ≠ np:
+            return
+        // What each argument is.  A literal is one; so is arithmetic
+        // over literals, which is not folded here -- the parameter's
+        // type reaches the operands, so they settle rather than fold --
+        // and is read for its value instead.
+        let none : i64[] = []
+        let vals : mut i64[] = []
+        let i : mut i64 = 0
+        while i < argc:
+            let v : i64 = self.pre_const(self.a.extra[(args_off + 1 + i) × 1¤ptrdiff], 0, 0, none)
+            if v = PRE_UNKNOWN:
+                // not known before anything runs; the condition is read
+                // at the call, as it always was
+                return
+            vals.push(v)
+            i ← i + 1
+        let n : i64 = self.a.extra[callee.pre_off × 1¤ptrdiff]
+        let j : mut i64 = 0
+        while j < n:
+            let c : i64 = self.a.extra[(callee.pre_off + 1 + j) × 1¤ptrdiff]
+            let v : i64 = self.pre_const(c, callee.params_off, np, vals)
+            if v = 0:
+                self.derrc(tok, 2619, "'" ⧺ name ⧺ "': a precondition does not hold for this call, whose arguments are known before anything runs")
+                return
+            j ← j + 1
+
+    // The value a condition answers where the parameters stand for the
+    // constants written at the call, or PRE_UNKNOWN where it says
+    // something this cannot read.  A truth value answers 1 or 0, which
+    // is what the caller above tests; anything unreadable answers
+    // neither and is left to the run.
+    fn pre_const(&self, e : i64, poff : i64, np : i64, vals : i64[]) → i64:
+        let k : i64 = self.kind_of(e)
+        let na : i64 = self.a.na[e × 1¤ptrdiff]
+        let nb : i64 = self.a.nb[e × 1¤ptrdiff]
+        if k = NK_INT or k = NK_BOOL:
+            return na
+        if k = NK_VAR:
+            let nm := self.text(self.a.ntok[e × 1¤ptrdiff])
+            let i : mut i64 = 0
+            while i < np:
+                if self.text(self.a.extra[(poff + 1 + i × 2) × 1¤ptrdiff]) = nm:
+                    return vals[i × 1¤ptrdiff]
+                i ← i + 1
+            return PRE_UNKNOWN
+        if k = NK_NOT:
+            let a : i64 = self.pre_const(na, poff, np, vals)
+            if a = PRE_UNKNOWN:
+                return PRE_UNKNOWN
+            return if a = 0: 1 else: 0
+        if k = NK_NEG:
+            let a : i64 = self.pre_const(na, poff, np, vals)
+            if a = PRE_UNKNOWN:
+                return PRE_UNKNOWN
+            return 0 - a
+        if k = NK_AND or k = NK_OR:
+            let a : i64 = self.pre_const(na, poff, np, vals)
+            if a = PRE_UNKNOWN:
+                return PRE_UNKNOWN
+            // short-circuit: the settled side may answer alone
+            if k = NK_AND and a = 0:
+                return 0
+            if k = NK_OR and a ≠ 0:
+                return 1
+            let b : i64 = self.pre_const(nb, poff, np, vals)
+            if b = PRE_UNKNOWN:
+                return PRE_UNKNOWN
+            return if b = 0: 0 else: 1
+        let a : i64 = self.pre_const(na, poff, np, vals)
+        if a = PRE_UNKNOWN:
+            return PRE_UNKNOWN
+        let b : i64 = self.pre_const(nb, poff, np, vals)
+        if b = PRE_UNKNOWN:
+            return PRE_UNKNOWN
+        if k = NK_EQ:
+            return if a = b: 1 else: 0
+        if k = NK_NE:
+            return if a ≠ b: 1 else: 0
+        if k = NK_LT:
+            return if a < b: 1 else: 0
+        if k = NK_LE:
+            return if a <= b: 1 else: 0
+        if k = NK_GT:
+            return if a > b: 1 else: 0
+        if k = NK_GE:
+            return if a >= b: 1 else: 0
+        if k = NK_ADD:
+            return a + b
+        if k = NK_SUB:
+            return a - b
+        if k = NK_MUL:
+            return a × b
+        if k = NK_DIV or k = NK_MOD:
+            // a zero divisor is a question with no answer; the run has
+            // its own thing to say about it
+            if b = 0:
+                return PRE_UNKNOWN
+            return if k = NK_DIV: (a ÷ b) ?? 0 else: (a % b) ?? 0
+        PRE_UNKNOWN
 
     fn check_one_arg(&mut self, tok : i64, name : str, num : i64,
                      arg : i64, pty : i64):
@@ -5133,7 +5254,7 @@ impl Checker:
 // derrc/dwarn calls; tests/compile/run_compile_tests.sh checks it.
 fn diag_codes() → i64[]:
     [2024, 2025, 2026, 2111, 2229, 2245, 2253, 2254, 2256, 2292,
-     2400, 2401, 2402, 2403, 2404, 2421, 2728, 2729, 2741, 2910, 2911]
+     2400, 2401, 2402, 2403, 2404, 2421, 2619, 2728, 2729, 2741, 2910, 2911]
 
 fn draws_code(code : i64) → bool:
     foreach c := diag_codes():

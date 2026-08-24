@@ -322,11 +322,14 @@ Completed
 
 [x] a precondition whose arguments are known before anything runs could be settled then.  The
     machinery is static_assert's; joining them up is its own piece of work.
-    Done in the interpreter, on branch todo/comptime-pre: a call written with constants --
-    literals or arithmetic over them -- has the callee's @pre read where the call is written,
-    and a wrong one is reported whether or not that call is ever reached.  Nothing is settled
-    where an argument is not known, and nothing at all under the ignore semantic.  ngplc does
-    not do it yet, which is the permitted direction.
+    Done in both: a call written with constants -- literals or arithmetic over them -- has the
+    callee's @pre read where the call is written, and a wrong one is reported whether or not
+    that call is ever reached.  Nothing is settled where an argument is not known.  In ngplc
+    the arguments are read for their values rather than looked at for literals: a parameter's
+    type reaches the operands, so `root(2 - 5)` settles rather than folds and there is no
+    NK_INT to recognise.  The condition is then read with the parameters standing for those
+    values; a name that is not a parameter, a zero divisor, anything unreadable leaves it to
+    the run.
 
 [x] @noreturn says control does not come back from a function, and what follows a call to one
     cannot be reached.  A return already says that for what follows it and needs no attribute,

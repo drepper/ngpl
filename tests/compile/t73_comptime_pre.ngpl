@@ -1,0 +1,33 @@
+// A precondition whose arguments are known before anything runs.
+//
+// A call written with constants says everything the callee's `@pre`
+// needs, so the condition is read where the call is written rather
+// than at the first call that reaches it.  Here every call keeps to
+// its condition; what is refused is tested where refusals are.
+//
+// The point of settling early is that the arguments need not be
+// literals: arithmetic over them is as known as they are.
+
+@pre(n > 0)
+fn root(n : i64) → i64:
+    n
+
+@pre(a > 0)
+@pre(b > 0)
+fn both(a : i64, b : i64) → i64:
+    a + b
+
+// where the argument is not known before anything runs, the condition
+// is read at the call, as it always was
+@impure
+fn chosen() → i64:
+    7
+
+@start
+@impure
+fn main():
+    let lit : i64 = root(4)
+    let sum : i64 = root(2 + 3)
+    let two : i64 = both(1, 2 × 3)
+    let run : i64 = root(chosen())
+    std.println("{} {} {} {}", lit, sum, two, run)
