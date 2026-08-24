@@ -1154,7 +1154,8 @@ impl Lower:
             self.ir(IR_CONST, 0, 0, 0, d8, 0)
             self.ir(IR_LABEL, lend8, 0, 0, 0, 0)
             return d8
-        // get
+        // get, with the default a ?? supplies
+        assert(defnode ≠ ⁻1, "a get with no default answers an optional and is lowered above")
         let iv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
         let dv : i64 = self.lower_expr(defnode)
         let d : i64 = self.tmp()

@@ -4380,9 +4380,13 @@ impl Checker:
                 self.derr(tok, "field '" ⧺ self.text(tok) ⧺ "' holds " ⧺ self.tn(fty) ⧺ ", not " ⧺ self.tn(self.ty_of(nb)))
         elif k = NK_DISCARD:
             if self.kind_of(na) = NK_MCALL:
+                // Not under a default: nothing supplies one here, and a
+                // get told that one is coming answers the element type
+                // while leaving lowering no default to reach for.  What
+                // is discarded is the optional, which is what it is.
                 self.check_mcall(na, self.a.ntok[na × 1¤ptrdiff],
                                  self.a.na[na × 1¤ptrdiff],
-                                 self.a.nb[na × 1¤ptrdiff], true)
+                                 self.a.nb[na × 1¤ptrdiff], false)
             else:
                 self.check_expr(na, TY_UNIT)
             if self.ty_of(na) = TY_UNT:

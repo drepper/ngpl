@@ -166,13 +166,18 @@ The Compiler
     refused, by both implementations, saying which type it could not copy.  Spec: "By Value
     Is a Copy", where this is written down as a limitation rather than a rule.
 
-[ ] ngplc stops with "index out of range" on `_ ← it.next()` -- an iterator's next()
+[x] ngplc stops with "index out of range" on `_ ← it.next()` -- an iterator's next()
     discarded rather than bound.  The lowering reaches lower_mcall with a node id of ⁻1
     (src/lower.ngpl:98, through lower_expr_i:521).  The interpreter runs the same program.
     Found while probing the walk-borrow rule; the shape is a discarded method call whose
     result is an optional, so `_ ← v.pop()` is worth trying too.  A crash rather than a
     diagnostic is the worst kind of refusal, so this one is worth a look before the next
     feature.
+    The shape that still crashed was `_ ← v.get(i)`: the discard told check_mcall a default
+    was coming, so the call answered the element type rather than the optional, and lowering
+    then took the path that reads a default node that was never written.  The discard says
+    no such thing now, and the get-with-a-default path asserts it has one.  Pinned by
+    tests/compile/t70_discarded_optional.ngpl.
 
 [ ] std.println's format is written before its arguments are worked out, in a compiled
     program but not under the interpreter.  The compiler puts the literal run of a format down
