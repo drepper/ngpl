@@ -318,7 +318,14 @@ Completed
     remembers a plain value, an array or a struct being a thing it points at rather than a
     value to keep.
 
-[ ] a condition on a type rather than on a function -- an invariant.
+[x] a condition on a type rather than on a function -- an invariant.
+    Done in the interpreter, on branch todo/type-invariant: `@invariant(lo <= hi)` in front of
+    a struct, the condition naming the fields.  Asked wherever one is made and wherever a
+    field of one is written, so there is no way to come by one that does not keep to it.  More
+    than one may be written and each is asked; the contract semantics -- ignore, observe,
+    enforce, quick-enforce -- are the ones @pre and @post already answer to.  What is left is
+    a method taking &mut self, which can change fields without a field write the evaluator
+    sees, and ngplc, which does not accept the annotation yet.
 
 [x] a precondition whose arguments are known before anything runs could be settled then.  The
     machinery is static_assert's; joining them up is its own piece of work.

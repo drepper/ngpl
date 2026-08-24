@@ -1195,15 +1195,20 @@ class StructType(Value):
     """
 
     __slots__ = ("name", "fields", "methods", "repr_kind",
-                 "_ref_self_methods", "field_units", "_resolved_units")
+                 "_ref_self_methods", "field_units", "_resolved_units",
+                 "invariants")
 
     def __init__(self, name: str, fields: list[tuple[str, str]],
                  methods: dict[str, "FuncValue"] | None = None,
-                 repr_kind: str | None = None, field_units=None):
+                 repr_kind: str | None = None, field_units=None,
+                 invariants=None):
         self.name = name
         self.fields = fields
         self.methods: dict[str, FuncValue] = methods or {}
         self.repr_kind = repr_kind
+        # What is always true of one of these, as the definition wrote
+        # it: a condition on the type rather than on a function.
+        self.invariants = list(invariants or [])
         self._ref_self_methods: set[str] = set()
         # The unit specs the definition wrote per field, resolved to
         # Unit objects on first use -- the units a file defines for

@@ -4486,6 +4486,11 @@ class Evaluator:
                                              "field assignment",
                                              target_ast.attr)
                     inst.field_values[target_ast.attr] = rhs
+                    # What the type says is always true has to be true
+                    # again once the field has been written, or there
+                    # would be a way to have one that does not keep to
+                    # it.
+                    self._check_invariants(inst)
                 elif isinstance(au, ObjectValue) and au.obj is std \
                         and target_ast.attr in _STD_SETTINGS:
                     setting = unwrap_optional(rhs)
@@ -6105,6 +6110,60 @@ class Evaluator:
     # Struct literal evaluation
     # ------------------------------------------------------------------
 
+    def _check_invariants(self, inst) -> None:
+        """Hold one of a type to what the type says is always true of it.
+
+        A condition on the type rather than on a function: it is asked
+        wherever one is made and wherever a field of one is written, so
+        there is no way to have one that does not keep to it.  The
+        fields are what the condition names, so they are what is bound
+        while it is read.
+        """
+        invariants = getattr(inst.struct_type, "invariants", None)
+        if not invariants:
+            return
+        semantic = contract_semantic()
+        if semantic == "ignore":
+            return
+        saved = self.env
+        self.env = Env(parent=saved)
+        for fname, fval in inst.field_values.items():
+            self.env.define(fname, fval)
+        try:
+            for inv in invariants:
+                try:
+                    held = self.eval_expr(inv)
+                except Exception as e:
+                    self._invariant_violation(
+                        inst, semantic, strip_position_prefix(str(e)))
+                    continue
+                unwrapped = unwrap_optional(held)
+                if not isinstance(unwrapped, BoolValue):
+                    raise coded(2615, TypeError(
+                        f"{inst.struct_type.name}: an @invariant says what is "
+                        f"always true, so it answers a truth value, and this "
+                        f"one answers {self._value_type_name(unwrapped)}"))
+                if not unwrapped.value:
+                    self._invariant_violation(inst, semantic, None)
+        finally:
+            self.env = saved
+
+    def _invariant_violation(self, inst, semantic: str,
+                             unreadable: str | None) -> None:
+        name = inst.struct_type.name
+        if unreadable is not None:
+            message = (f"{name}: an invariant could not be read, so what it "
+                       f"claims is not known to hold: {unreadable}")
+        else:
+            message = (f"{name}: an invariant does not hold, so this is not "
+                       f"one of the {name} the type describes")
+        if semantic == "quick-enforce":
+            raise ProgramAbort(resolve_abort_signal(0))
+        if semantic == "observe":
+            self._warnings.append(message)
+            return
+        raise coded(2616, ContractError(message))
+
     def _eval_struct_lit(self, node: StructLit) -> Value:
         """Evaluate a struct literal: Name { field: expr, ... }."""
         try:
@@ -6137,7 +6196,9 @@ class Evaluator:
             if fname not in field_values:
                 raise coded(2825, TypeError(
                     f"missing field '{fname}' in struct '{node.name}' literal"))
-        return ObjectValue(StructInstance(struct_type, field_values))
+        made = StructInstance(struct_type, field_values)
+        self._check_invariants(made)
+        return ObjectValue(made)
 
     # ------------------------------------------------------------------
     # Function calls

@@ -936,11 +936,19 @@ class StructDef:
     struct has no defined layout.
     """
 
+    # What `@invariant(…)` said is always true of one of these, as a
+    # list of expressions naming the fields.  A condition on the type
+    # rather than on a function: every way of making or changing one
+    # has to leave it holding.
+    invariants: list = []
+
     def __init__(self, name: str, fields: list[tuple[str, str]],
-                 repr_kind: str | None = None, field_units=None):
+                 repr_kind: str | None = None, field_units=None,
+                 invariants=None):
         self.name = name
         self.fields = fields
         self.repr_kind = repr_kind
+        self.invariants = list(invariants or [])
         # The unit each field's numbers count in, by field name; a
         # field not named here measures nothing.  Held as the parsed
         # spec, since the units a file defines register later.

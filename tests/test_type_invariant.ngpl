@@ -1,0 +1,64 @@
+// A condition on a type rather than on a function.
+//
+// `@pre` and `@post` say what a *function* holds to.  An `@invariant`
+// says what is always true of one of a *type*: it is asked wherever
+// one is made and wherever a field of one is written, so there is no
+// way to come by one that does not keep to it.
+//
+// The condition names the fields, which is what it is about.
+
+@invariant(lo <= hi)
+struct Span:
+    lo : i64
+    hi : i64
+
+@test
+fn test_one_that_keeps_it_is_made():
+    let s : Span = Span{lo: 1, hi: 5}
+    assert_eq(s.lo, 1)
+    assert_eq(s.hi, 5)
+
+@test
+fn test_a_write_that_keeps_it_is_allowed():
+    let s : mut Span = Span{lo: 1, hi: 5}
+    s.hi ← 9
+    assert_eq(s.hi, 9)
+
+// The empty span is one of these too: the condition says `<=`.
+@test
+fn test_the_edge_of_the_condition():
+    let s : Span = Span{lo: 3, hi: 3}
+    assert_eq(s.lo, s.hi)
+
+// More than one condition, and each is asked.
+@invariant(w > 0)
+@invariant(h > 0)
+struct Box:
+    w : i64
+    h : i64
+
+@test
+fn test_more_than_one_condition():
+    let b : Box = Box{w: 2, h: 3}
+    assert_eq(b.w × b.h, 6)
+
+@test
+@expect error 2616 "Span: an invariant does not hold, so this is not one of the Span the type describes"
+fn error_a_literal_that_breaks_it():
+    let s : mut = Span{lo: 9, hi: 5}
+
+@test
+@expect error 2616 "Span: an invariant does not hold, so this is not one of the Span the type describes"
+fn error_a_write_that_breaks_it():
+    let s : mut Span = Span{lo: 1, hi: 5}
+    s.lo ← 9
+
+@test
+@expect error 2616 "Box: an invariant does not hold, so this is not one of the Box the type describes"
+fn error_the_second_condition_is_asked_too():
+    let b : mut = Box{w: 2, h: 0}
+
+@start
+@impure
+fn main():
+    std.println("type invariant tests passed")
