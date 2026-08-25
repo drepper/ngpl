@@ -789,6 +789,49 @@ lead-byte test `(b & 0xC0) ≠ 0x80`.
   cheapest of register allocations, worth ~3% of code straight away;
   the true linear-scan allocator remains on the plan.
 
+- **A convention of our own, between functions nobody outside can
+  call.**  `src/abi.ngpl` reads the AST once and marks every function
+  the program does not export whose address is never taken — neither as
+  a bare name (`NK_FNVAL`) nor into a lambda's capture box, the two
+  ways one gets out, both ending in an indirect call that agreed with
+  the architecture rather than with us.  Of the compiler's own 1091
+  functions, 1090 qualify; only `main` does not, being where the loader
+  enters.  Every decision is written to `--log=json`.
+
+  What that buys is spent on i386, arm and riscv32, which passed *every*
+  argument on the stack: an `i64` arrives as a pair on all three, and
+  the simple course when they were written was to put every pair in
+  memory — four instructions at the call site and four in the prologue,
+  per argument, per call.  Their abstract registers are cells in the
+  frame (`i3_cello`, `a32_cello`, `r32_cello`), so a body moves memory
+  through one pair and touches nothing else, which leaves the rest free
+  end to end.  A private function therefore takes its first arguments in
+  registers — three on i386, two on arm, four on riscv32 — and preserves
+  none of them, there being nothing a caller here keeps across a call to
+  lose.  Measured on the compiler compiling itself, `.text`:
+
+  | target | before | after | |
+  |---|---|---|---|
+  | i386 | 6707053 | 6445947 | −3.89% |
+  | arm | 5124104 | 4931016 | −3.77% |
+  | riscv32 | 5670956 | 5380268 | −5.13% |
+
+  Each figure understates the code-generation gain, since the compiler's
+  own source grew by the change being measured.  The three 64-bit
+  targets are untouched: they already take six or eight arguments in
+  registers, and the 61 of 1088 functions with more parameters than that
+  are nearly all one-shot emitters that run once.
+
+  Two orderings hold it together and are the same fact twice: in the
+  prologue the register arguments reach their slots before the stack
+  ones are read, and at the call site the stack arguments are put down
+  before the register ones are loaded — because on each of these targets
+  a stack argument travels through the very pair argument 0 lives in.
+  An assertion at `IR_FADDR` refuses any address that reaches a function
+  holding a private convention, so an escape route the analysis has not
+  been taught shows itself at the first compile rather than in a
+  cross-target diff.
+
 **What stays a branch, on purpose.**  Loop back-edges and loop-bound
 checks (predictable, and the loop-carried-dependence research is
 unambiguous that cmov loses there); the short-circuit forms with
