@@ -832,6 +832,34 @@ lead-byte test `(b & 0xC0) ≠ 0x80`.
   been taught shows itself at the first compile rather than in a
   cross-target diff.
 
+- **Inlining, written and measured and not yet worth it** (branch
+  `todo/inlining`).  Two policies, both working: a function called from
+  exactly one place read at that place whatever its size, and one called
+  from several read only where the body is shorter than the call.
+  Measured on the compiler compiling itself:
+
+  | policy | instructions | text |
+  |---|---|---|
+  | bodies ≤ 24 nodes, wherever called | +1.53% | +5.6% |
+  | called once, whole body | +12.8% | +48.4% |
+
+  Half that text is an unfinished job — the body that was read is still
+  emitted where it stood, and stubbing out what nothing calls any more
+  would take it back.  The instructions are not: dead code executes
+  nothing, so 12.8% is work really done.
+
+  The cause is the shape above.  A call passes its arguments as
+  registers set up and spilled again by the prologue; a body read in
+  place binds them as a copy from one slot to another, which where every
+  operand already goes to memory and back is no cheaper.  What is
+  removed is the call and the return; what is added is a move for the
+  answer and a larger frame.  Values that stay in registers across the
+  boundary the inlining removed are the whole of the win, and until the
+  allocator exists none of them do.  Off, it still cost 1.84%, the remap
+  being ten more calls on every slot the lowering resolves — so it lives
+  on a branch rather than here, and the numbers above say what to
+  measure it against when the allocator lands.
+
 **What stays a branch, on purpose.**  Loop back-edges and loop-bound
 checks (predictable, and the loop-carried-dependence research is
 unambiguous that cmov loses there); the short-circuit forms with
