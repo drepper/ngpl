@@ -165,7 +165,7 @@ fn opt_value(a : str, name : str) → str:
 @build
 fn build():
     foreach part := ["tokens", "types", "diag", "lex", "ast", "parse",
-                     "dumpast", "check", "comptime", "ir", "lower", "emit",
+                     "dumpast", "check", "abi", "comptime", "ir", "lower", "emit",
                      "sha256", "symbols", "sbom", "elf", "codegen", "main",
                      "arch_x86_64", "rt_x86_64",
                      "arch_a64", "dispatch", "arch_rv64", "arch_i386",
@@ -485,7 +485,7 @@ fn main() → u8:
         return 1
 
     let tgt := targets()[tgt_index × 1¤ptrdiff]
-    let compiled := codegen(ast, toks, src, chk, tgt, stack_size, guard_size)
+    let compiled := codegen(ast, toks, src, chk, tgt, stack_size, guard_size, want_log)
     if #compiled.diags > 0:
         report(compiled.diags, files, json, src)
         return 1

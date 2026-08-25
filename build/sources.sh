@@ -23,6 +23,7 @@ NGPLC_SOURCES=(
     src/parse.ngpl         # tokens → Ast
     src/dumpast.ngpl       # --dump-ast
     src/check.ngpl         # names, types, widths, units, mutability, purity
+    src/abi.ngpl           # what a function nobody outside can call may do
     src/comptime.ngpl      # running the @build recipe while building
     src/ir.ngpl            # the three-address IR
     src/lower.ngpl         # Ast + Chk → IrFn

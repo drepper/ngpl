@@ -1,0 +1,100 @@
+// ===========================================================================
+// The convention a function nobody outside can call may take
+// ===========================================================================
+//
+// A function the program does not export, and whose bare name is never
+// taken as a value, is called only from code this compiler is writing
+// in the same pass.  Nothing outside has an opinion about it, so the
+// compiler is free to choose how its arguments arrive and what it
+// leaves in the registers -- the language's own convention rather than
+// the architecture's.  That freedom is what this file works out.
+//
+// It runs once, over the AST, before anything is lowered, and writes
+// what it decided into a structure the code generator reads.  Every
+// decision goes to the log under --log=json: a convention that cannot
+// be seen from outside the binary is one a reader has to be told about.
+//
+// The architecture is passed in as numbers rather than named here.  How
+// many arguments a target's ABI takes in registers, and how many more a
+// private function could take, is the one thing that differs between
+// the six, and taking it as a parameter keeps this file placeable
+// anywhere in the build order -- naming the target would mean naming
+// the Tgt enum, which is declared much later and must be declared
+// before it is used.
+
+struct Abi:
+    // One entry per function in a.fns, in the same order, so a function
+    // index is an index here.
+    private : i64[]      // 1 where the compiler may choose the convention
+    nreg : i64[]         // how many of its arguments arrive in registers
+                         // today, which is what the architecture says
+    headroom : i64[]     // how many more a private one could take, which
+                         // is what the code generator has yet to spend
+    span : i64[]         // how many tokens the definition is written in
+    log : str[]
+
+// Why a function is not free to take a convention of its own.  Each
+// answer is a reason a caller this compiler cannot see might exist.
+fn abi_why(f : FnDef, taken : i64) → str:
+    if f.is_export:
+        return "exported"
+    if f.is_start:
+        return "the start function, which the loader enters"
+    if f.is_test:
+        return "a test, which the driver calls"
+    if f.is_replaceable:
+        return "replaceable, so the call may not reach this body"
+    if taken = 1:
+        return "its name is taken as a value, and an indirect call agrees with the architecture"
+    ""
+
+@post(r: @dropunit(#r.private) = @dropunit(#a.fns) and @dropunit(#r.nreg) = @dropunit(#a.fns) and @dropunit(#r.headroom) = @dropunit(#a.fns) and @dropunit(#r.span) = @dropunit(#a.fns))
+fn analyze_abi(a : Ast, toks : Toks, argregs : i64, extra : i64, want_log : bool) → Abi:
+    let nfns : i64 = @dropunit(#a.fns)
+
+    // A name taken as a value reaches its function through a register
+    // the caller picked without knowing which body it would land in, so
+    // that function keeps the architecture's convention.  One sweep of
+    // the nodes finds every one of them; nothing else here needs a node.
+    let taken : mut i64[] = []
+    if nfns > 0:
+        foreach _ := 0…nfns - 1:
+            taken.push(0)
+    let nnodes : i64 = @dropunit(#a.nkind)
+    if nnodes > 0:
+        foreach i := 0…nnodes - 1:
+            if a.nkind[i × 1¤ptrdiff] = NK_FNVAL:
+                let fi : i64 = a.na[i × 1¤ptrdiff]
+                if fi >= 0 and fi < nfns:
+                    taken[fi × 1¤ptrdiff] ← 1
+    assert(@dropunit(#taken) = nfns, "one answer per function")
+
+    let priv : mut i64[] = []
+    let nreg : mut i64[] = []
+    let head : mut i64[] = []
+    let span : mut i64[] = []
+    let log : mut str[] = []
+    if nfns > 0:
+        foreach f := 0…nfns - 1:
+            let fd : FnDef = a.fns[f × 1¤ptrdiff]
+            let why : str = abi_why(fd, taken[f × 1¤ptrdiff])
+            let p : i64 = if why = "": 1 else: 0
+            // A private function could take more of its arguments in
+            // registers than the architecture's ABI allows, since the
+            // only code that calls it is code being written here.  What
+            // it takes today is still what the architecture says: the
+            // headroom is what the code generator has yet to spend, and
+            // the log says the two apart so that it stays true while
+            // that is so.
+            let hr : i64 = if p = 1: extra else: 0
+            priv.push(p)
+            nreg.push(argregs)
+            head.push(hr)
+            span.push(fd.tok_hi - fd.tok_lo)
+            if want_log:
+                // the log says a number, as a diagnostic does, so the
+                // measure is parted with here
+                let line : i64 = @dropunit(toks.line[fd.tok × 1¤ptrdiff])
+                let ln : str = "{\"function\": \"" ⧺ fd.name ⧺ "\", \"line\": " ⧺ i64_str(line) ⧺ ", \"decision\": \"convention\", \"private\": " ⧺ (if p = 1: "true" else: "false") ⧺ ", \"argument-registers\": " ⧺ i64_str(argregs) ⧺ ", \"headroom\": " ⧺ i64_str(hr)
+                log.push(if p = 1: ln ⧺ "}" else: ln ⧺ ", \"because\": \"" ⧺ why ⧺ "\"}")
+    Abi{private: priv, nreg: nreg, headroom: head, span: span, log: log}

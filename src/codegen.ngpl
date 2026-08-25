@@ -252,11 +252,15 @@ fn lower_ginit(lw : &mut Lower, a : Ast, chk : Chk) → IrFn:
 @pre(stack_size >= PAGE and guard_size >= PAGE)
 @pre((stack_size % PAGE ?? 1) = 0 and (guard_size % PAGE ?? 1) = 0)
 fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
-           stack_size : i64, guard_size : i64) → Compiled:
+           stack_size : i64, guard_size : i64, want_log : bool) → Compiled:
     if tgt.id ≠ TGT_X64:
         // the shared driver and the target's instruction layer carry
         // every other architecture
-        return codegen_t(a, toks, src, chk, tgt, stack_size, guard_size)
+        return codegen_t(a, toks, src, chk, tgt, stack_size, guard_size, want_log)
+    // Which functions nobody outside can call, and what that buys.  The
+    // pioneer takes six arguments in registers and has rax, r10 and r11
+    // over -- the volatile registers an argument never lands in.
+    let ab : Abi = analyze_abi(a, toks, 6, 3, want_log)
     let strs0 : mut str[] = []
     foreach s := a.strs:
         strs0.push(s)
@@ -761,7 +765,13 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         assert(next >= here, "the symbols run up the text")
         syms.push(Sym{name: sname[i], value: here, size: next - here,
                       is_global: sglob[i]})
+    // what the convention analysis decided, then what the lowering did
+    let dlog : mut str[] = []
+    foreach l := ab.log:
+        dlog.push(l)
+    foreach l := lw.dlog:
+        dlog.push(l)
     (Compiled{code: em.code, rodata: rodata, data: data,
               relro_size: relro_size, syms: syms,
-              log: lw.dlog, diags: cdiags})
+              log: dlog, diags: cdiags})
 
