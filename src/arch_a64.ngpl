@@ -23,9 +23,6 @@ let CC_GE : i64 = 5
 
 // IR the runtime builders use and the front end never writes
 let IR_SYSC : i64 = 108    // d ← syscall a (an SC_* index); extra b: [argc, arg vregs…]
-let IR_LDN : i64 = 109     // d ← mem[vreg a + imm b]; w = width in bytes, 0 for a pointer, +256 for signed
-let IR_STN : i64 = 110     // mem[vreg a + imm b] ← vreg c; w = width, 0 for a pointer
-let IR_KADDR : i64 = 111   // d ← a data address: a = 0 the kernel block, 1 the allocator's, 2 the signal block; b = byte offset
 
 // what the runtime asks of the kernel, named so the builders stay
 // architecture-blind; the target row resolves each to its number

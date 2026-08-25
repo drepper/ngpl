@@ -113,6 +113,12 @@ let IR_FRAME : i64 = 115   // d ← the address of this frame's bytes at offset 
 // only where the compiler has worked out that nothing holds it.
 let IR_GIVEBACK : i64 = 116
 let IR_CALLI : i64 = 100   // d ← call the address in vreg a, args at extra b
+// these three were written where aarch64 was first taught them; they
+// are the IR's, and live with the rest of it
+let IR_LDN : i64 = 109     // d ← mem[vreg a + imm b]; w = width in bytes, 0 for a pointer, +256 for signed
+let IR_STN : i64 = 110     // mem[vreg a + imm b] ← vreg c; w = width, 0 for a pointer
+let IR_KADDR : i64 = 111   // d ← a data address: a = 0 the kernel block, 1 the allocator's, 2 the signal block; b = byte offset
+
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
 let IR_FLD : i64 = 67      // d ← field b of struct a
 let IR_FSTO : i64 = 68     // field b of struct a ← c
@@ -129,3 +135,36 @@ struct IrFn:
     nlabels : i64
     fbytes ¤byte : i64   // how much frame the objects below the slots take
 
+// Which of an operation's fields name a vreg, one entry per opcode.
+//
+// Bit 0 says the a field is read, bit 1 the b field, bit 2 the c field,
+// and bit 3 that the operation reads vregs out of extra -- which only a
+// call does, its arguments being counted at extra[b] and standing at
+// extra[b+1] upwards.  A destination is not a read and is not here; a
+// field holding an immediate, a label, a string or a global is not a
+// vreg and is not here either.
+//
+// Read out of the two emitters rather than written by hand: a field is
+// a vreg exactly where arch_x86_64.ngpl passes it to em.load, and the
+// answer was checked against tdriver.ngpl, which spells the same
+// operations for five other targets and agreed on 90 of the 98 they
+// share.  The eight it did not were read by hand and are noted where
+// they differ.
+//
+// Anything that is not an opcode answers 15, every field a vreg and
+// extra besides.  A caller that believes too much is a caller that
+// keeps a value alive too long, which costs an optimisation; one that
+// believes too little would lose the value.
+fn ir_reads() → i64[]:
+    [
+    15, 0, 1, 15, 15, 15, 15, 15, 15, 15, 3, 3,
+    3, 3, 3, 3, 1, 1, 3, 3, 3, 1, 3, 3,
+    7, 7, 3, 3, 7, 15, 3, 3, 3, 3, 3, 3,
+    15, 15, 15, 15, 0, 1, 1, 0, 8, 1, 0, 1,
+    1, 1, 0, 0, 2, 0, 3, 3, 7, 3, 7, 1,
+    0, 3, 3, 1, 1, 1, 0, 1, 5, 1, 0, 7,
+    3, 3, 1, 1, 3, 1, 1, 15, 0, 1, 3, 1,
+    3, 1, 1, 0, 3, 7, 3, 3, 3, 3, 3, 3,
+    1, 3, 0, 0, 9, 0, 1, 0, 0, 3, 1, 3,
+    15, 1, 5, 0, 1, 3, 3, 0, 3
+    ]
