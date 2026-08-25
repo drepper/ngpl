@@ -12,14 +12,14 @@ interpreter standing in for all of it today.  The language is in
 [TODO-language.md](TODO-language.md) and the interpreter in
 [TODO-bootstrap.md](TODO-bootstrap.md).
 
-A language feature the bootstrap does not have yet is tagged `[FULL]`, one that is half in `[~]`;
+A language feature the bootstrap does not have yet is tagged `(FULL)`, one that is half in `[~]`;
 the boundary is described in [TODO-bootstrap.md](TODO-bootstrap.md).
 
 
 The Compiler
 ------------
 
-[ ] [FULL] compiler mode: ahead-of-time compilation to native code.  Startup function designation
+[ ] (FULL) compiler mode: ahead-of-time compilation to native code.  Startup function designation
     via command line or attribute.
 
     Attempt 2 of the self-hosted compiler lives in src/ (src/DESIGN.md, twenty-four .ngpl
@@ -203,7 +203,7 @@ The Compiler
     run_compile_tests.sh is the right shape, and the suite will want it for far more than
     @build.
 
-[ ] [FULL] separate compilation: a source file compiled on its own into something the next
+[ ] (FULL) separate compilation: a source file compiled on its own into something the next
     step links, so a change to one file does not re-read the rest.  The module system is
     what decides the unit; until then, multi-file compilation above reads everything.
 
@@ -232,10 +232,20 @@ The Compiler
     of this.
 
 
+Errors and Warnings
+-------------------
+
+[ ] If a curry-ed function call is not used or stored in a variable, this is an error and must
+    be flagged.
+
+[ ] Add a function attribute @ignorable which indicates that the function return value can
+    be ignored.  by default, the value of all functions returning one must be used.
+
+
 Code Generation
 ---------------
 
-[ ] [FULL] Vulkan code generation for GPU offloading of vector/matrix/tensor operations.
+[ ] (FULL) Vulkan code generation for GPU offloading of vector/matrix/tensor operations.
 
 [ ] two ways of translating a function that reads a vector or a matrix, and a rule for choosing
     between them: computed access at O(1) assuming a dense representation and a cache to reward
@@ -265,7 +275,7 @@ Code Generation
 Object Files and Linking
 ------------------------
 
-[ ] [FULL] object file format: possibly custom format supporting partial recompilation.
+[ ] (FULL) object file format: possibly custom format supporting partial recompilation.
     Dynamic linking support for system libraries (e.g., Vulkan shared objects).
 
 [ ] the encoding of a type in an object file covers everything a definition says: the members,
@@ -289,12 +299,12 @@ Object Files and Linking
 Runtime
 -------
 
-[ ] [FULL] native runtime using kernel interfaces directly (no libc dependency).  io_uring-based
+[ ] (FULL) native runtime using kernel interfaces directly (no libc dependency).  io_uring-based
     async I/O on Linux.
 
-[ ] [FULL] concurrency via clone3 and futex on Linux.
+[ ] (FULL) concurrency via clone3 and futex on Linux.
 
-[ ] [FULL] minimal runtime initialization: only pull in code for features actually used.
+[ ] (FULL) minimal runtime initialization: only pull in code for features actually used.
 
 [ ] a minimal set of OS functions for an embedded target, imported from whatever embedded OS is
     there, so the same runtime story holds where there is no Linux underneath.
@@ -307,10 +317,10 @@ Runtime
 Tooling
 -------
 
-[ ] [FULL] JIT compilation in interpreter: background compilation of hot functions, transparent
+[ ] (FULL) JIT compilation in interpreter: background compilation of hot functions, transparent
     switchover.  REPL commands to inspect generated code, machine code, and parse trees.
 
-[ ] [FULL] language server protocol (LSP) mode: expose type information, optimization decisions,
+[ ] (FULL) language server protocol (LSP) mode: expose type information, optimization decisions,
     diagnostics, and code navigation.
 
 [ ] every output the compiler and the interpreter produce is available in a machine-readable form
