@@ -32,7 +32,13 @@
 fn g_pioneer():
     assert(false, "x86-64 has its own emitter and does not come through the dispatchers")
 
+// A load whose value is already in the accumulator, because the store
+// that would have put it in memory was dropped, is no load at all.
 fn g_lds(em : &mut Emit, tg : Target, r : i64, slot : i64):
+    if r = RG_A and slot = em.hold_slot:
+        em.hold_slot ← ⁻1
+        return
+    em.hold_slot ← ⁻1
     match tg.id:
         Tgt.a64: a64g_lds(&em, tg, r, slot)
         Tgt.rv64: rvg_lds(&em, tg, r, slot)
@@ -41,7 +47,14 @@ fn g_lds(em : &mut Emit, tg : Target, r : i64, slot : i64):
         Tgt.rv32: r32g_lds(&em, tg, r, slot)
         Tgt.x64: g_pioneer()
 
+// A store nothing will read from memory is a store not worth making;
+// what holds the value instead is the accumulator, which is where the
+// one operation that wants it is about to look.
 fn g_sts(em : &mut Emit, tg : Target, r : i64, slot : i64):
+    if r = RG_A and slot = em.drop_slot:
+        em.drop_slot ← ⁻1
+        em.hold_slot ← slot
+        return
     match tg.id:
         Tgt.a64: a64g_sts(&em, tg, r, slot)
         Tgt.rv64: rvg_sts(&em, tg, r, slot)

@@ -168,3 +168,55 @@ fn ir_reads() → i64[]:
     1, 3, 0, 0, 9, 0, 1, 0, 0, 3, 1, 3,
     15, 1, 5, 0, 1, 3, 3, 0, 3
     ]
+
+// How often each vreg is really read anywhere in a function, asked of
+// ir_reads() so that a field holding an immediate, a label, a string or
+// a global is not mistaken for a vreg with that number.
+//
+// It was counted the other way once -- every field of every operation,
+// and the whole of extra besides -- which was sound and useless: vreg
+// numbers collide with the small constants that are everywhere, so
+// nearly every temporary looked live and nearly no store could go.
+@post(r: @dropunit(#r) = nv)
+fn se_counts(ir : IrFn, nv : i64) → i64[]:
+    let cnt : mut i64[] = []
+    if nv > 0:
+        foreach _ := 0…nv - 1:
+            cnt.push(0)
+    let rd : i64[] = ir_reads()
+    let nrd : i64 = @dropunit(#rd)
+    let ne : i64 = @dropunit(#ir.extra)
+    let n : i64 = @dropunit(#ir.op)
+    if n > 0:
+        foreach i := 0…n - 1:
+            let o : i64 = ir.op[i × 1¤ptrdiff]
+            // a number that is no opcode reads everything there is
+            let m : i64 = if o >= 0 and o < nrd: rd[o × 1¤ptrdiff] else: 15
+            let a : i64 = ir.ia[i × 1¤ptrdiff]
+            let b : i64 = ir.ib[i × 1¤ptrdiff]
+            let c : i64 = ir.ic[i × 1¤ptrdiff]
+            if (m & 1) = 1 and a >= 0 and a < nv:
+                cnt[a × 1¤ptrdiff] ← cnt[a × 1¤ptrdiff] + 1
+            if (m & 2) = 2 and b >= 0 and b < nv:
+                cnt[b × 1¤ptrdiff] ← cnt[b × 1¤ptrdiff] + 1
+            if (m & 4) = 4 and c >= 0 and c < nv:
+                cnt[c × 1¤ptrdiff] ← cnt[c × 1¤ptrdiff] + 1
+            if (m & 8) = 8:
+                // a call's arguments: how many at extra[b], then them.
+                // Where that does not describe what is there -- which
+                // no real opcode does, but a number that is none might
+                // -- every entry is counted instead.
+                let k : i64 = if b >= 0 and b < ne: ir.extra[b × 1¤ptrdiff] else: ⁻1
+                let ok : bool = k >= 0 and b + 1 + k <= ne
+                let lo : i64 = if ok: b + 1 else: 0
+                let hi : i64 = if ok: b + k else: ne - 1
+                if hi >= lo:
+                    foreach j := lo…hi:
+                        let v : i64 = ir.extra[j × 1¤ptrdiff]
+                        if v >= 0 and v < nv:
+                            cnt[v × 1¤ptrdiff] ← cnt[v × 1¤ptrdiff] + 1
+    cnt
+
+// How often a vreg is named among one operation's own fields.
+fn se_here(ir : IrFn, i : i64, v : i64) → i64:
+    (if ir.ia[i × 1¤ptrdiff] = v: 1 else: 0) + (if ir.ib[i × 1¤ptrdiff] = v: 1 else: 0) + (if ir.ic[i × 1¤ptrdiff] = v: 1 else: 0)

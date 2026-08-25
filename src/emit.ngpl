@@ -215,6 +215,11 @@ struct Emit:
     // rax holding it is enough.  Set for one operation at a time by
     // whoever can see that far, and cleared as soon as it is used.
     drop_slot : i64
+    // The slot whose value is sitting in the accumulator and was never
+    // written to memory, for the five targets that have no memo of
+    // their own.  Set when a store is dropped and read by the load that
+    // follows it, which the drop was only allowed because it knew.
+    hold_slot : i64
     // jump tables: abs64 fixups, and the resolved code offsets the
     // tables hold, flattened with a start index per table
     jt_pos : i64[]

@@ -34,10 +34,34 @@ fn t_canon(em : &mut Emit, tg : Target, w : i64):
 // is.  A call to anything not in that table -- a runtime routine, whose
 // number is negative, or a synthetic past the end of it -- takes what
 // the architecture says and nothing more.
+// Which operations begin by loading their first operand into RG_A.
+// Only after one of those may the store before it be dropped: the value
+// stays in the accumulator and that load takes it straight back, and
+// any other opening would put something else there first.  Read out of
+// the ladder below rather than written from memory of it.
+fn td_reads_a_first(o : i64) → bool:
+    if o >= IR_CEQ and o <= IR_CGE:
+        return true
+    o = IR_MOV or o = IR_ADD or o = IR_ADDW or o = IR_SUB or o = IR_SUBW or o = IR_MUL or o = IR_MULW or o = IR_NEG or o = IR_NEGW or o = IR_BAND or o = IR_BORR or o = IR_BXORR or o = IR_BNOTT or o = IR_SHLL or o = IR_SHRR or o = IR_MAXX or o = IR_MINN or o = IR_DIVV or o = IR_MODD or o = IR_JZ or o = IR_JNZ or o = IR_AIDX or o = IR_AREF or o = IR_ASTO or o = IR_ALEN or o = IR_HLEN or o = IR_FLD or o = IR_FSTO or o = IR_CHR or o = IR_NARROW or o = IR_LDN or o = IR_STN
+
+// The same reckoning the pioneer makes, over the same shared counts,
+// asking this ladder's own question about what comes next.
+fn td_can_drop(ir : IrFn, i : i64, n : i64, cnt : i64[], nv : i64) → bool:
+    let d : i64 = ir.id[i × 1¤ptrdiff]
+    if d < 0 or d >= nv or i + 1 >= n:
+        return false
+    let nx : i64 = ir.op[(i + 1) × 1¤ptrdiff]
+    if nx = IR_LABEL or not td_reads_a_first(nx):
+        return false
+    if ir.ia[(i + 1) × 1¤ptrdiff] ≠ d:
+        return false
+    cnt[d × 1¤ptrdiff] - se_here(ir, i, d) = se_here(ir, i + 1, d) and se_here(ir, i + 1, d) = 1
+
 fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
              nreg : i64, nreg_of : i64[]):
     assert(ir.nvregs >= np, "the frame covers the spilled arguments")
     let n : i64 = @dropunit(#ir.op)
+    let secnt : i64[] = se_counts(ir, ir.nvregs)
     em.begin_fn(ir.nlabels + 6 × n + 8)
     let sl : mut i64 = ir.nlabels
     // the objects that live in the frame take the slots past the vregs
@@ -53,6 +77,7 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
         let w : i64 = ir.iw[i × 1¤ptrdiff]
         let bits : i64 = w & 255
         let sgn : i64 = w » 8
+        em.drop_slot ← if td_can_drop(ir, i, n, secnt, ir.nvregs): d else: ⁻1
         if o = IR_CONST:
             g_const(&em, tg, RG_A, a)
             g_sts(&em, tg, RG_A, d)
