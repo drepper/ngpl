@@ -1067,7 +1067,7 @@ Standard Library
     with names like std.asin etc, the variants which implicit multiply the parameter with Pi such
     as std.sinpi and their reverse std.asinpi etc.
 
-[ ] Add the natural logarithm function with the glyph ⍟.
+[ ] [FULL] Add the natural logarithm function with the glyph ⍟.
 
 [ ] Add a way for the program to provide its own violation handler for pre- and post-conditions.
 
