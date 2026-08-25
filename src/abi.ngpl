@@ -27,15 +27,17 @@ struct Abi:
     // index is an index here.
     private : i64[]      // 1 where the compiler may choose the convention
     nreg : i64[]         // how many of its arguments arrive in registers
-                         // today, which is what the architecture says
-    headroom : i64[]     // how many more a private one could take, which
-                         // is what the code generator has yet to spend
+    beyond : i64[]       // how many of those are past what the
+                         // architecture's own convention would allow
     span : i64[]         // how many tokens the definition is written in
     log : str[]
 
 // Why a function is not free to take a convention of its own.  Each
 // answer is a reason a caller this compiler cannot see might exist.
 fn abi_why(f : FnDef, taken : i64) → str:
+    // Two ways a function's address gets out, and both end the same
+    // way: something calls it indirectly, having agreed with the
+    // architecture and not with us.
     if f.is_export:
         return "exported"
     if f.is_start:
@@ -45,10 +47,10 @@ fn abi_why(f : FnDef, taken : i64) → str:
     if f.is_replaceable:
         return "replaceable, so the call may not reach this body"
     if taken = 1:
-        return "its name is taken as a value, and an indirect call agrees with the architecture"
+        return "its address is taken -- as a value, or into a lambda's box -- and an indirect call agrees with the architecture"
     ""
 
-@post(r: @dropunit(#r.private) = @dropunit(#a.fns) and @dropunit(#r.nreg) = @dropunit(#a.fns) and @dropunit(#r.headroom) = @dropunit(#a.fns) and @dropunit(#r.span) = @dropunit(#a.fns))
+@post(r: @dropunit(#r.private) = @dropunit(#a.fns) and @dropunit(#r.nreg) = @dropunit(#a.fns) and @dropunit(#r.beyond) = @dropunit(#a.fns) and @dropunit(#r.span) = @dropunit(#a.fns))
 fn analyze_abi(a : Ast, toks : Toks, argregs : i64, extra : i64, want_log : bool) → Abi:
     let nfns : i64 = @dropunit(#a.fns)
 
@@ -63,15 +65,32 @@ fn analyze_abi(a : Ast, toks : Toks, argregs : i64, extra : i64, want_log : bool
     let nnodes : i64 = @dropunit(#a.nkind)
     if nnodes > 0:
         foreach i := 0…nnodes - 1:
-            if a.nkind[i × 1¤ptrdiff] = NK_FNVAL:
+            let k : i64 = a.nkind[i × 1¤ptrdiff]
+            if k = NK_FNVAL:
                 let fi : i64 = a.na[i × 1¤ptrdiff]
                 if fi >= 0 and fi < nfns:
                     taken[fi × 1¤ptrdiff] ← 1
+            if k = NK_LAMBDA:
+                // A lambda that captures a function holds its value in
+                // the box, and calls it through that -- indirectly, by
+                // an agreement with the architecture rather than with
+                // us.  The capture cell keeps the outer slot, or, below
+                // zero, the function it stands for.
+                let loff : i64 = a.na[i × 1¤ptrdiff]
+                let np9 : i64 = a.extra[loff × 1¤ptrdiff]
+                let ncap9 : i64 = a.extra[(loff + 1 + np9 × 2) × 1¤ptrdiff]
+                if ncap9 > 0:
+                    foreach ci := 0…ncap9 - 1:
+                        let cell : i64 = a.extra[(loff + 2 + np9 × 2 + ci) × 1¤ptrdiff]
+                        if cell < 0:
+                            let cf : i64 = 0 - cell - 1
+                            if cf >= 0 and cf < nfns:
+                                taken[cf × 1¤ptrdiff] ← 1
     assert(@dropunit(#taken) = nfns, "one answer per function")
 
     let priv : mut i64[] = []
     let nreg : mut i64[] = []
-    let head : mut i64[] = []
+    let byd : mut i64[] = []
     let span : mut i64[] = []
     let log : mut str[] = []
     if nfns > 0:
@@ -79,22 +98,21 @@ fn analyze_abi(a : Ast, toks : Toks, argregs : i64, extra : i64, want_log : bool
             let fd : FnDef = a.fns[f × 1¤ptrdiff]
             let why : str = abi_why(fd, taken[f × 1¤ptrdiff])
             let p : i64 = if why = "": 1 else: 0
-            // A private function could take more of its arguments in
+            // A private function takes more of its arguments in
             // registers than the architecture's ABI allows, since the
-            // only code that calls it is code being written here.  What
-            // it takes today is still what the architecture says: the
-            // headroom is what the code generator has yet to spend, and
-            // the log says the two apart so that it stays true while
-            // that is so.
+            // only code that calls it is code being written here.  How
+            // many more is the target's business and is passed in: a
+            // target grants it only where its call site and its
+            // prologue have both been taught to spend it.
             let hr : i64 = if p = 1: extra else: 0
             priv.push(p)
-            nreg.push(argregs)
-            head.push(hr)
+            nreg.push(argregs + hr)
+            byd.push(hr)
             span.push(fd.tok_hi - fd.tok_lo)
             if want_log:
                 // the log says a number, as a diagnostic does, so the
                 // measure is parted with here
                 let line : i64 = @dropunit(toks.line[fd.tok × 1¤ptrdiff])
-                let ln : str = "{\"function\": \"" ⧺ fd.name ⧺ "\", \"line\": " ⧺ i64_str(line) ⧺ ", \"decision\": \"convention\", \"private\": " ⧺ (if p = 1: "true" else: "false") ⧺ ", \"argument-registers\": " ⧺ i64_str(argregs) ⧺ ", \"headroom\": " ⧺ i64_str(hr)
+                let ln : str = "{\"function\": \"" ⧺ fd.name ⧺ "\", \"line\": " ⧺ i64_str(line) ⧺ ", \"decision\": \"convention\", \"private\": " ⧺ (if p = 1: "true" else: "false") ⧺ ", \"argument-registers\": " ⧺ i64_str(argregs + hr) ⧺ ", \"beyond-the-abi\": " ⧺ i64_str(hr)
                 log.push(if p = 1: ln ⧺ "}" else: ln ⧺ ", \"because\": \"" ⧺ why ⧺ "\"}")
-    Abi{private: priv, nreg: nreg, headroom: head, span: span, log: log}
+    Abi{private: priv, nreg: nreg, beyond: byd, span: span, log: log}

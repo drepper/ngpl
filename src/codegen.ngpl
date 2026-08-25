@@ -258,9 +258,11 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         // every other architecture
         return codegen_t(a, toks, src, chk, tgt, stack_size, guard_size, want_log)
     // Which functions nobody outside can call, and what that buys.  The
-    // pioneer takes six arguments in registers and has rax, r10 and r11
-    // over -- the volatile registers an argument never lands in.
-    let ab : Abi = analyze_abi(a, toks, 6, 3, want_log)
+    // pioneer takes six arguments in registers and spends none of the
+    // headroom past them yet -- rax is the memo and r10 and r11 are the
+    // emitter's own scratch -- so it grants nothing, and the log says
+    // six because six is what it uses.
+    let ab : Abi = analyze_abi(a, toks, 6, 0, want_log)
     let strs0 : mut str[] = []
     foreach s := a.strs:
         strs0.push(s)

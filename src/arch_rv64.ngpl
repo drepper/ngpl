@@ -324,6 +324,12 @@ fn rvg_calli(em : &mut Emit, tg : Target, r : i64):
 fn rvg_ijmp(em : &mut Emit, tg : Target, r : i64):
     rv_I(&em, 0, rv_r(r), 0, 0, 103)                        // jalr x0, r
 
+// Only i386 spends the private convention's headroom so far, so
+// this puts the argument where the architecture's own convention
+// says and the two agree.
+fn rvg_argreg(em : &mut Emit, tg : Target, k : i64, slot : i64):
+    rvg_argld(&em, tg, k, slot)
+
 fn rvg_argld(em : &mut Emit, tg : Target, k : i64, slot : i64):
     if k < 8:
         rv_ldslot(&em, 10 + k, slot)
@@ -385,7 +391,7 @@ fn rvg_frameaddr(em : &mut Emit, tg : Target, nvregs : i64, nobj : i64, off : i6
     assert(at >= 0 and at < 2048, "the frame offset fits the immediate")
     rv_I(&em, at, 2, 0, rv_r(r), 19)                        // addi xr, sp, at
 
-fn rvg_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64):
+fn rvg_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64, nreg : i64):
     let frame : i64 = align_up(32 + 8 × nvregs, 16)
     em.max_frame ← em.max_frame ⌈ (frame + 16)
     rv_I(&em, ⁻16, 2, 0, 2, 19)                             // addi sp, sp, -16

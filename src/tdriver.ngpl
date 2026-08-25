@@ -29,14 +29,20 @@ fn t_canon(em : &mut Emit, tg : Target, w : i64):
     if bits < 64:
         g_ext2(&em, tg, RG_A, bits, w » 8)
 
-fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
+// nreg is what this function itself takes in registers; nreg_of says
+// the same for every function it might call, indexed as a call target
+// is.  A call to anything not in that table -- a runtime routine, whose
+// number is negative, or a synthetic past the end of it -- takes what
+// the architecture says and nothing more.
+fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
+             nreg : i64, nreg_of : i64[]):
     assert(ir.nvregs >= np, "the frame covers the spilled arguments")
     let n : i64 = @dropunit(#ir.op)
     em.begin_fn(ir.nlabels + 6 × n + 8)
     let sl : mut i64 = ir.nlabels
     // the objects that live in the frame take the slots past the vregs
     let nobj : i64 = (@dropunit(ir.fbytes) + 7) ÷ 8 ?? 0
-    g_prologue(&em, tg, ir.nvregs + nobj, np)
+    g_prologue(&em, tg, ir.nvregs + nobj, np, nreg)
     let i : mut i64 = 0
     while i < n:
         let o : i64 = ir.op[i × 1¤ptrdiff]
@@ -221,10 +227,19 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
             g_label(&em, tg, a)
         elif o = IR_CALL:
             let argc : i64 = ir.extra[b × 1¤ptrdiff]
-            let k : mut i64 = 0
+            let cnr : i64 = if a >= 0 and a < @dropunit(#nreg_of): nreg_of[a × 1¤ptrdiff] else: 0
+            // The stack arguments are put down first.  Where a target
+            // moves an argument into a register it may be travelling
+            // through the very register a later stack argument would
+            // borrow, and going in this order the two never meet.
+            let k : mut i64 = cnr
             while k < argc:
                 g_argld(&em, tg, k, ir.extra[(b + 1 + k) × 1¤ptrdiff])
                 k ← k + 1
+            let kr : mut i64 = 0
+            while kr < argc and kr < cnr:
+                g_argreg(&em, tg, kr, ir.extra[(b + 1 + kr) × 1¤ptrdiff])
+                kr ← kr + 1
             g_call(&em, tg, a)
             g_retst(&em, tg, d)
         elif o = IR_CALLI:
@@ -371,6 +386,13 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[]):
                 em.sd_str.push(a)
             g_sts(&em, tg, RG_A, d)
         elif o = IR_FADDR:
+            // Whatever this address reaches will be called indirectly,
+            // by the architecture's convention.  A function taking a
+            // convention of its own must therefore never be the one it
+            // names -- the analysis has to have seen every way out, and
+            // this is where a way it missed would show.
+            assert(a < 0 or a >= @dropunit(#nreg_of) or nreg_of[a × 1¤ptrdiff] = 0,
+                   "no private convention is reached through an address")
             let pos : i64 = g_absref(&em, tg, RG_A)
             if em.skipping = 0:
                 em.ff_pos.push(pos)

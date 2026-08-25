@@ -414,6 +414,15 @@ fn a32g_ijmp(em : &mut Emit, tg : Target, r : i64):
     a32_ldsp(&em, 4, a32_cello(r))
     em.aw(A32_BLXR - 16 + 4)                         // bx r4
 
+// A function nobody outside can call takes its first two arguments in
+// r0:r1 and r2:r3.  arm's abstract registers are cells in the frame and
+// only r0:r1 carries anything between them, so r2 and r3 are free the
+// whole way through, and nothing needs preserving: a caller here keeps
+// nothing in a register across a call to lose.
+@pre(k >= 0 and k < 2)
+fn a32g_argreg(em : &mut Emit, tg : Target, k : i64, slot : i64):
+    a32_ldpair(&em, 2 × k, 2 × k + 1, a32_sloto(slot))
+
 fn a32g_argld(em : &mut Emit, tg : Target, k : i64, slot : i64):
     a32_ldpair(&em, 0, 1, a32_sloto(slot))
     a32_stpair(&em, 0, 1, 8 × k)
@@ -495,19 +504,25 @@ fn a32g_frameaddr(em : &mut Emit, tg : Target, nvregs : i64, nobj : i64, off : i
     a32_movimm(&em, 1, 0)
     a32_stpair(&em, 0, 1, a32_cello(r))
 
-fn a32g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64):
+fn a32g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64, nreg : i64):
     let frame : i64 = 160 + 8 × nvregs
     em.max_frame ← em.max_frame ⌈ (frame + 16)
     em.aw(A32_PUSHFL)                                // push {r11, lr}
     a32_dp(&em, A32_MOVR, 11, 0, 13)                 // mov r11, sp
     a32_movimm(&em, 12, frame)
     a32_dp(&em, A32_SUB, 13, 13, 12)                 // sub sp, sp, ip
+    // The ones that came in registers go to their slots first: r0:r1 is
+    // where argument 0 arrived and is also what a stack argument is
+    // read through, and in this order the two never meet.
     let j : mut i64 = 0
     while j < np:
-        // every argument arrived on the stack, above the saved pair
-        em.aw(A32_LDRR + (11 « 16) + (0 « 12) + (8 + 8 × j))
-        em.aw(A32_LDRR + (11 « 16) + (1 « 12) + (12 + 8 × j))
-        a32_stpair(&em, 0, 1, a32_sloto(j))
+        if j < nreg:
+            a32_stpair(&em, 2 × j, 2 × j + 1, a32_sloto(j))
+        else:
+            // it arrived on the stack, above the saved pair
+            em.aw(A32_LDRR + (11 « 16) + (0 « 12) + (8 + 8 × j))
+            em.aw(A32_LDRR + (11 « 16) + (1 « 12) + (12 + 8 × j))
+            a32_stpair(&em, 0, 1, a32_sloto(j))
         j ← j + 1
 
 fn a32g_epilogue(em : &mut Emit, tg : Target):

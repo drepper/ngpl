@@ -16,17 +16,33 @@ fn abi_argregs(tg : Target) → i64:
         Tgt.rv64: 8
         _: 0
 
-fn abi_headroom(tg : Target) → i64:
+// How many arguments past the architecture's own convention a private
+// function actually takes.  A target grants this only where its call
+// site and its prologue have both been taught to spend it; everywhere
+// else it is zero, and the architecture's convention carries every
+// argument exactly as it did before.
+//
+// i386 grants three because its abstract registers are cells in the
+// frame: eax:edx is the only pair a body touches, so ecx, ebx, esi and
+// edi are free from one end of a function to the other, and nothing
+// needs preserving because a caller keeps nothing across a call.
+fn abi_spent(tg : Target) → i64:
     match tg.id:
-        Tgt.a64: 8          // x9…x15, and x16/x17 besides
-        Tgt.rv64: 7         // t0…t6
-        Tgt.rv32: 4         // a0…a7, four pairs
-        Tgt.a32: 2          // r0…r3, two pairs
-        _: 1             // i386: one pair in eax:edx
+        Tgt.i386: 3         // eax:edx, ecx:ebx, esi:edi
+        Tgt.a32: 2          // r0:r1, r2:r3
+        Tgt.rv32: 4         // a0…a7, a pair each
+        _: 0
 
 fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
              stack_size : i64, guard_size : i64, want_log : bool) → Compiled:
-    let ab : Abi = analyze_abi(a, toks, abi_argregs(tgt), abi_headroom(tgt), want_log)
+    let ab : Abi = analyze_abi(a, toks, abi_argregs(tgt), abi_spent(tgt), want_log)
+    // What the driver routes through the private convention, per
+    // function.  Zero says the architecture's own path carries every
+    // argument, which is what every target but i386 still does.
+    let nregs : mut i64[] = []
+    if #a.fns > 0:
+        foreach i := 0…#a.fns - 1:
+            nregs.push(if abi_spent(tgt) = 0: 0 else: ab.nreg[i])
     let strs0 : mut str[] = []
     foreach s := a.strs:
         strs0.push(s)
@@ -118,32 +134,32 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         if chk.skipfn[i] = 1:
             let sir := lower_stub_fn(&lw, np)
             em.fn_off.push(em.here())
-            t_emit_fn(&em, tgt, sir, np, lw.strs)
+            t_emit_fn(&em, tgt, sir, np, lw.strs, nregs[i], nregs)
         else:
             let ir := lower_fn(&lw, a, chk, f)
             em.fn_off.push(em.here())
-            t_emit_fn(&em, tgt, ir, np, lw.strs)
+            t_emit_fn(&em, tgt, ir, np, lw.strs, nregs[i], nregs)
     if ninit > 0:
         let gir := lower_ginit(&lw, a, chk)
         em.fn_off.push(em.here())
-        t_emit_fn(&em, tgt, gir, 0, lw.strs)
+        t_emit_fn(&em, tgt, gir, 0, lw.strs, 0, nregs)
     let fir := lower_argsfilter(&lw)
     em.fn_off.push(em.here())
-    t_emit_fn(&em, tgt, fir, 0, lw.strs)
+    t_emit_fn(&em, tgt, fir, 0, lw.strs, 0, nregs)
     let dir := lower_testdriver(&lw, a)
     em.fn_off.push(em.here())
-    t_emit_fn(&em, tgt, dir, 0, lw.strs)
+    t_emit_fn(&em, tgt, dir, 0, lw.strs, 0, nregs)
     if #chk.lams > 0:
         foreach j := 0…#chk.lams - 1:
             let lir := lower_lambda_fn(&lw, a, chk, @dropunit(j))
             em.fn_off.push(em.here())
             let lnp : i64 = a.extra[a.na[chk.lams[j] × 1¤ptrdiff] × 1¤ptrdiff]
-            t_emit_fn(&em, tgt, lir, lnp + 1, lw.strs)
+            t_emit_fn(&em, tgt, lir, lnp + 1, lw.strs, 0, nregs)
     if #chk.psfn > 0:
         foreach j := 0…#chk.psfn - 1:
             let sir := lower_shim_fn(&lw, chk, @dropunit(j))
             em.fn_off.push(em.here())
-            t_emit_fn(&em, tgt, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs)
+            t_emit_fn(&em, tgt, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs, 0, nregs)
     assert(@dropunit(#em.fn_off) = nfns + g1 + 2 + @dropunit(#chk.lams) + @dropunit(#chk.psfn), "one code offset per function")
     // What is emitted so far is the program's own, and the calls it
     // made name the runtime it reaches for.  Emitting those reveals
@@ -176,7 +192,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                 em.rt_off[id0 × 1¤ptrdiff] ← em.here()
                 let rid : i64 = 0 - @dropunit(id0) - 1
                 let np9 : i64 = rt_nargs(rid)
-                t_emit_fn(&em, tgt, rt_build(rid, tgt, &lw), np9, lw.strs)
+                t_emit_fn(&em, tgt, rt_build(rid, tgt, &lw), np9, lw.strs, 0, nregs)
                 more ← true
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:

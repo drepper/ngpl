@@ -400,6 +400,35 @@ fn i3g_ijmp(em : &mut Emit, tg : Target, r : i64):
     i3_rm(&em, 139, 0, i3_cello(r))
     em.b2(255, 224)                  // jmp eax
 
+// The pairs a private function's first arguments travel in.  i386's
+// abstract registers are cells in the frame rather than registers --
+// every operation goes memory, eax:edx, memory -- so eax:edx is the
+// only pair the body ever touches and ecx, ebx, esi and edi are free
+// from one end of a function to the other.  Three arguments fit there,
+// which is three more than this target's own convention allows.
+//
+// Nothing has to be preserved for them.  A caller keeps nothing in a
+// register across a call, having nowhere to keep it, so a callee that
+// does not put ebx, esi and edi back is a callee nobody misses.
+@pre(k >= 0 and k < 3)
+fn i3_argreg_lo(k : i64) → i64:
+    if k = 0: return 0              // eax
+    if k = 1: return 1              // ecx
+    6                               // esi
+
+@pre(k >= 0 and k < 3)
+fn i3_argreg_hi(k : i64) → i64:
+    if k = 0: return 2              // edx
+    if k = 1: return 3              // ebx
+    7                               // edi
+
+// argument k of a private function, straight into the pair it travels
+// in.  The stack arguments go down first, since they travel through
+// eax:edx, which is where argument 0 is about to sit.
+@pre(k >= 0 and k < 3)
+fn i3g_argreg(em : &mut Emit, tg : Target, k : i64, slot : i64):
+    i3_ldpair(&em, i3_argreg_lo(k), i3_argreg_hi(k), i3_sloto(slot))
+
 fn i3g_argld(em : &mut Emit, tg : Target, k : i64, slot : i64):
     i3_ldpair(&em, 0, 2, i3_sloto(slot))
     em.b3(137, 68, 36)
@@ -504,7 +533,7 @@ fn i3g_frameaddr(em : &mut Emit, tg : Target, nvregs : i64, nobj : i64, off : i6
     i3_movimm(&em, 2, 0)
     i3_stpair(&em, 0, 2, i3_cello(r))
 
-fn i3g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64):
+fn i3g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64, nreg : i64):
     let frame : i64 = 32 + 8 × nvregs + 128
     em.max_frame ← em.max_frame ⌈ (frame + 16)
     em.b1(85)                        // push ebp
@@ -513,8 +542,13 @@ fn i3g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64):
     em.w32(frame)                    // sub esp, frame
     let j : mut i64 = 0
     while j < np:
-        i3_ldpair(&em, 0, 2, 8 + 8 × j)
-        i3_stpair(&em, 0, 2, i3_sloto(j))
+        if j < nreg:
+            // it arrived in a pair; it goes to its slot and the pair is
+            // free again before a single instruction of the body runs
+            i3_stpair(&em, i3_argreg_lo(j), i3_argreg_hi(j), i3_sloto(j))
+        else:
+            i3_ldpair(&em, 0, 2, 8 + 8 × j)
+            i3_stpair(&em, 0, 2, i3_sloto(j))
         j ← j + 1
 
 fn i3g_epilogue(em : &mut Emit, tg : Target):

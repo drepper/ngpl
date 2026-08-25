@@ -338,6 +338,16 @@ fn g_argld(em : &mut Emit, tg : Target, k : i64, slot : i64):
         Tgt.rv32: r32g_argld(&em, tg, k, slot)
         Tgt.x64: g_pioneer()
 
+// argument k of a function free to take a convention of its own
+fn g_argreg(em : &mut Emit, tg : Target, k : i64, slot : i64):
+    match tg.id:
+        Tgt.a64: a64g_argreg(&em, tg, k, slot)
+        Tgt.rv64: rvg_argreg(&em, tg, k, slot)
+        Tgt.i386: i3g_argreg(&em, tg, k, slot)
+        Tgt.a32: a32g_argreg(&em, tg, k, slot)
+        Tgt.rv32: r32g_argreg(&em, tg, k, slot)
+        Tgt.x64: g_pioneer()
+
 fn g_argconst(em : &mut Emit, tg : Target, k : i64, v : i64):
     match tg.id:
         Tgt.a64: a64g_argconst(&em, tg, k, v)
@@ -455,13 +465,13 @@ fn g_frameaddr(em : &mut Emit, tg : Target, nvregs : i64, nobj : i64, off : i64,
         Tgt.rv32: r32g_frameaddr(&em, tg, nvregs, nobj, off, r)
         Tgt.x64: g_pioneer()
 
-fn g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64):
+fn g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64, nreg : i64):
     match tg.id:
-        Tgt.a64: a64g_prologue(&em, tg, nvregs, np)
-        Tgt.rv64: rvg_prologue(&em, tg, nvregs, np)
-        Tgt.i386: i3g_prologue(&em, tg, nvregs, np)
-        Tgt.a32: a32g_prologue(&em, tg, nvregs, np)
-        Tgt.rv32: r32g_prologue(&em, tg, nvregs, np)
+        Tgt.a64: a64g_prologue(&em, tg, nvregs, np, nreg)
+        Tgt.rv64: rvg_prologue(&em, tg, nvregs, np, nreg)
+        Tgt.i386: i3g_prologue(&em, tg, nvregs, np, nreg)
+        Tgt.a32: a32g_prologue(&em, tg, nvregs, np, nreg)
+        Tgt.rv32: r32g_prologue(&em, tg, nvregs, np, nreg)
         Tgt.x64: g_pioneer()
 
 fn g_epilogue(em : &mut Emit, tg : Target):

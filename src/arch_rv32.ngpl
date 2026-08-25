@@ -375,6 +375,14 @@ fn r32g_ijmp(em : &mut Emit, tg : Target, r : i64):
     r32_ld(&em, 5, r32_cello(r))
     rv_I(&em, 0, 5, 0, 0, 103)
 
+// A function nobody outside can call takes its first four arguments in
+// a0…a7, a pair each.  riscv32's abstract registers are cells in the
+// frame and only a0:a1 carries anything between them, so a2 upwards are
+// free the whole way through and none of them has to be put back.
+@pre(k >= 0 and k < 4)
+fn r32g_argreg(em : &mut Emit, tg : Target, k : i64, slot : i64):
+    r32_ldpair(&em, 10 + 2 × k, 11 + 2 × k, r32_sloto(slot))
+
 fn r32g_argld(em : &mut Emit, tg : Target, k : i64, slot : i64):
     r32_ldpair(&em, 10, 11, r32_sloto(slot))
     r32_stpair(&em, 10, 11, 8 × k)
@@ -431,7 +439,7 @@ fn r32g_frameaddr(em : &mut Emit, tg : Target, nvregs : i64, nobj : i64, off : i
     r32_movimm(&em, 11, 0)
     r32_stpair(&em, 10, 11, r32_cello(r))
 
-fn r32g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64):
+fn r32g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64, nreg : i64):
     let frame : i64 = align_up(160 + 8 × nvregs, 16)
     em.max_frame ← em.max_frame ⌈ (frame + 16)
     rv_I(&em, ⁻16, 2, 0, 2, 19)
@@ -443,13 +451,19 @@ fn r32g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64):
     else:
         r32_movimm(&em, 5, frame)
         rv_R(&em, 32, 5, 2, 0, 2, 51)
+    // The ones that came in registers go to their slots first: a0:a1 is
+    // where argument 0 arrived and is also what a stack argument is
+    // read through, and in this order the two never meet.
     let j : mut i64 = 0
     while j < np:
-        // the incoming pair sits above the save area, so it is read
-        // through s0 (x8), which sp has moved away from
-        rv_I(&em, 16 + 8 × j, 8, 2, 10, 3)      // lw a0, off(s0)
-        rv_I(&em, 20 + 8 × j, 8, 2, 11, 3)
-        r32_stpair(&em, 10, 11, r32_sloto(j))
+        if j < nreg:
+            r32_stpair(&em, 10 + 2 × j, 11 + 2 × j, r32_sloto(j))
+        else:
+            // the incoming pair sits above the save area, so it is read
+            // through s0 (x8), which sp has moved away from
+            rv_I(&em, 16 + 8 × j, 8, 2, 10, 3)      // lw a0, off(s0)
+            rv_I(&em, 20 + 8 × j, 8, 2, 11, 3)
+            r32_stpair(&em, 10, 11, r32_sloto(j))
         j ← j + 1
 fn r32g_epilogue(em : &mut Emit, tg : Target):
     rv_I(&em, 0, 8, 0, 2, 19)                    // mv sp, s0
