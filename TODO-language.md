@@ -861,6 +861,16 @@ Functions and Combinators
     Analysis below -- so what is left is strict mode refusing an impure function outright,
     which waits on strict mode.
 
+[ ] Function parameters passed as reference are required to be not aliasing each other unless
+    specified with the @mayalias attribute as in `fn foo(a: &mut i32[] @mayaliase(b), b: &i32[])`.
+    Only mutable objects can be annotated with this attribute, it is an error otherwise.  If both
+    or all objects are writable, the relationship also holds the other way around. If three or
+    more parameters are marked with @mayalias all objects are transitively declared as such.
+    On the caller side, the compiler has to insert code to ensure that no aliasing takes place
+    unless it can be statically inferred or there is no writable reference passed to the function.
+    Aliasing between to objects is not possible when objects are allocated separately, or the
+    views are of different objects, or the row/coloumn/etc selectors do not overlap
+
 [ ] [FULL] combinator glyphs for function composition and pipelines (APL/BQN/UIUA-inspired).
     Ranges-library equivalent for container operations.
 
