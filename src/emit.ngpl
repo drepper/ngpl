@@ -210,6 +210,11 @@ struct Emit:
     // which vreg's value rax is known to hold, ⁻1 for none: the
     // cheapest of register allocations, one register deep
     rax_slot : i64
+    // A slot whose store is to be dropped rather than written: the
+    // emitter has been told that nothing will read it from memory, so
+    // rax holding it is enough.  Set for one operation at a time by
+    // whoever can see that far, and cleared as soon as it is used.
+    drop_slot : i64
     // jump tables: abs64 fixups, and the resolved code offsets the
     // tables hold, flattened with a start index per table
     jt_pos : i64[]
@@ -314,6 +319,13 @@ impl Emit:
         self.w32(0 - 8 × (slot + 1))
 
     fn store(&mut self, reg : i64, slot : i64):
+        // A store nothing will read is a store not worth making.  rax
+        // goes on holding the value, which is where the one operation
+        // that wants it is about to look.
+        if reg = 0 and slot = self.drop_slot:
+            self.rax_slot ← slot
+            self.drop_slot ← ⁻1
+            return
         if reg = 0:
             self.rax_slot ← slot
         elif slot = self.rax_slot:

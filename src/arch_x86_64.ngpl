@@ -32,6 +32,84 @@ fn cc_of(o : i64, sgn : i64) → i64:
     if o = IR_CGT: return 151
     147
 
+// Whether an operation begins by loading its first operand into rax.
+// Only those can have the store before them dropped: the value stays in
+// rax and the memo hands it straight over, and any other opening would
+// write over rax before it was read.  Checked against the emitter
+// below, one branch at a time.
+fn se_reads_a_first(o : i64) → bool:
+    if o >= IR_CEQ and o <= IR_CGE:
+        return true
+    o = IR_MOV or o = IR_ADD or o = IR_ADDW or o = IR_SUB or o = IR_SUBW or o = IR_MUL or o = IR_MULW or o = IR_NEG or o = IR_NEGW or o = IR_BAND or o = IR_BORR or o = IR_BXORR or o = IR_BNOTT or o = IR_SHLL or o = IR_SHRR or o = IR_MAXX or o = IR_MINN or o = IR_DIVV or o = IR_MODD or o = IR_JZ or o = IR_JNZ or o = IR_AIDX or o = IR_AREF or o = IR_APOP or o = IR_AGET or o = IR_ALEN or o = IR_LDN or o = IR_FLD or o = IR_HLEN or o = IR_CHR or o = IR_NARROW
+
+// How often each vreg is named anywhere in a function, counted over
+// every field of every operation.
+//
+// The count is deliberately too high rather than too low: a field
+// holding something that is not a vreg at all -- a constant, a label, a
+// string -- still counts against the vreg with that number.  A vreg
+// thought live when it is dead costs a store that could have been
+// dropped; one thought dead when it is live would cost the answer.  So
+// the reckoning errs the only way it may, and no table saying which
+// field of which operation is a vreg has to be written or kept true.
+@post(r: @dropunit(#r) = nv)
+fn se_counts(ir : IrFn, nv : i64) → i64[]:
+    let cnt : mut i64[] = []
+    if nv > 0:
+        foreach _ := 0…nv - 1:
+            cnt.push(0)
+    let n : i64 = @dropunit(#ir.op)
+    if n > 0:
+        foreach i := 0…n - 1:
+            let a : i64 = ir.ia[i × 1¤ptrdiff]
+            let b : i64 = ir.ib[i × 1¤ptrdiff]
+            let c : i64 = ir.ic[i × 1¤ptrdiff]
+            if a >= 0 and a < nv:
+                cnt[a × 1¤ptrdiff] ← cnt[a × 1¤ptrdiff] + 1
+            if b >= 0 and b < nv:
+                cnt[b × 1¤ptrdiff] ← cnt[b × 1¤ptrdiff] + 1
+            if c >= 0 and c < nv:
+                cnt[c × 1¤ptrdiff] ← cnt[c × 1¤ptrdiff] + 1
+    // And the side table, which is where a call keeps its arguments, an
+    // array literal its elements and a jump table its labels.  Leaving
+    // it out was a bug of exactly the kind the over-counting above is
+    // meant to make impossible: a vreg named only there looked dead,
+    // its store was dropped, and the call that wanted it read the slot
+    // it was never written to.  Everything in it is counted, numbers
+    // that are not vregs included.
+    let ne : i64 = @dropunit(#ir.extra)
+    if ne > 0:
+        foreach j := 0…ne - 1:
+            let e : i64 = ir.extra[j × 1¤ptrdiff]
+            if e >= 0 and e < nv:
+                cnt[e × 1¤ptrdiff] ← cnt[e × 1¤ptrdiff] + 1
+    cnt
+
+// How often a vreg is named among one operation's own fields.
+fn se_here(ir : IrFn, i : i64, v : i64) → i64:
+    (if ir.ia[i × 1¤ptrdiff] = v: 1 else: 0) + (if ir.ib[i × 1¤ptrdiff] = v: 1 else: 0) + (if ir.ic[i × 1¤ptrdiff] = v: 1 else: 0)
+
+// Whether the store this operation ends with may be dropped.
+//
+// It may when the only other place naming the slot is the operation
+// straight after, which reads it first and into rax.  Nothing else in
+// the function names it, so nothing else can read it from memory; and
+// the next operation cannot be arrived at any other way, since it is
+// not a label and a jump has nowhere else to land.  What holds the
+// value between the two is rax, which is where the memo is already
+// looking.
+fn se_can_drop(ir : IrFn, i : i64, n : i64, cnt : i64[], nv : i64) → bool:
+    let d : i64 = ir.id[i × 1¤ptrdiff]
+    if d < 0 or d >= nv or i + 1 >= n:
+        return false
+    let nx : i64 = ir.op[(i + 1) × 1¤ptrdiff]
+    if nx = IR_LABEL or not se_reads_a_first(nx):
+        return false
+    if ir.ia[(i + 1) × 1¤ptrdiff] ≠ d:
+        return false
+    // every naming of it outside this operation is that one read
+    cnt[d × 1¤ptrdiff] - se_here(ir, i, d) = se_here(ir, i + 1, d) and se_here(ir, i + 1, d) = 1
+
 fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
     assert(ir.nvregs >= np, "the frame covers the spilled arguments")
     em.begin_fn(ir.nlabels)
@@ -54,6 +132,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.store(R_AX, j)
         j ← j + 1
     let n : i64 = @dropunit(#ir.op)
+    let secnt : i64[] = se_counts(ir, ir.nvregs)
     let i : mut i64 = 0
     while i < n:
         let o : i64 = ir.op[i × 1¤ptrdiff]
@@ -63,6 +142,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
         let d : i64 = ir.id[i × 1¤ptrdiff]
         let w : i64 = ir.iw[i × 1¤ptrdiff]
         let bits : i64 = w & 255
+        em.drop_slot ← if se_can_drop(ir, i, n, secnt, ir.nvregs): d else: ⁻1
         let sgn : i64 = w » 8
         if o = IR_CONST:
             em.movimm(R_AX, a)
