@@ -860,6 +860,38 @@ lead-byte test `(b & 0xC0) ≠ 0x80`.
   on a branch rather than here, and the numbers above say what to
   measure it against when the allocator lands.
 
+- **What the allocator has to be, established by measurement.**  Three
+  shapes were costed before writing one, and two of them are ruled out.
+
+  *A wider memo* — the `rax` trick extended to `rbx` and `r12`–`r15`,
+  which the pioneer never touches — serves a load from a register
+  instead of the frame.  But `mov rax, r12` replaces `mov rax, [rbp-N]`
+  one instruction for one: it buys bytes and cycles and **not a single
+  instruction**, which is the measure that has decided everything else
+  here.  A memo cannot help; only removing memory operations can.
+
+  *Making the 32-bit abstract registers real* looks like the biggest
+  prize, since `RG_A/B/C` are cells in the frame on i386, arm and
+  riscv32 — every operand is a load, a store and a load back, roughly
+  three times the traffic of aarch64 and riscv64, where they are
+  registers already.  It cannot be done by substitution: `i3g_mul3`
+  needs `eax:edx`, `ecx:ebx` *and* `esi:edi` at once for one 64-bit
+  multiply, so all three pairs are scratch for a single operation.  The
+  cells are load-bearing, and replacing them needs an allocator that can
+  spill, not a renaming.
+
+  *Removing the stores* is what is left, and it is where the
+  instructions are.  A temporary costs a store to its slot and then a
+  load the memo already skips, so the store is the waste; for a value
+  whose only reader is the next operation it is pure loss.  It needs
+  last-use information, which can be had conservatively without a
+  per-opcode operand table by treating every field of every operation as
+  though it named a vreg — over-approximating only ever costs a
+  missed store, never a wrong answer.  The one real hazard is
+  re-entry: a backward jump can reach a read that lies *before* the
+  store, so a store may only be dropped when no jump after it targets a
+  label at or before it.
+
 **What stays a branch, on purpose.**  Loop back-edges and loop-bound
 checks (predictable, and the loop-carried-dependence research is
 unambiguous that cmov loses there); the short-circuit forms with
