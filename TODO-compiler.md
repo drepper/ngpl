@@ -258,6 +258,9 @@ Code Generation
     parameters in other registers and/or preserve or not different registers than those the
     defined the the architecture ABI.
 
+[ ] create branch-on-condition for targets that have conditions, flag-in-register for those that
+    don't for the non-x86_64 backends
+
 
 Object Files and Linking
 ------------------------
