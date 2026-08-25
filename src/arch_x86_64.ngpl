@@ -106,53 +106,47 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
         elif o = IR_ADD or o = IR_ADDW or o = IR_SUB or o = IR_SUBW:
             em.load(R_AX, a)
             em.load(R_CX, b)
-            if o = IR_ADD or o = IR_ADDW:
-                em.b3(72, 1, 200)   // add rax, rcx
-            else:
-                em.b3(72, 41, 200)  // sub rax, rcx
-            if o = IR_ADD or o = IR_SUB:
-                if bits = 64:
-                    em.jglobal(0, if sgn = 1: 128 else: 130, RT_OV)  // jo / jc
-                else:
-                    em.range_check(w)
-            else:
-                em.canon(w)
+            // A checked type is worked out at its own width so that the
+            // machine's flag is the answer; a wrapping one at 64, being
+            // narrowed afterwards in either case.
+            let ck : bool = o = IR_ADD or o = IR_SUB
+            em.opw(if ck: bits else: 64, if o = IR_ADD or o = IR_ADDW: 1 else: 41, 200)
+            if ck:
+                em.jglobal(0, if sgn = 1: 128 else: 130, RT_OV)  // jo / jc
+            em.canon(w)
             em.store(R_AX, d)
         elif o = IR_MUL or o = IR_MULW:
             em.load(R_AX, a)
             em.load(R_CX, b)
             if sgn = 1 or o = IR_MULW:
-                em.b4(72, 15, 175, 193)      // imul rax, rcx
-                if o = IR_MUL:
-                    if bits = 64:
-                        em.jglobal(0, 128, RT_OV)
-                    else:
-                        em.range_check(w)
-                else:
+                // imul has no 8-bit two-operand form, so a checked
+                // signed byte keeps the old shape and its range check
+                if o = IR_MUL and bits ≠ 8:
+                    em.imulw(bits)
+                    em.jglobal(0, 128, RT_OV)
                     em.canon(w)
+                else:
+                    em.b4(72, 15, 175, 193)  // imul rax, rcx
+                    if o = IR_MUL:
+                        em.range_check(w)
+                    else:
+                        em.canon(w)
             else:
-                em.b3(72, 247, 225)          // mul rcx
-                em.jglobal(0, 130, RT_OV)    // jc: past 64 bits
-                if bits ≠ 64:
-                    em.range_check(w)
+                // mul sets carry when the half above the width is not
+                // zero, which for this width is exactly the overflow
+                em.opw(bits, 247, 225)       // mul rcx
+                em.jglobal(0, 130, RT_OV)    // jc
+                em.canon(w)
             em.store(R_AX, d)
         elif o = IR_NEG or o = IR_NEGW:
             em.load(R_AX, a)
-            em.b3(72, 247, 216)              // neg rax
+            em.opw(if o = IR_NEG: bits else: 64, 247, 216)   // neg
             if o = IR_NEG:
-                if sgn = 1:
-                    if bits = 64:
-                        em.jglobal(0, 128, RT_OV)
-                    else:
-                        em.range_check(w)
-                else:
-                    // a negated unsigned is only 0; nonzero sets carry
-                    if bits = 64:
-                        em.jglobal(0, 130, RT_OV)
-                    else:
-                        em.range_check(w)
-            else:
-                em.canon(w)
+                // overflow for a signed negation is the least value
+                // alone, and for an unsigned one is anything but zero:
+                // at this width the machine says both
+                em.jglobal(0, if sgn = 1: 128 else: 130, RT_OV)
+            em.canon(w)
             em.store(R_AX, d)
         elif o = IR_BAND or o = IR_BORR or o = IR_BXORR:
             em.load(R_AX, a)

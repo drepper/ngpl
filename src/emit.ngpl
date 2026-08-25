@@ -525,6 +525,47 @@ impl Emit:
         else:
             self.dref(reg, self.gmap[g × 1¤ptrdiff])
 
+    // The same arithmetic, at the width the type actually has.
+    //
+    // Asked at 64 bits, a narrow type's overflow is a question the
+    // machine cannot answer: the flags describe the 64-bit result,
+    // which never overflows for anything narrower.  So it had to be
+    // answered by comparing against the range instead -- for a signed
+    // type five instructions and two ten-byte constants.  Asked at its
+    // own width, the machine sets the very flag the type wants and one
+    // branch reads it.
+    //
+    // What the narrower width costs is the shape of the answer: a
+    // 32-bit operation zero-extends into rax and a narrower one leaves
+    // the rest of the register as it was, so canon() has to put the
+    // value back into the form a slot holds.  One instruction against
+    // the five.
+    //
+    // The encodings run in a line: 8-bit is the opcode below, 16-bit
+    // takes the operand-size prefix, 32-bit is bare and 64-bit takes
+    // REX.W.  add, sub, neg and mul all obey it.
+    @pre(bits = 8 or bits = 16 or bits = 32 or bits = 64)
+    fn opw(&mut self, bits : i64, opcode : i64, modrm : i64):
+        if bits = 8:
+            self.b2(opcode - 1, modrm)
+        elif bits = 16:
+            self.b3(102, opcode, modrm)
+        elif bits = 32:
+            self.b2(opcode, modrm)
+        else:
+            self.b3(72, opcode, modrm)
+
+    // imul is two bytes of opcode and has no 8-bit two-operand form,
+    // so it does not fit the line above and is spelled out.
+    @pre(bits = 16 or bits = 32 or bits = 64)
+    fn imulw(&mut self, bits : i64):
+        if bits = 16:
+            self.b4(102, 15, 175, 193)
+        elif bits = 32:
+            self.b3(15, 175, 193)
+        else:
+            self.b4(72, 15, 175, 193)
+
     // narrow the canonical 64-bit value in rax back into its width
     fn canon(&mut self, w : i64):
         let bits : i64 = w & 255
