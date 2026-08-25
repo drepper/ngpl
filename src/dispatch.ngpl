@@ -225,31 +225,53 @@ fn g_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
         Tgt.rv32: r32g_mod3(&em, tg, rd, rx, ry, sgn)
         Tgt.x64: g_pioneer()
 
-fn g_addov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64):
+// Which widths a target can settle an overflow at directly, the
+// machine itself saying whether the narrow result was too big.  Below
+// this the arithmetic is done at a word and the range asked afterwards.
+//
+// aarch64 has 32-bit forms of adds and subs -- the 64-bit encodings
+// with one bit cleared -- and no scalar arithmetic narrower than that.
+// i386's registers are 32 bits, so every narrow width is native there
+// and the pair's high half need not be worked at all.
+//
+// riscv64 is not here, and was measured before being left out: it has
+// no flags, so the answer is a comparison whichever width is asked, and
+// what addw saves in making the sign-extended result the canonicalising
+// afterwards spends again.  Asking at 32 bits came to +0.05% on a
+// program of narrow arithmetic and nothing at all on t07_widths.
+fn g_narrow_ok(tg : Target, bits : i64) → bool:
+    if bits = 64:
+        return true
     match tg.id:
-        Tgt.a64: a64g_addov(&em, tg, rd, rf, rx, ry, sgn)
-        Tgt.rv64: rvg_addov(&em, tg, rd, rf, rx, ry, sgn)
-        Tgt.i386: i3g_addov(&em, tg, rd, rf, rx, ry, sgn)
-        Tgt.a32: a32g_addov(&em, tg, rd, rf, rx, ry, sgn)
-        Tgt.rv32: r32g_addov(&em, tg, rd, rf, rx, ry, sgn)
+        Tgt.a64: bits = 32
+        Tgt.i386: bits = 8 or bits = 16 or bits = 32
+        _: false
+
+fn g_addov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+    match tg.id:
+        Tgt.a64: a64g_addov(&em, tg, rd, rf, rx, ry, sgn, bits)
+        Tgt.rv64: rvg_addov(&em, tg, rd, rf, rx, ry, sgn, bits)
+        Tgt.i386: i3g_addov(&em, tg, rd, rf, rx, ry, sgn, bits)
+        Tgt.a32: a32g_addov(&em, tg, rd, rf, rx, ry, sgn, bits)
+        Tgt.rv32: r32g_addov(&em, tg, rd, rf, rx, ry, sgn, bits)
         Tgt.x64: g_pioneer()
 
-fn g_subov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64):
+fn g_subov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     match tg.id:
-        Tgt.a64: a64g_subov(&em, tg, rd, rf, rx, ry, sgn)
-        Tgt.rv64: rvg_subov(&em, tg, rd, rf, rx, ry, sgn)
-        Tgt.i386: i3g_subov(&em, tg, rd, rf, rx, ry, sgn)
-        Tgt.a32: a32g_subov(&em, tg, rd, rf, rx, ry, sgn)
-        Tgt.rv32: r32g_subov(&em, tg, rd, rf, rx, ry, sgn)
+        Tgt.a64: a64g_subov(&em, tg, rd, rf, rx, ry, sgn, bits)
+        Tgt.rv64: rvg_subov(&em, tg, rd, rf, rx, ry, sgn, bits)
+        Tgt.i386: i3g_subov(&em, tg, rd, rf, rx, ry, sgn, bits)
+        Tgt.a32: a32g_subov(&em, tg, rd, rf, rx, ry, sgn, bits)
+        Tgt.rv32: r32g_subov(&em, tg, rd, rf, rx, ry, sgn, bits)
         Tgt.x64: g_pioneer()
 
-fn g_mulov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64):
+fn g_mulov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     match tg.id:
-        Tgt.a64: a64g_mulov(&em, tg, rd, rf, rx, ry, sgn)
-        Tgt.rv64: rvg_mulov(&em, tg, rd, rf, rx, ry, sgn)
-        Tgt.i386: i3g_mulov(&em, tg, rd, rf, rx, ry, sgn)
-        Tgt.a32: a32g_mulov(&em, tg, rd, rf, rx, ry, sgn)
-        Tgt.rv32: r32g_mulov(&em, tg, rd, rf, rx, ry, sgn)
+        Tgt.a64: a64g_mulov(&em, tg, rd, rf, rx, ry, sgn, bits)
+        Tgt.rv64: rvg_mulov(&em, tg, rd, rf, rx, ry, sgn, bits)
+        Tgt.i386: i3g_mulov(&em, tg, rd, rf, rx, ry, sgn, bits)
+        Tgt.a32: a32g_mulov(&em, tg, rd, rf, rx, ry, sgn, bits)
+        Tgt.rv32: r32g_mulov(&em, tg, rd, rf, rx, ry, sgn, bits)
         Tgt.x64: g_pioneer()
 
 fn g_ext2(em : &mut Emit, tg : Target, r : i64, bits : i64, sgn : i64):

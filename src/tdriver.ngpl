@@ -88,15 +88,21 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
             g_lds(&em, tg, RG_A, a)
             g_lds(&em, tg, RG_B, b)
             if o = IR_ADD or o = IR_SUB:
-                if bits = 64:
+                // Where the machine can settle it at this width, it
+                // does; otherwise the arithmetic is done at a word and
+                // the range asked afterwards.
+                if g_narrow_ok(tg, bits):
                     if o = IR_ADD:
-                        g_addov(&em, tg, RG_A, RG_C, RG_A, RG_B, sgn)
+                        g_addov(&em, tg, RG_A, RG_C, RG_A, RG_B, sgn, bits)
                     else:
-                        g_subov(&em, tg, RG_A, RG_C, RG_A, RG_B, sgn)
+                        g_subov(&em, tg, RG_A, RG_C, RG_A, RG_B, sgn, bits)
                     g_jz(&em, tg, RG_C, sl)
                     g_call(&em, tg, RT_OV)
                     g_label(&em, tg, sl)
                     sl ← sl + 1
+                    // a narrow result comes back in the shape its width
+                    // leaves it; a word-wide one is already canonical
+                    t_canon(&em, tg, w)
                 else:
                     if o = IR_ADD:
                         g_add3(&em, tg, RG_A, RG_A, RG_B)
@@ -118,7 +124,7 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
                 g_mul3(&em, tg, RG_A, RG_A, RG_B)
                 t_canon(&em, tg, w)
             elif bits = 64:
-                g_mulov(&em, tg, RG_A, RG_C, RG_A, RG_B, sgn)
+                g_mulov(&em, tg, RG_A, RG_C, RG_A, RG_B, sgn, bits)
                 g_jz(&em, tg, RG_C, sl)
                 g_call(&em, tg, RT_OV)
                 g_label(&em, tg, sl)
@@ -714,15 +720,15 @@ fn t_emit_sat(em : &mut Emit, tg : Target, o : i64, w : i64, a : i64, b : i64, d
         return
     if sgn = 0:
         if o = IR_SATADD:
-            g_addov(&em, tg, RG_A, RG_C, RG_A, RG_B, 0)
+            g_addov(&em, tg, RG_A, RG_C, RG_A, RG_B, 0, 64)
             g_jz(&em, tg, RG_C, sl)
             g_const(&em, tg, RG_A, ⁻1)
         elif o = IR_SATSUB:
-            g_subov(&em, tg, RG_A, RG_C, RG_A, RG_B, 0)
+            g_subov(&em, tg, RG_A, RG_C, RG_A, RG_B, 0, 64)
             g_jz(&em, tg, RG_C, sl)
             g_const(&em, tg, RG_A, 0)
         else:
-            g_mulov(&em, tg, RG_A, RG_C, RG_A, RG_B, 0)
+            g_mulov(&em, tg, RG_A, RG_C, RG_A, RG_B, 0, 64)
             g_jz(&em, tg, RG_C, sl)
             g_const(&em, tg, RG_A, ⁻1)
         g_label(&em, tg, sl)
@@ -732,7 +738,7 @@ fn t_emit_sat(em : &mut Emit, tg : Target, o : i64, w : i64, a : i64, b : i64, d
     // operands, read before they are lost
     if o = IR_SATMUL:
         g_xor3(&em, tg, RG_C, RG_A, RG_B)
-        g_mulov(&em, tg, RG_A, RG_B, RG_A, RG_B, 1)
+        g_mulov(&em, tg, RG_A, RG_B, RG_A, RG_B, 1, 64)
         g_jz(&em, tg, RG_B, sl + 1)
         g_const(&em, tg, RG_B, 0)
         g_cmp3(&em, tg, RG_T, RG_C, RG_B, CC_LT, 1)
@@ -743,9 +749,9 @@ fn t_emit_sat(em : &mut Emit, tg : Target, o : i64, w : i64, a : i64, b : i64, d
         g_sts(&em, tg, RG_A, d)
         return
     if o = IR_SATADD:
-        g_addov(&em, tg, RG_A, RG_C, RG_A, RG_B, 1)
+        g_addov(&em, tg, RG_A, RG_C, RG_A, RG_B, 1, 64)
     else:
-        g_subov(&em, tg, RG_A, RG_C, RG_A, RG_B, 1)
+        g_subov(&em, tg, RG_A, RG_C, RG_A, RG_B, 1, 64)
     g_jz(&em, tg, RG_C, sl + 1)
     g_const(&em, tg, RG_C, 0)
     // an overflowed add went the way of b; a subtract the other way
