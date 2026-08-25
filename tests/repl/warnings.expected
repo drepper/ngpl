@@ -1,4 +1,4 @@
-warning: the value of this statement is not used; the signature hands nothing back, so the last statement is not a return value; name a return type, or write '_ ← …' to drop the value
+error: in f: the value of this statement is not used; it computes something and nothing reads it, so write '_ ← …' where the value is meant to be dropped, or name a return type where it was meant to be handed back
   --> <repl:1>:2:5
     |
   2 |     1
@@ -13,17 +13,11 @@ warning: 'step' is declared mut but is never modified
   3 |     n × step
     |
 8i64
-warning: the value of this statement is not used; the signature hands nothing back, so the last statement is not a return value; name a return type, or write '_ ← …' to drop the value
+error: in P.a: the value of this statement is not used; it computes something and nothing reads it, so write '_ ← …' where the value is meant to be dropped, or name a return type where it was meant to be handed back
   --> <repl:6>:3:9
     |
   3 |         1
     |         ^
   4 |     fn b(&self):
-    |
-error: in P.b: std.println writes where the rest of the program can see it; a function that calls it says @impure
-  --> <repl:6>:5:9
-    |
-  5 |         std.println("x")
-    |         ^^^^^^^^^^^
     |
 "still alive"

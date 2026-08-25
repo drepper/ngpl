@@ -8,7 +8,7 @@ fn returns_float_as_int() → i64:
 @test
 @expect error 2261 "returns_float_as_int: return type is i64 but body evaluates to float"
 fn test_return_float_for_int():
-  returns_float_as_int()
+  _ ← returns_float_as_int()
 
 fn returns_int_as_float() → f64:
   42
@@ -16,7 +16,7 @@ fn returns_int_as_float() → f64:
 @test
 @expect error 2263 "returns_int_as_float: return type is f64 but body evaluates to int"
 fn test_return_int_for_float():
-  returns_int_as_float()
+  _ ← returns_int_as_float()
 
 fn returns_float_as_i32() → i32:
   3.14
@@ -24,7 +24,7 @@ fn returns_float_as_i32() → i32:
 @test
 @expect error 2261 "returns_float_as_i32: return type is i32 but body evaluates to float"
 fn test_return_float_for_i32():
-  returns_float_as_i32()
+  _ ← returns_float_as_i32()
 
 fn returns_int_as_f32() → f32:
   7
@@ -32,7 +32,7 @@ fn returns_int_as_f32() → f32:
 @test
 @expect error 2263 "returns_int_as_f32: return type is f32 but body evaluates to int"
 fn test_return_int_for_f32():
-  returns_int_as_f32()
+  _ ← returns_int_as_f32()
 
 // Return type matches: these should succeed.
 
@@ -78,7 +78,7 @@ fn early_return_float_as_int(x: i64) → i64:
 @test
 @expect error 2261 "early_return_float_as_int: return type is i64 but body evaluates to float"
 fn test_early_return_mismatch():
-  early_return_float_as_int(1)
+  _ ← early_return_float_as_int(1)
 
 // Return type check with optional return type.
 
@@ -88,7 +88,7 @@ fn returns_float_as_int_opt() → i64?:
 @test
 @expect error 2261 "returns_float_as_int_opt: return type is i64? but body evaluates to float"
 fn test_return_float_for_int_optional():
-  returns_float_as_int_opt()
+  _ ← returns_float_as_int_opt()
 
 // Optional returning none is fine regardless of inner type.
 
@@ -120,13 +120,13 @@ fn test_lambda_return_ok():
 // A signature that hands nothing back discards whatever the body
 // ends with, and says so: the last statement is not a return value.
 
+@expect error 2291 "the value of this statement is not used; it computes something and nothing reads it, so write '_ ← …' where the value is meant to be dropped, or name a return type where it was meant to be handed back"
 fn void_return():
-  @expect warning 2292 "the value of this statement is not used; the signature hands nothing back, so the last statement is not a return value; name a return type, or write '_ ← …' to drop the value"
   42
 
 @test
 fn test_void_return():
-  void_return()
+  _ ← 1
 
 // --- Mixed-type arithmetic rejection ---
 
@@ -221,7 +221,7 @@ fn foo(a : i64) → i64:
 @test
 @expect error 2234 "addition requires matching types, got i64 and f32"
 fn test_mixed_via_call():
-  foo(1)
+  _ ← foo(1)
 
 // --- Helpers ---
 
@@ -301,7 +301,7 @@ fn wants_a_number(x : i32):
 @test
 @expect error 2015 "wants_a_number: argument 'x' expected i32, got StrValue"
 fn error_argument_of_another_kind():
-    wants_a_number("hello")
+    _ ← wants_a_number("hello")
 
 @test
 @expect error 2262 "error_returns_another_kind: return type is i32 but body evaluates to str"
@@ -344,7 +344,7 @@ fn takes_f32(x : f32):
 @test
 @expect error 2273 "takes_f32: argument 'x' is 17000001, which needs more significant bits than f32 has (24)"
 fn error_argument_too_wide_for_f32():
-    takes_f32(17000001)
+    _ ← takes_f32(17000001)
 
 @start
 @impure

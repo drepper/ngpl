@@ -2662,6 +2662,60 @@ The attribute is a claim the checker takes on trust: a `@noreturn` function whos
 Rust and Zig make it a *type*, which lets the compiler verify the claim rather than trust it; that is the better answer and the one to move to when the type system can carry it.  C's is an attribute taken on trust, as this is.
 
 
+### Answers That May Go Unread: `@ignorable`
+
+A function that hands something back is called for what it hands back, so a call whose result nothing reads is either a mistake or a line that could be deleted.  Both are worth saying:
+
+```
+fn twice(x : i64) → i64:
+    x + x
+
+twice(21)
+
+error: the result of 'twice' is not used; a function that hands back a
+value is called for it, so write '_ ← …' where the value is meant to be
+dropped
+```
+
+Writing `_ ← twice(21)` says the value is meant to be dropped, and that is the whole of what it takes to say it.  `@ignorable` says the same thing once at the definition instead, for a function called as much for what it does as for what it answers:
+
+```
+@ignorable
+fn note(x : i64) → i64:
+    …
+
+note(5)          // no '_ ←' needed: the definition said so
+```
+
+Standing last is no different.  A body that hands nothing back has no last value either, so an expression there computes something nothing reads, exactly as it would anywhere else:
+
+```
+fn f():
+    a + b
+
+error: the value of this statement is not used; it computes something
+and nothing reads it, so write '_ ← …' where the value is meant to be
+dropped, or name a return type where it was meant to be handed back
+```
+
+The likely mistake there is the missing return type rather than the statement, which is why the message names it — but the program is wrong either way, and a diagnostic that lets it through is one nobody reads.
+
+The rule is about the value, not about calls: any expression whose value goes nowhere is refused, and an arithmetic expression standing alone is the plainest case of it.  Nothing is said where the statement has an effect of its own, which is what the statement was for.
+
+A partial application is the one thing that may not be dropped even with `_ ← …`.  Currying is offered only for a pure function, so binding some arguments and waiting for the rest is the whole of what a partial application does; a line that drops one has done nothing whatever.  Neither form of dropping is allowed:
+
+```
+fn add3(a : i64, b : i64, c : i64) → i64:
+    a + b + c
+
+add3(1, 2)
+_ ← add3(1, 2)
+
+error: the partial application of 'add3' is not used; it binds arguments
+and does nothing else, so dropping it leaves nothing behind
+```
+
+
 ### Threading Over Containers: `@listable`
 
 A `@listable` function handed something *deeper* than a parameter asked for is handed a container of what it asked for, so it is asked of each of the things in the container instead.  The operators are `@listable`, and so are the standard library's numeric functions — `std.sin`, `std.cos`, `std.sinpi` — so `std.sinpi(halves)` answers an array of sines the way `2 × halves` answers an array of doublings:

@@ -107,15 +107,16 @@ fn test_lambda_no_capture_list():
 fn test_lambda_undefined_capture():
   let f : mut = λx : i64 |nonexistent| → i64: x
 
-// Warning on ignored lambda (from currying)
+// A partial application dropped: it binds arguments and does nothing
+// else, so the line has done nothing whatever.
 @test
-@expect warning 2292 "the value of this statement is not used; the signature hands nothing back, so the last statement is not a return value; name a return type, or write '_ ← …' to drop the value"
+@expect error 2293 "the partial application of 'add' is not used; it binds arguments and does nothing else, so dropping it leaves nothing behind"
 fn test_ignored_curry_warning():
   add(5)
 
-// Warning on ignored lambda literal
+// A lambda literal computed and dropped: pure, and nothing reads it.
 @test
-@expect warning 2292 "the value of this statement is not used; the signature hands nothing back, so the last statement is not a return value; name a return type, or write '_ ← …' to drop the value"
+@expect error 2291 "the value of this statement is not used; it computes something and nothing reads it, so write '_ ← …' where the value is meant to be dropped, or name a return type where it was meant to be handed back"
 fn test_ignored_lambda_warning():
   λx : i64 → i64: x + 1
 
@@ -173,7 +174,7 @@ fn test_lambda_replaceable_uncaptured():
 
 // Empty capture list is not allowed
 @test
-@expect error 2025 "Line 178, col 28: empty capture list is not allowed"
+@expect error 2025 "Line 179, col 28: empty capture list is not allowed"
 fn test_lambda_empty_capture_list():
   let f : mut = λx : i64 || → i64: x × 2
 
@@ -218,13 +219,13 @@ fn test_lambda_expected_return_err():
 
 // Missing type annotation causes error
 @test
-@expect error 2024 "Line 223, col 19: lambda parameter 'x' requires a type annotation"
+@expect error 2024 "Line 224, col 19: lambda parameter 'x' requires a type annotation"
 fn test_lambda_missing_type():
   let f : mut = λx |y| → i64: x + 1
 
 // Missing return type causes error
 @test
-@expect error 2026 "Line 229, col 24: lambda requires a return type (-> type)"
+@expect error 2026 "Line 230, col 24: lambda requires a return type (-> type)"
 fn test_lambda_missing_return_type():
   let f : mut = λx : i64: x + 1
 

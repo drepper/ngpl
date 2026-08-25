@@ -1,4 +1,4 @@
-error: in main: the result of 'doubled' is not used; a function that hands back a value is called for it, so write '_ ← …' where the value is meant to be dropped
+error: in main: the result of 'doubled' is not used; a function that hands back a value is called for it, so write '_ ← …' where the value is meant to be dropped, name a return type where it was meant to be handed back, or mark it @ignorable
   --> tests/output/static_unused_result.ngpl:10:5
     |
  10 |     doubled(21)

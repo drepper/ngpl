@@ -54,7 +54,7 @@ fn test_catch_expected_success():
 @test
 @expect error 2758 "array index 99 out of range (length 1)"
 fn test_catch_no_cross_call():
-    try_call_fail()
+    _ ← try_call_fail()
 
 // --- Catch requires optional or expected return type ---
 
@@ -62,7 +62,7 @@ fn test_catch_no_cross_call():
 @expect error 2012 "catch requires enclosing function to have optional or expected return type"
 fn test_catch_requires_optional():
     catch:
-        42
+        _ ← 42
 
 // --- Multiple statements in catch ---
 

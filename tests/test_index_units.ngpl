@@ -136,7 +136,7 @@ fn needs_byte(buf : byte[], off ¤byte : usize) → u8:
 fn test_reject_typed_int_param_ptrdiff():
     let arr : mut i64[] = [1, 2, 3]
     let idx : mut i32 = 0
-    needs_ptrdiff(arr, idx)
+    _ ← needs_ptrdiff(arr, idx)
 
 @test
 @expect error 2323 "needs_byte: parameter 'off' requires unit B, got typed integer usize without unit"
@@ -144,14 +144,14 @@ fn test_reject_typed_int_param_byte():
     let buf : mut u8[3] = 3 ⍴ 0
     buf[0] ← 10
     let off : mut usize = 0
-    needs_byte(buf, off)
+    _ ← needs_byte(buf, off)
 
 @test
 @expect error 2323 "needs_ptrdiff: parameter 'idx' requires unit ptrdiff, got typed integer u32 without unit"
 fn test_reject_u32_param():
     let arr : mut i64[] = [1, 2, 3]
     let idx : mut u32 = 1
-    needs_ptrdiff(arr, idx)
+    _ ← needs_ptrdiff(arr, idx)
 
 @test
 fn test_accept_untyped_const_param_ptrdiff():

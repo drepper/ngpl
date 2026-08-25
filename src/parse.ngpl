@@ -1847,9 +1847,9 @@ impl Parser:
     // Definitions
     // ------------------------------------------------------------------
 
-    // mods: bit 0 says @replaceable, bit 1 @export, bit 2 @build and
-    // bit 3 @listable -- bits rather than parameters, the subset
-    // holding a signature to twelve of them
+    // mods: bit 0 says @replaceable, bit 1 @export, bit 2 @build,
+    // bit 3 @listable and bit 4 @ignorable -- bits rather than
+    // parameters, the subset holding a signature to twelve of them
     fn parse_fn(&mut self, imp : bool, is_start : bool, is_noreturn : bool,
                 is_test : bool, mods : i64, ignored : bool,
                 pres : i64[], post_toks : i64[], posts : i64[],
@@ -1951,7 +1951,7 @@ impl Parser:
                                     params_off: params_off,
                                     ret: ret, body: body, is_export: false,
                                     is_replaceable: false, is_impure: imp,
-                                    is_start: false, is_noreturn: is_noreturn,
+                                    is_start: false, is_noreturn: is_noreturn, is_ignorable: (mods » 4) & 1 = 1,
                                     is_test: false,
                                     is_listable: false,
                                     olds_off: ⁻1,
@@ -1976,7 +1976,7 @@ impl Parser:
             self.builds.push(FnDef{name: name, modname: self.curmod, tok: name_tok, params_off: params_off,
                                    ret: ret, body: body, is_export: false,
                                    is_replaceable: false, is_impure: false,
-                                   is_start: false, is_noreturn: false,
+                                   is_start: false, is_noreturn: false, is_ignorable: false,
                                    is_test: false,
                                    is_listable: false,
                                    olds_off: ⁻1,
@@ -1987,7 +1987,7 @@ impl Parser:
                             ret: ret, body: body, is_export: (mods » 1) & 1 = 1,
                             is_replaceable: mods & 1 = 1,
                             is_impure: imp,
-                            is_start: is_start, is_noreturn: is_noreturn,
+                            is_start: is_start, is_noreturn: is_noreturn, is_ignorable: (mods » 4) & 1 = 1,
                             is_test: is_test,
                             is_listable: (mods » 3) & 1 = 1,
                             olds_off: olds_off,
@@ -2430,6 +2430,7 @@ impl Parser:
         let is_repr : mut bool = false
         let is_fl : mut bool = false
         let is_build : mut bool = false
+        let is_ignb : mut bool = false
         let is_lstb : mut bool = false
         let invs : mut i64[] = []
         let expects : mut i64 = 0
@@ -2448,6 +2449,8 @@ impl Parser:
                 is_start ← true
             elif name = "noreturn":
                 is_noreturn ← true
+            elif name = "ignorable":
+                is_ignb ← true
             elif name = "test":
                 is_test ← true
             elif name = "build":
@@ -2561,7 +2564,8 @@ impl Parser:
             self.parse_fn(imp, is_start, is_noreturn, is_test,
                           (if is_repl: 1 else: 0) + (if is_exp: 2 else: 0)
                               + (if is_build: 4 else: 0)
-                              + (if is_lstb: 8 else: 0),
+                              + (if is_lstb: 8 else: 0)
+                              + (if is_ignb: 16 else: 0),
                           expects > 0,
                           pres, post_toks, posts, "", 0)
         elif is_exp:

@@ -4721,6 +4721,10 @@ impl Checker:
                 self.check_expr(na, TY_UNIT)
             if self.ty_of(na) = TY_UNT:
                 self.adopt(na, TY_I64)
+            // '_ ← …' answers for anything worth computing.  A partial
+            // application is not one: dropping it drops the whole of
+            // what the line did.
+            self.unused_value(tok, na, true)
         elif k = NK_IF:
             if self.val_want ≠ ⁻1:
                 // this if is the value of the block holding it
@@ -4971,10 +4975,55 @@ impl Checker:
                 let t : i64 = self.ty_of(na)
                 if t ≠ TY_UNIT and self.kind_of(na) ≠ NK_EMPTYV:
                     // a bare ∅ says "nothing here", which is exactly
-                    // what a unit position holds
-                    self.dwarn(tok, 2292, "the value of this statement is not used; bind it or write '_ ← …'")
+                    // what a unit position holds.  Anything else here
+                    // computes a value nothing reads, standing last or
+                    // not: where the body hands nothing back, the last
+                    // statement is not a return value either.
+                    self.unused_value(tok, na, false)
         else:
             self.derr(tok, "this statement kind escaped the checker; that is an ngplc bug")
+
+    // Which function a call reaches, where that is knowable, and ⁻1
+    // otherwise.  A method call carries the index it resolved to; a
+    // plain one is found by the name it was written with.
+    fn call_target(&self, na : i64) → i64:
+        let k : i64 = self.kind_of(na)
+        if k = NK_MCALL:
+            let mid : i64 = self.a.nc[na × 1¤ptrdiff]
+            if mid >= 1000:
+                return ((mid - 1000) ÷ 2) ?? 0
+            return ⁻1
+        if k = NK_CALL:
+            return self.fn_index_here(self.text(self.a.ntok[na × 1¤ptrdiff]))
+        ⁻1
+
+    // What to say about a statement whose value nothing reads.
+    //
+    // A partial application is refused outright, whichever way it is
+    // dropped: it binds arguments and does nothing else -- currying is
+    // offered only for a pure function -- so a line that drops one has
+    // done nothing at all, and that is a mistake rather than a choice.
+    //
+    // A call that answers something is refused too, unless the
+    // definition carries @ignorable and has said its answer may go
+    // unread.  The interpreter has refused both since before this did,
+    // and a program it will not run is not one to compile.
+    fn unused_value(&mut self, tok : i64, na : i64, quiet : bool):
+        // a curried call: the checker marked the site when it made one
+        if self.kind_of(na) = NK_CALL and self.a.nc[na × 1¤ptrdiff] = 3:
+            self.derrc(tok, 2293, "the partial application here is not used; it binds arguments and does nothing else, so dropping it leaves nothing behind")
+            return
+        // quiet says the value was dropped on purpose with '_ ← …', or
+        // stands last in a body that hands nothing back
+        if quiet:
+            return
+        let f : i64 = self.call_target(na)
+        if f ≠ ⁻1:
+            if self.a.fns[f × 1¤ptrdiff].is_ignorable:
+                return
+            self.derrc(tok, 2290, "the result of '" ⧺ self.a.fns[f × 1¤ptrdiff].name ⧺ "' is not used; a function that hands back a value is called for it, so write '_ ← …' where the value is meant to be dropped, name a return type where it was meant to be handed back, or mark it @ignorable")
+            return
+        self.derrc(tok, 2291, "the value of this statement is not used; it computes something and nothing reads it, so write '_ ← …' where the value is meant to be dropped, or name a return type where it was meant to be handed back")
 
     fn check_foreach(&mut self, id : i64, tok : i64, na : i64, body : i64):
         let lo : i64 = self.a.extra[na × 1¤ptrdiff]
@@ -5384,7 +5433,8 @@ impl Checker:
 // is passed over rather than failed.  Keep this in step with the
 // derrc/dwarn calls; tests/compile/run_compile_tests.sh checks it.
 fn diag_codes() → i64[]:
-    [2024, 2025, 2026, 2111, 2229, 2245, 2253, 2254, 2256, 2292,
+    [2024, 2025, 2026, 2111, 2229, 2245, 2253, 2254, 2256,
+     2290, 2291, 2293,
      2400, 2401, 2402, 2403, 2404, 2421, 2619, 2728, 2729, 2741, 2910, 2911]
 
 fn draws_code(code : i64) → bool:

@@ -1,7 +1,7 @@
-warning: the value of this statement is not used; the signature hands nothing back, so the last statement is not a return value; name a return type, or write '_ ← …' to drop the value
-  --> tests/output/static_trailing_value.ngpl:6:5
+error: in f: the value of this statement is not used; it computes something and nothing reads it, so write '_ ← …' where the value is meant to be dropped, or name a return type where it was meant to be handed back
+  --> tests/output/static_trailing_value.ngpl:7:5
     |
-  6 |     1
+  7 |     1
     |     ^
-  7 | 
+  8 | 
     |

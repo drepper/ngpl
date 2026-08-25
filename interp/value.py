@@ -963,7 +963,8 @@ class FuncValue(Value):
                  "pack_param", "param_units", "is_impure", "param_refs",
                  "param_muts", "source_label", "ret_unit", "is_listable",
                  "is_noreturn", "preconditions", "postconditions",
-                 "_has_generics", "_param_names", "module", "is_export")
+                 "_has_generics", "_param_names", "module", "is_export",
+                 "is_ignorable")
 
     def __init__(self, name, params, body, env, ret_type=None,
                  is_replaceable: bool = False,
@@ -975,6 +976,7 @@ class FuncValue(Value):
                  ret_unit=None,
                  is_listable: bool = False,
                  is_noreturn: bool = False,
+                 is_ignorable: bool = False,
                  preconditions: list | None = None,
                  postconditions: list | None = None):
         self.name = name
@@ -995,6 +997,8 @@ class FuncValue(Value):
         self.is_listable = is_listable
         # Whether the function hands control back at all.
         self.is_noreturn = is_noreturn
+        # @ignorable: a caller may drop what this hands back
+        self.is_ignorable = is_ignorable
         # What the function holds to on the way in and on the way out.
         self.preconditions = preconditions or []
         self.postconditions = postconditions or []

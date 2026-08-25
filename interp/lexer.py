@@ -93,6 +93,8 @@ AT_KEYWORDS: dict[str, str] = {
     "dropunit": "DROPUNIT",
     # @old(e) in a postcondition: what e was when the call began.
     "old": "OLD",
+    # @ignorable: a function whose answer a caller may drop in silence
+    "ignorable": "IGNORABLE",
     "min": "MIN",
     "max": "MAX",
     "repr": "REPR",

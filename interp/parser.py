@@ -362,6 +362,7 @@ class Parser:
         is_impure = False
         is_listable = False
         is_noreturn = False
+        is_ignorable = False
         preconditions: list = []
         postconditions: list = []
         invariants: list = []
@@ -416,6 +417,10 @@ class Parser:
             elif self._check("NORETURN"):
                 self._eat("NORETURN")
                 is_noreturn = True
+                self._try_eat("NEWLINE")
+            elif self._check("IGNORABLE"):
+                self._eat("IGNORABLE")
+                is_ignorable = True
                 self._try_eat("NEWLINE")
             elif self._check("PRE"):
                 preconditions.append(self._parse_condition("pre"))
@@ -558,6 +563,7 @@ class Parser:
                                             postconditions=postconditions,
                                             is_comptime=is_comptime)
             fdef.is_build = is_build
+            fdef.is_ignorable = is_ignorable
             return fdef
         elif self._check("LET"):
             return self._parse_var_def()

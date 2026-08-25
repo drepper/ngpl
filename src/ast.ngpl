@@ -197,6 +197,7 @@ struct FnDef:
     is_impure : bool
     is_start : bool
     is_noreturn : bool
+    is_ignorable : bool  // a caller may drop what it hands back
     is_test : bool
     is_listable : bool   // handed a container where it asked for one of the
                          // things in it, it is asked of each of them

@@ -1,0 +1,75 @@
+// The value a function hands back is what it was called for.
+//
+// A function that answers something is called for the answer, so a
+// call whose result nothing reads is either a mistake or a line that
+// could be deleted.  Saying '_ ← …' says the value is meant to be
+// dropped, and that is the whole of what it takes to say it.
+//
+// @ignorable says it once at the definition instead: this function's
+// answer may go unread, and a caller that drops it in silence is doing
+// what the definition described.  It is for a function called as much
+// for what it does as for what it answers.
+//
+// A partial application is the one thing that may not be dropped at
+// all.  Currying is offered only for a pure function, so binding some
+// arguments and waiting for the rest is the whole of what it does; a
+// line that drops one has done nothing whatever.  Neither form of
+// dropping is allowed, the bare statement or the '_ ← …'.
+
+fn twice(x : i64) → i64:
+    x + x
+
+@ignorable
+fn noted(x : i64) → i64:
+    x + 1
+
+fn add3(a : i64, b : i64, c : i64) → i64:
+    a + b + c
+
+@test
+fn test_a_dropped_value_is_written_down():
+    _ ← twice(21)
+    assert_eq(twice(21), 42)
+
+@test
+fn test_ignorable_says_it_at_the_definition():
+    // no '_ ←' needed: the definition said its answer may go unread
+    noted(5)
+    assert_eq(noted(5), 6)
+
+@test
+fn test_a_partial_application_is_kept():
+    let f := add3(1, 2)
+    assert_eq(f(3), 6)
+    let g := add3(10)
+    assert_eq(g(20, 30), 60)
+
+// ---------------------------------------------------------------------
+// What is refused
+// ---------------------------------------------------------------------
+
+// Standing last in a body that hands nothing back, an unread value is
+// a warning instead: there the likely mistake is the missing return
+// type rather than the statement, and the fix is the signature.  So
+// this one has a statement after it, which makes it plainly dropped.
+@expect error "the result of 'twice' is not used"
+fn error_a_value_nothing_reads():
+    twice(21)
+    let _keep : i64 = 0
+    _ ← _keep
+
+// A partial application is refused wherever it is dropped, last or
+// not: no return type would carry it anywhere, because binding
+// arguments and waiting is the whole of what it did.
+@expect error "the partial application"
+fn error_a_partial_application_dropped():
+    add3(1, 2)
+
+@expect error "the partial application"
+fn error_a_partial_application_dropped_to_underscore():
+    _ ← add3(1, 2)
+
+@start
+@impure
+fn main():
+    std.println("ignorable tests passed")

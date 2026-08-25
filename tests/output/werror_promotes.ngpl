@@ -1,10 +1,8 @@
 // -Werror makes a warning an error, and an error stops the run: the
 // startup function below never runs, so nothing is printed.
-fn f():
-    1
-
 @start
 @impure
 fn main():
-    f()
+    let n : mut i64 = 1
+    std.println("{}", n)
     std.println("main ran")

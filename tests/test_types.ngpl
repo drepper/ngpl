@@ -147,7 +147,7 @@ fn test_inequality():
 // Storing is ← and nothing else, so a statement that compares computes
 // something nothing reads.
 @test
-@expect error 2291 "the value of this statement is not used; it computes something and nothing reads it"
+@expect error 2291 "the value of this statement is not used; it computes something and nothing reads it, so write '_ ← …' where the value is meant to be dropped, or name a return type where it was meant to be handed back"
 fn error_comparing_where_a_store_was_meant():
     let x : mut i64 = 1
     x = 5

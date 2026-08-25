@@ -232,6 +232,8 @@ class FuncDef:
                  is_comptime: bool = False):
         self.name = name
         self.is_build = False
+        # @ignorable: a caller may drop what this hands back
+        self.is_ignorable = False
         self.params = params
         # Where each parameter was written, for diagnostics about it.
         self.param_positions: dict[str, tuple[int, int, int | None]] = {}

@@ -2132,6 +2132,25 @@ def _has_declared_effect(expr, env, struct_vars) -> bool:
     return False
 
 
+def _is_partial_call(expr, callee) -> bool:
+    """Whether a call hands back a function rather than an answer.
+
+    Fewer arguments than the definition takes is a partial application:
+    it binds what it was given and waits for the rest.  Nothing else
+    happens -- currying is only offered for a pure function -- so a
+    partial application whose value goes nowhere has done nothing at
+    all, and saying so is worth more than a warning.
+    """
+    args = getattr(expr, "args", None)
+    params = getattr(callee, "params", None)
+    if args is None or params is None:
+        return False
+    if isinstance(expr, _ast.MethodCall):
+        # the receiver is a parameter the call site does not write
+        return len(args) + 1 < len(params)
+    return len(args) < len(params)
+
+
 def _dropped_value_finding(expr, env, struct_vars) -> str | None:
     """What a statement whose value goes nowhere should be told.
 
@@ -2154,13 +2173,26 @@ def _dropped_value_finding(expr, env, struct_vars) -> str | None:
         callee = _called_func(expr, env, struct_vars)
         if callee is None or _says_nothing(callee.ret_type):
             return None
+        if getattr(callee, "is_ignorable", False):
+            # The definition says its answer may be dropped, so dropping
+            # it is what it said it was for.
+            return None
+        if _is_partial_call(expr, callee):
+            return _Finding(
+                f"the partial application of '{callee.name}' is not used; "
+                f"it binds arguments and does nothing else, so dropping it "
+                f"leaves nothing behind", _call_site(expr), 2293)
         return _Finding(
             f"the result of '{callee.name}' is not used; a function that "
-            f"hands back a value is called for it, so write '_ ← …' where "
-            f"the value is meant to be dropped", _call_site(expr), 2290)
+            f"hands back a value is called for it, so write '_ \N{LEFTWARDS ARROW} …' where "
+            f"the value is meant to be dropped, name a return type where "
+            f"it was meant to be handed back, or mark it @ignorable",
+            _call_site(expr), 2290)
     return _Finding(
         "the value of this statement is not used; it computes something "
-        "and nothing reads it", expr, 2291)
+        "and nothing reads it, so write '_ \N{LEFTWARDS ARROW} …' where the value is "
+        "meant to be dropped, or name a return type where it was meant "
+        "to be handed back", expr, 2291)
 
 
 def _check_unused_values(stmts, env, struct_vars,
@@ -2199,6 +2231,23 @@ def _check_one_unused_value(stmt, env, struct_vars,
         if in_value_position:
             return None
         return _dropped_value_finding(stmt.expr, env, struct_vars)
+    if (isinstance(stmt, tuple) and len(stmt) == 3
+            and stmt[0] == "assign_stmt"
+            and isinstance(stmt[1], _ast.VarRef) and stmt[1].name == "_"):
+        # '_ ← …' says the value is meant to be dropped, which answers
+        # for anything that was worth computing.  A partial application
+        # is not: it binds arguments and does nothing else, so dropping
+        # one is dropping the whole of what the line did.
+        rhs = stmt[2]
+        if isinstance(rhs, (_ast.FuncCall, _ast.MethodCall)):
+            callee = _called_func(rhs, env, struct_vars)
+            if callee is not None and _is_partial_call(rhs, callee):
+                return _Finding(
+                    f"the partial application of '{callee.name}' is dropped; "
+                    f"it binds arguments and does nothing else, so '_ ← …' "
+                    f"here drops the whole of what the line did",
+                    _call_site(rhs), 2293)
+        return None
     if isinstance(stmt, _ast.IfStmt):
         # An if standing where a value is wanted hands on each branch's
         # last value, as a match does, so the branches are in value
@@ -2241,12 +2290,14 @@ def _static_unused_value_check(func_def, env, struct_vars) -> str | None:
     inside this function is walked on those terms rather than as part
     of the block holding it.
     """
-    finding = _check_unused_values(func_def.body, env, struct_vars, True)
+    finding = _check_unused_values(func_def.body, env, struct_vars,
+                                   not _says_nothing(func_def.ret_type))
     if finding is not None:
         return finding
     for node in _iter_ast(func_def.body):
         if isinstance(node, _ast.LambdaExpr) and isinstance(node.body, list):
-            finding = _check_unused_values(node.body, env, struct_vars, True)
+            finding = _check_unused_values(node.body, env, struct_vars,
+                                           not _says_nothing(node.ret_type))
             if finding is not None:
                 return finding
     return None
@@ -3222,6 +3273,7 @@ def _macro_runner(macros: dict, env: Env, evaluator: Evaluator):
             func.is_impure, param_refs=func.param_refs,
             param_muts=func.param_muts, ret_unit=func.ret_unit,
             is_listable=func.is_listable, is_noreturn=func.is_noreturn,
+            is_ignorable=getattr(func, "is_ignorable", False),
             preconditions=func.preconditions,
             postconditions=func.postconditions)
         macro_env.define(name, made[name])
@@ -3523,6 +3575,7 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                           param_muts=defn.param_muts, ret_unit=defn.ret_unit,
                           is_listable=defn.is_listable,
                           is_noreturn=defn.is_noreturn,
+                          is_ignorable=defn.is_ignorable,
                           preconditions=defn.preconditions,
                           postconditions=defn.postconditions)
             fv.module = getattr(defn, "module", "")
@@ -3707,6 +3760,7 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                                ret_unit=method_def.ret_unit,
                                is_listable=method_def.is_listable,
                                is_noreturn=method_def.is_noreturn,
+                               is_ignorable=method_def.is_ignorable,
                                preconditions=method_def.preconditions,
                                postconditions=method_def.postconditions)
                 if method_def.name in st.methods:
@@ -3806,8 +3860,6 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 program.warnings.extend(_unused_mut_warnings(defn))
                 program.warnings.extend(_unused_loop_label_warnings(defn))
                 program.warnings.extend(_unreachable_warnings(defn, env))
-                program.warnings.extend(
-                    _trailing_value_warnings(defn, env, struct_vars))
 
     # Every method is installed by now, so a call from one method to
     # another resolves whichever order the two were written in.
@@ -3830,8 +3882,6 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                     raise DefinitionError(
                         f"in {defn.struct_name}.{method_def.name}: {finding}",
                         _finding_pos(finding) or _node_pos(method_def))
-            program.warnings.extend(
-                _trailing_value_warnings(method_def, env, struct_vars))
 
 
 def _check_locale():
@@ -4154,6 +4204,7 @@ def main():
                           param_muts=defn.param_muts, ret_unit=defn.ret_unit,
                           is_listable=defn.is_listable,
                           is_noreturn=defn.is_noreturn,
+                          is_ignorable=defn.is_ignorable,
                           preconditions=defn.preconditions,
                           postconditions=defn.postconditions)
             eval_inst = Evaluator(env)
@@ -4173,9 +4224,7 @@ def main():
             for message, _ in (_redundant_return_type_warning(defn)
                                + _unused_mut_warnings(defn)
                                + _unused_loop_label_warnings(defn)
-                               + _unreachable_warnings(defn, env)
-                               + _trailing_value_warnings(
-                                   defn, env, _struct_vars_of(defn, env))))
+                               + _unreachable_warnings(defn, env)))
 
         remaining = list(defn.expect_annotations)
         matched: list = []

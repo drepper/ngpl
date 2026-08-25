@@ -235,11 +235,14 @@ The Compiler
 Errors and Warnings
 -------------------
 
-[ ] If a curry-ed function call is not used or stored in a variable, this is an error and must
-    be flagged.
+[x] If a curry-ed function call is not used or stored in a variable, this is an error and must
+    be flagged.  Refused whichever way it is dropped -- the bare statement and '_ ← …' alike --
+    and refused standing last as well, since no return type would carry it anywhere.
 
-[ ] Add a function attribute @ignorable which indicates that the function return value can
-    be ignored.  by default, the value of all functions returning one must be used.
+[x] Add a function attribute @ignorable which indicates that the function return value can
+    be ignored.  by default, the value of all functions returning one must be used.  The
+    interpreter already refused an unread result; ngplc only warned, which is the one direction
+    the strict-subset rule forbids, and now refuses it too.
 
 
 Code Generation

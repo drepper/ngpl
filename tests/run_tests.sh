@@ -51,6 +51,7 @@ all_tests=(
     "$testdir"/test_layout.ngpl
     "$testdir"/test_block_forms.ngpl
     "$testdir"/test_if_value.ngpl
+    "$testdir"/test_ignorable.ngpl
     "$testdir"/test_match_value.ngpl
     "$testdir"/test_listable_lambda.ngpl
     "$testdir"/test_post_old.ngpl
