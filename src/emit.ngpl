@@ -220,6 +220,11 @@ struct Emit:
     // their own.  Set when a store is dropped and read by the load that
     // follows it, which the drop was only allowed because it knew.
     hold_slot : i64
+    // Which parameters are still sitting in the register they arrived
+    // in, one entry per argument register.  A parameter whose every
+    // read happens before anything can have written over that register
+    // never needs the spill the prologue would make for it.
+    pkeep : i64[]
     // jump tables: abs64 fixups, and the resolved code offsets the
     // tables hold, flattened with a start index per table
     jt_pos : i64[]
@@ -313,7 +318,32 @@ impl Emit:
         self.patch32(pos, v)
         self.patch32(pos + 4, v » 32)
 
+    // Forget that any parameter is in reg, reg having just been written
+    fn pkill(&mut self, reg : i64):
+        if #self.pkeep > 0:
+            foreach j := 0…#self.pkeep - 1:
+                if arg_reg(@dropunit(j)) = reg:
+                    self.pkeep[j] ← 0
+
+    fn pclear(&mut self):
+        while #self.pkeep > 0:
+            _ ← self.pkeep.pop() ?? 0
+
     fn load(&mut self, reg : i64, slot : i64):
+        // A parameter still in the register it came in: a move from
+        // there, or nothing at all where it is already where it is
+        // wanted.  The prologue skipped its spill on the strength of
+        // this, so the two decide the same way or neither is right.
+        if slot >= 0 and slot < @dropunit(#self.pkeep) and self.pkeep[slot × 1¤ptrdiff] = 1:
+            let src : i64 = arg_reg(slot)
+            if src ≠ reg:
+                self.b1(72 + (if src >= 8: 4 else: 0) + (if reg >= 8: 1 else: 0))
+                self.b1(137)
+                self.b1(192 + ((src & 7) « 3) + (reg & 7))
+            if reg = 0:
+                self.rax_slot ← slot
+            self.pkill(reg)
+            return
         if reg = 0:
             if self.rax_slot = slot:
                 return

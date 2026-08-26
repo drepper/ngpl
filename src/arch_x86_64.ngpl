@@ -69,6 +69,75 @@ fn se_can_drop(ir : IrFn, i : i64, n : i64, cnt : i64[], nv : i64) → bool:
     // every naming of it outside this operation is that one read
     cnt[d × 1¤ptrdiff] - se_here(ir, i, d) = se_here(ir, i + 1, d) and se_here(ir, i + 1, d) = 1
 
+// What the first operation reads, where that is known exactly.
+//
+// 1: it reads a into rax and writes no argument register before doing
+// so.  2: it reads a into rax and then b into rcx.  0: anything else,
+// about which nothing is assumed.
+//
+// Read off the emitter below as the other two lists were, by the
+// sequence of typed loads each branch begins with.  An operation that
+// writes rdx or another argument register later in its body is still
+// here: what matters is that the reads come first, and nothing is
+// believed about a register once the first operation is done.
+fn p_class(o : i64) → i64:
+    if o >= IR_CEQ and o <= IR_CGE:
+        return 2
+    if o = IR_ADD or o = IR_ADDW or o = IR_SUB or o = IR_SUBW or o = IR_MUL or o = IR_MULW or o = IR_BAND or o = IR_BORR or o = IR_BXORR or o = IR_SHLL or o = IR_SHRR or o = IR_MAXX or o = IR_MINN or o = IR_DIVV or o = IR_MODD or o = IR_AIDX or o = IR_AREF or o = IR_AGET:
+        return 2
+    if o = IR_MOV or o = IR_NEG or o = IR_NEGW or o = IR_BNOTT or o = IR_JZ or o = IR_JNZ or o = IR_RET or o = IR_APOP or o = IR_ALEN or o = IR_LDN or o = IR_FLD or o = IR_HLEN or o = IR_CHR or o = IR_NARROW:
+        return 1
+    0
+
+// Whether parameter j never needs the spill the prologue would make.
+//
+// It does not when every read of it in the whole function is in the
+// first operation: nothing has run before that could have written over
+// the register it arrived in, so the read can come from there.  Later
+// than that and the register may be anything -- the emitter writes many
+// of them as raw bytes, which no memo could follow -- so nothing beyond
+// the first operation is claimed.
+// Whether anything jumps to a label.
+fn p_jumped_to(ir : IrFn, n : i64, lab : i64) → bool:
+    let hit : mut bool = false
+    if n > 0:
+        foreach i := 0…n - 1:
+            let o : i64 = ir.op[i × 1¤ptrdiff]
+            // a table keeps its labels in extra, where this does not look
+            hit ← hit or o = IR_JTAB or o = IR_VTAB
+            hit ← hit or (o = IR_JMP and ir.ia[i × 1¤ptrdiff] = lab)
+            hit ← hit or ((o = IR_JZ or o = IR_JNZ) and ir.ib[i × 1¤ptrdiff] = lab)
+    hit
+
+// The first operation that does anything, and ⁻1 where control could
+// arrive before it.
+//
+// A body opens with the label a tail call comes back to.  Where nothing
+// jumps there it is not somewhere control arrives, and the registers
+// still hold what the caller put in them.  Where something does, the
+// tail call has written the parameters to their slots and the registers
+// say nothing about them -- so the spill those slots need is made.
+fn p_first(ir : IrFn, n : i64) → i64:
+    let i : mut i64 = 0
+    while i < n and ir.op[i × 1¤ptrdiff] = IR_LABEL:
+        if p_jumped_to(ir, n, ir.ia[i × 1¤ptrdiff]):
+            return ⁻1
+        i ← i + 1
+    if i >= n:
+        return ⁻1
+    i
+
+fn p_keep(ir : IrFn, j : i64, cnt : i64[], nv : i64, first : i64) → bool:
+    if first < 0 or j < 0 or j >= nv:
+        return false
+    let c : i64 = p_class(ir.op[first × 1¤ptrdiff])
+    if c = 0:
+        return false
+    let ha : i64 = if ir.ia[first × 1¤ptrdiff] = j: 1 else: 0
+    let hb : i64 = if c = 2 and ir.ib[first × 1¤ptrdiff] = j: 1 else: 0
+    let here : i64 = ha + hb
+    here > 0 and cnt[j × 1¤ptrdiff] = here
+
 fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
     assert(ir.nvregs >= np, "the frame covers the spilled arguments")
     em.begin_fn(ir.nlabels)
@@ -81,17 +150,26 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
     let frame : i64 = 8 × (ir.nvregs + nobj) + 8
     em.max_frame ← em.max_frame ⌈ (frame + 16)
     em.w32(frame)
+    let secnt : i64[] = se_counts(ir, ir.nvregs)
+    let nops : i64 = @dropunit(#ir.op)
+    let pfirst : i64 = p_first(ir, nops)
+    // one function's answer is not the next one's
+    em.pclear()
     let j : mut i64 = 0
     while j < np:
         if j < 6:
-            em.store(arg_reg(j), j)
+            if p_keep(ir, j, secnt, ir.nvregs, pfirst):
+                // read where it arrived; no spill is made for it
+                em.pkeep.push(1)
+            else:
+                em.pkeep.push(0)
+                em.store(arg_reg(j), j)
         else:
             em.b3(72, 139, 133)
             em.w32(16 + 8 × (j - 6))    // mov rax, [rbp+…]: a stack argument
             em.store(R_AX, j)
         j ← j + 1
-    let n : i64 = @dropunit(#ir.op)
-    let secnt : i64[] = se_counts(ir, ir.nvregs)
+    let n : i64 = nops
     let i : mut i64 = 0
     while i < n:
         let o : i64 = ir.op[i × 1¤ptrdiff]
@@ -791,6 +869,11 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             while e < span:
                 em.pj_labels.push(ir.extra[(b + 3 + e) × 1¤ptrdiff])
                 e ← e + 1
+        // Nothing is believed about an argument register past the
+        // first operation: many are written as raw bytes, which no
+        // memo could follow.
+        if i = pfirst:
+            em.pclear()
         i ← i + 1
     em.resolve_locals()
     em.resolve_jtabs()
