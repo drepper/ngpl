@@ -33,6 +33,12 @@ fn cc_of(o : i64, sgn : i64) → i64:
     147
 
 // Whether an operation begins by loading its first operand into rax.
+//
+// IR_RET is here for the same reason as the rest, though it opens with
+// a test of whether there is a value at all: where there is one, the
+// first thing it does is read it into rax.  Reading this list off the
+// emitter mechanically had left it out for the shape of that line, and
+// the cost was a store before every return that nothing ever read.
 // Only those can have the store before them dropped: the value stays in
 // rax and the memo hands it straight over, and any other opening would
 // write over rax before it was read.  Checked against the emitter
@@ -40,7 +46,7 @@ fn cc_of(o : i64, sgn : i64) → i64:
 fn se_reads_a_first(o : i64) → bool:
     if o >= IR_CEQ and o <= IR_CGE:
         return true
-    o = IR_MOV or o = IR_ADD or o = IR_ADDW or o = IR_SUB or o = IR_SUBW or o = IR_MUL or o = IR_MULW or o = IR_NEG or o = IR_NEGW or o = IR_BAND or o = IR_BORR or o = IR_BXORR or o = IR_BNOTT or o = IR_SHLL or o = IR_SHRR or o = IR_MAXX or o = IR_MINN or o = IR_DIVV or o = IR_MODD or o = IR_JZ or o = IR_JNZ or o = IR_AIDX or o = IR_AREF or o = IR_APOP or o = IR_AGET or o = IR_ALEN or o = IR_LDN or o = IR_FLD or o = IR_HLEN or o = IR_CHR or o = IR_NARROW
+    o = IR_MOV or o = IR_ADD or o = IR_ADDW or o = IR_SUB or o = IR_SUBW or o = IR_MUL or o = IR_MULW or o = IR_NEG or o = IR_NEGW or o = IR_BAND or o = IR_BORR or o = IR_BXORR or o = IR_BNOTT or o = IR_SHLL or o = IR_SHRR or o = IR_MAXX or o = IR_MINN or o = IR_DIVV or o = IR_MODD or o = IR_JZ or o = IR_JNZ or o = IR_AIDX or o = IR_AREF or o = IR_APOP or o = IR_AGET or o = IR_ALEN or o = IR_LDN or o = IR_FLD or o = IR_HLEN or o = IR_CHR or o = IR_NARROW or o = IR_RET
 
 // Whether the store this operation ends with may be dropped.
 //

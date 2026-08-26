@@ -410,7 +410,15 @@ fn g_retst(em : &mut Emit, tg : Target, slot : i64):
         Tgt.rv32: r32g_retst(&em, tg, slot)
         Tgt.x64: g_pioneer()
 
+// The answer, on its way out.  Where the store that would have put it
+// in memory was dropped, it is still in the accumulator, and moving it
+// from there is what reading the slot would have been.
 fn g_retld(em : &mut Emit, tg : Target, slot : i64):
+    if slot = em.hold_slot:
+        em.hold_slot ← ⁻1
+        g_retmov(&em, tg, RG_A)
+        return
+    em.hold_slot ← ⁻1
     match tg.id:
         Tgt.a64: a64g_retld(&em, tg, slot)
         Tgt.rv64: rvg_retld(&em, tg, slot)
