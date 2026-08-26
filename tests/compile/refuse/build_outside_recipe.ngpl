@@ -1,0 +1,8 @@
+// std.build's readers answer for a recipe, and outside one there is no
+// recipe for them to answer for.  The interpreter allows it and ngplc
+// does not, which is the direction the subset rule permits.
+@start
+@impure
+fn main():
+    foreach p := std.build.paths():
+        std.println("{}", p)

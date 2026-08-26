@@ -1,0 +1,13 @@
+// A program carries one recipe.  Two say different things about what
+// to build, and nothing chooses between them.
+@build
+fn build():
+    std.build.output("a")
+
+@build
+fn build2():
+    std.build.output("b")
+
+@start
+fn main():
+    _ ← 1

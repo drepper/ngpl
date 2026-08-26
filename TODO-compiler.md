@@ -151,7 +151,16 @@ The Compiler
     is a raise-site-by-raise-site job; each one converted makes another t9N test comparable.
     The compiler has no such trouble: it refuses before it runs.
 
-[ ] arm and riscv32 do not report a stack overflow.  The other four install a SIGSEGV
+[ ] arm and riscv32 do not report a stack overflow.  Attempted and reverted: the note below
+    names one gap and there are at least three.  Neither startup calls RT_SIGINIT at all, so
+    no handler is installed; neither records the guard's bounds at KB_GLO/KB_GHI, so the
+    handler's one comparison is against zeros; and the trampoline the note asks for is
+    written and works -- RT_SEGVTRAMP, entered by the kernel, putting r0/r1/r2 (a0/a1/a2)
+    in the cells the prologue reads and calling RT_SEGV -- but with those two missing it
+    changes nothing.  A fourth is likely: arm's rt_sigaction wants SA_RESTORER as i386's
+    does, and nothing writes one.  Do all four together or none.
+
+    The other four install a SIGSEGV
     handler at startup, on a sigaltstack, and compare the faulting address against the
     guard's bounds; these two cannot, because a handler is entered with the kernel's calling
     convention and they take a routine's arguments on the stack where the kernel puts them
@@ -196,12 +205,12 @@ The Compiler
     wants, and formatting first is what makes a line atomic.  Whichever it is, both
     implementations should do it.
 
-[ ] the compiler's own refusals have no home in the suite.  tests/compile/ requires every
-    program to compile and tests/output/ drives the interpreter, so what ngplc says no to --
-    a std.build outside a recipe, a recipe reaching past the subset, two @build functions --
-    is checked by hand today.  A tests/compile/refuse/*.ngpl + *.expected pair driven from
-    run_compile_tests.sh is the right shape, and the suite will want it for far more than
-    @build.
+[x] the compiler's own refusals have no home in the suite.  tests/compile/refuse/*.ngpl
+    with an *.expected beside each, driven from run_compile_tests.sh: the program must be
+    refused, and refused in those words.  The path is given relative to the tree so the
+    message is the same on every machine.  Four to begin with -- std.build outside a
+    recipe, two @build functions, a recipe taking parameters, a recipe reaching past the
+    subset -- and the shape takes far more than @build.
 
 [ ] (FULL) separate compilation: a source file compiled on its own into something the next
     step links, so a change to one file does not re-read the rest.  The module system is

@@ -356,6 +356,46 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# What the compiler says no to.
+#
+# tests/compile/ asks every program to compile and tests/output/ drives
+# the interpreter, so until now what ngplc refused was checked by hand.
+# A refusal is a promise as much as a translation is: it says this
+# program is not one, and in these words.  Each pair here is one
+# refusal and what it said.
+#
+# The path is given relative to the tree so that the message a
+# diagnostic carries is the same on every machine.
+# ---------------------------------------------------------------------------
+echo
+for r in "$testdir"/refuse/*.ngpl; do
+    [ -e "$r" ] || break
+    name=$(basename "$r" .ngpl)
+    rel="tests/compile/refuse/$name.ngpl"
+    ( cd "$topdir" && ngplc "$rel" -o "$workdir/$name.bin" ) \
+        > "$workdir/$name.raw" 2>&1
+    rc=$?
+    # Under --compiler=interp the compiler is itself a program the
+    # interpreter is checking, and it says its piece about src/ before
+    # it says anything about the file under test.  What is being pinned
+    # here is what it said about the file under test, so the comparison
+    # begins at the first line that names it.
+    sed -n "\|$rel|,\$p" "$workdir/$name.raw" > "$workdir/$name.refuse"
+    if [ $rc -eq 0 ]; then
+        echo "FAIL refuse/$name: the compiler accepted it"
+        fail=$((fail + 1))
+    elif ! diff -u "$testdir/refuse/$name.expected" "$workdir/$name.refuse" \
+            > "$workdir/$name.rdiff"; then
+        echo "FAIL refuse/$name: refused, but not in those words"
+        sed 's/^/    /' "$workdir/$name.rdiff" | head -8
+        fail=$((fail + 1))
+    else
+        echo "ok   refuse/$name"
+        pass=$((pass + 1))
+    fi
+done
+
 # diag_codes() is what @expect is held to, and it is a hand-written
 # list beside hand-written derrc/dwarn calls.  A number drawn but not
 # listed is an expectation that would quietly pass; a number listed but

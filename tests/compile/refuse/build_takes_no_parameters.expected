@@ -1,0 +1,3 @@
+tests/compile/refuse/build_takes_no_parameters.ngpl:3:10: error: the @build function takes no parameters
+  3 | fn build(n : i64):
+    |          ^

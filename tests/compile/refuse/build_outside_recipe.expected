@@ -1,0 +1,6 @@
+tests/compile/refuse/build_outside_recipe.ngpl:7:18: error: std.build belongs to the @build function; nothing else declares or reads a build
+  7 |     foreach p := std.build.paths():
+    |                  ^
+tests/compile/refuse/build_outside_recipe.ngpl:7:13: error: foreach walks an array, a string or a range; this is ∅
+  7 |     foreach p := std.build.paths():
+    |             ^

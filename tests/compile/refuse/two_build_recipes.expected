@@ -1,0 +1,3 @@
+tests/compile/refuse/two_build_recipes.ngpl:8:4: error: a program carries one @build function, and this is a second
+  8 | fn build2():
+    |    ^

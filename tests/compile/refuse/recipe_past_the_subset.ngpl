@@ -1,0 +1,11 @@
+// What a recipe may say is a subset the compiler evaluates, and a
+// construct outside it is refused by name rather than passed over.
+@build
+fn build():
+    let h : mut std.dict(str, i64) = ⸨⸩
+    h["x"] ← 1
+    std.build.output("a")
+
+@start
+fn main():
+    _ ← 1
