@@ -257,22 +257,24 @@ Errors and Warnings
 Code Generation
 ---------------
 
-[ ] the second half of moving the sign extension to the assignment.  A value is now kept only as
-    wide as its type says and IR_EXT puts the bits above it where a widening is written, which is
-    the rare path: t07_widths and t20_selfhost_features did not grow by a byte, and only a program
-    that spells out `let w : i64 = n` grew at all.  What remains is taking canon out at production,
-    and it is the larger half, because canon is also the reason every reader may treat a slot as
-    64 bits wide.  Each reader then has to work at the value's own width or extend first: on
-    x86-64 that is IR_BAND, IR_BNOTT, IR_SHLL, IR_CEQ..IR_CGE, IR_MAXX, IR_SEL, IR_DIVV, IR_JZ,
-    IR_CALL, IR_GSTORE, IR_AIDX, IR_AREF, IR_ASTO, IR_APOP, IR_AGET, IR_ALEN, IR_VTAB, IR_LDN,
-    IR_STN, IR_FLD, IR_FSTO, IR_HLEN, IR_CHR, IR_ENVG, IR_FCLOSE, IR_NARROW, IR_SATADD and
-    IR_JTAB, and IR_PRINTI and IR_PRINTU whose runtime reads the register whole, and then the
-    five targets behind the driver.  Three of them are wrong quietly rather than loudly -- a
-    right shift, a division and a comparison over stale bits answer, they do not crash -- so the
-    order is to make the width-sensitive readers width-correct one at a time, each measurable on
-    its own and two of them shorter for it, and to drop canon at production only once none is
-    left.  If that sweep proves too wide, the fallback is a dataflow pass that drops canon only
-    where every reader of the slot is width-safe, which keeps the invariant true by default.
+[ ] the sign extension is now asked for rather than assumed, and two readers still ask for it
+    more than they need to.  A value is kept only as wide as its type says, except that memory
+    always holds it canonical, so only a value travelling from one vreg to another can carry
+    stale bits above its width.  canon_wanted says which values something will read wider than
+    their type, and only those are put right where they are made.  What is left is to make the
+    readers that do not have to ask stop asking: a comparison is made at 64 bits and so wants
+    both its operands canonical, and so does a division, where working at the value's own width
+    would want neither and would be shorter code besides -- comparing at 32 bits is a byte less
+    than comparing at 64.  Each is measurable on its own, and each has to be done in the pioneer
+    and in the shared driver, which is where the earlier estimate of this work went wrong: it
+    counted twenty-eight readers to fix when all but three of them read a handle, an index that
+    is already a ptrdiff, or a value they only ever store.
+
+[ ] the compiler folds a shift the interpreter refuses: `let a : u32 = @wrap(305419896 « 25)`
+    is an overflow to the interpreter, which will not have the literal shifted past what u32
+    holds, and a value to the compiler, which wraps it.  Predates the canonical-form work -- the
+    binary built before it does the same -- and is the wrong direction for the rule the project
+    holds above all others, ngplc accepting what the bootstrap refuses.
 
 [ ] (FULL) Vulkan code generation for GPU offloading of vector/matrix/tensor operations.
 

@@ -222,6 +222,120 @@ fn se_counts(ir : IrFn, nv : i64) → i64[]:
                             cnt[v × 1¤ptrdiff] ← cnt[v × 1¤ptrdiff] + 1
     cnt
 
+// Which operands an operation reads wider than the value's own type.
+// Nearly nothing does: arithmetic is worked at the width, a store
+// keeps the bits it has room for, and a call and a return hand a value
+// on as what its type says it is.  What is left is the operation that
+// compares at 64, that divides at 64, that shifts bits down from
+// above, that indexes, that hashes, that prints, or that judges a
+// value against a range -- each of which believes the bits above the
+// width, so each of them wants them true.  The bit per operand is the
+// one ir_reads uses: 1 for ia, 2 for ib, 4 for ic, 8 for the vregs an
+// argument list names.  A number that is no opcode wants everything
+// true, which is the safe way to be wrong.
+fn ir_needs_canon() → i64[]:
+    [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3,
+    3, 3, 3, 3, 0, 0, 3, 3, 3, 3, 3, 3,
+    0, 0, 0, 0, 0, 1, 1, 0, 8, 0, 0, 1,
+    1, 1, 0, 0, 2, 0, 2, 2, 6, 0, 2, 0,
+    0, 0, 0, 0, 0, 1, 0, 0, 4, 1, 0, 6,
+    2, 2, 0, 1, 2, 0, 1, 0, 0, 0, 2, 0,
+    0, 0, 1, 0, 2, 6, 3, 3, 3, 3, 1, 0,
+    0, 2, 0, 0, 8, 0, 0, 1, 0, 2, 0, 0,
+    0, 0, 4, 0, 1, 0, 0, 0, 7,
+    ]
+
+// Which operands a result carries its bits above the width from.  A
+// copy is the plain case, and a bitwise operation is the other: and,
+// or and exclusive-or work every bit alike, so what stands above the
+// width of the answer is what stood above the width of what went in,
+// and neither has an operation of its own in which to be put right.
+// Wanting such a result canonical is wanting its operands canonical,
+// so the want travels back along these edges until it reaches an
+// operation that can honour it.
+fn ir_copies() → i64[]:
+    [
+    0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 3, 3, 3, 0, 0, 0,
+    0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 4, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ]
+
+// Which vregs some operation reads wider than their type, and so must
+// hold in canonical form.  Everything else may keep the bits above its
+// width as they fell, because nothing will look at them.
+@post(r: @dropunit(#r) = nv)
+fn canon_wanted(ir : IrFn, nv : i64) → i64[]:
+    let want : mut i64[] = []
+    if nv > 0:
+        foreach _ := 0…nv - 1:
+            want.push(0)
+    let nc : i64[] = ir_needs_canon()
+    let nnc : i64 = @dropunit(#nc)
+    let ne : i64 = @dropunit(#ir.extra)
+    let n : i64 = @dropunit(#ir.op)
+    if n > 0:
+        foreach i := 0…n - 1:
+            let o : i64 = ir.op[i × 1¤ptrdiff]
+            let m : i64 = if o >= 0 and o < nnc: nc[o × 1¤ptrdiff] else: 15
+            let a : i64 = ir.ia[i × 1¤ptrdiff]
+            let b : i64 = ir.ib[i × 1¤ptrdiff]
+            let c : i64 = ir.ic[i × 1¤ptrdiff]
+            if (m & 1) = 1 and a >= 0 and a < nv:
+                want[a × 1¤ptrdiff] ← 1
+            if (m & 2) = 2 and b >= 0 and b < nv:
+                want[b × 1¤ptrdiff] ← 1
+            if (m & 4) = 4 and c >= 0 and c < nv:
+                want[c × 1¤ptrdiff] ← 1
+            if (m & 8) = 8:
+                // an argument list, read the way se_counts reads one:
+                // how many at extra[b], then them
+                let k : i64 = if b >= 0 and b < ne: ir.extra[b × 1¤ptrdiff] else: ⁻1
+                let ok : bool = k >= 0 and b + 1 + k <= ne
+                let lo : i64 = if ok: b + 1 else: 0
+                let hi : i64 = if ok: b + k else: ne - 1
+                if hi >= lo:
+                    foreach j := lo…hi:
+                        let v : i64 = ir.extra[j × 1¤ptrdiff]
+                        if v >= 0 and v < nv:
+                            want[v × 1¤ptrdiff] ← 1
+    // A copy is canonical only where what it copied was, so the want
+    // travels back along the copies until it stops spreading.  It
+    // spreads to at most one vreg per copy per round, so the rounds
+    // are bounded by how many copies there are.
+    let cp : i64[] = ir_copies()
+    let ncp : i64 = @dropunit(#cp)
+    let again : mut bool = n > 0
+    while again:
+        again ← false
+        foreach i := 0…n - 1:
+            let o : i64 = ir.op[i × 1¤ptrdiff]
+            let m : i64 = if o >= 0 and o < ncp: cp[o × 1¤ptrdiff] else: 0
+            let dd : i64 = ir.id[i × 1¤ptrdiff]
+            let on : bool = m ≠ 0 and dd >= 0 and dd < nv and want[dd × 1¤ptrdiff] = 1
+            if on:
+                let a2 : i64 = ir.ia[i × 1¤ptrdiff]
+                let b2 : i64 = ir.ib[i × 1¤ptrdiff]
+                let c2 : i64 = ir.ic[i × 1¤ptrdiff]
+                if (m & 1) = 1 and a2 >= 0 and a2 < nv and want[a2 × 1¤ptrdiff] = 0:
+                    want[a2 × 1¤ptrdiff] ← 1
+                    again ← true
+                if (m & 2) = 2 and b2 >= 0 and b2 < nv and want[b2 × 1¤ptrdiff] = 0:
+                    want[b2 × 1¤ptrdiff] ← 1
+                    again ← true
+                if (m & 4) = 4 and c2 >= 0 and c2 < nv and want[c2 × 1¤ptrdiff] = 0:
+                    want[c2 × 1¤ptrdiff] ← 1
+                    again ← true
+    want
+
 // How often a vreg is named among one operation's own fields.
 fn se_here(ir : IrFn, i : i64, v : i64) → i64:
     (if ir.ia[i × 1¤ptrdiff] = v: 1 else: 0) + (if ir.ib[i × 1¤ptrdiff] = v: 1 else: 0) + (if ir.ic[i × 1¤ptrdiff] = v: 1 else: 0)

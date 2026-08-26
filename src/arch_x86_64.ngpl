@@ -173,6 +173,16 @@ fn p_keep(ir : IrFn, j : i64, cnt : i64[], nv : i64, first : i64, priv : i64) �
 // says the same of every function it might call, indexed as a call
 // target is.  A runtime routine, whose number is negative, and anything
 // past the end of that table take the architecture's convention.
+// A produced value is put into canonical form only where something
+// will read it wider than its type -- which canon_wanted has already
+// worked out.  Everywhere else the bits above the width may stay as
+// they fell, nothing being about to look at them.
+fn want_canon(cwant : i64[], d : i64, w : i64) → bool:
+    let bits : i64 = w & 255
+    if bits ≠ 8 and bits ≠ 16 and bits ≠ 32:
+        return false
+    d >= 0 and d < @dropunit(#cwant) and cwant[d × 1¤ptrdiff] = 1
+
 fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
            priv : i64, priv_of : i64[]):
     assert(ir.nvregs >= np, "the frame covers the spilled arguments")
@@ -187,6 +197,8 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
     em.max_frame ← em.max_frame ⌈ (frame + 16)
     em.w32(frame)
     let secnt : i64[] = se_counts(ir, ir.nvregs)
+    // which results anything will read wider than their type
+    let cwant : i64[] = canon_wanted(ir, ir.nvregs)
     let nops : i64 = @dropunit(#ir.op)
     let pfirst : i64 = p_first(ir, nops)
     // one function's answer is not the next one's
@@ -235,7 +247,8 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             em.opw(dw, if o = IR_ADD or o = IR_ADDW: 1 else: 41, 200)
             if ck:
                 em.jglobal(0, if sgn = 1: 128 else: 130, RT_OV)  // jo / jc
-            em.canon_at(w, dw)
+            if want_canon(cwant, d, w):
+                em.canon_at(w, dw)
             em.store(R_AX, d)
         elif o = IR_MUL or o = IR_MULW:
             em.load(R_AX, a)
@@ -246,19 +259,21 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
                 if o = IR_MUL and bits ≠ 8:
                     em.imulw(bits)
                     em.jglobal(0, 128, RT_OV)
-                    em.canon(w)
+                    if want_canon(cwant, d, w):
+                        em.canon(w)
                 else:
                     em.b4(72, 15, 175, 193)  // imul rax, rcx
                     if o = IR_MUL:
                         em.range_check(w)
-                    else:
+                    elif want_canon(cwant, d, w):
                         em.canon(w)
             else:
                 // mul sets carry when the half above the width is not
                 // zero, which for this width is exactly the overflow
                 em.opw(bits, 247, 225)       // mul rcx
                 em.jglobal(0, 130, RT_OV)    // jc
-                em.canon_at(w, bits)
+                if want_canon(cwant, d, w):
+                    em.canon_at(w, bits)
             em.store(R_AX, d)
         elif o = IR_NEG or o = IR_NEGW:
             em.load(R_AX, a)
@@ -269,7 +284,8 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
                 // alone, and for an unsigned one is anything but zero:
                 // at this width the machine says both
                 em.jglobal(0, if sgn = 1: 128 else: 130, RT_OV)
-            em.canon_at(w, nw)
+            if want_canon(cwant, d, w):
+                em.canon_at(w, nw)
             em.store(R_AX, d)
         elif o = IR_BAND or o = IR_BORR or o = IR_BXORR:
             em.load(R_AX, a)
@@ -284,7 +300,8 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
         elif o = IR_BNOTT:
             em.load(R_AX, a)
             em.b3(72, 247, 208)              // not rax
-            em.canon(w)
+            if want_canon(cwant, d, w):
+                em.canon(w)
             em.store(R_AX, d)
         elif o = IR_SHLL or o = IR_SHRR:
             em.load(R_AX, a)
@@ -294,7 +311,8 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             em.jglobal(0, 131, RT_SHIFT)     // jae
             if o = IR_SHLL:
                 em.b3(72, 211, 224)          // shl rax, cl
-                em.canon(w)
+                if want_canon(cwant, d, w):
+                    em.canon(w)
             else:
                 if sgn = 1:
                     em.b3(72, 211, 248)      // sar rax, cl
@@ -408,6 +426,10 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             if argc > 6:
                 em.b3(72, 129, 196)
                 em.w32(8 × (argc - 6))           // add rsp: the ride is over
+            // a returned value is only as wide as its type; where this
+            // caller wants more, this caller is the one that says so
+            if want_canon(cwant, d, w):
+                em.canon(w)
             em.store(R_AX, d)
         elif o = IR_FADDR:
             em.raxbar()
@@ -423,6 +445,8 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             em.load(R_R11, a)
             em.raxbar()
             em.b3(65, 255, 211)              // call r11
+            if want_canon(cwant, d, w):
+                em.canon(w)
             em.store(R_AX, d)
         elif o = IR_RET:
             if a ≠ ⁻1:

@@ -85,6 +85,18 @@ impl Lower:
         self.idd.push(d)
         self.iww.push(w)
 
+    // What a call hands back, as a width, so that the value can be put
+    // into canonical form where it lands rather than before it is
+    // returned: a returned value is only as wide as its type says, and
+    // the caller is the one that knows whether anything wants more.
+    // Nought for anything that is not a sized integer, which is every
+    // handle, and which canon leaves alone.
+    fn callw(&self, nid : i64) → i64:
+        let rt : i64 = self.tof(nid)
+        if ty_is_int(rt) and ty_bits(rt) < 64:
+            return width_of(rt)
+        0
+
     fn tmp(&mut self) → i64:
         let v : i64 = self.tnext
         self.tnext ← self.tnext + 1
@@ -1103,7 +1115,7 @@ impl Lower:
             foreach v := vregs:
                 self.extra.push(v)
             let d : i64 = self.tmp()
-            self.ir(IR_CALL, f, off, 0, d, 0)
+            self.ir(IR_CALL, f, off, 0, d, self.callw(nid))
             return d
         let av : i64 = self.lower_expr(base)
         let w : i64 = width_of(self.tof(nid))
@@ -1773,7 +1785,7 @@ impl Lower:
         foreach v := vregs:
             self.extra.push(v)
         let d : i64 = self.tmp()
-        self.ir(IR_CALL, f, off, 0, d, 0)
+        self.ir(IR_CALL, f, off, 0, d, self.callw(nid))
         d
 
     // What the type says is always true of one, asked of this one.  A

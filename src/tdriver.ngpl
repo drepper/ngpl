@@ -62,6 +62,8 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
     assert(ir.nvregs >= np, "the frame covers the spilled arguments")
     let n : i64 = @dropunit(#ir.op)
     let secnt : i64[] = se_counts(ir, ir.nvregs)
+    // which results anything will read wider than their type
+    let cwant : i64[] = canon_wanted(ir, ir.nvregs)
     em.begin_fn(ir.nlabels + 6 × n + 8)
     let sl : mut i64 = ir.nlabels
     // the objects that live in the frame take the slots past the vregs
@@ -103,7 +105,8 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
                     sl ← sl + 1
                     // a narrow result comes back in the shape its width
                     // leaves it; a word-wide one is already canonical
-                    t_canon(&em, tg, w)
+                    if want_canon(cwant, d, w):
+                        t_canon(&em, tg, w)
                 else:
                     if o = IR_ADD:
                         g_add3(&em, tg, RG_A, RG_A, RG_B)
@@ -116,14 +119,16 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
                     g_add3(&em, tg, RG_A, RG_A, RG_B)
                 else:
                     g_sub3(&em, tg, RG_A, RG_A, RG_B)
-                t_canon(&em, tg, w)
+                if want_canon(cwant, d, w):
+                    t_canon(&em, tg, w)
             g_sts(&em, tg, RG_A, d)
         elif o = IR_MUL or o = IR_MULW:
             g_lds(&em, tg, RG_A, a)
             g_lds(&em, tg, RG_B, b)
             if o = IR_MULW:
                 g_mul3(&em, tg, RG_A, RG_A, RG_B)
-                t_canon(&em, tg, w)
+                if want_canon(cwant, d, w):
+                    t_canon(&em, tg, w)
             elif bits = 64:
                 g_mulov(&em, tg, RG_A, RG_C, RG_A, RG_B, sgn, bits)
                 g_jz(&em, tg, RG_C, sl)
@@ -158,7 +163,7 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
                 if o = IR_NEG:
                     t_range_check(&em, tg, w, sl)
                     sl ← sl + 1
-                else:
+                elif want_canon(cwant, d, w):
                     t_canon(&em, tg, w)
             g_sts(&em, tg, RG_A, d)
         elif o = IR_BAND or o = IR_BORR or o = IR_BXORR:
@@ -174,7 +179,8 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
         elif o = IR_BNOTT:
             g_lds(&em, tg, RG_A, a)
             g_not2(&em, tg, RG_A, RG_A)
-            t_canon(&em, tg, w)
+            if want_canon(cwant, d, w):
+                t_canon(&em, tg, w)
             g_sts(&em, tg, RG_A, d)
         elif o = IR_SHLL or o = IR_SHRR:
             g_lds(&em, tg, RG_A, a)
@@ -187,7 +193,8 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
             sl ← sl + 1
             if o = IR_SHLL:
                 g_shl3(&em, tg, RG_A, RG_A, RG_B)
-                t_canon(&em, tg, w)
+                if want_canon(cwant, d, w):
+                    t_canon(&em, tg, w)
             elif sgn = 1:
                 g_sar3(&em, tg, RG_A, RG_A, RG_B)
             else:
@@ -274,6 +281,12 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
                 kr ← kr + 1
             g_call(&em, tg, a)
             g_retst(&em, tg, d)
+            // a returned value is only as wide as its type; where this
+            // caller wants more, this caller is the one that says so
+            if want_canon(cwant, d, w):
+                g_lds(&em, tg, RG_A, d)
+                t_canon(&em, tg, w)
+                g_sts(&em, tg, RG_A, d)
         elif o = IR_CALLI:
             let argci : i64 = ir.extra[b × 1¤ptrdiff]
             let ki : mut i64 = 0
@@ -283,6 +296,10 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
             g_lds(&em, tg, RG_C, a)
             g_calli(&em, tg, RG_C)
             g_retst(&em, tg, d)
+            if want_canon(cwant, d, w):
+                g_lds(&em, tg, RG_A, d)
+                t_canon(&em, tg, w)
+                g_sts(&em, tg, RG_A, d)
         elif o = IR_RET:
             if a ≠ ⁻1:
                 g_retld(&em, tg, a)
