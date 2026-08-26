@@ -257,18 +257,16 @@ Errors and Warnings
 Code Generation
 ---------------
 
-[ ] the sign extension is now asked for rather than assumed, and two readers still ask for it
-    more than they need to.  A value is kept only as wide as its type says, except that memory
-    always holds it canonical, so only a value travelling from one vreg to another can carry
-    stale bits above its width.  canon_wanted says which values something will read wider than
-    their type, and only those are put right where they are made.  What is left is to make the
-    readers that do not have to ask stop asking: a comparison is made at 64 bits and so wants
-    both its operands canonical, and so does a division, where working at the value's own width
-    would want neither and would be shorter code besides -- comparing at 32 bits is a byte less
-    than comparing at 64.  Each is measurable on its own, and each has to be done in the pioneer
-    and in the shared driver, which is where the earlier estimate of this work went wrong: it
-    counted twenty-eight readers to fix when all but three of them read a handle, an index that
-    is already a ptrdiff, or a value they only ever store.
+[ ] the pioneer compares and divides at the value's own width and so asks nothing of the bits
+    above it; the five targets behind the shared driver still ask.  canon_wanted takes freecmp
+    and freediv, a bit per width at which a target reads no further than the value goes, and the
+    driver passes nothing free because g_cmp3 and g_div3 take a signedness and not a width.
+    aarch64 is the one worth doing next -- it has cmp on the w registers, so thirty-two is free
+    there for the asking, and eight and sixteen are not.  riscv64 has no compare below its word
+    at all and would have to extend, which is the work being avoided, so it should keep asking.
+    Measured on x86-64 when the pioneer took it up: t07_widths 22 bytes smaller, a division
+    probe 21, a comparison probe 12, and a self-compile 0.46 s against 0.47 s before any of the
+    canonical-form work, so the analysis pays for itself.
 
 [ ] the compiler folds a shift the interpreter refuses: `let a : u32 = @wrap(305419896 « 25)`
     is an overflow to the interpreter, which will not have the literal shifted past what u32

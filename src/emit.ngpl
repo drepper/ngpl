@@ -645,6 +645,31 @@ impl Emit:
             else:
                 self.b4(72, 15, 190, 192)    // movsx rax, al
 
+    // canon, for a register the answer is not in.  Division wants both
+    // its operands brought up together, and only the one in rax has a
+    // form of its own.
+    @pre(reg = 0 or reg = 1 or reg = 2 or reg = 6 or reg = 7)
+    fn canon_reg(&mut self, w : i64, reg : i64):
+        let bits : i64 = w & 255
+        let sgn : i64 = w » 8
+        let rr : i64 = 192 + 8 × (reg & 7) + (reg & 7)
+        if bits = 64:
+            return
+        if sgn = 0:
+            if bits = 32:
+                self.b2(137, rr)             // mov r32, r32
+            elif bits = 16:
+                self.b4(72, 15, 183, rr)     // movzx r64, r16
+            else:
+                self.b4(72, 15, 182, rr)     // movzx r64, r8
+        else:
+            if bits = 32:
+                self.b3(72, 99, rr)          // movsxd r64, r32
+            elif bits = 16:
+                self.b4(72, 15, 191, rr)     // movsx r64, r16
+            else:
+                self.b4(72, 15, 190, rr)     // movsx r64, r8
+
     // the checked-arithmetic backstop: overflow leaves for the abort,
     // a branch never taken by a correct program
     fn range_check(&mut self, w : i64):

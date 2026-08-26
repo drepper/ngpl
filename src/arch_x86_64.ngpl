@@ -177,6 +177,30 @@ fn p_keep(ir : IrFn, j : i64, cnt : i64[], nv : i64, first : i64, priv : i64) �
 // will read it wider than its type -- which canon_wanted has already
 // worked out.  Everywhere else the bits above the width may stay as
 // they fell, nothing being about to look at them.
+// cmp rax against a value, at the width the division is running at.
+// The widest needs a register to hold the number; the others say it
+// where they stand.
+fn cmpimm_ax(em : &mut Emit, dw : i64, v : i64):
+    if dw = 16:
+        em.b2(102, 61)                       // cmp ax, imm16
+        em.b1(v & 255)
+        em.b1((v » 8) & 255)
+    elif dw = 32:
+        em.b1(61)                            // cmp eax, imm32
+        em.w32(v)
+    else:
+        em.movimm(R_R10, v)
+        em.b3(76, 57, 208)                   // cmp rax, r10
+
+// The least value a width holds, which over minus one is the division
+// the machine faults on rather than answers.
+fn least_at(dw : i64) → i64:
+    if dw = 16:
+        return ⁻32768
+    if dw = 32:
+        return ⁻2147483648
+    ⁻9223372036854775807 - 1
+
 fn want_canon(cwant : i64[], d : i64, w : i64) → bool:
     let bits : i64 = w & 255
     if bits ≠ 8 and bits ≠ 16 and bits ≠ 32:
@@ -198,7 +222,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
     em.w32(frame)
     let secnt : i64[] = se_counts(ir, ir.nvregs)
     // which results anything will read wider than their type
-    let cwant : i64[] = canon_wanted(ir, ir.nvregs)
+    let cwant : i64[] = canon_wanted(ir, ir.nvregs, 7, 7)
     let nops : i64 = @dropunit(#ir.op)
     let pfirst : i64 = p_first(ir, nops)
     // one function's answer is not the next one's
@@ -322,14 +346,16 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
         elif o >= IR_CEQ and o <= IR_CGE:
             em.load(R_AX, a)
             em.load(R_CX, b)
-            em.b3(72, 57, 200)               // cmp rax, rcx
+            // at the width the values are, so that what stands above it
+            // is not asked about and need not be true
+            em.opw(bits, 57, 200)            // cmp
             em.b3(15, cc_of(o, sgn), 192)    // setcc al
             em.b4(72, 15, 182, 192)          // movzx rax, al
             em.store(R_AX, d)
         elif o = IR_MAXX or o = IR_MINN:
             em.load(R_AX, a)
             em.load(R_CX, b)
-            em.b3(72, 57, 200)               // cmp rax, rcx
+            em.opw(bits, 57, 200)            // cmp, at the values' width
             let cmov : mut i64 = 0
             if o = IR_MAXX:
                 cmov ← if sgn = 1: 76 else: 66// cmovl / cmovb
@@ -347,7 +373,16 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
         elif o = IR_DIVV or o = IR_MODD:
             em.load(R_AX, a)
             em.load(R_CX, b)
-            em.b3(72, 133, 201)              // test rcx, rcx
+            // A byte-wide division is the one the machine puts in ah
+            // rather than in dx, so it is done a word wider with its
+            // operands brought up first.  Every other width divides as
+            // it stands, which is what lets what is above it be
+            // anything at all.
+            let dw : i64 = if bits = 8: 32 else: bits
+            if bits = 8:
+                em.canon(w)
+                em.canon_reg(w, R_CX)
+            em.opw(dw, 133, 201)             // test rcx, rcx
             em.b2(15, 133)                   // jnz over the default
             let p1 : i64 = em.here()
             em.w32(0)
@@ -358,13 +393,18 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             em.patch32(p1, em.here() - (p1 + 4))
             let p6 : mut i64 = ⁻1
             if sgn = 1:
-                if bits = 64:
-                    em.movimm(R_R10, ⁻9223372036854775807 - 1)
-                    em.b3(76, 57, 208)       // cmp rax, r10
+                // The least value over minus one has no quotient the
+                // type can hold, and dividing at the width the machine
+                // faults on it rather than working out something too
+                // large.  A byte is the exception, being divided wider
+                // than it is: 128 fits where it is worked out, and the
+                // range check below is what refuses it.
+                if bits ≠ 8:
+                    cmpimm_ax(&em, dw, least_at(dw))
                     em.b2(15, 133)           // jne
                     let p3 : i64 = em.here()
                     em.w32(0)
-                    em.b3(72, 131, 249)      // cmp rcx, ⁻1
+                    em.opw(dw, 131, 249)     // cmp rcx, ⁻1
                     em.b1(255)
                     if o = IR_MODD:
                         // The least integer divided by minus one has
@@ -385,18 +425,30 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
                     else:
                         em.jglobal(0, 132, RT_OV)    // je
                     em.patch32(p3, em.here() - (p3 + 4))
-                em.b2(72, 153)               // cqo
-                em.b3(72, 247, 249)          // idiv rcx
+                if dw = 16:
+                    em.b2(102, 153)          // cwd
+                elif dw = 32:
+                    em.b1(153)               // cdq
+                else:
+                    em.b2(72, 153)           // cqo
+                em.opw(dw, 247, 249)         // idiv rcx
             else:
                 em.b2(49, 210)               // xor edx, edx
-                em.b3(72, 247, 241)          // div rcx
+                em.opw(dw, 247, 241)         // div rcx
             if o = IR_MODD:
                 em.b3(72, 137, 208)          // mov rax, rdx
-            if sgn = 1 and bits ≠ 64:
+            if sgn = 1 and bits = 8:
+                // the wider division leaves its answer zero-extended
+                // into the rest of the register, and the range check
+                // reads the whole of it
+                em.canon(32 + 256)
                 em.range_check(w)
             em.patch32(p2, em.here() - (p2 + 4))
             if p6 ≠ ⁻1:
                 em.patch32(p6, em.here() - (p6 + 4))
+            // every way here leaves a value only as wide as its type
+            if want_canon(cwant, d, w):
+                em.canon(w)
             em.raxbar()
             em.store(R_AX, d)
         elif o = IR_JMP:

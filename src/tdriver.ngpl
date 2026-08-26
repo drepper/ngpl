@@ -63,7 +63,7 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
     let n : i64 = @dropunit(#ir.op)
     let secnt : i64[] = se_counts(ir, ir.nvregs)
     // which results anything will read wider than their type
-    let cwant : i64[] = canon_wanted(ir, ir.nvregs)
+    let cwant : i64[] = canon_wanted(ir, ir.nvregs, 0, 0)
     em.begin_fn(ir.nlabels + 6 × n + 8)
     let sl : mut i64 = ir.nlabels
     // the objects that live in the frame take the slots past the vregs

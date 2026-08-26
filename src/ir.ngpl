@@ -259,7 +259,7 @@ fn ir_copies() → i64[]:
     [
     0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 3, 3, 3, 0, 0, 0,
-    0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 3, 3, 6, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 4, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -272,8 +272,15 @@ fn ir_copies() → i64[]:
 // Which vregs some operation reads wider than their type, and so must
 // hold in canonical form.  Everything else may keep the bits above its
 // width as they fell, because nothing will look at them.
+// freecmp and freediv say at which widths this target's comparison and
+// division read no further than the value goes, as a bit per width:
+// 1 for eight, 2 for sixteen, 4 for thirty-two, which is the width
+// divided by eight.  Where an operation is free at a width it asks
+// nothing of the bits above, and the value it reads may keep whatever
+// stands there.
+@pre(freecmp >= 0 and freecmp <= 15 and freediv >= 0 and freediv <= 15)
 @post(r: @dropunit(#r) = nv)
-fn canon_wanted(ir : IrFn, nv : i64) → i64[]:
+fn canon_wanted(ir : IrFn, nv : i64, freecmp : i64, freediv : i64) → i64[]:
     let want : mut i64[] = []
     if nv > 0:
         foreach _ := 0…nv - 1:
@@ -285,7 +292,14 @@ fn canon_wanted(ir : IrFn, nv : i64) → i64[]:
     if n > 0:
         foreach i := 0…n - 1:
             let o : i64 = ir.op[i × 1¤ptrdiff]
-            let m : i64 = if o >= 0 and o < nnc: nc[o × 1¤ptrdiff] else: 15
+            let m0 : i64 = if o >= 0 and o < nnc: nc[o × 1¤ptrdiff] else: 15
+            // a comparison or a division that this target makes at the
+            // value's own width asks nothing of what stands above it
+            let wb : i64 = (ir.iw[i × 1¤ptrdiff] & 255) ÷ 8 ?? 0
+            let iscmp : bool = (o >= IR_CEQ and o <= IR_CGE) or o = IR_MAXX or o = IR_MINN
+            let isdiv : bool = o = IR_DIVV or o = IR_MODD
+            let free : bool = (iscmp and (freecmp & wb) ≠ 0) or (isdiv and (freediv & wb) ≠ 0)
+            let m : i64 = if free: 0 else: m0
             let a : i64 = ir.ia[i × 1¤ptrdiff]
             let b : i64 = ir.ib[i × 1¤ptrdiff]
             let c : i64 = ir.ic[i × 1¤ptrdiff]
