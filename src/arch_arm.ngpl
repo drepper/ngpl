@@ -274,6 +274,28 @@ fn a32_helper2(em : &mut Emit, rd : i64, rx : i64, ry : i64, target : i64):
     a32_call(&em, target)
     a32_stpair(&em, 0, 1, a32_cello(rd))
 
+fn a32_bcc(em : &mut Emit, cond : i64, lab : i64):
+    em.tf_pos.push(em.here())
+    em.tf_lab.push(lab)
+    em.tf_form.push(A32F_B24)
+    em.aw((cond « 28) + (A32_B & 268435455))
+
+// A clear carry is the borrow here, so an addition that did not
+// overflow leaves it clear and a subtraction that did not leaves it set.
+fn a32g_addchk(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+    a32_binprep(&em, rx, ry)
+    a32_dp(&em, A32_ADDS, 0, 0, 2)
+    a32_dp(&em, A32_ADC + 1048576, 1, 1, 3)
+    a32_stpair(&em, 0, 1, a32_cello(rd))
+    a32_bcc(&em, if sgn = 1: 7 else: A32_CC, lab)
+
+fn a32g_subchk(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+    a32_binprep(&em, rx, ry)
+    a32_dp(&em, A32_SUBS, 0, 0, 2)
+    a32_dp(&em, A32_SBC + 1048576, 1, 1, 3)
+    a32_stpair(&em, 0, 1, a32_cello(rd))
+    a32_bcc(&em, if sgn = 1: 7 else: A32_CS, lab)
+
 fn a32g_addov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     a32_binprep(&em, rx, ry)
     a32_dp(&em, A32_ADDS, 0, 0, 2)

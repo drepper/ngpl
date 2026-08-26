@@ -244,6 +244,16 @@ fn r32_helper2(em : &mut Emit, rd : i64, rx : i64, ry : i64, target : i64):
     r32_call(&em, target)
     r32_stpair(&em, 10, 11, r32_cello(rd))
 
+// No flags on this machine: the answer is a value, so it is made and
+// tested exactly as it was before there was another way.
+fn r32g_addchk(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+    r32g_addov(&em, tg, rd, RG_C, rx, ry, sgn, bits)
+    r32g_jz(&em, tg, RG_C, lab)
+
+fn r32g_subchk(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+    r32g_subov(&em, tg, rd, RG_C, rx, ry, sgn, bits)
+    r32g_jz(&em, tg, RG_C, lab)
+
 fn r32g_addov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     r32_ovhelper(&em, rd, rf, rx, ry, sgn, 0)
 fn r32g_subov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):

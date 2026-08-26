@@ -92,11 +92,12 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
                 // does; otherwise the arithmetic is done at a word and
                 // the range asked afterwards.
                 if g_narrow_ok(tg, bits):
+                    // the target says whether it can branch on what the
+                    // arithmetic set or has to make a value of it first
                     if o = IR_ADD:
-                        g_addov(&em, tg, RG_A, RG_C, RG_A, RG_B, sgn, bits)
+                        g_addchk(&em, tg, RG_A, RG_A, RG_B, sgn, bits, sl)
                     else:
-                        g_subov(&em, tg, RG_A, RG_C, RG_A, RG_B, sgn, bits)
-                    g_jz(&em, tg, RG_C, sl)
+                        g_subchk(&em, tg, RG_A, RG_A, RG_B, sgn, bits, sl)
                     g_call(&em, tg, RT_OV)
                     g_label(&em, tg, sl)
                     sl ← sl + 1

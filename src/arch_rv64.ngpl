@@ -211,6 +211,16 @@ fn rvg_div3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64
 fn rvg_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
     rv_R(&em, 1, rv_r(ry), rv_r(rx), if sgn = 1: 6 else: 7, rv_r(rd), 51)
 
+// No flags on this machine: the answer is a value, so it is made and
+// tested exactly as it was before there was another way.
+fn rvg_addchk(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+    rvg_addov(&em, tg, rd, RG_C, rx, ry, sgn, bits)
+    rvg_jz(&em, tg, RG_C, lab)
+
+fn rvg_subchk(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+    rvg_subov(&em, tg, rd, RG_C, rx, ry, sgn, bits)
+    rvg_jz(&em, tg, RG_C, lab)
+
 fn rvg_addov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     if sgn = 1:
         rv_R(&em, 0, rv_r(ry), rv_r(rx), 0, RV_S1, 51)      // t5 = x + y

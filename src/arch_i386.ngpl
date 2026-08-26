@@ -238,6 +238,28 @@ fn i3_helper2(em : &mut Emit, rd : i64, rx : i64, ry : i64, target : i64):
     i3_call(&em, target)
     i3_stpair(&em, 0, 2, i3_cello(rd))
 
+// The result is stored before the branch: a move does not touch the
+// flags, so what the arithmetic said is still there to be read.
+fn i3g_addchk(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+    i3_binprep(&em, rx, ry)
+    if bits < 64:
+        i3_opw(&em, bits, 1, 200)
+    else:
+        em.b2(1, 200)
+        em.b2(17, 218)
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+    i3_jcc(&em, if sgn = 1: 129 else: 131, lab)      // jno / jnc
+
+fn i3g_subchk(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+    i3_binprep(&em, rx, ry)
+    if bits < 64:
+        i3_opw(&em, bits, 41, 200)
+    else:
+        em.b2(41, 200)
+        em.b2(25, 218)
+    i3_stpair(&em, 0, 2, i3_cello(rd))
+    i3_jcc(&em, if sgn = 1: 129 else: 131, lab)      // jno / jnc
+
 fn i3g_addov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     i3_binprep(&em, rx, ry)
     if bits < 64:

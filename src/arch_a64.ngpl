@@ -413,6 +413,16 @@ fn a64g_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i6
     a64_msub(&em, a64_ar(rd), A64_T1, a64_ar(ry), a64_ar(rx))
 
 // rd ← rx op ry with rf saying whether the 64-bit result overflowed
+// VC where a signed one did not overflow; for an unsigned add a clear
+// carry says so, and for an unsigned subtract a set one does.
+fn a64g_addchk(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+    a64_addsr_w(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry), bits)
+    a64_bcond(&em, if sgn = 1: 7 else: A64_CC, lab)
+
+fn a64g_subchk(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+    a64_subsr_w(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry), bits)
+    a64_bcond(&em, if sgn = 1: 7 else: A64_CS, lab)
+
 fn a64g_addov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     a64_addsr_w(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry), bits)
     a64_cset(&em, a64_ar(rf), if sgn = 1: A64_VS else: A64_CS)

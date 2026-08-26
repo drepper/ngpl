@@ -247,6 +247,37 @@ fn g_narrow_ok(tg : Target, bits : i64) → bool:
         Tgt.i386: bits = 8 or bits = 16 or bits = 32
         _: false
 
+// Compute, and go to lab where it did not overflow.
+//
+// The overflow dispatchers above put a flag in a register and leave the
+// caller to test it, which is the only shape the two RISC-V targets can
+// use: they have no flags, so the answer is a value whichever way it is
+// asked.  The other three have a condition and can branch on it, and
+// putting it in a register first costs a cset or a setcc, the widening
+// of it, and a test -- most of what the arithmetic itself costs.
+//
+// Each target says which of the two it is, because the condition that
+// means "no overflow" belongs with the instruction that set it: on ARM
+// a clear carry is the borrow, so a subtraction that did not overflow
+// leaves it set, and an addition that did not leaves it clear.
+fn g_addchk(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+    match tg.id:
+        Tgt.a64: a64g_addchk(&em, tg, rd, rx, ry, sgn, bits, lab)
+        Tgt.rv64: rvg_addchk(&em, tg, rd, rx, ry, sgn, bits, lab)
+        Tgt.i386: i3g_addchk(&em, tg, rd, rx, ry, sgn, bits, lab)
+        Tgt.a32: a32g_addchk(&em, tg, rd, rx, ry, sgn, bits, lab)
+        Tgt.rv32: r32g_addchk(&em, tg, rd, rx, ry, sgn, bits, lab)
+        Tgt.x64: g_pioneer()
+
+fn g_subchk(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64, lab : i64):
+    match tg.id:
+        Tgt.a64: a64g_subchk(&em, tg, rd, rx, ry, sgn, bits, lab)
+        Tgt.rv64: rvg_subchk(&em, tg, rd, rx, ry, sgn, bits, lab)
+        Tgt.i386: i3g_subchk(&em, tg, rd, rx, ry, sgn, bits, lab)
+        Tgt.a32: a32g_subchk(&em, tg, rd, rx, ry, sgn, bits, lab)
+        Tgt.rv32: r32g_subchk(&em, tg, rd, rx, ry, sgn, bits, lab)
+        Tgt.x64: g_pioneer()
+
 fn g_addov(em : &mut Emit, tg : Target, rd : i64, rf : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     match tg.id:
         Tgt.a64: a64g_addov(&em, tg, rd, rf, rx, ry, sgn, bits)
