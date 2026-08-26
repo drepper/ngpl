@@ -225,6 +225,9 @@ struct Emit:
     // read happens before anything can have written over that register
     // never needs the spill the prologue would make for it.
     pkeep : i64[]
+    // whether the function being emitted takes the private convention,
+    // which decides where its own parameters arrived
+    self_priv : i64
     // jump tables: abs64 fixups, and the resolved code offsets the
     // tables hold, flattened with a start index per table
     jt_pos : i64[]
@@ -322,7 +325,7 @@ impl Emit:
     fn pkill(&mut self, reg : i64):
         if #self.pkeep > 0:
             foreach j := 0…#self.pkeep - 1:
-                if arg_reg(@dropunit(j)) = reg:
+                if arg_reg_p(@dropunit(j), self.self_priv) = reg:
                     self.pkeep[j] ← 0
 
     fn pclear(&mut self):
@@ -335,14 +338,17 @@ impl Emit:
         // wanted.  The prologue skipped its spill on the strength of
         // this, so the two decide the same way or neither is right.
         if slot >= 0 and slot < @dropunit(#self.pkeep) and self.pkeep[slot × 1¤ptrdiff] = 1:
-            let src : i64 = arg_reg(slot)
+            let src : i64 = arg_reg_p(slot, self.self_priv)
             if src ≠ reg:
                 self.b1(72 + (if src >= 8: 4 else: 0) + (if reg >= 8: 1 else: 0))
                 self.b1(137)
                 self.b1(192 + ((src & 7) « 3) + (reg & 7))
+                // whatever had been in the register it was moved into is
+                // gone; where nothing was written, nothing is gone, and
+                // a parameter read twice is still there for the second
+                self.pkill(reg)
             if reg = 0:
                 self.rax_slot ← slot
-            self.pkill(reg)
             return
         if reg = 0:
             if self.rax_slot = slot:
@@ -595,6 +601,28 @@ impl Emit:
             self.b3(15, 175, 193)
         else:
             self.b4(72, 15, 175, 193)
+
+    // The canonical form of a value an operation just made at its own
+    // width.
+    //
+    // A slot holds the canonical form -- sign- or zero-extended to the
+    // word -- and everything downstream is built on that: a widening
+    // emits nothing at all, because the wider read of a narrower slot
+    // is already right.  So canon is not decoration and cannot simply
+    // be dropped.
+    //
+    // One case of it is free.  A 32-bit operation on this machine
+    // zero-extends into the whole register, so for an unsigned 32-bit
+    // type the answer is already canonical and the `mov eax, eax` that
+    // would say so says nothing.  A signed one still needs its movslq,
+    // and 8 and 16 bits need theirs either way, those widths leaving
+    // the rest of the register as it was.
+    @pre(done_at = 8 or done_at = 16 or done_at = 32 or done_at = 64)
+    fn canon_at(&mut self, w : i64, done_at : i64):
+        let bits : i64 = w & 255
+        if done_at = bits and bits = 32 and (w » 8) = 0:
+            return
+        self.canon(w)
 
     // narrow the canonical 64-bit value in rax back into its width
     fn canon(&mut self, w : i64):

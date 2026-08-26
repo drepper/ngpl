@@ -16,6 +16,29 @@ fn arg_reg(j : i64) → i64:
     if j = 4: return R_R8
     R_R9
 
+// Where an argument travels, for a function nobody outside can call.
+//
+// The architecture puts the first two in rdi and rsi, and this emitter
+// works in rax and rcx: every operation reads its first operand into
+// rax and its second into rcx.  So a private function takes them there
+// instead, and the move between the two disappears at both ends -- the
+// caller has the value where the callee wants it, and the callee wants
+// it where the arithmetic already looks.
+//
+// The rest keep their places as far as they can, rdi and rsi taking the
+// two the front of the list gave up.  Six arguments still travel in
+// registers; what changes is which.
+@pre(j >= 0)
+fn arg_reg_p(j : i64, priv : i64) → i64:
+    if priv = 0:
+        return arg_reg(j)
+    if j = 0: return R_AX
+    if j = 1: return R_CX
+    if j = 2: return R_DX
+    if j = 3: return R_SI
+    if j = 4: return R_DI
+    R_R8
+
 // the setcc condition for a comparison at a signedness
 @pre(sgn = 0 or sgn = 1)
 @post(r: r >= 146 and r <= 159)
@@ -127,18 +150,31 @@ fn p_first(ir : IrFn, n : i64) → i64:
         return ⁻1
     i
 
-fn p_keep(ir : IrFn, j : i64, cnt : i64[], nv : i64, first : i64) → bool:
+fn p_keep(ir : IrFn, j : i64, cnt : i64[], nv : i64, first : i64, priv : i64) → bool:
     if first < 0 or j < 0 or j >= nv:
         return false
     let c : i64 = p_class(ir.op[first × 1¤ptrdiff])
     if c = 0:
         return false
-    let ha : i64 = if ir.ia[first × 1¤ptrdiff] = j: 1 else: 0
-    let hb : i64 = if c = 2 and ir.ib[first × 1¤ptrdiff] = j: 1 else: 0
+    // The first operand is read into rax, which writes over whatever was
+    // there.  Where the second operand is the parameter that arrived in
+    // rax -- which only the private convention puts there -- it would be
+    // gone before it was read, so neither is kept and both are spilled.
+    let ia0 : i64 = ir.ia[first × 1¤ptrdiff]
+    let ib0 : i64 = ir.ib[first × 1¤ptrdiff]
+    if c = 2 and ia0 ≠ ib0 and ib0 >= 0 and ib0 < 6 and arg_reg_p(ib0, priv) = R_AX:
+        return false
+    let ha : i64 = if ia0 = j: 1 else: 0
+    let hb : i64 = if c = 2 and ib0 = j: 1 else: 0
     let here : i64 = ha + hb
     here > 0 and cnt[j × 1¤ptrdiff] = here
 
-fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
+// priv says whether this function takes the private convention; priv_of
+// says the same of every function it might call, indexed as a call
+// target is.  A runtime routine, whose number is negative, and anything
+// past the end of that table take the architecture's convention.
+fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
+           priv : i64, priv_of : i64[]):
     assert(ir.nvregs >= np, "the frame covers the spilled arguments")
     em.begin_fn(ir.nlabels)
     em.b1(85)                       // push rbp
@@ -155,15 +191,16 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
     let pfirst : i64 = p_first(ir, nops)
     // one function's answer is not the next one's
     em.pclear()
+    em.self_priv ← priv
     let j : mut i64 = 0
     while j < np:
         if j < 6:
-            if p_keep(ir, j, secnt, ir.nvregs, pfirst):
+            if p_keep(ir, j, secnt, ir.nvregs, pfirst, priv):
                 // read where it arrived; no spill is made for it
                 em.pkeep.push(1)
             else:
                 em.pkeep.push(0)
-                em.store(arg_reg(j), j)
+                em.store(arg_reg_p(j, priv), j)
         else:
             em.b3(72, 139, 133)
             em.w32(16 + 8 × (j - 6))    // mov rax, [rbp+…]: a stack argument
@@ -194,10 +231,11 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             // machine's flag is the answer; a wrapping one at 64, being
             // narrowed afterwards in either case.
             let ck : bool = o = IR_ADD or o = IR_SUB
-            em.opw(if ck: bits else: 64, if o = IR_ADD or o = IR_ADDW: 1 else: 41, 200)
+            let dw : i64 = if ck: bits else: 64
+            em.opw(dw, if o = IR_ADD or o = IR_ADDW: 1 else: 41, 200)
             if ck:
                 em.jglobal(0, if sgn = 1: 128 else: 130, RT_OV)  // jo / jc
-            em.canon(w)
+            em.canon_at(w, dw)
             em.store(R_AX, d)
         elif o = IR_MUL or o = IR_MULW:
             em.load(R_AX, a)
@@ -220,17 +258,18 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
                 // zero, which for this width is exactly the overflow
                 em.opw(bits, 247, 225)       // mul rcx
                 em.jglobal(0, 130, RT_OV)    // jc
-                em.canon(w)
+                em.canon_at(w, bits)
             em.store(R_AX, d)
         elif o = IR_NEG or o = IR_NEGW:
             em.load(R_AX, a)
-            em.opw(if o = IR_NEG: bits else: 64, 247, 216)   // neg
+            let nw : i64 = if o = IR_NEG: bits else: 64
+            em.opw(nw, 247, 216)                            // neg
             if o = IR_NEG:
                 // overflow for a signed negation is the least value
                 // alone, and for an unsigned one is anything but zero:
                 // at this width the machine says both
                 em.jglobal(0, if sgn = 1: 128 else: 130, RT_OV)
-            em.canon(w)
+            em.canon_at(w, nw)
             em.store(R_AX, d)
         elif o = IR_BAND or o = IR_BORR or o = IR_BXORR:
             em.load(R_AX, a)
@@ -352,6 +391,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
             em.set_label(a)
         elif o = IR_CALL:
             let argc : i64 = ir.extra[b × 1¤ptrdiff]
+            let cp : i64 = if a >= 0 and a < @dropunit(#priv_of): priv_of[a × 1¤ptrdiff] else: 0
             if argc > 6:
                 // the seventh argument onward rides the stack, pushed
                 // last-first so the seventh sits at [rbp+16]
@@ -362,7 +402,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[]):
                     x ← x - 1
             let k : mut i64 = 0
             while k < (argc ⌊ 6):
-                em.load(arg_reg(k), ir.extra[(b + 1 + k) × 1¤ptrdiff])
+                em.load(arg_reg_p(k, cp), ir.extra[(b + 1 + k) × 1¤ptrdiff])
                 k ← k + 1
             em.jglobal(232, ⁻1, a)
             if argc > 6:

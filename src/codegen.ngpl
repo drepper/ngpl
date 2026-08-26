@@ -263,6 +263,14 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // emitter's own scratch -- so it grants nothing, and the log says
     // six because six is what it uses.
     let ab : Abi = analyze_abi(a, toks, 6, 0, want_log)
+    // Who takes the private convention, indexed as a call target is.
+    // A synthetic past the end of this -- a lambda, a shim, the test
+    // driver -- takes the architecture's, as anything reached through
+    // an address must.
+    let privs : mut i64[] = []
+    if #a.fns > 0:
+        foreach i := 0…#a.fns - 1:
+            privs.push(ab.private[i])
     let strs0 : mut str[] = []
     foreach s := a.strs:
         strs0.push(s)
@@ -280,7 +288,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                               sf_pos: [], sf_str: [], sd_pos: [], sd_str: [],
                               df_pos: [], df_off: [], labels: [],
                               lf_pos: [], lf_label: [], fn_off: [],
-                              rt_off: [], rax_slot: ⁻1, drop_slot: ⁻1, hold_slot: ⁻1, pkeep: [],
+                              rt_off: [], rax_slot: ⁻1, drop_slot: ⁻1, hold_slot: ⁻1, pkeep: [], self_priv: 0,
                               jt_pos: [], jt_id: [], jt_count: 0,
                               jt_starts: [], jt_is_code: [], jt_entries: [],
                               pj_id: [],
@@ -509,32 +517,32 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             // a generic no call shaped: an empty body stands in
             let sir := lower_stub_fn(&lw, np)
             em.fn_off.push(em.here())
-            emit_fn(&em, sir, np, lw.strs)
+            emit_fn(&em, sir, np, lw.strs, privs[i], privs)
         else:
             let ir := lower_fn(&lw, a, chk, f)
             em.fn_off.push(em.here())
-            emit_fn(&em, ir, np, lw.strs)
+            emit_fn(&em, ir, np, lw.strs, privs[i], privs)
     if ninit > 0:
         let gir := lower_ginit(&lw, a, chk)
         em.fn_off.push(em.here())
-        emit_fn(&em, gir, 0, lw.strs)
+        emit_fn(&em, gir, 0, lw.strs, 0, privs)
     let fir := lower_argsfilter(&lw)
     em.fn_off.push(em.here())
-    emit_fn(&em, fir, 0, lw.strs)
+    emit_fn(&em, fir, 0, lw.strs, 0, privs)
     let dir := lower_testdriver(&lw, a)
     em.fn_off.push(em.here())
-    emit_fn(&em, dir, 0, lw.strs)
+    emit_fn(&em, dir, 0, lw.strs, 0, privs)
     if #chk.lams > 0:
         foreach j := 0…#chk.lams - 1:
             let lir := lower_lambda_fn(&lw, a, chk, @dropunit(j))
             em.fn_off.push(em.here())
             let lnp : i64 = a.extra[a.na[chk.lams[j] × 1¤ptrdiff] × 1¤ptrdiff]
-            emit_fn(&em, lir, lnp + 1, lw.strs)
+            emit_fn(&em, lir, lnp + 1, lw.strs, 0, privs)
     if #chk.psfn > 0:
         foreach j := 0…#chk.psfn - 1:
             let sir := lower_shim_fn(&lw, chk, @dropunit(j))
             em.fn_off.push(em.here())
-            emit_fn(&em, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs)
+            emit_fn(&em, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs, 0, privs)
     // every function was emitted and left its offset behind
     assert(@dropunit(#em.fn_off) = nfns + g1 + 2 + @dropunit(#chk.lams) + @dropunit(#chk.psfn), "one code offset per function")
     // What the program calls, and what that calls in turn.  Everything

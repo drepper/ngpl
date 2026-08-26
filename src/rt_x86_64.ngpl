@@ -1881,31 +1881,31 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     // would know that the IR does not, and rt_hash.ngpl and
     // rt_sha256.ngpl write them once for all six.
     em.rt_begin(RT_HSTART)
-    emit_fn(&em, rt_hstart_ir(), 1, lw.strs)
+    emit_fn(&em, rt_hstart_ir(), 1, lw.strs, 0, [])
     em.rt_begin(RT_HUPDATE)
-    emit_fn(&em, rt_hupdate_ir(&lw), 2, lw.strs)
+    emit_fn(&em, rt_hupdate_ir(&lw), 2, lw.strs, 0, [])
     em.rt_begin(RT_HFINAL)
-    emit_fn(&em, rt_hfinal_ir(&lw), 2, lw.strs)
+    emit_fn(&em, rt_hfinal_ir(&lw), 2, lw.strs, 0, [])
     em.rt_begin(RT_SHA256INIT)
-    emit_fn(&em, rt_sha256init_ir(), 1, lw.strs)
+    emit_fn(&em, rt_sha256init_ir(), 1, lw.strs, 0, [])
     em.rt_begin(RT_SHA256BLK)
-    emit_fn(&em, rt_sha256blk_ir(), 1, lw.strs)
+    emit_fn(&em, rt_sha256blk_ir(), 1, lw.strs, 0, [])
     em.rt_begin(RT_SHA256FIN)
-    emit_fn(&em, rt_sha256fin_ir(), 2, lw.strs)
+    emit_fn(&em, rt_sha256fin_ir(), 2, lw.strs, 0, [])
 
     // int's arithmetic is arithmetic and nothing else, so it is
     // written once in rt_bigint.ngpl and emitted here as it is
     // everywhere else.
     em.rt_begin(RT_BIGFROM)
-    emit_fn(&em, rt_bigfrom_ir(), 1, lw.strs)
+    emit_fn(&em, rt_bigfrom_ir(), 1, lw.strs, 0, [])
     em.rt_begin(RT_BIGCMP)
-    emit_fn(&em, rt_bigcmp_ir(), 2, lw.strs)
+    emit_fn(&em, rt_bigcmp_ir(), 2, lw.strs, 0, [])
     em.rt_begin(RT_BIGADD)
-    emit_fn(&em, rt_bigadd_ir(), 3, lw.strs)
+    emit_fn(&em, rt_bigadd_ir(), 3, lw.strs, 0, [])
     em.rt_begin(RT_BIGMUL)
-    emit_fn(&em, rt_bigmul_ir(), 2, lw.strs)
+    emit_fn(&em, rt_bigmul_ir(), 2, lw.strs, 0, [])
     em.rt_begin(RT_BIGPRINT)
-    emit_fn(&em, rt_bigprint_ir(), 1, lw.strs)
+    emit_fn(&em, rt_bigprint_ir(), 1, lw.strs, 0, [])
 
     // ------------------------------------------------------------------
     // The stack running out
