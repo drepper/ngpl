@@ -173,7 +173,7 @@ fn rvg_sar3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
 fn rvg_shl3i(em : &mut Emit, tg : Target, rd : i64, rs : i64, imm : i64):
     rv_I(&em, imm, rv_r(rs), 1, rv_r(rd), 19)               // slli
 
-fn rvg_cmp3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64):
+fn rvg_cmp3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64, bits : i64):
     let x : i64 = rv_r(rx)
     let y : i64 = rv_r(ry)
     let d : i64 = rv_r(rd)
@@ -205,10 +205,10 @@ fn rvg_sel4(em : &mut Emit, tg : Target, rd : i64, rc : i64, rx : i64, ry : i64)
     rv_R(&em, 0, RV_S0, rv_r(ry), 7, RV_S0, 51)             // and t4, ry, t4
     rv_R(&em, 0, RV_S0, RV_S1, 6, rv_r(rd), 51)             // or rd
 
-fn rvg_div3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
+fn rvg_div3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     rv_R(&em, 1, rv_r(ry), rv_r(rx), if sgn = 1: 4 else: 5, rv_r(rd), 51)
 
-fn rvg_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
+fn rvg_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     rv_R(&em, 1, rv_r(ry), rv_r(rx), if sgn = 1: 6 else: 7, rv_r(rd), 51)
 
 // No flags on this machine: the answer is a value, so it is made and

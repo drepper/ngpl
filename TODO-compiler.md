@@ -257,16 +257,21 @@ Errors and Warnings
 Code Generation
 ---------------
 
-[ ] the pioneer compares and divides at the value's own width and so asks nothing of the bits
-    above it; the five targets behind the shared driver still ask.  canon_wanted takes freecmp
-    and freediv, a bit per width at which a target reads no further than the value goes, and the
-    driver passes nothing free because g_cmp3 and g_div3 take a signedness and not a width.
-    aarch64 is the one worth doing next -- it has cmp on the w registers, so thirty-two is free
-    there for the asking, and eight and sixteen are not.  riscv64 has no compare below its word
-    at all and would have to extend, which is the work being avoided, so it should keep asking.
-    Measured on x86-64 when the pioneer took it up: t07_widths 22 bytes smaller, a division
-    probe 21, a comparison probe 12, and a self-compile 0.46 s against 0.47 s before any of the
-    canonical-form work, so the analysis pays for itself.
+[ ] x86-64 compares and divides at the value's own width and aarch64 compares at it; nothing
+    else does, and the reasons are worth keeping.  canon_wanted takes freecmp and freediv, a bit
+    per width at which a target reads no further than the value goes, and t_freecmp/t_freediv in
+    tdriver.ngpl name them.  riscv64 has no compare below its word at all and would have to widen
+    the value first, which is the work being avoided.  The three whose word is thirty-two bits
+    hold such a value canonical for nothing, so there is nothing there to free.  aarch64 can
+    divide at thirty-two but should not: sdiv answers the least value over minus one wrongly
+    rather than refusing it, and the check that must then stand in front of every such division
+    costs two constants the machine builds a piece at a time -- measured at 160 bytes on a
+    division probe and 60 on t07_widths, against the range check it would replace.
+
+    What is left is worth doing only where it is measured first.  Freeing a comparison is worth
+    20 bytes where a value is read by nothing else, and nothing at all where the value is an
+    array element or a call argument, which are canonical for their own reasons: the common case
+    is already paid for, and it is the arithmetic-into-comparison shape that gains.
 
 [ ] the compiler folds a shift the interpreter refuses: `let a : u32 = @wrap(305419896 « 25)`
     is an overflow to the interpreter, which will not have the literal shifted past what u32

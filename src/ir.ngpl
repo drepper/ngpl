@@ -298,8 +298,14 @@ fn canon_wanted(ir : IrFn, nv : i64, freecmp : i64, freediv : i64) → i64[]:
             let wb : i64 = (ir.iw[i × 1¤ptrdiff] & 255) ÷ 8 ?? 0
             let iscmp : bool = (o >= IR_CEQ and o <= IR_CGE) or o = IR_MAXX or o = IR_MINN
             let isdiv : bool = o = IR_DIVV or o = IR_MODD
-            let free : bool = (iscmp and (freecmp & wb) ≠ 0) or (isdiv and (freediv & wb) ≠ 0)
-            let m : i64 = if free: 0 else: m0
+            let cfree : bool = iscmp and (freecmp & wb) ≠ 0
+            // A division freed at its width still wants a canonical
+            // divisor: what stands for nought is asked before the
+            // division is reached, by a test that reads the register
+            // whole, and a nought with anything above it would not
+            // look like one.
+            let dfree : bool = isdiv and (freediv & wb) ≠ 0
+            let m : i64 = if cfree: 0 else: (if dfree: 2 else: m0)
             let a : i64 = ir.ia[i × 1¤ptrdiff]
             let b : i64 = ir.ib[i × 1¤ptrdiff]
             let c : i64 = ir.ic[i × 1¤ptrdiff]

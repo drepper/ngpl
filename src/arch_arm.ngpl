@@ -217,7 +217,7 @@ fn a32g_sar3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64):
     a32_dps(&em, A32_MOVR, 1, 0, 1, 2, 2)            // asr r1, r1, r2
     a32_stpair(&em, 0, 1, a32_cello(rd))
 
-fn a32g_cmp3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64):
+fn a32g_cmp3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64, bits : i64):
     a32_binprep(&em, rx, ry)
     if cond = CC_EQ or cond = CC_NE:
         a32_dp(&em, A32_EOR, 0, 0, 2)
@@ -260,10 +260,10 @@ fn a32g_sel4(em : &mut Emit, tg : Target, rd : i64, rc : i64, rx : i64, ry : i64
     em.aw((A32_EQ « 28) + (A32_MOVR & 268435455) + (1 « 12) + 5)
     a32_stpair(&em, 0, 1, a32_cello(rd))
 
-fn a32g_div3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
+fn a32g_div3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     a32_helper2(&em, rd, rx, ry, if sgn = 1: RT_DIVS64 else: RT_DIVU64)
 
-fn a32g_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
+fn a32g_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     a32_helper2(&em, rd, rx, ry, if sgn = 1: RT_MODS64 else: RT_MODU64)
 
 fn a32_helper2(em : &mut Emit, rd : i64, rx : i64, ry : i64, target : i64):

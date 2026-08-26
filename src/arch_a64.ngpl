@@ -149,9 +149,17 @@ fn a64_smulh(em : &mut Emit, rd : i64, rn : i64, rm : i64):
 fn a64_umulh(em : &mut Emit, rd : i64, rn : i64, rm : i64):
     em.aw(2613083136 + (rm « 16) + (rn « 5) + rd)
 fn a64_sdiv(em : &mut Emit, rd : i64, rn : i64, rm : i64):
-    em.aw(2596277248 + (rm « 16) + (rn « 5) + rd)
+    a64_sdivw(&em, rd, rn, rm, 1)
+
+@pre(sf = 0 or sf = 1)
+fn a64_sdivw(em : &mut Emit, rd : i64, rn : i64, rm : i64, sf : i64):
+    em.aw(448793600 + sf × 2147483648 + (rm « 16) + (rn « 5) + rd)
 fn a64_udiv(em : &mut Emit, rd : i64, rn : i64, rm : i64):
-    em.aw(2596276224 + (rm « 16) + (rn « 5) + rd)
+    a64_udivw(&em, rd, rn, rm, 1)
+
+@pre(sf = 0 or sf = 1)
+fn a64_udivw(em : &mut Emit, rd : i64, rn : i64, rm : i64, sf : i64):
+    em.aw(448792576 + sf × 2147483648 + (rm « 16) + (rn « 5) + rd)
 fn a64_msub(em : &mut Emit, rd : i64, rn : i64, rm : i64, ra : i64):
     em.aw(2600501248 + (rm « 16) + (ra « 10) + (rn « 5) + rd)
 fn a64_andr(em : &mut Emit, rd : i64, rn : i64, rm : i64):
@@ -171,7 +179,15 @@ fn a64_lsrv(em : &mut Emit, rd : i64, rn : i64, rm : i64):
 fn a64_asrv(em : &mut Emit, rd : i64, rn : i64, rm : i64):
     em.aw(2596284416 + (rm « 16) + (rn « 5) + rd)
 fn a64_cmpr(em : &mut Emit, rn : i64, rm : i64):
-    em.aw(3942645791 + (rm « 16) + (rn « 5))
+    a64_cmprw(&em, rn, rm, 1)
+
+// The same compare made at either width, sf being the bit that says
+// which: set for the whole register, clear for its lower half.  A
+// value only as wide as its type is compared there, and then what
+// stands above it is not asked about.
+@pre(sf = 0 or sf = 1)
+fn a64_cmprw(em : &mut Emit, rn : i64, rm : i64, sf : i64):
+    em.aw(1795162143 + sf × 2147483648 + (rm « 16) + (rn « 5))
 fn a64_movr(em : &mut Emit, rd : i64, rm : i64):
     em.aw(2852127712 + (rm « 16) + rd)                      // orr rd, xzr, rm
 fn a64_addi(em : &mut Emit, rd : i64, rn : i64, imm : i64):
@@ -390,8 +406,12 @@ fn a64_cc(cond : i64, sgn : i64) → i64:
     A64_CS
 
 // rd ← rx rel ry, materialized as 0 or 1
-fn a64g_cmp3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64):
-    a64_cmpr(&em, a64_ar(rx), a64_ar(ry))
+// This machine compares at either width, so a thirty-two bit value is
+// compared as one and what stands above it is never asked about.  The
+// narrower widths have no compare of their own and are compared whole,
+// which is why they are not among the widths the driver calls free.
+fn a64g_cmp3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64, bits : i64):
+    a64_cmprw(&em, a64_ar(rx), a64_ar(ry), if bits = 32: 0 else: 1)
     a64_cset(&em, a64_ar(rd), a64_cc(cond, sgn))
 
 // rd ← rc ≠ 0 ? rx : ry
@@ -399,17 +419,22 @@ fn a64g_sel4(em : &mut Emit, tg : Target, rd : i64, rc : i64, rx : i64, ry : i64
     em.aw(4043309087 + (a64_ar(rc) « 5))     // cmp rc, #0
     a64_csel(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry), A64_NE)
 
-fn a64g_div3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
+fn a64g_div3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+    let sf : i64 = if bits = 32: 0 else: 1
     if sgn = 1:
-        a64_sdiv(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
+        a64_sdivw(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry), sf)
     else:
-        a64_udiv(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry))
+        a64_udivw(&em, a64_ar(rd), a64_ar(rx), a64_ar(ry), sf)
 
-fn a64g_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
+// The quotient is taken at the width; the multiply and the subtract
+// that turn it into a remainder are right in their lower bits whatever
+// stands above them, so they are left whole.
+fn a64g_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
+    let sf : i64 = if bits = 32: 0 else: 1
     if sgn = 1:
-        a64_sdiv(&em, A64_T1, a64_ar(rx), a64_ar(ry))
+        a64_sdivw(&em, A64_T1, a64_ar(rx), a64_ar(ry), sf)
     else:
-        a64_udiv(&em, A64_T1, a64_ar(rx), a64_ar(ry))
+        a64_udivw(&em, A64_T1, a64_ar(rx), a64_ar(ry), sf)
     a64_msub(&em, a64_ar(rd), A64_T1, a64_ar(ry), a64_ar(rx))
 
 // rd ← rx op ry with rf saying whether the 64-bit result overflowed

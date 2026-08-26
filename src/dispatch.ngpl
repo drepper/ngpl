@@ -189,13 +189,13 @@ fn g_shl3i(em : &mut Emit, tg : Target, rd : i64, rs : i64, imm : i64):
         Tgt.rv32: r32g_shl3i(&em, tg, rd, rs, imm)
         Tgt.x64: g_pioneer()
 
-fn g_cmp3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64):
+fn g_cmp3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, cond : i64, sgn : i64, bits : i64):
     match tg.id:
-        Tgt.a64: a64g_cmp3(&em, tg, rd, rx, ry, cond, sgn)
-        Tgt.rv64: rvg_cmp3(&em, tg, rd, rx, ry, cond, sgn)
-        Tgt.i386: i3g_cmp3(&em, tg, rd, rx, ry, cond, sgn)
-        Tgt.a32: a32g_cmp3(&em, tg, rd, rx, ry, cond, sgn)
-        Tgt.rv32: r32g_cmp3(&em, tg, rd, rx, ry, cond, sgn)
+        Tgt.a64: a64g_cmp3(&em, tg, rd, rx, ry, cond, sgn, bits)
+        Tgt.rv64: rvg_cmp3(&em, tg, rd, rx, ry, cond, sgn, bits)
+        Tgt.i386: i3g_cmp3(&em, tg, rd, rx, ry, cond, sgn, bits)
+        Tgt.a32: a32g_cmp3(&em, tg, rd, rx, ry, cond, sgn, bits)
+        Tgt.rv32: r32g_cmp3(&em, tg, rd, rx, ry, cond, sgn, bits)
         Tgt.x64: g_pioneer()
 
 fn g_sel4(em : &mut Emit, tg : Target, rd : i64, rc : i64, rx : i64, ry : i64):
@@ -207,22 +207,22 @@ fn g_sel4(em : &mut Emit, tg : Target, rd : i64, rc : i64, rx : i64, ry : i64):
         Tgt.rv32: r32g_sel4(&em, tg, rd, rc, rx, ry)
         Tgt.x64: g_pioneer()
 
-fn g_div3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
+fn g_div3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     match tg.id:
-        Tgt.a64: a64g_div3(&em, tg, rd, rx, ry, sgn)
-        Tgt.rv64: rvg_div3(&em, tg, rd, rx, ry, sgn)
-        Tgt.i386: i3g_div3(&em, tg, rd, rx, ry, sgn)
-        Tgt.a32: a32g_div3(&em, tg, rd, rx, ry, sgn)
-        Tgt.rv32: r32g_div3(&em, tg, rd, rx, ry, sgn)
+        Tgt.a64: a64g_div3(&em, tg, rd, rx, ry, sgn, bits)
+        Tgt.rv64: rvg_div3(&em, tg, rd, rx, ry, sgn, bits)
+        Tgt.i386: i3g_div3(&em, tg, rd, rx, ry, sgn, bits)
+        Tgt.a32: a32g_div3(&em, tg, rd, rx, ry, sgn, bits)
+        Tgt.rv32: r32g_div3(&em, tg, rd, rx, ry, sgn, bits)
         Tgt.x64: g_pioneer()
 
-fn g_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64):
+fn g_mod3(em : &mut Emit, tg : Target, rd : i64, rx : i64, ry : i64, sgn : i64, bits : i64):
     match tg.id:
-        Tgt.a64: a64g_mod3(&em, tg, rd, rx, ry, sgn)
-        Tgt.rv64: rvg_mod3(&em, tg, rd, rx, ry, sgn)
-        Tgt.i386: i3g_mod3(&em, tg, rd, rx, ry, sgn)
-        Tgt.a32: a32g_mod3(&em, tg, rd, rx, ry, sgn)
-        Tgt.rv32: r32g_mod3(&em, tg, rd, rx, ry, sgn)
+        Tgt.a64: a64g_mod3(&em, tg, rd, rx, ry, sgn, bits)
+        Tgt.rv64: rvg_mod3(&em, tg, rd, rx, ry, sgn, bits)
+        Tgt.i386: i3g_mod3(&em, tg, rd, rx, ry, sgn, bits)
+        Tgt.a32: a32g_mod3(&em, tg, rd, rx, ry, sgn, bits)
+        Tgt.rv32: r32g_mod3(&em, tg, rd, rx, ry, sgn, bits)
         Tgt.x64: g_pioneer()
 
 // Which widths a target can settle an overflow at directly, the
