@@ -257,6 +257,23 @@ Errors and Warnings
 Code Generation
 ---------------
 
+[ ] the second half of moving the sign extension to the assignment.  A value is now kept only as
+    wide as its type says and IR_EXT puts the bits above it where a widening is written, which is
+    the rare path: t07_widths and t20_selfhost_features did not grow by a byte, and only a program
+    that spells out `let w : i64 = n` grew at all.  What remains is taking canon out at production,
+    and it is the larger half, because canon is also the reason every reader may treat a slot as
+    64 bits wide.  Each reader then has to work at the value's own width or extend first: on
+    x86-64 that is IR_BAND, IR_BNOTT, IR_SHLL, IR_CEQ..IR_CGE, IR_MAXX, IR_SEL, IR_DIVV, IR_JZ,
+    IR_CALL, IR_GSTORE, IR_AIDX, IR_AREF, IR_ASTO, IR_APOP, IR_AGET, IR_ALEN, IR_VTAB, IR_LDN,
+    IR_STN, IR_FLD, IR_FSTO, IR_HLEN, IR_CHR, IR_ENVG, IR_FCLOSE, IR_NARROW, IR_SATADD and
+    IR_JTAB, and IR_PRINTI and IR_PRINTU whose runtime reads the register whole, and then the
+    five targets behind the driver.  Three of them are wrong quietly rather than loudly -- a
+    right shift, a division and a comparison over stale bits answer, they do not crash -- so the
+    order is to make the width-sensitive readers width-correct one at a time, each measurable on
+    its own and two of them shorter for it, and to drop canon at production only once none is
+    left.  If that sweep proves too wide, the fallback is a dataflow pass that drops canon only
+    where every reader of the slot is width-safe, which keeps the invariant true by default.
+
 [ ] (FULL) Vulkan code generation for GPU offloading of vector/matrix/tensor operations.
 
 [ ] two ways of translating a function that reads a vector or a matrix, and a rule for choosing

@@ -236,11 +236,17 @@ impl Lower:
         let v : mut i64 = v0
         let cw : i64 = self.ncvt[nid × 1¤ptrdiff]
         if cw ≠ 0:
-            // the checker admitted a narrowing or sign-crossing here;
-            // the run stops where a value does not fit, as the
-            // interpreter does
+            // Going the other way is a widening: the value is right in
+            // its own bits and says nothing above them, so it is put
+            // into the canonical form the wider read expects.  Coming
+            // down is a narrowing, and the run stops where a value does
+            // not fit, as the interpreter does.
+            let up : bool = ty_is_int(cw) and ty_is_int(self.tof(nid)) and ty_bits(cw) > ty_bits(self.tof(nid))
             let d : i64 = self.tmp()
-            self.ir(IR_NARROW, v, 0, 0, d, width_of(cw))
+            if up:
+                self.ir(IR_EXT, v, 0, 0, d, width_of(self.tof(nid)))
+            else:
+                self.ir(IR_NARROW, v, 0, 0, d, width_of(cw))
             v ← d
         // Two things can be wanted of a value on its way into a
         // stated type, and `int?` wants both, so nhold says them

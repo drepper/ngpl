@@ -69,7 +69,7 @@ fn cc_of(o : i64, sgn : i64) → i64:
 fn se_reads_a_first(o : i64) → bool:
     if o >= IR_CEQ and o <= IR_CGE:
         return true
-    o = IR_MOV or o = IR_ADD or o = IR_ADDW or o = IR_SUB or o = IR_SUBW or o = IR_MUL or o = IR_MULW or o = IR_NEG or o = IR_NEGW or o = IR_BAND or o = IR_BORR or o = IR_BXORR or o = IR_BNOTT or o = IR_SHLL or o = IR_SHRR or o = IR_MAXX or o = IR_MINN or o = IR_DIVV or o = IR_MODD or o = IR_JZ or o = IR_JNZ or o = IR_AIDX or o = IR_AREF or o = IR_APOP or o = IR_AGET or o = IR_ALEN or o = IR_LDN or o = IR_FLD or o = IR_HLEN or o = IR_CHR or o = IR_NARROW or o = IR_RET
+    o = IR_MOV or o = IR_ADD or o = IR_ADDW or o = IR_SUB or o = IR_SUBW or o = IR_MUL or o = IR_MULW or o = IR_NEG or o = IR_NEGW or o = IR_BAND or o = IR_BORR or o = IR_BXORR or o = IR_BNOTT or o = IR_SHLL or o = IR_SHRR or o = IR_MAXX or o = IR_MINN or o = IR_DIVV or o = IR_MODD or o = IR_JZ or o = IR_JNZ or o = IR_AIDX or o = IR_AREF or o = IR_APOP or o = IR_AGET or o = IR_ALEN or o = IR_LDN or o = IR_FLD or o = IR_HLEN or o = IR_CHR or o = IR_NARROW or o = IR_RET or o = IR_EXT
 
 // Whether the store this operation ends with may be dropped.
 //
@@ -108,7 +108,7 @@ fn p_class(o : i64) → i64:
         return 2
     if o = IR_ADD or o = IR_ADDW or o = IR_SUB or o = IR_SUBW or o = IR_MUL or o = IR_MULW or o = IR_BAND or o = IR_BORR or o = IR_BXORR or o = IR_SHLL or o = IR_SHRR or o = IR_MAXX or o = IR_MINN or o = IR_DIVV or o = IR_MODD or o = IR_AIDX or o = IR_AREF or o = IR_AGET:
         return 2
-    if o = IR_MOV or o = IR_NEG or o = IR_NEGW or o = IR_BNOTT or o = IR_JZ or o = IR_JNZ or o = IR_RET or o = IR_APOP or o = IR_ALEN or o = IR_LDN or o = IR_FLD or o = IR_HLEN or o = IR_CHR or o = IR_NARROW:
+    if o = IR_EXT or o = IR_MOV or o = IR_NEG or o = IR_NEGW or o = IR_BNOTT or o = IR_JZ or o = IR_JNZ or o = IR_RET or o = IR_APOP or o = IR_ALEN or o = IR_LDN or o = IR_FLD or o = IR_HLEN or o = IR_CHR or o = IR_NARROW:
         return 1
     0
 
@@ -758,6 +758,12 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             em.movimm(R_AX, 3)
             em.b2(15, 5)                     // close
             em.raxbar()
+        elif o = IR_EXT:
+            // the canonical form of a value kept only as wide as its
+            // type: what a wider read is about to believe
+            em.load(R_AX, a)
+            em.canon(w)
+            em.store(R_AX, d)
         elif o = IR_NARROW:
             em.load(R_AX, a)
             let nbits : i64 = w & 255

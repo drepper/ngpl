@@ -679,9 +679,12 @@ impl Checker:
             // measure that stands in for the one wanted is not a change
             // of measure -- it is what the declaration said it was for.
             return false
-        let widening : bool = ty_bits(want) > ty_bits(t) and not (ty_sgn(t) = 1 and ty_sgn(want) = 0)
-        if not widening:
-            self.ncvt[e × 1¤ptrdiff] ← want
+        // A value is kept only as wide as its type, so a widening is
+        // work: the bits above its own are the sign or the zeros only
+        // where something has put them there, and this is where.  A
+        // narrowing is work for the other reason, the value having to
+        // be checked against the range it is going into.
+        self.ncvt[e × 1¤ptrdiff] ← want
         true
 
     fn adopt(&mut self, id : i64, t : i64):
