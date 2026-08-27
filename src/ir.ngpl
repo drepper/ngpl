@@ -229,13 +229,25 @@ fn se_counts(ir : IrFn, nv : i64) → i64[]:
 // compares at 64, that divides at 64, that shifts bits down from
 // above, that indexes, that hashes, that prints, or that judges a
 // value against a range -- each of which believes the bits above the
-// width, so each of them wants them true.  The bit per operand is the
-// one ir_reads uses: 1 for ia, 2 for ib, 4 for ic, 8 for the vregs an
-// argument list names.  A number that is no opcode wants everything
-// true, which is the safe way to be wrong.
+// width, so each of them wants them true.
+//
+// A widening is the last of them, and asking rather than doing is what
+// makes it free.  The value is put into canonical form where it is
+// made, and for an unsigned thirty-two bit one that costs nothing at
+// all: a thirty-two bit operation writes the whole register here and
+// on aarch64, clearing what stands above as it works, so the answer is
+// canonical before anything is spent on it.  Asking also lets several
+// readers of one value share the answer between them, which is worth
+// more than it costs where a vreg is written in more than one place --
+// measured on the compiler itself, which is the largest program to
+// hand: asking everywhere beats asking only where it is free.
+//
+// The bit per operand is the one ir_reads uses: 1 for ia, 2 for ib, 4
+// for ic, 8 for the vregs an argument list names.  A number that is no
+// opcode wants everything true, which is the safe way to be wrong.
 fn ir_needs_canon() → i64[]:
     [
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
     3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3,
     3, 3, 3, 3, 0, 0, 3, 3, 3, 3, 3, 3,
     0, 0, 0, 0, 0, 1, 1, 0, 8, 0, 0, 1,

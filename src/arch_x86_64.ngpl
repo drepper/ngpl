@@ -835,10 +835,10 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             em.b2(15, 5)                     // close
             em.raxbar()
         elif o = IR_EXT:
-            // the canonical form of a value kept only as wide as its
-            // type: what a wider read is about to believe
+            // What a wider read is about to believe.  The value was
+            // asked for canonical and so arrives canonical, and this
+            // has nothing left to do but hand it on.
             em.load(R_AX, a)
-            em.canon(w)
             em.store(R_AX, d)
         elif o = IR_NARROW:
             em.load(R_AX, a)

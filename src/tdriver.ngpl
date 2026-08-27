@@ -624,8 +624,8 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
             g_sysarg(&em, tg, 0, a)
             g_syscall(&em, tg, SC_CLOSE)
         elif o = IR_EXT:
+            // asked for canonical, so it arrives canonical
             g_lds(&em, tg, RG_A, a)
-            t_canon(&em, tg, w)
             g_sts(&em, tg, RG_A, d)
         elif o = IR_NARROW:
             g_lds(&em, tg, RG_A, a)

@@ -273,6 +273,22 @@ Code Generation
     array element or a call argument, which are canonical for their own reasons: the common case
     is already paid for, and it is the arithmetic-into-comparison shape that gains.
 
+[ ] a widening asks its source to be canonical rather than making it so, which costs nothing for
+    an unsigned thirty-two bit value because a thirty-two bit operation clears what stands above
+    it on x86-64 and on aarch64.  riscv64 fills it with the sign instead, so a signed thirty-two
+    bit value is the free one there and nothing has been done about it; the mechanism is already
+    target-independent -- the producer's t_canon does whatever its target needs -- so what is
+    missing is only the measurement saying it is worth having.
+
+    Two ways of doing this were tried and both are recorded because the second is not the obvious
+    one.  Recording per vreg that the machine had already left a value canonical never fired: the
+    IR writes a vreg from more than one place, so a whole-function claim about it almost never
+    holds, and finding that out took marker instructions planted in the generated code rather
+    than any amount of reading.  Asking at the point of use is five lines and works.  Asking
+    everywhere beats asking only where the asking is free -- 1883986 bytes against 1885162 on the
+    compiler, both against 1880280 before -- because several readers of one value share the
+    answer at the producer, and that is worth more than paying it once per writer.
+
 [ ] the compiler folds a shift the interpreter refuses: `let a : u32 = @wrap(305419896 « 25)`
     is an overflow to the interpreter, which will not have the literal shifted past what u32
     holds, and a value to the compiler, which wraps it.  Predates the canonical-form work -- the
