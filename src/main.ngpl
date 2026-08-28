@@ -135,6 +135,7 @@ fn opt_matches(a : str, name : str) → bool:
     #name > 0 and #a > #name and name ⊑ a and a[#name] = '='
 
 // what it carries, which an argument written 'name=' alone leaves empty
+@pre(#name > 0¤ptrdiff)
 fn opt_value(a : str, name : str) → str:
     let ac := a.chars()
     let nc := name.chars()
@@ -554,4 +555,3 @@ fn main() → u8:
     outf.writev(runs)
     outf.close()
     0
-
