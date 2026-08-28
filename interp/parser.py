@@ -20,7 +20,7 @@ from interp.ast import (
     DropUnitExpr, OldExpr,
     LimitExpr,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, TypeDef, EnumDef,
-    LambdaExpr, ReshapeExpr, MapExpr, TupleLit, CatchStmt, EnumerateExpr,
+    LambdaExpr, ReshapeExpr, MapExpr, QuantExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
     OperatorRef,
     UnitExpr, UnitDef, ModuleDef, UnitName, UnitBinOp, UnitSqrt, UnitLit, SumTypeDef,
@@ -2061,8 +2061,8 @@ class Parser:
     def _parse_arm_binding(self):
         """Parse what an arm binds: a name, or a tuple's elements.
 
-        `∃(v)` names the matched value and
-        `∃((a, b))` names the elements of it, in the
+        `⊨(v)` names the matched value and
+        `⊨((a, b))` names the elements of it, in the
         shape a definition or a parameter uses.
         """
         self._eat("PUNCT", "(")
@@ -2075,7 +2075,7 @@ class Parser:
         return name
 
     def _parse_match_arm(self) -> MatchArm:
-        """Parse one arm: ∃(name) | ∅ | _  followed by ':' and a body."""
+        """Parse one arm: ⊨(name) | ∅ | _  followed by ':' and a body."""
         kind: str
         name = None
         pattern_tok = self._cur()
@@ -2083,7 +2083,7 @@ class Parser:
             self.pos += 1
             name = self._parse_arm_binding()
             kind = "some"
-        elif self._check("NOTEXISTS"):
+        elif self._check("NOTSOME"):
             self.pos += 1
             name = self._parse_arm_binding()
             kind = "err"
@@ -2320,7 +2320,7 @@ class Parser:
             node.is_value = True
             # No else is not an unfinished expression: the if can fall
             # past its branch, and what it hands back there is nothing,
-            # so its value is optional -- ∃ the branch's value where
+            # so its value is optional -- ⊨ the branch's value where
             # the condition holds and ∅ where it does not.
             return self._set_pos(node, if_tok)
         # A match here is the statement form standing where a value is
@@ -2599,10 +2599,11 @@ class Parser:
         return left
 
     def _parse_reshape_expr(self):
-        """reshape_expr → negation (('⍴' | '⌿' | '⍀') …)?
+        """reshape_expr → negation (('⍴' | '⌿' | '⍀' | '∀' | '∃') …)?
 
         ⍴ takes a negation right operand.
-        ⌿/⍀ take a range-level right operand so that ``f ⌿ 1…5`` works.
+        ⌿/⍀/∀/∃ take a range-level right operand so that ``f ⌿ 1…5``
+        works.
         When the right operand of ⌿/⍀ is a 2-tuple literal, the second
         element is the initial accumulator value.
         """
@@ -2632,6 +2633,18 @@ class Parser:
             self._skip_nl()
             return self._set_pos(
                 MapExpr(left, self._parse_range_expr()), each_tok)
+        if self._check("OP") and self._cur().value in ("\N{FOR ALL}",
+                                                       "\N{THERE EXISTS}"):
+            # f ∀ v -- whether f holds of every one of them; f ∃ v --
+            # whether it holds of any.  The right operand is read the
+            # way a fold reads its own, so `f ∀ 1…5` needs no
+            # parentheses around the range.
+            quant_tok = self._cur()
+            kind = "all" if quant_tok.value == "\N{FOR ALL}" else "any"
+            self.pos += 1
+            self._skip_nl()
+            return self._set_pos(
+                QuantExpr(kind, left, self._parse_range_expr()), quant_tok)
         if self._check("OP") and self._cur().value in (
                 "\N{APL FUNCTIONAL SYMBOL SLASH BAR}",
                 "\N{APL FUNCTIONAL SYMBOL BACKSLASH BAR}"):
@@ -2862,8 +2875,8 @@ class Parser:
             self.pos += 1
             return self._set_pos(BoolLit(False), tok)
 
-        # Failed-result constructor ∄(...).
-        if tok.type == "NOTEXISTS":
+        # Failed-result constructor ⊭(...).
+        if tok.type == "NOTSOME":
             self.pos += 1
             self._eat("PUNCT", "(")
             value = self._parse_expr()

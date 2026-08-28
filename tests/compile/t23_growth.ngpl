@@ -17,7 +17,7 @@ fn main():
     std.println("{}", (v ⍳ 30) ?? ⁻1)
     assert((v ⍳ 99) = ∅)
     match v ⍳ 10:
-        ∃(p):
+        ⊨(p):
             std.println("at {}", p)
         ∅:
             std.println("nowhere")

@@ -7,10 +7,10 @@
 
 fn first_pair(v : &i64[]) -> (i64, i64)?:
     match v.get(0):
-        ∃(a):
+        ⊨(a):
             match v.get(1):
-                ∃(b):
-                    return ∃((a, b))
+                ⊨(b):
+                    return ⊨((a, b))
                 ∅:
                     return ∅
         ∅:
@@ -22,17 +22,17 @@ fn main():
     // what pop answers is the optional, and match takes it apart
     let v : mut i64[] = [1, 2]
     match v.pop():
-        ∃(x):
+        ⊨(x):
             std.println("popped {}", x)
         ∅:
             std.println("empty")
     match v.pop():
-        ∃(x):
+        ⊨(x):
             std.println("popped {}", x)
         ∅:
             std.println("empty")
     match v.pop():
-        ∃(x):
+        ⊨(x):
             std.println("popped {}", x)
         ∅:
             std.println("empty")
@@ -47,7 +47,7 @@ fn main():
     let r : i64[] = [10, 20]
     std.println("{} {}", r.get(1) ?? 0, r.get(5) ?? ⁻1)
     match r.get(5):
-        ∃(x):
+        ⊨(x):
             std.println("{}", x)
         ∅:
             std.println("nothing at 5")
@@ -55,7 +55,7 @@ fn main():
     // an optional tuple, built, matched and handed back
     let p := first_pair(&r)
     match p:
-        ∃(t):
+        ⊨(t):
             std.println("{} {}", t[0], t[1])
         ∅:
             std.println("no pair")

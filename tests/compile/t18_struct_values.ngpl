@@ -46,10 +46,10 @@ fn main():
     std.println("{} {}", f.kind, f.off)
 
     // an optional, a dictionary and a tuple hold the struct itself
-    let o : Tok? = ∃(d)
+    let o : Tok? = ⊨(d)
     d.kind ← 1000
     match o:
-        ∃(s):
+        ⊨(s):
             std.println("{} {}", s.kind, d.kind)
         ∅:
             std.println("none")
@@ -57,7 +57,7 @@ fn main():
     h["x"] ← d
     d.off ← 1
     match h["x"]:
-        ∃(s):
+        ⊨(s):
             std.println("{} {}", s.off, d.off)
         ∅:
             std.println("none")

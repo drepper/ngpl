@@ -3,5 +3,5 @@ error: in describe: match has no arm for ∅; add the missing pattern or a _ arm
     |
   4 |     match x:
     |     ^^^^^
-  5 |         ∃(v):
+  5 |         ⊨(v):
     |

@@ -40,7 +40,7 @@ fn test_a_body_that_ends_in_a_match():
 
 fn held(o : i64?) → i64:
     match o:
-        ∃(x): x × 2
+        ⊨(x): x × 2
         ∅: 0
 
 fn held_if(x : i64) → i64?:
@@ -67,10 +67,10 @@ fn test_a_match_as_a_value():
 @test
 fn test_an_optional_match_as_a_value():
     let v : i64 = match held_if(5):
-        ∃(x): x + 1
+        ⊨(x): x + 1
         ∅: 0
     let w : i64 = match held_if(⁻1):
-        ∃(x): x + 1
+        ⊨(x): x + 1
         ∅: 99
     assert_eq(v, 6)
     assert_eq(w, 99)

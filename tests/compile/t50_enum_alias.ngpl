@@ -53,9 +53,9 @@ fn main():
     // an enum in an array, and an optional of one
     let v : Color[] = [Color.red, Color.blue, Color.green]
     std.println("{} {} {}", #v, v[0] = Color.red, v[1] = Color.blue)
-    let o : Color? = ∃(Color.blue)
+    let o : Color? = ⊨(Color.blue)
     match o:
-        ∃(x):
+        ⊨(x):
             std.println("{}", describe(x))
         ∅:
             std.println("none")

@@ -60,16 +60,16 @@ Attempt 3 grows core-1 to **core-2** with structs:
   stream for struct names in one sweep).  `&mut self` methods and
   field stores demand a `mut` binding or `&mut` parameter, fields
   inheriting their holder's mutability.
-- **optionals** `T?` of any scalar or struct, with `∃(v)`, `∅`,
+- **optionals** `T?` of any scalar or struct, with `⊨(v)`, `∅`,
   `match` over the two shapes (the bound name scoped to the present
   arm, a trailing match handing each arm's value on as the function's
   answer), presence as truthiness, comparison with `∅` (and only ∅ —
   content comparison waits), and `??` generalized to every optional.
   The representation makes absence free: an optional is a pointer,
-  `∅` the null one and `∃(v)` a box holding the value, so a presence
+  `∅` the null one and `⊨(v)` a box holding the value, so a presence
   test is one compare against zero, `= ∅` needs no special lowering
-  at all (∅ is the constant 0), and nested `∃(∅)` falls out naturally.
-  `∃` allocates, so it is not speculatable; `∅` is.
+  at all (∅ is the constant 0), and nested `⊨(∅)` falls out naturally.
+  `⊨` allocates, so it is not speculatable; `∅` is.
 - **arrays of structs** `S[]`: the element is the struct's pointer, so
   the array machinery carries over unchanged; `v[i].f` reads and
   stores, whole-element replacement by a fresh literal, `&`-borrowed
@@ -244,7 +244,7 @@ Attempt 3 grows core-1 to **core-2** with structs:
   `cwd()` nor `iterate()` wants `@impure` — only opening and
   creating files do, as in the interpreter.  `next()` outside an
   unwrapping context now answers the boxed optional (a step is
-  `SNEW`+`FSTO` like any `∃`, the end the null), and optionals of
+  `SNEW`+`FSTO` like any `⊨`, the end the null), and optionals of
   int, bool, char and str bases compare with their own kind and with
   `∅` — presence bits first, contents only when both are there;
   struct bases are still taken apart by `match`.

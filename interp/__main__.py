@@ -165,7 +165,7 @@ def _builtin_assert_eq(args):
         raise TypeError("assert_eq requires exactly 2 arguments")
     a0, a1 = args[0], args[1]
     Evaluator._reject_mixed_optional(a0, a1, "assert_eq")
-    # Compared by shape first, so ∃(∅) and ∅ are not reported as equal.
+    # Compared by shape first, so ⊨(∅) and ∅ are not reported as equal.
     if isinstance(a0, (SomeValue, NoneValue)):
         a0_present = isinstance(a0, SomeValue)
         a1_present = isinstance(a1, SomeValue)
@@ -1339,6 +1339,9 @@ def _static_type_of(expr, types: dict, structs: dict) -> str | None:
     if isinstance(expr, _ast.GetAttr):
         return _field_type(expr, structs)
     if isinstance(expr, _ast.BinOp) and expr.op in _ANSWERS_A_TRUTH:
+        return "bool"
+    if isinstance(expr, _ast.QuantExpr):
+        # ∀ and ∃ answer whether, whatever they were asked about
         return "bool"
     if isinstance(expr, _ast.UnaryOp) and expr.op in ("not",
                                                       "\N{NOT SIGN}"):

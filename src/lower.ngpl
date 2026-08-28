@@ -731,7 +731,7 @@ impl Lower:
             self.lower_matche(nid, na, nb, nc, TY_UNIT, false, dm)
             return dm
         if k = NK_MATCH:
-            // ∃ binds what the optional holds; ∅ is the other way out
+            // ⊨ binds what the optional holds; ∅ is the other way out
             let dv : i64 = self.tmp()
             let sv : i64 = self.lower_expr(na)
             let bind : i64 = self.nslot[nid × 1¤ptrdiff]
@@ -989,7 +989,7 @@ impl Lower:
             else:
                 self.lower_stmt(last, false, TY_UNIT)
 
-    // What a branch hands to the destination: the value itself, or ∃
+    // What a branch hands to the destination: the value itself, or ⊨
     // of it where the if has no else and what it answers is therefore
     // optional.
     // Whether what this branch answers has to be held in an optional
@@ -1241,7 +1241,7 @@ impl Lower:
             return ⁻1
         if mid = MID_POP and defnode = ⁻1 and ty_is_opt(self.tof(nid)):
             // outside ??: an empty array answers the null, and a value
-            // answers boxed, as ∃ boxes
+            // answers boxed, as ⊨ boxes
             let n9 : i64 = self.tmp()
             self.ir(IR_ALEN, av, 0, 0, n9, 0)
             let d9 : i64 = self.tmp()

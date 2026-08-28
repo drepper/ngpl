@@ -19,16 +19,16 @@
 fn test_array_iterate_in_order():
     let v : i64[] = [10, 20, 30]
     let it := v.iterate()
-    assert_eq(it.next(), ∃(10))
-    assert_eq(it.next(), ∃(20))
-    assert_eq(it.next(), ∃(30))
+    assert_eq(it.next(), ⊨(10))
+    assert_eq(it.next(), ⊨(20))
+    assert_eq(it.next(), ⊨(30))
 
 // Exhaustion is reported as ∅, and stays ∅ on further calls.
 @test
 fn test_array_iterate_ends_with_none():
     let v : i64[] = [1]
     let it := v.iterate()
-    assert_eq(it.next(), ∃(1))
+    assert_eq(it.next(), ⊨(1))
     assert_eq(it.next(), ∅)
     assert_eq(it.next(), ∅)
 
@@ -54,9 +54,9 @@ fn test_array_iterators_are_independent():
     let v : i64[] = [1, 2, 3]
     let a := v.iterate()
     let b := v.iterate()
-    assert_eq(a.next(), ∃(1))
-    assert_eq(a.next(), ∃(2))
-    assert_eq(b.next(), ∃(1))
+    assert_eq(a.next(), ⊨(1))
+    assert_eq(a.next(), ⊨(2))
+    assert_eq(b.next(), ⊨(1))
 
 // An iterator borrows the array it was made from, so the array may be
 // read and not changed while the iterator lives.  There is no question
@@ -77,18 +77,18 @@ fn error_changing_an_array_an_iterator_holds():
 fn test_reading_an_array_an_iterator_holds():
     let v : i64[] = [1, 2]
     let it := v.iterate()
-    assert_eq(it.next(), ∃(1))
+    assert_eq(it.next(), ⊨(1))
     assert_eq(#v, 2)
-    assert_eq(it.next(), ∃(2))
+    assert_eq(it.next(), ⊨(2))
 
 // Iterating a byte array yields its bytes.
 @test
 fn test_iterate_byte_array():
     let b := std.bytes("abc")
     let it := b.iterate()
-    assert_eq(it.next(), ∃(97))
-    assert_eq(it.next(), ∃(98))
-    assert_eq(it.next(), ∃(99))
+    assert_eq(it.next(), ⊨(97))
+    assert_eq(it.next(), ⊨(98))
+    assert_eq(it.next(), ⊨(99))
     assert_eq(it.next(), ∅)
 
 // ---------------------------------------------------------------------

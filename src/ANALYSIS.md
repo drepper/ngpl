@@ -42,7 +42,7 @@ walk, entry fields, boxed `next()` and optional equality).
 test_iterator held out one more day on a bootstrap hole — the
 interpreter admitted `∅` as an element of a plain `i64[]` literal,
 which a flat compiled array cannot represent — until the authority
-itself was corrected: the interpreter now refuses a `∅` or `∃`
+itself was corrected: the interpreter now refuses a `∅` or `⊨`
 element in an array literal, the quirk test became an `@expect`,
 and test_iterator flipped whole as the eighth shared file.  The
 flip also caught a silent divergence the first conformance pass

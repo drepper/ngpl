@@ -13,7 +13,7 @@ fn credit(m : &mut std.dict(str, i64), name : str):
 
 fn spell(m : &std.dict(i64, str), k : i64) → str:
     match m[k]:
-        ∃(s):
+        ⊨(s):
             s
         ∅:
             "?"
@@ -45,12 +45,12 @@ fn main():
 
     // match takes both answers of a read
     match h["beta"]:
-        ∃(v):
+        ⊨(v):
             std.println("beta holds {}", v)
         ∅:
             std.println("beta absent")
     match h["nowhere"]:
-        ∃(v):
+        ⊨(v):
             std.println("nowhere holds {}", v)
         ∅:
             std.println("nowhere absent")
@@ -90,12 +90,12 @@ fn main():
     // a struct as the value; the read hands the struct back
     let syms : std.dict(str, Sym) = ⸨"lparen": Sym{kind: 4, off: 12}⸩
     match syms["lparen"]:
-        ∃(s):
+        ⊨(s):
             std.println("sym {} {}", s.kind, s.off)
         ∅:
             std.println("sym absent")
     match syms["rparen"]:
-        ∃(s):
+        ⊨(s):
             std.println("sym {} {}", s.kind, s.off)
         ∅:
             std.println("sym absent")

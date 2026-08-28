@@ -111,7 +111,7 @@ Completed
     not have a mut local spelled `i`.  The callee now starts from a clean slate and the
     caller's map is restored on return.  tests/test_callee_scope.ngpl.
 
-[x] `open_file` answers an optional: ∃(file) when the file opened, ∅ when it could not be.
+[x] `open_file` answers an optional: ⊨(file) when the file opened, ∅ when it could not be.
     A missing file is an ordinary answer, not a failure, so the caller decides what absence
     means and says so in its own words -- the raw openat error that used to propagate named
     a system call the program never wrote.  ngplc tests explicitly and reports

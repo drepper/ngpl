@@ -882,11 +882,11 @@ impl Parser:
             self.pos ← self.pos + 1
             let e : i64 = self.parse_unary_operand()
             return self.mknode(NK_NOT, at, e, 0, 0)
-        if k = TK_EXISTS:
+        if k = TK_SOME:
             self.pos ← self.pos + 1
-            _ ← self.eat(TK_LPAR, "'(' after ∃")
+            _ ← self.eat(TK_LPAR, "'(' after ⊨")
             let e : i64 = self.parse_expr()
-            _ ← self.eat(TK_RPAR, "')' closing ∃")
+            _ ← self.eat(TK_RPAR, "')' closing ⊨")
             return self.mknode(NK_SOME, at, e, 0, 0)
         if k = TK_EMPTY:
             self.pos ← self.pos + 1
@@ -1555,7 +1555,7 @@ impl Parser:
         _ ← self.eat(TK_INDENT, "an indented arm list")
         // An identifier where a pattern goes says this match is
         // over an enumeration: the arms name its values, and there
-        // is no ∃ or ∅ about it.
+        // is no ⊨ or ∅ about it.
         let mut_pos : i64 = self.pos
         let is_enum : mut bool = false
         while self.peek() = TK_NL:
@@ -1569,14 +1569,14 @@ impl Parser:
         let empty_blk : mut i64 = ⁻1
         let bind_tok : mut i64 = ⁻1
         while self.peek() ≠ TK_DEDENT and not self.failed():
-            if self.peek() = TK_EXISTS:
+            if self.peek() = TK_SOME:
                 if some_blk ≠ ⁻1:
-                    self.err("match repeats the ∃ pattern")
+                    self.err("match repeats the ⊨ pattern")
                     return 0
                 self.pos ← self.pos + 1
-                _ ← self.eat(TK_LPAR, "'(' after ∃")
+                _ ← self.eat(TK_LPAR, "'(' after ⊨")
                 bind_tok ← self.pos
-                _ ← self.eat_name("the name ∃ binds")
+                _ ← self.eat_name("the name ⊨ binds")
                 _ ← self.eat(TK_RPAR, "')' closing the pattern")
                 some_blk ← self.parse_block()
             elif self.peek() = TK_EMPTY:
@@ -1588,11 +1588,11 @@ impl Parser:
             elif self.peek() = TK_NL:
                 self.pos ← self.pos + 1
             else:
-                self.err("a core-2 match arm is ∃(name) or ∅")
+                self.err("a core-2 match arm is ⊨(name) or ∅")
                 return 0
         _ ← self.eat(TK_DEDENT, "the end of the match")
         if some_blk = ⁻1:
-            self.err("match has no arm for ∃")
+            self.err("match has no arm for ⊨")
             return 0
         if empty_blk = ⁻1:
             self.err("match has no arm for ∅")

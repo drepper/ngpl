@@ -1,4 +1,4 @@
-// core-2: optionals -- ∃ and ∅, match, ??, presence, absence.
+// core-2: optionals -- ⊨ and ∅, match, ??, presence, absence.
 
 struct Reading:
     value : i64
@@ -6,17 +6,17 @@ struct Reading:
 
 fn half_of_even(n : i64) → i64?:
     if (n % 2 ?? 1) = 0:
-        return ∃((n ÷ 2) ?? 0)
+        return ⊨((n ÷ 2) ?? 0)
     ∅
 
 fn last_reading(ok : bool) → Reading?:
     if ok:
-        return ∃(Reading{value: 42, trusted: true})
+        return ⊨(Reading{value: 42, trusted: true})
     ∅
 
 fn describe(x : i64?) → str:
     match x:
-        ∃(v):
+        ⊨(v):
             if v >= 0: "present" else: "negative"
         ∅:
             "absent"
@@ -38,24 +38,24 @@ fn main():
 
     // match binds the value in the present arm
     match half_of_even(100):
-        ∃(v):
+        ⊨(v):
             std.println("half {}", v)
         ∅:
             std.println("odd")
     match half_of_even(3):
-        ∃(v):
+        ⊨(v):
             std.println("half {}", v)
         ∅:
             std.println("odd")
 
     // an optional in and out of a function
-    std.println("{}", describe(∃(5)))
-    std.println("{}", describe(∃(⁻5)))
+    std.println("{}", describe(⊨(5)))
+    std.println("{}", describe(⊨(⁻5)))
     std.println("{}", describe(∅))
 
     // an optional struct
     match last_reading(true):
-        ∃(r):
+        ⊨(r):
             std.println("reading {} {}", r.value, r.trusted)
         ∅:
             std.println("no reading")
@@ -72,5 +72,5 @@ fn main():
     // an optional local settles a bare ∅ too
     let c : mut i64? = ∅
     std.println("c {}", c ?? ⁻7)
-    c ← ∃(8)
+    c ← ⊨(8)
     std.println("c {}", c ?? ⁻7)

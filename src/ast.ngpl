@@ -16,7 +16,7 @@ let NK_MCALL : i64 = 12     // na = base, nb = extra [argc, arg…]; method toke
 let NK_REF : i64 = 13       // na = inner, nb = 1 shared or 2 mut
 let NK_SLIT : i64 = 14      // na = extra [n, field-token, expr, …]; name token
 let NK_FIELD : i64 = 15     // na = base; field token
-let NK_SOME : i64 = 16      // na = the value ∃ carries
+let NK_SOME : i64 = 16      // na = the value ⊨ carries
 let NK_EMPTYV : i64 = 17    // a bare ∅
 let NK_HLIT : i64 = 18      // na = extra [n, key, value, …]
 let NK_TUPLE : i64 = 19     // na = extra [n, expr…]

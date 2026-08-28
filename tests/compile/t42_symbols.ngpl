@@ -31,7 +31,7 @@ fn pair_sum(p : &Pair) -> i64:
 
 fn depth(r : &Rec) -> i64:
     match r.next:
-        ∃(n):
+        ⊨(n):
             return 1 + depth(&n)
         ∅:
             return 1
@@ -63,12 +63,12 @@ fn main():
     std.println("{}", distance2(&p, &q))
     let pr := Pair{a: 20, b: 22}
     std.println("{}", pair_sum(&pr))
-    let r := Rec{v: 1, next: ∃(Rec{v: 2, next: ∅})}
+    let r := Rec{v: 1, next: ⊨(Rec{v: 2, next: ∅})}
     std.println("{}", depth(&r))
     std.println("{}", every_kind(10i32, 5u8, true, "abc", 'A'))
     let v : i64[] = [1, 2]
     let m : i32[,] = [[1, 2, 3], [4, 5, 6]]
     let h : std.dict(str, i64) = (⸨"k": 7⸩)
     std.println("{}", containers(&v, m, &h, "xy"))
-    std.println("{} {}", optionals(∃(5), ∃("ab")) ?? ⁻1, optionals(∅, ∅) ?? ⁻1)
+    std.println("{} {}", optionals(⊨(5), ⊨("ab")) ?? ⁻1, optionals(∅, ∅) ?? ⁻1)
     nothing()

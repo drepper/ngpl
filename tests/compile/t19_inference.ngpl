@@ -56,8 +56,8 @@ fn main():
     let fresh := Tok{kind: 5, off: 50}
     std.println("{}", label(fresh))
 
-    // an optional infers from ∃ and settles through ??
-    let o := ∃(5i64)
+    // an optional infers from ⊨ and settles through ??
+    let o := ⊨(5i64)
     std.println("{}", o ?? 0)
     let picked := o ?? ⁻1
     std.println("{}", picked)

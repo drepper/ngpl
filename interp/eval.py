@@ -106,7 +106,7 @@ from interp.ast import (
     DropUnitExpr,
     LimitExpr,
     RangeExpr, ForEachStmt, ExpectStmt, WrapExpr, LambdaExpr, SumTypeDef,
-    ReshapeExpr, MapExpr, TupleLit, CatchStmt, EnumerateExpr,
+    ReshapeExpr, MapExpr, QuantExpr, TupleLit, CatchStmt, EnumerateExpr,
     HashLit, SetLit, EmptyCollectionLit, BreakStmt, ContinueStmt,
     Quote, Splice, Reflect,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
@@ -363,12 +363,12 @@ def _literal_element_type(elements):
                     f"{element.unit.display_name}"))
         inner = element.inner if isinstance(element, UnitValue) else element
         if isinstance(inner, (NoneValue, SomeValue)):
-            # An array holds values; ∅ is the absence of one and ∃ its
+            # An array holds values; ∅ is the absence of one and ⊨ its
             # box, and neither is an element type an array can be of.
             raise coded(2741, TypeError(
                 f"an array element is a value, but element {index} is "
                 + ("∅, the absence of one" if isinstance(inner, NoneValue)
-                   else "boxed; take ∃ apart before storing")))
+                   else "boxed; take ⊨ apart before storing")))
         if isinstance(inner, (IntValue, FloatValue)):
             found_kind = "number"
         elif isinstance(inner, CharValue):
@@ -1646,7 +1646,7 @@ class Evaluator:
         self._reject_mixed_optional(left, right, "=")
         # Two optionals are compared by shape first and contents second,
         # so that a present-but-empty optional and an absent one are
-        # told apart: ∃(∅) is not ∅.
+        # told apart: ⊨(∅) is not ∅.
         if isinstance(left, (SomeValue, NoneValue)):
             left_present = isinstance(left, SomeValue)
             right_present = isinstance(right, SomeValue)
@@ -4242,6 +4242,9 @@ class Evaluator:
     def _ee_MapExpr(self, node):
         return self._eval_map(node)
 
+    def _ee_QuantExpr(self, node):
+        return self._eval_quant(node)
+
     def _ee_ReshapeExpr(self, node):
         shape = self.eval_expr(node.shape)
         data = self.eval_expr(node.data)
@@ -5340,7 +5343,7 @@ class Evaluator:
     def _eval_match(self, node: MatchStmt):
         """Dispatch on the shape of a value.
 
-        An optional matches ∃(name), which binds the value it holds, or
+        An optional matches ⊨(name), which binds the value it holds, or
         ∅ when it holds nothing.  A `_` arm matches anything.  The bound
         name exists only for its arm, and cannot be assigned to: it
         names the matched value, and writing to it would say nothing
@@ -5366,7 +5369,7 @@ class Evaluator:
                 continue
             if arm.kind == "none":
                 return self.eval_stmts(arm.body)
-            # ∃(name) or ∄(name), both of which bind.
+            # ⊨(name) or ⊭(name), both of which bind.
             return self._eval_bound_arm(arm, inner)
 
         described = {"some": "a present value",
@@ -5619,8 +5622,8 @@ class Evaluator:
     def _match_shape(subject):
         """Classify a match subject, and give the value an arm would bind.
 
-        ∃ covers both a present optional and a successful result: in each
-        the question "was there a value" is answered yes.  ∄ is the
+        ⊨ covers both a present optional and a successful result: in each
+        the question "was there a value" is answered yes.  ⊭ is the
         failed result, which answers no and says why; ∅ is the absent
         optional, which answers no and does not.
         """
@@ -5819,6 +5822,70 @@ class Evaluator:
                 f"range, and this is {self._value_type_name(held)}")
         return ObjectValue(ArrayValue([self._do_call(func, [e])
                                        for e in elements]))
+
+    def _quant_elements(self, held, glyph):
+        """What ∀ and ∃ ask about, handed over one at a time.
+
+        An iterator is drained as the question needs it, which is the
+        whole of why it is accepted here: a source that goes on for
+        ever is a fair thing to ask ∃ about, since one element that
+        holds ends it.
+        """
+        if isinstance(held, RangeValue):
+            return (mk_int(i) for i in held.to_list())
+        if isinstance(held, ObjectValue) and isinstance(held.obj, ArrayValue):
+            return iter(held.obj.values())
+        if isinstance(held, Iterator):
+            return self._drain_iterator(held)
+        raise TypeError(
+            f"{glyph} asks about each of an array, a range or an "
+            f"iterator, and this is {self._value_type_name(held)}")
+
+    @staticmethod
+    def _drain_iterator(it):
+        """The values an iterator has, until it says it has no more."""
+        while True:
+            got = it.next()
+            if is_none(got):
+                return
+            yield unwrap_optional(got)
+
+    def _eval_quant(self, node: QuantExpr) -> Value:
+        """Evaluate `f ∀ v` and `f ∃ v`.
+
+        ∀ answers whether f holds of every one of them, ∃ whether it
+        holds of any.
+
+        Both must exit early, and the loop below is where that is kept:
+        it returns at the first element that settles the question and f
+        is never asked about the rest -- ∀ at the first that does not
+        hold, ∃ at the first that does.  That is a guarantee the
+        language makes rather than an optimization this evaluator
+        chose, because f is the program's own function and what it does
+        on the way is part of what the program does.  Building the
+        answers first and reducing after would be correct arithmetic
+        and the wrong program.
+
+        An empty container answers the question there is no evidence
+        against: ∀ true and ∃ false.  Those are the identities that
+        make `f ∀ (v ⧺ w)` the same as `f ∀ v ∧ f ∀ w` however the
+        elements fall between the two.
+        """
+        glyph = "\N{FOR ALL}" if node.kind == "all" else "\N{THERE EXISTS}"
+        func = self.eval_expr(node.func)
+        held = unwrap_optional(self.eval_expr(node.container))
+        # the answer that settles it, which is also the answer given
+        settles = node.kind == "any"
+        for element in self._quant_elements(held, glyph):
+            answer = unwrap_optional(self._do_call(func, [element]))
+            if not isinstance(answer, BoolValue):
+                raise TypeError(
+                    f"{glyph} asks a question of each of them, so what "
+                    f"it asks has to answer a bool; this answered "
+                    f"{self._value_type_name(answer)}")
+            if answer.value == settles:
+                return mk_bool(settles)
+        return mk_bool(not settles)
 
     def _eval_fold(self, node: FoldExpr) -> Value:
         """Evaluate a fold expression: left fold ⌿ or right fold ⍀."""
@@ -7224,6 +7291,7 @@ _EXPR_DISPATCH = {
     OperatorRef: Evaluator._ee_OperatorRef,
     FoldExpr: Evaluator._ee_FoldExpr,
     MapExpr: Evaluator._ee_MapExpr,
+    QuantExpr: Evaluator._ee_QuantExpr,
     ReshapeExpr: Evaluator._ee_ReshapeExpr,
 }
 

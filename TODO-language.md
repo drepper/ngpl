@@ -96,7 +96,7 @@ otherwise.
     all arms must return a valu of the same type.  If an `if` statement does not have an `else`
     arm the value returned in an `optional` value.  Otherwise it is of the actual type.
     A branch that leaves rather than arriving -- a return, a @noreturn call -- states no type;
-    with no else, the branch still has to arrive with something for ∃ to hold.
+    with no else, the branch still has to arrive with something for ⊨ to hold.
 
 
 Execution Modes
@@ -817,12 +817,12 @@ Control Flow and Expressions
 -----------------------------
 
 [x] match statement for deconstructing sum types and optionals.  Done for optionals and
-    results: ∃(name) binds a present value or a success, ∄(name) binds a failure's error,
+    results: ⊨(name) binds a present value or a success, ⊭(name) binds a failure's error,
     ∅ matches absence, _ matches the rest, and a value no arm accepts is an error.
-    ∄(e) is also an expression, which is how a function originates an error rather than
+    ⊭(e) is also an expression, which is how a function originates an error rather than
     propagating one.  Sum types will use the same statement.  Exhaustiveness is checked
     where the subject's type can be worked out -- a call with a declared return type,
-    division, a written-out ∃/∅/∄, or a builtin optional-returning method -- and at run
+    division, a written-out ⊨/∅/⊭, or a builtin optional-returning method -- and at run
     time otherwise; it will reach further as type inference grows.
 
 [x] loop break/continue statements.  Non-local exits from nested loops.  Both are in,
@@ -1240,6 +1240,29 @@ Macros and Reflection
 
 [ ] ¨ over a hash or a set, which needs an answer to what a map of a hash is -- its values or
     its pairs -- and belongs with the rest of what those containers do.
+
+[x] the quantifier operators, f ∀ v and f ∃ v: whether f holds of every one of the things v
+    holds, and whether it holds of any.  The fold's shape -- the question on the left, what is
+    asked about on the right -- and the fold's precedence and range-level right operand.
+    Arrays, ranges and iterators; f must answer a bool, and answering anything else is refused
+    where it is asked rather than read as a truth.  Both must exit early: they exit at the
+    first element that settles the question and do not ask about the rest, ∀ at the first that
+    does not hold and ∃ at the first that does.  That is a guarantee every implementation owes
+    and not an optimization one may choose, because f is the program's own function and what
+    it does on the way -- printing, writing, failing -- is part of what the program does; a
+    rule that left the stopping point open would let one source produce two outputs.  It is
+    also why an iterator is admitted, a source that never ends being a fair thing to ask ∃
+    about, which holds only because the exit does.  An empty container answers
+    ∀ true and ∃ false, the identities that make the answer for a joined container agree with
+    the answers for its halves however the elements fall.  ∧⌿ and ∨⌿ over a mapped container
+    were the nearest thing before: three passes, no short circuit, and a refusal on empty.
+
+[x] ∃ and ∄ gave up their glyphs to those operators; the present optional and the failed
+    result are now written ⊨ and ⊭.  The turnstile asserts what follows it -- here is a value,
+    and it is this one -- and its negation says what stopped the assertion holding, which is
+    what the argument was always for.  A glyph does one job.
+
+[ ] ∀ and ∃ over a hash or a set, which waits on the same answer ¨ waits on.
 
 [x] refuse at the definition a function whose body threads over an array parameter while its
     return type names a scalar -- `fn g3(x : i32[]) -> bool: x > 3`, whose body hands back

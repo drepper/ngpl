@@ -2,7 +2,7 @@
 // answerable before anything runs.  Nothing calls describe.
 fn describe(x : i64?) → str:
     match x:
-        ∃(v):
+        ⊨(v):
             "present"
 
 @start

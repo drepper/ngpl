@@ -154,7 +154,7 @@ binds:
 
 ```
 match maybe_pair():
-    ∃((a, b)):
+    ⊨((a, b)):
         a + b
     ∅:
         0
@@ -167,7 +167,7 @@ the implementation is one function called from three places.
 
 This is a pattern in the sense that `match` has patterns, but it is not
 the general one: a destructuring names elements and cannot ask about
-them.  There is no `∃((a, 0))` matching a pair whose second element is
+them.  There is no `⊨((a, 0))` matching a pair whose second element is
 zero.  The language will want the general form eventually, and when it
 arrives this should be a case of it rather than a separate feature.
 

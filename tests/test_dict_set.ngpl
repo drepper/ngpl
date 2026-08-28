@@ -79,7 +79,7 @@ fn test_matching_on_a_read():
     let d := ⸨"a": 1i64⸩
     let seen : mut i64 = 0
     match d["a"]:
-        ∃(v):
+        ⊨(v):
             seen ← v
         ∅:
             seen ← ⁻1

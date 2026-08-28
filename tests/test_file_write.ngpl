@@ -76,7 +76,7 @@ fn test_open_of_a_present_file_answers_the_file():
 fn test_absence_takes_the_stated_branch():
     let took : mut str = ""
     match std.fs.cwd().open_file("no_such_file_in_this_tree"):
-        ∃(f):
+        ⊨(f):
             took ← "present"
             f.close()
         ∅:

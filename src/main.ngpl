@@ -223,7 +223,7 @@ fn resolve_source(name : str, base : str, paths : str[]) → str:
 fn can_open(path : str) → bool:
     let f := std.fs.cwd().open_file(path)
     match f:
-        ∃(_): true
+        ⊨(_): true
         ∅: false
 
 // Read the recipe out of its own file: lex it, parse it leniently, and

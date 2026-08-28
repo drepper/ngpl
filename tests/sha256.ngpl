@@ -157,19 +157,19 @@ fn sha256(data : byte[]) → u32[8]?:
 fn test_sha256_empty():
     let data := std.bytes("")
     let hash := sha256(data)
-    assert_eq(hash, ∃([0xe3b0c442, 0x98fc1c14, 0x9afbf4c8, 0x996fb924, 0x27ae41e4, 0x649b934c, 0xa495991b, 0x7852b855]))
+    assert_eq(hash, ⊨([0xe3b0c442, 0x98fc1c14, 0x9afbf4c8, 0x996fb924, 0x27ae41e4, 0x649b934c, 0xa495991b, 0x7852b855]))
 
 @test(sha256)
 fn test_sha256_abc():
     let data := std.bytes("abc")
     let hash := sha256(data)
-    assert_eq(hash, ∃([0xba7816bf, 0x8f01cfea, 0x414140de, 0x5dae2223, 0xb00361a3, 0x96177a9c, 0xb410ff61, 0xf20015ad]))
+    assert_eq(hash, ⊨([0xba7816bf, 0x8f01cfea, 0x414140de, 0x5dae2223, 0xb00361a3, 0x96177a9c, 0xb410ff61, 0xf20015ad]))
 
 @test(sha256)
 fn test_sha256_448bit():
     let data := std.bytes("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")
     let hash := sha256(data)
-    assert_eq(hash, ∃([0x248d6a61, 0xd20638b8, 0xe5c02693, 0x0c3e6039, 0xa33ce459, 0x64ff2167, 0xf6ecedd4, 0x19db06c1]))
+    assert_eq(hash, ⊨([0x248d6a61, 0xd20638b8, 0xe5c02693, 0x0c3e6039, 0xa33ce459, 0x64ff2167, 0xf6ecedd4, 0x19db06c1]))
 
 @start
 @impure

@@ -120,7 +120,7 @@ fn test_matching_on_the_answer():
     let s := "hello world"
     let where : mut i64 = ⁻1
     match s ⍳ 'w':
-        ∃(at):
+        ⊨(at):
             where ← @dropunit(at)
         ∅:
             where ← ⁻2
@@ -131,7 +131,7 @@ fn test_matching_on_what_is_not_there():
     let s := "hello"
     let where : mut i64 = 0
     match s ⍳ 'z':
-        ∃(at):
+        ⊨(at):
             where ← @dropunit(at)
         ∅:
             where ← ⁻2

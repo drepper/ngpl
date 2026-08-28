@@ -293,8 +293,8 @@ fn test_shift_right_past_the_width_is_a_compile_error():
 fn shift_by(n : i64) → i64:
     let b : byte = 3
     match b « n:
-        ∃(v):  v
-        ∄(e):  ⁻1
+        ⊨(v):  v
+        ⊭(e):  ⁻1
 
 @test
 fn test_runtime_count_reports_when_it_runs():

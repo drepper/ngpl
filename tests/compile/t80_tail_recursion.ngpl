@@ -39,7 +39,7 @@ fn hold(x : i64) → i64?:
 
 fn walk(n : i64?, acc : i64) → i64:
     match n:
-        ∃(x):
+        ⊨(x):
             if x = 0:
                 acc
             else:

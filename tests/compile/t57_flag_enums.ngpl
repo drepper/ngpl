@@ -56,7 +56,7 @@ fn through_a_layout():
     f.close()
     let alloc := std.arena.allocator()
     match std.fs.cwd().open_file("/tmp/ngpl_t57.tmp"):
-        ∃(g):
+        ⊨(g):
             let got := g.read_file(alloc)
             std.println("{} {} {} {}", #got, got[0¤byte], got[4¤byte], got[6¤byte])
         ∅:

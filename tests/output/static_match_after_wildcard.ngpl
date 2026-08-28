@@ -2,10 +2,10 @@
 // that cannot be reached rather than at the _ that shadows it.
 fn classify(x : i32?) → i32:
     match x:
-        ∃(v): v
+        ⊨(v): v
         _: 0
         ∅: 1
 
 @start
 fn main():
-    std.println("{}", classify(∃(3)))
+    std.println("{}", classify(⊨(3)))

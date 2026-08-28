@@ -130,7 +130,9 @@ _NORMALIZE_OPS = {
 
 # Single-character operators.
 # The last six are the tolerant comparisons, paired with the exact ones.
-SINGLE_OPS = set("+-%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ∃∄⍴⧺⌿⍀¤√∛∜↑⁻×÷⍳∊≠#⸨⸩∪∩∖⊂⊆⊃⊇"
+SINGLE_OPS = set("+-%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ⊨⊭⍴⧺⌿⍀¤√∛∜↑⁻×÷⍳∊≠#⸨⸩∪∩∖⊂⊆⊃⊇"
+                 # f ∀ v and f ∃ v -- whether f holds of them all, or of any.
+                 "∀∃"
                  # Written code: ⟦…⟧ around what a macro is invoked on,
                  # ⟪…⟫ around a piece of program held rather than run,
                  # $ putting a value back into one, and ※ in front of a
@@ -616,18 +618,18 @@ def tokenize(src: str):
         if ch in SINGLE_OPS:
             if ch == "λ":
                 tokens.append(Token("LAMBDA", ch, line, col))
-            elif ch == "\N{THERE DOES NOT EXIST}":
-                # ∄(e) is a failed result carrying the reason.
-                tokens.append(Token("NOTEXISTS", ch, line, col))
-            elif ch == "\N{THERE EXISTS}":
-                # ∃(v) is the present optional; the same token as the
+            elif ch == "\N{NOT TRUE}":
+                # ⊭(e) is a failed result carrying the reason.
+                tokens.append(Token("NOTSOME", ch, line, col))
+            elif ch == "\N{TRUE}":
+                # ⊨(v) is the present optional; the same token as the
                 # `some` keyword it spells more briefly.
                 tokens.append(Token("SOME", ch, line, col))
             elif ch == "=" or ch in ",.;:(){}[]…⸨⸩⟦⟧⟪⟫$":
                 tokens.append(Token("PUNCT", ch, line, col))
             elif ch == "\N{RIGHTWARDS ARROW}":
                 tokens.append(Token("OP", "->", line, col))
-            elif ch in ("+-%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻⍳∊≠#∪∩∖⊂⊆⊃⊇※\N{DIAERESIS}"
+            elif ch in ("+-%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻⍳∊≠#∪∩∖⊂⊆⊃⊇※∀∃\N{DIAERESIS}"
                         "\N{MULTIPLICATION SIGN}\N{DIVISION SIGN}"
                         "≅≇⪅⪆⪉⪊"
                         "\N{SQUARED PLUS}\N{SQUARED MINUS}"

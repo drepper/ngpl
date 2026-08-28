@@ -685,6 +685,20 @@ class MapExpr:
         self.pos = None
 
 
+class QuantExpr:
+    """`f ∀ v` and `f ∃ v` -- whether f holds of them all, or of any.
+
+    kind is "all" for ∀ and "any" for ∃.  The shape is a fold's: what
+    asks the question on the left, what is asked about on the right.
+    """
+
+    def __init__(self, kind, func, container):
+        self.kind = kind
+        self.func = func
+        self.container = container
+        self.pos = None
+
+
 class ReshapeExpr:
     """Reshape expression: shape ⍴ data."""
 
@@ -986,7 +1000,7 @@ class StructLit:
 
 
 class ExpErr:
-    """Constructor for a failed result: ∄(expr)."""
+    """Constructor for a failed result: ⊭(expr)."""
 
     def __init__(self, value):
         self.value = value
@@ -995,8 +1009,8 @@ class ExpErr:
 class MatchArm:
     """One arm of a match: a pattern and the statements it guards.
 
-    kind is "some" (∃(name), binding the contained value), "err"
-    (∄(name)), "none" (∅), "type" (Type(name), one alternative of a sum
+    kind is "some" (⊨(name), binding the contained value), "err"
+    (⊭(name)), "none" (∅), "type" (Type(name), one alternative of a sum
     type), "enum" (Enum.member, one value of an enumeration), or
     "wildcard" (_).  name is the bound name, set for every kind that
     binds; type_name is set for "type" and holds the enumeration's name

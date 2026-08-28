@@ -131,6 +131,7 @@ all_tests=(
     "$testdir"/test_borrow_foreach.ngpl
     "$testdir"/test_array_methods.ngpl
     "$testdir"/test_iterator.ngpl
+    "$testdir"/test_quantifiers.ngpl
     "$testdir"/test_walk_holds.ngpl
     "$testdir"/test_one_thing_twice.ngpl
     "$testdir"/test_evaluation_order.ngpl

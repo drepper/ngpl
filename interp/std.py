@@ -377,7 +377,7 @@ class DirFD:
             flags: openat flags (default O_RDONLY | O_CLOEXEC).
 
         Returns:
-            An optional: ∃(FileStream) when the file opened, ∅ when it
+            An optional: ⊨(FileStream) when the file opened, ∅ when it
             could not be -- a file that is not there being an ordinary
             answer, not a failure of the program.  The caller decides
             what its absence means and says so in its own words.

@@ -193,14 +193,14 @@ fn test_alternative_declared_later():
 fn test_optional_sum_absent():
     let s : Shape? = ∅
     match s:
-        ∃(v):  assert(false)
+        ⊨(v):  assert(false)
         ∅:     assert(true)
 
 @test
 fn test_optional_sum_present():
     let s : Shape? = Circle{r: 2.0}
     match s:
-        ∃(v):  assert_eq(area(v), 12.0)
+        ⊨(v):  assert_eq(area(v), 12.0)
         ∅:     assert(false)
 
 // What it holds, when it holds something, still has to be an

@@ -22,7 +22,7 @@ fn locate(ok : bool) → (Cursor, bool):
 
 fn find(ok : bool) → (i64?, str):
     if ok:
-        return (∃(4i64), "found")
+        return (⊨(4i64), "found")
     (∅, "nothing")
 
 fn divmod(a : i64, b : i64) → (i64, i64):

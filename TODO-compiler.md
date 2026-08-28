@@ -270,6 +270,21 @@ Errors and Warnings
     alternate stack, so the frame to start from has to be read out of the ucontext, whose
     layout is a sixth thing per target.  rt_backtrace.ngpl holds the routine and the table.
 
+[ ] the quantifier operators ∀ and ∃ in the compiled subset.  The bootstrap interpreter answers
+    `f ∀ v` and `f ∃ v` for arrays, ranges and iterators; ngplc refuses the glyphs, which is
+    what an unknown character does and is the honest answer until the subset covers them.
+    What they need is what ¨ needed -- a call per element and a container walked in the
+    lowering -- plus the exit, which is a branch out of the loop and not a new shape.
+
+    **They must exit early.**  The operators exit at the first element that settles the
+    question and do not ask about the rest -- ∀ at the first that does not hold, ∃ at the
+    first that does -- and that is part of what they mean, not an optimization the lowering
+    may leave for later.  A first cut that walks the whole container and reduces at the end
+    would answer correctly and still be wrong: the function is the program's own, so a call
+    that should not have happened is output that should not have appeared.  Do not land the
+    operators without the branch.  tests/test_quantifiers.ngpl pins the call count for both,
+    and is the suite they have; nothing in tests/compile uses them until this is done.
+
 
 Code Generation
 ---------------

@@ -2220,10 +2220,10 @@ impl Checker:
         self.ty_of(v) = TY_EMPTY
 
     // An if with no else can fall past its branch, and what it hands
-    // back there is nothing.  So its value is optional: ∃ the branch's
+    // back there is nothing.  So its value is optional: ⊨ the branch's
     // value where the condition holds, ∅ where it does not.  A branch
     // that already answers an optional is that optional -- an optional
-    // of an optional is refused here as it is refused of ∃.
+    // of an optional is refused here as it is refused of ⊨.
     fn check_ife_noelse(&mut self, id : i64, tok : i64, nb : i64, want : i64):
         let sw : i64 = ty_strip_ref(want)
         let inner : mut i64 = TY_UNIT
@@ -2232,7 +2232,7 @@ impl Checker:
         let v : i64 = self.ife_block_value(nb, inner)
         if v = ⁻1:
             // the branch leaves rather than arriving, so no value ever
-            // comes back and there is nothing for ∃ to hold
+            // comes back and there is nothing for ⊨ to hold
             self.derr(tok, "an if with no else answers ∅ where the condition does not hold, so its branch answers something where it does; this one leaves instead")
             self.set_type(id, mk_oty(TY_I64))
             return
@@ -4789,7 +4789,7 @@ impl Checker:
             self.check_block(empty_blk, trailing)
             if trailing and self.a.fns[self.cur_fn × 1¤ptrdiff].ret ≠ TY_UNIT:
                 if not self.block_yields(some_blk):
-                    self.derr(tok, "the ∃ arm answers nothing on some path")
+                    self.derr(tok, "the ⊨ arm answers nothing on some path")
                 if not self.block_yields(empty_blk):
                     self.derr(tok, "the ∅ arm answers nothing on some path")
         elif k = NK_MATCHE:
@@ -5214,7 +5214,7 @@ impl Checker:
         if nc = ⁻1:
             // With no else it falls past its branch, and ∅ is what it
             // answers there, so it does answer on every path -- but
-            // only where the branch arrives with something for the ∃
+            // only where the branch arrives with something for the ⊨
             // side to hold.  A branch that returns instead leaves the
             // fall-through with nothing, which is the old mistake and
             // still one.

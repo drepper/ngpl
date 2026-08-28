@@ -17,7 +17,7 @@
 //
 // An else is not required.  An if without one can fall past its
 // branch, and what it hands back there is nothing, so its value is
-// optional: ∃ the branch's value where the condition holds and ∅ where
+// optional: ⊨ the branch's value where the condition holds and ∅ where
 // it does not.
 //
 // The specification's "An `if` Is a Value" is the normative statement.
@@ -175,7 +175,7 @@ fn test_a_branch_that_leaves_states_no_type():
 // ---------------------------------------------------------------------
 //
 // An if with no else can fall past its branch, and what it hands back
-// there is nothing.  So it does answer on every path -- ∃ the branch's
+// there is nothing.  So it does answer on every path -- ⊨ the branch's
 // value where the condition holds, ∅ where it does not -- and its type
 // is the optional of what the branch says.
 

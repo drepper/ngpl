@@ -35,7 +35,7 @@ fn main() → u8:
     std.println("{} {}", back[0¤byte], back[299¤byte])
 
     match std.fs.cwd().open_file("/tmp/ngpl_t21_never_here.tmp"):
-        ∃(g):
+        ⊨(g):
             g.close()
             std.println("unexpectedly there")
         ∅:

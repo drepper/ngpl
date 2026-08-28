@@ -43,14 +43,14 @@ fn test_optional_binding_holds_nothing():
 fn test_optional_binding_matches():
     let x : i32? = 7
     match x:
-        ∃(v):  assert_eq(v, 7)
+        ⊨(v):  assert_eq(v, 7)
         ∅:     assert(false)
 
 @test
 fn test_optional_binding_matches_absent():
     let x : i32? = ∅
     match x:
-        ∃(v):  assert(false)
+        ⊨(v):  assert(false)
         ∅:     assert(true)
 
 // ! is the expected form, as it is elsewhere.

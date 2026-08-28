@@ -322,7 +322,7 @@ This is the rule arithmetic already follows.  `u8 + u8` may leave `u8`, and that
 **An optional is met by being held.**  An optional is the type that holds a value and the absence of one, so a value meets it by being held in one — in every position, as above:
 
 ```
-let o : i64? = 5                // ∃5
+let o : i64? = 5                // ⊨5
 let p : i64? = a                // carried to i64, then held
 
 fn g(o : i64?) → i64: o ?? 0
@@ -948,8 +948,8 @@ Being a value rather than a stop, it can be handled or recovered from:
 (b « 8) ?? 0    // 0
 
 match b « 8:
-    ∃(v):  …
-    ∄(e):  …
+    ⊨(v):  …
+    ⊭(e):  …
 ```
 
 An untyped integer is arbitrary-precision and has no width for a count to pass, so any count is fine:
@@ -1657,7 +1657,7 @@ v ⍳ 99                          /* ∅ */
 (v ⍳ 99) ?? ⁻1                  /* ⁻1, where a sentinel is wanted */
 
 match s ⍳ 'z':
-    ∃(at):
+    ⊨(at):
         …
     ∅:
         …
@@ -1818,7 +1818,7 @@ d["a"] ?? 0                     /* 1 */
 d["z"] ?? 0                     /* 0 */
 
 match d["a"]:
-    ∃(v): …
+    ⊨(v): …
     ∅: …
 ```
 
@@ -3435,16 +3435,16 @@ Unlike `?` which propagates `∅`, `??` recovers from it.  This is the right cho
 A value carried out of an optional meets a stated type like any other value: `get_padded_byte` answers `u8?`, and after `??` or `?` has produced a `u8` it may be bound to a `u32` with nothing written.  See "A Value Meets a Stated Type" for the whole of the rule, which is not about optionals in particular.
 
 
-### Naming a Present Optional (`∃`)
+### Naming a Present Optional (`⊨`)
 
-`∃(v)` is an optional that holds `v`, the counterpart of `∅` for absence.  It is Rust's `Some(v)` under a shorter spelling:
+`⊨(v)` is an optional that holds `v`, the counterpart of `∅` for absence.  It is Rust's `Some(v)` under a shorter spelling:
 
 ```
-∃(42)                     // an optional holding 42
+⊨(42)                     // an optional holding 42
 ∅                       // an optional holding nothing
 ```
 
-`some(v)` is the same constructor written as a keyword and remains accepted; `∃(v)` is the form to use, and the form an optional is shown as when a value is displayed rather than printed — `std.print` and `std.println` unwrap, as they do for every optional.
+`some(v)` is the same constructor written as a keyword and remains accepted; `⊨(v)` is the form to use, and the form an optional is shown as when a value is displayed rather than printed — `std.print` and `std.println` unwrap, as they do for every optional.
 
 #### An Optional Is Not the Value It Holds
 
@@ -3453,12 +3453,12 @@ Comparing an optional with a plain value is an error:
 ```
 v.get(0) = 1
 
-error: =: cannot compare an optional with a plain value; write ∃(v) to
+error: =: cannot compare an optional with a plain value; write ⊨(v) to
 compare against a present value, ∅ against an absent one, or ?? to
 supply a default
 ```
 
-This is what `∃` is for.  An equality that quietly looked through the optional would make
+This is what `⊨` is for.  An equality that quietly looked through the optional would make
 
 ```
 assert_eq(it.next(), 97)
@@ -3467,7 +3467,7 @@ assert_eq(it.next(), 97)
 read as a test of the element, when it is really a test of the element *and* of there being an element at all — two claims wearing the disguise of one.  The distinction matters most exactly where it is least visible: a test that passes because the iterator produced 97 and a test that would also have passed had it produced nothing are not the same test.  Written out, the intent is unambiguous:
 
 ```
-assert_eq(it.next(), ∃(97))   // there was a value, and it was 97
+assert_eq(it.next(), ⊨(97))   // there was a value, and it was 97
 assert_eq(it.next(), ∅)       // there was none
 assert_eq(it.next() ?? 0, 97)  // 97, or nothing at all
 ```
@@ -3475,8 +3475,8 @@ assert_eq(it.next() ?? 0, 97)  // 97, or nothing at all
 Two optionals are compared by shape first and contents second, so nesting survives:
 
 ```
-∃(∅) = ∅                 // false — one holds something, the other nothing
-∃(∃(1)) = ∃(∃(1))       // true
+⊨(∅) = ∅                 // false — one holds something, the other nothing
+⊨(⊨(1)) = ⊨(⊨(1))       // true
 ```
 
 Arithmetic and the other operators still unwrap implicitly, as [Implicit Unwrapping](#implicit-unwrapping) describes.  Only equality is strict, because only equality can silently answer a different question than the one asked.
@@ -3488,23 +3488,23 @@ Arithmetic and the other operators still unwrap implicitly, as [Implicit Unwrapp
 
 ```
 match it.next():
-    ∃(x):
+    ⊨(x):
         use(x)
     ∅:
         done()
 ```
 
-Patterns are `∃(name)` for a present optional or a successful result, which binds the value to `name`; `∄(name)` for a failed result, which binds the error; `∅` for an absent optional; and `_` for anything not already matched.  Arms may be written in either order, and a single-statement arm may sit on the same line as its colon:
+Patterns are `⊨(name)` for a present optional or a successful result, which binds the value to `name`; `⊭(name)` for a failed result, which binds the error; `∅` for an absent optional; and `_` for anything not already matched.  Arms may be written in either order, and a single-statement arm may sit on the same line as its colon:
 
 ```
 match v.get(i):
-    ∃(x): total ← total + x
+    ⊨(x): total ← total + x
     ∅: break_out ← true
 ```
 
 The name is bound only within its arm and cannot be assigned to: it names the value that was matched, and writing to it would say nothing about that value.
 
-A falsy value is still a present one, so `∃(x)` takes an element of `0` — the arm chosen depends on whether there was a value, not on what it was.
+A falsy value is still a present one, so `⊨(x)` takes an element of `0` — the arm chosen depends on whether there was a value, not on what it was.
 
 #### Matching an Enumeration
 
@@ -3575,44 +3575,44 @@ or `match-ladder`.
 
 #### Matching a Result
 
-The same statement handles a result, with `∄(name)` binding the error:
+The same statement handles a result, with `⊭(name)` binding the error:
 
 ```
 match 10 ÷ b:
-    ∃(v):
+    ⊨(v):
         use(v)
-    ∄(e):
+    ⊭(e):
         report(e)
 ```
 
-`∃` covers both a present optional and a successful result because in each the question *was there a value* is answered yes, and the arm wants the value either way.  The two negative answers are distinct, and that is why they have separate patterns:
+`⊨` covers both a present optional and a successful result because in each the question *was there a value* is answered yes, and the arm wants the value either way.  The two negative answers are distinct, and that is why they have separate patterns:
 
 | Pattern | Answers "was there a value" | Says why not |
 |---------|----------------------------|--------------|
-| `∃(v)` | yes | — |
+| `⊨(v)` | yes | — |
 | `∅` | no | no |
-| `∄(e)` | no | yes |
+| `⊭(e)` | no | yes |
 
 Neither stands in for the other.  A `match` on a result that handles only `∅` has not handled failure, and reports as much rather than falling through:
 
 ```
 match 10 ÷ 0:
-    ∃(v): use(v)
+    ⊨(v): use(v)
     ∅: nothing()
 
 error: match has no arm for a failed result; add the missing pattern or a _ arm
 ```
 
-The glyphs are meant to read as what they say: `∃` there is a value, `∅` the set is empty, `∄` there is no value — and, since `∄` takes an argument, here is what stopped there being one.
+The glyphs are meant to read as what they say.  `⊨` is the turnstile of logic, which asserts what follows it: here is a value, and it is this one.  `⊭` is its negation, and since it takes an argument it says more than that the assertion fails — here is what stopped it holding.  `∅` is the empty set, which carries nothing because there is nothing to carry.  (`⊨` and `⊭` once read `∃` and `∄`.  Those glyphs now name the [quantifier operators](#the-quantifier-operators--and-), which ask a question of a container rather than build a value, and a glyph does one job.)
 
-#### Constructing a Failure (`∄`)
+#### Constructing a Failure (`⊭`)
 
-`∄(e)` is also an expression: a failed result carrying `e`.  It is how a function reports an error of its own rather than propagating one:
+`⊭(e)` is also an expression: a failed result carrying `e`.  It is how a function reports an error of its own rather than propagating one:
 
 ```
 fn checked(n : int) → int!:
     if n < 0:
-        return ∄(std.errors.invalid_argument)
+        return ⊭(std.errors.invalid_argument)
     n × 2
 ```
 
@@ -3624,7 +3624,7 @@ A `match` given a value no arm accepts is an error rather than a silent no-op:
 
 ```
 match v.get(0):
-    ∃(x):
+    ⊨(x):
         std.println("{}", x)
 
 error: match has no arm for ∅; add the missing pattern or a _ arm
@@ -3639,7 +3639,7 @@ The check happens where the `match` is written, not where it runs.  A gap is a p
 fn never_called():
     let v : mut = [1]
     match v.get(0):
-        ∃(x):
+        ⊨(x):
             std.println("{}", x)
 
 error: in never_called: match has no arm for ∅; add the missing pattern
@@ -3652,10 +3652,10 @@ A pattern belonging to a different type is reported as itself rather than as a m
 
 ```
 match 10 ÷ b:
-    ∃(v): use(v)
+    ⊨(v): use(v)
     ∅: nothing()
 
-error: ∅ cannot match a result, whose failure is ∄(e)
+error: ∅ cannot match a result, whose failure is ⊭(e)
 ```
 
 Two further mistakes need no knowledge of the subject at all, and are always reported: a repeated pattern, and an arm written after `_`.  Both are arms that can never run.
@@ -3667,7 +3667,7 @@ Exhaustiveness needs the subject's type.  It is known for:
 * a name whose type is written down — a parameter, or a `let` that states one;
 * a call to a function with a declared return type;
 * division and remainder, which produce a result;
-* `∃(...)`, `∅`, and `∄(...)` written out;
+* `⊨(...)`, `∅`, and `⊭(...)` written out;
 * the standard library's optional-returning methods — `next`, `get`, `pop` — unless a struct in scope defines a method of that name, in which case nothing is assumed.
 
 A written type is read whatever it says.  `T?` admits `∅`, `T!` admits a failure, and a type saying neither is a plain value with one shape:
@@ -3675,7 +3675,7 @@ A written type is read whatever it says.  `T?` admits `∅`, `T!` admits a failu
 ```
 fn describe(x : i64?) → str:
     match x:
-        ∃(v): "present"
+        ⊨(v): "present"
 
 error: in describe: match has no arm for ∅; add the missing pattern or
 a _ arm
@@ -3745,9 +3745,9 @@ Three constructs handle an optional, and they are not interchangeable:
 | Swift | `.some(x)` / `.success(x)` | `nil` | `.failure(e)` | compile time |
 | Zig | `\|x\|` on `if`/`while` | `else` | `else \|e\|` | n/a (not a match) |
 | Scala | `Some(x)` / `Success(x)` | `None` | `Failure(e)` | compile time (warning) |
-| NGPL | `∃(x)` | `∅` | `∄(e)` | compile time where the type is known |
+| NGPL | `⊨(x)` | `∅` | `⊭(e)` | compile time where the type is known |
 
-The shape is Rust's, and the glyphs read as the mathematical statements they are.  Where Rust needs four constructors across two types — `Some`/`None` and `Ok`/`Err` — the same three patterns serve both here, because `∃` asks only whether a value arrived and does not care which type carried it.  That is a smaller vocabulary for the same coverage, at the cost of not distinguishing an optional from a result in the pattern itself.  Where this falls short of Rust and Scala is the reach of exhaustiveness rather than its existence: theirs follows from a type known for every expression, while here it covers the subjects whose type can be worked out and leaves the rest to a runtime check.  `match` is deliberately more general than optionals need: sum types will use the same statement, which is why the patterns are a list of shapes rather than a special form for `∃` and `∅`.
+The shape is Rust's, and the glyphs read as the mathematical statements they are.  Where Rust needs four constructors across two types — `Some`/`None` and `Ok`/`Err` — the same three patterns serve both here, because `⊨` asks only whether a value arrived and does not care which type carried it.  That is a smaller vocabulary for the same coverage, at the cost of not distinguishing an optional from a result in the pattern itself.  Where this falls short of Rust and Scala is the reach of exhaustiveness rather than its existence: theirs follows from a type known for every expression, while here it covers the subjects whose type can be worked out and leaves the rest to a runtime check.  `match` is deliberately more general than optionals need: sum types will use the same statement, which is why the patterns are a list of shapes rather than a special form for `⊨` and `∅`.
 
 
 ### Optionals in a Boolean Context
@@ -3826,7 +3826,7 @@ The `?` postfix on a type introduces an optional when no error type follows, and
 
 | Syntax | Meaning |
 |--------|---------|
-| `T?` | optional — success (`∃(v)`) or absence (`∅`) |
+| `T?` | optional — success (`⊨(v)`) or absence (`∅`) |
 | `T?E` | expected — success (`ok(v)`) or error (`err(e)` where `e` is of type `E`) |
 | `T!` | abbreviation for `T?std.errors` |
 
@@ -4510,7 +4510,7 @@ let v : i64 = if c { 7 } else { give_up() }      // give_up is @noreturn
 
 #### No `else`, and the Value Is Optional
 
-An `else` is not required.  An `if` without one can fall past its branch, and what it hands back there is nothing — so it answers on every path all the same, and what it answers is an optional: `∃` the branch's value where the condition holds, `∅` where it does not.
+An `else` is not required.  An `if` without one can fall past its branch, and what it hands back there is nothing — so it answers on every path all the same, and what it answers is an optional: `⊨` the branch's value where the condition holds, `∅` where it does not.
 
 ```
 fn positive(x : i64) → i64?:
@@ -4520,9 +4520,9 @@ fn positive(x : i64) → i64?:
 let step : i64? = if wide: 8
 ```
 
-A chain that runs out is the same thing: the last `elif` is the last branch, and falling past it answers `∅`.  A branch that already answers an optional is that optional — nothing is held a second time, an optional of an optional being no more a type here than it is after `∃`.
+A chain that runs out is the same thing: the last `elif` is the last branch, and falling past it answers `∅`.  A branch that already answers an optional is that optional — nothing is held a second time, an optional of an optional being no more a type here than it is after `⊨`.
 
-The branch still has to arrive with something for `∃` to hold.  One that leaves instead is the old mistake and is still one:
+The branch still has to arrive with something for `⊨` to hold.  One that leaves instead is the old mistake and is still one:
 
 ```
 fn f(c : bool) → i64:
@@ -6825,6 +6825,113 @@ Mapping and then folding is the shape most of this is for:
 The glyph and the position are APL's, and they put the function where the fold already puts it: on the left, with the data on the right.  Where APL's `¨` is an *operator modifier* that makes a new function, this is a binary operator that answers the array directly — the same simplification the fold made, and for the same reason: a modifier would need the language to have a notion of a derived function, which it does not.
 
 
+### The Quantifier Operators (`∀` and `∃`)
+
+`f ∀ v` asks whether `f` holds of **every** one of the things `v` holds.  `f ∃ v` asks whether it holds of **any**.  Both answer a `bool`.  The shape is the fold's and the map's: what asks the question on the left, what is asked about on the right.
+
+```
+fn positive(n : i64) → bool:
+    n > 0
+
+let v : i64[] = [1, 2, 3]
+positive ∀ v                    // true
+positive ∃ v                    // true
+
+let w : i64[] = [1, ⁻2, 3]
+positive ∀ w                    // false
+positive ∃ w                    // true
+```
+
+Anything that can be called with one value may stand on the left — a named function, a lambda, a name that holds one — and it has to answer a `bool`.  A function that answers anything else is a type error where it is asked, not a truth value inferred from what it said:
+
+```
+fn twice(n : i64) → i64:
+    n × 2
+
+twice ∀ v
+
+error: ∀ asks a question of each of them, so what it asks has to answer a bool; this answered i64
+```
+
+Arrays and ranges are what the right operand may be, as they are for a fold and a map, and so is an iterator:
+
+```
+(λx : i64 → bool: x < 100) ∀ 1…5            // true
+(λx : i64 → bool: (x % 2 ?? 0) = 0) ∃ 1…5   // true
+
+let it : mut = v.iterate()
+positive ∀ it                                // true
+```
+
+#### They Must Exit Early
+
+**Both operators exit at the first element that settles the question, and `f` is not asked about the rest.**  `∀` exits at the first element that does not hold; `∃` exits at the first that does.
+
+This is a guarantee the language makes, not an optimization an implementation may choose.  An implementation that asks `f` about an element after the answer is settled is wrong, and so is one that asks about them all and then reduces.
+
+```
+@impure
+fn loud(n : i64) → bool:
+    std.println("asked about {}", n)
+    n < 3
+
+loud ∀ [1, 2, 3, 4, 5]          // asks about 1, 2, 3 — and answers false
+loud ∃ [7, 8, 1, 9]             // asks about 7, 8, 1 — and answers true
+```
+
+It is a guarantee rather than a liberty because `f` is the program's own function, and what it does on the way — printing, writing, failing, taking time — is part of what the program does.  A rule that left the stopping point to the implementation would let one source produce two outputs, which is the thing this language is built not to allow.  `∧` and `∨` are short-circuit for the same reason and were never anything else.
+
+Two things follow.  How many times `f` was called is a fact a program may rely on and a test may pin, and `tests/test_quantifiers.ngpl` pins it for both operators.  And an iterator is admissible on the right: a source that never runs out is a fair thing to ask `∃` about, since one element that holds ends it — which is only true if the exit is guaranteed.
+
+#### An Empty Container
+
+```
+let e : i64[] = []
+positive ∀ e                    // true
+positive ∃ e                    // false
+```
+
+Each answers the question there is no evidence against.  These are not conventions picked for tidiness: they are the identities that make the operators agree with themselves when a container is split,
+
+```
+f ∀ (v ⧺ w)   =   f ∀ v ∧ f ∀ w
+f ∃ (v ⧺ w)   =   f ∃ v ∨ f ∃ w
+```
+
+however the elements fall between the two — including all of them on one side and none on the other.
+
+#### Precedence
+
+`∀` and `∃` bind where `⌿`, `⍀` and `⍴` bind: tighter than arithmetic, looser than unary.  The right operand is parsed at range-expression level, so `f ∀ 1…5` needs no parentheses, and brackets are what stop the operand reaching further, exactly as for a fold.  Both are line-continuation operators.
+
+Since the answer is a `bool`, the logical operators compose with them without parentheses:
+
+```
+positive ∀ v ∧ small ∃ v
+```
+
+#### Why Not a Fold
+
+`∧⌿ flags` and `∨⌿ flags` reduce a container of `bool` and are the nearest thing the language already had.  Three things separate them from these operators.  A fold takes the container's own elements, so it wants a container of `bool` and cannot ask a question about a container of anything else without a map to build one first.  A fold does not stop early: `∧⌿` visits every element even once one is false, and where the elements were computed that is work nobody wanted.  And a fold with no initial value refuses an empty container, where these answer it.
+
+```
+∧⌿ (positive¨v)                 // the same answer, three passes and no short circuit
+positive ∀ v                    // one pass, stopping where it can
+```
+
+#### Comparison with Other Languages
+
+| Language | All | Any |
+|----------|-----|-----|
+| Haskell | `all p v` | `any p v` |
+| Rust | `v.iter().all(p)` | `v.iter().any(p)` |
+| Python | `all(map(p, v))` | `any(map(p, v))` |
+| APL | `∧/p¨v` | `∨/p¨v` |
+| NGPL | `p ∀ v` | `p ∃ v` |
+
+The glyphs are the quantifiers of logic, which is what these are: `∀` for all, `∃` there exists.  They read in the order they are written — for all of `v`, `p` — and they put the function where the fold and the map already put it.
+
+
 ### The `catch` Statement
 
 The `catch` statement provides scoped error handling at the syntactic level.  Unlike exception systems in C++ or Java, `catch` blocks do **not** intercept errors from called functions.  Only errors that originate from operations directly written inside the `catch` block are caught.
@@ -7692,23 +7799,23 @@ An arm that binds may name the elements instead of the value, in the same shape 
 
 ```
 match maybe_pair():
-    ∃((a, b)):
+    ⊨((a, b)):
         a + b
     ∅:
         0
 
 match divided(7, 2):
-    ∃((q, r)):
+    ⊨((q, r)):
         q × 10 + r
-    ∄(e):
+    ⊭(e):
         ⁻1
 ```
 
-This holds for every pattern that binds — `∃(…)`, `∄(…)`, and `Type(…)` — and nests as the value does, with `_` where an element is not wanted:
+This holds for every pattern that binds — `⊨(…)`, `⊭(…)`, and `Type(…)` — and nests as the value does, with `_` where an element is not wanted:
 
 ```
-∃(((a, b), c)):     /* the value is ((i64, i64), str) */
-∃((_, c)):          /* only the second element is wanted */
+⊨(((a, b), c)):     /* the value is ((i64, i64), str) */
+⊨((_, c)):          /* only the second element is wanted */
 ```
 
 The names live for their arm and cannot be assigned to, as a single name cannot: they name what was matched, and writing to one would say nothing about the value that was matched.
@@ -8760,11 +8867,11 @@ This is what a `defer` statement would express one call at a time, without needi
 
 #### A File That Is Not There
 
-`open_file` answers an optional: `∃(file)` when the file opened, `∅` when it could not be.  A file that is missing, unreadable, or otherwise out of reach is an ordinary answer to asking for it — not a failure of the program — so the caller is made to decide what absence means and to say so in its own words, where a propagated operating system error would name a system call the program never wrote:
+`open_file` answers an optional: `⊨(file)` when the file opened, `∅` when it could not be.  A file that is missing, unreadable, or otherwise out of reach is an ordinary answer to asking for it — not a failure of the program — so the caller is made to decide what absence means and to say so in its own words, where a propagated operating system error would name a system call the program never wrote:
 
 ```
 match std.fs.cwd().open_file(name):
-    ∃(file):
+    ⊨(file):
         use(file)
     ∅:
         std.println("cannot open '{}'", name)

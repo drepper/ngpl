@@ -1,0 +1,123 @@
+// Tests for the quantifier operators ∀ and ∃.
+//
+// `f ∀ v` asks whether f holds of every one of the things v holds, and
+// `f ∃ v` whether it holds of any.  Both answer a bool.  The shape is
+// the fold's and the map's: what asks the question on the left, what is
+// asked about on the right.
+//
+// Two things are worth holding to and are tested here rather than left
+// to read from an implementation.  Both stop at the first element that
+// settles the question, so what the function does on the way is part of
+// what the program does.  And an empty container answers the question
+// there is no evidence against -- ∀ true, ∃ false -- which is what makes
+// the answer for a joined container agree with the answers for its
+// halves however the elements fall between them.
+
+fn positive(n : i64) → bool:
+    n > 0
+
+fn small(n : i64) → bool:
+    n < 10
+
+// how many times the question below was asked
+let asked : mut i64 = 0
+
+@impure
+fn under_three(n : i64) → bool:
+    asked ← asked + 1
+    n < 3
+
+// ---------------------------------------------------------------------
+// What they answer
+// ---------------------------------------------------------------------
+
+@test
+fn test_all_holds_of_every_one():
+    let v : i64[] = [1, 2, 3]
+    assert(positive ∀ v)
+
+@test
+fn test_all_fails_where_one_does():
+    let v : i64[] = [1, ⁻2, 3]
+    assert(not (positive ∀ v))
+
+@test
+fn test_any_holds_where_one_does():
+    let v : i64[] = [1, ⁻2, 3]
+    assert(positive ∃ v)
+
+@test
+fn test_any_fails_where_none_do():
+    let v : i64[] = [⁻1, ⁻2]
+    assert(not (positive ∃ v))
+
+// ---------------------------------------------------------------------
+// What may be asked, and what it may be asked of
+// ---------------------------------------------------------------------
+
+@test
+fn test_a_lambda_may_ask():
+    let v : i64[] = [2, 4, 6]
+    assert((λx : i64 → bool: (x % 2 ?? 0) = 0) ∀ v)
+
+@test
+fn test_a_range_may_be_asked_about():
+    assert((λx : i64 → bool: x < 100) ∀ 1…5)
+    assert((λx : i64 → bool: (x % 2 ?? 0) = 0) ∃ 1…5)
+
+@test
+fn test_an_iterator_may_be_asked_about():
+    let v : i64[] = [4, 5, 6]
+    let it := v.iterate()
+    assert(positive ∀ it)
+
+@test
+fn test_the_answer_is_a_bool():
+    let v : i64[] = [1, 2, 3]
+    let both : bool = positive ∀ v ∧ small ∃ v
+    assert(both)
+
+// ---------------------------------------------------------------------
+// Where the asking stops
+// ---------------------------------------------------------------------
+
+// ∀ stops at the first that does not hold.  The count says how many
+// were asked about, which is what the short circuit is for; a lambda
+// captures by value, so the tally is a global and the question is
+// asked by a function that may write it.
+@test
+@impure
+fn test_all_stops_at_the_first_failure():
+    asked ← 0
+    assert(not (under_three ∀ [1, 2, 3, 4, 5]))
+    assert_eq(asked, 3)
+
+// ∃ stops at the first that holds.
+@test
+@impure
+fn test_any_stops_at_the_first_success():
+    asked ← 0
+    assert(under_three ∃ [7, 8, 1, 9])
+    assert_eq(asked, 3)
+
+// ---------------------------------------------------------------------
+// The empty container, and the identity that fixes its answer
+// ---------------------------------------------------------------------
+
+@test
+fn test_empty_answers_the_identity():
+    let e : i64[] = []
+    assert(positive ∀ e)
+    assert(not (positive ∃ e))
+
+// Splitting a container may not change the answer, whichever way the
+// elements fall -- including all to one side.
+@test
+fn test_a_split_container_agrees_with_its_halves():
+    let e : i64[] = []
+    let v : i64[] = [1, 2]
+    let w : i64[] = [⁻3, 4]
+    assert_eq(positive ∀ (v ⧺ w), positive ∀ v ∧ positive ∀ w)
+    assert_eq(positive ∃ (v ⧺ w), positive ∃ v ∨ positive ∃ w)
+    assert_eq(positive ∀ (v ⧺ e), positive ∀ v ∧ positive ∀ e)
+    assert_eq(positive ∃ (v ⧺ e), positive ∃ v ∨ positive ∃ e)
