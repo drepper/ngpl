@@ -36,7 +36,7 @@ fn main():
     let w1 : i64 = a
     let w2 : i64 = s
     let arr : mut i64[] = [1]
-    arr[0 × 1¤ptrdiff] ← a
+    arr[0¤ptrdiff] ← a
     arr.push(s)
 
     // held, in every position
@@ -54,6 +54,6 @@ fn main():
     let same : i64 = if val = answers(w1): 1 else: 0
 
     std.println("{} {} {} {} {} {} {} {} {} {} {}",
-                w1, w2, arr[0 × 1¤ptrdiff] + arr[1 × 1¤ptrdiff],
+                w1, w2, arr[0¤ptrdiff] + arr[1¤ptrdiff],
                 lit ?? 0, val ?? 0, carried ?? 0,
                 p.held ?? 0, p.wide, m ?? 0, through, same)

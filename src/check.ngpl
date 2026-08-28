@@ -544,7 +544,7 @@ impl Checker:
 
 fn begins_underscore(nm : str) → bool:
     let cs := nm.chars()
-    #cs > 0 and cs[0 × 1¤ptrdiff] = '_'
+    #cs > 0 and cs[0¤ptrdiff] = '_'
 
 impl Checker:
     // A binding leaves its scope here, so this is where its lifetime

@@ -17,15 +17,15 @@ fn main():
     let v : mut i64[] = [1, 2, 3]
 
     // in range and past the end, both discarded
-    _ ← v.get(0 × 1¤ptrdiff)
-    _ ← v.get(99 × 1¤ptrdiff)
+    _ ← v.get(0¤ptrdiff)
+    _ ← v.get(99¤ptrdiff)
 
     // pop is the same shape and was already right; it stays right
     _ ← v.pop()
 
     // and the value still arrives where something reads it
-    let first : i64 = v.get(0 × 1¤ptrdiff) ?? 9
-    let past : i64 = v.get(99 × 1¤ptrdiff) ?? 9
-    let held : i64? = v.get(1 × 1¤ptrdiff)
+    let first : i64 = v.get(0¤ptrdiff) ?? 9
+    let past : i64 = v.get(99¤ptrdiff) ?? 9
+    let held : i64? = v.get(1¤ptrdiff)
 
     std.println("{} {} {} {}", @dropunit(#v), first, past, held ?? 0)

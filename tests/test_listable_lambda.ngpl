@@ -15,9 +15,9 @@ fn test_a_listable_lambda_threads():
     let twice := @listable λx : i64 → i64: x × 2
     let v : i64[] = [1, 2, 3]
     let w : i64[] = twice(v)
-    assert_eq(w[0 × 1¤ptrdiff], 2)
-    assert_eq(w[1 × 1¤ptrdiff], 4)
-    assert_eq(w[2 × 1¤ptrdiff], 6)
+    assert_eq(w[0¤ptrdiff], 2)
+    assert_eq(w[1¤ptrdiff], 4)
+    assert_eq(w[2¤ptrdiff], 6)
 
 // Handed what the parameter asked for, it is an ordinary call.
 @test
@@ -32,8 +32,8 @@ fn test_two_parameters_thread_together():
     let v : i64[] = [1, 2, 3]
     let w : i64[] = [10, 20, 30]
     let s : i64[] = add(v, w)
-    assert_eq(s[0 × 1¤ptrdiff], 11)
-    assert_eq(s[2 × 1¤ptrdiff], 33)
+    assert_eq(s[0¤ptrdiff], 11)
+    assert_eq(s[2¤ptrdiff], 33)
 
 // One of them may be the scalar the other is threaded against.
 @test
@@ -41,8 +41,8 @@ fn test_a_scalar_beside_a_container():
     let add := @listable λa : i64, b : i64 → i64: a + b
     let v : i64[] = [1, 2, 3]
     let s : i64[] = add(v, 100)
-    assert_eq(s[0 × 1¤ptrdiff], 101)
-    assert_eq(s[2 × 1¤ptrdiff], 103)
+    assert_eq(s[0¤ptrdiff], 101)
+    assert_eq(s[2¤ptrdiff], 103)
 
 // A partly applied listable lambda still threads: what is called in
 // the end is the lambda, and it is the lambda that says it does.
@@ -52,8 +52,8 @@ fn test_a_partial_still_threads():
     let plus100 := add(100)
     let v : i64[] = [1, 2, 3]
     let s : i64[] = plus100(v)
-    assert_eq(s[0 × 1¤ptrdiff], 101)
-    assert_eq(s[2 × 1¤ptrdiff], 103)
+    assert_eq(s[0¤ptrdiff], 101)
+    assert_eq(s[2¤ptrdiff], 103)
 
 @start
 @impure

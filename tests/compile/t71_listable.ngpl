@@ -44,7 +44,7 @@ fn main():
     let p : i64[] = plus100(v)
 
     std.println("{} {} {} {} {} {} {} {} {} {}",
-                t[0 × 1¤ptrdiff], t[2 × 1¤ptrdiff], one,
-                s[0 × 1¤ptrdiff], s[2 × 1¤ptrdiff],
-                b[0 × 1¤ptrdiff], b[2 × 1¤ptrdiff],
-                l[1 × 1¤ptrdiff], lone, p[2 × 1¤ptrdiff])
+                t[0¤ptrdiff], t[2¤ptrdiff], one,
+                s[0¤ptrdiff], s[2¤ptrdiff],
+                b[0¤ptrdiff], b[2¤ptrdiff],
+                l[1¤ptrdiff], lone, p[2¤ptrdiff])

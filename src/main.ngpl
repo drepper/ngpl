@@ -206,14 +206,14 @@ fn dir_of(path : str) → str:
 @impure
 fn resolve_source(name : str, base : str, paths : str[]) → str:
     let cs := name.chars()
-    if #cs > 0 and cs[0 × 1¤ptrdiff] = '/':
+    if #cs > 0 and cs[0¤ptrdiff] = '/':
         return name
     let here : str = if base = "": name else: base ⧺ "/" ⧺ name
     if can_open(here):
         return here
     foreach d := paths:
         let dc := d.chars()
-        let root : str = if (#dc > 0 and dc[0 × 1¤ptrdiff] = '/') or base = "": d else: base ⧺ "/" ⧺ d
+        let root : str = if (#dc > 0 and dc[0¤ptrdiff] = '/') or base = "": d else: base ⧺ "/" ⧺ d
         let cand : str = root ⧺ "/" ⧺ name
         if can_open(cand):
             return cand
@@ -409,7 +409,7 @@ fn main() → u8:
     // --build reads the source list from the recipe, so naming files
     // beside it would be saying two different things at once
     if build_file ≠ "" and #inputs > 0:
-        std.println("ngplc: --build reads the source list from the recipe; '{}' names a file besides", inputs[0 × 1¤ptrdiff])
+        std.println("ngplc: --build reads the source list from the recipe; '{}' names a file besides", inputs[0¤ptrdiff])
         return 1
     let plan : Recipe = if build_file ≠ "": read_build(build_file, json) else: empty_recipe()
     if build_file ≠ "":

@@ -300,7 +300,7 @@ fn f(n : i64) → i64: n
 f(a)                            // the argument is carried too
 
 let v : mut i64[] = [1]
-v[0 × 1¤ptrdiff] ← a
+v[0¤ptrdiff] ← a
 v.push(b)
 ```
 

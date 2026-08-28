@@ -33,9 +33,9 @@ fn test_carried_at_an_argument_and_an_answer():
 fn test_carried_into_a_container():
     let a : u8 = 200
     let v : mut i64[] = [1]
-    v[0 × 1¤ptrdiff] ← a
+    v[0¤ptrdiff] ← a
     v.push(a)
-    assert_eq(v[0 × 1¤ptrdiff] + v[1 × 1¤ptrdiff], 400)
+    assert_eq(v[0¤ptrdiff] + v[1¤ptrdiff], 400)
 
 // ---------------------------------------------------------------------
 // An optional is met by being held

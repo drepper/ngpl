@@ -40,7 +40,7 @@ fn test_indexing_what_is_being_walked():
     let v : i64[] = [10, 20]
     let n : mut i64 = 0
     foreach x := v:
-        n ← n + x + v[0 × 1¤ptrdiff]
+        n ← n + x + v[0¤ptrdiff]
     assert_eq(n, 50)
 
 // Two walks over one container are two shared borrows, and reading
@@ -88,7 +88,7 @@ fn error_growing_what_is_being_walked():
 fn error_writing_an_element_of_what_is_being_walked():
     let v : mut i64[] = [1, 2, 3]
     foreach x := v:
-        v[0 × 1¤ptrdiff] ← x
+        v[0¤ptrdiff] ← x
 
 @expect error 2400 "'v' is lent out for reading and cannot be changed until the borrow ends; a walk holds what it walks for the whole of its body"
 fn error_growing_what_a_shared_walk_lends():
@@ -120,7 +120,7 @@ fn test_writing_the_name_leaves_the_walk_alone():
     assert_eq(seen, 6)
     // and the name holds the last thing written to it
     assert_eq(@dropunit(#v), 1)
-    assert_eq(v[0 × 1¤ptrdiff], 30)
+    assert_eq(v[0¤ptrdiff], 30)
 
 @test
 fn test_writing_the_name_under_a_mutable_walk():
@@ -143,8 +143,8 @@ fn test_a_mutable_walk_writes_through():
     let v : mut i64[] = [1, 2, 3]
     foreach x := &mut v:
         x ← x + 1
-    assert_eq(v[0 × 1¤ptrdiff], 2)
-    assert_eq(v[2 × 1¤ptrdiff], 4)
+    assert_eq(v[0¤ptrdiff], 2)
+    assert_eq(v[2¤ptrdiff], 4)
 
 @expect error 2401 "'v' is lent out to be changed, so the name reaches nothing until the borrow ends; what the walk binds is the way in"
 fn error_reading_what_a_mutable_walk_holds():

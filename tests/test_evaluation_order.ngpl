@@ -104,7 +104,7 @@ fn test_a_store_reads_its_index_before_its_value():
     let v : mut i64[] = [0, 0, 0]
     v[n(1, 0) × 1¤ptrdiff] ← n(2, 7)
     assert_eq(seen(), 12)
-    assert_eq(v[0 × 1¤ptrdiff], 7)
+    assert_eq(v[0¤ptrdiff], 7)
 
 // A conditional reads its condition before either arm, which is the
 // only order that lets the arms be conditional at all.

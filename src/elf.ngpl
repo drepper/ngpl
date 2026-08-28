@@ -759,9 +759,9 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
     shdrs.push(shdr(shname[2], Sht.progbits, Shf.write | Shf.alloc,
                     d_vaddr, d_off, d_size, 0, 0, 8, 0))
     if #rows > 0:
-        shdrs.push(shdr(shname[3 × 1¤ptrdiff], Sht.progbits, Shf.alloc,
+        shdrs.push(shdr(shname[3¤ptrdiff], Sht.progbits, Shf.alloc,
                         bom_vaddr, bom_off, bom_size, 0, 0, 4, sbent))
-        shdrs.push(shdr(shname[4 × 1¤ptrdiff], Sht.strtab, Shf.alloc,
+        shdrs.push(shdr(shname[4¤ptrdiff], Sht.strtab, Shf.alloc,
                         bom_vaddr + bom_size, bstr_off, bstr_size, 0, 0, 1, 0))
     shdrs.push(shdr(shname[n_sym], Sht.symtab, Shf.nil, 0, sym_off, sym_size,
                     strtab_ndx, nlocal + 1, 8, syment))

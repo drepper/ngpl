@@ -2578,8 +2578,8 @@ impl Lower:
         while ci < n:
             case_labels.push(self.label())
             ci ← ci + 1
-        let lo : mut i64 = ks[0 × 1¤ptrdiff]
-        let hi : mut i64 = ks[0 × 1¤ptrdiff]
+        let lo : mut i64 = ks[0¤ptrdiff]
+        let hi : mut i64 = ks[0¤ptrdiff]
         foreach kv := ks:
             lo ← lo ⌊ kv
             hi ← hi ⌈ kv

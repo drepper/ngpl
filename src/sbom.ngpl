@@ -150,7 +150,7 @@ fn sbom_sources(a : Ast, t : Toks, src : byte[], files : Files) → SbomRow[]:
     let one : mut = std.hash.sha256.start()
     let feed : mut u8[] = []
     let fi ¤ptrdiff : mut i64 = 0
-    let hi ¤byte : mut i64 = if nf > 1: files.off[1 × 1¤ptrdiff] else: total
+    let hi ¤byte : mut i64 = if nf > 1: files.off[1¤ptrdiff] else: total
     let held : mut i64 = 0
     let prev : mut i64 = 0
     // and the function the token falls in, if any: the definitions are

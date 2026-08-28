@@ -800,7 +800,7 @@ fn build_recipe(a : Ast, toks : Toks, src : byte[], gvals : i64[]) → Recipe:
     if #a.builds = 0:
         return (Recipe{sources: [], output: "", output_dir: "",
                        paths: [], flags: [], diags: []})
-    let recipe : FnDef = a.builds[0 × 1¤ptrdiff]
+    let recipe : FnDef = a.builds[0¤ptrdiff]
     let ev : mut Cev = (Cev{a: a, toks: toks, src: src, gvals: gvals,
                           names: [], vals: [], vmut: [], marks: [], floor: 0,
                           pool: [], srcs: [], outn: "", outd: "",

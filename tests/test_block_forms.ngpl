@@ -177,10 +177,10 @@ fn test_a_lambda_either_way():
     let v : i64[] = [1, 2, 3]
     let laid : i64[] = (λx : i64 → i64: x + 1)¨v
     let braced : i64[] = (λx : i64 → i64: { x + 1 })¨v
-    assert_eq(laid[0 × 1¤ptrdiff], 2)
-    assert_eq(braced[0 × 1¤ptrdiff], 2)
-    assert_eq(laid[2 × 1¤ptrdiff], 4)
-    assert_eq(braced[2 × 1¤ptrdiff], 4)
+    assert_eq(laid[0¤ptrdiff], 2)
+    assert_eq(braced[0¤ptrdiff], 2)
+    assert_eq(laid[2¤ptrdiff], 4)
+    assert_eq(braced[2¤ptrdiff], 4)
 
 // ---------------------------------------------------------------------
 // A brace after a name

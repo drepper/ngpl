@@ -1968,7 +1968,7 @@ impl Parser:
                 self.err_at(name_tok, "a program carries one @build function, and this is a second")
                 return
             if #ptoks > 0:
-                self.err_at(ptoks[0 × 1¤ptrdiff], "the @build function takes no parameters")
+                self.err_at(ptoks[0¤ptrdiff], "the @build function takes no parameters")
                 return
             if ret ≠ TY_UNIT:
                 self.err_at(name_tok, "the @build function answers nothing; it declares a build by calling std.build")
@@ -2688,9 +2688,9 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
                 while @dropunit(#p.diags) > d0:
                     _ ← p.diags.pop() ?? (Diag{line: 1¤"line", col: 1¤"col", msg: "", level: DIAG_ERROR, code: DIAG_NONE})
                 while @dropunit(#p.fns) > f0:
-                    _ ← p.fns.pop() ?? p.fns[0 × 1¤ptrdiff]
+                    _ ← p.fns.pop() ?? p.fns[0¤ptrdiff]
                 while @dropunit(#p.globals) > g0:
-                    _ ← p.globals.pop() ?? p.globals[0 × 1¤ptrdiff]
+                    _ ← p.globals.pop() ?? p.globals[0¤ptrdiff]
             if p.poisoned:
                 p.poisoned ← false
                 // hunt for the next definition at the left margin
