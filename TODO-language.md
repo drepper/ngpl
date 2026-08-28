@@ -1241,8 +1241,10 @@ Macros and Reflection
 [ ] ¨ over a hash or a set, which needs an answer to what a map of a hash is -- its values or
     its pairs -- and belongs with the rest of what those containers do.
 
-[x] the quantifier operators, f ∀ v and f ∃ v: whether f holds of every one of the things v
-    holds, and whether it holds of any.  The fold's shape -- the question on the left, what is
+[x] the quantifier operators, f ∀ v, f ∃ v and f ∄ v: whether f holds of every one of the
+    things v holds, whether it holds of any, and whether it holds of none.  ∄ says in one word
+    what every other language makes a reader take a negation apart to see, and a loop that
+    left the moment it found one was saying it all along.  The fold's shape -- the question on the left, what is
     asked about on the right -- and the fold's precedence and range-level right operand.
     Arrays, ranges and iterators; f must answer a bool, and answering anything else is refused
     where it is asked rather than read as a truth.  Both must exit early: they exit at the
@@ -1253,7 +1255,19 @@ Macros and Reflection
     rule that left the stopping point open would let one source produce two outputs.  It is
     also why an iterator is admitted, a source that never ends being a fair thing to ask ∃
     about, which holds only because the exit does.  The compiled subset has them too, over an
-    array or a range; the iterator is the interpreter's alone for now.  An empty container answers
+    array or a range; the iterator is the interpreter's alone for now.
+
+[x] a lambda's parameter states a measure where a named function's does, `λi ¤ptrdiff : i64`.
+    Without it a walk over a measured range had to be asked a question by something that took
+    a plain number, so the measure came off outside -- @dropunit(#name) to make the range --
+    and went back on inside -- v[i × 1¤ptrdiff] at every subscript -- which is the units policy
+    saying the opposite of what it means.  A measured value is passed, and what it is passed
+    to says what it measures.
+
+[x] a range may count in a measure.  `0…#name - 1` counts ¤ptrdiff because that is what its
+    end is, and what walks it is handed indices that are indices.  The compiled subset had
+    refused it, so the two implementations disagreed about a range the interpreter had always
+    allowed.  An empty container answers
     ∀ true and ∃ false, the identities that make the answer for a joined container agree with
     the answers for its halves however the elements fall.  ∧⌿ and ∨⌿ over a mapped container
     were the nearest thing before: three passes, no short circuit, and a refusal on empty.

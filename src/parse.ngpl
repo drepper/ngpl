@@ -623,15 +623,25 @@ impl Parser:
         while true:
             let ptok : i64 = self.pos
             _ ← self.eat_name("the parameter's name")
+            // A parameter states its measure where a named function's
+            // does, between the name and the colon.  What a walk over
+            // a measured range hands it arrives measured, so the
+            // measure travels rather than being put on inside and
+            // taken off outside.
+            let pu : i64 = self.parse_name_unit()
             if self.peek() ≠ TK_COLON:
                 bad ← 2
                 ptoks.push(ptok)
                 pts.push(TY_I64)
             else:
                 self.pos ← self.pos + 1
-                let pt : i64 = self.parse_type(false)
-                if not ((ty_is_int(pt) and ty_unit(pt) = 0) or pt = TY_BOOL or pt = TY_CHAR or pt = TY_STR):
-                    self.err("a core-2 lambda takes plain integers, truth values, characters and strings")
+                let pt0 : i64 = self.parse_type(false)
+                if not (ty_is_int(pt0) or pt0 = TY_BOOL or pt0 = TY_CHAR or pt0 = TY_STR):
+                    self.err("a core-2 lambda takes integers, truth values, characters and strings")
+                    return self.mknode(NK_INT, at, 0, 0, 0)
+                let pt : i64 = if pu = UNIT_NONE: pt0 else: self.unit_on_type(pt0, pu, "")
+                if not ty_is_int(pt) and pu ≠ UNIT_NONE:
+                    self.err("only a number is measured")
                     return self.mknode(NK_INT, at, 0, 0, 0)
                 ptoks.push(ptok)
                 pts.push(pt)
@@ -1314,16 +1324,18 @@ impl Parser:
                     lhs ← self.mknode(NK_RANGEV, at, self.na[lhs × 1¤ptrdiff], rhs, self.nb[lhs × 1¤ptrdiff])
                 else:
                     lhs ← self.mknode(NK_RANGEV, at, lhs, rhs, ⁻1)
-            elif (k = TK_FORALL or k = TK_EXISTS) and min_bp <= 17:
-                // f ∀ v and f ∃ v.  The right operand is read at the
-                // range's level, so `f ∀ 1…5` needs no parentheses and
-                // `f ∀ v ⧺ w` asks about the join, while a comparison
-                // or a logical operator ends it -- the answer being a
-                // bool, `f ∀ v ∧ g ∃ w` is what it looks like.
+            elif (k = TK_FORALL or k = TK_EXISTS or k = TK_NOTEX) and min_bp <= 17:
+                // f ∀ v, f ∃ v and f ∄ v.  The right operand is read at
+                // the range's level, so `f ∀ 1…5` needs no parentheses
+                // and `f ∀ v ⧺ w` asks about the join, while a
+                // comparison or a logical operator ends it -- the
+                // answer being a bool, `f ∀ v ∧ g ∃ w` is what it looks
+                // like.  nc says which question: 0 all, 1 any, 2 none.
                 let at : i64 = self.pos
                 self.pos ← self.pos + 1
                 let rhs : i64 = self.parse_bin(8)
-                lhs ← self.mknode(NK_QUANT, at, lhs, rhs, if k = TK_EXISTS: 1 else: 0)
+                let q : i64 = if k = TK_EXISTS: 1 else: (if k = TK_NOTEX: 2 else: 0)
+                lhs ← self.mknode(NK_QUANT, at, lhs, rhs, q)
             else:
                 let bp : i64 = self.bin_bp(k)
                 if bp = ⁻1 or bp < min_bp:

@@ -91,6 +91,11 @@ _PICK_OPS = _MINMAX_OPS | {"\N{APL FUNCTIONAL SYMBOL IOTA}",
                            "\N{SMALL ELEMENT OF}"}
 
 # The fold operators, and the operators that may be folded with.
+# Which question each quantifier glyph asks.
+_QUANT_KIND = {"\N{FOR ALL}": "all",
+               "\N{THERE EXISTS}": "any",
+               "\N{THERE DOES NOT EXIST}": "none"}
+
 _FOLD_OPS = frozenset({"\N{APL FUNCTIONAL SYMBOL SLASH BAR}",
                        "\N{APL FUNCTIONAL SYMBOL BACKSLASH BAR}"})
 _FOLDABLE_OPS = frozenset({
@@ -2201,6 +2206,7 @@ class Parser:
         lambda_tok = self._cur()
         self._eat("LAMBDA")
         params: list[tuple[str, str]] = []
+        param_units: dict[str, object] = {}
         while (self._check("IDENT")
                or (self._check("PUNCT") and self._cur().value == "(")):
             saved = self.pos
@@ -2215,6 +2221,11 @@ class Parser:
                     break
                 continue
             name = self._eat("IDENT").value
+            # a parameter states its measure where a named function's
+            # does, between the name and the colon
+            if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+                self.pos += 1
+                param_units[name] = self._parse_unit_spec()
             follows = (self.tokens[self.pos + 1]
                        if self.pos + 1 < len(self.tokens) else None)
             names_type = follows is not None and (
@@ -2290,7 +2301,8 @@ class Parser:
         else:
             body = self._parse_expr()
         return self._set_pos(
-            LambdaExpr(params, captures, ret_type, body, is_listable),
+            LambdaExpr(params, captures, ret_type, body, is_listable,
+                       param_units),
             lambda_tok)
 
     # ------------------------------------------------------------------
@@ -2599,10 +2611,10 @@ class Parser:
         return left
 
     def _parse_reshape_expr(self):
-        """reshape_expr → negation (('⍴' | '⌿' | '⍀' | '∀' | '∃') …)?
+        """reshape_expr → negation (('⍴' | '⌿' | '⍀' | '∀' | '∃' | '∄') …)?
 
         ⍴ takes a negation right operand.
-        ⌿/⍀/∀/∃ take a range-level right operand so that ``f ⌿ 1…5``
+        ⌿/⍀/∀/∃/∄ take a range-level right operand so that ``f ⌿ 1…5``
         works.
         When the right operand of ⌿/⍀ is a 2-tuple literal, the second
         element is the initial accumulator value.
@@ -2633,14 +2645,15 @@ class Parser:
             self._skip_nl()
             return self._set_pos(
                 MapExpr(left, self._parse_range_expr()), each_tok)
-        if self._check("OP") and self._cur().value in ("\N{FOR ALL}",
-                                                       "\N{THERE EXISTS}"):
+        if self._check("OP") and self._cur().value in (
+                "\N{FOR ALL}", "\N{THERE EXISTS}",
+                "\N{THERE DOES NOT EXIST}"):
             # f ∀ v -- whether f holds of every one of them; f ∃ v --
-            # whether it holds of any.  The right operand is read the
-            # way a fold reads its own, so `f ∀ 1…5` needs no
-            # parentheses around the range.
+            # whether it holds of any; f ∄ v -- whether it holds of
+            # none.  The right operand is read the way a fold reads its
+            # own, so `f ∀ 1…5` needs no parentheses around the range.
             quant_tok = self._cur()
-            kind = "all" if quant_tok.value == "\N{FOR ALL}" else "any"
+            kind = _QUANT_KIND[quant_tok.value]
             self.pos += 1
             self._skip_nl()
             return self._set_pos(

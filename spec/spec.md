@@ -3603,7 +3603,7 @@ match 10 ÷ 0:
 error: match has no arm for a failed result; add the missing pattern or a _ arm
 ```
 
-The glyphs are meant to read as what they say.  `⊨` is the turnstile of logic, which asserts what follows it: here is a value, and it is this one.  `⊭` is its negation, and since it takes an argument it says more than that the assertion fails — here is what stopped it holding.  `∅` is the empty set, which carries nothing because there is nothing to carry.  (`⊨` and `⊭` once read `∃` and `∄`.  Those glyphs now name the [quantifier operators](#the-quantifier-operators--and-), which ask a question of a container rather than build a value, and a glyph does one job.)
+The glyphs are meant to read as what they say.  `⊨` is the turnstile of logic, which asserts what follows it: here is a value, and it is this one.  `⊭` is its negation, and since it takes an argument it says more than that the assertion fails — here is what stopped it holding.  `∅` is the empty set, which carries nothing because there is nothing to carry.  (`⊨` and `⊭` once read `∃` and `∄`.  Those glyphs now name the [quantifier operators](#the-quantifier-operators---and-), which ask a question of a container rather than build a value, and a glyph does one job.)
 
 #### Constructing a Failure (`⊭`)
 
@@ -6825,9 +6825,11 @@ Mapping and then folding is the shape most of this is for:
 The glyph and the position are APL's, and they put the function where the fold already puts it: on the left, with the data on the right.  Where APL's `¨` is an *operator modifier* that makes a new function, this is a binary operator that answers the array directly — the same simplification the fold made, and for the same reason: a modifier would need the language to have a notion of a derived function, which it does not.
 
 
-### The Quantifier Operators (`∀` and `∃`)
+### The Quantifier Operators (`∀`, `∃` and `∄`)
 
-`f ∀ v` asks whether `f` holds of **every** one of the things `v` holds.  `f ∃ v` asks whether it holds of **any**.  Both answer a `bool`.  The shape is the fold's and the map's: what asks the question on the left, what is asked about on the right.
+`f ∀ v` asks whether `f` holds of **every** one of the things `v` holds.  `f ∃ v` asks whether it holds of **any**.  `f ∄ v` asks whether it holds of **none**.  All three answer a `bool`.  The shape is the fold's and the map's: what asks the question on the left, what is asked about on the right.
+
+`f ∄ v` and `not (f ∃ v)` answer the same, and `∄` is there because the question is often the one being asked — a loop that returned false the moment it found one is saying *none of them*, not *not any of them*.
 
 ```
 fn positive(n : i64) → bool:
@@ -6840,6 +6842,10 @@ positive ∃ v                    // true
 let w : i64[] = [1, ⁻2, 3]
 positive ∀ w                    // false
 positive ∃ w                    // true
+positive ∄ w                    // false
+
+let x : i64[] = [⁻1, ⁻2]
+positive ∄ x                    // true
 ```
 
 Anything that can be called with one value may stand on the left — a named function, a lambda, a name that holds one — and it has to answer a `bool`.  A function that answers anything else is a type error where it is asked, not a truth value inferred from what it said:
@@ -6865,7 +6871,7 @@ positive ∀ it                                // true
 
 #### They Must Exit Early
 
-**Both operators exit at the first element that settles the question, and `f` is not asked about the rest.**  `∀` exits at the first element that does not hold; `∃` exits at the first that does.
+**All three operators exit at the first element that settles the question, and `f` is not asked about the rest.**  `∀` exits at the first element that does not hold; `∃` and `∄` exit at the first that does.
 
 This is a guarantee the language makes, not an optimization an implementation may choose.  An implementation that asks `f` about an element after the answer is settled is wrong, and so is one that asks about them all and then reduces.
 
@@ -6889,6 +6895,7 @@ Two things follow.  How many times `f` was called is a fact a program may rely o
 let e : i64[] = []
 positive ∀ e                    // true
 positive ∃ e                    // false
+positive ∄ e                    // true
 ```
 
 Each answers the question there is no evidence against.  These are not conventions picked for tidiness: they are the identities that make the operators agree with themselves when a container is split,
@@ -6921,15 +6928,17 @@ positive ∀ v                    // one pass, stopping where it can
 
 #### Comparison with Other Languages
 
-| Language | All | Any |
-|----------|-----|-----|
-| Haskell | `all p v` | `any p v` |
-| Rust | `v.iter().all(p)` | `v.iter().any(p)` |
-| Python | `all(map(p, v))` | `any(map(p, v))` |
-| APL | `∧/p¨v` | `∨/p¨v` |
-| NGPL | `p ∀ v` | `p ∃ v` |
+| Language | All | Any | None |
+|----------|-----|-----|------|
+| Haskell | `all p v` | `any p v` | `not . any p` |
+| Rust | `v.iter().all(p)` | `v.iter().any(p)` | `!v.iter().any(p)` |
+| Python | `all(map(p, v))` | `any(map(p, v))` | `not any(map(p, v))` |
+| APL | `∧/p¨v` | `∨/p¨v` | `~∨/p¨v` |
+| NGPL | `p ∀ v` | `p ∃ v` | `p ∄ v` |
 
-The glyphs are the quantifiers of logic, which is what these are: `∀` for all, `∃` there exists.  They read in the order they are written — for all of `v`, `p` — and they put the function where the fold and the map already put it.
+Only the last column is written rather than composed, and that is the point of having it: no other language says *none* in one word either, and every one of them makes the reader take the negation apart to see what was meant.
+
+The glyphs are the quantifiers of logic, which is what these are: `∀` for all, `∃` there exists, `∄` there does not exist.  They read in the order they are written — for all of `v`, `p` — and they put the function where the fold and the map already put it.
 
 
 ### The `catch` Statement

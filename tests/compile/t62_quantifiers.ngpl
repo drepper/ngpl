@@ -1,7 +1,8 @@
-// core-1: the quantifier operators ∀ and ∃.
+// core-1: the quantifier operators ∀, ∃ and ∄.
 //
-// `f ∀ v` asks whether f holds of every one of the things v holds and
-// `f ∃ v` whether it holds of any.  An array or a range may stand on
+// `f ∀ v` asks whether f holds of every one of the things v holds,
+// `f ∃ v` whether it holds of any, and `f ∄ v` whether it holds of
+// none.  An array or a range may stand on
 // the right; the interpreter also takes an iterator, which the
 // compiled subset does not, so nothing here asks about one.
 //
@@ -18,10 +19,6 @@ fn positive(n : i64) → bool:
 fn small(n : i64) → bool:
     n < 10
 
-// Curried, so what the operator gets is a question about one index and
-// nothing has to be captured: a function value closes over no array.
-fn at_positive(v : str, i : i64) → bool:
-    v[i × 1¤ptrdiff] ≠ '-'
 
 @start
 @impure
@@ -29,9 +26,9 @@ fn main():
     let v : i64[] = [1, 2, 3]
     let w : i64[] = [1, ⁻2, 3]
     let e : i64[] = []
-    std.println("{} {}", positive ∀ v, positive ∃ v)
-    std.println("{} {}", positive ∀ w, positive ∃ w)
-    std.println("{} {}", positive ∀ e, positive ∃ e)
+    std.println("{} {} {}", positive ∀ v, positive ∃ v, positive ∄ v)
+    std.println("{} {} {}", positive ∀ w, positive ∃ w, positive ∄ w)
+    std.println("{} {} {}", positive ∀ e, positive ∃ e, positive ∄ e)
     // a range on the right, and a lambda on the left
     std.println("{}", (λx : i64 → bool: x < 100) ∀ 1…5)
     std.println("{}", (λx : i64 → bool: x > 4) ∃ 1…5)
@@ -39,6 +36,13 @@ fn main():
     std.println("{}", positive ∀ v ∧ small ∃ v)
     // ⧺ is absorbed into the right operand, as it is for a fold
     std.println("{}", positive ∀ v ⧺ w)
-    // the exit, proved: "ab-" is three long and the range runs to 9,
-    // so only a walk that leaves at index 2 stays inside the string
-    std.println("{}", at_positive("ab-") ∀ 0…9)
+    // A measured range walked by a measured parameter: the index
+    // arrives an index, and nothing puts the measure on inside the
+    // question or takes it off outside.
+    let name : str = "i64"
+    std.println("{} {}", (λi ¤ptrdiff : i64 |name| → bool: name[i] ≠ 'x') ∀ 0…#name - 1,
+                (λi ¤ptrdiff : i64 |name| → bool: name[i] = 'x') ∄ 0…#name - 1)
+    // the exit, proved: "i64" is three long and the range runs to 9,
+    // so only a walk that leaves at index 1 -- the first that does not
+    // hold -- stays inside the string
+    std.println("{}", (λi ¤ptrdiff : i64 |name| → bool: name[i] = 'i') ∀ 0¤ptrdiff…9¤ptrdiff)

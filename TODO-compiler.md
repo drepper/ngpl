@@ -281,14 +281,21 @@ Errors and Warnings
     since the function is the program's own and a call that should not have happened is output
     that should not have appeared.  The branch out of the middle of the loop is what makes it
     true, and t62_quantifiers proves it by quantifying over a range that runs past the end of
-    an array: only a walk that leaves where it should never reaches an index out of range.
+    a string: only a walk that leaves where it should never reaches an index out of range.
 
     The compiled subset takes an array or a range on the right, where the interpreter also
     takes an iterator.  What blocks the third is not the operator: it is that the walk would
     have to hold the iterator's state, which the lowering has no shape for yet.
 
-[ ] ∀ and ∃ over an iterator in the compiled subset, which is the one thing the interpreter
+[ ] ∀, ∃ and ∄ over an iterator in the compiled subset, which is the one thing the interpreter
     admits on the right and ngplc does not.
+
+[ ] ngplc does not count a lambda's capture as a read, so a binding used only inside a lambda
+    that captures it draws "bound and never read".  The interpreter counts it and says nothing,
+    so the two disagree about a warning -- which is the direction the strict-subset rule
+    forbids.  Nothing to do with the quantifiers: a capture outside one warns the same way.
+    Found while writing t62_quantifiers, whose first draft bound a string used only through a
+    capture.
 
 [ ] a function value may close over an array.  Only a pure function of up to five plain
     scalars -- and str -- travels as a value or curries today, which is what decides how much

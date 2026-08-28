@@ -1029,11 +1029,12 @@ class LambdaValue(Value):
     """
 
     __slots__ = ("params", "body", "env", "captures",
-                 "ret_type", "partial_func", "partial_args", "is_listable")
+                 "ret_type", "partial_func", "partial_args", "is_listable",
+                 "param_units")
 
     def __init__(self, params, body, env, captures=None,
                  ret_type=None, partial_func=None, partial_args=None,
-                 is_listable=False):
+                 is_listable=False, param_units=None):
         self.params = params
         self.body = body
         self.env = env
@@ -1045,6 +1046,8 @@ class LambdaValue(Value):
         # deeper than a parameter asked for, it is asked of each of the
         # things in it, as a named listable function is.
         self.is_listable = is_listable
+        # what each parameter measures, where it says so
+        self.param_units = param_units or {}
 
     def display(self):
         if self.partial_func is not None:

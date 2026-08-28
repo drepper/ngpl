@@ -121,3 +121,48 @@ fn test_a_split_container_agrees_with_its_halves():
     assert_eq(positive ∃ (v ⧺ w), positive ∃ v ∨ positive ∃ w)
     assert_eq(positive ∀ (v ⧺ e), positive ∀ v ∧ positive ∀ e)
     assert_eq(positive ∃ (v ⧺ e), positive ∃ v ∨ positive ∃ e)
+
+// ---------------------------------------------------------------------
+// ∄: whether it holds of none
+// ---------------------------------------------------------------------
+
+@test
+fn test_none_holds_where_none_do():
+    let v : i64[] = [⁻1, ⁻2]
+    assert(positive ∄ v)
+
+@test
+fn test_none_fails_where_one_does():
+    let v : i64[] = [1, ⁻2]
+    assert(not (positive ∄ v))
+
+@test
+fn test_none_is_the_negation_of_any():
+    let v : i64[] = [1, ⁻2, 3]
+    let w : i64[] = [⁻1]
+    let e : i64[] = []
+    assert_eq(positive ∄ v, not (positive ∃ v))
+    assert_eq(positive ∄ w, not (positive ∃ w))
+    assert_eq(positive ∄ e, not (positive ∃ e))
+
+// ∄ exits where ∃ does: at the first element that holds.
+@test
+@impure
+fn test_none_stops_at_the_first_success():
+    asked ← 0
+    assert(not (under_three ∄ [7, 8, 1, 9]))
+    assert_eq(asked, 3)
+
+// ---------------------------------------------------------------------
+// A parameter that states a measure is handed a measured value
+// ---------------------------------------------------------------------
+
+// The index a walk over a measured range hands over is an index, and
+// the question asked of it says so.  Nothing puts the measure on
+// inside the question and nothing takes it off outside.
+@test
+fn test_a_measured_range_is_walked_by_a_measured_parameter():
+    let name : str = "i64"
+    assert((λi ¤ptrdiff : i64 |name| → bool: name[i] ≠ 'x') ∀ 0…#name - 1)
+    assert((λi ¤ptrdiff : i64 |name| → bool: name[i] = '6') ∃ 0…#name - 1)
+    assert((λi ¤ptrdiff : i64 |name| → bool: name[i] = 'x') ∄ 0…#name - 1)

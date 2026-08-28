@@ -664,12 +664,19 @@ class LambdaExpr:
     is_listable = False
 
     def __init__(self, params: list[tuple[str, str]], captures: list[str] | None,
-                 ret_type: str, body, is_listable: bool = False):
+                 ret_type: str, body, is_listable: bool = False,
+                 param_units: dict[str, object] | None = None):
         self.params = params
         self.captures = captures
         self.ret_type = ret_type
         self.body = body
         self.is_listable = is_listable
+        # A lambda's parameter states a measure the way a named
+        # function's does, `λi ¤ptrdiff : i64 → …`, and for the same
+        # reason: what is handed to it arrives measured, and a walk
+        # over a measured range should not have to drop the measure to
+        # be asked a question.
+        self.param_units: dict[str, object] = param_units or {}
 
 
 class MapExpr:
@@ -686,10 +693,12 @@ class MapExpr:
 
 
 class QuantExpr:
-    """`f ∀ v` and `f ∃ v` -- whether f holds of them all, or of any.
+    """`f ∀ v`, `f ∃ v` and `f ∄ v` -- whether f holds of them all, of
+    any, or of none.
 
-    kind is "all" for ∀ and "any" for ∃.  The shape is a fold's: what
-    asks the question on the left, what is asked about on the right.
+    kind is "all" for ∀, "any" for ∃ and "none" for ∄.  The shape is a
+    fold's: what asks the question on the left, what is asked about on
+    the right.
     """
 
     def __init__(self, kind, func, container):

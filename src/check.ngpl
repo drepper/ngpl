@@ -1340,9 +1340,14 @@ impl Checker:
                 // ends that state nothing take the binding's element,
                 // where one is stated, and i64 otherwise
                 let w9 : i64 = ty_strip_ref(want)
-                vt ← if ty_is_int(w9) and ty_unit(w9) = 0: w9 else: TY_I64
-            if not ty_is_int(vt) or ty_unit(vt) ≠ 0:
-                self.derr(tok, "a range counts plain numbers; this is " ⧺ self.tn(vt))
+                vt ← if ty_is_int(w9): w9 else: TY_I64
+            // A range may count in a measure: `0…#name - 1` counts
+            // ¤ptrdiff because that is what its end is, and what walks
+            // it is handed indices that are indices.  Dropping the
+            // measure to make the range and putting it back at every
+            // subscript is what this saves.
+            if not ty_is_int(vt):
+                self.derr(tok, "a range counts numbers; this is " ⧺ self.tn(vt))
                 vt ← TY_I64
             self.adopt(na, vt)
             self.adopt(nb, vt)
@@ -3177,8 +3182,8 @@ impl Checker:
     // a function of one value on the left, what it is asked about on
     // the right -- with the answer a bool rather than an array of the
     // answers, and the walk stopping where it can.
-    fn check_quant(&mut self, id : i64, tok : i64, fe : i64, ce : i64, isany : i64):
-        let g : str = if isany = 1: "∃" else: "∀"
+    fn check_quant(&mut self, id : i64, tok : i64, fe : i64, ce : i64, kind : i64):
+        let g : str = if kind = 1: "∃" else: (if kind = 2: "∄" else: "∀")
         self.set_type(id, TY_BOOL)
         self.check_expr(fe, TY_UNIT)
         let ft : i64 = self.ty_of(fe)
@@ -3202,14 +3207,16 @@ impl Checker:
         if ty_is_rg(ct):
             if ty_rgelem(ct) ≠ pt:
                 self.derr(tok, "the range counts " ⧺ self.tn(ty_rgelem(ct)) ⧺ ", but the function takes " ⧺ self.tn(pt))
-            self.a.nc[id × 1¤ptrdiff] ← isany + 2
+            // the fourth bit says the container is a range, which the
+            // lowering walks as the array of its steps
+            self.a.nc[id × 1¤ptrdiff] ← kind + 4
             return
         if not ty_is_arr(ct) and not ty_is_row(ct):
             self.derr(tok, g ⧺ " asks about each of an array or a range; this is " ⧺ self.tn(ct))
             return
         if ty_elem(ct) ≠ pt:
             self.derr(tok, "the array holds " ⧺ self.tn(ty_elem(ct)) ⧺ ", but the function takes " ⧺ self.tn(pt))
-        self.a.nc[id × 1¤ptrdiff] ← isany
+        self.a.nc[id × 1¤ptrdiff] ← kind
     // (expr)(args): the callee is a value, so the box travels as the
     // expression's own answer rather than out of a named slot
     fn check_callv(&mut self, id : i64, tok : i64, na : i64, args_off : i64):

@@ -110,6 +110,7 @@ let TK_SOME : i64 = 82       // ⊨
 // things v holds, f ∃ v whether it holds of any.
 let TK_FORALL : i64 = 107    // ∀
 let TK_EXISTS : i64 = 108    // ∃
+let TK_NOTEX : i64 = 109     // ∄
 let TK_EMPTY : i64 = 83      // ∅
 let TK_LHASH : i64 = 84      // ⸨
 let TK_RHASH : i64 = 85      // ⸩
@@ -181,6 +182,7 @@ let GLYPHS3 : std.dict(i64, i64) = (⸨
     14846632: 82,   // ⊨
     14846080: 107,  // ∀
     14846083: 108,  // ∃
+    14846084: 109,  // ∄
     14846085: 83,   // ∅
     14858408: 84,   // ⸨
     14858409: 85,   // ⸩

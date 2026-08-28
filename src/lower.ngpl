@@ -1634,16 +1634,21 @@ impl Lower:
         self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         out
 
-    // f ∀ v and f ∃ v.  The loop generate makes, with the answer a
-    // truth instead of an array and a way out of the middle of it:
-    // the walk leaves at the first element that settles the question
-    // and asks about no more.  That is not an optimization to be
-    // added later -- what f does on the way is what the program does,
-    // so a walk that finished the container would be a different
-    // program.  nc says which: 1 and 3 are ∃, 2 and 3 a range.
-    fn lower_quant(&mut self, nid : i64, fe : i64, ce : i64, kind : i64) → i64:
-        let isany : bool = (kind & 1) = 1
-        let isrange : bool = (kind & 2) = 2
+    // f ∀ v, f ∃ v and f ∄ v.  The loop generate makes, with the
+    // answer a truth instead of an array and a way out of the middle
+    // of it: the walk leaves at the first element that settles the
+    // question and asks about no more.  That is not an optimization to
+    // be added later -- what f does on the way is what the program
+    // does, so a walk that finished the container would be a different
+    // program.  kind is 0 for ∀, 1 for ∃ and 2 for ∄, and the fourth
+    // bit says the container is a range.
+    fn lower_quant(&mut self, nid : i64, fe : i64, ce : i64, kind0 : i64) → i64:
+        let kind : i64 = kind0 & 3
+        // ∀ is settled by an element that does not hold, ∃ and ∄ by one
+        // that does; what it is settled as is true only for ∃
+        let onhold : bool = kind ≠ 0
+        let settled : i64 = if kind = 1: 1 else: 0
+        let isrange : bool = (kind0 & 4) = 4
         let fv : i64 = self.lower_expr(fe)
         // a range is walked as the array of its steps, as generate
         // walks one; an array is walked where it stands
@@ -1651,7 +1656,7 @@ impl Lower:
         // The answer the walk carries until something settles it, and
         // the one place it is written from twice.
         let d : i64 = self.tmp()
-        self.ir(IR_CONST, if isany: 0 else: 1, 0, 0, d, 0)
+        self.ir(IR_CONST, 1 - settled, 0, 0, d, 0)
         let n9 : i64 = self.tmp()
         self.ir(IR_ALEN, av, 0, 0, n9, 0)
         let ix9 : i64 = self.tmp()
@@ -1677,7 +1682,7 @@ impl Lower:
         // the one answer that settles it: true for ∃, false for ∀.
         // It is written down and the walk leaves; nothing below runs.
         let lsettled : i64 = self.label()
-        if isany:
+        if onhold:
             self.ir(IR_JNZ, r9, lsettled, 0, 0, 0)
         else:
             self.ir(IR_JZ, r9, lsettled, 0, 0, 0)
@@ -1686,7 +1691,7 @@ impl Lower:
         self.ir(IR_MOV, ni9, 0, 0, ix9, 0)
         self.ir(IR_JMP, ltop, 0, 0, 0, 0)
         self.ir(IR_LABEL, lsettled, 0, 0, 0, 0)
-        self.ir(IR_CONST, if isany: 1 else: 0, 0, 0, d, 0)
+        self.ir(IR_CONST, settled, 0, 0, d, 0)
         self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         d
     fn lower_arrlit(&mut self, nid : i64, off : i64) → i64:

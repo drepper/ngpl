@@ -1067,6 +1067,15 @@ def _ancestors_of(module: str) -> list:
 _MISSING = object()
 
 
+# What each quantifier is: its glyph, the answer from f that settles
+# the question, what it then answers, and what it answers where nothing
+# settled it -- which is also its answer for an empty container.
+_QUANT_RULE = {
+    "all":  ("\N{FOR ALL}", False, False, True),
+    "any":  ("\N{THERE EXISTS}", True, True, False),
+    "none": ("\N{THERE DOES NOT EXIST}", True, False, True),
+}
+
 class Evaluator:
     """Evaluates NGPL AST in a given environment.
 
@@ -5851,31 +5860,29 @@ class Evaluator:
             yield unwrap_optional(got)
 
     def _eval_quant(self, node: QuantExpr) -> Value:
-        """Evaluate `f ∀ v` and `f ∃ v`.
+        """Evaluate `f ∀ v`, `f ∃ v` and `f ∄ v`.
 
         ∀ answers whether f holds of every one of them, ∃ whether it
-        holds of any.
+        holds of any, ∄ whether it holds of none.
 
-        Both must exit early, and the loop below is where that is kept:
-        it returns at the first element that settles the question and f
-        is never asked about the rest -- ∀ at the first that does not
-        hold, ∃ at the first that does.  That is a guarantee the
-        language makes rather than an optimization this evaluator
+        All three must exit early, and the loop below is where that is
+        kept: it returns at the first element that settles the question
+        and f is never asked about the rest -- ∀ at the first that does
+        not hold, ∃ and ∄ at the first that does.  That is a guarantee
+        the language makes rather than an optimization this evaluator
         chose, because f is the program's own function and what it does
         on the way is part of what the program does.  Building the
         answers first and reducing after would be correct arithmetic
         and the wrong program.
 
         An empty container answers the question there is no evidence
-        against: ∀ true and ∃ false.  Those are the identities that
-        make `f ∀ (v ⧺ w)` the same as `f ∀ v ∧ f ∀ w` however the
+        against: ∀ true, ∃ false, ∄ true.  Those are the identities
+        that make `f ∀ (v ⧺ w)` the same as `f ∀ v ∧ f ∀ w` however the
         elements fall between the two.
         """
-        glyph = "\N{FOR ALL}" if node.kind == "all" else "\N{THERE EXISTS}"
+        glyph, settles_on, settled, empty = _QUANT_RULE[node.kind]
         func = self.eval_expr(node.func)
         held = unwrap_optional(self.eval_expr(node.container))
-        # the answer that settles it, which is also the answer given
-        settles = node.kind == "any"
         for element in self._quant_elements(held, glyph):
             answer = unwrap_optional(self._do_call(func, [element]))
             if not isinstance(answer, BoolValue):
@@ -5883,9 +5890,9 @@ class Evaluator:
                     f"{glyph} asks a question of each of them, so what "
                     f"it asks has to answer a bool; this answered "
                     f"{self._value_type_name(answer)}")
-            if answer.value == settles:
-                return mk_bool(settles)
-        return mk_bool(not settles)
+            if answer.value == settles_on:
+                return mk_bool(settled)
+        return mk_bool(empty)
 
     def _eval_fold(self, node: FoldExpr) -> Value:
         """Evaluate a fold expression: left fold ⌿ or right fold ⍀."""
@@ -6082,7 +6089,8 @@ class Evaluator:
 
         return LambdaValue(node.params, node.body, lambda_env,
                            captures=node.captures, ret_type=node.ret_type,
-                           is_listable=node.is_listable)
+                           is_listable=node.is_listable,
+                           param_units=node.param_units)
 
     def _call_lambda(self, lam: LambdaValue, args):
         """Call a lambda value with given arguments."""
@@ -6101,7 +6109,8 @@ class Evaluator:
                 # lambda that says it does.
                 return LambdaValue(remaining, lam.body, new_env,
                                    captures=lam.captures, ret_type=lam.ret_type,
-                                   is_listable=lam.is_listable)
+                                   is_listable=lam.is_listable,
+                                   param_units=lam.param_units)
             raise TypeError(
                 f"lambda expects {len(lam.params)} arguments, "
                 f"got {len(args)}")
@@ -6129,9 +6138,27 @@ class Evaluator:
         for (pname, ptype), arg in zip(lam.params, args):
             display = (_names_display(pname) if isinstance(pname, tuple)
                        else pname)
+            # A parameter that states a measure is handed a measured
+            # value, exactly as a named function's is: the measure
+            # travels with the argument rather than being put on inside
+            # and taken off outside.
+            pspec = lam.param_units.get(pname) if not isinstance(pname, tuple) else None
+            if pspec is None and ptype is not None:
+                pspec = alias_unit_spec(ptype)
+            param_unit = None
+            if pspec is not None:
+                from interp.units import eval_unit_formula
+                param_unit = eval_unit_formula(pspec)
+                if isinstance(arg, IntValue) and not is_unwidthed(arg.width):
+                    raise coded(2323, TypeError(
+                        f"\N{GREEK SMALL LETTER LAMDA}: parameter "
+                        f"'{display}' requires unit "
+                        f"{param_unit.display_name}, got typed integer "
+                        f"{arg.width} without unit"))
+                arg = apply_unit(arg, param_unit, self._mk_int)
             if ptype is not None:
                 arg = coerce_arg(arg, ptype, "\N{GREEK SMALL LETTER LAMDA}",
-                                 display)
+                                 display, unit=param_unit)
             if isinstance(pname, tuple):
                 self._bind_parameter_names(
                     pname, arg, call_env, "\N{GREEK SMALL LETTER LAMDA}")
