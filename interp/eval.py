@@ -4009,10 +4009,12 @@ class Evaluator:
     def _ee_RangeExpr(self, node):
         s = unwrap_optional(self.eval_expr(node.start))
         e = unwrap_optional(self.eval_expr(node.end))
+        s0, e0 = s, e
         if isinstance(s, UnitValue):
             s = s.inner
         if isinstance(e, UnitValue):
             e = e.inner
+        self._one_measure_between("\N{HORIZONTAL ELLIPSIS}", s0, e0)
         if not isinstance(s, IntValue) or not isinstance(e, IntValue):
             raise TypeError("range bounds must be integers")
         step = None
@@ -5096,6 +5098,7 @@ class Evaluator:
             elif isinstance(expr, RangeExpr):
                 s = unwrap_optional(self.eval_expr(expr.start))
                 e = unwrap_optional(self.eval_expr(expr.end))
+                self._one_measure_between("\N{HORIZONTAL ELLIPSIS}", s, e)
                 range_unit = None
                 if isinstance(s, UnitValue):
                     range_unit = s.unit
@@ -5121,6 +5124,14 @@ class Evaluator:
                           else (lambda i: mk_int(i, elem_width)))
                 if expr.step is not None:
                     st = unwrap_optional(self.eval_expr(expr.step))
+                    # the step counts in the same measure as the ends
+                    if isinstance(st, UnitValue) and range_unit is not None \
+                            and not range_unit.same_dimension(st.unit):
+                        raise coded(2328, TypeError(
+                            f"\N{HORIZONTAL ELLIPSIS}: the ends are measured "
+                            f"{range_unit.display_name} and the step is "
+                            f"measured {st.unit.display_name}; a range counts "
+                            f"in one measure, or in none"))
                     if isinstance(st, UnitValue):
                         if range_unit is None:
                             range_unit = st.unit
@@ -5929,6 +5940,33 @@ class Evaluator:
             if is_none(got):
                 return
             yield unwrap_optional(got)
+
+    @staticmethod
+    def _one_measure_between(where: str, lo, hi, step=None):
+        """The ends of a range say one measure between them, or none.
+
+        An end that states nothing takes what the others state -- that
+        is what makes `0…#v` count in ¤ptrdiff without saying so twice.
+        Two ends that state different things are the mistake units
+        exist to catch: a byte offset counted as an element index has
+        the right type and the wrong meaning, and a loop is where that
+        does the most damage.
+        """
+        seen = {}
+        for name, v in (("start", lo), ("end", hi), ("step", step)):
+            if isinstance(v, UnitValue):
+                seen[name] = v.unit
+        if len(seen) < 2:
+            return
+        names = list(seen)
+        first = seen[names[0]]
+        for other in names[1:]:
+            if not first.same_dimension(seen[other]):
+                raise coded(2328, TypeError(
+                    f"{where}: the {names[0]} is measured "
+                    f"{first.display_name} and the {other} is measured "
+                    f"{seen[other].display_name}; a range counts in one "
+                    f"measure, or in none"))
 
     def _eval_quant(self, node: QuantExpr) -> Value:
         """Evaluate `f ∀ v`, `f ∃ v` and `f ∄ v`.

@@ -290,12 +290,15 @@ Errors and Warnings
 [ ] ∀, ∃ and ∄ over an iterator in the compiled subset, which is the one thing the interpreter
     admits on the right and ngplc does not.
 
-[ ] ngplc does not count a lambda's capture as a read, so a binding used only inside a lambda
-    that captures it draws "bound and never read".  The interpreter counts it and says nothing,
-    so the two disagree about a warning -- which is the direction the strict-subset rule
-    forbids.  Nothing to do with the quantifiers: a capture outside one warns the same way.
-    Found while writing t62_quantifiers, whose first draft bound a string used only through a
-    capture.
+[x] ngplc counts a lambda's capture as a read, and counts calling what a name holds as a read
+    of that name.  It did neither, so a binding used only through a capture drew "bound and
+    never read", and so did a lambda that was called but never otherwise mentioned -- two
+    warnings the interpreter does not draw, which is the direction the strict-subset rule
+    forbids.  Both are one line each in the checker: the capture resolves a slot and now marks
+    it used, as the comment beside it always said it was ("their values are read where the
+    lambda is written"), and check_lcall marks the name it dispatches on.
+    test_a_capture_reads_what_it_captures in test_lambda.ngpl holds them to it, under -Werror,
+    where a spurious warning is an error.
 
 [x] a loop over a range counts in a measure where the count is one.  The walks of the AST's
     nodes and functions in abi.ngpl, the two vreg sweeps in ir.ngpl, the driver's op walk, the

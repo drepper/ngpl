@@ -1307,6 +1307,18 @@ Macros and Reflection
     2402.  The lesson is that `- 1` is a pattern and inclusiveness is a meaning, and only the
     tests tell them apart.
 
+[x] a range counts in one measure, or in none.  Its ends -- and its step -- say one measure
+    between them; an end that states nothing takes what the others state, which is what lets
+    `0…#v` count in ¤ptrdiff without saying so twice.  Two that state different things are
+    refused, since a byte offset counted as an element index has the right type and the wrong
+    meaning, and a loop is where that does the most damage.
+
+    ngplc already refused it, on type grounds and with a vaguer message; the interpreter
+    accepted it and silently took the low end's measure, which is the worse of the two
+    answers.  The interpreter is the authority, so it is the one that changed.  Diagnostic
+    2328, and four tests in test_units.ngpl: the two that are refused, the one that counts in
+    a measure of its own, and the walk of a container that every loop relies on.
+
 [ ] ∀ and ∃ over a hash or a set, which waits on the same answer ¨ waits on.
 
 [x] a ⊑ b and a ⊒ b: whether b begins with a, and whether it ends with it.  Both sides are

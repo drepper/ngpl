@@ -266,6 +266,19 @@ fn test_lambda_multi_stmt_capture():
     base + doubled
   assert_eq(110, f(5))
 
+// A binding used only through a capture is read, and so is a name that
+// is called rather than mentioned.  Both were once invisible to the
+// compiler's unread-binding warning while the interpreter saw them,
+// which is the two implementations disagreeing about a diagnostic --
+// the one direction the strict-subset rule forbids.  -Werror over this
+// file is what holds them to it.
+@test
+fn test_a_capture_reads_what_it_captures():
+    let s : str = "ab-"
+    let g := λi : i64 ¤ptrdiff |s| → bool: s[i] ≠ '-'
+    assert(g(0¤ptrdiff))
+    assert(not g(2¤ptrdiff))
+
 // Multi-statement lambda with loop
 @test
 fn test_lambda_multi_stmt_loop():

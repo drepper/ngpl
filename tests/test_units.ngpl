@@ -134,6 +134,52 @@ fn test_incompatible_assign():
   @expect error 2327 "incompatible units: s and m"
   a ← 3¤second
 
+// --- A range counts in one measure ---
+
+// The two ends say one measure between them or none.  An end that
+// states nothing takes what the other states, which is what lets
+// `0…#v` count in ¤ptrdiff without saying so twice; two ends that
+// state different things are the mistake units exist to catch, and a
+// loop is where it would do the most damage.
+
+@test
+fn test_a_range_with_two_measures_is_refused():
+  let lo ¤meter : i64 = 0
+  let hi ¤second : i64 = 4
+  @expect error 2328 "a range counts in one measure, or in none"
+  foreach i := lo…hi:
+    _ ← i
+
+@test
+fn test_a_stepped_range_with_two_measures_is_refused():
+  let lo ¤meter : i64 = 0
+  let st ¤second : i64 = 1
+  let hi ¤meter : i64 = 4
+  @expect error 2328 "a range counts in one measure, or in none"
+  foreach i := lo…st…hi:
+    _ ← i
+
+// One measure between them is what a range is usually written with,
+// and it is the loop variable's own.
+@test
+fn test_a_range_may_count_in_one_measure():
+  let lo ¤meter : i64 = 1
+  let hi ¤meter : i64 = 4
+  let total ¤meter : mut i64 = 0¤meter
+  foreach i := lo…hi:
+    total ← total + i
+  assert_eq(total, 6¤meter)
+
+// An end that states nothing takes the other's measure, which is what
+// every walk of a container relies on.
+@test
+fn test_an_unmeasured_end_takes_the_other_measure():
+  let v : i64[] = [10, 20, 30]
+  let seen : mut i64 = 0
+  foreach i := 0…#v:
+    seen ← seen + v[i]
+  assert_eq(seen, 60)
+
 // --- Dimensionless assignment rejection ---
 
 @test

@@ -1246,6 +1246,11 @@ impl Checker:
                             self.derr(ctok, "a capture is one value read now; '" ⧺ self.text(ctok) ⧺ "' is " ⧺ self.tn(cty0))
                             self.set_type(id, TY_I64)
                             return
+                        // The capture's value is read here, where the
+                        // lambda is written, and a read is what it is:
+                        // a binding used only through one is not a
+                        // binding nothing reads.
+                        self.life_used(self.sslot[cs × 1¤ptrdiff])
                         couter.push(self.sslot[cs × 1¤ptrdiff])
                         ctoks.push(ctok)
                         ctys.push(cty0)
@@ -3098,6 +3103,9 @@ impl Checker:
 
     fn check_lcall(&mut self, id : i64, tok : i64, args_off : i64,
                    argc : i64, vs : i64):
+        // calling what a name holds reads the name, as reading it any
+        // other way would
+        self.life_used(self.sslot[vs × 1¤ptrdiff])
         let lt : i64 = ty_strip_ref(self.stype[vs × 1¤ptrdiff])
         let np : i64 = self.lam_np(lt)
         if argc > np:
