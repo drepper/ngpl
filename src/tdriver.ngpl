@@ -850,4 +850,3 @@ fn t_emit_sat(em : &mut Emit, tg : Target, o : i64, w : i64, a : i64, b : i64, d
     g_const(&em, tg, RG_A, ⁻9223372036854775807 - 1)
     g_label(&em, tg, sl + 1)
     g_sts(&em, tg, RG_A, d)
-

@@ -598,7 +598,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // bytes would sit in the image saying nothing.  What refers to a
     // string is a pointer patch or a descriptor patch, and those are
     // the two lists asked here.
-    let used : mut i64[] = str_uses(&em, @dropunit(#lw.strs))
+    let used : i64[] = str_uses(&em, @dropunit(#lw.strs))
     let stroffs : mut i64[] = []
     let descidx : mut i64[] = []
     let acc : mut i64 = 0
@@ -805,4 +805,3 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     (Compiled{code: em.code, rodata: rodata, data: data,
               relro_size: relro_size, syms: syms,
               log: dlog, diags: cdiags})
-

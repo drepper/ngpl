@@ -129,13 +129,14 @@ fn parse_size(t : str) → i64:
     v ⊠ scale
 
 // whether an argument is 'name=' and then whatever it carries
+@pre(#name > 0)
 fn opt_matches(a : str, name : str) → bool:
     #name > 0 and #a > #name and name ⊑ a and a[#name] = '='
 
 // what it carries, which an argument written 'name=' alone leaves empty
-@pre(#name > 0¤ptrdiff)
+@pre(#name > 0)
 fn opt_value(a : str, name : str) → str:
-    if #ac <= #nc + 1: "" else: ac[#nc + 1…#ac]
+    if #a <= #name + 1: "" else: a[#name+1…#a]
 
 // The compiler's own build, run with `ngplc --build src/main.ngpl`.
 //

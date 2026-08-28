@@ -215,7 +215,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let text_size : i64 = em.here()
     let ro_vaddr : i64 = IMAGE_BASE + align_up(PAGE + text_size, PAGE)
     // only the strings something reads reach the image; see str_uses
-    let used : mut i64[] = str_uses(&em, @dropunit(#lw.strs))
+    let used : i64[] = str_uses(&em, @dropunit(#lw.strs))
     let stroffs : mut i64[] = []
     let descidx : mut i64[] = []
     let acc : mut i64 = 0
@@ -587,7 +587,7 @@ fn i3_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
     i3g_resolve(&em, tg)
 
 // the door on 32-bit ARM
-fn a32_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
+fn a32_startup(em : &mut Emit, lw : &Lower, tg : Target, args_off : i64,
                stack_size : i64, guard_size : i64, ginit : i64,
                tdriver : i64, start_fn : i64, sret : bool):
     em.begin_fn(4)
@@ -680,7 +680,7 @@ fn a32_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
     a32g_resolve(&em, tg)
 
 // the door on RV32
-fn r32_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
+fn r32_startup(em : &mut Emit, lw : &Lower, tg : Target, args_off : i64,
                stack_size : i64, guard_size : i64, ginit : i64,
                tdriver : i64, start_fn : i64, sret : bool):
     em.begin_fn(4)
