@@ -80,14 +80,14 @@ fn se_reads_a_first(o : i64) → bool:
 // not a label and a jump has nowhere else to land.  What holds the
 // value between the two is rax, which is where the memo is already
 // looking.
-fn se_can_drop(ir : IrFn, i : i64, n : i64, cnt : i64[], nv : i64) → bool:
-    let d : i64 = ir.id[i × 1¤ptrdiff]
+fn se_can_drop(ir : IrFn, i : i64 ¤ptrdiff, n : i64 ¤ptrdiff, cnt : i64[], nv : i64) → bool:
+    let d : i64 = ir.id[i]
     if d < 0 or d >= nv or i + 1 >= n:
         return false
-    let nx : i64 = ir.op[(i + 1) × 1¤ptrdiff]
+    let nx : i64 = ir.op[i + 1]
     if nx = IR_LABEL or not se_reads_a_first(nx):
         return false
-    if ir.ia[(i + 1) × 1¤ptrdiff] ≠ d:
+    if ir.ia[i + 1] ≠ d:
         return false
     // every naming of it outside this operation is that one read
     cnt[d × 1¤ptrdiff] - se_here(ir, i, d) = se_here(ir, i + 1, d) and se_here(ir, i + 1, d) = 1
@@ -121,15 +121,14 @@ fn p_class(o : i64) → i64:
 // of them as raw bytes, which no memo could follow -- so nothing beyond
 // the first operation is claimed.
 // Whether anything jumps to a label.
-fn p_jumped_to(ir : IrFn, n : i64, lab : i64) → bool:
+fn p_jumped_to(ir : IrFn, n : i64 ¤ptrdiff, lab : i64) → bool:
     let hit : mut bool = false
-    if n > 0:
-        foreach i := 0…n:
-            let o : i64 = ir.op[i × 1¤ptrdiff]
-            // a table keeps its labels in extra, where this does not look
-            hit ← hit or o = IR_JTAB or o = IR_VTAB
-            hit ← hit or (o = IR_JMP and ir.ia[i × 1¤ptrdiff] = lab)
-            hit ← hit or ((o = IR_JZ or o = IR_JNZ) and ir.ib[i × 1¤ptrdiff] = lab)
+    foreach i := 0…n:
+        let o : i64 = ir.op[i]
+        // a table keeps its labels in extra, where this does not look
+        hit ← hit or o = IR_JTAB or o = IR_VTAB
+        hit ← hit or (o = IR_JMP and ir.ia[i] = lab)
+        hit ← hit or ((o = IR_JZ or o = IR_JNZ) and ir.ib[i] = lab)
     hit
 
 // The first operation that does anything, and ⁻1 where control could
@@ -140,28 +139,28 @@ fn p_jumped_to(ir : IrFn, n : i64, lab : i64) → bool:
 // still hold what the caller put in them.  Where something does, the
 // tail call has written the parameters to their slots and the registers
 // say nothing about them -- so the spill those slots need is made.
-fn p_first(ir : IrFn, n : i64) → i64:
-    let i : mut i64 = 0
-    while i < n and ir.op[i × 1¤ptrdiff] = IR_LABEL:
-        if p_jumped_to(ir, n, ir.ia[i × 1¤ptrdiff]):
-            return ⁻1
+fn p_first(ir : IrFn, n : i64 ¤ptrdiff) → i64 ¤ptrdiff:
+    let i : mut i64 ¤ptrdiff = 0¤ptrdiff
+    while i < n and ir.op[i] = IR_LABEL:
+        if p_jumped_to(ir, n, ir.ia[i]):
+            return ⁻1¤ptrdiff
         i ← i + 1
     if i >= n:
-        return ⁻1
+        return ⁻1¤ptrdiff
     i
 
-fn p_keep(ir : IrFn, j : i64, cnt : i64[], nv : i64, first : i64, priv : i64) → bool:
+fn p_keep(ir : IrFn, j : i64, cnt : i64[], nv : i64, first : i64 ¤ptrdiff, priv : i64) → bool:
     if first < 0 or j < 0 or j >= nv:
         return false
-    let c : i64 = p_class(ir.op[first × 1¤ptrdiff])
+    let c : i64 = p_class(ir.op[first])
     if c = 0:
         return false
     // The first operand is read into rax, which writes over whatever was
     // there.  Where the second operand is the parameter that arrived in
     // rax -- which only the private convention puts there -- it would be
     // gone before it was read, so neither is kept and both are spilled.
-    let ia0 : i64 = ir.ia[first × 1¤ptrdiff]
-    let ib0 : i64 = ir.ib[first × 1¤ptrdiff]
+    let ia0 : i64 = ir.ia[first]
+    let ib0 : i64 = ir.ib[first]
     if c = 2 and ia0 ≠ ib0 and ib0 >= 0 and ib0 < 6 and arg_reg_p(ib0, priv) = R_AX:
         return false
     let ha : i64 = if ia0 = j: 1 else: 0
@@ -223,8 +222,8 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
     let secnt : i64[] = se_counts(ir, ir.nvregs)
     // which results anything will read wider than their type
     let cwant : i64[] = canon_wanted(ir, ir.nvregs, 7, 7)
-    let nops : i64 = @dropunit(#ir.op)
-    let pfirst : i64 = p_first(ir, nops)
+    let nops : i64 ¤ptrdiff = #ir.op
+    let pfirst : i64 ¤ptrdiff = p_first(ir, nops)
     // one function's answer is not the next one's
     em.pclear()
     em.self_priv ← priv
@@ -242,15 +241,15 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             em.w32(16 + 8 × (j - 6))    // mov rax, [rbp+…]: a stack argument
             em.store(R_AX, j)
         j ← j + 1
-    let n : i64 = nops
-    let i : mut i64 = 0
+    let n : i64 ¤ptrdiff = nops
+    let i : mut i64 ¤ptrdiff = 0¤ptrdiff
     while i < n:
-        let o : i64 = ir.op[i × 1¤ptrdiff]
-        let a : i64 = ir.ia[i × 1¤ptrdiff]
-        let b : i64 = ir.ib[i × 1¤ptrdiff]
-        let c : i64 = ir.ic[i × 1¤ptrdiff]
-        let d : i64 = ir.id[i × 1¤ptrdiff]
-        let w : i64 = ir.iw[i × 1¤ptrdiff]
+        let o : i64 = ir.op[i]
+        let a : i64 = ir.ia[i]
+        let b : i64 = ir.ib[i]
+        let c : i64 = ir.ic[i]
+        let d : i64 = ir.id[i]
+        let w : i64 = ir.iw[i]
         let bits : i64 = w & 255
         em.drop_slot ← if se_can_drop(ir, i, n, secnt, ir.nvregs): d else: ⁻1
         let sgn : i64 = w » 8

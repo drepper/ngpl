@@ -88,14 +88,14 @@ fn td_reads_a_first(o : i64) → bool:
 
 // The same reckoning the pioneer makes, over the same shared counts,
 // asking this ladder's own question about what comes next.
-fn td_can_drop(ir : IrFn, i : i64, n : i64, cnt : i64[], nv : i64) → bool:
-    let d : i64 = ir.id[i × 1¤ptrdiff]
+fn td_can_drop(ir : IrFn, i : i64 ¤ptrdiff, n : i64 ¤ptrdiff, cnt : i64[], nv : i64) → bool:
+    let d : i64 = ir.id[i]
     if d < 0 or d >= nv or i + 1 >= n:
         return false
-    let nx : i64 = ir.op[(i + 1) × 1¤ptrdiff]
+    let nx : i64 = ir.op[i + 1]
     if nx = IR_LABEL or not td_reads_a_first(nx):
         return false
-    if ir.ia[(i + 1) × 1¤ptrdiff] ≠ d:
+    if ir.ia[i + 1] ≠ d:
         return false
     cnt[d × 1¤ptrdiff] - se_here(ir, i, d) = se_here(ir, i + 1, d) and se_here(ir, i + 1, d) = 1
 

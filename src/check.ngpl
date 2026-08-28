@@ -30,20 +30,13 @@ let MID_HDIGEST : i64 = 15   // h.digest(): the answer, and the end of the handl
 
 // The module a module is written inside; "" for one written at the top.
 fn mod_parent(m : str) → str:
-    let cs := m.chars()
-    let cut : mut i64 = ⁻1
-    if #cs > 0:
-        foreach i := 0…#cs:
-            if cs[i] = '.':
-                cut ← @dropunit(i)
+    let cut : mut i64 ¤ptrdiff = ⁻1¤ptrdiff
+    foreach i := 0…#m:
+        if m[i] = '.':
+            cut ← i
     if cut < 0:
         return ""
-    let out : mut str = ""
-    let j : mut i64 = 0
-    while j < cut:
-        out ← out ⧺ cs[j × 1¤ptrdiff]
-        j ← j + 1
-    out
+    m[0¤ptrdiff…cut]
 
 // whether `inner` is `outer` or is written inside it
 fn mod_within(inner : str, outer : str) → bool:
@@ -1816,25 +1809,19 @@ impl Checker:
     fn lam_intern(&mut self, pts : i64[], ret : i64, lstb : i64) → i64:
         let n : i64 = @dropunit(#pts)
         let m : i64 = @dropunit(#self.a.ltl)
-        let sh : mut i64 = 0
-        while sh < m:
+        foreach sh := 0…m:
             if self.a.ltl[sh × 1¤ptrdiff] = n and self.a.ltf[sh × 1¤ptrdiff] = lstb:
                 let st : i64 = self.a.lts[sh × 1¤ptrdiff]
                 let same : mut bool = self.a.lte[(st + n) × 1¤ptrdiff] = ret
-                let i : mut i64 = 0
-                while i < n:
+                foreach i := 0…n:
                     same ← same and self.a.lte[(st + i) × 1¤ptrdiff] = pts[i × 1¤ptrdiff]
-                    i ← i + 1
                 if same:
                     return sh
-            sh ← sh + 1
         self.a.lts.push(@dropunit(#self.a.lte))
         self.a.ltl.push(n)
         self.a.ltf.push(lstb)
-        let j : mut i64 = 0
-        while j < n:
-            self.a.lte.push(pts[j × 1¤ptrdiff])
-            j ← j + 1
+        foreach pt := pts:
+            self.a.lte.push(pt)
         self.a.lte.push(ret)
         m
 
@@ -1855,11 +1842,9 @@ impl Checker:
     fn mat_intern(&mut self, elem : i64, r : i64, c : i64, d : i64) → i64:
         // handed back as a plain type code, as the other interns are
         let m : i64 = @dropunit(#self.a.mel)
-        let i : mut i64 = 0
-        while i < m:
+        foreach i := 0…m:
             if self.a.mel[i × 1¤ptrdiff] = elem and self.a.mrr[i × 1¤ptrdiff] = r and self.a.mcc[i × 1¤ptrdiff] = c and self.a.mdd[i × 1¤ptrdiff] = d:
                 return i
-            i ← i + 1
         let inner : mut i64 = mk_rty(elem)
         if d ≠ ⁻2:
             inner ← mk_mty(self.mat_intern(elem, c, d, ⁻2))
@@ -2424,12 +2409,10 @@ impl Checker:
                 // the resolved position replaces the name for lowering
                 self.a.extra[(off + 1 + i × 2) × 1¤ptrdiff] ← fidx
             i ← i + 1
-        let m : mut i64 = 0
-        while m < nf:
+        foreach m := 0…nf:
             if filled[m × 1¤ptrdiff] = 0:
                 let ftok : i64 = self.a.extra[(d.fields_off + 1 + m × 2) × 1¤ptrdiff]
                 self.derr(tok, "the literal misses field '" ⧺ self.text(ftok) ⧺ "'")
-            m ← m + 1
         self.set_type(id, mk_sty(sidx))
 
     fn check_field(&mut self, id : i64, tok : i64, na : i64):
@@ -2501,10 +2484,8 @@ impl Checker:
         let st : i64 = self.a.estart[ei × 1¤ptrdiff]
         let n : i64 = self.a.ecount[ei × 1¤ptrdiff]
         let m : mut i64 = 0
-        let i : mut i64 = 0
-        while i < n:
+        foreach i := 0…n:
             m ← m | self.a.evalues[(st + i) × 1¤ptrdiff]
-            i ← i + 1
         m
 
     // the enum a written name stands for; the builtins are reached
@@ -2609,13 +2590,11 @@ impl Checker:
                 let v : i64 = self.a.evalues[(est + k) × 1¤ptrdiff]
                 // by value, so an arm for one name of a value covers
                 // every other name of it -- and repeats that value
-                let j : mut i64 = 0
-                while j < ecount:
+                foreach j := 0…ecount:
                     if self.a.evalues[(est + j) × 1¤ptrdiff] = v:
                         if taken[j × 1¤ptrdiff] = 1 and j = k:
                             self.derr(mtok, "match repeats '" ⧺ ename ⧺ "." ⧺ m ⧺ "'; the second arm can never be reached")
                         taken[j × 1¤ptrdiff] ← 1
-                    j ← j + 1
             // An arm that leaves rather than falls through -- a
             // return, or a call to something @noreturn -- has no value
             // to hand on, so a trailing match does not ask it for one.
@@ -2637,11 +2616,9 @@ impl Checker:
                 self.check_block(dflt, trailing and not self.block_returns(dflt))
         else:
             let missing : mut str = ""
-            let mi : mut i64 = 0
-            while mi < ecount:
+            foreach mi := 0…ecount:
                 if taken[mi × 1¤ptrdiff] = 0:
                     missing ← missing ⧺ (if missing = "": "" else: " or ") ⧺ ename ⧺ "." ⧺ self.a.emembers[(est + mi) × 1¤ptrdiff]
-                mi ← mi + 1
             if missing ≠ "":
                 self.derr(tok, "match has no arm for " ⧺ missing ⧺ "; add the missing pattern or a _ arm")
         if trailing and vwant = ⁻1 and self.answer_ty() ≠ TY_UNIT:
@@ -3481,11 +3458,9 @@ impl Checker:
             return na
         if k = NK_VAR:
             let nm := self.text(self.a.ntok[e × 1¤ptrdiff])
-            let i : mut i64 = 0
-            while i < np:
+            foreach i := 0…np:
                 if self.text(self.a.extra[(poff + 1 + i × 2) × 1¤ptrdiff]) = nm:
                     return vals[i × 1¤ptrdiff]
-                i ← i + 1
             return PRE_UNKNOWN
         if k = NK_NOT:
             let a : i64 = self.pre_const(na, poff, np, vals)
@@ -3665,11 +3640,10 @@ impl Checker:
         self.set_type(id, TY_UNIT)
 
     fn count_fields(&self, s : str) → i64:
-        let cs := s.chars()
         let n : mut i64 = 0
         let i : mut i64 ¤ptrdiff = 0
-        while i + 1 < #cs:
-            if cs[i] = '{' and cs[i + 1] = '}':
+        while i + 1 < #s:
+            if s[i] = '{' and s[i + 1] = '}':
                 n ← n + 1
                 i ← i + 2
             else:
@@ -4011,11 +3985,9 @@ impl Checker:
             let de : i64 = TY_ENTRY
             let di : mut i64 = ⁻1
             let dm : i64 = @dropunit(#self.ite)
-            let ds : mut i64 = 0
-            while ds < dm:
+            foreach ds := 0…dm:
                 if self.ite[ds × 1¤ptrdiff] = de:
                     di ← ds
-                ds ← ds + 1
             if di = ⁻1:
                 di ← dm
                 self.ite.push(de)
@@ -4028,11 +4000,9 @@ impl Checker:
             let ie : i64 = self.elem_of(t)
             let ii : mut i64 = ⁻1
             let mi : i64 = @dropunit(#self.ite)
-            let si : mut i64 = 0
-            while si < mi:
+            foreach si := 0…mi:
                 if self.ite[si × 1¤ptrdiff] = ie:
                     ii ← si
-                si ← si + 1
             if ii = ⁻1:
                 ii ← mi
                 self.ite.push(ie)

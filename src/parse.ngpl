@@ -418,35 +418,27 @@ impl Parser:
         // plain type code, so the measure comes off at the declaration
         let n : i64 = @dropunit(#es)
         let m : i64 = @dropunit(#self.tts)
-        let sh : mut i64 = 0
-        while sh < m:
+        foreach sh := 0…m:
             if self.ttl[sh × 1¤ptrdiff] = n:
                 let st : i64 = self.tts[sh × 1¤ptrdiff]
                 let same : mut bool = true
-                let i : mut i64 = 0
-                while i < n:
+                foreach i := 0…n:
                     same ← same and self.tte[(st + i) × 1¤ptrdiff] = es[i × 1¤ptrdiff]
-                    i ← i + 1
                 if same:
                     return sh
-            sh ← sh + 1
         self.tts.push(@dropunit(#self.tte))
         self.ttl.push(n)
-        let j : mut i64 = 0
-        while j < n:
-            self.tte.push(es[j × 1¤ptrdiff])
-            j ← j + 1
+        foreach e := es:
+            self.tte.push(e)
         m
 
     fn farr_intern(&mut self, elem : i64, size : i64) → i64:
         // handed back as a plain type code, so the measure comes off
         // at the declaration rather than at the answer
         let m : i64 = @dropunit(#self.fae)
-        let i : mut i64 = 0
-        while i < m:
+        foreach i := 0…m:
             if self.fae[i × 1¤ptrdiff] = elem and self.fas[i × 1¤ptrdiff] = size:
                 return i
-            i ← i + 1
         self.fae.push(elem)
         self.fas.push(size)
         m
@@ -468,25 +460,19 @@ impl Parser:
         // so the measure comes off here rather than at every use
         let n : i64 = @dropunit(#pts)
         let m : i64 = @dropunit(#self.ltl)
-        let sh : mut i64 = 0
-        while sh < m:
+        foreach sh := 0…m:
             if self.ltl[sh × 1¤ptrdiff] = n and self.ltf[sh × 1¤ptrdiff] = lstb:
                 let st : i64 = self.lts[sh × 1¤ptrdiff]
                 let same : mut bool = self.lte[(st + n) × 1¤ptrdiff] = ret
-                let i : mut i64 = 0
-                while i < n:
+                foreach i := 0…n:
                     same ← same and self.lte[(st + i) × 1¤ptrdiff] = pts[i × 1¤ptrdiff]
-                    i ← i + 1
                 if same:
                     return sh
-            sh ← sh + 1
         self.lts.push(@dropunit(#self.lte))
         self.ltl.push(n)
         self.ltf.push(lstb)
-        let j : mut i64 = 0
-        while j < n:
-            self.lte.push(pts[j × 1¤ptrdiff])
-            j ← j + 1
+        foreach pt := pts:
+            self.lte.push(pt)
         self.lte.push(ret)
         m
 
@@ -494,11 +480,9 @@ impl Parser:
     fn mat_intern(&mut self, elem : i64, r : i64, c : i64, d : i64) → i64:
         // handed back as a plain type code, as the other interns are
         let m : i64 = @dropunit(#self.mel)
-        let i : mut i64 = 0
-        while i < m:
+        foreach i := 0…m:
             if self.mel[i × 1¤ptrdiff] = elem and self.mrr[i × 1¤ptrdiff] = r and self.mcc[i × 1¤ptrdiff] = c and self.mdd[i × 1¤ptrdiff] = d:
                 return i
-            i ← i + 1
         // What one subscript answers is settled here, where a shape may
         // still be interned, so that reading it later -- from a &self
         // that cannot intern -- is a plain lookup.

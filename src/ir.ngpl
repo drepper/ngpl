@@ -376,5 +376,5 @@ fn canon_wanted(ir : IrFn, nv : i64, freecmp : i64, freediv : i64) → i64[]:
     want
 
 // How often a vreg is named among one operation's own fields.
-fn se_here(ir : IrFn, i : i64, v : i64) → i64:
-    (if ir.ia[i × 1¤ptrdiff] = v: 1 else: 0) + (if ir.ib[i × 1¤ptrdiff] = v: 1 else: 0) + (if ir.ic[i × 1¤ptrdiff] = v: 1 else: 0)
+fn se_here(ir : IrFn, i : i64 ¤ptrdiff, v : i64) → i64:
+    (if ir.ia[i] = v: 1 else: 0) + (if ir.ib[i] = v: 1 else: 0) + (if ir.ic[i] = v: 1 else: 0)

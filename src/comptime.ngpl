@@ -240,10 +240,10 @@ impl Cev:
 
     fn scan_list(&mut self, off : i64):
         let n : i64 = self.a.extra[off × 1¤ptrdiff]
-        let i : mut i64 = 0
-        while i < n and not self.halted():
+        foreach i := 0…n:
+            if self.halted():
+                return
             self.ev_scan(self.a.extra[(off + 1 + i) × 1¤ptrdiff])
-            i ← i + 1
 
     // A recipe calls only what is effect-free: an @impure callee would
     // put std.println back within reach through the side door, and with
@@ -532,7 +532,7 @@ impl Cev:
             if v.tag = CV_ARR:
                 return cv_int(v.m)
             if v.tag = CV_STR:
-                return cv_int(@dropunit(#v.s.chars()))
+                return cv_int(@dropunit(#v.s))
             self.derr(tok, "# counts an array or a string, and this is " ⧺ self.cv_kind(v))
             return cv_none()
         if k = NK_INDEX:
@@ -739,11 +739,9 @@ impl Cev:
         self.push_scope()
         self.floor ← @dropunit(#self.names)
         self.depth ← self.depth + 1
-        let j : mut i64 = 0
-        while j < np:
+        foreach j := 0…np:
             let ptok : i64 = self.a.extra[(callee.params_off + 1 + j × 2) × 1¤ptrdiff]
             self.bind(self.text(ptok), vs[j × 1¤ptrdiff], false)
-            j ← j + 1
         self.ret ← cv_none()
         let fl : i64 = self.ev_stmt(callee.body)
         let answered : CVal = self.ret

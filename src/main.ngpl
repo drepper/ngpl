@@ -83,10 +83,8 @@ fn report(diags : Diag[], files : Files, as_json : bool, src : byte[]):
 // names of their own.  A name the compiler cannot classify is refused
 // up front rather than read and misparsed.
 fn is_ngpl_source(path : str) → bool:
-    let cs := path.chars()
-    if #cs < 6:
-        return false
-    cs[#cs - 5] = '.' and cs[#cs - 4] = 'n' and cs[#cs - 3] = 'g' and cs[#cs - 2] = 'p' and cs[#cs - 1] = 'l'
+    // something before the suffix, and then the suffix
+    #path > 5 and ".ngpl" ⊒ path
 
 // The named source could not be opened: say which file and why the
 // compiler stopped, in the compiler's own words rather than a raw
@@ -101,14 +99,13 @@ fn missing_input(name : str):
 // the text is not a size at all
 @post(r: r = ⁻1 or r >= 0)
 fn parse_size(t : str) → i64:
-    let cs := t.chars()
-    if #cs = 0:
+    if #t = 0:
         return ⁻1
     let scale : mut i64 = 1
     // how many of the characters are the number, which is a count of
     // characters and is measured like one all the way to the subscript
-    let n : mut i64 ¤ptrdiff = #cs
-    let last := cs[#cs - 1]
+    let n : mut i64 ¤ptrdiff = #t
+    let last := t[#t - 1]
     if last = 'K' or last = 'k':
         scale ← 1024
         n ← n - 1
@@ -122,7 +119,7 @@ fn parse_size(t : str) → i64:
         return ⁻1
     let v : mut i64 = 0
     foreach i := 0…n:
-        let c := cs[i]
+        let c := t[i]
         if c < '0' or c > '9':
             return ⁻1
         v ← v ⊠ 10 ⊞ (c.ord() - 48)
@@ -172,20 +169,13 @@ fn empty_recipe() → Recipe:
 // the directory a path names something in, "" when it names something
 // in the working directory
 fn dir_of(path : str) → str:
-    let cs := path.chars()
-    let cut : mut i64 = ⁻1
-    if #cs > 0:
-        foreach i := 0…#cs:
-            if cs[i] = '/':
-                cut ← @dropunit(i)
+    let cut : mut i64 ¤ptrdiff = ⁻1¤ptrdiff
+    foreach i := 0…#path:
+        if path[i] = '/':
+            cut ← i
     if cut < 0:
         return ""
-    let out : mut str = ""
-    let j : mut i64 = 0
-    while j < cut:
-        out ← out ⧺ cs[j × 1¤ptrdiff]
-        j ← j + 1
-    out
+    path[0¤ptrdiff…cut]
 
 // A name the recipe gave, made into a path this run can open.  An
 // absolute name is taken as written; anything else is looked for beside
