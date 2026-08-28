@@ -543,8 +543,7 @@ impl Checker:
         slot
 
 fn begins_underscore(nm : str) → bool:
-    let cs := nm.chars()
-    #cs > 0 and cs[0¤ptrdiff] = '_'
+    "_" ⊑ nm
 
 impl Checker:
     // A binding leaves its scope here, so this is where its lifetime
@@ -1070,6 +1069,8 @@ impl Checker:
                 self.set_type(id, TY_I64)
         elif k = NK_CALL:
             self.check_call(id, tok, na)
+        elif k = NK_RUN:
+            self.check_run(id, tok, na, nb, nc)
         elif k = NK_QUANT:
             self.check_quant(id, tok, na, nb, nc)
         elif k = NK_CALLV:
@@ -3177,6 +3178,26 @@ impl Checker:
         self.a.nc[id × 1¤ptrdiff] ← 2
         self.set_type(id, mk_aty(self.lam_ret(ft)))
 
+    // a ⊑ b and a ⊒ b: whether a runs along the front of b, or along
+    // its back.  Both sides are sequences of the same thing -- two
+    // strings, or two arrays of one element type -- and the answer is
+    // a truth however long either of them is.
+    fn check_run(&mut self, id : i64, tok : i64, ae : i64, be : i64, back : i64):
+        let g : str = if back = 1: "⊒" else: "⊑"
+        self.set_type(id, TY_BOOL)
+        self.check_expr(ae, TY_UNIT)
+        let at9 : i64 = self.ty_of(ae)
+        self.check_expr(be, at9)
+        let bt : i64 = self.ty_of(be)
+        if at9 = TY_STR and bt = TY_STR:
+            return
+        let aseq : bool = ty_is_arr(at9) or ty_is_row(at9)
+        let bseq : bool = ty_is_arr(bt) or ty_is_row(bt)
+        if not aseq or not bseq:
+            self.derr(tok, g ⧺ " lays one sequence against another; this is " ⧺ self.tn(at9) ⧺ " and " ⧺ self.tn(bt))
+            return
+        if ty_elem(at9) ≠ ty_elem(bt):
+            self.derr(tok, g ⧺ " lays sequences of one thing against each other; the left holds " ⧺ self.tn(ty_elem(at9)) ⧺ " and the right holds " ⧺ self.tn(ty_elem(bt)))
     // f ∀ v and f ∃ v: whether f holds of every one of the things v
     // holds, and whether it holds of any.  The shape generate has --
     // a function of one value on the left, what it is asked about on

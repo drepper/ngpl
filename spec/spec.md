@@ -6825,6 +6825,62 @@ Mapping and then folding is the shape most of this is for:
 The glyph and the position are APL's, and they put the function where the fold already puts it: on the left, with the data on the right.  Where APL's `¨` is an *operator modifier* that makes a new function, this is a binary operator that answers the array directly — the same simplification the fold made, and for the same reason: a modifier would need the language to have a notion of a derived function, which it does not.
 
 
+### Laying One Sequence Against Another (`⊑` and `⊒`)
+
+`a ⊑ b` asks whether `b` begins with `a`, and `a ⊒ b` whether it ends with it.  Both answer a `bool`, and both sit where the other relational tests sit, so the logical operators take the answer without parentheses.
+
+```
+"ab" ⊑ "abc"                    // true
+"bc" ⊑ "abc"                    // false
+"bc" ⊒ "abc"                    // true
+
+let v : i64[] = [1, 2, 3]
+let p : i64[] = [1, 2]
+p ⊑ v                           // true
+p ⊒ v                           // false
+```
+
+Both sides are sequences of the same thing: two strings, or two arrays of one element type.  A string is a sequence of characters here as it is everywhere else it is walked.  Sequences of different things are a mistake rather than a pair that happens not to match, and are refused where they are written:
+
+```
+"ab" ⊑ [1, 2]
+
+error: ⊑: the left holds char and the right holds int; both sides are sequences of the same thing
+```
+
+#### The Edges
+
+A run longer than what it is laid against is neither a front nor a back of it, and that is settled before any element is looked at.  A sequence is its own front and its own back.  And the empty run is at the front and at the back of everything, including of itself:
+
+```
+"abcd" ⊑ "abc"                  // false
+"abc"  ⊑ "abc"                  // true
+"abc"  ⊒ "abc"                  // true
+""     ⊑ "abc"                  // true
+""     ⊒ "abc"                  // true
+```
+
+Those are the answers that make `a ⊑ a ⧺ b` hold for every `a` and `b`, including where either is empty.
+
+#### Why Not a Slice and an Equality
+
+`a = b[0…#a - 1]` says the same thing about a prefix, and says it worse.  It builds a sequence to throw away, it needs the length written twice, and it is wrong rather than false when `a` is longer than `b` — the slice is out of range, so the program stops where the question had a perfectly good answer.  `⊑` answers it.
+
+The comparison stops at the first element that differs, as `∀` does and for the same reason.
+
+#### Comparison with Other Languages
+
+| Language | Prefix | Suffix |
+|----------|--------|--------|
+| Python | `b.startswith(a)` | `b.endswith(a)` |
+| Rust | `b.starts_with(a)` | `b.ends_with(a)` |
+| C++ | `b.starts_with(a)` | `b.ends_with(a)` |
+| Haskell | `isPrefixOf a b` | `isSuffixOf a b` |
+| NGPL | `a ⊑ b` | `a ⊒ b` |
+
+Every other language spells this as a method on the longer sequence, which reads backwards from the way it is said — *a* is the prefix, and it is *a* that the sentence is about.  The glyphs put the two operands where the sentence puts them, and they are not method calls, so they work the same for a string and for an array without either type carrying the method.
+
+
 ### The Quantifier Operators (`∀`, `∃` and `∄`)
 
 `f ∀ v` asks whether `f` holds of **every** one of the things `v` holds.  `f ∃ v` asks whether it holds of **any**.  `f ∄ v` asks whether it holds of **none**.  All three answer a `bool`.  The shape is the fold's and the map's: what asks the question on the left, what is asked about on the right.

@@ -2440,6 +2440,8 @@ class Parser:
 
     _CMP_OPS = ("\N{NOT EQUAL TO}", "<", ">", "<=", ">=",
                 "\N{SUBSET OF}", "\N{SUBSET OF OR EQUAL TO}",
+                "\N{SQUARE IMAGE OF OR EQUAL TO}",
+                "\N{SQUARE ORIGINAL OF OR EQUAL TO}",
                 "≅", "≇", "⪅", "⪆", "⪉", "⪊")
 
     def _parse_cmp_expr(self):

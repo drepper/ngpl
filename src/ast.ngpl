@@ -101,6 +101,9 @@ let NK_MATCHE : i64 = 97
 // f ∀ v and f ∃ v: na = what asks, nb = what is asked about, nc = 1
 // for ∃ and 0 for ∀
 let NK_QUANT : i64 = 99
+// a ⊑ b and a ⊒ b: na = the shorter run, nb = the one it is laid
+// against, nc = 1 for the back and 0 for the front
+let NK_RUN : i64 = 100
 let NK_MSLICE : i64 = 95    // m[rows, cols]: na = matrix, nb = extra [rlo, rhi, clo, chi], nc = 1 for a column
 let NK_TRY : i64 = 91       // e?: ∅ answers the function early, a value unwraps
 let NK_BADLAM : i64 = 92    // a λ the checker refuses: na says why

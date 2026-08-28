@@ -1280,6 +1280,17 @@ Macros and Reflection
 
 [ ] ∀ and ∃ over a hash or a set, which waits on the same answer ¨ waits on.
 
+[x] a ⊑ b and a ⊒ b: whether b begins with a, and whether it ends with it.  Both sides are
+    sequences of the same thing -- two strings, or two arrays of one element type -- and the
+    answer is a bool at the level the other relational tests sit at.  The length settles it
+    before an element is looked at, and the comparison stops at the first that differs.  A
+    sequence is its own front and its own back, and the empty run is at both ends of
+    everything, which are the answers that make `a ⊑ a ⧺ b` hold for every a and b.  The
+    slice-and-compare it replaces builds a sequence to throw away, writes the length twice,
+    and stops the program rather than answering false when a is the longer.  Every other
+    language spells it as a method on the longer sequence, which reads backwards from the way
+    it is said.
+
 [x] refuse at the definition a function whose body threads over an array parameter while its
     return type names a scalar -- `fn g3(x : i32[]) -> bool: x > 3`, whose body hands back
     bool[].  A listable operator handed an array answers an array, and the parameter's

@@ -131,6 +131,9 @@ _NORMALIZE_OPS = {
 # Single-character operators.
 # The last six are the tolerant comparisons, paired with the exact ones.
 SINGLE_OPS = set("+-%=<>!&|^~.,;:?(){}[]←→«»↺↻…∧∨⊕⊼⊽¬λ⊨⊭⍴⧺⌿⍀¤√∛∜↑⁻×÷⍳∊≠#⸨⸩∪∩∖⊂⊆⊃⊇"
+                 # a ⊑ b and a ⊒ b -- a runs along the front of b, or
+                 # along its back.
+                 "⊑⊒"
                  # f ∀ v, f ∃ v and f ∄ v -- whether f holds of them all,
                  # of any, or of none.
                  "∀∃∄"
@@ -630,7 +633,7 @@ def tokenize(src: str):
                 tokens.append(Token("PUNCT", ch, line, col))
             elif ch == "\N{RIGHTWARDS ARROW}":
                 tokens.append(Token("OP", "->", line, col))
-            elif ch in ("+-%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻⍳∊≠#∪∩∖⊂⊆⊃⊇※∀∃∄\N{DIAERESIS}"
+            elif ch in ("+-%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻⍳∊≠#∪∩∖⊂⊆⊃⊇⊑⊒※∀∃∄\N{DIAERESIS}"
                         "\N{MULTIPLICATION SIGN}\N{DIVISION SIGN}"
                         "≅≇⪅⪆⪉⪊"
                         "\N{SQUARED PLUS}\N{SQUARED MINUS}"

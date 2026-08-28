@@ -1578,6 +1578,8 @@ class Evaluator:
     # rather than threaded.
     _SUBSET_OPS = frozenset({"\N{SUBSET OF}",
                              "\N{SUBSET OF OR EQUAL TO}"})
+    _RUN_OPS = frozenset({"\N{SQUARE IMAGE OF OR EQUAL TO}",
+                          "\N{SQUARE ORIGINAL OF OR EQUAL TO}"})
 
     # Every operator that means for a container what it means for one of
     # the things in it, and so is threaded over one that it is handed.
@@ -2036,6 +2038,67 @@ class Evaluator:
         if op == "\N{SUBSET OF OR EQUAL TO}":
             return mk_bool(inside)
         return mk_bool(inside and first.sizeof < second.sizeof)
+
+    def _op_run(self, op: str, left, right):
+        """Whether one sequence runs along the front or the back of another.
+
+        `a ⊑ b` asks whether b begins with a and `a ⊒ b` whether it
+        ends with a.  Both are settled by the length first -- a longer
+        sequence is neither -- and then element by element, stopping at
+        the first that differs, which is the same reason ∀ stops.
+
+        Equal sequences answer true to both, and an empty one answers
+        true against anything: the empty run is at the front and at the
+        back of every sequence, which is what makes `a ⊑ b` agree with
+        itself when a is split.
+        """
+        first, second = self._two_runs(op, left, right)
+        # The two hold the same thing or the question is not one that
+        # can be asked.  Answering false would be answering it, and a
+        # string laid against an array of numbers is a mistake rather
+        # than a sequence that happens not to match.
+        if first and second and type(first[0]) is not type(second[0]):
+            raise coded(2231, TypeError(
+                f"{op}: the left holds "
+                f"{self._value_type_name(first[0])} and the right holds "
+                f"{self._value_type_name(second[0])}; both sides are "
+                f"sequences of the same thing"))
+        if len(first) > len(second):
+            return mk_bool(False)
+        # where the shorter one is laid against the longer
+        at = 0 if op == "\N{SQUARE IMAGE OF OR EQUAL TO}" \
+            else len(second) - len(first)
+        for i, value in enumerate(first):
+            if not self._values_equal(value, second[at + i]):
+                return mk_bool(False)
+        return mk_bool(True)
+
+    def _two_runs(self, op: str, left, right):
+        """The two sequences an operator between sequences was given.
+
+        A string is a sequence of characters here, as it is everywhere
+        else it is walked; an array is a sequence of its elements.
+        """
+        runs = []
+        for side, value in (("left", _unwrap_operand(left)),
+                            ("right", _unwrap_operand(right))):
+            if isinstance(value, StrValue):
+                runs.append([CharValue(c) for c in value.value])
+                continue
+            if isinstance(value, ObjectValue) \
+                    and isinstance(value.obj, ArrayValue):
+                runs.append(value.obj.values())
+                continue
+            raise coded(2231, TypeError(
+                f"{op}: the {side} operand is "
+                f"{self._value_type_name(value)}; both sides are "
+                f"sequences of the same thing"))
+        return runs[0], runs[1]
+
+    def _values_equal(self, a, b) -> bool:
+        """Whether two elements of a sequence are the same value."""
+        result = self._apply_operator("=", a, b)
+        return isinstance(result, BoolValue) and result.value
 
     def _two_sets(self, op: str, left, right):
         """The two sets an operator between sets was given."""
@@ -2600,6 +2663,10 @@ class Evaluator:
             return self._op_index_of(left, right)
         if op in self._SUBSET_OPS:
             return self._op_subset(op, left, right)
+        if op in self._RUN_OPS:
+            # Both operands are the sequence itself, as they are for ⧺,
+            # so this is settled before anything threads over one.
+            return self._op_run(op, left, right)
         if op in self._SET_OPS:
             # Both operands are the container, as they are for ⧺, so
             # this is dispatched before anything is threaded over one.

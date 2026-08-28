@@ -105,7 +105,9 @@ fn parse_size(t : str) → i64:
     if #cs = 0:
         return ⁻1
     let scale : mut i64 = 1
-    let n : mut i64 = @dropunit(#cs)
+    // how many of the characters are the number, which is a count of
+    // characters and is measured like one all the way to the subscript
+    let n ¤ptrdiff : mut i64 = #cs
     let last := cs[#cs - 1]
     if last = 'K' or last = 'k':
         scale ← 1024
@@ -120,7 +122,7 @@ fn parse_size(t : str) → i64:
         return ⁻1
     let v : mut i64 = 0
     foreach i := 0…n - 1:
-        let c := cs[i × 1¤ptrdiff]
+        let c := cs[i]
         if c < '0' or c > '9':
             return ⁻1
         if v > SIZE_MAX_OPT:
@@ -130,7 +132,7 @@ fn parse_size(t : str) → i64:
 
 // whether an argument is 'name=' and then whatever it carries
 fn opt_matches(a : str, name : str) → bool:
-    #name > 0 and #a > #name and a[#name] = '=' and (λi : i64 ¤ptrdiff |a, name| → bool: a[i] = name[i]) ∀ 0…#name - 1
+    #name > 0 and #a > #name and name ⊑ a and a[#name] = '='
 
 // what it carries, which an argument written 'name=' alone leaves empty
 fn opt_value(a : str, name : str) → str:
@@ -198,15 +200,13 @@ fn dir_of(path : str) → str:
 // directory it is run -- and then along each search path it declared.
 @impure
 fn resolve_source(name : str, base : str, paths : str[]) → str:
-    let cs := name.chars()
-    if #cs > 0 and cs[0¤ptrdiff] = '/':
+    if "/" ⊑ name:
         return name
     let here : str = if base = "": name else: base ⧺ "/" ⧺ name
     if can_open(here):
         return here
     foreach d := paths:
-        let dc := d.chars()
-        let root : str = if (#dc > 0 and dc[0¤ptrdiff] = '/') or base = "": d else: base ⧺ "/" ⧺ d
+        let root : str = if "/" ⊑ d or base = "": d else: base ⧺ "/" ⧺ d
         let cand : str = root ⧺ "/" ⧺ name
         if can_open(cand):
             return cand

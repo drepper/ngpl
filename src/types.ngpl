@@ -324,7 +324,7 @@ fn fnval_ret_ok(r : i64) → bool:
 // questions about the same places, and the second was a flag carried
 // through a loop before there was a way to ask it.
 fn names_int_type(name : str) → bool:
-    #name >= 2 and (name[0¤ptrdiff] = 'i' or name[0¤ptrdiff] = 'u') and (λi : i64 ¤ptrdiff |name| → bool: name[i] >= '0' and name[i] <= '9') ∀ 1…#name - 1 and (λi : i64 ¤ptrdiff |name| → bool: name[i] ≠ '0') ∃ 1…#name - 1
+    #name >= 2 and ("i" ⊑ name or "u" ⊑ name) and (λi : i64 ¤ptrdiff |name| → bool: name[i] >= '0' and name[i] <= '9') ∀ 1…#name - 1 and (λi : i64 ¤ptrdiff |name| → bool: name[i] ≠ '0') ∃ 1…#name - 1
 
 // The name of a type, as a diagnostic writes it.  A measure the file
 // declared can only be named by a caller holding the file's marks, so

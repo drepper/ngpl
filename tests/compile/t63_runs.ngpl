@@ -1,0 +1,27 @@
+// core-1: ⊑ and ⊒, which lay one sequence against another.
+//
+// `a ⊑ b` asks whether b begins with a and `a ⊒ b` whether it ends
+// with a.  Two strings, or two arrays of one element type; the length
+// settles it before any element is looked at, and the comparison stops
+// at the first that differs.
+
+@start
+@impure
+fn main():
+    std.println("{} {}", "ab" ⊑ "abc", "bc" ⊑ "abc")
+    std.println("{} {}", "bc" ⊒ "abc", "ab" ⊒ "abc")
+    // a sequence is its own front and its own back
+    std.println("{} {}", "abc" ⊑ "abc", "abc" ⊒ "abc")
+    // a longer run is neither, and the empty run is both
+    std.println("{} {}", "abcd" ⊑ "abc", "" ⊑ "abc")
+    std.println("{} {}", "abcd" ⊒ "abc", "" ⊒ "abc")
+    let v : i64[] = [1, 2, 3]
+    let p : i64[] = [1, 2]
+    let s : i64[] = [2, 3]
+    std.println("{} {} {} {}", p ⊑ v, s ⊑ v, s ⊒ v, p ⊒ v)
+    // the answer is a bool, so the logical operators take it as one
+    std.println("{}", "ab" ⊑ "abc" and "bc" ⊒ "abc")
+    // a run is at the front of the join it begins
+    let a : str = "abc"
+    let b : str = "def"
+    std.println("{} {}", a ⊑ a ⧺ b, b ⊒ a ⧺ b)

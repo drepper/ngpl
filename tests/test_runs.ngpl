@@ -1,0 +1,84 @@
+// Tests for ⊑ and ⊒, which lay one sequence against another.
+//
+// `a ⊑ b` asks whether b begins with a and `a ⊒ b` whether it ends
+// with a.  Both sides are sequences of the same thing -- two strings,
+// or two arrays of one element type -- and the answer is a bool
+// however long either of them is.
+//
+// The length settles it first: a run longer than what it is laid
+// against is neither a front nor a back of it.  Equal sequences answer
+// true to both, and an empty one answers true against anything, the
+// empty run being at the front and at the back of everything.
+
+// ---------------------------------------------------------------------
+// Strings
+// ---------------------------------------------------------------------
+
+@test
+fn test_a_string_prefix():
+    assert("ab" ⊑ "abc")
+    assert(not ("bc" ⊑ "abc"))
+    assert(not ("abd" ⊑ "abc"))
+
+@test
+fn test_a_string_suffix():
+    assert("bc" ⊒ "abc")
+    assert(not ("ab" ⊒ "abc"))
+    assert(not ("xbc" ⊒ "abc"))
+
+@test
+fn test_a_string_is_its_own_front_and_back():
+    assert("abc" ⊑ "abc")
+    assert("abc" ⊒ "abc")
+
+@test
+fn test_a_longer_run_is_neither():
+    assert(not ("abcd" ⊑ "abc"))
+    assert(not ("abcd" ⊒ "abc"))
+
+@test
+fn test_the_empty_run_is_at_both_ends():
+    assert("" ⊑ "abc")
+    assert("" ⊒ "abc")
+    assert("" ⊑ "")
+    assert("" ⊒ "")
+
+// ---------------------------------------------------------------------
+// Arrays
+// ---------------------------------------------------------------------
+
+@test
+fn test_an_array_prefix_and_suffix():
+    let v : i64[] = [1, 2, 3]
+    let p : i64[] = [1, 2]
+    let s : i64[] = [2, 3]
+    assert(p ⊑ v)
+    assert(not (s ⊑ v))
+    assert(s ⊒ v)
+    assert(not (p ⊒ v))
+
+@test
+fn test_an_array_of_one_element_type():
+    let v : char[] = ['a', 'b', 'c']
+    let p : char[] = ['a', 'b']
+    assert(p ⊑ v)
+    assert(not (p ⊒ v))
+
+// ---------------------------------------------------------------------
+// What they answer, said another way
+// ---------------------------------------------------------------------
+
+// A run is at the front of the join of itself and anything.
+@test
+fn test_a_run_is_at_the_front_of_what_it_begins():
+    let a : str = "abc"
+    let b : str = "def"
+    assert(a ⊑ a ⧺ b)
+    assert(b ⊒ a ⧺ b)
+
+// The answer sits at the comparison level, so the logical operators
+// take it without parentheses.
+@test
+fn test_the_answer_is_a_bool():
+    let ok : bool = "ab" ⊑ "abc" and "bc" ⊒ "abc"
+    assert(ok)

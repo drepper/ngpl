@@ -552,6 +552,8 @@ impl Lower:
             return d
         if k = NK_CALL:
             return self.lower_call(nid, tok, na)
+        if k = NK_RUN:
+            return self.lower_run(na, nb, nc)
         if k = NK_QUANT:
             return self.lower_quant(nid, na, nb, nc)
         if k = NK_CALLV:
@@ -1634,6 +1636,71 @@ impl Lower:
         self.ir(IR_LABEL, lend, 0, 0, 0, 0)
         out
 
+    // a ⊑ b and a ⊒ b: whether a runs along the front of b, or along
+    // its back.  The length settles it first -- a longer run is
+    // neither -- and then it is element by element from where the
+    // shorter one is laid, stopping at the first that differs.  Two
+    // strings, or two arrays of one element type; the elements are
+    // compared as the language compares them.
+    fn lower_run(&mut self, ae : i64, be : i64, back : i64) → i64:
+        let isstr : bool = self.tof(ae) = TY_STR
+        let av : i64 = self.lower_expr(ae)
+        let bv : i64 = self.lower_expr(be)
+        let an : i64 = self.tmp()
+        let bn : i64 = self.tmp()
+        if isstr:
+            self.ir(IR_SLENV, av, 0, 0, an, 0)
+            self.ir(IR_SLENV, bv, 0, 0, bn, 0)
+        else:
+            self.ir(IR_ALEN, av, 0, 0, an, 0)
+            self.ir(IR_ALEN, bv, 0, 0, bn, 0)
+        // the answer, false until the walk has run out of ways to
+        // make it false
+        let d : i64 = self.tmp()
+        self.ir(IR_CONST, 0, 0, 0, d, 0)
+        let lend : i64 = self.label()
+        // a run longer than what it is laid against is neither
+        let toolong : i64 = self.tmp()
+        self.ir(IR_CLT, bn, an, 0, toolong, 64 + 256)
+        self.ir(IR_JNZ, toolong, lend, 0, 0, 0)
+        // where the shorter one is laid: the front, or as far along
+        // as leaves it ending where the longer one does
+        let at : i64 = self.tmp()
+        if back = 1:
+            self.ir(IR_SUBW, bn, an, 0, at, 64 + 256)
+        else:
+            self.ir(IR_CONST, 0, 0, 0, at, 0)
+        let ix : i64 = self.tmp()
+        self.ir(IR_CONST, 0, 0, 0, ix, 0)
+        let one : i64 = self.tmp()
+        self.ir(IR_CONST, 1, 0, 0, one, 0)
+        let ltop : i64 = self.label()
+        self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
+        let more : i64 = self.tmp()
+        self.ir(IR_CLT, ix, an, 0, more, 64 + 256)
+        let lsame : i64 = self.label()
+        self.ir(IR_JZ, more, lsame, 0, 0, 0)
+        let bi : i64 = self.tmp()
+        self.ir(IR_ADDW, at, ix, 0, bi, 64 + 256)
+        let x : i64 = self.tmp()
+        let y : i64 = self.tmp()
+        if isstr:
+            self.ir(IR_SIDX, av, ix, 0, x, 0)
+            self.ir(IR_SIDX, bv, bi, 0, y, 0)
+        else:
+            self.ir(IR_AIDX, av, ix, 0, x, 0)
+            self.ir(IR_AIDX, bv, bi, 0, y, 0)
+        let same : i64 = self.tmp()
+        self.ir(IR_CEQ, x, y, 0, same, 64 + 256)
+        self.ir(IR_JZ, same, lend, 0, 0, 0)
+        let nx : i64 = self.tmp()
+        self.ir(IR_ADDW, ix, one, 0, nx, 64 + 256)
+        self.ir(IR_MOV, nx, 0, 0, ix, 0)
+        self.ir(IR_JMP, ltop, 0, 0, 0, 0)
+        self.ir(IR_LABEL, lsame, 0, 0, 0, 0)
+        self.ir(IR_CONST, 1, 0, 0, d, 0)
+        self.ir(IR_LABEL, lend, 0, 0, 0, 0)
+        d
     // f ∀ v, f ∃ v and f ∄ v.  The loop generate makes, with the
     // answer a truth instead of an array and a way out of the middle
     // of it: the walk leaves at the first element that settles the

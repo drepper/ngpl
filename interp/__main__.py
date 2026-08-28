@@ -1315,6 +1315,7 @@ _LITERAL_TYPES = {
 _ANSWERS_A_TRUTH = frozenset({
     "=", "\N{NOT EQUAL TO}", "<", ">", "<=", ">=", "and", "or",
     "\N{ELEMENT OF}", "\N{SUBSET OF OR EQUAL TO}", "\N{SUBSET OF}",
+    "\N{SQUARE IMAGE OF OR EQUAL TO}", "\N{SQUARE ORIGINAL OF OR EQUAL TO}",
     "\N{ALMOST EQUAL TO}", "\N{NOT ALMOST EQUAL TO}",
 })
 

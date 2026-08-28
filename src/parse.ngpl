@@ -1254,6 +1254,9 @@ impl Parser:
         if k = TK_LAND: return 6
         if k = TK_LXOR or k = TK_LNAND or k = TK_LNOR: return 5
         if k = TK_EQ or k = TK_NE or k = TK_LT or k = TK_GT or k = TK_LE or k = TK_GE: return 7
+        // a relational test between two sequences, where the other
+        // relational tests are
+        if k = TK_PREFIX or k = TK_SUFFIX: return 7
         if k = TK_MAX or k = TK_MIN or k = TK_ELEM or k = TK_IOTA: return 9
         if k = TK_SHL or k = TK_SHR: return 10
         if k = TK_BOR: return 11
@@ -1266,6 +1269,8 @@ impl Parser:
         ⁻1
 
     fn bin_nk(&self, k : i64) → i64:
+        if k = TK_PREFIX: return NK_RUN
+        if k = TK_SUFFIX: return NK_RUN
         if k = TK_OR: return NK_OR
         if k = TK_COALESCE: return NK_DEFAULT
         if k = TK_AND: return NK_AND
@@ -1338,7 +1343,7 @@ impl Parser:
                 let at : i64 = self.pos
                 self.pos ← self.pos + 1
                 let rhs : i64 = self.parse_bin(bp + 1)
-                lhs ← self.mknode(self.bin_nk(k), at, lhs, rhs, 0)
+                lhs ← self.mknode(self.bin_nk(k), at, lhs, rhs, if k = TK_SUFFIX: 1 else: 0)
         lhs
 
     fn parse_expr(&mut self) → i64:

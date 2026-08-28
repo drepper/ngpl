@@ -297,6 +297,21 @@ Errors and Warnings
     Found while writing t62_quantifiers, whose first draft bound a string used only through a
     capture.
 
+[ ] a loop over a range should count in a measure wherever the count is one.  parse_size does
+    now; most of the compiler still drops the measure to make the range and puts it back at
+    the subscript, which is the units policy saying the opposite of what it means.
+
+    A mechanical pass over the rest is not safe, and the attempt is worth recording rather
+    than repeating.  What is left is entangled: a count stored in a plain i64[] beside other
+    plain numbers, an index packed into a type's encoding, a counter shared by two loops over
+    different things, a length compared against a value read back out of an array.  Measuring
+    one of these forces the arrays it meets to be measured too, and the change stops being
+    local.  A blanket pass that keyed on a name being measured anywhere rather than in the
+    same function converted eighty-nine loops and broke several; the compiler's own checker
+    caught every one, at stage 2 rather than in the interpreter, since the interpreter
+    tolerates a redundant × 1¤ptrdiff where the compiler refuses ptrdiff × ptrdiff.  The way
+    to do this is a few functions at a time, each read rather than matched.
+
 [ ] a function value may close over an array.  Only a pure function of up to five plain
     scalars -- and str -- travels as a value or curries today, which is what decides how much
     of the compiler ∀ and ∃ can be written over: a question about two arrays cannot be asked,
