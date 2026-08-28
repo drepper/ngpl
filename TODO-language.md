@@ -1252,7 +1252,8 @@ Macros and Reflection
     it does on the way -- printing, writing, failing -- is part of what the program does; a
     rule that left the stopping point open would let one source produce two outputs.  It is
     also why an iterator is admitted, a source that never ends being a fair thing to ask ∃
-    about, which holds only because the exit does.  An empty container answers
+    about, which holds only because the exit does.  The compiled subset has them too, over an
+    array or a range; the iterator is the interpreter's alone for now.  An empty container answers
     ∀ true and ∃ false, the identities that make the answer for a joined container agree with
     the answers for its halves however the elements fall.  ∧⌿ and ∨⌿ over a mapped container
     were the nearest thing before: three passes, no short circuit, and a refusal on empty.

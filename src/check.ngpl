@@ -1070,6 +1070,8 @@ impl Checker:
                 self.set_type(id, TY_I64)
         elif k = NK_CALL:
             self.check_call(id, tok, na)
+        elif k = NK_QUANT:
+            self.check_quant(id, tok, na, nb, nc)
         elif k = NK_CALLV:
             self.check_callv(id, tok, na, nb)
         elif k = NK_SCALL:
@@ -3170,6 +3172,44 @@ impl Checker:
         self.a.nc[id × 1¤ptrdiff] ← 2
         self.set_type(id, mk_aty(self.lam_ret(ft)))
 
+    // f ∀ v and f ∃ v: whether f holds of every one of the things v
+    // holds, and whether it holds of any.  The shape generate has --
+    // a function of one value on the left, what it is asked about on
+    // the right -- with the answer a bool rather than an array of the
+    // answers, and the walk stopping where it can.
+    fn check_quant(&mut self, id : i64, tok : i64, fe : i64, ce : i64, isany : i64):
+        let g : str = if isany = 1: "∃" else: "∀"
+        self.set_type(id, TY_BOOL)
+        self.check_expr(fe, TY_UNIT)
+        let ft : i64 = self.ty_of(fe)
+        if not ty_is_lam(ft):
+            self.derr(tok, g ⧺ " asks something of each of them, so what stands on its left is a function; this is " ⧺ self.tn(ft))
+            self.check_expr(ce, TY_UNIT)
+            return
+        if self.lam_np(ft) ≠ 1:
+            self.derr(tok, g ⧺ " asks about one value at a time; this function takes " ⧺ i64_str(self.lam_np(ft)))
+            self.check_expr(ce, TY_UNIT)
+            return
+        // What it answers is the whole of what the operator answers,
+        // so a function that answers anything else is refused here
+        // rather than having its answer read as a truth.
+        if self.lam_ret(ft) ≠ TY_BOOL:
+            self.derr(tok, g ⧺ " asks a question of each of them, so what it asks has to answer a bool; this answers " ⧺ self.tn(self.lam_ret(ft)))
+        let pt : i64 = self.lam_pt(ft, 0)
+        self.check_expr(ce, mk_aty(pt))
+        let ct : i64 = self.ty_of(ce)
+        // an array of what it takes, or a range counting in it
+        if ty_is_rg(ct):
+            if ty_rgelem(ct) ≠ pt:
+                self.derr(tok, "the range counts " ⧺ self.tn(ty_rgelem(ct)) ⧺ ", but the function takes " ⧺ self.tn(pt))
+            self.a.nc[id × 1¤ptrdiff] ← isany + 2
+            return
+        if not ty_is_arr(ct) and not ty_is_row(ct):
+            self.derr(tok, g ⧺ " asks about each of an array or a range; this is " ⧺ self.tn(ct))
+            return
+        if ty_elem(ct) ≠ pt:
+            self.derr(tok, "the array holds " ⧺ self.tn(ty_elem(ct)) ⧺ ", but the function takes " ⧺ self.tn(pt))
+        self.a.nc[id × 1¤ptrdiff] ← isany
     // (expr)(args): the callee is a value, so the box travels as the
     // expression's own answer rather than out of a named slot
     fn check_callv(&mut self, id : i64, tok : i64, na : i64, args_off : i64):
@@ -4096,11 +4136,7 @@ impl Checker:
         false
 
     fn is_ignored_name(&self, name : str) → bool:
-        if #self.a.ignored > 0:
-            foreach n := self.a.ignored:
-                if n = name:
-                    return true
-        false
+        str_is(name) ∃ self.a.ignored
 
     // the recipe's name resolves to nothing, since it is not among the
     // functions; saying so is better than saying it does not exist

@@ -106,6 +106,10 @@ let TK_LBRACE : i64 = 79
 let TK_RBRACE : i64 = 80
 let TK_QMARK : i64 = 81      // ? as a type's suffix
 let TK_SOME : i64 = 82       // ⊨
+// The quantifiers.  f ∀ v asks whether f holds of every one of the
+// things v holds, f ∃ v whether it holds of any.
+let TK_FORALL : i64 = 107    // ∀
+let TK_EXISTS : i64 = 108    // ∃
 let TK_EMPTY : i64 = 83      // ∅
 let TK_LHASH : i64 = 84      // ⸨
 let TK_RHASH : i64 = 85      // ⸩
@@ -175,6 +179,8 @@ let GLYPHS3 : std.dict(i64, i64) = (⸨
     14847114: 72,   // ⌊
     14854074: 78,   // ⧺
     14846632: 82,   // ⊨
+    14846080: 107,  // ∀
+    14846083: 108,  // ∃
     14846085: 83,   // ∅
     14858408: 84,   // ⸨
     14858409: 85,   // ⸩
@@ -183,6 +189,12 @@ let GLYPHS3 : std.dict(i64, i64) = (⸨
 // ===========================================================================
 // Small helpers
 // ===========================================================================
+
+// Whether a string is the one wanted.  The wanted one comes first so
+// that str_is(name) is a question about a single string, which is the
+// shape ∀ and ∃ ask for.
+fn str_is(want : str, s : str) → bool:
+    s = want
 
 @post(r: #r > 0)
 fn i64_str(n : i64) → str:

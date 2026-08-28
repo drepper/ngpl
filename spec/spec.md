@@ -6853,7 +6853,7 @@ twice ∀ v
 error: ∀ asks a question of each of them, so what it asks has to answer a bool; this answered i64
 ```
 
-Arrays and ranges are what the right operand may be, as they are for a fold and a map, and so is an iterator:
+Arrays and ranges are what the right operand may be, as they are for a fold and a map, and so is an iterator — though only the bootstrap interpreter takes the third; `ngplc` takes an array or a range:
 
 ```
 (λx : i64 → bool: x < 100) ∀ 1…5            // true

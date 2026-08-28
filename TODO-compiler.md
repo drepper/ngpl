@@ -270,20 +270,34 @@ Errors and Warnings
     alternate stack, so the frame to start from has to be read out of the ucontext, whose
     layout is a sixth thing per target.  rt_backtrace.ngpl holds the routine and the table.
 
-[ ] the quantifier operators ∀ and ∃ in the compiled subset.  The bootstrap interpreter answers
-    `f ∀ v` and `f ∃ v` for arrays, ranges and iterators; ngplc refuses the glyphs, which is
-    what an unknown character does and is the honest answer until the subset covers them.
-    What they need is what ¨ needed -- a call per element and a container walked in the
-    lowering -- plus the exit, which is a branch out of the loop and not a new shape.
+[x] the quantifier operators ∀ and ∃ in the compiled subset.  A token each, one node kind,
+    a rule in the checker and a loop in the lowering -- the loop generate already makes, with
+    the answer a truth instead of an array.
 
-    **They must exit early.**  The operators exit at the first element that settles the
-    question and do not ask about the rest -- ∀ at the first that does not hold, ∃ at the
-    first that does -- and that is part of what they mean, not an optimization the lowering
-    may leave for later.  A first cut that walks the whole container and reduces at the end
-    would answer correctly and still be wrong: the function is the program's own, so a call
-    that should not have happened is output that should not have appeared.  Do not land the
-    operators without the branch.  tests/test_quantifiers.ngpl pins the call count for both,
-    and is the suite they have; nothing in tests/compile uses them until this is done.
+    **They exit early**, which is the half that had to be got right rather than added later:
+    the walk leaves at the first element that settles the question -- ∀ at the first that does
+    not hold, ∃ at the first that does -- and asks about no more.  A lowering that walked the
+    whole container and reduced at the end would answer correctly and be a different program,
+    since the function is the program's own and a call that should not have happened is output
+    that should not have appeared.  The branch out of the middle of the loop is what makes it
+    true, and t62_quantifiers proves it by quantifying over a range that runs past the end of
+    an array: only a walk that leaves where it should never reaches an index out of range.
+
+    The compiled subset takes an array or a range on the right, where the interpreter also
+    takes an iterator.  What blocks the third is not the operator: it is that the walk would
+    have to hold the iterator's state, which the lowering has no shape for yet.
+
+[ ] ∀ and ∃ over an iterator in the compiled subset, which is the one thing the interpreter
+    admits on the right and ngplc does not.
+
+[ ] a function value may close over an array.  Only a pure function of up to five plain
+    scalars -- and str -- travels as a value or curries today, which is what decides how much
+    of the compiler ∀ and ∃ can be written over: a question about two arrays cannot be asked,
+    because neither a capture nor a curried argument may be one.  opt_matches was rewritable
+    because its two operands are str and str indexes like an array; the loops over the AST's
+    parallel arrays were not.  Lifting this is a borrow question before it is a codegen one --
+    an array parameter carries a borrow, and a value that outlives it is the thing the
+    restriction exists to prevent -- so it wants a design, not a patch.
 
 
 Code Generation

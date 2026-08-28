@@ -128,16 +128,14 @@ fn parse_size(t : str) → i64:
         v ← v × 10 + (c.ord() - 48)
     v × scale
 
+// the same character in the same place in both, which is what the
+// quantifier below asks of every place the name covers
+fn opt_same_at(a : str, name : str, i : i64) → bool:
+    a[i × 1¤ptrdiff] = name[i × 1¤ptrdiff]
+
 // whether an argument is 'name=' and then whatever it carries
 fn opt_matches(a : str, name : str) → bool:
-    let ac := a.chars()
-    let nc := name.chars()
-    if #nc = 0 or #ac <= #nc:
-        return false
-    foreach i := 0…#nc - 1:
-        if ac[i] ≠ nc[i]:
-            return false
-    ac[#nc] = '='
+    #name > 0 and #a > #name and a[#name] = '=' and opt_same_at(a, name) ∀ 0…@dropunit(#name) - 1
 
 // what it carries, which an argument written 'name=' alone leaves empty
 fn opt_value(a : str, name : str) → str:

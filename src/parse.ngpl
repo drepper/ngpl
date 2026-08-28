@@ -1314,6 +1314,16 @@ impl Parser:
                     lhs ← self.mknode(NK_RANGEV, at, self.na[lhs × 1¤ptrdiff], rhs, self.nb[lhs × 1¤ptrdiff])
                 else:
                     lhs ← self.mknode(NK_RANGEV, at, lhs, rhs, ⁻1)
+            elif (k = TK_FORALL or k = TK_EXISTS) and min_bp <= 17:
+                // f ∀ v and f ∃ v.  The right operand is read at the
+                // range's level, so `f ∀ 1…5` needs no parentheses and
+                // `f ∀ v ⧺ w` asks about the join, while a comparison
+                // or a logical operator ends it -- the answer being a
+                // bool, `f ∀ v ∧ g ∃ w` is what it looks like.
+                let at : i64 = self.pos
+                self.pos ← self.pos + 1
+                let rhs : i64 = self.parse_bin(8)
+                lhs ← self.mknode(NK_QUANT, at, lhs, rhs, if k = TK_EXISTS: 1 else: 0)
             else:
                 let bp : i64 = self.bin_bp(k)
                 if bp = ⁻1 or bp < min_bp:
@@ -2239,10 +2249,7 @@ impl Parser:
         self.end_stmt()
 
     fn knows_module(&self, name : str) → bool:
-        foreach m := self.mods:
-            if m = name:
-                return true
-        false
+        str_is(name) ∃ self.mods
 
     fn parse_unit_def(&mut self):
         self.pos ← self.pos + 1

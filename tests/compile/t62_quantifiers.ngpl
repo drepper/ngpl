@@ -1,0 +1,44 @@
+// core-1: the quantifier operators ∀ and ∃.
+//
+// `f ∀ v` asks whether f holds of every one of the things v holds and
+// `f ∃ v` whether it holds of any.  An array or a range may stand on
+// the right; the interpreter also takes an iterator, which the
+// compiled subset does not, so nothing here asks about one.
+//
+// The last test is the one worth having.  Both operators exit at the
+// first element that settles the question and ask about no more, and
+// the way to prove that rather than describe it is to quantify over a
+// range that runs past the end of an array: a walk that leaves where
+// it should never reaches an index out of range, and a walk that
+// finishes the container stops the program.
+
+fn positive(n : i64) → bool:
+    n > 0
+
+fn small(n : i64) → bool:
+    n < 10
+
+// Curried, so what the operator gets is a question about one index and
+// nothing has to be captured: a function value closes over no array.
+fn at_positive(v : str, i : i64) → bool:
+    v[i × 1¤ptrdiff] ≠ '-'
+
+@start
+@impure
+fn main():
+    let v : i64[] = [1, 2, 3]
+    let w : i64[] = [1, ⁻2, 3]
+    let e : i64[] = []
+    std.println("{} {}", positive ∀ v, positive ∃ v)
+    std.println("{} {}", positive ∀ w, positive ∃ w)
+    std.println("{} {}", positive ∀ e, positive ∃ e)
+    // a range on the right, and a lambda on the left
+    std.println("{}", (λx : i64 → bool: x < 100) ∀ 1…5)
+    std.println("{}", (λx : i64 → bool: x > 4) ∃ 1…5)
+    // the answer is a bool, so the logical operators take it unbracketed
+    std.println("{}", positive ∀ v ∧ small ∃ v)
+    // ⧺ is absorbed into the right operand, as it is for a fold
+    std.println("{}", positive ∀ v ⧺ w)
+    // the exit, proved: "ab-" is three long and the range runs to 9,
+    // so only a walk that leaves at index 2 stays inside the string
+    std.println("{}", at_positive("ab-") ∀ 0…9)

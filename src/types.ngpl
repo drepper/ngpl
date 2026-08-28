@@ -318,18 +318,17 @@ fn fnval_ret_ok(r : i64) → bool:
     let b : i64 = if ty_is_opt(r): ty_opt_base(r) else: r
     (ty_is_int(b) and ty_unit(b) = 0) or b = TY_BOOL or b = TY_CHAR or b = TY_STR
 
+// what follows the letter has to be digits, and not all of them zero
+fn digit_at(s : str, i : i64) → bool:
+    s[i × 1¤ptrdiff] >= '0' and s[i × 1¤ptrdiff] <= '9'
+
+fn nonzero_at(s : str, i : i64) → bool:
+    s[i × 1¤ptrdiff] ≠ '0'
+
 // whether a name is the bootstrap's to keep: i or u and a nonzero
 // width, however written -- the bootstrap claims them all
 fn names_int_type(name : str) → bool:
-    let cs := name.chars()
-    if #cs < 2 or (cs[0] ≠ 'i' and cs[0] ≠ 'u'):
-        return false
-    let nz : mut bool = false
-    foreach k := 1…#cs - 1:
-        if cs[k] < '0' or cs[k] > '9':
-            return false
-        nz ← nz ∨ cs[k] ≠ '0'
-    nz
+    #name >= 2 and (name[0¤ptrdiff] = 'i' or name[0¤ptrdiff] = 'u') and digit_at(name) ∀ 1…@dropunit(#name) - 1 and nonzero_at(name) ∃ 1…@dropunit(#name) - 1
 
 // The name of a type, as a diagnostic writes it.  A measure the file
 // declared can only be named by a caller holding the file's marks, so
