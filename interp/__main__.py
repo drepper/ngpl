@@ -804,8 +804,8 @@ def _check_try_in(body, ret_type, env, *, in_lambda: bool = False) -> str | None
 # the same name suppresses the assumption rather than risking a wrong one.
 _OPTIONAL_METHODS = frozenset({"next", "get", "pop"})
 
-_ARM_PATTERN = {"some": "\N{THERE EXISTS}(...)", "none": "\N{EMPTY SET}",
-                "err": "\N{THERE DOES NOT EXIST}(...)", "wildcard": "_"}
+_ARM_PATTERN = {"some": "\N{TRUE}(...)", "none": "\N{EMPTY SET}",
+                "err": "\N{NOT TRUE}(...)", "wildcard": "_"}
 _ARM_SUBJECT = {"some": "a present value", "none": "\N{EMPTY SET}",
                 "err": "a failed result"}
 _SUBJECT_SHAPES = {"optional": {"some", "none"},
@@ -817,7 +817,7 @@ _SUBJECT_SHAPES = {"optional": {"some", "none"},
 # nothing helpful to add.
 _WRONG_ARM_HINT = {
     ("optional", "err"): ", whose absence is \N{EMPTY SET}",
-    ("expected", "none"): ", whose failure is \N{THERE DOES NOT EXIST}(e)",
+    ("expected", "none"): ", whose failure is \N{NOT TRUE}(e)",
 }
 
 _SUBJECT_NAME = {"optional": "an optional", "expected": "a result",

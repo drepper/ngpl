@@ -911,7 +911,7 @@ class SomeValue(Value):
         self.value = value
 
     def display(self):
-        return f"\N{THERE EXISTS}({self.value.display()})"
+        return f"\N{TRUE}({self.value.display()})"
 
     def to_python(self):
         return self.value.to_python()

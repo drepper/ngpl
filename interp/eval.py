@@ -1562,7 +1562,7 @@ class Evaluator:
             return
         raise coded(2612, TypeError(
             f"{what}: cannot compare an optional with a plain value; write "
-            f"\N{THERE EXISTS}(v) to compare against a present value, "
+            f"\N{TRUE}(v) to compare against a present value, "
             f"\N{EMPTY SET} against an absent one, or ?? to supply a default"))
 
     _APPROX_OPS = frozenset("≅≇⪅⪆⪉⪊")

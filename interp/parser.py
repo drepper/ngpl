@@ -2136,8 +2136,8 @@ class Parser:
                 pattern_tok)
         else:
             raise ParseError(
-                "expected a match pattern: \N{THERE EXISTS}(name), "
-                "\N{THERE DOES NOT EXIST}(name), \N{EMPTY SET}, "
+                "expected a match pattern: \N{TRUE}(name), "
+                "\N{NOT TRUE}(name), \N{EMPTY SET}, "
                 "Type(name), Enum.member, or _",
                 self._cur())
         body = self._parse_block()
