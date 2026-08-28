@@ -188,14 +188,14 @@ fn ir_reads() → i64[]:
 fn se_counts(ir : IrFn, nv : i64) → i64[]:
     let cnt : mut i64[] = []
     if nv > 0:
-        foreach _ := 0…nv - 1:
+        foreach _ := 0…nv:
             cnt.push(0)
     let rd : i64[] = ir_reads()
     let nrd : i64 = @dropunit(#rd)
     let ne : i64 = @dropunit(#ir.extra)
     let n ¤ptrdiff : i64 = #ir.op
     if n > 0:
-        foreach i := 0…n - 1:
+        foreach i := 0…n:
             let o : i64 = ir.op[i]
             // a number that is no opcode reads everything there is
             let m : i64 = if o >= 0 and o < nrd: rd[o × 1¤ptrdiff] else: 15
@@ -216,8 +216,10 @@ fn se_counts(ir : IrFn, nv : i64) → i64[]:
                 let k : i64 = if b >= 0 and b < ne: ir.extra[b × 1¤ptrdiff] else: ⁻1
                 let ok : bool = k >= 0 and b + 1 + k <= ne
                 let lo : i64 = if ok: b + 1 else: 0
-                let hi : i64 = if ok: b + k else: ne - 1
-                if hi >= lo:
+                // where the walk stops, which is one past the last of
+                // them, as every range's end now is
+                let hi : i64 = if ok: b + 1 + k else: ne
+                if hi > lo:
                     foreach j := lo…hi:
                         let v : i64 = ir.extra[j × 1¤ptrdiff]
                         if v >= 0 and v < nv:
@@ -297,14 +299,14 @@ fn ir_copies() → i64[]:
 fn canon_wanted(ir : IrFn, nv : i64, freecmp : i64, freediv : i64) → i64[]:
     let want : mut i64[] = []
     if nv > 0:
-        foreach _ := 0…nv - 1:
+        foreach _ := 0…nv:
             want.push(0)
     let nc : i64[] = ir_needs_canon()
     let nnc : i64 = @dropunit(#nc)
     let ne : i64 = @dropunit(#ir.extra)
     let n ¤ptrdiff : i64 = #ir.op
     if n > 0:
-        foreach i := 0…n - 1:
+        foreach i := 0…n:
             let o : i64 = ir.op[i]
             let m0 : i64 = if o >= 0 and o < nnc: nc[o × 1¤ptrdiff] else: 15
             // a comparison or a division that this target makes at the
@@ -335,8 +337,10 @@ fn canon_wanted(ir : IrFn, nv : i64, freecmp : i64, freediv : i64) → i64[]:
                 let k : i64 = if b >= 0 and b < ne: ir.extra[b × 1¤ptrdiff] else: ⁻1
                 let ok : bool = k >= 0 and b + 1 + k <= ne
                 let lo : i64 = if ok: b + 1 else: 0
-                let hi : i64 = if ok: b + k else: ne - 1
-                if hi >= lo:
+                // where the walk stops, which is one past the last of
+                // them, as every range's end now is
+                let hi : i64 = if ok: b + 1 + k else: ne
+                if hi > lo:
                     foreach j := lo…hi:
                         let v : i64 = ir.extra[j × 1¤ptrdiff]
                         if v >= 0 and v < nv:
@@ -350,7 +354,7 @@ fn canon_wanted(ir : IrFn, nv : i64, freecmp : i64, freediv : i64) → i64[]:
     let again : mut bool = n > 0
     while again:
         again ← false
-        foreach i := 0…n - 1:
+        foreach i := 0…n:
             let o : i64 = ir.op[i]
             let m : i64 = if o >= 0 and o < ncp: cp[o × 1¤ptrdiff] else: 0
             let dd : i64 = ir.id[i]

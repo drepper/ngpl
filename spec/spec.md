@@ -443,7 +443,7 @@ Fast types **cannot** be used in data structure definitions that are visible out
 Fast types **are** allowed for:
 
 - Local scalar bindings: `let i : mut u32fast = 0`
-- Loop indices: `foreach k : u32fast = 0…63:`
+- Loop indices: `foreach k : u32fast = 0…64:`
 - Function parameters: `fn f x : u32fast → int:`
 
 #### Design Rationale
@@ -634,10 +634,10 @@ let s := "héllo"
 #s                        /* 5 ptrdiff */
 s[0]                            /* 'h' */
 s[1]                            /* 'é' — the character, not a byte of it */
-s[1…3]                          /* "éll", a string */
+s[1…4]                          /* "éll", a string */
 ```
 
-An index carries `ptrdiff`, as an array index does, and an untyped literal needs none.  Both ends of a slice are included, as they are for an array.  An index outside the string says so:
+An index carries `ptrdiff`, as an array index does, and an untyped literal needs none.  A slice ends before its end, as the range that says it does — so the end may stand at the length, which is where the slice stops rather than a character it takes.  An index outside the string says so:
 
 ```
 s[9]
@@ -653,7 +653,7 @@ s[0] ← 'j'
 error: a string cannot be written through; build the string that is
 wanted, joining with ⧺
 
-let changed := 'j' ⧺ s[1…4]
+let changed := 'j' ⧺ s[1…5]
 ```
 
 #### A Character Is Its Own Kind of Value
@@ -1575,7 +1575,7 @@ A dynamic array parameter (`type[]`) accepts any array of the correct element ty
 ```
 fn sum(arr : i32[]) → i32:
     let total : mut = 0
-    foreach i := 0…(#arr - 1):
+    foreach i := 0…(#arr):
         total ← total + arr[i]
     total
 
@@ -1645,7 +1645,7 @@ The left operand is an array or a string; the right is what is looked for.  In a
 A slice is a container in its own right, and a position in it is counted from its own beginning:
 
 ```
-v[1…3] ⍳ 30                     /* 1 */
+v[1…4] ⍳ 30                     /* 1 */
 ```
 
 #### The Answer Is Optional
@@ -1725,7 +1725,7 @@ in it is not one number; a row of it is searched on its own
 What is not looked in at all is named as what it is — a range is a pair of ends rather than something to search:
 
 ```
-(10…20) ⍳ 12
+(10…21) ⍳ 12
 
 error: ⍳: the left operand is range, and what is searched is an array
 or a string
@@ -2110,7 +2110,7 @@ A string holds characters, so a number is not something that can be in one, and 
 
 error: ∊: a string holds characters, and what is looked for is i64
 
-3 ∊ (1…5)
+3 ∊ (1…6)
 
 error: ∊: the right operand is range, and what is looked through is a
 vector, a matrix, or a string
@@ -2175,7 +2175,7 @@ Note that `@max(T)` and `@min(T)` are a different thing: they name the extreme v
 ```
 2 + 3 ⌈ 10 - 4                /* 6 — the larger of the two sums */
 3 ⌈ 5 = 5                    /* true — (3 ⌈ 5) = 5 */
-1…(2 ⌈ 3)                     /* 1…3 */
+1…(2 ⌈ 3)                     /* 1…4 */
 ```
 
 The two sit at the same level and associate to the left, which changes nothing: both are associative, and `a ⌈ b ⌊ c` is `(a ⌈ b) ⌊ c` either way one reads it.
@@ -3320,7 +3320,7 @@ The rule applies to every read, not only to a read after an assignment: as an op
 `_` may stand wherever a name is bound, and means the same thing: the value is not wanted.  A loop that only needs to run a certain number of times, or that wants one of two loop variables:
 
 ```
-foreach _ := 1…4:
+foreach _ := 1…5:
     tick()
 
 foreach i, _ := enumerate(values):
@@ -4157,7 +4157,7 @@ fn total(arr : &i32[]) → i32:              // may read
     arr[0] + arr[1]
 
 fn fill_zeros(arr : &mut i32[]):     // may write
-    foreach i := 0…(#arr - 1):
+    foreach i := 0…(#arr):
         arr[i] = 0
 ```
 
@@ -4725,31 +4725,40 @@ The `foreach` loop iterates over **ranges** and **containers**, binding one or m
 foreach var1 [: type1] [, var2 [: type2] ...] := expr1 [, expr2 ...] block
 ```
 
-The `:=` separates the variable list from the iterable expressions, consistent with variable definitions using `let x : mut = expr`.  When a type annotation is present on the last variable, the `:` is consumed by the type syntax, so only `=` follows (e.g., `foreach k : u32 = 0…3:`).  The block uses either `:` (layout) or `{ }` (braces), like all other block constructs.
+The `:=` separates the variable list from the iterable expressions, consistent with variable definitions using `let x : mut = expr`.  When a type annotation is present on the last variable, the `:` is consumed by the type syntax, so only `=` follows (e.g., `foreach k : u32 = 0…4:`).  The block uses either `:` (layout) or `{ }` (braces), like all other block constructs.
 
 #### Ranges
 
-A range expression `start…end` (using the `…` character) generates an inclusive sequence of integers:
+A range expression `start…end` (using the `…` character) counts from `start` and **stops before** `end`:
 
 ```
-foreach i := 1…10:
+foreach i := 1…11:
     std.println("{}", i)            /* prints 1, 2, 3, ..., 10 */
 
-foreach j := 5…1:
+foreach j := 5…0:
     std.println("{}", j)            /* prints 5, 4, 3, 2, 1 */
 ```
 
-The direction is determined by comparing `start` and `end`: ascending if `start ≤ end`, descending otherwise.  The type of the loop variable is **untyped int** — its actual integer width is decided by the context in which it is used, not committed to `int` at the range site.
+The end is where the range stops rather than the last value it holds.  That is what makes `0…#v` the way to walk a container:
+
+```
+foreach i := 0…#v:
+    use(v[i])
+```
+
+with no `- 1` to write and none to forget.  It is also what makes an **empty container give an empty range**: `#v` is `0`, `0…0` holds nothing, and the loop does not run.  Under an inclusive end the same loop would be written `0…#v`, which for an empty container reads `0…⁻1` — a range that counts *downward* from zero and walks a container that has nothing in it.  That is a real trap and it is the reason for this rule.
+
+The direction is determined by comparing `start` and `end`: ascending if `start ≤ end`, descending otherwise.  A range whose ends are equal holds nothing, whichever they are.  The type of the loop variable is **untyped int** — its actual integer width is decided by the context in which it is used, not committed to `int` at the range site.
 
 #### Stepped Ranges
 
-A three-part range `start…step…end` iterates from `start` to `end` (inclusive) with the given step size:
+A three-part range `start…step…end` counts from `start` by the given step and stops before `end`:
 
 ```
-foreach i := 0…2…10:
+foreach i := 0…2…11:
     std.println("{}", i)            /* prints 0, 2, 4, 6, 8, 10 */
 
-foreach j := 1…3…10:
+foreach j := 1…3…11:
     std.println("{}", j)            /* prints 1, 4, 7, 10 */
 ```
 
@@ -4760,17 +4769,17 @@ foreach k := 10…-3…0:
     std.println("{}", k)            /* prints 10, 7, 4, 1 */
 ```
 
-The step must be a non-zero integer.  The end bound is inclusive: the last value produced is the largest (or smallest, for negative step) value in the sequence that does not exceed the bound.  When the step does not evenly divide the range, the final value may be less than `end`:
+The step must be a non-zero integer.  The end is where the range stops, so a value equal to it is not produced, and where the step does not land on it the last value is the last one short of it:
 
 ```
 foreach i := 0…3…10:
-    std.println("{}", i)            /* prints 0, 3, 6, 9 (not 10) */
+    std.println("{}", i)            /* prints 0, 3, 6, 9 */
 ```
 
 Stepped ranges are particularly useful for block-oriented processing:
 
 ```
-foreach blk_off : usize = 0…64…(total_size - 1):
+foreach blk_off : usize = 0…65…(total_size):
     /* process 64-byte blocks starting at blk_off */
 ```
 
@@ -4784,7 +4793,7 @@ foreach blk_off : usize = 0…64…(total_size - 1):
 Loop variables can carry type annotations to coerce range values to a specific width:
 
 ```
-foreach k : u32 = 0…255:
+foreach k : u32 = 0…256:
     ...
 ```
 
@@ -4793,7 +4802,7 @@ foreach k : u32 = 0…255:
 When the number of variables matches the number of expressions, each variable iterates over its corresponding iterable:
 
 ```
-foreach i, j := 1…5, 10…14:
+foreach i, j := 1…6, 10…15:
     /* i takes values 1,2,3,4,5 and j takes values 10,11,12,13,14 */
     ...
 ```
@@ -4803,7 +4812,7 @@ foreach i, j := 1…5, 10…14:
 The loop runs for as many iterations as the **longest** iterable.  Shorter iterables wrap around from the beginning:
 
 ```
-foreach i, j := 1…6, 10…12:
+foreach i, j := 1…7, 10…13:
     /* i: 1, 2, 3, 4, 5, 6          (6 iterations) */
     /* j: 10, 11, 12, 10, 11, 12    (wraps after 3) */
     ...
@@ -4814,7 +4823,7 @@ foreach i, j := 1…6, 10…12:
 When there is exactly **one** variable but **multiple** iterable expressions, the variable receives a **tuple** containing one element from each iterable at the current position:
 
 ```
-foreach pair := 1…3, 10…12:
+foreach pair := 1…4, 10…13:
     std.println("{}", pair[0])      /* 1, 2, 3 */
     std.println("{}", pair[1])      /* 10, 11, 12 */
 ```
@@ -4852,14 +4861,14 @@ For dynamic arrays, `foreach` uses the array's length to determine the iteration
 Loop variables are **constant** within the body — they cannot be reassigned:
 
 ```
-foreach i := 1…5:
+foreach i := 1…6:
     i ← i + 1          /* ERROR: cannot assign to foreach variable 'i' */
 ```
 
 Redefinition with `let mut` or `let` is permitted but produces a **warning**.  The new variable shadows the loop variable for the remainder of the iteration:
 
 ```
-foreach i := 1…3:
+foreach i := 1…4:
     let i : mut = 99         /* WARNING: redefinition of foreach variable 'i' */
     /* i is 99 here, not the loop counter */
 ```
@@ -4871,14 +4880,14 @@ This distinction exists because shadowing is a common intentional pattern (e.g.,
 Accumulate a sum:
 ```
 let sum : mut = 0
-foreach i := 1…100:
+foreach i := 1…101:
     sum ← sum + i
 /* sum is 5050 */
 ```
 
 Two-variable loop with wrapping:
 ```
-foreach row, col := 0…2, 0…3:
+foreach row, col := 0…3, 0…4:
     /* row wraps: 0,1,2,0  for 4 iterations (longest range) */
     /* col runs:  0,1,2,3 */
     ...
@@ -4896,8 +4905,8 @@ foreach point := [1,2,3], [10,20,30]:
 | Feature | Python | Rust | Zig | NGPL |
 |---------|--------|------|-----|---------------|
 | Iteration keyword | `for` | `for` | `for` | `foreach` |
-| Range syntax | `range(1, 11)` | `1..=10` | `0..10` | `1…10` (inclusive) |
-| Stepped range | `range(0, 11, 2)` | `(0..=10).step_by(2)` | N/A | `0…2…10` |
+| Range syntax | `range(1, 11)` | `1..=10` | `0..10` | `1…12` (ends before 11) |
+| Stepped range | `range(0, 11, 2)` | `(0..=10).step_by(2)` | N/A | `0…2…11` |
 | Multiple iterables | `zip(a, b)` | `a.zip(b)` | N/A | built-in with wrapping |
 | Tuple binding | destructuring | destructuring | N/A | single let → tuple |
 | Loop binding mutability | mutable | immutable | N/A | immutable |
@@ -4935,7 +4944,7 @@ foreach i, v := enumerate([10, 20, 30]):
 `break` leaves a loop and `continue` starts its next turn.  Both work in a `while` loop and in a `foreach` loop, and both act on the loop they are written directly inside:
 
 ```
-foreach i := 1…10:
+foreach i := 1…11:
     if i % 2 = 0:
         continue                    // skip the even ones
     if i > 7:
@@ -4949,8 +4958,8 @@ An inner loop's `break` leaves only the inner loop, which is rarely what a searc
 
 ```
 outer:
-foreach i := 0…9:
-    foreach j := 0…9:
+foreach i := 0…10:
+    foreach j := 0…10:
         if grid[i, j] = target:
             break outer
 ```
@@ -4978,7 +4987,7 @@ fn f():
 
 fn g():
     outer:
-    foreach i := 1…3:
+    foreach i := 1…4:
         break inner                 // error: break names the loop 'inner',
                                     // which is not one it is inside
 ```
@@ -4989,8 +4998,8 @@ A name that nothing inside the loop takes draws a warning, since the loop then s
 
 ```
 outer:
-foreach i := 1…3:                   // warning: the loop is named 'outer'
-    foreach j := 1…3:               // and nothing inside it takes the name
+foreach i := 1…4:                   // warning: the loop is named 'outer'
+    foreach j := 1…4:               // and nothing inside it takes the name
         break                       // leaves only the inner loop
 ```
 
@@ -4999,7 +5008,7 @@ Being a warning rather than an error, it is what a name is usually left behind b
 Neither statement comes back, so a statement written after one in the same block cannot be reached, and the same warning that follows a `return` or a call to a `@noreturn` function follows these:
 
 ```
-foreach i := 1…3:
+foreach i := 1…4:
     break
     n ← n + 1                       // warning: this statement cannot be
                                     // reached
@@ -5426,7 +5435,7 @@ Automatic currying follows Haskell's model: every function of N parameters is co
 Range expressions (`start…end` and `start…step…end`) are first-class values.  They can be stored in variables, passed as arguments, and iterated with `foreach`.
 
 ```
-let r : mut = 1…10
+let r : mut = 1…11
 foreach i := r:
     ...
 ```
@@ -5434,7 +5443,7 @@ foreach i := r:
 Ranges bind tighter than comparison but looser than arithmetic:
 
 ```
-let r : mut = 1 + 2 … 10 - 3             // equivalent to (1+2)…(10-3) = 3…7
+let r : mut = 1 + 2 … 10 - 3             // equivalent to (1+2)…(10-3) = 3…8
 ```
 
 
@@ -5455,13 +5464,13 @@ generate(func, range)
 #### Basic Usage
 
 ```
-let squares : mut = generate(λx : int → int: x × x, 1…5)
+let squares : mut = generate(λx : int → int: x × x, 1…6)
 // squares = [1, 4, 9, 16, 25]
 
 fn double(x : i32) → i32:
     x × 2
 
-let doubled : mut = generate(double, 1…4)
+let doubled : mut = generate(double, 1…5)
 // doubled = [2, 4, 6, 8]
 ```
 
@@ -5473,17 +5482,17 @@ A curried function can be used as the mapping function:
 fn multiply(a : i32, b : i32) → i32:
     a × b
 
-let tripled : mut = generate(multiply(3), 1…5)
+let tripled : mut = generate(multiply(3), 1…6)
 // tripled = [3, 6, 9, 12, 15]
 ```
 
 #### With Stepped and Descending Ranges
 
 ```
-let evens : mut = generate(λx : int → int: x, 0…2…10)
+let evens : mut = generate(λx : int → int: x, 0…2…11)
 // evens = [0, 2, 4, 6, 8, 10]
 
-let desc : mut = generate(λx : int → int: x × x, 3…1)
+let desc : mut = generate(λx : int → int: x × x, 3…0)
 // desc = [9, 4, 1]
 ```
 
@@ -5491,7 +5500,7 @@ let desc : mut = generate(λx : int → int: x × x, 3…1)
 
 ```
 let offset : mut = 100
-let arr : mut = generate(λx : int |offset| → int: x + offset, 1…3)
+let arr : mut = generate(λx : int |offset| → int: x + offset, 1…4)
 // arr = [101, 102, 103]
 ```
 
@@ -5500,7 +5509,7 @@ let arr : mut = generate(λx : int |offset| → int: x + offset, 1…3)
 The mapping function must not return ∅.  This is a runtime error because the result array cannot contain empty optional values:
 
 ```
-generate(λx : int → ∅: ∅, 1…5)    // ERROR: function must not return ∅
+generate(λx : int → ∅: ∅, 1…6)    // ERROR: function must not return ∅
 ```
 
 #### Compile-time Optimization (Future)
@@ -5554,7 +5563,7 @@ let buf : mut = n ⍴ 0
 When the right operand is a range, it is expanded before cycling:
 
 ```
-let a : mut = 5 ⍴ (1…3)                // [1, 2, 3, 1, 2]
+let a : mut = 5 ⍴ (1…4)                // [1, 2, 3, 1, 2]
 ```
 
 #### Matrices and Tensors
@@ -5596,7 +5605,7 @@ a[⁻1] ← 4                // error: array index -1 out of range (length 3)
 This replaces the earlier behavior where out-of-bounds writes silently extended the array.  To grow an array, use `⍴` to reshape it to the desired size:
 
 ```
-let W : mut = 64 ⍴ generate(load_word, 0…15)   // extend 16-element result to 64
+let W : mut = 64 ⍴ generate(load_word, 0…16)   // extend 16-element result to 64
 ```
 
 #### Multi-Dimensional Subscript
@@ -5613,7 +5622,7 @@ m[0, 1] ← 42              // write access
 This extends to higher dimensions:
 
 ```
-let a : mut = (2, 3, 4) ⍴ (1…24)
+let a : mut = (2, 3, 4) ⍴ (1…25)
 let y : mut = a[1, 2, 3]        // 24 — equivalent to a[1][2][3]
 a[1, 0, 1] ← 55            // write access
 ```
@@ -5661,14 +5670,14 @@ fn read_byte(data : byte[], off ¤byte : usize) → u8:
 ```
 let arr : mut = [1, 2, 3, 4]
 let total : mut = 0
-foreach i := 0…#arr - 1:       // i carries ptrdiff unit
+foreach i := 0…#arr:       // i carries ptrdiff unit
     total ← total + arr[i]           // OK — i already has ptrdiff
 ```
 
 When a loop variable is explicitly typed, a unit-carrying copy is needed for indexing:
 
 ```
-foreach j : u32fast = 16…63:
+foreach j : u32fast = 16…64:
     let ji ¤ptrdiff : mut = j
     W[ji] ← W[ji - 16] + expand(W[ji - 2])
 ```
@@ -5676,7 +5685,7 @@ foreach j : u32fast = 16…63:
 Alternatively, omitting the type annotation keeps the loop variable untyped, which needs no unit:
 
 ```
-foreach j := 16…63:
+foreach j := 16…64:
     W[j] ← W[j - 16] + expand(W[j - 2])
 ```
 
@@ -5869,15 +5878,15 @@ A view borrows a window into another array's storage, so it has no length of its
 
 #### Slicing a Dimension
 
-A range in a subscript selects part of a dimension.  `v[1…3]` takes three elements, and a matrix takes one spec per dimension, each of which is a point or a range:
+A range in a subscript selects part of a dimension.  `v[1…4]` takes three elements, and a matrix takes one spec per dimension, each of which is a point or a range:
 
 ```
-let m := (3, 4) ⍴ (1…12)
+let m := (3, 4) ⍴ (1…13)
 m[1]              // a whole row: 4 elements
-m[1, 0…2]         // part of that row: 3 elements
-m[0…1, 2]         // part of a column: 2 elements
-m[0…1]            // two whole rows
-m[0…1, 1…2]      // a block: 2 rows of 2
+m[1, 0…3]         // part of that row: 3 elements
+m[0…2, 2]         // part of a column: 2 elements
+m[0…2]            // two whole rows
+m[0…2, 1…3]      // a block: 2 rows of 2
 ```
 
 What a slice shares follows from what it had to build.  Selecting along one dimension hands back the rows themselves, so writing through the result reaches the array the matrix was built from.  Narrowing a row cannot hand back that row, so it builds a new one and the result is a copy:
@@ -5889,11 +5898,11 @@ let m := (3, 4) ⍴ a
 let r : mut = m[1]           // a whole row, shared
 r[0] = 55                    // a[4] is now 55
 
-let b : mut = m[0…1, 1…2]   // narrowed, so copied
+let b : mut = m[0…2, 1…3]   // narrowed, so copied
 b[0][0] = 77                 // a is unchanged
 ```
 
-A one-dimensional slice narrows by definition, so `v[1…3]` is always a copy.
+A one-dimensional slice narrows by definition, so `v[1…4]` is always a copy.
 
 Unlike a reshape, a slice does not inherit `mut` from its source: the binding above says `mut` for itself.
 
@@ -5906,8 +5915,8 @@ fn sum3(a : i32[3]) → i32:
     a[0] + a[1] + a[2]
 
 let v : i32[] = [10, 20, 30, 40, 50, 60]
-sum3(v[1…3])        // ok: the range is 3 long
-sum3(v[1…4])        // error: got array of length 4
+sum3(v[1…4])        // ok: the range is 3 long
+sum3(v[1…5])        // error: got array of length 4
 ```
 
 A range keeps the dimensions it does not name, so slicing a matrix along one dimension leaves a matrix.  Two rows of a 3×4 are a 2×4, not two elements, and a parameter naming one dimension does not take it however many rows were selected:
@@ -5916,11 +5925,11 @@ A range keeps the dimensions it does not name, so slicing a matrix along one dim
 fn rows2(m : i32[2]) → i32:
     #m
 
-rows2(m[0…1])       // error: expected i32[2] (1 dimension), got a 2×4 array
-rows2(m[0…1, 1…2])  // error: got a 2×2 array
+rows2(m[0…2])       // error: expected i32[2] (1 dimension), got a 2×4 array
+rows2(m[0…2, 1…3])  // error: got a 2×2 array
 ```
 
-Reaching one dimension takes a point rather than a range on the others, which is what `m[1]` and `m[1, 0…2]` do above.  A parameter that means to take the matrix says so with a matrix type, described next.
+Reaching one dimension takes a point rather than a range on the others, which is what `m[1]` and `m[1, 0…3]` do above.  A parameter that means to take the matrix says so with a matrix type, described next.
 
 #### Array Types
 
@@ -5945,7 +5954,7 @@ Both the rank and each fixed extent are checked at the call:
 fn corner(m : i32[2,4]) → i32:
     m[0, 0]
 
-corner((3, 4) ⍴ (1…12))    // error: expected i32[2,4] (dimension 1 is 2), got a 3×4 array
+corner((3, 4) ⍴ (1…13))    // error: expected i32[2,4] (dimension 1 is 2), got a 3×4 array
 corner([1, 2, 3, 4, 5, 6, 7, 8])   // error: expected i32[2,4] (2 dimensions), got array of length 8
 ```
 
@@ -5955,9 +5964,9 @@ A dimension is checked where it is written, so a type may fix some dimensions an
 fn rows_of_four(m : i32[,4]) → i32:
     m.shape[0]
 
-rows_of_four((2, 4) ⍴ (1…8))     // 2
-rows_of_four((3, 4) ⍴ (1…12))    // 3
-rows_of_four((2, 3) ⍴ (1…6))     // error: dimension 2 is 4, got a 2×3 array
+rows_of_four((2, 4) ⍴ (1…9))     // 2
+rows_of_four((3, 4) ⍴ (1…13))    // 3
+rows_of_four((2, 3) ⍴ (1…7))     // error: dimension 2 is 4, got a 2×3 array
 ```
 
 ##### Reading the Open Dimensions
@@ -5967,13 +5976,13 @@ rows_of_four((2, 3) ⍴ (1…6))     // error: dimension 2 is 4, got a 2×3 arra
 ```
 fn sum_matrix(m : i32[,]) → i32:
     let t : mut = 0
-    foreach r := 0…(m.shape[0] - 1):
-        foreach c := 0…(m.shape[1] - 1):
+    foreach r := 0…(m.shape[0]):
+        foreach c := 0…(m.shape[1]):
             t ← t + m[r, c]
     t
 ```
 
-`#m.shape` is the rank, and `v.shape[0]` is `#v` for a one-dimensional array.  A slice reports the shape it was cut to rather than the one it came from, so `sum_matrix(m[0…1])` sees two rows.
+`#m.shape` is the rank, and `v.shape[0]` is `#v` for a one-dimensional array.  A slice reports the shape it was cut to rather than the one it came from, so `sum_matrix(m[0…2])` sees two rows.
 
 ##### Writing a Matrix Out
 
@@ -6009,7 +6018,7 @@ The same syntax spells a variable's type, a type alias, and a struct field.  A v
 ```
 let m : i32[2,3] = [[1, 2, 3], [4, 5, 6]]   // checked
 let z : i32[2,3] = (2, 3) ⍴ 0                        // 2×3 of zeros
-let bad : i32[2,3] = (3, 2) ⍴ (1…6)        // error: declared 2×3, got 3×2
+let bad : i32[2,3] = (3, 2) ⍴ (1…7)        // error: declared 2×3, got 3×2
 
 type Grid = i32[2,3]
 ```
@@ -6278,7 +6287,7 @@ Like a slice and unlike a reshape, the result does not inherit `mut` from its op
 ```
 mᵀ[0, 1]           // (mᵀ)[0, 1], which is m[1, 0]
 aᵀ × b               // (aᵀ) × b
-((2, 3) ⍴ (1…6))ᵀ   // a call's result, transposed
+((2, 3) ⍴ (1…7))ᵀ   // a call's result, transposed
 ```
 
 `(mᵀ)ᵀ` holds the same values in the same places as `m`, and is a fresh matrix rather than `m` itself, since each `ᵀ` built one.
@@ -6589,10 +6598,10 @@ This allows `⧺` and `⍴` to combine naturally without parentheses for common 
 
 ```
 // Build message schedule: 16 loaded words followed by 48 zero placeholders.
-let W : mut = generate(load_word, 0…15) ⧺ 48 ⍴ [0]
+let W : mut = generate(load_word, 0…16) ⧺ 48 ⍴ [0]
 ```
 
-This is clearer than the equivalent `64 ⍴ generate(load_word, 0…15)` because it does not rely on the cycling semantics of `⍴` to silently repeat data that will be overwritten.
+This is clearer than the equivalent `64 ⍴ generate(load_word, 0…16)` because it does not rely on the cycling semantics of `⍴` to silently repeat data that will be overwritten.
 
 #### Comparison with Other Languages
 
@@ -6648,7 +6657,7 @@ An operator is a value only here.  It is read as one when the fold glyph follows
 
 #### Precedence
 
-`⌿` and `⍀` bind at the same level as `⍴` (tighter than arithmetic, looser than unary).  The right operand is parsed at range-expression level, so `f ⌿ 1…5` works without parentheses.  Both are line-continuation operators.
+`⌿` and `⍀` bind at the same level as `⍴` (tighter than arithmetic, looser than unary).  The right operand is parsed at range-expression level, so `f ⌿ 1…6` works without parentheses.  Both are line-continuation operators.
 
 #### Semantics
 
@@ -6716,7 +6725,7 @@ let joined : mut = (λacc : str, s : str → str: acc + s) ⌿ ["a", "b", "c"]
 Folding over a range:
 
 ```
-let sum : mut = (λa : int, b : int → int: a + b) ⌿ 1…100
+let sum : mut = (λa : int, b : int → int: a + b) ⌿ 1…101
 ```
 
 Named functions as the left operand:
@@ -6735,7 +6744,7 @@ fn multiply(a : int, b : int) → int:
     a × b
 
 let triple : mut = multiply(3)
-let tripled : mut = generate(triple, 1…5)   // [3, 6, 9, 12, 15]
+let tripled : mut = generate(triple, 1…6)   // [3, 6, 9, 12, 15]
 let total : mut = add ⌿ tripled             // 45
 ```
 
@@ -6765,7 +6774,7 @@ fn twice(n : i64) → i64:
 
 let v : i64[] = [1, 2, 3]
 twice¨v                         // [2, 4, 6]
-twice¨(1…4)                     // [2, 4, 6, 8]
+twice¨(1…5)                     // [2, 4, 6, 8]
 ```
 
 Anything that can be called may stand on the left: a named function, a lambda, a name that holds one.
@@ -6864,7 +6873,7 @@ Those are the answers that make `a ⊑ a ⧺ b` hold for every `a` and `b`, incl
 
 #### Why Not a Slice and an Equality
 
-`a = b[0…#a - 1]` says the same thing about a prefix, and says it worse.  It builds a sequence to throw away, it needs the length written twice, and it is wrong rather than false when `a` is longer than `b` — the slice is out of range, so the program stops where the question had a perfectly good answer.  `⊑` answers it.
+`a = b[0…#a]` says the same thing about a prefix, and says it worse.  It builds a sequence to throw away, it needs the length written twice, and it is wrong rather than false when `a` is longer than `b` — the slice is out of range, so the program stops where the question had a perfectly good answer.  `⊑` answers it.
 
 The comparison stops at the first element that differs, as `∀` does and for the same reason.
 
@@ -6918,8 +6927,8 @@ error: ∀ asks a question of each of them, so what it asks has to answer a bool
 Arrays and ranges are what the right operand may be, as they are for a fold and a map, and so is an iterator — though only the bootstrap interpreter takes the third; `ngplc` takes an array or a range:
 
 ```
-(λx : i64 → bool: x < 100) ∀ 1…5            // true
-(λx : i64 → bool: (x % 2 ?? 0) = 0) ∃ 1…5   // true
+(λx : i64 → bool: x < 100) ∀ 1…6            // true
+(λx : i64 → bool: (x % 2 ?? 0) = 0) ∃ 1…6   // true
 
 let it : mut = v.iterate()
 positive ∀ it                                // true
@@ -6965,7 +6974,7 @@ however the elements fall between the two — including all of them on one side 
 
 #### Precedence
 
-`∀` and `∃` bind where `⌿`, `⍀` and `⍴` bind: tighter than arithmetic, looser than unary.  The right operand is parsed at range-expression level, so `f ∀ 1…5` needs no parentheses, and brackets are what stop the operand reaching further, exactly as for a fold.  Both are line-continuation operators.
+`∀` and `∃` bind where `⌿`, `⍀` and `⍴` bind: tighter than arithmetic, looser than unary.  The right operand is parsed at range-expression level, so `f ∀ 1…6` needs no parentheses, and brackets are what stop the operand reaching further, exactly as for a fold.  Both are line-continuation operators.
 
 Since the answer is a `bool`, the logical operators compose with them without parentheses:
 
@@ -7592,7 +7601,7 @@ Statement-level `@expect` for warnings inside a `@test` function:
 @test
 fn warn_foreach_redef():
     let total : mut = 0
-    foreach i := 1…3:
+    foreach i := 1…4:
         @expect warning "redefinition of foreach variable 'i'"
         let i : mut = 99
         total ← total + i
@@ -9039,7 +9048,7 @@ Ownership is followed through bindings, returns, parameters, and temporaries.  I
 Nor is a resource released when the binding holding it is overwritten:
 
 ```
-foreach i := 1…50:
+foreach i := 1…51:
     let f : mut = std.fs.cwd().open_file("data.bin") ?? std.exit(1)
     use(f)
 ```
@@ -9624,7 +9633,7 @@ When a `foreach` range has one or more unit-bearing bounds, the unit is propagat
 
 ```
 let total ¤byte : mut = 128
-foreach off := 0…64…(total - 1):
+foreach off := 0…65…(total):
     // off has unit byte, inherited from the range bound
     static_assert_eq(@unitof(off), ¤byte)
 ```
@@ -9965,7 +9974,7 @@ A source file may contain only definitions; every statement must live inside a f
 >>> let x := 42
 >>> x × 2
 84
->>> foreach i := 1…3:
+>>> foreach i := 1…4:
 ...     std.println("{}", i)
 ...
 1
@@ -10137,7 +10146,7 @@ The argument must be in the range 0…255.  A POSIX exit status is a single byte
 
 ```
 std.exit(300)
-error: std.exit: exit code 300 is outside the range 0…255 that a process
+error: std.exit: exit code 300 is outside the range 0…256 that a process
 can report
 ```
 

@@ -3322,8 +3322,12 @@ class Evaluator:
         return array.remove(index.value)
 
     @staticmethod
-    def _string_position(text: StrValue, index: Value) -> int:
+    def _string_position(text: StrValue, index: Value, *,
+                         past_end: bool = False) -> int:
         """Where in a string an index points, checked against its length.
+
+        A slice's end may stand at the length, since that is where the
+        slice stops rather than a character it takes; past_end says so.
 
         A string is counted in characters, so an index is a count of
         them and carries ptrdiff as an array index does -- the same
@@ -3345,7 +3349,7 @@ class Evaluator:
         if not isinstance(index, IntValue):
             raise TypeError("string index must be an integer")
         length = len(text.value)
-        if index.value < 0 or index.value >= length:
+        if index.value < 0 or index.value > (length if past_end else length - 1):
             raise coded(2733, IndexError(
                 f"string index {index.value} out of range "
                 f"(length {length})"))
@@ -3476,7 +3480,7 @@ class Evaluator:
             e_raw = unwrap_optional(self.eval_expr(rest[1]))
             s = self._check_index_unit(s_raw, arr)
             e = self._check_index_unit(e_raw, arr)
-            selected = [arr.get(i) for i in range(s.value, e.value + 1)]
+            selected = [arr.get(i) for i in range(s.value, e.value)]
         else:
             idx_raw = unwrap_optional(self.eval_expr(rest[0]))
             idx = self._check_index_unit(idx_raw, arr)
@@ -3505,7 +3509,7 @@ class Evaluator:
             if not isinstance(rhs_u, ObjectValue) or not isinstance(rhs_u.obj, ArrayValue):
                 raise TypeError("slice assignment requires an array on the right-hand side")
             rhs_arr = rhs_u.obj
-            for i_out, i_arr in enumerate(range(s.value, e.value + 1)):
+            for i_out, i_arr in enumerate(range(s.value, e.value)):
                 rhs_elem = rhs_arr.get(i_out)
                 if remaining:
                     self._eval_multi_slice_write(arr.get(i_arr), remaining, rhs_elem)
@@ -3651,16 +3655,17 @@ class Evaluator:
                 start = self._string_position(
                     unwrapped, unwrap_optional(self.eval_expr(node.start)))
                 end = self._string_position(
-                    unwrapped, unwrap_optional(self.eval_expr(node.end)))
-                # Inclusive at both ends, as an array slice is.
-                return mk_str(unwrapped.value[start:end + 1])
+                    unwrapped, unwrap_optional(self.eval_expr(node.end)),
+                    past_end=True)
+                # Ending before the end, as the range that says it does.
+                return mk_str(unwrapped.value[start:end])
             if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
                 s = unwrap_optional(self.eval_expr(node.start))
                 e = unwrap_optional(self.eval_expr(node.end))
                 s = self._check_index_unit(s, unwrapped.obj)
                 e = self._check_index_unit(e, unwrapped.obj)
                 arr = unwrapped.obj
-                elems = [arr.get(i) for i in range(s.value, e.value + 1)]
+                elems = [arr.get(i) for i in range(s.value, e.value)]
                 return ObjectValue(ArrayValue(list(elems),
                                               element_type=arr.element_type))
 
@@ -5127,14 +5132,13 @@ class Evaluator:
                     if stv == 0:
                         from interp.errors import ProgramStop
                         raise ProgramStop("range step must not be zero")
-                    if stv > 0:
-                        sequences.append([mk_val(i) for i in range(sv, ev + 1, stv)])
-                    else:
-                        sequences.append([mk_val(i) for i in range(sv, ev - 1, stv)])
+                    # the end is where the range stops, not the last
+                    # value it holds
+                    sequences.append([mk_val(i) for i in range(sv, ev, stv)])
                 elif sv <= ev:
-                    sequences.append([mk_val(i) for i in range(sv, ev + 1)])
+                    sequences.append([mk_val(i) for i in range(sv, ev)])
                 else:
-                    sequences.append([mk_val(i) for i in range(sv, ev - 1, -1)])
+                    sequences.append([mk_val(i) for i in range(sv, ev, -1)])
             else:
                 sequences.append(self._resolve_iterable(expr, node.is_comptime))
 

@@ -247,7 +247,7 @@ fn test_what_is_handed_over_may_be_put_back_twice():
 macro sum_to(n : syntax) → syntax:
     let total : mut i64 = 0
     let limit : i64 = 5
-    foreach i := 1…limit:
+    foreach i := 1…limit + 1:
         total ← total + i
     ⟪$total⟫
 

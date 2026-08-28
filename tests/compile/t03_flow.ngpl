@@ -4,22 +4,22 @@
 @impure
 fn main():
     let total : mut i64 = 0
-    foreach i := 1…10:
+    foreach i := 1…11:
         total ← total + i
     std.println("asc {}", total)
 
     total ← 0
-    foreach i := 5…1:
+    foreach i := 5…0:
         total ← total + i
     std.println("desc {}", total)
 
     total ← 0
-    foreach i := 1…2…9:
+    foreach i := 1…2…10:
         total ← total + i
     std.println("step {}", total)
 
     total ← 0
-    foreach i := 10…⁻2…0:
+    foreach i := 10…⁻2…⁻1:
         total ← total + i
     std.println("down {}", total)
 
@@ -31,15 +31,15 @@ fn main():
     std.println("brk {}", n)
 
     total ← 0
-    foreach i := 1…10:
+    foreach i := 1…11:
         if (i % 2 ?? 0) = 0:
             continue
         total ← total + i
     std.println("odd {}", total)
 
     total ← 0
-    foreach i := 1…3:
-        foreach j := 1…4:
+    foreach i := 1…4:
+        foreach j := 1…5:
             total ← total + i × j
     std.println("nest {}", total)
 

@@ -59,7 +59,7 @@ fn test_right_fold_empty_with_init():
 // Left fold over a range without init.
 @test
 fn test_left_fold_range():
-    let result := (λa : i64, b : i64 → i64: a + b) ⌿ 1…5
+    let result := (λa : i64, b : i64 → i64: a + b) ⌿ 1…6
     assert_eq(result, 15)
 
 // Left fold: bit packing with init (used in sha256).
@@ -148,7 +148,7 @@ fn test_folding_an_operator_with_an_initial_value():
 
 @test
 fn test_folding_an_operator_over_a_range():
-    assert_eq(+⌿ 1…5, 15)
+    assert_eq(+⌿ 1…6, 15)
 
 @test
 fn test_folding_a_logic_operator():

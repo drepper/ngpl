@@ -14,7 +14,7 @@
 fn pow(base : int, n : i64) → int:
     let acc : mut int = 1
     if n > 0:
-        foreach _ := 0…n - 1:
+        foreach _ := 0…n:
             acc ← acc × base
     acc
 

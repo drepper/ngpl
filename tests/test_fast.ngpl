@@ -1,7 +1,7 @@
 @test
 fn test_fast_local():
     let i : mut u32fast = 0
-    foreach k : u32fast = 0…9:
+    foreach k : u32fast = 0…10:
         i ← i + k
     assert_eq(i, 45)
 

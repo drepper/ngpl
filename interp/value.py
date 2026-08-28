@@ -1255,7 +1255,12 @@ class StructInstance:
 
 
 class RangeValue(Value):
-    """A range value representing start…end or start…step…end (inclusive)."""
+    """A range: start…end, or start…step…end, ending before end.
+
+    The end is the value the range stops at rather than the last one it
+    holds, which is what `0…#v` says and what makes an empty container
+    give an empty range instead of one that counts backwards.
+    """
 
     __slots__ = ("start", "end", "step")
 
@@ -1270,12 +1275,10 @@ class RangeValue(Value):
             if self.step == 0:
                 from interp.errors import ProgramStop
                 raise ProgramStop("range step must not be zero")
-            if self.step > 0:
-                return list(range(self.start, self.end + 1, self.step))
-            return list(range(self.start, self.end - 1, self.step))
+            return list(range(self.start, self.end, self.step))
         if self.start <= self.end:
-            return list(range(self.start, self.end + 1))
-        return list(range(self.start, self.end - 1, -1))
+            return list(range(self.start, self.end))
+        return list(range(self.start, self.end, -1))
 
     @property
     def size(self) -> int:

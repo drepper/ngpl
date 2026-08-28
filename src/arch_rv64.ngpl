@@ -435,7 +435,7 @@ fn rvg_epilogue(em : &mut Emit, tg : Target):
 
 fn rvg_resolve(em : &mut Emit, tg : Target):
     if #em.tf_pos > 0:
-        foreach i := 0…#em.tf_pos - 1:
+        foreach i := 0…#em.tf_pos:
             let pos : i64 = em.tf_pos[i]
             let delta : i64 = em.labels[em.tf_lab[i] × 1¤ptrdiff] - pos
             assert(delta >= ⁻1048576 and delta < 1048576, "a local jump inside jal's reach")

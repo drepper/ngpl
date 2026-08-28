@@ -62,8 +62,8 @@ fn test_a_lambda_may_ask():
 
 @test
 fn test_a_range_may_be_asked_about():
-    assert((λx : i64 → bool: x < 100) ∀ 1…5)
-    assert((λx : i64 → bool: (x % 2 ?? 0) = 0) ∃ 1…5)
+    assert((λx : i64 → bool: x < 100) ∀ 1…6)
+    assert((λx : i64 → bool: (x % 2 ?? 0) = 0) ∃ 1…6)
 
 @test
 fn test_an_iterator_may_be_asked_about():

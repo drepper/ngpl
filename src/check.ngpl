@@ -33,7 +33,7 @@ fn mod_parent(m : str) → str:
     let cs := m.chars()
     let cut : mut i64 = ⁻1
     if #cs > 0:
-        foreach i := 0…#cs - 1:
+        foreach i := 0…#cs:
             if cs[i] = '.':
                 cut ← @dropunit(i)
     if cut < 0:
@@ -185,7 +185,7 @@ fn c_struct_layout(a : Ast, si : i64, depth : i64) → (i64, i64):
     let off : mut i64 = 0
     let al : mut i64 = 1
     if n > 0:
-        foreach i := 0…n - 1:
+        foreach i := 0…n:
             let fty : i64 = a.extra[(d.fields_off + 2 + i × 2) × 1¤ptrdiff]
             let (fs, fa) := c_layout(a, fty, depth + 1)
             if fs = ⁻1:
@@ -204,7 +204,9 @@ fn c_field_offset(a : Ast, si : i64, k : i64) → i64:
     if k < 0 or k >= n:
         return ⁻1
     let off : mut i64 = 0
-    foreach i := 0…k:
+    // through field k and not short of it: the last turn aligns to
+    // where k starts without adding k's own size
+    foreach i := 0…k + 1:
         let fty : i64 = a.extra[(d.fields_off + 2 + i × 2) × 1¤ptrdiff]
         let (fs, fa) := c_layout(a, fty, 1)
         if fs = ⁻1:
@@ -220,7 +222,7 @@ fn c_bad_field(a : Ast, si : i64) → i64:
     let d := a.structs[si × 1¤ptrdiff]
     let n : i64 = a.extra[d.fields_off × 1¤ptrdiff]
     if n > 0:
-        foreach i := 0…n - 1:
+        foreach i := 0…n:
             let fty : i64 = a.extra[(d.fields_off + 2 + i × 2) × 1¤ptrdiff]
             let (fs, fa) := c_layout(a, fty, 1)
             _ ← fa
@@ -447,7 +449,7 @@ impl Checker:
 
     fn struct_index(&self, name : str) → i64:
         if #self.a.structs > 0:
-            foreach i := 0…#self.a.structs - 1:
+            foreach i := 0…#self.a.structs:
                 if self.a.structs[i].name = name:
                     return @dropunit(i)
         ⁻1
@@ -491,7 +493,7 @@ impl Checker:
     // the function whose whole name is this, or ⁻1
     fn fn_in(&self, whole : str) → i64:
         if #self.a.fns > 0:
-            foreach i := 0…#self.a.fns - 1:
+            foreach i := 0…#self.a.fns:
                 let d := self.a.fns[i]
                 let w : str = if d.modname = "": d.name else: d.modname ⧺ "." ⧺ d.name
                 if w = whole:
@@ -499,14 +501,14 @@ impl Checker:
         ⁻1
 
     fn fn_index(&self, name : str) → i64:
-        foreach i := 0…#self.fnames - 1:
+        foreach i := 0…#self.fnames:
             if self.fnames[i] = name:
                 return @dropunit(i)
         ⁻1
 
     fn global_index(&self, name : str) → i64:
         if #self.gnames > 0:
-            foreach i := 0…#self.gnames - 1:
+            foreach i := 0…#self.gnames:
                 if self.gnames[i] = name:
                     return @dropunit(i)
         ⁻1
@@ -1208,7 +1210,7 @@ impl Checker:
             let ctoks : mut i64[] = []
             let ctys : mut i64[] = []
             if ncap9 > 0:
-                foreach ci := 0…ncap9 - 1:
+                foreach ci := 0…ncap9:
                     let ctok : i64 = self.a.extra[(loff + 2 + np9 × 2 + ci) × 1¤ptrdiff]
                     let cs : i64 = self.lookup(self.text(ctok))
                     if cs = ⁻1:
@@ -1227,7 +1229,7 @@ impl Checker:
                         let cnp : i64 = self.a.extra[cd.params_off × 1¤ptrdiff]
                         let cok : mut bool = cnp >= 1 and cnp <= 5 and fnval_ret_ok(cd.ret) and not cd.is_impure
                         let cpts : mut i64[] = []
-                        foreach cpi := 0…cnp - 1:
+                        foreach cpi := 0…cnp:
                             let cpty : i64 = self.a.extra[(cd.params_off + 2 + cpi × 2) × 1¤ptrdiff]
                             cok ← cok and ty_ref_kind(cpty) = 0 and ((ty_is_int(cpty) and ty_unit(cpty) = 0) or cpty = TY_BOOL or cpty = TY_CHAR or cpty = TY_STR)
                             cpts.push(ty_strip_ref(cpty))
@@ -1250,13 +1252,13 @@ impl Checker:
             self.push_scope()
             let floor9 : i64 = self.scope_floor
             self.scope_floor ← @dropunit(#self.snames)
-            foreach pi := 0…np9 - 1:
+            foreach pi := 0…np9:
                 let ptok : i64 = self.a.extra[(loff + 1 + pi × 2) × 1¤ptrdiff]
                 let pty : i64 = self.a.extra[(loff + 2 + pi × 2) × 1¤ptrdiff]
                 let ps : i64 = self.declare(ptok, pty, 0)
                 self.a.extra[(loff + 1 + pi × 2) × 1¤ptrdiff] ← ps
             if ncap9 > 0:
-                foreach ci := 0…ncap9 - 1:
+                foreach ci := 0…ncap9:
                     _ ← self.declare(ctoks[ci × 1¤ptrdiff], ctys[ci × 1¤ptrdiff], 0)
                     // the cell keeps the outer slot: the value's source
                     self.a.extra[(loff + 2 + np9 × 2 + ci) × 1¤ptrdiff] ← couter[ci × 1¤ptrdiff]
@@ -1752,7 +1754,7 @@ impl Checker:
                 let np : i64 = self.a.extra[fd.params_off × 1¤ptrdiff]
                 let ok9 : mut bool = np >= 1 and np <= 5 and fnval_ret_ok(fd.ret) and not fd.is_impure and not fd.is_replaceable and not self.fn_is_generic(fidx)
                 let pts9 : mut i64[] = []
-                foreach pi := 0…np - 1:
+                foreach pi := 0…np:
                     let pty : i64 = self.a.extra[(fd.params_off + 2 + pi × 2) × 1¤ptrdiff]
                     ok9 ← ok9 and ty_ref_kind(pty) = 0 and ((ty_is_int(pty) and ty_unit(pty) = 0) or pty = TY_BOOL or pty = TY_CHAR or pty = TY_STR)
                     pts9.push(ty_strip_ref(pty))
@@ -2496,7 +2498,7 @@ impl Checker:
     // through std and so are not found here
     fn enum_index(&self, name : str) → i64:
         if @dropunit(#self.a.enames) > NBUILTIN_ENUMS:
-            foreach i := NBUILTIN_ENUMS × 1¤ptrdiff…#self.a.enames - 1:
+            foreach i := NBUILTIN_ENUMS × 1¤ptrdiff…#self.a.enames:
                 if self.a.enames[i] = name:
                     return @dropunit(i)
         ⁻1
@@ -2907,7 +2909,7 @@ impl Checker:
         let np : i64 = self.a.extra[callee.params_off × 1¤ptrdiff]
         let ok9 : mut bool = np <= 5 and fnval_ret_ok(callee.ret) and not callee.is_impure and not callee.is_replaceable
         let pts9 : mut i64[] = []
-        foreach pi := 0…np - 1:
+        foreach pi := 0…np:
             let pty : i64 = self.a.extra[(callee.params_off + 2 + pi × 2) × 1¤ptrdiff]
             ok9 ← ok9 and ty_ref_kind(pty) = 0 and ((ty_is_int(pty) and ty_unit(pty) = 0) or pty = TY_BOOL or pty = TY_CHAR or pty = TY_STR)
             pts9.push(ty_strip_ref(pty))
@@ -2916,7 +2918,7 @@ impl Checker:
             self.set_type(id, TY_I64)
             return
         if argc > 0:
-            foreach j := 0…argc - 1:
+            foreach j := 0…argc:
                 let arg : i64 = self.a.extra[(args_off + 1 + j) × 1¤ptrdiff]
                 let pt : i64 = pts9[j × 1¤ptrdiff]
                 self.check_expr(arg, pt)
@@ -2925,7 +2927,7 @@ impl Checker:
                 elif not self.fit_arg(arg, pt):
                     self.derr(tok, "argument " ⧺ i64_str(j + 1) ⧺ " is " ⧺ self.tn(self.ty_of(arg)) ⧺ ", but the parameter says " ⧺ self.tn(pt))
         let rem : mut i64[] = []
-        foreach j := argc…np - 1:
+        foreach j := argc…np:
             rem.push(pts9[j × 1¤ptrdiff])
         self.a.nc[id × 1¤ptrdiff] ← 3
         self.a.nb[id × 1¤ptrdiff] ← @dropunit(#self.psfn)
@@ -2946,7 +2948,7 @@ impl Checker:
             self.set_type(id, TY_I64)
             return
         let vmap : mut i64[] = []
-        foreach vi := 0…31:
+        foreach vi := 0…32:
             vmap.push(⁻1)
         let j : mut i64 = 0
         while j < np:
@@ -3065,7 +3067,7 @@ impl Checker:
             self.set_type(id, self.lam_ret(lt))
             return
         if argc > 0:
-            foreach j := 0…argc - 1:
+            foreach j := 0…argc:
                 let arg : i64 = self.a.extra[(args_off + 1 + j) × 1¤ptrdiff]
                 let pt : i64 = self.lam_pt(lt, j)
                 self.check_expr(arg, pt)
@@ -3084,7 +3086,7 @@ impl Checker:
             self.set_type(id, lt)
             return
         let rem : mut i64[] = []
-        foreach j := argc…np - 1:
+        foreach j := argc…np:
             rem.push(self.lam_pt(lt, j))
         self.a.nc[id × 1¤ptrdiff] ← 8
         self.a.nb[id × 1¤ptrdiff] ← @dropunit(#self.psfn)
@@ -3104,7 +3106,7 @@ impl Checker:
             return
         let threads : mut bool = false
         if argc > 0:
-            foreach j := 0…argc - 1:
+            foreach j := 0…argc:
                 let arg : i64 = self.a.extra[(args_off + 1 + j) × 1¤ptrdiff]
                 let pt : i64 = self.lam_pt(lt, j)
                 if self.lam_listable(lt):
@@ -3137,7 +3139,7 @@ impl Checker:
             return
         // some arguments: bind them now, wait for the rest
         let rem : mut i64[] = []
-        foreach j := argc…np - 1:
+        foreach j := argc…np:
             rem.push(self.lam_pt(lt, j))
         self.a.nc[id × 1¤ptrdiff] ← 4
         self.a.nb[id × 1¤ptrdiff] ← @dropunit(#self.psfn)
@@ -3248,7 +3250,7 @@ impl Checker:
         if not ty_is_lam(lt):
             self.derr(tok, "only a function value is applied; this is " ⧺ self.tn(lt))
             if argc > 0:
-                foreach j := 0…argc - 1:
+                foreach j := 0…argc:
                     self.check_expr(self.a.extra[(args_off + 1 + j) × 1¤ptrdiff], TY_UNIT)
             self.set_type(id, TY_I64)
             return
@@ -3258,7 +3260,7 @@ impl Checker:
             self.set_type(id, self.lam_ret(lt))
             return
         if argc > 0:
-            foreach j := 0…argc - 1:
+            foreach j := 0…argc:
                 let arg : i64 = self.a.extra[(args_off + 1 + j) × 1¤ptrdiff]
                 let pt : i64 = self.lam_pt(lt, j)
                 self.check_expr(arg, pt)
@@ -3275,7 +3277,7 @@ impl Checker:
             self.set_type(id, lt)
             return
         let rem : mut i64[] = []
-        foreach j := argc…np - 1:
+        foreach j := argc…np:
             rem.push(self.lam_pt(lt, j))
         self.a.nc[id × 1¤ptrdiff] ← 4
         self.nslot[id × 1¤ptrdiff] ← @dropunit(#self.psfn)
@@ -3348,7 +3350,7 @@ impl Checker:
             muts.push(if rrk = 2: 1 else: 0)
             refs.push(if rrk ≠ 0: 1 else: 0)
             ptys.push(rty)
-        foreach j := 0…argc - 1:
+        foreach j := 0…argc:
             let arg : i64 = self.a.extra[(args_off + 1 + j) × 1¤ptrdiff]
             let pty : i64 = self.a.extra[(params_off + 2 + (@dropunit(j) + self_n) × 2) × 1¤ptrdiff]
             let rk : i64 = ty_ref_kind(pty)
@@ -3358,8 +3360,9 @@ impl Checker:
             refs.push(if rk ≠ 0: 1 else: 0)
             ptys.push(pty)
         assert(@dropunit(#bases) = n, "one claim per parameter")
-        foreach a := 0…n - 2:
-            foreach b := a + 1…n - 1:
+        // every pair once: a stops one short of the last, b runs past it
+        foreach a := 0…n - 1:
+            foreach b := a + 1…n:
                 let ba : i64 = bases[a × 1¤ptrdiff]
                 if ba ≠ ⁻1 and ba = bases[b × 1¤ptrdiff] and (muts[a × 1¤ptrdiff] = 1 or muts[b × 1¤ptrdiff] = 1):
                     // one of the two is by value: it is a copy, so the
@@ -5543,7 +5546,7 @@ fn draws_code(code : i64) → bool:
 fn check_expectations(c : &mut Checker, a : Ast):
     if #a.expects = 0:
         return
-    foreach i := 0…#a.expects - 1:
+    foreach i := 0…#a.expects:
         let n_fns ¤ptrdiff : i64 = #c.a.fns
         let n_slots ¤ptrdiff : i64 = #c.fslots
         let n_lams ¤ptrdiff : i64 = #c.lams
@@ -5648,9 +5651,9 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
                                    val_want: ⁻1,
                                    argcopy: []})
     if #a.structs > 0:
-        foreach i := 0…#a.structs - 1:
+        foreach i := 0…#a.structs:
             let sd := a.structs[i]
-            foreach j := 0…#a.structs - 1:
+            foreach j := 0…#a.structs:
                 if j > i and a.structs[j].name = sd.name:
                     c.derr(a.structs[j].tok, "'" ⧺ sd.name ⧺ "' is already defined")
             let nf : i64 = a.extra[sd.fields_off × 1¤ptrdiff]
@@ -5675,9 +5678,9 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
                     c.derr(btok, "in @repr(C) struct '" ⧺ sd.name ⧺ "', field '" ⧺ c.text(btok) ⧺ "': " ⧺ c.tn(bty) ⧺ " has no defined C representation")
     let starts : mut i64 = 0
     if #a.fns > 0:
-      foreach i := 0…#a.fns - 1:
+      foreach i := 0…#a.fns:
         let f := a.fns[i]
-        foreach j := 0…#a.fns - 1:
+        foreach j := 0…#a.fns:
             if j > i and a.fns[j].name = f.name:
                 c.derr(a.fns[j].tok, "'" ⧺ f.name ⧺ "' is already defined")
         if f.name = "assert" or f.name = "assert_eq":
@@ -5699,13 +5702,13 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     // per-function state first: a global's initializer may call, and
     // the call consults it
     if #a.fns > 0:
-        foreach i := 0…#a.fns - 1:
+        foreach i := 0…#a.fns:
             c.fslots.push(0)
             c.fdone.push(0)
             c.skipfn.push(0)
     if #a.globals > 0:
-        foreach i := 0…#a.globals - 1:
-            foreach j := 0…#a.globals - 1:
+        foreach i := 0…#a.globals:
+            foreach j := 0…#a.globals:
                 if j > i and a.globals[j].name = a.globals[i].name:
                     c.derr(a.globals[j].tok, "'" ⧺ a.globals[i].name ⧺ "' is already defined")
             c.check_global(@dropunit(i))
@@ -5718,11 +5721,11 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     // and is a mistake rather than a place to put things.  What a
     // module inside it exports, it exports.
     if #a.mods > 0:
-        foreach mi := 0…#a.mods - 1:
+        foreach mi := 0…#a.mods:
             let mname : str = a.mods[mi]
             let seen : mut bool = false
             if #a.fns > 0:
-                foreach fi := 0…#a.fns - 1:
+                foreach fi := 0…#a.fns:
                     let fd := a.fns[fi]
                     if fd.is_export and mod_within(fd.modname, mname):
                         seen ← true
@@ -5740,14 +5743,14 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     if starts > 1:
         c.diags.push(Diag{line: 1¤"line", col: 1¤"col", msg: "more than one @start function", level: DIAG_ERROR, code: DIAG_NONE})
     if #a.structs > 0:
-        foreach i := 0…#a.structs - 1:
+        foreach i := 0…#a.structs:
             c.check_invariants(@dropunit(i))
     if #a.fns > 0:
-        foreach i := 0…#a.fns - 1:
+        foreach i := 0…#a.fns:
             if not c.fn_is_generic(@dropunit(i)):
                 c.check_fn(@dropunit(i))
         // a generic no call reached is never shaped; a stub stands in
-        foreach i := 0…#a.fns - 1:
+        foreach i := 0…#a.fns:
             if c.fdone[i] = 0:
                 c.skipfn[i] ← 1
     // ------------------------------------------------------------------

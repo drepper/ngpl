@@ -3,7 +3,7 @@
 // Basic: generate with lambda over a range
 @test
 fn test_generate_basic():
-  let arr := generate(λx : i64 → i64: x × 2, 1…5)
+  let arr := generate(λx : i64 → i64: x × 2, 1…6)
   assert_eq(5, #arr)
   assert_eq(2, arr[0])
   assert_eq(4, arr[1])
@@ -17,7 +17,7 @@ fn square(x: i32) → i32:
 
 @test
 fn test_generate_named_func():
-  let arr := generate(square, 1…4)
+  let arr := generate(square, 1…5)
   assert_eq(4, #arr)
   assert_eq(1, arr[0])
   assert_eq(4, arr[1])
@@ -30,7 +30,7 @@ fn multiply(a: i32, b: i32) → i32:
 
 @test
 fn test_generate_curried():
-  let arr := generate(multiply(3), 1…5)
+  let arr := generate(multiply(3), 1…6)
   assert_eq(5, #arr)
   assert_eq(3, arr[0])
   assert_eq(6, arr[1])
@@ -41,7 +41,7 @@ fn test_generate_curried():
 // Generate with a stepped range
 @test
 fn test_generate_stepped():
-  let arr := generate(λx : i64 → i64: x, 0…2…10)
+  let arr := generate(λx : i64 → i64: x, 0…2…11)
   assert_eq(6, #arr)
   assert_eq(0, arr[0])
   assert_eq(2, arr[1])
@@ -53,7 +53,7 @@ fn test_generate_stepped():
 // Generate with descending range
 @test
 fn test_generate_descending():
-  let arr := generate(λx : i64 → i64: x × x, 3…1)
+  let arr := generate(λx : i64 → i64: x × x, 3…0)
   assert_eq(3, #arr)
   assert_eq(9, arr[0])
   assert_eq(4, arr[1])
@@ -63,7 +63,7 @@ fn test_generate_descending():
 @test
 fn test_generate_capture():
   let offset : i64 = 100
-  let arr := generate(λx : i64 |offset| → i64: x + offset, 1…3)
+  let arr := generate(λx : i64 |offset| → i64: x + offset, 1…4)
   assert_eq(3, #arr)
   assert_eq(101, arr[0])
   assert_eq(102, arr[1])
@@ -72,14 +72,14 @@ fn test_generate_capture():
 // Generate with single-element range
 @test
 fn test_generate_single():
-  let arr := generate(λx : i64 → i64: x, 5…5)
+  let arr := generate(λx : i64 → i64: x, 5…6)
   assert_eq(1, #arr)
   assert_eq(5, arr[0])
 
 // Generate result can be iterated with foreach
 @test
 fn test_generate_foreach():
-  let arr := generate(λx : i64 → i64: x × 10, 1…3)
+  let arr := generate(λx : i64 → i64: x × 10, 1…4)
   let sum : mut i64 = 0
   foreach v := arr:
     sum ← sum + v
@@ -88,8 +88,8 @@ fn test_generate_foreach():
 // Generate result can be subscripted and sliced
 @test
 fn test_generate_slice():
-  let arr := generate(λx : i64 → i64: x, 1…10)
-  let sub := arr[2…4]
+  let arr := generate(λx : i64 → i64: x, 1…11)
+  let sub := arr[2…5]
   assert_eq(3, #sub)
   assert_eq(3, sub[0])
   assert_eq(4, sub[1])
@@ -99,7 +99,7 @@ fn test_generate_slice():
 @test
 @expect error 2254 "generate: function must not return ∅"
 fn test_generate_none_error():
-  generate(λx : i64 → ∅: ∅, 1…3)
+  generate(λx : i64 → ∅: ∅, 1…4)
 
 // Error: second argument not a range
 @test
@@ -110,7 +110,7 @@ fn test_generate_not_range():
 // Range as first-class value
 @test
 fn test_range_value():
-  let r := 1…5
+  let r := 1…6
   let arr := generate(λx : i64 → i64: x + 1, r)
   assert_eq(5, #arr)
   assert_eq(2, arr[0])
@@ -119,7 +119,7 @@ fn test_range_value():
 // Range in foreach via variable
 @test
 fn test_range_foreach():
-  let r := 1…4
+  let r := 1…5
   let sum : mut i64 = 0
   foreach i := r:
     sum ← sum + i

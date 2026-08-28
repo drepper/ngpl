@@ -19,7 +19,7 @@ fn dump_tokens(t : Toks, src : byte[], files : Files):
     // a token's line is counted over the whole text, so it is turned
     // back into the file it came from, as a diagnostic's is
     let starts := file_lines(files, src)
-    foreach i := 0…#t.kind - 1:
+    foreach i := 0…#t.kind:
         let k : i64 = t.kind[i]
         let text := run_str(src, t.off[i], t.len[i])
         let f ¤ptrdiff : i64 = file_of(starts, t.line[i])
@@ -121,7 +121,7 @@ fn parse_size(t : str) → i64:
     if n = 0:
         return ⁻1
     let v : mut i64 = 0
-    foreach i := 0…n - 1:
+    foreach i := 0…n:
         let c := cs[i]
         if c < '0' or c > '9':
             return ⁻1
@@ -141,7 +141,7 @@ fn opt_value(a : str, name : str) → str:
     let out : mut str = ""
     if #ac <= #nc + 1:
         return out
-    foreach i := #nc + 1…#ac - 1:
+    foreach i := #nc + 1…#ac:
         out ← out ⧺ ac[i]
     out
 
@@ -182,7 +182,7 @@ fn dir_of(path : str) → str:
     let cs := path.chars()
     let cut : mut i64 = ⁻1
     if #cs > 0:
-        foreach i := 0…#cs - 1:
+        foreach i := 0…#cs:
             if cs[i] = '/':
                 cut ← @dropunit(i)
     if cut < 0:

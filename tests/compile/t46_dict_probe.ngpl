@@ -10,19 +10,19 @@
 fn main():
     // more keys than a group holds, so the table grows several times
     let g : mut std.dict(i64, i64) = (⸨⸩)
-    foreach i := 1…500:
+    foreach i := 1…501:
         g[i × 7] ← i
     std.println("{}", #g)
     let sum : mut i64 = 0
     let held : mut i64 = 0
-    foreach i := 1…500:
+    foreach i := 1…501:
         sum ← sum + (g[i × 7] ?? 0)
         held ← held + (if (i × 7) ∊ g: 1 else: 0)
     std.println("{} {}", sum, held)
 
     // what was never put in is absent, and says so
     let missing : mut i64 = 0
-    foreach i := 1…500:
+    foreach i := 1…501:
         missing ← missing + (if (i × 7 + 1) ∊ g: 1 else: 0)
     std.println("{} {}", missing, g[3] ?? ⁻1)
 

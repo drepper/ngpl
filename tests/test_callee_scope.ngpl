@@ -13,7 +13,7 @@ fn count_up(n : i64) → i64:
 @test
 fn test_callee_reuses_a_foreach_name():
     let total : mut i64 = 0
-    foreach i := 1…3:
+    foreach i := 1…4:
         total ← total + count_up(i)
     assert_eq(total, 6)
 

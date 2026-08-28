@@ -44,7 +44,7 @@ fn test_enumerate_single():
 fn test_enumerate_range():
     let sum_idx : mut i64 = 0
     let sum_val : mut i64 = 0
-    foreach pair := enumerate(10…14):
+    foreach pair := enumerate(10…15):
         sum_idx ← sum_idx + pair[0]
         sum_val ← sum_val + pair[1]
     assert_eq(sum_idx, 10)   // 0+1+2+3+4
@@ -56,7 +56,7 @@ fn square(x : i64) → i64:
 
 @test
 fn test_enumerate_generated():
-    let arr := generate(square, 1…4)
+    let arr := generate(square, 1…5)
     let total : mut i64 = 0
     foreach i, v := enumerate(arr):
         total ← total + i + v

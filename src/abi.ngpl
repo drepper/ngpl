@@ -60,11 +60,11 @@ fn analyze_abi(a : Ast, toks : Toks, argregs : i64, extra : i64, want_log : bool
     // the nodes finds every one of them; nothing else here needs a node.
     let taken : mut i64[] = []
     if nfns > 0:
-        foreach _ := 0…nfns - 1:
+        foreach _ := 0…nfns:
             taken.push(0)
     let nnodes ¤ptrdiff : i64 = #a.nkind
     if nnodes > 0:
-        foreach i := 0…nnodes - 1:
+        foreach i := 0…nnodes:
             let k : i64 = a.nkind[i]
             if k = NK_FNVAL:
                 let fi : i64 = a.na[i]
@@ -80,7 +80,7 @@ fn analyze_abi(a : Ast, toks : Toks, argregs : i64, extra : i64, want_log : bool
                 let np9 : i64 = a.extra[loff × 1¤ptrdiff]
                 let ncap9 : i64 = a.extra[(loff + 1 + np9 × 2) × 1¤ptrdiff]
                 if ncap9 > 0:
-                    foreach ci := 0…ncap9 - 1:
+                    foreach ci := 0…ncap9:
                         let cell : i64 = a.extra[(loff + 2 + np9 × 2 + ci) × 1¤ptrdiff]
                         if cell < 0:
                             let cf : i64 = 0 - cell - 1
@@ -94,7 +94,7 @@ fn analyze_abi(a : Ast, toks : Toks, argregs : i64, extra : i64, want_log : bool
     let span : mut i64[] = []
     let log : mut str[] = []
     if nfns > 0:
-        foreach f := 0…nfns - 1:
+        foreach f := 0…nfns:
             let fd : FnDef = a.fns[f]
             let why : str = abi_why(fd, taken[f])
             let p : i64 = if why = "": 1 else: 0

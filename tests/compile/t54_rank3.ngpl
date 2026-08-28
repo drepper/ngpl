@@ -31,7 +31,7 @@ fn literals():
 
 @impure
 fn reshapes():
-    let s : i32[2,2,2] = (2,2,2) ⍴ (1…8)
+    let s : i32[2,2,2] = (2,2,2) ⍴ (1…9)
     std.println("{} {} {}", s[0,0,0], s[0,1,1], s[1,1,1])
     let z : i64[2,3,4] = (2,3,4) ⍴ 0
     let n : mut i64 = 0
@@ -39,7 +39,7 @@ fn reshapes():
         foreach row := plane:
             n ← n + @dropunit(#row)
     std.println("{} {}", n, @dropunit(#z))
-    let q : i64[2,2,2] = (2,2,2) ⍴ (1…8)
+    let q : i64[2,2,2] = (2,2,2) ⍴ (1…9)
     std.println("{}", total(q))
 
 @impure
@@ -52,12 +52,12 @@ fn steps_in():
     let r := c[1,0]
     std.println("{} {}", @dropunit(#r), r[2])
     // a range of planes answers a cube again
-    let sl := c[0…0]
+    let sl := c[0…1]
     std.println("{} {}", @dropunit(#sl), sl[0,1,2])
 
 @impure
 fn stores():
-    let m : mut i64[2,2,2] = (2,2,2) ⍴ (1…8)
+    let m : mut i64[2,2,2] = (2,2,2) ⍴ (1…9)
     m[1,0,1] ← 42
     m[0][1][0] ← 99
     std.println("{} {} {}", m[1,0,1], m[0,1,0], m[1,1,0])

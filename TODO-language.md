@@ -1278,6 +1278,35 @@ Macros and Reflection
     and it is this one -- and its negation says what stopped the assertion holding, which is
     what the argument was always for.  A glyph does one job.
 
+[x] a…b ends before b, as Python's range does.  The end is where the range stops rather than
+    the last value it holds, so `0…#v` walks a container without the `- 1` that every such
+    loop carried, and an empty container gives an empty range instead of one that counts
+    backwards -- which was a trap the compiler's own sources fell into more than once.
+
+    Both implementations, both suites and the specification.  The interpreter's foreach, its
+    RangeValue, its array and string slices and its multi-dimensional slices; the compiler's
+    range_alive, the portable RT_ASLICE and the pioneer's, the matrix slice's row walk and
+    the reshape's row cut; 164 foreach ranges in the compiler's own sources.  A slice's end
+    may now stand at the length, since that is where it stops rather than an element it takes.
+
+    The ranges in the suites came in five shapes and each wanted its own pass: a plain
+    literal end, an end carrying a measure (2¤byte…4¤byte), an end carrying a width
+    (1i32…4i32), a bracketed (expr - 1), and the `- 1` a foreach carried.  They cannot be
+    done in one pass or with one pattern: the first attempt let a two-part rule read a
+    three-part rule's output and corrupted every stepped range in the suite.
+
+    What this change actually costs is the loops that were inclusive *by intent* with a
+    variable end, which no `- 1` sweep can find because they never had one.  Five were found,
+    and the way each was found is worth recording.  se_counts and canon_wanted walk a call's
+    arguments as `lo…hi`; under-counting a vreg's uses miscompiled the compiler itself, and
+    the stage 2 it produced wrote zero-byte output files -- only the three-stage bootstrap
+    surfaced it.  c_field_offset walks `0…k` with a guard that makes the last turn align
+    without adding, so a field's offset lost its alignment and @repr(C) structs came out
+    20 B / 4 B where they should be 24 B / 8 B.  The alias check walks pairs as `0…n - 2`,
+    which ends in `- 2` and so was never swept, and ngplc quietly stopped drawing diagnostic
+    2402.  The lesson is that `- 1` is a pattern and inclusiveness is a meaning, and only the
+    tests tell them apart.
+
 [ ] ∀ and ∃ over a hash or a set, which waits on the same answer ¨ waits on.
 
 [x] a ⊑ b and a ⊒ b: whether b begins with a, and whether it ends with it.  Both sides are

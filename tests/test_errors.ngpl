@@ -29,7 +29,7 @@ fn error_global_const_assign():
 
 @expect error 2412 "cannot assign to foreach variable 'i'"
 fn error_foreach_assign():
-    foreach i := 1…3:
+    foreach i := 1…4:
         i ← i + 1
 
 // foreach variable redefinition is a warning, not an error.
@@ -37,7 +37,7 @@ fn error_foreach_assign():
 @test
 fn warn_foreach_redef():
     let total : mut i64 = 0
-    foreach i := 1…3:
+    foreach i := 1…4:
         @expect warning 2420 "redefinition of foreach variable 'i'"
         let i : mut i64 = 99
         total ← total + i
@@ -46,7 +46,7 @@ fn warn_foreach_redef():
 // foreach without type requires := not =
 @expect error 2023 "Line 49, col 14: foreach without type annotation requires ':='"
 fn error_foreach_bare_eq():
-    foreach i = 1…3:
+    foreach i = 1…4:
         std.println("{}", i)
 
 // let without type requires := not =

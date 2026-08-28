@@ -1,0 +1,39 @@
+// The factors of an expression, however deeply the parser nested them.
+// A product of a product is one product to a reader, so anything whose
+// head is × is taken apart into the factors of each of the things it
+// applies × to, joined; everything else is one factor, itself.
+//
+// @listable is what makes factors(e.arguments()) answer the factors of
+// each of them, and ⧺⌿ joins those into one array.  Written out, the
+// last line is a loop that pushes each answer onto the end of an array
+// it carries.
+//
+// comptime is what lets the macro below call it -- and what lets it
+// call itself, a macro being one function and this walk having to
+// descend.
+@listable
+comptime fn factors(e : syntax) → syntax[]:
+    [e] if e.head() ≠ ※× else ⧺⌿ factors(e.arguments())
+
+macro sin(e : syntax) → syntax:
+    let rest : mut syntax[] = []
+    let found : mut bool = false
+    foreach f := factors(e):
+        if not found and f = ※std.π:        // is it π itself?
+            found ← true
+        else:
+            rest.push(f)
+
+    if not found:
+        return ⟪std.sin($e)⟫
+    if #rest = 0¤ptrdiff:
+        return ⟪std.sinpi(1.0)⟫
+    if #rest = 1¤ptrdiff:
+        return ⟪std.sinpi($(rest[0]))⟫
+    ⟪std.sinpi($(std.syntax.funcall(※×, rest)))⟫
+
+
+@impure
+@start
+fn main():
+  std.println("{}", sin⟦std.π × 3.0f64⟧)

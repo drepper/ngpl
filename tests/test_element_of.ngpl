@@ -30,8 +30,8 @@ fn test_nothing_is_in_an_empty_vector():
 @test
 fn test_in_a_slice():
     let v : i64[] = [10, 20, 30, 40]
-    assert(30 ∊ v[1…3])
-    assert(¬(10 ∊ v[1…3]))
+    assert(30 ∊ v[1…4])
+    assert(¬(10 ∊ v[1…4]))
 
 // ---------------------------------------------------------------------
 // In a matrix
@@ -162,7 +162,7 @@ fn error_looking_through_something_that_holds_nothing():
 @test
 @expect error 2717 "∊: the right operand is range, and what is looked through is a vector, a matrix, a string, a dictionary or a set"
 fn error_looking_through_a_range():
-    let r := 1…5
+    let r := 1…6
     let found : mut = 3 ∊ r
 
 // An element is compared the way = compares it, so a unit that does

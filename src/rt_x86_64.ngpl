@@ -1352,8 +1352,9 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.resolve_locals()
 
     // RT_ASLICE: rdi = descriptor, rsi = lo, rdx = hi → rax = a fresh
-    // array of elements lo…hi, both ends included; hi below lo is
-    // empty, an end outside the array is out of range
+    // array of elements lo…hi, ending before hi; hi at or below lo is
+    // empty, and hi may stand at the end because that is where the
+    // slice stops rather than the last element it takes
     em.rt_begin(RT_ASLICE)
     em.begin_fn(3)
     em.b3(76, 139, 39)              // mov r12, [rdi]
@@ -1361,14 +1362,14 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.b3(73, 137, 246)             // mov r14, rsi: lo
     em.b3(73, 137, 215)             // mov r15, rdx: hi
     em.b3(76, 137, 248)             // mov rax, r15
-    em.b3(76, 41, 240)              // sub rax, r14
-    em.b3(72, 255, 192)             // inc rax: how many
+    em.b3(76, 41, 240)              // sub rax, r14: how many
     em.b3(72, 133, 192)             // test rax, rax
     em.jlocal(142, 0)               // jle Lempty
     em.b3(77, 133, 246)             // test r14, r14
     em.jglobal(0, 136, RT_BOUNDS)   // js: below the array
     em.b3(77, 57, 239)              // cmp r15, r13
-    em.jglobal(0, 131, RT_BOUNDS)   // jae: past the array
+    // hi is where the slice stops, so it may stand at the end
+    em.jglobal(0, 135, RT_BOUNDS)   // ja: past the array's end
     em.b3(72, 137, 195)             // mov rbx, rax: keep the count
     em.b3(72, 137, 199)             // mov rdi, rax
     em.jglobal(232, ⁻1, RT_ARRNEW)

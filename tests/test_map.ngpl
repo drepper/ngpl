@@ -28,7 +28,7 @@ fn test_each_of_an_array():
 
 @test
 fn test_each_of_a_range():
-    let doubled := twice¨(1…4)
+    let doubled := twice¨(1…5)
     assert_eq(doubled[0], 2)
     assert_eq(doubled[3], 8)
     assert_eq(#doubled, 4¤ptrdiff)

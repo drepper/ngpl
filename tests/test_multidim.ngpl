@@ -4,7 +4,7 @@
 
 @test
 fn test_2d_read():
-    let m : i64[,] = (3, 4) ⍴ (1…12)
+    let m : i64[,] = (3, 4) ⍴ (1…13)
     assert_eq(m[0, 0], 1)
     assert_eq(m[0, 3], 4)
     assert_eq(m[1, 0], 5)
@@ -40,7 +40,7 @@ fn test_2d_write_variable_index():
 
 @test
 fn test_3d_read():
-    let a : i64[,,] = (2, 3, 4) ⍴ (1…24)
+    let a : i64[,,] = (2, 3, 4) ⍴ (1…25)
     assert_eq(a[0, 0, 0], 1)
     assert_eq(a[0, 0, 3], 4)
     assert_eq(a[0, 2, 3], 12)
@@ -58,7 +58,7 @@ fn test_3d_write():
 
 @test
 fn test_single_then_multi():
-    let a : i64[,,] = (2, 3, 4) ⍴ (1…24)
+    let a : i64[,,] = (2, 3, 4) ⍴ (1…25)
     let row := a[1]
     assert_eq(row[0, 0], 13)
     assert_eq(row[2, 3], 24)
@@ -67,9 +67,9 @@ fn test_single_then_multi():
 
 @test
 fn test_equiv_chained():
-    let m : i64[,] = (3, 3) ⍴ (1…9)
-    foreach r := 0…2:
-        foreach c := 0…2:
+    let m : i64[,] = (3, 3) ⍴ (1…10)
+    foreach r := 0…3:
+        foreach c := 0…3:
             assert_eq(m[r, c], m[r][c])
 
 // ---- out-of-bounds ------------------------------------------------------

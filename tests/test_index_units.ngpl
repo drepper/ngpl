@@ -36,7 +36,7 @@ fn test_byte_write_bare_literal():
 @test
 fn test_slice_bare_literal():
     let arr : i64[] = [10, 20, 30, 40, 50]
-    let sub := arr[1…3]
+    let sub := arr[1…4]
     assert_eq(#sub, 3)
     assert_eq(sub[0], 20)
     assert_eq(sub[2], 40)
@@ -44,7 +44,7 @@ fn test_slice_bare_literal():
 @test
 fn test_slice_assign_bare_literal():
     let arr : mut i64[] = [0, 0, 0, 0]
-    arr[1…2] ← [88, 99]
+    arr[1…3] ← [88, 99]
     assert_eq(arr[1], 88)
     assert_eq(arr[2], 99)
 
@@ -60,7 +60,7 @@ fn test_sizeof_derived_index():
 fn test_foreach_sizeof_index():
     let arr : i64[] = [1, 2, 3, 4]
     let total : mut i64 = 0
-    foreach i := 0…#arr - 1:
+    foreach i := 0…#arr:
         total ← total + arr[i]
     assert_eq(total, 10)
 
@@ -120,7 +120,7 @@ fn test_reject_i32_byte_index_write():
 @expect error 2319 "array index requires unit ptrdiff, got typed integer i32 without unit"
 fn test_reject_foreach_typed_index():
     let arr : mut i64[] = [10, 20, 30]
-    foreach i : i32 = 0…2:
+    foreach i : i32 = 0…3:
         let x : mut = arr[i]
 
 // ---- typed integers without unit rejected (parameter passing) ------------

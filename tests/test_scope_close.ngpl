@@ -19,7 +19,7 @@ fn opens_and_drops():
 // limit if nothing were being closed.
 @test
 fn test_scope_end_releases_descriptors():
-    foreach i := 1…200:
+    foreach i := 1…201:
         opens_and_drops()
     let dir := std.fs.cwd()
     let file := dir.open_file("CLAUDE.md") ?? std.exit(1)
@@ -68,7 +68,7 @@ fn opens_via_temporary():
 
 @test
 fn test_temporary_pattern_does_not_leak():
-    foreach i := 1…200:
+    foreach i := 1…201:
         opens_via_temporary()
     let file := std.fs.cwd().open_file("CLAUDE.md") ?? std.exit(1)
     assert(file.fd < 50)

@@ -45,40 +45,40 @@ fn rows_fixed2(m : i32[2]) → i32:
 @test
 fn test_vector_slice_to_dynamic():
     let v : i32[] = [10, 20, 30, 40, 50, 60]
-    assert_eq(len_dyn(v[1…3]), 3)
-    assert_eq(sum_dyn(v[1…3]), 90)
+    assert_eq(len_dyn(v[1…4]), 3)
+    assert_eq(sum_dyn(v[1…4]), 90)
 
 // A fixed-size parameter is satisfied by a range of that length, even
 // though the vector it was cut from is longer.
 @test
 fn test_vector_slice_to_fixed():
     let v : i32[] = [10, 20, 30, 40, 50, 60]
-    assert_eq(sum_fixed3(v[1…3]), 90)
+    assert_eq(sum_fixed3(v[1…4]), 90)
 
 // A whole-vector range reaches the same parameter, since what is
 // checked is the length of the range.
 @test
 fn test_vector_full_range_to_fixed():
     let v : i32[] = [10, 20, 30]
-    assert_eq(sum_fixed3(v[0…2]), 60)
+    assert_eq(sum_fixed3(v[0…3]), 60)
 
 // The length checked is the range's, so a range of the wrong length is
 // rejected however long the source was.
 @expect error 2768 "sum_fixed3: argument 'a' expected i32[3] (length 3), got array of length 4"
 fn error_slice_wrong_length():
     let v : i32[] = [10, 20, 30, 40, 50, 60]
-    _ ← sum_fixed3(v[1…4])
+    _ ← sum_fixed3(v[1…5])
 
 @expect error 2768 "sum_fixed3: argument 'a' expected i32[3] (length 3), got array of length 2"
 fn error_slice_too_short():
     let v : i32[] = [10, 20, 30, 40, 50, 60]
-    _ ← sum_fixed3(v[1…2])
+    _ ← sum_fixed3(v[1…3])
 
 // A range that runs past the end is caught where it is taken.
 @expect error 2758 "array index 3 out of range (length 3)"
 fn error_slice_past_end():
     let v : i32[] = [10, 20, 30]
-    _ ← sum_dyn(v[1…5])
+    _ ← sum_dyn(v[1…6])
 
 // ---------------------------------------------------------------------
 // A vector slice is a copy
@@ -92,7 +92,7 @@ fn writes_first(a : mut i32[]):
 @test
 fn test_vector_slice_is_a_copy():
     let v : i32[] = [10, 20, 30, 40]
-    writes_first(v[1…2])
+    writes_first(v[1…3])
     assert_eq(v[1], 20)
 
 // ---------------------------------------------------------------------
@@ -111,16 +111,16 @@ fn test_matrix_row_to_dynamic():
 @test
 fn test_matrix_partial_row():
     let m : i64[,] = (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    assert_eq(len_dyn(m[1, 0…2]), 3)
-    assert_eq(sum_dyn(m[1, 0…2]), 18)
-    assert_eq(sum_fixed3(m[1, 0…2]), 18)
+    assert_eq(len_dyn(m[1, 0…3]), 3)
+    assert_eq(sum_dyn(m[1, 0…3]), 18)
+    assert_eq(sum_fixed3(m[1, 0…3]), 18)
 
 // Part of a column: the first dimension is ranged, the second is not.
 @test
 fn test_matrix_partial_column():
     let m : i64[,] = (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    assert_eq(len_dyn(m[0…1, 2]), 2)
-    assert_eq(sum_dyn(m[0…1, 2]), 10)
+    assert_eq(len_dyn(m[0…2, 2]), 2)
+    assert_eq(sum_dyn(m[0…2, 2]), 10)
 
 // Ranging the first dimension keeps the second, so two rows of a 3×4
 // matrix are a 2×4 matrix, not two elements.  Only an untyped
@@ -128,7 +128,7 @@ fn test_matrix_partial_column():
 @test
 fn test_matrix_row_range_stays_two_dimensional():
     let m : i64[,] = (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    let rows := m[0…1]
+    let rows := m[0…2]
     assert_eq(#rows, 2)
     assert_eq(#rows[0], 4)
     assert_eq(sum_matrix(rows), 36)
@@ -138,18 +138,18 @@ fn test_matrix_row_range_stays_two_dimensional():
 @expect error 2766 "len_dyn: argument 'a' expected i32[] (1 dimension), got a 2×4 array"
 fn error_row_range_to_dynamic():
     let m : i64[,] = (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    _ ← len_dyn(m[0…1])
+    _ ← len_dyn(m[0…2])
 
 // Not even when the row count is the one the parameter asks for.
 @expect error 2766 "rows_fixed2: argument 'm' expected i32[2] (1 dimension), got a 2×4 array"
 fn error_row_range_to_fixed():
     let m : i64[,] = (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    _ ← rows_fixed2(m[0…1])
+    _ ← rows_fixed2(m[0…2])
 
 @expect error 2766 "rows_fixed2: argument 'm' expected i32[2] (1 dimension), got a 3×4 array"
 fn error_whole_matrix_to_fixed():
     let m : i64[,] = (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    _ ← rows_fixed2(m[0…2])
+    _ ← rows_fixed2(m[0…3])
 
 // ---------------------------------------------------------------------
 // A matrix, sliced along both dimensions
@@ -160,7 +160,7 @@ fn error_whole_matrix_to_fixed():
 @test
 fn test_matrix_block():
     let m : i64[,] = (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    let b := m[0…1, 1…2]
+    let b := m[0…2, 1…3]
     assert_eq(#b, 2)
     assert_eq(#b[0], 2)
     assert_eq(sum_matrix(b), 18)
@@ -170,13 +170,13 @@ fn test_matrix_block():
 @expect error 2766 "rows_fixed2: argument 'm' expected i32[2] (1 dimension), got a 2×2 array"
 fn error_block_to_fixed_rows():
     let m : i64[,] = (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    _ ← rows_fixed2(m[0…1, 1…2])
+    _ ← rows_fixed2(m[0…2, 1…3])
 
 // A single row of a block is one dimension again, and does fit.
 @test
 fn test_block_row_to_fixed():
     let m : i64[,] = (3, 4) ⍴ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    assert_eq(len_dyn(m[0…1, 1…2][1]), 2)
+    assert_eq(len_dyn(m[0…2, 1…3][1]), 2)
 
 // ---------------------------------------------------------------------
 // What a slice shares and what it copies
@@ -199,7 +199,7 @@ fn test_whole_row_is_shared():
 fn test_row_range_is_shared():
     let a : mut i32[] = 12 ⍴ 0
     let m := (3, 4) ⍴ a
-    let rows : mut = m[0…1]
+    let rows : mut = m[0…2]
     rows[0][1] ← 66
     assert_eq(a[1], 66)
 
@@ -209,7 +209,7 @@ fn test_row_range_is_shared():
 fn test_narrowed_block_is_a_copy():
     let a : mut i32[] = 12 ⍴ 0
     let m := (3, 4) ⍴ a
-    let b : mut = m[0…1, 1…2]
+    let b : mut = m[0…2, 1…3]
     b[0][0] ← 77
     assert_eq(a[1], 0)
 
@@ -218,7 +218,7 @@ fn test_narrowed_block_is_a_copy():
 fn test_block_argument_is_a_copy():
     let a : mut i32[] = 12 ⍴ 0
     let m := (3, 4) ⍴ a
-    writes_first(m[0…1, 1…2][0])
+    writes_first(m[0…2, 1…3][0])
     assert_eq(a[1], 0)
 
 // A whole row passed by reference does reach the caller's array.

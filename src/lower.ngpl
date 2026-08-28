@@ -113,7 +113,7 @@ impl Lower:
         // a program without one string literal arrives here empty, and
         // 0…⁻1 would walk down; the guard keeps the range ascending
         if #self.strs > 0:
-            foreach i := 0…#self.strs - 1:
+            foreach i := 0…#self.strs:
                 if self.strs[i] = s:
                     return @dropunit(i)
         let idx : i64 = @dropunit(#self.strs)
@@ -121,7 +121,7 @@ impl Lower:
         idx
 
     fn fname_index(&self, name : str) → i64:
-        foreach i := 0…#self.a.fns - 1:
+        foreach i := 0…#self.a.fns:
             if self.a.fns[i].name = name:
                 return @dropunit(i)
         ⁻1
@@ -1360,7 +1360,8 @@ impl Lower:
         let lend : i64 = self.label()
         self.ir(IR_LABEL, ltop, 0, 0, 0, 0)
         let cnd : i64 = self.tmp()
-        self.ir(IR_CLE, r, rhi, 0, cnd, 64 + 256)
+        // rhi is where the slice stops, not the last row it takes
+        self.ir(IR_CLT, r, rhi, 0, cnd, 64 + 256)
         self.ir(IR_JZ, cnd, lend, 0, 0, 0)
         let row : i64 = self.tmp()
         self.ir(IR_AIDX, mv, r, 0, row, 0)
@@ -1451,12 +1452,12 @@ impl Lower:
         self.ir(IR_JZ, cnd, lend, 0, 0, 0)
         let lo : i64 = self.tmp()
         self.ir(IR_MULW, i, cv, 0, lo, 64 + 256)
+        // one row is the run from lo up to lo + columns, and a slice
+        // stops at its end rather than taking it
         let hi : i64 = self.tmp()
         self.ir(IR_ADDW, lo, cv, 0, hi, 64 + 256)
-        let hi1 : i64 = self.tmp()
-        self.ir(IR_SUBW, hi, one, 0, hi1, 64 + 256)
         let row : i64 = self.tmp()
-        self.ir(IR_ASLICE, flat, lo, hi1, row, 0)
+        self.ir(IR_ASLICE, flat, lo, hi, row, 0)
         self.ir(IR_APUSH, d, row, 0, 0, 0)
         let nxt : i64 = self.tmp()
         self.ir(IR_ADDW, i, one, 0, nxt, 64 + 256)
@@ -1542,7 +1543,7 @@ impl Lower:
         if to > from:
             let z : i64 = self.tmp()
             self.ir(IR_CONST, 0, 0, 0, z, 0)
-            foreach _ := from…to - 1:
+            foreach _ := from…to:
                 self.pack_byte(buf, z)
 
     // one value of type ty appended to buf; answers how far along the
@@ -1558,7 +1559,7 @@ impl Lower:
             let (ssz, sal) := c_struct_layout(self.a, si, 0)
             _ ← sal
             if nf > 0:
-                foreach fi := 0…nf - 1:
+                foreach fi := 0…nf:
                     let fty : i64 = self.a.extra[(d.fields_off + 2 + fi × 2) × 1¤ptrdiff]
                     self.pack_pad(buf, pos, pos0 + c_field_offset(self.a, si, @dropunit(fi)))
                     pos ← pos0 + c_field_offset(self.a, si, @dropunit(fi))
@@ -1588,7 +1589,7 @@ impl Lower:
         _ ← al
         let m : i64 = self.tmp()
         self.ir(IR_CONST, 255, 0, 0, m, 0)
-        foreach bi := 0…sz - 1:
+        foreach bi := 0…sz:
             let sh : i64 = self.tmp()
             self.ir(IR_CONST, 8 × @dropunit(bi), 0, 0, sh, 0)
             let shifted : i64 = self.tmp()
@@ -2601,8 +2602,8 @@ impl Lower:
             return false
         // distinct cases; a repeat would silently shadow, so leave a
         // repeat to the ladder the checker saw
-        foreach i := 0…#ks - 1:
-            foreach j := 0…#ks - 1:
+        foreach i := 0…#ks:
+            foreach j := 0…#ks:
                 if j > i and ks[i] = ks[j]:
                     return false
         // a ladder whose every arm returns a constant, default
@@ -2627,7 +2628,7 @@ impl Lower:
                 let si : mut i64 = 0
                 while si < span:
                     let entry : mut i64 = defv
-                    foreach i := 0…#ks - 1:
+                    foreach i := 0…#ks:
                         if ks[i] = lo + si:
                             entry ← vals[i]
                     self.extra.push(entry)
@@ -2642,7 +2643,7 @@ impl Lower:
         let ldef : i64 = self.label()
         let lend : i64 = self.label()
         let case_labels : mut i64[] = []
-        foreach _ := 0…#ks - 1:
+        foreach _ := 0…#ks:
             case_labels.push(self.label())
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(lo)
@@ -2651,14 +2652,14 @@ impl Lower:
         let s : mut i64 = 0
         while s < span:
             let target : mut i64 = ldef
-            foreach i := 0…#ks - 1:
+            foreach i := 0…#ks:
                 if ks[i] = lo + s:
                     target ← case_labels[i]
             self.extra.push(target)
             s ← s + 1
         self.decide(self.tok_line(self.a.ntok[sid × 1¤ptrdiff]), "jump-table", shape)
         self.ir(IR_JTAB, xslot, off, 0, 0, 0)
-        foreach i := 0…#ks - 1:
+        foreach i := 0…#ks:
             self.ir(IR_LABEL, case_labels[i], 0, 0, 0, 0)
             self.lower_block(blks[i], false, ret_ty)
             self.ir(IR_JMP, lend, 0, 0, 0, 0)
@@ -3079,14 +3080,16 @@ impl Lower:
         self.ir(IR_CONST, 0, 0, 0, z, 0)
         let up : i64 = self.tmp()
         self.ir(IR_CGT, dirv, z, 0, up, 64 + 256)
+        // the end is where the range stops rather than the last value
+        // it holds, so the walk is alive strictly short of it
         let le : i64 = self.tmp()
-        self.ir(IR_CLE, ivar, hiv, 0, le, 64 + 256)
+        self.ir(IR_CLT, ivar, hiv, 0, le, 64 + 256)
         let c1 : i64 = self.tmp()
         self.ir(IR_BAND, up, le, 0, c1, 64)
         let down : i64 = self.tmp()
         self.ir(IR_CLT, dirv, z, 0, down, 64 + 256)
         let ge : i64 = self.tmp()
-        self.ir(IR_CGE, ivar, hiv, 0, ge, 64 + 256)
+        self.ir(IR_CGT, ivar, hiv, 0, ge, 64 + 256)
         let c2 : i64 = self.tmp()
         self.ir(IR_BAND, down, ge, 0, c2, 64)
         let c : i64 = self.tmp()

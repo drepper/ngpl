@@ -259,7 +259,7 @@ impl Cev:
 
     fn fn_index(&self, name : str) → i64:
         if #self.a.fns > 0:
-            foreach i := 0…#self.a.fns - 1:
+            foreach i := 0…#self.a.fns:
                 if self.a.fns[i].name = name:
                     return @dropunit(i)
         ⁻1
@@ -597,7 +597,7 @@ impl Cev:
 
     fn global_index(&self, name : str) → i64:
         if #self.a.globals > 0:
-            foreach i := 0…#self.a.globals - 1:
+            foreach i := 0…#self.a.globals:
                 if self.a.globals[i].name = name:
                     return @dropunit(i)
         ⁻1

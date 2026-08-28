@@ -57,7 +57,7 @@ fn main():
 
     // a walk beside a range walk, and one in a function
     let mixed : mut i64 = 0
-    foreach i := 1…3:
+    foreach i := 1…4:
         foreach c := "ab":
             mixed ← mixed + i × c.ord()
     std.println("{} {}", mixed, vowels("alphabet soup"))

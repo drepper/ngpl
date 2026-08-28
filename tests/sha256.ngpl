@@ -100,21 +100,21 @@ fn sha256(data : byte[]) → u32[8]?:
     ]
 
     // Process each 64-byte block.
-    foreach blk_off := 0…64…(total_size - 1):
+    foreach blk_off := 0…64…total_size:
         // --- Load W[0..63]: first 16 from data, rest filled by expansion. ---
         let load_word := λi : usize |data, blk_off, total_size| → u32: get_padded_word(data, blk_off + i × 4 ¤byte, total_size) ?? 0
-        let W : mut u32[] = generate(load_word, 0…15) ⧺ 48 ⍴ [0]
+        let W : mut u32[] = generate(load_word, 0…16) ⧺ 48 ⍴ [0]
 
         // --- Message-schedule expansion: W[16..63]. ---
-        foreach j := 16…63:
+        foreach j := 16…64:
             W[j] ← @wrap(W[j - 16] + expand_Σ₀(W[j - 15]) +
                          W[j - 7] + expand_Σ₁(W[j - 2]))
 
         // --- Working variables: copy of current hash state. ---
-        let v : mut = H[0…7]
+        let v : mut = H[0…8]
 
         // --- 64 compression rounds using K[t] and W[t]. ---
-        foreach t := 0…63:
+        foreach t := 0…64:
             // Σ₁(e) = ROTR(6,e) ⊕ ROTR(11,e) ⊕ ROTR(25,e).
             let Σ₁ := (v[4] ↺ 6) ^ (v[4] ↺ 11) ^ (v[4] ↺ 25)
 
@@ -134,7 +134,7 @@ fn sha256(data : byte[]) → u32[8]?:
             let t2 := @wrap(Σ₀ + maj)
 
             // Shift working variables right by one position.
-            v[1…7] ← v[0…6]
+            v[1…8] ← v[0…7]
             v[0] ← @wrap(t1 + t2)
             v[4] ← @wrap(v[4] + t1)
 

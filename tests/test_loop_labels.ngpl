@@ -21,7 +21,7 @@ fn test_break_leaves_the_loop_it_is_in():
 @test
 fn test_continue_goes_round_again():
     let sum : mut i64 = 0
-    foreach i := 1…10:
+    foreach i := 1…11:
         if i % 2 = 0:
             continue
         sum ← sum + i
@@ -30,7 +30,7 @@ fn test_continue_goes_round_again():
 @test
 fn test_break_in_a_foreach():
     let seen : mut i64 = 0
-    foreach i := 1…10:
+    foreach i := 1…11:
         if i > 3:
             break
         seen ← seen + 1
@@ -41,8 +41,8 @@ fn test_break_in_a_foreach():
 @test
 fn test_an_unnamed_break_leaves_only_the_inner_loop():
     let count : mut i64 = 0
-    foreach i := 1…3:
-        foreach j := 1…3:
+    foreach i := 1…4:
+        foreach j := 1…4:
             if j = 2:
                 break
             count ← count + 1
@@ -57,8 +57,8 @@ fn test_an_unnamed_break_leaves_only_the_inner_loop():
 fn test_a_named_break_leaves_the_loop_it_names():
     let count : mut i64 = 0
     outer:
-    foreach i := 1…3:
-        foreach j := 1…3:
+    foreach i := 1…4:
+        foreach j := 1…4:
             if i = 2:
                 break outer
             count ← count + 1
@@ -68,8 +68,8 @@ fn test_a_named_break_leaves_the_loop_it_names():
 fn test_a_named_continue_takes_the_outer_loop_round_again():
     let count : mut i64 = 0
     rows:
-    foreach i := 1…3:
-        foreach j := 1…3:
+    foreach i := 1…4:
+        foreach j := 1…4:
             if j = 2:
                 continue rows
             count ← count + 1
@@ -107,9 +107,9 @@ fn test_a_name_on_a_while_loop():
 fn test_a_name_reaches_past_more_than_one_loop():
     let count : mut i64 = 0
     top:
-    foreach i := 1…3:
-        foreach j := 1…3:
-            foreach k := 1…3:
+    foreach i := 1…4:
+        foreach j := 1…4:
+            foreach k := 1…4:
                 count ← count + 1
                 if count = 4:
                     break top
@@ -120,9 +120,9 @@ fn test_a_name_reaches_past_more_than_one_loop():
 @test
 fn test_only_the_inner_loop_is_named():
     let count : mut i64 = 0
-    foreach i := 1…3:
+    foreach i := 1…4:
         inner:
-        foreach j := 1…3:
+        foreach j := 1…4:
             if j = 2:
                 continue inner
             count ← count + 1
@@ -176,7 +176,7 @@ fn error_continue_outside_a_loop():
 fn error_a_name_no_loop_here_has():
     let count : mut i64 = 0
     outer:
-    foreach i := 1…3:
+    foreach i := 1…4:
         break inner
 
 // A loop around a lambda is not one the lambda's body can leave: the
@@ -184,7 +184,7 @@ fn error_a_name_no_loop_here_has():
 @test
 @expect error 2202 "break is written outside any loop, so there is no loop for it to act on"
 fn error_break_inside_a_lambda():
-    foreach i := 1…3:
+    foreach i := 1…4:
         let f := λx : i64 → i64:
             break
             x
@@ -196,8 +196,8 @@ fn error_break_inside_a_lambda():
 fn warn_a_name_nothing_takes():
     let count : mut i64 = 0
     outer:
-    foreach i := 1…3:
-        foreach j := 1…3:
+    foreach i := 1…4:
+        foreach j := 1…4:
             if j = 2:
                 break
             count ← count + 1
@@ -210,7 +210,7 @@ fn warn_a_name_nothing_takes():
 fn warn_a_name_only_a_lambda_would_take():
     let count : mut i64 = 0
     outer:
-    foreach i := 1…3:
+    foreach i := 1…4:
         let f := λx : i64 → i64:
             x + 1
         count ← count + f(i)
@@ -222,9 +222,9 @@ fn warn_a_name_only_a_lambda_would_take():
 fn warn_only_one_of_two_names_is_taken():
     let count : mut i64 = 0
     outer:
-    foreach i := 1…3:
+    foreach i := 1…4:
         inner:
-        foreach j := 1…3:
+        foreach j := 1…4:
             if j = 2:
                 break outer
             count ← count + 1
@@ -236,7 +236,7 @@ fn warn_only_one_of_two_names_is_taken():
 @expect warning 2201 "this statement cannot be reached: the one above it does not come back"
 fn warn_a_statement_after_a_break():
     let n : mut i64 = 0
-    foreach i := 1…3:
+    foreach i := 1…4:
         break
         n ← n + 1
 
@@ -244,7 +244,7 @@ fn warn_a_statement_after_a_break():
 @expect warning 2201 "this statement cannot be reached: the one above it does not come back"
 fn warn_a_statement_after_a_continue():
     let n : mut i64 = 0
-    foreach i := 1…3:
+    foreach i := 1…4:
         continue
         n ← n + 1
 

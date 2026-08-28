@@ -14,7 +14,7 @@ fn main():
     std.println("{}", f12(3))
     let z := f()
     std.println("{}", z(1, 2, 3))
-    let tripled := generate(multiply(3), 1i32…5i32)
+    let tripled := generate(multiply(3), 1i32…6i32)
     std.println("{} {} {}", #tripled, tripled[0], tripled[4])
     let lam := λx : i64, y : i64 → i64: x × 10 + y
     let lam7 := lam(7)

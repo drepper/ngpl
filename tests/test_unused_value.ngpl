@@ -36,7 +36,7 @@ fn test_dropped_result():
 @test
 @expect error 2290 "the result of 'doubled' is not used; a function that hands back a value is called for it, so write '_ ← …' where the value is meant to be dropped, name a return type where it was meant to be handed back, or mark it @ignorable"
 fn test_dropped_result_in_a_loop():
-    foreach i := 1…3:
+    foreach i := 1…4:
         doubled(i)
 
 // An expression that is not a call at all drops its value the same way.

@@ -69,18 +69,18 @@ fn no_default(x : i64, acc : &mut i64[]):
 @start
 @impure
 fn main():
-    foreach x := ⁻2…9:
+    foreach x := ⁻2…10:
         std.println("dense {} {}", x, dense(x))
-    foreach x := ⁻5…3:
+    foreach x := ⁻5…4:
         std.println("span {} {}", x, signed_span(x))
     std.println("sparse {}", sparse(1))
     std.println("sparse {}", sparse(1000))
     std.println("sparse {}", sparse(9999))
     std.println("sparse {}", sparse(10000))
-    foreach d := ⁻2…6:
+    foreach d := ⁻2…7:
         std.println("wd {} {}", d, weekday_len(d))
     let hits : mut i64[] = []
-    foreach x := 9…14:
+    foreach x := 9…15:
         no_default(x, &hits)
     let total : mut i64 = 0
     foreach h := hits:

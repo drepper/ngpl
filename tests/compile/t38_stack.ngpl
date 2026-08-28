@@ -28,10 +28,10 @@ fn main():
     std.println("{}", wide(1, 2, 3, 4, 5, 6, 7))
     // the arena still answers while the stack is elsewhere
     let v : mut i64[] = []
-    foreach i := 1…2000:
+    foreach i := 1…2001:
         v.push(i × i)
     std.println("{} {}", #v, v[1999])
     let s : mut str = ""
-    foreach i := 1…20:
+    foreach i := 1…21:
         s ← s ⧺ "ab"
     std.println("{}", #s)

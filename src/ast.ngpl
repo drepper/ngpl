@@ -161,7 +161,7 @@ fn hash_digest_bytes() → i64[]:
 fn hash_algs_named() → str:
     let algs := hash_algs()
     let out : mut str = ""
-    foreach k := 0…#algs - 1:
+    foreach k := 0…#algs:
         out ← out ⧺ (if k = 0: "" else: ", ") ⧺ algs[k]
     out
 

@@ -130,7 +130,7 @@ fn test_comparison_binds_looser():
 @test
 fn test_a_range_bound_may_be_written_with_one():
     let total : mut i64 = 0
-    foreach i := 1…(2 ⌈ 3):
+    foreach i := 1…(2 ⌈ 3) + 1:
         total ← total + i
     assert_eq(total, 6)
 

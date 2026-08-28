@@ -126,7 +126,7 @@ fn test_immutable_binding_is_quiet():
 @test
 fn test_loop_bindings_are_quiet():
     let total : mut i64 = 0
-    foreach i := 1…3:
+    foreach i := 1…4:
         total ← total + i
     assert_eq(total, 6)
 

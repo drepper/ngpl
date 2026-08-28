@@ -42,11 +42,11 @@ fn mkcls() → i64[256]:
     t[32] ← CL_WS
     t[10] ← CL_NL
     t[9] ← CL_TAB
-    foreach d := 48…57:
+    foreach d := 48…58:
         t[d × 1¤ptrdiff] ← CL_DIGIT
-    foreach c := 97…122:
+    foreach c := 97…123:
         t[c × 1¤ptrdiff] ← CL_IDENT
-    foreach c := 65…90:
+    foreach c := 65…91:
         t[c × 1¤ptrdiff] ← CL_IDENT
     t[95] ← CL_IDENT
     t[34] ← CL_QUOTE
@@ -281,7 +281,7 @@ impl Lexer:
                 self.adv()
             let names := unit_names()
             let u : mut i64 = ⁻1
-            foreach i := 1…#names - 1:
+            foreach i := 1…#names:
                 if names[i] = usfx:
                     u ← @dropunit(i)
             if u = ⁻1:

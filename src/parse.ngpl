@@ -299,7 +299,7 @@ impl Parser:
             // a type variable: whatever the call hands over
             let tv : mut i64 = ⁻1
             if #self.tvn > 0:
-                foreach i := 0…#self.tvn - 1:
+                foreach i := 0…#self.tvn:
                     if self.tvn[i] = name:
                         tv ← 194048 + @dropunit(i)
             if tv = ⁻1:
@@ -522,23 +522,23 @@ impl Parser:
         // not a type a program may write down, which is how the
         // interpreter has it
         if @dropunit(#self.enames) > NBUILTIN_ENUMS:
-            foreach i := NBUILTIN_ENUMS × 1¤ptrdiff…#self.enames - 1:
+            foreach i := NBUILTIN_ENUMS × 1¤ptrdiff…#self.enames:
                 if self.enames[i] = name:
                     return mk_ety(@dropunit(i))
         // a name standing for a type answers what it stands for
         if #self.tanames > 0:
-            foreach i := 0…#self.tanames - 1:
+            foreach i := 0…#self.tanames:
                 if self.tanames[i] = name:
                     return self.tatypes[i]
         if #self.snames > 0:
-            foreach i := 0…#self.snames - 1:
+            foreach i := 0…#self.snames:
                 if self.snames[i] = name:
                     return mk_sty(@dropunit(i))
         ⁻1
 
     // the ¤unit that may follow a binding's or parameter's name
     fn unit_index(&self, name : str) → i64:
-        foreach i := 1…#self.unames - 1:
+        foreach i := 1…#self.unames:
             if self.unames[i] = name:
                 return @dropunit(i)
         ⁻1
@@ -699,12 +699,12 @@ impl Parser:
         let li : i64 = self.lam_intern(pts, ret, lstb)
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(@dropunit(#pts))
-        foreach i := 0…#pts - 1:
+        foreach i := 0…#pts:
             self.extra.push(ptoks[i])
             self.extra.push(pts[i])
         self.extra.push(@dropunit(#caps))
         if #caps > 0:
-            foreach i := 0…#caps - 1:
+            foreach i := 0…#caps:
                 self.extra.push(caps[i])
         self.extra.push(ret)
         self.mknode(NK_LAMBDA, at, off, body, li)
@@ -1137,7 +1137,7 @@ impl Parser:
                     let aname := self.ttext(self.pos)
                     let algs := hash_algs()
                     let alg : mut i64 = ⁻1
-                    foreach k := 0…#algs - 1:
+                    foreach k := 0…#algs:
                         if algs[k] = aname:
                             alg ← @dropunit(k)
                     if alg = ⁻1:
@@ -1209,7 +1209,7 @@ impl Parser:
     // so a comptime check reads them for free
     fn impl_str(&mut self, s : str) → i64:
         if #self.toks.strs > 0:
-            foreach i := 0…#self.toks.strs - 1:
+            foreach i := 0…#self.toks.strs:
                 if self.toks.strs[i] = s:
                     return @dropunit(i)
         let idx : i64 = @dropunit(#self.toks.strs)
@@ -1949,7 +1949,7 @@ impl Parser:
         let params_off : i64 = @dropunit(#self.extra)
         self.extra.push(@dropunit(#ptoks))
         if #ptoks > 0:
-            foreach i := 0…#ptoks - 1:
+            foreach i := 0…#ptoks:
                 self.extra.push(ptoks[i])
                 self.extra.push(ptypes[i])
         let pre_off : mut i64 = ⁻1
@@ -1962,7 +1962,7 @@ impl Parser:
         if #posts > 0:
             post_off ← @dropunit(#self.extra)
             self.extra.push(@dropunit(#posts))
-            foreach i := 0…#posts - 1:
+            foreach i := 0…#posts:
                 self.extra.push(post_toks[i])
                 self.extra.push(posts[i])
         if ignored:
@@ -2358,7 +2358,7 @@ impl Parser:
         let off : i64 = @dropunit(#self.extra)
         self.extra.push(@dropunit(#ftoks))
         if #ftoks > 0:
-            foreach i := 0…#ftoks - 1:
+            foreach i := 0…#ftoks:
                 self.extra.push(ftoks[i])
                 self.extra.push(ftypes[i])
         let inv_off : mut i64 = ⁻1
@@ -2584,7 +2584,7 @@ impl Parser:
             if #exp_code > 0:
                 self.pending_exp ← @dropunit(#self.extra)
                 self.extra.push(@dropunit(#exp_code))
-                foreach i := 0…#exp_code - 1:
+                foreach i := 0…#exp_code:
                     self.extra.push(exp_lvl[i])
                     self.extra.push(exp_code[i])
             self.parse_fn(imp, is_start, is_noreturn, is_test,

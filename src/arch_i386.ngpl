@@ -610,7 +610,7 @@ fn i3g_epilogue(em : &mut Emit, tg : Target):
 
 fn i3g_resolve(em : &mut Emit, tg : Target):
     if #em.tf_pos > 0:
-        foreach i := 0…#em.tf_pos - 1:
+        foreach i := 0…#em.tf_pos:
             let pos : i64 = em.tf_pos[i]
             em.patch32(pos, em.labels[em.tf_lab[i] × 1¤ptrdiff] - (pos + 4))
     while #em.tf_pos > 0:

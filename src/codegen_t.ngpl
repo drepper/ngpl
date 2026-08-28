@@ -41,7 +41,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // argument, which is what every target but i386 still does.
     let nregs : mut i64[] = []
     if #a.fns > 0:
-        foreach i := 0…#a.fns - 1:
+        foreach i := 0…#a.fns:
             nregs.push(if abi_spent(tgt) = 0: 0 else: ab.nreg[i])
     let strs0 : mut str[] = []
     foreach s := a.strs:
@@ -83,7 +83,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let n_relro : mut i64 = 0
     let n_rw : mut i64 = 0
     if nglobals > 0:
-        foreach i := 0…nglobals - 1:
+        foreach i := 0…nglobals:
             if a.globals[i].is_mut:
                 n_rw ← n_rw + 1
             elif is_relro[i] = 1:
@@ -99,7 +99,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let k_relro : mut i64 = 0
     let k_rw : mut i64 = 0
     if nglobals > 0:
-        foreach i := 0…nglobals - 1:
+        foreach i := 0…nglobals:
             if a.globals[i].is_mut:
                 em.gseg.push(1)
                 em.gmap.push(relro_size + SIG_SIZE + 8 × k_rw)
@@ -114,7 +114,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                 k_ro ← k_ro + 1
     let nfns : i64 = @dropunit(#a.fns)
     let start_fn : mut i64 = ⁻1
-    foreach i := 0…#a.fns - 1:
+    foreach i := 0…#a.fns:
         if a.fns[i].is_start:
             start_fn ← @dropunit(i)
     let ninit : i64 = @dropunit(#chk.ginit)
@@ -128,7 +128,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
               if ninit > 0: nfns else: ⁻1, tdriver, start_fn, sret)
     // the program's own code, then the whole runtime: nothing is
     // trimmed here yet, since the IR-built routines call each other
-    foreach i := 0…#a.fns - 1:
+    foreach i := 0…#a.fns:
         let f : i64 = @dropunit(i)
         // the space for a sized answer arrives as one more argument
         let np : i64 = a.extra[a.fns[i].params_off × 1¤ptrdiff] + (if farr_is_packed(a, a.fns[i].ret): 1 else: 0)
@@ -151,13 +151,13 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     em.fn_off.push(em.here())
     t_emit_fn(&em, tgt, dir, 0, lw.strs, 0, nregs)
     if #chk.lams > 0:
-        foreach j := 0…#chk.lams - 1:
+        foreach j := 0…#chk.lams:
             let lir := lower_lambda_fn(&lw, a, chk, @dropunit(j))
             em.fn_off.push(em.here())
             let lnp : i64 = a.extra[a.na[chk.lams[j] × 1¤ptrdiff] × 1¤ptrdiff]
             t_emit_fn(&em, tgt, lir, lnp + 1, lw.strs, 0, nregs)
     if #chk.psfn > 0:
-        foreach j := 0…#chk.psfn - 1:
+        foreach j := 0…#chk.psfn:
             let sir := lower_shim_fn(&lw, chk, @dropunit(j))
             em.fn_off.push(em.here())
             t_emit_fn(&em, tgt, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs, 0, nregs)
@@ -169,14 +169,14 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // this runs in waves until a wave adds nothing.  Asking the IR
     // which routines it calls would miss the second kind.
     let nrt : i64 = 68
-    foreach _ := 1…nrt:
+    foreach _ := 0…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
     let more : mut bool = true
     while more:
         more ← false
         if #em.cf_target > 0:
-            foreach i := 0…#em.cf_target - 1:
+            foreach i := 0…#em.cf_target:
                 let t : i64 = em.cf_target[i]
                 if t < 0:
                     em.rt_need[(0 - t - 1) × 1¤ptrdiff] ← 1
@@ -184,11 +184,11 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         // that was called, and the address has nowhere to point if it
         // was left out
         if #em.ff_fn > 0:
-            foreach i := 0…#em.ff_fn - 1:
+            foreach i := 0…#em.ff_fn:
                 let t : i64 = em.ff_fn[i]
                 if t < 0:
                     em.rt_need[(0 - t - 1) × 1¤ptrdiff] ← 1
-        foreach id0 := 0…nrt - 1:
+        foreach id0 := 0…nrt:
             if em.rt_need[id0 × 1¤ptrdiff] = 1 and em.rt_off[id0 × 1¤ptrdiff] = ⁻1:
                 em.rt_off[id0 × 1¤ptrdiff] ← em.here()
                 let rid : i64 = 0 - @dropunit(id0) - 1
@@ -197,7 +197,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                 more ← true
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:
-        foreach i := 0…#em.cf_pos - 1:
+        foreach i := 0…#em.cf_pos:
             let pos : i64 = em.cf_pos[i]
             let t : i64 = em.cf_target[i]
             let dest : i64 = if t >= 0: em.fn_off[t × 1¤ptrdiff] else: em.rt_off[(0 - t - 1) × 1¤ptrdiff]
@@ -205,7 +205,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             g_patch_call(&em, tgt, pos, dest)
     // a function's address, taken as a value
     if #em.ff_pos > 0:
-        foreach i := 0…#em.ff_pos - 1:
+        foreach i := 0…#em.ff_pos:
             let ff : i64 = em.ff_fn[i]
             let fat : i64 = if ff >= 0: em.fn_off[ff × 1¤ptrdiff] else: em.rt_off[(0 - ff - 1) × 1¤ptrdiff]
             assert(fat ≠ ⁻1, "the address taken is of a routine that was emitted")
@@ -221,7 +221,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let acc : mut i64 = 0
     let nstr : mut i64 = 0
     if #lw.strs > 0:
-        foreach i := 0…#lw.strs - 1:
+        foreach i := 0…#lw.strs:
             stroffs.push(acc)
             descidx.push(nstr)
             if used[i] = 1:
@@ -230,29 +230,29 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let descbase : i64 = align_up(acc, 8)
     let jt_base : i64 = descbase + 16 × nstr
     if #em.sf_pos > 0:
-        foreach i := 0…#em.sf_pos - 1:
+        foreach i := 0…#em.sf_pos:
             g_patch_abs(&em, tgt, em.sf_pos[i], ro_vaddr + stroffs[em.sf_str[i] × 1¤ptrdiff])
     if #em.sd_pos > 0:
-        foreach i := 0…#em.sd_pos - 1:
+        foreach i := 0…#em.sd_pos:
             g_patch_abs(&em, tgt, em.sd_pos[i], ro_vaddr + descbase + 16 × descidx[em.sd_str[i] × 1¤ptrdiff])
     if #em.jt_pos > 0:
-        foreach i := 0…#em.jt_pos - 1:
+        foreach i := 0…#em.jt_pos:
             g_patch_abs(&em, tgt, em.jt_pos[i], ro_vaddr + jt_base + 8 × em.jt_starts[em.jt_id[i] × 1¤ptrdiff])
     let rodata : mut u8[] = []
     if #lw.strs > 0:
-        foreach i := 0…#lw.strs - 1:
+        foreach i := 0…#lw.strs:
             if used[i] = 1:
                 foreach c := lw.strs[i]:
                     rodata.push(c.ord() & 255)
     while @dropunit(#rodata) < descbase:
         rodata.push(0)
     if #lw.strs > 0:
-        foreach i := 0…#lw.strs - 1:
+        foreach i := 0…#lw.strs:
             if used[i] = 1:
                 push64(&rodata, ro_vaddr + stroffs[i])
                 push64(&rodata, str_len(lw.strs[i]))
     if #em.jt_starts > 0:
-        foreach t := 0…#em.jt_starts - 1:
+        foreach t := 0…#em.jt_starts:
             let lo2 : i64 = em.jt_starts[t]
             let hi2 : i64 = if t + 1 < #em.jt_starts: em.jt_starts[t + 1] else: @dropunit(#em.jt_entries)
             let base2 : i64 = if em.jt_is_code[t] = 1: IMAGE_BASE + PAGE else: 0
@@ -275,41 +275,41 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                               bt_fn_names(a, ninit, @dropunit(#chk.lams), @dropunit(#chk.psfn)),
                               em.fn_off, bt_sizes(em.fn_off, bt_text_end(&em, text_size))):
             rodata.push(c)
-        foreach i := 0…#em.bt_pos - 1:
+        foreach i := 0…#em.bt_pos:
             g_patch_abs(&em, tgt, em.bt_pos[i], ro_vaddr + bt_base)
     let gro_base : i64 = @dropunit(#rodata)
     if nglobals > 0:
-        foreach i := 0…nglobals - 1:
+        foreach i := 0…nglobals:
             if em.gseg[i] = 0:
                 push64(&rodata, chk.gvals[i])
     if #em.gr_pos > 0:
-        foreach i := 0…#em.gr_pos - 1:
+        foreach i := 0…#em.gr_pos:
             g_patch_abs(&em, tgt, em.gr_pos[i], ro_vaddr + gro_base + em.gr_off[i])
     let d_vaddr : i64 = IMAGE_BASE + align_up(align_up(PAGE + text_size, PAGE) + @dropunit(#rodata), PAGE)
     if #em.df_pos > 0:
-        foreach i := 0…#em.df_pos - 1:
+        foreach i := 0…#em.df_pos:
             g_patch_abs(&em, tgt, em.df_pos[i], d_vaddr + em.df_off[i])
     let data : mut u8[] = []
     if nglobals > 0:
-        foreach i := 0…nglobals - 1:
+        foreach i := 0…nglobals:
             if em.gseg[i] = 1 and em.gmap[i] < relro_size:
                 push64(&data, chk.gvals[i])
     // argc, argv, envp, the auxiliary vector and the guard's two
     // bounds, then the page's rest
-    foreach _ := 1…KB_SIZE:
+    foreach _ := 0…KB_SIZE:
         data.push(0)
     while @dropunit(#data) < relro_size:
         data.push(0)
     // the structures the kernel is handed when the handler is installed
-    foreach _ := 1…SIG_SIZE:
+    foreach _ := 0…SIG_SIZE:
         data.push(0)
     if nglobals > 0:
-        foreach i := 0…nglobals - 1:
+        foreach i := 0…nglobals:
             if em.gseg[i] = 1 and em.gmap[i] >= relro_size:
                 push64(&data, chk.gvals[i])
     // the allocator's bump pointer, the limit it runs to, and the
     // free lists a block given back is put on
-    foreach _ := 1…AL_SIZE:
+    foreach _ := 0…AL_SIZE:
         data.push(0)
     assert(@dropunit(#data) = alloc_off + AL_SIZE, "the data segment is as long as it was planned")
     let cdiags : mut Diag[] = []
@@ -328,7 +328,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     sname.push("_start")
     soffs.push(0)
     sglob.push(false)
-    foreach i := 0…#a.fns - 1:
+    foreach i := 0…#a.fns:
         sname.push(fn_symbol(a, toks, src, @dropunit(i)))
         soffs.push(em.fn_off[i])
         sglob.push(a.fns[i].is_export)
@@ -338,12 +338,12 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     synth.push("<args>")
     synth.push("<tests>")
     if #chk.lams > 0:
-        foreach j := 0…#chk.lams - 1:
+        foreach j := 0…#chk.lams:
             synth.push("λ#" ⧺ i64_str(@dropunit(j)))
     if #chk.psfn > 0:
-        foreach j := 0…#chk.psfn - 1:
+        foreach j := 0…#chk.psfn:
             synth.push("partial#" ⧺ i64_str(@dropunit(j)))
-    foreach j := 0…#synth - 1:
+    foreach j := 0…#synth:
         sname.push(synth[j])
         soffs.push(em.fn_off[(nfns + @dropunit(j)) × 1¤ptrdiff])
         sglob.push(false)
@@ -355,7 +355,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let rname : mut str[] = []
     let roff : mut i64[] = []
     if #em.rt_off > 0:
-        foreach i := 0…#em.rt_off - 1:
+        foreach i := 0…#em.rt_off:
             if em.rt_off[i] ≠ ⁻1:
                 let at : i64 = em.rt_off[i]
                 let nm : str = rtn[i]
@@ -369,12 +369,12 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                 rname[k × 1¤ptrdiff] ← nm
                 roff[k × 1¤ptrdiff] ← at
     if #roff > 0:
-        foreach i := 0…#roff - 1:
+        foreach i := 0…#roff:
             sname.push(rname[i])
             soffs.push(roff[i])
             sglob.push(false)
     let syms : mut Sym[] = []
-    foreach i := 0…#sname - 1:
+    foreach i := 0…#sname:
         let here ¤byte : i64 = soffs[i]
         let next ¤byte : i64 = if i + 1 < #soffs: soffs[i + 1] else: text_size
         assert(next >= here, "the symbols run up the text")

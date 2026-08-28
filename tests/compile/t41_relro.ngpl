@@ -34,6 +34,6 @@ fn main():
     counter ← counter + 7
     total ← total + counter
     std.println("{} {}", counter, total)
-    foreach i := 1…5:
+    foreach i := 1…6:
         counter ← counter + i
     std.println("{}", counter)

@@ -198,7 +198,7 @@ fn test_type_name_cannot_be_a_variable():
 @expect error 2246 "'i32' names a type and cannot name a loop variable"
 @impure
 fn test_type_name_cannot_be_a_loop_variable():
-    foreach i32 := 1…3:
+    foreach i32 := 1…4:
         std.println("{}", i32)
 
 // What it still refuses is an expression that is neither a name nor a

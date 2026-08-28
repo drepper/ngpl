@@ -36,10 +36,10 @@ fn main():
     let hr := h[1]
     h[1, 0] ← 99
     std.println("{} {}", h[1, 0], hr[0])
-    let cut : mut = h[1, 0…1]
+    let cut : mut = h[1, 0…2]
     cut[0] ← 5
     std.println("{} {}", cut[0], h[1, 0])
-    let top : i64[,] = h[0…1]
+    let top : i64[,] = h[0…2]
     std.println("{} {}", #top, top[1, 0])
     // reshape: a fill and a cycle across the row seam
     let f : mut i64[,] = (2, 3) ⍴ 0
@@ -52,6 +52,6 @@ fn main():
     let u : u8[2,2] = [[200, 2], [3, 4]]
     std.println("{} {}", u[0, 0], u[1, 1])
     let sl : mut i64 = 0
-    foreach row := h[0…1]:
+    foreach row := h[0…2]:
         sl ← sl + row[0]
     std.println("{}", sl)

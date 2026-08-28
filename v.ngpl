@@ -1,0 +1,6 @@
+fn f(a: i32, b: i32) → i32:
+  a ÷ b ?? 0i32
+
+@start
+fn main():
+  _ ← f(3, 0)

@@ -333,7 +333,7 @@ impl Emit:
     // Forget that any parameter is in reg, reg having just been written
     fn pkill(&mut self, reg : i64):
         if #self.pkeep > 0:
-            foreach j := 0…#self.pkeep - 1:
+            foreach j := 0…#self.pkeep:
                 if arg_reg_p(@dropunit(j), self.self_priv) = reg:
                     self.pkeep[j] ← 0
 
@@ -445,7 +445,7 @@ impl Emit:
     fn jabort(&mut self, opcode2 : i64, target : i64):
         let at : mut i64 = ⁻1
         if #self.ab_kind > 0:
-            foreach i := 0…#self.ab_kind - 1:
+            foreach i := 0…#self.ab_kind:
                 if self.ab_kind[i] = target:
                     at ← self.ab_lab[i]
         if at = ⁻1:
@@ -459,7 +459,7 @@ impl Emit:
     // Nothing returns from one, so a call is the whole of it.
     fn abort_stubs(&mut self):
         if #self.ab_kind > 0:
-            foreach i := 0…#self.ab_kind - 1:
+            foreach i := 0…#self.ab_kind:
                 self.set_label(self.ab_lab[i])
                 self.jglobal(232, ⁻1, self.ab_kind[i])
         while #self.ab_kind > 0:
@@ -474,7 +474,7 @@ impl Emit:
 
     fn resolve_locals(&mut self):
         if #self.lf_pos > 0:
-            foreach i := 0…#self.lf_pos - 1:
+            foreach i := 0…#self.lf_pos:
                 let pos : i64 = self.lf_pos[i]
                 let target : i64 = self.labels[self.lf_label[i] × 1¤ptrdiff]
                 // an unset label once escaped this path as begin_fn(1)
@@ -524,7 +524,7 @@ impl Emit:
 
     fn resolve_jtabs(&mut self):
         if #self.pj_id > 0:
-            foreach i := 0…#self.pj_id - 1:
+            foreach i := 0…#self.pj_id:
                 self.jt_starts.push(@dropunit(#self.jt_entries))
                 let n0 : i64 = self.pj_len[i]
                 let st : i64 = self.pj_start[i]
@@ -758,10 +758,10 @@ fn str_uses(em : &Emit, n : i64) → i64[]:
         used.push(0)
         i ← i + 1
     if #em.sf_str > 0:
-        foreach k := 0…#em.sf_str - 1:
+        foreach k := 0…#em.sf_str:
             used[em.sf_str[k] × 1¤ptrdiff] ← 1
     if #em.sd_str > 0:
-        foreach k := 0…#em.sd_str - 1:
+        foreach k := 0…#em.sd_str:
             used[em.sd_str[k] × 1¤ptrdiff] ← 1
     used
 
@@ -845,7 +845,7 @@ fn rt_names() → str[]:
 // One byte to a class, as the DFA has them.
 fn utf8_class_bytes() → u8[]:
     let t : mut u8[] = []
-    foreach b := 0…255:
+    foreach b := 0…256:
         let c : i64 = 0
         let k : mut i64 = 0
         if b < 128: k ← 0

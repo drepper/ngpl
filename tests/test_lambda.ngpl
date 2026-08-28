@@ -271,7 +271,7 @@ fn test_lambda_multi_stmt_capture():
 fn test_lambda_multi_stmt_loop():
   let f := λn : i64 → i64:
     let sum : mut i64 = 0
-    foreach i := 1…n:
+    foreach i := 1…n + 1:
       sum ← sum + i
     sum
   assert_eq(55, f(10))

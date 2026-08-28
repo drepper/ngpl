@@ -96,7 +96,7 @@ fn bt_bytes(tg : Target, text_vaddr : i64, names : str[], offs : i64[],
     // the names begin where the entries end
     let noff : mut i64 = pw + bt_stride(tg) × @dropunit(n)
     if n > 0:
-        foreach i := 0…n - 1:
+        foreach i := 0…n:
             bt_word(&out, pw, text_vaddr + offs[i])
             bt_word(&out, pw, sizes[i])
             bt_word(&out, pw, noff)
@@ -227,7 +227,7 @@ fn rt_bt_ir(tg : Target, lw : &mut Lower) → IrFn:
 fn bt_fn_names(a : Ast, ninit : i64, nlams : i64, npsfn : i64) → str[]:
     let out : mut str[] = []
     if #a.fns > 0:
-        foreach i := 0…#a.fns - 1:
+        foreach i := 0…#a.fns:
             let d := a.fns[i]
             out.push(if d.modname = "": d.name else: d.modname ⧺ "." ⧺ d.name)
     if ninit > 0:
@@ -235,10 +235,10 @@ fn bt_fn_names(a : Ast, ninit : i64, nlams : i64, npsfn : i64) → str[]:
     out.push("<args>")
     out.push("<tests>")
     if nlams > 0:
-        foreach j := 0…nlams - 1:
+        foreach j := 0…nlams:
             out.push("λ#" ⧺ i64_str(j))
     if npsfn > 0:
-        foreach j := 0…npsfn - 1:
+        foreach j := 0…npsfn:
             out.push("partial#" ⧺ i64_str(j))
     out
 
@@ -248,7 +248,7 @@ fn bt_fn_names(a : Ast, ninit : i64, nlams : i64, npsfn : i64) → str[]:
 fn bt_text_end(em : &Emit, text_size : i64) → i64:
     let end : mut i64 = text_size
     if #em.rt_off > 0:
-        foreach i := 0…#em.rt_off - 1:
+        foreach i := 0…#em.rt_off:
             let at : i64 = em.rt_off[i]
             end ← end ⌊ (if at = ⁻1: text_size else: at)
     end
@@ -260,7 +260,7 @@ fn bt_sizes(offs : i64[], end : i64) → i64[]:
     let n ¤ptrdiff : i64 = #offs
     let out : mut i64[] = []
     if n > 0:
-        foreach i := 0…n - 1:
+        foreach i := 0…n:
             let here : i64 = offs[i]
             let next : i64 = if i + 1 < n: offs[i + 1] else: end
             assert(next >= here, "the functions run up the text")

@@ -16,7 +16,7 @@ fn test_curry_named_fn():
 @test
 fn test_curry_named_with_generate():
     let triple := multiply(3)
-    let result := generate(triple, 1…5)
+    let result := generate(triple, 1…6)
     assert_eq(result[0], 3)
     assert_eq(result[1], 6)
     assert_eq(result[2], 9)
@@ -54,7 +54,7 @@ fn test_curry_lambda():
 fn test_curry_lambda_with_generate():
     let power := λbase : i64, exp : i64 → i64: base × exp
     let times5 := power(5)
-    let result := generate(times5, 0…4)
+    let result := generate(times5, 0…5)
     assert_eq(result[0], 0)
     assert_eq(result[1], 5)
     assert_eq(result[2], 10)
@@ -100,7 +100,7 @@ fn add(a : i64, b : i64) → i64:
 @test
 fn test_curry_with_fold():
     let add5 := add(5)
-    let arr := generate(add5, 0…4)
+    let arr := generate(add5, 0…5)
     // arr = [5, 6, 7, 8, 9]
     let total := add ⌿ arr
     assert_eq(total, 35)

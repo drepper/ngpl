@@ -124,7 +124,7 @@ fn test_local_type_alias_generic():
 fn sum_aliased(arr : T'[]) → T':
     type Elem = T'
     let total : mut Elem = 0
-    foreach i := 0…(#arr - 1):
+    foreach i := 0…#arr:
         total ← total + arr[i]
     total
 

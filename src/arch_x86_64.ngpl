@@ -124,7 +124,7 @@ fn p_class(o : i64) → i64:
 fn p_jumped_to(ir : IrFn, n : i64, lab : i64) → bool:
     let hit : mut bool = false
     if n > 0:
-        foreach i := 0…n - 1:
+        foreach i := 0…n:
             let o : i64 = ir.op[i × 1¤ptrdiff]
             // a table keeps its labels in extra, where this does not look
             hit ← hit or o = IR_JTAB or o = IR_VTAB

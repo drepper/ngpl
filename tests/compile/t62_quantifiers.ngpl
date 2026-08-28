@@ -30,8 +30,8 @@ fn main():
     std.println("{} {} {}", positive ∀ w, positive ∃ w, positive ∄ w)
     std.println("{} {} {}", positive ∀ e, positive ∃ e, positive ∄ e)
     // a range on the right, and a lambda on the left
-    std.println("{}", (λx : i64 → bool: x < 100) ∀ 1…5)
-    std.println("{}", (λx : i64 → bool: x > 4) ∃ 1…5)
+    std.println("{}", (λx : i64 → bool: x < 100) ∀ 1…6)
+    std.println("{}", (λx : i64 → bool: x > 4) ∃ 1…6)
     // the answer is a bool, so the logical operators take it unbracketed
     std.println("{}", positive ∀ v ∧ small ∃ v)
     // ⧺ is absorbed into the right operand, as it is for a fold
@@ -45,4 +45,4 @@ fn main():
     // the exit, proved: "i64" is three long and the range runs to 9,
     // so only a walk that leaves at index 1 -- the first that does not
     // hold -- stays inside the string
-    std.println("{}", (λi : i64 ¤ptrdiff |name| → bool: name[i] = 'i') ∀ 0¤ptrdiff…9¤ptrdiff)
+    std.println("{}", (λi : i64 ¤ptrdiff |name| → bool: name[i] = 'i') ∀ 0¤ptrdiff…10¤ptrdiff)

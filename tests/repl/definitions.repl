@@ -4,7 +4,7 @@ fn double(n : i64) → i64:
 double(21)
 fn fact(n : i64) → i64:
     let acc : mut i64 = 1
-    foreach i := 1…n:
+    foreach i := 1…n + 1:
         acc ← acc × i
     acc
 

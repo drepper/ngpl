@@ -188,7 +188,7 @@ fn test_what_the_kinds_still_admit():
 @test
 @expect error 2711 "⍳: the left operand is range, and what is searched is an array or a string"
 fn error_searching_a_range():
-    let r := 10…20
+    let r := 10…21
     let at : mut = r ⍳ 12
 
 // An element is compared the way = compares it, so a unit that does
@@ -213,7 +213,7 @@ fn error_searching_a_matrix():
 @test
 fn test_searching_a_slice():
     let v : i64[] = [10, 20, 30, 40]
-    assert_eq((v[1…3] ⍳ 30) ?? ⁻1, 1)
+    assert_eq((v[1…4] ⍳ 30) ?? ⁻1, 1)
 
 // What a string is made of can be searched as the array it is.
 @test

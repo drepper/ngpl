@@ -560,7 +560,7 @@ fn a32g_epilogue(em : &mut Emit, tg : Target):
 
 fn a32g_resolve(em : &mut Emit, tg : Target):
     if #em.tf_pos > 0:
-        foreach i := 0…#em.tf_pos - 1:
+        foreach i := 0…#em.tf_pos:
             let pos : i64 = em.tf_pos[i]
             let delta : i64 = em.labels[em.tf_lab[i] × 1¤ptrdiff] - pos
             em.patch32(pos, code_word(&em, pos) + (((delta - 8) » 2) & 16777215))

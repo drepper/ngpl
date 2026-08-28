@@ -25,7 +25,7 @@ fn main():
     std.println("")
 
     // the same code points reached by position instead
-    foreach i := 0…7:
+    foreach i := 0…8:
         std.print("{} ", widths[i × 1¤ptrdiff].ord())
     std.println("")
 
@@ -49,6 +49,6 @@ fn main():
 
     // and a long string, so the walk runs past any one group
     let long : mut str = ""
-    foreach _ := 1…50:
+    foreach _ := 1…51:
         long ← long ⧺ mixed
     std.println("{} {}", #long, #long.chars())
