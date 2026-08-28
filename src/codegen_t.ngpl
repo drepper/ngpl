@@ -72,7 +72,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                               ab_kind: [], ab_lab: [],
                               tf_pos: [], tf_lab: [], tf_form: [],
                               ff_pos: [], ff_fn: [], k_args: 0, k_alloc: 0, k_sig: 0})
-    let nglobals : i64 = @dropunit(#a.globals)
+    let nglobals ¤ptrdiff : i64 = #a.globals
     // the same three kinds of data the x86-64 path sorts out, placed
     // with the same offsets
     let is_relro : mut i64[] = []
@@ -84,9 +84,9 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let n_rw : mut i64 = 0
     if nglobals > 0:
         foreach i := 0…nglobals - 1:
-            if a.globals[i × 1¤ptrdiff].is_mut:
+            if a.globals[i].is_mut:
                 n_rw ← n_rw + 1
-            elif is_relro[i × 1¤ptrdiff] = 1:
+            elif is_relro[i] = 1:
                 n_relro ← n_relro + 1
     let args_off : i64 = 8 × n_relro
     let relro_size : i64 = align_up(args_off + KB_SIZE, PAGE)
@@ -100,11 +100,11 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let k_rw : mut i64 = 0
     if nglobals > 0:
         foreach i := 0…nglobals - 1:
-            if a.globals[i × 1¤ptrdiff].is_mut:
+            if a.globals[i].is_mut:
                 em.gseg.push(1)
                 em.gmap.push(relro_size + SIG_SIZE + 8 × k_rw)
                 k_rw ← k_rw + 1
-            elif is_relro[i × 1¤ptrdiff] = 1:
+            elif is_relro[i] = 1:
                 em.gseg.push(1)
                 em.gmap.push(8 × k_relro)
                 k_relro ← k_relro + 1
@@ -280,8 +280,8 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let gro_base : i64 = @dropunit(#rodata)
     if nglobals > 0:
         foreach i := 0…nglobals - 1:
-            if em.gseg[i × 1¤ptrdiff] = 0:
-                push64(&rodata, chk.gvals[i × 1¤ptrdiff])
+            if em.gseg[i] = 0:
+                push64(&rodata, chk.gvals[i])
     if #em.gr_pos > 0:
         foreach i := 0…#em.gr_pos - 1:
             g_patch_abs(&em, tgt, em.gr_pos[i], ro_vaddr + gro_base + em.gr_off[i])
@@ -292,8 +292,8 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let data : mut u8[] = []
     if nglobals > 0:
         foreach i := 0…nglobals - 1:
-            if em.gseg[i × 1¤ptrdiff] = 1 and em.gmap[i × 1¤ptrdiff] < relro_size:
-                push64(&data, chk.gvals[i × 1¤ptrdiff])
+            if em.gseg[i] = 1 and em.gmap[i] < relro_size:
+                push64(&data, chk.gvals[i])
     // argc, argv, envp, the auxiliary vector and the guard's two
     // bounds, then the page's rest
     foreach _ := 1…KB_SIZE:
@@ -305,8 +305,8 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         data.push(0)
     if nglobals > 0:
         foreach i := 0…nglobals - 1:
-            if em.gseg[i × 1¤ptrdiff] = 1 and em.gmap[i × 1¤ptrdiff] >= relro_size:
-                push64(&data, chk.gvals[i × 1¤ptrdiff])
+            if em.gseg[i] = 1 and em.gmap[i] >= relro_size:
+                push64(&data, chk.gvals[i])
     // the allocator's bump pointer, the limit it runs to, and the
     // free lists a block given back is put on
     foreach _ := 1…AL_SIZE:

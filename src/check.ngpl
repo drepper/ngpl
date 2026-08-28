@@ -1838,6 +1838,7 @@ impl Checker:
 
     // the checker interns shapes a slice invents, as the parser does
     fn mat_intern(&mut self, elem : i64, r : i64, c : i64, d : i64) → i64:
+        // handed back as a plain type code, as the other interns are
         let m : i64 = @dropunit(#self.a.mel)
         let i : mut i64 = 0
         while i < m:
@@ -5607,7 +5608,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     let gnames : mut str[] = []
     foreach g := a.globals:
         gnames.push(g.name)
-    let nnodes : i64 = @dropunit(#a.nkind)
+    let nnodes ¤ptrdiff : i64 = #a.nkind
     let ntype : mut i64[] = []
     let nslot : mut i64[] = []
     let ncvt : mut i64[] = []
@@ -5615,7 +5616,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     let nlam : mut i64[] = []
     let nhold : mut i64[] = []
     let nfree : mut i64[] = []
-    let zi : mut i64 = 0
+    let zi ¤ptrdiff : mut i64 = 0¤ptrdiff
     while zi < nnodes:
         ntype.push(0)
         nslot.push(⁻1)

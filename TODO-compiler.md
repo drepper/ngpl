@@ -297,20 +297,32 @@ Errors and Warnings
     Found while writing t62_quantifiers, whose first draft bound a string used only through a
     capture.
 
-[ ] a loop over a range should count in a measure wherever the count is one.  parse_size does
-    now; most of the compiler still drops the measure to make the range and puts it back at
-    the subscript, which is the units policy saying the opposite of what it means.
+[x] a loop over a range counts in a measure where the count is one.  The walks of the AST's
+    nodes and functions in abi.ngpl, the two vreg sweeps in ir.ngpl, the driver's op walk, the
+    backtrace table's two builders, codegen_t's globals and parse.ngpl's unit-decay pass take
+    their length measured, walk a measured range, and subscript with the index they were
+    handed.  Forty-four × 1¤ptrdiff conversions went with them; what is left at a subscript is
+    an index that really did arrive as a plain number, read back out of an array.
 
-    A mechanical pass over the rest is not safe, and the attempt is worth recording rather
-    than repeating.  What is left is entangled: a count stored in a plain i64[] beside other
-    plain numbers, an index packed into a type's encoding, a counter shared by two loops over
-    different things, a length compared against a value read back out of an array.  Measuring
-    one of these forces the arrays it meets to be measured too, and the change stops being
-    local.  A blanket pass that keyed on a name being measured anywhere rather than in the
-    same function converted eighty-nine loops and broke several; the compiler's own checker
-    caught every one, at stage 2 rather than in the interpreter, since the interpreter
-    tolerates a redundant × 1¤ptrdiff where the compiler refuses ptrdiff × ptrdiff.  The way
-    to do this is a few functions at a time, each read rather than matched.
+    Six functions were tried and put back with the reason beside them.  tup_intern,
+    lam_intern and farr_intern in the parser, lam_intern and mat_intern in the checker, and
+    the listable call's argument count in the lowering all either store the count into an
+    i64[] that holds plain numbers beside it or hand it back as a plain type code, so the
+    measure comes off at the declaration, where it is said once, rather than at every use.
+
+    Three ways of going about this do not work, and are worth recording rather than repeating.
+    A pass keyed on a name being measured anywhere rather than in the same function converted
+    eighty-nine loops and broke several.  ngplc is not a sufficient check of its own sources:
+    it accepts a measured value pushed into an i64[] and a measured value returned where i64
+    is declared, both of which the interpreter refuses, so a sweep verified only against ngplc
+    passes and then stops stage 1.  And a bootstrap is not a sufficient check either -- the
+    conformance suite under --compiler=interp is what caught the last thirteen, because the
+    divergence is in what the two checkers refuse and not in what either compiles.
+
+[ ] ngplc accepts a ptrdiff pushed into an i64[] and a ptrdiff returned from a function
+    declared → i64; the interpreter refuses both.  Found by the units sweep above, which
+    passed ngplc's checker and then stopped stage 1.  The interpreter is the authority, so
+    ngplc is the one to fix.
 
 [ ] a function value may close over an array.  Only a pure function of up to five plain
     scalars -- and str -- travels as a value or curries today, which is what decides how much

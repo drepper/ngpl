@@ -1986,6 +1986,7 @@ impl Lower:
     // binding, which is the only difference between the two.
     fn lower_thread(&mut self, thr : i64[], vals : i64[], f : i64,
                     boxv : i64) → i64:
+        // pushed into extra beside plain numbers
         let argc : i64 = @dropunit(#thr)
         let d : i64 = self.tmp()
         self.ir(IR_ANEW, 4, 0, 0, d, 0)
@@ -2063,11 +2064,11 @@ impl Lower:
     fn copied_arg(&mut self, node : i64, v : i64) → i64:
         if #self.argcopy = 0:
             return v
-        let n : i64 = @dropunit(#self.argcopy)
-        let i : mut i64 = 0
+        let n ¤ptrdiff : i64 = #self.argcopy
+        let i ¤ptrdiff : mut i64 = 0¤ptrdiff
         let want : mut bool = false
         while i < n:
-            if self.argcopy[i × 1¤ptrdiff] = node:
+            if self.argcopy[i] = node:
                 want ← true
             i ← i + 1
         if not want:

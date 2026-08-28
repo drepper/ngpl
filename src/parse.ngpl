@@ -414,6 +414,8 @@ impl Parser:
     // a tuple shape is interned so equal shapes share one type code,
     // and type equality stays one integer comparison
     fn tup_intern(&mut self, es : i64[]) → i64:
+        // stored into ttl beside plain numbers, and handed back as a
+        // plain type code, so the measure comes off at the declaration
         let n : i64 = @dropunit(#es)
         let m : i64 = @dropunit(#self.tts)
         let sh : mut i64 = 0
@@ -437,6 +439,8 @@ impl Parser:
         m
 
     fn farr_intern(&mut self, elem : i64, size : i64) → i64:
+        // handed back as a plain type code, so the measure comes off
+        // at the declaration rather than at the answer
         let m : i64 = @dropunit(#self.fae)
         let i : mut i64 = 0
         while i < m:
@@ -460,6 +464,8 @@ impl Parser:
     // handed the same argument they do different things, so the flag
     // is part of the shape and not a note beside it.
     fn lam_intern(&mut self, pts : i64[], ret : i64, lstb : i64) → i64:
+        // stored into ltl, which holds plain numbers beside this one,
+        // so the measure comes off here rather than at every use
         let n : i64 = @dropunit(#pts)
         let m : i64 = @dropunit(#self.ltl)
         let sh : mut i64 = 0
@@ -486,6 +492,7 @@ impl Parser:
 
     // equal matrix shapes share one type code, as tuple shapes do
     fn mat_intern(&mut self, elem : i64, r : i64, c : i64, d : i64) → i64:
+        // handed back as a plain type code, as the other interns are
         let m : i64 = @dropunit(#self.mel)
         let i : mut i64 = 0
         while i < m:
@@ -2165,29 +2172,29 @@ impl Parser:
     // -- while the names were being read, the one closing it had not
     // been written yet.
     fn resolve_decays(&mut self):
-        let n : i64 = @dropunit(#self.unames)
-        let i : mut i64 = 0
+        let n ¤ptrdiff : i64 = #self.unames
+        let i ¤ptrdiff : mut i64 = 0¤ptrdiff
         while i < n:
-            let want : str = self.udname[i × 1¤ptrdiff]
+            let want : str = self.udname[i]
             if want ≠ "":
                 let d : i64 = self.unit_index(want)
                 if d = ⁻1:
                     self.poisoned ← false
-                    self.err_at(self.udtok[i × 1¤ptrdiff], "'" ⧺ want ⧺ "' is no measure this file knows, so '" ⧺ self.unames[i × 1¤ptrdiff] ⧺ "' cannot stand in for it")
+                    self.err_at(self.udtok[i], "'" ⧺ want ⧺ "' is no measure this file knows, so '" ⧺ self.unames[i] ⧺ "' cannot stand in for it")
                 else:
-                    self.udecay[i × 1¤ptrdiff] ← d
+                    self.udecay[i] ← d
             i ← i + 1
-        let j : mut i64 = 0
+        let j ¤ptrdiff : mut i64 = 0¤ptrdiff
         while j < n:
-            if self.udecay[j × 1¤ptrdiff] ≠ 0:
-                let chain : mut str = self.unames[j × 1¤ptrdiff]
-                let step : mut i64 = self.udecay[j × 1¤ptrdiff]
+            if self.udecay[j] ≠ 0:
+                let chain : mut str = self.unames[j]
+                let step : mut i64 = self.udecay[j]
                 let seen : mut i64 = 0
                 while step ≠ 0 and seen <= n:
                     chain ← chain ⧺ " → " ⧺ self.unames[step × 1¤ptrdiff]
                     if step = j:
                         self.poisoned ← false
-                        self.err_at(self.udtok[j × 1¤ptrdiff], "a measure cannot stand in for itself, however far round it goes: " ⧺ chain)
+                        self.err_at(self.udtok[j], "a measure cannot stand in for itself, however far round it goes: " ⧺ chain)
                         step ← 0
                     else:
                         step ← self.udecay[step × 1¤ptrdiff]

@@ -102,7 +102,7 @@ fn td_can_drop(ir : IrFn, i : i64, n : i64, cnt : i64[], nv : i64) → bool:
 fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
              nreg : i64, nreg_of : i64[]):
     assert(ir.nvregs >= np, "the frame covers the spilled arguments")
-    let n : i64 = @dropunit(#ir.op)
+    let n ¤ptrdiff : i64 = #ir.op
     let secnt : i64[] = se_counts(ir, ir.nvregs)
     // which results anything will read wider than their type
     let cwant : i64[] = canon_wanted(ir, ir.nvregs, t_freecmp(tg), t_freediv(tg))
@@ -111,14 +111,14 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
     // the objects that live in the frame take the slots past the vregs
     let nobj : i64 = (@dropunit(ir.fbytes) + 7) ÷ 8 ?? 0
     g_prologue(&em, tg, ir.nvregs + nobj, np, nreg)
-    let i : mut i64 = 0
+    let i ¤ptrdiff : mut i64 = 0¤ptrdiff
     while i < n:
-        let o : i64 = ir.op[i × 1¤ptrdiff]
-        let a : i64 = ir.ia[i × 1¤ptrdiff]
-        let b : i64 = ir.ib[i × 1¤ptrdiff]
-        let c : i64 = ir.ic[i × 1¤ptrdiff]
-        let d : i64 = ir.id[i × 1¤ptrdiff]
-        let w : i64 = ir.iw[i × 1¤ptrdiff]
+        let o : i64 = ir.op[i]
+        let a : i64 = ir.ia[i]
+        let b : i64 = ir.ib[i]
+        let c : i64 = ir.ic[i]
+        let d : i64 = ir.id[i]
+        let w : i64 = ir.iw[i]
         let bits : i64 = w & 255
         let sgn : i64 = w » 8
         // The width to work at, which is the value's own only where

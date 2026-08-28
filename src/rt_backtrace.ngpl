@@ -90,18 +90,18 @@ fn bt_word(out : &mut u8[], pw : i64, v : i64):
 fn bt_bytes(tg : Target, text_vaddr : i64, names : str[], offs : i64[],
             sizes : i64[]) → u8[]:
     let pw : i64 = tg.ptr
-    let n : i64 = @dropunit(#names)
+    let n ¤ptrdiff : i64 = #names
     let out : mut u8[] = []
-    bt_word(&out, pw, n)
+    bt_word(&out, pw, @dropunit(n))
     // the names begin where the entries end
-    let noff : mut i64 = pw + bt_stride(tg) × n
+    let noff : mut i64 = pw + bt_stride(tg) × @dropunit(n)
     if n > 0:
         foreach i := 0…n - 1:
-            bt_word(&out, pw, text_vaddr + offs[i × 1¤ptrdiff])
-            bt_word(&out, pw, sizes[i × 1¤ptrdiff])
+            bt_word(&out, pw, text_vaddr + offs[i])
+            bt_word(&out, pw, sizes[i])
             bt_word(&out, pw, noff)
-            bt_word(&out, pw, bt_nbytes(names[i × 1¤ptrdiff]))
-            noff ← noff + bt_nbytes(names[i × 1¤ptrdiff])
+            bt_word(&out, pw, bt_nbytes(names[i]))
+            noff ← noff + bt_nbytes(names[i])
     foreach nm := names:
         foreach b := std.bytes(nm):
             out.push(b)
@@ -257,12 +257,12 @@ fn bt_text_end(em : &Emit, text_size : i64) → i64:
 // to where the program's own code ends.
 @post(r: #r = #offs)
 fn bt_sizes(offs : i64[], end : i64) → i64[]:
-    let n : i64 = @dropunit(#offs)
+    let n ¤ptrdiff : i64 = #offs
     let out : mut i64[] = []
     if n > 0:
         foreach i := 0…n - 1:
-            let here : i64 = offs[i × 1¤ptrdiff]
-            let next : i64 = if i + 1 < n: offs[(i + 1) × 1¤ptrdiff] else: end
+            let here : i64 = offs[i]
+            let next : i64 = if i + 1 < n: offs[i + 1] else: end
             assert(next >= here, "the functions run up the text")
             out.push(next - here)
     out

@@ -52,7 +52,7 @@ fn abi_why(f : FnDef, taken : i64) → str:
 
 @post(r: @dropunit(#r.private) = @dropunit(#a.fns) and @dropunit(#r.nreg) = @dropunit(#a.fns) and @dropunit(#r.beyond) = @dropunit(#a.fns) and @dropunit(#r.span) = @dropunit(#a.fns))
 fn analyze_abi(a : Ast, toks : Toks, argregs : i64, extra : i64, want_log : bool) → Abi:
-    let nfns : i64 = @dropunit(#a.fns)
+    let nfns ¤ptrdiff : i64 = #a.fns
 
     // A name taken as a value reaches its function through a register
     // the caller picked without knowing which body it would land in, so
@@ -62,13 +62,13 @@ fn analyze_abi(a : Ast, toks : Toks, argregs : i64, extra : i64, want_log : bool
     if nfns > 0:
         foreach _ := 0…nfns - 1:
             taken.push(0)
-    let nnodes : i64 = @dropunit(#a.nkind)
+    let nnodes ¤ptrdiff : i64 = #a.nkind
     if nnodes > 0:
         foreach i := 0…nnodes - 1:
-            let k : i64 = a.nkind[i × 1¤ptrdiff]
+            let k : i64 = a.nkind[i]
             if k = NK_FNVAL:
-                let fi : i64 = a.na[i × 1¤ptrdiff]
-                if fi >= 0 and fi < nfns:
+                let fi : i64 = a.na[i]
+                if fi >= 0 and fi < @dropunit(nfns):
                     taken[fi × 1¤ptrdiff] ← 1
             if k = NK_LAMBDA:
                 // A lambda that captures a function holds its value in
@@ -76,7 +76,7 @@ fn analyze_abi(a : Ast, toks : Toks, argregs : i64, extra : i64, want_log : bool
                 // an agreement with the architecture rather than with
                 // us.  The capture cell keeps the outer slot, or, below
                 // zero, the function it stands for.
-                let loff : i64 = a.na[i × 1¤ptrdiff]
+                let loff : i64 = a.na[i]
                 let np9 : i64 = a.extra[loff × 1¤ptrdiff]
                 let ncap9 : i64 = a.extra[(loff + 1 + np9 × 2) × 1¤ptrdiff]
                 if ncap9 > 0:
@@ -84,7 +84,7 @@ fn analyze_abi(a : Ast, toks : Toks, argregs : i64, extra : i64, want_log : bool
                         let cell : i64 = a.extra[(loff + 2 + np9 × 2 + ci) × 1¤ptrdiff]
                         if cell < 0:
                             let cf : i64 = 0 - cell - 1
-                            if cf >= 0 and cf < nfns:
+                            if cf >= 0 and cf < @dropunit(nfns):
                                 taken[cf × 1¤ptrdiff] ← 1
     assert(@dropunit(#taken) = nfns, "one answer per function")
 
@@ -95,8 +95,8 @@ fn analyze_abi(a : Ast, toks : Toks, argregs : i64, extra : i64, want_log : bool
     let log : mut str[] = []
     if nfns > 0:
         foreach f := 0…nfns - 1:
-            let fd : FnDef = a.fns[f × 1¤ptrdiff]
-            let why : str = abi_why(fd, taken[f × 1¤ptrdiff])
+            let fd : FnDef = a.fns[f]
+            let why : str = abi_why(fd, taken[f])
             let p : i64 = if why = "": 1 else: 0
             // A private function takes more of its arguments in
             // registers than the architecture's ABI allows, since the

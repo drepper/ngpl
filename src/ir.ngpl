@@ -193,15 +193,15 @@ fn se_counts(ir : IrFn, nv : i64) → i64[]:
     let rd : i64[] = ir_reads()
     let nrd : i64 = @dropunit(#rd)
     let ne : i64 = @dropunit(#ir.extra)
-    let n : i64 = @dropunit(#ir.op)
+    let n ¤ptrdiff : i64 = #ir.op
     if n > 0:
         foreach i := 0…n - 1:
-            let o : i64 = ir.op[i × 1¤ptrdiff]
+            let o : i64 = ir.op[i]
             // a number that is no opcode reads everything there is
             let m : i64 = if o >= 0 and o < nrd: rd[o × 1¤ptrdiff] else: 15
-            let a : i64 = ir.ia[i × 1¤ptrdiff]
-            let b : i64 = ir.ib[i × 1¤ptrdiff]
-            let c : i64 = ir.ic[i × 1¤ptrdiff]
+            let a : i64 = ir.ia[i]
+            let b : i64 = ir.ib[i]
+            let c : i64 = ir.ic[i]
             if (m & 1) = 1 and a >= 0 and a < nv:
                 cnt[a × 1¤ptrdiff] ← cnt[a × 1¤ptrdiff] + 1
             if (m & 2) = 2 and b >= 0 and b < nv:
@@ -302,14 +302,14 @@ fn canon_wanted(ir : IrFn, nv : i64, freecmp : i64, freediv : i64) → i64[]:
     let nc : i64[] = ir_needs_canon()
     let nnc : i64 = @dropunit(#nc)
     let ne : i64 = @dropunit(#ir.extra)
-    let n : i64 = @dropunit(#ir.op)
+    let n ¤ptrdiff : i64 = #ir.op
     if n > 0:
         foreach i := 0…n - 1:
-            let o : i64 = ir.op[i × 1¤ptrdiff]
+            let o : i64 = ir.op[i]
             let m0 : i64 = if o >= 0 and o < nnc: nc[o × 1¤ptrdiff] else: 15
             // a comparison or a division that this target makes at the
             // value's own width asks nothing of what stands above it
-            let wb : i64 = (ir.iw[i × 1¤ptrdiff] & 255) ÷ 8 ?? 0
+            let wb : i64 = (ir.iw[i] & 255) ÷ 8 ?? 0
             let iscmp : bool = (o >= IR_CEQ and o <= IR_CGE) or o = IR_MAXX or o = IR_MINN
             let isdiv : bool = o = IR_DIVV or o = IR_MODD
             let cfree : bool = iscmp and (freecmp & wb) ≠ 0
@@ -320,9 +320,9 @@ fn canon_wanted(ir : IrFn, nv : i64, freecmp : i64, freediv : i64) → i64[]:
             // look like one.
             let dfree : bool = isdiv and (freediv & wb) ≠ 0
             let m : i64 = if cfree: 0 else: (if dfree: 2 else: m0)
-            let a : i64 = ir.ia[i × 1¤ptrdiff]
-            let b : i64 = ir.ib[i × 1¤ptrdiff]
-            let c : i64 = ir.ic[i × 1¤ptrdiff]
+            let a : i64 = ir.ia[i]
+            let b : i64 = ir.ib[i]
+            let c : i64 = ir.ic[i]
             if (m & 1) = 1 and a >= 0 and a < nv:
                 want[a × 1¤ptrdiff] ← 1
             if (m & 2) = 2 and b >= 0 and b < nv:
@@ -351,14 +351,14 @@ fn canon_wanted(ir : IrFn, nv : i64, freecmp : i64, freediv : i64) → i64[]:
     while again:
         again ← false
         foreach i := 0…n - 1:
-            let o : i64 = ir.op[i × 1¤ptrdiff]
+            let o : i64 = ir.op[i]
             let m : i64 = if o >= 0 and o < ncp: cp[o × 1¤ptrdiff] else: 0
-            let dd : i64 = ir.id[i × 1¤ptrdiff]
+            let dd : i64 = ir.id[i]
             let on : bool = m ≠ 0 and dd >= 0 and dd < nv and want[dd × 1¤ptrdiff] = 1
             if on:
-                let a2 : i64 = ir.ia[i × 1¤ptrdiff]
-                let b2 : i64 = ir.ib[i × 1¤ptrdiff]
-                let c2 : i64 = ir.ic[i × 1¤ptrdiff]
+                let a2 : i64 = ir.ia[i]
+                let b2 : i64 = ir.ib[i]
+                let c2 : i64 = ir.ic[i]
                 if (m & 1) = 1 and a2 >= 0 and a2 < nv and want[a2 × 1¤ptrdiff] = 0:
                     want[a2 × 1¤ptrdiff] ← 1
                     again ← true
