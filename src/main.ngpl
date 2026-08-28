@@ -125,10 +125,8 @@ fn parse_size(t : str) → i64:
         let c := cs[i]
         if c < '0' or c > '9':
             return ⁻1
-        if v > SIZE_MAX_OPT:
-            return ⁻1
-        v ← v × 10 + (c.ord() - 48)
-    v × scale
+        v ← v ⊠ 10 ⊞ (c.ord() - 48)
+    v ⊠ scale
 
 // whether an argument is 'name=' and then whatever it carries
 fn opt_matches(a : str, name : str) → bool:
@@ -137,14 +135,7 @@ fn opt_matches(a : str, name : str) → bool:
 // what it carries, which an argument written 'name=' alone leaves empty
 @pre(#name > 0¤ptrdiff)
 fn opt_value(a : str, name : str) → str:
-    let ac := a.chars()
-    let nc := name.chars()
-    let out : mut str = ""
-    if #ac <= #nc + 1:
-        return out
-    foreach i := #nc + 1…#ac:
-        out ← out ⧺ ac[i]
-    out
+    if #ac <= #nc + 1: "" else: ac[#nc + 1…#ac]
 
 // The compiler's own build, run with `ngplc --build src/main.ngpl`.
 //
