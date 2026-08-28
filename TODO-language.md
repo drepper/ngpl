@@ -1257,7 +1257,8 @@ Macros and Reflection
     about, which holds only because the exit does.  The compiled subset has them too, over an
     array or a range; the iterator is the interpreter's alone for now.
 
-[x] a lambda's parameter states a measure where a named function's does, `λi ¤ptrdiff : i64`.
+[x] a lambda's parameter states a measure against its type, `λi : i64 ¤ptrdiff`, which is where
+    a return type states its own.
     Without it a walk over a measured range had to be asked a question by something that took
     a plain number, so the measure came off outside -- @dropunit(#name) to make the range --
     and went back on inside -- v[i × 1¤ptrdiff] at every subscript -- which is the units policy

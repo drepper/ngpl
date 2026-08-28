@@ -5254,7 +5254,7 @@ Anonymous functions are introduced with the `λ` (U+03BB, GREEK SMALL LETTER LAM
 λ param1 : type1 [, paramN : typeN] [|capture1 [, captureN]|] → ret_type : body
 ```
 
-- **Parameters**: zero or more comma-separated `name : type` pairs.  Type annotations are mandatory, using the same syntax as function parameters.
+- **Parameters**: zero or more comma-separated `name : type` pairs.  Type annotations are mandatory, using the same syntax as function parameters.  A parameter may state a measure against its type — `λi : i64 ¤ptrdiff → bool: …` — which is where a return type states its own.  It is what lets a walk over a measured range hand the lambda an index that is still an index, rather than the measure coming off to build the range and going back on at every subscript.
 - **Return type**: mandatory, specified with `→` (or `->`) followed by a type name.  The `?` and `!` suffixes for optional and error types are supported (e.g., `→ int?`, `→ int!`).
 - **Capture list**: optional, enclosed in `|…|`.  Lists the external variables that the lambda body may access.  Must contain at least one name; an empty capture list `||` is a parse error.  Omit the capture list entirely when no captures are needed.
 - **Body**: either a single expression after the colon, or a multi-statement block using the same syntax as function bodies (layout-driven with `:` and indentation, or brace-delimited with `{ … }`).  In a multi-statement body the value of the last expression is the return value; explicit `return` is also supported for early exit.

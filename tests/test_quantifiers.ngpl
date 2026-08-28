@@ -163,6 +163,6 @@ fn test_none_stops_at_the_first_success():
 @test
 fn test_a_measured_range_is_walked_by_a_measured_parameter():
     let name : str = "i64"
-    assert((λi ¤ptrdiff : i64 |name| → bool: name[i] ≠ 'x') ∀ 0…#name - 1)
-    assert((λi ¤ptrdiff : i64 |name| → bool: name[i] = '6') ∃ 0…#name - 1)
-    assert((λi ¤ptrdiff : i64 |name| → bool: name[i] = 'x') ∄ 0…#name - 1)
+    assert((λi : i64 ¤ptrdiff |name| → bool: name[i] ≠ 'x') ∀ 0…#name - 1)
+    assert((λi : i64 ¤ptrdiff |name| → bool: name[i] = '6') ∃ 0…#name - 1)
+    assert((λi : i64 ¤ptrdiff |name| → bool: name[i] = 'x') ∄ 0…#name - 1)

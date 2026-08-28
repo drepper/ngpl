@@ -40,9 +40,9 @@ fn main():
     // arrives an index, and nothing puts the measure on inside the
     // question or takes it off outside.
     let name : str = "i64"
-    std.println("{} {}", (λi ¤ptrdiff : i64 |name| → bool: name[i] ≠ 'x') ∀ 0…#name - 1,
-                (λi ¤ptrdiff : i64 |name| → bool: name[i] = 'x') ∄ 0…#name - 1)
+    std.println("{} {}", (λi : i64 ¤ptrdiff |name| → bool: name[i] ≠ 'x') ∀ 0…#name - 1,
+                (λi : i64 ¤ptrdiff |name| → bool: name[i] = 'x') ∄ 0…#name - 1)
     // the exit, proved: "i64" is three long and the range runs to 9,
     // so only a walk that leaves at index 1 -- the first that does not
     // hold -- stays inside the string
-    std.println("{}", (λi ¤ptrdiff : i64 |name| → bool: name[i] = 'i') ∀ 0¤ptrdiff…9¤ptrdiff)
+    std.println("{}", (λi : i64 ¤ptrdiff |name| → bool: name[i] = 'i') ∀ 0¤ptrdiff…9¤ptrdiff)

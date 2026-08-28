@@ -2221,11 +2221,6 @@ class Parser:
                     break
                 continue
             name = self._eat("IDENT").value
-            # a parameter states its measure where a named function's
-            # does, between the name and the colon
-            if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
-                self.pos += 1
-                param_units[name] = self._parse_unit_spec()
             follows = (self.tokens[self.pos + 1]
                        if self.pos + 1 < len(self.tokens) else None)
             names_type = follows is not None and (
@@ -2240,7 +2235,14 @@ class Parser:
                 ptype = self._parse_tuple_type()
             else:
                 ptype = self._eat("IDENT").value
+            # The measure is written against the type, `λi : i64 ¤ptrdiff`,
+            # which is where a return type writes its own.  What a walk
+            # over a measured range hands the question arrives measured,
+            # and the question says what it is measured in.
+            unit_spec = self._unit_after_type(None, None)
             ptype += self._parse_array_suffix()
+            if unit_spec is not None:
+                param_units[name] = unit_spec
             params.append((name, ptype))
             if not self._try_eat("PUNCT", ","):
                 break

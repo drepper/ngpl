@@ -130,7 +130,7 @@ fn parse_size(t : str) → i64:
 
 // whether an argument is 'name=' and then whatever it carries
 fn opt_matches(a : str, name : str) → bool:
-    #name > 0 and #a > #name and a[#name] = '=' and (λi ¤ptrdiff : i64 |a, name| → bool: a[i] = name[i]) ∀ 0…#name - 1
+    #name > 0 and #a > #name and a[#name] = '=' and (λi : i64 ¤ptrdiff |a, name| → bool: a[i] = name[i]) ∀ 0…#name - 1
 
 // what it carries, which an argument written 'name=' alone leaves empty
 fn opt_value(a : str, name : str) → str:
