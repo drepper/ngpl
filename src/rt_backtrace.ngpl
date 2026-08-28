@@ -90,7 +90,7 @@ fn bt_word(out : &mut u8[], pw : i64, v : i64):
 fn bt_bytes(tg : Target, text_vaddr : i64, names : str[], offs : i64[],
             sizes : i64[]) → u8[]:
     let pw : i64 = tg.ptr
-    let n ¤ptrdiff : i64 = #names
+    let n : i64 ¤ptrdiff = #names
     let out : mut u8[] = []
     bt_word(&out, pw, @dropunit(n))
     // the names begin where the entries end
@@ -257,7 +257,7 @@ fn bt_text_end(em : &Emit, text_size : i64) → i64:
 // to where the program's own code ends.
 @post(r: #r = #offs)
 fn bt_sizes(offs : i64[], end : i64) → i64[]:
-    let n ¤ptrdiff : i64 = #offs
+    let n : i64 ¤ptrdiff = #offs
     let out : mut i64[] = []
     if n > 0:
         foreach i := 0…n:

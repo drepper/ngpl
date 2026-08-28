@@ -175,7 +175,7 @@ fn ev_cmp_admits() → i64[]:
 
 impl Cev:
     fn derr(&mut self, tok : i64, m : str):
-        let at ¤ptrdiff : i64 = tok
+        let at : i64 ¤ptrdiff = tok
         self.diags.push(Diag{line: self.toks.line[at],
                              col: self.toks.col[at], msg: m, level: DIAG_ERROR, code: DIAG_NONE})
 

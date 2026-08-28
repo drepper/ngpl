@@ -127,14 +127,14 @@ fn test_string_has_no_saturating_form():
 // Holding a length at the edge of its type leaves it a length.
 @test
 fn test_a_measured_value_keeps_its_unit():
-    let d ¤meter : i8 = 120
-    let e ¤meter : i8 = 100
+    let d : i8 ¤meter = 120
+    let e : i8 ¤meter = 100
     assert_eq(d ⊞ e, 127¤meter)
 
 @test
 fn test_saturating_multiplication_derives_the_unit():
-    let w ¤meter : i32 = 3
-    let h ¤meter : i32 = 4
+    let w : i32 ¤meter = 3
+    let h : i32 ¤meter = 4
     assert_eq(w ⊠ h, 12¤meter×meter)
 
 // --- Element-wise on arrays ----------------------------------------

@@ -1,0 +1,23 @@
+// core-1: a string is cut the way an array is.
+//
+// A string is a sequence of characters, so both ends of the cut are
+// counted in characters and the end is where the cut stops rather than
+// the last character it takes.  What comes back is a string; since a
+// string cannot be changed, it shares the bytes it was cut from and
+// only the descriptor is fresh.
+
+fn opt_value(a : str, name : str) → str:
+    if #a <= #name + 1: "" else: a[#name + 1…#a]
+
+@start
+@impure
+fn main():
+    let s : str = "hello, world"
+    std.println("[{}] [{}]", s[0¤ptrdiff…5¤ptrdiff], s[7¤ptrdiff…#s])
+    // the end may stand at the length, and an empty cut is empty
+    std.println("[{}] [{}]", s[0¤ptrdiff…#s], s[3¤ptrdiff…3¤ptrdiff])
+    // characters, not bytes: é is two bytes and one character
+    let u : str = "héllo"
+    std.println("[{}] {} {}", u[1¤ptrdiff…3¤ptrdiff], #u, #u[1¤ptrdiff…3¤ptrdiff])
+    // what the option parser wants it for
+    std.println("[{}] [{}]", opt_value("--target=x86-64", "--target"), opt_value("--target=", "--target"))

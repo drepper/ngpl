@@ -1929,6 +1929,12 @@ fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, a
     em.rt_begin(RT_BT)
     emit_fn(&em, rt_bt_ir(tg, &lw), 0, lw.strs, 0, [])
 
+    // Cutting a string is a walk over its characters and a descriptor,
+    // and neither is anything a hand-written version would do
+    // differently, so this is written once as IR as well.
+    em.rt_begin(RT_SSLICE)
+    emit_fn(&em, rt_build(RT_SSLICE, tg, &lw), 3, lw.strs, 0, [])
+
     // ------------------------------------------------------------------
     // The stack running out
     // ------------------------------------------------------------------

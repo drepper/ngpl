@@ -1319,6 +1319,22 @@ Macros and Reflection
     2328, and four tests in test_units.ngpl: the two that are refused, the one that counts in
     a measure of its own, and the walk of a container that every loop relies on.
 
+[x] a measure is written against the type, and only there.  A binding `let n : i64 ¤ptrdiff`,
+    a parameter `off : usize ¤byte`, a field `line : i64 ¤"line"`, a return type `→ i64 ¤byte`,
+    an array's element type `i64 ¤meter[]`.  Against the name is where it used to be written
+    and is refused, in both implementations, with a message naming both replacements.
+
+    Where the type is the initializer's to settle there is nothing to write the measure
+    against, so the colon carries it alone: `let m : ¤meter = 5i64`.  The compiler had no way
+    to say "no type, but measured" -- nc held ⁻1 for no type at all -- so it holds ⁻2 - unit,
+    and the checker settles the type from the right side and applies the measure, refusing a
+    value that is not a number and one already measured otherwise.
+
+    466 declarations moved, across the compiler, both suites and the specification.  Four
+    spellings hid from the first pass and each was found by a failing test: a compound measure
+    (¤meter×meter, ¤meter÷second), no space before the ¤, a space after it -- a spacing test,
+    which now exercises the same spacing in the new position -- and the inferred `:=` form.
+
 [ ] ∀ and ∃ over a hash or a set, which waits on the same answer ¨ waits on.
 
 [x] a ⊑ b and a ⊒ b: whether b begins with a, and whether it ends with it.  Both sides are

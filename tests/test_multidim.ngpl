@@ -13,8 +13,8 @@ fn test_2d_read():
 @test
 fn test_2d_read_variable_index():
     let m : i64[,] = (2, 3) ⍴ [10, 20, 30, 40, 50, 60]
-    let r ¤ptrdiff : i64 = 1
-    let c ¤ptrdiff : i64 = 2
+    let r : i64 ¤ptrdiff = 1
+    let c : i64 ¤ptrdiff = 2
     assert_eq(m[r, c], 60)
 
 // ---- 2D write access ----------------------------------------------------
@@ -31,8 +31,8 @@ fn test_2d_write():
 @test
 fn test_2d_write_variable_index():
     let m : mut i64[,] = (2, 2) ⍴ 0
-    let r ¤ptrdiff : i64 = 1
-    let c ¤ptrdiff : i64 = 0
+    let r : i64 ¤ptrdiff = 1
+    let c : i64 ¤ptrdiff = 0
     m[r, c] ← 7
     assert_eq(m[1, 0], 7)
 

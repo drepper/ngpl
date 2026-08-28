@@ -222,12 +222,12 @@ fn test_typeof_of_an_expression():
 @test
 fn test_typeof_of_a_subscript():
     let a : i32[] = [1, 2, 3]
-    let i ¤ptrdiff : i64 = 0
+    let i : i64 ¤ptrdiff = 0
     static_assert_eq(@typeof(a[i]), i32)
 
 @test
 fn test_unitof_of_an_expression():
-    let d ¤meter : i32 = 5
+    let d : i32 ¤meter = 5
     static_assert_eq(@unitof(d + d), @unitof(1 ¤meter))
 
 @start

@@ -12,9 +12,9 @@ fn assert_eq_int(a : A', b : B', msg:str):
 @test
 @impure
 fn test_basic_units():
-  let x ¤meter : i64 = 5
-  let y ¤second : i64 = 10
-  let z ¤kilogram : i64 = 3
+  let x : i64 ¤meter = 5
+  let y : i64 ¤second = 10
+  let z : i64 ¤kilogram = 3
   assert(true, "basic unit definition should work")
 
 // --- Same-unit addition ---
@@ -22,8 +22,8 @@ fn test_basic_units():
 @test
 @impure
 fn test_same_unit_add():
-  let a ¤meter : i64 = 3
-  let b ¤meter : i64 = 7
+  let a : i64 ¤meter = 3
+  let b : i64 ¤meter = 7
   let c := a + b
   // c should be 10 m
   std.println("{}", c)
@@ -33,8 +33,8 @@ fn test_same_unit_add():
 @test
 @impure
 fn test_same_unit_sub():
-  let a ¤meter : i64 = 10
-  let b ¤meter : i64 = 3
+  let a : i64 ¤meter = 10
+  let b : i64 ¤meter = 3
   let c := a - b
   // c should be 7 m
   std.println("{}", c)
@@ -44,7 +44,7 @@ fn test_same_unit_sub():
 @test
 @impure
 fn test_scalar_mul():
-  let a ¤meter : i64 = 5
+  let a : i64 ¤meter = 5
   let b := a × 3
   // b should be 15 m
   std.println("{}", b)
@@ -52,7 +52,7 @@ fn test_scalar_mul():
 @test
 @impure
 fn test_scalar_mul_rev():
-  let a ¤meter : i64 = 5
+  let a : i64 ¤meter = 5
   let b := 3 × a
   // b should be 15 m
   std.println("{}", b)
@@ -62,8 +62,8 @@ fn test_scalar_mul_rev():
 @test
 @impure
 fn test_unit_mul():
-  let a ¤meter : i64 = 5
-  let b ¤second : i64 = 2
+  let a : i64 ¤meter = 5
+  let b : i64 ¤second = 2
   let c := a × b
   // c should be 10 m×s
   std.println("{}", c)
@@ -73,8 +73,8 @@ fn test_unit_mul():
 @test
 @impure
 fn test_unit_div():
-  let dist ¤meter : i64 = 100
-  let time ¤second : i64 = 10
+  let dist : i64 ¤meter = 100
+  let time : i64 ¤second = 10
   let speed := dist ÷ time
   assert(speed = 10¤meter÷second, "100m over 10s is 10 m÷s")
   assert(@unitof(speed) = @unitof(1¤meter÷second), "and carries that unit")
@@ -85,8 +85,8 @@ fn test_unit_div():
 @test
 @impure
 fn test_dimensionless_div():
-  let a ¤meter : i64 = 10
-  let b ¤meter : i64 = 5
+  let a : i64 ¤meter = 10
+  let b : i64 ¤meter = 5
   let ratio := a ÷ b
   // same unit cancels, result is plain 2
   assert(ratio = 2, "the unit divides out")
@@ -97,7 +97,7 @@ fn test_dimensionless_div():
 @test
 @impure
 fn test_unit_conversion_km_to_m():
-  let d ¤meter : mut i64 = 0
+  let d : mut i64 ¤meter = 0
   d ← 3¤kilometer
   // 3 km = 3000 m
   assert_eq_int(d, 3000, "3 km to m")
@@ -105,7 +105,7 @@ fn test_unit_conversion_km_to_m():
 @test
 @impure
 fn test_unit_conversion_ms_to_s():
-  let t ¤second : mut i64 = 0
+  let t : mut i64 ¤second = 0
   t ← 2000¤millisecond
   // 2000 ms = 2 s
   assert_eq_int(t, 2, "2000 ms to s")
@@ -114,7 +114,7 @@ fn test_unit_conversion_ms_to_s():
 
 @test
 fn test_lossless_reject():
-  let t ¤second : mut i64 = 0
+  let t : mut i64 ¤second = 0
   // 500 ms = 0.5 s, not lossless for integer
   @expect error "without loss"
   t ← 500¤millisecond
@@ -123,14 +123,14 @@ fn test_lossless_reject():
 
 @test
 fn test_incompatible_add():
-  let a ¤meter : i64 = 5
-  let b ¤second : i64 = 3
+  let a : i64 ¤meter = 5
+  let b : i64 ¤second = 3
   @expect error 2313 "incompatible units for +: m and s"
   let c : mut = a + b
 
 @test
 fn test_incompatible_assign():
-  let a ¤meter : mut i64 = 5
+  let a : mut i64 ¤meter = 5
   @expect error 2327 "incompatible units: s and m"
   a ← 3¤second
 
@@ -144,17 +144,17 @@ fn test_incompatible_assign():
 
 @test
 fn test_a_range_with_two_measures_is_refused():
-  let lo ¤meter : i64 = 0
-  let hi ¤second : i64 = 4
+  let lo : i64 ¤meter = 0
+  let hi : i64 ¤second = 4
   @expect error 2328 "a range counts in one measure, or in none"
   foreach i := lo…hi:
     _ ← i
 
 @test
 fn test_a_stepped_range_with_two_measures_is_refused():
-  let lo ¤meter : i64 = 0
-  let st ¤second : i64 = 1
-  let hi ¤meter : i64 = 4
+  let lo : i64 ¤meter = 0
+  let st : i64 ¤second = 1
+  let hi : i64 ¤meter = 4
   @expect error 2328 "a range counts in one measure, or in none"
   foreach i := lo…st…hi:
     _ ← i
@@ -163,9 +163,9 @@ fn test_a_stepped_range_with_two_measures_is_refused():
 // and it is the loop variable's own.
 @test
 fn test_a_range_may_count_in_one_measure():
-  let lo ¤meter : i64 = 1
-  let hi ¤meter : i64 = 4
-  let total ¤meter : mut i64 = 0¤meter
+  let lo : i64 ¤meter = 1
+  let hi : i64 ¤meter = 4
+  let total : mut i64 ¤meter = 0¤meter
   foreach i := lo…hi:
     total ← total + i
   assert_eq(total, 6¤meter)
@@ -184,7 +184,7 @@ fn test_an_unmeasured_end_takes_the_other_measure():
 
 @test
 fn test_dimensionless_assign():
-  let a ¤meter : mut i64 = 5
+  let a : mut i64 ¤meter = 5
   @expect error 2322 "cannot assign dimensionless value to 'a' which has unit m"
   a ← 3
 
@@ -193,7 +193,7 @@ fn test_dimensionless_assign():
 @test
 @impure
 fn test_add_dimensioned_dimensionless():
-  let a ¤meter : i64 = 5
+  let a : i64 ¤meter = 5
   let b := a + 3
   // 3 adopts unit meter, result is 8 m
   assert_eq_int(b, 8, "5m + 3")
@@ -205,8 +205,8 @@ fn test_add_dimensioned_dimensionless():
 @test
 @impure
 fn test_add_km_and_m():
-  let a ¤kilometer : i64 = 3
-  let b ¤meter : i64 = 500
+  let a : i64 ¤kilometer = 3
+  let b : i64 ¤meter = 500
   let c := a + b
   // Result in base (m): 3000 + 500 = 3500 m
   std.println("{}", c)
@@ -216,8 +216,8 @@ fn test_add_km_and_m():
 @test
 @impure
 fn test_unit_comparison():
-  let a ¤meter : i64 = 5
-  let b ¤meter : i64 = 10
+  let a : i64 ¤meter = 5
+  let b : i64 ¤meter = 10
   assert(a < b, "5m < 10m")
   assert(b > a, "10m > 5m")
   assert(a = a, "5m = 5m")
@@ -226,8 +226,8 @@ fn test_unit_comparison():
 @test
 @impure
 fn test_unit_comparison_different():
-  let a ¤kilometer : i64 = 1
-  let b ¤meter : i64 = 1000
+  let a : i64 ¤kilometer = 1
+  let b : i64 ¤meter = 1000
   // 1 km = 1000 m (converted to base)
   assert(a = b, "1 km = 1000 m")
   assert(not (a < b), "1 km not < 1000 m")
@@ -237,7 +237,7 @@ fn test_unit_comparison_different():
 @test
 @impure
 fn test_negation():
-  let a ¤meter : i64 = 5
+  let a : i64 ¤meter = 5
   let b := ⁻a
   std.println("{}", b)
 
@@ -246,7 +246,7 @@ fn test_negation():
 @test
 @impure
 fn test_byte_units():
-  let a ¤byte : mut i64 = 0
+  let a : mut i64 ¤byte = 0
   a ← 1024¤kibibyte
   // 1024 KiB = 1048576 B
   assert_eq_int(a, 1048576, "1024 KiB to B")
@@ -254,7 +254,7 @@ fn test_byte_units():
 @test
 @impure
 fn test_byte_display():
-  let a ¤byte : i64 = 42
+  let a : i64 ¤byte = 42
   std.println("{}", a)
 
 // --- Unit inference from init value ---
@@ -262,7 +262,7 @@ fn test_byte_display():
 @test
 @impure
 fn test_unit_inference():
-  let a ¤meter : i64 = 5
+  let a : i64 ¤meter = 5
   let b := a
   // b should inherit unit m from a
   let c := b + a
@@ -277,8 +277,8 @@ unit accel = meter ÷ second ÷ second
 @test
 @impure
 fn test_user_units():
-  let v ¤"speed" : i64 = 10
-  let a ¤"accel" : i64 = 2
+  let v : i64 ¤"speed" = 10
+  let a : i64 ¤"accel" = 2
   std.println("{}", v)
   std.println("{}", a)
 
@@ -288,7 +288,7 @@ fn test_user_units():
 @impure
 fn test_format():
   let alloc := std.heap.allocator()
-  let d ¤meter : i64 = 42
+  let d : i64 ¤meter = 42
   let s := std.format(alloc, "distance: {}", d)
   assert(s = "distance: 42 m", "format with unit")
 
@@ -297,8 +297,8 @@ fn test_format():
 @test
 @impure
 fn test_abstract_units():
-  let n ¤count : i64 = 10
-  let d ¤distance : i64 = 50
+  let n : i64 ¤count = 10
+  let d : i64 ¤distance = 50
   std.println("{}", n)
   std.println("{}", d)
 
@@ -307,8 +307,8 @@ fn test_abstract_units():
 @test
 @impure
 fn test_unit_mod():
-  let a ¤meter : i64 = 7
-  let b ¤meter : i64 = 3
+  let a : i64 ¤meter = 7
+  let b : i64 ¤meter = 3
   let c := a % b
   // 7 m % 3 m = 1 m
   std.println("{}", c)
@@ -318,8 +318,8 @@ fn test_unit_mod():
 @test
 @impure
 fn test_float_units():
-  let a ¤meter : f64 = 3.5
-  let b ¤meter : f64 = 1.5
+  let a : f64 ¤meter = 3.5
+  let b : f64 ¤meter = 1.5
   let c := a + b
   std.println("{}", c)
 
@@ -328,7 +328,7 @@ fn test_float_units():
 @test
 @impure
 fn test_compound_unit_spec():
-  let v ¤meter÷second : i64 = 10
+  let v : i64 ¤meter÷second = 10
   std.println("{}", v)
 
 // --- Compound unit spec with multiplication ---
@@ -338,8 +338,8 @@ fn test_compound_unit_spec():
 @test
 @impure
 fn test_compound_unit_mul_spec():
-  let side ¤meter : i64 = 6
-  let area ¤meter×meter := side × side
+  let side : i64 ¤meter = 6
+  let area : ¤meter×meter = side × side
   assert(area = 36¤meter×meter, "6m × 6m is 36 m×m")
   std.println("{}", area)
 
@@ -350,7 +350,7 @@ fn test_compound_unit_mul_spec():
 @test
 @impure
 fn test_dropunit_parts_with_the_unit():
-  let v ¤meter : i64 = 7
+  let v : i64 ¤meter = 7
   let plain := @dropunit(v)
   assert(plain = 7, "the number survives")
   assert(@unitof(v) ≠ @unitof(plain), "the unit does not")
@@ -359,13 +359,13 @@ fn test_dropunit_parts_with_the_unit():
 @test
 @impure
 fn test_dropunit_keeps_the_width():
-  let v ¤byte : u32 = 7
+  let v : u32 ¤byte = 7
   let plain := @dropunit(v)
   assert(@sizeof(plain) = 4 ¤byte, "still four bytes wide")
 
 // A return type states no unit, so a value carrying one is not what
 // was promised and has to say it is parting with it.
-fn measured(n ¤meter : i32) → i32:
+fn measured(n : i32 ¤meter) → i32:
   @dropunit(n)
 
 @test
@@ -377,7 +377,7 @@ fn test_dropunit_at_a_return():
 
 // A return type may state a unit, so a function can hand back a
 // measured value rather than parting with the unit on the way out.
-fn measured_bytes(n ¤byte : usize) → usize ¤byte:
+fn measured_bytes(n : usize ¤byte) → usize ¤byte:
   n
 
 @test
@@ -410,8 +410,8 @@ fn test_return_unit_converts():
 @test
 @impure
 fn test_unit_no_space_before():
-  let x¤meter : i64 = 7
-  let y¤second : i64 = 3
+  let x : i64 ¤meter = 7
+  let y : i64 ¤second = 3
   let z := x × y
   std.println("{}", z)
 
@@ -420,8 +420,8 @@ fn test_unit_no_space_before():
 @test
 @impure
 fn test_unit_space_after():
-  let a ¤ meter : i64 = 12
-  let b ¤ second : i64 = 4
+  let a : i64 ¤ meter = 12
+  let b : i64 ¤ second = 4
   let c := a ÷ b
   std.println("{}", c)
 
@@ -430,7 +430,7 @@ fn test_unit_space_after():
 @test
 @impure
 fn test_unit_no_space_before_space_after():
-  let p¤ kilogram : i64 = 5
+  let p : i64 ¤ kilogram = 5
   std.println("{}", p)
 
 // --- Spacing: ¤ on expression with no space ---
@@ -438,7 +438,7 @@ fn test_unit_no_space_before_space_after():
 @test
 @impure
 fn test_unit_expr_no_space():
-  let x ¤meter : i64 = 42¤meter
+  let x : i64 ¤meter = 42¤meter
   std.println("{}", x)
 
 @start

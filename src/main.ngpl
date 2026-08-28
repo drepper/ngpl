@@ -22,7 +22,7 @@ fn dump_tokens(t : Toks, src : byte[], files : Files):
     foreach i := 0…#t.kind:
         let k : i64 = t.kind[i]
         let text := run_str(src, t.off[i], t.len[i])
-        let f ¤ptrdiff : i64 = file_of(starts, t.line[i])
+        let f : i64 ¤ptrdiff = file_of(starts, t.line[i])
         std.println("{}:{}:{} {} {} '{}' {}", files.names[f],
                     @dropunit(t.line[i] - starts[f] + 1),
                     @dropunit(t.col[i]), k,
@@ -51,9 +51,9 @@ fn report(diags : Diag[], files : Files, as_json : bool, src : byte[]):
         // number, so each parts with its measure here and nowhere
         // earlier -- the arithmetic above is checked, the printing is
         // what it always was.
-        let k ¤ptrdiff : i64 = file_of(starts, d.line)
+        let k : i64 ¤ptrdiff = file_of(starts, d.line)
         let file : str = files.names[k]
-        let ln ¤"line" : i64 = d.line - starts[k] + 1
+        let ln : i64 ¤"line" = d.line - starts[k] + 1
         // A warning says the program compiles and something in it is
         // worth a look; an error says it does not.  The number, where
         // the diagnostic has one, is what an @expect names.
@@ -66,12 +66,12 @@ fn report(diags : Diag[], files : Files, as_json : bool, src : byte[]):
             std.println("{}:{}:{}: {}: {}", file, @dropunit(ln), @dropunit(d.col), named, d.msg)
             let num := i64_str(@dropunit(ln))
             let gut : mut str = ""
-            let g ¤ptrdiff : mut i64 = 0
+            let g : mut i64 ¤ptrdiff = 0
             while g < #num:
                 gut ← gut ⧺ " "
                 g ← g + 1
             let pad : mut str = ""
-            let c ¤"col" : mut i64 = 1
+            let c : mut i64 ¤"col" = 1
             while c < d.col:
                 pad ← pad ⧺ " "
                 c ← c + 1
@@ -107,7 +107,7 @@ fn parse_size(t : str) → i64:
     let scale : mut i64 = 1
     // how many of the characters are the number, which is a count of
     // characters and is measured like one all the way to the subscript
-    let n ¤ptrdiff : mut i64 = #cs
+    let n : mut i64 ¤ptrdiff = #cs
     let last := cs[#cs - 1]
     if last = 'K' or last = 'k':
         scale ← 1024
@@ -336,7 +336,7 @@ fn main() → u8:
     let guard_size : mut i64 = GUARD_DEFAULT
     // aim at the machine underfoot unless --target says otherwise
     let tgt_index : mut i64 = target_index(host_target())
-    let i ¤ptrdiff : mut i64 = 0
+    let i : mut i64 ¤ptrdiff = 0
     while i < #argv:
         let a := argv[i]
         if a = "-o":
@@ -425,7 +425,7 @@ fn main() → u8:
     // what is needed to give a diagnostic back the file it came from.
     let alloc := std.arena.allocator()
     let src : mut byte[] = []
-    let offs ¤byte : mut i64[] = []
+    let offs : mut i64 ¤byte[] = []
     foreach nm := inputs:
         let file := std.fs.cwd().open_file(nm) ?? missing_input(nm)
         let text := file.read_file(alloc)

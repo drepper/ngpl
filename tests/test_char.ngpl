@@ -426,7 +426,7 @@ fn test_slicing_counts_characters():
 @test
 fn test_an_index_may_be_a_measured_value():
     let s := "hello"
-    let i ¤ptrdiff : i64 = 1
+    let i : i64 ¤ptrdiff = 1
     assert(s[i] = 'e')
 
 @test

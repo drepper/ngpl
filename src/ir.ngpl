@@ -125,6 +125,7 @@ let IR_STN : i64 = 110     // mem[vreg a + imm b] ← vreg c; w = width, 0 for a
 let IR_KADDR : i64 = 111   // d ← a data address: a = 0 the kernel block, 1 the allocator's, 2 the signal block; b = byte offset
 let IR_FPTR : i64 = 117    // d ← this frame's own pointer, the head of the chain
 let IR_BTADDR : i64 = 118  // d ← where the backtrace table sits in rodata
+let IR_SSLICE : i64 = 119  // d ← string a's characters from b up to c
 
 let IR_SNEW : i64 = 66     // d ← a fresh struct of a fields
 let IR_FLD : i64 = 67      // d ← field b of struct a
@@ -140,7 +141,7 @@ struct IrFn:
     extra : i64[]
     nvregs : i64
     nlabels : i64
-    fbytes ¤byte : i64   // how much frame the objects below the slots take
+    fbytes : i64 ¤byte   // how much frame the objects below the slots take
 
 // Which of an operation's fields name a vreg, one entry per opcode.
 //
@@ -173,7 +174,7 @@ fn ir_reads() → i64[]:
     3, 3, 1, 1, 3, 1, 1, 15, 0, 1, 3, 1,
     3, 1, 1, 0, 3, 7, 3, 3, 3, 3, 3, 3,
     1, 3, 0, 0, 9, 0, 1, 0, 0, 3, 1, 3,
-    15, 1, 5, 0, 1, 3, 3, 0, 3, 0, 0
+    15, 1, 5, 0, 1, 3, 3, 0, 3, 0, 0, 7
     ]
 
 // How often each vreg is really read anywhere in a function, asked of
@@ -193,7 +194,7 @@ fn se_counts(ir : IrFn, nv : i64) → i64[]:
     let rd : i64[] = ir_reads()
     let nrd : i64 = @dropunit(#rd)
     let ne : i64 = @dropunit(#ir.extra)
-    let n ¤ptrdiff : i64 = #ir.op
+    let n : i64 ¤ptrdiff = #ir.op
     if n > 0:
         foreach i := 0…n:
             let o : i64 = ir.op[i]
@@ -260,7 +261,7 @@ fn ir_needs_canon() → i64[]:
     2, 2, 0, 1, 2, 0, 1, 0, 0, 0, 2, 0,
     0, 0, 1, 0, 2, 6, 3, 3, 3, 3, 1, 0,
     0, 2, 0, 0, 8, 0, 0, 1, 0, 2, 0, 0,
-    0, 0, 4, 0, 1, 0, 0, 0, 7, 0, 0,
+    0, 0, 4, 0, 1, 0, 0, 0, 7, 0, 0, 7,
     ]
 
 // Which operands a result carries its bits above the width from.  A
@@ -304,7 +305,7 @@ fn canon_wanted(ir : IrFn, nv : i64, freecmp : i64, freediv : i64) → i64[]:
     let nc : i64[] = ir_needs_canon()
     let nnc : i64 = @dropunit(#nc)
     let ne : i64 = @dropunit(#ir.extra)
-    let n ¤ptrdiff : i64 = #ir.op
+    let n : i64 ¤ptrdiff = #ir.op
     if n > 0:
         foreach i := 0…n:
             let o : i64 = ir.op[i]

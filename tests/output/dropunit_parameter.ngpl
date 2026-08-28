@@ -5,5 +5,5 @@ fn plain(x : u32):
 @start
 @impure
 fn main():
-    let v ¤byte : u32 = 7
+    let v : u32 ¤byte = 7
     plain(v)

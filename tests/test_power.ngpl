@@ -111,7 +111,7 @@ fn test_overflow():
 @test
 @impure
 fn test_unit_pow():
-  let d ¤meter : f64 = 3.0
+  let d : f64 ¤meter = 3.0
   let area := d ↑ 2
   // 3.0 m ^ 2 = 9.0 m^2
   approx_eq(@dropunit(area), 9.0, "3.0m ↑ 2 value")
@@ -120,7 +120,7 @@ fn test_unit_pow():
 @test
 @impure
 fn test_unit_pow_cube():
-  let d ¤meter : f64 = 2.0
+  let d : f64 ¤meter = 2.0
   let vol := d ↑ 3
   // 2.0 m ^ 3 = 8.0 m^3
   approx_eq(@dropunit(vol), 8.0, "2.0m ↑ 3 value")
@@ -128,15 +128,15 @@ fn test_unit_pow_cube():
 @test
 @impure
 fn test_unit_pow_zero():
-  let d ¤meter : f64 = 5.0
+  let d : f64 ¤meter = 5.0
   let r := d ↑ 0
   // m^0 = dimensionless
   approx_eq(r, 1.0, "5.0m ↑ 0 dimensionless")
 
 @test
 fn test_unit_exp_rejected():
-  let d ¤meter : f64 = 5.0
-  let e ¤second : f64 = 2.0
+  let d : f64 ¤meter = 5.0
+  let e : f64 ¤second = 2.0
   @expect error "exponent cannot have a unit"
   let r : mut = d ↑ e
 

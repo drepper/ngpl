@@ -30,5 +30,5 @@ type Small = u8
 let b : Small = 7
 b
 unit tick
-let t ¤tick : i64 = 5
+let t : i64 ¤tick = 5
 t

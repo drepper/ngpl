@@ -124,7 +124,7 @@ impl Parser:
     // by the time it is noticed self.pos has moved past
     fn err_at(&mut self, tok : i64, m : str):
         if not self.poisoned:
-            let at ¤ptrdiff : i64 = tok
+            let at : i64 ¤ptrdiff = tok
             self.diags.push(Diag{line: self.toks.line[at],
                                  col: self.toks.col[at], msg: m, level: DIAG_ERROR, code: DIAG_NONE})
         self.poisoned ← true
@@ -133,14 +133,14 @@ impl Parser:
     @pre(code > 0)
     fn errc_at(&mut self, tok : i64, code : i64, m : str):
         if not self.poisoned:
-            let at ¤ptrdiff : i64 = tok
+            let at : i64 ¤ptrdiff = tok
             self.diags.push(Diag{line: self.toks.line[at],
                                  col: self.toks.col[at], msg: m, level: DIAG_ERROR, code: code})
         self.poisoned ← true
 
     fn err(&mut self, m : str):
         if not self.poisoned:
-            let at ¤ptrdiff : i64 = self.pos
+            let at : i64 ¤ptrdiff = self.pos
             self.diags.push(Diag{line: self.toks.line[at],
                                  col: self.toks.col[at], msg: m, level: DIAG_ERROR, code: DIAG_NONE})
         self.poisoned ← true
@@ -544,7 +544,7 @@ impl Parser:
         ⁻1
 
     // A measure written before the type measures what an array holds,
-    // the way it measures a bare number: `xs ¤meter : i64[]` is an
+    // the way it measures a bare number: `xs : i64 ¤meter[]` is an
     // array of lengths and not an array that is itself a length.  A
     // binding, a parameter and a field all write it the same way, so
     // they all settle it here.  `what` names the thing for the
@@ -1488,11 +1488,16 @@ impl Parser:
             return self.parse_let_tuple()
         let name_tok : i64 = self.pos
         _ ← self.eat_name("the name the let binds")
-        let u : i64 = self.parse_name_unit()
+        // A measure belongs to the type and is written there.  This
+        // is the place it used to be written, kept only to say so.
+        if self.peek() = TK_CURRENCY:
+            self.err("a measure is written against the type, as 'let x : i64 ¤meter = …' -- or against nothing, as 'let x : ¤meter = …', where the right side says the type")
+            return 0
+        let u : i64 = UNIT_NONE
         if self.peek() = TK_DEFINE:
             // := takes the type from the right side, which must state it
             if u ≠ UNIT_NONE:
-                self.err("a unit measures a stated type; write 'let x ¤ptrdiff : i64 = …'")
+                self.err("a unit measures a stated type; write 'let x : i64 ¤ptrdiff = …'")
                 return 0
             self.pos ← self.pos + 1
             let init0 : i64 = self.parse_expr()
@@ -1506,12 +1511,26 @@ impl Parser:
             if self.peek() = TK_EQ:
                 // let x : mut = e -- mut, the type still inferred
                 if u ≠ UNIT_NONE:
-                    self.err("a unit measures a stated type; write 'let x ¤ptrdiff : mut i64 = …'")
+                    self.err("a unit measures a stated type; write 'let x : mut i64 ¤ptrdiff = …'")
                     return 0
                 self.pos ← self.pos + 1
                 let init1 : i64 = self.parse_expr()
                 self.end_stmt()
                 return self.mknode(NK_LET, name_tok, init1, 1, ⁻1)
+        // `let m : ¤meter = e` -- the measure with no type, which the
+        // right side settles.  A measure belongs to a type, and where
+        // the type is the initializer's there is nothing to write it
+        // against, so the colon carries the measure alone.  nc holds
+        // ⁻2 - u to say so, ⁻1 already meaning no type at all.
+        if self.peek() = TK_CURRENCY:
+            if u ≠ UNIT_NONE:
+                self.err("the name and the type say different units")
+                return 0
+            let mu : i64 = self.parse_name_unit()
+            _ ← self.eat(TK_EQ, "'=' and the initial value")
+            let init2 : i64 = self.parse_expr()
+            self.end_stmt()
+            return self.mknode(NK_LET, name_tok, init2, is_mut, ⁻2 - mu)
         let ty0 : i64 = self.parse_type(false)
         let ty : mut i64 = ty0
         if u ≠ UNIT_NONE:
@@ -1911,7 +1930,10 @@ impl Parser:
             while true:
                 ptoks.push(self.pos)
                 _ ← self.eat_name("a parameter name")
-                let u : i64 = self.parse_name_unit()
+                if self.peek() = TK_CURRENCY:
+                    self.err("a measure is written against the type, as 'a : i64 ¤meter'")
+                    return
+                let u : i64 = UNIT_NONE
                 _ ← self.eat(TK_COLON, "':' and the parameter's type")
                 let pmut : mut i64 = 0
                 if self.peek() = TK_MUT:
@@ -2172,8 +2194,8 @@ impl Parser:
     // -- while the names were being read, the one closing it had not
     // been written yet.
     fn resolve_decays(&mut self):
-        let n ¤ptrdiff : i64 = #self.unames
-        let i ¤ptrdiff : mut i64 = 0¤ptrdiff
+        let n : i64 ¤ptrdiff = #self.unames
+        let i : mut i64 ¤ptrdiff = 0¤ptrdiff
         while i < n:
             let want : str = self.udname[i]
             if want ≠ "":
@@ -2184,7 +2206,7 @@ impl Parser:
                 else:
                     self.udecay[i] ← d
             i ← i + 1
-        let j ¤ptrdiff : mut i64 = 0¤ptrdiff
+        let j : mut i64 ¤ptrdiff = 0¤ptrdiff
         while j < n:
             if self.udecay[j] ≠ 0:
                 let chain : mut str = self.unames[j]
@@ -2341,8 +2363,11 @@ impl Parser:
             ftoks.push(self.pos)
             _ ← self.eat_name("a field's name")
             // a field may state a unit the way a binding does:
-            // name ¤unit : type
-            let fu : i64 = self.parse_name_unit()
+            // name : type ¤unit
+            if self.peek() = TK_CURRENCY:
+                self.err("a measure is written against the type, as 'f : i64 ¤meter'")
+                return
+            let fu : i64 = UNIT_NONE
             _ ← self.eat(TK_COLON, "':' and the field's type")
             let ty : mut i64 = self.parse_type(false)
             if fu ≠ 0:

@@ -26,7 +26,7 @@ fn test_a_vector_of_strings():
 fn test_walking_a_vector_of_strings():
     let words : str[] = ["a", "bb", "ccc"]
     let total : mut i64 = 0
-    let i ¤ptrdiff : mut i64 = 0
+    let i : mut i64 ¤ptrdiff = 0
     while i < #words:
         total ← total + @dropunit(#words[i])
         i ← i + 1¤ptrdiff

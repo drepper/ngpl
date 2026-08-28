@@ -72,7 +72,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                               ab_kind: [], ab_lab: [],
                               tf_pos: [], tf_lab: [], tf_form: [],
                               ff_pos: [], ff_fn: [], k_args: 0, k_alloc: 0, k_sig: 0})
-    let nglobals ¤ptrdiff : i64 = #a.globals
+    let nglobals : i64 ¤ptrdiff = #a.globals
     // the same three kinds of data the x86-64 path sorts out, placed
     // with the same offsets
     let is_relro : mut i64[] = []
@@ -168,7 +168,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // in a call where an overflow or a bounds check has to go -- so
     // this runs in waves until a wave adds nothing.  Asking the IR
     // which routines it calls would miss the second kind.
-    let nrt : i64 = 68
+    let nrt : i64 = 69
     foreach _ := 0…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
@@ -375,8 +375,8 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             sglob.push(false)
     let syms : mut Sym[] = []
     foreach i := 0…#sname:
-        let here ¤byte : i64 = soffs[i]
-        let next ¤byte : i64 = if i + 1 < #soffs: soffs[i + 1] else: text_size
+        let here : i64 ¤byte = soffs[i]
+        let next : i64 ¤byte = if i + 1 < #soffs: soffs[i + 1] else: text_size
         assert(next >= here, "the symbols run up the text")
         syms.push(Sym{name: sname[i], value: here, size: next - here,
                       is_global: sglob[i]})
@@ -778,6 +778,7 @@ fn rt_nargs(id : i64) → i64:
     if id = RT_DIVU64 or id = RT_MODU64 or id = RT_DIVS64 or id = RT_MODS64: return 2
     if id = RT_MULOV64: return 3
     if id = RT_BT: return 0
+    if id = RT_SSLICE: return 3
     if id = RT_HSTART: return 1
     if id = RT_HFINAL: return 2
     if id = RT_HUPDATE: return 2

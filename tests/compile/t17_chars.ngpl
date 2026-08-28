@@ -43,7 +43,7 @@ fn main():
     let s : str = "héllo"
     std.println("{} {} {}", s[0], s[1], s[4])
     std.println("{}", #s)
-    let i ¤ptrdiff : i64 = 2
+    let i : i64 ¤ptrdiff = 2
     std.println("{}", s[i])
 
     // .chars() lays the string out as an array

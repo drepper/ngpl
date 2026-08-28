@@ -189,7 +189,7 @@ fn test_format_type_flag_on_untyped():
 @test
 fn test_format_unit_flag():
     let alloc := std.arena.allocator()
-    let d ¤meter : i32 = 5
+    let d : i32 ¤meter = 5
     assert_eq(std.format(alloc, "{}", d), "5 m")
     assert_eq(std.format(alloc, "{:u}", d), "5")
     alloc.deinit()
@@ -197,7 +197,7 @@ fn test_format_unit_flag():
 @test
 fn test_format_both_flags():
     let alloc := std.arena.allocator()
-    let d ¤meter : i32 = 5
+    let d : i32 ¤meter = 5
     assert_eq(std.format(alloc, "{:t}", d), "5i32 m")
     assert_eq(std.format(alloc, "{:ut}", d), "5i32")
     alloc.deinit()

@@ -934,6 +934,60 @@ fn rt_build2(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.lab(lend)
         b.ret(out)
         return rtb_fn(b)
+    if id = RT_SSLICE:
+        // (s, lo, hi) → the characters from lo up to hi.  A string is
+        // counted in characters and held as bytes, so both ends are
+        // walked for rather than computed; a string is immutable, so
+        // what comes back shares the bytes it was cut from and only
+        // the descriptor is fresh.
+        let b : mut RtB = rtb(3)
+        let p : i64 = b.ldn(0, 0, 8)
+        let n : i64 = b.ldn(0, 8, 8)
+        let one : i64 = b.cst(1)
+        let at : i64 = b.t()
+        b.mov(at, b.cst(0))
+        // to where lo begins
+        let want : i64 = b.t()
+        b.mov(want, 1)
+        let l1 : i64 = b.l()
+        let l1e : i64 = b.l()
+        b.lab(l1)
+        b.jz(want, l1e)
+        let ok1 : i64 = b.l()
+        b.jnz(b.cltu(at, n), ok1)
+        _ ← b.call0(RT_BOUNDS)
+        b.lab(ok1)
+        b.mov(at, b.add(at, rt_charlen(&b, p, at)))
+        b.mov(want, b.sub(want, one))
+        b.jmp(l1)
+        b.lab(l1e)
+        let blo : i64 = b.t()
+        b.mov(blo, at)
+        // and on to where hi does; an end at or below the start is the
+        // empty cut, which walks nothing
+        let more : i64 = b.t()
+        b.mov(more, b.cst(0))
+        let lem : i64 = b.l()
+        b.jz(b.cltu(1, 2), lem)
+        b.mov(more, b.sub(2, 1))
+        b.lab(lem)
+        let l2 : i64 = b.l()
+        let l2e : i64 = b.l()
+        b.lab(l2)
+        b.jz(more, l2e)
+        let ok2 : i64 = b.l()
+        b.jnz(b.cltu(at, n), ok2)
+        _ ← b.call0(RT_BOUNDS)
+        b.lab(ok2)
+        b.mov(at, b.add(at, rt_charlen(&b, p, at)))
+        b.mov(more, b.sub(more, one))
+        b.jmp(l2)
+        b.lab(l2e)
+        let dsc : i64 = b.call1(RT_ALLOC, b.cst(16))
+        b.stn(dsc, 0, b.add(p, blo), 8)
+        b.stn(dsc, 8, b.sub(at, blo), 8)
+        b.ret(dsc)
+        return rtb_fn(b)
     if id = RT_CHARSTR:
         // (cp) → a fresh one-character string
         let b : mut RtB = rtb(1)

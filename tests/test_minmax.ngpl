@@ -182,8 +182,8 @@ fn error_strings():
 // The larger of two lengths is a length.
 @test
 fn test_the_unit_is_carried():
-    let a ¤meter : i64 = 5
-    let b ¤meter : i64 = 3
+    let a : i64 ¤meter = 5
+    let b : i64 ¤meter = 3
     assert_eq(a ⌈ b, 5¤meter)
     assert_eq(a ⌊ b, 3¤meter)
     static_assert_eq(@unitof(a ⌈ b), ¤meter)
@@ -192,8 +192,8 @@ fn test_the_unit_is_carried():
 // not by the number written.
 @test
 fn test_a_converted_unit_is_compared_by_what_it_measures():
-    let m ¤meter : i64 = 5
-    let cm ¤centimeter : i64 = 300
+    let m : i64 ¤meter = 5
+    let cm : i64 ¤centimeter = 300
     assert_eq(m ⌈ cm, 5¤meter)
     assert_eq(m ⌊ cm, 3¤meter)
 
@@ -201,14 +201,14 @@ fn test_a_converted_unit_is_compared_by_what_it_measures():
 // is for addition.
 @test
 fn test_an_untyped_operand_takes_the_unit():
-    let d ¤meter : i64 = 5
+    let d : i64 ¤meter = 5
     assert_eq(d ⌊ 3, 3¤meter)
 
 // The larger of a length and a duration is not a question.
 @expect error 2313 "incompatible units for ⌈: m and s"
 fn error_different_dimensions():
-    let a ¤meter : i64 = 5
-    let b ¤second : i64 = 3
+    let a : i64 ¤meter = 5
+    let b : i64 ¤second = 3
     let c : mut i64 = a ⌈ b
 
 // ---------------------------------------------------------------------

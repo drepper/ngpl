@@ -104,7 +104,7 @@ fn test_declared_parameter_settles_the_assertions(n : u16):
 
 @test
 fn test_measured_local_keeps_its_unit():
-    let d ¤meter : i32 = 5
+    let d : i32 ¤meter = 5
     static_assert_eq(@unitof(d), @unitof(1 ¤meter))
     static_assert_eq(@sizeof(d), 4 ¤byte)
 

@@ -1331,13 +1331,13 @@ let r : mut = √x             // ERROR: integer operand
 When applied to a value with a unit, the root is also taken of the unit's dimensions.  Each dimension exponent must be divisible by the root degree, and the unit's conversion factor must be a perfect power:
 
 ```
-let area ¤meter×meter : mut = 36.0
+let area : mut ¤meter×meter = 36.0
 let side : mut = √area       // 6.0 m (√(m²) = m)
 
-let vol ¤meter×meter×meter : mut = 125.0
+let vol : mut ¤meter×meter×meter = 125.0
 let edge : mut = ∛vol        // 5.0 m (∛(m³) = m)
 
-let d ¤meter : mut = 9.0
+let d : mut ¤meter = 9.0
 @expect error "exponent"
 let r : mut = √d             // ERROR: √(m¹) has odd exponent
 ```
@@ -1376,7 +1376,7 @@ let r : mut = 2.0 ↑ -1.0     // 0.5
 **With units**: a unit-bearing base raised to an integer exponent scales the unit dimensions accordingly.  The exponent itself cannot carry a unit:
 
 ```
-let d ¤meter : mut = 3.0
+let d : mut ¤meter = 3.0
 let area : mut = d ↑ 2       // 9.0 m^2
 let vol : mut = d ↑ 3       // 27.0 m^3
 let r : mut = d ↑ 0       // 1.0 (dimensionless — m^0)
@@ -1676,7 +1676,7 @@ Comparing against `∅` asks only whether there was one, which is how a run of c
 It carries the unit an index of that container carries — `ptrdiff`, or `byte` for a `byte[]` — so what comes back can be used to look with:
 
 ```
-let i ¤ptrdiff : i64 = (v ⍳ 20) ?? 0
+let i : i64 ¤ptrdiff = (v ⍳ 20) ?? 0
 v[i]                            /* 20 */
 ```
 
@@ -1684,7 +1684,7 @@ The unit is on the answer and not on what is looked for.  An element of a `byte[
 
 ```
 let b : byte[] = std.bytes("abc")
-let at ¤byte : i64 = (b ⍳ 98) ?? ⁻1     /* 1¤byte */
+let at : i64 ¤byte = (b ⍳ 98) ?? ⁻1     /* 1¤byte */
 ```
 
 #### What It Refuses
@@ -2195,12 +2195,12 @@ error: maximum (⌈) requires matching types, got untyped and float
 - **Units travel as they do through `+` and `-`**: the operands must measure the same thing, the answer carries the unit, and operands written in different scales of it are compared by what they measure rather than by the number written.
 
 ```
-let m ¤meter := 5
-let cm ¤centimeter := 300
+let m : ¤meter = 5
+let cm : ¤centimeter = 300
 m ⌈ cm                        /* 5 m */
 m ⌊ cm                        /* 3 m */
 
-let s ¤second := 3
+let s : ¤second = 3
 m ⌈ s
 
 error: incompatible units for ⌈: m and s
@@ -3370,7 +3370,7 @@ A function that may fail to produce a value declares an **optional return type**
 #### Declaration
 
 ```
-fn get_padded_byte(data : byte[], off ¤byte : usize, total_size ¤byte : usize) → u8?:
+fn get_padded_byte(data : byte[], off : usize ¤byte, total_size : usize ¤byte) → u8?:
     if off >= total_size: return ∅
     if off < #data: return data[off]
     ...
@@ -5647,7 +5647,7 @@ let x : mut = arr[0]                // OK — untyped integer constant
 
 let idx : mut i32 = 1
 let z : mut = arr[idx]              // error: typed integer without unit
-let idx2 ¤ptrdiff : mut i32 = 1
+let idx2 : mut i32 ¤ptrdiff = 1
 let w : mut = arr[idx2]             // OK — variable carries ptrdiff unit
 
 let buf : mut u8[4] = 4 ⍴ 0
@@ -5657,11 +5657,11 @@ let b : mut = buf[0]                // OK — untyped integer constant
 Units are attached at the point of declaration — variable definitions, or function parameters:
 
 ```
-fn safe_get(arr : i32[], idx ¤ptrdiff : i32) → i32?:
+fn safe_get(arr : i32[], idx : i32 ¤ptrdiff) → i32?:
     catch:
         arr[idx]             // OK — idx carries ptrdiff from declaration
 
-fn read_byte(data : byte[], off ¤byte : usize) → u8:
+fn read_byte(data : byte[], off : usize ¤byte) → u8:
     data[off]                // OK — off carries byte from declaration
 ```
 
@@ -5678,7 +5678,7 @@ When a loop variable is explicitly typed, a unit-carrying copy is needed for ind
 
 ```
 foreach j : u32fast = 16…64:
-    let ji ¤ptrdiff : mut = j
+    let ji : mut ¤ptrdiff = j
     W[ji] ← W[ji - 16] + expand(W[ji - 2])
 ```
 
@@ -5693,7 +5693,26 @@ Slice access (`arr[start…end]`) follows the same rule: both bounds must carry 
 
 Tuple indexing is not affected — tuples accept bare integer indices without unit annotation (`pair[0]`, `pair[1]`).
 
-**Rationale.**  The unit requirement catches a category of bugs that arise when byte offsets are used where element indices are expected (or vice versa).  Untyped integer constants are exempt because they appear overwhelmingly as literal subscripts (`arr[0]`, `arr[2]`) where the intent is unambiguous and requiring annotation would add noise without safety benefit.  Typed integers, by contrast, often originate from computations or parameters where the domain (byte offset vs. element index) is not obvious from context — the unit must be attached at the point of declaration (`let idx ¤ptrdiff : mut = n` or `param ¤byte : type`), not at the subscript site.
+**Where the measure is written.**  A measure belongs to the type and is written against it, everywhere and only there: a binding `let n : i64 ¤ptrdiff = #v`, a parameter `off : usize ¤byte`, a struct field `line : i64 ¤"line"`, a return type `→ i64 ¤byte`, an array's element type `i64 ¤meter[]`.
+
+Where the type is the initializer's to settle, the colon carries the measure with nothing in front of it:
+
+```
+let m : ¤meter = 5i64           /* the right side says i64; the colon says what it counts */
+let n : mut ¤meter = 7i64
+```
+
+Against the *name* is where a measure was once written, and is refused:
+
+```
+let d ¤meter : i64[] = [1, 2]
+
+error: a measure is written against the type, as 'let x : i64 ¤meter = …' -- or against nothing, as 'let x : ¤meter = …', where the right side says the type
+```
+
+One position, so there is one place to look for it and no question of two spellings disagreeing.
+
+**Rationale.**  The unit requirement catches a category of bugs that arise when byte offsets are used where element indices are expected (or vice versa).  Untyped integer constants are exempt because they appear overwhelmingly as literal subscripts (`arr[0]`, `arr[2]`) where the intent is unambiguous and requiring annotation would add noise without safety benefit.  Typed integers, by contrast, often originate from computations or parameters where the domain (byte offset vs. element index) is not obvious from context — the unit must be attached at the point of declaration (`let idx : mut ¤ptrdiff = n` or `param : type ¤byte`), not at the subscript site.
 
 #### Arithmetic Unit Enforcement
 
@@ -5704,7 +5723,7 @@ When one operand of a binary operation carries a unit and the other does not, th
 - **Typed integers** without a unit are rejected.  The programmer must attach the matching unit at the declaration site.
 
 ```
-let a ¤ptrdiff : mut i32 = 5
+let a : mut i32 ¤ptrdiff = 5
 let b : mut i32 = 3
 
 let x : mut = a + 2         // OK — untyped constant, result is 7 ¤ptrdiff
@@ -5716,7 +5735,7 @@ let w : mut = a < b         // error: cannot compare unit ptrdiff with typed int
 **Multiplicative operations** (`×`, `÷`, `%`, `⊠`) allow mixing freely — a typed integer without unit acts as a dimensionless scalar:
 
 ```
-let a ¤byte : mut i32 = 4
+let a : mut i32 ¤byte = 4
 let b : mut i32 = 3
 
 let x : mut = a × b         // OK — result is 12 ¤byte (scalar multiplication)
@@ -6195,7 +6214,7 @@ a.push("x")
 
 error: an array of i32 cannot hold a string
 
-let d ¤meter : mut i64[] = [1, 2]
+let d : mut i64 ¤meter[] = [1, 2]
 d.push(9)
 
 error: an array measured in m cannot hold a number that measures nothing
@@ -7013,7 +7032,7 @@ The `catch` statement provides scoped error handling at the syntactic level.  Un
 #### Syntax
 
 ```
-fn safe_access(arr : i32[], idx ¤ptrdiff : i32) → i32?:
+fn safe_access(arr : i32[], idx : i32 ¤ptrdiff) → i32?:
     catch:
         arr[idx]
 ```
@@ -8310,14 +8329,14 @@ This matches C++'s `std::numeric_limits<T>::max()` and `lowest()`.  It deliberat
 A unit is part of a type, so a type that states no unit is not the type of a value that carries one.  A binding and a return both refuse it:
 
 ```
-let v ¤byte : u32 = 7
+let v : u32 ¤byte = 7
 let a : u32 = v
 
 error: 'u32' carries no unit, but the value is B; use @dropunit to part with it
 ```
 
 ```
-fn measured(n ¤meter : i32) → i32:
+fn measured(n : i32 ¤meter) → i32:
     n
 
 error: return type is i32, but the body evaluates to m; use @dropunit
@@ -8327,14 +8346,14 @@ to part with the unit
 `@dropunit` is how a program says it means to:
 
 ```
-fn measured(n ¤meter : i32) → i32:
+fn measured(n : i32 ¤meter) → i32:
     @dropunit(n)
 ```
 
 The value keeps its width — only the unit goes:
 
 ```
-let v ¤byte : u32 = 7
+let v : u32 ¤byte = 7
 let plain := @dropunit(v)
 @sizeof(plain)           // 4 B, as before
 ```
@@ -8356,7 +8375,7 @@ use @dropunit to part with it
 A return type may state a unit, written after the type, so a function can hand back a measured value rather than parting with the unit on the way out:
 
 ```
-fn remaining(total ¤byte : usize, used ¤byte : usize) → usize ¤byte:
+fn remaining(total : usize ¤byte, used : usize ¤byte) → usize ¤byte:
     total - used
 ```
 
@@ -8837,7 +8856,7 @@ Each `{}` in the format string consumes the next argument from the pack.  An opt
 | Flag | Meaning | Example |
 |------|---------|---------|
 | `t` | Append the type suffix | `let a : i8 = 42` → `"{:t}"` → `"42i8"`, `"{:xt}"` → `"2ai8"` |
-| `u` | Leave the unit off | `let d ¤meter : i32 = 5` → `"{}"` → `"5 m"`, `"{:u}"` → `"5"` |
+| `u` | Leave the unit off | `let d : i32 ¤meter = 5` → `"{}"` → `"5 m"`, `"{:u}"` → `"5"` |
 
 The flags combine, and combine with the rest of the specifier: `"{:ut}"` on that same `d` gives `"5i32"`.  A number that was never given a width — an untyped literal — has no suffix to write, so `t` adds nothing to it.
 
@@ -8899,7 +8918,7 @@ They differ from `std.format` in having no allocator, since nothing is retained.
 
 ```
 let a : i8 = 42
-let d ¤meter : i32 = 5
+let d : i32 ¤meter = 5
 
 std.println("plain")                    /* plain               */
 std.println("{} and {}", 1, "two")      /* 1 and two           */
@@ -9366,7 +9385,7 @@ The operating system does not guarantee that environment variables are valid UTF
 if std.process.secure:
     // started with privilege the caller did not have: trust nothing
     ...
-let page ¤byte : i64 = std.process.pagesize
+let page : i64 ¤byte = std.process.pagesize
 ```
 
 What the kernel recorded about this process when it executed it, taken from the ELF auxiliary vector — the block of key and value pairs the kernel leaves above the environment on the initial stack.  These are members rather than calls, because none of them is a question the program asks twice with different answers: the vector is written once, at `execve`, and never changes.
@@ -9483,9 +9502,9 @@ The language supports attaching physical units to numeric values.  Units enable 
 A unit annotation uses `¤` followed by a unit name:
 
 ```
-let distance ¤meter : mut = 100
-let elapsed ¤second : mut = 10
-let speed ¤meter÷second : mut = distance ÷ elapsed
+let distance : mut ¤meter = 100
+let elapsed : mut ¤second = 10
+let speed : mut ¤meter÷second = distance ÷ elapsed
 ```
 
 The `¤` (U+00A4, CURRENCY SIGN) can appear in three positions:
@@ -9497,14 +9516,14 @@ The `¤` (U+00A4, CURRENCY SIGN) can appear in three positions:
 The first two say the same thing and stating both is refused.  For a scalar they are plainly the same; for an array they are the same because a unit measures a number and a container is not one, so both mean what the *elements* measure:
 
 ```
-let d ¤meter : i64[] = [1, 2]      // the unit written by the name
+let d : i64 ¤meter[] = [1, 2]      // the unit written by the name
 let d : i64 ¤meter[] = [1, 2]      // and against the element type
 ```
 
 Whitespace around `¤` is flexible: it can appear immediately after the preceding token (`x¤meter`, `42¤kilogram`) or separated by spaces (`x ¤ meter`).  This is a consequence of normal tokenization — `¤` is a single-character operator.
 
 ```
-let d ¤kilometer : mut = 5     // variable with unit kilometer
+let d : mut ¤kilometer = 5     // variable with unit kilometer
 d ← 3000¤meter           // expression with unit meter, converted to kilometer
 ```
 
@@ -9518,9 +9537,9 @@ A struct field may state a unit the way a binding does, written between the fiel
 unit shndx
 
 struct Span:
-    off ¤byte : i64
-    len ¤byte : i64
-    idx ¤"shndx" : u16
+    off : i64 ¤byte
+    len : i64 ¤byte
+    idx : u16 ¤"shndx"
     tag : i64
 ```
 
@@ -9539,14 +9558,14 @@ Builtin units use identifier syntax with full names: `meter`, `second`, `kilogra
 Compound unit specifications combine names with `×` (multiplication), `÷` (division), and `√` (square root):
 
 ```
-let velocity ¤meter÷second : mut = 10
-let area ¤meter×meter : mut = 25
+let velocity : mut ¤meter÷second = 10
+let area : mut ¤meter×meter = 25
 ```
 
 In expression context, `×` and `÷` after `¤` are consumed as unit operators only when followed by another unit name, not by a number.  This avoids ambiguity with arithmetic operators:
 
 ```
-let a ¤meter : mut = 5
+let a : mut ¤meter = 5
 let b : mut = a × 3            // 15 m (scalar multiplication, not unit formula)
 ```
 
@@ -9594,7 +9613,7 @@ The interpreter provides the following builtin units:
 - **Dimensioned + dimensionless arithmetic**: when one operand carries a unit and the other is a plain (dimensionless) numeric value, the dimensionless value is treated as having a compatible, invisible unit.  This applies to addition, subtraction, multiplication, division, modulus, and comparisons.  For addition and subtraction the result inherits the unit.  For multiplication and division, scalar-times-unit and unit-times-scalar both preserve the unit; division of a dimensionless value by a unit-bearing value produces an inverse unit.  Modulus follows the same rule as addition (result inherits the unit).
 
   ```
-  let a ¤meter : mut = 10
+  let a : mut ¤meter = 10
   let b : mut = a + 3       // 13 m
   let c : mut = 2 × a       // 20 m
   let d : mut = a ÷ 5       // 2 m
@@ -9608,7 +9627,7 @@ The interpreter provides the following builtin units:
 When assigning a value to a variable with a declared unit, the value must be convertible without loss.  For integer values, this means the converted result must be an exact integer:
 
 ```
-let t ¤second : mut = 0
+let t : mut ¤second = 0
 t ← 2000¤millisecond   // 2000 ms = 2 s (exact, allowed)
 t ← 500¤millisecond    // 500 ms = 0.5 s (not integer, rejected)
 ```
@@ -9622,7 +9641,7 @@ Conversion uses exact rational arithmetic (Python `fractions.Fraction`) internal
 When a variable is defined with initialization but without an explicit unit, the unit is derived from the initialization value:
 
 ```
-let a ¤meter : mut = 5
+let a : mut ¤meter = 5
 let b : mut = a              // b inherits unit m
 let c : mut = b + a          // 10 m (works because b has unit m)
 ```
@@ -9632,7 +9651,7 @@ let c : mut = b + a          // 10 m (works because b has unit m)
 When a `foreach` range has one or more unit-bearing bounds, the unit is propagated to the loop variable:
 
 ```
-let total ¤byte : mut = 128
+let total : mut ¤byte = 128
 foreach off := 0…65…(total):
     // off has unit byte, inherited from the range bound
     static_assert_eq(@unitof(off), ¤byte)

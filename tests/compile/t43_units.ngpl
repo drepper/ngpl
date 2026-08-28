@@ -9,28 +9,28 @@
 @impure
 @start
 fn main():
-    let p ¤ptrdiff : i64 = 12
-    let q ¤ptrdiff : i64 = 5
-    let b ¤byte : i64 = 8
+    let p : i64 ¤ptrdiff = 12
+    let q : i64 ¤ptrdiff = 5
+    let b : i64 ¤byte = 8
     let n : i64 = 3
 
     // alike meets alike, and an untyped number joins either
-    let sum ¤ptrdiff : i64 = p + q
-    let more ¤ptrdiff : i64 = p + 1
-    let least ¤ptrdiff : i64 = p ⌊ q
-    let held ¤ptrdiff : i64 = p ⊞ q
+    let sum : i64 ¤ptrdiff = p + q
+    let more : i64 ¤ptrdiff = p + 1
+    let least : i64 ¤ptrdiff = p ⌊ q
+    let held : i64 ¤ptrdiff = p ⊞ q
     std.println("{} {} {} {}", sum, more, least, held)
 
     // a product scales what it is given
-    let scaled ¤ptrdiff : i64 = p × n
-    let other ¤ptrdiff : i64 = n × p
-    let capped ¤ptrdiff : i64 = p ⊠ n
+    let scaled : i64 ¤ptrdiff = p × n
+    let other : i64 ¤ptrdiff = n × p
+    let capped : i64 ¤ptrdiff = p ⊠ n
     std.println("{} {} {}", scaled, other, capped)
 
     // the measures cancel, and what is left over keeps them
     let ratio : i64 = p ÷ q ?? 0
-    let part ¤ptrdiff : i64 = p ÷ n ?? 0
-    let rest ¤ptrdiff : i64 = p % q ?? 0
+    let part : i64 ¤ptrdiff = p ÷ n ?? 0
+    let rest : i64 ¤ptrdiff = p % q ?? 0
     std.println("{} {} {}", ratio, part, rest)
 
     // measured against measured, and against an untyped number
@@ -38,7 +38,7 @@ fn main():
 
     // parting with a measure is written down
     let plain : i64 = @dropunit(p) + n
-    let bytes ¤byte : i64 = b + 1
+    let bytes : i64 ¤byte = b + 1
     std.println("{} {}", plain, bytes)
 
     // a subscript is measured, and the index arithmetic under it is not

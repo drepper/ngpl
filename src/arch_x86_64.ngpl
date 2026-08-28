@@ -913,6 +913,12 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             em.load(R_DX, c)
             em.jglobal(232, ⁻1, RT_ASLICE)
             em.store(R_AX, d)
+        elif o = IR_SSLICE:
+            em.load(R_DI, a)
+            em.load(R_SI, b)
+            em.load(R_DX, c)
+            em.jglobal(232, ⁻1, RT_SSLICE)
+            em.store(R_AX, d)
         elif o = IR_SATADD or o = IR_SATSUB or o = IR_SATMUL:
             // held at the type's edge with selects, never a branch:
             // a narrow width computes exactly in 64 bits and clamps by

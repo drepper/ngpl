@@ -5,7 +5,7 @@
 @impure
 fn main():
     let a : i8 = 42
-    let d ¤meter : i32 = 5
+    let d : i32 ¤meter = 5
     std.println("plain")
     std.println("{} and {}", 1, "two")
     std.println("[{:>6}] [{:*<6}] [{:06}]", a, a, a)

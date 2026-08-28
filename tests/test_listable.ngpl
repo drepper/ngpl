@@ -166,15 +166,15 @@ fn test_a_generic_parameter():
     assert_eq(r[1], 2)
 
 @listable
-fn twice_as_far(d ¤meter : i64) → i64 ¤meter:
+fn twice_as_far(d : i64 ¤meter) → i64 ¤meter:
     d × 2
 
 // Each element meets the parameter for itself, so a unit is converted
 // per element as it would be for one.
 @test
 fn test_a_unit_bearing_parameter():
-    let one ¤meter : i64 = 1
-    let two ¤meter : i64 = 2
+    let one : i64 ¤meter = 1
+    let two : i64 ¤meter = 2
     let d := [one, two]
     let r := twice_as_far(d)
     assert_eq(r[0], 2¤meter)

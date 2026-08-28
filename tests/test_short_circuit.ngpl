@@ -47,7 +47,7 @@ fn test_or_reads_a_needed_right_side():
 @test
 fn test_and_guards_an_index():
     let v : i64[] = [1, 2, 3]
-    let i ¤ptrdiff : i64 = 3
+    let i : i64 ¤ptrdiff = 3
     let ok : bool = i < #v and v[i] > 0
     assert(¬ok)
 

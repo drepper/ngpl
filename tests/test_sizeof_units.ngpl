@@ -18,14 +18,14 @@ fn assert_true(cond:bool, msg:str):
 @impure
 fn test_sizeof_array_ptrdiff():
   let arr : i64[] = [10, 20, 30]
-  let sz ¤ptrdiff : i64 = #arr
+  let sz : i64 ¤ptrdiff = #arr
   assert_eq_int(sz, 3, "array sizeof is 3")
 
 @test
 @impure
 fn test_sizeof_string_ptrdiff():
   let s := "hello"
-  let sz ¤ptrdiff : i64 = #s
+  let sz : i64 ¤ptrdiff = #s
   assert_eq_int(sz, 5, "string sizeof is 5")
 
 // --- sizeof byte[] returns byte unit ---
@@ -34,7 +34,7 @@ fn test_sizeof_string_ptrdiff():
 @impure
 fn test_sizeof_byte_array():
   let buf: u8[4] = [1, 2, 3, 4]
-  let sz ¤byte : i64 = #buf
+  let sz : i64 ¤byte = #buf
   assert_eq_int(sz, 4, "byte array sizeof is 4")
 
 // --- dimensionless + unit-bearing: addition ---
@@ -42,14 +42,14 @@ fn test_sizeof_byte_array():
 @test
 @impure
 fn test_add_unit_plus_dimensionless():
-  let a ¤meter : i64 = 10
+  let a : i64 ¤meter = 10
   let b := a + 3
   assert_eq_int(b, 13, "10m + 3")
 
 @test
 @impure
 fn test_add_dimensionless_plus_unit():
-  let a ¤meter : i64 = 10
+  let a : i64 ¤meter = 10
   let b := 5 + a
   assert_eq_int(b, 15, "5 + 10m")
 
@@ -58,14 +58,14 @@ fn test_add_dimensionless_plus_unit():
 @test
 @impure
 fn test_sub_unit_minus_dimensionless():
-  let a ¤meter : i64 = 10
+  let a : i64 ¤meter = 10
   let b := a - 3
   assert_eq_int(b, 7, "10m - 3")
 
 @test
 @impure
 fn test_sub_dimensionless_minus_unit():
-  let a ¤meter : i64 = 10
+  let a : i64 ¤meter = 10
   let b := 20 - a
   assert_eq_int(b, 10, "20 - 10m")
 
@@ -74,14 +74,14 @@ fn test_sub_dimensionless_minus_unit():
 @test
 @impure
 fn test_mul_unit_times_dimensionless():
-  let a ¤meter : i64 = 5
+  let a : i64 ¤meter = 5
   let b := a × 3
   assert_eq_int(b, 15, "5m × 3 = 15m")
 
 @test
 @impure
 fn test_mul_dimensionless_times_unit():
-  let a ¤meter : i64 = 5
+  let a : i64 ¤meter = 5
   let b := 3 × a
   assert_eq_int(b, 15, "3 × 5m = 15m")
 
@@ -90,7 +90,7 @@ fn test_mul_dimensionless_times_unit():
 @test
 @impure
 fn test_div_unit_by_dimensionless():
-  let a ¤meter : i64 = 12
+  let a : i64 ¤meter = 12
   let b := a ÷ 3
   assert_eq_int(b, 4, "12m / 3 = 4m")
 
@@ -99,14 +99,14 @@ fn test_div_unit_by_dimensionless():
 @test
 @impure
 fn test_mod_unit_by_dimensionless():
-  let a ¤meter : i64 = 10
+  let a : i64 ¤meter = 10
   let b := a % 3
   assert_eq_int(b, 1, "10m % 3 = 1m")
 
 @test
 @impure
 fn test_mod_dimensionless_by_unit():
-  let a ¤meter : i64 = 3
+  let a : i64 ¤meter = 3
   let b := 10 % a
   assert_eq_int(b, 1, "10 % 3m = 1m")
 
@@ -115,7 +115,7 @@ fn test_mod_dimensionless_by_unit():
 @test
 @impure
 fn test_cmp_unit_with_dimensionless():
-  let a ¤meter : i64 = 5
+  let a : i64 ¤meter = 5
   assert_true(a > 3, "5m > 3")
   assert_true(2 < a, "2 < 5m")
   assert_true(a = 5, "5m = 5")
@@ -126,7 +126,7 @@ fn test_cmp_unit_with_dimensionless():
 @impure
 fn test_sizeof_in_arithmetic():
   let arr : i64[] = [10, 20, 30, 40, 50]
-  let sz ¤ptrdiff : i64 = #arr
+  let sz : i64 ¤ptrdiff = #arr
   let doubled := sz × 2
   assert_eq_int(doubled, 10, "sizeof×2")
   let plus_one := sz + 1
@@ -137,7 +137,7 @@ fn test_sizeof_in_arithmetic():
 @test
 @impure
 fn test_at_sizeof_ptrdiff():
-  let sz ¤ptrdiff : i64 = #[1, 2, 3]
+  let sz : i64 ¤ptrdiff = #[1, 2, 3]
   assert_eq_int(sz, 3, "# of a literal is 3")
 
 // --- @sizeof of a type: the storage it occupies, in bytes ---

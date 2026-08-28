@@ -27,7 +27,7 @@ fn main() → u8:
     let back := f.read_file(alloc)
     std.println("{}", #back)
     let same : mut bool = true
-    let j ¤byte : mut i64 = 0
+    let j : mut i64 ¤byte = 0
     while j < #back:
         same ← same and back[j] = payload[j]
         j ← j + 1

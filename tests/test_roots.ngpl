@@ -97,7 +97,7 @@ fn test_fourth_root_int_rejected():
 @test
 @impure
 fn test_sqrt_unit():
-  let area ¤meter×meter : f64 = 36.0
+  let area : f64 ¤meter×meter = 36.0
   let side := √area
   // √(36 m^2) = 6 m
   approx_eq(@dropunit(side), 6.0, "√(36 m^2) value")
@@ -105,7 +105,7 @@ fn test_sqrt_unit():
 
 @test
 fn test_sqrt_unit_incompatible():
-  let d ¤meter : f64 = 9.0
+  let d : f64 ¤meter = 9.0
   // √(m) has odd exponent, rejected
   @expect error "exponent"
   let r : mut = √d
@@ -113,7 +113,7 @@ fn test_sqrt_unit_incompatible():
 @test
 @impure
 fn test_cbrt_unit():
-  let vol ¤meter×meter×meter : f64 = 125.0
+  let vol : f64 ¤meter×meter×meter = 125.0
   let side := ∛vol
   // ∛(125 m^3) = 5 m
   approx_eq(@dropunit(side), 5.0, "∛(125 m^3) value")
@@ -122,7 +122,7 @@ fn test_cbrt_unit():
 @test
 @impure
 fn test_fourth_root_unit():
-  let x ¤meter×meter×meter×meter : f64 = 625.0
+  let x : f64 ¤meter×meter×meter×meter = 625.0
   let r := ∜x
   // ∜(625 m^4) = 5 m (approximately)
   approx_eq(@dropunit(r), 5.0, "∜(625 m^4) value")

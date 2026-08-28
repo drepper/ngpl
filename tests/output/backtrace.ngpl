@@ -1,14 +1,14 @@
 // An error raised several calls deep reports the whole chain, innermost
 // first, naming only the program's own functions.
 
-fn innermost(n ¤ptrdiff : i64) → i64:
+fn innermost(n : i64 ¤ptrdiff) → i64:
     let values : i64[] = [1, 2]
     values[n]
 
-fn middle(n ¤ptrdiff : i64) → i64:
+fn middle(n : i64 ¤ptrdiff) → i64:
     innermost(n) + 1
 
-fn outer(n ¤ptrdiff : i64) → i64:
+fn outer(n : i64 ¤ptrdiff) → i64:
     middle(n) × 2
 
 @start

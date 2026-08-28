@@ -21,8 +21,8 @@ let DIAG_WARNING : i64 = 1
 let DIAG_NONE : i64 = 0      // no number yet
 
 struct Diag:
-    line ¤"line" : i64
-    col ¤"col" : i64
+    line : i64 ¤"line"
+    col : i64 ¤"col"
     msg : str
     level : i64
     code : i64
@@ -39,22 +39,22 @@ struct Diag:
 // where a diagnostic is actually being written.
 struct Files:
     names : str[]
-    off ¤byte : i64[]    // the byte each one begins at
+    off : i64 ¤byte[]    // the byte each one begins at
 
 // the line each source file begins on, counted from 1 over the whole
 @pre(#f.names > 0 and #f.names = #f.off)
 @post(r: #r = #f.names)
 fn file_lines(f : Files, src : byte[]) → i64 ¤"line"[]:
-    let n ¤byte : i64 = #src
-    let nf ¤ptrdiff : i64 = #f.off
-    let out ¤"line" : mut i64[] = []
-    let line ¤"line" : mut i64 = 1
-    let i ¤byte : mut i64 = 0
-    let k ¤ptrdiff : mut i64 = 0
-    let one ¤"line" : i64 = 1
-    let zero ¤"line" : i64 = 0
+    let n : i64 ¤byte = #src
+    let nf : i64 ¤ptrdiff = #f.off
+    let out : mut i64 ¤"line"[] = []
+    let line : mut i64 ¤"line" = 1
+    let i : mut i64 ¤byte = 0
+    let k : mut i64 ¤ptrdiff = 0
+    let one : i64 ¤"line" = 1
+    let zero : i64 ¤"line" = 0
     while k < nf:
-        let want ¤byte : i64 = f.off[k]
+        let want : i64 ¤byte = f.off[k]
         while i < want and i < n:
             line ← line + (if src[i] = 10: one else: zero)
             i ← i + 1
@@ -65,21 +65,21 @@ fn file_lines(f : Files, src : byte[]) → i64 ¤"line"[]:
 // which file line `want` came from, as an index into the names
 @pre(want >= 1 and #starts > 0)
 @post(r: r >= 0 and r < #starts)
-fn file_of(starts ¤"line" : i64[], want ¤"line" : i64) → i64 ¤ptrdiff:
+fn file_of(starts : i64 ¤"line"[], want : i64 ¤"line") → i64 ¤ptrdiff:
     // the file a line belongs to is the last one that begins at or
     // before it; a compilation is a handful of files, so the walk back
     // finds it in fewer steps than a search would take to set up
-    let k ¤ptrdiff : mut i64 = #starts - 1
+    let k : mut i64 ¤ptrdiff = #starts - 1
     while k > 0 and starts[k] > want:
         k ← k - 1
     k
 
 // the text of source line n, decoded, for the excerpt under a diagnostic
 @pre(want >= 1)
-fn line_str(src : byte[], want ¤"line" : i64) → str:
-    let n ¤byte : i64 = #src
-    let line ¤"line" : mut i64 = 1
-    let i ¤byte : mut i64 = 0
+fn line_str(src : byte[], want : i64 ¤"line") → str:
+    let n : i64 ¤byte = #src
+    let line : mut i64 ¤"line" = 1
+    let i : mut i64 ¤byte = 0
     let out : mut str = ""
     while i < n:
         // the value of a byte, which is a code and not a count of

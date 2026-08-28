@@ -46,7 +46,7 @@ fn sbom_compiler_name() → str:
 // How much of the message is held before it is handed to the digests.
 // Large enough that the handing over is not what costs, small enough
 // that it is nothing beside the sources themselves.
-let SBOM_CHUNK ¤byte : i64 = 65536
+let SBOM_CHUNK : i64 ¤byte = 65536
 
 
 // ---------------------------------------------------------------------------
@@ -95,7 +95,7 @@ fn canon_kind(k : i64) → i64:
 // lexer kept neither.  A number is written out in decimal rather than
 // as it was spelled, so 0x10 and 16 hash alike if the lexer read them
 // alike.
-fn token_bytes(t : Toks, src : byte[], i ¤ptrdiff : i64, into : &mut u8[]):
+fn token_bytes(t : Toks, src : byte[], i : i64 ¤ptrdiff, into : &mut u8[]):
     let k0 : i64 = t.kind[i]
     let k : i64 = canon_kind(k0)
     into.push(k & 255)
@@ -143,14 +143,14 @@ fn feed_token(c : i64, ready : u8[], held : i64, prev : i64,
 // SBOM_CHUNK and never the message.
 fn sbom_sources(a : Ast, t : Toks, src : byte[], files : Files) → SbomRow[]:
     let rows : mut SbomRow[] = []
-    let nf ¤ptrdiff : i64 = #files.names
-    let ntok ¤ptrdiff : i64 = #t.kind
-    let total ¤byte : i64 = #src
+    let nf : i64 ¤ptrdiff = #files.names
+    let ntok : i64 ¤ptrdiff = #t.kind
+    let total : i64 ¤byte = #src
     let whole : mut = std.hash.sha256.start()
     let one : mut = std.hash.sha256.start()
     let feed : mut u8[] = []
-    let fi ¤ptrdiff : mut i64 = 0
-    let hi ¤byte : mut i64 = if nf > 1: files.off[1¤ptrdiff] else: total
+    let fi : mut i64 ¤ptrdiff = 0
+    let hi : mut i64 ¤byte = if nf > 1: files.off[1¤ptrdiff] else: total
     let held : mut i64 = 0
     let prev : mut i64 = 0
     // and the function the token falls in, if any: the definitions are
@@ -163,12 +163,12 @@ fn sbom_sources(a : Ast, t : Toks, src : byte[], files : Files) → SbomRow[]:
     let fprev : mut i64 = 0
     let fopen : mut bool = false
     let fend : mut i64 = ⁻1
-    let fnext ¤ptrdiff : mut i64 = 0
-    let nfn ¤ptrdiff : i64 = #a.fns
+    let fnext : mut i64 ¤ptrdiff = 0
+    let nfn : i64 ¤ptrdiff = #a.fns
     let ready : mut u8[] = []
-    let i ¤ptrdiff : mut i64 = 0
+    let i : mut i64 ¤ptrdiff = 0
     while i < ntok:
-        let at ¤byte : i64 = t.off[i]
+        let at : i64 ¤byte = t.off[i]
         while at >= hi and fi + 1 < nf:
             one.update(feed)
             whole.update(feed)

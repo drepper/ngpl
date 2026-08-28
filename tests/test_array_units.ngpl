@@ -13,7 +13,7 @@
 // type.  They say the same thing, so they are the same declaration.
 @test
 fn test_the_unit_may_be_written_by_the_name():
-    let d ¤meter : i64[] = [1, 2]
+    let d : i64 ¤meter[] = [1, 2]
     assert_eq(d[0], 1¤meter)
     assert_eq(@unitof(d[0]), ¤meter)
 
@@ -28,11 +28,13 @@ fn test_a_scalar_reads_the_same_way():
     let s : i64 ¤meter = 5
     assert_eq(s, 5¤meter)
 
-// Saying it twice is saying it once, twice -- not saying two things.
+// A measure belongs to the type and is written there.  Against the
+// name it says the same thing in the place the language no longer
+// keeps for it, and is refused rather than quietly taken.
 @test
-@expect error 2022 "Line 35, col 10: the definition states a unit twice; write it once, either after the name or against the element type"
-fn error_the_unit_written_twice():
-    let d ¤meter : i64 ¤meter[] = [1, 2]
+@expect error 2022 "a measure is written against the type"
+fn error_the_measure_written_against_the_name():
+    let d ¤meter : i64[] = [1, 2]
 
 // ---------------------------------------------------------------------
 // The unit reaches the elements
@@ -42,7 +44,7 @@ fn error_the_unit_written_twice():
 // out of, so it goes to the elements instead.
 @test
 fn test_a_measured_array_can_be_indexed():
-    let d ¤meter : i64[] = [10, 20, 30]
+    let d : i64 ¤meter[] = [10, 20, 30]
     assert_eq(d[2], 30¤meter)
     assert_eq(#d, 3¤ptrdiff)
 
@@ -60,7 +62,7 @@ fn test_an_allocated_array_is_measured_too():
 
 @test
 fn test_measured_elements_do_arithmetic_as_numbers_do():
-    let d ¤meter : i64[] = [7, 8]
+    let d : i64 ¤meter[] = [7, 8]
     assert_eq(d[0] + d[1], 15¤meter)
 
 // ---------------------------------------------------------------------
@@ -93,7 +95,7 @@ fn test_a_measured_array_return():
 // what the number counts.
 @test
 fn test_a_definition_measures_bare_numbers():
-    let d ¤meter : i64[] = [1, 2]
+    let d : i64 ¤meter[] = [1, 2]
     assert_eq(d[0], 1¤meter)
 
 // An assignment says nothing, so what it stores has to arrive measured
@@ -101,21 +103,21 @@ fn test_a_definition_measures_bare_numbers():
 @test
 @expect error 2322 "cannot assign dimensionless value to 'd' which has unit m"
 fn error_assigning_bare_numbers_to_a_measured_array():
-    let d ¤meter : mut i64[] = [1, 2]
+    let d : mut i64 ¤meter[] = [1, 2]
     d ← [5, 6]
 
 @test
 fn test_assigning_a_measured_array():
-    let d ¤meter : mut i64[] = [1, 2]
-    let e ¤meter : i64[] = [5, 6]
+    let d : mut i64 ¤meter[] = [1, 2]
+    let e : i64 ¤meter[] = [5, 6]
     d ← e
     assert_eq(d[0], 5¤meter)
 
 @test
 @expect error 2327 "incompatible units: s and m"
 fn error_assigning_the_wrong_measure():
-    let d ¤meter : mut i64[] = [1, 2]
-    let e ¤second : i64[] = [5, 6]
+    let d : mut i64 ¤meter[] = [1, 2]
+    let e : i64 ¤second[] = [5, 6]
     d ← e
 
 // What the definition said outlives the value: a name that has been
@@ -160,19 +162,19 @@ fn error_inserting_the_wrong_kind():
 @expect error 2324 "an array of i64 cannot hold m; use @dropunit to part with it"
 fn error_a_measured_value_in_an_unmeasured_array():
     let a : mut i64[] = [1, 2]
-    let m ¤meter : i64 = 7
+    let m : i64 ¤meter = 7
     a[0] ← m
 
 @test
 @expect error 2325 "an array measured in m cannot hold a number that measures nothing"
 fn error_an_unmeasured_value_in_a_measured_array():
-    let d ¤meter : mut i64[] = [1, 2]
+    let d : mut i64 ¤meter[] = [1, 2]
     d.push(9)
 
 @test
 fn test_pushing_a_measured_value():
-    let d ¤meter : mut i64[] = [1, 2]
-    let x ¤meter : i64 = 9
+    let d : mut i64 ¤meter[] = [1, 2]
+    let x : i64 ¤meter = 9
     d.push(x)
     assert_eq(d[2], 9¤meter)
 
@@ -248,7 +250,7 @@ fn test_one_element_still_says_it():
 // A unit settles the same way, wherever it is written.
 @test
 fn test_a_unit_settles_like_a_width():
-    let m ¤meter : i64 = 1
+    let m : i64 ¤meter = 1
     let a := [m, 2]
     let b := [2, m]
     assert_eq(a[1], 2¤meter)
@@ -257,8 +259,8 @@ fn test_a_unit_settles_like_a_width():
 @test
 @expect error 2320 "an array holds one unit, but element 0 is m and element 1 is s"
 fn error_a_literal_of_two_units():
-    let m ¤meter : i64 = 1
-    let s ¤second : i64 = 2
+    let m : i64 ¤meter = 1
+    let s : i64 ¤second = 2
     let a : mut = [m, s]
 
 // ---------------------------------------------------------------------
@@ -305,7 +307,7 @@ fn error_joining_arrays_of_two_types():
 @test
 @expect error 2310 "⧺: an array holds one unit, so two joined hold the same one, but the left operand is m and the right is unmeasured"
 fn error_joining_a_measured_array_to_a_bare_one():
-    let d ¤meter : i64[] = [1, 2]
+    let d : i64 ¤meter[] = [1, 2]
     let e : i64[] = [3]
     let c : mut = d ⧺ e
 

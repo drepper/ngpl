@@ -125,10 +125,10 @@ fn test_reject_foreach_typed_index():
 
 // ---- typed integers without unit rejected (parameter passing) ------------
 
-fn needs_ptrdiff(arr : i32[], idx ¤ptrdiff : i32) → i32:
+fn needs_ptrdiff(arr : i32[], idx : i32 ¤ptrdiff) → i32:
     arr[idx]
 
-fn needs_byte(buf : byte[], off ¤byte : usize) → u8:
+fn needs_byte(buf : byte[], off : usize ¤byte) → u8:
     buf[off]
 
 @test
@@ -167,7 +167,7 @@ fn test_accept_untyped_const_param_byte():
 @test
 fn test_accept_unit_value_param():
     let arr : i64[] = [10, 20, 30]
-    let idx ¤ptrdiff : i32 = 1
+    let idx : i32 ¤ptrdiff = 1
     assert_eq(needs_ptrdiff(arr, idx), 20)
 
 // ---- typed integers with correct unit accepted ---------------------------
@@ -175,14 +175,14 @@ fn test_accept_unit_value_param():
 @test
 fn test_typed_with_ptrdiff():
     let arr : i64[] = [10, 20, 30]
-    let idx ¤ptrdiff : i32 = 1
+    let idx : i32 ¤ptrdiff = 1
     assert_eq(arr[idx], 20)
 
 @test
 fn test_typed_with_byte():
     let buf : mut u8[3] = 3 ⍴ 0
     buf[0] ← 10; buf[1] ← 20; buf[2] ← 30
-    let idx ¤byte : i32 = 2
+    let idx : i32 ¤byte = 2
     assert_eq(buf[idx], 30)
 
 // ---- wrong unit rejected ------------------------------------------------
@@ -212,14 +212,14 @@ fn test_reject_meter_for_general():
 @expect error 2312 "cannot + typed integer i32 without unit with unit ptrdiff"
 fn test_arith_typed_plus_unit():
     let a : mut i32 = 5
-    let b ¤ptrdiff : mut i32 = 3
+    let b : mut i32 ¤ptrdiff = 3
     let x : mut = a + b
 
 // addition: unit + typed int → error
 @test
 @expect error 2311 "cannot + unit ptrdiff with typed integer i32 without unit"
 fn test_arith_unit_plus_typed():
-    let a ¤ptrdiff : mut i32 = 3
+    let a : mut i32 ¤ptrdiff = 3
     let b : mut i32 = 5
     let x : mut = a + b
 
@@ -227,28 +227,28 @@ fn test_arith_unit_plus_typed():
 @test
 @expect error 2311 "cannot - unit ptrdiff with typed integer i32 without unit"
 fn test_arith_unit_minus_typed():
-    let a ¤ptrdiff : mut i32 = 3
+    let a : mut i32 ¤ptrdiff = 3
     let b : mut i32 = 1
     let x : mut = a - b
 
 // addition: unit + untyped let → ok
 @test
 fn test_arith_unit_plus_const():
-    let a ¤ptrdiff : i32 = 3
+    let a : i32 ¤ptrdiff = 3
     let x := a + 2
     assert_eq(x, 5 ¤ptrdiff)
 
 // subtraction: unit - untyped let → ok
 @test
 fn test_arith_unit_minus_const():
-    let a ¤ptrdiff : i32 = 5
+    let a : i32 ¤ptrdiff = 5
     let x := a - 1
     assert_eq(x, 4 ¤ptrdiff)
 
 // multiplication: unit × typed int → ok (scalar)
 @test
 fn test_arith_unit_times_typed():
-    let a ¤byte : i32 = 3
+    let a : i32 ¤byte = 3
     let b : i32 = 4
     let x := a × b
     assert_eq(x, 12 ¤byte)
@@ -257,7 +257,7 @@ fn test_arith_unit_times_typed():
 @test
 fn test_arith_typed_times_unit():
     let a : i32 = 4
-    let b ¤byte : i32 = 3
+    let b : i32 ¤byte = 3
     let x := a × b
     assert_eq(x, 12 ¤byte)
 
@@ -265,7 +265,7 @@ fn test_arith_typed_times_unit():
 @test
 @expect error 2314 "cannot compare unit ptrdiff with typed integer i32 without unit"
 fn test_cmp_unit_eq_typed():
-    let a ¤ptrdiff : mut i32 = 3
+    let a : mut i32 ¤ptrdiff = 3
     let b : mut i32 = 3
     let x : mut = a = b
 
@@ -274,19 +274,19 @@ fn test_cmp_unit_eq_typed():
 @expect error 2315 "cannot compare typed integer i32 without unit with unit ptrdiff"
 fn test_cmp_typed_lt_unit():
     let a : mut i32 = 1
-    let b ¤ptrdiff : mut i32 = 3
+    let b : mut i32 ¤ptrdiff = 3
     let x : mut = a < b
 
 // comparison: unit = untyped let → ok
 @test
 fn test_cmp_unit_eq_const():
-    let a ¤ptrdiff : i32 = 3
+    let a : i32 ¤ptrdiff = 3
     assert_eq(a = 3, true)
 
 // comparison: unit < untyped let → ok
 @test
 fn test_cmp_unit_lt_const():
-    let a ¤ptrdiff : i32 = 1
+    let a : i32 ¤ptrdiff = 1
     assert_eq(a < 5, true)
 
 // ---- tuple indexing unchanged (no unit needed) --------------------------

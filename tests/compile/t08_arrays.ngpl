@@ -44,7 +44,7 @@ fn main():
     std.println("pop0 {}", empty.pop() ?? ⁻7)
 
     // an index that came from # carries the right measure
-    let i ¤ptrdiff : mut i64 = 0
+    let i : mut i64 ¤ptrdiff = 0
     let prod : mut i64 = 1
     while i < #v:
         prod ← prod × v[i]
@@ -54,7 +54,7 @@ fn main():
     // a byte-elemented array is measured in bytes
     let bs : mut u8[] = [1, 2, 3, 250]
     std.println("blen {}", #bs)
-    let j ¤byte : mut i64 = 0
+    let j : mut i64 ¤byte = 0
     let bsum : mut u64 = 0
     while j < #bs:
         bsum ← bsum + bs[j]

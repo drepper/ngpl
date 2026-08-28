@@ -101,7 +101,7 @@ fn test_the_empty_string_is_at_the_beginning():
 @test
 fn test_the_answer_is_an_index():
     let v : i64[] = [10, 20, 30]
-    let i ¤ptrdiff : i64 = (v ⍳ 20) ?? 0
+    let i : i64 ¤ptrdiff = (v ⍳ 20) ?? 0
     assert_eq(v[i], 20)
 
 // What is looked for is an element, which carries no unit of its own;
@@ -110,7 +110,7 @@ fn test_the_answer_is_an_index():
 @test
 fn test_the_answer_of_a_byte_array_is_counted_in_bytes():
     let b : byte[] = std.bytes("abc")
-    let at ¤byte : i64 = (b ⍳ 98) ?? ⁻1
+    let at : i64 ¤byte = (b ⍳ 98) ?? ⁻1
     assert_eq(at, 1¤byte)
     assert_eq(@unitof(at), ¤byte)
 

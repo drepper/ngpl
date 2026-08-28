@@ -183,8 +183,8 @@ fn align_up(v : i64, a : i64) → i64:
 // into a bare count, which the alignment then scales back up
 @pre(a > 0 and v >= 0)
 @post(r: r >= v)
-fn align_up_b(v ¤byte : i64, a ¤byte : i64) → i64 ¤byte:
-    let one ¤byte : i64 = 1
+fn align_up_b(v : i64 ¤byte, a : i64 ¤byte) → i64 ¤byte:
+    let one : i64 ¤byte = 1
     ((v + a - one) ÷ a ?? 0) × a
 
 // What the file's numbers count.  Offsets, sizes and addresses count
@@ -316,8 +316,8 @@ fn elf_ident(cls : Elfclass, order : Elfdata, abi : Elfosabi) → u8[16]:
 // are named values of the measure rather than members of a type.  Only
 // the absent one is ELF's; the text index is where this compiler puts
 // its text.
-let SHN_UNDEF ¤"shndx" : i64 = 0
-let SHN_TEXT ¤"shndx" : i64 = 1   // the first section header is the absent one
+let SHN_UNDEF : i64 ¤"shndx" = 0
+let SHN_TEXT : i64 ¤"shndx" = 1   // the first section header is the absent one
 
 // The file's own structures, as <elf.h> declares them.  They are
 // written out as themselves rather than assembled byte by byte: a
@@ -333,40 +333,40 @@ struct Elf64_Ehdr:
     e_type : Et
     e_machine : Em
     e_version : Ev
-    e_entry ¤byte : u64
-    e_phoff ¤byte : u64
-    e_shoff ¤byte : u64
+    e_entry : u64 ¤byte
+    e_phoff : u64 ¤byte
+    e_shoff : u64 ¤byte
     e_flags : u32
-    e_ehsize ¤byte : u16
-    e_phentsize ¤byte : u16
-    e_phnum ¤"phndx" : u16
-    e_shentsize ¤byte : u16
-    e_shnum ¤"shndx" : u16
-    e_shstrndx ¤"shndx" : u16
+    e_ehsize : u16 ¤byte
+    e_phentsize : u16 ¤byte
+    e_phnum : u16 ¤"phndx"
+    e_shentsize : u16 ¤byte
+    e_shnum : u16 ¤"shndx"
+    e_shstrndx : u16 ¤"shndx"
 
 @repr(C)
 struct Elf64_Phdr:
     p_type : Pt
     p_flags : Pf
-    p_offset ¤byte : u64
-    p_vaddr ¤byte : u64
-    p_paddr ¤byte : u64
-    p_filesz ¤byte : u64
-    p_memsz ¤byte : u64
-    p_align ¤byte : u64
+    p_offset : u64 ¤byte
+    p_vaddr : u64 ¤byte
+    p_paddr : u64 ¤byte
+    p_filesz : u64 ¤byte
+    p_memsz : u64 ¤byte
+    p_align : u64 ¤byte
 
 @repr(C)
 struct Elf64_Shdr:
-    sh_name ¤byte : u32
+    sh_name : u32 ¤byte
     sh_type : Sht
     sh_flags : Shf
-    sh_addr ¤byte : u64
-    sh_offset ¤byte : u64
-    sh_size ¤byte : u64
-    sh_link ¤"shndx" : u32
-    sh_info ¤"symndx" : u32
-    sh_addralign ¤byte : u64
-    sh_entsize ¤byte : u64
+    sh_addr : u64 ¤byte
+    sh_offset : u64 ¤byte
+    sh_size : u64 ¤byte
+    sh_link : u32 ¤"shndx"
+    sh_info : u32 ¤"symndx"
+    sh_addralign : u64 ¤byte
+    sh_entsize : u64 ¤byte
 
 // A row of the bill of materials, as it sits in the file: what it is
 // about, and where in .sbomstr its name and its digest are.  Twelve
@@ -375,17 +375,17 @@ struct Elf64_Shdr:
 @repr(C)
 struct Sbom_Entry:
     kind : Sbomkind
-    name ¤byte : u32     // offset into .sbomstr
-    hash ¤byte : u32     // …and of the digest, written out as ASCII
+    name : u32 ¤byte     // offset into .sbomstr
+    hash : u32 ¤byte     // …and of the digest, written out as ASCII
 
 @repr(C)
 struct Elf64_Sym:
-    st_name ¤byte : u32
+    st_name : u32 ¤byte
     st_info : u8
     st_other : Stv
-    st_shndx ¤"shndx" : u16
-    st_value ¤byte : u64
-    st_size ¤byte : u64
+    st_shndx : u16 ¤"shndx"
+    st_value : u64 ¤byte
+    st_size : u64 ¤byte
 
 
 // The 32-bit file wears the same information in narrower fields, and
@@ -399,57 +399,57 @@ struct Elf32_Ehdr:
     e_type : Et
     e_machine : Em
     e_version : Ev
-    e_entry ¤byte : u32
-    e_phoff ¤byte : u32
-    e_shoff ¤byte : u32
+    e_entry : u32 ¤byte
+    e_phoff : u32 ¤byte
+    e_shoff : u32 ¤byte
     e_flags : u32
-    e_ehsize ¤byte : u16
-    e_phentsize ¤byte : u16
-    e_phnum ¤"phndx" : u16
-    e_shentsize ¤byte : u16
-    e_shnum ¤"shndx" : u16
-    e_shstrndx ¤"shndx" : u16
+    e_ehsize : u16 ¤byte
+    e_phentsize : u16 ¤byte
+    e_phnum : u16 ¤"phndx"
+    e_shentsize : u16 ¤byte
+    e_shnum : u16 ¤"shndx"
+    e_shstrndx : u16 ¤"shndx"
 
 @repr(C)
 struct Elf32_Phdr:
     p_type : Pt
-    p_offset ¤byte : u32
-    p_vaddr ¤byte : u32
-    p_paddr ¤byte : u32
-    p_filesz ¤byte : u32
-    p_memsz ¤byte : u32
+    p_offset : u32 ¤byte
+    p_vaddr : u32 ¤byte
+    p_paddr : u32 ¤byte
+    p_filesz : u32 ¤byte
+    p_memsz : u32 ¤byte
     p_flags : Pf
-    p_align ¤byte : u32
+    p_align : u32 ¤byte
 
 @repr(C)
 struct Elf32_Shdr:
-    sh_name ¤byte : u32
+    sh_name : u32 ¤byte
     sh_type : Sht
     sh_flags : u32       // ELF32's Word is narrower than Shf's fixed
                          // u64, so the bits are copied out by number
-    sh_addr ¤byte : u32
-    sh_offset ¤byte : u32
-    sh_size ¤byte : u32
-    sh_link ¤"shndx" : u32
-    sh_info ¤"symndx" : u32
-    sh_addralign ¤byte : u32
-    sh_entsize ¤byte : u32
+    sh_addr : u32 ¤byte
+    sh_offset : u32 ¤byte
+    sh_size : u32 ¤byte
+    sh_link : u32 ¤"shndx"
+    sh_info : u32 ¤"symndx"
+    sh_addralign : u32 ¤byte
+    sh_entsize : u32 ¤byte
 
 @repr(C)
 struct Elf32_Sym:
-    st_name ¤byte : u32
-    st_value ¤byte : u32
-    st_size ¤byte : u32
+    st_name : u32 ¤byte
+    st_value : u32 ¤byte
+    st_size : u32 ¤byte
     st_info : u8
     st_other : Stv
-    st_shndx ¤"shndx" : u16
+    st_shndx : u16 ¤"shndx"
 
 // One symbol: what it is called, where it starts, how long it is, and
 // whether anything outside may link against it.
 struct Sym:
     name : str
-    value ¤byte : i64    // the offset within the text, made absolute below
-    size ¤byte : i64
+    value : i64 ¤byte    // the offset within the text, made absolute below
+    size : i64 ¤byte
     is_global : bool
 
 // The images ELF gives no structure to -- the read-only and writable
@@ -469,9 +469,9 @@ fn push64(out : &mut u8[], v : i64):
 // the file has no structure for
 @pre(n >= 0)
 @post(r: #r = n)
-fn zeros(n ¤byte : i64) → u8[]:
+fn zeros(n : i64 ¤byte) → u8[]:
     let out : mut u8[] = []
-    let i ¤byte : mut i64 = 0
+    let i : mut i64 ¤byte = 0
     while i < n:
         out.push(0)
         i ← i + 1
@@ -520,17 +520,17 @@ struct Elf32:
     shdrs : Elf32_Shdr[]
 
 // a program header, whose fields are the same shape every time
-fn phdr(kind : Pt, flags : Pf, off ¤byte : i64, vaddr ¤byte : i64,
-        filesz ¤byte : i64, memsz ¤byte : i64, align ¤byte : i64) → Elf64_Phdr:
+fn phdr(kind : Pt, flags : Pf, off : i64 ¤byte, vaddr : i64 ¤byte,
+        filesz : i64 ¤byte, memsz : i64 ¤byte, align : i64 ¤byte) → Elf64_Phdr:
     (Elf64_Phdr{p_type: kind, p_flags: flags,
                 p_offset: off, p_vaddr: vaddr,
                 p_paddr: vaddr, p_filesz: filesz,
                 p_memsz: memsz, p_align: align})
 
-fn shdr(name ¤byte : i64, kind : Sht, flags : Shf, addr ¤byte : i64,
-        off ¤byte : i64, size ¤byte : i64, link ¤"shndx" : i64,
-        info ¤"symndx" : i64, align ¤byte : i64,
-        entsize ¤byte : i64) → Elf64_Shdr:
+fn shdr(name : i64 ¤byte, kind : Sht, flags : Shf, addr : i64 ¤byte,
+        off : i64 ¤byte, size : i64 ¤byte, link : i64 ¤"shndx",
+        info : i64 ¤"symndx", align : i64 ¤byte,
+        entsize : i64 ¤byte) → Elf64_Shdr:
     (Elf64_Shdr{sh_name: name, sh_type: kind,
                 sh_flags: flags, sh_addr: addr,
                 sh_offset: off, sh_size: size,
@@ -555,19 +555,19 @@ struct ElfPlan:
     sbom : Sbom_Entry[]
     sbomstr : u8[]
     // where the pieces fall, for the gaps between them
-    text_off ¤byte : i64
-    text_size ¤byte : i64
-    ro_off ¤byte : i64
-    ro_size ¤byte : i64
-    d_off ¤byte : i64
-    d_size ¤byte : i64
-    bom_off ¤byte : i64
-    bom_size ¤byte : i64
-    bstr_size ¤byte : i64
-    sym_off ¤byte : i64
-    shstr_off ¤byte : i64
-    sh_off ¤byte : i64
-    hdrs_size ¤byte : i64
+    text_off : i64 ¤byte
+    text_size : i64 ¤byte
+    ro_off : i64 ¤byte
+    ro_size : i64 ¤byte
+    d_off : i64 ¤byte
+    d_size : i64 ¤byte
+    bom_off : i64 ¤byte
+    bom_size : i64 ¤byte
+    bstr_size : i64 ¤byte
+    sym_off : i64 ¤byte
+    shstr_off : i64 ¤byte
+    sh_off : i64 ¤byte
+    hdrs_size : i64 ¤byte
 
 // The program itself, hashed: the code, what it reads, what it writes,
 // and where it starts, plus which machine and how wide its words are.
@@ -575,7 +575,7 @@ struct ElfPlan:
 // section headers are things said *about* the program, and two builds
 // that differ only in what they say about themselves are one program.
 fn image_digest(tgt : Target, code : u8[], rodata : u8[], data : u8[],
-                entry ¤byte : i64) → str:
+                entry : i64 ¤byte) → str:
     // The three segments go straight into the digest.  Copying them
     // into one array first said the same thing and asked for a second
     // copy of the whole image to say it.
@@ -594,24 +594,24 @@ fn image_digest(tgt : Target, code : u8[], rodata : u8[], data : u8[],
 @pre(#code > 0 and stack_size > 0)
 @pre(relro_size >= 0)
 fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
-            stack_size ¤byte : i64, relro_size ¤byte : i64,
+            stack_size : i64 ¤byte, relro_size : i64 ¤byte,
             syms : Sym[], bom : SbomRow[]) → ElfPlan:
     // how wide this class's own bookkeeping is
-    let ehsize ¤byte : i64 = if tgt.is64: @sizeof(Elf64_Ehdr) else: @sizeof(Elf32_Ehdr)
-    let phent ¤byte : i64 = if tgt.is64: @sizeof(Elf64_Phdr) else: @sizeof(Elf32_Phdr)
-    let shent ¤byte : i64 = if tgt.is64: @sizeof(Elf64_Shdr) else: @sizeof(Elf32_Shdr)
-    let syment ¤byte : i64 = if tgt.is64: @sizeof(Elf64_Sym) else: @sizeof(Elf32_Sym)
-    let page ¤byte : i64 = PAGE
-    let image ¤byte : i64 = IMAGE_BASE
-    let text_off ¤byte : i64 = PAGE
-    let text_vaddr ¤byte : i64 = image + text_off
-    let text_size ¤byte : i64 = #code
-    let ro_off ¤byte : i64 = align_up_b(text_off + text_size, page)
-    let ro_vaddr ¤byte : i64 = image + ro_off
-    let ro_size ¤byte : i64 = #rodata
-    let d_off ¤byte : i64 = align_up_b(ro_off + ro_size, page)
-    let d_vaddr ¤byte : i64 = image + d_off
-    let d_size ¤byte : i64 = #data
+    let ehsize : i64 ¤byte = if tgt.is64: @sizeof(Elf64_Ehdr) else: @sizeof(Elf32_Ehdr)
+    let phent : i64 ¤byte = if tgt.is64: @sizeof(Elf64_Phdr) else: @sizeof(Elf32_Phdr)
+    let shent : i64 ¤byte = if tgt.is64: @sizeof(Elf64_Shdr) else: @sizeof(Elf32_Shdr)
+    let syment : i64 ¤byte = if tgt.is64: @sizeof(Elf64_Sym) else: @sizeof(Elf32_Sym)
+    let page : i64 ¤byte = PAGE
+    let image : i64 ¤byte = IMAGE_BASE
+    let text_off : i64 ¤byte = PAGE
+    let text_vaddr : i64 ¤byte = image + text_off
+    let text_size : i64 ¤byte = #code
+    let ro_off : i64 ¤byte = align_up_b(text_off + text_size, page)
+    let ro_vaddr : i64 ¤byte = image + ro_off
+    let ro_size : i64 ¤byte = #rodata
+    let d_off : i64 ¤byte = align_up_b(ro_off + ro_size, page)
+    let d_vaddr : i64 ¤byte = image + d_off
+    let d_size : i64 ¤byte = #data
 
     // The bill of materials sits in its own read-only segment after the
     // writable one: loaded, so a program can read its own, and last of
@@ -636,22 +636,22 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
         sbomstr.push(0)
     let sbom : mut Sbom_Entry[] = []
     foreach r := rows:
-        let nat ¤byte : i64 = #sbomstr
+        let nat : i64 ¤byte = #sbomstr
         foreach b := std.bytes(r.name):
             sbomstr.push(b)
         sbomstr.push(0)
-        let hat ¤byte : i64 = #sbomstr
+        let hat : i64 ¤byte = #sbomstr
         foreach b := std.bytes(r.hash):
             sbomstr.push(b)
         sbomstr.push(0)
         sbom.push(Sbom_Entry{kind: r.kind, name: nat, hash: hat})
-    let sbent ¤byte : i64 = @sizeof(Sbom_Entry)
-    let bom_off ¤byte : i64 = if #rows > 0: align_up_b(d_off + d_size, page) else: d_off + d_size
-    let bom_vaddr ¤byte : i64 = image + bom_off
-    let bom_size ¤byte : i64 = sbent × @dropunit(#sbom)
-    let bstr_off ¤byte : i64 = bom_off + bom_size
-    let bstr_size ¤byte : i64 = #sbomstr
-    let bom_seg ¤byte : i64 = bom_size + bstr_size
+    let sbent : i64 ¤byte = @sizeof(Sbom_Entry)
+    let bom_off : i64 ¤byte = if #rows > 0: align_up_b(d_off + d_size, page) else: d_off + d_size
+    let bom_vaddr : i64 ¤byte = image + bom_off
+    let bom_size : i64 ¤byte = sbent × @dropunit(#sbom)
+    let bstr_off : i64 ¤byte = bom_off + bom_size
+    let bstr_size : i64 ¤byte = #sbomstr
+    let bom_seg : i64 ¤byte = bom_size + bstr_size
 
     // A symbol table names the locals first and the globals after, and
     // says in the section's own header where the first global sits;
@@ -664,7 +664,7 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
                           st_info: sym_info(Stb.local, Stt.notype),
                           st_other: Stv.default, st_shndx: SHN_UNDEF,
                           st_value: 0, st_size: 0})
-    let nlocal ¤"symndx" : mut i64 = 0
+    let nlocal : mut i64 ¤"symndx" = 0
     foreach want := 0…2:
         foreach sy := syms:
             if (if sy.is_global: 1 else: 0) = want:
@@ -683,7 +683,7 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
 
     let shstr : mut u8[] = []
     shstr.push(0)
-    let shname ¤byte : mut i64[] = []
+    let shname : mut i64 ¤byte[] = []
     // The bill's two sections are named only when there is one, so a
     // file built without it is what it was before there were any.
     let names : mut str[] = [".text", ".rodata", ".data"]
@@ -699,13 +699,13 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
             shstr.push(b)
         shstr.push(0)
     // where the ones that are always there sit in that list
-    let n_sym ¤ptrdiff : i64 = if #rows > 0: 5 else: 3
-    let n_str ¤ptrdiff : i64 = n_sym + 1
-    let n_shs ¤ptrdiff : i64 = n_sym + 2
+    let n_sym : i64 ¤ptrdiff = if #rows > 0: 5 else: 3
+    let n_str : i64 ¤ptrdiff = n_sym + 1
+    let n_shs : i64 ¤ptrdiff = n_sym + 2
     // which section header the symbol table's names are in: the null
     // one, the three that are always loaded, the bill's two when there
     // is one, then the symbols and their strings
-    let strtab_ndx ¤"shndx" : i64 = if #rows > 0: 7 else: 5
+    let strtab_ndx : i64 ¤"shndx" = if #rows > 0: 7 else: 5
 
     // Past the last thing the kernel loads: the symbol table, the
     // strings its names live in, and the section headers that say
@@ -713,13 +713,13 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
     // is mapped -- it is there for whoever reads the file.  Every
     // offset is settled here, before anything is written, which is why
     // nothing has to be patched afterwards.
-    let nsym ¤"symndx" : i64 = @dropunit(#symtab)
-    let word ¤byte : i64 = 8
-    let sym_off ¤byte : i64 = align_up_b(bstr_off + bstr_size, word)
-    let sym_size ¤byte : i64 = syment × @dropunit(nsym)
-    let str_off ¤byte : i64 = sym_off + sym_size
-    let shstr_off ¤byte : i64 = str_off + #strtab
-    let sh_off ¤byte : i64 = align_up_b(shstr_off + #shstr, word)
+    let nsym : i64 ¤"symndx" = @dropunit(#symtab)
+    let word : i64 ¤byte = 8
+    let sym_off : i64 ¤byte = align_up_b(bstr_off + bstr_size, word)
+    let sym_size : i64 ¤byte = syment × @dropunit(nsym)
+    let str_off : i64 ¤byte = sym_off + sym_size
+    let shstr_off : i64 ¤byte = str_off + #strtab
+    let sh_off : i64 ¤byte = align_up_b(shstr_off + #shstr, word)
     assert((sh_off % word ?? word) = 0, "the section headers are aligned")
 
     let phdrs : mut Elf64_Phdr[] = []
@@ -742,11 +742,11 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
     // PT_GNU_STACK: read and write, and pointedly not execute.  Absent,
     // the kernel falls back to an executable stack; present, it says
     // what this program wants, and its size says how much.
-    let sixteen ¤byte : i64 = 16
+    let sixteen : i64 ¤byte = 16
     phdrs.push(phdr(Pt.gnu_stack, Pf.r | Pf.w, 0, 0, 0, stack_size, sixteen))
 
-    let nph ¤"phndx" : i64 = @dropunit(#phdrs)
-    let hdrs_size ¤byte : i64 = ehsize + phent × @dropunit(nph)
+    let nph : i64 ¤"phndx" = @dropunit(#phdrs)
+    let hdrs_size : i64 ¤byte = ehsize + phent × @dropunit(nph)
     assert(hdrs_size <= text_off, "the headers fit the page before the text")
 
     let shdrs : mut Elf64_Shdr[] = []
@@ -769,7 +769,7 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
                     #strtab, 0, 0, 1, 0))
     shdrs.push(shdr(shname[n_shs], Sht.strtab, Shf.nil, 0, shstr_off,
                     #shstr, 0, 0, 1, 0))
-    let nsh ¤"shndx" : i64 = @dropunit(#shdrs)
+    let nsh : i64 ¤"shndx" = @dropunit(#shdrs)
 
     let cls : Elfclass = if tgt.is64: Elfclass.class64 else: Elfclass.class32
     let ehdr : Elf64_Ehdr = (Elf64_Ehdr{

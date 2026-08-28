@@ -9,22 +9,22 @@
 unit widgets
 unit crates
 
-fn area(w ¤meter : i64, h ¤meter : i64) -> i64:
+fn area(w : i64 ¤meter, h : i64 ¤meter) -> i64:
     // two lengths do not multiply into a length, so their measures are
     // parted with before the product is taken
     return @dropunit(w) × @dropunit(h)
 
-fn restock(have ¤"widgets" : i64, more ¤"widgets" : i64) -> i64:
+fn restock(have : i64 ¤"widgets", more : i64 ¤"widgets") -> i64:
     return @dropunit(have + more)
 
 @impure
 @start
 fn main():
-    let a ¤meter : i64 = 5
-    let b ¤meter : i64 = 7
-    let t ¤second : i64 = 3
-    let m ¤kilogram : i64 = 2
-    let c ¤count : i64 = 9
+    let a : i64 ¤meter = 5
+    let b : i64 ¤meter = 7
+    let t : i64 ¤second = 3
+    let m : i64 ¤kilogram = 2
+    let c : i64 ¤count = 9
     std.println("{} {} {} {}", a, t, m, c)
     std.println("{} {}", a + b, b - a)
     std.println("{} {}", a < b, a = b)
@@ -41,15 +41,15 @@ fn main():
     std.println("{}", a + 1)
 
     // a measure a file named for itself
-    let w ¤"widgets" : i64 = 4
-    let x ¤"widgets" : i64 = 6
-    let k ¤"crates" : i64 = 2
+    let w : i64 ¤"widgets" = 4
+    let x : i64 ¤"widgets" = 6
+    let k : i64 ¤"crates" = 2
     std.println("{} {} {}", w, x, k)
     std.println("{} {}", w + x, restock(w, x))
     std.println("{}", area(a, b))
 
     // and an array of measured numbers
-    let d ¤meter : i64[] = [10, 20, 30]
+    let d : i64 ¤meter[] = [10, 20, 30]
     std.println("{} {} {}", d[0], d[2], #d)
     let total : mut i64 = 0
     foreach v := d:

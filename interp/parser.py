@@ -861,9 +861,9 @@ class Parser:
             param_unit = None
             unit_tok = None
             if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
-                unit_tok = self._cur()
-                self.pos += 1
-                param_unit = self._parse_unit_spec()
+                raise coded(2022, ParseError(
+                    "a measure is written against the type, as "
+                    "'a : i64 ¤meter'", self._cur()))
             param_type = None
             is_ref = False
             is_mut = False
@@ -1224,8 +1224,9 @@ class Parser:
                 # name ¤unit : type
                 field_unit = None
                 if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
-                    self.pos += 1
-                    field_unit = self._parse_unit_spec()
+                    raise coded(2022, ParseError(
+                        "a measure is written against the type, as "
+                        "'f : i64 ¤meter'", self._cur()))
                 self._eat("PUNCT", ":")
                 type_tok = self._cur()
                 if self._at_tuple_type():
@@ -1233,6 +1234,9 @@ class Parser:
                 else:
                     self.pos += 1
                     field_type = type_tok.value
+                # a field states its measure against its type, as a
+                # parameter and a binding do
+                field_unit = self._unit_after_type(field_unit, None)
                 field_type += self._parse_array_suffix()
                 if self._check("OP") and self._cur().value == "?":
                     self.pos += 1
@@ -1413,9 +1417,11 @@ class Parser:
         unit_spec = None
         unit_tok = None
         if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
-            unit_tok = self._cur()
-            self.pos += 1
-            unit_spec = self._parse_unit_spec()
+            raise coded(2022, ParseError(
+                "a measure is written against the type, as "
+                "'let x : i64 ¤meter = …' -- or against nothing, as "
+                "'let x : ¤meter = …', where the right side says the "
+                "type", self._cur()))
 
         type_annotation = None
         is_const = True
@@ -1436,6 +1442,13 @@ class Parser:
                 elif self._check("OP") and self._cur().value == "!":
                     self.pos += 1
                     type_annotation += "?std.errors"
+            elif self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+                # `let m : ¤meter = 5` -- the measure without a type,
+                # which the right side settles.  A measure belongs to a
+                # type, and this is where the type is the initializer's:
+                # there is nothing to write it against, so the colon
+                # carries the measure alone.
+                unit_spec = self._unit_after_type(unit_spec, unit_tok)
             elif self._check("IDENT"):
                 type_annotation = self._parse_base_type_name()
                 # `i64 ¤meter[]` says what each element is and what it
@@ -1487,7 +1500,8 @@ class Parser:
                 raise ParseError(
                     f"{self._tok_display(self._cur())} does not name a "
                     f"type; ':' is followed by one, as ': i64 =', or "
-                    f"':=' leaves it to the right side", self._cur())
+                    f"': ¤meter =' to measure whatever the right side "
+                    f"is, or ':=' leaves both to it", self._cur())
 
         if not has_colon:
             if not (self._check("PUNCT") and self._cur().value == ":"):

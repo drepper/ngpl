@@ -96,8 +96,8 @@ struct Toks:
     kind : i64[]
     off : i64[]
     len : i64[]
-    line ¤"line" : i64[]
-    col ¤"col" : i64[]
+    line : i64 ¤"line"[]
+    col : i64 ¤"col"[]
     val : i64[]      // value of TK_INT, string table index of TK_STR
     big : i64[]      // 1 when a TK_INT is in [2^63, 2^64), stored wrapped
     strs : str[]     // string literal table
@@ -108,18 +108,18 @@ struct Lexer:
     n : i64
     cls : i64[256]
     pos : i64
-    line ¤"line" : i64
-    col ¤"col" : i64
+    line : i64 ¤"line"
+    col : i64 ¤"col"
     parens : i64
     kind : i64[]
     off : i64[]
     len : i64[]
-    tline ¤"line" : i64[]
-    tcol ¤"col" : i64[]
+    tline : i64 ¤"line"[]
+    tcol : i64 ¤"col"[]
     val : i64[]
     big : i64[]
     strs : str[]
-    indents ¤"col" : i64[]   // the column each open block starts at
+    indents : i64 ¤"col"[]   // the column each open block starts at
     diags : Diag[]
 
 impl Lexer:
@@ -127,7 +127,7 @@ impl Lexer:
         if self.pos + ahead >= self.n: return ⁻1
         self.src[(self.pos + ahead) × 1¤byte]
 
-    fn emit(&mut self, k : i64, o : i64, l : i64, c ¤"col" : i64, v : i64, b : i64):
+    fn emit(&mut self, k : i64, o : i64, l : i64, c : i64 ¤"col", v : i64, b : i64):
         self.kind.push(k)
         self.off.push(o)
         self.len.push(l)
@@ -191,8 +191,8 @@ impl Lexer:
         false
 
     fn handle_indent(&mut self):
-        let width ¤"col" : i64 = self.col - 1
-        let top ¤"col" : i64 = self.indents[#self.indents - 1]
+        let width : i64 ¤"col" = self.col - 1
+        let top : i64 ¤"col" = self.indents[#self.indents - 1]
         if width > top:
             self.indents.push(width)
             self.emit(TK_INDENT, self.pos, 0, self.col, 0, 0)
@@ -214,7 +214,7 @@ impl Lexer:
 
     fn read_number(&mut self):
         let spos : i64 = self.pos
-        let scol ¤"col" : i64 = self.col
+        let scol : i64 ¤"col" = self.col
         let v : mut i64 = 0
         let big : mut i64 = 0
         if self.peek(0) = 48 and (self.peek(1) = 120 or self.peek(1) = 88):
@@ -272,7 +272,7 @@ impl Lexer:
             // where to fall back to, if the measure is not one the
             // lexer settles; the scan position is a plain count for now
             let upos : i64 = self.pos
-            let ucol ¤"col" : i64 = self.col
+            let ucol : i64 ¤"col" = self.col
             self.adv()
             self.adv()
             let usfx : mut str = ""
@@ -299,7 +299,7 @@ impl Lexer:
     // same closed-type ride a width suffix takes.
     fn read_char(&mut self):
         let spos : i64 = self.pos
-        let scol ¤"col" : i64 = self.col
+        let scol : i64 ¤"col" = self.col
         self.adv()
         let b : i64 = self.peek(0)
         let code : mut i64 = 0
@@ -383,7 +383,7 @@ impl Lexer:
 
     fn read_string(&mut self):
         let spos : i64 = self.pos
-        let scol ¤"col" : i64 = self.col
+        let scol : i64 ¤"col" = self.col
         self.adv()
         let s : mut str = ""
         while true:
@@ -416,7 +416,7 @@ impl Lexer:
 
     fn read_ident(&mut self):
         let spos : i64 = self.pos
-        let scol ¤"col" : i64 = self.col
+        let scol : i64 ¤"col" = self.col
         while true:
             let b : i64 = self.peek(0)
             if b = ⁻1: break
@@ -432,7 +432,7 @@ impl Lexer:
     // the two-character ASCII operators, reached through their class
     fn read_op2(&mut self, c : i64):
         let spos : i64 = self.pos
-        let scol ¤"col" : i64 = self.col
+        let scol : i64 ¤"col" = self.col
         let b1 : i64 = self.peek(1)
         let k : mut i64 = ⁻1
         let w : mut i64 = 1
@@ -478,7 +478,7 @@ impl Lexer:
 
     fn read_glyph(&mut self, c : i64):
         let spos : i64 = self.pos
-        let scol ¤"col" : i64 = self.col
+        let scol : i64 ¤"col" = self.col
         if c = CL_MB2:
             let key : i64 = self.peek(0) × 256 + self.peek(1)
             let k : i64 = GLYPHS2[key] ?? ⁻1

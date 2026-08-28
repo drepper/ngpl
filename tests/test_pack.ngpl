@@ -2,7 +2,7 @@
 
 // Sum all pack arguments (untyped pack).
 fn sum_all(acc : i64, rest… : i64) → i64:
-    let i ¤ptrdiff : mut i64 = 0
+    let i : mut i64 ¤ptrdiff = 0
     let s : mut = acc
     while i < #rest:
         s ← s + rest[i]
@@ -20,7 +20,7 @@ fn first_of(args… : T') → T':
 // Apply a function to each pack element and sum.
 fn apply_sum(f : F', args… : i64) → i64:
     let s : mut i64 = 0
-    let i ¤ptrdiff : mut i64 = 0
+    let i : mut i64 ¤ptrdiff = 0
     while i < #args:
         s ← s + f(args[i])
         i ← i + 1
@@ -114,7 +114,7 @@ fn test_pack_index_access():
 // Sum via concrete-typed pack.
 fn int_sum(vals… : i64) → i64:
     let s : mut i64 = 0
-    let i ¤ptrdiff : mut i64 = 0
+    let i : mut i64 ¤ptrdiff = 0
     while i < #vals:
         s ← s + vals[i]
         i ← i + 1
@@ -129,7 +129,7 @@ fn test_int_sum():
 // Pack with typed regular params and typed pack.
 fn prepend_and_sum(base : i64, extra… : i64) → i64:
     let s : mut = base
-    let i ¤ptrdiff : mut i64 = 0
+    let i : mut i64 ¤ptrdiff = 0
     while i < #extra:
         s ← s + extra[i]
         i ← i + 1

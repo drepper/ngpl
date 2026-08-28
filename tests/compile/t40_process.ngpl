@@ -8,7 +8,7 @@
 @impure
 @start
 fn main():
-    let page ¤byte : i64 = std.process.pagesize
+    let page : i64 ¤byte = std.process.pagesize
     let plain : i64 = @dropunit(page)
     std.println("{} {}", page > 0, (plain & (plain - 1)) = 0)
     std.println("{}", page)

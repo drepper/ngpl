@@ -552,7 +552,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // What the program calls, and what that calls in turn.  Everything
     // emitted so far is the program's own; the calls it made name the
     // runtime it needs, and the edge list closes over the rest.
-    let nrt : i64 = 68
+    let nrt : i64 = 69
     foreach _ := 0…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
@@ -789,8 +789,8 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     assert(#sname = #soffs and #sname = #sglob, "one of each per symbol")
     let syms : mut Sym[] = []
     foreach i := 0…#sname:
-        let here ¤byte : i64 = soffs[i]
-        let next ¤byte : i64 = if i + 1 < #soffs: soffs[i + 1] else: text_size
+        let here : i64 ¤byte = soffs[i]
+        let next : i64 ¤byte = if i + 1 < #soffs: soffs[i + 1] else: text_size
         // in address order, so a symbol's size is the distance to the
         // next one and never a distance backwards
         assert(next >= here, "the symbols run up the text")

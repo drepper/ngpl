@@ -1402,8 +1402,16 @@ impl Checker:
         elif k = NK_SLICE:
             self.check_expr(na, TY_UNIT)
             let bt2 : i64 = self.ty_of(na)
+            if bt2 = TY_STR:
+                // A string is a sequence of characters and is cut like
+                // one; both ends are counted in characters, as a
+                // subscript of it is, and what comes back is a string.
+                self.check_index_expr(tok, TY_STR, nb)
+                self.check_index_expr(tok, TY_STR, nc)
+                self.set_type(id, TY_STR)
+                return
             if not ty_is_arr(bt2) and not ty_is_mat(bt2):
-                self.derr(tok, "a slice takes an array apart; this is " ⧺ self.tn(bt2))
+                self.derr(tok, "a slice takes an array or a string apart; this is " ⧺ self.tn(bt2))
                 self.check_expr(nb, TY_UNIT)
                 self.check_expr(nc, TY_UNIT)
                 self.set_type(id, mk_aty(TY_I64))
@@ -2724,6 +2732,10 @@ impl Checker:
             self.derr(tok, "this dictionary's keys are " ⧺ self.tn(kt) ⧺ ", not " ⧺ self.tn(self.ty_of(ke)))
 
     fn index_unit_of(&self, arr_ty : i64) → i64:
+        // a string is counted in characters, and an index into one is
+        // a count of them
+        if arr_ty = TY_STR:
+            return UNIT_PTRDIFF
         if ty_is_mat(arr_ty):
             return UNIT_PTRDIFF
         if ty_drop_unit(self.elem_of(arr_ty)) = TY_U8: UNIT_BYTE else: UNIT_PTRDIFF
@@ -3655,7 +3667,7 @@ impl Checker:
     fn count_fields(&self, s : str) → i64:
         let cs := s.chars()
         let n : mut i64 = 0
-        let i ¤ptrdiff : mut i64 = 0
+        let i : mut i64 ¤ptrdiff = 0
         while i + 1 < #cs:
             if cs[i] = '{' and cs[i + 1] = '}':
                 n ← n + 1
@@ -4526,6 +4538,23 @@ impl Checker:
                 self.check_stmt(na, false)
             return
         if k = NK_LET:
+            if nc <= ⁻2:
+                // `let m : ¤meter = e`: the right side says the type
+                // and the colon says what it measures
+                let mu9 : i64 = ⁻2 - nc
+                self.check_expr(na, TY_UNIT)
+                let it9 : i64 = self.ty_of(na)
+                if not ty_is_int(it9) or it9 = TY_UNT:
+                    self.derr(tok, "a measure belongs to a number, and this binding's value is " ⧺ self.tn(it9) ⧺ "; state the type, as 'let " ⧺ self.text(tok) ⧺ " : i64 ¤… = …'")
+                    _ ← self.declare(tok, TY_I64, nb)
+                    return
+                if ty_unit(it9) ≠ 0 and ty_unit(it9) ≠ mu9:
+                    self.derr(tok, "the value is measured " ⧺ self.tn(it9) ⧺ ", and the binding says another measure")
+                    _ ← self.declare(tok, it9, nb)
+                    return
+                let mslot : i64 = self.declare(tok, ty_with_unit(it9, mu9), nb)
+                self.nslot[id × 1¤ptrdiff] ← mslot
+                return
             if nc = ⁻1:
                 // := and : mut =: the right side says the type; what
                 // it does not say is refused with the stated-form cure
@@ -5555,11 +5584,11 @@ fn check_expectations(c : &mut Checker, a : Ast):
     if #a.expects = 0:
         return
     foreach i := 0…#a.expects:
-        let n_fns ¤ptrdiff : i64 = #c.a.fns
-        let n_slots ¤ptrdiff : i64 = #c.fslots
-        let n_lams ¤ptrdiff : i64 = #c.lams
-        let n_psfn ¤ptrdiff : i64 = #c.psfn
-        let n_diags ¤ptrdiff : i64 = #c.diags
+        let n_fns : i64 ¤ptrdiff = #c.a.fns
+        let n_slots : i64 ¤ptrdiff = #c.fslots
+        let n_lams : i64 ¤ptrdiff = #c.lams
+        let n_psfn : i64 ¤ptrdiff = #c.psfn
+        let n_diags : i64 ¤ptrdiff = #c.diags
         c.a.fns.push(a.expects[i])
         c.fslots.push(0)
         c.fdone.push(0)
@@ -5568,7 +5597,7 @@ fn check_expectations(c : &mut Checker, a : Ast):
 
         // what it drew: the numbers, and whether anything refused
         let drew : mut i64[] = []
-        let d ¤ptrdiff : mut i64 = n_diags
+        let d : mut i64 ¤ptrdiff = n_diags
         while d < #c.diags:
             drew.push(c.diags[d].code)
             d ← d + 1
@@ -5619,7 +5648,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     let gnames : mut str[] = []
     foreach g := a.globals:
         gnames.push(g.name)
-    let nnodes ¤ptrdiff : i64 = #a.nkind
+    let nnodes : i64 ¤ptrdiff = #a.nkind
     let ntype : mut i64[] = []
     let nslot : mut i64[] = []
     let ncvt : mut i64[] = []
@@ -5627,7 +5656,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     let nlam : mut i64[] = []
     let nhold : mut i64[] = []
     let nfree : mut i64[] = []
-    let zi ¤ptrdiff : mut i64 = 0¤ptrdiff
+    let zi : mut i64 ¤ptrdiff = 0¤ptrdiff
     while zi < nnodes:
         ntype.push(0)
         nslot.push(⁻1)
@@ -5738,7 +5767,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
                     if fd.is_export and mod_within(fd.modname, mname):
                         seen ← true
             if not seen:
-                let mt ¤ptrdiff : i64 = a.modtok[mi]
+                let mt : i64 ¤ptrdiff = a.modtok[mi]
                 c.diags.push(Diag{line: toks.line[mt], col: toks.col[mt],
                                   msg: "module '" ⧺ mname ⧺ "' exports nothing, so nothing outside it can name anything in it; mark what it is for with @export", level: DIAG_ERROR, code: DIAG_NONE})
     if starts = 0 and ntests = 0 and #a.igtests = 0:

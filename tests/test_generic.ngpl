@@ -156,7 +156,7 @@ fn given_back(x : T') → T':
 
 @test
 fn test_a_generic_takes_a_measured_number():
-    let d ¤meter : i64 = 5
+    let d : i64 ¤meter = 5
     let back := given_back(d)
     assert_eq(back, 5¤meter)
     assert_eq(@unitof(back), ¤meter)

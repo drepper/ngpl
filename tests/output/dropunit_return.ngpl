@@ -1,4 +1,4 @@
-fn measured(n ¤meter : i32) → i32:
+fn measured(n : i32 ¤meter) → i32:
     n
 
 @start

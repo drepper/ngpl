@@ -31,20 +31,20 @@ unit srcpos -> ptrdiff
 @test
 fn test_it_subscripts():
     let xs : i64[] = [10, 20, 30]
-    let t ¤"tok" : i64 = 1
+    let t : i64 ¤"tok" = 1
     assert_eq(xs[t], 20)
 
 @test
 fn test_it_compares_with_a_count():
     let xs : i64[] = [10, 20, 30]
-    let t ¤"tok" : i64 = 1
+    let t : i64 ¤"tok" = 1
     assert(t < #xs)
     assert(not (t >= #xs))
 
 @test
 fn test_it_walks_an_array():
     let xs : i64[] = [10, 20, 30]
-    let i ¤"tok" : mut i64 = 0
+    let i : mut i64 ¤"tok" = 0
     let sum : mut i64 = 0
     while i < #xs:
         sum ← sum + xs[i]
@@ -55,24 +55,24 @@ fn test_it_walks_an_array():
 // a token index, which is the whole reason for having it.
 @test
 fn test_arithmetic_keeps_the_measure():
-    let t ¤"tok" : i64 = 1
-    let u ¤"tok" : i64 = t + 1
+    let t : i64 ¤"tok" = 1
+    let u : i64 ¤"tok" = t + 1
     assert_eq(@dropunit(u), 2)
 
-fn wants_ptrdiff(p ¤ptrdiff : i64) → i64:
+fn wants_ptrdiff(p : i64 ¤ptrdiff) → i64:
     @dropunit(p)
 
 @test
 fn test_it_passes_where_a_ptrdiff_is_wanted():
-    let t ¤"tok" : i64 = 7
+    let t : i64 ¤"tok" = 7
     assert_eq(wants_ptrdiff(t), 7)
 
-fn wants_tok(t ¤"tok" : i64) → i64:
+fn wants_tok(t : i64 ¤"tok") → i64:
     @dropunit(t)
 
 @test
 fn test_its_own_measure_passes():
-    let t ¤"tok" : i64 = 7
+    let t : i64 ¤"tok" = 7
     assert_eq(wants_tok(t), 7)
 
 // ---------------------------------------------------------------------
@@ -82,34 +82,34 @@ fn test_its_own_measure_passes():
 // Two measures standing in for the same thing are still two measures.
 @expect error 2327 "incompatible units: tok and node"
 fn error_a_sibling_is_not_it():
-    let t ¤"tok" : i64 = 1
-    let n ¤"node" : i64 = t
+    let t : i64 ¤"tok" = 1
+    let n : i64 ¤"node" = t
     _ ← n
 
 @expect error 2327 "incompatible units: node and tok"
 fn error_a_sibling_does_not_pass():
-    let n ¤"node" : i64 = 1
+    let n : i64 ¤"node" = 1
     _ ← wants_tok(n)
 
 @expect error 2313 "incompatible units for +: tok and node"
 fn error_siblings_do_not_add():
-    let t ¤"tok" : i64 = 1
-    let n ¤"node" : i64 = 2
+    let t : i64 ¤"tok" = 1
+    let n : i64 ¤"node" = 2
     _ ← t + n
 
 // The way back is not open: what stands in for a thing is not the
 // thing, so a plain ptrdiff is not a token index.
 @expect error 2327 "incompatible units: ptrdiff and tok"
 fn error_the_way_back_is_shut():
-    let p ¤ptrdiff : i64 = 1
-    let t ¤"tok" : i64 = p
+    let p : i64 ¤ptrdiff = 1
+    let t : i64 ¤"tok" = p
     _ ← t
 
 // A measure that stands in for nothing stands in for nothing.
 @expect error 2318 "array index requires unit ptrdiff, got height"
 fn error_a_measure_that_stands_in_for_nothing():
     let xs : i64[] = [10, 20, 30]
-    let h ¤"height" : i64 = 1
+    let h : i64 ¤"height" = 1
     _ ← xs[h]
 
 // ---------------------------------------------------------------------
@@ -119,25 +119,25 @@ fn error_a_measure_that_stands_in_for_nothing():
 @test
 fn test_a_chain_reaches_the_end():
     let xs : i64[] = [10, 20, 30]
-    let l ¤"lineno" : i64 = 2
+    let l : i64 ¤"lineno" = 2
     assert_eq(xs[l], 30)
 
-fn wants_srcpos(p ¤"srcpos" : i64) → i64:
+fn wants_srcpos(p : i64 ¤"srcpos") → i64:
     @dropunit(p)
 
 @test
 fn test_a_chain_reaches_the_middle():
-    let l ¤"lineno" : i64 = 4
+    let l : i64 ¤"lineno" = 4
     assert_eq(wants_srcpos(l), 4)
 
-fn wants_lineno(l ¤"lineno" : i64) → i64:
+fn wants_lineno(l : i64 ¤"lineno") → i64:
     @dropunit(l)
 
 // Still one-way, however long the chain: what a line number stands in
 // for does not stand in for a line number.
 @expect error 2327 "incompatible units: srcpos and lineno"
 fn error_a_chain_is_still_one_way():
-    let p ¤"srcpos" : i64 = 1
+    let p : i64 ¤"srcpos" = 1
     _ ← wants_lineno(p)
 
 // A circle is no order at all, and is refused where it is written,

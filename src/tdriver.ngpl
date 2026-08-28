@@ -102,7 +102,7 @@ fn td_can_drop(ir : IrFn, i : i64, n : i64, cnt : i64[], nv : i64) → bool:
 fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
              nreg : i64, nreg_of : i64[]):
     assert(ir.nvregs >= np, "the frame covers the spilled arguments")
-    let n ¤ptrdiff : i64 = #ir.op
+    let n : i64 ¤ptrdiff = #ir.op
     let secnt : i64[] = se_counts(ir, ir.nvregs)
     // which results anything will read wider than their type
     let cwant : i64[] = canon_wanted(ir, ir.nvregs, t_freecmp(tg), t_freediv(tg))
@@ -111,7 +111,7 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
     // the objects that live in the frame take the slots past the vregs
     let nobj : i64 = (@dropunit(ir.fbytes) + 7) ÷ 8 ?? 0
     g_prologue(&em, tg, ir.nvregs + nobj, np, nreg)
-    let i ¤ptrdiff : mut i64 = 0¤ptrdiff
+    let i : mut i64 ¤ptrdiff = 0¤ptrdiff
     while i < n:
         let o : i64 = ir.op[i]
         let a : i64 = ir.ia[i]
@@ -668,11 +668,11 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
             g_argconst(&em, tg, 2, c)
             g_call(&em, tg, RT_AFIND)
             g_retst(&em, tg, d)
-        elif o = IR_ASLICE:
+        elif o = IR_ASLICE or o = IR_SSLICE:
             g_argld(&em, tg, 0, a)
             g_argld(&em, tg, 1, b)
             g_argld(&em, tg, 2, c)
-            g_call(&em, tg, RT_ASLICE)
+            g_call(&em, tg, if o = IR_ASLICE: RT_ASLICE else: RT_SSLICE)
             g_retst(&em, tg, d)
         elif o = IR_SATADD or o = IR_SATSUB or o = IR_SATMUL:
             t_emit_sat(&em, tg, o, w, a, b, d, sl)

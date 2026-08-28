@@ -287,6 +287,14 @@ Errors and Warnings
     takes an iterator.  What blocks the third is not the operator: it is that the walk would
     have to hold the iterator's state, which the lowering has no shape for yet.
 
+[x] a string is cut in the compiled subset: `s[a…b]` answers the characters from a up to b.
+    A string is a sequence of characters and is cut like one -- both ends counted in
+    characters, the end where the cut stops -- and what comes back is a string.  RT_SSLICE
+    walks to each end rather than computing it, since the bytes are UTF-8 and a character is
+    one to four of them, and shares the bytes it cut: a string cannot be changed, so only the
+    descriptor is fresh.  Written once as IR, so the pioneer compiles the same routine the
+    other five do.  t64_string_slices holds it, é included.
+
 [ ] ∀, ∃ and ∄ over an iterator in the compiled subset, which is the one thing the interpreter
     admits on the right and ngplc does not.
 

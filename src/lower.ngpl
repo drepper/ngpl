@@ -53,7 +53,7 @@ struct Lower:
     cur_fname : str
     dlog : str[]         // one JSON line per code-shaping decision
     argcopy : i64[]      // arguments whose copy by value cannot be elided
-    fbytes ¤byte : i64   // frame taken by objects that live in the frame
+    fbytes : i64 ¤byte   // frame taken by objects that live in the frame
     sret : i64           // where a sized answer is to be written, ⁻1 for none
 
 @post(r: (r & 255) >= 8 and (r & 255) <= 64)
@@ -71,9 +71,9 @@ impl Lower:
     @pre(bytes >= 0 and align > 0)
     @post(r: r >= 0)
     fn frame_alloc(&mut self, bytes : i64, align : i64) → i64:
-        let nb ¤byte : i64 = bytes
-        let al ¤byte : i64 = align
-        let at ¤byte : i64 = align_up_b(self.fbytes, al)
+        let nb : i64 ¤byte = bytes
+        let al : i64 ¤byte = align
+        let at : i64 ¤byte = align_up_b(self.fbytes, al)
         self.fbytes ← at + nb
         @dropunit(at)
 
@@ -134,7 +134,7 @@ impl Lower:
         self.toks.line[tok × 1¤ptrdiff]
 
     // what was decided and where, for the log a program can read
-    fn decide(&mut self, line ¤"line" : i64, what : str, detail : str):
+    fn decide(&mut self, line : i64 ¤"line", what : str, detail : str):
         // the log says a number, as a diagnostic does, so the measure
         // is parted with here and nowhere earlier
         self.dlog.push("{\"function\": \"" ⧺ self.cur_fname ⧺ "\", \"line\": " ⧺ i64_str(@dropunit(line)) ⧺ ", \"decision\": \"" ⧺ what ⧺ "\"" ⧺ detail ⧺ "}")
@@ -334,6 +334,13 @@ impl Lower:
         if k = NK_MSLICE:
             return self.lower_mslice(nid, na, nb, nc)
         if k = NK_SLICE:
+            if self.tof(na) = TY_STR:
+                let sv : i64 = self.lower_expr(na)
+                let slo : i64 = self.lower_expr(nb)
+                let shi : i64 = self.lower_expr(nc)
+                let sd : i64 = self.tmp()
+                self.ir(IR_SSLICE, sv, slo, shi, sd, 0)
+                return sd
             let av : i64 = self.lower_arr_operand(na)
             let lo : i64 = self.lower_expr(nb)
             let hi : i64 = self.lower_expr(nc)
@@ -2065,8 +2072,8 @@ impl Lower:
     fn copied_arg(&mut self, node : i64, v : i64) → i64:
         if #self.argcopy = 0:
             return v
-        let n ¤ptrdiff : i64 = #self.argcopy
-        let i ¤ptrdiff : mut i64 = 0¤ptrdiff
+        let n : i64 ¤ptrdiff = #self.argcopy
+        let i : mut i64 ¤ptrdiff = 0¤ptrdiff
         let want : mut bool = false
         while i < n:
             if self.argcopy[i] = node:
@@ -2081,7 +2088,7 @@ impl Lower:
         d
 
     fn lower_assert(&mut self, nid : i64, tok : i64, args_off : i64, is_eq : bool):
-        let line ¤"line" : i64 = self.tok_line(tok)
+        let line : i64 ¤"line" = self.tok_line(tok)
         let lok : i64 = self.label()
         if is_eq:
             let x : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
@@ -2133,7 +2140,7 @@ impl Lower:
         let cs := self.a.strs[self.a.na[fmt × 1¤ptrdiff] × 1¤ptrdiff].chars()
         let chunk : mut str = ""
         let argi : mut i64 = 2
-        let i ¤ptrdiff : mut i64 = 0
+        let i : mut i64 ¤ptrdiff = 0
         while i < #cs:
             if i + 1 < #cs and cs[i] = '{' and cs[i + 1] = '}':
                 if chunk ≠ "":

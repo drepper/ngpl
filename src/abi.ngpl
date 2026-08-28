@@ -52,7 +52,7 @@ fn abi_why(f : FnDef, taken : i64) → str:
 
 @post(r: @dropunit(#r.private) = @dropunit(#a.fns) and @dropunit(#r.nreg) = @dropunit(#a.fns) and @dropunit(#r.beyond) = @dropunit(#a.fns) and @dropunit(#r.span) = @dropunit(#a.fns))
 fn analyze_abi(a : Ast, toks : Toks, argregs : i64, extra : i64, want_log : bool) → Abi:
-    let nfns ¤ptrdiff : i64 = #a.fns
+    let nfns : i64 ¤ptrdiff = #a.fns
 
     // A name taken as a value reaches its function through a register
     // the caller picked without knowing which body it would land in, so
@@ -62,7 +62,7 @@ fn analyze_abi(a : Ast, toks : Toks, argregs : i64, extra : i64, want_log : bool
     if nfns > 0:
         foreach _ := 0…nfns:
             taken.push(0)
-    let nnodes ¤ptrdiff : i64 = #a.nkind
+    let nnodes : i64 ¤ptrdiff = #a.nkind
     if nnodes > 0:
         foreach i := 0…nnodes:
             let k : i64 = a.nkind[i]

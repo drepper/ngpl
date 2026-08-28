@@ -7,14 +7,14 @@
 unit widgets
 
 struct Span:
-    off ¤byte : i64
-    len ¤byte : i64
+    off : i64 ¤byte
+    len : i64 ¤byte
     tag : i64
 
 @repr(C)
 struct Packed:
-    size ¤byte : u64
-    n ¤"widgets" : u32
+    size : u64 ¤byte
+    n : u32 ¤"widgets"
     kind : u32
 
 @test
@@ -26,19 +26,19 @@ fn test_a_literal_adopts_the_fields_measure():
 
 @test
 fn test_a_measured_value_fills_a_field_of_its_measure():
-    let base ¤byte : i64 = 16
+    let base : i64 ¤byte = 16
     let s : Span = Span{off: base, len: base + 8, tag: 0}
     assert_eq(@dropunit(s.len), 24)
 
 @test
 fn test_a_read_carries_the_measure_into_arithmetic():
     let s : Span = Span{off: 8, len: 24, tag: 0}
-    let end ¤byte : i64 = s.off + s.len
+    let end : i64 ¤byte = s.off + s.len
     assert_eq(@dropunit(end), 32)
 
 @expect error 2326 "Span: parameter 'tag' is i64, which carries no unit, but the argument is B; use @dropunit to part with it"
 fn error_a_plain_field_refuses_a_measured_value():
-    let q ¤byte : i64 = 8
+    let q : i64 ¤byte = 8
     let s : Span = Span{off: 0, len: 0, tag: q}
     assert_eq(s.tag, 8)
 
@@ -58,7 +58,7 @@ fn test_the_layout_is_blind_to_the_measure():
 @impure
 fn test_a_store_is_held_to_the_measure():
     let s : mut Span = Span{off: 0, len: 0, tag: 0}
-    let w ¤byte : i64 = 40
+    let w : i64 ¤byte = 40
     s.off ← w
     s.len ← 8
     assert_eq(@dropunit(s.off + s.len), 48)

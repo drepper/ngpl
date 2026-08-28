@@ -17,7 +17,7 @@ fn count_kind(v : &Tok[], want : i64) → i64:
     n
 
 fn widen_all(v : &mut Tok[]):
-    let i ¤ptrdiff : mut i64 = 0
+    let i : mut i64 ¤ptrdiff = 0
     while i < #v:
         v[i].wide ← true
         i ← i + 1

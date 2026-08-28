@@ -31,7 +31,7 @@ fn test_args_program_present():
 // Indexing past the last parameter is an error, not a silent empty string.
 @expect error "out of range"
 fn error_args_get_out_of_range():
-    let past_end ¤count : mut i64 = std.args.count()
+    let past_end : mut i64 ¤count = std.args.count()
     let bad : mut = std.args.get(past_end)
 
 // ---------------------------------------------------------------------
@@ -99,7 +99,7 @@ fn test_sys_affinity_cpus_consistent():
 // Memory sizes are positive and the page size is a power of two.
 @test
 fn test_sys_memory():
-    let page ¤byte : i64 = std.sys.page_size()
+    let page : i64 ¤byte = std.sys.page_size()
     assert(page > 0)
     assert((page & (page - 1)) = 0)
     assert(std.sys.total_memory() >= page)
@@ -111,7 +111,7 @@ fn test_sys_memory():
 // The page size is positive and a power of two, as any page size is.
 @test
 fn test_process_pagesize():
-    let page ¤byte : i64 = std.process.pagesize
+    let page : i64 ¤byte = std.process.pagesize
     assert(page > 0)
     assert((page & (page - 1)) = 0)
 
