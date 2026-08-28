@@ -68,7 +68,8 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                               max_frame: 0,
                               gmap: [], gseg: [], gr_pos: [], gr_off: [],
                               skipping: 0, rt_need: [],
-                              rx: [], rx_pos: [], rx_off: [],
+                              rx: [], rx_pos: [], rx_off: [], bt_pos: [],
+                              ab_kind: [], ab_lab: [],
                               tf_pos: [], tf_lab: [], tf_form: [],
                               ff_pos: [], ff_fn: [], k_args: 0, k_alloc: 0, k_sig: 0})
     let nglobals : i64 = @dropunit(#a.globals)
@@ -167,7 +168,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // in a call where an overflow or a bounds check has to go -- so
     // this runs in waves until a wave adds nothing.  Asking the IR
     // which routines it calls would miss the second kind.
-    let nrt : i64 = 67
+    let nrt : i64 = 68
     foreach _ := 1…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
@@ -259,6 +260,23 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             while e3 < hi2:
                 push64(&rodata, base2 + em.jt_entries[e3 × 1¤ptrdiff])
                 e3 ← e3 + 1
+    // The table a backtrace reads: where every function of the program
+    // begins, how far it runs, and what it is called.  Built here
+    // because here is where all three are known, and read by RT_BT,
+    // which is the one thing that asks where it is -- so the list of
+    // places that ask is also the answer to whether to build it at
+    // all.  A program with no way to stop itself carries no RT_BT, and
+    // then these bytes would sit in the image saying nothing.
+    if #em.bt_pos > 0:
+        let bt_base : i64 = align_up(@dropunit(#rodata), 8)
+        while @dropunit(#rodata) < bt_base:
+            rodata.push(0)
+        foreach c := bt_bytes(tgt, IMAGE_BASE + PAGE,
+                              bt_fn_names(a, ninit, @dropunit(#chk.lams), @dropunit(#chk.psfn)),
+                              em.fn_off, bt_sizes(em.fn_off, bt_text_end(&em, text_size))):
+            rodata.push(c)
+        foreach i := 0…#em.bt_pos - 1:
+            g_patch_abs(&em, tgt, em.bt_pos[i], ro_vaddr + bt_base)
     let gro_base : i64 = @dropunit(#rodata)
     if nglobals > 0:
         foreach i := 0…nglobals - 1:
@@ -434,6 +452,9 @@ fn rv_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
     rv_movimm(&em, RV_RC, guard_size)
     rv_R(&em, 0, RV_RB, RV_RC, 0, RV_RC, 51)
     rv_S(&em, KB_GHI, RV_RC, RV_RA, 3)
+    rv_movimm(&em, RV_RC, guard_size + stack_size)
+    rv_R(&em, 0, RV_RB, RV_RC, 0, RV_RC, 51)
+    rv_S(&em, KB_STOP, RV_RC, RV_RA, 3)
     rvg_call(&em, tg, RT_SIGINIT)
     if ginit >= 0:
         rvg_call(&em, tg, ginit)
@@ -543,6 +564,12 @@ fn i3_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
     em.w32(guard_size)               // add eax, guard
     em.b3(137, 70, KB_GHI)           // mov [esi+KB_GHI], eax
     em.b3(199, 70, KB_GHI + 4)
+    em.w32(0)
+    em.b2(137, 248)                  // mov eax, edi
+    em.b1(5)
+    em.w32(guard_size + stack_size)  // add eax, guard + stack
+    em.b3(137, 70, KB_STOP)          // mov [esi+KB_STOP], eax
+    em.b3(199, 70, KB_STOP + 4)
     em.w32(0)
     i3_call(&em, RT_SIGINIT)
     if ginit >= 0:
@@ -750,6 +777,7 @@ fn rt_nargs(id : i64) → i64:
     if id = RT_ENVG or id = RT_AUXV: return 1
     if id = RT_DIVU64 or id = RT_MODU64 or id = RT_DIVS64 or id = RT_MODS64: return 2
     if id = RT_MULOV64: return 3
+    if id = RT_BT: return 0
     if id = RT_HSTART: return 1
     if id = RT_HFINAL: return 2
     if id = RT_HUPDATE: return 2
@@ -834,6 +862,9 @@ fn a64_startup(em : &mut Emit, lw : &mut Lower, tg : Target, args_off : i64,
     a64_movimm(&em, A64_T1, guard_size)
     a64_addr_(&em, A64_T1, A64_T1, A64_RB)
     a64_sto(&em, A64_T1, A64_T0, KB_GHI)
+    a64_movimm(&em, A64_T1, guard_size + stack_size)
+    a64_addr_(&em, A64_T1, A64_T1, A64_RB)
+    a64_sto(&em, A64_T1, A64_T0, KB_STOP)
     a64_call(&em, RT_SIGINIT)
     if ginit >= 0:
         a64_call(&em, ginit)

@@ -467,6 +467,16 @@ fn g_retmov(em : &mut Emit, tg : Target, r : i64):
         Tgt.rv32: r32g_retmov(&em, tg, r)
         Tgt.x64: g_pioneer()
 
+// where this frame stands, put where a value goes
+fn g_fptr(em : &mut Emit, tg : Target, r : i64):
+    match tg.id:
+        Tgt.a64: a64g_fptr(&em, tg, r)
+        Tgt.rv64: rvg_fptr(&em, tg, r)
+        Tgt.i386: i3g_fptr(&em, tg, r)
+        Tgt.a32: a32g_fptr(&em, tg, r)
+        Tgt.rv32: r32g_fptr(&em, tg, r)
+        Tgt.x64: g_pioneer()
+
 fn g_absref(em : &mut Emit, tg : Target, r : i64) → i64:
     match tg.id:
         Tgt.a64: return a64g_absref(&em, tg, r)

@@ -561,6 +561,11 @@ fn a64g_retmov(em : &mut Emit, tg : Target, r : i64):
 // an absolute address, materialized into an abstract register or an
 // argument register; the caller records the answered position in the
 // fixup list the address belongs to
+// x29 is the frame pointer the prologue set, and it is a register
+// like any other to read
+fn a64g_fptr(em : &mut Emit, tg : Target, r : i64):
+    a64_movr(&em, a64_ar(r), 29)
+
 fn a64g_absref(em : &mut Emit, tg : Target, r : i64) → i64:
     a64_absref(&em, a64_ar(r))
 

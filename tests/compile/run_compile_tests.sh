@@ -75,7 +75,8 @@ for t in "$testdir"/t*.ngpl; do
         continue
     fi
 
-    "$workdir/$name.bin" > "$workdir/$name.native.out" 2>/dev/null
+    "$workdir/$name.bin" > "$workdir/$name.native.out" \
+        2> "$workdir/$name.native.err"
     native_rc=$?
 
     if [ $native_only -eq 1 ]; then
@@ -116,6 +117,18 @@ for t in "$testdir"/t*.ngpl; do
         fi
         if [ $native_rc -lt 64 ] || [ $native_rc -gt 127 ]; then
             echo "FAIL $name: stopped with $native_rc, which is outside the 64-127 the runtime reserves"
+            fail=$((fail + 1))
+            continue
+        fi
+        # What a stop says on the error stream, where a test pins it.
+        # The interpreter is not held to this: it names a position on
+        # every frame and the compiled program names only the function,
+        # which is the one place the two are allowed to differ.
+        if [ -f "$testdir/$name.err.expected" ] \
+                && ! diff -u "$testdir/$name.err.expected" \
+                        "$workdir/$name.native.err" > "$workdir/$name.ediff"; then
+            echo "FAIL $name: not what it says it reports"
+            sed 's/^/    /' "$workdir/$name.ediff" | head -12
             fail=$((fail + 1))
             continue
         fi

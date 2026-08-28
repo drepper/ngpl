@@ -467,6 +467,12 @@ fn a32g_retld(em : &mut Emit, tg : Target, slot : i64):
 fn a32g_retmov(em : &mut Emit, tg : Target, r : i64):
     a32_ldpair(&em, 0, 1, a32_cello(r))
 
+// r11 is the frame pointer, and the high half of the pair is zero
+fn a32g_fptr(em : &mut Emit, tg : Target, r : i64):
+    a32_dp(&em, A32_MOVR, 0, 0, 11)              // mov r0, r11
+    a32_zero9(&em, 1)
+    a32_stpair(&em, 0, 1, a32_cello(r))
+
 fn a32g_absref(em : &mut Emit, tg : Target, r : i64) → i64:
     let pos : i64 = em.here()
     a32_movw(&em, 0, 0)

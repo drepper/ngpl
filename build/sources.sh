@@ -56,5 +56,6 @@ NGPLC_SOURCES=(
     src/rt_sha256.ngpl     # SHA-256 as IR, which all six compile
     src/rt_bigint.ngpl     # int's arithmetic as IR, likewise
     src/rt_signal.ngpl     # catching the stack running out, as IR
+    src/rt_backtrace.ngpl  # the call stack a stopped program leaves, as IR
     src/codegen_t.ngpl     # the pipeline for every target but the pioneer
 )

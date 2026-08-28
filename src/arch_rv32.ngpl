@@ -410,6 +410,12 @@ fn r32g_retld(em : &mut Emit, tg : Target, slot : i64):
 fn r32g_retmov(em : &mut Emit, tg : Target, r : i64):
     r32_ldpair(&em, 10, 11, r32_cello(r))
 
+// s0 is the frame pointer, and the high half of the pair is zero
+fn r32g_fptr(em : &mut Emit, tg : Target, r : i64):
+    rv_I(&em, 0, 8, 0, 10, 19)                  // mv a0, s0
+    rv_movimm(&em, 11, 0)
+    r32_stpair(&em, 10, 11, r32_cello(r))
+
 fn r32g_absref(em : &mut Emit, tg : Target, r : i64) → i64:
     let pos : i64 = em.here()
     rv_U(&em, 0, 10, 55)                        // lui

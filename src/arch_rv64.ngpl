@@ -364,6 +364,10 @@ fn rvg_retld(em : &mut Emit, tg : Target, slot : i64):
 fn rvg_retmov(em : &mut Emit, tg : Target, r : i64):
     rv_mv(&em, 10, rv_r(r))
 
+// s0 is the frame pointer the prologue set
+fn rvg_fptr(em : &mut Emit, tg : Target, r : i64):
+    rv_I(&em, 0, 8, 0, rv_r(r), 19)              // mv rd, s0
+
 fn rvg_absref(em : &mut Emit, tg : Target, r : i64) → i64:
     rv_absref(&em, rv_r(r))
 

@@ -763,6 +763,14 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
                 em.df_pos.push(pos)
                 em.df_off.push((if a = 0: em.k_args else: (if a = 1: em.k_alloc else: em.k_sig)) + b)
             g_sts(&em, tg, RG_A, d)
+        elif o = IR_FPTR:
+            g_fptr(&em, tg, RG_A)
+            g_sts(&em, tg, RG_A, d)
+        elif o = IR_BTADDR:
+            let bpos : i64 = g_absref(&em, tg, RG_A)
+            if em.skipping = 0:
+                em.bt_pos.push(bpos)
+            g_sts(&em, tg, RG_A, d)
         else:
             assert(false, "an IR op the driver knows")
         i ← i + 1

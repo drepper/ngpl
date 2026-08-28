@@ -505,6 +505,13 @@ fn i3g_retld(em : &mut Emit, tg : Target, slot : i64):
 fn i3g_retmov(em : &mut Emit, tg : Target, r : i64):
     i3_ldpair(&em, 0, 2, i3_cello(r))
 
+// ebp is the frame pointer, and an address on a 32-bit machine is the
+// low half of the pair a value is kept in
+fn i3g_fptr(em : &mut Emit, tg : Target, r : i64):
+    em.b2(137, 232)                  // mov eax, ebp
+    em.b2(49, 210)                   // xor edx, edx
+    i3_stpair(&em, 0, 2, i3_cello(r))
+
 fn i3g_absref(em : &mut Emit, tg : Target, r : i64) → i64:
     let pos : i64 = em.here() + 1
     i3_movimm(&em, 0, 0)             // mov eax, imm32

@@ -171,6 +171,7 @@ fn build():
                      "arch_a64", "dispatch", "arch_rv64", "arch_i386",
                      "arch_arm", "arch_rv32", "tdriver", "rt_portable",
                      "rt_hash", "rt_sha256", "rt_bigint", "rt_signal",
+                     "rt_backtrace",
                      "codegen_t"]:
         std.build.source(part ⧺ ".ngpl")
     std.build.output_dir("build")

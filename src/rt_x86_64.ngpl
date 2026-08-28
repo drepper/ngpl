@@ -37,7 +37,7 @@ fn emit_write(em : &mut Emit, fd : i64):
     em.b1(195)
     em.resolve_locals()
 
-fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64,
+fn emit_runtime(em : &mut Emit, tg : Target, lw : &mut Lower, alloc_off : i64, args_off : i64,
                 relro_off : i64):
     // RT_PRINTI: rdi = signed value → decimal on fd 1
     em.rt_begin(RT_PRINTI)
@@ -88,9 +88,24 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     // signal is not a status, and a caller should not have to know to
     // look for one.
     em.rt_begin(RT_ABORT)
+    // A frame of its own, which this routine wanted for nothing until
+    // there was a backtrace to make.  The chain a walk follows is one
+    // of frames, and a frameless routine is a step the walk cannot
+    // take: without this the innermost function -- the one the stop
+    // happened in -- would be the one name missing from what is
+    // printed.  Reached by a call or by a jump from RT_BOUNDS and its
+    // kind, which push no frame either, so what sits above the saved
+    // pointer is the address inside that function both ways.  Nothing
+    // returns from here, so there is no epilogue to match.
+    em.b1(85)                       // push rbp
+    em.b3(72, 137, 229)             // mov rbp, rsp
     em.movimm(R_AX, 1)
     em.movimm(R_DI, 2)
     em.b2(15, 5)                    // write(2, rsi, rdx)
+    // …and how the program got here.  Nothing pushed a frame between
+    // the stop and this call, so rbp is still the frame the stop
+    // happened in and the walk starts where it should.
+    em.jglobal(232, ⁻1, RT_BT)
     em.movimm(R_DI, EXIT_STOP)
     em.movimm(R_AX, 60)
     em.b2(15, 5)                    // exit
@@ -1906,6 +1921,12 @@ fn emit_runtime(em : &mut Emit, lw : &mut Lower, alloc_off : i64, args_off : i64
     emit_fn(&em, rt_bigmul_ir(), 2, lw.strs, 0, [])
     em.rt_begin(RT_BIGPRINT)
     emit_fn(&em, rt_bigprint_ir(), 1, lw.strs, 0, [])
+
+    // The backtrace is a walk over frames and a search of a table, and
+    // neither is anything a hand-written version would do differently,
+    // so rt_backtrace.ngpl writes it once for all six as well.
+    em.rt_begin(RT_BT)
+    emit_fn(&em, rt_bt_ir(tg, &lw), 0, lw.strs, 0, [])
 
     // ------------------------------------------------------------------
     // The stack running out

@@ -253,6 +253,23 @@ Errors and Warnings
     interpreter already refused an unread result; ngplc only warned, which is the one direction
     the strict-subset rule forbids, and now refuses it too.
 
+[x] a compiled program that stops itself says how it got there.  Every stop goes through
+    RT_ABORT, and RT_ABORT now walks the frame pointers back to the entry, looks each return
+    address up in a table the compiler leaves in .rodata -- one entry a function, holding where
+    its code begins, how far it runs, and what it is called -- and prints the names it finds,
+    innermost first, in the shape the interpreter prints them.  A frame the table does not
+    cover is passed over in silence, which is what leaves the runtime's own frames out.  Two
+    things had to change to make it true rather than nearly true: the pioneer's checks jumped
+    straight at RT_BOUNDS and its kind, leaving no return address, so they now jump to a
+    one-call stub at the end of the function instead -- the hot path is the same conditional
+    jump, only to a nearer place -- and the kernel block gained KB_STOP, the top of the stack,
+    so the walk is bounded at both ends and cannot fault.  What is not there yet is a position:
+    the interpreter says file:line:column for every frame and this says only the name, because
+    the IR carries no source position and a line table would have to be built and threaded
+    through six emitters.  Nor does the stack-overflow handler print one; it runs on the
+    alternate stack, so the frame to start from has to be read out of the ucontext, whose
+    layout is a sixth thing per target.  rt_backtrace.ngpl holds the routine and the table.
+
 
 Code Generation
 ---------------

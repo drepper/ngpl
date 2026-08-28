@@ -1,0 +1,33 @@
+// core-1: a program that stops itself says how it got there.
+//
+// The four frames below the stop are the whole of the check: the
+// function whose precondition did not hold, its caller, the caller of
+// that, and the one that started it -- innermost first and numbered.
+// What the runtime walks through to reach the report is in no line of
+// it, because the table a name is looked up in holds the program's own
+// functions and nothing else.
+//
+// What is expected on the error stream sits beside this file, in
+// t98_backtrace.err.expected.  The interpreter is not held to it: it
+// names a position on every frame where the compiled program names
+// only the function, which is the one place the two may differ.
+
+@pre(n ≠ 0)
+fn recip(n : i64) → i64:
+    (100 ÷ n) ?? 0
+
+@impure
+fn nothing() → i64:
+    0
+
+fn middle(n : i64) → i64:
+    recip(n)
+
+fn outer(n : i64) → i64:
+    middle(n)
+
+@start
+@impure
+fn main():
+    std.println("looking")
+    std.println("{}", outer(nothing()))

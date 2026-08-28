@@ -296,7 +296,8 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                               max_frame: 0,
                               gmap: [], gseg: [], gr_pos: [], gr_off: [],
                               skipping: 0, rt_need: [],
-                              rx: [], rx_pos: [], rx_off: [],
+                              rx: [], rx_pos: [], rx_off: [], bt_pos: [],
+                              ab_kind: [], ab_lab: [],
                               tf_pos: [], tf_lab: [], tf_form: [],
                               ff_pos: [], ff_fn: [], k_args: 0, k_alloc: 0, k_sig: 0})
     let nglobals : i64 = @dropunit(#a.globals)
@@ -416,6 +417,9 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     em.movimm(R_AX, guard_size)
     em.b3(72, 1, 216)               // add rax, rbx
     em.b4(73, 137, 67, KB_GHI)      // mov [r11+KB_GHI], rax
+    em.movimm(R_AX, guard_size + stack_size)
+    em.b3(72, 1, 216)               // add rax, rbx
+    em.b4(73, 137, 67, KB_STOP)     // mov [r11+KB_STOP], rax: one past the top
     em.jlocal(⁻1, 1)
     em.set_label(0)
     let smsg : i64 = lw.intern("the stack could not be reserved\n")
@@ -548,7 +552,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // What the program calls, and what that calls in turn.  Everything
     // emitted so far is the program's own; the calls it made name the
     // runtime it needs, and the edge list closes over the rest.
-    let nrt : i64 = 67
+    let nrt : i64 = 68
     foreach _ := 1…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
@@ -570,7 +574,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             if em.rt_need[from × 1¤ptrdiff] = 1 and em.rt_need[to × 1¤ptrdiff] = 0:
                 em.rt_need[to × 1¤ptrdiff] ← 1
                 changed ← true
-    emit_runtime(&em, &lw, alloc_off, args_off, relro_size)
+    emit_runtime(&em, tgt, &lw, alloc_off, args_off, relro_size)
     em.skipping ← 0
     if #em.rt_off > 0:
         foreach i := 0…nrt - 1:
@@ -651,6 +655,23 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     if #em.rx_pos > 0:
         foreach i := 0…#em.rx_pos - 1:
             em.patch64(em.rx_pos[i], ro_vaddr + rx_base + em.rx_off[i])
+    // The table a backtrace reads: where every function of the program
+    // begins, how far it runs, and what it is called.  Built here
+    // because here is where all three are known, and read by RT_BT,
+    // which is the one thing that asks where it is -- so the list of
+    // places that ask is also the answer to whether to build it at
+    // all.  A program with no way to stop itself carries no RT_BT, and
+    // then these bytes would sit in the image saying nothing.
+    if #em.bt_pos > 0:
+        let bt_base : i64 = align_up(@dropunit(#rodata), 8)
+        while @dropunit(#rodata) < bt_base:
+            rodata.push(0)
+        foreach c := bt_bytes(tgt, IMAGE_BASE + PAGE,
+                              bt_fn_names(a, ninit, @dropunit(#chk.lams), @dropunit(#chk.psfn)),
+                              em.fn_off, bt_sizes(em.fn_off, bt_text_end(&em, text_size))):
+            rodata.push(c)
+        foreach i := 0…#em.bt_pos - 1:
+            em.patch64(em.bt_pos[i], ro_vaddr + bt_base)
     // the globals that are never written ride here, past the tables
     let gro_base : i64 = @dropunit(#rodata)
     if nglobals > 0:

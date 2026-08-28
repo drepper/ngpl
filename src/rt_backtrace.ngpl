@@ -1,0 +1,268 @@
+// ===========================================================================
+// What a stopped program says about how it got there
+// ===========================================================================
+//
+// A program that stops itself -- an index past the end, an overflow, a
+// contract that does not hold -- says what happened and leaves.  What
+// it did not say was where: the message names the kind of failure and
+// nothing names the call that reached it, which is the half a reader
+// needs.  The interpreter has printed the program's own call stack
+// since it could, and this is the compiled program's answer to it.
+//
+// Two pieces.  One is a table the compiler writes into the read-only
+// data: every function the program defines, where its code begins, how
+// far it runs, and what it is called.  The other is a routine that
+// walks the frame pointers back from the stop, looks each return
+// address up in that table, and says the names it finds.  A frame
+// whose return address is in no entry is passed over in silence, which
+// is what happens to the runtime's own frames between the failure and
+// here: the table holds the program's functions and nothing else, so
+// the walk needs no second rule to leave the runtime out.
+//
+// The walk cannot fault.  A frame is followed only while it lies
+// inside the stack the startup reserved -- whose bounds are written
+// down for the segment-fault handler and are read here for the same
+// reason -- and only while each frame lies above the one it came from,
+// which is what an untrodden stack looks like.  Past a hundred frames
+// it stops and says so, since a runaway recursion has nothing to add
+// after the first few.
+//
+// Offsets here are immediates in a load or a store, not quantities the
+// program computes with, so they carry no unit -- as everywhere the IR
+// is built.
+
+// How many frames are worth printing before the rest is repetition.
+let BT_MAX : i64 = 100
+
+// Room in the routine's own frame for the frame number's digits.  A
+// number below BT_MAX needs three and this is the slot they sit in.
+let BT_DIGITS : i64 = 16
+
+// Where a frame keeps the frame it came from, and where it keeps the
+// address the call will return to.  Five of the six put the saved
+// frame pointer at the frame's head and the return address one word
+// up.  riscv32 is the exception: its pair still takes sixteen bytes
+// because that is what the stack is aligned to, and it puts the return
+// address at eight and the saved frame pointer at four.
+fn bt_prev_off(tg : Target) → i64:
+    if tg.id = TGT_RV32: 4 else: 0
+
+fn bt_ret_off(tg : Target) → i64:
+    if tg.id = TGT_RV32: 8 else: tg.ptr
+
+// ---------------------------------------------------------------------------
+// The table
+// ---------------------------------------------------------------------------
+//
+// A word saying how many entries follow, then that many entries of
+// four words -- where the code begins, how far it runs, where the name
+// sits measured from the head of the table, and how many bytes the
+// name is -- and then the names themselves.  Every field is a word
+// wide so the reader steps over an entry by a multiply and reads a
+// field by an immediate offset.  The two fields that are addresses are
+// written as they will stand: the table is built once the layout is
+// settled, so nothing in it has to be relocated.
+
+fn bt_stride(tg : Target) → i64:
+    4 × tg.ptr
+
+// How many bytes a name is, which is not how long the string is: a
+// str is counted in characters and a synthesized name carries a λ,
+// which is two bytes and one character.  What goes in the table and
+// what a write asks for are both bytes.
+fn bt_nbytes(s : str) → i64:
+    let b : u8[] = std.bytes(s)
+    @dropunit(#b)
+
+// one field, in the width the target's words have
+fn bt_word(out : &mut u8[], pw : i64, v : i64):
+    if pw = 8:
+        push64(&out, v)
+    else:
+        push32(&out, v)
+
+// The bytes of the table, ready to sit in the read-only data.  The
+// functions arrive in the order the code lays them out, each with
+// where it begins measured from the head of the text and how far it
+// runs.
+@pre(#names = #offs and #names = #sizes)
+@post(r: @dropunit(#r) >= tg.ptr)
+fn bt_bytes(tg : Target, text_vaddr : i64, names : str[], offs : i64[],
+            sizes : i64[]) → u8[]:
+    let pw : i64 = tg.ptr
+    let n : i64 = @dropunit(#names)
+    let out : mut u8[] = []
+    bt_word(&out, pw, n)
+    // the names begin where the entries end
+    let noff : mut i64 = pw + bt_stride(tg) × n
+    if n > 0:
+        foreach i := 0…n - 1:
+            bt_word(&out, pw, text_vaddr + offs[i × 1¤ptrdiff])
+            bt_word(&out, pw, sizes[i × 1¤ptrdiff])
+            bt_word(&out, pw, noff)
+            bt_word(&out, pw, bt_nbytes(names[i × 1¤ptrdiff]))
+            noff ← noff + bt_nbytes(names[i × 1¤ptrdiff])
+    foreach nm := names:
+        foreach b := std.bytes(nm):
+            out.push(b)
+    assert(@dropunit(#out) = noff, "the names end where the entries said they would")
+    out
+
+// ---------------------------------------------------------------------------
+// The walk
+// ---------------------------------------------------------------------------
+
+// The frame's number, written into the routine's own frame and said in
+// one write.  Three digits at the most, since the walk stops before a
+// fourth could be needed.
+fn bt_decimal(b : &mut RtB, v : i64, buf : i64):
+    let ten : i64 = b.cst(10)
+    let one : i64 = b.cst(1)
+    let asc0 : i64 = b.cst(48)
+    let p : i64 = b.t()
+    b.mov(p, b.cst(BT_DIGITS))
+    let q : i64 = b.t()
+    b.mov(q, v)
+    let ltop : i64 = b.l()
+    b.lab(ltop)
+    b.mov(p, b.sub(p, one))
+    b.stn(b.add(buf, p), 0, b.add(b.umod(q, ten), asc0), 1)
+    b.mov(q, b.udiv(q, ten))
+    b.jnz(q, ltop)
+    _ ← b.call2(RT_WRITE2, b.add(buf, p), b.sub(b.cst(BT_DIGITS), p))
+
+// () → nothing.  Says the program's own call stack on the error
+// stream, innermost first, in the shape the interpreter says it.  A
+// stop that no function of the program reached -- one in the startup,
+// before anything was called -- prints nothing at all, which is why
+// the heading waits for the first frame it finds a name for.
+fn rt_bt_ir(tg : Target, lw : &mut Lower) → IrFn:
+    let pw : i64 = tg.ptr
+    let b : mut RtB = rtb(0)
+    let lend : i64 = b.l()
+    let tbl : i64 = b.btaddr()
+    let n : i64 = b.ldn(tbl, 0, 0)
+    b.jz(n, lend)
+    // The stack the startup reserved, which is the only memory a frame
+    // may be followed into.  Two targets install no segment-fault
+    // handler -- arm and riscv32, whose kernels hand a handler its
+    // siginfo somewhere the runtime cannot read it -- and so write no
+    // bounds down either.  Where the bounds are missing the whole
+    // address space stands in for them and the walk leans on the chain
+    // rising and on the cap, which is what it would have leaned on
+    // anyway; there is no branch here for the case, only a pair of
+    // selections.
+    let k : i64 = b.kaddr(0, 0)
+    let none : i64 = b.ceq(b.ldn(k, KB_STOP, 8), b.cst(0))
+    let lo : i64 = b.sel(none, b.cst(0), b.ldn(k, KB_GHI, 8))
+    let hi : i64 = b.sel(none, b.cst(⁻1), b.ldn(k, KB_STOP, 8))
+    let one : i64 = b.cst(1)
+    let hdr : i64 = b.cst(pw)
+    let stride : i64 = b.cst(bt_stride(tg))
+    let buf : i64 = b.frame(0)
+    // the walk's state: the frame it stands in, and how many names it
+    // has said
+    let fp : i64 = b.t()
+    b.mov(fp, b.fptr())
+    let shown : i64 = b.t()
+    b.mov(shown, b.cst(0))
+    let i : i64 = b.t()
+    let ltop : i64 = b.l()
+    let lnext : i64 = b.l()
+    let lscan : i64 = b.l()
+    let lhit : i64 = b.l()
+    let lhdr : i64 = b.l()
+    let lcut : i64 = b.l()
+    b.lab(ltop)
+    b.jnz(b.cltu(fp, lo), lend)
+    b.jnz(b.cgeu(fp, hi), lend)
+    let ret : i64 = b.ldn(fp, bt_ret_off(tg), 0)
+    let nxt : i64 = b.ldn(fp, bt_prev_off(tg), 0)
+    // a return address is one past the call, so the byte before it is
+    // the one that lies inside the caller
+    let pc : i64 = b.sub(ret, one)
+    // which entry holds it, if any.  The distance from the entry's
+    // start is read unsigned, so an address below the start wraps to
+    // something no size can cover and one comparison settles both ends.
+    b.mov(i, b.cst(0))
+    b.lab(lscan)
+    b.jnz(b.cgeu(i, n), lnext)
+    let e : i64 = b.add(tbl, b.add(hdr, b.mul(i, stride)))
+    let into : i64 = b.sub(pc, b.ldn(e, 0, 0))
+    b.jnz(b.cltu(into, b.ldn(e, pw, 0)), lhit)
+    b.mov(i, b.add(i, one))
+    b.jmp(lscan)
+    b.lab(lhit)
+    b.jnz(shown, lhdr)
+    b.eprint_msg(lw.intern("backtrace (innermost call first):\n"))
+    b.lab(lhdr)
+    b.eprint_msg(lw.intern("  #"))
+    bt_decimal(&b, shown, buf)
+    b.eprint_msg(lw.intern(" "))
+    _ ← b.call2(RT_WRITE2, b.add(tbl, b.ldn(e, 2 × pw, 0)), b.ldn(e, 3 × pw, 0))
+    b.eprint_msg(lw.intern("\n"))
+    b.mov(shown, b.add(shown, one))
+    b.jnz(b.cgeu(shown, b.cst(BT_MAX)), lcut)
+    b.lab(lnext)
+    // the frame it came from lies above it, or the chain has been
+    // trodden on and there is nothing more to be read from it
+    b.jz(b.cltu(fp, nxt), lend)
+    b.mov(fp, nxt)
+    b.jmp(ltop)
+    b.lab(lcut)
+    b.eprint_msg(lw.intern("  (deeper frames are not shown)\n"))
+    b.lab(lend)
+    b.retn()
+    rtb_deep_fn(b, BT_DIGITS)
+
+// ---------------------------------------------------------------------------
+// What the compiler puts in the table
+// ---------------------------------------------------------------------------
+
+// The program's own functions, in the order the code lays them out:
+// the ones the source wrote, then the ones the compiler synthesized
+// behind them.  The name is what a reader wrote and not the symbol
+// table's spelling of the whole signature, because a backtrace is read
+// by a person and the symbol table is not.
+fn bt_fn_names(a : Ast, ninit : i64, nlams : i64, npsfn : i64) → str[]:
+    let out : mut str[] = []
+    if #a.fns > 0:
+        foreach i := 0…#a.fns - 1:
+            let d := a.fns[i]
+            out.push(if d.modname = "": d.name else: d.modname ⧺ "." ⧺ d.name)
+    if ninit > 0:
+        out.push("<globals>")
+    out.push("<args>")
+    out.push("<tests>")
+    if nlams > 0:
+        foreach j := 0…nlams - 1:
+            out.push("λ#" ⧺ i64_str(j))
+    if npsfn > 0:
+        foreach j := 0…npsfn - 1:
+            out.push("partial#" ⧺ i64_str(j))
+    out
+
+// Where the program's own code ends, which is where the runtime's
+// begins.  A routine nobody reached is in no binary and has no offset,
+// and says nothing about where anything is.
+fn bt_text_end(em : &Emit, text_size : i64) → i64:
+    let end : mut i64 = text_size
+    if #em.rt_off > 0:
+        foreach i := 0…#em.rt_off - 1:
+            let at : i64 = em.rt_off[i]
+            end ← end ⌊ (if at = ⁻1: text_size else: at)
+    end
+
+// How far each function runs: to where the next begins, and the last
+// to where the program's own code ends.
+@post(r: #r = #offs)
+fn bt_sizes(offs : i64[], end : i64) → i64[]:
+    let n : i64 = @dropunit(#offs)
+    let out : mut i64[] = []
+    if n > 0:
+        foreach i := 0…n - 1:
+            let here : i64 = offs[i × 1¤ptrdiff]
+            let next : i64 = if i + 1 < n: offs[(i + 1) × 1¤ptrdiff] else: end
+            assert(next >= here, "the functions run up the text")
+            out.push(next - here)
+    out

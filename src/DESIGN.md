@@ -649,18 +649,19 @@ Attempt 3 grows core-1 to **core-2** with structs:
 
 ## The Files
 
-The compiler is twenty-seven source files, listed in build order by
+The compiler is thirty-five source files, listed in build order by
 `build/sources.sh` and by the `@build` recipe in `src/main.ngpl`.
 Twenty-four of them were cut from one 20,836-line file by contiguous
 slices -- concatenating them in that order reproduced it byte for byte,
 and the binary they compiled to was byte-identical on all six targets,
-which is how the split was checked.  `comptime.ngpl` is the one that
-was written afterwards.
+which is how the split was checked.  The rest were written afterwards,
+`comptime.ngpl` first.
 
-    tokens types diag lex ast parse dumpast check comptime ir lower
+    tokens types diag lex ast parse dumpast check abi comptime ir lower
     emit sha256 symbols sbom elf codegen main
     arch_x86_64 rt_x86_64 arch_a64 dispatch arch_rv64 arch_i386
-    arch_arm arch_rv32 tdriver rt_portable rt_hash rt_sha256 codegen_t
+    arch_arm arch_rv32 tdriver rt_portable rt_hash rt_sha256 rt_bigint
+    rt_signal rt_backtrace codegen_t
 
 Build it with `ngplc --build src/main.ngpl`; the recipe in `main.ngpl`
 is a `@build` function, which generates no code and cannot be called.

@@ -199,6 +199,27 @@ impl RtB:
         self.o(IR_KADDR, which, off, 0, d, 0)
         d
 
+    // the routine's own frame, for the few bytes a routine needs
+    // somewhere to put and nowhere to keep
+    fn frame(&mut self, off : i64) → i64:
+        let d : i64 = self.t()
+        self.o(IR_FRAME, off, 0, 0, d, 0)
+        d
+
+    // where this frame stands, which is where a walk over the frames
+    // starts
+    fn fptr(&mut self) → i64:
+        let d : i64 = self.t()
+        self.o(IR_FPTR, 0, 0, 0, d, 0)
+        d
+
+    // the table the backtrace reads, which the compiler leaves in the
+    // read-only data
+    fn btaddr(&mut self) → i64:
+        let d : i64 = self.t()
+        self.o(IR_BTADDR, 0, 0, 0, d, 0)
+        d
+
     // calls into the rest of the runtime
     fn call0(&mut self, target : i64) → i64:
         let d : i64 = self.t()
@@ -315,6 +336,14 @@ fn rtb_fn(b : RtB) → IrFn:
     (IrFn{op: b.op, ia: b.ia, ib: b.ib, ic: b.ic, id: b.idd, iw: b.iww,
           extra: b.extra, nvregs: b.ntmp, nlabels: b.nlab, fbytes: 0¤byte})
 
+// the same, for a routine that asked for bytes of its own frame.  The
+// count arrives without a measure and is given one here, since what
+// the bootstrap subset writes a unit on is a literal and not a name.
+fn rtb_deep_fn(b : RtB, nbytes : i64) → IrFn:
+    (IrFn{op: b.op, ia: b.ia, ib: b.ib, ic: b.ic, id: b.idd, iw: b.iww,
+          extra: b.extra, nvregs: b.ntmp, nlabels: b.nlab,
+          fbytes: nbytes × 1¤byte})
+
 // each runtime routine, one builder; the id picks it
 fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
     // the routines every target takes from here, the pioneer with the
@@ -333,6 +362,7 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
     if id = RT_BIGPRINT: return rt_bigprint_ir()
     if id = RT_SIGINIT: return rt_siginit_ir(tg)
     if id = RT_SEGV: return rt_segv_ir(tg, &lw)
+    if id = RT_BT: return rt_bt_ir(tg, &lw)
     if id = RT_WRITE1 or id = RT_WRITE2:
         // (buf, len): the loop puts every byte down or dies trying
         let b : mut RtB = rtb(2)
@@ -356,10 +386,11 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         b.retn()
         return rtb_fn(b)
     if id = RT_ABORT:
-        // (buf, len): say it, then leave through exit with a status
-        // rather than through a signal
+        // (buf, len): say it, say how the program got here, then leave
+        // through exit with a status rather than through a signal
         let b : mut RtB = rtb(2)
         _ ← b.call2(RT_WRITE2, 0, 1)
+        _ ← b.call0(RT_BT)
         _ ← b.sys1(SC_EXIT, b.cst(EXIT_STOP))
         let spin : i64 = b.l()
         b.lab(spin)
