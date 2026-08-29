@@ -1,0 +1,201 @@
+============================================================
+The binding powers, from loosest to tightest
+============================================================
+
+fn f(a : i64, b : i64, c : i64) → bool:
+    a + b × c = a ⧺ b or a < b and c ⌈ b > a
+
+------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (primitive_type
+          (identifier)))
+      (parameter
+        name: (identifier)
+        type: (primitive_type
+          (identifier)))
+      (parameter
+        name: (identifier)
+        type: (primitive_type
+          (identifier))))
+    return_type: (primitive_type
+      (identifier))
+    body: (block
+      (indented_block
+        (expression_statement
+          (binary_expression
+            left: (binary_expression
+              left: (binary_expression
+                left: (identifier)
+                right: (binary_expression
+                  left: (identifier)
+                  right: (identifier)))
+              right: (binary_expression
+                left: (identifier)
+                right: (identifier)))
+            right: (binary_expression
+              left: (binary_expression
+                left: (identifier)
+                right: (identifier))
+              right: (binary_expression
+                left: (binary_expression
+                  left: (identifier)
+                  right: (identifier))
+                right: (identifier)))))))))
+
+============================================================
+A lambda, what it captures, and a quantifier over a range
+============================================================
+
+fn f(name : str) → bool:
+    (λi : i64 ¤ptrdiff |name| → bool: name[i] = '0') ∀ 1…#name
+
+------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (primitive_type
+          (identifier))))
+    return_type: (primitive_type
+      (identifier))
+    body: (block
+      (indented_block
+        (expression_statement
+          (quantifier_expression
+            left: (parenthesized_expression
+              (lambda
+                (lambda_parameter
+                  name: (identifier)
+                  type: (measured_type
+                    (primitive_type
+                      (identifier))
+                    (measure
+                      (identifier))))
+                (capture_list
+                  (identifier))
+                return_type: (primitive_type
+                  (identifier))
+                body: (binary_expression
+                  left: (index_expression
+                    container: (identifier)
+                    (identifier))
+                  right: (character))))
+            right: (range_expression
+              start: (integer)
+              (unary_expression
+                operand: (identifier)))))))))
+
+============================================================
+A range, a slice, and a subscript
+============================================================
+
+fn f(v : i64[], s : str) → i64:
+    let t : str = s[0¤ptrdiff…3¤ptrdiff]
+    v[0] + v[#v - 1]
+
+------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (array_type
+          (primitive_type
+            (identifier))))
+      (parameter
+        name: (identifier)
+        type: (primitive_type
+          (identifier))))
+    return_type: (primitive_type
+      (identifier))
+    body: (block
+      (indented_block
+        (let_statement
+          name: (identifier)
+          type: (primitive_type
+            (identifier))
+          value: (slice_expression
+            container: (identifier)
+            (range_expression
+              start: (measured_literal
+                (integer)
+                (measure
+                  (identifier)))
+              (measured_literal
+                (integer)
+                (measure
+                  (identifier))))))
+        (expression_statement
+          (binary_expression
+            left: (index_expression
+              container: (identifier)
+              (integer))
+            right: (index_expression
+              container: (identifier)
+              (binary_expression
+                left: (unary_expression
+                  operand: (identifier))
+                right: (integer)))))))))
+
+============================================================
+What is made where it is written
+============================================================
+
+fn f() → Point:
+    let a : i64[] = [1, 2, 3]
+    let d : std.dict(str, i64) = (⸨"a": 1, "b": 2⸩)
+    Point{x: 1, y: 2}
+
+------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (primitive_type
+      (identifier))
+    body: (block
+      (indented_block
+        (let_statement
+          name: (identifier)
+          type: (array_type
+            (primitive_type
+              (identifier)))
+          value: (array_literal
+            (integer)
+            (integer)
+            (integer)))
+        (let_statement
+          name: (identifier)
+          type: (qualified_type
+            module: (identifier)
+            name: (identifier)
+            (primitive_type
+              (identifier))
+            (primitive_type
+              (identifier)))
+          value: (parenthesized_expression
+            (dict_literal
+              key: (string)
+              value: (integer)
+              key: (string)
+              value: (integer))))
+        (expression_statement
+          (struct_literal
+            name: (identifier)
+            field: (identifier)
+            (integer)
+            field: (identifier)
+            (integer)))))))
+

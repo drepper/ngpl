@@ -1,0 +1,174 @@
+============================================================
+An if with an elif and an else
+============================================================
+
+fn f(x : i64) → i64:
+    if x > 0:
+        1
+    elif x = 0:
+        0
+    else:
+        ⁻1
+
+------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (primitive_type
+          (identifier))))
+    return_type: (primitive_type
+      (identifier))
+    body: (block
+      (indented_block
+        (if_statement
+          condition: (binary_expression
+            left: (identifier)
+            right: (integer))
+          consequence: (block
+            (indented_block
+              (expression_statement
+                (integer))))
+          (elif_clause
+            condition: (binary_expression
+              left: (identifier)
+              right: (integer))
+            consequence: (block
+              (indented_block
+                (expression_statement
+                  (integer)))))
+          (else_clause
+            alternative: (block
+              (indented_block
+                (expression_statement
+                  (unary_expression
+                    operand: (integer)))))))))))
+
+============================================================
+A walk over a container, and one over a range
+============================================================
+
+fn f(v : i64[]):
+    foreach e := v:
+        g(e)
+    foreach i := 0…#v:
+        g(v[i])
+
+------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (array_type
+          (primitive_type
+            (identifier)))))
+    body: (block
+      (indented_block
+        (foreach_statement
+          pattern: (identifier)
+          iterable: (identifier)
+          body: (block
+            (indented_block
+              (expression_statement
+                (call_expression
+                  function: (identifier)
+                  arguments: (argument_list
+                    (identifier)))))))
+        (foreach_statement
+          pattern: (identifier)
+          iterable: (range_expression
+            start: (integer)
+            (unary_expression
+              operand: (identifier)))
+          body: (block
+            (indented_block
+              (expression_statement
+                (call_expression
+                  function: (identifier)
+                  arguments: (argument_list
+                    (index_expression
+                      container: (identifier)
+                      (identifier))))))))))))
+
+============================================================
+A while that binds what it tests
+============================================================
+
+fn f(it : Iter):
+    while e := it.next():
+        g(e)
+
+------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (primitive_type
+          (identifier))))
+    body: (block
+      (indented_block
+        (while_statement
+          condition: (binding
+            name: (identifier)
+            value: (call_expression
+              function: (field_expression
+                receiver: (identifier)
+                field: (identifier))
+              arguments: (argument_list)))
+          body: (block
+            (indented_block
+              (expression_statement
+                (call_expression
+                  function: (identifier)
+                  arguments: (argument_list
+                    (identifier)))))))))))
+
+============================================================
+A match, and the value it answers
+============================================================
+
+fn f(c : Colour) → str:
+    match c:
+        Colour.red: "red"
+        Colour.blue: "blue"
+
+------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (primitive_type
+          (identifier))))
+    return_type: (primitive_type
+      (identifier))
+    body: (block
+      (indented_block
+        (match_statement
+          value: (identifier)
+          (match_arm
+            pattern: (field_expression
+              receiver: (identifier)
+              field: (identifier))
+            body: (block
+              (expression_statement
+                (string))))
+          (match_arm
+            pattern: (field_expression
+              receiver: (identifier)
+              field: (identifier))
+            body: (block
+              (expression_statement
+                (string)))))))))
+

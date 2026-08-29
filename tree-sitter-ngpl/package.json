@@ -1,0 +1,22 @@
+{
+  "name": "tree-sitter-ngpl",
+  "version": "0.1.0",
+  "description": "NGPL grammar for tree-sitter",
+  "keywords": [
+    "parser",
+    "lexer",
+    "ngpl"
+  ],
+  "scripts": {
+    "test": "tree-sitter test"
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.ngpl",
+      "file-types": [
+        "ngpl"
+      ],
+      "highlights": "queries/highlights.scm"
+    }
+  ]
+}

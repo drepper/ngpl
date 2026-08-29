@@ -1,0 +1,165 @@
+============================================================
+A function, its parameters and what it answers
+============================================================
+
+fn add(a : i64, b : i64) → i64:
+    a + b
+
+------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (primitive_type
+          (identifier)))
+      (parameter
+        name: (identifier)
+        type: (primitive_type
+          (identifier))))
+    return_type: (primitive_type
+      (identifier))
+    body: (block
+      (indented_block
+        (expression_statement
+          (binary_expression
+            left: (identifier)
+            right: (identifier)))))))
+
+============================================================
+A function with attributes, one of them holding a condition
+============================================================
+
+@start
+@impure
+@pre(n > 0)
+fn once(n : i64):
+    std.println("{}", n)
+
+------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (attribute
+      name: (identifier))
+    (attribute
+      name: (identifier))
+    (attribute
+      name: (identifier)
+      (binary_expression
+        left: (identifier)
+        right: (integer)))
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (primitive_type
+          (identifier))))
+    body: (block
+      (indented_block
+        (expression_statement
+          (call_expression
+            function: (field_expression
+              receiver: (identifier)
+              field: (identifier))
+            arguments: (argument_list
+              (string)
+              (identifier))))))))
+
+============================================================
+A struct, and the block of methods over it
+============================================================
+
+struct Point:
+    x : i64
+    y : i64
+
+impl Point:
+    fn sum(&self) → i64:
+        self.x + self.y
+
+------------------------------------------------------------
+
+(source_file
+  (struct_definition
+    name: (identifier)
+    (field_declaration
+      name: (identifier)
+      type: (primitive_type
+        (identifier)))
+    (field_declaration
+      name: (identifier)
+      type: (primitive_type
+        (identifier))))
+  (impl_block
+    type: (identifier)
+    (function_definition
+      name: (identifier)
+      parameters: (parameter_list
+        (self_parameter))
+      return_type: (primitive_type
+        (identifier))
+      body: (block
+        (indented_block
+          (expression_statement
+            (binary_expression
+              left: (field_expression
+                receiver: (self_expression)
+                field: (identifier))
+              right: (field_expression
+                receiver: (self_expression)
+                field: (identifier)))))))))
+
+============================================================
+An enum whose members say what they stand for
+============================================================
+
+enum Colour:
+    red = 1
+    green
+    blue = 4
+
+------------------------------------------------------------
+
+(source_file
+  (enum_definition
+    name: (identifier)
+    (enumerator
+      name: (identifier)
+      value: (integer))
+    (enumerator
+      name: (identifier))
+    (enumerator
+      name: (identifier)
+      value: (integer))))
+
+============================================================
+A global, a name for a type, and a measure of the file's own
+============================================================
+
+let LIMIT : i64 = 64
+type Count = i64
+unit line
+unit tok → ptrdiff
+
+------------------------------------------------------------
+
+(source_file
+  (global_definition
+    name: (identifier)
+    type: (primitive_type
+      (identifier))
+    value: (integer))
+  (type_alias
+    name: (identifier)
+    type: (union_type
+      (primitive_type
+        (identifier))))
+  (unit_definition
+    name: (identifier))
+  (unit_definition
+    name: (identifier)
+    stands_for: (identifier)))
+

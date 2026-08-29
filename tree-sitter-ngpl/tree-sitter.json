@@ -1,0 +1,36 @@
+{
+  "grammars": [
+    {
+      "name": "ngpl",
+      "camelcase": "Ngpl",
+      "scope": "source.ngpl",
+      "path": ".",
+      "file-types": [
+        "ngpl"
+      ],
+      "highlights": "queries/highlights.scm",
+      "injection-regex": "^ngpl$"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "NGPL grammar for tree-sitter",
+    "authors": [
+      {
+        "name": "Ulrich Drepper",
+        "email": "drepper@gmail.com"
+      }
+    ]
+  },
+  "bindings": {
+    "c": false,
+    "go": false,
+    "node": false,
+    "python": false,
+    "rust": false,
+    "swift": false,
+    "kotlin": false,
+    "zig": false
+  }
+}

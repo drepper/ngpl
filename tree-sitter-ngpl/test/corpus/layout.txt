@@ -1,0 +1,130 @@
+============================================================
+A block is opened by indentation and closed by the end of it
+============================================================
+
+fn f(x : i64) → i64:
+    if x > 0:
+        if x > 10:
+            2
+        else:
+            1
+    else:
+        0
+
+------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (primitive_type
+          (identifier))))
+    return_type: (primitive_type
+      (identifier))
+    body: (block
+      (indented_block
+        (if_statement
+          condition: (binary_expression
+            left: (identifier)
+            right: (integer))
+          consequence: (block
+            (indented_block
+              (if_statement
+                condition: (binary_expression
+                  left: (identifier)
+                  right: (integer))
+                consequence: (block
+                  (indented_block
+                    (expression_statement
+                      (integer))))
+                (else_clause
+                  alternative: (block
+                    (indented_block
+                      (expression_statement
+                        (integer))))))))
+          (else_clause
+            alternative: (block
+              (indented_block
+                (expression_statement
+                  (integer))))))))))
+
+============================================================
+A line inside brackets does not end a statement
+============================================================
+
+let K : std.dict(str, i64) = (⸨
+    "fn": 20,
+    "let": 21,
+⸩)
+
+------------------------------------------------------------
+
+(source_file
+  (global_definition
+    name: (identifier)
+    type: (qualified_type
+      module: (identifier)
+      name: (identifier)
+      (primitive_type
+        (identifier))
+      (primitive_type
+        (identifier)))
+    value: (parenthesized_expression
+      (dict_literal
+        key: (string)
+        value: (integer)
+        key: (string)
+        value: (integer)))))
+
+============================================================
+A block written in braces, its statements closed by semicolons
+============================================================
+
+fn f(x : i64) → i64: { if x > 10: { return 2 }; 0 }
+
+------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (primitive_type
+          (identifier))))
+    return_type: (primitive_type
+      (identifier))
+    body: (block
+      (brace_block
+        (brace_if
+          condition: (binary_expression
+            left: (identifier)
+            right: (integer))
+          (brace_block
+            (brace_return
+              (integer))))
+        (integer)))))
+
+============================================================
+A comment on its own line ends nothing
+============================================================
+
+fn f() → i64:
+    // what this is for
+    1
+
+------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (primitive_type
+      (identifier))
+    body: (block
+      (indented_block
+        (expression_statement
+          (integer))))))
+

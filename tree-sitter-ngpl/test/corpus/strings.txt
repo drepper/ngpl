@@ -1,0 +1,67 @@
+============================================================
+A string that ends on the line it began
+============================================================
+
+let greeting : str = "hello, world"
+
+------------------------------------------------------------
+
+(source_file
+  (global_definition
+    name: (identifier)
+    type: (primitive_type
+      (identifier))
+    value: (string)))
+
+============================================================
+A string written across several lines
+============================================================
+
+let plea : str = """the pieces are joined
+                  " as they were written"""
+
+------------------------------------------------------------
+
+(source_file
+  (global_definition
+    name: (identifier)
+    type: (primitive_type
+      (identifier))
+    value: (string)))
+
+============================================================
+Three quotes end one, so a single quote inside needs no escape
+============================================================
+
+let quoted : str = """a " needs no escape here"""
+
+------------------------------------------------------------
+
+(source_file
+  (global_definition
+    name: (identifier)
+    type: (primitive_type
+      (identifier))
+    value: (string)))
+
+============================================================
+A character, and the escapes a string has
+============================================================
+
+let nl : char = '\n'
+let esc : str = "a\tb\\c\"d"
+
+------------------------------------------------------------
+
+(source_file
+  (global_definition
+    name: (identifier)
+    type: (primitive_type
+      (identifier))
+    value: (character))
+  (global_definition
+    name: (identifier)
+    type: (primitive_type
+      (identifier))
+    value: (string)))
+
