@@ -12,6 +12,9 @@ impl Bag:
     fn view(&self) → &i64[]:
         self.items
 
+    fn copy(&self) → i64[]:
+        self.items
+
 fn items_of(b : &Bag) → &i64[] |b|:
     b.items
 
@@ -32,6 +35,16 @@ fn test_a_borrowed_answer_reaches_into_its_origin():
     assert_eq(#w, 4)
     let f := first_two(&b)
     assert_eq(#f, 4)
+
+// Without the & the signature promises a value of the caller's own,
+// so what comes back is a copy: pushing to it leaves the bag alone.
+@test
+fn test_a_plain_answer_is_a_copy():
+    let b : mut Bag = Bag{items: [1, 2, 3]}
+    let own : mut i64[] = b.copy()
+    own.push(0)
+    assert_eq(#own, 4)
+    assert_eq(#b.items, 3)
 
 @test
 fn test_two_origins_hold_both():

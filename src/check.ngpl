@@ -80,6 +80,13 @@ struct Chk:
     // could hold it is listed here.
     rec_stmt : i64[]
     rec_slot : i64[]
+    // Per node: 1 on a read of a binding that was born fresh -- from a
+    // literal, a join, a slice, a call -- so that answering it by value
+    // moves it; anything else answered by value is the caller's own,
+    // or shared with something that is, and is copied.  Per node and
+    // not per slot: slots start over in every function, and lowering
+    // runs after every function has been checked.
+    nmove : i64[]
     fslots : i64[]
     gvals : i64[]        // the folded initial value of every global
     ginit : i64[]        // globals whose value is built as the run begins
@@ -315,6 +322,8 @@ struct Checker:
     // per frame slot: 1 where the binding was born from a literal or a
     // join, which are fresh; a slice or a reshape may share storage
     lfresh : i64[]
+    smove : i64[]        // per frame slot, for the function under check
+    nmove : i64[]        // see Chk
     pnode_slot : i64[]   // the nodes to mark, if it comes to that
     pnode_id : i64[]
     // How long each binding lives.  Statements are numbered as they
@@ -1811,6 +1820,9 @@ impl Checker:
             let base0 : i64 = ty_strip_ref(st0)
             self.set_type(id, base0)
             self.nslot[id × 1¤ptrdiff] ← self.sslot[s × 1¤ptrdiff]
+            // whether the binding read here was born fresh, kept beside the read
+            let mv9 : i64 = self.sslot[s × 1¤ptrdiff]
+            self.nmove[id × 1¤ptrdiff] ← if mv9 >= 0 and mv9 × 1¤ptrdiff < #self.smove: self.smove[mv9 × 1¤ptrdiff] else: 0
             self.life_used(self.sslot[s × 1¤ptrdiff])
             if ty_is_arr(base0):
                 self.pack_used(self.sslot[s × 1¤ptrdiff], id)
@@ -4522,6 +4534,12 @@ impl Checker:
                 self.lorig_node.push(id)
                 self.lorig_s.push(s)
 
+    // `n ⍴ 0` lays out storage of its own; `(2, 2) ⍴ a` shares a's
+    fn reshape_is_fresh(&self, e : i64) → bool:
+        let src : i64 = self.a.nb[e × 1¤ptrdiff]
+        let k : i64 = self.kind_of(src)
+        k ≠ NK_VAR and k ≠ NK_FIELD and k ≠ NK_INDEX and k ≠ NK_REF
+
     fn is_blet(&self, id : i64) → bool:
         foreach b := self.a.blets:
             if b = id:
@@ -4674,6 +4692,10 @@ impl Checker:
                 while #self.lfresh <= ls × 1¤ptrdiff:
                     self.lfresh.push(0)
                 self.lfresh[ls × 1¤ptrdiff] ← if lk = NK_ARRLIT or lk = NK_CCAT: 1 else: 0
+                while #self.smove <= ls × 1¤ptrdiff:
+                    self.smove.push(0)
+                let fresh : bool = lk = NK_ARRLIT or lk = NK_CCAT or lk = NK_SLIT or lk = NK_HLIT or lk = NK_CALL or lk = NK_MCALL or lk = NK_SCALL or lk = NK_SLICE or (lk = NK_RESHAPE and self.reshape_is_fresh(self.a.na[s × 1¤ptrdiff]))
+                self.smove[ls × 1¤ptrdiff] ← if fresh: 1 else: 0
         let low : i64 = self.marks[#self.marks - 1¤ptrdiff]
         foreach si := low × 1¤ptrdiff…#self.snames:
             let slot : i64 = self.sslot[si]
@@ -5800,6 +5822,8 @@ impl Checker:
             _ ← self.loop_end.pop() ?? 0¤"line"
         while #self.lrec > 0:
             _ ← self.lrec.pop() ?? 0
+        while #self.smove > 0:
+            _ ← self.smove.pop() ?? 0
         self.blk_end ← self.toks.line[self.a.fns[f × 1¤ptrdiff].tok_hi × 1¤ptrdiff]
         self.stmt_end ← self.blk_end
         self.pack_reset(0)
@@ -6071,6 +6095,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     let nlam : mut i64[] = []
     let nhold : mut i64[] = []
     let nlend : mut i64[] = []
+    let nmove : mut i64[] = []
     let nfree : mut i64[] = []
     foreach zi := 0¤ptrdiff…nnodes:
         ntype.push(0)
@@ -6080,6 +6105,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
         nlam.push(⁻1)
         nhold.push(0)
         nlend.push(0)
+        nmove.push(0)
         nfree.push(0)
     let c : mut Checker = (Checker{a: a, toks: toks, src: src, fnames: fnames, curmod: "",
                                    gnames: gnames, gvals: [], ginit: [], ite: [],
@@ -6108,7 +6134,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
                                    lu_name: [], lu_line: [], lu_slot: [], lu_used: [], lu_tok: [], loop_end: [],
                                    stmt_end: 0¤"line", blk_end: 0¤"line",
                                    rec_stmt: [], rec_slot: [], lrec: [],
-                                   rec_cand_stmt: [], rec_cand_slot: [], rec_cand_tok: [], lfresh: []})
+                                   rec_cand_stmt: [], rec_cand_slot: [], rec_cand_tok: [], lfresh: [], smove: [], nmove: nmove})
     if #a.structs > 0:
         foreach i := 0…#a.structs:
             let sd := a.structs[i]
@@ -6236,7 +6262,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
         assert(#c.fslots = #a.fns, "one slot count per function")
         assert(#c.gvals = #a.globals, "one folded value per global")
     (Chk{ntype: c.ntype, nslot: c.nslot, ncvt: c.ncvt, nrep: c.nrep, nlam: c.nlam, nhold: c.nhold, nfree: c.nfree, log: c.log, fslots: c.fslots,
-         rec_stmt: c.rec_stmt, rec_slot: c.rec_slot,
+         rec_stmt: c.rec_stmt, rec_slot: c.rec_slot, nmove: c.nmove,
          gvals: c.gvals, ginit: c.ginit, lams: c.lams, lamns: c.lamns,
          psfn: c.psfn, psk: c.psk, psnp: c.psnp, skipfn: c.skipfn,
          argcopy: c.argcopy,

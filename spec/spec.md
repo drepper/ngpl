@@ -5346,6 +5346,18 @@ error 2430: 'b' is lent out for reading to 'v' until line 3 and cannot be
 
 The message names the borrower and the line the lend runs to, which is the thing a reader cannot see otherwise.  A lend that ends at the last use is what makes the first form legal: were it the block, every function that hands out a view would make its receiver unusable for the rest of the caller.
 
+**Without the `&`, the answer is a copy.**  A return type that names a value promises the caller a value of its own, so an answer that is not the function's to give — a field of `&self`, an element of a parameter, the parameter itself, a global, or a name bound to one of those — is copied on the way out.  A value the function made itself is handed over as it is, since nothing else can reach it:
+
+```
+impl Bag:
+    fn items(&self) → &i64[]:              // a view: the caller is held to the bag
+        self.items
+    fn copy(&self) → i64[]:                // a copy: the caller may do as it likes
+        self.items
+```
+
+This is what makes `→ &T` worth writing: the two signatures say two different things, and the language holds each to its word.  `--log=json` says where a copy was made, `{"decision": "answer-copy", "of": "array"}`, and the compiler's own source incurs two.
+
 A binding that takes a borrowed answer writes no type, or writes the borrow.  Naming a plain type asks for a copy, which a borrow is not, and is refused so that a copy is never made by accident where a borrow was handed over:
 
 ```

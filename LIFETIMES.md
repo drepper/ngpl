@@ -250,6 +250,18 @@ copy is never made by accident where a borrow was handed over.
 
 ### 5.1 Both implementations
 
+- **Without the `&`, the answer is a copy.**  A plain-typed answer that
+  is not the function's own — a field, an element, a parameter, a
+  global, or a binding born from one of those — is copied on the way
+  out; a value born fresh in the function (a literal, a join, a slice,
+  a call's answer, a reshape of a scalar) is moved.  Arrays are copied
+  by `ALEN`+`ACYC` as an elided argument copy already is, structs by a
+  field-for-field `SNEW`; the interpreter deep-copies the container.
+  The compiler's own source incurs two copies, both in the comptime
+  evaluator, and the self-compile is unchanged.  This is the other
+  half of the defect in section 2: the two signatures now say two
+  different things and each is held to its word.
+
 - The return-type syntax above, including origin elision and the
   refusals 2434 and 2435.
 - The body check 2432: the answer is rooted in an origin, through

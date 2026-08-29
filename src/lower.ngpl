@@ -15,6 +15,8 @@ struct Lower:
     nfree : i64[]
     rec_stmt : i64[]     // see Chk
     rec_slot : i64[]
+    nmove : i64[]        // see Chk
+    cur_ref : i64        // whether the function being lowered answers a borrow
     strs : str[]
     op : i64[]
     ia : i64[]
@@ -2266,7 +2268,13 @@ impl Lower:
             self.ir(IR_FSTO, bb9, 0, q9, 0, 0)
             self.lower_ret(bb9)
             return
-        let v : i64 = self.lower_expr(na)
+        let v0 : i64 = self.lower_expr(na)
+        // Without the & the signature promises the caller a value of
+        // its own, so an answer that is not the function's to give --
+        // a field, an element, a parameter, a global, anything not
+        // born fresh in this function -- is copied on the way out.
+        let vt : i64 = self.tof(na)
+        let v : i64 = if self.cur_ref = 0 and not ty_is_opt(vt) and not self.answer_moves(na): self.copied_answer(na, v0, vt) else: v0
         // nhold says the checker already had it held on the way out of
         // lower_expr; holding it again would make an optional of an
         // optional, which is nobody's value.
@@ -2277,6 +2285,60 @@ impl Lower:
             self.lower_ret(b9)
             return
         self.lower_ret(v)
+
+    // the single expression a block answers with, or ⁻1
+    fn block_only_value(&self, blk : i64) → i64:
+        let off : i64 = self.a.na[blk × 1¤ptrdiff]
+        if self.a.extra[off × 1¤ptrdiff] ≠ 1:
+            return ⁻1
+        let only : i64 = self.a.extra[(off + 1) × 1¤ptrdiff]
+        if self.kof(only) ≠ NK_EXPRSTMT:
+            return ⁻1
+        self.a.na[only × 1¤ptrdiff]
+
+    // Whether what this answers is the function's own to hand over:
+    // something made here, or a binding born fresh here.  A field, an
+    // element, a parameter or a global is not, and neither is a name
+    // bound to one of those.
+    fn answer_moves(&self, na : i64) → bool:
+        let k : i64 = self.kof(na)
+        if k = NK_ARRLIT or k = NK_CCAT or k = NK_SLIT or k = NK_HLIT or k = NK_CALL or k = NK_MCALL or k = NK_SCALL or k = NK_SLICE:
+            return true
+        if k = NK_RESHAPE:
+            let sk : i64 = self.kof(self.a.nb[na × 1¤ptrdiff])
+            return sk ≠ NK_VAR and sk ≠ NK_FIELD and sk ≠ NK_INDEX and sk ≠ NK_REF
+        if k = NK_VAR:
+            return self.nmove[na × 1¤ptrdiff] = 1
+        if k = NK_IF:
+            let tv : i64 = self.block_only_value(self.a.nb[na × 1¤ptrdiff])
+            let ec : i64 = self.a.nc[na × 1¤ptrdiff]
+            let ev : i64 = if ec = ⁻1: ⁻1 else: self.block_only_value(ec)
+            return tv ≠ ⁻1 and ev ≠ ⁻1 and self.answer_moves(tv) and self.answer_moves(ev)
+        false
+
+    // A copy of an array or a struct for the caller: the container is
+    // fresh, and what it holds is what was held.  Anything else is a
+    // value already, or has no copy yet and is handed over as it is.
+    fn copied_answer(&mut self, na : i64, v : i64, t : i64) → i64:
+        if ty_is_arr(t) and not ty_is_farr(t):
+            self.decide(self.tok_line(self.a.ntok[na × 1¤ptrdiff]), "answer-copy", ", \"of\": \"array\"")
+            let len : i64 = self.tmp()
+            self.ir(IR_ALEN, v, 0, 0, len, 0)
+            let d : i64 = self.tmp()
+            self.ir(IR_ACYC, len, v, 0, d, 0)
+            return d
+        if ty_is_struct(t):
+            self.decide(self.tok_line(self.a.ntok[na × 1¤ptrdiff]), "answer-copy", ", \"of\": \"struct\"")
+            let sd := self.a.structs[ty_sidx(t) × 1¤ptrdiff]
+            let nf : i64 = self.a.extra[sd.fields_off]
+            let d : i64 = self.tmp()
+            self.ir(IR_SNEW, nf, 0, 0, d, 0)
+            foreach i := 0…nf:
+                let fv : i64 = self.tmp()
+                self.ir(IR_FLD, v, i, 0, fv, 0)
+                self.ir(IR_FSTO, d, i, fv, 0, 0)
+            return d
+        v
 
     fn lower_ret(&mut self, v : i64):
         if self.sret ≠ ⁻1 and self.packed_ty_n(self.cur_ret) >= 0:
@@ -3250,6 +3312,7 @@ fn lower_lambda_fn(lw : &mut Lower, a : Ast, chk : Chk, j : i64) → IrFn:
     lw.tmax ← lw.tbase
     lw.in_wrap ← 0
     lw.cur_ret ← ret
+    lw.cur_ref ← 0
     lw.post_label ← ⁻1
     lw.res_vreg ← ⁻1
     lw.cur_fname ← "λ"
@@ -3334,6 +3397,7 @@ fn lower_shim_fn(lw : &mut Lower, chk : Chk, j : i64) → IrFn:
     lw.tmax ← lw.tbase
     lw.in_wrap ← 0
     lw.cur_ret ← TY_I64
+    lw.cur_ref ← 0
     lw.post_label ← ⁻1
     lw.res_vreg ← ⁻1
     lw.cur_fname ← "λ"
@@ -3458,6 +3522,7 @@ fn lower_fn(lw : &mut Lower, a : Ast, chk : Chk, f : i64) → IrFn:
     lw.tmax ← lw.tbase
     lw.in_wrap ← 0
     lw.cur_ret ← d.ret
+    lw.cur_ref ← d.ret_ref
     lw.post_label ← ⁻1
     lw.res_vreg ← ⁻1
     lw.sret ← ⁻1

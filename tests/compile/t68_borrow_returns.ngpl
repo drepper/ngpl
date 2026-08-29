@@ -11,6 +11,10 @@ impl Bag:
     fn view(&self) → &i64[]:
         self.items
 
+    // without the &, the caller gets a copy of its own
+    fn copy(&self) → i64[]:
+        self.items
+
 fn items_of(b : &Bag) → &i64[] |b|:
     b.items
 
@@ -30,9 +34,24 @@ fn total(n : i64) → i64:
     v.push(n)
     s + @dropunit(#v)
 
+// a fresh local moves out; a by-value parameter, which is the
+// caller's own under an elided copy, is copied -- and the two must
+// not be confused by sitting in the same slot of different functions
+fn made() → i64[]:
+    let out : mut i64[] = []
+    out.push(1)
+    out
+
+fn same(v : i64[]) → i64[]:
+    v
+
 @start
 @impure
 fn main():
+    let src : i64[] = [5, 6]
+    let dup : mut i64[] = same(src)
+    dup.push(7)
+    std.println("made {} dup {} src {}", #made(), #dup, #src)
     let b : mut Bag = Bag{items: [1, 2, 3]}
     let v := b.view()
     std.println("view {}", #v)
@@ -46,4 +65,7 @@ fn main():
     c.items.push(8)
     let f := first_two(&b)
     std.println("chain {}", #f)
+    let own : mut i64[] = b.copy()
+    own.push(0)
+    std.println("copy {} bag {}", #own, #b.items)
     std.println("bag {} {} total {}", #b.items, #c.items, total(4))

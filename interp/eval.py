@@ -4634,7 +4634,9 @@ class Evaluator:
             if isinstance(obj, StructInstance):
                 stack.extend(obj.field_values.values())
             elif isinstance(obj, ArrayValue):
-                stack.extend(obj.values())
+                vals = obj.values()
+                if vals and isinstance(vals[0], (ObjectValue, SomeValue)):
+                    stack.extend(vals)
         return out
 
     def eval_stmt(self, stmt):
@@ -7353,14 +7355,14 @@ class Evaluator:
                 result, resolved_ret_type, func.name, ret_unit)
             returned = self._wrap_optional_return(result, resolved_ret_type)
             self._check_conditions(func, func.postconditions, returned, olds)
-            self._check_borrowed_answer(func, returned, origin_ids)
+            returned = self._check_borrowed_answer(func, returned, origin_ids, regular_args)
             return returned
         except _ReturnSentinel as e:
             checked = self._check_return_type(
                 e.value, resolved_ret_type, func.name, ret_unit)
             returned = self._wrap_optional_return(checked, resolved_ret_type)
             self._check_conditions(func, func.postconditions, returned, olds)
-            self._check_borrowed_answer(func, returned, origin_ids)
+            returned = self._check_borrowed_answer(func, returned, origin_ids, regular_args)
             return returned
         except _PropagatedError as pe:
             raise pe.original from pe
@@ -7381,14 +7383,32 @@ class Evaluator:
             self._comptime_vars = old_comptime_vars
             self._cur_module = old_module
 
-    def _check_borrowed_answer(self, func, returned, origin_ids):
-        """A borrowed answer is rooted in an origin, and a plain answer
-        is not something someone else's borrow."""
+    def _check_borrowed_answer(self, func, returned, origin_ids, args=()):
+        """A borrowed answer is rooted in an origin; a plain answer is
+        not someone else's borrow, and is a copy where it would
+        otherwise be the caller's own.
+
+        Without the & the signature promises a value of the caller's
+        own, so an array or a struct that is reached from what the
+        caller handed over -- a field of &self, an element of a
+        parameter, the parameter itself -- is copied on the way out.
+        A value the function made is handed over as it is.
+        """
         inner = returned.value if isinstance(returned, SomeValue) else returned
         if origin_ids is None:
             if isinstance(inner, ObjectValue) and id(inner.obj) in self._lent_objs:
                 self._refuse_stored_borrow(inner, f"what '{func.name}' answers")
-            return
+            if isinstance(inner, ObjectValue) \
+                    and isinstance(inner.obj, (ArrayValue, StructInstance)):
+                shared = set()
+                for a in args:
+                    shared |= self._reachable_ids(a)
+                if id(inner.obj) in shared:
+                    copied = self._copy_answer(inner)
+                    if isinstance(returned, SomeValue):
+                        return SomeValue(copied)
+                    return copied
+            return returned
         if isinstance(inner, NoneValue):
             return
         if not isinstance(inner, ObjectValue) or id(inner.obj) not in origin_ids:
@@ -7402,6 +7422,16 @@ class Evaluator:
         # the let that binds this answer picks it up, with the origin
         # names the call site fills in
         self._pending_lend = (func.name, list(func.ret_origins), inner.obj, func.ret_ref)
+        return returned
+
+    @staticmethod
+    def _copy_answer(value):
+        """A copy of an array or a struct: the container is fresh, and
+        what it holds is what was held."""
+        obj = value.obj
+        if isinstance(obj, ArrayValue):
+            return deep_copy_value(value)
+        return ObjectValue(StructInstance(obj.struct_type, dict(obj.field_values)))
 
     def _track_temporary(self, value):
         """Note a freshly produced resource so an unkept one can be released.
