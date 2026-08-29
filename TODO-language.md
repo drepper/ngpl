@@ -1034,7 +1034,17 @@ Floating-Point
 String and I/O
 --------------
 
-[ ] [FULL] multi-line string literals ("""…""" syntax, possibly with " continuation prefix).
+[x] Multi-line string literals.  Three quotes open a string that need not
+    end on the line it starts; every line after the first begins with a
+    quote, which may be indented as the code around it is, and three
+    quotes end it.  Neither the continuation quote, nor the whitespace
+    before it, nor the line break is part of what the string holds, so
+    the pieces are joined as written and a break inside the text is
+    written \n as in any other string -- which is what lets a message
+    that must not contain a break be written across as many lines as it
+    is comfortable to read.  Since three quotes end one, a single quote
+    inside needs no escape.  In the compiler's own source 112 messages
+    are written this way now.
 
 [ ] [FULL] binary and hexadecimal number literal suffixes (₂ for binary, ₕ for hexadecimal).
     Also add octal literals: file modes and the S_IF* constants are conventionally

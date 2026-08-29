@@ -164,7 +164,8 @@ fn lower_testdriver(lw : &mut Lower, a : Ast) → IrFn:
     lw.ir(IR_JZ, ton, lrun, 0, 0, 0)
     // --test: report and count, then exit without @start
     if total = 0:
-        lw.ir(IR_EPRINTS, lw.intern("error: no tests: nothing in this file is marked @test or @expect\n"), 0, 0, 0, 0)
+        lw.ir(IR_EPRINTS, lw.intern("""error: no tests: nothing in this file is marked @test or
+                                     " @expect\n"""), 0, 0, 0, 0)
         let z0 : i64 = lw.tmp()
         lw.ir(IR_CONST, 1, 0, 0, z0, 0)
         lw.ir(IR_EXIT, z0, 0, 0, 0, 0)

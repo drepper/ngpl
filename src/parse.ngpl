@@ -241,7 +241,8 @@ impl Parser:
             while true:
                 let et : i64 = self.parse_type(false)
                 if not ((ty_is_int(et) and ty_unit(et) = 0) or et = TY_BOOL or et = TY_STR or et = TY_CHAR or ty_is_struct(et) or ty_is_opt(et)):
-                    self.err("a core-2 tuple holds plain integers, truth values, characters, strings, structs or optionals")
+                    self.err("""a core-2 tuple holds plain integers, truth values, characters,
+                              " strings, structs or optionals""")
                     return TY_I64
                 es.push(et)
                 if self.failed():
@@ -264,7 +265,8 @@ impl Parser:
                 return TY_I64
             return mk_tty(self.tup_intern(es))
         if self.peek() = TK_INT:
-            self.err("'" ⧺ self.ttext(self.pos) ⧺ "' does not name a type; a type is written by name, as i64")
+            self.err("'" ⧺ self.ttext(self.pos) ⧺ """' does not name a type; a type is written by
+                                                   " name, as i64""")
             return TY_I64
         let name := self.ttext(self.pos)
         _ ← self.eat_name("a type name")
@@ -290,7 +292,8 @@ impl Parser:
                 return mk_hty(kt, vt)
             if m = "hash":
                 // this type's name until std.hash became the digests
-                self.err("'std.hash' is the digests now; the type that maps keys to values is 'std.dict(K, V)'")
+                self.err("""'std.hash' is the digests now; the type that maps keys to values is
+                          " 'std.dict(K, V)'""")
                 return TY_I64
             if m ≠ "iovec":
                 self.err("'std." ⧺ m ⧺ "' is not a core-2 type; std.dict(K, V) and std.iovec are")
@@ -348,7 +351,8 @@ impl Parser:
         if self.peek() = TK_LBRACK:
             self.pos ← self.pos + 1
             if not ty_is_int(base) and not ty_is_struct(base) and not ty_is_enum(base) and base ≠ TY_CHAR and base ≠ TY_STR and base ≠ TY_BOOL and base ≠ TY_IOVEC:
-                self.err("a core-2 array holds plain integers, truth values, characters, strings or structs")
+                self.err("""a core-2 array holds plain integers, truth values, characters, strings
+                          " or structs""")
                 return TY_I64
             let d0 : mut i64 = ⁻1
             if self.peek() = TK_INT:
@@ -362,7 +366,8 @@ impl Parser:
                 // T[,] and its sized kin: a matrix, its rows one type
                 self.pos ← self.pos + 1
                 if ty_is_struct(base):
-                    self.err("a core-2 matrix holds plain integers, truth values, characters or strings")
+                    self.err("""a core-2 matrix holds plain integers, truth values, characters or
+                              " strings""")
                     return TY_I64
                 let d1 : mut i64 = ⁻1
                 if self.peek() = TK_INT:
@@ -584,7 +589,8 @@ impl Parser:
                     let at : i64 = self.pos
                     self.pos ← self.pos + 1
                     if self.peek() = TK_MUT:
-                        self.err("a borrow at a call is written &name; &mut is the parameter's side")
+                        self.err("""a borrow at a call is written &name; &mut is the parameter's
+                                  " side""")
                         return ⁻1
                     let vtok : i64 = self.pos
                     _ ← self.eat_name("the borrowed name")
@@ -669,7 +675,8 @@ impl Parser:
                 ret ← self.parse_type(false)
                 let rb : i64 = if ty_is_opt(ret): ty_opt_base(ret) else: ret
                 if not ((ty_is_int(rb) and ty_unit(rb) = 0) or rb = TY_BOOL or rb = TY_CHAR or rb = TY_STR):
-                    self.err("a core-2 lambda answers a plain integer, a truth value, a character or a string")
+                    self.err("""a core-2 lambda answers a plain integer, a truth value, a character
+                              " or a string""")
                     return self.mknode(NK_INT, at, 0, 0, 0)
         let body : mut i64 = ⁻1
         if self.peek() = TK_COLON and self.peek2() = TK_NL:
@@ -986,11 +993,13 @@ impl Parser:
                 // which is the only place it could go.
                 self.pos ← self.pos + 1
                 if self.peek() ≠ TK_LAMBDA:
-                    self.err("@listable in front of a value marks a lambda as one that threads, so a λ follows it")
+                    self.err("""@listable in front of a value marks a lambda as one that threads, so
+                              " a λ follows it""")
                     return 0
                 return self.parse_lambda(self.pos, 1)
             if name ≠ "wrap":
-                self.err("'@" ⧺ name ⧺ "' is not core-2; @wrap, @dropunit, @sizeof, @listable and @old are the expression annotations")
+                self.err("'@" ⧺ name ⧺ """' is not core-2; @wrap, @dropunit, @sizeof, @listable and
+                                        " @old are the expression annotations""")
                 return 0
             self.pos ← self.pos + 1
             _ ← self.eat(TK_LPAR, "'(' after @wrap")
@@ -1032,7 +1041,8 @@ impl Parser:
                     elif em0 = "get": esb ← SB_ENVG
                     elif em0 = "has": esb ← SB_ENVH
                     else:
-                        self.err("'std.env." ⧺ em0 ⧺ "' is not core-2; names(), get() and has() are")
+                        self.err("'std.env." ⧺ em0 ⧺ """' is not core-2; names(), get() and has()
+                                                      " are""")
                         return 0
                     self.pos ← self.pos + 1
                     let eoff : i64 = self.parse_args()
@@ -1052,7 +1062,10 @@ impl Parser:
                     elif bm = "paths": bsb ← SB_BPATHS
                     elif bm = "flags": bsb ← SB_BFLAGS
                     else:
-                        self.err("'std.build." ⧺ bm ⧺ "' is not core-2; source(), output(), output_dir(), search_path() and flag() declare a build, and sources(), output_name(), output_directory(), paths() and flags() answer what was declared")
+                        self.err("'std.build." ⧺ bm ⧺ """' is not core-2; source(), output(),
+                                " output_dir(), search_path() and flag() declare a build, and
+                                " sources(), output_name(), output_directory(), paths() and flags()
+                                " answer what was declared""")
                         return 0
                     self.pos ← self.pos + 1
                     let boff : i64 = self.parse_args()
@@ -1135,7 +1148,9 @@ impl Parser:
                     if hm = "digest": hsb ← SB_HDIGEST
                     elif hm = "start": hsb ← SB_HSTART
                     else:
-                        self.err("'std.hash." ⧺ aname ⧺ "." ⧺ hm ⧺ "' is not core-2; digest() answers the digest of a message in hand and start() a handle to feed one that is not")
+                        self.err("'std.hash." ⧺ aname ⧺ "." ⧺ hm ⧺ """' is not core-2; digest()
+                                " answers the digest of a message in hand and start() a handle to
+                                " feed one that is not""")
                         return 0
                     self.pos ← self.pos + 1
                     // What a digest is: a fixed count of bytes, which
@@ -1150,7 +1165,9 @@ impl Parser:
                 elif m = "print": sb ← SB_PRINT
                 elif m = "exit": sb ← SB_EXIT
                 else:
-                    self.err("'std." ⧺ m ⧺ "' is not core-2; println, print, exit, args, env, process, fs, arena, bytes, iov, hash, build and implementation are")
+                    self.err("'std." ⧺ m ⧺ """' is not core-2; println, print, exit, args, env,
+                                            " process, fs, arena, bytes, iov, hash, build and
+                                            " implementation are""")
                     return 0
                 let off : i64 = self.parse_args()
                 return self.mknode(NK_SCALL, at, sb, off, 0)
@@ -1217,7 +1234,8 @@ impl Parser:
         elif m = "secure": idx ← PROC_SECURE
         elif m = "exec_filename": idx ← PROC_EXECFN
         else:
-            self.err("'std.process." ⧺ m ⧺ "' is not a member; pagesize, uid, euid, gid, egid, secure and exec_filename are")
+            self.err("'std.process." ⧺ m ⧺ """' is not a member; pagesize, uid, euid, gid, egid,
+                                            " secure and exec_filename are""")
             return 0
         self.mknode(NK_SCALL, at, SB_PROC, idx, 0)
 
@@ -1234,7 +1252,8 @@ impl Parser:
             return self.mknode(NK_STR, at, self.impl_str("ngplc"), 0, 0)
         if m = "language":
             return self.mknode(NK_STR, at, self.impl_str("core-1"), 0, 0)
-        self.err("'std.implementation." ⧺ m ⧺ "' is not a member; name, language, interpreter and compiled are")
+        self.err("'std.implementation." ⧺ m ⧺ """' is not a member; name, language, interpreter and
+                                               " compiled are""")
         0
 
     // binding power of a binary operator token; ⁻1 when it is none.
@@ -1363,7 +1382,8 @@ impl Parser:
         // hands back the value of the branch that runs, which says the
         // same thing and says it the one way, so this spelling is gone
         // and what is left of it is the sentence pointing at the other.
-        self.err("`a if c else b` is no longer how a value is chosen; an if hands back the value of the branch that runs, so this is written `if c: a else: b`")
+        self.err("""`a if c else b` is no longer how a value is chosen; an if hands back the value
+                  " of the branch that runs, so this is written `if c: a else: b`""")
         v
 
     // ------------------------------------------------------------------
@@ -1476,7 +1496,8 @@ impl Parser:
         // A measure belongs to the type and is written there.  This
         // is the place it used to be written, kept only to say so.
         if self.peek() = TK_CURRENCY:
-            self.err("a measure is written against the type, as 'let x : i64 ¤meter = …' -- or against nothing, as 'let x : ¤meter = …', where the right side says the type")
+            self.err("""a measure is written against the type, as 'let x : i64 ¤meter = …' -- or
+                      " against nothing, as 'let x : ¤meter = …', where the right side says the type""")
             return 0
         let u : i64 = UNIT_NONE
         if self.peek() = TK_DEFINE:
@@ -1722,7 +1743,8 @@ impl Parser:
                 elif self.peek() = TK_STR:
                     self.pos ← self.pos + 1
                 else:
-                    self.err("@expect states the code it expects, and may state the message beside it; the older form states the message alone")
+                    self.err("""@expect states the code it expects, and may state the message beside
+                              " it; the older form states the message alone""")
                     return 0
                 while self.peek() = TK_NL:
                     self.pos ← self.pos + 1
@@ -1938,7 +1960,8 @@ impl Parser:
                     let rk : i64 = ty_ref_kind(ty)
                     ty ← self.unit_on_type(ty_strip_ref(ty), u, "") + 262144 × rk
                 if ty_is_tup(ty_strip_ref(ty)):
-                    self.err("a core-2 tuple is returned and taken apart; it does not travel as a parameter")
+                    self.err("""a core-2 tuple is returned and taken apart; it does not travel as a
+                              " parameter""")
                 ptypes.push(ty)
                 if self.failed(): return
                 if self.peek() = TK_COMMA:
@@ -2007,7 +2030,8 @@ impl Parser:
                 self.err_at(ptoks[0¤ptrdiff], "the @build function takes no parameters")
                 return
             if ret ≠ TY_UNIT:
-                self.err_at(name_tok, "the @build function answers nothing; it declares a build by calling std.build")
+                self.err_at(name_tok, """the @build function answers nothing; it declares a build by
+                                       " calling std.build""")
                 return
             self.builds.push(FnDef{name: name, modname: self.curmod, tok: name_tok, params_off: params_off,
                                    ret: ret, body: body, is_export: false,
@@ -2091,14 +2115,17 @@ impl Parser:
                             av ← self.evalues[q]
                             found ← true
                     if not found:
-                        self.err("'" ⧺ aname ⧺ "' is not an enumerator this enum has already named; an enumerator stands for a written-out number, or for one named above it")
+                        self.err("'" ⧺ aname ⧺ """' is not an enumerator this enum has already
+                                                " named; an enumerator stands for a written-out
+                                                " number, or for one named above it""")
                         return
                     self.pos ← self.pos + 1
                     next_val ← av
                     alias ← true
                 else:
                     if self.peek() ≠ TK_INT or self.toks.big[self.pos × 1¤ptrdiff] ≠ 0:
-                        self.err("an enumerator stands for a written-out number, or for one this enum named above it")
+                        self.err("""an enumerator stands for a written-out number, or for one this
+                                  " enum named above it""")
                         return
                     next_val ← neg × self.toks.val[self.pos × 1¤ptrdiff]
                     self.pos ← self.pos + 1
@@ -2188,7 +2215,8 @@ impl Parser:
                     chain ← chain ⧺ " → " ⧺ self.unames[step]
                     if step = j:
                         self.poisoned ← false
-                        self.err_at(self.udtok[j], "a measure cannot stand in for itself, however far round it goes: " ⧺ chain)
+                        self.err_at(self.udtok[j], """a measure cannot stand in for itself, however
+                                                    " far round it goes: """ ⧺ chain)
                         step ← 0¤ptrdiff
                     else:
                         step ← self.udecay[step] × 1¤ptrdiff
@@ -2508,7 +2536,8 @@ impl Parser:
                 let kind := self.ttext(self.pos)
                 _ ← self.eat_word("the layout's name")
                 if kind ≠ "C":
-                    self.err("'@repr(" ⧺ kind ⧺ ")' is not a layout core-2 defines; C is the one there is")
+                    self.err("'@repr(" ⧺ kind ⧺ """)' is not a layout core-2 defines; C is the one
+                                                 " there is""")
                     return
                 _ ← self.eat(TK_RPAR, "')' closing @repr")
                 is_repr ← true
@@ -2536,7 +2565,8 @@ impl Parser:
                     // it by its words
                     self.pos ← self.pos + 1
                 else:
-                    self.err("@expect states the code it expects, and may state the message beside it; the older form states the message alone")
+                    self.err("""@expect states the code it expects, and may state the message beside
+                              " it; the older form states the message alone""")
                     return
                 expects ← expects + 1
             elif name = "pre":
@@ -2568,7 +2598,8 @@ impl Parser:
         // on a recipe for the one reason, so it is given once: a recipe
         // runs while the program is built and nothing of it is written.
         if is_build and (imp or is_start or is_noreturn or is_test or is_repl or is_exp):
-            self.err("the @build function carries no other annotation; it is read at compile time and no code for it is written")
+            self.err("""the @build function carries no other annotation; it is read at compile time
+                      " and no code for it is written""")
             return
         if self.peek() = TK_FN:
             // A signature is held to twelve parameters here, so what
@@ -2589,7 +2620,8 @@ impl Parser:
                           expects > 0,
                           pres, post_toks, posts, "", 0)
         elif is_exp:
-            self.err("@export names what others may link against, and only a function is a symbol yet")
+            self.err("""@export names what others may link against, and only a function is a symbol
+                      " yet""")
             return
         elif self.peek() = TK_STRUCT or self.peek() = TK_IMPL:
             if imp or is_start or is_noreturn or is_test or #pres > 0 or #posts > 0:
@@ -2597,7 +2629,8 @@ impl Parser:
             elif expects > 0:
                 // a struct's expected errors are parse-time, which no
                 // single pass can both report and ignore
-                self.err("@expect covers functions and globals in core-2; an expected-error struct stays in the bootstrap suite")
+                self.err("""@expect covers functions and globals in core-2; an expected-error struct
+                          " stays in the bootstrap suite""")
             elif self.peek() = TK_STRUCT:
                 self.parse_struct(is_repr, invs)
             else:
@@ -2619,7 +2652,8 @@ impl Parser:
             else:
                 self.parse_global(expects > 0)
         else:
-            self.err("core-2 has modules, functions, structs, impl blocks, enums, type names and global bindings at the top level")
+            self.err("""core-2 has modules, functions, structs, impl blocks, enums, type names and
+                      " global bindings at the top level""")
 
 // The whole file, every definition understood or reported.
 fn parse(toks : Toks, src : byte[]) → Ast:

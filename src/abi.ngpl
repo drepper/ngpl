@@ -47,7 +47,8 @@ fn abi_why(f : FnDef, taken : i64) → str:
     if f.is_replaceable:
         return "replaceable, so the call may not reach this body"
     if taken = 1:
-        return "its address is taken -- as a value, or into a lambda's box -- and an indirect call agrees with the architecture"
+        return """its address is taken -- as a value, or into a lambda's box -- and an indirect call
+                " agrees with the architecture"""
     ""
 
 @post(r: @dropunit(#r.private) = @dropunit(#a.fns) and @dropunit(#r.nreg) = @dropunit(#a.fns) and @dropunit(#r.beyond) = @dropunit(#a.fns) and @dropunit(#r.span) = @dropunit(#a.fns))

@@ -196,15 +196,48 @@ class LexerError(Exception):
 def _read_string(src, pos, start_line, start_col, line_start):
     """Read a double-quoted string literal starting after the opening quote.
 
+    Three quotes open one that may run over several lines.  Every line
+    after the first begins with a quote, which may be indented as the
+    code around it is, and neither that quote nor the whitespace before
+    it nor the line break itself is part of what the string holds: the
+    pieces are joined as they were written, and a line break inside the
+    text is written \n as it is in any other string.  The string ends at
+    the next three quotes, so a single quote needs no escape inside one.
+
     Returns (Token, next_pos).
     """
     text_chars = []
     line = start_line
     cur_line_start = line_start
+    multi = src[pos:pos + 2] == '""'
+    if multi:
+        pos += 2
     end_pos = pos
 
     while end_pos < len(src):
         ch = src[end_pos]
+        if multi and src[end_pos:end_pos + 3] == '"""':
+            text = "".join(text_chars)
+            end_col = end_pos + 3 - cur_line_start
+            return Token("STR", text, start_line, start_col, end_col), end_pos + 3
+        if ch == "\n" and multi:
+            end_pos += 1
+            line += 1
+            cur_line_start = end_pos
+            while end_pos < len(src) and src[end_pos] in " \t":
+                end_pos += 1
+            if src[end_pos:end_pos + 3] == '"""':
+                text = "".join(text_chars)
+                end_col = end_pos + 3 - cur_line_start
+                return Token("STR", text, start_line, start_col, end_col), end_pos + 3
+            if src[end_pos:end_pos + 1] != '"':
+                raise LexerError(
+                    "a line continuing a multi-line string begins with a "
+                    "quote, and what stands before that quote is not part "
+                    "of the string",
+                    line, end_pos - cur_line_start)
+            end_pos += 1
+            continue
         if ch == "\n":
             # A simple string ends before the line does; a newline
             # inside one is an unterminated string, not a longer one.
@@ -230,7 +263,7 @@ def _read_string(src, pos, start_line, start_col, line_start):
                 end_pos = hex_end + 1
             else:
                 raise LexerError(f"unknown escape '\\{esc}'", line, end_pos - cur_line_start)
-        elif ch == '"':
+        elif ch == '"' and not multi:
             text = "".join(text_chars)
             end_col = end_pos + 1 - cur_line_start
             return Token("STR", text, start_line, start_col, end_col), end_pos + 1
@@ -593,7 +626,13 @@ def tokenize(src: str):
 
         # String literal.
         if ch == '"':
+            str_start = pos
             token, pos = _read_string(src, pos + 1, line, col, line_start)
+            spanned = src[str_start:pos]
+            nl_count = spanned.count("\n")
+            if nl_count > 0:
+                line += nl_count
+                line_start = str_start + spanned.rfind("\n") + 1
             tokens.append(token)
             continue
 

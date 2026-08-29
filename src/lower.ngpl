@@ -1965,7 +1965,8 @@ impl Lower:
                     self.ir(IR_CEQ, n, n2, 0, same, 64 + 256)
                     let lok : i64 = self.label()
                     self.ir(IR_JNZ, same, lok, 0, 0, 0)
-                    let m : i64 = self.intern("a listable call meets element against element, and its containers are of different lengths\n")
+                    let m : i64 = self.intern("""a listable call meets element against element, and
+                                               " its containers are of different lengths\n""")
                     self.ir(IR_ABORT, m, 0, 0, 0, 0)
                     self.ir(IR_LABEL, lok, 0, 0, 0, 0)
                 else:

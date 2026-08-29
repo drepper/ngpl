@@ -557,7 +557,8 @@ impl Emit:
     // nowhere.
     fn rt_begin(&mut self, id : i64):
         let k : i64 = 0 - id - 1
-        assert(k >= 0 and k < @dropunit(#self.rt_off), "a runtime routine's id is one of the list's")
+        assert(k >= 0 and k < @dropunit(#self.rt_off), """a runtime routine's id is one of the
+                " list's""")
         assert(self.rt_off[k × 1¤ptrdiff] = ⁻1, "a runtime routine was emitted twice")
         self.skipping ← 1 - self.rt_need[k × 1¤ptrdiff]
         // a routine that is passed over is left without a place, so a

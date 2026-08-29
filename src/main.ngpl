@@ -60,7 +60,8 @@ fn report(diags : Diag[], files : Files, as_json : bool, src : byte[]):
         let sev : str = if d.level = DIAG_WARNING: "warning" else: "error"
         let named : str = if d.code = DIAG_NONE: sev else: sev ⧺ "[" ⧺ i64_str(d.code) ⧺"]"
         if as_json:
-            std.println("{}\"file\": \"{}\", \"line\": {}, \"col\": {}, \"severity\": \"{}\", \"code\": {}, \"message\": \"{}\"{}",
+            std.println("""{}\"file\": \"{}\", \"line\": {}, \"col\": {}, \"severity\": \"{}\",
+                         " \"code\": {}, \"message\": \"{}\"{}""",
                         "{", file, @dropunit(ln), @dropunit(d.col), sev, d.code, d.msg, "}")
         else:
             std.println("{}:{}:{}: {}: {}", file, @dropunit(ln), @dropunit(d.col), named, d.msg)
@@ -383,7 +384,8 @@ fn main() → u8:
     // --build reads the source list from the recipe, so naming files
     // beside it would be saying two different things at once
     if build_file ≠ "" and #inputs > 0:
-        std.println("ngplc: --build reads the source list from the recipe; '{}' names a file besides", inputs[0¤ptrdiff])
+        std.println("""ngplc: --build reads the source list from the recipe; '{}' names a file
+                     " besides""", inputs[0¤ptrdiff])
         return 1
     let plan : Recipe = if build_file ≠ "": read_build(build_file, json) else: empty_recipe()
     if build_file ≠ "":
@@ -397,14 +399,16 @@ fn main() → u8:
         if output = "" and plan.output ≠ "":
             output ← if plan.output_dir = "": plan.output else: plan.output_dir ⧺ "/" ⧺ plan.output
         foreach f := plan.flags:
-            std.println("ngplc: the build recipe asks for flag '{}', which this compiler does not have", f)
+            std.println("""ngplc: the build recipe asks for flag '{}', which this compiler does not
+                         " have""", f)
             return 1
     if #inputs = 0:
         std.println("ngplc: no source file named")
         return 1
     foreach nm := inputs:
         if not is_ngpl_source(nm):
-            std.println("ngplc: cannot tell what '{}' is: an NGPL source file's name ends in '.ngpl'", nm)
+            std.println("""ngplc: cannot tell what '{}' is: an NGPL source file's name ends in
+                         " '.ngpl'""", nm)
             return 1
 
     // Several sources make one program: they are read as if written

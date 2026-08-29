@@ -549,6 +549,52 @@ Where the number is written down rather than computed, the answer is known witho
 error: chr: -1 is not a code point; a character is numbered from 0
 ```
 
+#### A String Written Over Several Lines
+
+Three quotes open a string that need not end on the line it starts.  Every line after the first begins with a quote, which may be indented to sit under the code around it, and three quotes end it:
+
+```
+let plea : str = """the compiler cannot say what this is for,
+                  " and a reader of the message cannot either;
+                  " say what was expected and what stands there"""
+```
+
+Neither the quote that begins a continuation line, nor the whitespace before it, nor the line break itself is part of what the string holds.  The pieces are joined exactly as they were written, so the string above is one line of text, and the space each piece needs is written after the quote that begins it — where it can be seen — rather than at the end of the piece before, where it could not.
+
+A line break inside the text is written `\n`, as it is in any other string.  This is the point of the form: a message that must not contain a break can be written across as many lines as it is comfortable to read, and what the program holds does not depend on where the source happened to wrap.
+
+```
+"""one
+"two"""                         /* "onetwo" */
+
+"""one\n
+"two"""                         /* "one\ntwo" */
+```
+
+The string ends at the next three quotes, wherever they stand: at the end of a piece, or alone on a line of their own.
+
+```
+let sentence : str = """the closing quotes may stand
+                      " on a line of their own
+                      """
+```
+
+Because three quotes are what ends one, a single quote inside needs no escape:
+
+```
+"""a " needs no escape here"""  /* a " needs no escape here */
+```
+
+The escapes are the ones any string has.  `""""""` is the empty string, as `""` is, and a line that continues one and does not begin with a quote is refused:
+
+```
+"""a line that does not begin
+with a quote"""
+
+error: a line continuing a multi-line string begins with a quote, and
+what stands before that quote is not part of the string
+```
+
 #### Building a String
 
 `⧺` joins two sequences, and a string and a character are both text, so joining either with either gives a string:

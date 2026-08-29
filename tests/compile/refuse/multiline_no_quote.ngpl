@@ -1,0 +1,11 @@
+// A line continuing a multi-line string begins with a quote.  Without
+// one there is no telling where the string ends and the program goes
+// on, so what would otherwise be read as code is refused rather than
+// swallowed into the text.
+
+@start
+@impure
+fn main():
+    let s : str = """a line that does not begin
+    with a quote"""
+    std.println("{}", s)

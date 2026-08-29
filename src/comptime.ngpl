@@ -144,7 +144,8 @@ fn sb_spell(sb : i64) → str:
 
 // what a recipe holds, said once and quoted wherever it is refused
 fn ev_subset() → str:
-    "a recipe binds names, tests them, loops, joins strings and calls the functions this file defines"
+    """a recipe binds names, tests them, loops, joins strings and calls the functions this file
+     " defines"""
 
 // a node with nothing under it
 fn ev_is_leaf(k : i64) → bool:
@@ -252,10 +253,12 @@ impl Cev:
         let name : str = self.text(tok)
         let f : i64 = self.fn_index(name)
         if f = ⁻1:
-            self.derr(tok, "'" ⧺ name ⧺ "' is not a function this file defines; a build recipe reaches what is written beside it")
+            self.derr(tok, "'" ⧺ name ⧺ """' is not a function this file defines; a build recipe
+                                         " reaches what is written beside it""")
             return
         if self.a.fns[f × 1¤ptrdiff].is_impure:
-            self.derr(tok, "'" ⧺ name ⧺ "' is @impure, and a build recipe does nothing but declare; " ⧺ ev_subset())
+            self.derr(tok, "'" ⧺ name ⧺ """' is @impure, and a build recipe does nothing but
+                                         " declare; """ ⧺ ev_subset())
 
     fn fn_index(&self, name : str) → i64:
         if #self.a.fns > 0:
@@ -653,14 +656,16 @@ impl Cev:
             return cv_none()
         let lim : i64 = 4611686018427387903
         if l.n > lim or l.n < ⁻lim or r.n > lim or r.n < ⁻lim:
-            self.derr(tok, "the numbers a build recipe counts with stay well inside i64; these do not")
+            self.derr(tok, """the numbers a build recipe counts with stay well inside i64; these do
+                            " not""")
             return cv_none()
         if k = NK_ADD: return cv_int(l.n + r.n)
         if k = NK_SUB: return cv_int(l.n - r.n)
         if k = NK_MUL:
             let small : i64 = 2147483647
             if l.n > small or l.n < ⁻small or r.n > small or r.n < ⁻small:
-                self.derr(tok, "the numbers a build recipe multiplies stay inside i32; these do not")
+                self.derr(tok, """the numbers a build recipe multiplies stay inside i32; these do
+                                " not""")
                 return cv_none()
             return cv_int(l.n × r.n)
         if r.n = 0:
@@ -700,7 +705,8 @@ impl Cev:
         let name : str = self.text(tok)
         let f : i64 = self.fn_index(name)
         if f = ⁻1:
-            self.derr(tok, "'" ⧺ name ⧺ "' is not a function this file defines; a build recipe reaches what is written beside it")
+            self.derr(tok, "'" ⧺ name ⧺ """' is not a function this file defines; a build recipe
+                                         " reaches what is written beside it""")
             return cv_none()
         if self.depth >= EV_DEPTH:
             self.derr(tok, "the calls in this build recipe stand more than " ⧺ i64_str(EV_DEPTH) ⧺ " deep; something in it does not finish")
