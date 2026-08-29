@@ -2470,6 +2470,14 @@ impl Parser:
             if self.peek() = TK_NL:
                 self.pos ← self.pos + 1
                 continue
+            // where this method begins, which is its first annotation
+            // and not the `fn`, as for a function at the top level.  An
+            // impl block is one top-level definition, so without this
+            // every method in it would say it began where the block
+            // did -- and the bill of materials, which digests a
+            // function over the tokens from here to its end, would
+            // give the block's first method one row and the rest none.
+            self.def_start ← self.pos
             let imp : mut bool = false
             let is_noreturn : mut bool = false
             let pres : mut i64[] = []

@@ -6,6 +6,22 @@
 // needs to wrap them.  The ELF itself is built in main, where the
 // target's class picks the materializer.
 struct Compiled:
+    // Under --incremental against a file: "" when every function
+    // landed where that file had it and inside the room it was given,
+    // and otherwise what stopped one, which the driver prints before
+    // compiling whole.
+    incr_why : str
+    // Where .rodata stops being the strings' own bytes and becomes
+    // their descriptors and the tables: from here on a build that
+    // lines up with a previous one has to match it byte for byte,
+    // while the bytes before are what the strings say, which a message
+    // naming a line the source moved is allowed to change.
+    ro_fixed : i64 ¤byte
+    // and where the globals that are never written sit inside it,
+    // which is values again: a constant's value may change where the
+    // constant has not moved
+    ro_vals : i64 ¤byte
+    ro_vals_end : i64 ¤byte
     code : u8[]
     rodata : u8[]
     data : u8[]
@@ -250,14 +266,66 @@ fn lower_ginit(lw : &mut Lower, a : Ast, chk : Chk) → IrFn:
     (IrFn{op: opc, ia: iac, ib: ibc, ic: icc, id: idc, iw: iwc,
           extra: exc, nvregs: lw.tmax, nlabels: lw.nlabels, fbytes: lw.fbytes})
 
+// Whether a build that lined its functions up with a previous binary
+// may be written back into it: everything the copied code names has to
+// be where it was.  Answers "" when it may, and otherwise what stopped
+// it, which the driver prints and then compiles whole.
+//
+// This is what makes it safe to have skipped emitting most of the
+// program.  Whatever a skipped function would have contributed to
+// .rodata, to .data and to the symbol table, it contributed to the
+// previous build; if those came out the same, the skipping cost
+// nothing.
+fn incr_lines_up(prev : Prev, c : Compiled) → str:
+    // Everything the copied code points into is named by an offset,
+    // and the offsets are what has to hold: the address of a string,
+    // of a descriptor, of a table.  A string's own bytes are not
+    // pointed into and may say something else -- @pre names the line
+    // it is written on, and a line moves when one is added above it.
+    // The descriptors say where each string begins and how long it is,
+    // so comparing from them onwards checks every offset at once: a
+    // string that changed length moved either the descriptors or the
+    // strings after it, and either way what follows will not match.
+    //
+    // The read-only data may also grow at its end -- that is where the
+    // jump tables of the functions this build wrote again go -- but
+    // .data begins on the page after it, so the growth has to stay
+    // inside the pages .rodata already had.
+    if c.ro_fixed > prev.ro_size:
+        return "the strings grew past where the read-only data ended"
+    if #c.rodata < prev.ro_size:
+        return "the read-only data shrank, from " ⧺ i64_str(@dropunit(prev.ro_size)) ⧺ " bytes to " ⧺ i64_str(@dropunit(#c.rodata))
+    if align_up(@dropunit(#c.rodata), @dropunit(PAGE)) ≠ align_up(@dropunit(prev.ro_size), @dropunit(PAGE)):
+        return "the read-only data grew onto another page, and the writable data begins after it"
+    foreach i := c.ro_fixed…prev.ro_size:
+        // the read-only globals are values too, and a value that did
+        // not move is a value the copied code reads correctly
+        if i < c.ro_vals or i >= c.ro_vals_end:
+            if c.rodata[i] ≠ prev.raw[prev.ro_off + i]:
+                return "the read-only data came out different, from byte " ⧺ i64_str(@dropunit(i))
+    if @dropunit(#c.data) ≠ @dropunit(prev.d_size):
+        return "the writable data is " ⧺ i64_str(@dropunit(#c.data)) ⧺ " bytes and was " ⧺ i64_str(@dropunit(prev.d_size))
+    foreach i := 0¤byte…#c.data:
+        if c.data[i] ≠ prev.raw[prev.d_off + i]:
+            return "the writable data came out different"
+    if #c.syms ≠ #prev.sym_name:
+        return "the symbol table holds a different number of symbols"
+    foreach i := 0¤ptrdiff…#c.syms:
+        if c.syms[i].name ≠ prev.sym_name[i]:
+            return "a symbol is not the one that stood in its place"
+        if c.syms[i].value ≠ prev.sym_off[i] or c.syms[i].size ≠ prev.sym_size[i]:
+            return "a symbol moved, or its room changed"
+    ""
+
 @pre(stack_size >= PAGE and guard_size >= PAGE)
 @pre((stack_size % PAGE ?? 1) = 0 and (guard_size % PAGE ?? 1) = 0)
 fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
-           stack_size : i64, guard_size : i64, want_log : bool) → Compiled:
+           stack_size : i64, guard_size : i64, want_log : bool,
+           incr : Incr) → Compiled:
     if tgt.id ≠ TGT_X64:
         // the shared driver and the target's instruction layer carry
         // every other architecture
-        return codegen_t(a, toks, src, chk, tgt, stack_size, guard_size, want_log)
+        return codegen_t(a, toks, src, chk, tgt, stack_size, guard_size, want_log, incr)
     // Which functions nobody outside can call, and what that buys.  The
     // pioneer takes six arguments in registers and spends none of the
     // headroom past them yet -- rax is the memo and r10 and r11 are the
@@ -268,10 +336,15 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // A synthetic past the end of this -- a lambda, a shim, the test
     // driver -- takes the architecture's, as anything reached through
     // an address must.
+    // A private convention is decided over the whole program, so it can
+    // move for a function whose own source did not -- and a function
+    // this build copies rather than generates was written against the
+    // convention it had.  Under --incremental every function keeps the
+    // architecture's, which is the same in every build.
     let privs : mut i64[] = []
     if #a.fns > 0:
         foreach i := 0…#a.fns:
-            privs.push(ab.private[i])
+            privs.push(if incr.mode ≠ 0: 0 else: ab.private[i])
     let strs0 : mut str[] = []
     foreach s := a.strs:
         strs0.push(s)
@@ -514,40 +587,67 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     em.b2(15, 5)
     // The program's own code first: what it calls is then known, and
     // the runtime that follows carries only what is reached.
+    let incr_why : mut str = ""
     foreach i := 0…#a.fns:
         let f : i64 = @dropunit(i)
         // the space for a sized answer arrives as one more argument
         let np : i64 = a.extra[a.fns[i].params_off] + (if farr_is_packed(a, a.fns[i].ret): 1 else: 0)
-        if chk.skipfn[i] = 1:
-            // a generic no call shaped: an empty body stands in
-            let sir := lower_stub_fn(&lw, np)
-            em.fn_off.push(em.here())
-            emit_fn(&em, sir, np, lw.strs, privs[i], privs)
+        let symnm : str = fn_symbol(a, toks, src, f)
+        // Every function is lowered, including one whose code is about
+        // to be copied rather than written: lowering is what puts a
+        // string literal in the table, and the table is what .rodata
+        // is.  A build that lowered only the changed functions would
+        // produce a different .rodata, every address in the copied
+        // code would be wrong, and the mode would fall back every
+        // time.  What an unchanged function skips is emission.  A
+        // generic no call shaped gets a stub: an empty body stands in.
+        let ir := if chk.skipfn[i] = 1: lower_stub_fn(&lw, np) else: lower_fn(&lw, a, chk, f)
+        incr_why ← incr_first_reason(incr_why, incr_before(&em, incr, symnm))
+        em.fn_off.push(em.here())
+        let began : i64 = em.here()
+        if incr.mode = 2 and incr_why = "" and not incr.fresh[i]:
+            incr_why ← incr_first_reason(incr_why, incr_copy(&em, incr, symnm))
         else:
-            let ir := lower_fn(&lw, a, chk, f)
-            em.fn_off.push(em.here())
             emit_fn(&em, ir, np, lw.strs, privs[i], privs)
+        incr_why ← incr_first_reason(incr_why, incr_after(&em, incr, symnm, began))
     if ninit > 0:
         let gir := lower_ginit(&lw, a, chk)
+        incr_why ← incr_first_reason(incr_why, incr_before(&em, incr, "<globals>"))
         em.fn_off.push(em.here())
+        let b1 : i64 = em.here()
         emit_fn(&em, gir, 0, lw.strs, 0, privs)
+        incr_why ← incr_first_reason(incr_why, incr_after(&em, incr, "<globals>", b1))
     let fir := lower_argsfilter(&lw)
+    incr_why ← incr_first_reason(incr_why, incr_before(&em, incr, "<args>"))
     em.fn_off.push(em.here())
+    let b2 : i64 = em.here()
     emit_fn(&em, fir, 0, lw.strs, 0, privs)
+    incr_why ← incr_first_reason(incr_why, incr_after(&em, incr, "<args>", b2))
     let dir := lower_testdriver(&lw, a)
+    incr_why ← incr_first_reason(incr_why, incr_before(&em, incr, "<tests>"))
     em.fn_off.push(em.here())
+    let b3 : i64 = em.here()
     emit_fn(&em, dir, 0, lw.strs, 0, privs)
+    incr_why ← incr_first_reason(incr_why, incr_after(&em, incr, "<tests>", b3))
     if #chk.lams > 0:
         foreach j := 0…#chk.lams:
             let lir := lower_lambda_fn(&lw, a, chk, @dropunit(j))
+            let lnm : str = "λ#" ⧺ i64_str(@dropunit(j))
+            incr_why ← incr_first_reason(incr_why, incr_before(&em, incr, lnm))
             em.fn_off.push(em.here())
+            let b4 : i64 = em.here()
             let lnp : i64 = a.extra[a.na[chk.lams[j] × 1¤ptrdiff] × 1¤ptrdiff]
             emit_fn(&em, lir, lnp + 1, lw.strs, 0, privs)
+            incr_why ← incr_first_reason(incr_why, incr_after(&em, incr, lnm, b4))
     if #chk.psfn > 0:
         foreach j := 0…#chk.psfn:
             let sir := lower_shim_fn(&lw, chk, @dropunit(j))
+            let pnm : str = "partial#" ⧺ i64_str(@dropunit(j))
+            incr_why ← incr_first_reason(incr_why, incr_before(&em, incr, pnm))
             em.fn_off.push(em.here())
+            let b5 : i64 = em.here()
             emit_fn(&em, sir, chk.psnp[j] - chk.psk[j] + 1, lw.strs, 0, privs)
+            incr_why ← incr_first_reason(incr_why, incr_after(&em, incr, pnm, b5))
     // every function was emitted and left its offset behind
     assert(@dropunit(#em.fn_off) = nfns + g1 + 2 + @dropunit(#chk.lams) + @dropunit(#chk.psfn), "one code offset per function")
     // What the program calls, and what that calls in turn.  Everything
@@ -557,6 +657,20 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     foreach _ := 0…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
+    // Which routines a build carries is read off the calls it emitted,
+    // and a build that copies a function instead of emitting it sees
+    // none of that function's calls.  So a build lining up with a
+    // previous one starts from the routines that build had: the old
+    // symbol table names them, they sit after the program's own code
+    // in the order of their ids, and code copied out of the old .text
+    // calls them where they stood.  A routine this build needs and the
+    // old one lacked still goes in -- and moves the ones after it,
+    // which the check on the symbol table then catches.
+    if incr.mode = 2:
+        let rtn0 := rt_names()
+        foreach i := 0…nrt:
+            if incr.at_of(rtn0[i]) >= 0:
+                em.rt_need[i] ← 1
     if #em.cf_target > 0:
         foreach i := 0…#em.cf_target:
             let t : i64 = em.cf_target[i]
@@ -599,7 +713,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // bytes would sit in the image saying nothing.  What refers to a
     // string is a pointer patch or a descriptor patch, and those are
     // the two lists asked here.
-    let used : i64[] = str_uses(&em, @dropunit(#lw.strs))
+    let used : i64[] = if incr.mode = 0: str_uses(&em, @dropunit(#lw.strs)) else: incr_all_used(#lw.strs)
     let stroffs : mut i64[] = []
     let descidx : mut i64[] = []
     let acc : mut i64 = 0
@@ -612,16 +726,12 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                 acc ← acc + str_len(lw.strs[i])
                 nstr ← nstr + 1
     let descbase : i64 = align_up(acc, 8)
-    let jt_base : i64 = descbase + 16 × nstr
     if #em.sf_pos > 0:
         foreach i := 0…#em.sf_pos:
             em.patch64(em.sf_pos[i], ro_vaddr + stroffs[em.sf_str[i] × 1¤ptrdiff])
     if #em.sd_pos > 0:
         foreach i := 0…#em.sd_pos:
             em.patch64(em.sd_pos[i], ro_vaddr + descbase + 16 × descidx[em.sd_str[i] × 1¤ptrdiff])
-    if #em.jt_pos > 0:
-        foreach i := 0…#em.jt_pos:
-            em.patch64(em.jt_pos[i], ro_vaddr + jt_base + 8 × em.jt_starts[em.jt_id[i] × 1¤ptrdiff])
     assert(#stroffs = #lw.strs, "one offset per string")
     let rodata : mut u8[] = []
     if #lw.strs > 0:
@@ -636,14 +746,6 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             if used[i] = 1:
                 push64(&rodata, ro_vaddr + stroffs[i])
                 push64(&rodata, str_len(lw.strs[i]))
-    // a jump table holds code addresses, a value table its data
-    if #em.jt_starts > 0:
-        foreach t := 0…#em.jt_starts:
-            let lo2 : i64 = em.jt_starts[t]
-            let hi2 : i64 = if t + 1 < #em.jt_starts: em.jt_starts[t + 1] else: @dropunit(#em.jt_entries)
-            let base2 : i64 = if em.jt_is_code[t] = 1: IMAGE_BASE + PAGE else: 0
-            foreach e3 := lo2…hi2:
-                push64(&rodata, base2 + em.jt_entries[e3 × 1¤ptrdiff])
     // the constant tables the runtime reads: the UTF-8 decoder's byte
     // classes, then its transition words, one to a class
     let rx_base : i64 = @dropunit(#rodata)
@@ -677,9 +779,27 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         foreach i := 0…nglobals:
             if em.gseg[i] = 0:
                 push64(&rodata, chk.gvals[i])
+    let gro_end : i64 = @dropunit(#rodata)
     if #em.gr_pos > 0:
         foreach i := 0…#em.gr_pos:
             em.patch64(em.gr_pos[i], ro_vaddr + gro_base + em.gr_off[i])
+    // A jump table holds code addresses, a value table its data, and
+    // both come last: see incr_jt_prefix for why the end is where they
+    // have to be.
+    let jt_base : i64 = align_up(@dropunit(#rodata), 8)
+    while @dropunit(#rodata) < jt_base:
+        rodata.push(0)
+    let jt_kept : i64 = incr_jt_prefix(&rodata, incr, jt_base)
+    if #em.jt_pos > 0:
+        foreach i := 0…#em.jt_pos:
+            em.patch64(em.jt_pos[i], ro_vaddr + jt_base + jt_kept + 8 × em.jt_starts[em.jt_id[i] × 1¤ptrdiff])
+    if #em.jt_starts > 0:
+        foreach t := 0…#em.jt_starts:
+            let lo2 : i64 = em.jt_starts[t]
+            let hi2 : i64 = if t + 1 < #em.jt_starts: em.jt_starts[t + 1] else: @dropunit(#em.jt_entries)
+            let base2 : i64 = if em.jt_is_code[t] = 1: IMAGE_BASE + PAGE else: 0
+            foreach e3 := lo2…hi2:
+                push64(&rodata, base2 + em.jt_entries[e3 × 1¤ptrdiff])
     // data: what is written before @start and then sealed, then what
     // stays writable throughout
     let d_vaddr : i64 = IMAGE_BASE + align_up(align_up(PAGE + text_size, PAGE) + @dropunit(#rodata), PAGE)
@@ -801,6 +921,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         dlog.push(l)
     foreach l := lw.dlog:
         dlog.push(l)
-    (Compiled{code: em.code, rodata: rodata, data: data,
+    (Compiled{incr_why: incr_why, ro_fixed: descbase × 1¤byte,
+              ro_vals: gro_base × 1¤byte, ro_vals_end: gro_end × 1¤byte, code: em.code, rodata: rodata, data: data,
               relro_size: relro_size, syms: syms,
               log: dlog, diags: cdiags})

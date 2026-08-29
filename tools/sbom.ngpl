@@ -43,9 +43,41 @@ fn le(b : u8[], at : i64 ¤byte, n : i64) → i64:
         i ← i + 1
     v
 
+// How many bytes the character beginning with this one is written in.
+// A byte that begins nothing -- a continuation met on its own, or one
+// of the two values UTF-8 never uses -- stands for itself, so a table
+// this does not understand is read to its end rather than run off it.
+@post(r: r >= 1 and r <= 4)
+fn utf8_len(lead : i64) → i64:
+    if lead < 194: return 1
+    if lead < 224: return 2
+    if lead < 240: return 3
+    if lead < 245: return 4
+    1
+
+// The character those bytes spell: the low bits of the lead byte, then
+// six from each byte that follows.
+fn utf8_at(b : u8[], at : i64 ¤byte, n : i64) → i64:
+    let lead : i64 = @dropunit(b[at])
+    if n = 1:
+        return lead
+    let keep : i64 = if n = 2: 31 elif n = 3: 15 else: 7
+    let v : mut i64 = lead & keep
+    let i : mut i64 = 1
+    while i < n:
+        let cont : i64 = @dropunit(b[at + i × 1¤byte])
+        v ← (v « 6) | (cont & 63)
+        i ← i + 1
+    v
+
 // The string beginning at at, up to the byte that ends it.  A table
 // that is not terminated ends at the end of the section rather than
 // running on into whatever follows.
+//
+// The bytes are read as UTF-8 rather than one character each: a str is
+// a sequence of characters, so a name taken a byte at a time would be
+// a longer string than the one that was written, and printing it would
+// show the encoding rather than the name.
 fn cstr(b : u8[], at : i64 ¤byte, limit : i64 ¤byte) → str:
     let s : mut str = ""
     let i : mut i64 ¤byte = at
@@ -53,8 +85,11 @@ fn cstr(b : u8[], at : i64 ¤byte, limit : i64 ¤byte) → str:
         let c : i64 = @dropunit(b[i])
         if c = 0:
             return s
-        s ← s ⧺ c.chr()
-        i ← i + 1¤byte
+        let n : i64 = utf8_len(c)
+        if i + n × 1¤byte > limit or i + n × 1¤byte > #b:
+            return s
+        s ← s ⧺ utf8_at(b, i, n).chr()
+        i ← i + n × 1¤byte
     s
 
 @post(r: #r > 0)

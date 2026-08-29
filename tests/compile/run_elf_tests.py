@@ -25,6 +25,7 @@ bytes and got zero bytes.  Overlap and emptiness are cheap to check
 and neither would have survived it.
 """
 
+import json
 import os
 import re
 import shutil
@@ -527,6 +528,146 @@ def compiler_sources() -> list:
     return out
 
 
+# ---------------------------------------------------------------------------
+# Compiling only what changed
+# ---------------------------------------------------------------------------
+
+INCR_PROBE = """\
+fn answer() \u2192 i64:
+    41
+
+fn shown() \u2192 i64:
+    answer() + 1
+
+@start
+@impure
+fn main() \u2192 u8:
+    std.println("{}", shown())
+    0
+"""
+
+
+def incr_build(compiler, source: str, out: str, target: str = "") -> tuple:
+    """Build with --incremental and answer (what it decided, the log)."""
+    cmd = compiler + [source, "-o", out, "--incremental", "--log=json"]
+    if target:
+        cmd.append("--target=" + target)
+    run = subprocess.run(cmd, capture_output=True, cwd=topdir)
+    said = run.stdout.decode("utf-8", "replace")
+    check(run.returncode == 0,
+          f"ngplc refused an incremental build (status {run.returncode}): "
+          f"{said.strip().splitlines()[:1]}")
+    decisions = [line for line in said.splitlines()
+                 if '"decision": "incremental' in line]
+    check(len(decisions) == 1,
+          f"--incremental said {len(decisions)} things about what it decided")
+    return json.loads(decisions[0]), said
+
+
+def incr_run(path: str) -> str:
+    """What the program prints, which is what the mode must not change."""
+    run = subprocess.run([path], capture_output=True)
+    check(run.returncode == 0,
+          f"the program built incrementally stopped with {run.returncode}")
+    return run.stdout.decode("utf-8", "replace").strip()
+
+
+def check_incremental(compiler, work: str) -> str:
+    """A first build leaves room, and a later one writes only what moved.
+
+    The whole of the mode is here: that a rebuild of an unchanged
+    source reproduces the file byte for byte, that a change writes the
+    functions that moved and copies the rest -- which the file shows,
+    since only their bytes differ -- and that a function that outgrows
+    the room it was given falls back to a whole build rather than
+    writing something that does not fit.  Every build's program is run,
+    because a layout that lines up and a program that answers wrongly
+    is the failure this mode risks.
+    """
+    src = os.path.join(work, "incr_probe.ngpl")
+    out = os.path.join(work, "incr_probe")
+    open(src, "w").write(INCR_PROBE)
+    if os.path.exists(out):
+        os.remove(out)
+
+    first, _ = incr_build(compiler, src, out)
+    check(first["decision"] == "incremental-first",
+          f"a build with no file to read said {first['decision']!r}")
+    check(incr_run(out) == "42", "the first build answers wrongly")
+
+    # every function of the program got room, and the room is trapped:
+    # a jump into the gap between two functions stops rather than wanders
+    elf = Elf(open(out, "rb").read())
+    text = elf.section(".text")
+    body = elf.raw[text["offset"]:text["offset"] + text["size"]]
+    for sym in elf.symbols():
+        if "\u2192" not in sym["name"]:
+            continue
+        end = sym["value"] - text["addr"] + sym["size"]
+        check(body[end - 1] == 0xCC,
+              f"the room after {sym['name']!r} is not trapped")
+
+    was = open(out, "rb").read()
+    again, _ = incr_build(compiler, src, out)
+    check(again["decision"] == "incremental",
+          f"a rebuild of an unchanged source said {again['decision']!r}")
+    check(again["regenerated"] == 0,
+          f"a rebuild of an unchanged source wrote {again['regenerated']} "
+          "functions again")
+    check(open(out, "rb").read() == was,
+          "a rebuild of an unchanged source wrote a different file")
+
+    # one function changed, and no more of the code than that may move
+    open(src, "w").write(INCR_PROBE.replace("    41\n", "    42\n"))
+    moved, _ = incr_build(compiler, src, out)
+    check(moved["decision"] == "incremental",
+          f"a change that fits its room said {moved['decision']!r}")
+    check(moved["regenerated"] >= 1,
+          "a change that fits its room wrote nothing again")
+    check(incr_run(out) == "43", "the rebuilt program answers wrongly")
+    now = open(out, "rb").read()
+    lo, hi = text["offset"], text["offset"] + text["size"]
+    differ = [i for i in range(lo, hi) if was[i] != now[i]]
+    check(len(differ) <= 256,
+          f"{len(differ)} bytes of the code changed for a one-line change")
+
+    # and one that cannot fit falls back, which is always right
+    grown = INCR_PROBE.replace(
+        "    41\n",
+        "    let a : i64 = 41\n"
+        "    let b : i64 = a + 1\n"
+        "    let c : i64 = b + 1\n"
+        "    let d : i64 = c + 1\n"
+        "    d - 3\n")
+    open(src, "w").write(grown)
+    fell, _ = incr_build(compiler, src, out)
+    check(fell["decision"] == "incremental-fallback",
+          f"a function that outgrew its room said {fell['decision']!r}")
+    check(fell["why"], "the fallback did not say why")
+    check(incr_run(out) == "42", "the program built after a fallback is wrong")
+
+    # The five targets that share the driver reach the same conclusion.
+    # They are built and compared rather than run, which needs no
+    # emulator: what a cross build gets wrong here is the layout, and
+    # the layout is what a rebuild that lines up is claiming.  Both
+    # classes, since the widths differ.
+    open(src, "w").write(INCR_PROBE)
+    for target in ("aarch64", "riscv32"):
+        cross = os.path.join(work, "incr_probe_" + target)
+        if os.path.exists(cross):
+            os.remove(cross)
+        one, _ = incr_build(compiler, src, cross, target)
+        check(one["decision"] == "incremental-first",
+              f"a first build for {target} said {one['decision']!r}")
+        kept = open(cross, "rb").read()
+        two, _ = incr_build(compiler, src, cross, target)
+        check(two["decision"] == "incremental" and two["regenerated"] == 0,
+              f"an unchanged rebuild for {target} said {two}")
+        check(open(cross, "rb").read() == kept,
+              f"an unchanged rebuild for {target} wrote a different file")
+    return ""
+
+
 def main() -> int:
     compiler = ["python", "-m", "interp"] + compiler_sources() + ["--"]
     for arg in sys.argv[1:]:
@@ -637,6 +778,8 @@ def main() -> int:
         said = refuse(compiler, sym_src, out, ["--guard-size=2G"])
         check("gibibyte" in said, f"the complaint was: {said}")
 
+    case("--incremental writes only what changed",
+         lambda: check_incremental(compiler, work))
     case("--stack-size reaches PT_GNU_STACK", stack_option)
     case("--guard-size is taken", guard_option)
     case("a size that is not one is refused", bad_options)

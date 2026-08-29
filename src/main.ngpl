@@ -150,7 +150,7 @@ fn opt_value(a : str, name : str) → str:
 fn build():
     foreach part := ["tokens", "types", "diag", "lex", "ast", "parse",
                      "dumpast", "check", "abi", "comptime", "ir", "lower", "emit",
-                     "sha256", "symbols", "sbom", "elf", "codegen", "main",
+                     "sha256", "symbols", "sbom", "incr", "elf", "codegen", "main",
                      "arch_x86_64", "rt_x86_64",
                      "arch_a64", "dispatch", "arch_rv64", "arch_i386",
                      "arch_arm", "arch_rv32", "tdriver", "rt_portable",
@@ -266,6 +266,10 @@ fn help():
                   "\n
                   " Output:\n
                   "  -o FILE                    Write the executable to FILE\n
+                  "      --incremental          Leave each function room to grow, and on a\n
+                  "                             later build write again only the functions\n
+                  "                             whose source changed and those that call\n
+                  "                             them\n
                   "      --target=MACHINE       Compile for MACHINE rather than for the\n
                   "                             machine this compiler runs on\n
                   "\n
@@ -320,6 +324,7 @@ fn main() → u8:
     let want_ast : mut bool = false
     let werror : mut bool = false
     let want_log : mut bool = false
+    let incremental : mut bool = false
     let json : mut bool = false
     let stack_size : mut i64 = STACK_DEFAULT
     let guard_size : mut i64 = GUARD_DEFAULT
@@ -376,6 +381,8 @@ fn main() → u8:
             json ← true
         elif a = "--log=json":
             want_log ← true
+        elif a = "--incremental":
+            incremental ← true
         elif a = "-Werror":
             werror ← true
         else:
@@ -453,6 +460,23 @@ fn main() → u8:
         if any_refusal(chk.diags, werror):
             return 1
 
+    // What went in: the compiler, then each source and all of them
+    // together, then every function.  It is worked out here rather
+    // than beside the writing because --incremental decides what to
+    // generate by comparing the function digests with the ones the
+    // previous binary carries, and that decision comes before the work
+    // it saves.
+    // Every binary carries its bill.  There is no flag: a program that
+    // says what it was built from only where someone remembered to ask
+    // is a program nobody can check, and since std.sha256 became a
+    // runtime routine the bill costs a tenth of a second compiled and
+    // nothing at all under the interpreter.
+    let bom : mut SbomRow[] = []
+    bom.push(SbomRow{kind: Sbomkind.compiler, name: sbom_compiler_name(),
+                     hash: sha256_hex(std.bytes(sbom_compiler_name()))})
+    foreach r := sbom_sources(ast, toks, src, files):
+        bom.push(r)
+
     // The recipe is read whenever the program carries one, not only
     // under --build.  The interpreter runs it at load with no flag
     // involved, so a compiler that read it only when asked would accept
@@ -464,7 +488,39 @@ fn main() → u8:
         return 1
 
     let tgt := targets()[tgt_index × 1¤ptrdiff]
-    let compiled := codegen(ast, toks, src, chk, tgt, stack_size, guard_size, want_log)
+    // as every Unix compiler has it: a.out unless -o names the file
+    let outname : str = if output ≠ "": output else: "a.out"
+
+    // Under --incremental the file about to be written is read first.
+    // What it says -- a digest per function, an address and a slot per
+    // symbol -- is enough to write again only the functions whose
+    // source moved and those that name one; where it says nothing
+    // usable, this is a first build, which differs from a plain one
+    // only in leaving each function room to grow.
+    let prev : Prev = if incremental: read_prev(outname) else: prev_none()
+    let fill : i64 = if tgt.id = TGT_X64: INCR_FILL_X86 else: INCR_FILL_ANY
+    let incr : mut Incr = incr_off()
+    if incremental:
+        incr ← incr_prev(ast, toks, src, prev, bom, fill,
+                         tgt.machine.ord(), tgt.is64, tgt.eflags)
+    let first := codegen(ast, toks, src, chk, tgt, stack_size, guard_size, want_log, incr)
+    // A rebuild that could not be laid over the old file says why and
+    // is done again whole, which is always right.  The whole build
+    // still leaves padding, so the build after it is incremental.
+    let why : mut str = ""
+    if incr.mode = 2 and #first.diags = 0:
+        why ← if first.incr_why = "": incr_lines_up(prev, first) else: first.incr_why
+    let compiled := if why = "":
+        first
+    else:
+        codegen(ast, toks, src, chk, tgt, stack_size, guard_size, want_log, incr_first(fill))
+    if incremental and want_log:
+        if incr.mode ≠ 2:
+            std.println("{}", "{\"decision\": \"incremental-first\", \"functions\": " ⧺ i64_str(@dropunit(#ast.fns)) ⧺ "}")
+        elif why = "":
+            std.println("{}", "{\"decision\": \"incremental\", \"read\": \"" ⧺ outname ⧺ "\", \"functions\": " ⧺ i64_str(@dropunit(#ast.fns)) ⧺ ", \"regenerated\": " ⧺ i64_str(incr_fresh_count(incr)) ⧺ "}")
+        else:
+            std.println("{}", "{\"decision\": \"incremental-fallback\", \"why\": \"" ⧺ why ⧺ "\"}")
     if #compiled.diags > 0:
         report(compiled.diags, files, json, src)
         return 1
@@ -475,25 +531,12 @@ fn main() → u8:
         foreach l := compiled.log:
             std.println("{}", l)
 
-    // as every Unix compiler has it: a.out unless -o names the file
-    let outname : str = if output ≠ "": output else: "a.out"
     let outf := std.fs.cwd().create_file(outname, 493)
     // one plan, and the class picks how wide its fields are written;
     // one run for each thing the file is made of, and the kernel
     // joins them, so nothing here ever holds the whole image
-    // What went in: the compiler, then each source and all of them
-    // together.  What came out is added by the plan, which is where the
-    // entry point is known.
-    // Every binary carries its bill.  There is no flag: a program that
-    // says what it was built from only where someone remembered to ask
-    // is a program nobody can check, and since std.sha256 became a
-    // runtime routine the bill costs a tenth of a second compiled and
-    // nothing at all under the interpreter.
-    let bom : mut SbomRow[] = []
-    bom.push(SbomRow{kind: Sbomkind.compiler, name: sbom_compiler_name(),
-                     hash: sha256_hex(std.bytes(sbom_compiler_name()))})
-    foreach r := sbom_sources(ast, toks, src, files):
-        bom.push(r)
+    // What came out is added by the plan, which is where the entry
+    // point is known.
     let pl := plan_elf(tgt, compiled.code, compiled.rodata, compiled.data,
                        stack_size × 1¤byte, compiled.relro_size × 1¤byte,
                        compiled.syms, bom)

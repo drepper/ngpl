@@ -10069,7 +10069,7 @@ Both sections are read only and are loaded, in their own segment after the data:
 
 Folding alone is not enough, because the two forms put the separators in different places: layout writes a newline before the indent and before the dedent where braces write none, and a dedent is followed straight away by the next statement where a closing brace needs a newline after it.  So a separator is held rather than written, and written only when what follows is not a block edge and what preceded was not one either.  A block edge already says a statement ended, and a run of blank lines says nothing at all.
 
-**A row for every function.**  A file's digest says a build differs; a function's says *where*.  Two builds of a program that changed in one place agree on every row but one, which is what makes a bill worth reading rather than only worth comparing.  A function's digest covers the tokens it is written in, from its first annotation — a contract is part of what a function is — to the last token of its body.
+**A row for every function.**  A file's digest says a build differs; a function's says *where*.  Two builds of a program that changed in one place agree on every row but one, which is what makes a bill worth reading rather than only worth comparing.  A function's digest covers the tokens it is written in, from its first annotation — a contract is part of what a function is — to the last token of its body.  A method's range begins at its own first annotation, not at the `impl` block's: an impl block is one definition at the top level, and taking its start for every method in it would give the block's first method a row and the rest none.
 
 **The program's own digest covers what the program is, not what the file says about it.**  The code, what it reads, what it writes, the entry point, the machine and the class go in.  The bill does not — that would be a digest of its own digest — and neither do the symbol names, the section headers, or the output's filename, because the same program deployed twice under two names is one program.
 
@@ -10081,7 +10081,7 @@ The digests are SHA-256, computed with `std.hash.sha256`, and the compiler feeds
 ngplc tools/sbom.ngpl -o build/sbom
 build/sbom --short build/ngplc
 
-build/ngplc: 766 rows
+build/ngplc: 1276 rows
   b51515afc7741850  compiler  ngplc core-2
   53ad40a665160a89  source    src/tokens.ngpl
   …
@@ -10089,6 +10089,107 @@ build/ngplc: 766 rows
 ```
 
 It walks the section headers for the two sections and reads nothing else, so a binary built for another architecture or another class still answers.  The elf tests hold it to the same rows they find themselves.
+
+### Compiling Only What Changed
+
+`--incremental` asks for a binary that a later build can write into
+rather than replace.  It is off by default and changes nothing about
+what a program means; what it changes is the shape of the file and how
+much of it the next build has to write.
+
+**A first build leaves room.**  With `--incremental` and no output file
+yet, the compiler compiles as it always does and leaves each function a
+fifth of its own size in padding behind it — at least sixteen bytes,
+and `INCR_PAD_NUM/INCR_PAD_DEN` in `src/incr.ngpl` and nowhere else.
+The padding is filled with the architecture's trap byte where it has a
+one-byte one, so a jump into the gap between two functions stops rather
+than wanders, and it is rounded up to sixteen bytes: on the targets
+whose instructions are all four bytes wide a function begins where the
+last one ended, and padding that was not a multiple of the instruction
+width would leave the next function's first instruction split across a
+word.  The symbol table already reports a function's size as
+the distance to the next symbol, so padding a function widens the slot
+the symbol describes and needs no new field.
+
+**A later build reads the file it is about to write.**  The bill of
+materials in it gives a digest per function, its symbol table an
+address and a slot per symbol, and its `.text` the bytes of every
+function that has not changed.  The digests for the new sources are
+computed straight after parsing — before checking, before any code is
+generated — so the decision comes before the work it saves.  A function
+is written again when its own digest moved, or when it names one whose
+digest moved; every other function has its old bytes copied to the
+address it already had.  Since a digest is over tokens, a comment or a
+rewrapped line moves nothing.
+
+**What may differ, and what may not.**  Everything the copied code
+names has to be where it was, and the compiler checks that it is before
+writing anything:
+
+| Must hold | May change |
+|---|---|
+| every function at the address it had, inside the room it had | the bytes of any string, since nothing points into the middle of one |
+| the descriptors, the tables, and the offsets of everything after them | the value of a global that is never written |
+| the symbol table, name for name and address for address | the digests in the bill, which are what changed |
+| `.rodata` no larger than the pages it already had | its length within those pages |
+| `.data` byte for byte | |
+
+The reason a string's own bytes may change is that `@pre` names the
+line it is written on, and adding a line above it moves that line: the
+message is different and the address is not, so the copied code prints
+the new message, which is the true one.
+
+**When it does not line up** the build falls back to a whole one, which
+is always correct, and says which of these stopped it: a function that
+outgrew its slot, a function the old file did not have or no longer
+has, a symbol that moved, read-only data that came out different, or a
+runtime routine the old build did not carry.  A whole build under
+`--incremental` writes fresh padding, so the build after a fallback is
+incremental again.  `--log=json` says what it decided:
+
+```
+{"decision": "incremental", "read": "build/ngplc", "functions": 1236, "regenerated": 2}
+{"decision": "incremental-fallback", "why": "'twice(i64) → i64' outgrew the room it had"}
+```
+
+**Three things the mode arranges so that a build can be lined up with
+another.**  Each is a place where the ordinary compiler decides
+something from what it emitted, which a build that copies a function
+never sees:
+
+- *Every literal goes in the image*, not only the ones an emitted
+  instruction reads.  A pool trimmed to what was seen would drop the
+  strings the copied functions name and move every string after them.
+- *The private calling convention is off.*  It is decided over the
+  whole program, so it can move for a function whose own source did
+  not — and a function whose code is copied was written against the
+  convention it had.
+- *The runtime is the one the old build carried, in the order it had
+  them.*  Which routines a binary holds is read off the calls it
+  emitted; a rebuild starts from the routines the old file's symbol
+  table names, and a routine this build needs and that one lacked moves
+  the ones after it, which the check on the symbol table catches.  The
+  order counts too on the five targets that share the driver, where a
+  routine is written as it is discovered and writing it is what puts
+  its messages in the pool.
+
+**The jump tables sit at the end of `.rodata`** for the same reason: a
+rebuild keeps the old build's tables whole, since code copied out of
+the old `.text` points into them at the offsets they had, and lays its
+own tables after them.  The cost is the tables of the functions that
+were written again, which stay in the file unread.
+
+**What it costs and what it saves.**  A rebuild still lexes, parses,
+checks and lowers the whole program: this is not separate compilation,
+and a change anywhere can change what checking says anywhere.  Lowering
+happens even for a function whose code is copied, because lowering is
+what puts a string literal in the pool and the pool is what `.rodata`
+is.  What is skipped is emitting.  On the compiler's own sources that
+is not yet a saving worth measuring — reading a two-megabyte binary
+back and comparing it costs about what emitting cost — so what the mode
+buys today is a file that changes only where the program did: a
+one-line change to one function moves two bytes of `.text` and the
+digests that say so.
 
 ### Roadmap
 

@@ -31,6 +31,7 @@ NGPLC_SOURCES=(
     src/sha256.ngpl        # the digest a bill of materials names things by
     src/symbols.ngpl       # what a function is called in the object file
     src/sbom.ngpl          # what a program was built from, and its digests
+    src/incr.ngpl          # what changed since the last build, and its room
     src/elf.ngpl           # targets, the ELF structures, and writing them
     src/codegen.ngpl       # the x86-64 pipeline, put together
     src/main.ngpl          # the driver, the command line, the @build recipe

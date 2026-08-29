@@ -1,0 +1,626 @@
+// ===========================================================================
+// Compiling only what changed
+// ===========================================================================
+//
+// Under --incremental the compiler leaves each function room to grow,
+// and a later build replaces in the file only the functions whose
+// source moved and the ones that call them.  What makes it possible is
+// that a binary already says everything needed to decide: the bill of
+// materials carries a digest per function, over the tokens it is
+// written in, and the symbol table carries an address per function and
+// a size that runs to the next symbol -- which is to say, the room it
+// has.  Neither was put there for this.
+//
+// INCREMENTAL.md is the design, and says what falls back to a whole
+// build and why.  Everything here is on the reading side: what a
+// previous build said about itself, and which functions this one must
+// generate again.
+
+// How much room a function is given beyond what it takes.  Twenty per
+// cent: enough that an edit to a body usually still fits where the body
+// stood, small enough that a program does not swell.  This is the only
+// place the number is written.
+let INCR_PAD_NUM : i64 = 20
+let INCR_PAD_DEN : i64 = 100
+
+// A function's padding: never nothing, since a function with no room
+// at all could not take one byte more, and always a multiple of
+// sixteen.
+//
+// The rounding is not tidiness.  On the five targets whose
+// instructions are all four bytes wide, a function begins where the
+// last one ended and is aligned because every function's size is a
+// multiple of four; padding that was not would leave the next
+// function's first instruction split across a word, which is not an
+// instruction.  Sixteen covers that and every alignment a target has
+// asked for so far.
+@post(r: r >= 16¤byte and (@dropunit(r) % 16 ?? 1) = 0)
+fn incr_padding(size : i64 ¤byte) → i64 ¤byte:
+    let by : i64 ¤byte = (size × INCR_PAD_NUM ÷ INCR_PAD_DEN ?? 0¤byte)
+    let want : i64 ¤byte = if by < 16¤byte: 16¤byte else: by
+    ((want + 15¤byte) ÷ 16¤byte ?? 0) × 16¤byte
+
+// What a previous build of this program said about itself.  `ok` says
+// whether the file could be read as one at all; everything else is only
+// worth reading when it is true.
+struct Prev:
+    ok : bool
+    raw : u8[]
+    // what the old file was built for: code copied out of it is that
+    // machine's code and no other's
+    machine : i64
+    is64 : bool
+    eflags : i64
+    text_off : i64 ¤byte
+    text_size : i64 ¤byte
+    ro_off : i64 ¤byte
+    ro_size : i64 ¤byte
+    d_off : i64 ¤byte
+    d_size : i64 ¤byte
+    // every symbol the table holds, in the order it holds them: the
+    // name, where its code begins in .text, and how much room it has
+    sym_name : str[]
+    sym_off : i64 ¤byte[]
+    sym_size : i64 ¤byte[]
+    // every row of the bill: what it is about, what it names, and
+    // what it said
+    row_kind : i64[]
+    row_name : str[]
+    row_hash : str[]
+
+fn prev_none() → Prev:
+    (Prev{ok: false, raw: [], machine: 0, is64: false, eflags: 0, text_off: 0¤byte, text_size: 0¤byte,
+          ro_off: 0¤byte, ro_size: 0¤byte, d_off: 0¤byte, d_size: 0¤byte,
+          sym_name: [], sym_off: [], sym_size: [],
+          row_kind: [], row_name: [], row_hash: []})
+
+// A little-endian number of n bytes, as every field in the files this
+// compiler writes is written.
+@pre(n > 0 and n <= 8)
+fn pv_le(b : u8[], at : i64 ¤byte, n : i64) → i64:
+    let v : mut i64 = 0
+    let i : mut i64 = 0
+    while i < n:
+        let here : i64 ¤byte = at + i × 1¤byte
+        if here >= #b:
+            return v
+        // widened before it is shifted: a byte shifted eight is past
+        // the top of its own type
+        let x : i64 = @dropunit(b[here])
+        v ← v + (x « (8 × i))
+        i ← i + 1
+    v
+
+// How many bytes the character beginning with this one is written in.
+// A byte that begins nothing -- a continuation met on its own, or one
+// of the two values UTF-8 never uses -- stands for itself, so a table
+// this does not understand is still read to its end rather than run
+// off it.
+@post(r: r >= 1 and r <= 4)
+fn pv_utf8_len(lead : i64) → i64:
+    if lead < 194: return 1
+    if lead < 224: return 2
+    if lead < 240: return 3
+    if lead < 245: return 4
+    1
+
+// The character those bytes spell: the low bits of the lead byte, then
+// six from each byte that follows.
+fn pv_utf8_at(b : u8[], at : i64 ¤byte, n : i64) → i64:
+    let lead : i64 = @dropunit(b[at])
+    if n = 1:
+        return lead
+    let keep : i64 = if n = 2: 31 elif n = 3: 15 else: 7
+    let v : mut i64 = lead & keep
+    let i : mut i64 = 1
+    while i < n:
+        let cont : i64 = @dropunit(b[at + i × 1¤byte])
+        v ← (v « 6) | (cont & 63)
+        i ← i + 1
+    v
+
+// The string beginning at at, up to the byte that ends it.  A table
+// that is not terminated ends at the end of the section rather than
+// running on into whatever follows.
+//
+// The bytes are read as UTF-8 rather than one character each: a str is
+// a sequence of characters, so a symbol named `twice(i64) → i64` taken
+// a byte at a time is a different string from the one the compiler
+// spells, and the spelling is the whole of what it is compared with.
+fn pv_cstr(b : u8[], at : i64 ¤byte, limit : i64 ¤byte) → str:
+    let s : mut str = ""
+    let i : mut i64 ¤byte = at
+    while i < limit and i < #b:
+        let c : i64 = @dropunit(b[i])
+        if c = 0:
+            return s
+        let n : i64 = pv_utf8_len(c)
+        if i + n × 1¤byte > limit or i + n × 1¤byte > #b:
+            return s
+        s ← s ⧺ pv_utf8_at(b, i, n).chr()
+        i ← i + n × 1¤byte
+    s
+
+// What a previous build wrote, or a Prev that says it could not be
+// read.  Nothing here refuses: a file that cannot be walked is a file
+// this build compiles whole, which is always right.
+@impure
+fn read_prev(path : str) → Prev:
+    let alloc := std.arena.allocator()
+    match std.fs.cwd().open_file(path):
+        ⊨(file):
+            let f := file.read_file(alloc)
+            file.close()
+            if #f < 64¤byte:
+                return prev_none()
+            if pv_le(f, 0¤byte, 1) ≠ 127 or pv_le(f, 1¤byte, 1) ≠ 69 or pv_le(f, 2¤byte, 1) ≠ 76 or pv_le(f, 3¤byte, 1) ≠ 70:
+                return prev_none()
+            let cls : i64 = pv_le(f, 4¤byte, 1)
+            if cls ≠ 1 and cls ≠ 2 or pv_le(f, 5¤byte, 1) ≠ 1:
+                return prev_none()
+            let is64 : bool = cls = 2
+            let shoff : i64 ¤byte = if is64: pv_le(f, 40¤byte, 8) × 1¤byte else: pv_le(f, 32¤byte, 4) × 1¤byte
+            let at : i64 ¤byte = if is64: 58¤byte else: 46¤byte
+            let shentsize : i64 ¤byte = pv_le(f, at, 2) × 1¤byte
+            let shnum : i64 = pv_le(f, at + 2¤byte, 2)
+            let shstrndx : i64 = pv_le(f, at + 4¤byte, 2)
+            if shoff = 0¤byte or shnum = 0 or shstrndx >= shnum:
+                return prev_none()
+            let addr_at : i64 ¤byte = if is64: 16¤byte else: 12¤byte
+            let off_at : i64 ¤byte = if is64: 24¤byte else: 16¤byte
+            let size_at : i64 ¤byte = if is64: 32¤byte else: 20¤byte
+            let shstr : i64 ¤byte = shoff + shstrndx × shentsize
+            let w : i64 = if is64: 8 else: 4
+            let names_at : i64 ¤byte = pv_le(f, shstr + off_at, w) × 1¤byte
+            let names_end : i64 ¤byte = names_at + pv_le(f, shstr + size_at, w) × 1¤byte
+
+            let text_o : mut i64 ¤byte = 0¤byte
+            let text_va : mut i64 ¤byte = 0¤byte
+            let text_n : mut i64 ¤byte = 0¤byte
+            let ro_o : mut i64 ¤byte = 0¤byte
+            let ro_n : mut i64 ¤byte = 0¤byte
+            let d_o : mut i64 ¤byte = 0¤byte
+            let d_n : mut i64 ¤byte = 0¤byte
+            let bom_o : mut i64 ¤byte = 0¤byte
+            let bom_n : mut i64 ¤byte = 0¤byte
+            let bstr_o : mut i64 ¤byte = 0¤byte
+            let bstr_n : mut i64 ¤byte = 0¤byte
+            let sym_o : mut i64 ¤byte = 0¤byte
+            let sym_n : mut i64 ¤byte = 0¤byte
+            let str_o : mut i64 ¤byte = 0¤byte
+            let str_n : mut i64 ¤byte = 0¤byte
+            let i : mut i64 = 0
+            while i < shnum:
+                let sh : i64 ¤byte = shoff + i × shentsize
+                let nm : str = pv_cstr(f, names_at + pv_le(f, sh, 4) × 1¤byte, names_end)
+                let so : i64 ¤byte = pv_le(f, sh + off_at, if is64: 8 else: 4) × 1¤byte
+                let sz : i64 ¤byte = pv_le(f, sh + size_at, if is64: 8 else: 4) × 1¤byte
+                if nm = ".text":
+                    text_o ← so
+                    text_n ← sz
+                    text_va ← pv_le(f, sh + addr_at, if is64: 8 else: 4) × 1¤byte
+                elif nm = ".rodata":
+                    ro_o ← so
+                    ro_n ← sz
+                elif nm = ".data":
+                    d_o ← so
+                    d_n ← sz
+                elif nm = ".sbom":
+                    bom_o ← so
+                    bom_n ← sz
+                elif nm = ".sbomstr":
+                    bstr_o ← so
+                    bstr_n ← sz
+                elif nm = ".symtab":
+                    sym_o ← so
+                    sym_n ← sz
+                elif nm = ".strtab":
+                    str_o ← so
+                    str_n ← sz
+                i ← i + 1
+            if text_o = 0¤byte or bom_o = 0¤byte or sym_o = 0¤byte:
+                return prev_none()
+
+            // the symbols, as addresses into .text and the room each has
+            let syment : i64 ¤byte = if is64: 24¤byte else: 16¤byte
+            let sn : mut str[] = []
+            let sv : mut i64 ¤byte[] = []
+            let ss : mut i64 ¤byte[] = []
+            let nsym : i64 = @dropunit(sym_n ÷ syment ?? 1¤byte)
+            let k : mut i64 = 0
+            while k < nsym:
+                let sy : i64 ¤byte = sym_o + k × syment
+                let nat : i64 ¤byte = pv_le(f, sy, 4) × 1¤byte
+                let nm : str = pv_cstr(f, str_o + nat, str_o + str_n)
+                // the value is a virtual address; .text is mapped where
+                // the file holds it, so the offset is the difference
+                let va : i64 ¤byte = if is64: pv_le(f, sy + 8¤byte, 8) × 1¤byte else: pv_le(f, sy + 4¤byte, 4) × 1¤byte
+                let val : i64 ¤byte = va - text_va
+                let siz : i64 ¤byte = if is64: pv_le(f, sy + 16¤byte, 8) × 1¤byte else: pv_le(f, sy + 8¤byte, 4) × 1¤byte
+                if nm ≠ "":
+                    sn.push(nm)
+                    sv.push(val)
+                    ss.push(siz)
+                k ← k + 1
+
+            // the bill
+            let rk : mut i64[] = []
+            let rn : mut str[] = []
+            let rh : mut str[] = []
+            let nrow : i64 = @dropunit(bom_n ÷ 12¤byte ?? 1¤byte)
+            let r : mut i64 = 0
+            while r < nrow:
+                let row : i64 ¤byte = bom_o + r × 12¤byte
+                rk.push(pv_le(f, row, 4))
+                rn.push(pv_cstr(f, bstr_o + pv_le(f, row + 4¤byte, 4) × 1¤byte, bstr_o + bstr_n))
+                rh.push(pv_cstr(f, bstr_o + pv_le(f, row + 8¤byte, 4) × 1¤byte, bstr_o + bstr_n))
+                r ← r + 1
+
+            return (Prev{ok: true, raw: f,
+                         machine: pv_le(f, 18¤byte, 2),
+                         is64: is64,
+                         eflags: pv_le(f, if is64: 48¤byte else: 36¤byte, 4),
+                         text_off: text_o, text_size: text_n,
+                         ro_off: ro_o, ro_size: ro_n, d_off: d_o, d_size: d_n,
+                         sym_name: sn, sym_off: sv, sym_size: ss,
+                         row_kind: rk, row_name: rn, row_hash: rh})
+        ∅:
+            return prev_none()
+
+// ---------------------------------------------------------------------------
+// What this build must generate again
+// ---------------------------------------------------------------------------
+//
+// A function is generated again when its own digest moved, or when a
+// function it names has one that moved.  The second is a margin rather
+// than a need today: every function is laid at the address it already
+// had, so a caller's call instruction is right whatever became of the
+// callee's body.  It is what makes the rule survive the things that
+// would break it -- inlining a callee into its caller, a calling
+// convention decided per function -- and it is what was asked for.
+//
+// Who calls whom is read off the tokens rather than the tree: every
+// identifier inside a function that spells a function's name counts as
+// a call.  That says yes where a name is not a call at all, which
+// generates a function that need not have been -- the safe direction,
+// and the only one worth taking for an answer nothing else checks.
+
+// The table a name is looked up in.  Its size is a power of two and is
+// settled when it is made, from the number of names it will hold: a
+// linear probe walks forever in a table that fills up.
+struct Names:
+    slot : i64[]         // 1 + the name's index, or 0 for an empty slot
+    name : str[]
+
+fn names_hash(s : str) → i64:
+    let h : mut i64 = 0
+    foreach ch := s:
+        h ← @wrap(h × 31 + ch.ord()) & 1073741823
+    h
+
+impl Names:
+    fn probe(&self, s : str) → i64:
+        let mask : i64 = @dropunit(#self.slot) - 1
+        let at : mut i64 = names_hash(s) & mask
+        while true:
+            let held : i64 = self.slot[at × 1¤ptrdiff]
+            if held = 0 or self.name[(held - 1) × 1¤ptrdiff] = s:
+                return at
+            at ← (at + 1) & mask
+        at
+
+    // the index the name was added under, or ⁻1
+    fn find(&self, s : str) → i64:
+        let held : i64 = self.slot[self.probe(s) × 1¤ptrdiff]
+        if held = 0: ⁻1 else: held - 1
+
+    fn add(&mut self, s : str):
+        // A linear probe walks forever in a table that is full, so the
+        // room is settled when the table is made rather than grown
+        // when it fills; this is what says the settling was right.
+        assert(@dropunit(#self.name) × 2 < @dropunit(#self.slot),
+               "the name table keeps half its slots free")
+        let at : i64 = self.probe(s)
+        if self.slot[at × 1¤ptrdiff] = 0:
+            self.name.push(s)
+            self.slot[at × 1¤ptrdiff] ← @dropunit(#self.name)
+
+// Slots for that many names with half the table left over, rounded up
+// to a power of two so a probe can mask rather than divide.
+@pre(want >= 0)
+@post(r: r >= 64 and (r & (r - 1)) = 0 and r > want × 2)
+fn names_slots(want : i64) → i64:
+    let n : mut i64 = 64
+    while n <= want × 2:
+        n ← n × 2
+    n
+
+fn names_new(want : i64) → Names:
+    let sl : mut i64[] = []
+    foreach _ := 0…names_slots(want):
+        sl.push(0)
+    (Names{slot: sl, name: []})
+
+// The name the bill knows a function by: the module it was written in,
+// then its own.
+fn incr_fn_name(a : Ast, f : i64) → str:
+    let d := a.fns[f × 1¤ptrdiff]
+    if d.modname = "": d.name else: d.modname ⧺ "." ⧺ d.name
+
+// Which functions to generate again, one bool per function.  Answers
+// them all where the previous build cannot be lined up with this one;
+// the caller then compiles whole, which is what a fallback is.
+fn incr_regenerate(a : Ast, toks : Toks, src : byte[], prev : Prev,
+                   rows : SbomRow[]) → bool[]:
+    let nf : i64 ¤ptrdiff = #a.fns
+    // what the previous build said each function was
+    let was : mut Names = names_new(@dropunit(#prev.row_name))
+    let washash : mut str[] = []
+    foreach i := 0¤ptrdiff…#prev.row_name:
+        if prev.row_kind[i] = Sbomkind.function.ord():
+            was.add(prev.row_name[i])
+            let at : i64 = was.find(prev.row_name[i])
+            while @dropunit(#washash) <= at:
+                washash.push("")
+            washash[at × 1¤ptrdiff] ← prev.row_hash[i]
+
+    // And what this one says, from the bill computed after parsing.
+    // A name two functions share cannot say which of them a digest
+    // belongs to, so neither is trusted: both are written again.  The
+    // bill names a function by its module and its own name, and an
+    // overload gives two definitions one such name.
+    let now : mut Names = names_new(@dropunit(#rows))
+    let nowhash : mut str[] = []
+    let twice : mut bool[] = []
+    foreach r := rows:
+        if r.kind = Sbomkind.function:
+            now.add(r.name)
+            let at : i64 = now.find(r.name)
+            while @dropunit(#nowhash) <= at:
+                nowhash.push("")
+                twice.push(false)
+            if nowhash[at × 1¤ptrdiff] ≠ "":
+                twice[at × 1¤ptrdiff] ← true
+            nowhash[at × 1¤ptrdiff] ← r.hash
+
+    // a function whose digest moved, or which the previous build did
+    // not have at all
+    let moved : mut bool[] = []
+    let fnames : mut Names = names_new(@dropunit(nf))
+    foreach i := 0¤ptrdiff…nf:
+        let nm : str = incr_fn_name(a, @dropunit(i))
+        fnames.add(nm)
+        let w : i64 = was.find(nm)
+        let n : i64 = now.find(nm)
+        let before : str = if w >= 0: washash[w × 1¤ptrdiff] else: ""
+        let after : str = if n >= 0: nowhash[n × 1¤ptrdiff] else: ""
+        let shared : bool = n >= 0 and twice[n × 1¤ptrdiff]
+        moved.push(shared or before = "" or after = "" or before ≠ after)
+
+    // and one that names a function whose digest moved.  The names are
+    // read off the tokens each function is written in, so a name that
+    // is not a call still counts.
+    let out : mut bool[] = []
+    foreach i := 0¤ptrdiff…nf:
+        out.push(moved[i])
+    foreach i := 0¤ptrdiff…nf:
+        if out[i]:
+            continue
+        let d := a.fns[i]
+        let t : mut i64 ¤ptrdiff = d.tok_lo × 1¤ptrdiff
+        while t < d.tok_hi × 1¤ptrdiff:
+            if toks.kind[t] = TK_IDENT:
+                let nm : str = run_str(src, toks.off[t], toks.len[t])
+                let g : i64 = fnames.find(nm)
+                if g >= 0 and moved[g × 1¤ptrdiff]:
+                    out[i] ← true
+                    t ← d.tok_hi × 1¤ptrdiff
+            t ← t + 1¤ptrdiff
+    out
+
+// ---------------------------------------------------------------------------
+// What a build under --incremental is working against
+// ---------------------------------------------------------------------------
+
+// The byte padding is filled with: a trap where the architecture has a
+// one-byte one, so a jump into the gap between two functions stops
+// rather than wandering, and zero where it does not.
+let INCR_FILL_X86 : i64 = 204        // int3
+let INCR_FILL_ANY : i64 = 0
+
+struct Incr:
+    // 0 = not incremental; 1 = a first build, which leaves each
+    // function room; 2 = a build against a file, which must lay every
+    // function where that file already has it
+    mode : i64
+    // the byte the padding is filled with, which is a bit pattern and
+    // not a quantity
+    fill : i64
+    // per function of a.fns: generate it again rather than copy it
+    fresh : bool[]
+    // Every symbol the previous build had, and the room it was given.
+    // Both are offsets into .text and neither is measured, because the
+    // emitter's own cursor is not: em.here() answers a plain number,
+    // and these are compared against it on every function.
+    sym : Names
+    sym_at : i64[]
+    sym_end : i64[]
+    // the previous .text, to copy the functions that did not change
+    text : u8[]
+    // and its .rodata, whose jump tables the copied code points into
+    ro : u8[]
+
+fn incr_off() → Incr:
+    (Incr{mode: 0, fill: INCR_FILL_ANY, fresh: [], sym: names_new(0),
+          sym_at: [], sym_end: [], text: [], ro: []})
+
+// A first build under --incremental: no file to line up with, so
+// every function is written as usual and each is left room to grow.
+fn incr_first(fill : i64) → Incr:
+    (Incr{mode: 1, fill: fill, fresh: [], sym: names_new(0),
+          sym_at: [], sym_end: [], text: [], ro: []})
+
+// A build against a file the previous one wrote: every symbol it had,
+// the room it gave each, its .text to copy from, and which functions
+// this build has to write again.  Answers a first build instead where
+// the file cannot be read as one of this compiler's, and where it was
+// built for another machine -- code copied out of it would be that
+// machine's code.
+fn incr_prev(a : Ast, toks : Toks, src : byte[], prev : Prev,
+             rows : SbomRow[], fill : i64, machine : i64, is64 : bool,
+             eflags : i64) → Incr:
+    if not prev.ok or prev.machine ≠ machine or prev.is64 ≠ is64 or prev.eflags ≠ eflags:
+        return incr_first(fill)
+    if prev.text_size = 0¤byte or #prev.sym_name = 0¤ptrdiff:
+        return incr_first(fill)
+    let sym : mut Names = names_new(@dropunit(#prev.sym_name))
+    let at : mut i64[] = []
+    let end : mut i64[] = []
+    foreach i := 0¤ptrdiff…#prev.sym_name:
+        sym.add(prev.sym_name[i])
+        let k : i64 = sym.find(prev.sym_name[i])
+        while @dropunit(#at) <= k:
+            at.push(⁻1)
+            end.push(⁻1)
+        // a name the table holds twice says two places, and neither is
+        // the place: the first one wins and the code that follows
+        // notices the second overrunning it
+        if at[k × 1¤ptrdiff] < 0:
+            at[k × 1¤ptrdiff] ← @dropunit(prev.sym_off[i])
+            end[k × 1¤ptrdiff] ← @dropunit(prev.sym_off[i] + prev.sym_size[i])
+    let hi : i64 ¤byte = prev.text_off + prev.text_size
+    let text : mut u8[] = []
+    if hi <= #prev.raw:
+        text ← prev.raw[prev.text_off…hi]
+    let rhi : i64 ¤byte = prev.ro_off + prev.ro_size
+    let ro : mut u8[] = []
+    if rhi <= #prev.raw:
+        ro ← prev.raw[prev.ro_off…rhi]
+    (Incr{mode: 2, fill: fill,
+          fresh: incr_regenerate(a, toks, src, prev, rows),
+          sym: sym, sym_at: at, sym_end: end, text: text, ro: ro})
+
+// How many functions a rebuild has to write again, for the line the
+// driver prints about what it decided.
+fn incr_fresh_count(incr : Incr) → i64:
+    let n : mut i64 = 0
+    foreach v := incr.fresh:
+        n ← n + (if v: 1 else: 0)
+    n
+
+impl Incr:
+    // Where a symbol's code must begin, or ⁻1 where the previous build
+    // had no such symbol -- which is a build that cannot be lined up
+    // with this one, and so a whole one.
+    fn at_of(&self, nm : str) → i64:
+        let i : i64 = self.sym.find(nm)
+        if i < 0: ⁻1 else: self.sym_at[i × 1¤ptrdiff]
+
+    // …and where its room ends
+    fn end_of(&self, nm : str) → i64:
+        let i : i64 = self.sym.find(nm)
+        if i < 0: ⁻1 else: self.sym_end[i × 1¤ptrdiff]
+
+// ---------------------------------------------------------------------------
+// Laying a function where the last build had it
+// ---------------------------------------------------------------------------
+//
+// Three calls wrap each function in the emission loop, and together
+// they are the whole of what the mode asks of a backend.  Each answers
+// "" while the build still lines up and otherwise what stopped it,
+// naming the function: a reason is never recovered from -- the caller
+// compiles whole instead, which is always right.
+
+// Every literal the program wrote, whether or not an instruction that
+// this build emitted reads it.  A build that keeps some functions from
+// the last one cannot see what those read -- their bytes are copied,
+// not emitted, and nothing records a use -- so a pool trimmed to what
+// was seen would drop the strings they name and move every string
+// after them.  Under --incremental the pool is the whole of what the
+// source wrote, which depends on the parse alone and so is the same in
+// every build.  The cost is the odd literal nobody reads.
+fn incr_all_used(n : i64 ¤ptrdiff) → i64[]:
+    let u : mut i64[] = []
+    foreach _ := 0¤ptrdiff…n:
+        u.push(1)
+    u
+
+// The jump tables sit at the end of .rodata so that a build lining up
+// with a previous one can keep that build's tables whole: code copied
+// out of the old .text points into them at the offsets they had.  This
+// writes the old region out first and answers how long it was; the
+// tables this build generates are laid after it, and the fixups it
+// resolved are the only ones that name them.  The cost is the tables
+// of functions that were regenerated, which stay in the file unread.
+fn incr_jt_prefix(rodata : &mut u8[], incr : Incr, jt_base : i64) → i64:
+    if incr.mode ≠ 2 or @dropunit(#incr.ro) <= jt_base:
+        return 0
+    let keep : i64 = @dropunit(#incr.ro) - jt_base
+    foreach k := 0…keep:
+        rodata.push(incr.ro[(jt_base + k) × 1¤byte])
+    keep
+
+// The reason a build stopped lining up is the first one: everything
+// after it is a consequence of it.
+fn incr_first_reason(had : str, got : str) → str:
+    if had ≠ "": had else: got
+
+// Before a function: put the cursor where the old file had this
+// symbol.  A symbol the old file does not know, or one whose address
+// the code has already run past, means the layout is not the same
+// layout and there is nothing to line up with.
+fn incr_before(em : &mut Emit, incr : Incr, nm : str) → str:
+    if incr.mode ≠ 2:
+        return ""
+    let want : i64 = incr.at_of(nm)
+    if want < 0:
+        return "the previous build had no '" ⧺ nm ⧺ "'"
+    if em.here() > want:
+        return "the code before '" ⧺ nm ⧺ "' grew past where it stood"
+    while em.here() < want:
+        em.b1(incr.fill)
+    ""
+
+// After a function: fill the rest of its slot.  On a first build the
+// slot is invented -- the function's own size plus its share of
+// padding -- and on a later one it is the slot the old file gave it,
+// which the function has just overrun if it did not fit.
+fn incr_after(em : &mut Emit, incr : Incr, nm : str, began : i64) → str:
+    if incr.mode = 1:
+        let grown : i64 ¤byte = (em.here() - began) × 1¤byte
+        let pad : i64 = @dropunit(incr_padding(grown))
+        foreach _ := 0…pad:
+            em.b1(incr.fill)
+        return ""
+    if incr.mode ≠ 2:
+        return ""
+    let room : i64 = incr.end_of(nm)
+    if room < 0:
+        return "the previous build had no room for '" ⧺ nm ⧺ "'"
+    if em.here() > room:
+        return "'" ⧺ nm ⧺ "' outgrew the room it had"
+    while em.here() < room:
+        em.b1(incr.fill)
+    ""
+
+// A function this build did not have to write: its bytes from the old
+// file, which are already resolved against a layout this build is
+// reproducing.  Everything those bytes name -- a callee's address, a
+// string's, a global's -- is at the address it was at, which is the
+// condition the caller checks before and after.
+fn incr_copy(em : &mut Emit, incr : Incr, nm : str) → str:
+    let at : i64 = incr.at_of(nm)
+    let end : i64 = incr.end_of(nm)
+    if at < 0 or end < at:
+        return "the previous build had no bytes for '" ⧺ nm ⧺ "'"
+    // a file whose .text stops inside a symbol it declares is not one
+    // to copy from, and half a function padded out with traps would
+    // be worse than compiling whole
+    if end × 1¤byte > #incr.text:
+        return "the previous build's code stops inside '" ⧺ nm ⧺ "'"
+    let hi : i64 ¤byte = end × 1¤byte
+    let i : mut i64 ¤byte = at × 1¤byte
+    while i < hi:
+        em.b1(@dropunit(incr.text[i]))
+        i ← i + 1¤byte
+    ""

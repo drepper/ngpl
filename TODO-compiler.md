@@ -599,13 +599,31 @@ Tooling
     digest's blocks -- each wanting the same treatment for its own
     table.
 
-[ ] FnDef.tok_lo is set once per top-level definition (parse.ngpl,
-    def_start), so a method's range runs from where its impl block
+[x] FnDef.tok_lo was set once per top-level definition (parse.ngpl,
+    def_start), so a method's range ran from where its impl block
     began, not where the method did.  Found by the last-use scan on
     feat/borrow-returns, which read 6.5 million tokens for 1205
     functions before it was pointed at the name token instead.  The
     bill of materials hashes tok_lo..tok_hi as "what a function is",
-    so a method's row hashes every method before it in the block, and
-    editing one changes the hashes of all that follow.  Setting
-    def_start at each method's own first annotation is the fix; the
-    bill's rows will change when it lands.
+    and the scan that turns that into rows closes one function before
+    it opens the next -- so the block's first method got a row and the
+    rest got none: 752 rows for 1236 functions.  Found again by
+    --incremental, which read the missing rows as 484 functions it
+    could not tell had changed.  parse_impl now sets def_start at each
+    method's own first annotation; the bill has a row per function.
+
+[ ] The two runtimes give a bad code point two different messages.
+    x86-64's says "not a character: past the code points or a
+    surrogate" (rt_x86_64.ngpl) and the five that share rt_portable
+    say "chr: the value is not a code point" (rt_portable.ngpl), so
+    tests/compile/t93_badchar prints one thing on the host and another
+    under qemu.  The same program stopped for the same reason should
+    say the same thing whatever compiled it; the x86-64 wording is the
+    one to keep, since it says which of the two rules was broken.
+
+[ ] t96_stack_overflow is a segmentation fault under qemu-arm and
+    qemu-riscv32 rather than the message the guard page is there to
+    produce -- status 139 where every other target answers 66.  The
+    other four targets catch it, so this is either the signal handler
+    the two 32-bit legacy targets install or what qemu does with an
+    alternate signal stack on them.
