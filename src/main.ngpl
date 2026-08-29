@@ -256,41 +256,41 @@ fn size_str(n : i64) → str:
 // rather than written again here, so they cannot come to disagree.
 @impure
 fn help():
-    std.println("Usage: ngplc [OPTION...] SOURCE.ngpl...")
-    std.println("   or: ngplc [OPTION...] --build RECIPE.ngpl")
-    std.println("Compile NGPL source into a static executable.")
-    std.println("")
-    std.println(" Naming what to compile:")
-    std.println("      --build FILE           Take the source list from FILE's @build")
-    std.println("                             recipe rather than from the command line")
-    std.println("")
-    std.println(" Output:")
-    std.println("  -o FILE                    Write the executable to FILE")
-    std.println("      --target=MACHINE       Compile for MACHINE rather than for the")
-    std.println("                             machine this compiler runs on")
-    std.println("")
-    std.println(" The program that comes out:")
-    std.println("      --stack-size=SIZE      Reserve SIZE for its stack")
-    std.println("      --guard-size=SIZE      Leave SIZE unmapped below the stack, so")
-    std.println("                             running off the bottom is caught")
-    std.println("")
-    std.println(" Diagnostics:")
-    std.println("  -Werror                    Treat every warning as an error")
-    std.println("      --diag=json            Write diagnostics as JSON, one to a line")
-    std.println("")
-    std.println(" What the compiler did:")
-    std.println("      --dump-tokens          Write the token stream and stop")
-    std.println("      --dump-ast             Write the syntax tree and stop")
-    std.println("      --log=json             Write one JSON line for each decision")
-    std.println("                             taken about the shape of the code")
-    std.println("")
-    std.println("      --help                 Give this help list")
-    std.println("")
-    std.println("Mandatory or optional arguments to long options are also mandatory or optional")
-    std.println("for any corresponding short options.")
-    std.println("")
-    std.println("A SIZE is a number of bytes, or a number and K, M or G; the stack")
-    std.println("holds {} and the guard {} unless they are said otherwise.",
+    std.println("""Usage: ngplc [OPTION...] SOURCE.ngpl...\n
+                  "   or: ngplc [OPTION...] --build RECIPE.ngpl\n
+                  "Compile NGPL source into a static executable.\n
+                  "\n
+                  " Naming what to compile:\n
+                  "      --build FILE           Take the source list from FILE's @build\n
+                  "                             recipe rather than from the command line\n
+                  "\n
+                  " Output:\n
+                  "  -o FILE                    Write the executable to FILE\n
+                  "      --target=MACHINE       Compile for MACHINE rather than for the\n
+                  "                             machine this compiler runs on\n
+                  "\n
+                  " The program that comes out:\n
+                  "      --stack-size=SIZE      Reserve SIZE for its stack\n
+                  "      --guard-size=SIZE      Leave SIZE unmapped below the stack, so\n
+                  "                             running off the bottom is caught\n
+                  "\n
+                  " Diagnostics:\n
+                  "  -Werror                    Treat every warning as an error\n
+                  "      --diag=json            Write diagnostics as JSON, one to a line\n
+                  "\n
+                  " What the compiler did:\n
+                  "      --dump-tokens          Write the token stream and stop\n
+                  "      --dump-ast             Write the syntax tree and stop\n
+                  "      --log=json             Write one JSON line for each decision\n
+                  "                             taken about the shape of the code\n
+                  "\n
+                  "      --help                 Give this help list\n
+                  "\n
+                  "Mandatory or optional arguments to long options are also mandatory or optional\n
+                  "for any corresponding short options.\n
+                  "\n
+                  "A SIZE is a number of bytes, or a number and K, M or G; the stack\n
+                  "holds {} and the guard {} unless they are said otherwise.\n""",
                 size_str(STACK_DEFAULT), size_str(GUARD_DEFAULT))
     std.println("")
     std.println("MACHINE is one of: {}.", target_names())
