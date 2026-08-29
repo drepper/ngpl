@@ -969,10 +969,9 @@ impl Lower:
     fn lower_block_value(&mut self, blk : i64, d : i64, toopt : bool):
         let off : i64 = self.a.na[blk × 1¤ptrdiff]
         let n : i64 = self.a.extra[off × 1¤ptrdiff]
-        let i : mut i64 = 0
-        while i + 1 < n:
+        // every statement but the last, and an empty block has none
+        foreach i := 0…(n - 1) ⌈ 0:
             self.lower_stmt(self.a.extra[(off + 1 + i) × 1¤ptrdiff], false, TY_UNIT)
-            i ← i + 1
         if n > 0:
             let last : i64 = self.a.extra[(off + n) × 1¤ptrdiff]
             let lk : i64 = self.kof(last)
@@ -2090,26 +2089,31 @@ impl Lower:
             return
         let fmt : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
         let cs : str = self.a.strs[self.a.na[fmt × 1¤ptrdiff] × 1¤ptrdiff]
-        let chunk : mut str = ""
         let argi : mut i64 = 2
+        // The text between the fields is taken where it stands: what
+        // runs from the end of the last field to the start of this one
+        // is one slice of the format, not a string gathered a
+        // character at a time.
+        let cut : mut i64 ¤ptrdiff = 0
         let i : mut i64 ¤ptrdiff = 0
         while i < #cs:
             if i + 1 < #cs and cs[i] = '{' and cs[i + 1] = '}':
+                let chunk : str = cs[cut…i]
                 if chunk ≠ "":
                     let m : i64 = self.intern(chunk)
                     self.ir(IR_PRINTS, m, 0, 0, 0, 0)
-                    chunk ← ""
                 let arg : i64 = self.a.extra[(args_off + argi) × 1¤ptrdiff]
                 self.lower_print_arg(arg)
                 argi ← argi + 1
                 i ← i + 2
+                cut ← i
             else:
-                chunk ← chunk ⧺ cs[i]
                 i ← i + 1
+        let rest : mut str = cs[cut…#cs]
         if sb = SB_PRINTLN:
-            chunk ← chunk ⧺ (10).chr()
-        if chunk ≠ "":
-            let m : i64 = self.intern(chunk)
+            rest ← rest ⧺ (10).chr()
+        if rest ≠ "":
+            let m : i64 = self.intern(rest)
             self.ir(IR_PRINTS, m, 0, 0, 0, 0)
 
     fn lower_print_arg(&mut self, arg : i64):
@@ -2640,13 +2644,10 @@ impl Lower:
         foreach i := 0…n:
             let mtok : i64 = self.a.extra[(nb + 3 + i × 3) × 1¤ptrdiff]
             let m := self.text(mtok)
-            let mi : mut i64 = 0
-            while mi < ecount:
+            foreach mi := 0…ecount:
                 if self.a.emembers[(est + mi) × 1¤ptrdiff] = m:
                     ks.push(self.a.evalues[(est + mi) × 1¤ptrdiff])
-                    mi ← ecount
-                else:
-                    mi ← mi + 1
+                    break
             blks.push(self.a.extra[(nb + 4 + i × 3) × 1¤ptrdiff])
         assert(#ks = #blks, "one value per arm")
         let sv : i64 = self.lower_expr(na)

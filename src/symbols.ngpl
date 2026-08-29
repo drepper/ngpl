@@ -23,11 +23,9 @@ fn fnv1a(t : str) → i64:
 fn hex16(v : i64) → str:
     let digits : str = "0123456789abcdef"
     let out : mut str = ""
-    let i : mut i64 = 15
-    while i >= 0:
-        let nib : i64 = (v » (4 × i)) & 15
-        out ← out ⧺ digits[nib × 1¤ptrdiff]
-        i ← i - 1
+    foreach i := 15…⁻1:
+        let nib : i64 ¤ptrdiff = ((v » (4 × i)) & 15) × 1¤ptrdiff
+        out ← out ⧺ digits[nib]
     out
 
 // The normalized definition a struct's hash is taken over: its name,

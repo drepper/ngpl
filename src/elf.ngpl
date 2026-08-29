@@ -471,10 +471,8 @@ fn push64(out : &mut u8[], v : i64):
 @post(r: #r = n)
 fn zeros(n : i64 ¤byte) → u8[]:
     let out : mut u8[] = []
-    let i : mut i64 ¤byte = 0
-    while i < n:
+    foreach i := 0…n:
         out.push(0)
-        i ← i + 1
     out
 
 // The file, as the pieces it is made of and in the order they are

@@ -560,3 +560,25 @@ Tooling
     and indexes directly.  The counts a table is walked by -- nglobals,
     nrt -- are declared measured for the same reason, and codegen.ngpl now
     reads as codegen_t.ngpl already did.
+
+[x] The text between a format's fields is taken where it stands.
+    lower_scall gathered it a character at a time and flushed the
+    gathered string at each {}; it now remembers where the last field
+    ended and cuts one slice.  The two suffix readers in the lexer do
+    the same through run_str, which is what that helper is for: the
+    scan finds the end of the run, and the run is read once.
+
+[x] Six counted loops are left, each because it is not a walk: two
+    whose counter's final value is the answer (p_first in
+    arch_x86_64.ngpl, file_of in diag.ngpl), three that advance by one
+    or two depending on what they meet (count_fields in check.ngpl, the
+    match-arm scan in lower.ngpl, the argument scan in main.ngpl), and
+    one that doubles rather than counts (the hash table's capacity in
+    lower.ngpl).
+
+[ ] Fifty-two loop counters still put ¤ptrdiff back on at every index.
+    Each is a walk whose limit is a count read out of the AST arena as a
+    plain i64, and measuring the counter means measuring that count --
+    which means measuring the arena offsets it is added to.  That is one
+    change, not fifty-two, and it is the next one worth making in the
+    units sweep.

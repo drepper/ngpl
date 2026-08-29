@@ -6,16 +6,20 @@
 // string cannot be changed, it shares the bytes it was cut from and
 // only the descriptor is fresh.
 
+// the start may stand at the length too, so an option written with
+// nothing after its '=' needs no guard: the cut is simply empty
+@pre(#a > #name)
 fn opt_value(a : str, name : str) → str:
-    if #a <= #name + 1: "" else: a[#name + 1…#a]
+    a[#name + 1…#a]
 
 @start
 @impure
 fn main():
     let s : str = "hello, world"
     std.println("[{}] [{}]", s[0¤ptrdiff…5¤ptrdiff], s[7¤ptrdiff…#s])
-    // the end may stand at the length, and an empty cut is empty
+    // either end may stand at the length, and an empty cut is empty
     std.println("[{}] [{}]", s[0¤ptrdiff…#s], s[3¤ptrdiff…3¤ptrdiff])
+    std.println("[{}] [{}]", s[#s…#s], s[#s - 1…#s])
     // characters, not bytes: é is two bytes and one character
     let u : str = "héllo"
     std.println("[{}] {} {}", u[1¤ptrdiff…3¤ptrdiff], #u, #u[1¤ptrdiff…3¤ptrdiff])

@@ -253,10 +253,12 @@ impl Lexer:
         if nb ≠ ⁻1 and self.cls[nb × 1¤ptrdiff] = CL_IDENT:
             // i8…i64, u8…u64: the suffix says the literal's type, and
             // it rides in the big field as big + 2 × the type's code
-            let sfx : mut str = ""
+            // the suffix is a run of the source, read where it stands
+            // once its end is known
+            let spos9 : i64 = self.pos
             while self.peek(0) ≠ ⁻1 and (self.cls[self.peek(0) × 1¤ptrdiff] = CL_IDENT or is_digit(self.peek(0))):
-                sfx ← sfx ⧺ (self.peek(0)).chr()
                 self.adv()
+            let sfx : str = run_str(self.src, spos9, self.pos - spos9)
             st ← TYNAMES[sfx] ?? ⁻1
             if st = ⁻1 or not ty_is_int(st):
                 self.err("'" ⧺ sfx ⧺ "' is not a width; a literal's suffix is i8…i64 or u8…u64")
@@ -275,10 +277,10 @@ impl Lexer:
             let ucol : i64 ¤"col" = self.col
             self.adv()
             self.adv()
-            let usfx : mut str = ""
+            let upos9 : i64 = self.pos
             while self.peek(0) ≠ ⁻1 and self.cls[self.peek(0) × 1¤ptrdiff] = CL_IDENT:
-                usfx ← usfx ⧺ (self.peek(0)).chr()
                 self.adv()
+            let usfx : str = run_str(self.src, upos9, self.pos - upos9)
             let names := unit_names()
             let u : mut i64 = ⁻1
             foreach i := 1…#names:

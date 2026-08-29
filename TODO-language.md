@@ -1407,3 +1407,19 @@ Syntax Decisions Still Open
     accumulator.  A map and a fold in core-1 would let hex16 in
     symbols.ngpl, the digit walks in lex.ngpl and the counting loops in
     check.ngpl be written as the expressions they are.
+
+[x] A slice may begin at the end of what it cuts from.  s[n…n] is the
+    empty string for every n up to the length, which is what the
+    half-open rule says and what the compiled runtime already did; only
+    the interpreter refused it, checking the start as though it were an
+    index to a character rather than a place to stop.  Callers had been
+    writing a guard for it -- opt_value in main.ngpl did -- and that
+    guard is now the contract @pre(#a > #name) instead.
+    tests/compile/t64_string_slices.ngpl covers both ends.
+
+[ ] A capture is a value read now, so a lambda cannot capture 'self',
+    and the quantifiers ∀ ∃ ∄ -- which take a function on their left --
+    cannot be used in a method to ask something of what the receiver
+    holds.  That is most of check.ngpl and parse.ngpl, where the scans
+    that would read as quantifiers stay written as walks.  A capture
+    that borrows rather than copies would open all of them.

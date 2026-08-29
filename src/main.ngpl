@@ -66,15 +66,11 @@ fn report(diags : Diag[], files : Files, as_json : bool, src : byte[]):
             std.println("{}:{}:{}: {}: {}", file, @dropunit(ln), @dropunit(d.col), named, d.msg)
             let num := i64_str(@dropunit(ln))
             let gut : mut str = ""
-            let g : mut i64 ¤ptrdiff = 0
-            while g < #num:
+            foreach g := 0…#num:
                 gut ← gut ⧺ " "
-                g ← g + 1
             let pad : mut str = ""
-            let c : mut i64 ¤"col" = 1
-            while c < d.col:
+            foreach c := 1…d.col:
                 pad ← pad ⧺ " "
-                c ← c + 1
             std.println("  {} | {}", num, line_str(src, d.line))
             std.println("  {} | {}^", gut, pad)
 
@@ -130,10 +126,12 @@ fn parse_size(t : str) → i64:
 fn opt_matches(a : str, name : str) → bool:
     #name > 0 and #a > #name and name ⊑ a and a[#name] = '='
 
-// what it carries, which an argument written 'name=' alone leaves empty
-@pre(#name > 0)
+// what it carries, which an argument written 'name=' alone leaves
+// empty: the slice begins where the '=' ends, and a slice may begin at
+// the end of what it takes from
+@pre(#name > 0 and #a > #name)
 fn opt_value(a : str, name : str) → str:
-    if #a <= #name + 1: "" else: a[#name+1…#a]
+    a[#name + 1…#a]
 
 // The compiler's own build, run with `ngplc --build src/main.ngpl`.
 //

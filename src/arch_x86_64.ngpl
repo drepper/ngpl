@@ -240,8 +240,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             em.w32(16 + 8 × (j - 6))    // mov rax, [rbp+…]: a stack argument
             em.store(R_AX, j)
     let n : i64 ¤ptrdiff = nops
-    let i : mut i64 ¤ptrdiff = 0¤ptrdiff
-    while i < n:
+    foreach i := 0¤ptrdiff…n:
         let o : i64 = ir.op[i]
         let a : i64 = ir.ia[i]
         let b : i64 = ir.ib[i]
@@ -462,15 +461,11 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             if argc > 6:
                 // the seventh argument onward rides the stack, pushed
                 // last-first so the seventh sits at [rbp+16]
-                let x : mut i64 = argc - 1
-                while x >= 6:
+                foreach x := argc - 1…5:
                     em.load(R_AX, ir.extra[(b + 1 + x) × 1¤ptrdiff])
                     em.b1(80)                    // push rax
-                    x ← x - 1
-            let k : mut i64 = 0
-            while k < (argc ⌊ 6):
+            foreach k := 0…(argc ⌊ 6):
                 em.load(arg_reg_p(k, cp), ir.extra[(b + 1 + k) × 1¤ptrdiff])
-                k ← k + 1
             em.jglobal(232, ⁻1, a)
             if argc > 6:
                 em.b3(72, 129, 196)
@@ -999,7 +994,6 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
         // memo could follow.
         if i = pfirst:
             em.pclear()
-        i ← i + 1
     em.abort_stubs()
     em.resolve_locals()
     em.resolve_jtabs()

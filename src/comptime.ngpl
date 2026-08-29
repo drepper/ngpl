@@ -286,11 +286,9 @@ impl Cev:
     // innermost first, and never below the frame's floor, so a callee
     // sees its own parameters and nothing of its caller's
     fn slot_of(&self, name : str) → i64:
-        let i : mut i64 = @dropunit(#self.names) - 1
-        while i >= self.floor:
+        foreach i := @dropunit(#self.names) - 1…self.floor - 1:
             if self.names[i × 1¤ptrdiff] = name:
                 return i
-            i ← i - 1
         ⁻1
 
     // -------------------------------------------------------------------
@@ -330,13 +328,11 @@ impl Cev:
         if n = 0:
             return cv_none()
         self.push_scope()
-        let i : mut i64 = 0
-        while i + 1 < n:
+        foreach i := 0…n - 1:
             let fl : i64 = self.ev_stmt(self.a.extra[(off + 1 + i) × 1¤ptrdiff])
             if fl ≠ EV_NORM:
                 self.pop_scope()
                 return cv_none()
-            i ← i + 1
         let last : i64 = self.a.extra[(off + n) × 1¤ptrdiff]
         let lk : i64 = self.a.nkind[last × 1¤ptrdiff]
         let v : mut CVal = cv_none()

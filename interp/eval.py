@@ -3652,8 +3652,12 @@ class Evaluator:
             arr_val = self.eval_expr(node.obj)
             unwrapped = unwrap_optional(arr_val)
             if isinstance(unwrapped, StrValue):
+                # A slice's start may stand at the length as its end
+                # may: that is the empty slice which ends the string,
+                # and it is what s[n…n] means at every other n.
                 start = self._string_position(
-                    unwrapped, unwrap_optional(self.eval_expr(node.start)))
+                    unwrapped, unwrap_optional(self.eval_expr(node.start)),
+                    past_end=True)
                 end = self._string_position(
                     unwrapped, unwrap_optional(self.eval_expr(node.end)),
                     past_end=True)

@@ -111,8 +111,7 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
     // the objects that live in the frame take the slots past the vregs
     let nobj : i64 = (@dropunit(ir.fbytes) + 7) ÷ 8 ?? 0
     g_prologue(&em, tg, ir.nvregs + nobj, np, nreg)
-    let i : mut i64 ¤ptrdiff = 0¤ptrdiff
-    while i < n:
+    foreach i := 0¤ptrdiff…n:
         let o : i64 = ir.op[i]
         let a : i64 = ir.ia[i]
         let b : i64 = ir.ib[i]
@@ -761,7 +760,6 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
             g_sts(&em, tg, RG_A, d)
         else:
             assert(false, "an IR op the driver knows")
-        i ← i + 1
     g_resolve(&em, tg)
     em.resolve_jtabs()
 

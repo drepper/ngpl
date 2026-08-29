@@ -166,8 +166,7 @@ fn sbom_sources(a : Ast, t : Toks, src : byte[], files : Files) → SbomRow[]:
     let fnext : mut i64 ¤ptrdiff = 0
     let nfn : i64 ¤ptrdiff = #a.fns
     let ready : mut u8[] = []
-    let i : mut i64 ¤ptrdiff = 0
-    while i < ntok:
+    foreach i := 0…ntok:
         let at : i64 ¤byte = t.off[i]
         while at >= hi and fi + 1 < nf:
             one.update(feed)
@@ -217,7 +216,6 @@ fn sbom_sources(a : Ast, t : Toks, src : byte[], files : Files) → SbomRow[]:
             one.update(feed)
             whole.update(feed)
             feed ← []
-        i ← i + 1
     one.update(feed)
     whole.update(feed)
     rows.push(SbomRow{kind: Sbomkind.source, name: files.names[fi],

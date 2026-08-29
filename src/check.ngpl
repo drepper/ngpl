@@ -505,11 +505,9 @@ impl Checker:
         ⁻1
 
     fn lookup(&self, name : str) → i64:
-        let i : mut i64 = @dropunit(#self.snames) - 1
-        while i >= self.scope_floor:
+        foreach i := @dropunit(#self.snames) - 1…self.scope_floor - 1:
             if self.snames[i × 1¤ptrdiff] = name:
                 return i
-            i ← i - 1
         ⁻1
 
     fn declare(&mut self, tok : i64, ty : i64, is_mut : i64) → i64:
@@ -519,12 +517,10 @@ impl Checker:
         if names_int_type(name):
             self.derr(tok, "'" ⧺ name ⧺ "' names a type and cannot name a variable")
         let low : i64 = self.marks[#self.marks - 1]
-        let i : mut i64 = @dropunit(#self.snames) - 1
-        while i >= low:
+        foreach i := @dropunit(#self.snames) - 1…low - 1:
             if self.snames[i × 1¤ptrdiff] = name:
                 self.derr(tok, "'" ⧺ name ⧺ "' is already defined in this scope")
                 return self.sslot[i × 1¤ptrdiff]
-            i ← i - 1
         let slot : i64 = self.nslots
         self.nslots ← self.nslots + 1
         self.snames.push(name)
@@ -1713,15 +1709,11 @@ impl Checker:
 
     // what survived: every node of a surviving slot is told how many
     fn pack_settle(&mut self):
-        if #self.pnode_slot = 0:
-            return
-        let i : mut i64 = 0
-        while i × 1¤ptrdiff < #self.pnode_slot:
-            let s : i64 = self.pnode_slot[i × 1¤ptrdiff]
+        foreach i := 0¤ptrdiff…#self.pnode_slot:
+            let s : i64 = self.pnode_slot[i]
             let n : i64 = self.pcnt[s × 1¤ptrdiff]
             if n >= 0 and self.puse[s × 1¤ptrdiff] = self.psafe[s × 1¤ptrdiff]:
-                self.nrep[self.pnode_id[i × 1¤ptrdiff] × 1¤ptrdiff] ← n
-            i ← i + 1
+                self.nrep[self.pnode_id[i] × 1¤ptrdiff] ← n
 
     fn check_var(&mut self, id : i64, tok : i64):
         let name := self.text(tok)
@@ -1802,22 +1794,24 @@ impl Checker:
     // handed the same argument they do different things.
     fn lam_intern(&mut self, pts : i64[], ret : i64, lstb : i64) → i64:
         let n : i64 = @dropunit(#pts)
-        let m : i64 = @dropunit(#self.a.ltl)
-        foreach sh := 0…m:
-            if self.a.ltl[sh × 1¤ptrdiff] = n and self.a.ltf[sh × 1¤ptrdiff] = lstb:
-                let st : i64 = self.a.lts[sh × 1¤ptrdiff]
+        // where a shape like this would land, which is the answer when
+        // the scan finds none like it
+        let at : i64 = @dropunit(#self.a.ltl)
+        foreach sh := 0¤ptrdiff…#self.a.ltl:
+            if self.a.ltl[sh] = n and self.a.ltf[sh] = lstb:
+                let st : i64 = self.a.lts[sh]
                 let same : mut bool = self.a.lte[(st + n) × 1¤ptrdiff] = ret
                 foreach i := 0…n:
                     same ← same and self.a.lte[(st + i) × 1¤ptrdiff] = pts[i × 1¤ptrdiff]
                 if same:
-                    return sh
+                    return @dropunit(sh)
         self.a.lts.push(@dropunit(#self.a.lte))
         self.a.ltl.push(n)
         self.a.ltf.push(lstb)
         foreach pt := pts:
             self.a.lte.push(pt)
         self.a.lte.push(ret)
-        m
+        at
 
     // Whether a lambda of this type threads over a container.
     fn lam_listable(&self, t : i64) → bool:
@@ -1835,10 +1829,9 @@ impl Checker:
     // the checker interns shapes a slice invents, as the parser does
     fn mat_intern(&mut self, elem : i64, r : i64, c : i64, d : i64) → i64:
         // handed back as a plain type code, as the other interns are
-        let m : i64 = @dropunit(#self.a.mel)
-        foreach i := 0…m:
-            if self.a.mel[i × 1¤ptrdiff] = elem and self.a.mrr[i × 1¤ptrdiff] = r and self.a.mcc[i × 1¤ptrdiff] = c and self.a.mdd[i × 1¤ptrdiff] = d:
-                return i
+        foreach i := 0¤ptrdiff…#self.a.mel:
+            if self.a.mel[i] = elem and self.a.mrr[i] = r and self.a.mcc[i] = c and self.a.mdd[i] = d:
+                return @dropunit(i)
         let inner : mut i64 = mk_rty(elem)
         if d ≠ ⁻2:
             inner ← mk_mty(self.mat_intern(elem, c, d, ⁻2))
@@ -2292,10 +2285,9 @@ impl Checker:
         self.push_scope()
         let off : i64 = self.a.na[blk × 1¤ptrdiff]
         let n : i64 = self.a.extra[off × 1¤ptrdiff]
-        let i : mut i64 = 0
-        while i + 1 < n:
+        // every statement but the last, and an empty block has none
+        foreach i := 0…(n - 1) ⌈ 0:
             self.check_stmt(self.a.extra[(off + 1 + i) × 1¤ptrdiff], false)
-            i ← i + 1
         let v : mut i64 = ⁻1
         if n = 0:
             self.derr(self.a.ntok[blk × 1¤ptrdiff], "a branch of an if used as a value holds the value; this one is empty")
@@ -3774,8 +3766,7 @@ impl Checker:
         let fields : i64 = self.count_fields(self.a.strs[self.a.na[fmt × 1¤ptrdiff] × 1¤ptrdiff])
         if fields ≠ argc - 1:
             self.derr(tok, "the format's {} fields and the arguments after it disagree in number")
-        let i : mut i64 = 2
-        while i <= argc:
+        foreach i := 2…argc + 1:
             let arg : i64 = self.a.extra[(args_off + i) × 1¤ptrdiff]
             self.check_expr(arg, TY_UNIT)
             let t : i64 = self.ty_of(arg)
@@ -3783,7 +3774,6 @@ impl Checker:
                 self.adopt(arg, TY_I64)
             elif not ty_is_int(t) and not ty_is_bigint(t) and t ≠ TY_BOOL and t ≠ TY_STR and t ≠ TY_CHAR:
                 self.derr(tok, "println writes numbers, truth values, characters and strings; this is " ⧺ self.tn(t))
-            i ← i + 1
         self.set_type(id, TY_UNIT)
 
     // T.offsetof("f"): where the named field begins, settled here and
@@ -4329,11 +4319,9 @@ impl Checker:
     fn walk_wrote(&mut self, slot : i64):
         if slot < 0:
             return
-        let i : mut i64 = 0
-        while i × 1¤ptrdiff < #self.wslot:
-            if self.wslot[i × 1¤ptrdiff] = slot:
-                self.wreb[i × 1¤ptrdiff] ← 1
-            i ← i + 1
+        foreach i := 0¤ptrdiff…#self.wslot:
+            if self.wslot[i] = slot:
+                self.wreb[i] ← 1
 
     @post(r: r = 0 or r = 1)
     fn walk_close(&mut self) → i64:
@@ -5503,10 +5491,8 @@ fn check_expectations(c : &mut Checker, a : Ast):
 
         // what it drew: the numbers, and whether anything refused
         let drew : mut i64[] = []
-        let d : mut i64 ¤ptrdiff = n_diags
-        while d < #c.diags:
+        foreach d := n_diags…#c.diags:
             drew.push(c.diags[d].code)
-            d ← d + 1
 
         // take it back off the schedule; nothing of it is written, so
         // nothing of it may be left behind
@@ -5560,8 +5546,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     let nlam : mut i64[] = []
     let nhold : mut i64[] = []
     let nfree : mut i64[] = []
-    let zi : mut i64 ¤ptrdiff = 0¤ptrdiff
-    while zi < nnodes:
+    foreach zi := 0¤ptrdiff…nnodes:
         ntype.push(0)
         nslot.push(⁻1)
         ncvt.push(0)
@@ -5569,7 +5554,6 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
         nlam.push(⁻1)
         nhold.push(0)
         nfree.push(0)
-        zi ← zi + 1
     let c : mut Checker = (Checker{a: a, toks: toks, src: src, fnames: fnames, curmod: "",
                                    gnames: gnames, gvals: [], ginit: [], ite: [],
                                    ntype: ntype, nslot: nslot, ncvt: ncvt,
@@ -5599,13 +5583,11 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
                     c.derr(a.structs[j].tok, "'" ⧺ sd.name ⧺ "' is already defined")
             let nf : i64 = a.extra[sd.fields_off × 1¤ptrdiff]
             foreach x := 0…nf:
-                let y : mut i64 = x + 1
-                while y < nf:
+                foreach y := x + 1…nf:
                     let tx : i64 = a.extra[(sd.fields_off + 1 + x × 2) × 1¤ptrdiff]
                     let ty0 : i64 = a.extra[(sd.fields_off + 1 + y × 2) × 1¤ptrdiff]
                     if c.text(tx) = c.text(ty0):
                         c.derr(ty0, "'" ⧺ sd.name ⧺ "' names field '" ⧺ c.text(tx) ⧺ "' twice")
-                    y ← y + 1
             // a @repr(C) struct is held to what C can represent where
             // it is written, not where its size is first asked for, so
             // the complaint points at the offending field
