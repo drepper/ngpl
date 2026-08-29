@@ -1,0 +1,10 @@
+// An answer that may change what it reaches must reach into something
+// lent to be changed.
+struct Bag:
+    items : i64[]
+fn grow(b : &Bag) → &mut i64[] |b|:
+    b.items
+@start
+@impure
+fn main():
+    std.println("no")

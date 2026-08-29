@@ -3,6 +3,7 @@
 // ===========================================================================
 
 struct Parser:
+    blets : i64[]        // see Ast
     toks : Toks
     src : byte[]
     pos : i64
@@ -1537,6 +1538,10 @@ impl Parser:
             let init2 : i64 = self.parse_expr()
             self.end_stmt()
             return self.mknode(NK_LET, name_tok, init2, is_mut, ⁻2 - mu)
+        // `let v : &T = …` binds a borrow, and says so
+        let is_blet : bool = self.peek() = TK_BAND
+        if is_blet:
+            self.pos ← self.pos + 1
         let ty0 : i64 = self.parse_type(false)
         let ty : mut i64 = ty0
         if u ≠ UNIT_NONE:
@@ -1544,7 +1549,10 @@ impl Parser:
         _ ← self.eat(TK_EQ, "'=' and the initial value")
         let init : i64 = self.parse_expr()
         self.end_stmt()
-        self.mknode(NK_LET, name_tok, init, is_mut, ty)
+        let lid : i64 = self.mknode(NK_LET, name_tok, init, is_mut, ty)
+        if is_blet:
+            self.blets.push(lid)
+        lid
 
     // let (a, b) := f()  or  let (a, b) : mut (i64, str) = …; the
     // names, '_' among them, take a tuple apart
@@ -1970,9 +1978,55 @@ impl Parser:
                     break
         _ ← self.eat(TK_RPAR, "')' after the parameters")
         let ret : mut i64 = TY_UNIT
+        // `→ &T |p, q|`: the answer is a borrow, and reaches into the
+        // parameters named after it -- the capture list's notation,
+        // meaning here what it means there.  Left off, the one
+        // borrowed parameter is the origin.
+        let ret_ref : mut i64 = 0
+        let origins : mut i64[] = []
+        let wrote_origins : mut bool = false
         if self.peek() = TK_ARROW:
             self.pos ← self.pos + 1
+            let ref_tok : i64 = self.pos
+            if self.peek() = TK_BAND:
+                self.pos ← self.pos + 1
+                ret_ref ← 1
+                if self.peek() = TK_MUT:
+                    self.pos ← self.pos + 1
+                    ret_ref ← 2
             ret ← self.parse_type(false)
+            if self.peek() = TK_BOR:
+                self.pos ← self.pos + 1
+                wrote_origins ← true
+                while self.peek() = TK_IDENT:
+                    let otok : i64 = self.pos
+                    self.pos ← self.pos + 1
+                    let oi : i64 = self.param_index(ptoks, self.ttext(otok))
+                    if oi = ⁻1 or ty_ref_kind(ptypes[oi × 1¤ptrdiff]) = 0:
+                        self.errc_at(otok, 2434, "'" ⧺ name ⧺ "' answers a borrow of '" ⧺ self.ttext(otok) ⧺ "', which is not a borrowed parameter")
+                        return
+                    origins.push(oi)
+                    if self.peek() = TK_COMMA:
+                        self.pos ← self.pos + 1
+                _ ← self.eat(TK_BOR, "'|' closing what the answer reaches into")
+            if ret_ref ≠ 0:
+                if not wrote_origins:
+                    foreach i := 0…#ptypes:
+                        if ty_ref_kind(ptypes[i]) ≠ 0:
+                            origins.push(@dropunit(i))
+                    if #origins = 0:
+                        self.errc_at(ref_tok, 2434, "'" ⧺ name ⧺ "' answers a borrow, but borrows nothing it could be of; a borrowed answer reaches into a borrowed parameter")
+                        return
+                    if #origins > 1:
+                        self.errc_at(ref_tok, 2435, "'" ⧺ name ⧺ "' answers a borrow and borrows more than one thing; write which the answer reaches into, as '|" ⧺ self.ttext(ptoks[origins[0¤ptrdiff] × 1¤ptrdiff]) ⧺ "|'")
+                        return
+                foreach o := origins:
+                    if ret_ref = 2 and ty_ref_kind(ptypes[o × 1¤ptrdiff]) ≠ 2:
+                        self.errc_at(ref_tok, 2434, "'" ⧺ name ⧺ "' answers a borrow that may change what it reaches, but '" ⧺ self.ttext(ptoks[o × 1¤ptrdiff]) ⧺ "' is lent for reading; write '&mut'")
+                        return
+            elif wrote_origins:
+                self.errc_at(ref_tok, 2434, "'" ⧺ name ⧺ "' names what its answer reaches into, but answers no borrow; write '→ &…'")
+                return
         let body : i64 = self.parse_block()
         if self.peek() = TK_NL:
             self.pos ← self.pos + 1
@@ -1988,6 +2042,7 @@ impl Parser:
         let olds_off : mut i64 ¤"aextra" = ⁻1
         if #self.olds > 0:
             olds_off ← self.push_list(self.olds)
+        let ret_from : i64 ¤"aextra" = if ret_ref ≠ 0: self.push_list(origins) else: ⁻1 × 1¤"aextra"
         let post_off : mut i64 ¤"aextra" = ⁻1
         if #posts > 0:
             post_off ← self.extra_end()
@@ -2015,6 +2070,7 @@ impl Parser:
                                     is_listable: false,
                                     olds_off: ⁻1,
                                     pre_off: pre_off, post_off: post_off,
+                                    ret_ref: ret_ref, ret_from: ret_from,
                             tok_lo: self.def_start, tok_hi: self.pos})
             self.expoff.push(self.pending_exp)
             return
@@ -2041,6 +2097,7 @@ impl Parser:
                                    is_listable: false,
                                    olds_off: ⁻1,
                                    pre_off: pre_off, post_off: post_off,
+                                   ret_ref: 0, ret_from: ⁻1 × 1¤"aextra",
                             tok_lo: self.def_start, tok_hi: self.pos})
             return
         self.fns.push(FnDef{name: name, modname: self.curmod, tok: name_tok, params_off: params_off,
@@ -2052,6 +2109,7 @@ impl Parser:
                             is_listable: (mods » 3) & 1 = 1,
                             olds_off: olds_off,
                             pre_off: pre_off, post_off: post_off,
+                            ret_ref: ret_ref, ret_from: ret_from,
                             tok_lo: self.def_start, tok_hi: self.pos})
 
     // enum Name [: width]: one enumerator to a line.  What a value
@@ -2248,6 +2306,13 @@ impl Parser:
 
     // `mod.name(args)`: the module is written down beside the call, and
     // the checker looks the name up in it rather than in scope.
+    // which parameter a name is, or ⁻1
+    fn param_index(&self, ptoks : i64[], nm : str) → i64:
+        foreach i := 0…#ptoks:
+            if self.ttext(ptoks[i]) = nm:
+                return @dropunit(i)
+        ⁻1
+
     fn parse_qualified(&mut self, at : i64, last : i64) → i64:
         let path : mut str = self.ttext(at)
         foreach j := at + 2…2…last + 2:
@@ -2672,7 +2737,7 @@ fn parse_recipe(toks : Toks, src : byte[]) → Ast:
     parse_mode(toks, src, true)
 
 fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
-    let p : mut Parser = (Parser{toks: toks, src: src, pos: 0,
+    let p : mut Parser = (Parser{toks: toks, src: src, pos: 0, blets: [],
                                  nkind: [], ntok: [], na: [], nb: [], nc: [],
                                  extra: [], fns: [], curmod: "", mods: [], modtok: [], qmods: [],
                                  builds: [], globals: [], structs: [],
@@ -2765,7 +2830,7 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
         assert(#p.structs = #p.snames, "every pre-scanned struct parsed")
         assert(#p.nkind = #p.ntok and #p.nkind = #p.na, "node arrays in step")
         assert(#p.nkind = #p.nb and #p.nkind = #p.nc, "node arrays in step")
-    (Ast{nkind: p.nkind, ntok: p.ntok, na: p.na, nb: p.nb, nc: p.nc,
+    (Ast{blets: p.blets, nkind: p.nkind, ntok: p.ntok, na: p.na, nb: p.nb, nc: p.nc,
          extra: p.extra, strs: p.toks.strs, fns: p.fns,
          mods: p.mods, modtok: p.modtok, qmods: p.qmods, builds: p.builds,
          globals: p.globals,

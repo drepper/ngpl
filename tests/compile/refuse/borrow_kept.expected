@@ -1,0 +1,3 @@
+tests/compile/refuse/borrow_kept.ngpl:15:28: error[2433]: 'v' is a borrow of 'b' and lives only as long as 'b' is held; 'Keep.v' may outlive that
+  15 |     let k : Keep = Keep{v: v}
+     |                            ^

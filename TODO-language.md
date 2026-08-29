@@ -974,6 +974,14 @@ Memory and Lifetime Management
     immutable binding is rejected.  Still missing: borrows anywhere other than a foreach
     iterable, and any check that two borrows do not overlap.
 
+    Continued on the branch feat/borrow-returns, designed in LIFETIMES.md: a function
+    answers a borrow of what it was lent (`→ &T |origin|`), the origin is lent to whatever
+    binds the answer until that binding's last use rather than the end of its block, and a
+    lifetime ends at the last use -- a lend ends there, a resource is released there, and
+    an array the binding made and showed to nothing goes back to the allocator there.
+    Diagnostics 2430-2436.  Not there yet: reclaim of strings, structs and dictionaries;
+    a borrow of a scalar element; borrows kept in structs (refused instead).
+
 [ ] [FULL] reference counting for boxed values with implicit deallocation.
 
 [x] defer statement for explicit cleanup at scope exit.  Decided against: cleanup is

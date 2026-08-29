@@ -1116,6 +1116,17 @@ class Evaluator:
         # Resources produced by the statement currently running, so that
         # any the statement does not keep can be released as it ends.
         self._temporaries: list | None = None
+        # Borrows that came back from a call and are held by a binding.
+        # A lend runs from the call to the binding's last use in its
+        # block, found by a scan of the block; the origins are frozen
+        # "lent" meanwhile.  _pending_lend carries what the last
+        # borrow-returning call answered to the let that binds it.
+        self._pending_lend = None
+        self._lend_ends: dict[int, list] = {}
+        self._lent_info: dict[str, tuple[str, int, str]] = {}
+        self._lent_objs: dict[int, tuple] = {}
+        self._block_cache: dict[int, dict] = {}
+        self._cur_block = None
         # Pre-compute builtin function mappings (avoid repeated lookups).
         self._ops = {
             "+": self._op_add,
@@ -3232,6 +3243,7 @@ class Evaluator:
         kind = self._frozen_vars.get(name)
         if kind == "moved":
             raise TypeError(f"use of moved value '{name}'")
+        self._refuse_if_lent(name)
         if kind is not None:
             raise coded(2411, TypeError(
                 f"{node.method}: cannot modify {kind} variable '{name}'"))
@@ -3301,6 +3313,7 @@ class Evaluator:
             return ArrayIterator(array)
 
         if name == "push":
+            self._refuse_stored_borrow(args[0], "the array")
             array.push(unwrap_optional(args[0]))
             return none()
 
@@ -3796,6 +3809,12 @@ class Evaluator:
         if self._frozen_vars and self._frozen_vars.get(node.name) == "moved":
             raise TypeError(
                 f"use of moved value '{node.name}'")
+        if self._frozen_vars and self._frozen_vars.get(node.name) == "lent-mut":
+            to, line, _ = self._lent_info.get(node.name, ("?", None, "mut"))
+            raise coded(2431, TypeError(
+                f"'{node.name}' is lent out to be changed to '{to}'"
+                f"{f' until line {line}' if line is not None else ''}, so the "
+                f"name reaches nothing until then"))
         # Whether it is a mutable global is a membership test on a set
         # that is nearly always empty, and being local is a lookup in a
         # frame that nearly always has it -- so the first question
@@ -3879,7 +3898,55 @@ class Evaluator:
 
     def _ee_FuncCall(self, node):
         args = [self.eval_expr(a) for a in node.args]
-        return self._call_func(node.name, args)
+        result = self._call_func(node.name, args)
+        pl = self._pending_lend
+        if pl is not None:
+            try:
+                func = self.env.lookup(node.name)
+            except KeyError:
+                func = None
+            if func is not None and getattr(func, "ret_origins", None):
+                self._name_origins(func, node.args, None)
+        return result
+
+    @staticmethod
+    def _base_name(expr):
+        """The binding an argument reaches into, or None."""
+        while True:
+            if isinstance(expr, RefExpr):
+                return expr.name
+            if isinstance(expr, BorrowExpr):
+                expr = expr.expr
+            elif isinstance(expr, GetAttr):
+                expr = expr.obj
+            elif isinstance(expr, Subscript):
+                expr = expr.obj
+            elif isinstance(expr, VarRef):
+                return expr.name
+            else:
+                return None
+
+    def _name_origins(self, func, arg_nodes, recv_node):
+        """Replace the callee's origin parameter names with the caller's
+        bindings that were handed to them."""
+        fn_name, origins, obj, how = self._pending_lend
+        names = []
+        for o in origins:
+            if o == "self":
+                base = self._base_name(recv_node)
+            else:
+                idx = next((i for i, (p, _) in enumerate(func.params) if p == o), None)
+                if recv_node is not None and idx is not None:
+                    idx -= 1
+                base = self._base_name(arg_nodes[idx]) if idx is not None and 0 <= idx < len(arg_nodes) else None
+            if base is not None:
+                names.append(base)
+        if not names:
+            # made where it stands and handed straight on: nothing to
+            # hold, so nothing is lent
+            self._pending_lend = None
+            return
+        self._pending_lend = (fn_name, names, obj, how)
 
     def _dotted_name(self, node):
         """The name a chain of plain identifiers spells, or None."""
@@ -3928,6 +3995,12 @@ class Evaluator:
         args = [self.eval_expr(a) for a in node.args]
         result = self._call_method(obj, node.method, args)
         unwrapped_obj = unwrap_optional(obj)
+        if self._pending_lend is not None \
+                and isinstance(unwrapped_obj, ObjectValue) \
+                and isinstance(unwrapped_obj.obj, StructInstance):
+            method = unwrapped_obj.obj.struct_type.methods.get(node.method)
+            if method is not None and getattr(method, "ret_origins", None):
+                self._name_origins(method, node.args, node.obj)
         if (isinstance(unwrapped_obj, ObjectValue)
                 and isinstance(unwrapped_obj.obj, StructInstance)
                 and isinstance(node.obj, VarRef)):
@@ -4351,14 +4424,218 @@ class Evaluator:
         """
         result = none()
         last = len(stmts) - 1
-        for i, stmt in enumerate(stmts):
-            result = self.eval_stmt(stmt)
-            if isinstance(result, _ReturnSentinel):
-                raise result
-            if (i != last and isinstance(stmt, ExprStmt)
-                    and isinstance(result, LambdaValue)):
-                self._warn_discarded_lambda(result)
+        outer_block = self._cur_block
+        self._cur_block = stmts
+        try:
+            for i, stmt in enumerate(stmts):
+                result = self.eval_stmt(stmt)
+                if isinstance(result, _ReturnSentinel):
+                    raise result
+                if (i != last and isinstance(stmt, ExprStmt)
+                        and isinstance(result, LambdaValue)):
+                    self._warn_discarded_lambda(result)
+                self._after_last_use(stmts, stmt, i == last)
+        finally:
+            self._cur_block = outer_block
         return result
+
+    # ------------------------------------------------------------------
+    # Where a lifetime ends: the last use, not the end of the block
+    # ------------------------------------------------------------------
+
+    def _block_info(self, stmts) -> dict:
+        """For a block: the statement each name is last read in, the
+        names the block itself binds, and those it hands somewhere that
+        may keep them.
+
+        A compound statement counts as one, so a name read anywhere
+        inside a loop is in use until the loop is over -- the read on
+        the second turn comes after the write on the first.
+        """
+        key = id(stmts)
+        info = self._block_cache.get(key)
+        if info is not None:
+            return info
+        last: dict[str, object] = {}
+        defs: set[str] = set()
+        escapes: set[str] = set()
+
+        stmt_is_call = False
+
+        def names_in(node, out, esc, in_arg):
+            if isinstance(node, VarRef):
+                out.add(node.name)
+                if in_arg:
+                    esc.add(node.name)
+                return
+            if isinstance(node, RefExpr):
+                out.add(node.name)
+                if in_arg:
+                    esc.add(node.name)
+                return
+            if isinstance(node, (list, tuple)):
+                for x in node:
+                    names_in(x, out, esc, in_arg)
+                return
+            if not hasattr(node, "__dict__"):
+                return
+            cls = type(node).__name__
+            # only the binding itself, handed whole, is kept by whoever
+            # takes it; a field or an element read out of it is a value
+            # of its own, and the binding stays where it is
+            if cls not in ("BorrowExpr",):
+                in_arg = False
+            for k, v in vars(node).items():
+                if k == "pos" or k.startswith("_"):
+                    continue
+                # what is handed on may be kept: an argument, a value
+                # returned, stored, bound whole, or captured
+                handed = in_arg or (
+                    (cls in ("FuncCall", "MethodCall") and k == "args")
+                    or cls in ("ReturnStmt", "StructLit", "ArrayLit",
+                               "LambdaExpr")
+                    or (cls == "VarDef" and k == "init_expr"
+                        and isinstance(v, VarRef))
+                    or (cls == "Assignment" and k == "value"))
+                if cls == "MethodCall" and k == "obj":
+                    # what a method answers may reach into its receiver
+                    # -- an iterator over a directory does -- so a
+                    # receiver whose answer is kept is handed on; one
+                    # asked for its effect alone is not
+                    handed = in_arg or not stmt_is_call
+                names_in(v, out, esc, handed)
+
+        for i, stmt in enumerate(stmts):
+            used: set[str] = set()
+            stmt_is_call = (type(stmt).__name__ == "ExprStmt"
+                            and type(getattr(stmt, "expr", None)).__name__ == "MethodCall")
+            names_in(stmt, used, escapes, False)
+            for n in used:
+                last[n] = stmt
+            if type(stmt).__name__ == "VarDef":
+                defs.add(stmt.name)
+            if i == len(stmts) - 1 and type(stmt).__name__ == "ExprStmt":
+                # the block's own value leaves with whoever asked for it
+                names_in(stmt, set(), escapes, True)
+        info = {"last": last, "defs": defs, "escapes": escapes}
+        self._block_cache[key] = info
+        return info
+
+    def _after_last_use(self, stmts, stmt, is_last):
+        """End what ends at this statement: the lends whose binding was
+        last read here, and the lives of resources this block made and
+        showed to nothing that could keep them."""
+        for rec in self._lend_ends.pop(id(stmt), ()):
+            self._end_lend(rec)
+        info = self._block_info(stmts)
+        for name in info["defs"]:
+            if info["last"].get(name) is not stmt or name in info["escapes"]:
+                continue
+            try:
+                value = self.env.lookup(name)
+            except KeyError:
+                continue
+            if isinstance(value, SomeValue):
+                value = value.value
+            if not isinstance(value, ObjectValue):
+                continue
+            if id(value.obj) in self._lent_objs:
+                continue
+            destroy = getattr(value.obj, "destroy", None)
+            if callable(destroy) and not getattr(value.obj, "_closed", False):
+                # its last use is behind it, and nothing else holds it:
+                # the resource is released here rather than at the end
+                # of the block
+                try:
+                    destroy()
+                except Exception as e:
+                    self._warnings.append(
+                        f"releasing '{name}' after its last use failed: {e}")
+
+    def _start_lend(self, name, stmt, fn_name, origins, obj):
+        """Bind a borrowed answer to a name: its origins are lent to it
+        until the name's last use in the block in hand."""
+        info = self._block_info(self._cur_block) if self._cur_block is not None else None
+        until = info["last"].get(name, stmt) if info is not None else stmt
+        line = self._line_of(until)
+        how = self._pending_lend[3]
+        for origin in origins:
+            self._frozen_vars[origin] = "lent-mut" if how == "mut" else "lent"
+            self._lent_info[origin] = (name, line, how)
+        rec = (name, origins, obj)
+        self._lend_ends.setdefault(id(until), []).append(rec)
+        self._lent_objs[id(obj)] = (fn_name, origins, obj)
+
+    @staticmethod
+    def _line_of(node):
+        """The line a statement is on: the first position found in it."""
+        stack = [node]
+        seen = 0
+        while stack and seen < 200:
+            n = stack.pop(); seen += 1
+            pos = getattr(n, "pos", None)
+            if pos:
+                return pos[0]
+            if isinstance(n, (list, tuple)):
+                stack.extend(reversed(n))
+            elif hasattr(n, "__dict__"):
+                stack.extend(v for k, v in vars(n).items() if not k.startswith("_"))
+        return None
+
+    def _end_lend(self, rec):
+        name, origins, obj = rec
+        for origin in origins:
+            if self._frozen_vars.get(origin) in ("lent", "lent-mut"):
+                del self._frozen_vars[origin]
+            self._lent_info.pop(origin, None)
+        self._lent_objs.pop(id(obj), None)
+
+    def _refuse_if_lent(self, name):
+        """A binding lent to a borrowed answer cannot be changed until
+        that answer's last use, which the message points at."""
+        kind = self._frozen_vars.get(name)
+        if kind in ("lent", "lent-mut"):
+            to, line, how = self._lent_info.get(name, ("?", None, "shared"))
+            what = "to be changed" if how == "mut" else "for reading"
+            where = f" until line {line}" if line is not None else ""
+            raise coded(2430, TypeError(
+                f"'{name}' is lent out {what} to '{to}'{where} and cannot "
+                f"be changed before then"))
+
+    def _refuse_stored_borrow(self, value, where):
+        """A borrowed answer lives only as long as its origin is held,
+        so nothing that may outlive that may hold it."""
+        inner = value.value if isinstance(value, SomeValue) else value
+        if isinstance(inner, ObjectValue) and id(inner.obj) in self._lent_objs:
+            fn_name, origins, _ = self._lent_objs[id(inner.obj)]
+            raise coded(2433, TypeError(
+                f"what '{fn_name}' answers is a borrow of "
+                f"'{', '.join(origins)}' and lives only as long as "
+                f"'{', '.join(origins)}' is held; {where} may outlive that"))
+
+    @staticmethod
+    def _reachable_ids(value, limit=4096):
+        """The objects an argument reaches: itself, its fields, its
+        elements, and theirs -- what a borrow of it may be of."""
+        out = set()
+        stack = [value]
+        while stack and len(out) < limit:
+            v = stack.pop()
+            if isinstance(v, Reference):
+                v = v.get()
+            if isinstance(v, SomeValue):
+                v = v.value
+            if not isinstance(v, ObjectValue):
+                continue
+            obj = v.obj
+            if id(obj) in out:
+                continue
+            out.add(id(obj))
+            if isinstance(obj, StructInstance):
+                stack.extend(obj.field_values.values())
+            elif isinstance(obj, ArrayValue):
+                stack.extend(obj.values())
+        return out
 
     def eval_stmt(self, stmt):
         """Evaluate a single statement, releasing what it does not keep.
@@ -4386,6 +4663,7 @@ class Evaluator:
             raise
         finally:
             self._temporaries = outer
+            self._pending_lend = None
 
     def _watchdog_tick(self):
         """Count a statement; every few thousand, look at the clock."""
@@ -4553,6 +4831,7 @@ class Evaluator:
                         f"cannot write through a subscript of "
                         f"{runtime_type_of(unwrapped)}")
             elif isinstance(target_ast, GetAttr):
+                self._refuse_stored_borrow(rhs, f"'{target_ast.attr}'")
                 obj_val = _pre_obj
                 au = unwrap_optional(obj_val)
                 if isinstance(au, ObjectValue) and isinstance(au.obj, StructInstance):
@@ -4599,6 +4878,7 @@ class Evaluator:
                     return none()
                 if target_ast.name in self._frozen_vars:
                     kind = self._frozen_vars[target_ast.name]
+                    self._refuse_if_lent(target_ast.name)
                     if kind == "moved":
                         del self._frozen_vars[target_ast.name]
                     else:
@@ -4671,6 +4951,15 @@ class Evaluator:
         return self._eval_expect(stmt)
 
     def _es_VarDef(self, stmt):
+        # `let v : &T = …` says the binding holds a borrow; the & is
+        # kept in front of the type by the parser and taken off here
+        borrow_ann = False
+        if stmt.type_annotation is not None and stmt.type_annotation.startswith("&"):
+            borrow_ann = True
+            stmt.type_annotation = stmt.type_annotation[1:]
+            stmt._borrow_ann = True
+        elif getattr(stmt, "_borrow_ann", False):
+            borrow_ann = True
         if stmt.type_annotation is not None:
             check_bootstrap_type(stmt.type_annotation,
                                  f"'{stmt.name}'")
@@ -4733,6 +5022,22 @@ class Evaluator:
         if not self._bind_reshape_access(stmt):
             if stmt.is_const:
                 self._frozen_vars[stmt.name] = "let"
+        pl = self._pending_lend
+        held = value.value if isinstance(value, SomeValue) else value
+        if pl is not None and isinstance(held, ObjectValue) and pl[2] is held.obj:
+            if stmt.type_annotation is not None and not borrow_ann:
+                raise coded(2436, TypeError(
+                    f"'{stmt.name}' names a type and would take a copy, but "
+                    f"'{pl[0]}' answers a borrow; write ': &{stmt.type_annotation}' "
+                    f"or no type"))
+            self._start_lend(stmt.name, stmt, pl[0], pl[1], held.obj)
+            self._pending_lend = None
+        elif borrow_ann:
+            raise coded(2436, TypeError(
+                f"'{stmt.name}' is written as a borrow, but what it is bound "
+                f"to is no borrowed answer"))
+        elif isinstance(held, ObjectValue) and id(held.obj) in self._lent_objs:
+            self._refuse_stored_borrow(value, f"'{stmt.name}'")
         return none()
 
     def _es_DestructureDef(self, stmt):
@@ -5251,6 +5556,7 @@ class Evaluator:
             # Writing through a mutable borrow is writing to the binding,
             # so one may not be taken of something that cannot be written.
             name = expr.expr.name
+            self._refuse_if_lent(name)
             frozen = self._frozen_vars.get(name)
             if frozen is not None and frozen != "moved":
                 raise coded(2416, TypeError(
@@ -6395,6 +6701,7 @@ class Evaluator:
                 raise coded(2824, TypeError(
                     f"struct '{node.name}' has no field '{field_name}'"))
             value = self.eval_expr(field_expr)
+            self._refuse_stored_borrow(value, f"'{node.name}.{field_name}'")
             funit = struct_type.field_unit(field_name)
             if funit is not None:
                 # a measured field coerces the way a measured binding
@@ -6982,6 +7289,14 @@ class Evaluator:
                 pack_elements.append(parg)
             call_env.define(pack_name, TupleValue(pack_elements))
 
+        # What a borrowed answer may be of: the origin arguments and
+        # everything reached from them, read before the body runs
+        origin_ids = None
+        if func.ret_ref is not None:
+            origin_ids = set()
+            for idx, (pname, _) in enumerate(func.params):
+                if pname in (func.ret_origins or ()) and idx < len(regular_args):
+                    origin_ids |= self._reachable_ids(regular_args[idx])
         old_env = self.env
         old_ret_type = self._current_ret_type
         old_pure = self._pure_func_name
@@ -7038,12 +7353,14 @@ class Evaluator:
                 result, resolved_ret_type, func.name, ret_unit)
             returned = self._wrap_optional_return(result, resolved_ret_type)
             self._check_conditions(func, func.postconditions, returned, olds)
+            self._check_borrowed_answer(func, returned, origin_ids)
             return returned
         except _ReturnSentinel as e:
             checked = self._check_return_type(
                 e.value, resolved_ret_type, func.name, ret_unit)
             returned = self._wrap_optional_return(checked, resolved_ret_type)
             self._check_conditions(func, func.postconditions, returned, olds)
+            self._check_borrowed_answer(func, returned, origin_ids)
             return returned
         except _PropagatedError as pe:
             raise pe.original from pe
@@ -7063,6 +7380,28 @@ class Evaluator:
             self._generic_map = old_generic_map
             self._comptime_vars = old_comptime_vars
             self._cur_module = old_module
+
+    def _check_borrowed_answer(self, func, returned, origin_ids):
+        """A borrowed answer is rooted in an origin, and a plain answer
+        is not something someone else's borrow."""
+        inner = returned.value if isinstance(returned, SomeValue) else returned
+        if origin_ids is None:
+            if isinstance(inner, ObjectValue) and id(inner.obj) in self._lent_objs:
+                self._refuse_stored_borrow(inner, f"what '{func.name}' answers")
+            return
+        if isinstance(inner, NoneValue):
+            return
+        if not isinstance(inner, ObjectValue) or id(inner.obj) not in origin_ids:
+            what = ("the function's own, and is gone when it returns"
+                    if isinstance(inner, ObjectValue)
+                    else f"{self._value_type_name(inner)}, which travels by value")
+            raise coded(2432, TypeError(
+                f"'{func.name}' answers a borrow of "
+                f"'{', '.join(func.ret_origins)}', but this answers "
+                f"something {what}"))
+        # the let that binds this answer picks it up, with the origin
+        # names the call site fills in
+        self._pending_lend = (func.name, list(func.ret_origins), inner.obj, func.ret_ref)
 
     def _track_temporary(self, value):
         """Note a freshly produced resource so an unkept one can be released.

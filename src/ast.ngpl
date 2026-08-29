@@ -221,6 +221,12 @@ struct FnDef:
                          // it has become.
     pre_off : i64 ¤"aextra"        // extra: [n, expr…] or ⁻1
     post_off : i64 ¤"aextra"       // extra: [n, name-token, expr, …] or ⁻1
+    // A function may answer a borrow: 1 where the answer is a & of
+    // something it was lent, 2 a &mut, 0 where it answers a value.
+    // ret_from is then extra: [n, parameter index…] -- the origins,
+    // the parameters the answer reaches into -- and ⁻1 otherwise.
+    ret_ref : i64
+    ret_from : i64 ¤"aextra"
     // Which tokens the definition is written in, from its first
     // annotation to the last token of its body.  The bill of materials
     // hashes these: what a function is, rather than how it was typed.
@@ -245,6 +251,8 @@ struct GlobalDef:
     init : i64
 
 struct Ast:
+    // the let nodes written `let v : &T = …`, which bind a borrow
+    blets : i64[]
     nkind : i64[]
     ntok : i64[]
     na : i64[]

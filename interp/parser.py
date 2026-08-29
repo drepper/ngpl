@@ -155,6 +155,45 @@ class Parser:
         # holds.
         self._in_rules = False
 
+    def _settle_origins(self, name, ret_ref, written, params, param_refs,
+                        param_muts, self_is_ref, tok):
+        """Which parameters a borrowed answer reaches into.
+
+        Written, each must be a borrowed parameter, and a `&mut` answer
+        must reach into `&mut` parameters.  Left off, the one borrowed
+        parameter is meant; two or more is a question the signature has
+        to answer.
+        """
+        borrowed = [n for n, _ in params
+                    if n in param_refs or (n == "self" and self_is_ref)
+                    or n in param_muts and n != "self" and n in param_refs]
+        if "self" in param_muts and "self" not in borrowed:
+            borrowed.insert(0, "self")
+        if written is None:
+            if len(borrowed) == 1:
+                written = list(borrowed)
+            elif not borrowed:
+                raise coded(2434, ParseError(
+                    f"'{name}' answers a borrow, but borrows nothing it "
+                    f"could be of; a borrowed answer reaches into a "
+                    f"borrowed parameter", tok))
+            else:
+                raise coded(2435, ParseError(
+                    f"'{name}' answers a borrow and borrows "
+                    f"{', '.join(borrowed)}; write which the answer "
+                    f"reaches into, as '|{borrowed[0]}|'", tok))
+        for o in written:
+            if o not in borrowed:
+                raise coded(2434, ParseError(
+                    f"'{name}' answers a borrow of '{o}', which is not a "
+                    f"borrowed parameter", tok))
+            if ret_ref == "mut" and o not in param_muts:
+                raise coded(2434, ParseError(
+                    f"'{name}' answers a borrow that may change what it "
+                    f"reaches, but '{o}' is lent for reading; write "
+                    f"'{o} : &mut …'", tok))
+        return written
+
     def _set_pos(self, node, tok):
         """Attach source position from a token to an AST node."""
         return set_pos(node, tok.line, tok.col, tok.end_col)
@@ -935,8 +974,17 @@ class Parser:
         # Where the return type was written, so a redundant one can be
         # pointed at.  None when the signature left it off.
         ret_type_pos = None
+        # A function may answer a borrow: `→ &T` or `→ &mut T`, and after
+        # the type `|p, q|` names the parameters the answer reaches
+        # into -- the capture list's notation, meaning what it means
+        # there.  Left off, the one borrowed parameter is the origin.
+        ret_ref = None
+        ret_origins = None
         arrow_tok = self._cur()
         if self._try_eat("OP", "->"):
+            if self._check("OP") and self._cur().value == "&":
+                self.pos += 1
+                ret_ref = "mut" if self._try_eat("MUT") else "shared"
             if self._at_tuple_type():
                 # Read as any type is, so a tuple return may be an
                 # array of tuples or an optional one.
@@ -981,6 +1029,25 @@ class Parser:
                     f"{self._tok_display(self._cur())} does not name a "
                     f"type; the arrow is followed by one, as '-> i64'",
                     self._cur())
+            if self._check("OP") and self._cur().value == "|":
+                self.pos += 1
+                ret_origins = []
+                while self._check("IDENT"):
+                    ret_origins.append(self._eat("IDENT").value)
+                    if not self._try_eat("PUNCT", ","):
+                        break
+                if not (self._check("OP") and self._cur().value == "|"):
+                    raise ParseError("expected '|' to close the origin list",
+                                     self._cur())
+                self.pos += 1
+            if ret_ref is not None:
+                ret_origins = self._settle_origins(
+                    name, ret_ref, ret_origins, params, param_refs,
+                    param_muts, self_is_ref, arrow_tok)
+            elif ret_origins is not None:
+                raise coded(2434, ParseError(
+                    f"'{name}' names what its answer reaches into, but "
+                    f"answers no borrow; write '-> &{ret_type}'", arrow_tok))
 
         if expect_annotations:
             try:
@@ -999,6 +1066,8 @@ class Parser:
                                is_comptime=is_comptime)
                 fdef.param_positions = param_positions
                 fdef.ret_type_pos = ret_type_pos
+                fdef.ret_ref = ret_ref
+                fdef.ret_origins = ret_origins
                 from interp.errors import Diagnostic
                 fdef._parse_error = Diagnostic(
                     str(e), getattr(e, "diag_code", None))
@@ -1019,6 +1088,8 @@ class Parser:
                        postconditions=postconditions,
                        is_comptime=is_comptime)
         fdef.param_positions = param_positions
+        fdef.ret_ref = ret_ref
+        fdef.ret_origins = ret_origins
         fdef.ret_type_pos = ret_type_pos
         fdef._self_is_ref = self_is_ref
         # Noted rather than acted on: what a name is called in an
@@ -1426,9 +1497,15 @@ class Parser:
         type_annotation = None
         is_const = True
         has_colon = self._try_eat("PUNCT", ":")
+        borrow_ann = False
         if has_colon:
             if self._try_eat("MUT"):
                 is_const = False
+            if self._check("OP") and self._cur().value == "&":
+                # the binding holds a borrow, which the value's type is
+                # written after; the & is kept in front of it
+                self.pos += 1
+                borrow_ann = True
             if self._at_tuple_type():
                 # A tuple type is read whole, so what may follow it is
                 # what may follow any type: brackets making an array of
@@ -1479,7 +1556,7 @@ class Parser:
                         self._eat("PUNCT", "=")
                         init_expr = self._parse_expr()
                         self._try_eat("PUNCT", ";")
-                        return self._set_pos(VarDef(name_tok.value, type_annotation,
+                        return self._set_pos(VarDef(name_tok.value, ('&' + type_annotation) if borrow_ann and type_annotation is not None else type_annotation,
                                       ArrayAlloc(type_annotation, dims[0], init_expr,
                                                  rest_dims=dims[1:]),
                                   is_const, unit_spec=unit_spec), kw_tok)
@@ -1513,7 +1590,7 @@ class Parser:
         init_expr = self._parse_expr()
         self._try_eat("PUNCT", ";")
 
-        return self._set_pos(VarDef(name_tok.value, type_annotation, init_expr, is_const,
+        return self._set_pos(VarDef(name_tok.value, ('&' + type_annotation) if borrow_ann and type_annotation is not None else type_annotation, init_expr, is_const,
                       unit_spec=unit_spec), kw_tok)
 
     # ------------------------------------------------------------------

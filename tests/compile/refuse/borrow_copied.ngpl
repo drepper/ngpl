@@ -1,0 +1,13 @@
+// Naming a plain type asks for a copy, which is not what a borrowed
+// answer is; the binding writes the borrow or no type at all.
+struct Bag:
+    items : i64[]
+impl Bag:
+    fn view(&self) → &i64[]:
+        self.items
+@start
+@impure
+fn main():
+    let b : Bag = Bag{items: [1]}
+    let v : i64[] = b.view()
+    std.println("{}", #v)

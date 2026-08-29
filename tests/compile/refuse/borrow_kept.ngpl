@@ -1,0 +1,16 @@
+// A borrowed answer lives only as long as its origin is held, so a
+// struct that may outlive that cannot keep it.
+struct Bag:
+    items : i64[]
+struct Keep:
+    v : i64[]
+impl Bag:
+    fn view(&self) → &i64[]:
+        self.items
+@start
+@impure
+fn main():
+    let b : Bag = Bag{items: [1]}
+    let v := b.view()
+    let k : Keep = Keep{v: v}
+    std.println("{}", #k.v)

@@ -5277,7 +5277,100 @@ v.push(4)                               // fine: the iterator is gone
 
 #### Borrows That Nothing Can Observe
 
-A borrow passed to a function — `f(&v)`, `f(&mut v)` — begins and ends inside the call.  There is no point at which the caller can reach `v` while that borrow is outstanding, so no rule is needed and none is stated; the restriction above is about borrows that outlive the expression that took them, which in this language are the walk and the iterator.
+A borrow passed to a function — `f(&v)`, `f(&mut v)` — begins and ends inside the call, unless the function answers a borrow of it (see [A Borrow That Comes Back](#a-borrow-that-comes-back)).  Where it does not, there is no point at which the caller can reach `v` while that borrow is outstanding, so no rule is needed and none is stated; the restriction above is about borrows that outlive the expression that took them, which in this language are the walk, the iterator, and the borrowed answer.
+
+#### A Borrow That Comes Back
+
+A function may answer a borrow of what it was lent.  Its return type says so, and says where the borrow comes from:
+
+```
+fn items(b : &Bag) → &i64[] |b|:
+    b.items
+```
+
+`|b|` names the **origin**: the parameter the answer reaches into.  It is the capture list's notation and means what a capture list means — what this reaches from outside itself.  It may be left off when there is exactly one borrowed parameter, or when the only one is `&self`:
+
+```
+impl Bag:
+    fn items(&self) → &i64[]:              // origin: self
+        self.items
+
+fn longer(a : &Bag, b : &Bag) → &i64[] |a, b|:
+    if #a.items > #b.items: a.items else: b.items
+```
+
+Two or more origins say the answer may come from any of them, and the caller is held to all of them.  Writing `longer` above without its `|a, b|` is refused, since nothing else could say which:
+
+```
+error 2435: 'longer' answers a borrow and borrows more than one thing; write
+            which the answer reaches into, as '|a|'
+```
+
+An answer that may change what it reaches is `→ &mut T`, and each of its origins must be `&mut`; `fn grow(b : &Bag) → &mut i64[] |b|:` is refused:
+
+```
+error 2434: 'grow' answers a borrow that may change what it reaches, but 'b'
+            is lent for reading; write '&mut'
+```
+
+**In the body**, what is answered must be **rooted** in an origin: the origin itself, a field reached from it, an element of it, or what a borrow-returning call answers when rooted in it.  Anything else is refused, because the borrow would point at something that is gone when the function returns:
+
+```
+fn fresh(b : &Bag) → &i64[] |b|:
+    let t : i64[] = [1]
+    t
+
+error 2432: 'fresh' answers a borrow of 'b', but this answers something the
+            function's own, which is gone when it returns
+```
+
+**At the call**, the result is a borrow of whichever caller bindings fed the origins, and those bindings are lent to whatever binds the result — held for reading under `&T`, and reaching nothing at all under `&mut T` — from the call to the binding's **last use**:
+
+```
+let b : mut Bag = Bag{items: [1, 2, 3]}
+let v := b.items()                 // b is lent to v
+std.println("{}", #v)              // v's last use: the lend ends here
+b.items.push(4)                    // fine
+```
+
+and, with the uses the other way round:
+
+```
+let v := b.items()
+b.items.push(4)
+std.println("{}", #v)
+
+error 2430: 'b' is lent out for reading to 'v' until line 3 and cannot be
+            changed before then
+```
+
+The message names the borrower and the line the lend runs to, which is the thing a reader cannot see otherwise.  A lend that ends at the last use is what makes the first form legal: were it the block, every function that hands out a view would make its receiver unusable for the rest of the caller.
+
+A binding that takes a borrowed answer writes no type, or writes the borrow.  Naming a plain type asks for a copy, which a borrow is not, and is refused so that a copy is never made by accident where a borrow was handed over:
+
+```
+let v : &i64[] = b.items()         // a borrow, and says so
+let v := b.items()                 // the same
+let v : i64[] = b.items()
+
+error 2436: 'v' names a type and would take a copy, but 'items' answers a
+            borrow; write ': &i64[]' or no type
+```
+
+**A borrowed answer may not outlive the function that holds it.**  It cannot be pushed into a container, kept in a field, or answered plain by a function that does not itself answer a borrow rooted in the same origin — which is what makes the chain composable: a function may hand on what a borrow-returning call answered, as long as its own signature says so.
+
+```
+let k : Keep = Keep{v: b.items()}
+
+error 2433: what 'items' answers is a borrow of 'b' and lives only as long as
+            'b' is held; 'Keep.v' may outlive that
+```
+
+`--log=json` writes one line for each lend as it is taken:
+
+```
+{"function": "main", "line": 12, "decision": "lend", "origin": "b", "to": "v", "until": 13}
+```
 
 #### Why the Distinction Is Explicit
 
@@ -6480,6 +6573,31 @@ from the statement that declares the binding to the statement that last
 uses it. Statements are numbered as they are read, so the numbering is
 of the text — a loop body is numbered once, because this is a question
 about the program rather than about what a run does with it.
+
+**A lifetime ends at the last use, not at the end of the block.**
+Three things follow from that, and they are the substance of it:
+
+- A lend ends there.  The origin of a borrowed answer is released at
+  the borrower's last use, as [A Borrow That Comes
+  Back](#a-borrow-that-comes-back) describes.
+- A resource is released there.  A file or directory bound to a name
+  is closed after the statement that last reads the name, so the
+  scope's end in [Resource Lifetime and Scope](#resource-lifetime-and-scope)
+  is the worst case rather than the rule.
+- Memory is reclaimed there.  An array a binding made itself and
+  showed to nothing that could hold it is given back to the allocator
+  after its last use; `--log=json` says so with
+  `{"decision": "reclaim", "name": …, "at": …}`.
+
+The rule that keeps all three sound is the one below for `&mut`: **a
+use that hands the value to something that may keep it is not a last
+use.**  Handing a binding whole to a function, keeping it in a field
+or a container, answering it, capturing it — each makes the binding
+escape, and an escaping binding lives to the end of its scope, because
+nothing closer can be seen.  A loop is one statement for this purpose:
+a name read anywhere in a loop is in use until the loop is over,
+because the read on the second turn comes after the write on the
+first.
 
 **A lifetime that begins and ends at the same statement is a binding
 nothing read**, and that is worth saying:

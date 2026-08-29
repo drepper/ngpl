@@ -1,0 +1,3 @@
+tests/compile/refuse/borrow_mut_of_shared.ngpl:5:21: error[2434]: 'grow' answers a borrow that may change what it reaches, but 'b' is lent for reading; write '&mut'
+  5 | fn grow(b : &Bag) → &mut i64[] |b|:
+    |                     ^

@@ -1,0 +1,3 @@
+tests/compile/refuse/borrow_which.ngpl:5:33: error[2435]: 'longer' answers a borrow and borrows more than one thing; write which the answer reaches into, as '|a|'
+  5 | fn longer(a : &Bag, b : &Bag) → &i64[]:
+    |                                 ^

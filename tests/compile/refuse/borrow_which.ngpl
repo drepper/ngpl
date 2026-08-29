@@ -1,0 +1,10 @@
+// Two borrowed parameters: the signature says which the answer
+// reaches into, because nothing else can.
+struct Bag:
+    items : i64[]
+fn longer(a : &Bag, b : &Bag) → &i64[]:
+    a.items
+@start
+@impure
+fn main():
+    std.println("no")

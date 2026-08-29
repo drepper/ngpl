@@ -26,6 +26,9 @@ let MID_HUPDATE : i64 = 14   // h.update(x): another piece of the message
 let HOLD_FREE : i64 = 0
 let HOLD_READ : i64 = 1
 let HOLD_NONE : i64 = 2
+// the last-use table's size: a power of two, and more than the names
+// any one function has, so a probe ends
+let LU_SIZE : i64 = 8192
 let MID_HDIGEST : i64 = 15   // h.digest(): the answer, and the end of the handle
 
 // The module a module is written inside; "" for one written at the top.
@@ -71,6 +74,12 @@ struct Chk:
     // Per walk: 1 where what it walked is nobody's by the time it
     // ends, so the walk is where the memory goes back.
     nfree : i64[]
+    // Where a binding's life ends before its scope does: after the
+    // statement rec_stmt, the array in slot rec_slot goes back.  Only
+    // an array the binding made itself and showed to nothing that
+    // could hold it is listed here.
+    rec_stmt : i64[]
+    rec_slot : i64[]
     fslots : i64[]
     gvals : i64[]        // the folded initial value of every global
     ginit : i64[]        // globals whose value is built as the run begins
@@ -258,6 +267,54 @@ struct Checker:
     // counts.
     kuse : i64[]
     ksafe : i64[]
+    // ------------------------------------------------------------------
+    // Borrows that come back, and lifetimes that end at the last use
+    // ------------------------------------------------------------------
+    // Per node: 1 or 2 where a call answers a borrow, shared or mutable
+    nlend : i64[]
+    // Which caller bindings a borrowed answer reaches into: one row per
+    // (call node, scope entry) pair
+    lorig_node : i64[]
+    lorig_s : i64[]
+    // Beside snames: the scope entry this binding is lent to (⁻1 for
+    // none), and whether the binding is itself a borrowed answer
+    slend : i64[]
+    sborrow : i64[]
+    // The lends in force: the borrower, the origin, the hold the origin
+    // had before, the line the lend runs to, and how it is lent
+    lend_b : i64[]
+    lend_o : i64[]
+    lend_back : i64[]
+    lend_until : i64 ¤"line"[]
+    lend_how : i64[]
+    // The last line each name in the function under check is read on,
+    // found by reading the function's tokens before its body is checked.
+    // Looked up by name through an open-addressed table, since the
+    // largest functions have hundreds of names and thousands of tokens
+    // and a walk per token was more than the bootstrap could afford.
+    lu_name : str[]
+    lu_line : i64 ¤"line"[]
+    lu_slot : i64[]      // LU_SIZE entries: 1 + the name's index, or 0
+    lu_used : i64[]      // the entries taken, so a function starts clean
+    lu_tok : i64[]       // per name: the token it was first read from
+    // The loops in hand: the line each ends on
+    loop_end : i64 ¤"line"[]
+    // Where the statement in hand ends, and where the block does
+    stmt_end : i64 ¤"line"
+    blk_end : i64 ¤"line"
+    // What is given back after which statement (see Chk), and per
+    // frame slot whether it already was
+    rec_stmt : i64[]
+    rec_slot : i64[]
+    lrec : i64[]
+    // the candidates, settled once the function's packing is: a packed
+    // array lives in the frame and has no block to give back
+    rec_cand_stmt : i64[]
+    rec_cand_slot : i64[]
+    rec_cand_tok : i64[]
+    // per frame slot: 1 where the binding was born from a literal or a
+    // join, which are fresh; a slice or a reshape may share storage
+    lfresh : i64[]
     pnode_slot : i64[]   // the nodes to mark, if it comes to that
     pnode_id : i64[]
     // How long each binding lives.  Statements are numbered as they
@@ -530,6 +587,8 @@ impl Checker:
         self.smut.push(is_mut)
         self.sslot.push(slot)
         self.sheld.push(HOLD_FREE)
+        self.slend.push(⁻1)
+        self.sborrow.push(0)
         self.life_born(slot, tok)
         slot
 
@@ -578,6 +637,8 @@ impl Checker:
             let hb : i64 = self.hback.pop() ?? 0
             self.sheld[hs × 1¤ptrdiff] ← hb
         let low : i64 = self.marks.pop() ?? 0
+        // a lend ends with the scope of either side of it
+        self.end_lends_from(low)
         while @dropunit(#self.snames) > low:
             self.life_ends(self.sslot[(#self.snames - 1¤ptrdiff)])
             _ ← self.snames.pop() ?? ""
@@ -585,6 +646,8 @@ impl Checker:
             _ ← self.smut.pop() ?? 0
             _ ← self.sslot.pop() ?? 0
             _ ← self.sheld.pop() ?? 0
+            _ ← self.slend.pop() ?? 0
+            _ ← self.sborrow.pop() ?? 0
 
     fn is_open(&self, t : i64) → bool:
         t = TY_UNT or t = TY_EMPTY
@@ -1737,7 +1800,10 @@ impl Checker:
             return
         let s : i64 = self.lookup(name)
         if s ≠ ⁻1:
-            if self.sheld[s × 1¤ptrdiff] = HOLD_NONE:
+            if self.sheld[s × 1¤ptrdiff] = HOLD_NONE and self.slend[s × 1¤ptrdiff] ≠ ⁻1:
+                let bi : i64 = self.slend[s × 1¤ptrdiff]
+                self.derrc(tok, 2431, "'" ⧺ name ⧺ "' is lent out to be changed to '" ⧺ self.snames[bi × 1¤ptrdiff] ⧺ "' until line " ⧺ i64_str(@dropunit(self.lend_line_of(bi))) ⧺ ", so the name reaches nothing until then")
+            elif self.sheld[s × 1¤ptrdiff] = HOLD_NONE:
                 self.derrc(tok, 2401, "'" ⧺ name ⧺ """' is lent out to be changed, so the name
                                                     " reaches nothing until the borrow ends; what
                                                     " the walk binds is the way in""")
@@ -2391,6 +2457,7 @@ impl Checker:
             let ftok : i64 = self.a.extra[(off + 1 + i × 2) × 1¤ptrdiff]
             let e : i64 = self.a.extra[(off + 2 + i × 2) × 1¤ptrdiff]
             let (fidx, fty) := self.field_of(sidx, self.text(ftok))
+            self.refuse_kept(e, "'" ⧺ name ⧺ "." ⧺ self.text(ftok) ⧺ "'")
             if fidx = ⁻1:
                 self.derr(ftok, "'" ⧺ name ⧺ "' has no field '" ⧺ self.text(ftok) ⧺ "'")
                 self.check_expr(e, TY_UNIT)
@@ -2862,6 +2929,7 @@ impl Checker:
             self.set_type(id, mk_aty(callee.ret))
             return
         self.set_type(id, callee.ret)
+        self.note_lend(id, f, args_off, ⁻1, 0)
 
     // `mod.name(args)`: the module says where to look, so the walk out
     // through the enclosing modules does not happen, and what the
@@ -4050,6 +4118,8 @@ impl Checker:
             return
         if m = "push":
             self.require_mut_base(na, tok)
+            if argc >= 1:
+                self.refuse_kept(self.a.extra[args_off + 1], "the array")
             self.keep_safe(na)
             if argc ≠ 1:
                 self.derr(tok, "push takes the one element to append")
@@ -4125,6 +4195,7 @@ impl Checker:
         // lowering finds the function and whether a receiver travels
         self.a.nc[id × 1¤ptrdiff] ← 1000 + 2 × f + (if instance: 1 else: 0)
         self.set_type(id, callee.ret)
+        self.note_lend(id, f, args_off, na, self_n)
 
     // The type as this file writes it.  type_name() knows only the
     // measures the language ships with, so a message about one the
@@ -4214,6 +4285,9 @@ impl Checker:
                 self.derr(tok, "'" ⧺ name ⧺ "' is not mut, so nothing may change it")
             return
         let hd : i64 = self.sheld[s × 1¤ptrdiff]
+        if self.slend[s × 1¤ptrdiff] ≠ ⁻1:
+            self.refuse_lent(tok, s)
+            return
         if hd ≠ HOLD_FREE:
             self.derrc(tok, 2400, "'" ⧺ name ⧺ "' is lent out " ⧺ (if hd = HOLD_READ: "for reading" else: "to be changed") ⧺ " and cannot be changed until the borrow ends; a walk holds what it walks for the whole of its body")
             return
@@ -4293,11 +4367,362 @@ impl Checker:
         self.push_scope()
         let off : i64 = self.a.na[blk × 1¤ptrdiff]
         let n : i64 = self.a.extra[off × 1¤ptrdiff]
+        // this block ends where the statement it sits in ends
+        let saved_end : i64 ¤"line" = self.blk_end
+        self.blk_end ← self.stmt_end
         foreach i := 0…n:
             let s : i64 = self.a.extra[(off + 1 + i) × 1¤ptrdiff]
             let trailing : bool = is_fn_body and i = n - 1
+            self.stmt_end ← if i + 1 < n: self.stmt_line(self.a.extra[(off + 2 + i) × 1¤ptrdiff]) - 1¤"line" else: self.blk_end
             self.check_stmt(s, trailing)
+            self.after_stmt(s)
+        self.blk_end ← saved_end
         self.pop_scope()
+
+    // ------------------------------------------------------------------
+    // Borrows that come back, and lifetimes that end at the last use
+    // ------------------------------------------------------------------
+    //
+    // A function may answer a borrow of what it was lent.  At the call
+    // the caller's binding is lent to whatever binds the answer, and
+    // held -- for reading, or not at all -- until that binding's last
+    // use, which is a question about the program's reads and not about
+    // where its blocks close.  The last use is read off the function's
+    // tokens before the body is checked; a loop is one statement, so a
+    // name read anywhere in one is in use until the loop is over.
+
+    fn stmt_line(&self, s : i64) → i64 ¤"line":
+        self.toks.line[self.a.ntok[s × 1¤ptrdiff] × 1¤ptrdiff]
+
+    fn scan_last_use(&mut self, f : i64):
+        while #self.lu_slot < LU_SIZE × 1¤ptrdiff:
+            self.lu_slot.push(0)
+        while #self.lu_used > 0:
+            let u : i64 = self.lu_used.pop() ?? 0
+            self.lu_slot[u × 1¤ptrdiff] ← 0
+        while #self.lu_name > 0:
+            _ ← self.lu_name.pop() ?? ""
+            _ ← self.lu_line.pop() ?? 0¤"line"
+            _ ← self.lu_tok.pop() ?? 0
+        let d := self.a.fns[f × 1¤ptrdiff]
+        // from the name, which the parameters follow, to the body's
+        // end.  Not from tok_lo: for a method that is where the impl
+        // block began, not where the method did.
+        foreach t := d.tok × 1¤ptrdiff…d.tok_hi × 1¤ptrdiff:
+            if self.toks.kind[t] = TK_IDENT:
+                // hashed over the token's bytes where they lie: the
+                // name is only spelled out for an entry taken afresh
+                let h : i64 = self.lu_probe_tok(@dropunit(t))
+                let held : i64 = self.lu_slot[h × 1¤ptrdiff]
+                if held = 0:
+                    self.lu_name.push(self.text(@dropunit(t)))
+                    self.lu_line.push(self.toks.line[t])
+                    self.lu_tok.push(@dropunit(t))
+                    self.lu_slot[h × 1¤ptrdiff] ← @dropunit(#self.lu_name)
+                    self.lu_used.push(h)
+                else:
+                    self.lu_line[(held - 1) × 1¤ptrdiff] ← self.toks.line[t]
+
+    fn lu_hash_bytes(&self, off : i64, n : i64) → i64:
+        let h : mut i64 = 0
+        foreach i := 0…n:
+            h ← @wrap(h × 31 + self.src[(off + i) × 1¤byte]) & 1073741823
+        h
+
+    // whether two tokens spell the same bytes, read where they lie
+    fn same_spelling(&self, t1 : i64, t2 : i64) → bool:
+        let n : i64 = self.toks.len[t1 × 1¤ptrdiff]
+        if n ≠ self.toks.len[t2 × 1¤ptrdiff]:
+            return false
+        let o1 : i64 = self.toks.off[t1 × 1¤ptrdiff]
+        let o2 : i64 = self.toks.off[t2 × 1¤ptrdiff]
+        foreach i := 0…n:
+            if self.src[(o1 + i) × 1¤byte] ≠ self.src[(o2 + i) × 1¤byte]:
+                return false
+        true
+
+    // the table entry a token's name has or would take
+    fn lu_probe_tok(&self, tok : i64) → i64:
+        let off : i64 = self.toks.off[tok × 1¤ptrdiff]
+        let n : i64 = self.toks.len[tok × 1¤ptrdiff]
+        let mask : i64 = LU_SIZE - 1
+        let at : mut i64 = self.lu_hash_bytes(off, n) & mask
+        while true:
+            let held : i64 = self.lu_slot[at × 1¤ptrdiff]
+            if held = 0 or self.same_spelling(self.lu_tok[(held - 1) × 1¤ptrdiff], tok):
+                return at
+            at ← (at + 1) & mask
+        at
+
+    // the table entry a name has or would take
+    fn lu_probe(&self, nm : str) → i64:
+        let h : mut i64 = 0
+        foreach ch := nm:
+            h ← @wrap(h × 31 + ch.ord()) & 1073741823
+        let mask : i64 = LU_SIZE - 1
+        let at : mut i64 = h & mask
+        while true:
+            let held : i64 = self.lu_slot[at × 1¤ptrdiff]
+            if held = 0 or self.lu_name[(held - 1) × 1¤ptrdiff] = nm:
+                return at
+            at ← (at + 1) & mask
+        at
+
+    fn lu_index(&self, nm : str) → i64:
+        if #self.lu_slot = 0:
+            return ⁻1
+        let held : i64 = self.lu_slot[self.lu_probe(nm) × 1¤ptrdiff]
+        if held = 0: ⁻1 else: held - 1
+
+    // the last line a name is read on; where it is never read again,
+    // the line it was declared on
+    fn last_line(&self, nm : str, tok : i64) → i64 ¤"line":
+        let at : i64 = self.lu_index(nm)
+        if at = ⁻1: self.toks.line[tok × 1¤ptrdiff] else: self.lu_line[at × 1¤ptrdiff]
+
+    fn loop_enter(&mut self):
+        self.loop_end.push(self.stmt_end)
+        // a borrower read inside this loop is read on every turn, so
+        // its lend runs to the loop's end
+        foreach i := 0¤ptrdiff…#self.lend_until:
+            if self.lend_until[i] <= self.stmt_end:
+                self.lend_until[i] ← self.stmt_end
+
+    fn loop_leave(&mut self):
+        _ ← self.loop_end.pop() ?? 0¤"line"
+
+    fn lend_line_of(&self, bi : i64) → i64 ¤"line":
+        foreach i := 0¤ptrdiff…#self.lend_b:
+            if self.lend_b[i] = bi:
+                return self.lend_until[i]
+        0¤"line"
+
+    fn refuse_lent(&mut self, tok : i64, s : i64):
+        let bi : i64 = self.slend[s × 1¤ptrdiff]
+        let how : mut i64 = 1
+        foreach i := 0¤ptrdiff…#self.lend_b:
+            if self.lend_b[i] = bi and self.lend_o[i] = s:
+                how ← self.lend_how[i]
+        self.derrc(tok, 2430, "'" ⧺ self.snames[s × 1¤ptrdiff] ⧺ "' is lent out " ⧺ (if how = 2: "to be changed" else: "for reading") ⧺ " to '" ⧺ self.snames[bi × 1¤ptrdiff] ⧺ "' until line " ⧺ i64_str(@dropunit(self.lend_line_of(bi))) ⧺ " and cannot be changed before then")
+
+    // A call that answers a borrow: which caller bindings it reaches
+    // into, kept beside the node for the let that binds the answer.
+    fn note_lend(&mut self, id : i64, f : i64, args_off : i64 ¤"aextra", recv : i64, self_n : i64 ¤ptrdiff):
+        let callee := self.a.fns[f × 1¤ptrdiff]
+        if callee.ret_ref = 0:
+            return
+        self.nlend[id × 1¤ptrdiff] ← callee.ret_ref
+        let no : i64 ¤ptrdiff = self.a.extra[callee.ret_from] × 1¤ptrdiff
+        foreach i := 0…no:
+            let pi : i64 ¤ptrdiff = self.a.extra[callee.ret_from + 1 + i] × 1¤ptrdiff
+            let e : i64 = if self_n = 1 and pi = 0: recv else: self.a.extra[args_off + 1 + pi - self_n]
+            let inner : i64 = if self.kind_of(e) = NK_REF: self.a.na[e × 1¤ptrdiff] else: e
+            let s : i64 = self.base_slot(inner)
+            if s ≠ ⁻1:
+                self.lorig_node.push(id)
+                self.lorig_s.push(s)
+
+    fn is_blet(&self, id : i64) → bool:
+        foreach b := self.a.blets:
+            if b = id:
+                return true
+        false
+
+    // The let just checked: where it binds a borrowed answer, its
+    // origins are lent to it until its last use.
+    fn bind_lend(&mut self, id : i64):
+        let na : i64 = self.a.na[id × 1¤ptrdiff]
+        let tok : i64 = self.a.ntok[id × 1¤ptrdiff]
+        let bi : i64 = @dropunit(#self.snames) - 1
+        if bi < 0 or self.snames[bi × 1¤ptrdiff] ≠ self.text(tok):
+            return
+        let how : i64 = self.nlend[na × 1¤ptrdiff]
+        if how = 0:
+            if self.is_blet(id):
+                self.derrc(tok, 2436, "'" ⧺ self.text(tok) ⧺ "' is written as a borrow, but what it is bound to is no borrowed answer")
+            elif self.kind_of(na) = NK_VAR:
+                self.refuse_kept(na, "'" ⧺ self.text(tok) ⧺ "'")
+            return
+        if self.a.nc[id × 1¤ptrdiff] >= 0 and not self.is_blet(id):
+            self.derrc(tok, 2436, "'" ⧺ self.text(tok) ⧺ "' names a type and would take a copy, but what it is bound to is a borrow; write ': &" ⧺ self.tn(self.a.nc[id × 1¤ptrdiff]) ⧺ "' or no type")
+            return
+        self.sborrow[bi × 1¤ptrdiff] ← how
+        let until0 : i64 ¤"line" = self.last_line(self.text(tok), tok)
+        let until : mut i64 ¤"line" = until0
+        foreach le := self.loop_end:
+            if until <= le:
+                until ← le
+        foreach i := 0¤ptrdiff…#self.lorig_node:
+            if self.lorig_node[i] = na:
+                let o : i64 = self.lorig_s[i]
+                self.lend_b.push(bi)
+                self.lend_o.push(o)
+                self.lend_back.push(self.sheld[o × 1¤ptrdiff])
+                self.lend_until.push(until)
+                self.lend_how.push(how)
+                self.sheld[o × 1¤ptrdiff] ← self.sheld[o × 1¤ptrdiff] ⌈ (if how = 2: HOLD_NONE else: HOLD_READ)
+                self.slend[o × 1¤ptrdiff] ← bi
+                self.log.push("{\"function\": \"" ⧺ self.a.fns[self.cur_fn × 1¤ptrdiff].name ⧺ "\", \"line\": " ⧺ i64_str(@dropunit(self.toks.line[tok × 1¤ptrdiff])) ⧺ ", \"decision\": \"lend\", \"origin\": \"" ⧺ self.snames[o × 1¤ptrdiff] ⧺ "\", \"to\": \"" ⧺ self.text(tok) ⧺ "\", \"until\": " ⧺ i64_str(@dropunit(until)) ⧺ "}")
+
+    fn end_lend(&mut self, i : i64 ¤ptrdiff):
+        let o : i64 = self.lend_o[i]
+        if o × 1¤ptrdiff < #self.sheld:
+            self.sheld[o × 1¤ptrdiff] ← self.lend_back[i]
+            self.slend[o × 1¤ptrdiff] ← ⁻1
+        let lastp : i64 ¤ptrdiff = #self.lend_b - 1
+        self.lend_b[i] ← self.lend_b[lastp]
+        self.lend_o[i] ← self.lend_o[lastp]
+        self.lend_back[i] ← self.lend_back[lastp]
+        self.lend_until[i] ← self.lend_until[lastp]
+        self.lend_how[i] ← self.lend_how[lastp]
+        _ ← self.lend_b.pop() ?? 0
+        _ ← self.lend_o.pop() ?? 0
+        _ ← self.lend_back.pop() ?? 0
+        _ ← self.lend_until.pop() ?? 0¤"line"
+        _ ← self.lend_how.pop() ?? 0
+
+    fn end_lends_from(&mut self, low : i64):
+        let i : mut i64 ¤ptrdiff = 0
+        while i < #self.lend_b:
+            if self.lend_b[i] >= low or self.lend_o[i] >= low:
+                self.end_lend(i)
+            else:
+                i ← i + 1
+
+    // A borrowed answer lives only as long as its origin is held, so
+    // nothing that may outlive that may keep it.
+    fn refuse_kept(&mut self, e : i64, where : str):
+        let inner : i64 = if self.kind_of(e) = NK_REF: self.a.na[e × 1¤ptrdiff] else: e
+        if self.kind_of(inner) ≠ NK_VAR:
+            return
+        let s : i64 = self.lookup(self.text(self.a.ntok[inner × 1¤ptrdiff]))
+        if s = ⁻1 or self.sborrow[s × 1¤ptrdiff] = 0:
+            return
+        let os : mut str = ""
+        foreach i := 0¤ptrdiff…#self.lend_b:
+            if self.lend_b[i] = s:
+                os ← if os = "": self.snames[self.lend_o[i] × 1¤ptrdiff] else: os ⧺ ", " ⧺ self.snames[self.lend_o[i] × 1¤ptrdiff]
+        self.derrc(self.a.ntok[inner × 1¤ptrdiff], 2433, "'" ⧺ self.snames[s × 1¤ptrdiff] ⧺ "' is a borrow of '" ⧺ os ⧺ "' and lives only as long as '" ⧺ os ⧺ "' is held; " ⧺ where ⧺ " may outlive that")
+
+    // What a borrowed answer may be: an origin, a field or an element
+    // reached from one, or what a borrow-returning call answers when
+    // rooted in one -- never something the function made itself.
+    fn rooted(&mut self, e : i64) → bool:
+        let k : i64 = self.kind_of(e)
+        if k = NK_VAR:
+            let s : i64 = self.lookup(self.text(self.a.ntok[e × 1¤ptrdiff]))
+            if s = ⁻1:
+                return false
+            if self.sborrow[s × 1¤ptrdiff] ≠ 0:
+                return true
+            let d := self.a.fns[self.cur_fn × 1¤ptrdiff]
+            let no : i64 ¤ptrdiff = self.a.extra[d.ret_from] × 1¤ptrdiff
+            foreach i := 0…no:
+                if self.a.extra[d.ret_from + 1 + i] = s:
+                    return true
+            return false
+        if k = NK_FIELD or k = NK_INDEX or k = NK_REF:
+            return self.rooted(self.a.na[e × 1¤ptrdiff])
+        if k = NK_IF:
+            // an if used as a value: both arms answer, and both are rooted
+            let tv : i64 = self.block_value_node(self.a.nb[e × 1¤ptrdiff])
+            let ev : i64 = if self.a.nc[e × 1¤ptrdiff] = ⁻1: ⁻1 else: self.block_value_node(self.a.nc[e × 1¤ptrdiff])
+            return tv ≠ ⁻1 and ev ≠ ⁻1 and self.rooted(tv) and self.rooted(ev)
+        if self.nlend[e × 1¤ptrdiff] ≠ 0:
+            let ok : mut bool = true
+            foreach i := 0¤ptrdiff…#self.lorig_node:
+                if self.lorig_node[i] = e:
+                    let os : i64 = self.lorig_s[i]
+                    let d := self.a.fns[self.cur_fn × 1¤ptrdiff]
+                    let no : i64 ¤ptrdiff = self.a.extra[d.ret_from] × 1¤ptrdiff
+                    let found : mut bool = self.sborrow[os × 1¤ptrdiff] ≠ 0
+                    foreach j := 0…no:
+                        if self.a.extra[d.ret_from + 1 + j] = os:
+                            found ← true
+                    ok ← ok and found
+            return ok
+        false
+
+    fn require_rooted(&mut self, tok : i64, e : i64):
+        let d := self.a.fns[self.cur_fn × 1¤ptrdiff]
+        if d.ret_ref = 0:
+            return
+        if not self.rooted(e):
+            let no : i64 ¤ptrdiff = self.a.extra[d.ret_from] × 1¤ptrdiff
+            let os : mut str = ""
+            foreach i := 0…no:
+                let pi : i64 = self.a.extra[d.ret_from + 1 + i]
+                os ← if os = "": self.snames[pi × 1¤ptrdiff] else: os ⧺ ", " ⧺ self.snames[pi × 1¤ptrdiff]
+            self.derrc(tok, 2432, "'" ⧺ d.name ⧺ "' answers a borrow of '" ⧺ os ⧺ "', but this answers something the function's own, which is gone when it returns")
+
+    // After a statement: the lends whose borrower was last read here
+    // end, and the arrays this scope made, showed to nothing, and has
+    // finished with go back.
+    fn after_stmt(&mut self, s : i64):
+        let here : i64 ¤"line" = self.stmt_end
+        let i : mut i64 ¤ptrdiff = 0
+        while i < #self.lend_b:
+            if self.lend_until[i] <= here:
+                self.end_lend(i)
+            else:
+                i ← i + 1
+        if self.kind_of(s) = NK_LET:
+            self.bind_lend(s)
+            let ls : i64 = self.nslot[s × 1¤ptrdiff]
+            let lk : i64 = self.kind_of(self.a.na[s × 1¤ptrdiff])
+            if ls >= 0:
+                while #self.lfresh <= ls × 1¤ptrdiff:
+                    self.lfresh.push(0)
+                self.lfresh[ls × 1¤ptrdiff] ← if lk = NK_ARRLIT or lk = NK_CCAT: 1 else: 0
+        let low : i64 = self.marks[#self.marks - 1¤ptrdiff]
+        foreach si := low × 1¤ptrdiff…#self.snames:
+            let slot : i64 = self.sslot[si]
+            if slot < 0 or slot × 1¤ptrdiff >= #self.lown or self.lown[slot × 1¤ptrdiff] = 0:
+                continue
+            if slot × 1¤ptrdiff >= #self.lfresh or self.lfresh[slot × 1¤ptrdiff] = 0:
+                continue
+            if slot × 1¤ptrdiff >= #self.kuse or self.kuse[slot × 1¤ptrdiff] ≠ self.ksafe[slot × 1¤ptrdiff]:
+                continue
+            if slot × 1¤ptrdiff < #self.lesc and self.lesc[slot × 1¤ptrdiff] ≠ 0:
+                continue
+            if self.sheld[si] ≠ HOLD_FREE or self.slend[si] ≠ ⁻1 or self.sborrow[si] ≠ 0:
+                continue
+            let t : i64 = self.stype[si]
+            // a sized array is the frame itself, with no block to give back
+            if not ty_is_arr(t) or ty_is_farr(t):
+                continue
+            let et : i64 = self.elem_of(t)
+            if not ((ty_is_int(et) and et ≠ TY_UNT) or et = TY_BOOL or et = TY_CHAR):
+                continue
+            let ltok : i64 = self.ltok[slot × 1¤ptrdiff]
+            if ltok = ⁻1 or self.last_line(self.snames[si], ltok) > here:
+                continue
+            while #self.lrec <= slot × 1¤ptrdiff:
+                self.lrec.push(0)
+            if self.lrec[slot × 1¤ptrdiff] = 1:
+                continue
+            self.lrec[slot × 1¤ptrdiff] ← 1
+            self.rec_cand_stmt.push(s)
+            self.rec_cand_slot.push(slot)
+            self.rec_cand_tok.push(ltok)
+
+    // Once the packing is settled: a candidate that was packed lives
+    // in the frame and has nothing to give back; the rest go back
+    // after the statement that last read them.
+    fn rec_settle(&mut self):
+        foreach i := 0¤ptrdiff…#self.rec_cand_slot:
+            let slot : i64 = self.rec_cand_slot[i]
+            let packed : bool = slot × 1¤ptrdiff < #self.pcnt and self.pcnt[slot × 1¤ptrdiff] >= 0 and self.puse[slot × 1¤ptrdiff] = self.psafe[slot × 1¤ptrdiff]
+            if packed:
+                continue
+            let ltok : i64 = self.rec_cand_tok[i]
+            self.rec_stmt.push(self.rec_cand_stmt[i])
+            self.rec_slot.push(slot)
+            self.log.push("{\"function\": \"" ⧺ self.a.fns[self.cur_fn × 1¤ptrdiff].name ⧺ "\", \"line\": " ⧺ i64_str(@dropunit(self.toks.line[ltok × 1¤ptrdiff])) ⧺ ", \"decision\": \"reclaim\", \"name\": \"" ⧺ self.text(ltok) ⧺ "\", \"at\": " ⧺ i64_str(@dropunit(self.toks.line[self.a.ntok[self.rec_cand_stmt[i] × 1¤ptrdiff] × 1¤ptrdiff])) ⧺ "}")
+        while #self.rec_cand_slot > 0:
+            _ ← self.rec_cand_slot.pop() ?? 0
+            _ ← self.rec_cand_stmt.pop() ?? 0
+            _ ← self.rec_cand_tok.pop() ?? 0
 
     // ------------------------------------------------------------------
     // How long a binding lives
@@ -4844,8 +5269,10 @@ impl Checker:
             self.check_expr(na, TY_UNIT)
             self.want_truthy(na, "the condition")
             self.loop_depth ← self.loop_depth + 1
+            self.loop_enter()
             self.check_block(nb, false)
             self.loop_depth ← self.loop_depth - 1
+            self.loop_leave()
         elif k = NK_MATCH:
             self.check_expr(na, TY_UNIT)
             let t : i64 = self.ty_of(na)
@@ -4908,8 +5335,10 @@ impl Checker:
             let wslot : i64 = self.declare(tok, wdty, wmut)
             self.nslot[id × 1¤ptrdiff] ← wslot
             self.loop_depth ← self.loop_depth + 1
+            self.loop_enter()
             self.check_block(nb, false)
             self.loop_depth ← self.loop_depth - 1
+            self.loop_leave()
             self.pop_scope()
         elif k = NK_FOREACHA:
             self.pack_safe(na)
@@ -4939,10 +5368,12 @@ impl Checker:
                 let rslot : i64 = self.declare(tok, self.elem_of(ft0) + 262144 × frk, if frk = 2: 1 else: 0)
                 self.nslot[id × 1¤ptrdiff] ← rslot
                 self.loop_depth ← self.loop_depth + 1
+                self.loop_enter()
                 self.walk_open(self.walked_slot(fiter))
                 self.check_block(nb, false)
                 self.nfree[id × 1¤ptrdiff] ← self.walk_close()
                 self.loop_depth ← self.loop_depth - 1
+                self.loop_leave()
                 self.pop_scope()
                 return
             self.check_expr(na, TY_UNIT)
@@ -4958,10 +5389,12 @@ impl Checker:
             let slot : i64 = self.declare(tok, if t = TY_STR: TY_CHAR else: (if ty_is_rg(t): ty_rgelem(t) else: self.elem_of(t)), 0)
             self.nslot[id × 1¤ptrdiff] ← slot
             self.loop_depth ← self.loop_depth + 1
+            self.loop_enter()
             self.walk_open(if ty_is_arr(t): self.walked_slot(na) else: ⁻1)
             self.check_block(nb, false)
             self.nfree[id × 1¤ptrdiff] ← self.walk_close()
             self.loop_depth ← self.loop_depth - 1
+            self.loop_leave()
             self.pop_scope()
         elif k = NK_RETURN:
             if self.lam_ret ≠ ⁻1:
@@ -4990,6 +5423,11 @@ impl Checker:
                 self.a.fns[self.cur_fn × 1¤ptrdiff].ret ← self.ty_of(na)
                 return
             let want : i64 = self.a.fns[self.cur_fn × 1¤ptrdiff].ret
+            if na ≠ ⁻1:
+                if self.a.fns[self.cur_fn × 1¤ptrdiff].ret_ref ≠ 0:
+                    self.require_rooted(tok, na)
+                else:
+                    self.refuse_kept(na, "what the function answers")
             if na = ⁻1:
                 if want ≠ TY_UNIT:
                     self.derr(tok, "the function answers " ⧺ self.tn(want) ⧺ "; a bare return does not")
@@ -5140,8 +5578,10 @@ impl Checker:
         let slot : i64 = self.declare(tok, vt, 0)
         self.nslot[id × 1¤ptrdiff] ← slot
         self.loop_depth ← self.loop_depth + 1
+        self.loop_enter()
         self.check_block(body, false)
         self.loop_depth ← self.loop_depth - 1
+        self.loop_leave()
         self.pop_scope()
 
     // ------------------------------------------------------------------
@@ -5353,6 +5793,15 @@ impl Checker:
     fn check_fn(&mut self, f : i64):
         self.cur_fn ← f
         self.curmod ← self.a.fns[f × 1¤ptrdiff].modname
+        self.scan_last_use(f)
+        while #self.lend_b > 0:
+            self.end_lend(#self.lend_b - 1¤ptrdiff)
+        while #self.loop_end > 0:
+            _ ← self.loop_end.pop() ?? 0¤"line"
+        while #self.lrec > 0:
+            _ ← self.lrec.pop() ?? 0
+        self.blk_end ← self.toks.line[self.a.fns[f × 1¤ptrdiff].tok_hi × 1¤ptrdiff]
+        self.stmt_end ← self.blk_end
         self.pack_reset(0)
         self.nslots ← 0
         self.loop_depth ← 0
@@ -5413,6 +5862,15 @@ impl Checker:
                 let last : i64 = self.a.extra[(off + n) × 1¤ptrdiff]
                 if self.stmt_is_value(last):
                     last_is_value ← true
+                    if d.ret_ref ≠ 0 and self.kind_of(last) = NK_EXPRSTMT:
+                        // the parameters are gone from scope; the roots
+                        // are read against the names the log keeps
+                        self.push_scope()
+                        let np9 : i64 ¤ptrdiff = self.a.extra[d.params_off] × 1¤ptrdiff
+                        foreach i := 0…np9:
+                            _ ← self.declare(self.a.extra[d.params_off + 1 + i × 2], self.a.extra[d.params_off + 2 + i × 2], 0)
+                        self.require_rooted(self.a.ntok[last × 1¤ptrdiff], self.a.na[last × 1¤ptrdiff])
+                        self.pop_scope()
             if not last_is_value and not self.block_returns(d.body):
                 self.derr(d.tok, "'" ⧺ d.name ⧺ "' answers " ⧺ self.tn(d.ret) ⧺ " but not on every path")
         if d.is_noreturn and not self.block_leaves(d.body):
@@ -5427,6 +5885,7 @@ impl Checker:
         // the bindings whose every read was somewhere a packed array
         // serves are told how many they hold, and become the elements
         self.pack_settle()
+        self.rec_settle()
         self.fdone[f × 1¤ptrdiff] ← 1
 
     fn check_global(&mut self, g : i64):
@@ -5502,7 +5961,8 @@ impl Checker:
 fn diag_codes() → i64[]:
     [2024, 2025, 2026, 2111, 2229, 2245, 2253, 2254, 2256,
      2290, 2291, 2293,
-     2400, 2401, 2402, 2403, 2404, 2421, 2619, 2728, 2729, 2741, 2910, 2911]
+     2400, 2401, 2402, 2403, 2404, 2421, 2430, 2431, 2432, 2433, 2436,
+     2619, 2728, 2729, 2741, 2910, 2911]
 
 fn draws_code(code : i64) → bool:
     foreach c := diag_codes():
@@ -5610,6 +6070,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
     let nrep : mut i64[] = []
     let nlam : mut i64[] = []
     let nhold : mut i64[] = []
+    let nlend : mut i64[] = []
     let nfree : mut i64[] = []
     foreach zi := 0¤ptrdiff…nnodes:
         ntype.push(0)
@@ -5618,6 +6079,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
         nrep.push(⁻1)
         nlam.push(⁻1)
         nhold.push(0)
+        nlend.push(0)
         nfree.push(0)
     let c : mut Checker = (Checker{a: a, toks: toks, src: src, fnames: fnames, curmod: "",
                                    gnames: gnames, gvals: [], ginit: [], ite: [],
@@ -5639,7 +6101,14 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
                                    psfn: [], psk: [], psnp: [],
                                    fdone: [], skipfn: [], lam_ret: ⁻1,
                                    val_want: ⁻1,
-                                   argcopy: []})
+                                   argcopy: [],
+                                   nlend: nlend, lorig_node: [], lorig_s: [],
+                                   slend: [], sborrow: [],
+                                   lend_b: [], lend_o: [], lend_back: [], lend_until: [], lend_how: [],
+                                   lu_name: [], lu_line: [], lu_slot: [], lu_used: [], lu_tok: [], loop_end: [],
+                                   stmt_end: 0¤"line", blk_end: 0¤"line",
+                                   rec_stmt: [], rec_slot: [], lrec: [],
+                                   rec_cand_stmt: [], rec_cand_slot: [], rec_cand_tok: [], lfresh: []})
     if #a.structs > 0:
         foreach i := 0…#a.structs:
             let sd := a.structs[i]
@@ -5767,6 +6236,7 @@ fn check(a : Ast, toks : Toks, src : byte[]) → Chk:
         assert(#c.fslots = #a.fns, "one slot count per function")
         assert(#c.gvals = #a.globals, "one folded value per global")
     (Chk{ntype: c.ntype, nslot: c.nslot, ncvt: c.ncvt, nrep: c.nrep, nlam: c.nlam, nhold: c.nhold, nfree: c.nfree, log: c.log, fslots: c.fslots,
+         rec_stmt: c.rec_stmt, rec_slot: c.rec_slot,
          gvals: c.gvals, ginit: c.ginit, lams: c.lams, lamns: c.lamns,
          psfn: c.psfn, psk: c.psk, psnp: c.psnp, skipfn: c.skipfn,
          argcopy: c.argcopy,

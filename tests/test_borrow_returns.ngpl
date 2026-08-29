@@ -1,0 +1,78 @@
+// A function may answer a borrow of what it was lent, and the lend
+// runs to the borrower's last use rather than to the end of its
+// block.  The refusals are the ones LIFETIMES.md lists.
+
+struct Bag:
+    items : i64[]
+
+struct Keep:
+    v : i64[]
+
+impl Bag:
+    fn view(&self) → &i64[]:
+        self.items
+
+fn items_of(b : &Bag) → &i64[] |b|:
+    b.items
+
+fn longer(a : &Bag, b : &Bag) → &i64[] |a, b|:
+    if #a.items > #b.items: a.items else: b.items
+
+fn first_two(b : &Bag) → &i64[] |b|:
+    items_of(&b)
+
+@test
+fn test_a_borrowed_answer_reaches_into_its_origin():
+    let b : mut Bag = Bag{items: [1, 2, 3]}
+    let v := b.view()
+    assert_eq(#v, 3)
+    // v's last use is above, so b is its own again
+    b.items.push(4)
+    let w : &i64[] = items_of(&b)
+    assert_eq(#w, 4)
+    let f := first_two(&b)
+    assert_eq(#f, 4)
+
+@test
+fn test_two_origins_hold_both():
+    let a : mut Bag = Bag{items: [1, 2]}
+    let c : mut Bag = Bag{items: [9]}
+    let l := longer(&a, &c)
+    assert_eq(#l, 2)
+    a.items.push(3)
+    c.items.push(8)
+    assert_eq(#a.items + #c.items, 5)
+
+@test
+@expect error 2430 "'b' is lent out for reading to 'v' until line 52 and cannot be changed before then"
+fn error_changing_a_lent_origin():
+    let b : mut Bag = Bag{items: [1, 2, 3]}
+    let v := b.view()
+    b.items.push(4)
+    assert_eq(#v, 4)
+
+@test
+@expect error 2433 "what 'view' answers is a borrow of 'b' and lives only as long as 'b' is held; 'Keep.v' may outlive that"
+fn error_keeping_a_borrowed_answer():
+    let b : Bag = Bag{items: [1]}
+    let v := b.view()
+    let k : Keep = Keep{v: v}
+    assert_eq(#k.v, 1)
+
+@test
+@expect error 2436 "'v' names a type and would take a copy, but 'view' answers a borrow; write ': &i64[]' or no type"
+fn error_copying_a_borrowed_answer():
+    let b : Bag = Bag{items: [1]}
+    let v : i64[] = b.view()
+    assert_eq(#v, 1)
+
+// A resource is released after the statement that last reads its
+// name, which is observable: descriptors are handed out lowest-first,
+// so the file opened afterwards takes the number the first gave back.
+@test
+fn test_a_resource_is_released_at_its_last_use():
+    let dir := std.fs.cwd()
+    let a := dir.open_file("CLAUDE.md") ?? std.exit(1)
+    let first : i64 = a.fd
+    let b := dir.open_file("ngpl.md") ?? std.exit(1)
+    assert_eq(b.fd, first)

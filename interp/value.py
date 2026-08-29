@@ -964,7 +964,8 @@ class FuncValue(Value):
                  "param_muts", "source_label", "ret_unit", "is_listable",
                  "is_noreturn", "preconditions", "postconditions",
                  "_has_generics", "_param_names", "module", "is_export",
-                 "is_ignorable")
+                 "is_ignorable",
+                 "ret_ref", "ret_origins")
 
     def __init__(self, name, params, body, env, ret_type=None,
                  is_replaceable: bool = False,
@@ -992,6 +993,10 @@ class FuncValue(Value):
         self.is_impure = is_impure
         self.param_refs: set[str] = param_refs or set()
         self.param_muts: set[str] = param_muts or set()
+        # "shared" or "mut" where the answer is a borrow, and then the
+        # parameters it reaches into
+        self.ret_ref = None
+        self.ret_origins = None
         # Whether the function is threaded over an argument that is
         # deeper than the parameter asks for.
         self.is_listable = is_listable

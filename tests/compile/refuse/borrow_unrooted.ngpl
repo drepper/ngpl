@@ -1,0 +1,13 @@
+// A borrowed answer reaches into an origin; the function's own array
+// is gone when it returns, so it cannot be answered as one.
+struct Bag:
+    items : i64[]
+fn fresh(b : &Bag) → &i64[] |b|:
+    let t : i64[] = [1]
+    t
+@start
+@impure
+fn main():
+    let b : Bag = Bag{items: [1]}
+    let v := fresh(&b)
+    std.println("{}", #v)

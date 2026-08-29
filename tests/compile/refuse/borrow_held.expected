@@ -1,0 +1,3 @@
+tests/compile/refuse/borrow_held.ngpl:14:13: error[2430]: 'b' is lent out for reading to 'v' until line 15 and cannot be changed before then
+  14 |     b.items.push(4)
+     |             ^

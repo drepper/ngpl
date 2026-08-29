@@ -598,3 +598,14 @@ Tooling
     check.ngpl's enum members and captures, the IR's own extra, a
     digest's blocks -- each wanting the same treatment for its own
     table.
+
+[ ] FnDef.tok_lo is set once per top-level definition (parse.ngpl,
+    def_start), so a method's range runs from where its impl block
+    began, not where the method did.  Found by the last-use scan on
+    feat/borrow-returns, which read 6.5 million tokens for 1205
+    functions before it was pointed at the name token instead.  The
+    bill of materials hashes tok_lo..tok_hi as "what a function is",
+    so a method's row hashes every method before it in the block, and
+    editing one changes the hashes of all that follow.  Setting
+    def_start at each method's own first annotation is the fix; the
+    bill's rows will change when it lands.

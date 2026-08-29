@@ -1,0 +1,15 @@
+// The origin of a borrowed answer is held until the answer's last
+// use, so changing it before then is refused -- and the message says
+// where the hold ends.
+struct Bag:
+    items : i64[]
+impl Bag:
+    fn view(&self) → &i64[]:
+        self.items
+@start
+@impure
+fn main():
+    let b : mut Bag = Bag{items: [1, 2, 3]}
+    let v := b.view()
+    b.items.push(4)
+    std.println("{}", #v)

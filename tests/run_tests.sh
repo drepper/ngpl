@@ -129,6 +129,7 @@ all_tests=(
     "$testdir"/test_discard.ngpl
     "$testdir"/test_scope_close.ngpl
     "$testdir"/test_borrow_foreach.ngpl
+    "$testdir"/test_borrow_returns.ngpl
     "$testdir"/test_array_methods.ngpl
     "$testdir"/test_iterator.ngpl
     "$testdir"/test_quantifiers.ngpl

@@ -1,0 +1,3 @@
+tests/compile/refuse/borrow_copied.ngpl:12:9: error[2436]: 'v' names a type and would take a copy, but what it is bound to is a borrow; write ': &i64[]' or no type
+  12 |     let v : i64[] = b.view()
+     |         ^

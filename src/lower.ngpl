@@ -13,6 +13,8 @@ struct Lower:
     nlam : i64[]
     nhold : i64[]
     nfree : i64[]
+    rec_stmt : i64[]     // see Chk
+    rec_slot : i64[]
     strs : str[]
     op : i64[]
     ia : i64[]
@@ -2168,6 +2170,34 @@ impl Lower:
             let s : i64 = self.a.extra[(off + 1 + i) × 1¤ptrdiff]
             let trailing : bool = is_fn_body and i = n - 1
             self.lower_stmt(s, trailing, ret_ty)
+            self.reclaim_after(s)
+
+    // An array the checker found finished with after this statement:
+    // its slots go back, as a walk's do, unless they lie inside the
+    // descriptor, which is not a block of its own.
+    fn reclaim_after(&mut self, s : i64):
+        foreach i := 0¤ptrdiff…#self.rec_stmt:
+            if self.rec_stmt[i] ≠ s:
+                continue
+            let desc : i64 = self.rec_slot[i]
+            let lkeep : i64 = self.label()
+            let dsl : i64 = self.tmp()
+            self.ir(IR_FLD, desc, 0, 0, dsl, 0)
+            let hoff : i64 = self.tmp()
+            self.ir(IR_CONST, 24, 0, 0, hoff, 0)
+            let inl : i64 = self.tmp()
+            self.ir(IR_ADD, desc, hoff, 0, inl, 64 + 256)
+            let same : i64 = self.tmp()
+            self.ir(IR_CEQ, dsl, inl, 0, same, 64 + 256)
+            self.ir(IR_JNZ, same, lkeep, 0, 0, 0)
+            let dcp : i64 = self.tmp()
+            self.ir(IR_FLD, desc, 2, 0, dcp, 0)
+            let three : i64 = self.tmp()
+            self.ir(IR_CONST, 3, 0, 0, three, 0)
+            let nby : i64 = self.tmp()
+            self.ir(IR_SHLL, dcp, three, 0, nby, 64 + 256)
+            self.ir(IR_GIVEBACK, dsl, nby, 0, 0, 0)
+            self.ir(IR_LABEL, lkeep, 0, 0, 0, 0)
 
     // what a return hands over: a bare value under an optional answer
     // boxes itself, and a bare ÷ or % answers ∅ for the zero divisor

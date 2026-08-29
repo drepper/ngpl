@@ -47,7 +47,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     foreach s := a.strs:
         strs0.push(s)
     let lw : mut Lower = (Lower{a: a, toks: toks, src: src, ntype: chk.ntype,
-                                nslot: chk.nslot, ncvt: chk.ncvt, nrep: chk.nrep, nlam: chk.nlam, nhold: chk.nhold, nfree: chk.nfree, strs: strs0,
+                                nslot: chk.nslot, ncvt: chk.ncvt, nrep: chk.nrep, nlam: chk.nlam, nhold: chk.nhold, nfree: chk.nfree, rec_stmt: chk.rec_stmt, rec_slot: chk.rec_slot, strs: strs0,
                                 op: [], ia: [], ib: [], ic: [], idd: [],
                                 iww: [], extra: [], tbase: 0, tnext: 0,
                                 tmax: 0, nlabels: 0, breaks: [], conts: [],

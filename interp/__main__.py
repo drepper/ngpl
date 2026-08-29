@@ -3584,6 +3584,8 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                           postconditions=defn.postconditions)
             fv.module = getattr(defn, "module", "")
             fv.is_export = defn.is_export
+            fv.ret_ref = getattr(defn, "ret_ref", None)
+            fv.ret_origins = getattr(defn, "ret_origins", None)
             env.define(_module_qualify(fv.module, defn.name), fv)
 
             if honor_start and defn.is_start:
@@ -3767,6 +3769,8 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                                is_ignorable=method_def.is_ignorable,
                                preconditions=method_def.preconditions,
                                postconditions=method_def.postconditions)
+                fv.ret_ref = getattr(method_def, "ret_ref", None)
+                fv.ret_origins = getattr(method_def, "ret_origins", None)
                 if method_def.name in st.methods:
                     raise DefinitionError(
                         f"duplicate method '{method_def.name}' "

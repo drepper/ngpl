@@ -1,0 +1,3 @@
+tests/compile/refuse/borrow_unrooted.ngpl:7:5: error[2432]: 'fresh' answers a borrow of 'b', but this answers something the function's own, which is gone when it returns
+  7 |     t
+    |     ^

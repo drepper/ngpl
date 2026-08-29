@@ -1,0 +1,49 @@
+// A function may answer a borrow of what it was lent: `→ &T |p|` says
+// the answer reaches into p.  At the call the caller's binding is lent
+// to whatever binds the answer, and held until that binding's last
+// use -- not until its block closes, which is what lets the bag be
+// changed once nothing is looking at it any more.
+
+struct Bag:
+    items : i64[]
+
+impl Bag:
+    fn view(&self) → &i64[]:
+        self.items
+
+fn items_of(b : &Bag) → &i64[] |b|:
+    b.items
+
+fn longer(a : &Bag, b : &Bag) → &i64[] |a, b|:
+    if #a.items > #b.items: a.items else: b.items
+
+// a borrow handed on is the same borrow, rooted where it was rooted
+fn first_two(b : &Bag) → &i64[] |b|:
+    items_of(&b)
+
+// an array the function made and showed to nothing goes back to the
+// allocator after its last use, which is before the function ends
+fn total(n : i64) → i64:
+    let w : i64[] = [10, 20]
+    let s : i64 = w[0] + w[1]
+    let v : mut i64[] = [1, 2, 3]
+    v.push(n)
+    s + @dropunit(#v)
+
+@start
+@impure
+fn main():
+    let b : mut Bag = Bag{items: [1, 2, 3]}
+    let v := b.view()
+    std.println("view {}", #v)
+    // v's last use was the line above, so b is its own again
+    b.items.push(4)
+    let w : &i64[] = items_of(&b)
+    std.println("items {}", #w)
+    let c : mut Bag = Bag{items: [9]}
+    let l := longer(&b, &c)
+    std.println("longer {}", #l)
+    c.items.push(8)
+    let f := first_two(&b)
+    std.println("chain {}", #f)
+    std.println("bag {} {} total {}", #b.items, #c.items, total(4))
