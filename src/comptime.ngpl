@@ -560,9 +560,9 @@ impl Cev:
         if k >= NK_EQ and k <= NK_GE:
             return self.ev_cmp(k, tok, na, nb)
         if k = NK_CALL:
-            return self.ev_call(tok, na)
+            return self.ev_call(tok, na × 1¤"aextra")
         if k = NK_SCALL:
-            return self.ev_scall(tok, na, nb)
+            return self.ev_scall(tok, na, nb × 1¤"aextra")
         self.derr(tok, ev_spell(k) ⧺ " is not part of a build recipe; " ⧺ ev_subset())
         cv_none()
 
@@ -696,7 +696,7 @@ impl Cev:
     // Calls, and what the recipe declares
     // -------------------------------------------------------------------
 
-    fn ev_call(&mut self, tok : i64, args_off : i64) → CVal:
+    fn ev_call(&mut self, tok : i64, args_off : i64 ¤"aextra") → CVal:
         let name : str = self.text(tok)
         let f : i64 = self.fn_index(name)
         if f = ⁻1:
@@ -706,16 +706,16 @@ impl Cev:
             self.derr(tok, "the calls in this build recipe stand more than " ⧺ i64_str(EV_DEPTH) ⧺ " deep; something in it does not finish")
             return cv_none()
         let callee : FnDef = self.a.fns[f × 1¤ptrdiff]
-        let np : i64 = self.a.extra[callee.params_off × 1¤ptrdiff]
-        let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
+        let np : i64 ¤ptrdiff = self.a.extra[callee.params_off] × 1¤ptrdiff
+        let argc : i64 ¤ptrdiff = self.a.extra[args_off] × 1¤ptrdiff
         if argc ≠ np:
-            self.derr(tok, "'" ⧺ name ⧺ "' wants " ⧺ i64_str(np) ⧺ " arguments, not " ⧺ i64_str(argc))
+            self.derr(tok, "'" ⧺ name ⧺ "' wants " ⧺ i64_str(@dropunit(np)) ⧺ " arguments, not " ⧺ i64_str(@dropunit(argc)))
             return cv_none()
         // the arguments are read in the caller's scope, before the
         // callee's frame hides it
         let vs : mut CVal[] = []
         foreach i := 0…argc:
-            vs.push(self.ev_expr(self.a.extra[(args_off + 1 + i) × 1¤ptrdiff]))
+            vs.push(self.ev_expr(self.a.extra[args_off + 1 + i]))
             if self.halted():
                 return cv_none()
         let saved_floor : i64 = self.floor
@@ -724,8 +724,8 @@ impl Cev:
         self.floor ← @dropunit(#self.names)
         self.depth ← self.depth + 1
         foreach j := 0…np:
-            let ptok : i64 = self.a.extra[(callee.params_off + 1 + j × 2) × 1¤ptrdiff]
-            self.bind(self.text(ptok), vs[j × 1¤ptrdiff], false)
+            let ptok : i64 = self.a.extra[callee.params_off + 1 + j × 2]
+            self.bind(self.text(ptok), vs[j], false)
         self.ret ← cv_none()
         let fl : i64 = self.ev_stmt(callee.body)
         let answered : CVal = self.ret
@@ -738,15 +738,15 @@ impl Cev:
             return cv_none()
         answered
 
-    fn ev_scall(&mut self, tok : i64, sb : i64, args_off : i64) → CVal:
-        let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
+    fn ev_scall(&mut self, tok : i64, sb : i64, args_off : i64 ¤"aextra") → CVal:
+        let argc : i64 ¤ptrdiff = self.a.extra[args_off] × 1¤ptrdiff
         // the five declarations take the one string; the five readers
         // take nothing
         if sb <= SB_BFLAG:
             if argc ≠ 1:
                 self.derr(tok, "this std.build declaration takes the one string")
                 return cv_none()
-            let v : CVal = self.ev_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            let v : CVal = self.ev_expr(self.a.extra[args_off + 1])
             if self.halted():
                 return cv_none()
             if v.tag ≠ CV_STR:

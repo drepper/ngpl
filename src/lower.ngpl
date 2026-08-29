@@ -550,7 +550,7 @@ impl Lower:
                 self.ir(IR_ALEN, av, 0, 0, d, w)
             return d
         if k = NK_CALL:
-            return self.lower_call(nid, tok, na)
+            return self.lower_call(nid, tok, na × 1¤"aextra")
         if k = NK_RUN:
             return self.lower_run(na, nb, nc)
         if k = NK_QUANT:
@@ -670,7 +670,7 @@ impl Lower:
                 let b : i64 = self.tmp()
                 self.ir(IR_CNE, d, z, 0, b, 64)
                 return b
-            self.lower_scall(nid, tok, na, nb)
+            self.lower_scall(nid, tok, na, nb × 1¤"aextra")
             return ⁻1
         if k = NK_MCALL:
             return self.lower_mcall(nid, ⁻1)
@@ -1093,7 +1093,7 @@ impl Lower:
     fn lower_mcall(&mut self, nid : i64, defnode : i64) → i64:
         let mid : i64 = self.a.nc[nid × 1¤ptrdiff]
         let base : i64 = self.a.na[nid × 1¤ptrdiff]
-        let args_off : i64 = self.a.nb[nid × 1¤ptrdiff]
+        let args_off : i64 ¤"aextra" = self.a.nb[nid × 1¤ptrdiff] × 1¤"aextra"
         if mid >= 1000:
             // a struct's method is a function with the receiver first
             let f : i64 = ((mid - 1000) ÷ 2) ?? 0
@@ -1101,9 +1101,9 @@ impl Lower:
             let vregs : mut i64[] = []
             if inst = 1:
                 vregs.push(self.lower_expr(base))
-            let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
+            let argc : i64 ¤ptrdiff = self.a.extra[args_off] × 1¤ptrdiff
             foreach i := 0…argc:
-                vregs.push(self.lower_expr(self.a.extra[(args_off + 1 + i) × 1¤ptrdiff]))
+                vregs.push(self.lower_expr(self.a.extra[args_off + 1 + i]))
             let off : i64 = @dropunit(#self.extra)
             self.extra.push(@dropunit(#vregs))
             foreach v := vregs:
@@ -1126,23 +1126,23 @@ impl Lower:
             self.ir(IR_CHARS, av, 0, 0, d, 0)
             return d
         if mid = MID_READF:
-            _ ← self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            _ ← self.lower_expr(self.a.extra[args_off + 1])
             let d : i64 = self.tmp()
             self.ir(IR_FREAD, av, 0, 0, d, 0)
             return d
         if mid = MID_WRITEF:
-            let bv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            let bv : i64 = self.lower_expr(self.a.extra[args_off + 1])
             self.ir(IR_FWRITE, av, bv, 0, 0, 0)
             return ⁻1
         if mid = MID_CLOSEF:
             self.ir(IR_FCLOSE, av, 0, 0, 0, 0)
             return ⁻1
         if mid = MID_WRITEV:
-            let pv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            let pv : i64 = self.lower_expr(self.a.extra[args_off + 1])
             self.ir(IR_WRITEV, av, pv, 0, 0, 0)
             return ⁻1
         if mid = MID_HUPDATE:
-            let uv : i64 = self.lower_hash_arg(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            let uv : i64 = self.lower_hash_arg(self.a.extra[args_off + 1])
             self.ir(IR_HUPDATE, av, uv, 0, 0, 0)
             return ⁻1
         if mid = MID_HDIGEST:
@@ -1230,7 +1230,7 @@ impl Lower:
             self.ir(IR_LABEL, lend, 0, 0, 0, 0)
             return d
         if mid = MID_PUSH:
-            let vv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            let vv : i64 = self.lower_expr(self.a.extra[args_off + 1])
             self.ir(IR_APUSH, av, vv, 0, 0, 0)
             return ⁻1
         if mid = MID_POP and defnode = ⁻1 and ty_is_opt(self.tof(nid)):
@@ -1267,7 +1267,7 @@ impl Lower:
             return d
         if defnode = ⁻1 and ty_is_opt(self.tof(nid)):
             // get, outside ??: past the end answers the null
-            let iv9 : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            let iv9 : i64 = self.lower_expr(self.a.extra[args_off + 1])
             let n8 : i64 = self.tmp()
             self.ir(IR_ALEN, av, 0, 0, n8, 0)
             let c8 : i64 = self.tmp()
@@ -1289,7 +1289,7 @@ impl Lower:
             return d8
         // get, with the default a ?? supplies
         assert(defnode ≠ ⁻1, "a get with no default answers an optional and is lowered above")
-        let iv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+        let iv : i64 = self.lower_expr(self.a.extra[args_off + 1])
         let dv : i64 = self.lower_expr(defnode)
         let d : i64 = self.tmp()
         self.ir(IR_AGET, av, iv, dv, d, w)
@@ -1545,16 +1545,16 @@ impl Lower:
         if ty_is_struct(ty):
             let si : i64 = ty_sidx(ty)
             let d := self.a.structs[si × 1¤ptrdiff]
-            let nf : i64 = self.a.extra[d.fields_off × 1¤ptrdiff]
+            let nf : i64 ¤ptrdiff = self.a.extra[d.fields_off] × 1¤ptrdiff
             let (ssz, sal) := c_struct_layout(self.a, si, 0)
             _ ← sal
             if nf > 0:
                 foreach fi := 0…nf:
-                    let fty : i64 = self.a.extra[(d.fields_off + 2 + fi × 2) × 1¤ptrdiff]
-                    self.pack_pad(buf, pos, pos0 + c_field_offset(self.a, si, @dropunit(fi)))
-                    pos ← pos0 + c_field_offset(self.a, si, @dropunit(fi))
+                    let fty : i64 = self.a.extra[d.fields_off + 2 + fi × 2]
+                    self.pack_pad(buf, pos, pos0 + c_field_offset(self.a, si, fi))
+                    pos ← pos0 + c_field_offset(self.a, si, fi)
                     let fv : i64 = self.tmp()
-                    self.ir(IR_FLD, v, fi, 0, fv, 0)
+                    self.ir(IR_FLD, v, @dropunit(fi), 0, fv, 0)
                     pos ← self.pack_val(buf, fty, fv, pos)
             // the tail padding is part of the struct, so an array of
             // it keeps every element where the layout says
@@ -1588,9 +1588,9 @@ impl Lower:
         pos + sz
 
     // generate(f, r): the range written out, then one call per step
-    fn lower_generate(&mut self, nid : i64, args_off : i64) → i64:
-        let fe : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
-        let re : i64 = self.a.extra[(args_off + 2) × 1¤ptrdiff]
+    fn lower_generate(&mut self, nid : i64, args_off : i64 ¤"aextra") → i64:
+        let fe : i64 = self.a.extra[args_off + 1]
+        let re : i64 = self.a.extra[args_off + 2]
         let fv : i64 = self.lower_expr(fe)
         let rga : i64 = self.lower_rg_arr(re)
         let out : i64 = self.tmp()
@@ -1770,9 +1770,9 @@ impl Lower:
             self.ir(IR_APUSH, d, ev, 0, 0, 0)
         d
 
-    fn lower_call(&mut self, nid : i64, tok : i64, args_off : i64) → i64:
+    fn lower_call(&mut self, nid : i64, tok : i64, args_off : i64 ¤"aextra") → i64:
         let name := self.text(tok)
-        let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
+        let argc : i64 ¤ptrdiff = self.a.extra[args_off] × 1¤ptrdiff
         if name = "static_assert" or name = "static_assert_eq":
             return ⁻1
         if name = "assert" or name = "assert_eq":
@@ -1788,9 +1788,9 @@ impl Lower:
             if self.a.nc[nid × 1¤ptrdiff] = 6:
                 let gv9 : mut i64[] = []
                 foreach gi9 := 0…argc:
-                    gv9.push(self.lower_expr(self.a.extra[(args_off + 1 + gi9) × 1¤ptrdiff]))
+                    gv9.push(self.lower_expr(self.a.extra[args_off + 1 + gi9]))
                 let go9 : i64 = @dropunit(#self.extra)
-                self.extra.push(argc + 1)
+                self.extra.push(@dropunit(argc) + 1)
                 foreach v := gv9:
                     self.extra.push(v)
                 self.extra.push(gb9)
@@ -1801,15 +1801,15 @@ impl Lower:
                 return gd9
             let gv8 : mut i64[] = []
             foreach gi8 := 0…argc:
-                gv8.push(self.lower_expr(self.a.extra[(args_off + 1 + gi8) × 1¤ptrdiff]))
+                gv8.push(self.lower_expr(self.a.extra[args_off + 1 + gi8]))
             let gp8 : i64 = self.tmp()
-            self.ir(IR_SNEW, 1 + argc + 1, 0, 0, gp8, 0)
+            self.ir(IR_SNEW, 1 + @dropunit(argc) + 1, 0, 0, gp8, 0)
             let gf8 : i64 = self.tmp()
             self.ir(IR_FADDR, self.shimbase + self.a.nb[nid × 1¤ptrdiff], 0, 0, gf8, 0)
             self.ir(IR_FSTO, gp8, 0, gf8, 0, 0)
             foreach gk8 := 0…argc:
-                self.ir(IR_FSTO, gp8, 1 + gk8, gv8[gk8 × 1¤ptrdiff], 0, 0)
-            self.ir(IR_FSTO, gp8, 1 + argc, gb9, 0, 0)
+                self.ir(IR_FSTO, gp8, @dropunit(1 + gk8), gv8[gk8], 0, 0)
+            self.ir(IR_FSTO, gp8, 1 + @dropunit(argc), gb9, 0, 0)
             return gp8
         if self.a.nc[nid × 1¤ptrdiff] = 5:
             // an empty application answers the box unchanged
@@ -1820,16 +1820,16 @@ impl Lower:
             let isclo : i64 = if self.a.nc[nid × 1¤ptrdiff] = 4: 1 else: 0
             let vb9 : mut i64[] = []
             foreach bi9 := 0…argc:
-                vb9.push(self.lower_expr(self.a.extra[(args_off + 1 + bi9) × 1¤ptrdiff]))
+                vb9.push(self.lower_expr(self.a.extra[args_off + 1 + bi9]))
             let d9p : i64 = self.tmp()
-            self.ir(IR_SNEW, 1 + argc + isclo, 0, 0, d9p, 0)
+            self.ir(IR_SNEW, 1 + @dropunit(argc) + isclo, 0, 0, d9p, 0)
             let av9p : i64 = self.tmp()
             self.ir(IR_FADDR, self.shimbase + self.a.nb[nid × 1¤ptrdiff], 0, 0, av9p, 0)
             self.ir(IR_FSTO, d9p, 0, av9p, 0, 0)
             foreach ci9p := 0…argc:
-                self.ir(IR_FSTO, d9p, 1 + ci9p, vb9[ci9p × 1¤ptrdiff], 0, 0)
+                self.ir(IR_FSTO, d9p, @dropunit(1 + ci9p), vb9[ci9p], 0, 0)
             if isclo = 1:
-                self.ir(IR_FSTO, d9p, 1 + argc, self.nslot[nid × 1¤ptrdiff], 0, 0)
+                self.ir(IR_FSTO, d9p, 1 + @dropunit(argc), self.nslot[nid × 1¤ptrdiff], 0, 0)
             return d9p
         if self.a.nc[nid × 1¤ptrdiff] = 1:
             // through the binding's box: the address in slot 0, the
@@ -1837,7 +1837,7 @@ impl Lower:
             let box9 : i64 = self.nslot[nid × 1¤ptrdiff]
             let vr9 : mut i64[] = []
             foreach ix9 := 0…argc:
-                vr9.push(self.lower_expr(self.a.extra[(args_off + 1 + ix9) × 1¤ptrdiff]))
+                vr9.push(self.lower_expr(self.a.extra[args_off + 1 + ix9]))
             let bt9 : i64 = self.nlam[nid × 1¤ptrdiff]
             if bt9 ≠ ⁻1 and self.lam_listable(bt9):
                 let pts9 : mut i64[] = []
@@ -1847,7 +1847,7 @@ impl Lower:
                 if self.threads_any(thr9):
                     return self.lower_thread(thr9, vr9, ⁻1, box9)
             let off9 : i64 = @dropunit(#self.extra)
-            self.extra.push(argc + 1)
+            self.extra.push(@dropunit(argc) + 1)
             foreach v := vr9:
                 self.extra.push(v)
             self.extra.push(box9)
@@ -1858,15 +1858,15 @@ impl Lower:
             return d9
         let vregs : mut i64[] = []
         foreach i := 0…argc:
-            let an : i64 = self.a.extra[(args_off + 1 + i) × 1¤ptrdiff]
+            let an : i64 = self.a.extra[args_off + 1 + i]
             vregs.push(self.copied_arg(an, self.lower_expr(an)))
         let f : i64 = self.fname_index(name)
         if f ≠ ⁻1 and self.a.fns[f × 1¤ptrdiff].is_listable:
             let pts : mut i64[] = []
-            let po : i64 = self.a.fns[f × 1¤ptrdiff].params_off
-            let pn : i64 = self.a.extra[po × 1¤ptrdiff]
+            let po : i64 ¤"aextra" = self.a.fns[f × 1¤ptrdiff].params_off
+            let pn : i64 ¤ptrdiff = self.a.extra[po] × 1¤ptrdiff
             foreach pk := 0…pn:
-                pts.push(self.a.extra[(po + 2 + pk × 2) × 1¤ptrdiff])
+                pts.push(self.a.extra[po + 2 + pk × 2])
             let thr : i64[] = self.thread_mask(args_off, argc, pts)
             if self.threads_any(thr):
                 return self.lower_thread(thr, vregs, f, ⁻1)
@@ -1893,11 +1893,11 @@ impl Lower:
         let d := self.a.structs[ty_sidx(sty) × 1¤ptrdiff]
         if d.inv_off = ⁻1:
             return
-        let n : i64 = self.a.extra[d.inv_off × 1¤ptrdiff]
+        let n : i64 ¤ptrdiff = self.a.extra[d.inv_off] × 1¤ptrdiff
         let saved : i64 = self.inv_subject
         self.inv_subject ← subject
         foreach j := 0…n:
-            let c : i64 = self.a.extra[(d.inv_off + 1 + j) × 1¤ptrdiff]
+            let c : i64 = self.a.extra[d.inv_off + 1 + j]
             let cv : i64 = self.lower_expr(c)
             let lok : i64 = self.label()
             self.ir(IR_JNZ, cv, lok, 0, 0, 0)
@@ -1914,16 +1914,16 @@ impl Lower:
     fn lam_listable(&self, t : i64) → bool:
         self.a.ltf[ty_lidx(t) × 1¤ptrdiff] = 1
 
-    fn lam_pt(&self, t : i64, i : i64) → i64:
-        self.a.lte[(self.a.lts[ty_lidx(t) × 1¤ptrdiff] + i) × 1¤ptrdiff]
+    fn lam_pt(&self, t : i64, i : i64 ¤ptrdiff) → i64:
+        self.a.lte[self.a.lts[ty_lidx(t) × 1¤ptrdiff] × 1¤ptrdiff + i]
 
-    fn thread_mask(&mut self, args_off : i64, argc : i64, pts : i64[]) → i64[]:
+    fn thread_mask(&mut self, args_off : i64 ¤"aextra", argc : i64 ¤ptrdiff, pts : i64[]) → i64[]:
         let thr : mut i64[] = []
         foreach i := 0…argc:
-            let an : i64 = self.a.extra[(args_off + 1 + i) × 1¤ptrdiff]
+            let an : i64 = self.a.extra[args_off + 1 + i]
             let at : i64 = ty_strip_ref(self.tof(an))
-            let pb : i64 = ty_strip_ref(pts[i × 1¤ptrdiff])
-            if ty_is_arr(at) and not ty_is_arr(pb) and ty_ref_kind(pts[i × 1¤ptrdiff]) = 0:
+            let pb : i64 = ty_strip_ref(pts[i])
+            if ty_is_arr(at) and not ty_is_arr(pb) and ty_ref_kind(pts[i]) = 0:
                 thr.push(1)
             else:
                 thr.push(0)
@@ -2038,12 +2038,12 @@ impl Lower:
         self.ir(IR_ACYC, len, v, 0, d, 0)
         d
 
-    fn lower_assert(&mut self, nid : i64, tok : i64, args_off : i64, is_eq : bool):
+    fn lower_assert(&mut self, nid : i64, tok : i64, args_off : i64 ¤"aextra", is_eq : bool):
         let line : i64 ¤"line" = self.tok_line(tok)
         let lok : i64 = self.label()
         if is_eq:
-            let x : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
-            let y : i64 = self.a.extra[(args_off + 2) × 1¤ptrdiff]
+            let x : i64 = self.a.extra[args_off + 1]
+            let y : i64 = self.a.extra[args_off + 2]
             let c : mut i64 = 0
             if ty_is_opt(self.tof(x)) and ty_is_opt(self.tof(y)):
                 c ← self.lower_opt_eq(x, y)
@@ -2071,25 +2071,25 @@ impl Lower:
             let m : i64 = self.intern("assertion does not hold (line " ⧺ i64_str(@dropunit(line)) ⧺ ")\n")
             self.ir(IR_ABORT, m, 0, 0, 0, 0)
         else:
-            let cv : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            let cv : i64 = self.lower_expr(self.a.extra[args_off + 1])
             self.ir(IR_JNZ, cv, lok, 0, 0, 0)
-            let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
+            let argc : i64 ¤ptrdiff = self.a.extra[args_off] × 1¤ptrdiff
             let msg : mut str = "assertion does not hold (line " ⧺ i64_str(@dropunit(line)) ⧺ ")\n"
             if argc = 2:
-                let marg : i64 = self.a.extra[(args_off + 2) × 1¤ptrdiff]
+                let marg : i64 = self.a.extra[args_off + 2]
                 msg ← "assertion does not hold (line " ⧺ i64_str(@dropunit(line)) ⧺ "): " ⧺ self.a.strs[self.a.na[marg × 1¤ptrdiff] × 1¤ptrdiff] ⧺ "\n"
             let m : i64 = self.intern(msg)
             self.ir(IR_ABORT, m, 0, 0, 0, 0)
         self.ir(IR_LABEL, lok, 0, 0, 0, 0)
 
-    fn lower_scall(&mut self, nid : i64, tok : i64, sb : i64, args_off : i64):
+    fn lower_scall(&mut self, nid : i64, tok : i64, sb : i64, args_off : i64 ¤"aextra"):
         if sb = SB_EXIT:
-            let v : i64 = self.lower_expr(self.a.extra[(args_off + 1) × 1¤ptrdiff])
+            let v : i64 = self.lower_expr(self.a.extra[args_off + 1])
             self.ir(IR_EXIT, v, 0, 0, 0, 0)
             return
-        let fmt : i64 = self.a.extra[(args_off + 1) × 1¤ptrdiff]
+        let fmt : i64 = self.a.extra[args_off + 1]
         let cs : str = self.a.strs[self.a.na[fmt × 1¤ptrdiff] × 1¤ptrdiff]
-        let argi : mut i64 = 2
+        let argi : mut i64 ¤ptrdiff = 2
         // The text between the fields is taken where it stands: what
         // runs from the end of the last field to the start of this one
         // is one slice of the format, not a string gathered a
@@ -2102,7 +2102,7 @@ impl Lower:
                 if chunk ≠ "":
                     let m : i64 = self.intern(chunk)
                     self.ir(IR_PRINTS, m, 0, 0, 0, 0)
-                let arg : i64 = self.a.extra[(args_off + argi) × 1¤ptrdiff]
+                let arg : i64 = self.a.extra[args_off + argi]
                 self.lower_print_arg(arg)
                 argi ← argi + 1
                 i ← i + 2
@@ -2191,11 +2191,11 @@ impl Lower:
     // position being what that means, so the frame is used again
     // rather than stacked.
     fn lower_tail(&mut self, na : i64):
-        let args_off : i64 = self.a.na[na × 1¤ptrdiff]
-        let argc : i64 = self.a.extra[args_off × 1¤ptrdiff]
+        let args_off : i64 ¤"aextra" = self.a.na[na × 1¤ptrdiff] × 1¤"aextra"
+        let argc : i64 ¤ptrdiff = self.a.extra[args_off] × 1¤ptrdiff
         let vals : mut i64[] = []
         foreach i := 0…argc:
-            let an : i64 = self.a.extra[(args_off + 1 + i) × 1¤ptrdiff]
+            let an : i64 = self.a.extra[args_off + 1 + i]
             let v0 : i64 = self.copied_arg(an, self.lower_expr(an))
             let v : mut i64 = v0
             if v0 >= 0 and v0 < self.tail_np:
@@ -2210,7 +2210,7 @@ impl Lower:
         assert(@dropunit(#vals) = argc, "one value per argument")
         self.decide(self.tok_line(self.a.ntok[na × 1¤ptrdiff]), "tail-call-loop", "")
         foreach j := 0…argc:
-            self.ir(IR_MOV, vals[j × 1¤ptrdiff], 0, 0, j, 0)
+            self.ir(IR_MOV, vals[j], 0, 0, @dropunit(j), 0)
         self.ir(IR_JMP, self.tail_label, 0, 0, 0, 0)
 
     fn lower_ret_value(&mut self, na : i64):
@@ -3416,11 +3416,11 @@ fn lower_fn(lw : &mut Lower, a : Ast, chk : Chk, f : i64) → IrFn:
     // statement, so anything taken from there is written over by the
     // first thing the body computes.  The pointer gets a slot of its
     // own, below where the temporaries begin.
-    let np0 : i64 = a.extra[d.params_off × 1¤ptrdiff]
+    let np0 : i64 ¤ptrdiff = a.extra[d.params_off] × 1¤ptrdiff
     let sized_ret : bool = farr_is_packed(a, d.ret)
-    let sbase : i64 = chk.fslots[f × 1¤ptrdiff] ⌈ (np0 + 1)
+    let sbase : i64 = chk.fslots[f × 1¤ptrdiff] ⌈ (@dropunit(np0) + 1)
     let obase : i64 = if sized_ret: sbase + 1 else: chk.fslots[f × 1¤ptrdiff]
-    let nolds : i64 = if d.olds_off = ⁻1: 0 else: a.extra[d.olds_off × 1¤ptrdiff]
+    let nolds : i64 = if d.olds_off = ⁻1: 0 else: a.extra[d.olds_off]
     lw.old_base ← obase
     lw.tbase ← obase + nolds
     lw.tnext ← lw.tbase
@@ -3432,7 +3432,7 @@ fn lower_fn(lw : &mut Lower, a : Ast, chk : Chk, f : i64) → IrFn:
     lw.sret ← ⁻1
     lw.cur_fname ← d.name
     if sized_ret:
-        lw.ir(IR_MOV, np0, 0, 0, sbase, 0)
+        lw.ir(IR_MOV, @dropunit(np0), 0, 0, sbase, 0)
         lw.sret ← sbase
     // Where this function calls itself in tail position, the call is a
     // loop: the parameters take the new values and the body starts
@@ -3447,16 +3447,16 @@ fn lower_fn(lw : &mut Lower, a : Ast, chk : Chk, f : i64) → IrFn:
     // answering a sized array, whose caller hands it the room to
     // answer into and whose recursion is not the shape this turns.
     lw.tail_fn ← f
-    lw.tail_np ← np0
+    lw.tail_np ← @dropunit(np0)
     lw.tail_label ← ⁻1
     if not sized_ret and d.post_off = ⁻1:
         lw.tail_label ← lw.label()
         lw.ir(IR_LABEL, lw.tail_label, 0, 0, 0, 0)
     if d.pre_off ≠ ⁻1:
-        let n : i64 = a.extra[d.pre_off × 1¤ptrdiff]
+        let n : i64 ¤ptrdiff = a.extra[d.pre_off] × 1¤ptrdiff
         foreach j := 0…n:
             lw.tnext ← lw.tbase
-            let c : i64 = a.extra[(d.pre_off + 1 + j) × 1¤ptrdiff]
+            let c : i64 = a.extra[d.pre_off + 1 + j]
             let cv : i64 = lw.lower_expr(c)
             let lok : i64 = lw.label()
             lw.ir(IR_JNZ, cv, lok, 0, 0, 0)
@@ -3466,10 +3466,10 @@ fn lower_fn(lw : &mut Lower, a : Ast, chk : Chk, f : i64) → IrFn:
     // What @old says is what the call began with, so it is read here:
     // after the preconditions, before a statement of the body.
     if d.olds_off ≠ ⁻1:
-        let no : i64 = a.extra[d.olds_off × 1¤ptrdiff]
+        let no : i64 ¤ptrdiff = a.extra[d.olds_off] × 1¤ptrdiff
         foreach oi := 0…no:
             lw.tnext ← lw.tbase
-            let on : i64 = a.extra[(d.olds_off + 1 + oi) × 1¤ptrdiff]
+            let on : i64 = a.extra[d.olds_off + 1 + oi]
             let ov : i64 = lw.lower_expr(a.na[on × 1¤ptrdiff])
             lw.ir(IR_MOV, ov, 0, 0, obase + a.nb[on × 1¤ptrdiff], 0)
         lw.tnext ← lw.tbase
@@ -3477,16 +3477,16 @@ fn lower_fn(lw : &mut Lower, a : Ast, chk : Chk, f : i64) → IrFn:
         lw.post_label ← lw.label()
         // the checker gave the result's name the slot after the
         // parameters, so the value is put where the conditions read it
-        lw.res_vreg ← a.extra[d.params_off × 1¤ptrdiff]
+        lw.res_vreg ← a.extra[d.params_off]
     lw.lower_block(d.body, true, d.ret)
     if d.ret = TY_UNIT:
         lw.ir(IR_RET, ⁻1, 0, 0, 0, 0)
     if lw.post_label ≠ ⁻1:
         lw.ir(IR_LABEL, lw.post_label, 0, 0, 0, 0)
-        let n : i64 = a.extra[d.post_off × 1¤ptrdiff]
+        let n : i64 ¤ptrdiff = a.extra[d.post_off] × 1¤ptrdiff
         foreach j := 0…n:
             lw.tnext ← lw.tbase
-            let c : i64 = a.extra[(d.post_off + 2 + j × 2) × 1¤ptrdiff]
+            let c : i64 = a.extra[d.post_off + 2 + j × 2]
             let cv : i64 = lw.lower_expr(c)
             let lok : i64 = lw.label()
             lw.ir(IR_JNZ, cv, lok, 0, 0, 0)

@@ -1,0 +1,29 @@
+// `unit X → Y` says a value measured X may go wherever one measured Y
+// is wanted, while staying something of its own.  The way back is not
+// open: what stands in for a thing is not the thing.  A table's own
+// measure is declared this way, so that a place in it subscripts the
+// table and still cannot be handed a count of anything else.
+
+unit slot → ptrdiff
+unit step → slot
+
+@start
+@impure
+fn main():
+    let table : i64[] = [3, 10, 20, 30]
+    let at : i64 ¤"slot" = 0
+
+    // a place stands in for the ptrdiff the subscript wants
+    let count : i64 ¤ptrdiff = table[at] × 1¤ptrdiff
+    std.println("count {}", @dropunit(count))
+
+    // and the two add, because one of them stands in for the other
+    let sum : mut i64 = 0
+    foreach i := 0…count:
+        sum ← sum + table[at + 1 + i]
+    std.println("sum {}", sum)
+
+    // standing in carries down a chain: a step stands in for a slot,
+    // which stands in for the ptrdiff that subscripts
+    let far : i64 ¤"step" = 2
+    std.println("at {}", table[far])

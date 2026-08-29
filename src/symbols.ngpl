@@ -36,15 +36,15 @@ fn hex16(v : i64) → str:
 // end.
 fn sdef_norm(a : Ast, toks : Toks, src : byte[], si : i64, seen : i64[]) → str:
     let d := a.structs[si × 1¤ptrdiff]
-    let n : i64 = a.extra[d.fields_off × 1¤ptrdiff]
+    let n : i64 ¤ptrdiff = a.extra[d.fields_off] × 1¤ptrdiff
     let out : mut str = d.name ⧺ "{"
     let deeper : mut i64[] = []
     foreach v := seen:
         deeper.push(v)
     deeper.push(si)
     foreach i := 0…n:
-        let ftok : i64 = a.extra[(d.fields_off + 1 + i × 2) × 1¤ptrdiff]
-        let fty : i64 = a.extra[(d.fields_off + 2 + i × 2) × 1¤ptrdiff]
+        let ftok : i64 = a.extra[d.fields_off + 1 + i × 2]
+        let fty : i64 = a.extra[d.fields_off + 2 + i × 2]
         out ← out ⧺ (if i = 0: "" else: ",") ⧺ run_str(src, toks.off[ftok × 1¤ptrdiff], toks.len[ftok × 1¤ptrdiff]) ⧺ ":" ⧺ sym_type(a, toks, src, fty, deeper)
     out ⧺ "}"
 
@@ -108,11 +108,11 @@ fn sym_type(a : Ast, toks : Toks, src : byte[], t0 : i64, seen : i64[]) → str:
 // the whole signature: the name, the parameters' types, the answer
 fn fn_symbol(a : Ast, toks : Toks, src : byte[], f : i64) → str:
     let d := a.fns[f × 1¤ptrdiff]
-    let np : i64 = a.extra[d.params_off × 1¤ptrdiff]
+    let np : i64 ¤ptrdiff = a.extra[d.params_off] × 1¤ptrdiff
     let none : i64[] = []
     // the whole name: the module it was written in, then its own
     let out : mut str = (if d.modname = "": d.name else: d.modname ⧺ "." ⧺ d.name) ⧺ "("
     foreach i := 0…np:
-        out ← out ⧺ (if i = 0: "" else: ", ") ⧺ sym_type(a, toks, src, a.extra[(d.params_off + 2 + i × 2) × 1¤ptrdiff], none)
+        out ← out ⧺ (if i = 0: "" else: ", ") ⧺ sym_type(a, toks, src, a.extra[d.params_off + 2 + i × 2], none)
     out ⧺ ") → " ⧺ sym_type(a, toks, src, d.ret, none)
 

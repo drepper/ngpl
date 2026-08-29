@@ -1,0 +1,15 @@
+// A measure that stands in for one that stands in for it says nothing
+// about which of the two is the wider, so the circle is refused.  It
+// is looked for after the whole file has been read, because while the
+// names were being read the one closing the circle had not been
+// written yet.
+
+unit a → b
+unit b → c
+unit c → a
+
+@start
+@impure
+fn main():
+    let x : i64 ¤"a" = 1
+    std.println("{}", @dropunit(x))

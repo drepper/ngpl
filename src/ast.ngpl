@@ -191,11 +191,19 @@ let TYNAMES : std.dict(str, i64) = (⸨
     "bool": 2, "str": 3, "char": 4, "byte": 16,
     "int": 11⸩)
 
+// Where something sits in the extra table, and how many slots it takes
+// up there.  The table is one flat array of plain numbers -- a count
+// and then whatever that count describes -- so a place in it is nothing
+// a node id or a token index is, and saying so is what keeps the three
+// apart.  It stands in for a ptrdiff because that is what subscripts
+// the table.
+unit aextra → ptrdiff
+
 struct FnDef:
     name : str
     modname : str        // the module it was written in, "" for the global one
     tok : i64
-    params_off : i64     // extra: [n, name-token, type, …]
+    params_off : i64 ¤"aextra"     // extra: [n, name-token, type, …]
     ret : i64
     body : i64
     is_export : bool     // its symbol is one others may link against
@@ -207,12 +215,12 @@ struct FnDef:
     is_test : bool
     is_listable : bool   // handed a container where it asked for one of the
                          // things in it, it is asked of each of them
-    olds_off : i64       // extra: [n, @old node…] or ⁻1.  Read before a
+    olds_off : i64 ¤"aextra"       // extra: [n, @old node…] or ⁻1.  Read before a
                          // statement of the body runs, so a postcondition
                          // may say what a parameter was rather than what
                          // it has become.
-    pre_off : i64        // extra: [n, expr…] or ⁻1
-    post_off : i64       // extra: [n, name-token, expr, …] or ⁻1
+    pre_off : i64 ¤"aextra"        // extra: [n, expr…] or ⁻1
+    post_off : i64 ¤"aextra"       // extra: [n, name-token, expr, …] or ⁻1
     // Which tokens the definition is written in, from its first
     // annotation to the last token of its body.  The bill of materials
     // hashes these: what a function is, rather than how it was typed.
@@ -222,9 +230,9 @@ struct FnDef:
 struct SDef:
     name : str
     tok : i64
-    fields_off : i64     // extra: [n, field-token, type, …]
+    fields_off : i64 ¤"aextra"     // extra: [n, field-token, type, …]
     is_repr_c : bool     // @repr(C): the fields sit where C would put them
-    inv_off : i64        // extra: [n, condition…] or ⁻1.  What is always
+    inv_off : i64 ¤"aextra"        // extra: [n, condition…] or ⁻1.  What is always
                          // true of one of these: asked wherever one is
                          // made and wherever a field of one is written.
 

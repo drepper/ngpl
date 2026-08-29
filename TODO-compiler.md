@@ -576,9 +576,25 @@ Tooling
     one that doubles rather than counts (the hash table's capacity in
     lower.ngpl).
 
-[ ] Fifty-two loop counters still put ¤ptrdiff back on at every index.
-    Each is a walk whose limit is a count read out of the AST arena as a
-    plain i64, and measuring the counter means measuring that count --
-    which means measuring the arena offsets it is added to.  That is one
-    change, not fifty-two, and it is the next one worth making in the
-    units sweep.
+[x] The AST's extra table has a measure of its own.  `unit aextra →
+    ptrdiff` says a place in that table goes wherever a subscript is
+    wanted while staying something a node id and a token index are not,
+    and params_off, pre_off, post_off, olds_off, fields_off, inv_off and
+    args_off carry it -- in the struct that holds them, in every
+    signature that takes one, and from the moment the parser makes one
+    at extra_end().  The counts the table stores at those places are
+    read as counts, so the walks over them carry ¤ptrdiff and index
+    without putting the measure back on: 45 counters that did are now
+    20, and 149 multiplications by 1¤ptrdiff are gone.
+
+    Two places where the same name means something else were found by
+    doing this, and both are now written so: in the back end args_off is
+    where the kernel's arguments sit in the writable data, counted in
+    bytes; and in check_scall a builtin's own member index rides where
+    an argument list would, which the comment beside it had already
+    said.
+
+    What is left is twenty counters over tables that are not this one --
+    check.ngpl's enum members and captures, the IR's own extra, a
+    digest's blocks -- each wanting the same treatment for its own
+    table.

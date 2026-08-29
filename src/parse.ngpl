@@ -203,8 +203,12 @@ impl Parser:
         self.nc.push(c)
         id
 
-    fn push_list(&mut self, items : i64[]) → i64:
-        let off : i64 = @dropunit(#self.extra)
+    // where the next thing written into the extra table will land
+    fn extra_end(&self) → i64 ¤"aextra":
+        @dropunit(#self.extra) × 1¤"aextra"
+
+    fn push_list(&mut self, items : i64[]) → i64 ¤"aextra":
+        let off : i64 ¤"aextra" = self.extra_end()
         self.extra.push(@dropunit(#items))
         foreach a := items:
             self.extra.push(a)
@@ -417,31 +421,31 @@ impl Parser:
         // stored into ttl beside plain numbers, and handed back as a
         // plain type code, so the measure comes off at the declaration
         let n : i64 = @dropunit(#es)
-        let m : i64 = @dropunit(#self.tts)
-        foreach sh := 0…m:
-            if self.ttl[sh × 1¤ptrdiff] = n:
-                let st : i64 = self.tts[sh × 1¤ptrdiff]
+        let at : i64 = @dropunit(#self.tts)
+        foreach sh := 0¤ptrdiff…#self.tts:
+            if self.ttl[sh] = n:
+                let st : i64 = self.tts[sh]
                 let same : mut bool = true
                 foreach i := 0…n:
                     same ← same and self.tte[(st + i) × 1¤ptrdiff] = es[i × 1¤ptrdiff]
                 if same:
-                    return sh
+                    return @dropunit(sh)
         self.tts.push(@dropunit(#self.tte))
         self.ttl.push(n)
         foreach e := es:
             self.tte.push(e)
-        m
+        at
 
     fn farr_intern(&mut self, elem : i64, size : i64) → i64:
         // handed back as a plain type code, so the measure comes off
         // at the declaration rather than at the answer
-        let m : i64 = @dropunit(#self.fae)
-        foreach i := 0…m:
-            if self.fae[i × 1¤ptrdiff] = elem and self.fas[i × 1¤ptrdiff] = size:
-                return i
+        let at : i64 = @dropunit(#self.fae)
+        foreach i := 0¤ptrdiff…#self.fae:
+            if self.fae[i] = elem and self.fas[i] = size:
+                return @dropunit(i)
         self.fae.push(elem)
         self.fas.push(size)
-        m
+        at
 
     // u8[W] for every algorithm there is, so a digest's type is there
     // whichever one a program asks for
@@ -459,30 +463,29 @@ impl Parser:
         // stored into ltl, which holds plain numbers beside this one,
         // so the measure comes off here rather than at every use
         let n : i64 = @dropunit(#pts)
-        let m : i64 = @dropunit(#self.ltl)
-        foreach sh := 0…m:
-            if self.ltl[sh × 1¤ptrdiff] = n and self.ltf[sh × 1¤ptrdiff] = lstb:
-                let st : i64 = self.lts[sh × 1¤ptrdiff]
+        let at : i64 = @dropunit(#self.ltl)
+        foreach sh := 0¤ptrdiff…#self.ltl:
+            if self.ltl[sh] = n and self.ltf[sh] = lstb:
+                let st : i64 = self.lts[sh]
                 let same : mut bool = self.lte[(st + n) × 1¤ptrdiff] = ret
                 foreach i := 0…n:
                     same ← same and self.lte[(st + i) × 1¤ptrdiff] = pts[i × 1¤ptrdiff]
                 if same:
-                    return sh
+                    return @dropunit(sh)
         self.lts.push(@dropunit(#self.lte))
         self.ltl.push(n)
         self.ltf.push(lstb)
         foreach pt := pts:
             self.lte.push(pt)
         self.lte.push(ret)
-        m
+        at
 
     // equal matrix shapes share one type code, as tuple shapes do
     fn mat_intern(&mut self, elem : i64, r : i64, c : i64, d : i64) → i64:
         // handed back as a plain type code, as the other interns are
-        let m : i64 = @dropunit(#self.mel)
-        foreach i := 0…m:
-            if self.mel[i × 1¤ptrdiff] = elem and self.mrr[i × 1¤ptrdiff] = r and self.mcc[i × 1¤ptrdiff] = c and self.mdd[i × 1¤ptrdiff] = d:
-                return i
+        foreach i := 0¤ptrdiff…#self.mel:
+            if self.mel[i] = elem and self.mrr[i] = r and self.mcc[i] = c and self.mdd[i] = d:
+                return @dropunit(i)
         // What one subscript answers is settled here, where a shape may
         // still be interned, so that reading it later -- from a &self
         // that cannot intern -- is a plain lookup.
@@ -710,7 +713,7 @@ impl Parser:
                 self.pos ← self.pos + 1
         self.braces ← self.braces - 1
         _ ← self.eat(TK_RBRACE, "'}' closing the block")
-        let off : i64 = self.push_list(stmts)
+        let off : i64 = @dropunit(self.push_list(stmts))
         self.mknode(NK_BLOCK, 0, off, 0, 0)
 
     fn parse_postfix(&mut self, base0 : i64) → i64:
@@ -925,7 +928,7 @@ impl Parser:
                     elems.push(self.parse_expr())
                     if self.failed(): return 0
                 _ ← self.eat(TK_RPAR, "')' closing the tuple")
-                let toff : i64 = self.push_list(elems)
+                let toff : i64 = @dropunit(self.push_list(elems))
                 return self.mknode(NK_TUPLE, at, toff, 0, 0)
             _ ← self.eat(TK_RPAR, "')' closing the parenthesis")
             return self.parse_postfix(e)
@@ -943,7 +946,7 @@ impl Parser:
                     else:
                         break
             _ ← self.eat(TK_RBRACK, "']' closing the array literal")
-            let off : i64 = self.push_list(elems)
+            let off : i64 = @dropunit(self.push_list(elems))
             return self.mknode(NK_ARRLIT, at, off, 0, 0)
         if k = TK_AT:
             self.pos ← self.pos + 1
@@ -1421,7 +1424,7 @@ impl Parser:
                         // nothing owns it now, so it is skipped whole
                         self.skip_block()
             _ ← self.eat(TK_DEDENT, "the end of the block")
-        let off : i64 = self.push_list(stmts)
+        let off : i64 = @dropunit(self.push_list(stmts))
         self.mknode(NK_BLOCK, 0, off, 0, 0)
 
     // step over a balanced INDENT…DEDENT run
@@ -1950,21 +1953,21 @@ impl Parser:
         let body : i64 = self.parse_block()
         if self.peek() = TK_NL:
             self.pos ← self.pos + 1
-        let params_off : i64 = @dropunit(#self.extra)
+        let params_off : i64 ¤"aextra" = self.extra_end()
         self.extra.push(@dropunit(#ptoks))
         if #ptoks > 0:
             foreach i := 0…#ptoks:
                 self.extra.push(ptoks[i])
                 self.extra.push(ptypes[i])
-        let pre_off : mut i64 = ⁻1
+        let pre_off : mut i64 ¤"aextra" = ⁻1
         if #pres > 0:
             pre_off ← self.push_list(pres)
-        let olds_off : mut i64 = ⁻1
+        let olds_off : mut i64 ¤"aextra" = ⁻1
         if #self.olds > 0:
             olds_off ← self.push_list(self.olds)
-        let post_off : mut i64 = ⁻1
+        let post_off : mut i64 ¤"aextra" = ⁻1
         if #posts > 0:
-            post_off ← @dropunit(#self.extra)
+            post_off ← self.extra_end()
             self.extra.push(@dropunit(#posts))
             foreach i := 0…#posts:
                 self.extra.push(post_toks[i])
@@ -2179,16 +2182,16 @@ impl Parser:
         foreach j := 0¤ptrdiff…n:
             if self.udecay[j] ≠ 0:
                 let chain : mut str = self.unames[j]
-                let step : mut i64 = self.udecay[j]
-                let seen : mut i64 = 0
+                let step : mut i64 ¤ptrdiff = self.udecay[j] × 1¤ptrdiff
+                let seen : mut i64 ¤ptrdiff = 0
                 while step ≠ 0 and seen <= n:
-                    chain ← chain ⧺ " → " ⧺ self.unames[step × 1¤ptrdiff]
+                    chain ← chain ⧺ " → " ⧺ self.unames[step]
                     if step = j:
                         self.poisoned ← false
                         self.err_at(self.udtok[j], "a measure cannot stand in for itself, however far round it goes: " ⧺ chain)
-                        step ← 0
+                        step ← 0¤ptrdiff
                     else:
-                        step ← self.udecay[step × 1¤ptrdiff]
+                        step ← self.udecay[step] × 1¤ptrdiff
                         seen ← seen + 1
 
     // `module a` says where the definitions after it live, until the
@@ -2346,13 +2349,13 @@ impl Parser:
         _ ← self.eat(TK_DEDENT, "the end of the struct")
         if self.peek() = TK_NL:
             self.pos ← self.pos + 1
-        let off : i64 = @dropunit(#self.extra)
+        let off : i64 ¤"aextra" = self.extra_end()
         self.extra.push(@dropunit(#ftoks))
         if #ftoks > 0:
             foreach i := 0…#ftoks:
                 self.extra.push(ftoks[i])
                 self.extra.push(ftypes[i])
-        let inv_off : mut i64 = ⁻1
+        let inv_off : mut i64 ¤"aextra" = ⁻1
         if #invs > 0:
             inv_off ← self.push_list(invs)
         self.structs.push(SDef{name: name, tok: name_tok, fields_off: off,

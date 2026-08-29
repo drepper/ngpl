@@ -1,0 +1,9 @@
+tests/compile/refuse/measure_circle.ngpl:7:10: error: a measure cannot stand in for itself, however far round it goes: a → b → c → a
+  7 | unit a → b
+    |          ^
+tests/compile/refuse/measure_circle.ngpl:8:10: error: a measure cannot stand in for itself, however far round it goes: b → c → a → b
+  8 | unit b → c
+    |          ^
+tests/compile/refuse/measure_circle.ngpl:9:10: error: a measure cannot stand in for itself, however far round it goes: c → a → b → c
+  9 | unit c → a
+    |          ^

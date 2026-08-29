@@ -149,10 +149,10 @@ fn dump_ast(a : Ast, src : byte[], toks : Toks):
     foreach f := a.fns:
         std.println("fn {} ret={} impure={} start={}", f.name,
                     type_name_m(f.ret, a.umarks), f.is_impure, f.is_start)
-        let np : i64 = a.extra[f.params_off × 1¤ptrdiff]
+        let np : i64 ¤ptrdiff = a.extra[f.params_off] × 1¤ptrdiff
         foreach i := 0…np:
-            let ptok : i64 = a.extra[(f.params_off + 1 + i × 2) × 1¤ptrdiff]
-            let pty : i64 = a.extra[(f.params_off + 2 + i × 2) × 1¤ptrdiff]
+            let ptok : i64 = a.extra[f.params_off + 1 + i × 2]
+            let pty : i64 = a.extra[f.params_off + 2 + i × 2]
             std.println("  param {} : {}", run_str(src, toks.off[ptok × 1¤ptrdiff], toks.len[ptok × 1¤ptrdiff]), type_name_m(pty, a.umarks))
         dump_node(a, f.body, 1, src, toks)
     // the recipe is not among the functions, so it is shown apart from

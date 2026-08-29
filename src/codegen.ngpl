@@ -516,7 +516,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     foreach i := 0…#a.fns:
         let f : i64 = @dropunit(i)
         // the space for a sized answer arrives as one more argument
-        let np : i64 = a.extra[a.fns[i].params_off × 1¤ptrdiff] + (if farr_is_packed(a, a.fns[i].ret): 1 else: 0)
+        let np : i64 = a.extra[a.fns[i].params_off] + (if farr_is_packed(a, a.fns[i].ret): 1 else: 0)
         if chk.skipfn[i] = 1:
             // a generic no call shaped: an empty body stands in
             let sir := lower_stub_fn(&lw, np)

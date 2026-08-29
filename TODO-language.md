@@ -1423,3 +1423,13 @@ Syntax Decisions Still Open
     holds.  That is most of check.ngpl and parse.ngpl, where the scans
     that would read as quantifiers stay written as walks.  A capture
     that borrows rather than copies would open all of them.
+
+[x] `unit X → Y` had never been used by any program, and two faults sat
+    in the path that reads it.  resolve_decays walked the chain with a
+    plain counter against a measured length, and set the walk's end with
+    a bare 0 where the name it assigns to is measured -- the first the
+    interpreter refused, the second only the interpreter refused, since
+    ngplc lets a dimensionless number into a measured name.
+    tests/compile/t66_measure_decay.ngpl covers standing in, down a
+    chain of two, and tests/compile/refuse/measure_circle.ngpl covers
+    the circle that is refused.
