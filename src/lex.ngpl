@@ -42,12 +42,12 @@ fn mkcls() → i64[256]:
     t[32] ← CL_WS
     t[10] ← CL_NL
     t[9] ← CL_TAB
-    foreach d := 48…58:
-        t[d × 1¤ptrdiff] ← CL_DIGIT
-    foreach c := 97…123:
-        t[c × 1¤ptrdiff] ← CL_IDENT
-    foreach c := 65…91:
-        t[c × 1¤ptrdiff] ← CL_IDENT
+    foreach d := 48¤ptrdiff…58:
+        t[d] ← CL_DIGIT
+    foreach c := 97¤ptrdiff…123:
+        t[c] ← CL_IDENT
+    foreach c := 65¤ptrdiff…91:
+        t[c] ← CL_IDENT
     t[95] ← CL_IDENT
     t[34] ← CL_QUOTE
     t[47] ← CL_SLASH
@@ -470,10 +470,8 @@ impl Lexer:
             if b1 = 63:
                 k ← TK_COALESCE
                 w ← 2
-        let i : mut i64 = 0
-        while i < w:
+        foreach i := 0…w:
             self.adv()
-            i ← i + 1
         self.emit(k, spos, w, scol, 0, 0)
 
     fn read_glyph(&mut self, c : i64):

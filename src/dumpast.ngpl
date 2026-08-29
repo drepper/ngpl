@@ -5,10 +5,8 @@
 @impure
 fn dump_node(a : Ast, id : i64, depth : i64, src : byte[], toks : Toks):
     let pad : mut str = ""
-    let d : mut i64 = 0
-    while d < depth:
+    foreach d := 0…depth:
         pad ← pad ⧺ "  "
-        d ← d + 1
     let k : i64 = a.nkind[id × 1¤ptrdiff]
     let tok : i64 = a.ntok[id × 1¤ptrdiff]
     let na : i64 = a.na[id × 1¤ptrdiff]
@@ -26,10 +24,8 @@ fn dump_node(a : Ast, id : i64, depth : i64, src : byte[], toks : Toks):
     elif k = NK_ARRLIT:
         std.println("{}arrlit", pad)
         let n : i64 = a.extra[na × 1¤ptrdiff]
-        let i : mut i64 = 0
-        while i < n:
+        foreach i := 0…n:
             dump_node(a, a.extra[(na + 1 + i) × 1¤ptrdiff], depth + 1, src, toks)
-            i ← i + 1
     elif k = NK_INDEX:
         std.println("{}index", pad)
         dump_node(a, na, depth + 1, src, toks)
@@ -40,35 +36,27 @@ fn dump_node(a : Ast, id : i64, depth : i64, src : byte[], toks : Toks):
     elif k = NK_CALL:
         std.println("{}call {}", pad, ttext)
         let n : i64 = a.extra[na × 1¤ptrdiff]
-        let i : mut i64 = 0
-        while i < n:
+        foreach i := 0…n:
             dump_node(a, a.extra[(na + 1 + i) × 1¤ptrdiff], depth + 1, src, toks)
-            i ← i + 1
     elif k = NK_SCALL:
         std.println("{}scall {}", pad, na)
         let n : i64 = a.extra[nb × 1¤ptrdiff]
-        let i : mut i64 = 0
-        while i < n:
+        foreach i := 0…n:
             dump_node(a, a.extra[(nb + 1 + i) × 1¤ptrdiff], depth + 1, src, toks)
-            i ← i + 1
     elif k = NK_MCALL:
         std.println("{}mcall {}", pad, ttext)
         dump_node(a, na, depth + 1, src, toks)
         let n : i64 = a.extra[nb × 1¤ptrdiff]
-        let i : mut i64 = 0
-        while i < n:
+        foreach i := 0…n:
             dump_node(a, a.extra[(nb + 1 + i) × 1¤ptrdiff], depth + 1, src, toks)
-            i ← i + 1
     elif k = NK_REF:
         std.println("{}ref {}", pad, nb)
         dump_node(a, na, depth + 1, src, toks)
     elif k = NK_SLIT:
         std.println("{}slit {}", pad, ttext)
         let n : i64 = a.extra[na × 1¤ptrdiff]
-        let i : mut i64 = 0
-        while i < n:
+        foreach i := 0…n:
             dump_node(a, a.extra[(na + 2 + i × 2) × 1¤ptrdiff], depth + 1, src, toks)
-            i ← i + 1
     elif k = NK_FIELD:
         std.println("{}field {}", pad, ttext)
         dump_node(a, na, depth + 1, src, toks)
@@ -79,10 +67,8 @@ fn dump_node(a : Ast, id : i64, depth : i64, src : byte[], toks : Toks):
     elif k = NK_BLOCK:
         std.println("{}block", pad)
         let n : i64 = a.extra[na × 1¤ptrdiff]
-        let i : mut i64 = 0
-        while i < n:
+        foreach i := 0…n:
             dump_node(a, a.extra[(na + 1 + i) × 1¤ptrdiff], depth + 1, src, toks)
-            i ← i + 1
     elif k = NK_LET:
         std.println("{}let {} mut={} ty={}", pad, ttext, nb, type_name_m(nc, a.umarks))
         dump_node(a, na, depth + 1, src, toks)
@@ -123,15 +109,13 @@ fn dump_node(a : Ast, id : i64, depth : i64, src : byte[], toks : Toks):
         std.println("{}match-enum", pad)
         dump_node(a, na, depth + 1, src, toks)
         let mn : i64 = a.extra[nb × 1¤ptrdiff]
-        let mi : mut i64 = 0
-        while mi < mn:
+        foreach mi := 0…mn:
             let et : i64 = a.extra[(nb + 2 + mi × 3) × 1¤ptrdiff]
             let mt : i64 = a.extra[(nb + 3 + mi × 3) × 1¤ptrdiff]
             std.println("{}  arm {}.{}", pad,
                         run_str(src, toks.off[et × 1¤ptrdiff], toks.len[et × 1¤ptrdiff]),
                         run_str(src, toks.off[mt × 1¤ptrdiff], toks.len[mt × 1¤ptrdiff]))
             dump_node(a, a.extra[(nb + 4 + mi × 3) × 1¤ptrdiff], depth + 2, src, toks)
-            mi ← mi + 1
         if a.extra[(nb + 1) × 1¤ptrdiff] ≠ ⁻1:
             std.println("{}  arm _", pad)
             dump_node(a, a.extra[(nb + 1) × 1¤ptrdiff], depth + 2, src, toks)
@@ -166,12 +150,10 @@ fn dump_ast(a : Ast, src : byte[], toks : Toks):
         std.println("fn {} ret={} impure={} start={}", f.name,
                     type_name_m(f.ret, a.umarks), f.is_impure, f.is_start)
         let np : i64 = a.extra[f.params_off × 1¤ptrdiff]
-        let i : mut i64 = 0
-        while i < np:
+        foreach i := 0…np:
             let ptok : i64 = a.extra[(f.params_off + 1 + i × 2) × 1¤ptrdiff]
             let pty : i64 = a.extra[(f.params_off + 2 + i × 2) × 1¤ptrdiff]
             std.println("  param {} : {}", run_str(src, toks.off[ptok × 1¤ptrdiff], toks.len[ptok × 1¤ptrdiff]), type_name_m(pty, a.umarks))
-            i ← i + 1
         dump_node(a, f.body, 1, src, toks)
     // the recipe is not among the functions, so it is shown apart from
     // them; a dump that left it out would not be a view of the file

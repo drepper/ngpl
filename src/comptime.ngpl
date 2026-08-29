@@ -312,12 +312,10 @@ impl Cev:
 
     fn ev_block(&mut self, off : i64) → i64:
         let n : i64 = self.a.extra[off × 1¤ptrdiff]
-        let i : mut i64 = 0
-        while i < n:
+        foreach i := 0…n:
             let fl : i64 = self.ev_stmt(self.a.extra[(off + 1 + i) × 1¤ptrdiff])
             if fl ≠ EV_NORM:
                 return fl
-            i ← i + 1
         EV_NORM
 
     // The value of a block: its statements in order, its last one
@@ -475,8 +473,7 @@ impl Cev:
             self.derr(tok, "foreach walks an array, and this is " ⧺ self.cv_kind(av))
             return EV_STOP
         let name : str = self.text(tok)
-        let i : mut i64 = 0
-        while i < av.m:
+        foreach i := 0…av.m:
             self.push_scope()
             self.bind(name, cv_str(self.pool[(av.n + i) × 1¤ptrdiff]), false)
             let fl : i64 = self.ev_stmt(body)
@@ -487,7 +484,6 @@ impl Cev:
                 return fl
             if not self.tick(tok):
                 return EV_STOP
-            i ← i + 1
         EV_NORM
 
     fn cv_kind(&self, v : CVal) → str:
@@ -605,8 +601,7 @@ impl Cev:
     fn ev_arrlit(&mut self, tok : i64, off : i64) → CVal:
         let n : i64 = self.a.extra[off × 1¤ptrdiff]
         let base : i64 = @dropunit(#self.pool)
-        let i : mut i64 = 0
-        while i < n:
+        foreach i := 0…n:
             let e : CVal = self.ev_expr(self.a.extra[(off + 1 + i) × 1¤ptrdiff])
             if self.halted():
                 return cv_none()
@@ -614,7 +609,6 @@ impl Cev:
                 self.derr(tok, "a build recipe's arrays hold strings, and this element is " ⧺ self.cv_kind(e))
                 return cv_none()
             self.pool.push(e.s)
-            i ← i + 1
         assert(@dropunit(#self.pool) = base + n, "every element reached the pool")
         (CVal{tag: CV_ARR, n: base, m: n, s: ""})
 
@@ -643,14 +637,10 @@ impl Cev:
             return cv_str(l.s ⧺ r.s)
         if l.tag = CV_ARR and r.tag = CV_ARR:
             let base : i64 = @dropunit(#self.pool)
-            let i : mut i64 = 0
-            while i < l.m:
+            foreach i := 0…l.m:
                 self.pool.push(self.pool[(l.n + i) × 1¤ptrdiff])
-                i ← i + 1
-            let j : mut i64 = 0
-            while j < r.m:
+            foreach j := 0…r.m:
                 self.pool.push(self.pool[(r.n + j) × 1¤ptrdiff])
-                j ← j + 1
             return (CVal{tag: CV_ARR, n: base, m: l.m + r.m, s: ""})
         self.derr(tok, "⧺ joins two strings or two arrays, and these are " ⧺ self.cv_kind(l) ⧺ " and " ⧺ self.cv_kind(r))
         cv_none()
@@ -728,12 +718,10 @@ impl Cev:
         // the arguments are read in the caller's scope, before the
         // callee's frame hides it
         let vs : mut CVal[] = []
-        let i : mut i64 = 0
-        while i < argc:
+        foreach i := 0…argc:
             vs.push(self.ev_expr(self.a.extra[(args_off + 1 + i) × 1¤ptrdiff]))
             if self.halted():
                 return cv_none()
-            i ← i + 1
         let saved_floor : i64 = self.floor
         let saved_ret : CVal = self.ret
         self.push_scope()

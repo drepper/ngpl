@@ -1400,3 +1400,10 @@ Syntax Decisions Still Open
 [ ] [FULL] whether one glyph may mean one thing before a value and another between two, as APL's
     do and as `⌈`, `⌊` and `⧺` already do here, or whether every glyph has a fixed arity as the
     newer array languages settled on.  Run both and record what each costs a reader and a parser.
+
+[ ] The compiled subset has no `¨` and no `⌿`.  The compiler's own source
+    therefore says what it means with `foreach`, the quantifiers, `⊨`/`⊭`
+    and `⊑`/`⊒`, and every fold in it is written as a walk that adds to an
+    accumulator.  A map and a fold in core-1 would let hex16 in
+    symbols.ngpl, the digit walks in lex.ngpl and the counting loops in
+    check.ngpl be written as the expressions they are.

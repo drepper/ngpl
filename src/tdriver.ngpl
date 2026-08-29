@@ -106,7 +106,7 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
     let secnt : i64[] = se_counts(ir, ir.nvregs)
     // which results anything will read wider than their type
     let cwant : i64[] = canon_wanted(ir, ir.nvregs, t_freecmp(tg), t_freediv(tg))
-    em.begin_fn(ir.nlabels + 6 × n + 8)
+    em.begin_fn(ir.nlabels + @dropunit(6 × n) + 8)
     let sl : mut i64 = ir.nlabels
     // the objects that live in the frame take the slots past the vregs
     let nobj : i64 = (@dropunit(ir.fbytes) + 7) ÷ 8 ?? 0
@@ -330,14 +330,10 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
             // moves an argument into a register it may be travelling
             // through the very register a later stack argument would
             // borrow, and going in this order the two never meet.
-            let k : mut i64 = cnr
-            while k < argc:
+            foreach k := (cnr ⌊ argc)…argc:
                 g_argld(&em, tg, k, ir.extra[(b + 1 + k) × 1¤ptrdiff])
-                k ← k + 1
-            let kr : mut i64 = 0
-            while kr < argc and kr < cnr:
+            foreach kr := 0…(argc ⌊ cnr):
                 g_argreg(&em, tg, kr, ir.extra[(b + 1 + kr) × 1¤ptrdiff])
-                kr ← kr + 1
             g_call(&em, tg, a)
             g_retst(&em, tg, d)
             // a returned value is only as wide as its type; where this
@@ -348,10 +344,8 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
                 g_sts(&em, tg, RG_A, d)
         elif o = IR_CALLI:
             let argci : i64 = ir.extra[b × 1¤ptrdiff]
-            let ki : mut i64 = 0
-            while ki < argci:
+            foreach ki := 0…argci:
                 g_argld(&em, tg, ki, ir.extra[(b + 1 + ki) × 1¤ptrdiff])
-                ki ← ki + 1
             g_lds(&em, tg, RG_C, a)
             g_calli(&em, tg, RG_C)
             g_retst(&em, tg, d)
@@ -700,10 +694,8 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
             em.pj_id.push(id)
             em.pj_start.push(@dropunit(#em.pj_labels))
             em.pj_len.push(span)
-            let e : mut i64 = 0
-            while e < span:
+            foreach e := 0…span:
                 em.pj_labels.push(ir.extra[(b + 3 + e) × 1¤ptrdiff])
-                e ← e + 1
         elif o = IR_VTAB:
             let vmin : i64 = ir.extra[b × 1¤ptrdiff]
             let span : i64 = ir.extra[(b + 1) × 1¤ptrdiff]
@@ -732,16 +724,12 @@ fn t_emit_fn(em : &mut Emit, tg : Target, ir : IrFn, np : i64, strs : str[],
             em.pj_id.push(id2)
             em.pj_start.push(@dropunit(#em.pj_labels))
             em.pj_len.push(0 - span)
-            let e2 : mut i64 = 0
-            while e2 < span:
+            foreach e2 := 0…span:
                 em.pj_labels.push(ir.extra[(b + 3 + e2) × 1¤ptrdiff])
-                e2 ← e2 + 1
         elif o = IR_SYSC:
             let sargc : i64 = ir.extra[b × 1¤ptrdiff]
-            let sk : mut i64 = 0
-            while sk < sargc:
+            foreach sk := 0…sargc:
                 g_sysarg(&em, tg, sk, ir.extra[(b + 1 + sk) × 1¤ptrdiff])
-                sk ← sk + 1
             g_syscall(&em, tg, a)
             if d ≠ ⁻1:
                 g_sysret(&em, tg, RG_A)

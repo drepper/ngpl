@@ -300,7 +300,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                               ab_kind: [], ab_lab: [],
                               tf_pos: [], tf_lab: [], tf_form: [],
                               ff_pos: [], ff_fn: [], k_args: 0, k_alloc: 0, k_sig: 0})
-    let nglobals : i64 = @dropunit(#a.globals)
+    let nglobals : i64 ¤ptrdiff = #a.globals
     // The data a program carries falls into three kinds.  One is never
     // written and rides with the other read-only things.  One is
     // written before @start is reached and never again -- the globals
@@ -317,9 +317,9 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let n_rw : mut i64 = 0
     if nglobals > 0:
         foreach i := 0…nglobals:
-            if a.globals[i × 1¤ptrdiff].is_mut:
+            if a.globals[i].is_mut:
                 n_rw ← n_rw + 1
-            elif is_relro[i × 1¤ptrdiff] = 1:
+            elif is_relro[i] = 1:
                 n_relro ← n_relro + 1
             else:
                 n_ro ← n_ro + 1
@@ -334,11 +334,11 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let k_rw : mut i64 = 0
     if nglobals > 0:
         foreach i := 0…nglobals:
-            if a.globals[i × 1¤ptrdiff].is_mut:
+            if a.globals[i].is_mut:
                 em.gseg.push(1)
                 em.gmap.push(relro_size + SIG_SIZE + 8 × k_rw)
                 k_rw ← k_rw + 1
-            elif is_relro[i × 1¤ptrdiff] = 1:
+            elif is_relro[i] = 1:
                 em.gseg.push(1)
                 em.gmap.push(8 × k_relro)
                 k_relro ← k_relro + 1
@@ -346,7 +346,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                 em.gseg.push(0)
                 em.gmap.push(8 × k_ro)
                 k_ro ← k_ro + 1
-    assert(@dropunit(#em.gmap) = nglobals, "every global was placed")
+    assert(#em.gmap = nglobals, "every global was placed")
     let nfns : i64 = @dropunit(#a.fns)
     // _start: call the @start function, then exit 0
     let start_fn : mut i64 = ⁻1
@@ -552,7 +552,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // What the program calls, and what that calls in turn.  Everything
     // emitted so far is the program's own; the calls it made name the
     // runtime it needs, and the edge list closes over the rest.
-    let nrt : i64 = 69
+    let nrt : i64 ¤ptrdiff = 69
     foreach _ := 0…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
@@ -578,7 +578,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     em.skipping ← 0
     if #em.rt_off > 0:
         foreach i := 0…nrt:
-            assert(em.rt_off[i × 1¤ptrdiff] ≠ ⁻1 or em.rt_need[i × 1¤ptrdiff] = 0, "a needed routine was emitted")
+            assert(em.rt_off[i] ≠ ⁻1 or em.rt_need[i] = 0, "a needed routine was emitted")
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:
         foreach i := 0…#em.cf_pos:
@@ -641,10 +641,8 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             let lo2 : i64 = em.jt_starts[t]
             let hi2 : i64 = if t + 1 < #em.jt_starts: em.jt_starts[t + 1] else: @dropunit(#em.jt_entries)
             let base2 : i64 = if em.jt_is_code[t] = 1: IMAGE_BASE + PAGE else: 0
-            let e3 : mut i64 = lo2
-            while e3 < hi2:
+            foreach e3 := lo2…hi2:
                 push64(&rodata, base2 + em.jt_entries[e3 × 1¤ptrdiff])
-                e3 ← e3 + 1
     // the constant tables the runtime reads: the UTF-8 decoder's byte
     // classes, then its transition words, one to a class
     let rx_base : i64 = @dropunit(#rodata)
@@ -676,8 +674,8 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let gro_base : i64 = @dropunit(#rodata)
     if nglobals > 0:
         foreach i := 0…nglobals:
-            if em.gseg[i × 1¤ptrdiff] = 0:
-                push64(&rodata, chk.gvals[i × 1¤ptrdiff])
+            if em.gseg[i] = 0:
+                push64(&rodata, chk.gvals[i])
     if #em.gr_pos > 0:
         foreach i := 0…#em.gr_pos:
             em.patch64(em.gr_pos[i], ro_vaddr + gro_base + em.gr_off[i])
@@ -690,8 +688,8 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let data : mut u8[] = []
     if nglobals > 0:
         foreach i := 0…nglobals:
-            if em.gseg[i × 1¤ptrdiff] = 1 and em.gmap[i × 1¤ptrdiff] < relro_size:
-                push64(&data, chk.gvals[i × 1¤ptrdiff])
+            if em.gseg[i] = 1 and em.gmap[i] < relro_size:
+                push64(&data, chk.gvals[i])
     // argc, argv, envp, the auxiliary vector and the guard's two
     // bounds, then the page's rest
     foreach _ := 0…KB_SIZE:
@@ -703,8 +701,8 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         data.push(0)
     if nglobals > 0:
         foreach i := 0…nglobals:
-            if em.gseg[i × 1¤ptrdiff] = 1 and em.gmap[i × 1¤ptrdiff] >= relro_size:
-                push64(&data, chk.gvals[i × 1¤ptrdiff])
+            if em.gseg[i] = 1 and em.gmap[i] >= relro_size:
+                push64(&data, chk.gvals[i])
     // the allocator's bump pointer, the limit it runs to, and the
     // free lists a block given back is put on
     foreach _ := 0…AL_SIZE:

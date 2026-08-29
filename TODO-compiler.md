@@ -524,3 +524,39 @@ Tooling
     available at runtime but need to be the last before the sections that are not loaded.  the
     output file hash sum is computed with all the actual section content plus relevant information
     from the ELF data structures like the entry point.
+
+[x] A precondition is read only through what holds a left and a right.
+    settle_pre reads a call whose arguments are all known before anything
+    runs, and pre_const walked every node the same way: it took the two
+    sides first and asked what kind the node was afterwards.  A condition
+    written with a length, a call, or a dropped measure has no second
+    side, so the walk reached node ⁻1 and the compiler stopped with an
+    index error while checking its own source.  pre_reads names the kinds
+    the walk understands -- the six comparisons and the five arithmetic
+    operators -- and anything else answers PRE_UNKNOWN and is left to the
+    run, which is what an unreadable condition always meant.  A condition
+    written with @dropunit around a number the walk could otherwise read
+    is now left to the run as well; reading through it would settle more
+    of them and is worth doing when a reason appears.
+
+[x] A counted `while` is a walk and is written as one, in every file of
+    the compiler: 84 of them turned into `foreach`.  The one that must
+    not is the loop whose limit can move while it runs -- a walk settles
+    its range once -- and the conversion refuses those.
+
+    The other trap it found is written down in tests/compile/t65_range_order.ngpl.
+    `while i < n` starting at s and `foreach i := s…n` are the same loop
+    only while s <= n: a range whose start is above its end counts *down*
+    to it, as the spec says and as all six targets do.  In t_emit_fn the
+    start was the count of argument registers and the end the count of
+    arguments, and a call with fewer arguments than the target has
+    registers walked backwards off the front of the argument list.  It is
+    now written `(cnr ⌊ argc)…argc`, which says what it meant: the stack
+    arguments begin where the register ones run out and never past the
+    last argument.
+
+[x] A walk over a container is written with that container's own length
+    rather than a dropped-unit copy of it, so the counter carries ¤ptrdiff
+    and indexes directly.  The counts a table is walked by -- nglobals,
+    nrt -- are declared measured for the same reason, and codegen.ngpl now
+    reads as codegen_t.ngpl already did.

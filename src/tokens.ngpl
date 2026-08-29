@@ -221,10 +221,8 @@ fn i64_str(n : i64) → str:
 @pre(off >= 0 and n >= 0)
 fn run_str(src : byte[], off : i64, n : i64) → str:
     let s : mut str = ""
-    let i : mut i64 = 0
-    while i < n:
+    foreach i := 0…n:
         let b : i64 = src[(off + i) × 1¤byte]
         s ← s ⧺ b.chr()
-        i ← i + 1
     s
 

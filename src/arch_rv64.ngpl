@@ -417,14 +417,12 @@ fn rvg_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64, nreg : i64)
     else:
         rv_movimm(&em, RV_S1, frame)
         rv_R(&em, 32, RV_S1, 2, 0, 2, 51)                   // sub sp, sp, t5
-    let j : mut i64 = 0
-    while j < np:
+    foreach j := 0…np:
         if j < 8:
             rv_stslot(&em, 10 + j, j)
         else:
             rv_I(&em, 16 + 8 × (j - 8), 8, 3, RV_S1, 3)     // ld t5, off(s0)
             rv_stslot(&em, RV_S1, j)
-        j ← j + 1
 
 fn rvg_epilogue(em : &mut Emit, tg : Target):
     rv_I(&em, 0, 8, 0, 2, 19)                               // mv sp, s0

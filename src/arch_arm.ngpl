@@ -542,8 +542,7 @@ fn a32g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64, nreg : i64
     // The ones that came in registers go to their slots first: r0:r1 is
     // where argument 0 arrived and is also what a stack argument is
     // read through, and in this order the two never meet.
-    let j : mut i64 = 0
-    while j < np:
+    foreach j := 0…np:
         if j < nreg:
             a32_stpair(&em, 2 × j, 2 × j + 1, a32_sloto(j))
         else:
@@ -551,7 +550,6 @@ fn a32g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64, nreg : i64
             em.aw(A32_LDRR + (11 « 16) + (0 « 12) + (8 + 8 × j))
             em.aw(A32_LDRR + (11 « 16) + (1 « 12) + (12 + 8 × j))
             a32_stpair(&em, 0, 1, a32_sloto(j))
-        j ← j + 1
 
 fn a32g_epilogue(em : &mut Emit, tg : Target):
     a32_dp(&em, A32_MOVR, 13, 0, 11)                 // mov sp, r11

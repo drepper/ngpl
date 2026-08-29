@@ -592,8 +592,7 @@ fn i3g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64, nreg : i64)
     em.b2(137, 229)                  // mov ebp, esp
     em.b2(129, 236)
     em.w32(frame)                    // sub esp, frame
-    let j : mut i64 = 0
-    while j < np:
+    foreach j := 0…np:
         if j < nreg:
             // it arrived in a pair; it goes to its slot and the pair is
             // free again before a single instruction of the body runs
@@ -601,7 +600,6 @@ fn i3g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64, nreg : i64)
         else:
             i3_ldpair(&em, 0, 2, 8 + 8 × j)
             i3_stpair(&em, 0, 2, i3_sloto(j))
-        j ← j + 1
 
 fn i3g_epilogue(em : &mut Emit, tg : Target):
     em.b2(137, 236)                  // mov esp, ebp

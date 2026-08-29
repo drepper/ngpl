@@ -612,15 +612,13 @@ fn a64g_prologue(em : &mut Emit, tg : Target, nvregs : i64, np : i64, nreg : i64
     else:
         a64_movimm(&em, A64_T1, frame)
         em.aw(3405774848 + (A64_T1 « 16) + (31 « 5) + 31)    // sub sp, sp, t1
-    let j : mut i64 = 0
-    while j < np:
+    foreach j := 0…np:
         if j < 8:
             a64_stslot(&em, j, j)
         else:
             // an incoming stack argument sits above the saved pair
             a64_ldo(&em, A64_T1, 29, 16 + 8 × (j - 8))
             a64_stslot(&em, A64_T1, j)
-        j ← j + 1
 
 fn a64g_epilogue(em : &mut Emit, tg : Target):
     em.aw(2432697279)                            // mov sp, x29: drop the frame

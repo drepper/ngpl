@@ -1,0 +1,39 @@
+// A range counts from its start to its end whichever way round they
+// are, and the ends are read at the moment the walk begins.  With the
+// ends written out a compiler could settle the direction while it
+// compiles; here they are only known as it runs, which is the case
+// that makes `while i < n` and `foreach i := s…n` different loops.
+
+@start
+@impure
+fn main():
+    let hi : i64 = 3
+    let lo : i64 = 0
+    let same : i64 = 3
+
+    // the start above the end counts down to it; the values are read
+    // off as digits, so their order is part of what is checked
+    let down : mut i64 = 0
+    foreach k := hi…lo:
+        down ← down × 10 + k
+    std.println("down {}", down)
+
+    // the start below the end counts up to it
+    // a leading 1 keeps the zero this one begins with
+    let up : mut i64 = 1
+    foreach k := lo…hi:
+        up ← up × 10 + k
+    std.println("up {}", up)
+
+    // the two meeting is a walk over nothing, either way round
+    let none : mut i64 = 0
+    foreach _ := same…hi:
+        none ← none + 1
+    std.println("same {}", none)
+
+    // and a container walked by its own length is walked once through
+    let v : i64[] = [10, 20, 30]
+    let seen : mut i64 = 0
+    foreach i := 0…#v:
+        seen ← seen + v[i]
+    std.println("sum {}", seen)

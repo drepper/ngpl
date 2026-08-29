@@ -1956,12 +1956,12 @@ impl Lower:
         self.ir(IR_ANEW, 4, 0, 0, d, 0)
         let n : i64 = self.tmp()
         let seen : mut bool = false
-        foreach j0 := 0…argc:
-            if thr[j0 × 1¤ptrdiff] = 1:
+        foreach j0 := 0…#thr:
+            if thr[j0] = 1:
                 if seen:
                     // a second container: its length has to be the first's
                     let n2 : i64 = self.tmp()
-                    self.ir(IR_ALEN, vals[j0 × 1¤ptrdiff], 0, 0, n2, 0)
+                    self.ir(IR_ALEN, vals[j0], 0, 0, n2, 0)
                     let same : i64 = self.tmp()
                     self.ir(IR_CEQ, n, n2, 0, same, 64 + 256)
                     let lok : i64 = self.label()
@@ -1970,7 +1970,7 @@ impl Lower:
                     self.ir(IR_ABORT, m, 0, 0, 0, 0)
                     self.ir(IR_LABEL, lok, 0, 0, 0, 0)
                 else:
-                    self.ir(IR_ALEN, vals[j0 × 1¤ptrdiff], 0, 0, n, 0)
+                    self.ir(IR_ALEN, vals[j0], 0, 0, n, 0)
                     seen ← true
         assert(seen, "a threaded call has a container to thread over")
         let iv : i64 = self.tmp()
@@ -1982,13 +1982,13 @@ impl Lower:
         self.ir(IR_CLT, iv, n, 0, c, 64 + 256)
         self.ir(IR_JZ, c, lend, 0, 0, 0)
         let cargs : mut i64[] = []
-        foreach j := 0…argc:
-            if thr[j × 1¤ptrdiff] = 1:
+        foreach j := 0…#thr:
+            if thr[j] = 1:
                 let e : i64 = self.tmp()
-                self.ir(IR_AIDX, vals[j × 1¤ptrdiff], iv, 0, e, 0)
+                self.ir(IR_AIDX, vals[j], iv, 0, e, 0)
                 cargs.push(e)
             else:
-                cargs.push(vals[j × 1¤ptrdiff])
+                cargs.push(vals[j])
         let off : i64 = @dropunit(#self.extra)
         if boxv = ⁻1:
             self.extra.push(argc)
@@ -2670,28 +2670,28 @@ impl Lower:
             self.extra.push(ldef)
             foreach s := 0…span:
                 let target : mut i64 = ldef
-                foreach j := 0…n:
-                    if ks[j × 1¤ptrdiff] = lo + s:
-                        target ← case_labels[j × 1¤ptrdiff]
+                foreach j := 0…#ks:
+                    if ks[j] = lo + s:
+                        target ← case_labels[j]
                 self.extra.push(target)
             self.decide(self.tok_line(self.a.ntok[sid × 1¤ptrdiff]), "match-jump-table", shape)
             self.ir(IR_JTAB, sv, off, 0, 0, 0)
         else:
             self.decide(self.tok_line(self.a.ntok[sid × 1¤ptrdiff]), "match-ladder", shape)
-            foreach j := 0…n:
+            foreach j := 0…#ks:
                 let kv : i64 = self.tmp()
-                self.ir(IR_CONST, ks[j × 1¤ptrdiff], 0, 0, kv, 0)
+                self.ir(IR_CONST, ks[j], 0, 0, kv, 0)
                 let c : i64 = self.tmp()
                 self.ir(IR_CEQ, sv, kv, 0, c, 64 + 256)
-                self.ir(IR_JNZ, c, case_labels[j × 1¤ptrdiff], 0, 0, 0)
+                self.ir(IR_JNZ, c, case_labels[j], 0, 0, 0)
             self.ir(IR_JMP, ldef, 0, 0, 0, 0)
         let toopt : bool = dest ≠ ⁻1 and ty_is_opt(self.tof(sid))
-        foreach b := 0…n:
-            self.ir(IR_LABEL, case_labels[b × 1¤ptrdiff], 0, 0, 0, 0)
+        foreach b := 0…#blks:
+            self.ir(IR_LABEL, case_labels[b], 0, 0, 0, 0)
             if dest ≠ ⁻1:
-                self.lower_block_value(blks[b × 1¤ptrdiff], dest, toopt)
+                self.lower_block_value(blks[b], dest, toopt)
             else:
-                self.lower_block(blks[b × 1¤ptrdiff], trailing, ret_ty)
+                self.lower_block(blks[b], trailing, ret_ty)
             self.ir(IR_JMP, lend, 0, 0, 0, 0)
         self.ir(IR_LABEL, ldef, 0, 0, 0, 0)
         if dflt ≠ ⁻1:

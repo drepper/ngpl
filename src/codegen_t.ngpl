@@ -168,7 +168,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // in a call where an overflow or a bounds check has to go -- so
     // this runs in waves until a wave adds nothing.  Asking the IR
     // which routines it calls would miss the second kind.
-    let nrt : i64 = 69
+    let nrt : i64 ¤ptrdiff = 69
     foreach _ := 0…nrt:
         em.rt_need.push(0)
         em.rt_off.push(⁻1)
@@ -189,8 +189,8 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                 if t < 0:
                     em.rt_need[(0 - t - 1) × 1¤ptrdiff] ← 1
         foreach id0 := 0…nrt:
-            if em.rt_need[id0 × 1¤ptrdiff] = 1 and em.rt_off[id0 × 1¤ptrdiff] = ⁻1:
-                em.rt_off[id0 × 1¤ptrdiff] ← em.here()
+            if em.rt_need[id0] = 1 and em.rt_off[id0] = ⁻1:
+                em.rt_off[id0] ← em.here()
                 let rid : i64 = 0 - @dropunit(id0) - 1
                 let np9 : i64 = rt_nargs(rid)
                 t_emit_fn(&em, tgt, rt_build(rid, tgt, &lw), np9, lw.strs, 0, nregs)
@@ -256,10 +256,8 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             let lo2 : i64 = em.jt_starts[t]
             let hi2 : i64 = if t + 1 < #em.jt_starts: em.jt_starts[t + 1] else: @dropunit(#em.jt_entries)
             let base2 : i64 = if em.jt_is_code[t] = 1: IMAGE_BASE + PAGE else: 0
-            let e3 : mut i64 = lo2
-            while e3 < hi2:
+            foreach e3 := lo2…hi2:
                 push64(&rodata, base2 + em.jt_entries[e3 × 1¤ptrdiff])
-                e3 ← e3 + 1
     // The table a backtrace reads: where every function of the program
     // begins, how far it runs, and what it is called.  Built here
     // because here is where all three are known, and read by RT_BT,

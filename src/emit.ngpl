@@ -492,10 +492,8 @@ impl Emit:
         self.raxbar()
         while #self.labels > 0:
             _ ← self.labels.pop() ?? 0
-        let i : mut i64 = 0
-        while i < nlabels:
+        foreach i := 0…nlabels:
             self.labels.push(⁻1)
-            i ← i + 1
 
     fn sref(&mut self, reg : i64, stridx : i64):
         if reg = 0:
@@ -535,19 +533,15 @@ impl Emit:
                     // a value table: the entries are the data itself
                     let n : i64 = 0 - n0
                     self.jt_is_code.push(0)
-                    let j : mut i64 = 0
-                    while j < n:
+                    foreach j := 0…n:
                         self.jt_entries.push(self.pj_labels[(st + j) × 1¤ptrdiff])
-                        j ← j + 1
                     continue
                 self.jt_is_code.push(1)
                 let n : i64 = n0
-                let j : mut i64 = 0
-                while j < n:
+                foreach j := 0…n:
                     let off2 : i64 = self.labels[self.pj_labels[(st + j) × 1¤ptrdiff] × 1¤ptrdiff]
                     assert(off2 ≠ ⁻1, "every table target was placed")
                     self.jt_entries.push(off2)
-                    j ← j + 1
         while #self.pj_id > 0:
             _ ← self.pj_id.pop() ?? 0
             _ ← self.pj_start.pop() ?? 0
@@ -756,10 +750,8 @@ fn str_len(s : str) → i64:
 // image at all.  Answers one flag per string, in the pool's own order.
 fn str_uses(em : &Emit, n : i64) → i64[]:
     let used : mut i64[] = []
-    let i : mut i64 = 0
-    while i < n:
+    foreach i := 0…n:
         used.push(0)
-        i ← i + 1
     if #em.sf_str > 0:
         foreach k := 0…#em.sf_str:
             used[em.sf_str[k] × 1¤ptrdiff] ← 1

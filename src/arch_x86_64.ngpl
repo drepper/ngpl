@@ -227,8 +227,7 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
     // one function's answer is not the next one's
     em.pclear()
     em.self_priv ← priv
-    let j : mut i64 = 0
-    while j < np:
+    foreach j := 0…np:
         if j < 6:
             if p_keep(ir, j, secnt, ir.nvregs, pfirst, priv):
                 // read where it arrived; no spill is made for it
@@ -240,7 +239,6 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             em.b3(72, 139, 133)
             em.w32(16 + 8 × (j - 6))    // mov rax, [rbp+…]: a stack argument
             em.store(R_AX, j)
-        j ← j + 1
     let n : i64 ¤ptrdiff = nops
     let i : mut i64 ¤ptrdiff = 0¤ptrdiff
     while i < n:
@@ -489,10 +487,8 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             em.store(R_AX, d)
         elif o = IR_CALLI:
             let argci : i64 = ir.extra[b × 1¤ptrdiff]
-            let ki : mut i64 = 0
-            while ki < argci:
+            foreach ki := 0…argci:
                 em.load(arg_reg(ki), ir.extra[(b + 1 + ki) × 1¤ptrdiff])
-                ki ← ki + 1
             em.load(R_R11, a)
             em.raxbar()
             em.b3(65, 255, 211)              // call r11
@@ -654,10 +650,8 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             em.pj_id.push(id2)
             em.pj_start.push(@dropunit(#em.pj_labels))
             em.pj_len.push(0 - span)         // negative: raw values, not labels
-            let e2 : mut i64 = 0
-            while e2 < span:
+            foreach e2 := 0…span:
                 em.pj_labels.push(ir.extra[(b + 3 + e2) × 1¤ptrdiff])
-                e2 ← e2 + 1
         elif o = IR_FRAME:
             // the object region sits below the slots, and a is an
             // offset from its bottom, which is the bottom of the frame
@@ -998,10 +992,8 @@ fn emit_fn(em : &mut Emit, ir : IrFn, np : i64, strs : str[],
             em.pj_id.push(id)
             em.pj_start.push(@dropunit(#em.pj_labels))
             em.pj_len.push(span)
-            let e : mut i64 = 0
-            while e < span:
+            foreach e := 0…span:
                 em.pj_labels.push(ir.extra[(b + 3 + e) × 1¤ptrdiff])
-                e ← e + 1
         // Nothing is believed about an argument register past the
         // first operation: many are written as raw bytes, which no
         // memo could follow.

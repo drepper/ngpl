@@ -44,12 +44,10 @@ fn sdef_norm(a : Ast, toks : Toks, src : byte[], si : i64, seen : i64[]) → str
     foreach v := seen:
         deeper.push(v)
     deeper.push(si)
-    let i : mut i64 = 0
-    while i < n:
+    foreach i := 0…n:
         let ftok : i64 = a.extra[(d.fields_off + 1 + i × 2) × 1¤ptrdiff]
         let fty : i64 = a.extra[(d.fields_off + 2 + i × 2) × 1¤ptrdiff]
         out ← out ⧺ (if i = 0: "" else: ",") ⧺ run_str(src, toks.off[ftok × 1¤ptrdiff], toks.len[ftok × 1¤ptrdiff]) ⧺ ":" ⧺ sym_type(a, toks, src, fty, deeper)
-        i ← i + 1
     out ⧺ "}"
 
 fn struct_sym(a : Ast, toks : Toks, src : byte[], si : i64, seen : i64[]) → str:
@@ -92,19 +90,15 @@ fn sym_type(a : Ast, toks : Toks, src : byte[], t0 : i64, seen : i64[]) → str:
         let n : i64 = a.ttl[ty_tidx(t) × 1¤ptrdiff]
         let st : i64 = a.tts[ty_tidx(t) × 1¤ptrdiff]
         let out : mut str = "("
-        let i : mut i64 = 0
-        while i < n:
+        foreach i := 0…n:
             out ← out ⧺ (if i = 0: "" else: ", ") ⧺ sym_type(a, toks, src, a.tte[(st + i) × 1¤ptrdiff], seen)
-            i ← i + 1
         return pre ⧺ out ⧺ ")"
     if ty_is_lam(t):
         let n : i64 = a.ltl[ty_lidx(t) × 1¤ptrdiff]
         let st : i64 = a.lts[ty_lidx(t) × 1¤ptrdiff]
         let out : mut str = "λ("
-        let i : mut i64 = 0
-        while i < n:
+        foreach i := 0…n:
             out ← out ⧺ (if i = 0: "" else: ", ") ⧺ sym_type(a, toks, src, a.lte[(st + i) × 1¤ptrdiff], seen)
-            i ← i + 1
         return pre ⧺ out ⧺ ") → " ⧺ sym_type(a, toks, src, a.lte[(st + n) × 1¤ptrdiff], seen)
     if ty_is_int(t):
         let base : str = (if ty_sgn(t) = 1: "i" else: "u") ⧺ i64_str(ty_bits(t))
@@ -120,9 +114,7 @@ fn fn_symbol(a : Ast, toks : Toks, src : byte[], f : i64) → str:
     let none : i64[] = []
     // the whole name: the module it was written in, then its own
     let out : mut str = (if d.modname = "": d.name else: d.modname ⧺ "." ⧺ d.name) ⧺ "("
-    let i : mut i64 = 0
-    while i < np:
+    foreach i := 0…np:
         out ← out ⧺ (if i = 0: "" else: ", ") ⧺ sym_type(a, toks, src, a.extra[(d.params_off + 2 + i × 2) × 1¤ptrdiff], none)
-        i ← i + 1
     out ⧺ ") → " ⧺ sym_type(a, toks, src, d.ret, none)
 

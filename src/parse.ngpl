@@ -1095,11 +1095,9 @@ impl Parser:
                     let st9 : i64 = self.estart[EI_FILETYPE × 1¤ptrdiff]
                     let n9 : i64 = self.ecount[EI_FILETYPE × 1¤ptrdiff]
                     let fv : mut i64 = ⁻1
-                    let k9 : mut i64 = 0
-                    while k9 < n9:
+                    foreach k9 := 0…n9:
                         if self.emembers[(st9 + k9) × 1¤ptrdiff] = fname:
                             fv ← self.evalues[(st9 + k9) × 1¤ptrdiff]
-                        k9 ← k9 + 1
                     if fv = ⁻1:
                         self.err("'std.filetype." ⧺ fname ⧺ "' names no kind of file")
                         return 0
