@@ -10075,6 +10075,21 @@ Folding alone is not enough, because the two forms put the separators in differe
 
 The digests are SHA-256, computed with `std.hash.sha256`, and the compiler feeds them as it reads rather than gathering the message first.
 
+**Reading one back** needs nothing but the file, which is the reason for writing it there.  `tools/sbom.ngpl` is such a reader, written in the language and in the compiled subset:
+
+```
+ngplc tools/sbom.ngpl -o build/sbom
+build/sbom --short build/ngplc
+
+build/ngplc: 766 rows
+  b51515afc7741850  compiler  ngplc core-2
+  53ad40a665160a89  source    src/tokens.ngpl
+  …
+  c9b68b50ea4c0cf8  output    build/ngplc
+```
+
+It walks the section headers for the two sections and reads nothing else, so a binary built for another architecture or another class still answers.  The elf tests hold it to the same rows they find themselves.
+
 ### Roadmap
 
 Compilation units, imports, and dependency resolution are not yet designed.  What exists is the build function, which came first because the compiler's own sources needed it; modules, which name and hide but do not yet divide a program into separately compiled pieces; and the bill of materials above.

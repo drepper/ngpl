@@ -26,6 +26,7 @@ and neither would have survived it.
 """
 
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -452,6 +453,40 @@ def check_readelf(path: str) -> str:
     return ""
 
 
+def check_sbom_tool(elf: "Elf", path: str) -> str:
+    """The reader written in NGPL agrees with the one written here.
+
+    tools/sbom walks the file with nothing but the file, which is the
+    point of writing the bill into it; this holds that reader to the
+    same rows this one finds.  A tool that is not built is a note
+    rather than a failure: it is not part of the bootstrap.
+    """
+    tool = os.path.join("build", "sbom")
+    if not os.path.exists(tool):
+        return ("tools/sbom is not built, so the bill was read here only "
+                "(ngplc tools/sbom.ngpl -o build/sbom)")
+    run = subprocess.run([tool, path], capture_output=True)
+    check(run.returncode == 0,
+          f"tools/sbom refused the file (status {run.returncode}): "
+          f"{run.stderr.decode('utf-8', 'replace').strip()}")
+    lines = run.stdout.decode("utf-8", "replace").rstrip("\n").split("\n")
+    mine = sbom_rows(elf)
+    check(lines[0] == f"{path}: {len(mine)} rows",
+          f"tools/sbom says {lines[0]!r}, not {len(mine)} rows")
+    # the two kinds whose name is empty say what they are instead
+    named = {"output": path,
+             "sources": "(all sources, in the order they were read)"}
+    said = []
+    for line in lines[1:]:
+        m = re.match(r"^  ([0-9a-f]+)  (\S+) *(.*)$", line)
+        check(m is not None, f"tools/sbom wrote a row this cannot read: {line!r}")
+        said.append((m.group(2), m.group(3), m.group(1)))
+    want = [(k, n or named.get(k, ""), d) for k, n, d in mine]
+    check(said == want, "tools/sbom and this reader disagree: "
+          f"{[r for r in zip(want, said) if r[0] != r[1]][:1]}")
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # Driving the compiler
 # ---------------------------------------------------------------------------
@@ -579,6 +614,8 @@ def main() -> int:
          lambda: check_sbom(sym, [rel(sym_src)]))
     case("a bill of several sources keeps them in order", multi_bill)
     case("readelf reads it", lambda: check_readelf(sym_bin))
+    case("the reader written in NGPL reads it too",
+         lambda: check_sbom_tool(sym, sym_bin))
 
     def stack_option():
         out = os.path.join(work, "probe_stack")

@@ -1,0 +1,279 @@
+// ===========================================================================
+// sbom -- what a binary says it was made of
+// ===========================================================================
+//
+// Every binary ngplc writes carries a bill of materials in two
+// sections: .sbom, a table of twelve-byte rows, and .sbomstr, the
+// strings those rows point into.  Nothing outside the file is needed to
+// read it -- which is the reason for putting it there -- and this is
+// the reader.
+//
+//     ngplc tools/sbom.ngpl -o build/sbom
+//     build/sbom build/ngplc
+//
+// A row is a kind, a name, and a SHA-256 written out as ASCII.  The
+// source digests are taken over the tokens rather than the text, so a
+// comment added or a line rewrapped does not move them; two builds that
+// agree here were built from the same program however it was typed.
+//
+// The reader is deliberately incurious about the rest of the file.  It
+// walks the section headers for the two it wants and reads nothing
+// else, so a binary this does not otherwise understand -- another
+// architecture, another class -- still answers the question.
+
+// ---------------------------------------------------------------------------
+// Reading what is written down
+// ---------------------------------------------------------------------------
+
+// A little-endian number of n bytes at at.  ELF writes every field this
+// way in the files ngplc produces, and a file that says otherwise is
+// turned away before anything here is asked.
+@pre(n > 0 and n <= 8)
+fn le(b : u8[], at : i64 ¤byte, n : i64) → i64:
+    let v : mut i64 = 0
+    let i : mut i64 = 0
+    while i < n:
+        let here : i64 ¤byte = at + i × 1¤byte
+        if here >= #b:
+            return v
+        // widened before it is shifted: a byte shifted eight is past
+        // the top of its own type
+        let x : i64 = @dropunit(b[here])
+        v ← v + (x « (8 × i))
+        i ← i + 1
+    v
+
+// The string beginning at at, up to the byte that ends it.  A table
+// that is not terminated ends at the end of the section rather than
+// running on into whatever follows.
+fn cstr(b : u8[], at : i64 ¤byte, limit : i64 ¤byte) → str:
+    let s : mut str = ""
+    let i : mut i64 ¤byte = at
+    while i < limit and i < #b:
+        let c : i64 = @dropunit(b[i])
+        if c = 0:
+            return s
+        s ← s ⧺ c.chr()
+        i ← i + 1¤byte
+    s
+
+@post(r: #r > 0)
+fn num(n : i64) → str:
+    if n = 0: return "0"
+    let neg : bool = n < 0
+    // counted below zero, where every i64 has a home
+    let v : mut i64 = if neg: n else: @wrap(0 - n)
+    let s : mut str = ""
+    while v ≠ 0:
+        let digit : i64 = @wrap(0 - (v % 10 ?? 0))
+        s ← (48 + digit).chr() ⧺ s
+        v ← (v ÷ 10 ?? 0)
+    if neg: ("-" ⧺ s) else: s
+
+fn pad(s : str, w : i64 ¤ptrdiff) → str:
+    let out : mut str = s
+    let i : mut i64 ¤ptrdiff = #s
+    while i < w:
+        out ← out ⧺ " "
+        i ← i + 1¤ptrdiff
+    out
+
+// What a row is about.  A number this does not know is shown as itself:
+// a bill written by a later compiler may say kinds this reader predates,
+// and every other row in it is still worth reading.
+fn kind_name(k : i64) → str:
+    if k = 0: return "compiler"
+    if k = 1: return "source"
+    if k = 2: return "sources"
+    if k = 3: return "output"
+    if k = 4: return "function"
+    "kind " ⧺ num(k)
+
+// ---------------------------------------------------------------------------
+// Where the two sections are
+// ---------------------------------------------------------------------------
+//
+// Only the fields on the way to them are read: the class, so the widths
+// are known; where the section headers are and how many; and which of
+// them holds their names.
+
+let ELF_MAGIC0 : i64 = 127     // \x7f E L F
+let ELFCLASS32 : i64 = 1
+let ELFCLASS64 : i64 = 2
+let ELFDATA2LSB : i64 = 1
+let ROW_BYTES : i64 ¤byte = 12¤byte
+
+@impure
+fn complain(path : str, what : str):
+    std.println("sbom: {}: {}", path, what)
+
+// Whether the file begins as an ELF this reader can walk.
+@impure
+fn readable(f : u8[], path : str) → bool:
+    if #f < 64¤byte:
+        complain(path, "too short to be an ELF file")
+        return false
+    if le(f, 0¤byte, 1) ≠ ELF_MAGIC0 or le(f, 1¤byte, 1) ≠ 69 or le(f, 2¤byte, 1) ≠ 76 or le(f, 3¤byte, 1) ≠ 70:
+        complain(path, "not an ELF file")
+        return false
+    let cls : i64 = le(f, 4¤byte, 1)
+    if cls ≠ ELFCLASS32 and cls ≠ ELFCLASS64:
+        complain(path, "neither a 32-bit nor a 64-bit ELF file")
+        return false
+    if le(f, 5¤byte, 1) ≠ ELFDATA2LSB:
+        complain(path, "big-endian, which this reader does not walk")
+        return false
+    true
+
+// A section header's file offset and size, whichever class the file is.
+fn sh_offset(f : u8[], sh : i64 ¤byte, cls : i64) → i64 ¤byte:
+    if cls = ELFCLASS64:
+        return le(f, sh + 24¤byte, 8) × 1¤byte
+    le(f, sh + 16¤byte, 4) × 1¤byte
+
+fn sh_size(f : u8[], sh : i64 ¤byte, cls : i64) → i64 ¤byte:
+    if cls = ELFCLASS64:
+        return le(f, sh + 32¤byte, 8) × 1¤byte
+    le(f, sh + 20¤byte, 4) × 1¤byte
+
+// ---------------------------------------------------------------------------
+// The bill itself
+// ---------------------------------------------------------------------------
+
+// Answers how many rows were shown, or ⁻1 where the file could not be
+// read as one that carries a bill.
+@impure
+fn show(path : str, short : bool, verbose : bool) → i64:
+    let alloc := std.arena.allocator()
+    match std.fs.cwd().open_file(path):
+        ⊨(file):
+            let f := file.read_file(alloc)
+            file.close()
+            if not readable(f, path):
+                return ⁻1
+            let cls : i64 = le(f, 4¤byte, 1)
+            let shoff : i64 ¤byte = if cls = ELFCLASS64: le(f, 40¤byte, 8) × 1¤byte else: le(f, 32¤byte, 4) × 1¤byte
+            let at : i64 ¤byte = if cls = ELFCLASS64: 58¤byte else: 46¤byte
+            let shentsize : i64 ¤byte = le(f, at, 2) × 1¤byte
+            let shnum : i64 = le(f, at + 2¤byte, 2)
+            let shstrndx : i64 = le(f, at + 4¤byte, 2)
+            if shoff = 0¤byte or shnum = 0 or shstrndx >= shnum:
+                complain(path, "has no section headers, so it says nothing about itself")
+                return ⁻1
+
+            // the names of the sections, so the two wanted can be found
+            let shstr : i64 ¤byte = shoff + shstrndx × shentsize
+            let names_at : i64 ¤byte = sh_offset(f, shstr, cls)
+            let names_end : i64 ¤byte = names_at + sh_size(f, shstr, cls)
+
+            let table : mut i64 ¤byte = 0¤byte
+            let table_size : mut i64 ¤byte = 0¤byte
+            let strs : mut i64 ¤byte = 0¤byte
+            let strs_end : mut i64 ¤byte = 0¤byte
+            let i : mut i64 = 0
+            while i < shnum:
+                let sh : i64 ¤byte = shoff + i × shentsize
+                let nm : str = cstr(f, names_at + le(f, sh, 4) × 1¤byte, names_end)
+                if nm = ".sbom":
+                    table ← sh_offset(f, sh, cls)
+                    table_size ← sh_size(f, sh, cls)
+                elif nm = ".sbomstr":
+                    strs ← sh_offset(f, sh, cls)
+                    strs_end ← strs + sh_size(f, sh, cls)
+                i ← i + 1
+            if table = 0¤byte or strs = 0¤byte:
+                complain(path, "carries no bill of materials")
+                return ⁻1
+            if (table_size % ROW_BYTES ?? 1¤byte) ≠ 0¤byte:
+                complain(path, "the bill is " ⧺ num(@dropunit(table_size)) ⧺ " bytes, which is not whole twelve-byte rows")
+                return ⁻1
+
+            let rows : i64 = @dropunit(table_size ÷ ROW_BYTES ?? 0¤byte)
+            // the widest kind, so the names line up under one another
+            let kw : mut i64 ¤ptrdiff = 0¤ptrdiff
+            let r : mut i64 = 0
+            while r < rows:
+                let k : str = kind_name(le(f, table + r × ROW_BYTES, 4))
+                if #k > kw:
+                    kw ← #k
+                r ← r + 1
+
+            std.println("{}: {} rows", path, num(rows))
+            let j : mut i64 = 0
+            while j < rows:
+                let row : i64 ¤byte = table + j × ROW_BYTES
+                let kind : str = kind_name(le(f, row, 4))
+                let name : str = cstr(f, strs + le(f, row + 4¤byte, 4) × 1¤byte, strs_end)
+                let hash : str = cstr(f, strs + le(f, row + 8¤byte, 4) × 1¤byte, strs_end)
+                // the digest first, as every other tool that prints one
+                // does, so a column of them can be read down
+                let shown : str = if short and #hash > 16¤ptrdiff: hash[0¤ptrdiff…16¤ptrdiff] else: hash
+                // Two kinds carry no name of their own, and each means
+                // something different by it: the output row is the file
+                // being read, and the sources row is all of them at
+                // once.  A gap would say neither.
+                let k9 : i64 = le(f, row, 4)
+                let about : mut str = name
+                if name = "":
+                    about ← if k9 = 3: path else: "(all sources, in the order they were read)"
+                std.println("  {}  {}  {}", shown, pad(kind, kw), about)
+                j ← j + 1
+            if verbose:
+                std.println("  ({} bytes of rows, {} of strings)",
+                            num(@dropunit(table_size)), num(@dropunit(strs_end - strs)))
+            return rows
+        ∅:
+            complain(path, "cannot be opened")
+            return ⁻1
+
+@impure
+fn usage():
+    std.println("Usage: sbom [OPTION...] FILE...")
+    std.println("")
+    std.println("Show the bill of materials a binary carries: which compiler")
+    std.println("built it, which sources it was built from, each function it")
+    std.println("holds, and a SHA-256 of each.")
+    std.println("")
+    std.println("  --short      show the first 16 characters of each digest")
+    std.println("  --verbose    say how large the two sections are")
+    std.println("  --help       show this and stop")
+
+@start
+@impure
+fn main() → u8:
+    let argv := std.args.all()
+    foreach a := argv:
+        if a = "--help":
+            usage()
+            return 0
+    if #argv = 0:
+        usage()
+        return 1
+
+    let short : mut bool = false
+    let verbose : mut bool = false
+    let files : mut str[] = []
+    let bad : mut bool = false
+    foreach a := argv:
+        if a = "--short":
+            short ← true
+        elif a = "--verbose":
+            verbose ← true
+        elif "-" ⊑ a:
+            std.println("sbom: '{}' is no option this knows", a)
+            bad ← true
+        else:
+            files.push(a)
+    if bad:
+        return 1
+    if #files = 0:
+        std.println("sbom: no file to read; name one")
+        return 1
+
+    // Every file is read, whatever the ones before it answered, and the
+    // exit status says whether any of them could not be.
+    let failed : mut bool = false
+    foreach path := files:
+        if show(path, short, verbose) < 0:
+            failed ← true
+    if failed: 1 else: 0
