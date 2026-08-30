@@ -146,6 +146,7 @@ from interp.ast import (
     MatchStmt, ExpErr,
     StructLit,
 )
+from interp.value import _ALIAS_VERSION
 from interp.value import (
     Value, IntValue, FloatValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
     FuncValue, LambdaValue, BuiltinFunc, ObjectValue, BuiltinBoundMethod,
@@ -7392,6 +7393,20 @@ class Evaluator:
                   and is_generic_type(func.ret_type))
             func._has_generics = has_generics
 
+        # A function with nothing dynamic in its signature -- no pack,
+        # no generic, no condition, no borrowed answer, every parameter
+        # a plain name -- does the same things at every call, and what
+        # they are is settled once; see _call_planned.
+        plan = func._plan
+        if plan is None and not has_generics and not has_pack \
+                and not func.preconditions and not func.postconditions \
+                and func.ret_ref is None \
+                and not any(isinstance(pn, tuple) for pn, _ in func.params):
+            plan = self._make_plan(func)
+            func._plan = plan
+        if plan is not None and plan[0] == _ALIAS_VERSION[0]:
+            return self._call_planned(func, args, plan)
+
         generic_map: dict[str, str] = {}
         if has_generics:
             for (pname, ptype), arg in zip(func.params, regular_args):
@@ -7646,6 +7661,146 @@ class Evaluator:
             # Attach the stack to the exception itself, at the innermost
             # frame that sees it, so it survives the unwinding below and
             # cannot be confused with a later, unrelated failure.
+            attach_backtrace(e, self._call_stack)
+            raise
+        finally:
+            self._end_scope(call_env, returned, borrowed)
+            self._call_stack.pop()
+            self.env = old_env
+            self._current_ret_type = old_ret_type
+            self._pure_func_name = old_pure
+            self._frozen_vars = old_frozen
+            self._generic_map = old_generic_map
+            self._comptime_vars = old_comptime_vars
+            self._cur_module = old_module
+
+    def _make_plan(self, func):
+        """What a call of this function does, read off the signature
+        once.  Holds while the alias table is what it was, since what a
+        parameter's type measures is read off that table."""
+        params = []
+        for pn, pt in func.params:
+            pspec = func.param_units.get(pn)
+            if pspec is None and pt is not None:
+                pspec = alias_unit_spec(pt)
+            declared = _parse_array_type(pt) if pt is not None else None
+            params.append((pn, pt, pn in func.param_refs, pn in func.param_muts,
+                           pspec, declared))
+        borrowed = func._param_names
+        if borrowed is None:
+            borrowed = frozenset(pn for pn, _ in func.params)
+            func._param_names = borrowed
+        frozen = {pn: (Held.borrowed if pn in func.param_refs else Held.let)
+                  for pn, _ in func.params if pn not in func.param_muts}
+        ret_unit = func.ret_unit
+        if ret_unit is None and func.ret_type is not None:
+            ret_unit = alias_unit_spec(func.ret_type)
+        any_mut = any(is_mut for _, _, _, is_mut, _, _ in params)
+        return (_ALIAS_VERSION[0], tuple(params), any_mut, borrowed, frozen, ret_unit)
+
+    def _call_planned(self, func, args, plan):
+        """_call_user_func_inner for a function with a plan: the same
+        steps in the same order, with what the plan settled read off
+        it rather than found again, and the steps that would do nothing
+        -- the conditions, the olds, the generics -- not taken."""
+        _, params, any_mut, borrowed, frozen, ret_unit = plan
+        ret_type = func.ret_type
+        _lent_mutably = [
+            id(unwrap_optional(a.get()).obj)
+            for (pn, _pt, _r, is_mut, _u, _d), a in zip(params, args)
+            if is_mut and isinstance(a, RefValue)
+            and isinstance(unwrap_optional(a.get()), ObjectValue)
+        ] if any_mut else ()
+        call_env = func.env.copy_for_call()
+        for (param_name, param_type, is_ref, is_mut, pspec, declared), arg_value in zip(params, args):
+            self._check_resizable_argument(func, param_name, param_type,
+                                           arg_value)
+            if is_ref:
+                if not isinstance(arg_value, RefValue):
+                    raise coded(2259, TypeError(
+                        f"{func.name}: parameter '{param_name}' is by-reference, "
+                        f"caller must pass &{param_name}"))
+                if param_type is not None:
+                    lent = unwrap_optional(arg_value.get())
+                    if isinstance(lent, ObjectValue) \
+                            and isinstance(lent.obj, ArrayValue):
+                        try:
+                            coerce_arg(lent, param_type, func.name, param_name)
+                        except (TypeError, OverflowError) as e:
+                            raise coded(2754, TypeError(strip_position_prefix(str(e)))) from None
+                call_env.define(param_name, arg_value)
+                continue
+            if isinstance(arg_value, RefValue):
+                raise coded(2260, TypeError(
+                    f"{func.name}: parameter '{param_name}' is by-value, "
+                    f"caller must not pass a reference"))
+            if is_mut:
+                arg_value = deep_copy_value(arg_value)
+                if declared is not None and isinstance(arg_value, ObjectValue) \
+                        and isinstance(arg_value.obj, ArrayValue):
+                    arg_value.obj.fixed_size = declared[1][0]
+            elif isinstance(arg_value, ObjectValue) \
+                    and id(arg_value.obj) in _lent_mutably:
+                arg_value = deep_copy_value(arg_value)
+            elif isinstance(arg_value, ObjectValue) \
+                    and isinstance(arg_value.obj, ArrayValue):
+                if declared is not None \
+                        and arg_value.obj.fixed_size != declared[1][0]:
+                    arg_value = deep_copy_value(arg_value)
+                    arg_value.obj.fixed_size = declared[1][0]
+            param_unit = None
+            if pspec is not None:
+                from interp.units import eval_unit_formula
+                param_unit = eval_unit_formula(pspec)
+                if isinstance(arg_value, IntValue) \
+                        and not is_unwidthed(arg_value.width):
+                    raise coded(2323, TypeError(
+                        f"{func.name}: parameter '{param_name}' requires unit "
+                        f"{param_unit.display_name}, got typed integer "
+                        f"{arg_value.width} without unit"))
+                arg_value = apply_unit(arg_value, param_unit, self._mk_int)
+            if param_type is not None:
+                if param_unit is not None:
+                    arg_value = coerce_arg(arg_value, param_type, func.name,
+                                           param_name, unit=param_unit)
+                else:
+                    arg_value = coerce_arg(arg_value, param_type,
+                                           func.name, param_name)
+            else:
+                check_bootstrap_argument(
+                    arg_value, f"{func.name}: parameter '{param_name}'")
+            call_env.define(param_name, arg_value)
+
+        old_env = self.env
+        old_ret_type = self._current_ret_type
+        old_pure = self._pure_func_name
+        old_frozen = self._frozen_vars
+        old_generic_map = self._generic_map
+        old_comptime_vars = self._comptime_vars
+        old_module = self._cur_module
+        self._frozen_vars = dict(frozen)
+        self._call_stack.append([func.name, self._last_pos, func.source_label])
+        returned: Value | None = None
+        try:
+            self.env = call_env
+            self._current_ret_type = ret_type
+            self._pure_func_name = None if func.is_impure else func.name
+            self._cur_module = func.module
+            self._generic_map = {}
+            self._comptime_vars = set(borrowed)
+            result = self.eval_stmts(func.body)
+            result = self._check_return_type(result, ret_type, func.name, ret_unit)
+            returned = self._wrap_optional_return(result, ret_type)
+            returned = self._check_borrowed_answer(func, returned, None, args)
+            return returned
+        except _ReturnSentinel as e:
+            checked = self._check_return_type(e.value, ret_type, func.name, ret_unit)
+            returned = self._wrap_optional_return(checked, ret_type)
+            returned = self._check_borrowed_answer(func, returned, None, args)
+            return returned
+        except _PropagatedError as pe:
+            raise pe.original from pe
+        except BaseException as e:
             attach_backtrace(e, self._call_stack)
             raise
         finally:

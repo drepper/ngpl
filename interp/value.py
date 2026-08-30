@@ -963,7 +963,7 @@ class FuncValue(Value):
                  "pack_param", "param_units", "is_impure", "param_refs",
                  "param_muts", "source_label", "ret_unit", "is_listable",
                  "is_noreturn", "preconditions", "postconditions",
-                 "_has_generics", "_param_names", "module", "is_export",
+                 "_has_generics", "_param_names", "_plan", "module", "is_export",
                  "is_ignorable",
                  "ret_ref", "ret_origins")
 
@@ -1015,6 +1015,9 @@ class FuncValue(Value):
         # where the type predicates live.
         self._has_generics: bool | None = None
         self._param_names: frozenset | None = None
+        # what a call of this function has to do, settled at the first
+        # call; see Evaluator._call_planned
+        self._plan = None
         # The module the definition was written in, and whether it is
         # exported from it.  Both are settled where it is installed.
         self.module: str = ""
@@ -2012,8 +2015,15 @@ def register_user_type(name: str):
 _ALIAS_UNITS: dict[str, object] = {}
 
 
+# Bumped whenever an alias is registered: what an alias measures is
+# read off this table, and a call plan that read it holds only while
+# the table is what it was.
+_ALIAS_VERSION = [0]
+
+
 def register_type_alias(name: str, target: str, unit_spec=None):
     """Register a user-defined type alias, and what it measures."""
+    _ALIAS_VERSION[0] += 1
     _TYPE_ALIASES[name] = target
     if unit_spec is not None:
         _ALIAS_UNITS[name] = unit_spec

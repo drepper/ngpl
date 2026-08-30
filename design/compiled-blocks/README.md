@@ -129,8 +129,18 @@ Wall time of the self-compile, one run each, on the same machine:
 | v5: `let` initializers, assignment right sides, method calls under modules, `and`/`or` | 926 s | 26% |
 | v6: the plain `foreach` turn inline | 909 s | 28% |
 
+| v7: the planned call | 907 s | -- |
+
 Timing is noisy (±3%); a difference smaller than that is not one.
 Every version produced the identical binary.
+
+**The table above overstates the walk.**  Those runs overlapped other
+runs on the same machine, which cost the walk more than it cost the
+compiled versions.  Measured clean -- the walk and v7 back to back,
+nothing else running -- the walk takes **1191 s** and v7 **907 s**:
+24%, or 1.31 times.  The per-version deltas in the table are real in
+their direction and unreliable in their size; only a back-to-back
+pair on an idle machine says how much.
 
 Two lessons in that table.  Ten percent (v1--v3) is what taking the
 dispatch out of a tree-walker buys when every node still calls a
@@ -162,13 +172,17 @@ That is the semantics, and the walk's own share is under ten.
    Every helper that looks a name up by string (`_end_scope`, the
    lifetime tables, the frozen table) would have to be taught for a
    gain the profile no longer shows.  Not worth it now.
-3. **The call.**  `_call_user_func_inner` runs a few dozen checks per
-   call -- generics, the lent-mutably scan, parameter coercion, two
-   contract passes, `@old`, the return type, the borrowed answer,
-   seven saves and restores -- at 24 million calls.  A per-function
-   plan settled at the first call (no generics, no pack, no
-   conditions, no borrowed answer, which parameters need which check)
-   would skip most of it for most functions.  This is the next thing.
+3. **The call** -- done in v7.  `_make_plan` reads a function's
+   signature once: no pack, no generic, no condition, no borrowed
+   answer, every parameter a plain name, and what each parameter's
+   type measures.  `_call_planned` is then the walk's call with the
+   settled things read off the plan and the steps that would do
+   nothing not taken.  A plan holds while the alias table is what it
+   was (`_ALIAS_VERSION`), since what a type measures is read off that
+   table.  The sampler attributed 19% of all samples to the call's
+   prologue and epilogue before this; what remains of it is the work a
+   call has to do -- copying by-value arguments, coercing them, the
+   return check, `_end_scope`.
 4. **Loops** are inline in their plain form (v6); `while` with a
    bound name, `foreach` with several names or a typed one, and
    `match` still go to their handlers.
