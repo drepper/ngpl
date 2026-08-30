@@ -243,8 +243,9 @@ ESCAPES = {
   "r": "\r",
   "t": "\t",
   "\\": "\\",
+  "'": "'",
+  '"': '"'
 }
-CHAR_ESCAPES = ESCAPES | {"'": "'", '"': '"'}
 
 
 # Single-character operators.
@@ -474,8 +475,8 @@ def _read_char(src, pos, line, col, line_start):
         if ch == "\\" and end_pos + 1 < len(src):
             esc = src[end_pos + 1]
             end_pos += 2
-            if esc in CHAR_ESCAPES:
-                chars.append(CHAR_ESCAPES[esc])
+            if esc in ESCAPES:
+                chars.append(ESCAPES[esc])
             elif esc == "u" and src[end_pos:end_pos + 1] == "{":
                 closing = src.find("}", end_pos + 1)
                 if closing < 0:
