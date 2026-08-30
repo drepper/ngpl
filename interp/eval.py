@@ -4663,6 +4663,35 @@ class Evaluator:
             return val.get()
         return val
 
+    def _c_frozen_refuse(self, name, k):
+        """The two refusals a read meets in the frozen table, for a
+        compiled read that found the name held one of the two ways."""
+        if k is Held.moved:
+            raise TypeError(f"use of moved value '{name}'")
+        if k is Held.lent_mut:
+            to, line, _ = self._lent_info.get(name, ("?", None, "mut"))
+            raise coded(2431, TypeError(
+                f"'{name}' is lent out to be changed to '{to}'"
+                f"{f' until line {line}' if line is not None else ''}, so the "
+                f"name reaches nothing until then"))
+
+    def _c_pure_check(self, name):
+        env = self.env
+        if not env.has_local(name) and env.is_mutable_global(name):
+            raise coded(2239, TypeError(
+                f"pure function '{self._pure_func_name}' cannot "
+                f"read mutable global variable '{name}'"))
+
+    def _c_lookup(self, name):
+        """A read the innermost frame did not answer: the environment,
+        and then a type name standing for its type."""
+        try:
+            return self.env.lookup(name)
+        except KeyError:
+            if is_type_name(name):
+                return TypeValue(name)
+            raise
+
     def _c_pos(self, pos):
         if pos is not None:
             self._last_pos = pos
@@ -4957,182 +4986,9 @@ class Evaluator:
         # LHS can be a VarRef (variable shadowing) or Subscript (array mutation).
         if isinstance(stmt, tuple) and len(stmt) == 3 and stmt[0] == "assign_stmt":
             _, target_ast, rhs_ast = stmt
-            target_pos = getattr(target_ast, "pos", None)
-            if target_pos is not None:
-                self._last_pos = target_pos
-            self._check_assignable(target_ast)
-            # Left to right.  What is written stands to the left of the
-            # value, so the target's own subexpressions -- the thing
-            # being written into, and where in it -- are evaluated
-            # before the value is.  Held here so the code below reads
-            # them rather than evaluating them a second time, which
-            # would run their effects twice.
-            _pre_obj = _MISSING
-            _pre_idx = None
-            _pre_start = _pre_end = _MISSING
-            if isinstance(target_ast, (MultiSlice, SliceAccess, Subscript,
-                                       GetAttr)):
-                _pre_obj = self.eval_expr(target_ast.obj)
-                if isinstance(target_ast, SliceAccess):
-                    _pre_start = self.eval_expr(target_ast.start)
-                    _pre_end = self.eval_expr(target_ast.end)
-                elif isinstance(target_ast, Subscript):
-                    _pre_idx = [self.eval_expr(i)
-                                for i in target_ast.indices]
+            pre = self._c_assign_pre(target_ast)
             rhs = self.eval_expr(rhs_ast)
-            if isinstance(target_ast, VarRef):
-                self._check_assigned_kind(target_ast.name, rhs)
-            if isinstance(target_ast, MultiSlice):
-                # arr[range, range, ...] ← matrix — multi-dim slice write.
-                arr_val = _pre_obj
-                self._eval_multi_slice_write(arr_val, target_ast.specs, rhs)
-            elif isinstance(target_ast, SliceAccess):
-                # arr[s…e] ← rhs_array — copy elements into slice.
-                arr_val = _pre_obj
-                au = unwrap_optional(arr_val)
-                if isinstance(au, ObjectValue) and isinstance(au.obj, ArrayValue):
-                    s = unwrap_optional(_pre_start)
-                    e = unwrap_optional(_pre_end)
-                    s = self._check_index_unit(s, au.obj)
-                    e = self._check_index_unit(e, au.obj)
-                    rhs_arr = self._as_array(rhs)
-                    if rhs_arr is not None:
-                        for i in range(rhs_arr.sizeof):
-                            au.obj.set(s.value + i, rhs_arr.get(i))
-            elif isinstance(target_ast, Subscript):
-                # arr[i] or arr[i, j, ...] ← value — mutate (nested) array element.
-                val = _pre_obj
-                for _i, idx_node in enumerate(target_ast.indices[:-1]):
-                    unwrapped = unwrap_optional(val)
-                    idx_val = _pre_idx[_i]
-                    iu = unwrap_optional(idx_val)
-                    if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
-                        iu = self._check_index_unit(iu, unwrapped.obj)
-                        val = unwrapped.obj.get(iu.value)
-                    else:
-                        raise TypeError("multi-dimensional subscript requires nested arrays")
-                unwrapped = unwrap_optional(val)
-                if isinstance(unwrapped, StrValue):
-                    # A string is read at a position, not written at
-                    # one: a character may be a different width in
-                    # UTF-8 than the one it replaces, so there is no
-                    # writing in place to be had.  A new string is
-                    # built instead.
-                    raise coded(2745, TypeError(
-                        "a string cannot be written through; build the "
-                        "string that is wanted, joining with \N{DOUBLE PLUS}"))
-                if isinstance(unwrapped, ObjectValue) \
-                        and isinstance(unwrapped.obj, HashValue):
-                    # Writing at a key puts it there, whether or not it
-                    # was there before: a dictionary has no length to run past
-                    # and nothing to be out of range of.
-                    hv = unwrapped.obj
-                    key = self._checked_key(_pre_idx[-1], hv.key_type, None)
-                    value = rhs
-                    if hv.value_type is not None:
-                        value = coerce_to_type(value, hv.value_type)
-                    elif hv.sizeof:
-                        held = runtime_type_of(hv.values()[0])
-                        mismatch = _scalar_kind_mismatch(value, held)
-                        if mismatch is not None:
-                            raise TypeError(
-                                f"a dictionary of {held} cannot hold {mismatch}")
-                    hv.put(key, value)
-                elif isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
-                    iu = unwrap_optional(_pre_idx[-1])
-                    iu = self._check_index_unit(iu, unwrapped.obj)
-                    unwrapped.obj.set(iu.value, rhs)
-                else:
-                    raise TypeError(
-                        f"cannot write through a subscript of "
-                        f"{runtime_type_of(unwrapped)}")
-            elif isinstance(target_ast, GetAttr):
-                self._refuse_stored_borrow(rhs, f"'{target_ast.attr}'")
-                obj_val = _pre_obj
-                au = unwrap_optional(obj_val)
-                if isinstance(au, ObjectValue) and isinstance(au.obj, StructInstance):
-                    inst = au.obj
-                    if target_ast.attr not in inst.field_values:
-                        raise TypeError(
-                            f"struct '{inst.struct_type.name}' has no field "
-                            f"'{target_ast.attr}'")
-                    field_type = None
-                    for fname, ftype in inst.struct_type.fields:
-                        if fname == target_ast.attr:
-                            field_type = ftype
-                            break
-                    if field_type is not None:
-                        funit = inst.struct_type.field_unit(target_ast.attr)
-                        if funit is not None:
-                            rhs = coerce_to_type(rhs, field_type, funit,
-                                                 self._mk_int)
-                        else:
-                            rhs = coerce_arg(rhs, field_type,
-                                             "field assignment",
-                                             target_ast.attr)
-                    inst.field_values[target_ast.attr] = rhs
-                    # What the type says is always true has to be true
-                    # again once the field has been written, or there
-                    # would be a way to have one that does not keep to
-                    # it.
-                    self._check_invariants(inst)
-                elif isinstance(au, ObjectValue) and au.obj is std \
-                        and target_ast.attr in _STD_SETTINGS:
-                    setting = unwrap_optional(rhs)
-                    if not isinstance(setting, (FloatValue, IntValue)):
-                        raise TypeError(
-                            f"std.{target_ast.attr} is a number, but the "
-                            f"value is {self._value_type_name(setting)}")
-                    setattr(std, target_ast.attr, float(setting.value))
-                else:
-                    raise TypeError("field assignment requires a struct instance")
-            elif isinstance(target_ast, VarRef):
-                if target_ast.name == DISCARD_NAME:
-                    # The right-hand side has already been evaluated for
-                    # its effects; the result is simply dropped.  No type
-                    # check applies, since there is nothing to store into.
-                    return none()
-                if target_ast.name in self._frozen_vars:
-                    kind = self._frozen_vars[target_ast.name]
-                    self._refuse_if_lent(target_ast.name)
-                    if kind is Held.moved:
-                        del self._frozen_vars[target_ast.name]
-                    else:
-                        raise coded(2412, TypeError(
-                            f"cannot assign to {kind} variable "
-                            f"'{target_ast.name}'"))
-                if self.env.is_const_global(target_ast.name):
-                    raise coded(2241, TypeError(
-                        f"cannot assign to let variable "
-                        f"'{target_ast.name}'"))
-                if (self._pure_func_name is not None
-                        and not self.env.has_local(target_ast.name)):
-                    raise coded(2242, TypeError(
-                        f"pure function '{self._pure_func_name}' cannot "
-                        f"assign to non-local variable '{target_ast.name}'"))
-                current = self.env.lookup(target_ast.name)
-                if isinstance(current, Reference):
-                    current.set(rhs)
-                    return none()
-                decl = self.env.declaration(target_ast.name)
-                if decl is not None and not decl.says_nothing():
-                    rhs = self._coerce_declared(rhs, decl, target_ast.name)
-                elif isinstance(current, UnitValue):
-                    # Nothing was written down, so what the name holds
-                    # is all there is to go on.
-                    if isinstance(rhs, UnitValue):
-                        rhs = self._convert_unit_value(rhs, current.unit)
-                    else:
-                        raise TypeError(
-                            f"cannot assign dimensionless value to "
-                            f"'{target_ast.name}' which has unit "
-                            f"{current.unit.display_name}")
-                # The value is stored on its own: what the definition
-                # said outlives it.
-                if not self.env.update(target_ast.name, rhs):
-                    self.env.define(target_ast.name, rhs)
-            return none()
-
+            return self._c_assign_post(target_ast, rhs, pre)
         if isinstance(stmt, (BreakStmt, ContinueStmt)):
             word = "break" if isinstance(stmt, BreakStmt) else "continue"
             # The static checks catch this in a function; what reaches
@@ -5152,10 +5008,209 @@ class Evaluator:
         return none()
 
 
+
+    def _c_assign_pre(self, target_ast):
+        """What an assignment settles before its right side is read:
+        that the target may be written, and the target's own
+        subexpressions, evaluated first because they stand first."""
+        target_pos = getattr(target_ast, "pos", None)
+        if target_pos is not None:
+            self._last_pos = target_pos
+        self._check_assignable(target_ast)
+        # Left to right.  What is written stands to the left of the
+        # value, so the target's own subexpressions -- the thing
+        # being written into, and where in it -- are evaluated
+        # before the value is.  Held here so the code below reads
+        # them rather than evaluating them a second time, which
+        # would run their effects twice.
+        _pre_obj = _MISSING
+        _pre_idx = None
+        _pre_start = _pre_end = _MISSING
+        if isinstance(target_ast, (MultiSlice, SliceAccess, Subscript,
+                                   GetAttr)):
+            _pre_obj = self.eval_expr(target_ast.obj)
+            if isinstance(target_ast, SliceAccess):
+                _pre_start = self.eval_expr(target_ast.start)
+                _pre_end = self.eval_expr(target_ast.end)
+            elif isinstance(target_ast, Subscript):
+                _pre_idx = [self.eval_expr(i)
+                            for i in target_ast.indices]
+        return (_pre_obj, _pre_idx, _pre_start, _pre_end)
+
+    def _c_assign_post(self, target_ast, rhs, pre):
+        """The write itself, once the right side is a value."""
+        _pre_obj, _pre_idx, _pre_start, _pre_end = pre
+        if isinstance(target_ast, VarRef):
+            self._check_assigned_kind(target_ast.name, rhs)
+        if isinstance(target_ast, MultiSlice):
+            # arr[range, range, ...] ← matrix — multi-dim slice write.
+            arr_val = _pre_obj
+            self._eval_multi_slice_write(arr_val, target_ast.specs, rhs)
+        elif isinstance(target_ast, SliceAccess):
+            # arr[s…e] ← rhs_array — copy elements into slice.
+            arr_val = _pre_obj
+            au = unwrap_optional(arr_val)
+            if isinstance(au, ObjectValue) and isinstance(au.obj, ArrayValue):
+                s = unwrap_optional(_pre_start)
+                e = unwrap_optional(_pre_end)
+                s = self._check_index_unit(s, au.obj)
+                e = self._check_index_unit(e, au.obj)
+                rhs_arr = self._as_array(rhs)
+                if rhs_arr is not None:
+                    for i in range(rhs_arr.sizeof):
+                        au.obj.set(s.value + i, rhs_arr.get(i))
+        elif isinstance(target_ast, Subscript):
+            # arr[i] or arr[i, j, ...] ← value — mutate (nested) array element.
+            val = _pre_obj
+            for _i, idx_node in enumerate(target_ast.indices[:-1]):
+                unwrapped = unwrap_optional(val)
+                idx_val = _pre_idx[_i]
+                iu = unwrap_optional(idx_val)
+                if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
+                    iu = self._check_index_unit(iu, unwrapped.obj)
+                    val = unwrapped.obj.get(iu.value)
+                else:
+                    raise TypeError("multi-dimensional subscript requires nested arrays")
+            unwrapped = unwrap_optional(val)
+            if isinstance(unwrapped, StrValue):
+                # A string is read at a position, not written at
+                # one: a character may be a different width in
+                # UTF-8 than the one it replaces, so there is no
+                # writing in place to be had.  A new string is
+                # built instead.
+                raise coded(2745, TypeError(
+                    "a string cannot be written through; build the "
+                    "string that is wanted, joining with \N{DOUBLE PLUS}"))
+            if isinstance(unwrapped, ObjectValue) \
+                    and isinstance(unwrapped.obj, HashValue):
+                # Writing at a key puts it there, whether or not it
+                # was there before: a dictionary has no length to run past
+                # and nothing to be out of range of.
+                hv = unwrapped.obj
+                key = self._checked_key(_pre_idx[-1], hv.key_type, None)
+                value = rhs
+                if hv.value_type is not None:
+                    value = coerce_to_type(value, hv.value_type)
+                elif hv.sizeof:
+                    held = runtime_type_of(hv.values()[0])
+                    mismatch = _scalar_kind_mismatch(value, held)
+                    if mismatch is not None:
+                        raise TypeError(
+                            f"a dictionary of {held} cannot hold {mismatch}")
+                hv.put(key, value)
+            elif isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
+                iu = unwrap_optional(_pre_idx[-1])
+                iu = self._check_index_unit(iu, unwrapped.obj)
+                unwrapped.obj.set(iu.value, rhs)
+            else:
+                raise TypeError(
+                    f"cannot write through a subscript of "
+                    f"{runtime_type_of(unwrapped)}")
+        elif isinstance(target_ast, GetAttr):
+            self._refuse_stored_borrow(rhs, f"'{target_ast.attr}'")
+            obj_val = _pre_obj
+            au = unwrap_optional(obj_val)
+            if isinstance(au, ObjectValue) and isinstance(au.obj, StructInstance):
+                inst = au.obj
+                if target_ast.attr not in inst.field_values:
+                    raise TypeError(
+                        f"struct '{inst.struct_type.name}' has no field "
+                        f"'{target_ast.attr}'")
+                field_type = None
+                for fname, ftype in inst.struct_type.fields:
+                    if fname == target_ast.attr:
+                        field_type = ftype
+                        break
+                if field_type is not None:
+                    funit = inst.struct_type.field_unit(target_ast.attr)
+                    if funit is not None:
+                        rhs = coerce_to_type(rhs, field_type, funit,
+                                             self._mk_int)
+                    else:
+                        rhs = coerce_arg(rhs, field_type,
+                                         "field assignment",
+                                         target_ast.attr)
+                inst.field_values[target_ast.attr] = rhs
+                # What the type says is always true has to be true
+                # again once the field has been written, or there
+                # would be a way to have one that does not keep to
+                # it.
+                self._check_invariants(inst)
+            elif isinstance(au, ObjectValue) and au.obj is std \
+                    and target_ast.attr in _STD_SETTINGS:
+                setting = unwrap_optional(rhs)
+                if not isinstance(setting, (FloatValue, IntValue)):
+                    raise TypeError(
+                        f"std.{target_ast.attr} is a number, but the "
+                        f"value is {self._value_type_name(setting)}")
+                setattr(std, target_ast.attr, float(setting.value))
+            else:
+                raise TypeError("field assignment requires a struct instance")
+        elif isinstance(target_ast, VarRef):
+            if target_ast.name == DISCARD_NAME:
+                # The right-hand side has already been evaluated for
+                # its effects; the result is simply dropped.  No type
+                # check applies, since there is nothing to store into.
+                return none()
+            if target_ast.name in self._frozen_vars:
+                kind = self._frozen_vars[target_ast.name]
+                self._refuse_if_lent(target_ast.name)
+                if kind is Held.moved:
+                    del self._frozen_vars[target_ast.name]
+                else:
+                    raise coded(2412, TypeError(
+                        f"cannot assign to {kind} variable "
+                        f"'{target_ast.name}'"))
+            if self.env.is_const_global(target_ast.name):
+                raise coded(2241, TypeError(
+                    f"cannot assign to let variable "
+                    f"'{target_ast.name}'"))
+            if (self._pure_func_name is not None
+                    and not self.env.has_local(target_ast.name)):
+                raise coded(2242, TypeError(
+                    f"pure function '{self._pure_func_name}' cannot "
+                    f"assign to non-local variable '{target_ast.name}'"))
+            current = self.env.lookup(target_ast.name)
+            if isinstance(current, Reference):
+                current.set(rhs)
+                return none()
+            decl = self.env.declaration(target_ast.name)
+            if decl is not None and not decl.says_nothing():
+                rhs = self._coerce_declared(rhs, decl, target_ast.name)
+            elif isinstance(current, UnitValue):
+                # Nothing was written down, so what the name holds
+                # is all there is to go on.
+                if isinstance(rhs, UnitValue):
+                    rhs = self._convert_unit_value(rhs, current.unit)
+                else:
+                    raise TypeError(
+                        f"cannot assign dimensionless value to "
+                        f"'{target_ast.name}' which has unit "
+                        f"{current.unit.display_name}")
+            # The value is stored on its own: what the definition
+            # said outlives it.
+            if not self.env.update(target_ast.name, rhs):
+                self.env.define(target_ast.name, rhs)
+        return none()
+
+
     def _es_ExpectStmt(self, stmt):
         return self._eval_expect(stmt)
 
     def _es_VarDef(self, stmt):
+        borrow_ann = self._c_vardef_pre(stmt)
+        if stmt.name == DISCARD_NAME:
+            # `let _ := expr` discards too, so that a value can be
+            # thrown away without inventing a name for it.
+            self.eval_expr(stmt.init_expr)
+            return none()
+        self._c_vardef_frozen(stmt)
+        return self._c_vardef_bind(stmt, self.eval_expr(stmt.init_expr), borrow_ann)
+
+    def _c_vardef_pre(self, stmt) -> bool:
+        """What a let settles before its initializer is read: the
+        borrow in its type, the type itself, the name.  Answers whether
+        the binding is written as a borrow."""
         # `let v : &T = …` says the binding holds a borrow; the & is
         # kept in front of the type by the parser and taken off here
         borrow_ann = False
@@ -5171,11 +5226,9 @@ class Evaluator:
         if is_type_name(stmt.name):
             raise coded(2243, TypeError(
                 f"'{stmt.name}' names a type and cannot name a variable"))
-        if stmt.name == DISCARD_NAME:
-            # `let _ := expr` discards too, so that a value can be
-            # thrown away without inventing a name for it.
-            self.eval_expr(stmt.init_expr)
-            return none()
+        return borrow_ann
+
+    def _c_vardef_frozen(self, stmt):
         if stmt.name in self._frozen_vars:
             kind = self._frozen_vars[stmt.name]
             if kind is Held.foreach:
@@ -5185,7 +5238,9 @@ class Evaluator:
             elif not stmt.is_const:
                 raise coded(2244, TypeError(
                     f"cannot redefine {kind} variable '{stmt.name}'"))
-        value = self.eval_expr(stmt.init_expr)
+
+    def _c_vardef_bind(self, stmt, value, borrow_ann):
+        """The rest of a let, once its initializer is a value."""
         if stmt.type_annotation is None:
             # Naming a value settles it, and without a type written
             # down a number settles on `int` or `float` -- neither
@@ -5594,6 +5649,21 @@ class Evaluator:
 
     def _eval_foreach(self, node: ForEachStmt):
         """Evaluate a foreach loop over ranges or containers."""
+        st = self._c_foreach_setup(node)
+        if st is None:
+            return none()
+        return self._c_foreach_run(node, *st)
+
+    def _c_foreach_end(self, flat_names):
+        """What a foreach undoes on the way out, however it ends."""
+        for name in flat_names:
+            self._frozen_vars.pop(name, None)
+        self._comptime_vars -= set(flat_names)
+
+    def _c_foreach_setup(self, node):
+        """The first half of a foreach: the sequences resolved, the
+        loop names frozen.  Answers what the loop needs, or None where
+        there is nothing to loop over."""
         sequences: list[list[Value]] = []
         # None for an ordinary iterable, "shared" or "mut" for a borrow.
         borrows: list[str | None] = []
@@ -5668,7 +5738,7 @@ class Evaluator:
                 sequences.append(self._resolve_iterable(expr, node.is_comptime))
 
         if not sequences:
-            return none()
+            return None
 
         max_len = max(len(seq) for seq in sequences)
         num_vars = len(node.vars)
@@ -5713,6 +5783,12 @@ class Evaluator:
                 for one in _flatten_names(name):
                     self._frozen_vars[one] = kind
         self._comptime_vars |= set(flat_names)
+        return (sequences, var_names, destructure, flat_names)
+
+    def _c_foreach_run(self, node, sequences, var_names, destructure, flat_names):
+        max_len = max(len(seq) for seq in sequences)
+        num_vars = len(node.vars)
+        num_iters = len(sequences)
         try:
             for idx in range(max_len):
                 if num_vars == 1 and num_iters > 1:

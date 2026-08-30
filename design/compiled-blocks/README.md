@@ -125,16 +125,30 @@ Wall time of the self-compile, one run each, on the same machine:
 | v2: field access, subscript, method call, unit inline | 1151 s | 9% |
 | v3: variable-read and integer-operator fast paths | 1133 s | 10% |
 | v3 + `_reachable_ids` no longer copying every array it meets | 1045 s | 17% |
+| v4: statement-form emitter; reads, operators, `while` inline | 1030 s | 18% |
+| v5: `let` initializers, assignment right sides, method calls under modules, `and`/`or` | 926 s | 26% |
+| v6: the plain `foreach` turn inline | 909 s | 28% |
 
 Timing is noisy (±3%); a difference smaller than that is not one.
 Every version produced the identical binary.
 
-Ten percent from compiling is what taking the dispatch out of a
-tree-walker buys when every node still calls a helper: the helper is
-a Python call, as the handler was, and the work inside it -- the
-frozen-name checks, the environment probe, unwrapping an optional,
-boxing an integer -- is the same work.  The rest of the way is §5,
-and each step there is measured against this table.
+Two lessons in that table.  Ten percent (v1--v3) is what taking the
+dispatch out of a tree-walker buys when every node still calls a
+helper.  Then v4 -- reads and operators inlined as statements, which
+should have been the big one -- bought nothing measurable, and the
+profile said why: two thirds of all expressions were still entering
+the walk, through the `let` handler evaluating its own initializer,
+the assignment evaluating its right side, and every method call
+falling back because the program declares modules.  Compiling those
+(v5) was worth as much as everything before it.  **What matters is
+which nodes reach the compiled path at all, not how tight the
+compiled path is**; the histogram of what falls back is the thing to
+read before optimizing anything.
+
+Where it stands after v6, at leaf: unwrapping optionals 6%, boxing
+values 5%, the watchdog 2%, then the checkers -- `coerce_to_type`,
+`check_int`, `_check_return_type`, units -- each around one percent.
+That is the semantics, and the walk's own share is under ten.
 
 ## 5. What is next, in the order it pays
 
@@ -142,16 +156,23 @@ and each step there is measured against this table.
    struct walks everything reachable from every argument to decide
    whether the answer must be copied.  This is not the walk's cost and
    the compiler does not touch it; it wants its own fix.
-2. **Names as Python locals.**  A function's `let`s and parameters
-   could live in a list indexed by slot, resolved at compile time,
-   with the environment kept for globals and captures.  Every helper
-   that looks a name up by string (`_after_last_use`, the frozen
-   table, `_end_scope`) has to be taught, which is why it is not done
-   yet.
-3. **Loops inline.**  `while` and `foreach` are still the walk's
-   handlers with compiled bodies; the per-iteration frame push, loop
-   label and break/continue signals could be emitted.
-4. **Functions as one Python function**, control flow and all -- the
+2. **Names as Python locals** -- reconsidered.  After v4 a read is
+   one dictionary probe on the innermost frame plus the frozen-table
+   probe; a slot would make the first an index and leave the second.
+   Every helper that looks a name up by string (`_end_scope`, the
+   lifetime tables, the frozen table) would have to be taught for a
+   gain the profile no longer shows.  Not worth it now.
+3. **The call.**  `_call_user_func_inner` runs a few dozen checks per
+   call -- generics, the lent-mutably scan, parameter coercion, two
+   contract passes, `@old`, the return type, the borrowed answer,
+   seven saves and restores -- at 24 million calls.  A per-function
+   plan settled at the first call (no generics, no pack, no
+   conditions, no borrowed answer, which parameters need which check)
+   would skip most of it for most functions.  This is the next thing.
+4. **Loops** are inline in their plain form (v6); `while` with a
+   bound name, `foreach` with several names or a typed one, and
+   `match` still go to their handlers.
+5. **Functions as one Python function**, control flow and all -- the
    transpiler proper.  Everything above is on the way to it; by then
    the semantics are factored into helpers that generated code can
    call, which is the part that is hard.
