@@ -160,6 +160,26 @@ values 5%, the watchdog 2%, then the checkers -- `coerce_to_type`,
 `check_int`, `_check_return_type`, units -- each around one percent.
 That is the semantics, and the walk's own share is under ten.
 
+## 4a. Cheaper checks, and where that ended
+
+After v7 the profile is the semantics itself, so the next round went
+at the checks: the range of every named width worked out once instead
+of shifted out per `check_int`; `resolve_width` and
+`Unit.stands_in_for` memoized (a unit's components and decay never
+change after its declaration, so neither does the answer);
+`unwrap_optional` and `_unwrap_operand` answering for three more
+types before the isinstance ladder; the builtin byte and ptrdiff
+units hoisted out of `_check_index_unit`; the integer fast paths of
+`+ - ×` skipping two call layers; the comparisons answering two plain
+integers before unwrapping anything.
+
+Worth about two percent all told -- 907 s to 893 s -- and the second
+half of it (the comparisons) measured as nothing.  That is the
+signal to stop: the remaining per-operation work is boxing a result
+and probing one or two dictionaries, and no exact shortcut is left
+that skips either.  Clean pair after this round: **the walk 1191 s,
+compiled 893 s, 1.33 times**, identical binaries throughout.
+
 ## 5. What is next, in the order it pays
 
 1. **`_reachable_ids`** (7%): every call answering an array or a

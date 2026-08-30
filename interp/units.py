@@ -15,7 +15,8 @@ class Unit:
     factor is a Fraction: 1 of this unit = factor of the base representation.
     """
 
-    __slots__ = ("components", "factor", "display_name", "decay")
+    __slots__ = ("components", "factor", "display_name", "decay",
+                 "_stands")
 
     def __init__(self, components: dict[str, int], factor: Fraction,
                  display_name: str, decay: "Unit | None" = None):
@@ -28,6 +29,12 @@ class Unit:
         # direction is not open and neither is the way between two that
         # decay to the same thing.
         self.decay = decay
+        # what this unit was already asked whether it stands in for,
+        # and the answer: a unit's components and decay never change
+        # after its declaration, so the answer never does either.  The
+        # asked-about unit itself is the key, which also keeps it
+        # alive, so no other object can turn up under its identity.
+        self._stands: dict = {}
 
     def same_dimension(self, other: "Unit") -> bool:
         # Measures are shared: the ¤byte two operands carry is one
@@ -48,16 +55,23 @@ class Unit:
         declaration may only name a measure already declared, so the
         chain cannot close on itself.
         """
+        got = self._stands.get(id(wanted))
+        if got is not None:
+            return got[1]
+        answer = False
         if self.same_dimension(wanted):
-            return True
-        seen = 0
-        step = self.decay
-        while step is not None and seen < 64:
-            if step.same_dimension(wanted):
-                return True
-            step = step.decay
-            seen += 1
-        return False
+            answer = True
+        else:
+            seen = 0
+            step = self.decay
+            while step is not None and seen < 64:
+                if step.same_dimension(wanted):
+                    answer = True
+                    break
+                step = step.decay
+                seen += 1
+        self._stands[id(wanted)] = (wanted, answer)
+        return answer
 
     def is_dimensionless(self) -> bool:
         return all(v == 0 for v in self.components.values())

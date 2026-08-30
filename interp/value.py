@@ -368,8 +368,13 @@ class _IntMasks:
 _TYPE_MASK = _IntMasks()
 
 
+_WIDTH_PAIRS: dict = {}
+
+
 def resolve_width(w1: str, w2: str) -> str:
-    """Determine the result type when combining two integer types.
+    """Determine the result type when combining two integer types.  The
+    answer to a pair never changes, and the pairs a program combines
+    are few, so each is worked out once.
 
     Three kinds of operand meet here, and they rank:
 
@@ -383,6 +388,15 @@ def resolve_width(w1: str, w2: str) -> str:
       is an `int` and stays one; only a literal is untyped.
     - Two fixed widths give the wider.
     """
+    got = _WIDTH_PAIRS.get((w1, w2))
+    if got is not None:
+        return got
+    got = _resolve_width_slow(w1, w2)
+    _WIDTH_PAIRS[(w1, w2)] = got
+    return got
+
+
+def _resolve_width_slow(w1: str, w2: str) -> str:
     if w1 == w2:
         return w1
     if w1 == UNTYPED:
@@ -424,9 +438,25 @@ def wrap_int(value: int, width: str) -> int:
     return result
 
 
+# The range of every named width, worked out once: check_int runs for
+# every checked arithmetic result, and shifting the same 1 the same 63
+# places each time bought nothing.
+_INT_RANGES: dict = {}
+_RANGE_MISS = ()
+
+
+def _range_of(width: str):
+    got = _INT_RANGES.get(width, _RANGE_MISS)
+    if got is not _RANGE_MISS:
+        return got
+    got = _int_range(width)
+    _INT_RANGES[width] = got
+    return got
+
+
 def check_int(value: int, width: str) -> int:
     """Check that an integer fits the given type; raise OverflowError if not."""
-    r = _int_range(width)
+    r = _range_of(width)
     if r is None:
         return value
     lo, hi = r

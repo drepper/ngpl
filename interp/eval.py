@@ -146,6 +146,9 @@ from interp.ast import (
     MatchStmt, ExpErr,
     StructLit,
 )
+from interp.units import BUILTIN_UNITS as _BUILTIN_UNITS
+_UNIT_BYTE = _BUILTIN_UNITS["byte"]
+_UNIT_PTRDIFF = _BUILTIN_UNITS["ptrdiff"]
 from interp.value import _ALIAS_VERSION
 from interp.value import (
     Value, IntValue, FloatValue, StrValue, BoolValue, NoneValue, SomeValue, ExpectedValue,
@@ -747,7 +750,10 @@ def unwrap_optional(value):
     """
     t = type(value)
     if t is IntValue or t is StrValue or t is BoolValue or t is CharValue \
-            or t is ObjectValue:
+            or t is ObjectValue or t is UnitValue or t is FloatValue \
+            or t is NoneValue:
+        # the three added at the end fall through every question below
+        # unchanged, so answering here says the same thing sooner
         return value
     if isinstance(value, SomeValue):
         return unwrap_optional(value.value)
@@ -785,8 +791,11 @@ def _unwrap_operand(value):
     # Most operands are already the plain thing an operator wants, and
     # asking costs less than the two calls that answer the same.
     t = type(value)
-    if t is IntValue or t is StrValue or t is BoolValue or t is CharValue:
+    if t is IntValue or t is StrValue or t is BoolValue or t is CharValue \
+            or t is ObjectValue or t is FloatValue:
         return value
+    if t is UnitValue:
+        return value.inner
     v = unwrap_optional(value)
     if isinstance(v, UnitValue):
         return v.inner
@@ -1229,7 +1238,11 @@ class Evaluator:
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-            return self._mk_int(lu.value + ru.value, resolve_width(lu.width, ru.width))
+            if self._wrapping:
+                return mk_int_wrap(lu.value + ru.value,
+                                   resolve_width(lu.width, ru.width))
+            return mk_int(lu.value + ru.value,
+                          resolve_width(lu.width, ru.width))
         ff = self._require_matching_numeric(lu, ru, "addition")
         if ff is not None:
             # A zero from a sum is exact: it says the two were equal.
@@ -1244,7 +1257,11 @@ class Evaluator:
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-            return self._mk_int(lu.value - ru.value, resolve_width(lu.width, ru.width))
+            if self._wrapping:
+                return mk_int_wrap(lu.value - ru.value,
+                                   resolve_width(lu.width, ru.width))
+            return mk_int(lu.value - ru.value,
+                          resolve_width(lu.width, ru.width))
         ff = self._require_matching_numeric(lu, ru, "subtraction")
         if ff is not None:
             return self._float_arith(ff[0] - ff[1], ff[2], "-", ff[0], ff[1],
@@ -1256,7 +1273,11 @@ class Evaluator:
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
-            return self._mk_int(lu.value * ru.value, resolve_width(lu.width, ru.width))
+            if self._wrapping:
+                return mk_int_wrap(lu.value * ru.value,
+                                   resolve_width(lu.width, ru.width))
+            return mk_int(lu.value * ru.value,
+                          resolve_width(lu.width, ru.width))
         ff = self._require_matching_numeric(lu, ru, "multiplication")
         if ff is not None:
             return self._float_arith(ff[0] * ff[1], ff[2],
@@ -1759,14 +1780,19 @@ class Evaluator:
         return mk_bool(False)
 
     def _op_neq(self, left, right):
-        """Inequality comparison."""
-        lu = _unwrap_operand(left)
-        ru = _unwrap_operand(right)
+        """Inequality comparison: the other answer to _op_eq's question."""
+        if type(left) is IntValue and type(right) is IntValue \
+                and left.width == right.width:
+            return TRUE_VALUE if left.value != right.value else FALSE_VALUE
         eq = self._op_eq(left, right)
         return mk_bool(not eq.value)
 
     def _op_lt(self, left, right):
         """Less-than comparison."""
+        # two plain integers order by value whatever their widths, as
+        # the branch below answers once they are unwrapped
+        if type(left) is IntValue and type(right) is IntValue:
+            return TRUE_VALUE if left.value < right.value else FALSE_VALUE
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
         if isinstance(lu, CharValue) and isinstance(ru, CharValue):
@@ -1780,6 +1806,10 @@ class Evaluator:
 
     def _op_gt(self, left, right):
         """Greater-than comparison."""
+        # two plain integers order by value whatever their widths, as
+        # the branch below answers once they are unwrapped
+        if type(left) is IntValue and type(right) is IntValue:
+            return TRUE_VALUE if left.value > right.value else FALSE_VALUE
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
         if isinstance(lu, CharValue) and isinstance(ru, CharValue):
@@ -1793,6 +1823,10 @@ class Evaluator:
 
     def _op_lte(self, left, right):
         """Less-than-or-equal comparison."""
+        # two plain integers order by value whatever their widths, as
+        # the branch below answers once they are unwrapped
+        if type(left) is IntValue and type(right) is IntValue:
+            return TRUE_VALUE if left.value <= right.value else FALSE_VALUE
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
         if isinstance(lu, CharValue) and isinstance(ru, CharValue):
@@ -1806,6 +1840,10 @@ class Evaluator:
 
     def _op_gte(self, left, right):
         """Greater-than-or-equal comparison."""
+        # two plain integers order by value whatever their widths, as
+        # the branch below answers once they are unwrapped
+        if type(left) is IntValue and type(right) is IntValue:
+            return TRUE_VALUE if left.value >= right.value else FALSE_VALUE
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
         if isinstance(lu, CharValue) and isinstance(ru, CharValue):
@@ -3471,9 +3509,8 @@ class Evaluator:
         without a unit (e.g. i32, u64) are rejected — they must
         carry the correct unit annotation.
         """
-        from interp.units import BUILTIN_UNITS
         is_byte_array = arr.element_type in ("u8", "byte")
-        required = BUILTIN_UNITS["byte"] if is_byte_array else BUILTIN_UNITS["ptrdiff"]
+        required = _UNIT_BYTE if is_byte_array else _UNIT_PTRDIFF
         if isinstance(iu, UnitValue):
             # An index measured in something that stands in for the
             # array's own measure is an index: `unit tok -> ptrdiff`
