@@ -2713,28 +2713,24 @@ class Evaluator:
             # Element-wise on the left operand only, which it does for
             # itself: the right one is the container to look through.
             return self._op_element_of(left, right)
-        if op in ("=", "\N{NOT EQUAL TO}") and (isinstance(left, (SomeValue, NoneValue))
-                                   or isinstance(right, (SomeValue, NoneValue))):
-            # Whether there is a value at all is settled before what it
-            # is, so that an optional carrying a unit is not unwrapped
-            # into its unit by the dispatch below and compared as though
-            # the optional had never been there.  `(v ⍳ x) == ∅` asks
-            # the same question whichever way the search went.
-            return self._ops[op](left, right)
-        if op in ("=", "\N{NOT EQUAL TO}") \
-                and (isinstance(_unwrap_operand(left), SyntaxValue)
-                     or isinstance(_unwrap_operand(right), SyntaxValue)):
-            # Two pieces of the program are the same where the same
-            # thing is written in both, wherever each was written.
-            return self._op_syntax_eq(op, _unwrap_operand(left),
-                                      _unwrap_operand(right))
-        if op in ("=", "\N{NOT EQUAL TO}") \
-                and (_is_keyed_container(_unwrap_operand(left))
-                     or _is_keyed_container(_unwrap_operand(right))):
-            # A hash and a set are the operand rather than a stand-in
-            # for what is in them, so they are compared whole and answer
-            # one truth value rather than one for each thing in them.
-            return self._op_container_eq(op, left, right)
+        if op in "=\N{NOT EQUAL TO}":
+            if isinstance(left, (SomeValue, NoneValue)) or isinstance(right, (SomeValue, NoneValue)):
+                # Whether there is a value at all is settled before what it
+                # is, so that an optional carrying a unit is not unwrapped
+                # into its unit by the dispatch below and compared as though
+                # the optional had never been there.  `(v ⍳ x) == ∅` asks
+                # the same question whichever way the search went.
+                return self._ops[op](left, right)
+            if isinstance(_unwrap_operand(left), SyntaxValue) or isinstance(_unwrap_operand(right), SyntaxValue):
+                # Two pieces of the program are the same where the same
+                # thing is written in both, wherever each was written.
+                return self._op_syntax_eq(op, _unwrap_operand(left),
+                                          _unwrap_operand(right))
+            if _is_keyed_container(_unwrap_operand(left)) or _is_keyed_container(_unwrap_operand(right)):
+                # A hash and a set are the operand rather than a stand-in
+                # for what is in them, so they are compared whole and answer
+                # one truth value rather than one for each thing in them.
+                return self._op_container_eq(op, left, right)
         if op in self._LISTABLE_BINOPS:
             # An operand deeper than the operator asks for is taken
             # apart and the operator asked again of each of its
@@ -2748,8 +2744,8 @@ class Evaluator:
                     noun="operands")
                 if threaded is not None:
                     return threaded
-        if op in self._APPROX_OPS:
-            return self._op_approx(op, left, right)
+            if op in self._APPROX_OPS:
+                return self._op_approx(op, left, right)
         lu = unwrap_optional(left)
         ru = unwrap_optional(right)
         if isinstance(lu, UnitValue) or isinstance(ru, UnitValue):
@@ -4069,33 +4065,34 @@ class Evaluator:
         if isinstance(unwrapped, (TupleValue, StrValue)):
             if node.attr == "sizeof":
                 raise AttributeError(_sizeof_is_gone(node.attr))
-        if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
-            if node.attr == "sizeof":
-                raise coded(2742, AttributeError(_sizeof_is_gone(node.attr)))
-            if node.attr == "shape":
-                # One extent per dimension, which is how a function
-                # reads the dimensions its parameter type left open.
-                return TupleValue([
-                    self._sizeof_result(d) if d is not None else none()
-                    for d in array_shape(unwrapped.obj)])
-        if isinstance(unwrapped, ObjectValue):
-            attr_val = getattr(unwrapped.obj, node.attr, None)
-            if attr_val is not None:
-                if isinstance(attr_val, Value):
-                    return attr_val
-                if callable(attr_val):
-                    return BuiltinBoundMethod(unwrapped.obj, node.attr)
-                # bool before int: bool is a subclass of int, so the
-                # int test would otherwise turn true/false into 1/0.
-                if isinstance(attr_val, bool):
-                    return mk_bool(attr_val)
-                if isinstance(attr_val, int):
-                    return mk_int(attr_val)
-                if isinstance(attr_val, float):
-                    return mk_float(attr_val)
-                if isinstance(attr_val, str):
-                    return mk_str(attr_val)
-                return ObjectValue(attr_val)
+        elif isinstance(unwrapped, ObjectValue):
+            if isinstance(unwrapped.obj, ArrayValue):
+                if node.attr == "sizeof":
+                    raise coded(2742, AttributeError(_sizeof_is_gone(node.attr)))
+                if node.attr == "shape":
+                    # One extent per dimension, which is how a function
+                    # reads the dimensions its parameter type left open.
+                    return TupleValue([
+                        self._sizeof_result(d) if d is not None else none()
+                        for d in array_shape(unwrapped.obj)])
+            else:
+                attr_val = getattr(unwrapped.obj, node.attr, None)
+                if attr_val is not None:
+                    if isinstance(attr_val, Value):
+                        return attr_val
+                    if callable(attr_val):
+                        return BuiltinBoundMethod(unwrapped.obj, node.attr)
+                    # bool before int: bool is a subclass of int, so the
+                    # int test would otherwise turn true/false into 1/0.
+                    if isinstance(attr_val, bool):
+                        return mk_bool(attr_val)
+                    if isinstance(attr_val, int):
+                        return mk_int(attr_val)
+                    if isinstance(attr_val, float):
+                        return mk_float(attr_val)
+                    if isinstance(attr_val, str):
+                        return mk_str(attr_val)
+                    return ObjectValue(attr_val)
         elif isinstance(unwrapped, IntValue):
             # int.value attribute? No, just return the int itself.
             pass

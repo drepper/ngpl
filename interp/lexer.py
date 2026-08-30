@@ -10,8 +10,8 @@ based on indentation changes, enabling layout-driven scoping.
 
 import enum
 import math
+
 from interp.errors import coded
-import re
 
 
 class TokenType(enum.Enum):
@@ -403,8 +403,7 @@ def _check_literal_width(width: str, is_float: bool, text: str, line, col):
     spelled with a float type, nor a fractional one with an integer
     type.
     """
-    from interp.value import (BUILTIN_TYPES, FLOAT_TYPES, FAST_TYPES,
-                              _parse_int_width)
+    from interp.value import BUILTIN_TYPES, FAST_TYPES, FLOAT_TYPES, _parse_int_width
     known = (width in BUILTIN_TYPES or width in FAST_TYPES
              or _parse_int_width(width) is not None)
     if not known:
@@ -444,8 +443,7 @@ def _check_float_literal_range(value: float, width: str, text: str, base: int,
     one that was written, and a literal is a mistake in the source, so
     the source is where it is reported.
     """
-    from interp.value import (float_overflow_message, float_overflows,
-                              float_underflow_message, float_underflows)
+    from interp.value import float_overflows, float_overflow_message, float_underflows, float_underflow_message
     if math.isinf(value) or float_overflows(value, width):
         # The value is an infinity because the text overflowed, so the
         # text is what the complaint has to name.
