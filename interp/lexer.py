@@ -16,7 +16,7 @@ import re
 class Token:
     """A single lexical token."""
 
-    __slots__ = ("type", "value", "line", "col", "end_col", "width")
+    __slots__ = ("col", "end_col", "line", "type", "value", "width")
 
     def __init__(self, type_, value, line, col, end_col: int | None = None,
                  width: str | None = None):
@@ -226,31 +226,32 @@ def _read_string(src, pos, start_line, start_col, line_start):
             text = "".join(text_chars)
             end_col = end_pos + 3 - cur_line_start
             return Token("STR", text, start_line, start_col, end_col), end_pos + 3
-        if ch == "\n" and multi:
-            end_pos += 1
-            line += 1
-            cur_line_start = end_pos
-            while end_pos < len(src) and src[end_pos] in " \t":
-                end_pos += 1
-            if src[end_pos:end_pos + 3] == '"""':
-                text = "".join(text_chars)
-                end_col = end_pos + 3 - cur_line_start
-                return Token("STR", text, start_line, start_col, end_col), end_pos + 3
-            if src[end_pos:end_pos + 1] != '"':
-                raise LexerError(
-                    "a line continuing a multi-line string begins with a "
-                    "quote, and what stands before that quote is not part "
-                    "of the string",
-                    line, end_pos - cur_line_start)
-            end_pos += 1
-            continue
         if ch == "\n":
-            # A simple string ends before the line does; a newline
-            # inside one is an unterminated string, not a longer one.
-            # (This used to advance nothing and hang the scanner.)
-            raise LexerError(
-                "string literal is not closed before the end of the line",
-                start_line, start_col)
+            if multi:
+                end_pos += 1
+                line += 1
+                cur_line_start = end_pos
+                while end_pos < len(src) and src[end_pos] in " \t":
+                    end_pos += 1
+                if src[end_pos:end_pos + 3] == '"""':
+                    text = "".join(text_chars)
+                    end_col = end_pos + 3 - cur_line_start
+                    return Token("STR", text, start_line, start_col, end_col), end_pos + 3
+                if src[end_pos:end_pos + 1] != '"':
+                    raise LexerError(
+                        "a line continuing a multi-line string begins with a "
+                        "quote, and what stands before that quote is not part "
+                        "of the string",
+                        line, end_pos - cur_line_start)
+                end_pos += 1
+                continue
+            else:
+                # A simple string ends before the line does; a newline
+                # inside one is an unterminated string, not a longer one.
+                # (This used to advance nothing and hang the scanner.)
+                raise LexerError(
+                    "string literal is not closed before the end of the line",
+                    start_line, start_col)
         elif ch == "\\" and end_pos + 1 < len(src):
             esc = src[end_pos + 1]
             end_pos += 2
@@ -316,7 +317,7 @@ def _literal_digits_are_zero(text: str, base: int) -> bool:
     surely as float("0.0") is.
     """
     digits = text[2:] if base == 16 else text
-    for mark in ("e", "E", "p", "P"):
+    for mark in "eEpP":
         digits = digits.split(mark)[0]
     return set(digits.replace(".", "")) <= {"0"}
 
@@ -428,13 +429,8 @@ def _read_number(src, pos, line, col):
     value_str = ""
     is_float = False
 
-    if pos + 1 < len(src) and src[pos] == "0" and src[pos + 1] in ("b", "B"):
-        base = 2
-        value_str += src[pos:pos + 2]
-        pos += 2
-    elif pos + 1 < len(src) and src[pos] == "0" and src[pos + 1] in ("x", "X"):
-        base = 16
-        value_str += src[pos:pos + 2]
+    if pos + 1 < len(src) and src[pos] == "0" and src[pos + 1] in "bBxX":
+        base = 2 if src[pos + 1] in "bB" else 16
         pos += 2
     else:
         base = 10
@@ -453,26 +449,16 @@ def _read_number(src, pos, line, col):
                 value_str += src[pos]
                 pos += 1
 
-    if base == 16 and pos < len(src) and src[pos] in "pP":
-        is_float = True
-        value_str += src[pos]
-        pos += 1
-        if pos < len(src) and src[pos] in "+-":
-            value_str += src[pos]
-            pos += 1
-        while pos < len(src) and src[pos].isdigit():
-            value_str += src[pos]
-            pos += 1
-    elif base == 10 and pos < len(src) and src[pos] in "eE":
-        is_float = True
-        value_str += src[pos]
-        pos += 1
-        if pos < len(src) and src[pos] in "+-":
-            value_str += src[pos]
-            pos += 1
-        while pos < len(src) and src[pos].isdigit():
-            value_str += src[pos]
-            pos += 1
+    if pos < len(src) and base != 2 and src[pos] in ("eE" if base == 10 else "pP"):
+          is_float = True
+          value_str += src[pos]
+          pos += 1
+          if pos < len(src) and src[pos] in "+-":
+              value_str += src[pos]
+              pos += 1
+          while pos < len(src) and src[pos].isdigit():
+              value_str += src[pos]
+              pos += 1
 
     width = ""
     while pos < len(src) and (src[pos].isalnum() or src[pos] == "_"):
@@ -505,12 +491,7 @@ def _read_number(src, pos, line, col):
         return Token("FLOAT", (value, width), line, col, end_col), pos
 
     try:
-        if base == 2:
-            value = int(value_str[2:], 2)
-        elif base == 16:
-            value = int(value_str[2:], 16)
-        else:
-            value = int(value_str, 10)
+        value = int(value_str, base)
     except ValueError:
         raise LexerError(f"invalid integer literal: {value_str}", line, col)
 
