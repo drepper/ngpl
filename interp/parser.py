@@ -1558,7 +1558,7 @@ class Parser:
                         # written out, or empty to take that dimension
                         # from the initializer.
                         def extent():
-                            if self._check("PUNCT") and self._cur().value in (",", "]"):
+                            if self._check("PUNCT") and self._cur().value in ",]":
                                 return None
                             return self._parse_expr()
 
@@ -1942,7 +1942,7 @@ class Parser:
         # statement is an assignment when it holds a ←, and anything
         # else beginning with a name is an expression.
         if self._check("IDENT") or (self._check("PUNCT")
-                                    and self._cur().value in ("(", "$")):
+                                    and self._cur().value in "($"):
             saved_pos = self.pos
             bracket_depth = 0
             found_assign_op = None
@@ -2505,7 +2505,7 @@ class Parser:
         left = self._parse_logic_xor_expr()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value in ("∨", "⊽")):
+            if not (self._check("OP") and self._cur().value in "∨⊽"):
                 break
             op_tok = self._cur()
             self.pos += 1
@@ -2533,7 +2533,7 @@ class Parser:
         left = self._parse_cmp_expr()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value in ("∧", "⊼")):
+            if not (self._check("OP") and self._cur().value in "∧⊼"):
                 break
             op_tok = self._cur()
             self.pos += 1
@@ -3260,7 +3260,7 @@ class Parser:
         and says so.
         """
         def entry():
-            if self._check("PUNCT") and self._cur().value in (",", "]"):
+            if self._check("PUNCT") and self._cur().value in ",]":
                 return None
             return self._parse_expr()
 

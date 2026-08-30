@@ -133,6 +133,14 @@ _NORMALIZE_OPS = {
     "<-": "\N{LEFTWARDS ARROW}",
 }
 
+# Escape sequences
+ESCAPES = {
+  "n": "\n",
+  "r": "\r",
+  "t": "\t",
+  "\\": "\\",
+}
+
 
 # Single-character operators.
 # The last six are the tolerant comparisons, paired with the exact ones.
@@ -358,21 +366,13 @@ def _read_char(src, pos, line, col, line_start):
     chars: list[str] = []
     end_pos = pos
 
-    while end_pos < len(src) and src[end_pos] not in ("'", "\n"):
+    while end_pos < len(src) and src[end_pos] not in "'\n":
         ch = src[end_pos]
         if ch == "\\" and end_pos + 1 < len(src):
             esc = src[end_pos + 1]
             end_pos += 2
-            if esc == "n":
-                chars.append("\n")
-            elif esc == "t":
-                chars.append("\t")
-            elif esc == "r":
-                chars.append("\r")
-            elif esc == "\\":
-                chars.append("\\")
-            elif esc in ("'", '"'):
-                chars.append(esc)
+            if esc in ESCAPES:
+                chars.append(ESCAPES[esc])
             elif esc == "u" and src[end_pos:end_pos + 1] == "{":
                 closing = src.find("}", end_pos + 1)
                 if closing < 0:
@@ -730,14 +730,10 @@ def process_indentation(tokens: list[Token]) -> list[Token]:
     while i < len(tokens):
         tok = tokens[i]
 
-        if tok.type == "PUNCT" and tok.value in ("(", "[", "{"):
-            nesting += 1
-            result.append(tok)
-            i += 1
-            continue
-
-        if tok.type == "PUNCT" and tok.value in (")", "]", "}"):
-            if nesting > 0:
+        if tok.type == "PUNCT" and tok.value in "([{)]}":
+            if tok.value in  "([{":
+                nesting += 1
+            elif nesting > 0:
                 nesting -= 1
             result.append(tok)
             i += 1
