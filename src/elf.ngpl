@@ -17,6 +17,11 @@
 // ---------------------------------------------------------------------------
 
 // the machines ELF names, with the format's own width
+
+@import("./tokens.ngpl")
+@import("./sha256.ngpl")
+@import("./sbom.ngpl")
+
 enum Em : u16:
     none = 0
     i386 = 3

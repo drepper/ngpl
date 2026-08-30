@@ -1,6 +1,9 @@
-// The second file names Level, which the first declared.  It also calls
-// shout(), which the third defines: a function may be written below
-// whatever calls it, so only the enum fixes the order.
+// The second file names Level, which the first declared, so it says so.
+// It also calls shout(), which the third defines: a function may be
+// written below whatever calls it, so nothing has to be said about
+// that.
+
+@import("./a.ngpl")
 
 fn announce(l : Level) → str:
     greeting(l) ⧺ ", " ⧺ shout(l)

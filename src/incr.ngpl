@@ -20,6 +20,13 @@
 // cent: enough that an edit to a body usually still fits where the body
 // stood, small enough that a program does not swell.  This is the only
 // place the number is written.
+
+@import("./tokens.ngpl")
+@import("./lex.ngpl")
+@import("./ast.ngpl")
+@import("./emit.ngpl")
+@import("./sbom.ngpl")
+
 let INCR_PAD_NUM : i64 = 20
 let INCR_PAD_DEN : i64 = 100
 

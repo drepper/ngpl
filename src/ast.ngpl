@@ -3,6 +3,9 @@
 // ===========================================================================
 
 // expressions
+
+@import("./diag.ngpl")
+
 let NK_INT : i64 = 1        // na = value (wrapped), nb = big flag
 let NK_BOOL : i64 = 2       // na = 0 or 1
 let NK_STR : i64 = 3        // na = string table index
@@ -128,12 +131,12 @@ let SB_PROC : i64 = 13      // std.process.<member>: nb names which
 // back.  The five declarations come first and the five readers after,
 // so "is this a build builtin" and "is this a declaration" are each one
 // comparison against the ends of a run.
-let SB_BSRC : i64 = 15      // std.build.source(p)
+let SB_BSRC : i64 = 15      // std.build.root_source_file(p)
 let SB_BOUT : i64 = 16      // std.build.output(n)
 let SB_BOUTD : i64 = 17     // std.build.output_dir(d)
 let SB_BPATH : i64 = 18     // std.build.search_path(p)
 let SB_BFLAG : i64 = 19     // std.build.flag(f)
-let SB_BSRCS : i64 = 20     // std.build.sources() → str[]
+let SB_BSRCS : i64 = 20     // std.build.root_source_file_name() → str
 let SB_BOUTN : i64 = 21     // std.build.output_name() → str
 let SB_BOUTDN : i64 = 22    // std.build.output_directory() → str
 let SB_BPATHS : i64 = 23    // std.build.paths() → str[]

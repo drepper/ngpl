@@ -5,6 +5,26 @@
 // what codegen answers: the three images and what the file writer
 // needs to wrap them.  The ELF itself is built in main, where the
 // target's class picks the materializer.
+
+@import("./tokens.ngpl")
+@import("./types.ngpl")
+@import("./diag.ngpl")
+@import("./lex.ngpl")
+@import("./ast.ngpl")
+@import("./check.ngpl")
+@import("./abi.ngpl")
+@import("./ir.ngpl")
+@import("./lower.ngpl")
+@import("./emit.ngpl")
+@import("./symbols.ngpl")
+@import("./incr.ngpl")
+@import("./elf.ngpl")
+@import("./arch_x86_64.ngpl")
+@import("./rt_x86_64.ngpl")
+@import("./arch_a64.ngpl")
+@import("./rt_backtrace.ngpl")
+@import("./codegen_t.ngpl")
+
 struct Compiled:
     // Under --incremental against a file: "" when every function
     // landed where that file had it and inside the room it was given,

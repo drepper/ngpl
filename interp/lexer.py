@@ -111,6 +111,12 @@ AT_KEYWORDS: dict[str, str] = {
     # @build heads the build recipe the interpreter reads for search
     # paths and flags; the bare word stays available as a name.
     "build": "BUILD",
+    # @import("./x.ngpl") names a file this one is written against.
+    # The text is spliced in before this file's own, by the reader,
+    # long before the lexer sees any of it; the line survives so that
+    # what a file depends on is written in the file, and so that no
+    # line number moves.  Here it is only a word to be recognised.
+    "import": "AT_IMPORT",
     # @macro_rules heads a macro written as a list of rewrite rules.
     # An annotation rather than a keyword of its own, so the word stays
     # available to a program that wants it as a name.

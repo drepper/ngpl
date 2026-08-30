@@ -1,0 +1,1 @@
+ngplc: these files import one another: tests/compile/refuse/import_ring.ngpl imports tests/compile/refuse/import_ring.ngpl

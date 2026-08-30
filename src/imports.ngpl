@@ -1,0 +1,248 @@
+// ===========================================================================
+// Reading a program: what a file is written against
+// ===========================================================================
+//
+// A file says at its head which other files it is written against:
+//
+//     @import("./tokens.ngpl")
+//
+// and each of those is read in ahead of it, so that everything a file
+// names has been said before the file says anything.  That is what
+// makes the order of a program's sources the program's own business
+// rather than the command line's: the compiler is handed one file and
+// finds the rest.
+//
+// The rules are few.  A name begins with `./`, and names a file beside
+// the one importing it -- there is no search path and no package
+// anything, yet.  A file goes in once however many files ask for it,
+// since what they are asking for is that it be there.  Asking for the
+// same file twice in one file is a mistake rather than a request, and
+// is refused.  Files that import one another in a ring are refused,
+// because no order of them can put each after what it needs.
+//
+// The imports are read off the head of the file, before it has been
+// lexed -- the text has to be assembled before there is anything to
+// lex.  So the head is where they have to be: the reader stops at the
+// first line that is neither blank, nor a comment, nor an @import, and
+// nothing further down can be mistaken for one.  The lines themselves
+// stay in the text, where the parser reads past them: a file that says
+// what it needs should go on saying it, and leaving them in means no
+// line number moves.
+
+@import("./tokens.ngpl")
+
+
+let IMP_TAB : i64 = 9
+let IMP_NL : i64 = 10
+let IMP_SP : i64 = 32
+let IMP_QUOTE : i64 = 34
+
+// Whether the source at `at` begins with this text.  The wanted text
+// is ASCII -- `@import(`, `//` -- so a byte answers for a character.
+fn imp_has(b : byte[], at : i64 ¤byte, want : str) → bool:
+    let i : mut i64 ¤byte = at
+    foreach c := want:
+        if i >= #b or b[i] ≠ c.ord():
+            return false
+        i ← i + 1¤byte
+    true
+
+// The end of the line beginning at `at`: the newline, or the end of
+// the file where the last line has none.
+@post(r: r >= at)
+fn imp_line_end(b : byte[], at : i64 ¤byte) → i64 ¤byte:
+    let i : mut i64 ¤byte = at
+    while i < #b and b[i] ≠ IMP_NL:
+        i ← i + 1¤byte
+    i
+
+// Whether everything from `at` to `hi` is blank.
+fn imp_blank(b : byte[], at : i64 ¤byte, hi : i64 ¤byte) → bool:
+    let i : mut i64 ¤byte = at
+    while i < hi:
+        if b[i] ≠ IMP_SP and b[i] ≠ IMP_TAB:
+            return false
+        i ← i + 1¤byte
+    true
+
+// How many bytes the character beginning with this one is written in.
+// A byte that begins nothing stands for itself, so a name this does
+// not understand is still read to its end rather than run off it.
+@post(r: r >= 1 and r <= 4)
+fn imp_utf8_len(lead : i64) → i64:
+    if lead < 194: return 1
+    if lead < 224: return 2
+    if lead < 240: return 3
+    if lead < 245: return 4
+    1
+
+// The character those bytes spell: the low bits of the lead byte, then
+// six from each byte that follows.
+fn imp_utf8_at(b : byte[], at : i64 ¤byte, n : i64) → i64:
+    let lead : i64 = b[at]
+    if n = 1:
+        return lead
+    let keep : i64 = if n = 2: 31 elif n = 3: 15 else: 7
+    let v : mut i64 = lead & keep
+    let i : mut i64 = 1
+    while i < n:
+        v ← (v « 6) | (b[at + i × 1¤byte] & 63)
+        i ← i + 1
+    v
+
+// The text between `at` and `hi`, read as UTF-8.  A file name is text
+// and is opened and printed as text, so it is read as text rather than
+// a byte at a time.
+fn imp_str(b : byte[], at : i64 ¤byte, hi : i64 ¤byte) → str:
+    let s : mut str = ""
+    let i : mut i64 ¤byte = at
+    while i < hi:
+        let n : i64 = imp_utf8_len(b[i])
+        if i + n × 1¤byte > hi:
+            return s
+        s ← s ⧺ imp_utf8_at(b, i, n).chr()
+        i ← i + n × 1¤byte
+    s
+
+// What one @import line names, or "" where the line is not one this
+// reader can follow.  The line has to be exactly `@import("...")` and
+// nothing else, which is what the head of a file is allowed to hold.
+fn imp_named(b : byte[], at : i64 ¤byte, hi : i64 ¤byte) → str:
+    if not imp_has(b, at, "@import(\""):
+        return ""
+    let lo : i64 ¤byte = at + 9¤byte
+    let i : mut i64 ¤byte = lo
+    while i < hi and b[i] ≠ IMP_QUOTE:
+        i ← i + 1¤byte
+    if i >= hi or not imp_has(b, i, "\")") or not imp_blank(b, i + 2¤byte, hi):
+        return ""
+    imp_str(b, lo, i)
+
+// What a program is made of: the text of every file, in the order the
+// imports put them, and where each one begins.  `why` is empty while
+// the program could be read and says what stopped it otherwise.
+struct Program:
+    why : str
+    src : byte[]
+    names : str[]
+    offs : i64 ¤byte[]
+
+// the directory a path names something in, "" when it names something
+// in the working directory
+fn dir_of(path : str) → str:
+    let cut : mut i64 ¤ptrdiff = ⁻1¤ptrdiff
+    foreach i := 0…#path:
+        if path[i] = '/':
+            cut ← i
+    if cut < 0:
+        return ""
+    path[0¤ptrdiff…cut]
+
+// A path beside another: `./x.ngpl` next to `dir/a.ngpl` is
+// `dir/x.ngpl`, and next to a file in the working directory it is
+// `x.ngpl`.
+@pre("./" ⊑ name)
+fn imp_beside(name : str, base : str) → str:
+    let bare : str = name[2¤ptrdiff…#name]
+    if base = "": bare else: base ⧺ "/" ⧺ bare
+
+struct Reader:
+    why : str
+    src : byte[]
+    names : str[]
+    offs : i64 ¤byte[]
+    done : str[]         // every file already read
+    stack : str[]        // every file being read, the innermost last
+
+fn imp_holds(v : str[], want : str) → bool:
+    foreach s := v:
+        if s = want:
+            return true
+    false
+
+fn imp_ring(stack : str[], last : str) → str:
+    let s : mut str = ""
+    foreach f := stack:
+        s ← s ⧺ f ⧺ " imports "
+    s ⧺ last
+
+impl Reader:
+    // Read this file and everything it is written against, the things
+    // it names first.  Anything that stops it is written down and the
+    // reading gives up: one reason is what a caller can act on, and
+    // the first is the one that explains the rest.
+    @impure
+    fn take(&mut self, path : str, asked : str):
+        if self.why ≠ "":
+            return
+        if imp_holds(self.stack, path):
+            self.why ← "these files import one another: " ⧺ imp_ring(self.stack, path)
+            return
+        if imp_holds(self.done, path):
+            return
+        match std.fs.cwd().open_file(path):
+            ⊨(file):
+                let alloc := std.arena.allocator()
+                let text : mut byte[] = file.read_file(alloc)
+                file.close()
+                // a file ends its last line before the next one begins,
+                // or the two run together into a line spanning them
+                let n : i64 = @dropunit(#text)
+                if n > 0 and text[(n - 1) × 1¤byte] ≠ IMP_NL:
+                    text.push(IMP_NL)
+                // what this file asks for, off its head
+                let want : mut str[] = []
+                let wline : mut i64[] = []
+                let at : mut i64 ¤byte = 0¤byte
+                let ln : mut i64 = 1
+                let reading : mut bool = true
+                while reading and at < #text:
+                    let hi : i64 ¤byte = imp_line_end(text, at)
+                    if imp_blank(text, at, hi) or imp_has(text, at, "//"):
+                        at ← hi + 1¤byte
+                        ln ← ln + 1
+                        continue
+                    if not imp_has(text, at, "@import"):
+                        reading ← false
+                        continue
+                    let nm : str = imp_named(text, at, hi)
+                    if nm = "":
+                        self.why ← path ⧺ ":" ⧺ i64_str(ln) ⧺ """: @import takes one file name in
+                                    " quotes and nothing else, as @import(\"./tokens.ngpl\")"""
+                        return
+                    if not ("./" ⊑ nm):
+                        self.why ← path ⧺ ":" ⧺ i64_str(ln) ⧺ ": an @import names a file beside this one, so its name begins with './'; this one is '" ⧺ nm ⧺ "'"
+                        return
+                    if imp_holds(want, nm):
+                        self.why ← path ⧺ ":" ⧺ i64_str(ln) ⧺ ": '" ⧺ nm ⧺ "' is imported here and already above; once is what it means"
+                        return
+                    want.push(nm)
+                    wline.push(ln)
+                    at ← hi + 1¤byte
+                    ln ← ln + 1
+                self.stack.push(path)
+                foreach i := 0¤ptrdiff…#want:
+                    self.take(imp_beside(want[i], dir_of(path)),
+                              path ⧺ ":" ⧺ i64_str(wline[i]))
+                    if self.why ≠ "":
+                        return
+                _ ← self.stack.pop() ?? ""
+                self.names.push(path)
+                self.offs.push(#self.src)
+                self.src ← self.src ⧺ text
+                self.done.push(path)
+            ∅:
+                let where : str = if asked = "": "" else: asked ⧺ ": "
+                self.why ← where ⧺ "cannot open '" ⧺ path ⧺ "': no such file or it cannot be read"
+
+// The whole program, from the file it is rooted in.  Naming several
+// files still means what it always did -- each is read in turn, and
+// nothing twice -- so a program that has not been given imports yet is
+// read as it was.
+@impure
+fn read_program(roots : str[]) → Program:
+    let r : mut Reader = (Reader{why: "", src: [], names: [], offs: [],
+                                 done: [], stack: []})
+    foreach nm := roots:
+        r.take(nm, "")
+    (Program{why: r.why, src: r.src, names: r.names, offs: r.offs})

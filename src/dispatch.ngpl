@@ -28,6 +28,15 @@
 // x86.ngpl and never reaches these, so this is not a case to handle
 // but a statement that the case cannot arise -- written down because
 // the match asks for all six and this is the honest sixth.
+
+@import("./emit.ngpl")
+@import("./elf.ngpl")
+@import("./arch_a64.ngpl")
+@import("./arch_rv64.ngpl")
+@import("./arch_i386.ngpl")
+@import("./arch_arm.ngpl")
+@import("./arch_rv32.ngpl")
+
 @noreturn
 fn g_pioneer():
     assert(false, "x86-64 has its own emitter and does not come through the dispatchers")

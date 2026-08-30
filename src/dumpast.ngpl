@@ -2,6 +2,12 @@
 // AST dump, one node a line
 // ===========================================================================
 
+@import("./tokens.ngpl")
+@import("./types.ngpl")
+@import("./lex.ngpl")
+@import("./ast.ngpl")
+
+
 @impure
 fn dump_node(a : Ast, id : i64, depth : i64, src : byte[], toks : Toks):
     let pad : mut str = ""

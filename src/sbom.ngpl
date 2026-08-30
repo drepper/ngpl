@@ -15,6 +15,13 @@
 
 // What a row is about.  A fixed representation, since these are read
 // out of a file by whoever wants to know.
+
+@import("./tokens.ngpl")
+@import("./diag.ngpl")
+@import("./lex.ngpl")
+@import("./ast.ngpl")
+@import("./sha256.ngpl")
+
 enum Sbomkind : u32:
     compiler         // which compiler built it
     source           // one of the sources it was built from

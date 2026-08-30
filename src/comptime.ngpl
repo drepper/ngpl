@@ -21,6 +21,13 @@
 // is its first customer.
 
 // what a recipe computed with
+
+@import("./tokens.ngpl")
+@import("./types.ngpl")
+@import("./diag.ngpl")
+@import("./lex.ngpl")
+@import("./ast.ngpl")
+
 let CV_NONE : i64 = 0       // what a declaration answers
 let CV_INT : i64 = 1
 let CV_BOOL : i64 = 2       // n is 0 or 1
@@ -70,7 +77,7 @@ let EV_DEPTH : i64 = 64
 // What the recipe said, answered together with whatever went wrong
 // saying it -- the shape every phase here has.
 struct Recipe:
-    sources : str[]
+    root : str              // the file the program is rooted in
     output : str            // "" where the recipe named none
     output_dir : str
     paths : str[]
@@ -89,7 +96,7 @@ struct Cev:
     marks : i64[]           // where each open scope began
     floor : i64             // a called function sees nothing below this
     pool : str[]            // the elements of every array value, one arena
-    srcs : str[]            // what has been declared, in order
+    root : str              // the one source the program is rooted in
     outn : str
     outd : str
     paths : str[]
@@ -758,7 +765,13 @@ impl Cev:
             if v.tag ≠ CV_STR:
                 self.derr(tok, "std.build is told a string, and this is " ⧺ self.cv_kind(v))
                 return cv_none()
-            if sb = SB_BSRC: self.srcs.push(v.s)
+            if sb = SB_BSRC:
+                // one source, not a list: what the rest of the program
+                // is is written in the program, as @import lines
+                if self.root ≠ "":
+                    self.derr(tok, "a build names the one file it is rooted in, and this one is named already")
+                    return cv_none()
+                self.root ← v.s
             elif sb = SB_BOUT: self.outn ← v.s
             elif sb = SB_BOUTD: self.outd ← v.s
             elif sb = SB_BPATH: self.paths.push(v.s)
@@ -769,7 +782,8 @@ impl Cev:
             return cv_none()
         if sb = SB_BOUTN: return cv_str(self.outn)
         if sb = SB_BOUTDN: return cv_str(self.outd)
-        let from : str[] = if sb = SB_BSRCS: self.srcs else: (if sb = SB_BPATHS: self.paths else: self.flags)
+        if sb = SB_BSRCS: return cv_str(self.root)
+        let from : str[] = if sb = SB_BPATHS: self.paths else: self.flags
         self.pooled(from)
 
     // a copy of a list into the pool, so what a reader answers is what
@@ -783,15 +797,15 @@ impl Cev:
 // Read the @build recipe, if the program carries one.  A file without
 // one pays a single comparison; every other phase here answers a struct
 // carrying its own diagnostics, and so does this.
-@post(r: #r.diags = 0 or (#r.sources = 0 and #r.paths = 0 and #r.flags = 0))
+@post(r: #r.diags = 0 or (#r.root = 0¤ptrdiff and #r.paths = 0 and #r.flags = 0))
 fn build_recipe(a : Ast, toks : Toks, src : byte[], gvals : i64[]) → Recipe:
     if #a.builds = 0:
-        return (Recipe{sources: [], output: "", output_dir: "",
+        return (Recipe{root: "", output: "", output_dir: "",
                        paths: [], flags: [], diags: []})
     let recipe : FnDef = a.builds[0¤ptrdiff]
     let ev : mut Cev = (Cev{a: a, toks: toks, src: src, gvals: gvals,
                           names: [], vals: [], vmut: [], marks: [], floor: 0,
-                          pool: [], srcs: [], outn: "", outd: "",
+                          pool: [], root: "", outn: "", outd: "",
                           paths: [], flags: [],
                           steps: EV_STEPS, depth: 0, ret: cv_none(),
                           diags: []})
@@ -803,9 +817,9 @@ fn build_recipe(a : Ast, toks : Toks, src : byte[], gvals : i64[]) → Recipe:
         _ ← ev.ev_stmt(recipe.body)
         ev.pop_scope()
     if #ev.diags > 0:
-        return (Recipe{sources: [], output: "", output_dir: "",
+        return (Recipe{root: "", output: "", output_dir: "",
                        paths: [], flags: [], diags: ev.diags})
     assert(#ev.marks = 0, "every scope the recipe opened was closed")
     assert(ev.depth = 0, "every call the recipe made returned")
-    (Recipe{sources: ev.srcs, output: ev.outn, output_dir: ev.outd,
+    (Recipe{root: ev.root, output: ev.outn, output_dir: ev.outd,
             paths: ev.paths, flags: ev.flags, diags: []})

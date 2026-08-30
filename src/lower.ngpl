@@ -2,6 +2,14 @@
 // Lowering: Ast + Chk → IrFn per function
 // ===========================================================================
 
+@import("./tokens.ngpl")
+@import("./types.ngpl")
+@import("./lex.ngpl")
+@import("./ast.ngpl")
+@import("./check.ngpl")
+@import("./ir.ngpl")
+
+
 struct Lower:
     a : Ast
     toks : Toks

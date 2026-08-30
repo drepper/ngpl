@@ -28,6 +28,13 @@
 // architectures put a restorer between the flags and the mask and
 // three do not, and the field is there or not there in the layout
 // whether or not the flag that uses it is set.
+
+@import("./ir.ngpl")
+@import("./lower.ngpl")
+@import("./emit.ngpl")
+@import("./elf.ngpl")
+@import("./arch_a64.ngpl")
+
 fn sa_mask_off(tg : Target) → i64:
     if tg.sa_restorer_off >= 0:
         return tg.sa_restorer_off + tg.ptr

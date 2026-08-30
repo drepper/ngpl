@@ -15,6 +15,9 @@
 //
 // A parameter's type may add 262144×r: r = 1 for a & borrow, 2 for &mut.
 
+@import("./tokens.ngpl")
+
+
 let TY_UNIT : i64 = 0
 let TY_BOOL : i64 = 2
 let TY_STR : i64 = 3

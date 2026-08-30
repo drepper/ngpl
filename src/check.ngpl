@@ -3,6 +3,13 @@
 // ===========================================================================
 
 // method ids the checker writes into an MCALL's nc
+
+@import("./tokens.ngpl")
+@import("./types.ngpl")
+@import("./diag.ngpl")
+@import("./lex.ngpl")
+@import("./ast.ngpl")
+
 let MID_PUSH : i64 = 1
 let MID_POP : i64 = 2
 let MID_GET : i64 = 3

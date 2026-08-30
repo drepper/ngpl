@@ -611,10 +611,23 @@ class Parser:
             return fdef
         elif self._check("LET"):
             return self._parse_var_def()
+        elif self._check("AT_IMPORT"):
+            # The reader has already spliced the file in, before any of
+            # this was lexed.  The line stays where it was written, so
+            # that a file says what it is written against and so that
+            # no line number moves; here there is nothing left to do
+            # but read past it.
+            self._eat("AT_IMPORT")
+            self._eat("PUNCT", "(")
+            self._eat("STR")
+            self._eat("PUNCT", ")")
+            self._try_eat("NEWLINE")
+            return None
         elif self._check("IMPORT"):
             raise ParseError(
                 "'import' is a full-language feature the bootstrap does "
-                "not provide; a program is one file", self._cur())
+                "not provide; a file names what it needs with @import",
+                self._cur())
         elif self._check("EOF"):
             return None  # end of file reached cleanly
         else:

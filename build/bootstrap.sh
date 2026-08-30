@@ -19,7 +19,7 @@ source build/sources.sh
 # is not something `-nt` says in one test.
 stale=0
 [[ -x $out ]] || stale=1
-for s in "${NGPLC_SOURCES[@]}"; do
+for s in src/*.ngpl; do
     [[ $s -nt $out ]] && stale=1
 done
 if [[ $1 != --force && $stale -eq 0 ]]; then
@@ -30,17 +30,16 @@ work=$(mktemp -d) || exit 1
 trap 'rm -rf "$work"' EXIT
 
 # Stage 1 runs under the interpreter, which reads a @build recipe but
-# has no --build of its own, so it is handed the list above.  Stages 2
-# and 3 are compilers, and take the list from the recipe in
-# src/main.ngpl.  Comparing stage 1 with stage 2 therefore checks the
-# two lists against each other: if the recipe and this script ever name
-# different files, or the same files in a different order, the binaries
-# differ and the bootstrap says so.
+# has no --build of its own, so it is handed the root file.  Stages 2
+# and 3 are compilers, and take the root from the recipe in
+# src/main.ngpl.  Comparing stage 1 with stage 2 therefore checks that
+# the recipe names the file this script names, and that following the
+# imports from it twice over reaches the same program.
 echo "bootstrap: stage 1 -- the interpreted compiler compiles itself (minutes)" >&2
-python -m interp --timeout="${NGPLI_TIMEOUT:-1800}" "${NGPLC_SOURCES[@]}" \
-       -- "${NGPLC_SOURCES[@]}" -o "$work/stage1"
+python -m interp --timeout="${NGPLI_TIMEOUT:-1800}" "$NGPLC_ROOT" \
+       -- "$NGPLC_ROOT" -o "$work/stage1"
 
-echo "bootstrap: stage 2 -- the stage-1 binary compiles the sources its recipe names" >&2
+echo "bootstrap: stage 2 -- the stage-1 binary compiles the source its recipe names" >&2
 "$work/stage1" --build src/main.ngpl -o "$work/stage2"
 
 echo "bootstrap: stage 3 -- the stage-2 binary compiles them once more" >&2
@@ -52,8 +51,7 @@ if ! cmp -s "$work/stage2" "$work/stage3"; then
 fi
 if ! cmp -s "$work/stage1" "$work/stage2"; then
     echo "bootstrap: FAILED -- stage 1 and stage 2 differ, so the @build recipe in" >&2
-    echo "  src/main.ngpl and the list in build/sources.sh do not name the same" >&2
-    echo "  files in the same order" >&2
+    echo "  src/main.ngpl and build/sources.sh do not name the same root file" >&2
     exit 1
 fi
 echo "bootstrap: fixed point holds (stage1 == stage2 == stage3)" >&2

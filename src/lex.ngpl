@@ -9,6 +9,11 @@
 // the mask-pipeline design DESIGN.md describes: the classes here are
 // the classes a SIMD or GPU lexer computes 64 bytes at a time.
 
+@import("./tokens.ngpl")
+@import("./types.ngpl")
+@import("./diag.ngpl")
+
+
 let CL_INVALID : i64 = 0
 let CL_WS : i64 = 1
 let CL_NL : i64 = 2

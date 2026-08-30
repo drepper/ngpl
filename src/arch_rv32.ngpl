@@ -8,6 +8,12 @@
 // exactly the pair math a 32-bit machine needs.
 // ---------------------------------------------------------------------------
 
+@import("./emit.ngpl")
+@import("./elf.ngpl")
+@import("./arch_a64.ngpl")
+@import("./arch_rv64.ngpl")
+
+
 fn r32_cello(r : i64) → i64:
     128 + 8 × r
 

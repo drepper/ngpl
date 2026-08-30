@@ -1108,23 +1108,25 @@ class BuildModule:
     """What the build function said, kept for whoever asks.
 
     The interpreter reads the @build function for what it declares --
-    the sources the program is made of, where the result goes, the
+    the one file the program is rooted in, where the result goes, the
     search paths and the compiler flags -- before anything else runs.
     Acting on any of it belongs to the compiler; reading it does not.
 
     Each thing is declared by naming it and answered by a reader:
-    `source(p)`/`sources()`, `output(n)`/`output_name()`,
-    `output_dir(d)`/`output_directory()`, `search_path(p)`/`paths()`
-    and `flag(f)`/`flags()`.  The two that hold a single name are
-    last-writer-wins, and answer "" until one is declared.
+    `root_source_file(p)`/`root_source_file_name()`,
+    `output(n)`/`output_name()`, `output_dir(d)`/`output_directory()`,
+    `search_path(p)`/`paths()` and `flag(f)`/`flags()`.  The three that
+    hold a single name answer "" until one is declared; a build names
+    the file it is rooted in once, since what else the program is made
+    of is written in the program as @import lines.
     """
 
-    __slots__ = ("_paths", "_flags", "_sources", "_output", "_output_dir")
+    __slots__ = ("_paths", "_flags", "_root", "_output", "_output_dir")
 
     def __init__(self):
         self._paths: list[str] = []
         self._flags: list[str] = []
-        self._sources: list[str] = []
+        self._root: str = ""
         self._output: str = ""
         self._output_dir: str = ""
 
@@ -1149,9 +1151,13 @@ class BuildModule:
         self._flags.append(self._one_str(args, "flag"))
         return none()
 
-    def source(self, args):
+    def root_source_file(self, args):
         from interp.value import none
-        self._sources.append(self._one_str(args, "source"))
+        name = self._one_str(args, "root_source_file")
+        if self._root:
+            raise TypeError("a build names the one file it is rooted in, "
+                            "and this one is named already")
+        self._root = name
         return none()
 
     def output(self, args):
@@ -1176,9 +1182,10 @@ class BuildModule:
         self._nothing(args, "flags")
         return _str_array(self._flags)
 
-    def sources(self, args):
-        self._nothing(args, "sources")
-        return _str_array(self._sources)
+    def root_source_file_name(self, args):
+        from interp.value import mk_str
+        self._nothing(args, "root_source_file_name")
+        return mk_str(self._root)
 
     def output_name(self, args):
         from interp.value import mk_str

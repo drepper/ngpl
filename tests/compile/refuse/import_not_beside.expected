@@ -1,0 +1,1 @@
+ngplc: tests/compile/refuse/import_not_beside.ngpl:3: an @import names a file beside this one, so its name begins with './'; this one is 'tokens.ngpl'

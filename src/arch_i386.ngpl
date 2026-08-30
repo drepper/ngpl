@@ -12,6 +12,11 @@
 // ---------------------------------------------------------------------------
 
 // the cells: A, B, C, T at [ebp-8], [ebp-16], [ebp-24], [ebp-32]
+
+@import("./emit.ngpl")
+@import("./elf.ngpl")
+@import("./arch_a64.ngpl")
+
 fn i3_cello(r : i64) → i64:
     0 - 8 × (r + 1)
 

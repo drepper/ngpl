@@ -9,6 +9,11 @@
 // the stack, eight bytes each.
 // ---------------------------------------------------------------------------
 
+@import("./emit.ngpl")
+@import("./elf.ngpl")
+@import("./arch_a64.ngpl")
+
+
 let A32_LDRSP : i64 = 3852271616
 let A32_STRSP : i64 = 3851223040
 let A32_LDRR : i64 = 3851419648

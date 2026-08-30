@@ -11,6 +11,19 @@
 // The pioneer keeps its hand-tuned routines, and the conformance suite
 // holds the two spellings to one behaviour.
 
+@import("./ir.ngpl")
+@import("./lower.ngpl")
+@import("./emit.ngpl")
+@import("./elf.ngpl")
+@import("./arch_a64.ngpl")
+@import("./dispatch.ngpl")
+@import("./rt_hash.ngpl")
+@import("./rt_sha256.ngpl")
+@import("./rt_bigint.ngpl")
+@import("./rt_signal.ngpl")
+@import("./rt_backtrace.ngpl")
+
+
 struct RtB:
     op : i64[]
     ia : i64[]

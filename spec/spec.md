@@ -9978,6 +9978,27 @@ A module whose own definitions are all private but which contains a module that 
 
 What the design leaves for later: importing a module under a shorter name, asking a module for something that is not a function, visibility narrower than exported-or-not, and separate compilation — which is what would make a module a unit of anything but naming.
 
+### What a File Is Written Against
+
+A file says at its head which other files it is written against, and each of those is read in ahead of it:
+
+```
+@import("./tokens.ngpl")
+@import("./types.ngpl")
+```
+
+The compiler is handed one file and finds the rest.  That is the point: **the order the sources are read in is the program's own business**, written in the files that know it, rather than a list kept somewhere outside them and kept in step by hand.
+
+**A name begins with `./`** and names a file beside the one importing it.  There is no search path here and no package anything; a name that begins otherwise is refused.
+
+**A file goes in once**, however many files ask for it — what an import asks for is that the file be there, and it is.  Asking for the same file twice *in one file* is a mistake rather than a request, and is refused.  Files that import one another in a ring are refused too: no order of them puts each after what it needs.
+
+**The head is where they go.**  The imports are read before the file has been lexed — the text has to be assembled before there is anything to lex — so the reader stops at the first line that is neither blank, nor a comment, nor an `@import`, and nothing further down can be mistaken for one.  The lines stay in the text, where the parser reads past them: a file that says what it needs should go on saying it, and leaving them in means no line number moves.
+
+**What has to come first is what a file names.**  A struct, a function, a global or an enum may be written below whatever uses it; a **unit** may not, because a unit is registered as it is read.  So a file that measures anything with `¤something` wants the file declaring that unit read first, which is what an import says.
+
+Naming several files on the command line still works and still means what it did — each is read in turn, and nothing twice — so a program written before any of this compiles unchanged.
+
 ### The Build Function
 
 A program may carry one function annotated `@build`.  It is the build recipe: what the program is made of, and what should be done with it.
@@ -9985,8 +10006,7 @@ A program may carry one function annotated `@build`.  It is the build recipe: wh
 ```
 @build
 fn build():
-    foreach part := ["lex", "parse", "check"]:
-        std.build.source("src/" ⧺ part ⧺ ".ngpl")
+    std.build.root_source_file("main.ngpl")
     std.build.output_dir("build")
     std.build.output("ngplc")
 ```
@@ -9995,25 +10015,27 @@ The recipe lives in the source, not in a file of its own — any source file may
 
 A recipe is **comptime-only**: it runs while the program is being built and **no code for it is written into the executable**.  It cannot be called from the program, and the program cannot observe what it declared.
 
-`--build FILE` finds the recipe in `FILE`, runs it, and compiles the sources it names:
+`--build FILE` finds the recipe in `FILE`, runs it, and compiles the program rooted in the file it names:
 
 ```
 ngplc --build src/main.ngpl
 ```
 
-Because only `FILE` is read at that point — the other sources are what the recipe is for — a recipe reaches what its own file defines and no more.
+Because only `FILE` is read at that point — the rest of the program is what the recipe is for — a recipe reaches what its own file defines and no more.
 
 #### What a Recipe Declares
 
-Each thing is declared by naming it and answered by a reader.  The three that hold a list answer it in the order it was declared; the two that hold a single name are last-writer-wins and answer `""` until one is declared.
+Each thing is declared by naming it and answered by a reader.  The two that hold a list answer them in the order they were declared; the three that hold a single name answer `""` until one is declared, and the last two of those are last-writer-wins.
 
 | declares | answers | |
 |---|---|---|
-| `std.build.source(p)` | `std.build.sources()` | a source file of the program |
+| `std.build.root_source_file(p)` | `std.build.root_source_file_name()` | the one file the program is rooted in |
 | `std.build.output(n)` | `std.build.output_name()` | what the result is called |
 | `std.build.output_dir(d)` | `std.build.output_directory()` | where the result goes |
 | `std.build.search_path(p)` | `std.build.paths()` | where a source is looked for |
 | `std.build.flag(f)` | `std.build.flags()` | a compiler flag |
+
+**One source, not a list.**  What else a program is made of is written in the program, as the `@import` lines at the head of each file, so a recipe names the file it is rooted in and no more.  Naming a second is refused: a build has one root.
 
 A relative source name is taken relative to the directory `FILE` is in, then against each search path in the order declared, so a recipe means the same thing from whatever directory it is run.
 
@@ -10021,7 +10043,7 @@ Where the recipe and the command line say different things, **the command line w
 
 #### What a Recipe May Say
 
-A recipe is a program, not a list — the example above computed its sources — but it is a program in a subset.  A recipe binds names, tests them, loops, joins strings, and calls the functions its own file defines.  It holds integers, truth values, strings and arrays of strings.
+A recipe is a program, not a table — it may compute the name it declares — but it is a program in a subset.  A recipe binds names, tests them, loops, joins strings, and calls the functions its own file defines.  It holds integers, truth values, strings and arrays of strings.
 
 The interpreter reads a recipe with the same evaluator it runs everything else with, so it accepts recipes the compiler does not.  The compiler **refuses what it cannot do, by name**, rather than ignoring it — a recipe that the compiler accepts means the same thing under both, and a recipe that reaches past the subset is told which construct did it.
 
@@ -10251,15 +10273,14 @@ A program may carry one `@build` function: the build recipe, described in full i
 ```
 @build
 fn build():
-    foreach part := ["lex", "parse", "check"]:
-        std.build.source("src/" ⧺ part ⧺ ".ngpl")
+    std.build.root_source_file("main.ngpl")
     std.build.output_dir("build")
     std.build.output("demo")
     std.build.search_path("vendor")
     std.build.flag("contracts=enforce")
 ```
 
-A recipe is a program, not a list, so the sources above were computed rather than written out.  Because the interpreter evaluates it with the same evaluator it runs everything else with, the recipes it accepts are a superset of the ones the compiler accepts; Chapter 8 says what the compiler's subset holds.
+A recipe names the one file the program is rooted in; the rest of the program is reached from it by the `@import` lines the sources carry.  A recipe is a program, not a table, so the name may be computed rather than written out.  Because the interpreter evaluates it with the same evaluator it runs everything else with, the recipes it accepts are a superset of the ones the compiler accepts; Chapter 8 says what the compiler's subset holds.
 
 The function takes no parameters, and a program carries at most one.
 

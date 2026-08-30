@@ -41,7 +41,7 @@ if [[ $compiler == native ]]; then
     "$topdir"/build/bootstrap.sh || exit 1
     ngplc() { "$topdir"/build/ngplc "$@"; }
 else
-    ngplc() { python -m interp "${NGPLC_SOURCES[@]}" -- "$@"; }
+    ngplc() { python -m interp "$NGPLC_ROOT" -- "$@"; }
 fi
 
 pass=0
@@ -153,22 +153,23 @@ done
 
 # ---------------------------------------------------------------------------
 # Multi-file programs: several sources read as if they were one.  Each
-# directory under multi/ holds its files and a `sources` naming them in
-# the order they are compiled, which is part of the program -- an enum
-# must be declared before it is used as a type.
+# directory under multi/ holds its files and a `root` naming the one
+# the program is rooted in; the rest are reached from it by the @import
+# lines they carry, which is also what settles the order they are
+# compiled in -- a file goes in after everything it names.
 #
 # A directory whose files carry a @build recipe is compiled a second
 # time through --build, and the two binaries must be byte-identical:
-# that is what says the recipe names exactly the files `sources` does,
+# that is what says the recipe is rooted in the file `root` names,
 # rather than something that merely also works.
 # ---------------------------------------------------------------------------
 for d in "$testdir"/multi/*/; do
-    [ -f "$d/sources" ] || continue
+    [ -f "$d/root" ] || continue
     name=multi-$(basename "$d")
     files=()
     while read -r f; do
         [ -n "$f" ] && files+=("$d$f")
-    done < "$d/sources"
+    done < "$d/root"
 
     python -m interp --skip-tests "${files[@]}" \
         > "$workdir/$name.interp.out" 2>/dev/null
@@ -196,7 +197,7 @@ for d in "$testdir"/multi/*/; do
         continue
     fi
 
-    recipe=$(grep -l '@build' "${files[@]}" 2>/dev/null | head -1)
+    recipe=$(grep -l '@build' "$d"*.ngpl 2>/dev/null | head -1)
     if [ -n "$recipe" ]; then
         if ! ngplc --build "$recipe" -o "$workdir/$name.build.bin" \
                 > "$workdir/$name.build.out" 2>&1; then

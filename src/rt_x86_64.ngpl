@@ -18,6 +18,12 @@
 //
 // The loop is the other half of the agreement: write says how much it
 // took, and a pipe is free to take less than it was offered.
+
+@import("./lower.ngpl")
+@import("./emit.ngpl")
+@import("./elf.ngpl")
+@import("./arch_x86_64.ngpl")
+
 fn emit_write(em : &mut Emit, fd : i64):
     em.begin_fn(2)
     em.b3(72, 137, 242)             // mov rdx, rsi -- what is left

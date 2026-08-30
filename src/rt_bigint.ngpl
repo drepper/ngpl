@@ -21,6 +21,10 @@
 // calling convention of their own -- so they are written once here and
 // every target emits them, as the hash and sha256 routines are.
 
+@import("./ir.ngpl")
+@import("./emit.ngpl")
+
+
 let BIG_SHIFT : i64 = 31
 let BIG_MASK : i64 = 2147483647      // 2^31 - 1
 let BIG_BASE : i64 = 2147483648      // 2^31

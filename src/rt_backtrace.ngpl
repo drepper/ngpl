@@ -32,6 +32,15 @@
 // is built.
 
 // How many frames are worth printing before the rest is repetition.
+
+@import("./tokens.ngpl")
+@import("./ast.ngpl")
+@import("./ir.ngpl")
+@import("./lower.ngpl")
+@import("./emit.ngpl")
+@import("./elf.ngpl")
+@import("./arch_a64.ngpl")
+
 let BT_MAX : i64 = 100
 
 // Room in the routine's own frame for the frame number's digits.  A

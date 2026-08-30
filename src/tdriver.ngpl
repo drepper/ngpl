@@ -7,6 +7,14 @@
 
 // a value that must fit its width or leave for RT_OV, composed with
 // scratch labels the caller hands out
+
+@import("./ir.ngpl")
+@import("./emit.ngpl")
+@import("./elf.ngpl")
+@import("./arch_x86_64.ngpl")
+@import("./arch_a64.ngpl")
+@import("./dispatch.ngpl")
+
 fn t_range_check(em : &mut Emit, tg : Target, w : i64, lok : i64):
     let bits : i64 = w & 255
     let sgn : i64 = w » 8

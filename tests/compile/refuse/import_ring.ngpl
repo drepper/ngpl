@@ -1,0 +1,8 @@
+// Files that import one another in a ring cannot be put in an order
+// where each follows what it needs -- not even a ring of one.
+@import("./import_ring.ngpl")
+
+@start
+@impure
+fn main():
+    std.println("never")

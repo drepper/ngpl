@@ -7,6 +7,10 @@
 // are checked against; it did not change when that path was built.
 // Its runtime is beside it, in rt_x86_64.ngpl.
 
+@import("./ir.ngpl")
+@import("./emit.ngpl")
+
+
 @pre(j >= 0 and j <= 5)
 fn arg_reg(j : i64) → i64:
     if j = 0: return R_DI

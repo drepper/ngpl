@@ -3942,6 +3942,113 @@ def report_times(total: float) -> None:
     print(f"{'total':<24}{total:>10.3f}{100.0:>7.1f}%", file=sys.stderr)
 
 
+_IMPORT_LINE = re.compile(r'^@import\("([^"]*)"\)\s*$')
+
+
+class ImportError_(Exception):
+    """An @import that cannot be followed."""
+
+
+def _imports_of(text: str, path: str) -> list[tuple[str, int]]:
+    """The files this one is written against, and where each is asked for.
+
+    They are the @import lines at the head of the file: a file says
+    what it needs before it says anything else, so the reader stops at
+    the first line that is neither blank, nor a comment, nor one of
+    them.  That also means nothing inside a string or a body can be
+    mistaken for one.
+    """
+    out: list[tuple[str, int]] = []
+    for lineno, line in enumerate(text.split("\n"), 1):
+        bare = line.strip()
+        if not bare or bare.startswith("//"):
+            continue
+        if not line.startswith("@import"):
+            break
+        m = _IMPORT_LINE.match(line.rstrip())
+        if m is None:
+            raise ImportError_(
+                f"{path}:{lineno}: @import takes one file name in quotes, "
+                f'as @import("./tokens.ngpl")')
+        out.append((m.group(1), lineno))
+    return out
+
+
+def _read_program(roots: list[str]) -> tuple[str, list[int], list[str]]:
+    """The whole program, from the file (or files) it is rooted in.
+
+    A file's imports are read first and spliced in ahead of it, each
+    file once: what a file is written against has to be there before
+    it, which is what makes the order of the sources the program's own
+    business rather than the command line's.  Answers the text, the
+    line each file begins on, and the files in the order they went in.
+    """
+    pieces: list[str] = []
+    starts: list[int] = []
+    paths: list[str] = []
+    done: dict[str, str] = {}          # real path -> the name it went in under
+    lines = 0
+
+    def read(path: str, asked_from: str | None, stack: list[str],
+             reading: list[str]) -> None:
+        nonlocal lines
+        real = os.path.realpath(path)
+        if real in stack:
+            ring = " imports ".join(list(reading) + [path])
+            raise ImportError_(f"these files import one another: {ring}")
+        if real in done:
+            return
+        if not os.path.isfile(path):
+            where = f"{asked_from}: " if asked_from else ""
+            raise ImportError_(f"{where}cannot open '{path}': no such file "
+                               f"or it cannot be read")
+        with open(path, "rb") as f:
+            raw = f.read()
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError as e:
+            line = raw.count(b"\n", 0, e.start) + 1
+            col = e.start - (raw.rfind(b"\n", 0, e.start) + 1) + 1
+            raise ImportError_(
+                f"{path}:{line}:{col}: the source is not UTF-8: "
+                f"byte 0x{raw[e.start]:02X} {e.reason}")
+        # A file ends its last line before the next one starts, or the
+        # two would run together into a line spanning the boundary.
+        if text and not text.endswith("\n"):
+            text += "\n"
+
+        # The head is read whole before anything in it is followed, so
+        # that what a file says about itself is answered for before
+        # what it names is opened.
+        seen: set[str] = set()
+        wanted = _imports_of(text, path)
+        for name, lineno in wanted:
+            if not name.startswith("./"):
+                raise ImportError_(
+                    f"{path}:{lineno}: an @import names a file beside this "
+                    f"one, so its name begins with './'; this one is "
+                    f"'{name}'")
+            if name in seen:
+                raise ImportError_(
+                    f"{path}:{lineno}: '{name}' is imported here and "
+                    f"already above; once is what it means")
+            seen.add(name)
+        for name, lineno in wanted:
+            here = os.path.normpath(
+                os.path.join(os.path.dirname(path) or ".", name))
+            read(here, f"{path}:{lineno}", stack + [real], reading + [path])
+
+        done[real] = path
+        starts.append(lines + 1)
+        lines += text.count("\n")
+        paths.append(path)
+        pieces.append(text)
+
+    for root in roots:
+        read(root, None, [], [])
+    return "".join(pieces), starts, paths
+
+
 def main():
     """Run the NGPL interpreter on a source file."""
     # The evaluator spends several Python frames per NGPL call, so
@@ -3991,40 +4098,17 @@ def main():
     definitions = []
 
     if source_paths:
-        pieces: list[str] = []
-        starts: list[int] = []
-        line_count = 0
-        for path in source_paths:
-            if not os.path.isfile(path):
-                print(f"Error: file not found: {path}", file=sys.stderr)
-                sys.exit(1)
-
-            with open(path, "rb") as f:
-                raw = f.read()
-            try:
-                text = raw.decode("utf-8")
-            except UnicodeDecodeError as e:
-                # The language mandates UTF-8; what is not is refused
-                # with its position rather than surfacing as a decoder
-                # traceback.  The count is over this file's own bytes,
-                # so it says the position in the file that is wrong.
-                line = raw.count(b"\n", 0, e.start) + 1
-                col = e.start - (raw.rfind(b"\n", 0, e.start) + 1) + 1
-                print(f"error: {path}:{line}:{col}: the source is not "
-                      f"UTF-8: byte 0x{raw[e.start]:02X} {e.reason}",
-                      file=sys.stderr)
-                sys.exit(1)
-
-            # A file ends its last line before the next one starts.
-            # Without this the two would run together into a single line
-            # spanning a file boundary, which nothing downstream could
-            # make sense of.
-            if text and not text.endswith("\n"):
-                text += "\n"
-            starts.append(line_count + 1)
-            line_count += text.count("\n")
-            pieces.append(text)
-        source = "".join(pieces)
+        # What a file is written against comes in ahead of it, however
+        # deep that goes; the UTF-8 rule and the newline at a file's
+        # end are the reader's business too.  Naming several files
+        # still works and means what it did: each is read in turn, and
+        # nothing is read twice.
+        try:
+            source, starts, read_paths = _read_program(source_paths)
+        except ImportError_ as e:
+            print(f"error: {e}", file=sys.stderr)
+            sys.exit(1)
+        source_paths = read_paths
 
         # A diagnostic raised mid-run never reaches the top level, so it
         # finds the text to point into here rather than being handed it.

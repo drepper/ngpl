@@ -2,6 +2,13 @@
 // Parsing: tokens → Ast
 // ===========================================================================
 
+@import("./tokens.ngpl")
+@import("./types.ngpl")
+@import("./diag.ngpl")
+@import("./lex.ngpl")
+@import("./ast.ngpl")
+
+
 struct Parser:
     blets : i64[]        // see Ast
     toks : Toks
@@ -1052,21 +1059,21 @@ impl Parser:
                     _ ← self.eat(TK_DOT, "'.' after std.build")
                     let bm := self.ttext(self.pos)
                     let bsb : mut i64 = ⁻1
-                    if bm = "source": bsb ← SB_BSRC
+                    if bm = "root_source_file": bsb ← SB_BSRC
                     elif bm = "output": bsb ← SB_BOUT
                     elif bm = "output_dir": bsb ← SB_BOUTD
                     elif bm = "search_path": bsb ← SB_BPATH
                     elif bm = "flag": bsb ← SB_BFLAG
-                    elif bm = "sources": bsb ← SB_BSRCS
+                    elif bm = "root_source_file_name": bsb ← SB_BSRCS
                     elif bm = "output_name": bsb ← SB_BOUTN
                     elif bm = "output_directory": bsb ← SB_BOUTDN
                     elif bm = "paths": bsb ← SB_BPATHS
                     elif bm = "flags": bsb ← SB_BFLAGS
                     else:
-                        self.err("'std.build." ⧺ bm ⧺ """' is not core-2; source(), output(),
-                                " output_dir(), search_path() and flag() declare a build, and
-                                " sources(), output_name(), output_directory(), paths() and flags()
-                                " answer what was declared""")
+                        self.err("'std.build." ⧺ bm ⧺ """' is not core-2; root_source_file(),
+                                " output(), output_dir(), search_path() and flag() declare a build,
+                                " and root_source_file_name(), output_name(), output_directory(),
+                                " paths() and flags() answer what was declared""")
                         return 0
                     self.pos ← self.pos + 1
                     let boff : i64 = self.parse_args()
@@ -2592,6 +2599,19 @@ impl Parser:
                 _ ← self.eat(TK_LPAR, "'(' after @invariant")
                 invs.push(self.parse_expr())
                 _ ← self.eat(TK_RPAR, "')' closing @invariant")
+            elif name = "import":
+                // @import("./x.ngpl"): the file this one is written
+                // against.  Its text came in ahead of this one before
+                // any of it was lexed, so there is nothing to do with
+                // it here.  The line stays where it was written, which
+                // is what lets a file say what it needs without moving
+                // a single line number.
+                _ ← self.eat(TK_LPAR, "'(' after @import")
+                _ ← self.eat(TK_STR, "the file's name, in quotes")
+                _ ← self.eat(TK_RPAR, "')' closing @import")
+                if self.peek() = TK_NL:
+                    self.pos ← self.pos + 1
+                return
             elif name = "listable":
                 is_lstb ← true
             elif name = "export":

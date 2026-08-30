@@ -649,30 +649,36 @@ Attempt 3 grows core-1 to **core-2** with structs:
 
 ## The Files
 
-The compiler is thirty-five source files, listed in build order by
-`build/sources.sh` and by the `@build` recipe in `src/main.ngpl`.
+The compiler is thirty-seven source files.  There is no list of them:
+each says at its head what it is written against, with
+`@import("./other.ngpl")`, and the compiler is handed `src/main.ngpl`
+and follows those, putting each file after everything it names.
 Twenty-four of them were cut from one 20,836-line file by contiguous
 slices -- concatenating them in that order reproduced it byte for byte,
 and the binary they compiled to was byte-identical on all six targets,
 which is how the split was checked.  The rest were written afterwards,
 `comptime.ngpl` first.
 
-    tokens types diag lex ast parse dumpast check abi comptime ir lower
-    emit sha256 symbols sbom elf codegen main
-    arch_x86_64 rt_x86_64 arch_a64 dispatch arch_rv64 arch_i386
-    arch_arm arch_rv32 tdriver rt_portable rt_hash rt_sha256 rt_bigint
-    rt_signal rt_backtrace codegen_t
+    tokens imports types diag lex ast parse dumpast check abi comptime
+    ir lower emit sha256 symbols sbom incr elf
+    arch_x86_64 rt_x86_64 arch_a64 arch_rv64 arch_i386 arch_arm
+    arch_rv32 dispatch tdriver rt_hash rt_sha256 rt_bigint rt_signal
+    rt_backtrace rt_portable codegen_t codegen main
 
-Build it with `ngplc --build src/main.ngpl`; the recipe in `main.ngpl`
-is a `@build` function, which generates no code and cannot be called.
+That is the order the imports put them in, not an order anyone wrote
+down.  Build it with `ngplc src/main.ngpl`, or with
+`ngplc --build src/main.ngpl`; the recipe in `main.ngpl` is a `@build`
+function, which generates no code and cannot be called, and it names
+that one file.
 
-**The order is part of the program.**  A struct may be declared below
-whatever names it — the parser sweeps for struct names before parsing —
-but an `enum` and a `unit` are registered as they are read, so
-`elf.ngpl` must precede everything that writes `Sht` or `¤"shndx"`.
-Nothing may glob `src/*.ngpl`: alphabetical is not dependency order.
-Two lists therefore say the same thing, and the bootstrap checks them
-against each other rather than trusting a comment.
+**The order is part of the program**, and the program says it.  A
+struct, a function, a global and an `enum` may be declared below
+whatever names them — the parser sweeps for struct names before parsing
+and the checker resolves the rest afterwards — but a `unit` is
+registered as it is read, so `elf.ngpl` has to precede everything that
+writes `¤"shndx"`.  Each file names what it is written against at its
+head and the compiler follows those, so alphabetical order never comes
+into it and no list outside the sources can drift from them.
 
 One seam the list does not hide: `impl Emit` is opened in both
 `emit.ngpl`, which declares it, and `arch_a64.ngpl`, which adds the two

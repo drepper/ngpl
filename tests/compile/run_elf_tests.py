@@ -512,20 +512,15 @@ def refuse(compiler, source: str, out: str, extra) -> str:
 
 
 def compiler_sources() -> list:
-    """The compiler's own sources, in the order build/sources.sh names them.
+    """The one file the compiler is rooted in, as build/sources.sh names it.
 
-    One list, read rather than repeated: the order is part of the
-    program, so a second copy of it here would be a second thing that
-    can be wrong.
+    Read rather than repeated: the rest of the program is reached from
+    it by the @import lines the sources carry, so this is the only name
+    anything outside the sources has to know.
     """
     text = open(os.path.join(topdir, "build", "sources.sh")).read()
-    inside = text.split("NGPLC_SOURCES=(", 1)[1].split(")", 1)[0]
-    out = []
-    for line in inside.splitlines():
-        name = line.split("#", 1)[0].strip()
-        if name:
-            out.append(name)
-    return out
+    root = text.split("NGPLC_ROOT=", 1)[1].split("\n", 1)[0].strip()
+    return [root]
 
 
 # ---------------------------------------------------------------------------
@@ -808,17 +803,20 @@ def main() -> int:
                   check_segments(wv, 8 * 1024 * 1024),
                   check_sections(wv), None)[-1])
     def multi_bill():
-        # a program from several files: the bill names each one, in the
-        # order they were read, and then all of them together
+        # A program from several files, named by one: the third imports
+        # the second, which imports the first.  The bill names each one
+        # in the order they were read -- which is the order the imports
+        # put them in, each after what it is written against -- and
+        # then all of them together.
         parts = [os.path.join("tests", "compile", "multi", "split", f)
                  for f in ("a.ngpl", "b.ngpl", "c.ngpl")]
         out = os.path.join(work, "probe_multi")
-        compile_probe(compiler, parts[0], out, parts[1:])
+        compile_probe(compiler, parts[2], out)
         return check_sbom(Elf(open(out, "rb").read()), parts)
 
     case("every binary carries its bill of materials",
          lambda: check_sbom(sym, [rel(sym_src)]))
-    case("a bill of several sources keeps them in order", multi_bill)
+    case("a bill of imported sources keeps them in order", multi_bill)
     case("readelf reads it", lambda: check_readelf(sym_bin))
     case("the reader written in NGPL reads it too",
          lambda: check_sbom_tool(sym, sym_bin))

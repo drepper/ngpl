@@ -32,6 +32,12 @@
 
 // x turned right by n places, at thirty-two bits.  What falls off the
 // bottom comes back at the top, which a shift alone will not do.
+
+@import("./ir.ngpl")
+@import("./emit.ngpl")
+@import("./sha256.ngpl")
+@import("./rt_hash.ngpl")
+
 @pre(n >= 1 and n <= 31)
 fn sha_ir_rotr(b : &mut RtB, x : i64, n : i64) → i64:
     b.bor(b.shr32(x, b.cst(n)), b.shl32(x, b.cst(32 - n)))

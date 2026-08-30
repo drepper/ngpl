@@ -9,6 +9,9 @@
 // everything else arrives through here.
 // ===========================================================================
 
+@import("./elf.ngpl")
+
+
 let RG_A : i64 = 0
 let RG_B : i64 = 1
 let RG_C : i64 = 2

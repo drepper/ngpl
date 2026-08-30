@@ -22,6 +22,11 @@
 // the Tgt enum, which is declared much later and must be declared
 // before it is used.
 
+@import("./tokens.ngpl")
+@import("./lex.ngpl")
+@import("./ast.ngpl")
+
+
 struct Abi:
     // One entry per function in a.fns, in the same order, so a function
     // index is an index here.

@@ -1,4 +1,4 @@
-error: 'import' is a full-language feature the bootstrap does not provide; a program is one file
+error: 'import' is a full-language feature the bootstrap does not provide; a file names what it needs with @import
   --> tests/output/refuse_import.ngpl:1:1
     |
   1 | import foo

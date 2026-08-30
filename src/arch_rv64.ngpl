@@ -8,6 +8,11 @@
 // comparisons as 0/1 anyway.
 // ---------------------------------------------------------------------------
 
+@import("./emit.ngpl")
+@import("./elf.ngpl")
+@import("./arch_a64.ngpl")
+
+
 let RV_RA : i64 = 5
 let RV_RB : i64 = 6
 let RV_RC : i64 = 7

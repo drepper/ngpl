@@ -10,6 +10,30 @@
 // 32-bit targets take none: an i64 arrives as a pair, and the simple
 // course was to put every pair on the stack -- which is why the private
 // convention is worth most exactly there.
+
+@import("./tokens.ngpl")
+@import("./types.ngpl")
+@import("./diag.ngpl")
+@import("./lex.ngpl")
+@import("./ast.ngpl")
+@import("./check.ngpl")
+@import("./abi.ngpl")
+@import("./ir.ngpl")
+@import("./lower.ngpl")
+@import("./emit.ngpl")
+@import("./symbols.ngpl")
+@import("./incr.ngpl")
+@import("./elf.ngpl")
+@import("./arch_a64.ngpl")
+@import("./arch_rv64.ngpl")
+@import("./arch_i386.ngpl")
+@import("./arch_arm.ngpl")
+@import("./arch_rv32.ngpl")
+@import("./dispatch.ngpl")
+@import("./tdriver.ngpl")
+@import("./rt_backtrace.ngpl")
+@import("./rt_portable.ngpl")
+
 fn abi_argregs(tg : Target) → i64:
     match tg.id:
         Tgt.a64: 8

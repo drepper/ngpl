@@ -29,6 +29,11 @@
 // Where things sit in a handle.  The buffer is as wide as the widest
 // block any algorithm here absorbs, so the layout does not move when
 // one is added; SHA-256's is 64 of its 136 bytes.
+
+@import("./ir.ngpl")
+@import("./lower.ngpl")
+@import("./emit.ngpl")
+
 let HS_ALG : i64 = 0        // which algorithm, or ⁻1 once the digest is taken
 let HS_TOTAL : i64 = 8      // how many bytes have been added
 let HS_FILL : i64 = 16      // how many of them are in the buffer, not yet absorbed
