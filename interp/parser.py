@@ -8,7 +8,7 @@ Blocks can use brace-delimited { ... } or layout-driven scoping with : and
 indentation (INDENT/DEDENT tokens).
 """
 
-from interp.errors import coded
+from interp.errors import Level, coded
 from interp.ast import (
     IntLit, FloatLit, StrLit, CharLit, BoolLit, NoneLit, VarRef, RefExpr, BorrowExpr,
     BinOp, UnaryOp,
@@ -31,16 +31,16 @@ from interp.ast import (
     MacroCall, Quote, Splice, Reflect,
     set_pos,
 )
-from interp.lexer import Token, KEYWORDS
+from interp.lexer import Token, TokenType, KEYWORDS
 
 
 # Token types that can begin a top-level definition, either as the
 # definition keyword itself or as an annotation preceding it.
 DEFINITION_STARTERS = frozenset({
-    "START", "BUILD", "REPLACEABLE", "TEST", "FLAG", "IMPURE", "EXPECT", "REPR",
-    "HOT", "COLD", "LISTABLE", "NORETURN", "PRE", "POST",
-    "ENUM", "STRUCT", "IMPL", "UNIT", "TYPE", "FN", "LET", "MODULE",
-    "MACRO", "MACRO_RULES", "COMPTIME",
+    TokenType.START, TokenType.BUILD, TokenType.REPLACEABLE, TokenType.TEST, TokenType.FLAG, TokenType.IMPURE, TokenType.EXPECT, TokenType.REPR,
+    TokenType.HOT, TokenType.COLD, TokenType.LISTABLE, TokenType.NORETURN, TokenType.PRE, TokenType.POST,
+    TokenType.ENUM, TokenType.STRUCT, TokenType.IMPL, TokenType.UNIT, TokenType.TYPE, TokenType.FN, TokenType.LET, TokenType.MODULE,
+    TokenType.MACRO, TokenType.MACRO_RULES, TokenType.COMPTIME,
 })
 
 
@@ -63,7 +63,7 @@ class ParseError(Exception):
         super().__init__(msg)
 
 
-_TYPE_TO_KEYWORD: dict[str, str] = {v: k for k, v in KEYWORDS.items()}
+_TYPE_TO_KEYWORD: dict[TokenType, str] = {v: k for k, v in KEYWORDS.items()}
 
 
 # The operators of each precedence level.  A saturating operator sits
@@ -216,28 +216,28 @@ class Parser:
         kw = _TYPE_TO_KEYWORD.get(tok.type)
         if kw is not None:
             return f"'{kw}'"
-        if tok.type == "IDENT":
+        if tok.type is TokenType.IDENT:
             return f"identifier '{tok.value}'"
-        if tok.type == "INT":
+        if tok.type is TokenType.INT:
             return f"integer {tok.value}"
-        if tok.type == "CHAR":
+        if tok.type is TokenType.CHAR:
             return f"character '{chr(tok.value)}'"
-        if tok.type == "STR":
+        if tok.type is TokenType.STR:
             return f"string \"{tok.value}\""
-        if tok.type in ("PUNCT", "OP"):
+        if tok.type in (TokenType.PUNCT, TokenType.OP):
             return f"'{tok.value}'"
-        if tok.type == "EOF":
+        if tok.type is TokenType.EOF:
             return "end of file"
-        if tok.type == "NEWLINE":
+        if tok.type is TokenType.NEWLINE:
             return "newline"
-        if tok.type == "INDENT":
+        if tok.type is TokenType.INDENT:
             return "indent"
-        if tok.type == "DEDENT":
+        if tok.type is TokenType.DEDENT:
             return "dedent"
         return f"'{tok.value}'"
 
     @staticmethod
-    def _type_display(type_: str, value: str | None = None) -> str:
+    def _type_display(type_: TokenType, value: str | None = None) -> str:
         """Format an expected token type for user-facing error messages."""
         if value is not None:
             return f"'{value}'"
@@ -245,13 +245,14 @@ class Parser:
         if kw is not None:
             return f"'{kw}'"
         label = {
-            "IDENT": "identifier", "INT": "integer", "STR": "string",
-            "PUNCT": "punctuation", "OP": "operator", "EOF": "end of file",
-            "NEWLINE": "newline",
+            TokenType.IDENT: "identifier", TokenType.INT: "integer",
+            TokenType.STR: "string", TokenType.PUNCT: "punctuation",
+            TokenType.OP: "operator", TokenType.EOF: "end of file",
+            TokenType.NEWLINE: "newline",
         }.get(type_)
         if label is not None:
             return label
-        return type_.lower()
+        return type_.name.lower()
 
     def _cur(self):
         """Return the current token without consuming it."""
@@ -293,20 +294,20 @@ class Parser:
         Returns the text to append to the element type, or "" when the
         next token does not open an array type.
         """
-        if not (self._check("PUNCT") and self._cur().value == "["):
+        if not (self._check(TokenType.PUNCT) and self._cur().value == "["):
             return ""
         self.pos += 1
         dims: list[str] = []
         while True:
-            dims.append(str(self._eat("INT").value) if self._check("INT") else "")
-            if self._try_eat("PUNCT", ",") is None:
+            dims.append(str(self._eat(TokenType.INT).value) if self._check(TokenType.INT) else "")
+            if self._try_eat(TokenType.PUNCT, ",") is None:
                 break
-        self._eat("PUNCT", "]")
+        self._eat(TokenType.PUNCT, "]")
         return "[" + ",".join(dims) + "]"
 
     def _at_tuple_type(self) -> bool:
         """Whether a type starts here and is a tuple's."""
-        return self._check("PUNCT") and self._cur().value == "("
+        return self._check(TokenType.PUNCT) and self._cur().value == "("
 
     def _parse_tuple_type(self) -> str:
         """Parse: '(' type (',' type)+ ')'
@@ -320,11 +321,11 @@ class Parser:
         The text is rebuilt rather than kept as written, so that two
         spellings of one type are one string.
         """
-        self._eat("PUNCT", "(")
+        self._eat(TokenType.PUNCT, "(")
         elements = [self._parse_type()]
-        while self._try_eat("PUNCT", ","):
+        while self._try_eat(TokenType.PUNCT, ","):
             elements.append(self._parse_type())
-        self._eat("PUNCT", ")")
+        self._eat(TokenType.PUNCT, ")")
         if len(elements) == 1:
             return elements[0]
         return "(" + ", ".join(elements) + ")"
@@ -337,12 +338,12 @@ class Parser:
             written = self._parse_base_type_name()
         self._reject_unit_here()
         written += self._parse_array_suffix()
-        if self._check("OP") and self._cur().value == "?":
+        if self._check(TokenType.OP) and self._cur().value == "?":
             self.pos += 1
             written += "?"
-            if self._check("IDENT"):
+            if self._check(TokenType.IDENT):
                 written += self._parse_dotted_name()
-        elif self._check("OP") and self._cur().value == "!":
+        elif self._check(TokenType.OP) and self._cur().value == "!":
             self.pos += 1
             written += "?std.errors"
         return written
@@ -354,11 +355,11 @@ class Parser:
     def parse(self):
         """Parse the full token stream into a list of top-level definitions."""
         definitions = []
-        while not self._check("EOF"):
-            while self._try_eat("NEWLINE"):
+        while not self._check(TokenType.EOF):
+            while self._try_eat(TokenType.NEWLINE):
                 pass
             # Skip stray INDENT/DEDENT at top level.
-            while self._check("INDENT", "DEDENT"):
+            while self._check(TokenType.INDENT, TokenType.DEDENT):
                 self.pos += 1
             definition = self._parse_definition()
             if definition is not None:
@@ -380,12 +381,12 @@ class Parser:
         parsed as a statement, so a bare expression arrives as ExprStmt.
         """
         items = []
-        while not self._check("EOF"):
-            while self._try_eat("NEWLINE"):
+        while not self._check(TokenType.EOF):
+            while self._try_eat(TokenType.NEWLINE):
                 pass
-            while self._check("INDENT", "DEDENT"):
+            while self._check(TokenType.INDENT, TokenType.DEDENT):
                 self.pos += 1
-            if self._check("EOF"):
+            if self._check(TokenType.EOF):
                 break
             if self._cur().type in DEFINITION_STARTERS:
                 item = self._parse_definition()
@@ -416,91 +417,91 @@ class Parser:
         expect_annotations: list[tuple[str, str]] = []
 
         while True:
-            if self._check("START"):
-                self._eat("START")
+            if self._check(TokenType.START):
+                self._eat(TokenType.START)
                 is_start = True
-                self._try_eat("NEWLINE")
-            elif self._check("BUILD"):
-                self._eat("BUILD")
+                self._try_eat(TokenType.NEWLINE)
+            elif self._check(TokenType.BUILD):
+                self._eat(TokenType.BUILD)
                 is_build = True
-                self._try_eat("NEWLINE")
-            elif self._check("REPLACEABLE"):
-                self._eat("REPLACEABLE")
+                self._try_eat(TokenType.NEWLINE)
+            elif self._check(TokenType.REPLACEABLE):
+                self._eat(TokenType.REPLACEABLE)
                 is_replaceable = True
-                self._try_eat("NEWLINE")
-            elif self._check("EXPORT"):
+                self._try_eat(TokenType.NEWLINE)
+            elif self._check(TokenType.EXPORT):
                 # What a compiler writes into the object file under a
                 # name others may link against.  The interpreter links
                 # nothing, so it notes the intent and runs on.
-                self._eat("EXPORT")
+                self._eat(TokenType.EXPORT)
                 is_export = True
-                self._try_eat("NEWLINE")
-            elif self._check("TEST"):
-                self._eat("TEST")
+                self._try_eat(TokenType.NEWLINE)
+            elif self._check(TokenType.TEST):
+                self._eat(TokenType.TEST)
                 is_test = True
-                if self._check("PUNCT") and self._cur().value == "(":
-                    self._eat("PUNCT", "(")
-                    while not (self._check("PUNCT") and self._cur().value == ")"):
-                        test_refs.append(self._eat("IDENT").value)
-                        if not self._try_eat("PUNCT", ","):
+                if self._check(TokenType.PUNCT) and self._cur().value == "(":
+                    self._eat(TokenType.PUNCT, "(")
+                    while not (self._check(TokenType.PUNCT) and self._cur().value == ")"):
+                        test_refs.append(self._eat(TokenType.IDENT).value)
+                        if not self._try_eat(TokenType.PUNCT, ","):
                             break
-                    self._eat("PUNCT", ")")
-                self._try_eat("NEWLINE")
-            elif self._check("FLAG"):
-                self._eat("FLAG")
+                    self._eat(TokenType.PUNCT, ")")
+                self._try_eat(TokenType.NEWLINE)
+            elif self._check(TokenType.FLAG):
+                self._eat(TokenType.FLAG)
                 is_flag = True
-                self._try_eat("NEWLINE")
-            elif self._check("IMPURE"):
-                self._eat("IMPURE")
+                self._try_eat(TokenType.NEWLINE)
+            elif self._check(TokenType.IMPURE):
+                self._eat(TokenType.IMPURE)
                 is_impure = True
-                self._try_eat("NEWLINE")
-            elif self._check("LISTABLE"):
-                self._eat("LISTABLE")
+                self._try_eat(TokenType.NEWLINE)
+            elif self._check(TokenType.LISTABLE):
+                self._eat(TokenType.LISTABLE)
                 is_listable = True
-                self._try_eat("NEWLINE")
-            elif self._check("NORETURN"):
-                self._eat("NORETURN")
+                self._try_eat(TokenType.NEWLINE)
+            elif self._check(TokenType.NORETURN):
+                self._eat(TokenType.NORETURN)
                 is_noreturn = True
-                self._try_eat("NEWLINE")
-            elif self._check("IGNORABLE"):
-                self._eat("IGNORABLE")
+                self._try_eat(TokenType.NEWLINE)
+            elif self._check(TokenType.IGNORABLE):
+                self._eat(TokenType.IGNORABLE)
                 is_ignorable = True
-                self._try_eat("NEWLINE")
-            elif self._check("PRE"):
+                self._try_eat(TokenType.NEWLINE)
+            elif self._check(TokenType.PRE):
                 preconditions.append(self._parse_condition("pre"))
-            elif self._check("POST"):
+            elif self._check(TokenType.POST):
                 postconditions.append(self._parse_condition("post"))
-            elif self._check("INVARIANT"):
-                self._eat("INVARIANT")
-                self._eat("PUNCT", "(")
+            elif self._check(TokenType.INVARIANT):
+                self._eat(TokenType.INVARIANT)
+                self._eat(TokenType.PUNCT, "(")
                 self._skip_nl()
                 invariants.append(self._parse_expr())
                 self._skip_nl()
-                self._eat("PUNCT", ")")
-                self._try_eat("NEWLINE")
-            elif self._check("LIKELY") or self._check("UNLIKELY"):
+                self._eat(TokenType.PUNCT, ")")
+                self._try_eat(TokenType.NEWLINE)
+            elif self._check(TokenType.LIKELY) or self._check(TokenType.UNLIKELY):
                 tok = self._cur()
                 raise ParseError(
                     f"@{tok.value} applies to an if statement, not to a "
                     f"definition; @hot and @cold are the hints for a function",
                     tok)
-            elif self._check("HOT") or self._check("COLD"):
+            elif self._check(TokenType.HOT) or self._check(TokenType.COLD):
                 tok = self._eat(self._cur().type)
-                other = "cold" if tok.type == "HOT" else "hot"
+                other = "cold" if tok.type is TokenType.HOT else "hot"
                 if hint == other:
                     raise ParseError(
                         f"@{tok.value} contradicts @{other} on the same "
                         f"function", tok)
                 hint = tok.value
-                self._try_eat("NEWLINE")
-            elif self._check("REPR"):
+                self._try_eat(TokenType.NEWLINE)
+            elif self._check(TokenType.REPR):
                 repr_kind = self._parse_repr_annotation()
-                self._try_eat("NEWLINE")
-            elif self._check("EXPECT"):
-                self._eat("EXPECT")
-                if not self._check("IDENT"):
+                self._try_eat(TokenType.NEWLINE)
+            elif self._check(TokenType.EXPECT):
+                self._eat(TokenType.EXPECT)
+                if not self._check(TokenType.IDENT):
                     raise ParseError("expected 'error' or 'warning' after @expect", self._cur())
-                level_tok = self._eat("IDENT")
+                level_tok = self._eat(TokenType.IDENT)
                 if level_tok.value not in ("error", "warning"):
                     raise ParseError(
                         f"expected 'error' or 'warning' after @expect, got '{level_tok.value}'",
@@ -515,25 +516,25 @@ class Parser:
                 # @expect <level> "pattern" is the older form and still
                 # matches by text, for the expectations not yet given a
                 # code.
-                if self._check("INT"):
-                    code_tok = self._eat("INT")
+                if self._check(TokenType.INT):
+                    code_tok = self._eat(TokenType.INT)
                     said = None
-                    if self._check("STR"):
-                        said = self._eat("STR").value
+                    if self._check(TokenType.STR):
+                        said = self._eat(TokenType.STR).value
                     expect_annotations.append(
-                        (level_tok.value, said, code_tok.value,
+                        (Level[level_tok.value], said, code_tok.value,
                          getattr(code_tok, "line", None)))
-                elif self._check("STR"):
-                    pattern_tok = self._eat("STR")
+                elif self._check(TokenType.STR):
+                    pattern_tok = self._eat(TokenType.STR)
                     expect_annotations.append(
-                        (level_tok.value, pattern_tok.value, None,
+                        (Level[level_tok.value], pattern_tok.value, None,
                          getattr(pattern_tok, "line", None)))
                 else:
                     raise ParseError(
                         "@expect states the code it expects, and may state "
                         "the message beside it; the older form states the "
                         "message alone", self._cur())
-                self._try_eat("NEWLINE")
+                self._try_eat(TokenType.NEWLINE)
             else:
                 break
 
@@ -541,33 +542,33 @@ class Parser:
         # runs, so a macro may call it.  Read before the checks below,
         # since with it written a function does follow them.
         is_comptime = False
-        if self._check("COMPTIME") and self.pos + 1 < len(self.tokens) \
-                and self.tokens[self.pos + 1].type == "FN":
-            self._eat("COMPTIME")
+        if self._check(TokenType.COMPTIME) and self.pos + 1 < len(self.tokens) \
+                and self.tokens[self.pos + 1].type is TokenType.FN:
+            self._eat(TokenType.COMPTIME)
             is_comptime = True
 
-        if hint is not None and not self._check("FN"):
+        if hint is not None and not self._check(TokenType.FN):
             raise ParseError(
                 f"@{hint} applies to a function, but none follows",
                 self._cur())
-        if is_listable and not self._check("FN"):
+        if is_listable and not self._check(TokenType.FN):
             raise ParseError(
                 "@listable applies to a function, but none follows",
                 self._cur())
-        if is_noreturn and not self._check("FN"):
+        if is_noreturn and not self._check(TokenType.FN):
             raise ParseError(
                 "@noreturn applies to a function, but none follows",
                 self._cur())
-        if (preconditions or postconditions) and not self._check("FN"):
+        if (preconditions or postconditions) and not self._check(TokenType.FN):
             what = "@pre" if preconditions else "@post"
             raise ParseError(
                 f"{what} states a condition a function holds to, but none "
                 f"follows", self._cur())
 
-        if self._check("ENUM"):
+        if self._check(TokenType.ENUM):
             return self._parse_enum_def(is_flag)
 
-        if self._check("STRUCT"):
+        if self._check(TokenType.STRUCT):
             return self._parse_struct_def(repr_kind, invariants)
         if invariants:
             raise ParseError(
@@ -579,25 +580,25 @@ class Parser:
                 f"@repr({repr_kind}) applies to a struct, but none follows",
                 self._cur())
 
-        if self._check("IMPL"):
+        if self._check(TokenType.IMPL):
             return self._parse_impl_block()
 
-        if self._check("MACRO_RULES"):
+        if self._check(TokenType.MACRO_RULES):
             return self._parse_macro_rules_def()
 
-        if self._check("MACRO"):
+        if self._check(TokenType.MACRO):
             return self._parse_macro_func_def()
 
-        if self._check("MODULE"):
+        if self._check(TokenType.MODULE):
             return self._parse_module_def()
 
-        if self._check("UNIT"):
+        if self._check(TokenType.UNIT):
             return self._parse_unit_def()
 
-        if self._check("TYPE"):
+        if self._check(TokenType.TYPE):
             return self._parse_type_def()
 
-        if self._check("FN"):
+        if self._check(TokenType.FN):
             fdef = self._parse_function_def(is_start, is_test, test_refs, expect_annotations,
                                             is_replaceable, is_impure, hint=hint,
                                             is_listable=is_listable,
@@ -609,26 +610,26 @@ class Parser:
             fdef.is_build = is_build
             fdef.is_ignorable = is_ignorable
             return fdef
-        elif self._check("LET"):
+        elif self._check(TokenType.LET):
             return self._parse_var_def()
-        elif self._check("AT_IMPORT"):
+        elif self._check(TokenType.AT_IMPORT):
             # The reader has already spliced the file in, before any of
             # this was lexed.  The line stays where it was written, so
             # that a file says what it is written against and so that
             # no line number moves; here there is nothing left to do
             # but read past it.
-            self._eat("AT_IMPORT")
-            self._eat("PUNCT", "(")
-            self._eat("STR")
-            self._eat("PUNCT", ")")
-            self._try_eat("NEWLINE")
+            self._eat(TokenType.AT_IMPORT)
+            self._eat(TokenType.PUNCT, "(")
+            self._eat(TokenType.STR)
+            self._eat(TokenType.PUNCT, ")")
+            self._try_eat(TokenType.NEWLINE)
             return None
-        elif self._check("IMPORT"):
+        elif self._check(TokenType.IMPORT):
             raise ParseError(
                 "'import' is a full-language feature the bootstrap does "
                 "not provide; a file names what it needs with @import",
                 self._cur())
-        elif self._check("EOF"):
+        elif self._check(TokenType.EOF):
             return None  # end of file reached cleanly
         else:
             raise ParseError(
@@ -644,7 +645,7 @@ class Parser:
         how it is read.
         """
         macro_tok = self._cur()
-        func = self._parse_function_def(False, keyword="MACRO")
+        func = self._parse_function_def(False, keyword=TokenType.MACRO)
         return self._set_pos(MacroFuncDef(func.name, func), macro_tok)
 
     def _parse_macro_rules_def(self):
@@ -656,29 +657,29 @@ class Parser:
                 ⟪$a × std.π⟫ → ⟪std.sinpi($a)⟫
                 ⟪$x⟫         → ⟪std.sin($x)⟫
         """
-        macro_tok = self._eat("MACRO_RULES")
-        name = self._eat("IDENT").value
-        self._eat("PUNCT", ":")
+        macro_tok = self._eat(TokenType.MACRO_RULES)
+        name = self._eat(TokenType.IDENT).value
+        self._eat(TokenType.PUNCT, ":")
         self._skip_nl()
-        self._eat("INDENT")
+        self._eat(TokenType.INDENT)
         rules = []
         saved = self._in_rules
         self._in_rules = True
         try:
-            while not self._check("DEDENT", "EOF"):
-                if self._try_eat("NEWLINE"):
+            while not self._check(TokenType.DEDENT, TokenType.EOF):
+                if self._try_eat(TokenType.NEWLINE):
                     continue
                 rule_tok = self._cur()
                 patterns = self._parse_rule_quote(as_pattern=True)
-                self._eat("OP", "->")
+                self._eat(TokenType.OP, "->")
                 template = self._parse_rule_quote(as_pattern=False)
                 rules.append(MacroRule(
                     patterns, template,
                     (rule_tok.line, rule_tok.col, rule_tok.end_col)))
-                self._try_eat("NEWLINE")
+                self._try_eat(TokenType.NEWLINE)
         finally:
             self._in_rules = saved
-        self._try_eat("DEDENT")
+        self._try_eat(TokenType.DEDENT)
         if not rules:
             raise ParseError(
                 f"@macro_rules {name} states no rules, so there is nothing "
@@ -697,20 +698,20 @@ class Parser:
         answers one when it runs: a rule is read, not evaluated.
         """
         open_tok = self._cur()
-        self._eat("PUNCT", "⟪")
+        self._eat(TokenType.PUNCT, "⟪")
         saved = self._in_quote
         self._in_quote = True
         try:
-            if not as_pattern and self._check("NEWLINE"):
+            if not as_pattern and self._check(TokenType.NEWLINE):
                 body = self._parse_quoted_block()
-                self._eat("PUNCT", "⟫")
+                self._eat(TokenType.PUNCT, "⟫")
                 return body
             items = [self._parse_expr()]
-            while self._try_eat("PUNCT", ","):
+            while self._try_eat(TokenType.PUNCT, ","):
                 items.append(self._parse_expr())
         finally:
             self._in_quote = saved
-        self._eat("PUNCT", "⟫")
+        self._eat(TokenType.PUNCT, "⟫")
         if as_pattern:
             return items
         if len(items) != 1:
@@ -722,13 +723,13 @@ class Parser:
     def _parse_quoted_block(self):
         """Parse the statements written under an opening ⟪."""
         self._skip_nl()
-        self._eat("INDENT")
+        self._eat(TokenType.INDENT)
         body = []
-        while not self._check("DEDENT", "EOF"):
-            if self._try_eat("NEWLINE"):
+        while not self._check(TokenType.DEDENT, TokenType.EOF):
+            if self._try_eat(TokenType.NEWLINE):
                 continue
             body.append(self._parse_statement())
-        self._try_eat("DEDENT")
+        self._try_eat(TokenType.DEDENT)
         self._skip_nl()
         return body
 
@@ -740,26 +741,26 @@ class Parser:
         follows is a reference and not an expression: there is nothing
         to work out, only something to point at.
         """
-        caret = self._eat("OP", "※")
-        if self._check("OP"):
-            op_tok = self._eat("OP")
+        caret = self._eat(TokenType.OP, "※")
+        if self._check(TokenType.OP):
+            op_tok = self._eat(TokenType.OP)
             return self._set_pos(
                 Reflect(self._set_pos(OperatorRef(op_tok.value), op_tok)),
                 caret)
-        if self._check("NONE"):
+        if self._check(TokenType.NONE):
             # ∅ names the type of what holds nothing, which is what a
             # written ∅ answers for its head.
-            none_tok = self._eat("NONE")
+            none_tok = self._eat(TokenType.NONE)
             return self._set_pos(
                 Reflect(self._set_pos(VarRef(none_tok.value), none_tok)),
                 caret)
-        if not self._check("IDENT"):
+        if not self._check(TokenType.IDENT):
             raise ParseError(
                 "※ is written in front of a name or an operator, which is "
                 "what it refers to", self._cur())
-        name_tok = self._eat("IDENT")
+        name_tok = self._eat(TokenType.IDENT)
         tree = self._set_pos(VarRef(name_tok.value), name_tok)
-        while self._check("PUNCT") and self._cur().value == ".":
+        while self._check(TokenType.PUNCT) and self._cur().value == ".":
             dot = self._cur()
             self.pos += 1
             tree = self._set_pos(GetAttr(tree, self._eat_member_name()), dot)
@@ -772,26 +773,26 @@ class Parser:
         contents indented under the opening bracket it holds
         statements, which is what a macro that writes a block answers.
         """
-        open_tok = self._eat("PUNCT", "⟪")
+        open_tok = self._eat(TokenType.PUNCT, "⟪")
         saved = self._in_quote
         self._in_quote = True
         try:
-            if self._check("NEWLINE"):
+            if self._check(TokenType.NEWLINE):
                 self._skip_nl()
-                self._eat("INDENT")
+                self._eat(TokenType.INDENT)
                 body = []
-                while not self._check("DEDENT", "EOF"):
-                    if self._try_eat("NEWLINE"):
+                while not self._check(TokenType.DEDENT, TokenType.EOF):
+                    if self._try_eat(TokenType.NEWLINE):
                         continue
                     body.append(self._parse_statement())
-                self._try_eat("DEDENT")
+                self._try_eat(TokenType.DEDENT)
                 self._skip_nl()
-                self._eat("PUNCT", "⟫")
+                self._eat(TokenType.PUNCT, "⟫")
                 return self._set_pos(Quote(body, is_block=True), open_tok)
             tree = self._parse_expr()
         finally:
             self._in_quote = saved
-        self._eat("PUNCT", "⟫")
+        self._eat(TokenType.PUNCT, "⟫")
         return self._set_pos(Quote(tree), open_tok)
 
     def _parse_function_def(self, is_start, is_test=False, test_refs=None,
@@ -805,7 +806,7 @@ class Parser:
                             is_export: bool = False,
                             preconditions: list | None = None,
                             postconditions: list | None = None,
-                            keyword: str = "FN",
+                            keyword: TokenType = TokenType.FN,
                             is_comptime: bool = False):
         """Parse: fn name '(' [params] ')' ('->' ret_type)? block
 
@@ -819,7 +820,7 @@ class Parser:
         When struct_name is set, handles self / mut self as the first parameter.
         """
         kw_tok = self._eat(keyword)
-        name_tok = self._eat("IDENT")
+        name_tok = self._eat(TokenType.IDENT)
         name = name_tok.value
 
         params = []
@@ -828,70 +829,70 @@ class Parser:
         param_muts: set[str] = set()
         param_positions: dict[str, tuple[int, int, int | None]] = {}
         pack_param: tuple[str, str | None] | None = None
-        self._eat("PUNCT", "(")
+        self._eat(TokenType.PUNCT, "(")
 
         self_is_ref = False
         if struct_name is not None:
-            while self._try_eat("NEWLINE"):
+            while self._try_eat(TokenType.NEWLINE):
                 pass
-            if not (self._check("PUNCT") and self._cur().value == ")"):
-                if self._check("OP") and self._cur().value == "&":
+            if not (self._check(TokenType.PUNCT) and self._cur().value == ")"):
+                if self._check(TokenType.OP) and self._cur().value == "&":
                     saved = self.pos
                     self.pos += 1
-                    if self._check("MUT"):
+                    if self._check(TokenType.MUT):
                         nxt = self.pos + 1
                         if (nxt < len(self.tokens)
-                                and self.tokens[nxt].type == "IDENT"
+                                and self.tokens[nxt].type is TokenType.IDENT
                                 and self.tokens[nxt].value == "self"):
-                            self._eat("MUT")
-                            self._eat("IDENT")
+                            self._eat(TokenType.MUT)
+                            self._eat(TokenType.IDENT)
                             params.append(("self", struct_name))
                             param_muts.add("self")
                             self_is_ref = True
-                            self._try_eat("NEWLINE")
-                            self._try_eat("PUNCT", ",")
+                            self._try_eat(TokenType.NEWLINE)
+                            self._try_eat(TokenType.PUNCT, ",")
                         else:
                             self.pos = saved
-                    elif (self._check("IDENT")
+                    elif (self._check(TokenType.IDENT)
                           and self._cur().value == "self"):
-                        self._eat("IDENT")
+                        self._eat(TokenType.IDENT)
                         params.append(("self", struct_name))
                         self_is_ref = True
-                        self._try_eat("NEWLINE")
-                        self._try_eat("PUNCT", ",")
+                        self._try_eat(TokenType.NEWLINE)
+                        self._try_eat(TokenType.PUNCT, ",")
                     else:
                         self.pos = saved
-                elif self._check("MUT"):
+                elif self._check(TokenType.MUT):
                     next_idx = self.pos + 1
                     if (next_idx < len(self.tokens)
-                            and self.tokens[next_idx].type == "IDENT"
+                            and self.tokens[next_idx].type is TokenType.IDENT
                             and self.tokens[next_idx].value == "self"):
-                        self._eat("MUT")
-                        self._eat("IDENT")
+                        self._eat(TokenType.MUT)
+                        self._eat(TokenType.IDENT)
                         params.append(("self", struct_name))
                         param_muts.add("self")
-                        self._try_eat("NEWLINE")
-                        self._try_eat("PUNCT", ",")
-                elif self._check("IDENT") and self._cur().value == "self":
-                    self._eat("IDENT")
+                        self._try_eat(TokenType.NEWLINE)
+                        self._try_eat(TokenType.PUNCT, ",")
+                elif self._check(TokenType.IDENT) and self._cur().value == "self":
+                    self._eat(TokenType.IDENT)
                     params.append(("self", struct_name))
-                    self._try_eat("NEWLINE")
-                    self._try_eat("PUNCT", ",")
+                    self._try_eat(TokenType.NEWLINE)
+                    self._try_eat(TokenType.PUNCT, ",")
 
-        while not (self._check("PUNCT") and self._cur().value == ")"):
-            while self._try_eat("NEWLINE"):
+        while not (self._check(TokenType.PUNCT) and self._cur().value == ")"):
+            while self._try_eat(TokenType.NEWLINE):
                 pass
-            if self._check("PUNCT") and self._cur().value == ")":
+            if self._check(TokenType.PUNCT) and self._cur().value == ")":
                 break
-            if self._check("PUNCT") and self._cur().value == "(":
+            if self._check(TokenType.PUNCT) and self._cur().value == "(":
                 # A parameter may name the elements of a tuple instead
                 # of the tuple, as a definition may.
                 open_tok = self._cur()
                 names = _as_names(self._parse_destructure_names(open_tok))
                 param_type = None
                 is_mut = False
-                if self._try_eat("PUNCT", ":"):
-                    if self._try_eat("MUT"):
+                if self._try_eat(TokenType.PUNCT, ":"):
+                    if self._try_eat(TokenType.MUT):
                         is_mut = True
                     param_type = self._parse_type()
                 params.append((names, param_type))
@@ -900,36 +901,36 @@ class Parser:
                 param_positions[names] = (
                     open_tok.line, open_tok.col,
                     self.tokens[self.pos - 1].end_col)
-                self._try_eat("NEWLINE")
-                if not self._try_eat("PUNCT", ","):
+                self._try_eat(TokenType.NEWLINE)
+                if not self._try_eat(TokenType.PUNCT, ","):
                     break
                 continue
-            if not self._check("IDENT"):
+            if not self._check(TokenType.IDENT):
                 break
-            param_name_tok = self._eat("IDENT")
+            param_name_tok = self._eat(TokenType.IDENT)
             param_positions[param_name_tok.value] = (
                 param_name_tok.line, param_name_tok.col, param_name_tok.end_col)
-            is_pack = self._try_eat("PUNCT", "\N{HORIZONTAL ELLIPSIS}")
+            is_pack = self._try_eat(TokenType.PUNCT, "\N{HORIZONTAL ELLIPSIS}")
             param_unit = None
             unit_tok = None
-            if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+            if self._check(TokenType.OP) and self._cur().value == "\N{CURRENCY SIGN}":
                 raise coded(2022, ParseError(
                     "a measure is written against the type, as "
                     "'a : i64 ¤meter'", self._cur()))
             param_type = None
             is_ref = False
             is_mut = False
-            if self._check("PUNCT") and self._cur().value == ":":
+            if self._check(TokenType.PUNCT) and self._cur().value == ":":
                 next_idx = self.pos + 1
                 next_is_type = (next_idx < len(self.tokens) and
-                                self.tokens[next_idx].type == "IDENT")
+                                self.tokens[next_idx].type is TokenType.IDENT)
                 next_is_ref = (next_idx < len(self.tokens) and
-                               self.tokens[next_idx].type == "OP" and
+                               self.tokens[next_idx].type is TokenType.OP and
                                self.tokens[next_idx].value == "&")
                 next_is_mut = (next_idx < len(self.tokens) and
-                               self.tokens[next_idx].type == "MUT")
+                               self.tokens[next_idx].type is TokenType.MUT)
                 next_is_tuple = (next_idx < len(self.tokens) and
-                                 self.tokens[next_idx].type == "PUNCT" and
+                                 self.tokens[next_idx].type is TokenType.PUNCT and
                                  self.tokens[next_idx].value == "(")
                 if not (next_is_type or next_is_ref or next_is_mut
                         or next_is_tuple):
@@ -941,11 +942,11 @@ class Parser:
                         f"{self._tok_display(bad)} does not name a type; "
                         f"a parameter's ':' is followed by one, as 'a : i64'",
                         bad)
-                self._eat("PUNCT", ":")
-                if self._check("OP") and self._cur().value == "&":
+                self._eat(TokenType.PUNCT, ":")
+                if self._check(TokenType.OP) and self._cur().value == "&":
                     self.pos += 1
                     is_ref = True
-                if self._try_eat("MUT"):
+                if self._try_eat(TokenType.MUT):
                     is_mut = True
                 if self._at_tuple_type():
                     param_type = self._parse_tuple_type()
@@ -954,12 +955,12 @@ class Parser:
                     param_type = self._parse_base_type_name()
                 param_unit = self._unit_after_type(param_unit, unit_tok)
                 param_type += self._parse_array_suffix()
-                if self._check("OP") and self._cur().value == "?":
+                if self._check(TokenType.OP) and self._cur().value == "?":
                     self.pos += 1
                     param_type += "?"
-                    if self._check("IDENT"):
+                    if self._check(TokenType.IDENT):
                         param_type += self._parse_dotted_name()
-                elif self._check("OP") and self._cur().value == "!":
+                elif self._check(TokenType.OP) and self._cur().value == "!":
                     self.pos += 1
                     param_type += "?std.errors"
             if is_pack:
@@ -972,10 +973,10 @@ class Parser:
                 param_muts.add(param_name_tok.value)
             if param_unit is not None:
                 param_units[param_name_tok.value] = param_unit
-            self._try_eat("NEWLINE")
-            if not self._try_eat("PUNCT", ","):
+            self._try_eat(TokenType.NEWLINE)
+            if not self._try_eat(TokenType.PUNCT, ","):
                 break
-        self._eat("PUNCT", ")")
+        self._eat(TokenType.PUNCT, ")")
 
         # A signature that says nothing about what comes back says the
         # same as one that writes ∅: the function hands nothing back.
@@ -994,19 +995,19 @@ class Parser:
         ret_ref = None
         ret_origins = None
         arrow_tok = self._cur()
-        if self._try_eat("OP", "->"):
-            if self._check("OP") and self._cur().value == "&":
+        if self._try_eat(TokenType.OP, "->"):
+            if self._check(TokenType.OP) and self._cur().value == "&":
                 self.pos += 1
-                ret_ref = "mut" if self._try_eat("MUT") else "shared"
+                ret_ref = "mut" if self._try_eat(TokenType.MUT) else "shared"
             if self._at_tuple_type():
                 # Read as any type is, so a tuple return may be an
                 # array of tuples or an optional one.
                 ret_type = self._parse_type()
                 ret_type_pos = (arrow_tok.line, arrow_tok.col,
                                 self.tokens[self.pos - 1].end_col)
-            elif self._check("IDENT", "NONE", "OPT"):
+            elif self._check(TokenType.IDENT, TokenType.NONE, TokenType.OPT):
                 ret_tok = self._cur()
-                if ret_tok.type == "IDENT":
+                if ret_tok.type is TokenType.IDENT:
                     ret_type = self._parse_base_type_name()
                 else:
                     self.pos += 1
@@ -1021,7 +1022,7 @@ class Parser:
                 ret_type += self._parse_array_suffix()
                 # And after the brackets, which is how it was first
                 # written and which says the same thing.
-                if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+                if self._check(TokenType.OP) and self._cur().value == "\N{CURRENCY SIGN}":
                     if ret_unit is not None:
                         raise ParseError(
                             "the return type states a unit twice; write it "
@@ -1029,12 +1030,12 @@ class Parser:
                             "the brackets", self._cur())
                     self.pos += 1
                     ret_unit = self._parse_unit_spec()
-                if self._check("OP") and self._cur().value == "?":
+                if self._check(TokenType.OP) and self._cur().value == "?":
                     self.pos += 1
                     ret_type += "?"
-                    if self._check("IDENT"):
+                    if self._check(TokenType.IDENT):
                         ret_type += self._parse_dotted_name()
-                elif self._check("OP") and self._cur().value == "!":
+                elif self._check(TokenType.OP) and self._cur().value == "!":
                     self.pos += 1
                     ret_type += "?std.errors"
             else:
@@ -1042,14 +1043,14 @@ class Parser:
                     f"{self._tok_display(self._cur())} does not name a "
                     f"type; the arrow is followed by one, as '-> i64'",
                     self._cur())
-            if self._check("OP") and self._cur().value == "|":
+            if self._check(TokenType.OP) and self._cur().value == "|":
                 self.pos += 1
                 ret_origins = []
-                while self._check("IDENT"):
-                    ret_origins.append(self._eat("IDENT").value)
-                    if not self._try_eat("PUNCT", ","):
+                while self._check(TokenType.IDENT):
+                    ret_origins.append(self._eat(TokenType.IDENT).value)
+                    if not self._try_eat(TokenType.PUNCT, ","):
                         break
-                if not (self._check("OP") and self._cur().value == "|"):
+                if not (self._check(TokenType.OP) and self._cur().value == "|"):
                     raise ParseError("expected '|' to close the origin list",
                                      self._cur())
                 self.pos += 1
@@ -1113,12 +1114,12 @@ class Parser:
 
     def _parse_dotted_name(self) -> str:
         """Parse a possibly dotted name like 'std.errors'."""
-        name = self._eat("IDENT").value
-        while (self._check("PUNCT") and self._cur().value == "." and
+        name = self._eat(TokenType.IDENT).value
+        while (self._check(TokenType.PUNCT) and self._cur().value == "." and
                self.pos + 1 < len(self.tokens) and
-               self.tokens[self.pos + 1].type == "IDENT"):
+               self.tokens[self.pos + 1].type is TokenType.IDENT):
             self.pos += 1
-            name += "." + self._eat("IDENT").value
+            name += "." + self._eat(TokenType.IDENT).value
         return name
 
     def _parse_condition(self, which: str):
@@ -1129,21 +1130,21 @@ class Parser:
         condition about what the function did rather than what it
         answered.
         """
-        kw_tok = self._eat("PRE" if which == "pre" else "POST")
-        self._eat("PUNCT", "(")
+        kw_tok = self._eat(TokenType.PRE if which == "pre" else TokenType.POST)
+        self._eat(TokenType.PUNCT, "(")
         self._skip_nl()
         name = None
-        if which == "post" and self._check("IDENT") \
+        if which == "post" and self._check(TokenType.IDENT) \
                 and self.pos + 1 < len(self.tokens) \
-                and self.tokens[self.pos + 1].type == "PUNCT" \
+                and self.tokens[self.pos + 1].type is TokenType.PUNCT \
                 and self.tokens[self.pos + 1].value == ":":
-            name = self._eat("IDENT").value
-            self._eat("PUNCT", ":")
+            name = self._eat(TokenType.IDENT).value
+            self._eat(TokenType.PUNCT, ":")
             self._skip_nl()
         condition = self._parse_expr()
         self._skip_nl()
-        self._eat("PUNCT", ")")
-        self._try_eat("NEWLINE")
+        self._eat(TokenType.PUNCT, ")")
+        self._try_eat(TokenType.NEWLINE)
         return Condition(which, name, condition,
                          (kw_tok.line, kw_tok.col, kw_tok.end_col))
 
@@ -1153,24 +1154,24 @@ class Parser:
         Only std.dict, std.set and std.iovec take the dot: every other
         type is one name, and a dot after one means something else.
         """
-        name = self._eat("IDENT").value
+        name = self._eat(TokenType.IDENT).value
         # std.hash was this type's name until std.hash became digests.
         # Saying so beats letting the dot fall through to whatever
         # comes next and complaining about that.
-        if (self._check("PUNCT") and self._cur().value == "."
+        if (self._check(TokenType.PUNCT) and self._cur().value == "."
                 and self.pos + 1 < len(self.tokens)
-                and self.tokens[self.pos + 1].type == "IDENT"
+                and self.tokens[self.pos + 1].type is TokenType.IDENT
                 and f"{name}.{self.tokens[self.pos + 1].value}" == "std.hash"):
             raise ParseError(
                 "'std.hash' is the digests now; the type that maps keys to "
                 "values is 'std.dict(K, V)'", self._cur())
-        if (self._check("PUNCT") and self._cur().value == "."
+        if (self._check(TokenType.PUNCT) and self._cur().value == "."
                 and self.pos + 1 < len(self.tokens)
-                and self.tokens[self.pos + 1].type == "IDENT"
+                and self.tokens[self.pos + 1].type is TokenType.IDENT
                 and f"{name}.{self.tokens[self.pos + 1].value}"
                 in ("std.dict", "std.set", "std.iovec")):
             self.pos += 1
-            name += "." + self._eat("IDENT").value
+            name += "." + self._eat(TokenType.IDENT).value
             return self._parse_type_arguments(name)
         return name
 
@@ -1183,16 +1184,16 @@ class Parser:
         """
         if name not in ("std.dict", "std.set"):
             return name
-        if not (self._check("PUNCT") and self._cur().value == "("):
+        if not (self._check(TokenType.PUNCT) and self._cur().value == "("):
             raise ParseError(
                 f"'{name}' says what it holds: write "
                 f"{'std.dict(K, V)' if name == 'std.dict' else 'std.set(V)'}",
                 self._cur())
-        self._eat("PUNCT", "(")
+        self._eat(TokenType.PUNCT, "(")
         args = [self._parse_type()]
-        while self._try_eat("PUNCT", ","):
+        while self._try_eat(TokenType.PUNCT, ","):
             args.append(self._parse_type())
-        self._eat("PUNCT", ")")
+        self._eat(TokenType.PUNCT, ")")
         want = 2 if name == "std.dict" else 1
         if len(args) != want:
             raise ParseError(
@@ -1206,47 +1207,47 @@ class Parser:
 
         Members are: name [= integer_value], one per line or separated by commas.
         """
-        kw_tok = self._eat("ENUM")
-        name_tok = self._eat("IDENT")
+        kw_tok = self._eat(TokenType.ENUM)
+        name_tok = self._eat(TokenType.IDENT)
         name = name_tok.value
 
         underlying_type = None
-        if (self._check("PUNCT") and self._cur().value == ":" and
+        if (self._check(TokenType.PUNCT) and self._cur().value == ":" and
                 self.pos + 1 < len(self.tokens) and
-                self.tokens[self.pos + 1].type == "IDENT" and
+                self.tokens[self.pos + 1].type is TokenType.IDENT and
                 self.pos + 2 < len(self.tokens) and
-                self.tokens[self.pos + 2].type == "PUNCT" and
+                self.tokens[self.pos + 2].type is TokenType.PUNCT and
                 self.tokens[self.pos + 2].value == ":"):
-            self._eat("PUNCT", ":")
-            underlying_type = self._eat("IDENT").value
+            self._eat(TokenType.PUNCT, ":")
+            underlying_type = self._eat(TokenType.IDENT).value
 
-        self._eat("PUNCT", ":")
-        while self._try_eat("NEWLINE"):
+        self._eat(TokenType.PUNCT, ":")
+        while self._try_eat(TokenType.NEWLINE):
             pass
-        self._eat("INDENT")
+        self._eat(TokenType.INDENT)
 
         members: list[tuple[str, int | None]] = []
         while True:
-            while self._try_eat("NEWLINE"):
+            while self._try_eat(TokenType.NEWLINE):
                 pass
-            if self._check("DEDENT", "EOF"):
+            if self._check(TokenType.DEDENT, TokenType.EOF):
                 break
-            member_name_tok = self._eat("IDENT")
+            member_name_tok = self._eat(TokenType.IDENT)
             explicit_value = None
-            if self._try_eat("PUNCT", "="):
+            if self._try_eat(TokenType.PUNCT, "="):
                 val_tok = self._cur()
                 negate = False
-                if self._check("OP") and val_tok.value == "⁻":
+                if self._check(TokenType.OP) and val_tok.value == "⁻":
                     negate = True
                     self.pos += 1
                     val_tok = self._cur()
-                if val_tok.type == "IDENT" and not negate:
+                if val_tok.type is TokenType.IDENT and not negate:
                     # An enumerator standing for one named above it is
                     # another name for it, and says so.  That is the
                     # only way two names share a value.
                     self.pos += 1
                     explicit_value = _EnumAlias(val_tok.value)
-                elif val_tok.type != "INT":
+                elif val_tok.type is not TokenType.INT:
                     raise ParseError(
                         f"an enumerator stands for a written-out number, "
                         f"or for one this enum named above it; "
@@ -1256,12 +1257,12 @@ class Parser:
                     self.pos += 1
                     explicit_value = -val_tok.value if negate else val_tok.value
             members.append((member_name_tok.value, explicit_value))
-            self._try_eat("PUNCT", ",")
-            self._try_eat("PUNCT", ";")
-            while self._try_eat("NEWLINE"):
+            self._try_eat(TokenType.PUNCT, ",")
+            self._try_eat(TokenType.PUNCT, ";")
+            while self._try_eat(TokenType.NEWLINE):
                 pass
 
-        self._eat("DEDENT")
+        self._eat(TokenType.DEDENT)
         return self._set_pos(
             EnumDef(name, underlying_type, members, is_flag), kw_tok)
 
@@ -1269,49 +1270,49 @@ class Parser:
         """Parse: @repr '(' KIND ')' and return the layout kind."""
         from interp.layout import KNOWN_REPRS
 
-        self._eat("REPR")
-        self._eat("PUNCT", "(")
-        if not self._check("IDENT"):
+        self._eat(TokenType.REPR)
+        self._eat(TokenType.PUNCT, "(")
+        if not self._check(TokenType.IDENT):
             raise ParseError("expected a layout kind after @repr(",
                              self._cur())
-        kind_tok = self._eat("IDENT")
+        kind_tok = self._eat(TokenType.IDENT)
         if kind_tok.value not in KNOWN_REPRS:
             known = ", ".join(sorted(KNOWN_REPRS))
             raise ParseError(
                 f"unknown layout '{kind_tok.value}' in @repr; known: {known}",
                 kind_tok)
-        self._eat("PUNCT", ")")
+        self._eat(TokenType.PUNCT, ")")
         return kind_tok.value
 
     def _parse_struct_def(self, repr_kind: str | None = None,
                           invariants=None):
         """Parse: struct Name: INDENT field_definitions DEDENT"""
-        kw_tok = self._eat("STRUCT")
-        name_tok = self._eat("IDENT")
+        kw_tok = self._eat(TokenType.STRUCT)
+        name_tok = self._eat(TokenType.IDENT)
         name = name_tok.value
-        self._eat("PUNCT", ":")
-        while self._try_eat("NEWLINE"):
+        self._eat(TokenType.PUNCT, ":")
+        while self._try_eat(TokenType.NEWLINE):
             pass
 
         fields: list[tuple[str, str]] = []
         field_units: dict = {}
         field_positions: dict[str, tuple[int, int, int | None]] = {}
-        if self._check("INDENT"):
-            self._eat("INDENT")
+        if self._check(TokenType.INDENT):
+            self._eat(TokenType.INDENT)
             while True:
-                while self._try_eat("NEWLINE"):
+                while self._try_eat(TokenType.NEWLINE):
                     pass
-                if self._check("DEDENT", "EOF"):
+                if self._check(TokenType.DEDENT, TokenType.EOF):
                     break
-                field_name_tok = self._eat("IDENT")
+                field_name_tok = self._eat(TokenType.IDENT)
                 # a field may state a unit the way a binding does:
                 # name ¤unit : type
                 field_unit = None
-                if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+                if self._check(TokenType.OP) and self._cur().value == "\N{CURRENCY SIGN}":
                     raise coded(2022, ParseError(
                         "a measure is written against the type, as "
                         "'f : i64 ¤meter'", self._cur()))
-                self._eat("PUNCT", ":")
+                self._eat(TokenType.PUNCT, ":")
                 type_tok = self._cur()
                 if self._at_tuple_type():
                     field_type = self._parse_tuple_type()
@@ -1322,7 +1323,7 @@ class Parser:
                 # parameter and a binding do
                 field_unit = self._unit_after_type(field_unit, None)
                 field_type += self._parse_array_suffix()
-                if self._check("OP") and self._cur().value == "?":
+                if self._check(TokenType.OP) and self._cur().value == "?":
                     self.pos += 1
                     field_type += "?"
                 fields.append((field_name_tok.value, field_type))
@@ -1333,29 +1334,29 @@ class Parser:
                 field_positions[field_name_tok.value] = (
                     type_tok.line, type_tok.col,
                     self.tokens[self.pos - 1].end_col)
-                self._try_eat("PUNCT", ",")
-                while self._try_eat("NEWLINE"):
+                self._try_eat(TokenType.PUNCT, ",")
+                while self._try_eat(TokenType.NEWLINE):
                     pass
-            self._eat("DEDENT")
+            self._eat(TokenType.DEDENT)
         sdef = StructDef(name, fields, repr_kind, field_units, invariants)
         sdef.field_positions = field_positions
         return self._set_pos(sdef, kw_tok)
 
     def _parse_impl_block(self):
         """Parse: impl StructName: INDENT method_definitions DEDENT"""
-        self._eat("IMPL")
-        name_tok = self._eat("IDENT")
+        self._eat(TokenType.IMPL)
+        name_tok = self._eat(TokenType.IDENT)
         struct_name = name_tok.value
-        self._eat("PUNCT", ":")
-        while self._try_eat("NEWLINE"):
+        self._eat(TokenType.PUNCT, ":")
+        while self._try_eat(TokenType.NEWLINE):
             pass
-        self._eat("INDENT")
+        self._eat(TokenType.INDENT)
 
         methods: list[FuncDef] = []
         while True:
-            while self._try_eat("NEWLINE"):
+            while self._try_eat(TokenType.NEWLINE):
                 pass
-            if self._check("DEDENT", "EOF"):
+            if self._check(TokenType.DEDENT, TokenType.EOF):
                 break
             is_impure = False
             is_listable = False
@@ -1364,34 +1365,34 @@ class Parser:
             postconditions: list = []
             hint: str | None = None
             while True:
-                if self._check("IMPURE"):
-                    self._eat("IMPURE")
+                if self._check(TokenType.IMPURE):
+                    self._eat(TokenType.IMPURE)
                     is_impure = True
-                    self._try_eat("NEWLINE")
-                elif self._check("LISTABLE"):
-                    self._eat("LISTABLE")
+                    self._try_eat(TokenType.NEWLINE)
+                elif self._check(TokenType.LISTABLE):
+                    self._eat(TokenType.LISTABLE)
                     is_listable = True
-                    self._try_eat("NEWLINE")
-                elif self._check("NORETURN"):
-                    self._eat("NORETURN")
+                    self._try_eat(TokenType.NEWLINE)
+                elif self._check(TokenType.NORETURN):
+                    self._eat(TokenType.NORETURN)
                     is_noreturn = True
-                    self._try_eat("NEWLINE")
-                elif self._check("PRE"):
+                    self._try_eat(TokenType.NEWLINE)
+                elif self._check(TokenType.PRE):
                     preconditions.append(self._parse_condition("pre"))
-                elif self._check("POST"):
+                elif self._check(TokenType.POST):
                     postconditions.append(self._parse_condition("post"))
-                elif self._check("HOT") or self._check("COLD"):
+                elif self._check(TokenType.HOT) or self._check(TokenType.COLD):
                     tok = self._eat(self._cur().type)
-                    other = "cold" if tok.type == "HOT" else "hot"
+                    other = "cold" if tok.type is TokenType.HOT else "hot"
                     if hint == other:
                         raise ParseError(
                             f"@{tok.value} contradicts @{other} on the same "
                             f"method", tok)
                     hint = tok.value
-                    self._try_eat("NEWLINE")
+                    self._try_eat(TokenType.NEWLINE)
                 else:
                     break
-            if not self._check("FN"):
+            if not self._check(TokenType.FN):
                 raise ParseError(
                     f"expected 'fn' in impl block, got "
                     f"{self._tok_display(self._cur())}",
@@ -1402,7 +1403,7 @@ class Parser:
                 is_noreturn=is_noreturn, preconditions=preconditions,
                 postconditions=postconditions)
             methods.append(method)
-        self._eat("DEDENT")
+        self._eat(TokenType.DEDENT)
         return ImplBlock(struct_name, methods)
 
     def _skip_to_next_definition(self):
@@ -1411,20 +1412,20 @@ class Parser:
         Used for error recovery in @expect-annotated functions.
         """
         depth = 0
-        while not self._check("EOF"):
+        while not self._check(TokenType.EOF):
             tok = self._cur()
-            if tok.type == "INDENT":
+            if tok.type is TokenType.INDENT:
                 depth += 1
                 self.pos += 1
-            elif tok.type == "DEDENT":
+            elif tok.type is TokenType.DEDENT:
                 depth -= 1
                 self.pos += 1
                 if depth <= 0:
                     break
-            elif tok.type == "PUNCT" and tok.value == "{":
+            elif tok.type is TokenType.PUNCT and tok.value == "{":
                 depth += 1
                 self.pos += 1
-            elif tok.type == "PUNCT" and tok.value == "}":
+            elif tok.type is TokenType.PUNCT and tok.value == "}":
                 depth -= 1
                 self.pos += 1
                 if depth <= 0:
@@ -1441,16 +1442,16 @@ class Parser:
         element that is itself a tuple.  The discard target stands
         where an element is not wanted.
         """
-        self._eat("PUNCT", "(")
+        self._eat(TokenType.PUNCT, "(")
         names: list = []
         while True:
-            if self._check("PUNCT") and self._cur().value == "(":
+            if self._check(TokenType.PUNCT) and self._cur().value == "(":
                 names.append(self._parse_destructure_names(kw_tok))
             else:
-                names.append(self._eat("IDENT").value)
-            if not self._try_eat("PUNCT", ","):
+                names.append(self._eat(TokenType.IDENT).value)
+            if not self._try_eat(TokenType.PUNCT, ","):
                 break
-        self._eat("PUNCT", ")")
+        self._eat(TokenType.PUNCT, ")")
         if len(names) < 2:
             raise ParseError(
                 "a definition taking a tuple apart needs a name for each "
@@ -1477,14 +1478,14 @@ class Parser:
 
         type_annotation = None
         is_const = True
-        if self._try_eat("PUNCT", ":"):
-            if self._try_eat("MUT"):
+        if self._try_eat(TokenType.PUNCT, ":"):
+            if self._try_eat(TokenType.MUT):
                 is_const = False
-            if not (self._check("PUNCT") and self._cur().value == "="):
+            if not (self._check(TokenType.PUNCT) and self._cur().value == "="):
                 type_annotation = self._parse_type()
-        self._eat("PUNCT", "=")
+        self._eat(TokenType.PUNCT, "=")
         init_expr = self._parse_expr()
-        self._try_eat("PUNCT", ";")
+        self._try_eat(TokenType.PUNCT, ";")
         return self._set_pos(
             DestructureDef(names, type_annotation, init_expr, is_const),
             kw_tok)
@@ -1492,15 +1493,15 @@ class Parser:
     def _parse_var_def(self):
         """Parse: let name [¤unit] := expr  |  let name [¤unit] : [mut] type = expr  |  let name : mut type[size] = init"""
         kw_tok = self._cur()
-        self._eat("LET")
+        self._eat(TokenType.LET)
         keyword = "let"
-        if self._check("PUNCT") and self._cur().value == "(":
+        if self._check(TokenType.PUNCT) and self._cur().value == "(":
             return self._parse_destructure_def(kw_tok)
-        name_tok = self._eat("IDENT")
+        name_tok = self._eat(TokenType.IDENT)
 
         unit_spec = None
         unit_tok = None
-        if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+        if self._check(TokenType.OP) and self._cur().value == "\N{CURRENCY SIGN}":
             raise coded(2022, ParseError(
                 "a measure is written against the type, as "
                 "'let x : i64 ¤meter = …' -- or against nothing, as "
@@ -1509,12 +1510,12 @@ class Parser:
 
         type_annotation = None
         is_const = True
-        has_colon = self._try_eat("PUNCT", ":")
+        has_colon = self._try_eat(TokenType.PUNCT, ":")
         borrow_ann = False
         if has_colon:
-            if self._try_eat("MUT"):
+            if self._try_eat(TokenType.MUT):
                 is_const = False
-            if self._check("OP") and self._cur().value == "&":
+            if self._check(TokenType.OP) and self._cur().value == "&":
                 # the binding holds a borrow, which the value's type is
                 # written after; the & is kept in front of it
                 self.pos += 1
@@ -1526,20 +1527,20 @@ class Parser:
                 type_annotation = self._parse_tuple_type()
                 unit_spec = self._unit_after_type(unit_spec, unit_tok)
                 type_annotation += self._parse_array_suffix()
-                if self._check("OP") and self._cur().value == "?":
+                if self._check(TokenType.OP) and self._cur().value == "?":
                     self.pos += 1
                     type_annotation += "?"
-                elif self._check("OP") and self._cur().value == "!":
+                elif self._check(TokenType.OP) and self._cur().value == "!":
                     self.pos += 1
                     type_annotation += "?std.errors"
-            elif self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+            elif self._check(TokenType.OP) and self._cur().value == "\N{CURRENCY SIGN}":
                 # `let m : ¤meter = 5` -- the measure without a type,
                 # which the right side settles.  A measure belongs to a
                 # type, and this is where the type is the initializer's:
                 # there is nothing to write it against, so the colon
                 # carries the measure alone.
                 unit_spec = self._unit_after_type(unit_spec, unit_tok)
-            elif self._check("IDENT"):
+            elif self._check(TokenType.IDENT):
                 type_annotation = self._parse_base_type_name()
                 # `i64 ¤meter[]` says what each element is and what it
                 # measures, in that order, which is the same thing
@@ -1547,9 +1548,9 @@ class Parser:
                 # the name.  Read before the brackets, so the shape
                 # that follows is the array's rather than the unit's.
                 unit_spec = self._unit_after_type(unit_spec, unit_tok)
-                if self._check("PUNCT") and self._cur().value == "[":
+                if self._check(TokenType.PUNCT) and self._cur().value == "[":
                     self.pos += 1
-                    if self._check("PUNCT") and self._cur().value == "]":
+                    if self._check(TokenType.PUNCT) and self._cur().value == "]":
                         self.pos += 1
                         type_annotation += "[]"
                     else:
@@ -1558,17 +1559,17 @@ class Parser:
                         # written out, or empty to take that dimension
                         # from the initializer.
                         def extent():
-                            if self._check("PUNCT") and self._cur().value in ",]":
+                            if self._check(TokenType.PUNCT) and self._cur().value in ",]":
                                 return None
                             return self._parse_expr()
 
                         dims = [extent()]
-                        while self._try_eat("PUNCT", ","):
+                        while self._try_eat(TokenType.PUNCT, ","):
                             dims.append(extent())
-                        self._eat("PUNCT", "]")
-                        self._eat("PUNCT", "=")
+                        self._eat(TokenType.PUNCT, "]")
+                        self._eat(TokenType.PUNCT, "=")
                         init_expr = self._parse_expr()
-                        self._try_eat("PUNCT", ";")
+                        self._try_eat(TokenType.PUNCT, ";")
                         return self._set_pos(VarDef(name_tok.value, ('&' + type_annotation) if borrow_ann and type_annotation is not None else type_annotation,
                                       ArrayAlloc(type_annotation, dims[0], init_expr,
                                                  rest_dims=dims[1:]),
@@ -1576,15 +1577,15 @@ class Parser:
 
                 # An optional or expected binding, spelled as it is in a
                 # signature or a type alias.
-                if self._check("OP") and self._cur().value == "?":
+                if self._check(TokenType.OP) and self._cur().value == "?":
                     self.pos += 1
                     type_annotation += "?"
-                    if self._check("IDENT"):
+                    if self._check(TokenType.IDENT):
                         type_annotation += self._parse_dotted_name()
-                elif self._check("OP") and self._cur().value == "!":
+                elif self._check(TokenType.OP) and self._cur().value == "!":
                     self.pos += 1
                     type_annotation += "?std.errors"
-            elif not (self._check("PUNCT") and self._cur().value == "="):
+            elif not (self._check(TokenType.PUNCT) and self._cur().value == "="):
                 # Neither a type nor the '=' of ':=': the binding
                 # promised a type it does not state.
                 raise ParseError(
@@ -1594,14 +1595,14 @@ class Parser:
                     f"is, or ':=' leaves both to it", self._cur())
 
         if not has_colon:
-            if not (self._check("PUNCT") and self._cur().value == ":"):
+            if not (self._check(TokenType.PUNCT) and self._cur().value == ":"):
                 raise coded(2020, ParseError(
                     f"{keyword} definition requires ':=' or ': [mut] type ='",
                     self._cur()))
-            self._eat("PUNCT", ":")
-        self._eat("PUNCT", "=")
+            self._eat(TokenType.PUNCT, ":")
+        self._eat(TokenType.PUNCT, "=")
         init_expr = self._parse_expr()
-        self._try_eat("PUNCT", ";")
+        self._try_eat(TokenType.PUNCT, ";")
 
         return self._set_pos(VarDef(name_tok.value, ('&' + type_annotation) if borrow_ann and type_annotation is not None else type_annotation, init_expr, is_const,
                       unit_spec=unit_spec), kw_tok)
@@ -1613,9 +1614,9 @@ class Parser:
     def _parse_type_def(self):
         """Parse: type NAME = TARGET_TYPE"""
         kw_tok = self._cur()
-        self._eat("TYPE")
-        name_tok = self._eat("IDENT")
-        self._eat("PUNCT", "=")
+        self._eat(TokenType.TYPE)
+        name_tok = self._eat(TokenType.IDENT)
+        self._eat(TokenType.PUNCT, "=")
         type_tok = self._cur()
         if self._at_tuple_type():
             target = self._parse_tuple_type()
@@ -1626,37 +1627,37 @@ class Parser:
         # belongs to the type, so every binding of the alias counts in
         # it without repeating it.
         alias_unit = None
-        if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+        if self._check(TokenType.OP) and self._cur().value == "\N{CURRENCY SIGN}":
             self.pos += 1
             alias_unit = self._parse_unit_spec()
         target += self._parse_array_suffix()
-        if self._check("OP") and self._cur().value == "?":
+        if self._check(TokenType.OP) and self._cur().value == "?":
             self.pos += 1
             target += "?"
-            if self._check("IDENT"):
+            if self._check(TokenType.IDENT):
                 target += self._parse_dotted_name()
-        elif self._check("OP") and self._cur().value == "!":
+        elif self._check(TokenType.OP) and self._cur().value == "!":
             self.pos += 1
             target += "?std.errors"
 
         # `type N = A | B` names a choice between types rather than
         # another name for one of them.
-        if self._check("OP") and self._cur().value == "|":
+        if self._check(TokenType.OP) and self._cur().value == "|":
             alternatives = [target]
-            while self._check("OP") and self._cur().value == "|":
+            while self._check(TokenType.OP) and self._cur().value == "|":
                 self.pos += 1
-                alt_tok = self._eat("IDENT")
+                alt_tok = self._eat(TokenType.IDENT)
                 alt = alt_tok.value + self._parse_array_suffix()
                 if alt in alternatives:
                     raise ParseError(
                         f"'{alt}' is named twice in the alternatives of "
                         f"'{name_tok.value}'", alt_tok)
                 alternatives.append(alt)
-            self._try_eat("PUNCT", ";")
+            self._try_eat(TokenType.PUNCT, ";")
             return self._set_pos(
                 SumTypeDef(name_tok.value, alternatives), kw_tok)
 
-        self._try_eat("PUNCT", ";")
+        self._try_eat(TokenType.PUNCT, ";")
         return self._set_pos(
             TypeDef(name_tok.value, target, None, alias_unit), kw_tok)
 
@@ -1668,20 +1669,20 @@ class Parser:
         outside, so `module .c` is `c` wherever it is written.  These
         are C++'s namespace rules with a period for the two colons.
         """
-        kw_tok = self._eat("MODULE")
+        kw_tok = self._eat(TokenType.MODULE)
         absolute = False
-        if self._check("PUNCT", "."):
-            self._eat("PUNCT", ".")
+        if self._check(TokenType.PUNCT, "."):
+            self._eat(TokenType.PUNCT, ".")
             absolute = True
         # `module .` on its own is the way back out to the global
         # module, which a section marker otherwise has no way to say.
         parts = []
-        if not absolute or self._check("IDENT"):
-            parts.append(self._eat("IDENT").value)
-            while self._check("PUNCT", "."):
-                self._eat("PUNCT", ".")
-                parts.append(self._eat("IDENT").value)
-        self._try_eat("NEWLINE")
+        if not absolute or self._check(TokenType.IDENT):
+            parts.append(self._eat(TokenType.IDENT).value)
+            while self._check(TokenType.PUNCT, "."):
+                self._eat(TokenType.PUNCT, ".")
+                parts.append(self._eat(TokenType.IDENT).value)
+        self._try_eat(TokenType.NEWLINE)
         written = ("." if absolute else "") + ".".join(parts)
         if not parts:
             full = ""
@@ -1694,20 +1695,20 @@ class Parser:
 
     def _parse_unit_def(self):
         """Parse: unit name [= formula]"""
-        kw_tok = self._eat("UNIT")
-        name_tok = self._eat("IDENT")
+        kw_tok = self._eat(TokenType.UNIT)
+        name_tok = self._eat(TokenType.IDENT)
         formula = None
-        if self._try_eat("PUNCT", "="):
+        if self._try_eat(TokenType.PUNCT, "="):
             formula = self._parse_unit_formula()
         # `unit tok → ptrdiff` says a token index may go wherever a
         # ptrdiff is wanted -- it is still its own measure, and still
         # not a node id, but it stands in for the one it names.  The
         # arrow is written → or ->, as it is everywhere else.
         decay = None
-        if self._check("OP") and self._cur().value == "->":
+        if self._check(TokenType.OP) and self._cur().value == "->":
             self.pos += 1
-            decay = self._eat("IDENT").value
-        self._try_eat("PUNCT", ";")
+            decay = self._eat(TokenType.IDENT).value
+        self._try_eat(TokenType.PUNCT, ";")
         return self._set_pos(UnitDef(name_tok.value, formula, decay), kw_tok)
 
     def _reject_unit_here(self):
@@ -1718,7 +1719,7 @@ class Parser:
         the type itself, which is the question a sum or product type
         raises and which is not answered yet.
         """
-        if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+        if self._check(TokenType.OP) and self._cur().value == "\N{CURRENCY SIGN}":
             raise coded(2021, ParseError(
                 "a unit belongs to a binding or to what an array holds; "
                 "a type alias or a tuple element cannot state one yet",
@@ -1731,7 +1732,7 @@ class Parser:
         values counts -- so writing both would be saying it twice
         rather than saying two things, and is refused.
         """
-        if not (self._check("OP")
+        if not (self._check(TokenType.OP)
                 and self._cur().value == "\N{CURRENCY SIGN}"):
             return unit_spec
         tok = self._cur()
@@ -1746,13 +1747,13 @@ class Parser:
     def _parse_unit_spec(self):
         """Parse a unit specification after ¤ (no numeric literals)."""
         left = self._parse_unit_atom()
-        while self._check("OP") and self._cur().value in ("\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}"):
+        while self._check(TokenType.OP) and self._cur().value in ("\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}"):
             next_pos = self.pos + 1
             if next_pos >= len(self.tokens):
                 break
             nxt = self.tokens[next_pos]
-            if nxt.type not in ("IDENT", "STR") and \
-               not (nxt.type == "OP" and nxt.value == "\N{SQUARE ROOT}"):
+            if nxt.type not in (TokenType.IDENT, TokenType.STR) and \
+               not (nxt.type is TokenType.OP and nxt.value == "\N{SQUARE ROOT}"):
                 break
             op = self._cur().value
             self.pos += 1
@@ -1762,22 +1763,22 @@ class Parser:
 
     def _parse_unit_atom(self):
         """Parse a single unit atom: ident, string, or √unit."""
-        if self._check("OP") and self._cur().value == "\N{SQUARE ROOT}":
+        if self._check(TokenType.OP) and self._cur().value == "\N{SQUARE ROOT}":
             self.pos += 1
             operand = self._parse_unit_atom()
             return UnitSqrt(operand)
-        if self._check("IDENT"):
-            name = self._eat("IDENT").value
+        if self._check(TokenType.IDENT):
+            name = self._eat(TokenType.IDENT).value
             return UnitName(name, is_string=False)
-        if self._check("STR"):
-            name = self._eat("STR").value
+        if self._check(TokenType.STR):
+            name = self._eat(TokenType.STR).value
             return UnitName(name, is_string=True)
         raise ParseError("expected unit name", self._cur())
 
     def _parse_unit_formula(self):
         """Parse a unit formula in a unit definition (allows numeric factors)."""
         left = self._parse_unit_def_atom()
-        while self._check("OP") and self._cur().value in ("\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}"):
+        while self._check(TokenType.OP) and self._cur().value in ("\N{MULTIPLICATION SIGN}", "\N{DIVISION SIGN}"):
             op = self._cur().value
             self.pos += 1
             right = self._parse_unit_def_atom()
@@ -1786,18 +1787,18 @@ class Parser:
 
     def _parse_unit_def_atom(self):
         """Parse a unit definition atom: ident, string, integer, or √unit."""
-        if self._check("OP") and self._cur().value == "\N{SQUARE ROOT}":
+        if self._check(TokenType.OP) and self._cur().value == "\N{SQUARE ROOT}":
             self.pos += 1
             operand = self._parse_unit_def_atom()
             return UnitSqrt(operand)
-        if self._check("INT"):
-            val = self._eat("INT").value
+        if self._check(TokenType.INT):
+            val = self._eat(TokenType.INT).value
             return UnitLit(val)
-        if self._check("IDENT"):
-            name = self._eat("IDENT").value
+        if self._check(TokenType.IDENT):
+            name = self._eat(TokenType.IDENT).value
             return UnitName(name, is_string=False)
-        if self._check("STR"):
-            name = self._eat("STR").value
+        if self._check(TokenType.STR):
+            name = self._eat(TokenType.STR).value
             return UnitName(name, is_string=True)
         raise ParseError("expected unit name or number", self._cur())
 
@@ -1807,9 +1808,9 @@ class Parser:
 
     def _parse_block(self):
         """Parse a block, dispatching to brace or layout style."""
-        if self._check("PUNCT") and self._cur().value == "{":
+        if self._check(TokenType.PUNCT) and self._cur().value == "{":
             return self._parse_brace_block()
-        if self._check("PUNCT") and self._cur().value == ":":
+        if self._check(TokenType.PUNCT) and self._cur().value == ":":
             return self._parse_layout_block()
         raise ParseError("expected '{' or ':' to begin block", self._cur())
 
@@ -1818,12 +1819,12 @@ class Parser:
 
         INDENT/DEDENT tokens are skipped as noise inside braces.
         """
-        self._eat("PUNCT", "{")
+        self._eat(TokenType.PUNCT, "{")
         stmts = []
         while True:
-            while not self._check("EOF") and self._cur().type in ("NEWLINE", "INDENT", "DEDENT"):
+            while not self._check(TokenType.EOF) and self._cur().type in (TokenType.NEWLINE, TokenType.INDENT, TokenType.DEDENT):
                 self.pos += 1
-            if self._check("EOF") or (self._cur().type == "PUNCT" and self._cur().value == "}"):
+            if self._check(TokenType.EOF) or (self._cur().type is TokenType.PUNCT and self._cur().value == "}"):
                 break
             stmt = self._parse_statement()
             if stmt is not None:
@@ -1831,9 +1832,9 @@ class Parser:
             # A statement that is itself a block -- an if, a while, a
             # walk -- ends at its own '}' and has no separator of its
             # own to eat, where a plain one has already eaten the ';'.
-            while self._check("PUNCT") and self._cur().value == ";":
+            while self._check(TokenType.PUNCT) and self._cur().value == ";":
                 self.pos += 1
-        self._eat("PUNCT", "}")
+        self._eat(TokenType.PUNCT, "}")
         return stmts
 
     def _parse_layout_block(self):
@@ -1846,25 +1847,25 @@ class Parser:
         a function's body, an if's, a while's, a walk's -- so the two
         forms are equal everywhere by being made equal once.
         """
-        self._eat("PUNCT", ":")
-        if self._check("PUNCT") and self._cur().value == "{":
+        self._eat(TokenType.PUNCT, ":")
+        if self._check(TokenType.PUNCT) and self._cur().value == "{":
             return self._parse_brace_block()
-        while self._try_eat("NEWLINE"):
+        while self._try_eat(TokenType.NEWLINE):
             pass
-        if not self._check("INDENT"):
+        if not self._check(TokenType.INDENT):
             stmt = self._parse_statement()
             return [stmt] if stmt else []
-        self._eat("INDENT")
+        self._eat(TokenType.INDENT)
         stmts = []
         while True:
-            while self._try_eat("NEWLINE"):
+            while self._try_eat(TokenType.NEWLINE):
                 pass
-            if self._check("DEDENT", "EOF"):
+            if self._check(TokenType.DEDENT, TokenType.EOF):
                 break
             stmt = self._parse_statement()
             if stmt is not None:
                 stmts.append(stmt)
-        self._eat("DEDENT")
+        self._eat(TokenType.DEDENT)
         return stmts
 
     # ------------------------------------------------------------------
@@ -1873,42 +1874,42 @@ class Parser:
 
     def _parse_statement(self):
         """Parse a single statement."""
-        while self._try_eat("NEWLINE"):
+        while self._try_eat(TokenType.NEWLINE):
             pass
 
-        if self._check("EOF"):
+        if self._check(TokenType.EOF):
             return None
 
-        if self._check("EXPECT"):
+        if self._check(TokenType.EXPECT):
             return self._parse_expect_stmt()
 
-        if self._check("LET"):
+        if self._check(TokenType.LET):
             return self._parse_var_def()
 
-        if self._check("TYPE"):
+        if self._check(TokenType.TYPE):
             return self._parse_type_def()
 
-        if self._check("LIKELY") or self._check("UNLIKELY"):
+        if self._check(TokenType.LIKELY) or self._check(TokenType.UNLIKELY):
             return self._parse_hinted_if()
 
-        if self._check("IF"):
+        if self._check(TokenType.IF):
             return self._parse_if_stmt()
 
-        if self._check("BREAK") or self._check("CONTINUE"):
+        if self._check(TokenType.BREAK) or self._check(TokenType.CONTINUE):
             kw_tok = self._cur()
-            is_break = kw_tok.type == "BREAK"
+            is_break = kw_tok.type is TokenType.BREAK
             self.pos += 1
             label = None
-            if self._check("IDENT"):
-                label = self._eat("IDENT").value
-            self._try_eat("PUNCT", ";")
+            if self._check(TokenType.IDENT):
+                label = self._eat(TokenType.IDENT).value
+            self._try_eat(TokenType.PUNCT, ";")
             node = BreakStmt(label) if is_break else ContinueStmt(label)
             return self._set_pos(node, kw_tok)
 
         # `outer:` on a line of its own names the loop below it.
         if self._at_loop_label():
-            label_tok = self._eat("IDENT")
-            self._eat("PUNCT", ":")
+            label_tok = self._eat(TokenType.IDENT)
+            self._eat(TokenType.PUNCT, ":")
             self._skip_nl()
             loop = self._parse_statement()
             loop.label = label_tok.value
@@ -1916,62 +1917,62 @@ class Parser:
                               label_tok.end_col)
             return loop
 
-        if self._check("WHILE"):
+        if self._check(TokenType.WHILE):
             return self._parse_while_stmt()
 
-        if self._check("COMPTIME"):
+        if self._check(TokenType.COMPTIME):
             if (self.pos + 1 < len(self.tokens) and
-                    self.tokens[self.pos + 1].type == "FOREACH"):
-                self._eat("COMPTIME")
+                    self.tokens[self.pos + 1].type is TokenType.FOREACH):
+                self._eat(TokenType.COMPTIME)
                 return self._parse_foreach_stmt(is_comptime=True)
 
-        if self._check("FOREACH"):
+        if self._check(TokenType.FOREACH):
             return self._parse_foreach_stmt()
 
-        if self._check("MATCH"):
+        if self._check(TokenType.MATCH):
             return self._parse_match_stmt()
 
-        if self._check("CATCH"):
+        if self._check(TokenType.CATCH):
             return self._parse_catch_stmt()
 
-        if self._check("RETURN"):
+        if self._check(TokenType.RETURN):
             return self._parse_return_stmt()
 
         # General assignment: LHS ← RHS.  `=` is equality and never
         # stores, which is what lets the same glyph be the operator: a
         # statement is an assignment when it holds a ←, and anything
         # else beginning with a name is an expression.
-        if self._check("IDENT") or (self._check("PUNCT")
+        if self._check(TokenType.IDENT) or (self._check(TokenType.PUNCT)
                                     and self._cur().value in "($"):
             saved_pos = self.pos
             bracket_depth = 0
             found_assign_op = None
             while saved_pos < len(self.tokens):
                 t = self.tokens[saved_pos]
-                if t.type in ("NEWLINE", "INDENT", "DEDENT") or (t.type == "PUNCT" and t.value == ";"):
+                if t.type in (TokenType.NEWLINE, TokenType.INDENT, TokenType.DEDENT) or (t.type is TokenType.PUNCT and t.value == ";"):
                     break
-                if t.type == "PUNCT":
+                if t.type is TokenType.PUNCT:
                     if t.value == "[": bracket_depth += 1
                     elif t.value == "]": bracket_depth -= 1
-                if t.type == "OP" and t.value == "←" and bracket_depth == 0:
+                if t.type is TokenType.OP and t.value == "←" and bracket_depth == 0:
                     found_assign_op = "←"
                     break
                 saved_pos += 1
 
             if found_assign_op:
                 lhs = self._parse_expr()
-                self._eat("OP", "←")
+                self._eat(TokenType.OP, "←")
                 rhs = self._parse_expr()
-                self._try_eat("PUNCT", ";")
+                self._try_eat(TokenType.PUNCT, ";")
                 return ("assign_stmt", lhs, rhs)
 
         expr = self._parse_expr()
-        had_semi = self._try_eat("PUNCT", ";")
+        had_semi = self._try_eat(TokenType.PUNCT, ";")
         return ExprStmt(expr, had_semi=bool(had_semi))
 
     def _parse_if_stmt(self, hint: str | None = None):
         """Parse: if expr block (elif expr block)* (else block)?"""
-        self._eat("IF")
+        self._eat(TokenType.IF)
         cond = self._parse_expr()
         cons_body = self._parse_block()
 
@@ -1982,12 +1983,12 @@ class Parser:
         clauses: list[tuple[object, list]] = []
         while True:
             self._skip_nl()
-            if self._check("ELIF"):
-                self._eat("ELIF")
+            if self._check(TokenType.ELIF):
+                self._eat(TokenType.ELIF)
                 elif_cond = self._parse_expr()
                 clauses.append((elif_cond, self._parse_block()))
-            elif self._check("ELSE"):
-                self._eat("ELSE")
+            elif self._check(TokenType.ELSE):
+                self._eat(TokenType.ELSE)
                 clauses.append((None, self._parse_block()))
             else:
                 break
@@ -2006,20 +2007,20 @@ class Parser:
         and what follows has to be a loop -- a label names something to
         leave, and only a loop can be left.
         """
-        if not (self._check("IDENT") and self.pos + 1 < len(self.tokens)
-                and self.tokens[self.pos + 1].type == "PUNCT"
+        if not (self._check(TokenType.IDENT) and self.pos + 1 < len(self.tokens)
+                and self.tokens[self.pos + 1].type is TokenType.PUNCT
                 and self.tokens[self.pos + 1].value == ":"):
             return False
         ahead = self.pos + 2
         while ahead < len(self.tokens) \
-                and self.tokens[ahead].type == "NEWLINE":
+                and self.tokens[ahead].type is TokenType.NEWLINE:
             ahead += 1
         if ahead >= len(self.tokens):
             return False
         kind = self.tokens[ahead].type
-        if kind == "COMPTIME" and ahead + 1 < len(self.tokens):
+        if kind is TokenType.COMPTIME and ahead + 1 < len(self.tokens):
             kind = self.tokens[ahead + 1].type
-        return kind in ("WHILE", "FOREACH")
+        return kind in (TokenType.WHILE, TokenType.FOREACH)
 
     def _parse_while_stmt(self):
         """Parse: while [var [: type]] ':=' expr block, or while expr block
@@ -2028,21 +2029,21 @@ class Parser:
         afresh each time round, bound to the variable, and its value is
         what the loop tests.
         """
-        self._eat("WHILE")
+        self._eat(TokenType.WHILE)
         var_name = None
         var_type = None
         var_is_mut = False
         if self._at_while_binding():
-            var_name = self._eat("IDENT").value
-            self._eat("PUNCT", ":")
-            if self._try_eat("MUT"):
+            var_name = self._eat(TokenType.IDENT).value
+            self._eat(TokenType.PUNCT, ":")
+            if self._try_eat(TokenType.MUT):
                 var_is_mut = True
-            if self._check("IDENT"):
-                var_type = self._eat("IDENT").value
-                if self._check("OP") and self._cur().value == "?":
+            if self._check(TokenType.IDENT):
+                var_type = self._eat(TokenType.IDENT).value
+                if self._check(TokenType.OP) and self._cur().value == "?":
                     self.pos += 1
                     var_type += "?"
-            self._eat("PUNCT", "=")
+            self._eat(TokenType.PUNCT, "=")
         cond = self._parse_expr()
         body = self._parse_block()
         return WhileStmt(cond, body, var_name, var_type, var_is_mut)
@@ -2056,71 +2057,71 @@ class Parser:
         assignment would also look like, so such a body has to be
         written as an indented block.
         """
-        if not self._check("IDENT"):
+        if not self._check(TokenType.IDENT):
             return False
         after = self.tokens[self.pos + 1] if self.pos + 1 < len(self.tokens) else None
-        if after is None or after.type != "PUNCT" or after.value != ":":
+        if after is None or after.type is not TokenType.PUNCT or after.value != ":":
             return False
         third = self.tokens[self.pos + 2] if self.pos + 2 < len(self.tokens) else None
         if third is None:
             return False
-        if third.type == "PUNCT" and third.value == "=":
+        if third.type is TokenType.PUNCT and third.value == "=":
             return True
-        if third.type == "MUT":
+        if third.type is TokenType.MUT:
             return True
-        if third.type != "IDENT":
+        if third.type is not TokenType.IDENT:
             return False
         fourth = self.tokens[self.pos + 3] if self.pos + 3 < len(self.tokens) else None
-        return (fourth is not None and fourth.type == "PUNCT"
+        return (fourth is not None and fourth.type is TokenType.PUNCT
                 and fourth.value == "=")
 
     def _parse_foreach_stmt(self, is_comptime: bool = False):
         """Parse: [comptime] foreach var1 [: type1] [, var2 [: type2]] := expr1 [, expr2] block
         When a type annotation is present the = suffices (: already consumed);
         without a type annotation := is required."""
-        self._eat("FOREACH")
+        self._eat(TokenType.FOREACH)
         vars_list: list[tuple[str, str | None]] = []
         last_has_type = False
         while True:
-            if self._check("PUNCT") and self._cur().value == "(":
+            if self._check(TokenType.PUNCT) and self._cur().value == "(":
                 # `foreach (k, v) := d` names the halves of what it is
                 # handed, as a parameter and a definition already do.
                 open_tok = self._cur()
                 names = _as_names(self._parse_destructure_names(open_tok))
                 vars_list.append((names, None))
                 last_has_type = False
-                if not self._try_eat("PUNCT", ","):
+                if not self._try_eat(TokenType.PUNCT, ","):
                     break
                 continue
-            name_tok = self._eat("IDENT")
+            name_tok = self._eat(TokenType.IDENT)
             var_type = None
             last_has_type = False
-            if (self._check("PUNCT") and self._cur().value == ":" and
+            if (self._check(TokenType.PUNCT) and self._cur().value == ":" and
                     self.pos + 1 < len(self.tokens) and
-                    self.tokens[self.pos + 1].type == "IDENT"):
-                self._eat("PUNCT", ":")
-                var_type = self._eat("IDENT").value
+                    self.tokens[self.pos + 1].type is TokenType.IDENT):
+                self._eat(TokenType.PUNCT, ":")
+                var_type = self._eat(TokenType.IDENT).value
                 last_has_type = True
-                if self._check("OP") and self._cur().value == "?":
+                if self._check(TokenType.OP) and self._cur().value == "?":
                     self.pos += 1
                     var_type += "?"
-                    if self._check("IDENT"):
+                    if self._check(TokenType.IDENT):
                         var_type += self._parse_dotted_name()
-                elif self._check("OP") and self._cur().value == "!":
+                elif self._check(TokenType.OP) and self._cur().value == "!":
                     self.pos += 1
                     var_type += "?std.errors"
             vars_list.append((name_tok.value, var_type))
-            if not self._try_eat("PUNCT", ","):
+            if not self._try_eat(TokenType.PUNCT, ","):
                 break
         if not last_has_type:
-            if not (self._check("PUNCT") and self._cur().value == ":"):
+            if not (self._check(TokenType.PUNCT) and self._cur().value == ":"):
                 raise coded(2023, ParseError("foreach without type annotation requires ':='", self._cur()))
-            self._eat("PUNCT", ":")
-        self._eat("PUNCT", "=")
+            self._eat(TokenType.PUNCT, ":")
+        self._eat(TokenType.PUNCT, "=")
         iterables = []
         while True:
             iterables.append(self._parse_iterable())
-            if not self._try_eat("PUNCT", ","):
+            if not self._try_eat(TokenType.PUNCT, ","):
                 break
         body = self._parse_block()
         return ForEachStmt(vars_list, iterables, body, is_comptime)
@@ -2132,9 +2133,9 @@ class Parser:
         them for writing, so the loop variable refers to the element
         rather than to a copy of it.
         """
-        if self._check("OP") and self._cur().value == "&":
-            amp_tok = self._eat("OP", "&")
-            is_mut = self._try_eat("MUT") is not None
+        if self._check(TokenType.OP) and self._cur().value == "&":
+            amp_tok = self._eat(TokenType.OP, "&")
+            is_mut = self._try_eat(TokenType.MUT) is not None
             return self._set_pos(BorrowExpr(self._parse_expr(), is_mut),
                                  amp_tok)
         return self._parse_expr()
@@ -2145,24 +2146,24 @@ class Parser:
         Each arm is a pattern, a colon, and a body -- either statements
         on the same line or an indented block, as elsewhere.
         """
-        kw_tok = self._eat("MATCH")
+        kw_tok = self._eat(TokenType.MATCH)
         subject = self._parse_expr()
-        self._eat("PUNCT", ":")
-        while self._try_eat("NEWLINE"):
+        self._eat(TokenType.PUNCT, ":")
+        while self._try_eat(TokenType.NEWLINE):
             pass
-        if not self._check("INDENT"):
+        if not self._check(TokenType.INDENT):
             raise ParseError("match requires an indented list of arms",
                              self._cur())
-        self._eat("INDENT")
+        self._eat(TokenType.INDENT)
 
         arms: list[MatchArm] = []
         while True:
-            while self._try_eat("NEWLINE"):
+            while self._try_eat(TokenType.NEWLINE):
                 pass
-            if self._check("DEDENT", "EOF"):
+            if self._check(TokenType.DEDENT, TokenType.EOF):
                 break
             arms.append(self._parse_match_arm())
-        self._eat("DEDENT")
+        self._eat(TokenType.DEDENT)
         if not arms:
             raise ParseError("match requires at least one arm", kw_tok)
         return self._set_pos(MatchStmt(subject, arms), kw_tok)
@@ -2174,13 +2175,13 @@ class Parser:
         `⊨((a, b))` names the elements of it, in the
         shape a definition or a parameter uses.
         """
-        self._eat("PUNCT", "(")
-        if self._check("PUNCT") and self._cur().value == "(":
+        self._eat(TokenType.PUNCT, "(")
+        if self._check(TokenType.PUNCT) and self._cur().value == "(":
             names = _as_names(self._parse_destructure_names(self._cur()))
-            self._eat("PUNCT", ")")
+            self._eat(TokenType.PUNCT, ")")
             return names
-        name = self._eat("IDENT").value
-        self._eat("PUNCT", ")")
+        name = self._eat(TokenType.IDENT).value
+        self._eat(TokenType.PUNCT, ")")
         return name
 
     def _parse_match_arm(self) -> MatchArm:
@@ -2188,29 +2189,29 @@ class Parser:
         kind: str
         name = None
         pattern_tok = self._cur()
-        if self._check("SOME"):
+        if self._check(TokenType.SOME):
             self.pos += 1
             name = self._parse_arm_binding()
             kind = "some"
-        elif self._check("NOTSOME"):
+        elif self._check(TokenType.NOTSOME):
             self.pos += 1
             name = self._parse_arm_binding()
             kind = "err"
-        elif self._check("NONE"):
+        elif self._check(TokenType.NONE):
             self.pos += 1
             kind = "none"
-        elif (self._check("IDENT") and self._cur().value == "_"):
+        elif (self._check(TokenType.IDENT) and self._cur().value == "_"):
             self.pos += 1
             kind = "wildcard"
-        elif self._check("IDENT"):
-            type_tok = self._eat("IDENT")
+        elif self._check(TokenType.IDENT):
+            type_tok = self._eat(TokenType.IDENT)
             type_name = type_tok.value
-            if self._check("PUNCT") and self._cur().value == ".":
+            if self._check(TokenType.PUNCT) and self._cur().value == ".":
                 # Enum.member: one value of an enumeration.  It binds
                 # nothing, because an enumerator holds nothing beside
                 # which one it is.
                 self.pos += 1
-                member = self._eat("IDENT").value
+                member = self._eat(TokenType.IDENT).value
                 body = self._parse_block()
                 return self._set_pos(
                     MatchArm("enum", None, body, type_name=type_name,
@@ -2235,18 +2236,18 @@ class Parser:
 
     def _parse_catch_stmt(self):
         """Parse: catch block"""
-        self._eat("CATCH")
+        self._eat(TokenType.CATCH)
         body = self._parse_block()
         return CatchStmt(body)
 
     def _parse_return_stmt(self):
         """Parse: return [expr]"""
-        self._eat("RETURN")
+        self._eat(TokenType.RETURN)
         value = None
-        if not self._check("EOF", "NEWLINE", "DEDENT") and \
-           not (self._cur().type == "PUNCT" and self._cur().value == "}"):
+        if not self._check(TokenType.EOF, TokenType.NEWLINE, TokenType.DEDENT) and \
+           not (self._cur().type is TokenType.PUNCT and self._cur().value == "}"):
             value = self._parse_expr()
-        self._try_eat("PUNCT", ";")
+        self._try_eat(TokenType.PUNCT, ";")
         return ReturnStmt(value)
 
     def _parse_hinted_if(self):
@@ -2259,14 +2260,14 @@ class Parser:
         hint = tok.value
         other = "unlikely" if hint == "likely" else "likely"
         self._skip_nl()
-        while self._check("LIKELY") or self._check("UNLIKELY"):
+        while self._check(TokenType.LIKELY) or self._check(TokenType.UNLIKELY):
             dup = self._eat(self._cur().type)
             if dup.value != hint:
                 raise ParseError(
                     f"@{dup.value} contradicts @{hint} on the same condition",
                     dup)
             raise ParseError(f"@{hint} is given twice on the same condition", dup)
-        if not self._check("IF"):
+        if not self._check(TokenType.IF):
             raise ParseError(
                 f"@{hint} applies to an if statement, but none follows",
                 self._cur())
@@ -2275,32 +2276,32 @@ class Parser:
     def _parse_expect_stmt(self):
         """Parse: @expect (error|warning) "pattern" \\n statement"""
         expectations: list[tuple[str, str]] = []
-        while self._check("EXPECT"):
-            self._eat("EXPECT")
-            if not self._check("IDENT"):
+        while self._check(TokenType.EXPECT):
+            self._eat(TokenType.EXPECT)
+            if not self._check(TokenType.IDENT):
                 raise ParseError("expected 'error' or 'warning' after @expect", self._cur())
-            level_tok = self._eat("IDENT")
+            level_tok = self._eat(TokenType.IDENT)
             if level_tok.value not in ("error", "warning"):
                 raise ParseError(
                     f"expected 'error' or 'warning' after @expect, got '{level_tok.value}'",
                     level_tok)
             # the same two shapes a definition's @expect takes
-            if self._check("INT"):
-                code_tok = self._eat("INT")
-                said = self._eat("STR").value if self._check("STR") else None
-                expectations.append((level_tok.value, said, code_tok.value,
+            if self._check(TokenType.INT):
+                code_tok = self._eat(TokenType.INT)
+                said = self._eat(TokenType.STR).value if self._check(TokenType.STR) else None
+                expectations.append((Level[level_tok.value], said, code_tok.value,
                                      getattr(code_tok, "line", None)))
-            elif self._check("STR"):
-                pattern_tok = self._eat("STR")
-                expectations.append((level_tok.value, pattern_tok.value, None,
+            elif self._check(TokenType.STR):
+                pattern_tok = self._eat(TokenType.STR)
+                expectations.append((Level[level_tok.value], pattern_tok.value, None,
                                      getattr(pattern_tok, "line", None)))
             else:
                 raise ParseError(
                     "@expect states the code it expects, and may state the "
                     "message beside it; the older form states the message "
                     "alone", self._cur())
-            self._try_eat("NEWLINE")
-            while self._try_eat("NEWLINE"):
+            self._try_eat(TokenType.NEWLINE)
+            while self._try_eat(TokenType.NEWLINE):
                 pass
         stmt = self._parse_statement()
         return ExpectStmt(expectations, stmt)
@@ -2308,37 +2309,37 @@ class Parser:
     def _parse_lambda(self, is_listable: bool = False):
         """Parse: [@listable] λ [param : type, …] [|captures|] -> ret_type : expr"""
         lambda_tok = self._cur()
-        self._eat("LAMBDA")
+        self._eat(TokenType.LAMBDA)
         params: list[tuple[str, str]] = []
         param_units: dict[str, object] = {}
-        while (self._check("IDENT")
-               or (self._check("PUNCT") and self._cur().value == "(")):
+        while (self._check(TokenType.IDENT)
+               or (self._check(TokenType.PUNCT) and self._cur().value == "(")):
             saved = self.pos
-            if self._check("PUNCT") and self._cur().value == "(":
+            if self._check(TokenType.PUNCT) and self._cur().value == "(":
                 open_tok = self._cur()
                 names = _as_names(self._parse_destructure_names(open_tok))
                 ptype = None
-                if self._try_eat("PUNCT", ":"):
+                if self._try_eat(TokenType.PUNCT, ":"):
                     ptype = self._parse_type()
                 params.append((names, ptype))
-                if not self._try_eat("PUNCT", ","):
+                if not self._try_eat(TokenType.PUNCT, ","):
                     break
                 continue
-            name = self._eat("IDENT").value
+            name = self._eat(TokenType.IDENT).value
             follows = (self.tokens[self.pos + 1]
                        if self.pos + 1 < len(self.tokens) else None)
             names_type = follows is not None and (
-                follows.type == "IDENT"
-                or (follows.type == "PUNCT" and follows.value == "("))
-            if not (self._check("PUNCT") and self._cur().value == ":"
+                follows.type is TokenType.IDENT
+                or (follows.type is TokenType.PUNCT and follows.value == "("))
+            if not (self._check(TokenType.PUNCT) and self._cur().value == ":"
                     and names_type):
                 raise coded(2024, ParseError(
                     f"lambda parameter '{name}' requires a type annotation", self._cur()))
-            self._eat("PUNCT", ":")
+            self._eat(TokenType.PUNCT, ":")
             if self._at_tuple_type():
                 ptype = self._parse_tuple_type()
             else:
-                ptype = self._eat("IDENT").value
+                ptype = self._eat(TokenType.IDENT).value
             # The measure is written against the type, `λi : i64 ¤ptrdiff`,
             # which is where a return type writes its own.  What a walk
             # over a measured range hands the question arrives measured,
@@ -2348,59 +2349,59 @@ class Parser:
             if unit_spec is not None:
                 param_units[name] = unit_spec
             params.append((name, ptype))
-            if not self._try_eat("PUNCT", ","):
+            if not self._try_eat(TokenType.PUNCT, ","):
                 break
 
         captures: list[str] | None = None
-        if self._check("OP") and self._cur().value == "|":
+        if self._check(TokenType.OP) and self._cur().value == "|":
             self.pos += 1
             captures = []
-            while self._check("IDENT"):
-                captures.append(self._eat("IDENT").value)
-                if not self._try_eat("PUNCT", ","):
+            while self._check(TokenType.IDENT):
+                captures.append(self._eat(TokenType.IDENT).value)
+                if not self._try_eat(TokenType.PUNCT, ","):
                     break
-            if not (self._check("OP") and self._cur().value == "|"):
+            if not (self._check(TokenType.OP) and self._cur().value == "|"):
                 raise ParseError("expected '|' to close capture list", self._cur())
             self.pos += 1
             if not captures:
                 raise coded(2025, ParseError("empty capture list is not allowed", self._cur()))
 
-        if not (self._check("OP") and self._cur().value == "->"):
+        if not (self._check(TokenType.OP) and self._cur().value == "->"):
             raise coded(2026, ParseError("lambda requires a return type (-> type)", self._cur()))
-        self._eat("OP", "->")
-        if not self._check("IDENT", "NONE"):
+        self._eat(TokenType.OP, "->")
+        if not self._check(TokenType.IDENT, TokenType.NONE):
             raise ParseError("expected return type after '->'", self._cur())
         ret_tok = self._cur()
         self.pos += 1
         ret_type = ret_tok.value
-        if self._check("OP") and self._cur().value == "?":
+        if self._check(TokenType.OP) and self._cur().value == "?":
             self.pos += 1
             ret_type += "?"
-            if self._check("IDENT"):
+            if self._check(TokenType.IDENT):
                 ret_type += self._parse_dotted_name()
-        elif self._check("OP") and self._cur().value == "!":
+        elif self._check(TokenType.OP) and self._cur().value == "!":
             self.pos += 1
             ret_type += "?std.errors"
 
-        self._eat("PUNCT", ":")
-        if self._check("PUNCT") and self._cur().value == "{":
+        self._eat(TokenType.PUNCT, ":")
+        if self._check(TokenType.PUNCT) and self._cur().value == "{":
             body = self._parse_brace_block()
-        elif self._check("NEWLINE"):
-            self._try_eat("NEWLINE")
-            while self._try_eat("NEWLINE"):
+        elif self._check(TokenType.NEWLINE):
+            self._try_eat(TokenType.NEWLINE)
+            while self._try_eat(TokenType.NEWLINE):
                 pass
-            if self._check("INDENT"):
-                self._eat("INDENT")
+            if self._check(TokenType.INDENT):
+                self._eat(TokenType.INDENT)
                 stmts: list = []
                 while True:
-                    while self._try_eat("NEWLINE"):
+                    while self._try_eat(TokenType.NEWLINE):
                         pass
-                    if self._check("DEDENT", "EOF"):
+                    if self._check(TokenType.DEDENT, TokenType.EOF):
                         break
                     stmt = self._parse_statement()
                     if stmt is not None:
                         stmts.append(stmt)
-                self._eat("DEDENT")
+                self._eat(TokenType.DEDENT)
                 body = stmts
             else:
                 body = self._parse_expr()
@@ -2417,7 +2418,7 @@ class Parser:
 
     def _skip_nl(self):
         """Skip any NEWLINE tokens (for multi-line expressions)."""
-        while self._check("NEWLINE"):
+        while self._check(TokenType.NEWLINE):
             self.pos += 1
 
     def _parse_expr(self):
@@ -2432,7 +2433,7 @@ class Parser:
         # operands, and its value is the value of whichever block runs.
         # Nothing else can begin with `if` here -- the statement level
         # takes its own -- so the two never have to be told apart.
-        if self._check("IF"):
+        if self._check(TokenType.IF):
             if_tok = self._cur()
             node = self._parse_if_stmt()
             node.is_value = True
@@ -2444,7 +2445,7 @@ class Parser:
         # A match here is the statement form standing where a value is
         # wanted, as an if is: its arms are their own block each, and
         # the value is the value of whichever arm runs.
-        if self._check("MATCH"):
+        if self._check(TokenType.MATCH):
             match_tok = self._cur()
             return self._set_pos(self._parse_match_stmt(), match_tok)
         left = self._parse_or_expr()
@@ -2465,8 +2466,8 @@ class Parser:
         past the newline, so the `if` below would otherwise be found
         sitting here.
         """
-        return (self._check("IF") and self.pos > 0
-                and self.tokens[self.pos - 1].type != "NEWLINE")
+        return (self._check(TokenType.IF) and self.pos > 0
+                and self.tokens[self.pos - 1].type is not TokenType.NEWLINE)
 
     def _parse_or_expr(self):
         """or_expr → and_expr ('or' and_expr | '??' and_expr)*"""
@@ -2474,11 +2475,11 @@ class Parser:
         while True:
             self._skip_nl()
             or_tok = self._cur()
-            if self._try_eat("OR"):
+            if self._try_eat(TokenType.OR):
                 self._skip_nl()
                 right = self._parse_and_expr()
                 left = self._set_binop_pos(BinOp("or", left, right), left, right, or_tok)
-            elif self._check("OP") and self._cur().value == "??":
+            elif self._check(TokenType.OP) and self._cur().value == "??":
                 self.pos += 1
                 self._skip_nl()
                 right = self._parse_and_expr()
@@ -2493,7 +2494,7 @@ class Parser:
         while True:
             self._skip_nl()
             and_tok = self._cur()
-            if not self._try_eat("AND"):
+            if not self._try_eat(TokenType.AND):
                 break
             self._skip_nl()
             right = self._parse_logic_or_expr()
@@ -2505,7 +2506,7 @@ class Parser:
         left = self._parse_logic_xor_expr()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value in "∨⊽"):
+            if not (self._check(TokenType.OP) and self._cur().value in "∨⊽"):
                 break
             op_tok = self._cur()
             self.pos += 1
@@ -2519,7 +2520,7 @@ class Parser:
         left = self._parse_logic_and_expr()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value == "⊕"):
+            if not (self._check(TokenType.OP) and self._cur().value == "⊕"):
                 break
             xor_tok = self._cur()
             self.pos += 1
@@ -2533,7 +2534,7 @@ class Parser:
         left = self._parse_cmp_expr()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value in "∧⊼"):
+            if not (self._check(TokenType.OP) and self._cur().value in "∧⊼"):
                 break
             op_tok = self._cur()
             self.pos += 1
@@ -2564,13 +2565,13 @@ class Parser:
         left = self._parse_range_expr()
         while True:
             self._skip_nl()
-            if self._check("OP") and self._cur().value in _OLD_CMP_SPELLINGS:
+            if self._check(TokenType.OP) and self._cur().value in _OLD_CMP_SPELLINGS:
                 old = self._cur().value
                 raise coded(2027, ParseError(
                     f"'{old}' is not an operator; "
                     f"{_OLD_CMP_SPELLINGS[old]}", self._cur()))
-            is_eq = self._check("PUNCT") and self._cur().value == "="
-            if not (is_eq or (self._check("OP")
+            is_eq = self._check(TokenType.PUNCT) and self._cur().value == "="
+            if not (is_eq or (self._check(TokenType.OP)
                               and self._cur().value in self._CMP_OPS)):
                 break
             op_tok = self._cur()
@@ -2583,10 +2584,10 @@ class Parser:
     def _parse_range_expr(self):
         """range_expr → minmax_expr ('…' minmax_expr ('…' minmax_expr)?)?"""
         left = self._parse_minmax_expr()
-        if self._check("PUNCT") and self._cur().value == "…":
+        if self._check(TokenType.PUNCT) and self._cur().value == "…":
             self.pos += 1
             second = self._parse_minmax_expr()
-            if self._check("PUNCT") and self._cur().value == "…":
+            if self._check(TokenType.PUNCT) and self._cur().value == "…":
                 self.pos += 1
                 end = self._parse_minmax_expr()
                 return RangeExpr(left, end, step=second)
@@ -2606,7 +2607,7 @@ class Parser:
         left = self._parse_shift_expr()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value in _PICK_OPS):
+            if not (self._check(TokenType.OP) and self._cur().value in _PICK_OPS):
                 break
             op_tok = self._cur()
             self.pos += 1
@@ -2621,7 +2622,7 @@ class Parser:
         left = self._parse_bitwise_or()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value in ("<<", ">>", "«", "»", "↺", "↻")):
+            if not (self._check(TokenType.OP) and self._cur().value in ("<<", ">>", "«", "»", "↺", "↻")):
                 break
             op_tok = self._cur()
             self.pos += 1
@@ -2635,7 +2636,7 @@ class Parser:
         left = self._parse_bitwise_xor()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value == "|"):
+            if not (self._check(TokenType.OP) and self._cur().value == "|"):
                 break
             op_tok = self._cur()
             self.pos += 1
@@ -2649,7 +2650,7 @@ class Parser:
         left = self._parse_bitwise_and()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value == "^"):
+            if not (self._check(TokenType.OP) and self._cur().value == "^"):
                 break
             op_tok = self._cur()
             self.pos += 1
@@ -2663,7 +2664,7 @@ class Parser:
         left = self._parse_add_expr()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value == "&"):
+            if not (self._check(TokenType.OP) and self._cur().value == "&"):
                 break
             op_tok = self._cur()
             self.pos += 1
@@ -2681,7 +2682,7 @@ class Parser:
         left = self._parse_concat_expr()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value in _ADD_OPS):
+            if not (self._check(TokenType.OP) and self._cur().value in _ADD_OPS):
                 break
             op_tok = self._cur()
             self.pos += 1
@@ -2695,7 +2696,7 @@ class Parser:
         left = self._parse_mul_expr()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value == "\N{DOUBLE PLUS}"):
+            if not (self._check(TokenType.OP) and self._cur().value == "\N{DOUBLE PLUS}"):
                 break
             concat_tok = self._cur()
             self.pos += 1
@@ -2709,7 +2710,7 @@ class Parser:
         left = self._parse_reshape_expr()
         while True:
             self._skip_nl()
-            if not (self._check("OP") and self._cur().value in _MUL_OPS):
+            if not (self._check(TokenType.OP) and self._cur().value in _MUL_OPS):
                 break
             op_tok = self._cur()
             self.pos += 1
@@ -2731,21 +2732,21 @@ class Parser:
         # `⧺⌿ v` says what a lambda repeating the operator would.  It is
         # one only when the fold glyph follows it directly; anywhere
         # else an operator needs its operands.
-        if (self._check("OP") and self._cur().value in _FOLDABLE_OPS
+        if (self._check(TokenType.OP) and self._cur().value in _FOLDABLE_OPS
                 and self.pos + 1 < len(self.tokens)
-                and self.tokens[self.pos + 1].type == "OP"
+                and self.tokens[self.pos + 1].type is TokenType.OP
                 and self.tokens[self.pos + 1].value in _FOLD_OPS):
             op_tok = self._cur()
             self.pos += 1
             left = self._set_pos(OperatorRef(op_tok.value), op_tok)
         else:
             left = self._parse_negation()
-        if self._check("OP") and self._cur().value == "\N{APL FUNCTIONAL SYMBOL RHO}":
+        if self._check(TokenType.OP) and self._cur().value == "\N{APL FUNCTIONAL SYMBOL RHO}":
             self.pos += 1
             self._skip_nl()
             right = self._parse_negation()
             return ReshapeExpr(left, right)
-        if self._check("OP") and self._cur().value == "\N{DIAERESIS}":
+        if self._check(TokenType.OP) and self._cur().value == "\N{DIAERESIS}":
             # f ¨ v -- what is on the left is asked of each of them.
             # What follows is the container, as it is for a fold.
             each_tok = self._cur()
@@ -2753,7 +2754,7 @@ class Parser:
             self._skip_nl()
             return self._set_pos(
                 MapExpr(left, self._parse_range_expr()), each_tok)
-        if self._check("OP") and self._cur().value in (
+        if self._check(TokenType.OP) and self._cur().value in (
                 "\N{FOR ALL}", "\N{THERE EXISTS}",
                 "\N{THERE DOES NOT EXIST}"):
             # f ∀ v -- whether f holds of every one of them; f ∃ v --
@@ -2766,7 +2767,7 @@ class Parser:
             self._skip_nl()
             return self._set_pos(
                 QuantExpr(kind, left, self._parse_range_expr()), quant_tok)
-        if self._check("OP") and self._cur().value in (
+        if self._check(TokenType.OP) and self._cur().value in (
                 "\N{APL FUNCTIONAL SYMBOL SLASH BAR}",
                 "\N{APL FUNCTIONAL SYMBOL BACKSLASH BAR}"):
             direction = "left" if self._cur().value == "\N{APL FUNCTIONAL SYMBOL SLASH BAR}" else "right"
@@ -2783,7 +2784,7 @@ class Parser:
 
         Unary negation binds looser than ↑: ⁻2↑2 = ⁻(2↑2) = ⁻4.
         """
-        if self._check("OP") and self._cur().value == "⁻":
+        if self._check(TokenType.OP) and self._cur().value == "⁻":
             neg_tok = self._cur()
             self.pos += 1
             operand = self._parse_negation()
@@ -2796,7 +2797,7 @@ class Parser:
         Right operand goes through negation to allow 2↑⁻3.
         """
         left = self._parse_unary()
-        if self._check("OP") and self._cur().value == "\N{UPWARDS ARROW}":
+        if self._check(TokenType.OP) and self._cur().value == "\N{UPWARDS ARROW}":
             pow_tok = self._cur()
             self.pos += 1
             self._skip_nl()
@@ -2812,127 +2813,127 @@ class Parser:
         smaller of two numbers; which one is meant is settled by where
         the glyph is written, as it is for a minus sign.
         """
-        if self._check("OP") and self._cur().value in _CASE_OPS:
+        if self._check(TokenType.OP) and self._cur().value in _CASE_OPS:
             op_tok = self._cur()
             self.pos += 1
             operand = self._parse_unary()
             return self._set_pos(UnaryOp(op_tok.value, operand), op_tok)
-        if self._check("OP") and self._cur().value in (
+        if self._check(TokenType.OP) and self._cur().value in (
                 "#", "\N{SUPERSET OF}", "\N{SUPERSET OF OR EQUAL TO}"):
             op_tok = self._cur()
             self.pos += 1
             operand = self._parse_unary()
             return self._set_pos(UnaryOp(op_tok.value, operand), op_tok)
-        if self._check("OP") and self._cur().value == "~":
+        if self._check(TokenType.OP) and self._cur().value == "~":
             op_tok = self._cur()
             self.pos += 1
             operand = self._parse_unary()
             return self._set_pos(UnaryOp("~", operand), op_tok)
-        if self._check("OP") and self._cur().value == "\N{SQUARE ROOT}":
+        if self._check(TokenType.OP) and self._cur().value == "\N{SQUARE ROOT}":
             op_tok = self._cur()
             self.pos += 1
             operand = self._parse_unary()
             return self._set_pos(UnaryOp("\N{SQUARE ROOT}", operand), op_tok)
-        if self._check("OP") and self._cur().value == "\N{CUBE ROOT}":
+        if self._check(TokenType.OP) and self._cur().value == "\N{CUBE ROOT}":
             op_tok = self._cur()
             self.pos += 1
             operand = self._parse_unary()
             return self._set_pos(UnaryOp("\N{CUBE ROOT}", operand), op_tok)
-        if self._check("OP") and self._cur().value == "\N{FOURTH ROOT}":
+        if self._check(TokenType.OP) and self._cur().value == "\N{FOURTH ROOT}":
             op_tok = self._cur()
             self.pos += 1
             operand = self._parse_unary()
             return self._set_pos(UnaryOp("\N{FOURTH ROOT}", operand), op_tok)
-        if self._check("OP") and self._cur().value == "¬":
+        if self._check(TokenType.OP) and self._cur().value == "¬":
             op_tok = self._cur()
             self.pos += 1
             operand = self._parse_unary()
             return self._set_pos(UnaryOp("¬", operand), op_tok)
-        if self._check("NOT"):
+        if self._check(TokenType.NOT):
             op_tok = self._cur()
-            self._eat("NOT")
+            self._eat(TokenType.NOT)
             operand = self._parse_unary()
             return self._set_pos(UnaryOp("not", operand), op_tok)
-        if self._check("WRAP"):
-            self._eat("WRAP")
-            self._eat("PUNCT", "(")
+        if self._check(TokenType.WRAP):
+            self._eat(TokenType.WRAP)
+            self._eat(TokenType.PUNCT, "(")
             expr = self._parse_expr()
             self._skip_nl()
-            self._eat("PUNCT", ")")
+            self._eat(TokenType.PUNCT, ")")
             return WrapExpr(expr)
-        if self._check("ENUMERATE"):
-            self._eat("ENUMERATE")
-            self._eat("PUNCT", "(")
+        if self._check(TokenType.ENUMERATE):
+            self._eat(TokenType.ENUMERATE)
+            self._eat(TokenType.PUNCT, "(")
             expr = self._parse_expr()
             self._skip_nl()
-            self._eat("PUNCT", ")")
+            self._eat(TokenType.PUNCT, ")")
             return EnumerateExpr(expr)
-        if self._check("TYPEOF"):
-            self._eat("TYPEOF")
-            self._eat("PUNCT", "(")
+        if self._check(TokenType.TYPEOF):
+            self._eat(TokenType.TYPEOF)
+            self._eat(TokenType.PUNCT, "(")
             expr = self._parse_expr()
             self._skip_nl()
-            self._eat("PUNCT", ")")
+            self._eat(TokenType.PUNCT, ")")
             node = TypeOfExpr(expr)
             return self._parse_postfix(node)
-        if self._check("RESULTOF"):
-            self._eat("RESULTOF")
-            self._eat("PUNCT", "(")
-            name_tok = self._eat("IDENT")
+        if self._check(TokenType.RESULTOF):
+            self._eat(TokenType.RESULTOF)
+            self._eat(TokenType.PUNCT, "(")
+            name_tok = self._eat(TokenType.IDENT)
             self._skip_nl()
-            self._eat("PUNCT", ")")
+            self._eat(TokenType.PUNCT, ")")
             node = ResultOfExpr(name_tok.value)
             return self._parse_postfix(node)
-        if self._check("SIZEOF"):
-            self._eat("SIZEOF")
-            self._eat("PUNCT", "(")
+        if self._check(TokenType.SIZEOF):
+            self._eat(TokenType.SIZEOF)
+            self._eat(TokenType.PUNCT, "(")
             expr = self._parse_expr()
             self._skip_nl()
-            self._eat("PUNCT", ")")
+            self._eat(TokenType.PUNCT, ")")
             node = SizeOfExpr(expr)
             return self._parse_postfix(node)
-        if self._check("MIN", "MAX"):
-            kind = "min" if self._check("MIN") else "max"
+        if self._check(TokenType.MIN, TokenType.MAX):
+            kind = "min" if self._check(TokenType.MIN) else "max"
             self.pos += 1
-            self._eat("PUNCT", "(")
+            self._eat(TokenType.PUNCT, "(")
             expr = self._parse_expr()
             self._skip_nl()
-            self._eat("PUNCT", ")")
+            self._eat(TokenType.PUNCT, ")")
             return self._parse_postfix(LimitExpr(kind, expr))
-        if self._check("OLD"):
+        if self._check(TokenType.OLD):
             old_tok = self._cur()
-            self._eat("OLD")
-            self._eat("PUNCT", "(")
+            self._eat(TokenType.OLD)
+            self._eat(TokenType.PUNCT, "(")
             expr = self._parse_expr()
             self._skip_nl()
-            self._eat("PUNCT", ")")
+            self._eat(TokenType.PUNCT, ")")
             return self._parse_postfix(self._set_pos(OldExpr(expr), old_tok))
-        if self._check("DROPUNIT"):
-            self._eat("DROPUNIT")
-            self._eat("PUNCT", "(")
+        if self._check(TokenType.DROPUNIT):
+            self._eat(TokenType.DROPUNIT)
+            self._eat(TokenType.PUNCT, "(")
             expr = self._parse_expr()
             self._skip_nl()
-            self._eat("PUNCT", ")")
+            self._eat(TokenType.PUNCT, ")")
             node = DropUnitExpr(expr)
             return self._parse_postfix(node)
-        if self._check("UNITOF"):
-            self._eat("UNITOF")
-            self._eat("PUNCT", "(")
+        if self._check(TokenType.UNITOF):
+            self._eat(TokenType.UNITOF)
+            self._eat(TokenType.PUNCT, "(")
             expr = self._parse_expr()
             self._skip_nl()
-            self._eat("PUNCT", ")")
+            self._eat(TokenType.PUNCT, ")")
             node = UnitOfExpr(expr)
             return self._parse_postfix(node)
-        if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+        if self._check(TokenType.OP) and self._cur().value == "\N{CURRENCY SIGN}":
             self.pos += 1
             unit_spec = self._parse_unit_spec()
             return UnitRefExpr(unit_spec)
         node = self._parse_primary()
-        if self._check("OP") and self._cur().value == "\N{CURRENCY SIGN}":
+        if self._check(TokenType.OP) and self._cur().value == "\N{CURRENCY SIGN}":
             self.pos += 1
             unit_spec = self._parse_unit_spec()
             node = UnitExpr(node, unit_spec)
-        if self._check("OP") and self._cur().value == "?":
+        if self._check(TokenType.OP) and self._cur().value == "?":
             try_tok = self._cur()
             self.pos += 1
             node = self._set_pos(TryUnwrap(node), try_tok)
@@ -2951,124 +2952,124 @@ class Parser:
         # Lambda expression: λparams |captures|: body, with @listable
         # in front of it where it threads.  A lambda is a function like
         # any other; what it lacked was somewhere to say so.
-        if tok.type == "LAMBDA":
+        if tok.type is TokenType.LAMBDA:
             return self._parse_lambda()
-        if tok.type == "LISTABLE":
-            self._eat("LISTABLE")
+        if tok.type is TokenType.LISTABLE:
+            self._eat(TokenType.LISTABLE)
             self._skip_nl()
-            if not self._check("LAMBDA"):
+            if not self._check(TokenType.LAMBDA):
                 raise ParseError(
                     "@listable in front of a value marks a lambda as one "
                     "that threads, so a λ follows it", self._cur())
             return self._parse_lambda(True)
 
         # Literals.
-        if tok.type == "INT":
+        if tok.type is TokenType.INT:
             self.pos += 1
             return self._set_pos(IntLit(tok.value, tok.width or "int"), tok)
 
-        if tok.type == "FLOAT":
+        if tok.type is TokenType.FLOAT:
             self.pos += 1
             value, width = tok.value
             return self._set_pos(FloatLit(value, width), tok)
 
-        if tok.type == "CHAR":
+        if tok.type is TokenType.CHAR:
             self.pos += 1
             # A member call may follow, as it may on a name: 'a'.ord()
             # reads as one thing and has nothing to be ambiguous with.
             return self._parse_postfix(
                 self._set_pos(CharLit(tok.value), tok))
 
-        if tok.type == "STR":
+        if tok.type is TokenType.STR:
             self.pos += 1
             return self._parse_postfix(
                 self._set_pos(StrLit(tok.value), tok))
 
-        if tok.type == "NONE":
+        if tok.type is TokenType.NONE:
             self.pos += 1
             return self._set_pos(NoneLit(), tok)
 
-        if tok.type == "TRUE":
+        if tok.type is TokenType.TRUE:
             self.pos += 1
             return self._set_pos(BoolLit(True), tok)
 
-        if tok.type == "FALSE":
+        if tok.type is TokenType.FALSE:
             self.pos += 1
             return self._set_pos(BoolLit(False), tok)
 
         # Failed-result constructor ⊭(...).
-        if tok.type == "NOTSOME":
+        if tok.type is TokenType.NOTSOME:
             self.pos += 1
-            self._eat("PUNCT", "(")
+            self._eat(TokenType.PUNCT, "(")
             value = self._parse_expr()
-            self._eat("PUNCT", ")")
+            self._eat(TokenType.PUNCT, ")")
             return self._set_pos(ExpErr(value), tok)
 
         # Optional some(...) constructor.
-        if tok.type == "SOME":
+        if tok.type is TokenType.SOME:
             self.pos += 1
-            self._eat("PUNCT", "(")
+            self._eat(TokenType.PUNCT, "(")
             value = self._parse_expr()
-            self._eat("PUNCT", ")")
+            self._eat(TokenType.PUNCT, ")")
             return OptSome(value)
 
         # A hash or a set: ⸨k: v, …⸩ or ⸨v, …⸩.  Which one it is is
         # decided by the first entry, a colon after it saying that the
         # entries have two halves; ⸨⸩ says neither and a type has to.
-        if tok.type == "PUNCT" and tok.value == "\N{LEFT DOUBLE PARENTHESIS}":
+        if tok.type is TokenType.PUNCT and tok.value == "\N{LEFT DOUBLE PARENTHESIS}":
             self.pos += 1
             self._skip_nl()
-            if self._check("PUNCT") and \
+            if self._check(TokenType.PUNCT) and \
                     self._cur().value == "\N{RIGHT DOUBLE PARENTHESIS}":
-                close = self._eat("PUNCT", "\N{RIGHT DOUBLE PARENTHESIS}")
+                close = self._eat(TokenType.PUNCT, "\N{RIGHT DOUBLE PARENTHESIS}")
                 end = (close.end_col if close.line == tok.line
                        and close.end_col is not None else None)
                 return set_pos(EmptyCollectionLit(), tok.line, tok.col, end)
             first = self._parse_expr()
             self._skip_nl()
-            is_hash = self._check("PUNCT") and self._cur().value == ":"
+            is_hash = self._check(TokenType.PUNCT) and self._cur().value == ":"
             pairs, elements = [], []
             if is_hash:
-                self._eat("PUNCT", ":")
+                self._eat(TokenType.PUNCT, ":")
                 self._skip_nl()
                 pairs.append((first, self._parse_expr()))
             else:
                 elements.append(first)
             self._skip_nl()
-            while self._try_eat("PUNCT", ","):
+            while self._try_eat(TokenType.PUNCT, ","):
                 self._skip_nl()
-                if self._check("PUNCT") and \
+                if self._check(TokenType.PUNCT) and \
                         self._cur().value == "\N{RIGHT DOUBLE PARENTHESIS}":
                     break
                 key = self._parse_expr()
                 self._skip_nl()
                 if is_hash:
-                    self._eat("PUNCT", ":")
+                    self._eat(TokenType.PUNCT, ":")
                     self._skip_nl()
                     pairs.append((key, self._parse_expr()))
                 else:
                     elements.append(key)
                 self._skip_nl()
-            close = self._eat("PUNCT", "\N{RIGHT DOUBLE PARENTHESIS}")
+            close = self._eat(TokenType.PUNCT, "\N{RIGHT DOUBLE PARENTHESIS}")
             end = (close.end_col if close.line == tok.line
                    and close.end_col is not None else None)
             node = HashLit(pairs) if is_hash else SetLit(elements)
             return set_pos(node, tok.line, tok.col, end)
 
         # Array literal [...].
-        if tok.type == "PUNCT" and tok.value == "[":
+        if tok.type is TokenType.PUNCT and tok.value == "[":
             self.pos += 1
             elements = []
             while True:
                 self._skip_nl()
-                if self._check("PUNCT") and self._cur().value == "]":
+                if self._check(TokenType.PUNCT) and self._cur().value == "]":
                     break
                 expr = self._parse_expr()
                 elements.append(expr)
                 self._skip_nl()
-                if not self._try_eat("PUNCT", ","):
+                if not self._try_eat(TokenType.PUNCT, ","):
                     break
-            close = self._eat("PUNCT", "]")
+            close = self._eat(TokenType.PUNCT, "]")
             # The literal spans its brackets when both are on one line,
             # so a diagnostic can underline the whole of it.
             end = (close.end_col if close.line == tok.line
@@ -3076,40 +3077,40 @@ class Parser:
             return set_pos(ArrayLit(elements), tok.line, tok.col, end)
 
         # Dynamic array allocation: new type[size].
-        if tok.type == "IDENT" and tok.value == "new":
+        if tok.type is TokenType.IDENT and tok.value == "new":
             self.pos += 1  # eat "new"
-            type_tok = self._eat("IDENT")
-            self._eat("PUNCT", "[")
+            type_tok = self._eat(TokenType.IDENT)
+            self._eat(TokenType.PUNCT, "[")
             size_expr = self._parse_expr()
             self._skip_nl()
-            self._eat("PUNCT", "]")
+            self._eat(TokenType.PUNCT, "]")
             return ArrayAlloc(type_tok.value, size_expr)
 
         # Parenthesized expression or tuple literal.
-        if tok.type == "PUNCT" and tok.value == "(":
+        if tok.type is TokenType.PUNCT and tok.value == "(":
             self.pos += 1
             first = self._parse_expr()
-            if self._check("PUNCT") and self._cur().value == ",":
+            if self._check(TokenType.PUNCT) and self._cur().value == ",":
                 elements = [first]
-                while self._try_eat("PUNCT", ","):
+                while self._try_eat(TokenType.PUNCT, ","):
                     self._skip_nl()
-                    if self._check("PUNCT") and self._cur().value == ")":
+                    if self._check(TokenType.PUNCT) and self._cur().value == ")":
                         break
                     elements.append(self._parse_expr())
                 self._skip_nl()
-                self._eat("PUNCT", ")")
+                self._eat(TokenType.PUNCT, ")")
                 return TupleLit(elements)
             self._skip_nl()
-            self._eat("PUNCT", ")")
+            self._eat(TokenType.PUNCT, ")")
             return self._parse_postfix(first)
 
         # static_assert / static_assert_eq — special forms.
-        if tok.type == "IDENT" and tok.value == "static_assert":
+        if tok.type is TokenType.IDENT and tok.value == "static_assert":
             self.pos += 1
             args = self._parse_call_args()
             return self._set_pos(StaticAssert(args), tok)
 
-        if tok.type == "IDENT" and tok.value == "static_assert_eq":
+        if tok.type is TokenType.IDENT and tok.value == "static_assert_eq":
             self.pos += 1
             args = self._parse_call_args()
             if len(args) != 2:
@@ -3117,15 +3118,15 @@ class Parser:
             return self._set_pos(StaticAssertEq(args[0], args[1]), tok)
 
         # ⟪ … ⟫ -- a piece of program held rather than run.
-        if tok.type == "PUNCT" and tok.value == "⟪":
+        if tok.type is TokenType.PUNCT and tok.value == "⟪":
             return self._parse_postfix(self._parse_quote())
 
         # ※name -- what a name refers to.
-        if tok.type == "OP" and tok.value == "※":
+        if tok.type is TokenType.OP and tok.value == "※":
             return self._parse_reflect()
 
         # $e inside one -- put what e answers into the tree here.
-        if tok.type == "PUNCT" and tok.value == "$":
+        if tok.type is TokenType.PUNCT and tok.value == "$":
             if not self._in_quote:
                 raise ParseError(
                     "$ puts a value into a piece of program held between "
@@ -3134,46 +3135,46 @@ class Parser:
             if self._in_rules:
                 # In a rule the hole is filled by matching, so what
                 # follows names the hole rather than being worked out.
-                return self._set_pos(MetaVar(self._eat("IDENT").value), tok)
+                return self._set_pos(MetaVar(self._eat(TokenType.IDENT).value), tok)
             saved = self._in_quote
             self._in_quote = False
             try:
-                if self._check("PUNCT") and self._cur().value == "(":
-                    self._eat("PUNCT", "(")
+                if self._check(TokenType.PUNCT) and self._cur().value == "(":
+                    self._eat(TokenType.PUNCT, "(")
                     inner = self._parse_expr()
-                    self._eat("PUNCT", ")")
+                    self._eat(TokenType.PUNCT, ")")
                 else:
-                    inner = self._set_pos(VarRef(self._eat("IDENT").value),
+                    inner = self._set_pos(VarRef(self._eat(TokenType.IDENT).value),
                                           tok)
             finally:
                 self._in_quote = saved
             return self._set_pos(Splice(inner), tok)
 
         # Identifier (possibly function call, possibly followed by dotted chain).
-        if tok.type == "IDENT":
+        if tok.type is TokenType.IDENT:
             self.pos += 1
             name = tok.value
 
             # name⟦…⟧ -- a macro, which is not a call: what is written
             # between the brackets is handed over as it is written.
-            if self._check("PUNCT") and self._cur().value == "⟦":
+            if self._check(TokenType.PUNCT) and self._cur().value == "⟦":
                 self.pos += 1
                 args = []
                 self._skip_nl()
-                if not (self._check("PUNCT") and self._cur().value == "⟧"):
+                if not (self._check(TokenType.PUNCT) and self._cur().value == "⟧"):
                     args.append(self._parse_expr())
-                    while self._try_eat("PUNCT", ","):
+                    while self._try_eat(TokenType.PUNCT, ","):
                         self._skip_nl()
                         args.append(self._parse_expr())
                 self._skip_nl()
-                self._eat("PUNCT", "⟧")
+                self._eat(TokenType.PUNCT, "⟧")
                 return self._set_pos(MacroCall(name, args), tok)
 
             # Check for function call: name(...)
-            if (self._cur().type == "PUNCT" and self._cur().value == "("):
+            if (self._cur().type is TokenType.PUNCT and self._cur().value == "("):
                 args = self._parse_call_args()
                 node = self._set_pos(FuncCall(name, args), tok)
-            elif self._check("PUNCT") and self._cur().value == "{" and self._is_struct_literal_start():
+            elif self._check(TokenType.PUNCT) and self._cur().value == "{" and self._is_struct_literal_start():
                 node = self._set_pos(self._parse_struct_lit(name), tok)
             else:
                 node = self._set_pos(VarRef(name), tok)
@@ -3183,20 +3184,20 @@ class Parser:
             #   [expr] → Subscript
             #   (args) → MethodCall (on previous node)
             while True:
-                if self._check("PUNCT") and self._cur().value == ".":
+                if self._check(TokenType.PUNCT) and self._cur().value == ".":
                     dot_tok = self._cur()
                     self.pos += 1
                     attr_name = self._eat_member_name()
-                    if self._check("PUNCT") and self._cur().value == "(":
+                    if self._check(TokenType.PUNCT) and self._cur().value == "(":
                         args = self._parse_call_args()
                         node = self._set_pos(MethodCall(node, attr_name, args), dot_tok)
                     else:
                         node = self._set_pos(GetAttr(node, attr_name), dot_tok)
-                elif self._check("PUNCT") and self._cur().value == "[":
+                elif self._check(TokenType.PUNCT) and self._cur().value == "[":
                     bracket_tok = self._cur()
                     self.pos += 1
                     node = self._set_pos(self._parse_bracket_access(node), bracket_tok)
-                elif self._check("PUNCT") and self._cur().value == "(":
+                elif self._check(TokenType.PUNCT) and self._cur().value == "(":
                     call_tok = self._cur()
                     args = self._parse_call_args()
                     if isinstance(node, VarRef):
@@ -3214,40 +3215,40 @@ class Parser:
         """Check if { starts a struct literal (vs. a brace block)."""
         lookahead = self.pos + 1
         while (lookahead < len(self.tokens)
-               and self.tokens[lookahead].type in ("NEWLINE", "INDENT", "DEDENT")):
+               and self.tokens[lookahead].type in (TokenType.NEWLINE, TokenType.INDENT, TokenType.DEDENT)):
             lookahead += 1
         if lookahead >= len(self.tokens):
             return False
-        if (self.tokens[lookahead].type == "PUNCT"
+        if (self.tokens[lookahead].type is TokenType.PUNCT
                 and self.tokens[lookahead].value == "}"):
             return True
-        if (self.tokens[lookahead].type == "IDENT"
+        if (self.tokens[lookahead].type is TokenType.IDENT
                 and lookahead + 1 < len(self.tokens)
-                and self.tokens[lookahead + 1].type == "PUNCT"
+                and self.tokens[lookahead + 1].type is TokenType.PUNCT
                 and self.tokens[lookahead + 1].value == ":"):
             return True
         return False
 
     def _parse_struct_lit(self, name: str) -> StructLit:
         """Parse struct literal body: { field: expr, ... }."""
-        self._eat("PUNCT", "{")
+        self._eat(TokenType.PUNCT, "{")
         field_inits: list[tuple[str, object]] = []
         while True:
-            while not self._check("EOF") and self._cur().type in ("NEWLINE", "INDENT", "DEDENT"):
+            while not self._check(TokenType.EOF) and self._cur().type in (TokenType.NEWLINE, TokenType.INDENT, TokenType.DEDENT):
                 self.pos += 1
-            if self._check("PUNCT") and self._cur().value == "}":
+            if self._check(TokenType.PUNCT) and self._cur().value == "}":
                 break
-            field_name_tok = self._eat("IDENT")
-            self._eat("PUNCT", ":")
+            field_name_tok = self._eat(TokenType.IDENT)
+            self._eat(TokenType.PUNCT, ":")
             value_expr = self._parse_expr()
             field_inits.append((field_name_tok.value, value_expr))
-            while not self._check("EOF") and self._cur().type in ("NEWLINE", "INDENT", "DEDENT"):
+            while not self._check(TokenType.EOF) and self._cur().type in (TokenType.NEWLINE, TokenType.INDENT, TokenType.DEDENT):
                 self.pos += 1
-            if not self._try_eat("PUNCT", ","):
+            if not self._try_eat(TokenType.PUNCT, ","):
                 break
-        while not self._check("EOF") and self._cur().type in ("NEWLINE", "INDENT", "DEDENT"):
+        while not self._check(TokenType.EOF) and self._cur().type in (TokenType.NEWLINE, TokenType.INDENT, TokenType.DEDENT):
             self.pos += 1
-        self._eat("PUNCT", "}")
+        self._eat(TokenType.PUNCT, "}")
         return StructLit(name, field_inits)
 
     def _parse_bracket_access(self, node, bracket_tok=None):
@@ -3260,17 +3261,17 @@ class Parser:
         and says so.
         """
         def entry():
-            if self._check("PUNCT") and self._cur().value in ",]":
+            if self._check(TokenType.PUNCT) and self._cur().value in ",]":
                 return None
             return self._parse_expr()
 
         idx_expr = entry()
         indices = [idx_expr]
-        while self._check("PUNCT") and self._cur().value == ",":
+        while self._check(TokenType.PUNCT) and self._cur().value == ",":
             self.pos += 1
             indices.append(entry())
         self._skip_nl()
-        self._eat("PUNCT", "]")
+        self._eat(TokenType.PUNCT, "]")
         if any(i is None for i in indices):
             return Subscript(node, indices)
         has_range = any(isinstance(e, RangeExpr) for e in indices)
@@ -3296,7 +3297,7 @@ class Parser:
         nothing for a keyword to be ambiguous with here.
         """
         tok = self._cur()
-        if tok.type == "IDENT" or (isinstance(tok.value, str)
+        if tok.type is TokenType.IDENT or (isinstance(tok.value, str)
                                    and KEYWORDS.get(tok.value) == tok.type):
             self.pos += 1
             return tok.value
@@ -3307,25 +3308,25 @@ class Parser:
     def _parse_postfix(self, node):
         """Chain .attr, [idx], and (args) postfix operators onto node."""
         while True:
-            if self._check("PUNCT") and self._cur().value == ".":
+            if self._check(TokenType.PUNCT) and self._cur().value == ".":
                 dot_tok = self._cur()
                 self.pos += 1
                 attr_name = self._eat_member_name()
-                if self._check("PUNCT") and self._cur().value == "(":
+                if self._check(TokenType.PUNCT) and self._cur().value == "(":
                     args = self._parse_call_args()
                     node = self._set_pos(MethodCall(node, attr_name, args),
                                          dot_tok)
                 else:
                     node = self._set_pos(GetAttr(node, attr_name), dot_tok)
-            elif self._check("PUNCT") and self._cur().value == "[":
+            elif self._check(TokenType.PUNCT) and self._cur().value == "[":
                 self.pos += 1
                 node = self._parse_bracket_access(node)
-            elif self._check("PUNCT") and self._cur().value == "(":
+            elif self._check(TokenType.PUNCT) and self._cur().value == "(":
                 args = self._parse_call_args()
                 node = MethodCall(node, "__call__", args)
             else:
                 break
-        if self._check("OP") and self._cur().value == "?":
+        if self._check(TokenType.OP) and self._cur().value == "?":
             try_tok = self._cur()
             self.pos += 1
             node = self._set_pos(TryUnwrap(node), try_tok)
@@ -3333,26 +3334,26 @@ class Parser:
 
     def _parse_call_args(self):
         """Parse function/method call arguments: ( arg, arg, ... )."""
-        self._eat("PUNCT", "(")
+        self._eat(TokenType.PUNCT, "(")
         args = []
         while True:
-            while self._try_eat("NEWLINE"):
+            while self._try_eat(TokenType.NEWLINE):
                 pass
-            if self._check("PUNCT") and self._cur().value == ")":
+            if self._check(TokenType.PUNCT) and self._cur().value == ")":
                 break
-            if (self._check("OP") and self._cur().value == "&"
+            if (self._check(TokenType.OP) and self._cur().value == "&"
                     and self.pos + 1 < len(self.tokens)
-                    and self.tokens[self.pos + 1].type == "IDENT"):
+                    and self.tokens[self.pos + 1].type is TokenType.IDENT):
                 ref_tok = self._cur()
                 self.pos += 1
-                name_tok = self._eat("IDENT")
+                name_tok = self._eat(TokenType.IDENT)
                 arg = self._set_pos(RefExpr(name_tok.value), ref_tok)
             else:
                 arg = self._parse_expr()
             args.append(arg)
-            while self._try_eat("NEWLINE"):
+            while self._try_eat(TokenType.NEWLINE):
                 pass
-            if not self._try_eat("PUNCT", ","):
+            if not self._try_eat(TokenType.PUNCT, ","):
                 break
-        self._eat("PUNCT", ")")
+        self._eat(TokenType.PUNCT, ")")
         return args

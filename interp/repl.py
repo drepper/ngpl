@@ -19,11 +19,11 @@ complete.  Two rules decide when that is:
 import sys
 
 from interp.env import Env
-from interp.errors import (extract_position, format_backtrace,
+from interp.errors import (Level, extract_position, format_backtrace,
                            format_diagnostic, strip_position_prefix,
                            set_source, ProgramAbort, ProgramExit)
 from interp.eval import Evaluator
-from interp.lexer import LexerError, process_indentation, tokenize
+from interp.lexer import TokenType, LexerError, process_indentation, tokenize
 from interp.parser import ParseError, Parser
 from interp.ast import (
     DestructureDef as ASTDestructureDef,
@@ -91,18 +91,18 @@ def _needs_more_input(src: str) -> bool:
         return True
 
     significant = [t for t in tokens
-                   if t.type not in ("NEWLINE", "INDENT", "DEDENT", "EOF")]
+                   if t.type not in (TokenType.NEWLINE, TokenType.INDENT, TokenType.DEDENT, TokenType.EOF)]
     if not significant:
         return False
 
     # A line ending in ':' or '{' opens a block whose body is still to come.
     last = significant[-1]
-    if last.type == "PUNCT" and last.value in (":", "{"):
+    if last.type is TokenType.PUNCT and last.value in (":", "{"):
         return True
 
     # A layout block was opened and its body has begun.  It parses, but
     # more statements may still be intended, so wait for the empty line.
-    if any(t.type == "INDENT" for t in tokens):
+    if any(t.type is TokenType.INDENT for t in tokens):
         return True
 
     try:
@@ -110,7 +110,7 @@ def _needs_more_input(src: str) -> bool:
     except ParseError as e:
         # An error at the very end means the input simply stops early;
         # an error anywhere else is a real syntax error to report now.
-        return e.token is not None and e.token.type == "EOF"
+        return e.token is not None and e.token.type is TokenType.EOF
     except Exception:
         return False
 
@@ -336,7 +336,7 @@ class Repl:
             line, col, end_col = pos
             if line <= len(src.split("\n")):
                 print(format_diagnostic(src, name, line, col, msg,
-                                        end_col=end_col, level="error"),
+                                        end_col=end_col, level=Level.error),
                       file=sys.stderr)
             else:
                 print(f"error: {msg}", file=sys.stderr)

@@ -5,6 +5,7 @@ and optional syntax highlighting, similar to modern compilers like
 gcc/clang/rustc.
 """
 
+import enum
 import sys
 
 
@@ -36,6 +37,27 @@ class ProgramAbort(BaseException):
 
 
 # Whether a warning is to be treated as an error, as -Werror asks.
+class Level(enum.Enum):
+    """How much a diagnostic means.
+
+    An error refuses the program, a warning reports it and lets it
+    through, a note says something beside one of those.  A name rather
+    than a word, so that a level nobody defined is a mistake where it
+    is written; `str` of one is the word, which is what a diagnostic
+    has always printed.
+    """
+
+    error = enum.auto()
+    warning = enum.auto()
+    note = enum.auto()
+
+    def __str__(self) -> str:
+        return self.name
+
+    def __format__(self, spec: str) -> str:
+        return format(self.name, spec)
+
+
 # Set once from the command line and read wherever a diagnostic's level
 # is decided, so the option reaches the @expect machinery as well as
 # the text that is printed.
@@ -53,23 +75,46 @@ def warnings_are_errors() -> bool:
     return _warnings_are_errors
 
 
-# What a @pre or a @post that does not hold does, named as C++26 names
-# the four evaluation semantics.  Set once from the command line and
-# read where a condition is checked.
-CONTRACT_SEMANTICS = ("ignore", "observe", "enforce", "quick-enforce")
+class Contract(enum.Enum):
+    """What a @pre or a @post that does not hold does.
 
-_contract_semantic = "enforce"
+    Named as C++26 names the four evaluation semantics.  Set once from
+    the command line and read where a condition is checked; `str` of
+    one is the word the command line spells it with.
+    """
+
+    ignore = "ignore"
+    observe = "observe"
+    enforce = "enforce"
+    quick_enforce = "quick-enforce"
+
+    def __str__(self) -> str:
+        return self.value
+
+    def __format__(self, spec: str) -> str:
+        return format(self.value, spec)
 
 
-def set_contract_semantic(name: str) -> None:
+# the words --contracts accepts, in the order the help lists them
+CONTRACT_SEMANTICS = tuple(c.value for c in Contract)
+
+_contract_semantic = Contract.enforce
+
+
+def set_contract_semantic(name: str | Contract) -> None:
     """Choose what a condition that does not hold does."""
     global _contract_semantic
-    if name not in CONTRACT_SEMANTICS:
-        raise ValueError(f"unknown contract semantic: {name}")
-    _contract_semantic = name
+    if isinstance(name, Contract):
+        _contract_semantic = name
+        return
+    for c in Contract:
+        if c.value == name:
+            _contract_semantic = c
+            return
+    raise ValueError(f"unknown contract semantic: {name}")
 
 
-def contract_semantic() -> str:
+def contract_semantic() -> Contract:
     """What a condition that does not hold does."""
     return _contract_semantic
 
@@ -134,7 +179,7 @@ class _StackHolder:
 
 def report_runtime_diagnostic(message: str,
                               pos: tuple[int, int, int | None] | None = None,
-                              *, level: str = "warning",
+                              *, level: Level = Level.warning,
                               call_stack=()) -> None:
     """Print something found while the program runs, and carry on.
 
@@ -157,7 +202,7 @@ def report_runtime_diagnostic(message: str,
             print(trace, file=sys.stderr)
 
 
-def diagnostic_level(level: str) -> str:
+def diagnostic_level(level: Level) -> Level:
     """The level a diagnostic is reported at.
 
     Under -Werror a warning is an error, in what is printed and in what
@@ -166,7 +211,7 @@ def diagnostic_level(level: str) -> str:
     accounts for its diagnostics needs no rewriting to be checked this
     way.
     """
-    return "error" if _warnings_are_errors and level == "warning" else level
+    return Level.error if _warnings_are_errors and level is Level.warning else level
 
 
 def attach_backtrace(exc: BaseException, call_stack: list) -> None:
@@ -327,7 +372,7 @@ def format_diagnostic(
     message: str,
     *,
     end_col: int | None = None,
-    level: str = "error",
+    level: Level = Level.error,
     use_color: bool | None = None,
 ) -> str:
     """Format a compiler/interpreter diagnostic with source context.
@@ -339,7 +384,7 @@ def format_diagnostic(
         col: 0-based column of the error start.
         message: the error message.
         end_col: 0-based column past the end of the error region.
-        level: "error", "warning", or "note".
+        level: Level.error, Level.warning, or Level.note.
         use_color: force color on/off; None = auto-detect from stderr.
     """
     if use_color is None:
@@ -348,12 +393,12 @@ def format_diagnostic(
 
     lines = source.splitlines()
     if line < 1:
-        level_str = f"{c.red}{c.bold}{level}{c.reset}" if level == "error" else f"{c.yellow}{c.bold}{level}{c.reset}"
+        level_str = f"{c.red}{c.bold}{level}{c.reset}" if level is Level.error else f"{c.yellow}{c.bold}{level}{c.reset}"
         return f"{level_str}: {c.bold}{message}{c.reset}"
     if line > len(lines):
         line = len(lines)
         if line < 1:
-            level_str = f"{c.red}{c.bold}{level}{c.reset}" if level == "error" else f"{c.yellow}{c.bold}{level}{c.reset}"
+            level_str = f"{c.red}{c.bold}{level}{c.reset}" if level is Level.error else f"{c.yellow}{c.bold}{level}{c.reset}"
             return f"{level_str}: {c.bold}{message}{c.reset}"
         col = len(lines[line - 1])
         end_col = col + 1
@@ -376,9 +421,9 @@ def format_diagnostic(
     num_width = max(len(str(max_line)), 2)
 
     level_colors = {
-        "error": c.red,
-        "warning": c.yellow,
-        "note": c.blue,
+        Level.error: c.red,
+        Level.warning: c.yellow,
+        Level.note: c.blue,
     }
     level_color = level_colors.get(level, c.red)
 

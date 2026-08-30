@@ -8,9 +8,106 @@ After tokenization, `process_indentation` inserts INDENT/DEDENT tokens
 based on indentation changes, enabling layout-driven scoping.
 """
 
+import enum
 import math
 from interp.errors import coded
 import re
+
+
+class TokenType(enum.Enum):
+    """What a token is.
+
+    A name, not a string that happens to spell one.  The lexer answers
+    with these and the parser asks with them, so a type that is not one
+    of these is a mistake where it is written rather than a comparison
+    that quietly answers no.  What they are worth is nothing: an
+    identity is the whole of what a token type has to have.
+
+    `str` of one is its name, which is what the messages have always
+    printed, so nothing a reader sees changes.
+    """
+
+    AND = enum.auto()
+    AT_IMPORT = enum.auto()
+    BREAK = enum.auto()
+    BUILD = enum.auto()
+    CATCH = enum.auto()
+    CHAR = enum.auto()
+    COLD = enum.auto()
+    COMPTIME = enum.auto()
+    CONTINUE = enum.auto()
+    DEDENT = enum.auto()
+    DROPUNIT = enum.auto()
+    ELIF = enum.auto()
+    ELSE = enum.auto()
+    ENUM = enum.auto()
+    ENUMERATE = enum.auto()
+    EOF = enum.auto()
+    EXPECT = enum.auto()
+    EXPORT = enum.auto()
+    FALSE = enum.auto()
+    FLAG = enum.auto()
+    FLOAT = enum.auto()
+    FN = enum.auto()
+    FOREACH = enum.auto()
+    HOT = enum.auto()
+    IDENT = enum.auto()
+    IF = enum.auto()
+    IGNORABLE = enum.auto()
+    IMPL = enum.auto()
+    IMPORT = enum.auto()
+    IMPURE = enum.auto()
+    INDENT = enum.auto()
+    INT = enum.auto()
+    INVARIANT = enum.auto()
+    IS = enum.auto()
+    LAMBDA = enum.auto()
+    LET = enum.auto()
+    LIKELY = enum.auto()
+    LISTABLE = enum.auto()
+    MACRO = enum.auto()
+    MACRO_RULES = enum.auto()
+    MATCH = enum.auto()
+    MAX = enum.auto()
+    MIN = enum.auto()
+    MODULE = enum.auto()
+    MUT = enum.auto()
+    NEWLINE = enum.auto()
+    NONE = enum.auto()
+    NORETURN = enum.auto()
+    NOT = enum.auto()
+    NOTSOME = enum.auto()
+    OLD = enum.auto()
+    OP = enum.auto()
+    OPT = enum.auto()
+    OR = enum.auto()
+    POST = enum.auto()
+    PRE = enum.auto()
+    PUNCT = enum.auto()
+    REPLACEABLE = enum.auto()
+    REPR = enum.auto()
+    RESULTOF = enum.auto()
+    RETURN = enum.auto()
+    SIZEOF = enum.auto()
+    SOME = enum.auto()
+    START = enum.auto()
+    STR = enum.auto()
+    STRUCT = enum.auto()
+    TEST = enum.auto()
+    TRUE = enum.auto()
+    TYPE = enum.auto()
+    TYPEOF = enum.auto()
+    UNIT = enum.auto()
+    UNITOF = enum.auto()
+    UNLIKELY = enum.auto()
+    WHILE = enum.auto()
+    WRAP = enum.auto()
+
+    def __str__(self) -> str:
+        return self.name
+
+    def __format__(self, spec: str) -> str:
+        return format(self.name, spec)
 
 
 class Token:
@@ -18,8 +115,12 @@ class Token:
 
     __slots__ = ("col", "end_col", "line", "type", "value", "width")
 
-    def __init__(self, type_, value, line, col, end_col: int | None = None,
-                 width: str | None = None):
+    def __init__(self, type_: "TokenType", value, line, col,
+                 end_col: int | None = None, width: str | None = None):
+        # A token's type is a TokenType and never a string that spells
+        # one: such a string compares unequal to every member, so it
+        # would not fail here but somewhere far away, quietly.
+        assert isinstance(type_, TokenType), type_
         self.type = type_
         self.value = value
         self.line = line
@@ -40,87 +141,87 @@ TRANSPOSE = "\N{MODIFIER LETTER CAPITAL T}"
 
 
 # Keywords: maps keyword string to token type.
-KEYWORDS = {
-    "fn": "FN",
-    "mut": "MUT",
-    "if": "IF",
-    "else": "ELSE",
-    "elif": "ELIF",
-    "while": "WHILE",
-    "opt": "OPT",
-    "is": "IS",
-    "∅": "NONE",
-    "true": "TRUE",
-    "false": "FALSE",
-    "let": "LET",
-    "import": "IMPORT",
-    "match": "MATCH",
-    "return": "RETURN",
-    "and": "AND",
-    "or": "OR",
-    "not": "NOT",
-    "some": "SOME",
-    "break": "BREAK",
-    "continue": "CONTINUE",
-    "start": "START",
-    "test": "TEST",
-    "foreach": "FOREACH",
-    "expect": "EXPECT",
-    "wrap": "WRAP",
-    "enum": "ENUM",
-    "flag": "FLAG",
-    "replaceable": "REPLACEABLE",
-    "export": "EXPORT",
-    "catch": "CATCH",
-    "comptime": "COMPTIME",
-    "type": "TYPE",
-    "module": "MODULE",
-    "unit": "UNIT",
-    "impure": "IMPURE",
-    "enumerate": "ENUMERATE",
-    "struct": "STRUCT",
-    "impl": "IMPL",
-    "macro": "MACRO",
+KEYWORDS: dict[str, TokenType] = {
+    "fn": TokenType.FN,
+    "mut": TokenType.MUT,
+    "if": TokenType.IF,
+    "else": TokenType.ELSE,
+    "elif": TokenType.ELIF,
+    "while": TokenType.WHILE,
+    "opt": TokenType.OPT,
+    "is": TokenType.IS,
+    "∅": TokenType.NONE,
+    "true": TokenType.TRUE,
+    "false": TokenType.FALSE,
+    "let": TokenType.LET,
+    "import": TokenType.IMPORT,
+    "match": TokenType.MATCH,
+    "return": TokenType.RETURN,
+    "and": TokenType.AND,
+    "or": TokenType.OR,
+    "not": TokenType.NOT,
+    "some": TokenType.SOME,
+    "break": TokenType.BREAK,
+    "continue": TokenType.CONTINUE,
+    "start": TokenType.START,
+    "test": TokenType.TEST,
+    "foreach": TokenType.FOREACH,
+    "expect": TokenType.EXPECT,
+    "wrap": TokenType.WRAP,
+    "enum": TokenType.ENUM,
+    "flag": TokenType.FLAG,
+    "replaceable": TokenType.REPLACEABLE,
+    "export": TokenType.EXPORT,
+    "catch": TokenType.CATCH,
+    "comptime": TokenType.COMPTIME,
+    "type": TokenType.TYPE,
+    "module": TokenType.MODULE,
+    "unit": TokenType.UNIT,
+    "impure": TokenType.IMPURE,
+    "enumerate": TokenType.ENUMERATE,
+    "struct": TokenType.STRUCT,
+    "impl": TokenType.IMPL,
+    "macro": TokenType.MACRO,
 }
 
 # Keywords recognized only after the @ prefix.  The @ is part of the
 # token — no whitespace may separate it from the name.
-AT_KEYWORDS: dict[str, str] = {
-    "typeof": "TYPEOF",
-    "resultof": "RESULTOF",
-    "sizeof": "SIZEOF",
-    "unitof": "UNITOF",
-    "dropunit": "DROPUNIT",
+AT_KEYWORDS: dict[str, TokenType] = {
+    "typeof": TokenType.TYPEOF,
+    "resultof": TokenType.RESULTOF,
+    "sizeof": TokenType.SIZEOF,
+    "unitof": TokenType.UNITOF,
+    "dropunit": TokenType.DROPUNIT,
     # @old(e) in a postcondition: what e was when the call began.
-    "old": "OLD",
+    "old": TokenType.OLD,
     # @ignorable: a function whose answer a caller may drop in silence
-    "ignorable": "IGNORABLE",
-    "min": "MIN",
-    "max": "MAX",
-    "repr": "REPR",
-    "likely": "LIKELY",
-    "unlikely": "UNLIKELY",
-    "hot": "HOT",
-    "cold": "COLD",
-    "listable": "LISTABLE",
-    "noreturn": "NORETURN",
-    "pre": "PRE",
-    "post": "POST",
+    "ignorable": TokenType.IGNORABLE,
+    "min": TokenType.MIN,
+    "max": TokenType.MAX,
+    "repr": TokenType.REPR,
+    "likely": TokenType.LIKELY,
+    "unlikely": TokenType.UNLIKELY,
+    "hot": TokenType.HOT,
+    "cold": TokenType.COLD,
+    "listable": TokenType.LISTABLE,
+    "noreturn": TokenType.NORETURN,
+    "pre": TokenType.PRE,
+    "post": TokenType.POST,
     # @invariant(e) on a struct: what is always true of one.
-    "invariant": "INVARIANT",
+    "invariant": TokenType.INVARIANT,
     # @build heads the build recipe the interpreter reads for search
     # paths and flags; the bare word stays available as a name.
-    "build": "BUILD",
+    "build": TokenType.BUILD,
     # @import("./x.ngpl") names a file this one is written against.
     # The text is spliced in before this file's own, by the reader,
     # long before the lexer sees any of it; the line survives so that
     # what a file depends on is written in the file, and so that no
     # line number moves.  Here it is only a word to be recognised.
-    "import": "AT_IMPORT",
+    "import": TokenType.AT_IMPORT,
     # @macro_rules heads a macro written as a list of rewrite rules.
     # An annotation rather than a keyword of its own, so the word stays
     # available to a program that wants it as a name.
-    "macro_rules": "MACRO_RULES",
+    "macro_rules": TokenType.MACRO_RULES,
 }
 
 # Double-character operators that must be checked before single ones.
@@ -133,13 +234,17 @@ _NORMALIZE_OPS = {
     "<-": "\N{LEFTWARDS ARROW}",
 }
 
-# Escape sequences
+# Escape sequences: the four that stand for a character nothing else
+# can spell.  A character literal takes two more, since the character
+# it holds may be either quote -- '\'' is the only way to write one --
+# which is what src/lex.ngpl accepts too.
 ESCAPES = {
   "n": "\n",
   "r": "\r",
   "t": "\t",
   "\\": "\\",
 }
+CHAR_ESCAPES = ESCAPES | {"'": "'", '"': '"'}
 
 
 # Single-character operators.
@@ -233,7 +338,7 @@ def _read_string(src, pos, start_line, start_col, line_start):
         if multi and src[end_pos:end_pos + 3] == '"""':
             text = "".join(text_chars)
             end_col = end_pos + 3 - cur_line_start
-            return Token("STR", text, start_line, start_col, end_col), end_pos + 3
+            return Token(TokenType.STR, text, start_line, start_col, end_col), end_pos + 3
         if ch == "\n":
             if multi:
                 end_pos += 1
@@ -244,7 +349,7 @@ def _read_string(src, pos, start_line, start_col, line_start):
                 if src[end_pos:end_pos + 3] == '"""':
                     text = "".join(text_chars)
                     end_col = end_pos + 3 - cur_line_start
-                    return Token("STR", text, start_line, start_col, end_col), end_pos + 3
+                    return Token(TokenType.STR, text, start_line, start_col, end_col), end_pos + 3
                 if src[end_pos:end_pos + 1] != '"':
                     raise LexerError(
                         "a line continuing a multi-line string begins with a "
@@ -281,7 +386,7 @@ def _read_string(src, pos, start_line, start_col, line_start):
         elif ch == '"' and not multi:
             text = "".join(text_chars)
             end_col = end_pos + 1 - cur_line_start
-            return Token("STR", text, start_line, start_col, end_col), end_pos + 1
+            return Token(TokenType.STR, text, start_line, start_col, end_col), end_pos + 1
         else:
             text_chars.append(ch)
             end_pos += 1
@@ -371,8 +476,8 @@ def _read_char(src, pos, line, col, line_start):
         if ch == "\\" and end_pos + 1 < len(src):
             esc = src[end_pos + 1]
             end_pos += 2
-            if esc in ESCAPES:
-                chars.append(ESCAPES[esc])
+            if esc in CHAR_ESCAPES:
+                chars.append(CHAR_ESCAPES[esc])
             elif esc == "u" and src[end_pos:end_pos + 1] == "{":
                 closing = src.find("}", end_pos + 1)
                 if closing < 0:
@@ -413,7 +518,7 @@ def _read_char(src, pos, line, col, line_start):
             f"holds {len(chars)}; a string is written with double quotes, "
             f"as \"{written}\"", line, col)
     end_col = end_pos + 1 - line_start
-    return (Token("CHAR", ord(chars[0]), line, col, end_col), end_pos + 1)
+    return (Token(TokenType.CHAR, ord(chars[0]), line, col, end_col), end_pos + 1)
 
 
 def _read_number(src, pos, line, col):
@@ -488,7 +593,7 @@ def _read_number(src, pos, line, col):
         if not width:
             width = "float"
         _check_float_literal_range(value, width, value_str, base, line, col)
-        return Token("FLOAT", (value, width), line, col, end_col), pos
+        return Token(TokenType.FLOAT, (value, width), line, col, end_col), pos
 
     try:
         value = int(value_str, base)
@@ -498,7 +603,7 @@ def _read_number(src, pos, line, col):
     if not width:
         width = "int"
 
-    return Token("INT", value, line, col, end_col, width=width), pos
+    return Token(TokenType.INT, value, line, col, end_col, width=width), pos
 
 
 def tokenize(src: str):
@@ -551,7 +656,7 @@ def tokenize(src: str):
                         line, indent)
                 indent += 1
                 pos += 1
-            tokens.append(Token("NEWLINE", indent, line, 0))
+            tokens.append(Token(TokenType.NEWLINE, indent, line, 0))
             continue
 
         # Line comment — stop before the newline so the \n handler runs.
@@ -640,32 +745,32 @@ def tokenize(src: str):
         # Double-character operators (check before single-char ones).
         two = src[pos:pos + 2]
         if two in DOUBLE_OPS:
-            tokens.append(Token("OP", _NORMALIZE_OPS.get(two, two), line, col, col + 2))
+            tokens.append(Token(TokenType.OP, _NORMALIZE_OPS.get(two, two), line, col, col + 2))
             pos += 2
             continue
 
         # Single-character operators and punctuation.
         if ch in SINGLE_OPS:
             if ch == "λ":
-                tokens.append(Token("LAMBDA", ch, line, col))
+                tokens.append(Token(TokenType.LAMBDA, ch, line, col))
             elif ch == "\N{NOT TRUE}":
                 # ⊭(e) is a failed result carrying the reason.
-                tokens.append(Token("NOTSOME", ch, line, col))
+                tokens.append(Token(TokenType.NOTSOME, ch, line, col))
             elif ch == "\N{TRUE}":
                 # ⊨(v) is the present optional; the same token as the
                 # `some` keyword it spells more briefly.
-                tokens.append(Token("SOME", ch, line, col))
+                tokens.append(Token(TokenType.SOME, ch, line, col))
             elif ch == "=" or ch in ",.;:(){}[]…⸨⸩⟦⟧⟪⟫$":
-                tokens.append(Token("PUNCT", ch, line, col))
+                tokens.append(Token(TokenType.PUNCT, ch, line, col))
             elif ch == "\N{RIGHTWARDS ARROW}":
-                tokens.append(Token("OP", "->", line, col))
+                tokens.append(Token(TokenType.OP, "->", line, col))
             elif ch in ("+-%<>!&|^~?←«»↺↻∧∨⊕⊼⊽¬⍴⧺⌿⍀¤√∛∜↑⁻⍳∊≠#∪∩∖⊂⊆⊃⊇⊑⊒※∀∃∄\N{DIAERESIS}"
                         "\N{MULTIPLICATION SIGN}\N{DIVISION SIGN}"
                         "≅≇⪅⪆⪉⪊"
                         "\N{SQUARED PLUS}\N{SQUARED MINUS}"
                         "\N{SQUARED TIMES}"
                         "\N{LEFT CEILING}\N{LEFT FLOOR}"):
-                tokens.append(Token("OP", ch, line, col))
+                tokens.append(Token(TokenType.OP, ch, line, col))
             else:
                 # Reaching here means the character was added to
                 # SINGLE_OPS but to none of the branches above, which
@@ -688,7 +793,7 @@ def tokenize(src: str):
                     break
                 pos += 1
             name = src[name_start:pos]
-            token_type = KEYWORDS.get(name, "IDENT")
+            token_type = KEYWORDS.get(name, TokenType.IDENT)
             tokens.append(Token(token_type, name, line, col, pos - line_start))
             continue
 
@@ -703,7 +808,7 @@ def tokenize(src: str):
         raise LexerError(f"unexpected character: {ch!r}", line, col)
 
     # Send a sentinel at end to mark conclusion.
-    tokens.append(Token("EOF", None, line, pos - line_start))
+    tokens.append(Token(TokenType.EOF, None, line, pos - line_start))
     return tokens
 
 
@@ -730,7 +835,7 @@ def process_indentation(tokens: list[Token]) -> list[Token]:
     while i < len(tokens):
         tok = tokens[i]
 
-        if tok.type == "PUNCT" and tok.value in "([{)]}":
+        if tok.type is TokenType.PUNCT and tok.value in "([{)]}":
             if tok.value in  "([{":
                 nesting += 1
             elif nesting > 0:
@@ -739,7 +844,7 @@ def process_indentation(tokens: list[Token]) -> list[Token]:
             i += 1
             continue
 
-        if tok.type != "NEWLINE":
+        if tok.type is not TokenType.NEWLINE:
             result.append(tok)
             i += 1
             continue
@@ -754,29 +859,29 @@ def process_indentation(tokens: list[Token]) -> list[Token]:
         # Trailing binary operator ⇒ line continuation.
         prev = None
         for k in range(len(result) - 2, -1, -1):
-            if result[k].type not in ("NEWLINE", "INDENT", "DEDENT"):
+            if result[k].type not in (TokenType.NEWLINE, TokenType.INDENT, TokenType.DEDENT):
                 prev = result[k]
                 break
         # An operator right after ※ is a name rather than an operation,
         # so a line ending in one is finished rather than continued.
         before = None
         for k in range(len(result) - 3, -1, -1):
-            if result[k].type not in ("NEWLINE", "INDENT", "DEDENT"):
+            if result[k].type not in (TokenType.NEWLINE, TokenType.INDENT, TokenType.DEDENT):
                 before = result[k]
                 break
-        names_an_operator = (before is not None and before.type == "OP"
+        names_an_operator = (before is not None and before.type is TokenType.OP
                              and before.value == "※")
         if prev and not names_an_operator and (
-            (prev.type == "OP" and prev.value in _CONTINUATION_OPS)
-            or prev.type in ("AND", "OR")
-            or (prev.type == "PUNCT" and prev.value == "=")
+            (prev.type is TokenType.OP and prev.value in _CONTINUATION_OPS)
+            or prev.type in (TokenType.AND, TokenType.OR)
+            or (prev.type is TokenType.PUNCT and prev.value == "=")
         ):
             i += 1
             continue
 
         # Collect consecutive NEWLINEs (blank lines).
         j = i + 1
-        while j < len(tokens) and tokens[j].type == "NEWLINE":
+        while j < len(tokens) and tokens[j].type is TokenType.NEWLINE:
             result.append(tokens[j])
             j += 1
 
@@ -789,24 +894,24 @@ def process_indentation(tokens: list[Token]) -> list[Token]:
             indent = 0
 
         # End of file: close all open indent levels.
-        if j >= len(tokens) or tokens[j].type == "EOF":
+        if j >= len(tokens) or tokens[j].type is TokenType.EOF:
             while len(indent_stack) > 1:
                 indent_stack.pop()
-                result.append(Token("DEDENT", "", tok.line, 0))
+                result.append(Token(TokenType.DEDENT, "", tok.line, 0))
             i = j
             continue
 
         # Emit INDENT or DEDENT tokens.
         if indent > indent_stack[-1]:
             indent_stack.append(indent)
-            result.append(Token("INDENT", "", tok.line, 0))
+            result.append(Token(TokenType.INDENT, "", tok.line, 0))
         else:
             while indent < indent_stack[-1]:
                 indent_stack.pop()
-                result.append(Token("DEDENT", "", tok.line, 0))
+                result.append(Token(TokenType.DEDENT, "", tok.line, 0))
             if indent > indent_stack[-1]:
                 indent_stack.append(indent)
-                result.append(Token("INDENT", "", tok.line, 0))
+                result.append(Token(TokenType.INDENT, "", tok.line, 0))
 
         i = j
         continue
@@ -814,11 +919,11 @@ def process_indentation(tokens: list[Token]) -> list[Token]:
     # Close remaining indent levels at end of input.
     while len(indent_stack) > 1:
         indent_stack.pop()
-        result.append(Token("DEDENT", "", 0, 0))
+        result.append(Token(TokenType.DEDENT, "", 0, 0))
 
     return result
 
 
 def strip_newlines(tokens):
     """Remove NEWLINE/INDENT/DEDENT tokens when a flat stream is needed."""
-    return [t for t in tokens if t.type not in ("NEWLINE", "INDENT", "DEDENT")]
+    return [t for t in tokens if t.type not in (TokenType.NEWLINE, TokenType.INDENT, TokenType.DEDENT)]

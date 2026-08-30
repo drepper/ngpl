@@ -47,7 +47,7 @@ _KNOWN_READONLY_METHODS = frozenset({
     "get", "iterate", "next", "str", "ord", "chr", "chars", "shape",
 })
 from interp.layout import LayoutError, struct_layout, struct_lookup
-from interp.errors import (format_diagnostic, extract_position,
+from interp.errors import (Contract, Level, format_diagnostic, extract_position,
                            strip_position_prefix, format_backtrace,
                            diagnostic_level, set_warnings_are_errors,
                            warnings_are_errors, set_contract_semantic,
@@ -264,7 +264,7 @@ def _test_failure_report(exc: BaseException, evaluator: Evaluator,
 
     line, col, end_col = position
     report = format_diagnostic(source, source_path, line, col, message,
-                               end_col=end_col, level="error")
+                               end_col=end_col, level=Level.error)
     trace = format_backtrace(exc, source_path)
     if trace is not None:
         report += "\n" + trace
@@ -372,9 +372,9 @@ def _show_error(exc: BaseException, source: str, source_path: str,
         pos = evaluator._last_pos
 
     msg = strip_position_prefix(str(exc))
-    level = "error"
+    level=Level.error
     if isinstance(exc, AssertionError):
-        level = "error"
+        level=Level.error
         msg = f"assertion failed: {msg}" if "assertion" not in msg.lower() else msg
 
     if pos is not None:
@@ -1214,7 +1214,7 @@ def _static_precondition_check(func_def, env, funcs) -> str | None:
     the callee's condition, with the parameters standing for the
     arguments written at the call.
     """
-    if contract_semantic() == "ignore":
+    if contract_semantic() is Contract.ignore:
         return None
     checker = None
     for node in _iter_ast(func_def.body):
@@ -3142,7 +3142,7 @@ def _report_warnings(warnings, source: str, source_path: str) -> int:
     Returns how many were reported, which under -Werror is how many
     errors the program has.
     """
-    level = diagnostic_level("warning")
+    level = diagnostic_level(Level.warning)
     for message, position in warnings:
         if position is not None and position[0] <= source.count("\n") + 1:
             line, col, end_col = position
@@ -4204,7 +4204,7 @@ def main():
 
         parse_err = getattr(defn, "_parse_error", None)
         if parse_err is not None:
-            errors_produced.append(("error", parse_err))
+            errors_produced.append((Level.error, parse_err))
 
         if not parse_err:
             try:
@@ -4213,27 +4213,27 @@ def main():
                         validate_param_type(param_type, defn.name,
                                             _param_display(param_name))
             except (TypeError, ValueError) as e:
-                errors_produced.append(("error", _carrying_code(str(e), e)))
+                errors_produced.append((Level.error, _carrying_code(str(e), e)))
 
         if not errors_produced:
             move_err = _static_check_moves(defn.body, env)
             if move_err is not None:
-                errors_produced.append(("error", move_err))
+                errors_produced.append((Level.error, move_err))
 
         if not errors_produced:
             try_err = _static_check_try(defn, env)
             if try_err is not None:
-                errors_produced.append(("error", try_err))
+                errors_produced.append((Level.error, try_err))
 
         if not errors_produced:
             match_err = _static_check_match(defn, env)
             if match_err is not None:
-                errors_produced.append(("error", match_err))
+                errors_produced.append((Level.error, match_err))
 
         if not errors_produced:
             assert_err = _static_assert_check(defn, env)
             if assert_err is not None:
-                errors_produced.append(("error", assert_err))
+                errors_produced.append((Level.error, assert_err))
 
         if not errors_produced:
             named_structs = _struct_vars_of(defn, env)
@@ -4242,52 +4242,52 @@ def main():
                 or _static_lambda_return_check(defn, env, named_structs)
                 or _static_conditional_check(defn, named_structs))
             if return_err is not None:
-                errors_produced.append(("error", return_err))
+                errors_produced.append((Level.error, return_err))
 
         if not errors_produced:
             old_err = _static_old_check(defn)
             if old_err is not None:
-                errors_produced.append(("error", old_err))
+                errors_produced.append((Level.error, old_err))
             pre_err = _static_precondition_check(defn, env, by_name)
             if pre_err is not None:
-                errors_produced.append(("error", pre_err))
+                errors_produced.append((Level.error, pre_err))
             noreturn_err = _static_noreturn_check(defn, gone)
             if noreturn_err is not None:
                 # collected rather than raised, so an @expect may name
                 # it as it names the other findings about a definition
-                errors_produced.append(("error", noreturn_err))
+                errors_produced.append((Level.error, noreturn_err))
             listable_err = _static_listable_check(defn)
             if listable_err is not None:
                 raise DefinitionError(listable_err, _node_pos(defn))
             loop_err = _static_loop_check(defn)
             if loop_err is not None:
-                errors_produced.append(("error", loop_err))
+                errors_produced.append((Level.error, loop_err))
             borrow_err = _static_borrow_check(defn)
             if borrow_err is not None:
-                errors_produced.append(("error", borrow_err))
+                errors_produced.append((Level.error, borrow_err))
             alias_err = _static_alias_check(defn, env)
             if alias_err is not None:
-                errors_produced.append(("error", alias_err))
+                errors_produced.append((Level.error, alias_err))
             literal_err = _static_literal_check(defn)
             if literal_err is not None:
-                errors_produced.append(("error", literal_err))
+                errors_produced.append((Level.error, literal_err))
 
         if not errors_produced:
             chr_err = _static_chr_check(defn)
             if chr_err is not None:
-                errors_produced.append(("error", chr_err))
+                errors_produced.append((Level.error, chr_err))
 
         if not errors_produced:
             struct_vars = _struct_vars_of(defn, env)
             purity_err = _static_purity_check(defn, env, struct_vars)
             if purity_err is not None:
-                errors_produced.append(("error", purity_err))
+                errors_produced.append((Level.error, purity_err))
 
         if not errors_produced:
             unused_err = _static_unused_value_check(
                 defn, env, _struct_vars_of(defn, env))
             if unused_err is not None:
-                errors_produced.append(("error", unused_err))
+                errors_produced.append((Level.error, unused_err))
 
         if not errors_produced:
             fv = FuncValue(defn.name, defn.params, defn.body, env, defn.ret_type,
@@ -4306,13 +4306,13 @@ def main():
             try:
                 eval_inst._call_user_func(fv, [])
             except Exception as e:
-                errors_produced.append(("error", _carrying_code(str(e), e)))
-            errors_produced.extend(("warning", w) for w in eval_inst._warnings)
+                errors_produced.append((Level.error, _carrying_code(str(e), e)))
+            errors_produced.extend((Level.warning, w) for w in eval_inst._warnings)
 
         # Added last: a non-empty list above skips running the function,
         # and the expected error would then never be produced.
         errors_produced.extend(
-            ("warning", message)
+            (Level.warning, message)
             for message, _ in (_redundant_return_type_warning(defn)
                                + _unused_mut_warnings(defn)
                                + _unused_loop_label_warnings(defn)
@@ -4487,12 +4487,12 @@ def _start_exit_code(result: object, func: FuncValue,
         return 0
     # Under -Werror the signature is refused rather than worked around,
     # so the status says the run did not go through.
-    level = diagnostic_level("warning")
+    level = diagnostic_level(Level.warning)
     print(f"{level}: @start function '{func.name}' has return type "
           f"'{ret}' which is not u8, i8, or \N{EMPTY SET}"
-          + ("" if level == "error" else "; using exit code 0"),
+          + ("" if level is Level.error else "; using exit code 0"),
           file=sys.stderr)
-    return 1 if level == "error" else 0
+    return 1 if level is Level.error else 0
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ Designed as a prototype interpreter: correctness takes priority over performance
 JIT compilation and optimization are future work.
 """
 
+import enum
 import math
 import re
 import sys as _sys
@@ -38,6 +39,32 @@ _watchdog_beat_every: float = 0.0
 _watchdog_next_beat: float = 0.0
 _watchdog_steps: int = 0
 _watchdog_countdown: int = _WATCHDOG_CHECK_EVERY
+
+
+class Held(enum.Enum):
+    """What a name is holding, while it is holding it.
+
+    A binding is not simply bound: it may have been moved out of, lent
+    for reading or lent to be changed, or fixed for the length of a
+    loop or a match arm.  These are the states the evaluator moves a
+    name between, and a name in the wrong one is what a use is refused
+    for.  `str` of one is the word the diagnostics have always used.
+    """
+
+    let = "let"
+    borrowed = "borrowed"
+    foreach = "foreach"
+    while_ = "while"
+    match_ = "match"
+    moved = "moved"
+    lent = "lent"
+    lent_mut = "lent-mut"
+
+    def __str__(self) -> str:
+        return self.value
+
+    def __format__(self, spec: str) -> str:
+        return format(self.value, spec)
 
 
 def arm_watchdog(timeout: float | None, heartbeat: float | None) -> None:
@@ -142,7 +169,7 @@ from interp.value import (
 from interp.env import Env, Decl
 from interp.std import (std, DirFD, FileStream, Bytes, MmapAllocator,
                        resolve_abort_signal)
-from interp.errors import (attach_backtrace, diagnostic_level, coded,
+from interp.errors import (Contract, Level, attach_backtrace, diagnostic_level, coded,
                           strip_position_prefix, ContractError,
                           contract_semantic, report_runtime_diagnostic,
                           ProgramAbort)
@@ -1091,7 +1118,7 @@ class Evaluator:
         # What `@old(…)` saw when the call whose postcondition is being
         # read began; None outside a postcondition that has any.
         self._olds: dict | None = None
-        self._frozen_vars: dict[str, str] = {}
+        self._frozen_vars: dict[str, Held] = {}
         self._warnings: list[str] = []
         # True while an @expect body runs: its warnings are collected
         # for matching rather than reported to the user.
@@ -2294,7 +2321,7 @@ class Evaluator:
         # ignore does not read the condition at all, so nothing it
         # would have said -- including that it could not be read -- is
         # said.
-        if semantic == "ignore":
+        if semantic is Contract.ignore:
             return
         was = self._olds
         self._olds = olds
@@ -2303,7 +2330,7 @@ class Evaluator:
         finally:
             self._olds = was
 
-    def _check_each(self, func, conditions, result, semantic: str):
+    def _check_each(self, func, conditions, result, semantic: Contract):
         for condition in conditions:
             if condition.name is not None:
                 self.env.define(condition.name, result)
@@ -2328,7 +2355,7 @@ class Evaluator:
                 continue
             self._contract_violation(func, condition, semantic, None)
 
-    def _contract_violation(self, func, condition, semantic: str,
+    def _contract_violation(self, func, condition, semantic: Contract,
                             unreadable: str | None) -> None:
         """Do what the chosen semantic says a broken condition does.
 
@@ -2351,18 +2378,18 @@ class Evaluator:
                      else "the function did not")
             message = (f"{func.name}: {which} does not hold, so {blame} keep "
                        f"to what {func.name} says it needs")
-        if semantic == "quick-enforce":
+        if semantic is Contract.quick_enforce:
             # Nothing is reported: the point of this one is that the
             # check costs a test and a trap and nothing else.
             raise ProgramAbort(resolve_abort_signal(0))
-        if semantic == "observe":
+        if semantic is Contract.observe:
             # Reported as a warning whatever -Werror says: asking to
             # observe is asking for the run to carry on, and a
             # diagnostic that said error while the program kept going
             # would be saying two things.  Asking for both is asking
             # for enforce, which is spelled by asking for enforce.
             report_runtime_diagnostic(message, condition.pos,
-                                      level="warning",
+                                      level=Level.warning,
                                       call_stack=self._call_stack)
             return
         raise coded(2614, ContractError(message, condition.pos))
@@ -3241,7 +3268,7 @@ class Evaluator:
             return
         name = base.name
         kind = self._frozen_vars.get(name)
-        if kind == "moved":
+        if kind is Held.moved:
             raise TypeError(f"use of moved value '{name}'")
         self._refuse_if_lent(name)
         if kind is not None:
@@ -3806,10 +3833,10 @@ class Evaluator:
                 "'_' discards the value assigned to it and cannot be read"))
         # Nothing is frozen in most functions, and an empty mapping says
         # so for less than a lookup in it does.
-        if self._frozen_vars and self._frozen_vars.get(node.name) == "moved":
+        if self._frozen_vars and self._frozen_vars.get(node.name) is Held.moved:
             raise TypeError(
                 f"use of moved value '{node.name}'")
-        if self._frozen_vars and self._frozen_vars.get(node.name) == "lent-mut":
+        if self._frozen_vars and self._frozen_vars.get(node.name) is Held.lent_mut:
             to, line, _ = self._lent_info.get(node.name, ("?", None, "mut"))
             raise coded(2431, TypeError(
                 f"'{node.name}' is lent out to be changed to '{to}'"
@@ -4010,7 +4037,7 @@ class Evaluator:
                     and method.params
                     and method.params[0][0] == "self"
                     and node.method not in inst.struct_type._ref_self_methods):
-                self._frozen_vars[node.obj.name] = "moved"
+                self._frozen_vars[node.obj.name] = Held.moved
         return result
 
     def _ee_GetAttr(self, node):
@@ -4560,7 +4587,7 @@ class Evaluator:
         line = self._line_of(until)
         how = self._pending_lend[3]
         for origin in origins:
-            self._frozen_vars[origin] = "lent-mut" if how == "mut" else "lent"
+            self._frozen_vars[origin] = Held.lent_mut if how == "mut" else Held.lent
             self._lent_info[origin] = (name, line, how)
         rec = (name, origins, obj)
         self._lend_ends.setdefault(id(until), []).append(rec)
@@ -4585,7 +4612,7 @@ class Evaluator:
     def _end_lend(self, rec):
         name, origins, obj = rec
         for origin in origins:
-            if self._frozen_vars.get(origin) in ("lent", "lent-mut"):
+            if self._frozen_vars.get(origin) in (Held.lent, Held.lent_mut):
                 del self._frozen_vars[origin]
             self._lent_info.pop(origin, None)
         self._lent_objs.pop(id(obj), None)
@@ -4594,7 +4621,7 @@ class Evaluator:
         """A binding lent to a borrowed answer cannot be changed until
         that answer's last use, which the message points at."""
         kind = self._frozen_vars.get(name)
-        if kind in ("lent", "lent-mut"):
+        if kind in (Held.lent, Held.lent_mut):
             to, line, how = self._lent_info.get(name, ("?", None, "shared"))
             what = "to be changed" if how == "mut" else "for reading"
             where = f" until line {line}" if line is not None else ""
@@ -4881,7 +4908,7 @@ class Evaluator:
                 if target_ast.name in self._frozen_vars:
                     kind = self._frozen_vars[target_ast.name]
                     self._refuse_if_lent(target_ast.name)
-                    if kind == "moved":
+                    if kind is Held.moved:
                         del self._frozen_vars[target_ast.name]
                     else:
                         raise coded(2412, TypeError(
@@ -4975,7 +5002,7 @@ class Evaluator:
             return none()
         if stmt.name in self._frozen_vars:
             kind = self._frozen_vars[stmt.name]
-            if kind == "foreach":
+            if kind is Held.foreach:
                 from interp.errors import Diagnostic
                 self._warnings.append(Diagnostic(
                     f"redefinition of foreach variable '{stmt.name}'", 2420))
@@ -5023,7 +5050,7 @@ class Evaluator:
                         Decl(self._declared_type_of(stmt, value), unit))
         if not self._bind_reshape_access(stmt):
             if stmt.is_const:
-                self._frozen_vars[stmt.name] = "let"
+                self._frozen_vars[stmt.name] = Held.let
         pl = self._pending_lend
         held = value.value if isinstance(value, SomeValue) else value
         if pl is not None and isinstance(held, ObjectValue) and pl[2] is held.obj:
@@ -5077,8 +5104,8 @@ class Evaluator:
         self._warnings.append(message)
         if not self._collect_warnings:
             from interp.errors import diagnostic_level
-            level = diagnostic_level("warning")
-            if level == "error":
+            level = diagnostic_level(Level.warning)
+            if level is Level.error:
                 raise TypeError(message)
             print(f"{level}: {message}", file=_sys.stderr)
 
@@ -5149,10 +5176,10 @@ class Evaluator:
 
         name = inner.name
         kind = self._frozen_vars.get(name)
-        if kind == "moved":
+        if kind is Held.moved:
             raise TypeError(f"use of moved value '{name}'")
         if kind is None and self.env.is_const_global(name):
-            kind = "let"
+            kind = Held.let
         return name, kind
 
     def _bind_reshape_access(self, stmt) -> bool:
@@ -5173,7 +5200,7 @@ class Evaluator:
             if not stmt.is_const:
                 raise coded(2413, TypeError(
                     f"cannot take a mutable view of {kind} variable '{name}'"))
-            self._frozen_vars[stmt.name] = "borrowed"
+            self._frozen_vars[stmt.name] = Held.borrowed
         else:
             # The source may be written, so the view may be too, whether
             # or not the binding repeated mut.
@@ -5306,7 +5333,7 @@ class Evaluator:
 
         name = base.name
         kind = self._frozen_vars.get(name)
-        if kind == "moved":
+        if kind is Held.moved:
             raise TypeError(f"use of moved value '{name}'")
         if kind is not None:
             raise coded(2414, TypeError(
@@ -5355,7 +5382,7 @@ class Evaluator:
         # A mut binding is the exception, and only means anything when
         # what it names can be written through.
         if not node.var_is_mut:
-            self._frozen_vars[name] = "while"
+            self._frozen_vars[name] = Held.while_
         self._comptime_vars = self._comptime_vars | {name}
         try:
             while True:
@@ -5492,15 +5519,15 @@ class Evaluator:
         # A mutably borrowed variable is the one kind of loop variable
         # that may be assigned to, because assigning to it writes into
         # the container rather than rebinding the name.
-        freeze_kinds: list[str | None] = []
+        freeze_kinds: list[Held | None] = []
         for i in range(num_vars):
             borrow = borrows[i] if i < len(borrows) and num_vars == num_iters else None
             if borrow == "mut":
                 freeze_kinds.append(None)
             elif borrow == "shared":
-                freeze_kinds.append("borrowed")
+                freeze_kinds.append(Held.borrowed)
             else:
-                freeze_kinds.append("foreach")
+                freeze_kinds.append(Held.foreach)
 
         flat_names = []
         for name in var_names:
@@ -5531,7 +5558,7 @@ class Evaluator:
                             # The name is a pattern, so what arrives is
                             # taken apart into the names it holds.
                             self._bind_parameter_names(
-                                var_name, val, self.env, "foreach")
+                                var_name, val, self.env, Held.foreach)
                             continue
                         # A reference is bound as-is; coercing it would
                         # replace it with a copy of the element.
@@ -5560,7 +5587,7 @@ class Evaluator:
             name = expr.expr.name
             self._refuse_if_lent(name)
             frozen = self._frozen_vars.get(name)
-            if frozen is not None and frozen != "moved":
+            if frozen is not None and frozen is not Held.moved:
                 raise coded(2416, TypeError(
                     f"cannot mutably borrow {frozen} variable '{name}'"))
             if self.env.is_const_global(name):
@@ -5666,7 +5693,7 @@ class Evaluator:
                 check_bootstrap_binding(element, name)
             self.env.define(name, settle_untyped(element))
             if stmt.is_const:
-                self._frozen_vars[name] = "let"
+                self._frozen_vars[name] = Held.let
 
     def _eval_expect(self, node: ExpectStmt):
         """Evaluate a statement wrapped in @expect annotations.
@@ -5678,9 +5705,9 @@ class Evaluator:
         diagnostics: list[tuple[str, str]] = []
         # Diagnostics found before the program ran, about this statement.
         diagnostics.extend(
-            ("warning", w) for w in getattr(node.stmt, "static_warnings", ()))
+            (Level.warning, w) for w in getattr(node.stmt, "static_warnings", ()))
         diagnostics.extend(
-            ("error", e) for e in getattr(node.stmt, "static_errors", ()))
+            (Level.error, e) for e in getattr(node.stmt, "static_errors", ()))
         saved_warnings = self._warnings
         saved_collect = self._collect_warnings
         self._warnings = []
@@ -5690,8 +5717,8 @@ class Evaluator:
         except Exception as e:
             from interp.errors import Diagnostic
             diagnostics.append(
-                ("error", Diagnostic(str(e), getattr(e, "diag_code", None))))
-        diagnostics.extend(("warning", w) for w in self._warnings)
+                (Level.error, Diagnostic(str(e), getattr(e, "diag_code", None))))
+        diagnostics.extend((Level.warning, w) for w in self._warnings)
         self._warnings = saved_warnings
         self._collect_warnings = saved_collect
 
@@ -5992,7 +6019,7 @@ class Evaluator:
         restore = {name: self._frozen_vars.get(name) for name in bound}
         for name, bound_value in bound.items():
             self.env.define(name, bound_value)
-            self._frozen_vars[name] = "match"
+            self._frozen_vars[name] = Held.match_
         try:
             return self.eval_stmts(arm.body)
         finally:
@@ -6643,7 +6670,7 @@ class Evaluator:
         if not invariants:
             return
         semantic = contract_semantic()
-        if semantic == "ignore":
+        if semantic is Contract.ignore:
             return
         saved = self.env
         self.env = Env(parent=saved)
@@ -6677,9 +6704,9 @@ class Evaluator:
         else:
             message = (f"{name}: an invariant does not hold, so this is not "
                        f"one of the {name} the type describes")
-        if semantic == "quick-enforce":
+        if semantic is Contract.quick_enforce:
             raise ProgramAbort(resolve_abort_signal(0))
-        if semantic == "observe":
+        if semantic is Contract.observe:
             self._warnings.append(message)
             return
         raise coded(2616, ContractError(message))
@@ -7317,7 +7344,7 @@ class Evaluator:
             if param_name in func.param_muts:
                 continue
             self._frozen_vars[param_name] = (
-                "borrowed" if param_name in func.param_refs else "let")
+                Held.borrowed if param_name in func.param_refs else Held.let)
         self._call_stack.append([func.name, self._last_pos, func.source_label])
         returned: Value | None = None
         # Parameters hold values the caller owns, so leaving this scope
