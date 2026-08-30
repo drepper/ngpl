@@ -279,7 +279,10 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // rodata: the strings' bytes, then their descriptors, then the
     // tables -- the same layout the x86-64 path writes
     let text_size : i64 = em.here()
-    let ro_vaddr : i64 = IMAGE_BASE + align_up(PAGE + text_size, PAGE)
+    // What the text region is given, which is where the read-only
+    // data begins; see incr_room_text for why this is not #code.
+    let text_room : i64 ¤byte = incr_room_text(incr, text_size × 1¤byte)
+    let ro_vaddr : i64 = IMAGE_BASE + align_up(PAGE + @dropunit(text_room), PAGE)
     // only the strings something reads reach the image; see str_uses
     let used : i64[] = if incr.mode = 0: str_uses(&em, @dropunit(#lw.strs)) else: incr_all_used(#lw.strs)
     let stroffs : mut i64[] = []
@@ -356,7 +359,8 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             let base2 : i64 = if em.jt_is_code[t] = 1: IMAGE_BASE + PAGE else: 0
             foreach e3 := lo2…hi2:
                 push64(&rodata, base2 + em.jt_entries[e3 × 1¤ptrdiff])
-    let d_vaddr : i64 = IMAGE_BASE + align_up(align_up(PAGE + text_size, PAGE) + @dropunit(#rodata), PAGE)
+    let ro_room : i64 ¤byte = incr_room_ro(incr, #rodata)
+    let d_vaddr : i64 = IMAGE_BASE + align_up(ro_vaddr - IMAGE_BASE + @dropunit(ro_room), PAGE)
     if #em.df_pos > 0:
         foreach i := 0…#em.df_pos:
             g_patch_abs(&em, tgt, em.df_pos[i], d_vaddr + em.df_off[i])
@@ -458,6 +462,7 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     foreach l := lw.dlog:
         dlog.push(l)
     (Compiled{incr_why: incr_why, ro_fixed: descbase × 1¤byte,
+              text_room: text_room, ro_room: ro_room,
               ro_vals: gro_base × 1¤byte, ro_vals_end: gro_end × 1¤byte, code: em.code, rodata: rodata, data: data,
               relro_size: relro_size, syms: syms,
               log: dlog, diags: cdiags})

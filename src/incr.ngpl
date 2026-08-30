@@ -445,6 +445,11 @@ struct Incr:
     sym : Names
     sym_at : i64[]
     sym_end : i64[]
+    // What the previous build gave the two regions, which a build laid
+    // over it has to give them again to the byte, since .rodata begins
+    // where the text's room ends and .data where .rodata's does.
+    text_room : i64 ¤byte
+    ro_room : i64 ¤byte
     // the previous .text, to copy the functions that did not change
     text : u8[]
     // and its .rodata, whose jump tables the copied code points into
@@ -452,13 +457,15 @@ struct Incr:
 
 fn incr_off() → Incr:
     (Incr{mode: 0, fill: INCR_FILL_ANY, fresh: [], sym: names_new(0),
-          sym_at: [], sym_end: [], text: [], ro: []})
+          sym_at: [], sym_end: [], text_room: 0¤byte, ro_room: 0¤byte,
+          text: [], ro: []})
 
 // A first build under --incremental: no file to line up with, so
 // every function is written as usual and each is left room to grow.
 fn incr_first(fill : i64) → Incr:
     (Incr{mode: 1, fill: fill, fresh: [], sym: names_new(0),
-          sym_at: [], sym_end: [], text: [], ro: []})
+          sym_at: [], sym_end: [], text_room: 0¤byte, ro_room: 0¤byte,
+          text: [], ro: []})
 
 // A build against a file the previous one wrote: every symbol it had,
 // the room it gave each, its .text to copy from, and which functions
@@ -498,7 +505,9 @@ fn incr_prev(a : Ast, toks : Toks, src : byte[], prev : Prev,
         ro ← prev.raw[prev.ro_off…rhi]
     (Incr{mode: 2, fill: fill,
           fresh: incr_regenerate(a, toks, src, prev, rows),
-          sym: sym, sym_at: at, sym_end: end, text: text, ro: ro})
+          sym: sym, sym_at: at, sym_end: end,
+          text_room: incr_text_room(prev), ro_room: incr_ro_room(prev),
+          text: text, ro: ro})
 
 // How many functions a rebuild has to write again, for the line the
 // driver prints about what it decided.
@@ -559,6 +568,38 @@ fn incr_jt_prefix(rodata : &mut u8[], incr : Incr, jt_base : i64) → i64:
     foreach k := 0…keep:
         rodata.push(incr.ro[(jt_base + k) × 1¤byte])
     keep
+
+// How much of the address space a region is given.  A first build
+// under --incremental reserves the same fifth beyond what it holds
+// that it leaves behind each function, so that a later build has
+// somewhere to put a string that grew and a function that would not
+// fit where it stood; a build with no room to reserve holds exactly
+// what it holds.
+fn incr_room(mode : i64, size : i64 ¤byte) → i64 ¤byte:
+    if mode = 0: size else: size + incr_padding(size)
+
+// And what a file already reserved, which a build written over it has
+// to reserve again to the byte: .rodata begins where the text's room
+// ends and .data where .rodata's does, so reserving anything else
+// would move an address the copied code names.
+fn incr_text_room(prev : Prev) → i64 ¤byte:
+    prev.ro_off - prev.text_off
+
+fn incr_ro_room(prev : Prev) → i64 ¤byte:
+    prev.d_off - prev.ro_off
+
+// Where .rodata begins is settled by the room the text is given, and
+// where .data begins by the room .rodata is given.  Both are worked
+// out here, once: code generation needs them to patch the addresses it
+// writes into the instructions, and the ELF plan needs them to put the
+// regions where those instructions say they are.  Two copies of this
+// arithmetic is one copy too many -- it was two, and the second was
+// wrong the moment the first reserved anything.
+fn incr_room_text(incr : Incr, size : i64 ¤byte) → i64 ¤byte:
+    if incr.mode = 2: incr.text_room else: incr_room(incr.mode, size)
+
+fn incr_room_ro(incr : Incr, size : i64 ¤byte) → i64 ¤byte:
+    if incr.mode = 2: incr.ro_room else: incr_room(incr.mode, size)
 
 // The reason a build stopped lining up is the first one: everything
 // after it is a consequence of it.

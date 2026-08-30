@@ -632,3 +632,13 @@ Tooling
     other four targets catch it, so this is either the signal handler
     the two 32-bit legacy targets install or what qemu does with an
     alternate signal stack on them.
+
+[ ] ngplc accepts a comment between two @pre lines and the interpreter
+    refuses it -- "@pre states a condition a function holds to, but
+    none follows".  The interpreter is the authority, so ngplc is the
+    one that is wrong: an annotation run has to reach the fn it
+    annotates, and a comment inside the run breaks it.  Found by
+    writing one that way in plan_elf, which compiled and then stopped
+    stage 1 half an hour later.  Cheap to catch before that: `python -m
+    interp "${NGPLC_SOURCES[@]}" -- --help < /dev/null` reads every
+    source in seconds.

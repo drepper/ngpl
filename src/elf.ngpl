@@ -589,11 +589,19 @@ fn image_digest(tgt : Target, code : u8[], rodata : u8[], data : u8[],
     h.update(tail)
     hex_digest(h.digest())
 
+// text_room and ro_room are how much of the address space those two
+// regions are given, which is what they hold unless a build means to
+// leave room to grow into.  Under --incremental a first build reserves
+// more than it uses and a later one reserves exactly what the file it
+// is written over reserved, so that .rodata and .data stay at the
+// addresses the code already names.
 @pre(#code > 0 and stack_size > 0)
 @pre(relro_size >= 0)
+@pre(text_room >= #code and ro_room >= #rodata)
 fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
             stack_size : i64 ¤byte, relro_size : i64 ¤byte,
-            syms : Sym[], bom : SbomRow[]) → ElfPlan:
+            syms : Sym[], bom : SbomRow[],
+            text_room : i64 ¤byte, ro_room : i64 ¤byte) → ElfPlan:
     // how wide this class's own bookkeeping is
     let ehsize : i64 ¤byte = if tgt.is64: @sizeof(Elf64_Ehdr) else: @sizeof(Elf32_Ehdr)
     let phent : i64 ¤byte = if tgt.is64: @sizeof(Elf64_Phdr) else: @sizeof(Elf32_Phdr)
@@ -604,10 +612,10 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
     let text_off : i64 ¤byte = PAGE
     let text_vaddr : i64 ¤byte = image + text_off
     let text_size : i64 ¤byte = #code
-    let ro_off : i64 ¤byte = align_up_b(text_off + text_size, page)
+    let ro_off : i64 ¤byte = align_up_b(text_off + text_room, page)
     let ro_vaddr : i64 ¤byte = image + ro_off
     let ro_size : i64 ¤byte = #rodata
-    let d_off : i64 ¤byte = align_up_b(ro_off + ro_size, page)
+    let d_off : i64 ¤byte = align_up_b(ro_off + ro_room, page)
     let d_vaddr : i64 ¤byte = image + d_off
     let d_size : i64 ¤byte = #data
 

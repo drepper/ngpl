@@ -22,6 +22,13 @@ struct Compiled:
     // constant has not moved
     ro_vals : i64 ¤byte
     ro_vals_end : i64 ¤byte
+    // What this build gave the text region and the read-only data, on
+    // which it patched every address it wrote into an instruction.
+    // The ELF plan is told rather than asked to work it out again: the
+    // two have to agree to the byte, and the way to make sure of that
+    // is to have one of them decide.
+    text_room : i64 ¤byte
+    ro_room : i64 ¤byte
     code : u8[]
     rodata : u8[]
     data : u8[]
@@ -288,15 +295,18 @@ fn incr_lines_up(prev : Prev, c : Compiled) → str:
     // strings after it, and either way what follows will not match.
     //
     // The read-only data may also grow at its end -- that is where the
-    // jump tables of the functions this build wrote again go -- but
-    // .data begins on the page after it, so the growth has to stay
-    // inside the pages .rodata already had.
+    // jump tables of the functions this build wrote again go, and a
+    // message that gained a character is longer than the one it
+    // replaces -- into the room the build that wrote the file
+    // reserved.  Past that room is where .data begins.
     if c.ro_fixed > prev.ro_size:
         return "the strings grew past where the read-only data ended"
     if #c.rodata < prev.ro_size:
         return "the read-only data shrank, from " ⧺ i64_str(@dropunit(prev.ro_size)) ⧺ " bytes to " ⧺ i64_str(@dropunit(#c.rodata))
-    if align_up(@dropunit(#c.rodata), @dropunit(PAGE)) ≠ align_up(@dropunit(prev.ro_size), @dropunit(PAGE)):
-        return "the read-only data grew onto another page, and the writable data begins after it"
+    if #c.rodata > incr_ro_room(prev):
+        return "the read-only data grew past the room the file left it: " ⧺ i64_str(@dropunit(#c.rodata)) ⧺ " bytes where " ⧺ i64_str(@dropunit(incr_ro_room(prev))) ⧺ " were reserved"
+    if #c.code > incr_text_room(prev):
+        return "the code grew past the room the file left it: " ⧺ i64_str(@dropunit(#c.code)) ⧺ " bytes where " ⧺ i64_str(@dropunit(incr_text_room(prev))) ⧺ " were reserved"
     foreach i := c.ro_fixed…prev.ro_size:
         // the read-only globals are values too, and a value that did
         // not move is a value the copied code reads correctly
@@ -706,7 +716,10 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             em.patch32(pos, dest - (pos + 4))
     // rodata: the strings' bytes, then their descriptors
     let text_size : i64 = em.here()
-    let ro_vaddr : i64 = IMAGE_BASE + align_up(PAGE + text_size, PAGE)
+    // What the text region is given, which is where the read-only
+    // data begins; see incr_room_text for why this is not #code.
+    let text_room : i64 ¤byte = incr_room_text(incr, text_size × 1¤byte)
+    let ro_vaddr : i64 = IMAGE_BASE + align_up(PAGE + @dropunit(text_room), PAGE)
     // The pool holds every literal the source wrote, and .rodata holds
     // the ones something reads.  A message an @expect names, a line in
     // a function nobody calls: no instruction refers to either, so the
@@ -802,7 +815,8 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                 push64(&rodata, base2 + em.jt_entries[e3 × 1¤ptrdiff])
     // data: what is written before @start and then sealed, then what
     // stays writable throughout
-    let d_vaddr : i64 = IMAGE_BASE + align_up(align_up(PAGE + text_size, PAGE) + @dropunit(#rodata), PAGE)
+    let ro_room : i64 ¤byte = incr_room_ro(incr, #rodata)
+    let d_vaddr : i64 = IMAGE_BASE + align_up(ro_vaddr - IMAGE_BASE + @dropunit(ro_room), PAGE)
     if #em.df_pos > 0:
         foreach i := 0…#em.df_pos:
             em.patch64(em.df_pos[i], d_vaddr + em.df_off[i])
@@ -922,6 +936,7 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     foreach l := lw.dlog:
         dlog.push(l)
     (Compiled{incr_why: incr_why, ro_fixed: descbase × 1¤byte,
+              text_room: text_room, ro_room: ro_room,
               ro_vals: gro_base × 1¤byte, ro_vals_end: gro_end × 1¤byte, code: em.code, rodata: rodata, data: data,
               relro_size: relro_size, syms: syms,
               log: dlog, diags: cdiags})

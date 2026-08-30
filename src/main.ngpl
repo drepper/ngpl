@@ -537,9 +537,13 @@ fn main() → u8:
     // joins them, so nothing here ever holds the whole image
     // What came out is added by the plan, which is where the entry
     // point is known.
+    // The room the two regions get is what code generation gave them
+    // when it patched the addresses, not something worked out again
+    // here: a second opinion about where .rodata begins is a second
+    // chance to disagree with the instructions that name it.
     let pl := plan_elf(tgt, compiled.code, compiled.rodata, compiled.data,
                        stack_size × 1¤byte, compiled.relro_size × 1¤byte,
-                       compiled.syms, bom)
+                       compiled.syms, bom, compiled.text_room, compiled.ro_room)
     let runs : mut std.iovec[] = []
     if tgt.is64:
         let e := elf_file64(pl, compiled.code, compiled.rodata, compiled.data)

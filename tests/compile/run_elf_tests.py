@@ -646,6 +646,34 @@ def check_incremental(compiler, work: str) -> str:
     check(fell["why"], "the fallback did not say why")
     check(incr_run(out) == "42", "the program built after a fallback is wrong")
 
+    # A change that grows the read-only data -- here the jump table of
+    # a dense dispatch that was written again -- goes into the room the
+    # first build reserved past .rodata's end, so .data does not move
+    # and the rebuild still lines up.  Before the room was reserved
+    # this fell back whenever the growth crossed a page.
+    jt_src = os.path.join(work, "incr_dispatch.ngpl")
+    jt_bin = os.path.join(work, "incr_dispatch")
+    dispatch = open(os.path.join(topdir, "tests", "compile",
+                                 "t11_dispatch.ngpl")).read()
+    open(jt_src, "w").write(dispatch)
+    if os.path.exists(jt_bin):
+        os.remove(jt_bin)
+    incr_build(compiler, jt_src, jt_bin)
+    before = Elf(open(jt_bin, "rb").read())
+    ro0 = before.section(".rodata")["size"]
+    data0 = before.section(".data")["addr"]
+    open(jt_src, "w").write(dispatch.replace("return 103", "return 203"))
+    grew, _ = incr_build(compiler, jt_src, jt_bin)
+    check(grew["decision"] == "incremental",
+          f"a jump table that was written again said {grew['decision']!r}")
+    after = Elf(open(jt_bin, "rb").read())
+    check(after.section(".rodata")["size"] > ro0,
+          "the jump table written again did not grow the read-only data")
+    check(after.section(".data")["addr"] == data0,
+          "the writable data moved, which every address in the old code names")
+    check("dense 3 203" in incr_run(jt_bin),
+          "the rebuilt dispatch answers wrongly")
+
     # The five targets that share the driver reach the same conclusion.
     # They are built and compared rather than run, which needs no
     # emulator: what a cross build gets wrong here is the layout, and

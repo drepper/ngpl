@@ -134,7 +134,35 @@ computed base to the end of the old `.rodata`, so it can be copied out
 without anything recording where it was.  The cost is the tables of the
 functions that were regenerated, which stay in the file unread.
 
-### 2.5 What must hold, and what may change
+### 2.5 Room, and what it is for
+
+Two regions are given more of the address space than they hold, by the
+same fifth-with-a-floor rule the functions are padded by:
+
+- **the text region**, so that `.rodata` begins further along than the
+  code reaches.  A build laid over another cannot move `.rodata`
+  without invalidating every string reference in every function it
+  copied, so the room is what lets the code grow at all;
+- **`.rodata`**, so that `.data` begins further along than it reaches.
+  The read-only data grows at its end whenever a function that owns a
+  jump table is written again, since the new table is laid after the
+  old ones; without room, that growth crosses a page and moves `.data`,
+  and every global reference in the copied code is wrong.
+
+A build laid over a file reserves exactly what that file reserved --
+`.rodata`'s address minus the text's, and `.data`'s minus `.rodata`'s,
+both read back from the section headers.  A first build reserves the
+fifth.  A plain build reserves nothing, and its output is byte for byte
+what it was before any of this.
+
+The rooms are worked out in code generation, not in the ELF plan, and
+the plan is told: code generation patches the address of every string
+and every global into the instructions, so it is the one that has to
+decide where those live.  Two copies of that arithmetic is one copy too
+many -- there were two, and the second was wrong the moment the first
+reserved anything, which cost a segmentation fault to find.
+
+### 2.6 What must hold, and what may change
 
 The invariant is not that the file comes out the same.  It is that
 everything the copied code names is at the address it named:
@@ -144,7 +172,7 @@ everything the copied code names is at the address it named:
 | every function at the address it had, inside the room it had | the bytes of any string: nothing points into the middle of one |
 | the descriptors and every table after them, byte for byte | the value of a global that is never written |
 | the symbol table, name for name and address for address | the digests in the bill |
-| `.rodata` no larger than the pages it already had | its length within those pages |
+| `.rodata` no larger than the room the file reserved | its length within that room |
 | `.data`, byte for byte | |
 
 The descriptors are what makes the second row checkable in one pass:
@@ -158,7 +186,7 @@ That a string's own bytes may differ is what makes the mode useful:
 changes that message.  The address does not move, the copied code
 prints the new message, and the new message is the true one.
 
-### 2.6 When it does not line up
+### 2.7 When it does not line up
 
 Incremental compilation is an optimization, and an optimization that is
 ever wrong is not one.  Each of these makes the build fall back to a
@@ -167,10 +195,11 @@ whole one, which is always correct, and says which:
 | Condition | Why |
 |---|---|
 | a function is new, or one is gone | it has no slot, and the layout would shift |
-| a regenerated function outgrows its slot | there is no room, and moving it moves its callers |
+| a regenerated function outgrows its slot | there is no room where it stands |
 | a symbol the old file had is missing, or one is new | the layout is not the same layout |
 | the read-only data came out different past the strings | a literal, a table or a global moved, and every reference to it |
-| `.rodata` grew onto another page | `.data` begins on the page after it |
+| `.rodata` grew past its room | `.data` begins where that room ends |
+| the code grew past its room | `.rodata` begins where that room ends |
 | `.data` came out different | a global's initial value or its place moved |
 | the runtime routines needed changed | the code after the functions is not the same code |
 | the target, the class or its flags changed | the file is not a variant of the old one, and its code is another machine's |
@@ -178,27 +207,7 @@ whole one, which is always correct, and says which:
 A whole build under `--incremental` writes fresh padding sized to the
 new functions, so the build after a fallback is incremental again.
 
-### 2.7 What is deliberately not built
-
-**Relocating a function that outgrew its slot.**  The design is a
-trampoline: write the new body in the spare room at the end of `.text`
-— which is free up to the page boundary, since `.rodata` begins at
-`align_up(text_end, page)` — and leave a jump to it at the old address,
-so no caller need change.  This is the obvious next step and the one
-that would make the mode carry an ordinary edit rather than the ones
-that happen to fit; three things it has to answer, worked out and not
-built:
-
-- a jump to an address, encoded per target — five bytes on x86-64,
-  a range-limited branch on the others, where a slot of sixteen bytes
-  is the smallest room a trampoline can be written into;
-- the relocated bodies are emitted after the runtime, so the emission
-  loop has to gather them and come back to them, and `em.fn_off` for
-  such a function names its trampoline rather than its body;
-- `.text` then grows, so the last symbol's size grows with it, and the
-  check that says no symbol moved has to let that one through — and
-  fall back where the growth crosses the page, since `.rodata` begins
-  on the next one.
+### 2.8 What is deliberately not built
 
 **Moving the unloaded content to make room.**  What follows the loaded
 sections in the file — the symbol table, its strings, the section
