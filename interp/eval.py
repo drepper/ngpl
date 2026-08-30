@@ -51,20 +51,20 @@ class Held(enum.Enum):
     for.  `str` of one is the word the diagnostics have always used.
     """
 
-    let = "let"
-    borrowed = "borrowed"
-    foreach = "foreach"
-    while_ = "while"
-    match_ = "match"
-    moved = "moved"
-    lent = "lent"
-    lent_mut = "lent-mut"
+    let = enum.auto()
+    borrowed = enum.auto()
+    foreach = enum.auto()
+    while_ = enum.auto()
+    match_ = enum.auto()
+    moved = enum.auto()
+    lent = enum.auto()
+    lent_mut = enum.auto()
 
     def __str__(self) -> str:
-        return self.value
+        return self.name
 
     def __format__(self, spec: str) -> str:
-        return format(self.value, spec)
+        return format(self.name, spec)
 
 
 def arm_watchdog(timeout: float | None, heartbeat: float | None) -> None:
@@ -4820,7 +4820,6 @@ class Evaluator:
                         val = unwrapped.obj.get(iu.value)
                     else:
                         raise TypeError("multi-dimensional subscript requires nested arrays")
-                last_idx_node = target_ast.indices[-1]
                 unwrapped = unwrap_optional(val)
                 if isinstance(unwrapped, StrValue):
                     # A string is read at a position, not written at
@@ -4943,14 +4942,6 @@ class Evaluator:
                     self.env.define(target_ast.name, rhs)
             return none()
 
-
-
-
-
-
-
-
-
         if isinstance(stmt, (BreakStmt, ContinueStmt)):
             word = "break" if isinstance(stmt, BreakStmt) else "continue"
             # The static checks catch this in a function; what reaches
@@ -4966,9 +4957,6 @@ class Evaluator:
             if isinstance(stmt, BreakStmt):
                 raise _BreakSignal(stmt.label)
             raise _ContinueSignal(stmt.label)
-
-
-
 
         return none()
 
@@ -5731,8 +5719,7 @@ class Evaluator:
                     if getattr(msg, "code", None) != exp_code:
                         continue
                     if exp_pattern is not None and str(msg) != exp_pattern:
-                        from interp.errors import (
-                            _record_expect_drift, source_path_in_hand)
+                        from interp.errors import _record_expect_drift, source_path_in_hand
                         _record_expect_drift(source_path_in_hand(), exp_line,
                                              exp_code, exp_pattern, str(msg))
                 elif not re.search(exp_pattern, msg):
@@ -6388,9 +6375,7 @@ class Evaluator:
             return True
         if isinstance(val, FuncValue) and not val.is_replaceable:
             return True
-        if isinstance(val, ObjectValue) and not isinstance(val.obj, ArrayValue):
-            return True
-        return False
+        return isinstance(val, ObjectValue) and not isinstance(val.obj, ArrayValue)
 
     @staticmethod
     def _value_type_name(val: Value) -> str:
