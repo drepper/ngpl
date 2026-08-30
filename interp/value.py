@@ -1512,6 +1512,14 @@ class ArrayValue(Value):
             return self._length
         return len(self.elements)
 
+    def first(self) -> "Value | None":
+        """The first element, or None of an empty array -- without the
+        copy `values` makes, for the one question that only wants to
+        know what kind of thing an array holds."""
+        if self._backing is not None:
+            return self._backing[self._offset] if self._length else None
+        return self.elements[0] if self.elements else None
+
     def values(self) -> list[Value]:
         """Return the elements as a plain list.
 

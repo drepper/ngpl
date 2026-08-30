@@ -13,6 +13,7 @@ Designed as a prototype interpreter: correctness takes priority over performance
 JIT compilation and optimization are future work.
 """
 
+import os
 import enum
 import math
 import re
@@ -33,6 +34,7 @@ import time as _time
 
 _WATCHDOG_CHECK_EVERY = 4096
 _watchdog_armed: bool = False
+_COMPILE_ON: bool = os.environ.get("NGPLI_INTERPRET", "") == ""
 _watchdog_deadline: float | None = None
 _watchdog_started: float = 0.0
 _watchdog_beat_every: float = 0.0
@@ -51,20 +53,22 @@ class Held(enum.Enum):
     for.  `str` of one is the word the diagnostics have always used.
     """
 
-    let = enum.auto()
-    borrowed = enum.auto()
-    foreach = enum.auto()
-    while_ = enum.auto()
-    match_ = enum.auto()
-    moved = enum.auto()
-    lent = enum.auto()
-    lent_mut = enum.auto()
+    # The value is the word a diagnostic prints; three of the names
+    # cannot be spelled as Python names, which is why it is not the name.
+    let = "let"
+    borrowed = "borrowed"
+    foreach = "foreach"
+    while_ = "while"
+    match_ = "match"
+    moved = "moved"
+    lent = "lent"
+    lent_mut = "lent-mut"
 
     def __str__(self) -> str:
-        return self.name
+        return self.value
 
     def __format__(self, spec: str) -> str:
-        return format(self.name, spec)
+        return format(self.value, spec)
 
 
 def arm_watchdog(timeout: float | None, heartbeat: float | None) -> None:
@@ -1153,6 +1157,7 @@ class Evaluator:
         self._lent_info: dict[str, tuple[str, int, str]] = {}
         self._lent_objs: dict[int, tuple] = {}
         self._block_cache: dict[int, dict] = {}
+        self._compiled: dict = {}
         self._cur_block = None
         # Pre-compute builtin function mappings (avoid repeated lookups).
         self._ops = {
@@ -3636,38 +3641,8 @@ class Evaluator:
         if isinstance(node, Subscript):
             val = self.eval_expr(node.obj)
             for idx_node in node.indices:
-                unwrapped = unwrap_optional(val)
-                if isinstance(unwrapped, ObjectValue) \
-                        and isinstance(unwrapped.obj, HashValue):
-                    # What is not there is not a value to invent, so
-                    # the answer says whether there was one, as ⍳ does.
-                    key = self.eval_expr(idx_node)
-                    self._checked_key(key, unwrapped.obj.key_type, None)
-                    found = unwrapped.obj.get(key)
-                    val = none() if found is None else some(found)
-                    continue
-                if isinstance(unwrapped, ObjectValue) \
-                        and isinstance(unwrapped.obj, SetValue):
-                    raise coded(2735, TypeError(
-                        "a set holds values rather than answering about "
-                        "them by key; \N{SMALL ELEMENT OF} asks whether one "
-                        "is in it"))
-                idx_val = self.eval_expr(idx_node)
-                iu = unwrap_optional(idx_val)
-                if isinstance(unwrapped, TupleValue):
-                    if isinstance(iu, UnitValue):
-                        iu = iu.inner
-                    if isinstance(iu, IntValue):
-                        val = unwrapped.get(iu.value)
-                    else:
-                        raise TypeError("tuple index must be an integer")
-                elif isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
-                    iu = self._check_index_unit(iu, unwrapped.obj)
-                    val = unwrapped.obj.get(iu.value)
-                elif isinstance(unwrapped, StrValue):
-                    val = self._string_index(unwrapped, iu)
-                else:
-                    raise coded(2736, TypeError("multi-dimensional subscript requires nested arrays or tuples"))
+                val = self._c_sub_before(val)
+                val = self._c_sub_index(val, self.eval_expr(idx_node))
             return val
 
         # Slice read: arr[start…end] (inclusive).
@@ -3843,9 +3818,11 @@ class Evaluator:
         # frame that nearly always has it -- so the first question
         # settles almost every name, and the second is asked of the few
         # that are mutable globals rather than of every read.
+        # the local question first: it is one dictionary probe, where
+        # the global one climbs every parent, and a local settles it
         if (self._pure_func_name is not None
-                and self.env.is_mutable_global(node.name)
-                and not self.env.has_local(node.name)):
+                and not self.env.has_local(node.name)
+                and self.env.is_mutable_global(node.name)):
             raise coded(2239, TypeError(
                 f"pure function '{self._pure_func_name}' cannot "
                 f"read mutable global variable '{node.name}'"))
@@ -4016,6 +3993,22 @@ class Evaluator:
             self._check_mutating_call(node)
         obj = self.eval_expr(node.obj)
         args = [self.eval_expr(a) for a in node.args]
+        return self._c_method(node, obj, args)
+
+    def _c_pre_method(self, node):
+        """What the walk does before the receiver: the node's position,
+        and the check a mutating call is held to."""
+        pos = node.pos
+        if pos is not None:
+            self._last_pos = pos
+            cs = self._call_stack
+            if cs:
+                cs[-1][1] = pos
+        if node.method in _ARRAY_MUTATORS:
+            self._check_mutating_call(node)
+        return True
+
+    def _c_method(self, node, obj, args):
         result = self._call_method(obj, node.method, args)
         unwrapped_obj = unwrap_optional(obj)
         if self._pending_lend is not None \
@@ -4037,7 +4030,61 @@ class Evaluator:
         return result
 
     def _ee_GetAttr(self, node):
-        obj = self.eval_expr(node.obj)
+        return self._c_getattr(node, self.eval_expr(node.obj))
+
+    def _c_sub_before(self, val):
+        """What a subscript asks of the container before its index is
+        read: a set refuses, and anything else is answered after."""
+        unwrapped = unwrap_optional(val)
+        if isinstance(unwrapped, ObjectValue) \
+                and isinstance(unwrapped.obj, SetValue):
+            raise coded(2735, TypeError(
+                "a set holds values rather than answering about "
+                "them by key; \N{SMALL ELEMENT OF} asks whether one "
+                "is in it"))
+        return val
+
+    def _c_sub_index(self, val, idx_val):
+        """The element at an index the walk has read."""
+        unwrapped = unwrap_optional(val)
+        if isinstance(unwrapped, ObjectValue) \
+                and isinstance(unwrapped.obj, HashValue):
+            self._checked_key(idx_val, unwrapped.obj.key_type, None)
+            found = unwrapped.obj.get(idx_val)
+            return none() if found is None else some(found)
+        iu = unwrap_optional(idx_val)
+        if isinstance(unwrapped, TupleValue):
+            if isinstance(iu, UnitValue):
+                iu = iu.inner
+            if isinstance(iu, IntValue):
+                return unwrapped.get(iu.value)
+            raise TypeError("tuple index must be an integer")
+        if isinstance(unwrapped, ObjectValue) and isinstance(unwrapped.obj, ArrayValue):
+            iu = self._check_index_unit(iu, unwrapped.obj)
+            return unwrapped.obj.get(iu.value)
+        if isinstance(unwrapped, StrValue):
+            return self._string_index(unwrapped, iu)
+        raise coded(2736, TypeError("multi-dimensional subscript requires nested arrays or tuples"))
+
+    def _c_sub_start(self, node):
+        """What the walk asks of a subscript before anything is read:
+        whether it spells a type, and whether every index is there."""
+        pos = node.pos
+        if pos is not None:
+            self._last_pos = pos
+            cs = self._call_stack
+            if cs:
+                cs[-1][1] = pos
+        written = self._written_type(node)
+        if written is not None:
+            return TypeValue(written)
+        if any(i is None for i in node.indices):
+            raise coded(2734, TypeError(
+                "a subscript needs an index; an empty one is how an array "
+                "type leaves a dimension open, which is not a value"))
+        return None
+
+    def _c_getattr(self, node, obj):
         unwrapped = unwrap_optional(obj)
         if isinstance(unwrapped, EnumType):
             if node.attr in unwrapped.members:
@@ -4223,7 +4270,9 @@ class Evaluator:
     def _ee_UnitExpr(self, node):
         value = self.eval_expr(node.expr)
         from interp.units import eval_unit_formula
-        unit = eval_unit_formula(node.unit_spec)
+        return self._c_unit(value, eval_unit_formula(node.unit_spec))
+
+    def _c_unit(self, value, unit):
         if isinstance(value, UnitValue):
             return UnitValue(value.inner, unit)
         return UnitValue(value, unit)
@@ -4446,6 +4495,28 @@ class Evaluator:
         Raises:
             _ReturnSentinel: when a return statement is encountered (caught by caller).
         """
+        # A block runs compiled once it has been compiled; see
+        # interp/compile.py, which does what the loop below does.
+        # Keyed by the list's identity, and the entry holds the list:
+        # a list this has compiled cannot be collected, so its id is
+        # never given to another, and a block that merely reuses the
+        # number of a dead one is told apart by the reference.
+        entry = self._compiled.get(id(stmts))
+        if entry is None or entry[0] is not stmts:
+            run = None
+            if _COMPILE_ON:
+                from interp.compile import compile_block
+                run = compile_block(self, stmts)
+            entry = (stmts, run)
+            self._compiled[id(stmts)] = entry
+        run = entry[1]
+        if run is not None:
+            outer_block = self._cur_block
+            self._cur_block = stmts
+            try:
+                return run(self)
+            finally:
+                self._cur_block = outer_block
         result = none()
         last = len(stmts) - 1
         outer_block = self._cur_block
@@ -4544,6 +4615,124 @@ class Evaluator:
         info = {"last": last, "defs": defs, "escapes": escapes}
         self._block_cache[key] = info
         return info
+
+    # ---- what a compiled block calls; see interp/compile.py ----------
+
+    def _c_var(self, node):
+        pos = node.pos
+        if pos is not None:
+            self._last_pos = pos
+            cs = self._call_stack
+            if cs:
+                cs[-1][1] = pos
+        return self._ee_VarRef(node)
+
+    def _c_var2(self, name, pos):
+        """_c_var for a name that is not '_', which the compiler has
+        already looked at: the same checks, off the constants."""
+        if pos is not None:
+            self._last_pos = pos
+            cs = self._call_stack
+            if cs:
+                cs[-1][1] = pos
+        fz = self._frozen_vars
+        if fz:
+            k = fz.get(name)
+            if k is Held.moved:
+                raise TypeError(f"use of moved value '{name}'")
+            if k is Held.lent_mut:
+                to, line, _ = self._lent_info.get(name, ("?", None, "mut"))
+                raise coded(2431, TypeError(
+                    f"'{name}' is lent out to be changed to '{to}'"
+                    f"{f' until line {line}' if line is not None else ''}, so the "
+                    f"name reaches nothing until then"))
+        env = self.env
+        if (self._pure_func_name is not None
+                and not env.has_local(name)
+                and env.is_mutable_global(name)):
+            raise coded(2239, TypeError(
+                f"pure function '{self._pure_func_name}' cannot "
+                f"read mutable global variable '{name}'"))
+        try:
+            val = env.lookup(name)
+        except KeyError:
+            if is_type_name(name):
+                return TypeValue(name)
+            raise
+        if isinstance(val, Reference):
+            return val.get()
+        return val
+
+    def _c_pos(self, pos):
+        if pos is not None:
+            self._last_pos = pos
+            cs = self._call_stack
+            if cs:
+                cs[-1][1] = pos
+        return True
+
+    def _c_at(self, pos, value):
+        self._last_pos = pos
+        cs = self._call_stack
+        if cs:
+            cs[-1][1] = pos
+        return value
+
+    def _c_iop(self, left, right, h, op, pos):
+        """_c_binop with the integer handler in hand: two plain integers
+        take it, as _apply_operator would have found it, and anything
+        else goes the long way."""
+        if pos is not None:
+            self._last_pos = pos
+            cs = self._call_stack
+            if cs:
+                cs[-1][1] = pos
+        if type(left) is IntValue and type(right) is IntValue:
+            return h(left, right)
+        return self._apply_operator(op, left, right)
+
+    def _c_binop(self, left, right, op, pos):
+        if pos is not None:
+            self._last_pos = pos
+            if self._call_stack:
+                self._call_stack[-1][1] = pos
+        return self._apply_operator(op, left, right)
+
+    def _c_call(self, node, args):
+        result = self._call_func(node.name, args)
+        pl = self._pending_lend
+        if pl is not None:
+            try:
+                func = self.env.lookup(node.name)
+            except KeyError:
+                func = None
+            if func is not None and getattr(func, "ret_origins", None):
+                self._name_origins(func, node.args, None)
+        return result
+
+    def _c_end_lends(self, stmt_id):
+        for rec in self._lend_ends.pop(stmt_id, ()):
+            self._end_lend(rec)
+
+    def _c_end_lives(self, names):
+        for name in names:
+            try:
+                value = self.env.lookup(name)
+            except KeyError:
+                continue
+            if isinstance(value, SomeValue):
+                value = value.value
+            if not isinstance(value, ObjectValue):
+                continue
+            if id(value.obj) in self._lent_objs:
+                continue
+            destroy = getattr(value.obj, "destroy", None)
+            if callable(destroy) and not getattr(value.obj, "_closed", False):
+                try:
+                    destroy()
+                except Exception as e:
+                    self._warnings.append(
+                        f"releasing '{name}' after its last use failed: {e}")
 
     def _after_last_use(self, stmts, stmt, is_last):
         """End what ends at this statement: the lends whose binding was
@@ -4658,9 +4847,11 @@ class Evaluator:
             if isinstance(obj, StructInstance):
                 stack.extend(obj.field_values.values())
             elif isinstance(obj, ArrayValue):
-                vals = obj.values()
-                if vals and isinstance(vals[0], (ObjectValue, SomeValue)):
-                    stack.extend(vals)
+                # An array of scalars reaches nothing, and most arrays
+                # are that; asking its first element says so without
+                # copying the whole of it, which `values` does.
+                if isinstance(obj.first(), (ObjectValue, SomeValue)):
+                    stack.extend(obj.values())
         return out
 
     def eval_stmt(self, stmt):

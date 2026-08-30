@@ -58,3 +58,6 @@ what it is.
   spelling was withdrawn once an `if` handed back a value of its own
 - [Asking Something of Each](design/map/README.md) — `f ¨ v`, and why
   a function marked `@listable` does not make it unnecessary
+- [Compiling Blocks to Python Inside the Interpreter](design/compiled-blocks/README.md)
+  — the bootstrap interpreter compiles each block to Python source once;
+  the walk is the definition and byte identity is the gate
