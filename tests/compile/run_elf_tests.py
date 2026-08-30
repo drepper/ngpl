@@ -631,7 +631,11 @@ def check_incremental(compiler, work: str) -> str:
     check(len(differ) <= 256,
           f"{len(differ)} bytes of the code changed for a one-line change")
 
-    # and one that cannot fit falls back, which is always right
+    # One that cannot fit where it stands is written past everything
+    # the last build used, in a section of its own -- loaded and
+    # executable and not writable, like the .text it came out of.  No
+    # jump is left behind at the old address: a function that names one
+    # that moved is written again too, and calls it where it now is.
     grown = INCR_PROBE.replace(
         "    41\n",
         "    let a : i64 = 41\n"
@@ -640,9 +644,42 @@ def check_incremental(compiler, work: str) -> str:
         "    let d : i64 = c + 1\n"
         "    d - 3\n")
     open(src, "w").write(grown)
+    moved2, _ = incr_build(compiler, src, out)
+    check(moved2["decision"] == "incremental",
+          f"a function that outgrew its room said {moved2['decision']!r}")
+    check(incr_run(out) == "42", "the program with the moved function is wrong")
+    elf2 = Elf(open(out, "rb").read())
+    over = [sh for sh in elf2.shdrs
+            if sh["sname"].startswith(".text") and sh["sname"] != ".text"]
+    check(len(over) >= 1, "the function that moved got no section of its own")
+    want = SHF_ALLOC | SHF_EXECINSTR
+    for sh in over:
+        check(sh["flags"] & want == want,
+              f"{sh['sname']} is not loaded and executable")
+        check(not sh["flags"] & SHF_WRITE, f"{sh['sname']} is writable")
+        check(sh["addr"] >= elf2.section(".text")["addr"] + elf2.section(".text")["size"],
+              f"{sh['sname']} overlaps .text")
+    lo = min(sh["addr"] for sh in over)
+    hi = max(sh["addr"] + sh["size"] for sh in over)
+    covered = [p for p in elf2.segments(PT_LOAD)
+               if p["vaddr"] <= lo and p["vaddr"] + p["filesz"] >= hi]
+    check(covered, "no loaded segment covers the sections that were added")
+    check(all(p["flags"] & PF_W == 0 for p in covered),
+          "the segment holding the moved code is writable")
+    where = {sy["name"]: sy["value"] for sy in elf2.symbols()}
+    grew = [nm for nm in where if "answer" in nm]
+    check(grew and where[grew[0]] >= lo,
+          "the function that outgrew its room is not in the new section")
+
+    # A function the previous build did not have has no slot at all,
+    # and no room is the one thing that is still a whole build.
+    open(src, "w").write(INCR_PROBE + """
+fn fourth(n : i64) \u2192 i64:
+    n + 4
+""")
     fell, _ = incr_build(compiler, src, out)
     check(fell["decision"] == "incremental-fallback",
-          f"a function that outgrew its room said {fell['decision']!r}")
+          f"a function the file did not have said {fell['decision']!r}")
     check(fell["why"], "the fallback did not say why")
     check(incr_run(out) == "42", "the program built after a fallback is wrong")
 

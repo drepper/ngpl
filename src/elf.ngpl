@@ -589,6 +589,11 @@ fn image_digest(tgt : Target, code : u8[], rodata : u8[], data : u8[],
     h.update(tail)
     hex_digest(h.digest())
 
+// tx_ends says where each section of the text region ends: .text
+// first, then one section for each build that had to move a function
+// past it.  They are one mapping and one buffer -- the code -- and
+// the boundaries are only what the section headers say about it.
+//
 // text_room and ro_room are how much of the address space those two
 // regions are given, which is what they hold unless a build means to
 // leave room to grow into.  Under --incremental a first build reserves
@@ -598,10 +603,12 @@ fn image_digest(tgt : Target, code : u8[], rodata : u8[], data : u8[],
 @pre(#code > 0 and stack_size > 0)
 @pre(relro_size >= 0)
 @pre(text_room >= #code and ro_room >= #rodata)
+@pre(#tx_ends > 0¤ptrdiff and tx_ends[(@dropunit(#tx_ends) - 1) × 1¤ptrdiff] × 1¤byte = #code)
 fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
             stack_size : i64 ¤byte, relro_size : i64 ¤byte,
             syms : Sym[], bom : SbomRow[],
-            text_room : i64 ¤byte, ro_room : i64 ¤byte) → ElfPlan:
+            text_room : i64 ¤byte, ro_room : i64 ¤byte,
+            tx_ends : i64[]) → ElfPlan:
     // how wide this class's own bookkeeping is
     let ehsize : i64 ¤byte = if tgt.is64: @sizeof(Elf64_Ehdr) else: @sizeof(Elf32_Ehdr)
     let phent : i64 ¤byte = if tgt.is64: @sizeof(Elf64_Phdr) else: @sizeof(Elf32_Phdr)
@@ -692,7 +699,14 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
     let shname : mut i64 ¤byte[] = []
     // The bill's two sections are named only when there is one, so a
     // file built without it is what it was before there were any.
-    let names : mut str[] = [".text", ".rodata", ".data"]
+    // one name per section of the text region: .text, then .text2 and
+    // whatever a build after it added
+    let nx : i64 ¤ptrdiff = #tx_ends - 1¤ptrdiff
+    let names : mut str[] = [".text"]
+    foreach j := 0¤ptrdiff…nx:
+        names.push(".text" ⧺ i64_str(@dropunit(j) + 2))
+    names.push(".rodata")
+    names.push(".data")
     if #rows > 0:
         names.push(".sbom")
         names.push(".sbomstr")
@@ -705,13 +719,13 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
             shstr.push(b)
         shstr.push(0)
     // where the ones that are always there sit in that list
-    let n_sym : i64 ¤ptrdiff = if #rows > 0: 5 else: 3
+    let n_sym : i64 ¤ptrdiff = (if #rows > 0: 5¤ptrdiff else: 3¤ptrdiff) + nx
     let n_str : i64 ¤ptrdiff = n_sym + 1
     let n_shs : i64 ¤ptrdiff = n_sym + 2
     // which section header the symbol table's names are in: the null
     // one, the three that are always loaded, the bill's two when there
     // is one, then the symbols and their strings
-    let strtab_ndx : i64 ¤"shndx" = if #rows > 0: 7 else: 5
+    let strtab_ndx : i64 ¤"shndx" = (if #rows > 0: 7 else: 5) + @dropunit(nx)
 
     // Past the last thing the kernel loads: the symbol table, the
     // strings its names live in, and the section headers that say
@@ -758,16 +772,21 @@ fn plan_elf(tgt : Target, code : u8[], rodata : u8[], data : u8[],
     let shdrs : mut Elf64_Shdr[] = []
     // section headers: the absent one, then what the file holds
     shdrs.push(shdr(0, Sht.null, Shf.nil, 0, 0, 0, 0, 0, 0, 0))
-    shdrs.push(shdr(shname[0], Sht.progbits, Shf.alloc | Shf.execinstr,
-                    text_vaddr, text_off, text_size, 0, 0, 16, 0))
-    shdrs.push(shdr(shname[1], Sht.progbits, Shf.alloc,
+    // .text, then the overflow sections: each begins where the last
+    // one ended, all of them loaded and none of them writable
+    foreach j := 0¤ptrdiff…#tx_ends:
+        let lo : i64 ¤byte = if j = 0¤ptrdiff: 0¤byte else: tx_ends[j - 1¤ptrdiff] × 1¤byte
+        shdrs.push(shdr(shname[j], Sht.progbits, Shf.alloc | Shf.execinstr,
+                        text_vaddr + lo, text_off + lo,
+                        tx_ends[j] × 1¤byte - lo, 0, 0, 16, 0))
+    shdrs.push(shdr(shname[1¤ptrdiff + nx], Sht.progbits, Shf.alloc,
                     ro_vaddr, ro_off, ro_size, 0, 0, 8, 0))
-    shdrs.push(shdr(shname[2], Sht.progbits, Shf.write | Shf.alloc,
+    shdrs.push(shdr(shname[2¤ptrdiff + nx], Sht.progbits, Shf.write | Shf.alloc,
                     d_vaddr, d_off, d_size, 0, 0, 8, 0))
     if #rows > 0:
-        shdrs.push(shdr(shname[3¤ptrdiff], Sht.progbits, Shf.alloc,
+        shdrs.push(shdr(shname[3¤ptrdiff + nx], Sht.progbits, Shf.alloc,
                         bom_vaddr, bom_off, bom_size, 0, 0, 4, sbent))
-        shdrs.push(shdr(shname[4¤ptrdiff], Sht.strtab, Shf.alloc,
+        shdrs.push(shdr(shname[4¤ptrdiff + nx], Sht.strtab, Shf.alloc,
                         bom_vaddr + bom_size, bstr_off, bstr_size, 0, 0, 1, 0))
     shdrs.push(shdr(shname[n_sym], Sht.symtab, Shf.nil, 0, sym_off, sym_size,
                     strtab_ndx, nlocal + 1, 8, syment))

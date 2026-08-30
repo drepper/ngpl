@@ -279,9 +279,83 @@ struct Emit:
     k_alloc : i64
     k_sig : i64
 
+// Where the emitter had got to, in every list it goes on appending to
+// past the end of a function.  Taken before a function is written and
+// given back when it turns out not to fit where it was written: the
+// bytes go, and so does every fixup they asked for, and the function
+// is written again somewhere it does fit.
+//
+// The per-function lists are not here.  Labels, their fixups, the
+// pending jump tables and the abort stubs are all emptied by the time
+// a function ends, so there is nothing of them left to give back.
+struct Emark:
+    code : i64
+    cf : i64
+    sf : i64
+    sd : i64
+    df : i64
+    jt : i64
+    jts : i64
+    jte : i64
+    jtn : i64
+    gr : i64
+    rx : i64
+    bt : i64
+    ff : i64
+
 impl Emit:
     fn here(&self) → i64:
         @dropunit(#self.code)
+
+    fn mark(&self) → Emark:
+        (Emark{code: @dropunit(#self.code), cf: @dropunit(#self.cf_pos),
+               sf: @dropunit(#self.sf_pos), sd: @dropunit(#self.sd_pos),
+               df: @dropunit(#self.df_pos), jt: @dropunit(#self.jt_pos),
+               jts: @dropunit(#self.jt_starts), jte: @dropunit(#self.jt_entries),
+               jtn: self.jt_count, gr: @dropunit(#self.gr_pos),
+               rx: @dropunit(#self.rx_pos), bt: @dropunit(#self.bt_pos),
+               ff: @dropunit(#self.ff_pos)})
+
+    // Everything written since the mark, unwritten.  Each list is
+    // appended to in order, so its length at the mark is a position in
+    // it and truncating back to that length is exact.
+    @pre(m.code <= @dropunit(#self.code))
+    fn rewind(&mut self, m : Emark):
+        while @dropunit(#self.code) > m.code:
+            _ ← self.code.pop() ?? 0
+        while @dropunit(#self.cf_pos) > m.cf:
+            _ ← self.cf_pos.pop() ?? 0
+            _ ← self.cf_target.pop() ?? 0
+        while @dropunit(#self.sf_pos) > m.sf:
+            _ ← self.sf_pos.pop() ?? 0
+            _ ← self.sf_str.pop() ?? 0
+        while @dropunit(#self.sd_pos) > m.sd:
+            _ ← self.sd_pos.pop() ?? 0
+            _ ← self.sd_str.pop() ?? 0
+        while @dropunit(#self.df_pos) > m.df:
+            _ ← self.df_pos.pop() ?? 0
+            _ ← self.df_off.pop() ?? 0
+        while @dropunit(#self.jt_pos) > m.jt:
+            _ ← self.jt_pos.pop() ?? 0
+            _ ← self.jt_id.pop() ?? 0
+        while @dropunit(#self.jt_starts) > m.jts:
+            _ ← self.jt_starts.pop() ?? 0
+            _ ← self.jt_is_code.pop() ?? 0
+        while @dropunit(#self.jt_entries) > m.jte:
+            _ ← self.jt_entries.pop() ?? 0
+        self.jt_count ← m.jtn
+        while @dropunit(#self.gr_pos) > m.gr:
+            _ ← self.gr_pos.pop() ?? 0
+            _ ← self.gr_off.pop() ?? 0
+        while @dropunit(#self.rx_pos) > m.rx:
+            _ ← self.rx_pos.pop() ?? 0
+            _ ← self.rx_off.pop() ?? 0
+        while @dropunit(#self.bt_pos) > m.bt:
+            _ ← self.bt_pos.pop() ?? 0
+        while @dropunit(#self.ff_pos) > m.ff:
+            _ ← self.ff_pos.pop() ?? 0
+            _ ← self.ff_fn.pop() ?? 0
+        assert(@dropunit(#self.code) = m.code, "the cursor is back where the mark was")
 
     // A routine the program never calls is emitted nowhere: while this
     // is set, every byte and every fixup the emitter is handed goes

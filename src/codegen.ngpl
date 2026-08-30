@@ -22,6 +22,12 @@ struct Compiled:
     // constant has not moved
     ro_vals : i64 ¤byte
     ro_vals_end : i64 ¤byte
+    // and where the table a backtrace reads sits, which says where
+    // every function begins and how far it runs: layout written down
+    // as data, so it says something else whenever a function has
+    // moved, at addresses nothing points into
+    ro_bt : i64 ¤byte
+    ro_bt_end : i64 ¤byte
     // What this build gave the text region and the read-only data, on
     // which it patched every address it wrote into an instruction.
     // The ELF plan is told rather than asked to work it out again: the
@@ -29,6 +35,11 @@ struct Compiled:
     // is to have one of them decide.
     text_room : i64 ¤byte
     ro_room : i64 ¤byte
+    // Where each section of the text region ends: .text first, then
+    // one for each build that had to move a function out of it.  They
+    // are one mapping and one buffer; the boundaries are what the
+    // section headers say about it.
+    tx_ends : i64[]
     code : u8[]
     rodata : u8[]
     data : u8[]
@@ -283,7 +294,7 @@ fn lower_ginit(lw : &mut Lower, a : Ast, chk : Chk) → IrFn:
 // .rodata, to .data and to the symbol table, it contributed to the
 // previous build; if those came out the same, the skipping cost
 // nothing.
-fn incr_lines_up(prev : Prev, c : Compiled) → str:
+fn incr_lines_up(prev : Prev, incr : Incr, c : Compiled) → str:
     // Everything the copied code points into is named by an offset,
     // and the offsets are what has to hold: the address of a string,
     // of a descriptor, of a table.  A string's own bytes are not
@@ -308,9 +319,10 @@ fn incr_lines_up(prev : Prev, c : Compiled) → str:
     if #c.code > incr_text_room(prev):
         return "the code grew past the room the file left it: " ⧺ i64_str(@dropunit(#c.code)) ⧺ " bytes where " ⧺ i64_str(@dropunit(incr_text_room(prev))) ⧺ " were reserved"
     foreach i := c.ro_fixed…prev.ro_size:
-        // the read-only globals are values too, and a value that did
-        // not move is a value the copied code reads correctly
-        if i < c.ro_vals or i >= c.ro_vals_end:
+        // the read-only globals are values too, and so is the table a
+        // backtrace reads: a value that did not move is a value the
+        // copied code reads correctly, whatever it now says
+        if (i < c.ro_vals or i >= c.ro_vals_end) and (i < c.ro_bt or i >= c.ro_bt_end):
             if c.rodata[i] ≠ prev.raw[prev.ro_off + i]:
                 return "the read-only data came out different, from byte " ⧺ i64_str(@dropunit(i))
     if @dropunit(#c.data) ≠ @dropunit(prev.d_size):
@@ -318,13 +330,32 @@ fn incr_lines_up(prev : Prev, c : Compiled) → str:
     foreach i := 0¤byte…#c.data:
         if c.data[i] ≠ prev.raw[prev.d_off + i]:
             return "the writable data came out different"
+    // Every symbol the previous build had, at the address it had it,
+    // with one exception and one allowance.  The exception is a
+    // function this build had to move: it is past everything that
+    // build used, in a section of its own, and the callers that name
+    // it were written again with its new address.  The allowance is
+    // that a slot may grow, which is what happens to the symbol before
+    // one that moved -- a slot's size is the distance to the next
+    // symbol, and the next symbol is out in the overflow now.  It may
+    // not shrink: that would mean something else has taken the room.
+    //
+    // The symbols are matched by name rather than by their place in
+    // the table, since a function that moved is no longer in the same
+    // place in it.
     if #c.syms ≠ #prev.sym_name:
         return "the symbol table holds a different number of symbols"
     foreach i := 0¤ptrdiff…#c.syms:
-        if c.syms[i].name ≠ prev.sym_name[i]:
-            return "a symbol is not the one that stood in its place"
-        if c.syms[i].value ≠ prev.sym_off[i] or c.syms[i].size ≠ prev.sym_size[i]:
-            return "a symbol moved, or its room changed"
+        let nm : str = c.syms[i].name
+        let was : i64 = incr.at_of(nm)
+        if was < 0:
+            return "'" ⧺ nm ⧺ "' is a symbol the previous build did not have"
+        if @dropunit(c.syms[i].value) ≠ was:
+            if @dropunit(c.syms[i].value) < incr_text_end(incr):
+                return "'" ⧺ nm ⧺ "' moved, and not out past what the previous build used"
+            continue
+        if @dropunit(c.syms[i].value + c.syms[i].size) < incr.end_of(nm):
+            return "the room '" ⧺ nm ⧺ "' is smaller than it was"
     ""
 
 @pre(stack_size >= PAGE and guard_size >= PAGE)
@@ -598,6 +629,16 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // The program's own code first: what it calls is then known, and
     // the runtime that follows carries only what is reached.
     let incr_why : mut str = ""
+    // Functions that are not written where they stand: one that has
+    // outgrown its slot, and one an earlier build already moved past
+    // .text.  Their bodies go after the runtime, in the room reserved
+    // beyond what the last build used, so this gathers them as it
+    // goes and comes back to them there.
+    let dfr_fn : mut i64[] = []        // which function of a.fns
+    let dfr_at : mut i64[] = []        // where it already lives, or ⁻1
+    let dfr_np : mut i64[] = []
+    let dfr_ir : mut IrFn[] = []
+    let dfr_rt : mut i64[] = []        // the runtime it reaches, harvested
     foreach i := 0…#a.fns:
         let f : i64 = @dropunit(i)
         // the space for a sized answer arrives as one more argument
@@ -612,13 +653,44 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         // time.  What an unchanged function skips is emission.  A
         // generic no call shaped gets a stub: an empty body stands in.
         let ir := if chk.skipfn[i] = 1: lower_stub_fn(&lw, np) else: lower_fn(&lw, a, chk, f)
+        // A function an earlier build moved lives past .text, which is
+        // past where the runtime is about to be written: it is written
+        // with the rest of the overflow.  Emitting it here first is
+        // how its runtime calls are found out in time; the bytes are
+        // thrown away again.
+        let away : bool = incr.mode = 2 and incr.at_of(symnm) >= incr_text_size(incr)
+        if away:
+            if incr.fresh[i]:
+                let mk0 := em.mark()
+                emit_fn(&em, ir, np, lw.strs, privs[i], privs)
+                incr_harvest(&em, mk0, &dfr_rt)
+                em.rewind(mk0)
+            dfr_fn.push(f)
+            dfr_at.push(incr.at_of(symnm))
+            dfr_np.push(np)
+            dfr_ir.push(ir)
+            em.fn_off.push(0)
+            continue
         incr_why ← incr_first_reason(incr_why, incr_before(&em, incr, symnm))
         em.fn_off.push(em.here())
         let began : i64 = em.here()
         if incr.mode = 2 and incr_why = "" and not incr.fresh[i]:
             incr_why ← incr_first_reason(incr_why, incr_copy(&em, incr, symnm))
         else:
+            let mk := em.mark()
             emit_fn(&em, ir, np, lw.strs, privs[i], privs)
+            // It did not fit where it stood.  The slot stays where it
+            // is, trapped, and the body goes past the region the last
+            // build used, where its callers -- which are written again
+            // whenever it is -- will call it.
+            if incr.mode = 2 and em.here() > incr.end_of(symnm):
+                incr_harvest(&em, mk, &dfr_rt)
+                em.rewind(mk)
+                dfr_fn.push(f)
+                dfr_at.push(⁻1)
+                dfr_np.push(np)
+                dfr_ir.push(ir)
+                em.fn_off[i] ← 0
         incr_why ← incr_first_reason(incr_why, incr_after(&em, incr, symnm, began))
     if ninit > 0:
         let gir := lower_ginit(&lw, a, chk)
@@ -681,6 +753,10 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         foreach i := 0…nrt:
             if incr.at_of(rtn0[i]) >= 0:
                 em.rt_need[i] ← 1
+    // what the functions written after the runtime reach, found out
+    // before the set is closed rather than after it is written
+    foreach t := dfr_rt:
+        em.rt_need[(0 - t - 1) × 1¤ptrdiff] ← 1
     if #em.cf_target > 0:
         foreach i := 0…#em.cf_target:
             let t : i64 = em.cf_target[i]
@@ -704,6 +780,86 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     if #em.rt_off > 0:
         foreach i := 0…nrt:
             assert(em.rt_off[i] ≠ ⁻1 or em.rt_need[i] = 0, "a needed routine was emitted")
+
+    // ---------------------------------------------------------------
+    // The overflow: what would not fit where it stood
+    // ---------------------------------------------------------------
+    //
+    // .text ends here, at the size the previous build had.  Past it
+    // are the sections that build wrote for the functions it had to
+    // move; a function in one of them is written where it is, in the
+    // order it is in, since code that calls it and was not written
+    // again calls it there.  Past all of them is this build's own
+    // section, holding what this build had to move.  Nothing needs a
+    // jump left behind: a function that names one that moved is a
+    // function this build writes again, and it calls the new address.
+    let tx_ends : mut i64[] = []
+    tx_ends.push(em.here())
+    // the sections the previous build wrote past .text, written again
+    // with the bounds they had
+    if incr.mode = 2:
+        foreach ov_e := incr.tx_ends:
+            if ov_e > tx_ends[0¤ptrdiff]:
+                tx_ends.push(ov_e)
+    let placed : mut i64[] = []
+    if #dfr_fn > 0:
+        // the ones already out there first, in the order they are out
+        // there; the plainest sort, for the handful there ever are
+        let ov_ord : mut i64[] = []
+        foreach ov_k := 0…#dfr_fn:
+            if dfr_at[ov_k] >= 0:
+                let ov_at : i64 = dfr_at[ov_k]
+                let ov_j : mut i64 ¤ptrdiff = #ov_ord
+                ov_ord.push(@dropunit(ov_k))
+                while ov_j > 0¤ptrdiff and dfr_at[ov_ord[ov_j - 1¤ptrdiff] × 1¤ptrdiff] > ov_at:
+                    let ov_t : i64 = ov_ord[ov_j - 1¤ptrdiff]
+                    ov_ord[ov_j - 1¤ptrdiff] ← ov_ord[ov_j]
+                    ov_ord[ov_j] ← ov_t
+                    ov_j ← ov_j - 1¤ptrdiff
+        let ov_late : mut i64[] = []
+        foreach ov_kk := ov_ord:
+            let ov_i : i64 ¤ptrdiff = ov_kk × 1¤ptrdiff
+            let ov_f : i64 = dfr_fn[ov_i]
+            let ov_nm : str = fn_symbol(a, toks, src, ov_f)
+            incr_why ← incr_first_reason(incr_why, incr_before(&em, incr, ov_nm))
+            em.fn_off[ov_f × 1¤ptrdiff] ← em.here()
+            let ov_beg : i64 = em.here()
+            if not incr.fresh[ov_f × 1¤ptrdiff]:
+                incr_why ← incr_first_reason(incr_why, incr_copy(&em, incr, ov_nm))
+            else:
+                let ov_mark := em.mark()
+                emit_fn(&em, dfr_ir[ov_i], dfr_np[ov_i], lw.strs, privs[ov_f × 1¤ptrdiff], privs)
+                // it has outgrown even the room it was moved into, so
+                // it moves again, into this build's own section
+                if em.here() > incr.end_of(ov_nm):
+                    em.rewind(ov_mark)
+                    ov_late.push(ov_kk)
+                    em.fn_off[ov_f × 1¤ptrdiff] ← 0
+            incr_why ← incr_first_reason(incr_why, incr_after(&em, incr, ov_nm, ov_beg))
+            if em.fn_off[ov_f × 1¤ptrdiff] ≠ 0:
+                placed.push(ov_f)
+        // then everything this build had to move, after the last of
+        // the sections the previous build wrote
+        foreach ov_k := 0…#dfr_fn:
+            if dfr_at[ov_k] < 0:
+                ov_late.push(@dropunit(ov_k))
+        if #ov_late > 0:
+            assert(em.here() <= incr_text_end(incr), "the overflow begins past what the last build used")
+            while em.here() < incr_text_end(incr):
+                em.b1(incr.fill)
+            foreach ov_kk := ov_late:
+                let ov_i : i64 ¤ptrdiff = ov_kk × 1¤ptrdiff
+                let ov_f : i64 = dfr_fn[ov_i]
+                em.fn_off[ov_f × 1¤ptrdiff] ← em.here()
+                let ov_beg2 : i64 = em.here()
+                emit_fn(&em, dfr_ir[ov_i], dfr_np[ov_i], lw.strs, privs[ov_f × 1¤ptrdiff], privs)
+                // room of its own, so the build after this one can
+                // write it again where it now stands
+                let ov_pad : i64 = @dropunit(incr_padding((em.here() - ov_beg2) × 1¤byte))
+                foreach _ := 0…ov_pad:
+                    em.b1(incr.fill)
+                placed.push(ov_f)
+            tx_ends.push(em.here())
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:
         foreach i := 0…#em.cf_pos:
@@ -776,16 +932,24 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // places that ask is also the answer to whether to build it at
     // all.  A program with no way to stop itself carries no RT_BT, and
     // then these bytes would sit in the image saying nothing.
+    let bt_at : mut i64 = 0
+    let bt_to : mut i64 = 0
     if #em.bt_pos > 0:
         let bt_base : i64 = align_up(@dropunit(#rodata), 8)
         while @dropunit(#rodata) < bt_base:
             rodata.push(0)
-        foreach c := bt_bytes(tgt, IMAGE_BASE + PAGE,
-                              bt_fn_names(a, ninit, @dropunit(#chk.lams), @dropunit(#chk.psfn)),
-                              em.fn_off, bt_sizes(em.fn_off, bt_text_end(&em, text_size))):
+        bt_at ← bt_base
+        // in the order the code is laid out, which is not the order
+        // the functions were parsed in once one of them has moved
+        let bt_nm : str[] = incr_reorder_names(bt_fn_names(a, ninit, @dropunit(#chk.lams), @dropunit(#chk.psfn)), placed)
+        let bt_of : i64[] = incr_reorder(em.fn_off, placed)
+        foreach c := bt_bytes(tgt, IMAGE_BASE + PAGE, bt_nm, bt_of,
+                              bt_sizes(bt_of, @dropunit(#placed),
+                                       bt_text_end(&em, text_size), text_size)):
             rodata.push(c)
         foreach i := 0…#em.bt_pos:
             em.patch64(em.bt_pos[i], ro_vaddr + bt_base)
+        bt_to ← @dropunit(#rodata)
     // the globals that are never written ride here, past the tables
     let gro_base : i64 = @dropunit(#rodata)
     if nglobals > 0:
@@ -868,10 +1032,16 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     sname.push("_start")
     soffs.push(0)
     sglob.push(false)
+    // A function this build had to move is not in address order here:
+    // it is out past the runtime.  It is left out of this run and
+    // added after the runtime's own symbols, which is where it is, so
+    // that each symbol's size can go on being the distance to the
+    // next one.
     foreach i := 0…#a.fns:
-        sname.push(fn_symbol(a, toks, src, @dropunit(i)))
-        soffs.push(em.fn_off[i])
-        sglob.push(a.fns[i].is_export)
+        if not incr_moved(placed, @dropunit(i)):
+            sname.push(fn_symbol(a, toks, src, @dropunit(i)))
+            soffs.push(em.fn_off[i])
+            sglob.push(a.fns[i].is_export)
     let synth : mut str[] = []
     if ninit > 0:
         synth.push("<globals>")
@@ -919,6 +1089,11 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             sname.push(rname[i])
             soffs.push(roff[i])
             sglob.push(false)
+    // and the moved ones last, in the order they were laid out there
+    foreach mv := placed:
+        sname.push(fn_symbol(a, toks, src, mv))
+        soffs.push(em.fn_off[mv × 1¤ptrdiff])
+        sglob.push(a.fns[mv × 1¤ptrdiff].is_export)
     assert(#sname = #soffs and #sname = #sglob, "one of each per symbol")
     let syms : mut Sym[] = []
     foreach i := 0…#sname:
@@ -936,7 +1111,8 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     foreach l := lw.dlog:
         dlog.push(l)
     (Compiled{incr_why: incr_why, ro_fixed: descbase × 1¤byte,
-              text_room: text_room, ro_room: ro_room,
-              ro_vals: gro_base × 1¤byte, ro_vals_end: gro_end × 1¤byte, code: em.code, rodata: rodata, data: data,
+              text_room: text_room, ro_room: ro_room, tx_ends: tx_ends,
+              ro_vals: gro_base × 1¤byte, ro_vals_end: gro_end × 1¤byte,
+              ro_bt: bt_at × 1¤byte, ro_bt_end: bt_to × 1¤byte, code: em.code, rodata: rodata, data: data,
               relro_size: relro_size, syms: syms,
               log: dlog, diags: cdiags})

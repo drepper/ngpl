@@ -255,14 +255,27 @@ fn bt_text_end(em : &Emit, text_size : i64) → i64:
 
 // How far each function runs: to where the next begins, and the last
 // to where the program's own code ends.
+//
+// A build that had to move a function out of .text -- see incr.ngpl --
+// hands them over with the moved ones last, and those are past the
+// runtime rather than before it.  So there are two ends: where the
+// program's own code stops, which is where the run that stayed put
+// ends, and where the whole region stops, which is where the moved
+// ones do.  With none moved the two are the same question and
+// end_main answers it.
+@pre(nmoved >= 0 and nmoved <= @dropunit(#offs))
 @post(r: #r = #offs)
-fn bt_sizes(offs : i64[], end : i64) → i64[]:
-    let n : i64 ¤ptrdiff = #offs
+fn bt_sizes(offs : i64[], nmoved : i64, end_main : i64, end_all : i64) → i64[]:
+    let n : i64 = @dropunit(#offs)
+    let nmain : i64 = n - nmoved
     let out : mut i64[] = []
-    if n > 0:
-        foreach i := 0…n:
-            let here : i64 = offs[i]
-            let next : i64 = if i + 1 < n: offs[i + 1] else: end
-            assert(next >= here, "the functions run up the text")
-            out.push(next - here)
+    foreach i := 0¤ptrdiff…#offs:
+        let k : i64 = @dropunit(i)
+        let next : mut i64 = end_all
+        if k + 1 = nmain:
+            next ← end_main
+        elif k + 1 < n:
+            next ← offs[(k + 1) × 1¤ptrdiff]
+        assert(next >= offs[i], "the functions run up the text")
+        out.push(next - offs[i])
     out

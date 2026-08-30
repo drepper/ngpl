@@ -509,7 +509,7 @@ fn main() → u8:
     // still leaves padding, so the build after it is incremental.
     let why : mut str = ""
     if incr.mode = 2 and #first.diags = 0:
-        why ← if first.incr_why = "": incr_lines_up(prev, first) else: first.incr_why
+        why ← if first.incr_why = "": incr_lines_up(prev, incr, first) else: first.incr_why
     let compiled := if why = "":
         first
     else:
@@ -543,7 +543,8 @@ fn main() → u8:
     // chance to disagree with the instructions that name it.
     let pl := plan_elf(tgt, compiled.code, compiled.rodata, compiled.data,
                        stack_size × 1¤byte, compiled.relro_size × 1¤byte,
-                       compiled.syms, bom, compiled.text_room, compiled.ro_room)
+                       compiled.syms, bom, compiled.text_room, compiled.ro_room,
+                       compiled.tx_ends)
     let runs : mut std.iovec[] = []
     if tgt.is64:
         let e := elf_file64(pl, compiled.code, compiled.rodata, compiled.data)

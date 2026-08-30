@@ -642,3 +642,14 @@ Tooling
     stage 1 half an hour later.  Cheap to catch before that: `python -m
     interp "${NGPLC_SOURCES[@]}" -- --help < /dev/null` reads every
     source in seconds.
+
+[ ] ngplc accepts a second `let` of a name a function has already
+    given one, and the interpreter refuses it -- "cannot redefine let
+    variable 'k'".  The interpreter is the authority and tests/
+    test_one_thing_twice.ngpl says the refusal is meant, so ngplc is
+    the one that is wrong: one name, one meaning, for the length of a
+    function.  Found by writing `let k` in a new block of codegen that
+    already had a `let k` further down, which compiled and then stopped
+    the interpreter -- and only on the path that reaches the second
+    one, so the parse check misses it.  A crude reading of the sources
+    finds them: every `let NAME` in one function, counted.

@@ -162,7 +162,54 @@ decide where those live.  Two copies of that arithmetic is one copy too
 many -- there were two, and the second was wrong the moment the first
 reserved anything, which cost a segmentation fault to find.
 
-### 2.6 What must hold, and what may change
+### 2.6 Where a function goes when it will not fit
+
+The text region is `.text` and, after it, one section for each build
+that had to move a function out — `.text2`, `.text3`, and so on, each
+loaded, executable and not writable, all of them one mapping and one
+buffer.  The section headers are the only thing that divides them.
+
+A function that will not fit where it stood is written there instead.
+Its old slot stays where it is, filled with traps, and nothing is left
+behind at the old address: **no trampoline is needed**, because a
+function that names one that moved is a function this build writes
+again, and it calls the new address.  That is the rule about immediate
+dependents earning its keep — it was a margin when every function
+stayed put, and it is what makes moving one safe.
+
+A function already out there is written where it is, in the order it is
+in, since code that calls it and was not written again calls it there.
+If it has outgrown even the room it was moved into, it moves again,
+into this build's own section.  Each moved function is left the same
+fifth of padding a function in `.text` gets, so the build after this one
+can usually write it again where it now stands rather than moving it a
+third time.
+
+Three things this asks of the rest of the compiler:
+
+- **The emitter can be rewound.**  Whether a function fits is only
+  known once it has been written, so it is written into its slot,
+  measured, and — where it overran — unwritten: `Emit.mark` records the
+  length of every list the emitter appends to past the end of a
+  function, and `Emit.rewind` truncates each back to it.  The
+  per-function lists need no such thing, since a function empties them
+  before it ends.
+- **What it calls is found out before the runtime is written.**  Which
+  runtime routines a binary carries is read off the calls that were
+  emitted, and the set is closed and the routines written before the
+  overflow is.  So the calls of a function bound for the overflow are
+  harvested from the emission that measured it, and kept until the set
+  is built.  A function already out there and unchanged needs no
+  harvesting: what it calls, the previous build carried.
+- **The symbols and the backtrace table are in the order the code is
+  laid out**, not the order the functions were parsed in.  A symbol's
+  size is the distance to the next symbol, so a moved function is left
+  out of the run of program functions and added after the runtime's
+  own, which is where it is.  The backtrace table is handed the same
+  order, and two ends rather than one: where the program's own code
+  stops, and where the whole region does.
+
+### 2.7 What must hold, and what may change
 
 The invariant is not that the file comes out the same.  It is that
 everything the copied code names is at the address it named:
@@ -173,6 +220,9 @@ everything the copied code names is at the address it named:
 | the descriptors and every table after them, byte for byte | the value of a global that is never written |
 | the symbol table, name for name and address for address | the digests in the bill |
 | `.rodata` no larger than the room the file reserved | its length within that room |
+| every symbol at the address it had | one this build moved, which is out past everything the last build used |
+| no symbol's slot smaller than it was | a slot that grew, which is what the hole a moved function left does to the one before it |
+| | the table a backtrace reads, which is layout written down as data |
 | `.data`, byte for byte | |
 
 The descriptors are what makes the second row checkable in one pass:
@@ -186,7 +236,7 @@ That a string's own bytes may differ is what makes the mode useful:
 changes that message.  The address does not move, the copied code
 prints the new message, and the new message is the true one.
 
-### 2.7 When it does not line up
+### 2.8 When it does not line up
 
 Incremental compilation is an optimization, and an optimization that is
 ever wrong is not one.  Each of these makes the build fall back to a
@@ -195,11 +245,10 @@ whole one, which is always correct, and says which:
 | Condition | Why |
 |---|---|
 | a function is new, or one is gone | it has no slot, and the layout would shift |
-| a regenerated function outgrows its slot | there is no room where it stands |
+| the text grew past its room | `.rodata` begins where that room ends |
 | a symbol the old file had is missing, or one is new | the layout is not the same layout |
 | the read-only data came out different past the strings | a literal, a table or a global moved, and every reference to it |
 | `.rodata` grew past its room | `.data` begins where that room ends |
-| the code grew past its room | `.rodata` begins where that room ends |
 | `.data` came out different | a global's initial value or its place moved |
 | the runtime routines needed changed | the code after the functions is not the same code |
 | the target, the class or its flags changed | the file is not a variant of the old one, and its code is another machine's |
@@ -207,16 +256,16 @@ whole one, which is always correct, and says which:
 A whole build under `--incremental` writes fresh padding sized to the
 new functions, so the build after a fallback is incremental again.
 
-### 2.8 What is deliberately not built
+### 2.9 What is deliberately not built
 
 **Moving the unloaded content to make room.**  What follows the loaded
 sections in the file — the symbol table, its strings, the section
-headers — can be pushed further out at no cost, and the code is written
-so that it could be.  But it does not help the case that matters:
-growing `.text` past its page moves `.rodata`'s address, and then every
-string reference in every function is wrong, which is a whole build by
-another name.  The room worth having is the padding and the tail of the
-last text page, and neither needs anything moved.
+headers — can be pushed further out at no cost.  But it does not answer
+the question it looks like it answers: a function needs room at a
+particular address inside the text region, and what is in the way there
+is `.rodata`, not the symbol table.  Room is made instead by reserving
+it, before anything needs it (§2.5), and a function that will not fit
+goes into a section of its own inside that room (§2.6).
 
 **Global variables.**  A global's address is its offset in its segment,
 settled by the order and sizes of the globals, which come from checking
@@ -232,16 +281,18 @@ nothing to get from.
 
 Two checks hold the mode to its promise, and both are cheap.
 
-**Every function lands where it was.**  The emitter is told each
-function's old address and pads to it; a function that would overrun
-the next one's address is caught there rather than discovered later,
-and the reason names the function.
+**Every function lands where it was, or in a section of its own.**  The
+emitter is told each function's old address and pads to it.  One that
+would overrun the next address is caught there rather than discovered
+later — and written out past everything the last build used, where its
+callers, which are written again whenever it is, will call it.
 
-**Nothing else moved.**  After code generation the new `.rodata` and
-`.data` and the new symbol table are checked against the old, as §2.5
-sets out.  This is what makes it safe to have skipped emitting most of
-the program: whatever the skipped functions would have contributed to
-those tables, they contributed before, and the tables are the same.
+**Nothing else moved.**  After code generation the new `.rodata`, the
+new `.data` and the new symbol table are checked against the old, as
+§2.7 sets out.  This is what makes it safe to have skipped emitting
+most of the program: whatever the skipped functions would have
+contributed to those tables, they contributed before, and the tables
+are the same.
 
 ## 4. What it costs and what it saves
 
@@ -261,10 +312,11 @@ emitting cost.  The time is in the phases the mode does not skip.
 What it buys today is a file that changes only where the program did.
 A one-line change to one function writes two functions again — the one
 that changed and the one that calls it — and moves two bytes of
-`.text`, the rest of the difference being the digests that say so.
-That is what makes a rebuilt binary comparable with the one before it,
-and it is the ground a trampoline for outgrown functions, and later a
-smaller front end, would be built on.
+`.text`, the rest of the difference being the digests that say so.  A
+change that outgrows a function's slot writes it into a section of its
+own and leaves the rest of `.text` alone.  That is what makes a rebuilt
+binary comparable with the one before it, and it is the ground a
+smaller front end would be built on.
 
 `--log=json` says what it decided:
 

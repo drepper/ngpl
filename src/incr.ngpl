@@ -53,6 +53,11 @@ struct Prev:
     eflags : i64
     text_off : i64 ¤byte
     text_size : i64 ¤byte
+    // Where each section of the text region ends: .text first, then
+    // the overflow sections after it in address order.  A function
+    // that outgrew its slot in an earlier build lives in one of those,
+    // and a build laid over this one writes them again where they are.
+    tx_end : i64 ¤byte[]
     ro_off : i64 ¤byte
     ro_size : i64 ¤byte
     d_off : i64 ¤byte
@@ -70,6 +75,7 @@ struct Prev:
 
 fn prev_none() → Prev:
     (Prev{ok: false, raw: [], machine: 0, is64: false, eflags: 0, text_off: 0¤byte, text_size: 0¤byte,
+          tx_end: [],
           ro_off: 0¤byte, ro_size: 0¤byte, d_off: 0¤byte, d_size: 0¤byte,
           sym_name: [], sym_off: [], sym_size: [],
           row_kind: [], row_name: [], row_hash: []})
@@ -177,6 +183,11 @@ fn read_prev(path : str) → Prev:
             let text_o : mut i64 ¤byte = 0¤byte
             let text_va : mut i64 ¤byte = 0¤byte
             let text_n : mut i64 ¤byte = 0¤byte
+            // .text and the overflow sections after it are one region:
+            // one mapping, one buffer, one set of offsets.  Kept in
+            // address order, which the plainest sort settles: there
+            // are never many.
+            let tx : mut i64 ¤byte[] = []
             let ro_o : mut i64 ¤byte = 0¤byte
             let ro_n : mut i64 ¤byte = 0¤byte
             let d_o : mut i64 ¤byte = 0¤byte
@@ -195,6 +206,14 @@ fn read_prev(path : str) → Prev:
                 let nm : str = pv_cstr(f, names_at + pv_le(f, sh, 4) × 1¤byte, names_end)
                 let so : i64 ¤byte = pv_le(f, sh + off_at, if is64: 8 else: 4) × 1¤byte
                 let sz : i64 ¤byte = pv_le(f, sh + size_at, if is64: 8 else: 4) × 1¤byte
+                if ".text" ⊑ nm:
+                    let e : i64 ¤byte = so + sz
+                    let k : mut i64 ¤ptrdiff = #tx
+                    tx.push(e)
+                    while k > 0¤ptrdiff and tx[k - 1¤ptrdiff] > e:
+                        tx[k] ← tx[k - 1¤ptrdiff]
+                        tx[k - 1¤ptrdiff] ← e
+                        k ← k - 1¤ptrdiff
                 if nm = ".text":
                     text_o ← so
                     text_n ← sz
@@ -261,6 +280,7 @@ fn read_prev(path : str) → Prev:
                          is64: is64,
                          eflags: pv_le(f, if is64: 48¤byte else: 36¤byte, 4),
                          text_off: text_o, text_size: text_n,
+                         tx_end: tx,
                          ro_off: ro_o, ro_size: ro_n, d_off: d_o, d_size: d_n,
                          sym_name: sn, sym_off: sv, sym_size: ss,
                          row_kind: rk, row_name: rn, row_hash: rh})
@@ -450,7 +470,15 @@ struct Incr:
     // where the text's room ends and .data where .rodata's does.
     text_room : i64 ¤byte
     ro_room : i64 ¤byte
-    // the previous .text, to copy the functions that did not change
+    // Where each section of the previous build's text region ended,
+    // counted from the start of the region: .text first, then its
+    // overflow sections.  Past the first is where a function that
+    // outgrew its slot went; past the last is where one that outgrows
+    // it now will go.
+    tx_ends : i64[]
+    // the previous text region, to copy the functions that did not
+    // change -- .text and the overflow sections together, since a
+    // symbol's value is an offset into the region however far along
     text : u8[]
     // and its .rodata, whose jump tables the copied code points into
     ro : u8[]
@@ -458,14 +486,14 @@ struct Incr:
 fn incr_off() → Incr:
     (Incr{mode: 0, fill: INCR_FILL_ANY, fresh: [], sym: names_new(0),
           sym_at: [], sym_end: [], text_room: 0¤byte, ro_room: 0¤byte,
-          text: [], ro: []})
+          tx_ends: [], text: [], ro: []})
 
 // A first build under --incremental: no file to line up with, so
 // every function is written as usual and each is left room to grow.
 fn incr_first(fill : i64) → Incr:
     (Incr{mode: 1, fill: fill, fresh: [], sym: names_new(0),
           sym_at: [], sym_end: [], text_room: 0¤byte, ro_room: 0¤byte,
-          text: [], ro: []})
+          tx_ends: [], text: [], ro: []})
 
 // A build against a file the previous one wrote: every symbol it had,
 // the room it gave each, its .text to copy from, and which functions
@@ -495,10 +523,13 @@ fn incr_prev(a : Ast, toks : Toks, src : byte[], prev : Prev,
         if at[k × 1¤ptrdiff] < 0:
             at[k × 1¤ptrdiff] ← @dropunit(prev.sym_off[i])
             end[k × 1¤ptrdiff] ← @dropunit(prev.sym_off[i] + prev.sym_size[i])
-    let hi : i64 ¤byte = prev.text_off + prev.text_size
+    let hi : i64 ¤byte = incr_prev_text_end(prev)
     let text : mut u8[] = []
-    if hi <= #prev.raw:
+    if hi <= #prev.raw and hi > prev.text_off:
         text ← prev.raw[prev.text_off…hi]
+    let rel : mut i64[] = []
+    foreach e := prev.tx_end:
+        rel.push(@dropunit(e - prev.text_off))
     let rhi : i64 ¤byte = prev.ro_off + prev.ro_size
     let ro : mut u8[] = []
     if rhi <= #prev.raw:
@@ -507,7 +538,7 @@ fn incr_prev(a : Ast, toks : Toks, src : byte[], prev : Prev,
           fresh: incr_regenerate(a, toks, src, prev, rows),
           sym: sym, sym_at: at, sym_end: end,
           text_room: incr_text_room(prev), ro_room: incr_ro_room(prev),
-          text: text, ro: ro})
+          tx_ends: rel, text: text, ro: ro})
 
 // How many functions a rebuild has to write again, for the line the
 // driver prints about what it decided.
@@ -578,6 +609,13 @@ fn incr_jt_prefix(rodata : &mut u8[], incr : Incr, jt_base : i64) → i64:
 fn incr_room(mode : i64, size : i64 ¤byte) → i64 ¤byte:
     if mode = 0: size else: size + incr_padding(size)
 
+// Where the previous build's text region ended: the last of its
+// sections, or nothing at all where it had none this could read.
+fn incr_prev_text_end(prev : Prev) → i64 ¤byte:
+    let n : i64 ¤ptrdiff = #prev.tx_end
+    if n = 0¤ptrdiff: return prev.text_off
+    prev.tx_end[n - 1¤ptrdiff]
+
 // And what a file already reserved, which a build written over it has
 // to reserve again to the byte: .rodata begins where the text's room
 // ends and .data where .rodata's does, so reserving anything else
@@ -600,6 +638,62 @@ fn incr_room_text(incr : Incr, size : i64 ¤byte) → i64 ¤byte:
 
 fn incr_room_ro(incr : Incr, size : i64 ¤byte) → i64 ¤byte:
     if incr.mode = 2: incr.ro_room else: incr_room(incr.mode, size)
+
+// Where .text itself ends, counted from the start of the text region,
+// which is where the overflow sections begin.
+fn incr_text_size(incr : Incr) → i64:
+    if #incr.tx_ends = 0¤ptrdiff: 0 else: incr.tx_ends[0¤ptrdiff]
+
+// And where the whole region the previous build used ends, which is
+// where a function this build has to move goes.
+fn incr_text_end(incr : Incr) → i64:
+    let n : i64 ¤ptrdiff = #incr.tx_ends
+    if n = 0¤ptrdiff: 0 else: incr.tx_ends[n - 1¤ptrdiff]
+
+// The runtime routines a function reaches, read off the calls it has
+// just emitted.  A function whose body is written after the runtime
+// would otherwise have its needs found out too late -- the set is
+// closed and the routines are written before it -- so they are taken
+// from the emission that measured it and kept until the set is built.
+fn incr_harvest(em : &Emit, m : Emark, into : &mut i64[]):
+    foreach k := m.cf…@dropunit(#em.cf_target):
+        let t : i64 = em.cf_target[k × 1¤ptrdiff]
+        if t < 0:
+            into.push(t)
+
+// Whether this function is one the build moved past .text.
+fn incr_moved(placed : i64[], f : i64) → bool:
+    foreach g := placed:
+        if g = f:
+            return true
+    false
+
+// A list in the order the code was laid out rather than the order the
+// functions were parsed in: everything that stayed where it was, then
+// what was moved, in the order it was moved into place.  The
+// backtrace table reads a function's size as the distance to the next
+// one, so it has to be handed them in the order they are written.
+fn incr_reorder(v : i64[], placed : i64[]) → i64[]:
+    if #placed = 0¤ptrdiff:
+        return v
+    let out : mut i64[] = []
+    foreach i := 0¤ptrdiff…#v:
+        if not incr_moved(placed, @dropunit(i)):
+            out.push(v[i])
+    foreach f := placed:
+        out.push(v[f × 1¤ptrdiff])
+    out
+
+fn incr_reorder_names(v : str[], placed : i64[]) → str[]:
+    if #placed = 0¤ptrdiff:
+        return v
+    let out : mut str[] = []
+    foreach i := 0¤ptrdiff…#v:
+        if not incr_moved(placed, @dropunit(i)):
+            out.push(v[i])
+    foreach f := placed:
+        out.push(v[f × 1¤ptrdiff])
+    out
 
 // The reason a build stopped lining up is the first one: everything
 // after it is a consequence of it.

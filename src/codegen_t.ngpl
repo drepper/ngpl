@@ -134,6 +134,13 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // the program's own code, then the whole runtime: nothing is
     // trimmed here yet, since the IR-built routines call each other
     let incr_why : mut str = ""
+    // see the same lists in codegen.ngpl: what is not written where it
+    // stands is gathered here and written after the runtime
+    let dfr_fn : mut i64[] = []
+    let dfr_at : mut i64[] = []
+    let dfr_np : mut i64[] = []
+    let dfr_ir : mut IrFn[] = []
+    let dfr_rt : mut i64[] = []
     foreach i := 0…#a.fns:
         let f : i64 = @dropunit(i)
         // the space for a sized answer arrives as one more argument
@@ -142,13 +149,39 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         // lowered whether or not it is emitted: see the same loop in
         // codegen.ngpl for why the string table has to be complete
         let ir := if chk.skipfn[i] = 1: lower_stub_fn(&lw, np) else: lower_fn(&lw, a, chk, f)
+        // a function an earlier build moved lives past .text, which is
+        // past where the runtime goes: it is written with the rest of
+        // the overflow, and emitted here only to find out what it
+        // calls while that can still be answered
+        let away : bool = incr.mode = 2 and incr.at_of(symnm) >= incr_text_size(incr)
+        if away:
+            if incr.fresh[i]:
+                let mk0 := em.mark()
+                t_emit_fn(&em, tgt, ir, np, lw.strs, nregs[i], nregs)
+                incr_harvest(&em, mk0, &dfr_rt)
+                em.rewind(mk0)
+            dfr_fn.push(f)
+            dfr_at.push(incr.at_of(symnm))
+            dfr_np.push(np)
+            dfr_ir.push(ir)
+            em.fn_off.push(0)
+            continue
         incr_why ← incr_first_reason(incr_why, incr_before(&em, incr, symnm))
         em.fn_off.push(em.here())
         let began : i64 = em.here()
         if incr.mode = 2 and incr_why = "" and not incr.fresh[i]:
             incr_why ← incr_first_reason(incr_why, incr_copy(&em, incr, symnm))
         else:
+            let mk := em.mark()
             t_emit_fn(&em, tgt, ir, np, lw.strs, nregs[i], nregs)
+            if incr.mode = 2 and em.here() > incr.end_of(symnm):
+                incr_harvest(&em, mk, &dfr_rt)
+                em.rewind(mk)
+                dfr_fn.push(f)
+                dfr_at.push(⁻1)
+                dfr_np.push(np)
+                dfr_ir.push(ir)
+                em.fn_off[i] ← 0
         incr_why ← incr_first_reason(incr_why, incr_after(&em, incr, symnm, began))
     if ninit > 0:
         let gir := lower_ginit(&lw, a, chk)
@@ -222,21 +255,25 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         let rtn0 := rt_names()
         let key : mut i64[] = []
         foreach i := 0…nrt:
-            let at : i64 = incr.at_of(rtn0[i])
-            key.push(if at < 0: 1073741824 + @dropunit(i) else: at)
-            if at >= 0:
+            let rt_at : i64 = incr.at_of(rtn0[i])
+            key.push(if rt_at < 0: 1073741824 + @dropunit(i) else: rt_at)
+            if rt_at >= 0:
                 em.rt_need[i] ← 1
         // a few dozen entries, so the plainest sort is the right one
         foreach i := 0…nrt:
-            let k : mut i64 = @dropunit(i)
-            while k > 0 and key[(k - 1) × 1¤ptrdiff] > key[k × 1¤ptrdiff]:
-                let tk : i64 = key[(k - 1) × 1¤ptrdiff]
-                key[(k - 1) × 1¤ptrdiff] ← key[k × 1¤ptrdiff]
-                key[k × 1¤ptrdiff] ← tk
-                let ti : i64 = rt_order[(k - 1) × 1¤ptrdiff]
-                rt_order[(k - 1) × 1¤ptrdiff] ← rt_order[k × 1¤ptrdiff]
-                rt_order[k × 1¤ptrdiff] ← ti
-                k ← k - 1
+            let rt_k : mut i64 = @dropunit(i)
+            while rt_k > 0 and key[(rt_k - 1) × 1¤ptrdiff] > key[rt_k × 1¤ptrdiff]:
+                let tk : i64 = key[(rt_k - 1) × 1¤ptrdiff]
+                key[(rt_k - 1) × 1¤ptrdiff] ← key[rt_k × 1¤ptrdiff]
+                key[rt_k × 1¤ptrdiff] ← tk
+                let ti : i64 = rt_order[(rt_k - 1) × 1¤ptrdiff]
+                rt_order[(rt_k - 1) × 1¤ptrdiff] ← rt_order[rt_k × 1¤ptrdiff]
+                rt_order[rt_k × 1¤ptrdiff] ← ti
+                rt_k ← rt_k - 1
+    // what the functions written after the runtime reach, found out
+    // before the set is closed rather than after it is written
+    foreach t := dfr_rt:
+        em.rt_need[(0 - t - 1) × 1¤ptrdiff] ← 1
     let more : mut bool = true
     while more:
         more ← false
@@ -261,6 +298,66 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
                 let np9 : i64 = rt_nargs(rid)
                 t_emit_fn(&em, tgt, rt_build(rid, tgt, &lw), np9, lw.strs, 0, nregs)
                 more ← true
+
+    // The overflow: what would not fit where it stood.  See the same
+    // block in codegen.ngpl for what each part of it is for.
+    let tx_ends : mut i64[] = []
+    tx_ends.push(em.here())
+    if incr.mode = 2:
+        foreach ov_e := incr.tx_ends:
+            if ov_e > tx_ends[0¤ptrdiff]:
+                tx_ends.push(ov_e)
+    let placed : mut i64[] = []
+    if #dfr_fn > 0:
+        let ov_ord : mut i64[] = []
+        foreach ov_k := 0…#dfr_fn:
+            if dfr_at[ov_k] >= 0:
+                let ov_at : i64 = dfr_at[ov_k]
+                let ov_j : mut i64 ¤ptrdiff = #ov_ord
+                ov_ord.push(@dropunit(ov_k))
+                while ov_j > 0¤ptrdiff and dfr_at[ov_ord[ov_j - 1¤ptrdiff] × 1¤ptrdiff] > ov_at:
+                    let ov_t : i64 = ov_ord[ov_j - 1¤ptrdiff]
+                    ov_ord[ov_j - 1¤ptrdiff] ← ov_ord[ov_j]
+                    ov_ord[ov_j] ← ov_t
+                    ov_j ← ov_j - 1¤ptrdiff
+        let ov_late : mut i64[] = []
+        foreach ov_kk := ov_ord:
+            let ov_i : i64 ¤ptrdiff = ov_kk × 1¤ptrdiff
+            let ov_f : i64 = dfr_fn[ov_i]
+            let ov_nm : str = fn_symbol(a, toks, src, ov_f)
+            incr_why ← incr_first_reason(incr_why, incr_before(&em, incr, ov_nm))
+            em.fn_off[ov_f × 1¤ptrdiff] ← em.here()
+            let ov_beg : i64 = em.here()
+            if not incr.fresh[ov_f × 1¤ptrdiff]:
+                incr_why ← incr_first_reason(incr_why, incr_copy(&em, incr, ov_nm))
+            else:
+                let ov_mark := em.mark()
+                t_emit_fn(&em, tgt, dfr_ir[ov_i], dfr_np[ov_i], lw.strs, nregs[ov_f × 1¤ptrdiff], nregs)
+                if em.here() > incr.end_of(ov_nm):
+                    em.rewind(ov_mark)
+                    ov_late.push(ov_kk)
+                    em.fn_off[ov_f × 1¤ptrdiff] ← 0
+            incr_why ← incr_first_reason(incr_why, incr_after(&em, incr, ov_nm, ov_beg))
+            if em.fn_off[ov_f × 1¤ptrdiff] ≠ 0:
+                placed.push(ov_f)
+        foreach ov_k := 0…#dfr_fn:
+            if dfr_at[ov_k] < 0:
+                ov_late.push(@dropunit(ov_k))
+        if #ov_late > 0:
+            assert(em.here() <= incr_text_end(incr), "the overflow begins past what the last build used")
+            while em.here() < incr_text_end(incr):
+                em.b1(incr.fill)
+            foreach ov_kk := ov_late:
+                let ov_i : i64 ¤ptrdiff = ov_kk × 1¤ptrdiff
+                let ov_f : i64 = dfr_fn[ov_i]
+                em.fn_off[ov_f × 1¤ptrdiff] ← em.here()
+                let ov_beg2 : i64 = em.here()
+                t_emit_fn(&em, tgt, dfr_ir[ov_i], dfr_np[ov_i], lw.strs, nregs[ov_f × 1¤ptrdiff], nregs)
+                let ov_pad : i64 = @dropunit(incr_padding((em.here() - ov_beg2) × 1¤byte))
+                foreach _ := 0…ov_pad:
+                    em.b1(incr.fill)
+                placed.push(ov_f)
+            tx_ends.push(em.here())
     // calls resolve now that every target has a place
     if #em.cf_pos > 0:
         foreach i := 0…#em.cf_pos:
@@ -323,16 +420,22 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // places that ask is also the answer to whether to build it at
     // all.  A program with no way to stop itself carries no RT_BT, and
     // then these bytes would sit in the image saying nothing.
+    let bt_at : mut i64 = 0
+    let bt_to : mut i64 = 0
     if #em.bt_pos > 0:
         let bt_base : i64 = align_up(@dropunit(#rodata), 8)
         while @dropunit(#rodata) < bt_base:
             rodata.push(0)
-        foreach c := bt_bytes(tgt, IMAGE_BASE + PAGE,
-                              bt_fn_names(a, ninit, @dropunit(#chk.lams), @dropunit(#chk.psfn)),
-                              em.fn_off, bt_sizes(em.fn_off, bt_text_end(&em, text_size))):
+        bt_at ← bt_base
+        let bt_nm : str[] = incr_reorder_names(bt_fn_names(a, ninit, @dropunit(#chk.lams), @dropunit(#chk.psfn)), placed)
+        let bt_of : i64[] = incr_reorder(em.fn_off, placed)
+        foreach c := bt_bytes(tgt, IMAGE_BASE + PAGE, bt_nm, bt_of,
+                              bt_sizes(bt_of, @dropunit(#placed),
+                                       bt_text_end(&em, text_size), text_size)):
             rodata.push(c)
         foreach i := 0…#em.bt_pos:
             g_patch_abs(&em, tgt, em.bt_pos[i], ro_vaddr + bt_base)
+        bt_to ← @dropunit(#rodata)
     let gro_base : i64 = @dropunit(#rodata)
     if nglobals > 0:
         foreach i := 0…nglobals:
@@ -403,10 +506,13 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     sname.push("_start")
     soffs.push(0)
     sglob.push(false)
+    // a function this build moved is not in address order here; see
+    // the same run in codegen.ngpl
     foreach i := 0…#a.fns:
-        sname.push(fn_symbol(a, toks, src, @dropunit(i)))
-        soffs.push(em.fn_off[i])
-        sglob.push(a.fns[i].is_export)
+        if not incr_moved(placed, @dropunit(i)):
+            sname.push(fn_symbol(a, toks, src, @dropunit(i)))
+            soffs.push(em.fn_off[i])
+            sglob.push(a.fns[i].is_export)
     let synth : mut str[] = []
     if ninit > 0:
         synth.push("<globals>")
@@ -448,6 +554,10 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
             sname.push(rname[i])
             soffs.push(roff[i])
             sglob.push(false)
+    foreach mv := placed:
+        sname.push(fn_symbol(a, toks, src, mv))
+        soffs.push(em.fn_off[mv × 1¤ptrdiff])
+        sglob.push(a.fns[mv × 1¤ptrdiff].is_export)
     let syms : mut Sym[] = []
     foreach i := 0…#sname:
         let here : i64 ¤byte = soffs[i]
@@ -462,8 +572,9 @@ fn codegen_t(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     foreach l := lw.dlog:
         dlog.push(l)
     (Compiled{incr_why: incr_why, ro_fixed: descbase × 1¤byte,
-              text_room: text_room, ro_room: ro_room,
-              ro_vals: gro_base × 1¤byte, ro_vals_end: gro_end × 1¤byte, code: em.code, rodata: rodata, data: data,
+              text_room: text_room, ro_room: ro_room, tx_ends: tx_ends,
+              ro_vals: gro_base × 1¤byte, ro_vals_end: gro_end × 1¤byte,
+              ro_bt: bt_at × 1¤byte, ro_bt_end: bt_to × 1¤byte, code: em.code, rodata: rodata, data: data,
               relro_size: relro_size, syms: syms,
               log: dlog, diags: cdiags})
 

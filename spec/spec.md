@@ -10128,9 +10128,10 @@ writing anything:
 
 | Must hold | May change |
 |---|---|
-| every function at the address it had, inside the room it had | the bytes of any string, since nothing points into the middle of one |
+| every function at the address it had, or out in a section of its own | the bytes of any string, since nothing points into the middle of one |
 | the descriptors, the tables, and the offsets of everything after them | the value of a global that is never written |
 | the symbol table, name for name and address for address | the digests in the bill, which are what changed |
+| no slot smaller than it was | the table a backtrace reads, which is layout written down as data |
 | `.rodata` no larger than the pages it already had | its length within those pages |
 | `.data` byte for byte | |
 
@@ -10139,10 +10140,21 @@ line it is written on, and adding a line above it moves that line: the
 message is different and the address is not, so the copied code prints
 the new message, which is the true one.
 
+**A function that will not fit where it stood** is written past
+everything the last build used, in a section of its own: `.text2`, then
+`.text3` for the build after that, each loaded and executable and not
+writable, all of them one mapping with `.text`.  Its old slot stays
+where it is, filled with traps, and nothing is left behind at the old
+address — a function that names one that moved is a function this build
+writes again, and it calls the new address.  A moved function is left
+the same padding as any other, so the build after it can usually write
+it again where it now stands.
+
 **When it does not line up** the build falls back to a whole one, which
-is always correct, and says which of these stopped it: a function that
-outgrew its slot, a function the old file did not have or no longer
-has, a symbol that moved, read-only data that came out different, or a
+is always correct, and says which of these stopped it: a function the
+old file did not have or no longer has, a symbol that moved anywhere
+but out into a section of its own, read-only data that came out
+different, either region grown past the room reserved for it, or a
 runtime routine the old build did not carry.  A whole build under
 `--incremental` writes fresh padding, so the build after a fallback is
 incremental again.  `--log=json` says what it decided:
