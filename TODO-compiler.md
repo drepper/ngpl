@@ -612,14 +612,19 @@ Tooling
     could not tell had changed.  parse_impl now sets def_start at each
     method's own first annotation; the bill has a row per function.
 
-[ ] The two runtimes give a bad code point two different messages.
-    x86-64's says "not a character: past the code points or a
+[x] The two runtimes gave a bad code point two different messages.
+    x86-64's said "not a character: past the code points or a
     surrogate" (rt_x86_64.ngpl) and the five that share rt_portable
-    say "chr: the value is not a code point" (rt_portable.ngpl), so
-    tests/compile/t93_badchar prints one thing on the host and another
-    under qemu.  The same program stopped for the same reason should
-    say the same thing whatever compiled it; the x86-64 wording is the
-    one to keep, since it says which of the two rules was broken.
+    said "chr: the value is not a code point" (rt_portable.ngpl), so
+    tests/compile/t93_badchar printed one thing on the host and another
+    under qemu.  The x86-64 wording is now RT_BADCHAR's on all six,
+    since it says which of the two rules was broken.  It was the only
+    one of the six aborts the two runtimes disagreed about.
+
+    The interpreter still words it a third way -- "chr: 55296 is not a
+    code point; a character is numbered from 0" -- and names the value,
+    which a runtime routine cannot cheaply do.  Whether the authority
+    should follow the two runtimes or they it is not decided here.
 
 [ ] t96_stack_overflow is a segmentation fault under qemu-arm and
     qemu-riscv32 rather than the message the guard page is there to

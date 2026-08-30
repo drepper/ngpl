@@ -406,7 +406,7 @@ fn rt_build(id : i64, tg : Target, lw : &mut Lower) → IrFn:
         elif id = RT_OOM:
             msg ← "out of memory\n"
         elif id = RT_BADCHAR:
-            msg ← "chr: the value is not a code point\n"
+            msg ← "not a character: past the code points or a surrogate\n"
         elif id = RT_BADFIT:
             msg ← "the value does not fit the type it meets\n"
         b.abort_msg(lw.intern(msg))
