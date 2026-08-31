@@ -219,8 +219,9 @@ The Compiler
 
 [x] built-in build system, after zig's: an @build-annotated comptime-only function is
     handed a &mut std.Build and, where it reads it, a &std.Options holding what the command
-    line said -- o.output and o.target, each a str? and ∅ where nothing was given, one member
-    per option so that an option added later changes no recipe's signature -- and adds to it; --build FILE
+    line said -- o.output, o.target and o.optimize, each an optional and ∅ where nothing was
+    given, one member per option so that an option added later changes no recipe's signature,
+    which o.optimize was the first to show -- and adds to it; --build FILE
     finds it, runs it, and builds every executable it added, in the order it added them.
     No code for the recipe is written into the executable.  An executable says its name,
     the file it is rooted in, and optionally where it goes and what it is built for; the

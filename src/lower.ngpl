@@ -67,6 +67,11 @@ struct Lower:
     argcopy : i64[]      // arguments whose copy by value cannot be elided
     fbytes : i64 ¤byte   // frame taken by objects that live in the frame
     sret : i64           // where a sized answer is to be written, ⁻1 for none
+    // How hard the compiler was asked to work on this code: 0 unless
+    // -O said otherwise.  Nothing reads the number; what reads it is
+    // opt_at_least below, so an optimization says which level it
+    // belongs to and the levels stay a matter of one comparison.
+    olevel : i64
 
 @post(r: (r & 255) >= 8 and (r & 255) <= 64)
 fn width_of(t : i64) → i64:
@@ -76,6 +81,15 @@ fn width_of(t : i64) → i64:
     ty_bits(t) + 256 × ty_sgn(t)
 
 impl Lower:
+    // Whether the code being generated was asked for at least this much
+    // work.  Every optimization the compiler grows asks this rather
+    // than reading the level, so what a level means is written once
+    // beside each thing it turns on, and level 0 -- the default, what a
+    // build gets when -O said nothing -- turns none of them on.
+    @pre(level >= 1)
+    fn opt_at_least(&self, level : i64) → bool:
+        self.olevel >= level
+
     // Take bytes out of this frame's object region.  The offset counts
     // from the bottom, so what is handed out stays put as the region
     // grows; the alignment is the object's own, and the region as a

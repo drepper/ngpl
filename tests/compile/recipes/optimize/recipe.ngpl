@@ -1,0 +1,25 @@
+// A recipe reading what -O asked for, and saying it itself.  The level
+// is a member of the std.Options like any other, ∅ where -O was not
+// given, and a field of an executable, which wins over what -O said.
+//
+// The harness runs this without -O, so the one that reads the options
+// is built at 0 and the one that says a level of its own is built at
+// that.  What the compiler does at each level is its own business; a
+// recipe only says what is asked for.
+
+fn tag(level : i64) → str:
+    if level = 0: "plain" elif level = 1: "fast" else: "faster"
+
+@build
+fn build(b : &mut std.Build, o : &std.Options):
+    b.output_dir ← "out"
+    b.add_executable(std.Build.Executable{name: "prog-" ⧺ tag(o.optimize ?? 0),
+                                          root_source_file: "one.ngpl"})
+    b.add_executable(std.Build.Executable{name: "prog-said",
+                                          root_source_file: "one.ngpl",
+                                          optimize: 2})
+
+@start
+@impure
+fn main():
+    std.println("the recipe is not the program")

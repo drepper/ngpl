@@ -1,0 +1,13 @@
+// A recipe holds numbers, truth values and strings; the evaluator that
+// reads one has no characters.  A recipe that wrote one would be handed
+// its code point here and a character by the interpreter, which is two
+// different programs, so it is refused by name instead.
+@build
+fn build(b : &mut std.Build):
+    let c := 'a'
+    b.add_executable(std.Build.Executable{name: "a", root_source_file: "a.ngpl"})
+    _ ← c
+
+@start
+fn main():
+    _ ← 1

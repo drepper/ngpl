@@ -137,6 +137,23 @@ fn parse_size(t : str) → i64:
         v ← v ⊠ 10 ⊞ (c - '0')
     v ⊠ scale
 
+// The number an option carries written out in plain decimal, or ⁻1
+// where what follows is not one.  -O takes a level this way, where a
+// size takes the K, M and G that parse_size knows.
+@post(r: r >= ⁻1)
+fn parse_level(t : str) → i64:
+    if #t = 0¤ptrdiff:
+        return ⁻1
+    let v : mut i64 = 0
+    foreach c := t:
+        if c < '0' or c > '9':
+            return ⁻1
+        // a level nobody could mean is refused rather than wrapped
+        if v > 99999999:
+            return ⁻1
+        v ← v × 10 + (c - '0')
+    v
+
 // whether an argument is 'name=' and then whatever it carries
 @pre(#name > 0)
 fn opt_matches(a : str, name : str) → bool:
@@ -182,8 +199,8 @@ fn build(b : &mut std.Build, o : &std.Options):
                                           target: o.target ?? ""})
 
 fn empty_recipe() → Recipe:
-    (Recipe{names: [], roots: [], outdirs: [], targets: [], paths: [],
-            flags: [], diags: []})
+    (Recipe{names: [], roots: [], outdirs: [], targets: [], optimizes: [],
+            paths: [], flags: [], diags: []})
 
 // A name the recipe gave, made into a path this run can open.  An
 // absolute name is taken as written; anything else is looked for beside
@@ -220,7 +237,7 @@ fn recipe_failed():
 
 @impure
 fn read_build(path : str, json : bool, output : str, target : str,
-              host : str) → Recipe:
+              host : str, optimize : i64) → Recipe:
     if not is_ngpl_source(path):
         std.println("ngplc: cannot tell what '{}' is: an NGPL source file's name ends in '.ngpl'", path)
         recipe_failed()
@@ -242,7 +259,7 @@ fn read_build(path : str, json : bool, output : str, target : str,
     // The recipe runs without the checker having seen the file: what it
     // may contain is settled by the evaluator's own first pass, and no
     // global has been folded, so it reads none.
-    let plan := build_recipe(ast, toks, src, [], output, target, host)
+    let plan := build_recipe(ast, toks, src, [], output, target, host, optimize)
     if #plan.diags > 0:
         report(plan.diags, files, json, src)
         recipe_failed()
@@ -282,6 +299,8 @@ fn help():
                   "                             them\n
                   "      --target=MACHINE       Compile for MACHINE rather than for the\n
                   "                             machine this compiler runs on\n
+                  "  -O[LEVEL]                  Work on the code at LEVEL, or at 1 where the\n
+                  "                             level is left off; without -O the level is 0\n
                   "\n
                   " The program that comes out:\n
                   "      --stack-size=SIZE      Reserve SIZE for its stack\n
@@ -318,6 +337,11 @@ struct Options:
     tgt_index : i64
     stack_size : i64
     guard_size : i64
+    // how hard the compiler is asked to work on the code: 0, which is
+    // what every build gets unless -O said otherwise, and upwards from
+    // there.  It reaches the phases that generate code, which ask
+    // whether they are at a level rather than reading the number.
+    optimize : i64
     want_tokens : bool
     want_ast : bool
     want_log : bool
@@ -389,7 +413,7 @@ fn compile_one(inputs : str[], outname : str, o : Options) → u8:
     // What the recipe says here is not acted on -- --build is where a
     // recipe is read for what it declares -- so it is handed nothing
     // the command line said, and reads it only to be held to the rules.
-    let recipe := build_recipe(ast, toks, src, chk.gvals, "", "", "")
+    let recipe := build_recipe(ast, toks, src, chk.gvals, "", "", "", ⁻1)
     if #recipe.diags > 0:
         report(recipe.diags, files, o.json, src)
         return 1
@@ -408,7 +432,7 @@ fn compile_one(inputs : str[], outname : str, o : Options) → u8:
     if o.incremental:
         incr ← incr_prev(ast, toks, src, prev, bom, fill,
                          tgt.machine.ord(), tgt.is64, tgt.eflags)
-    let first := codegen(ast, toks, src, chk, tgt, o.stack_size, o.guard_size, o.want_log, incr)
+    let first := codegen(ast, toks, src, chk, tgt, o.stack_size, o.guard_size, o.optimize, o.want_log, incr)
     // A rebuild that could not be laid over the old file says why and
     // is done again whole, which is always right.  The whole build
     // still leaves padding, so the build after it is incremental.
@@ -418,7 +442,7 @@ fn compile_one(inputs : str[], outname : str, o : Options) → u8:
     let compiled := if why = "":
         first
     else:
-        codegen(ast, toks, src, chk, tgt, o.stack_size, o.guard_size, o.want_log, incr_first(fill))
+        codegen(ast, toks, src, chk, tgt, o.stack_size, o.guard_size, o.optimize, o.want_log, incr_first(fill))
     if o.incremental and o.want_log:
         if incr.mode ≠ 2:
             std.println("{}", "{\"decision\": \"incremental-first\", \"functions\": " ⧺ i64_str(@dropunit(#ast.fns)) ⧺ "}")
@@ -430,6 +454,7 @@ fn compile_one(inputs : str[], outname : str, o : Options) → u8:
         report(compiled.diags, files, o.json, src)
         return 1
     if o.want_log:
+        std.println("{}", "{\"decision\": \"optimize\", \"level\": " ⧺ i64_str(o.optimize) ⧺ "}")
         // what the checker worked out, then what the lowering did
         foreach l := chk.log:
             std.println("{}", l)
@@ -523,6 +548,10 @@ fn main() → u8:
     // aim at the machine underfoot unless --target says otherwise
     let tgt_index : mut i64 = target_index(host_target())
     let target_name : mut str = ""
+    // What -O asked for, ⁻1 where it was not given.  The level the
+    // compiler works at is 0 unless it says otherwise; the two are
+    // told apart so that a recipe can be handed ∅ for "nothing said".
+    let opt_level : mut i64 = ⁻1
     let i : mut i64 ¤ptrdiff = 0
     while i < #argv:
         let a := argv[i]
@@ -569,6 +598,19 @@ fn main() → u8:
             target_name ← tname
             i ← i + 1
             continue
+        if "-O" ⊑ a and a ≠ "-o":
+            // -O alone is the first level, as every compiler has it;
+            // -O and a number is that level, however far the levels
+            // this compiler has yet reach.
+            let raw : str = a[2¤ptrdiff…#a]
+            let lv : i64 = if raw = "": 1 else: parse_level(raw)
+            if lv = ⁻1:
+                std.println("""ngplc: -O takes a level written after it, as -O2, or nothing at all
+                             " for -O1; '{}' is not one""", a)
+                return 1
+            opt_level ← lv
+            i ← i + 1
+            continue
         if a = "--dump-tokens":
             want_tokens ← true
         elif a = "--dump-ast":
@@ -592,7 +634,7 @@ fn main() → u8:
         return 1
     // The recipe is handed what the command line said, so it may act on
     // it; the compiler then applies -o to what the recipe added.
-    let plan : Recipe = if build_file ≠ "": read_build(build_file, json, output, target_name, host_target()) else: empty_recipe()
+    let plan : Recipe = if build_file ≠ "": read_build(build_file, json, output, target_name, host_target(), opt_level) else: empty_recipe()
     if build_file ≠ "":
         if #plan.names = 0:
             std.println("""ngplc: the @build recipe in '{}' adds no executable, so there is nothing
@@ -618,7 +660,9 @@ fn main() → u8:
     // Every executable the recipe asked for, in the order it asked.
     // Without a recipe there is the one program the command line named.
     let opts : Options = (Options{tgt_index: tgt_index, stack_size: stack_size,
-                                  guard_size: guard_size, want_tokens: want_tokens,
+                                  guard_size: guard_size,
+                                  optimize: opt_level ⌈ 0,
+                                  want_tokens: want_tokens,
                                   want_ast: want_ast, want_log: want_log,
                                   werror: werror, json: json,
                                   incremental: incremental})
@@ -643,8 +687,12 @@ fn main() → u8:
             dir ← if "/" ⊑ plan.outdirs[i] or base = "": plan.outdirs[i] else: base ⧺ "/" ⧺ plan.outdirs[i]
         let named : str = if dir = "": plan.names[i] else: dir ⧺ "/" ⧺ plan.names[i]
         let where : str = if output ≠ "": output else: named
+        // How hard the compiler is asked to work on this one: what the
+        // executable said, else what -O said, which is 0 unless it did.
+        let olv : i64 = if plan.optimizes[i] >= 0: plan.optimizes[i] else: opts.optimize
         let one : Options = (Options{tgt_index: ti, stack_size: opts.stack_size,
                                      guard_size: opts.guard_size,
+                                     optimize: olv,
                                      want_tokens: opts.want_tokens,
                                      want_ast: opts.want_ast, want_log: opts.want_log,
                                      werror: opts.werror, json: opts.json,

@@ -840,9 +840,36 @@ def main() -> int:
         check("one page" in said, f"the complaint was: {said}")
         said = refuse(compiler, sym_src, out, ["--guard-size=2G"])
         check("gibibyte" in said, f"the complaint was: {said}")
+        for bad in ("-Ox", "-O-1", "-O2x"):
+            said = refuse(compiler, sym_src, out, [bad])
+            check("takes a level" in said, f"the complaint was: {said}")
+
+    def optimization_level():
+        """What -O asked for reaches the code generator, and says so.
+
+        The level is what the phases that generate code read; nothing
+        turns on it yet, so what is checked is that every form of the
+        option arrives as the number it names and that a build without
+        it is at zero.
+        """
+        out = os.path.join(work, "probe_opt")
+        for extra, want in (([], 0), (["-O"], 1), (["-O1"], 1),
+                            (["-O2"], 2), (["-O7"], 7)):
+            cmd = compiler + [sym_src, "-o", out, "--log=json"] + extra
+            run = subprocess.run(cmd, capture_output=True, cwd=topdir)
+            check(run.returncode == 0,
+                  f"ngplc refused {extra}: {run.returncode}")
+            said = run.stdout.decode("utf-8", "replace")
+            lines = [line for line in said.splitlines()
+                     if '"decision": "optimize"' in line]
+            check(len(lines) == 1,
+                  f"{extra or 'no -O'} said {len(lines)} things about the level")
+            check(json.loads(lines[0])["level"] == want,
+                  f"{extra or 'no -O'} arrived as {lines[0]}")
 
     case("--incremental writes only what changed",
          lambda: check_incremental(compiler, work))
+    case("-O reaches the code generator", optimization_level)
     case("--stack-size reaches PT_GNU_STACK", stack_option)
     case("--guard-size is taken", guard_option)
     case("a size that is not one is refused", bad_options)

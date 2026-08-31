@@ -3995,6 +3995,19 @@ class Evaluator:
                         + ", ".join(_ExeObj.FIELDS[:-1])
                         + f" and {_ExeObj.FIELDS[-1]} are")
                 value = unwrap_optional(self.eval_expr(fexpr))
+                if fname in _ExeObj.NUMBERS:
+                    # the level it is built at, which is a number
+                    if not isinstance(value, IntValue):
+                        raise TypeError(
+                            "the level an executable is built at is a "
+                            f"number, and '{fname}' is "
+                            f"{self._value_type_name(value)}")
+                    if value.value < 0:
+                        raise TypeError(
+                            "a level counts the work asked for, from 0 up; "
+                            "this one is below it")
+                    fields[fname] = value.value
+                    continue
                 if not isinstance(value, StrValue):
                     raise TypeError(
                         "a field of std.Build.Executable is a string, and "
@@ -4238,9 +4251,9 @@ class Evaluator:
                     # something absent.
                     raise AttributeError(
                         f"'{node.attr}' is nothing the command line says; "
-                        "output is what -o named and target what --target "
-                        "named, each \N{EMPTY SET} where the command line "
-                        "said nothing")
+                        "output is what -o named, target what --target "
+                        "named and optimize the level -O asked for, each "
+                        "\N{EMPTY SET} where the command line said nothing")
                 attr_val = getattr(unwrapped.obj, node.attr, None)
                 if attr_val is not None:
                     if isinstance(attr_val, Value):

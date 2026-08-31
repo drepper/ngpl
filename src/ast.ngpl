@@ -158,16 +158,18 @@ fn build_member(name : str) → i64:
 // thing rather than as a parameter each.
 let OM_OUTPUT : i64 = 1     // o.output: what -o named, ∅ where it was not given
 let OM_TARGET : i64 = 2     // o.target: what --target named, ∅ likewise
+let OM_OPTIMIZE : i64 = 3   // o.optimize: the level -O asked for, ∅ likewise
 
 fn option_member(name : str) → i64:
     if name = "output": return OM_OUTPUT
     if name = "target": return OM_TARGET
+    if name = "optimize": return OM_OPTIMIZE
     ⁻1
 
 // what a std.Options holds, for the diagnostic that says it does not
 fn option_members() → str:
-    """output is what -o named and target what --target named, each ∅ where the command line
-     " said nothing"""
+    """output is what -o named, target what --target named and optimize the level -O asked
+     " for, each ∅ where the command line said nothing"""
 
 // what a std.Build offers, for the diagnostic that says it does not
 fn build_members() → str:

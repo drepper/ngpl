@@ -1,0 +1,3 @@
+tests/compile/refuse/recipe_character.ngpl:7:14: error: a character is not part of a build recipe; a recipe binds names, tests them, loops, joins strings, reads what the command line said with ??, and calls the functions this file defines
+  7 |     let c := 'a'
+    |              ^

@@ -88,6 +88,9 @@ struct Recipe:
     roots : str[]
     outdirs : str[]
     targets : str[]
+    // the level each is built at, ⁻1 where the executable said nothing
+    // and what -O said stands
+    optimizes : i64[]
     paths : str[]
     flags : str[]
     diags : Diag[]
@@ -111,13 +114,16 @@ struct Cev:
     cfg_root : str[]
     cfg_outd : str[]
     cfg_tgt : str[]
+    cfg_opt : i64[]
     // …and which of them were added, in the order they were added
     added : i64[]
     // what the command line said, which the std.Options answers: the
     // empty string is how the rest of the compiler carries "nothing
-    // said", and it becomes the ∅ a recipe reads
+    // said" of the two names, and ⁻1 how it carries it of the level;
+    // each becomes the ∅ a recipe reads
     opt_output : str
     opt_target : str
+    opt_optimize : i64
     outd : str              // b.output_dir: where an output that names none goes
     host : str              // b.host_target: what this compiler builds for by default
     paths : str[]
@@ -231,6 +237,14 @@ impl Cev:
         let na : i64 = self.a.na[id × 1¤ptrdiff]
         let nb : i64 = self.a.nb[id × 1¤ptrdiff]
         let nc : i64 = self.a.nc[id × 1¤ptrdiff]
+        // A character literal is an int node the lexer marked, and the
+        // evaluator holds no characters -- a recipe that wrote one
+        // would be handed its code point here and a character by the
+        // interpreter, which is two different programs.  So it is
+        // refused by name, as everything else outside the subset is.
+        if k = NK_INT and nb >= 2 and (nb » 1) = TY_CHAR:
+            self.derr(tok, "a character is not part of a build recipe; " ⧺ ev_subset())
+            return
         if ev_is_leaf(k):
             return
         if k = NK_ARRLIT or k = NK_CALL:
@@ -865,34 +879,49 @@ impl Cev:
 
     fn ev_exe_lit(&mut self, tok : i64, off : i64) → CVal:
         // One std.Build.Executable{…}: its fields read in the order
-        // they were written, and what it did not name left empty.
+        // they were written, and what it did not name left empty.  Four
+        // of them are names and one is a level, so what a field holds
+        // is judged against the field rather than all alike.
         let n : i64 = self.a.extra[off × 1¤"aextra"]
         let name : mut str = ""
         let root : mut str = ""
         let outd : mut str = ""
         let tgt : mut str = ""
+        // ⁻1 is what this executable says nothing about, which leaves
+        // the level to what -O said
+        let olv : mut i64 = ⁻1
         foreach i := 0…n:
             let ftok : i64 = self.a.extra[(off + 1 + i × 2) × 1¤"aextra"]
             let v : CVal = self.ev_expr(self.a.extra[(off + 2 + i × 2) × 1¤"aextra"])
             if self.halted():
                 return cv_none()
+            let f : str = self.text(ftok)
+            if f = "optimize":
+                if v.tag ≠ CV_INT:
+                    self.derr(ftok, "the level an executable is built at is a number, and this is " ⧺ self.cv_kind(v))
+                    return cv_none()
+                if v.n < 0:
+                    self.derr(ftok, "a level counts the work asked for, from 0 up; this one is below it")
+                    return cv_none()
+                olv ← v.n
+                continue
             if v.tag ≠ CV_STR:
                 self.derr(ftok, "a field of std.Build.Executable is a string, and this is " ⧺ self.cv_kind(v))
                 return cv_none()
-            let f : str = self.text(ftok)
             if f = "name": name ← v.s
             elif f = "root_source_file": root ← v.s
             elif f = "output_dir": outd ← v.s
             elif f = "target": tgt ← v.s
             else:
                 self.derr(ftok, "'" ⧺ f ⧺ """' is no field of std.Build.Executable; name,
-                                 " root_source_file, output_dir and target are""")
+                                 " root_source_file, output_dir, target and optimize are""")
                 return cv_none()
         let at : i64 = @dropunit(#self.cfg_name)
         self.cfg_name.push(name)
         self.cfg_root.push(root)
         self.cfg_outd.push(outd)
         self.cfg_tgt.push(tgt)
+        self.cfg_opt.push(olv)
         (CVal{tag: CV_EXE, n: at, m: 0, s: ""})
 
     fn ev_bmethod(&mut self, tok : i64, name : str, args_off : i64 ¤"aextra") → CVal:
@@ -936,14 +965,16 @@ impl Cev:
         cv_none()
 
     fn ev_ofield(&mut self, tok : i64, name : str) → CVal:
-        // A data member of the command line, read.  Each is an optional
-        // string: ∅ where nothing was said, which is what the empty
-        // string the compiler carries stands for.
+        // A data member of the command line, read.  Each is an optional:
+        // ∅ where nothing was said, which is what the empty string and
+        // the ⁻1 the compiler carries stand for.
         let om : i64 = option_member(name)
-        let said : str = if om = OM_OUTPUT: self.opt_output else: self.opt_target
         if om = ⁻1:
             self.derr(tok, "'" ⧺ name ⧺ "' is nothing the command line says; " ⧺ option_members())
             return cv_none()
+        if om = OM_OPTIMIZE:
+            return if self.opt_optimize < 0: cv_none() else: cv_int(self.opt_optimize)
+        let said : str = if om = OM_OUTPUT: self.opt_output else: self.opt_target
         if said = "": cv_none() else: cv_str(said)
 
     fn ev_bfield(&mut self, tok : i64, name : str) → CVal:
@@ -967,16 +998,17 @@ impl Cev:
 // carrying its own diagnostics, and so does this.
 @post(r: #r.diags = 0 or (#r.names = 0 and #r.paths = 0 and #r.flags = 0))
 fn build_recipe(a : Ast, toks : Toks, src : byte[], gvals : i64[],
-                output : str, target : str, host : str) → Recipe:
+                output : str, target : str, host : str, optimize : i64) → Recipe:
     if #a.builds = 0:
         return (Recipe{names: [], roots: [], outdirs: [], targets: [],
-                       paths: [], flags: [], diags: []})
+                       optimizes: [], paths: [], flags: [], diags: []})
     let recipe : FnDef = a.builds[0¤ptrdiff]
     let ev : mut Cev = (Cev{a: a, toks: toks, src: src, gvals: gvals,
                           names: [], vals: [], vmut: [], marks: [], floor: 0,
                           pool: [], cfg_name: [], cfg_root: [], cfg_outd: [],
-                          cfg_tgt: [], added: [], opt_output: output,
-                          opt_target: target, outd: "", host: host,
+                          cfg_tgt: [], cfg_opt: [], added: [], opt_output: output,
+                          opt_target: target, opt_optimize: optimize,
+                          outd: "", host: host,
                           paths: [], flags: [],
                           steps: EV_STEPS, depth: 0, ret: cv_none(),
                           diags: []})
@@ -1001,7 +1033,7 @@ fn build_recipe(a : Ast, toks : Toks, src : byte[], gvals : i64[],
         ev.pop_scope()
     if #ev.diags > 0:
         return (Recipe{names: [], roots: [], outdirs: [], targets: [],
-                       paths: [], flags: [], diags: ev.diags})
+                       optimizes: [], paths: [], flags: [], diags: ev.diags})
     assert(#ev.marks = 0, "every scope the recipe opened was closed")
     assert(ev.depth = 0, "every call the recipe made returned")
     // the executables it added, in the order it added them, each with
@@ -1010,13 +1042,15 @@ fn build_recipe(a : Ast, toks : Toks, src : byte[], gvals : i64[],
     let roots : mut str[] = []
     let outdirs : mut str[] = []
     let targets : mut str[] = []
+    let optimizes : mut i64[] = []
     foreach at := ev.added:
         let i : i64 ¤ptrdiff = at × 1¤ptrdiff
         names.push(ev.cfg_name[i])
         roots.push(ev.cfg_root[i])
         outdirs.push(if ev.cfg_outd[i] = "": ev.outd else: ev.cfg_outd[i])
         targets.push(ev.cfg_tgt[i])
-    assert(#names = #roots and #names = #outdirs and #names = #targets,
-           "the four things said about an executable are still in step")
+        optimizes.push(ev.cfg_opt[i])
+    assert(#names = #roots and #names = #outdirs and #names = #targets and #names = #optimizes,
+           "the five things said about an executable are still in step")
     (Recipe{names: names, roots: roots, outdirs: outdirs, targets: targets,
-            paths: ev.paths, flags: ev.flags, diags: []})
+            optimizes: optimizes, paths: ev.paths, flags: ev.flags, diags: []})

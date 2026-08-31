@@ -1,0 +1,6 @@
+// What the recipe beside this builds.  Which name it is built under
+// says what the command line asked for of the code.
+@start
+@impure
+fn main():
+    std.println("one says 42")

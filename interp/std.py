@@ -1112,17 +1112,25 @@ class Executable:
     the command line said and from what the build holds.
     """
 
-    __slots__ = ("name", "root_source_file", "output_dir", "target")
+    __slots__ = ("name", "root_source_file", "output_dir", "target",
+                 "optimize")
 
     FIELDS: tuple[str, ...] = ("name", "root_source_file", "output_dir",
-                               "target")
+                               "target", "optimize")
+
+    # The one field that holds a number rather than a name: the level
+    # this executable is built at, or None where it says nothing and
+    # what -O said stands.
+    NUMBERS: tuple[str, ...] = ("optimize",)
 
     def __init__(self, name: str = "", root_source_file: str = "",
-                 output_dir: str = "", target: str = ""):
+                 output_dir: str = "", target: str = "",
+                 optimize: int | None = None):
         self.name = name
         self.root_source_file = root_source_file
         self.output_dir = output_dir
         self.target = target
+        self.optimize = optimize
 
     def display(self) -> str:
         return f"std.Build.Executable{{name: \"{self.name}\"}}"
@@ -1162,13 +1170,15 @@ class Options:
     for reading it.
     """
 
-    __slots__ = ("_output", "_target")
+    __slots__ = ("_output", "_target", "_optimize")
 
-    MEMBERS: tuple[str, ...] = ("output", "target")
+    MEMBERS: tuple[str, ...] = ("output", "target", "optimize")
 
-    def __init__(self, output: str | None = None, target: str | None = None):
+    def __init__(self, output: str | None = None, target: str | None = None,
+                 optimize: int | None = None):
         self._output = output
         self._target = target
+        self._optimize = optimize
 
     @staticmethod
     def _said(what: str | None):
@@ -1184,6 +1194,17 @@ class Options:
     @property
     def target(self):
         return self._said(self._target)
+
+    @property
+    def optimize(self):
+        """The level -O asked for: a number, ∅ where it was not given.
+
+        Untyped, as a level written on the command line is: what holds
+        it settles how wide it is.
+        """
+        from interp.value import SomeValue, mk_int, none
+        return (none() if self._optimize is None
+                else SomeValue(mk_int(self._optimize)))
 
 
 class Build:

@@ -10053,8 +10053,9 @@ A recipe is **handed the build it declares on**, and its first parameter is that
 |---|---|
 | `o.output` | the name `-o` gave, `∅` where it was not given |
 | `o.target` | the machine `--target` gave, `∅` likewise |
+| `o.optimize` | the level `-O` asked for, `∅` likewise |
 
-Each is a `str?` and **`∅` says the command line said nothing** — the absence is the value, rather than an empty string standing in for it, so `??` gives what to use instead:
+Each is an optional — `str?` for the two names, a number for the level — and **`∅` says the command line said nothing** — the absence is the value, rather than an empty string standing in for it, so `??` gives what to use instead:
 
 ```
 @build
@@ -10065,7 +10066,7 @@ fn build(b : &mut std.Build, o : &std.Options):
                                           target: o.target ?? ""})
 ```
 
-**The options arrive as one thing so that the signature stops changing.**  An option added to the compiler later adds a member here and leaves every recipe ever written as it was; a parameter per option would break each one in turn.  For the same reason the borrow is the plain `&`: the command line is a recipe's to read, never to rewrite, and a `std.Options` copied into a recipe or written through is refused where it is written.
+**The options arrive as one thing so that the signature stops changing.**  An option added to the compiler later adds a member here and leaves every recipe ever written as it was; a parameter per option would break each one in turn.  `o.optimize` is the first member added that way, and no recipe had to be rewritten for it.  For the same reason the borrow is the plain `&`: the command line is a recipe's to read, never to rewrite, and a `std.Options` copied into a recipe or written through is refused where it is written.
 
 A recipe that reads none of it, which is most of them, takes only the build.  Anything else — no parameters, a first that is not a `&mut std.Build`, a third, a second that is not a `&std.Options` — is refused where it is written.
 
@@ -10091,7 +10092,8 @@ An executable is declared by adding one, and everything about it is said in the 
 b.add_executable(std.Build.Executable{name: "sbom",
                                       root_source_file: "tools/sbom.ngpl",
                                       output_dir: "build/tools",
-                                      target: "aarch64"})
+                                      target: "aarch64",
+                                      optimize: 2})
 ```
 
 | field | means | when it is left out |
@@ -10100,6 +10102,9 @@ b.add_executable(std.Build.Executable{name: "sbom",
 | `root_source_file` | the one file the program is rooted in | required; a build has a root |
 | `output_dir` | where this one goes | `b.output_dir`, the build's own |
 | `target` | what this one is built for | what `--target` said, else the machine underfoot |
+| `optimize` | how hard the compiler works on this one | what `-O` said, else 0 |
+
+Every field but `optimize` holds a name; `optimize` holds the level, counted from 0 up, and a level below that is refused where it is written.
 
 **Where each one goes is its own.**  `output_dir` is a field of the executable, and `b.output_dir` is only what an executable that names none falls back to — so one recipe can put its program in one directory and its tools in another without saying anything about the build as a whole.
 
@@ -10125,7 +10130,7 @@ What a `std.Options` holds is the same statements, said to the recipe rather tha
 
 #### What a Recipe May Say
 
-A recipe is a program, not a table — it may compute the names it declares — but it is a program in a subset.  A recipe binds names, tests them, loops, joins strings, reads what the command line said with `∅` and `??`, and calls the functions its own file defines.  It holds integers, truth values, strings and arrays of strings, the build it was handed and the options beside it.  `std.Build.Executable` is the one struct literal it may write: a recipe holds no program, so a program's struct is not one of the things it can make.
+A recipe is a program, not a table — it may compute the names it declares — but it is a program in a subset.  A recipe binds names, tests them, loops, joins strings, reads what the command line said with `∅` and `??`, and calls the functions its own file defines.  It holds integers, truth values, strings and arrays of strings, the build it was handed and the options beside it.  `std.Build.Executable` is the one struct literal it may write: a recipe holds no program, so a program's struct is not one of the things it can make.  A **character** is not one of the things it holds either, and a recipe that writes one is told so rather than handed the number behind it.
 
 The interpreter reads a recipe with the same evaluator it runs everything else with, so it accepts recipes the compiler does not.  The compiler **refuses what it cannot do, by name**, rather than ignoring it — a recipe that the compiler accepts means the same thing under both, and a recipe that reaches past the subset is told which construct did it.
 
@@ -10193,6 +10198,24 @@ build/ngplc: 1276 rows
 ```
 
 It walks the section headers for the two sections and reads nothing else, so a binary built for another architecture or another class still answers.  The elf tests hold it to the same rows they find themselves.
+
+### How Hard the Compiler Works
+
+`-O` says how much work to spend on the code.  `-O` alone is level 1, `-O` and a number is that level, and **without it the level is 0** — which is what every build gets unless it asks otherwise, and what every optimization is measured against:
+
+```
+ngplc prog.ngpl -o prog          /* level 0 */
+ngplc prog.ngpl -o prog -O       /* level 1 */
+ngplc prog.ngpl -o prog -O2      /* level 2 */
+```
+
+The level is a number rather than a set of names, so a level the compiler does not have yet is a level it will have: nothing is refused for being high.  What is refused is what is not a level at all — `-Ox`, `-O-1`, `-O2x` — since an option accepted and then ignored is the one behaviour guaranteed to be wrong.
+
+What each level turns on is the compiler's own business and is written beside the thing it turns on: the phases that generate code ask whether they are **at least** at a level rather than reading the number, so a level is one comparison and level 0 turns none of them on.  `--log=json` says which level a build ran at.
+
+A recipe reads what was asked for as `o.optimize` and says what it wants as an executable's `optimize`, and the executable's own level wins: **what the executable said, else what `-O` said, else 0** — the same order `--target` follows.
+
+Optimization never changes what a program means.  A level buys speed or size out of the same program; it does not buy a different one, and nothing a program is promised — a contract checked, an overflow caught, a character judged — is traded away for it.
 
 ### Compiling Only What Changed
 
