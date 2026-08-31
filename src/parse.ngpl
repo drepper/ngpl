@@ -2390,7 +2390,7 @@ impl Parser:
             // top of the range is written out where it would be needed
             let hi : i64 = if bits - sgn >= 63: 9223372036854775807 else: (1 « (bits - sgn)) - 1
             if v < lo or (bits - sgn < 64 and v > hi):
-                self.err("enumerator '" ⧺ self.emembers[f] ⧺ "' is " ⧺ tokens.i64_str(v) ⧺ ", which does not fit " ⧺ types.type_name_m(w, self.umarks) ⧺ ", the type the values are stored in")
+                self.err("enumerator '" ⧺ self.emembers[f] ⧺ "' is " ⧺ tokens.i64_str(v) ⧺ ", which does not fit " ⧺ types.type_name_m(w, self.umarks, self.snames, self.enames) ⧺ ", the type the values are stored in")
                 return
         let n : i64 ¤ptrdiff = #self.emembers - first
         if n = 0:

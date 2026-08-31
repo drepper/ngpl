@@ -12,7 +12,7 @@ error: array index 9 out of range (length 2)
     |   ^
     |
 "still alive"
-error: bad_call: argument 'n' expected i64, got StrValue
+error: bad_call: argument 'n' expected i64, got str
   --> <repl:7>:1:10
     |
   1 | bad_call("text")

@@ -2639,14 +2639,14 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
         if not isinstance(value, BoolValue):
             raise TypeError(
                 f"{func_name}: argument '{param_name}' expected bool, "
-                f"got {type(value).__name__}")
+                f"got {runtime_type_of(value)}")
         return value
 
     if param_type == "str":
         if not isinstance(value, StrValue):
             raise TypeError(
                 f"{func_name}: argument '{param_name}' expected str, "
-                f"got {type(value).__name__}")
+                f"got {runtime_type_of(value)}")
         return value
 
     if param_type == "char":
@@ -2660,7 +2660,7 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
         if not isinstance(value, NoneValue):
             raise TypeError(
                 f"{func_name}: argument '{param_name}' expected \N{EMPTY SET}, "
-                f"got {type(value).__name__}")
+                f"got {runtime_type_of(value)}")
         return value
 
     # A parameter states a type the way a binding does, so an array
@@ -2731,17 +2731,17 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
             return ObjectValue(ArrayValue(elements, element_type=elem_type))
         raise TypeError(
             f"{func_name}: argument '{param_name}' expected {param_type}, "
-            f"got {type(value).__name__}")
+            f"got {runtime_type_of(value)}")
 
     if param_type in _TYPE_BITS or param_type == "int":
         if isinstance(value, FloatValue):
             raise TypeError(
                 f"{func_name}: argument '{param_name}' expected {param_type}, "
-                f"got {type(value).__name__}")
+                f"got {runtime_type_of(value)}")
         if not isinstance(value, IntValue):
             raise coded(2015, TypeError(
                 f"{func_name}: argument '{param_name}' expected {param_type}, "
-                f"got {type(value).__name__}"))
+                f"got {runtime_type_of(value)}"))
         return coerce_to_type(value, param_type)
 
     if param_type in FLOAT_TYPES:
@@ -2761,7 +2761,7 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
             return mk_float(checked, param_type)
         raise TypeError(
             f"{func_name}: argument '{param_name}' expected {param_type}, "
-            f"got {type(value).__name__}")
+            f"got {runtime_type_of(value)}")
 
     if is_generic_type(param_type):
         return value
@@ -2806,6 +2806,16 @@ def coerce_arg(value: "Value", param_type: str, func_name: str,
 _SCALAR_TARGETS = {"str", "bool", "int", "char"}
 
 
+def is_scalar_value(value: "Value") -> bool:
+    """Whether a value is one of the scalars a width can name.
+
+    Everything else -- a struct, a dictionary, a tuple, an enum -- is
+    its own kind, and the kinds do not run together.
+    """
+    return isinstance(value, (IntValue, FloatValue, StrValue, BoolValue,
+                              CharValue))
+
+
 def _scalar_kind_mismatch(value: "Value", target: str) -> str | None:
     """Say how a scalar value differs in kind from the type named.
 
@@ -2817,6 +2827,15 @@ def _scalar_kind_mismatch(value: "Value", target: str) -> str | None:
     if target not in _SCALAR_TARGETS and target not in _TYPE_BITS \
             and target not in FLOAT_TYPES:
         return None
+    # A struct, a dictionary, a tuple or an enum is not a scalar of any
+    # width: what holds several things is not one of them, and an
+    # enumeration is its own type rather than the number behind it.  An
+    # array is the one thing left alone here, since a scalar target
+    # names what its elements are rather than what it is.
+    if isinstance(value, (TupleValue, EnumValue)) or (
+            isinstance(value, ObjectValue)
+            and not isinstance(value.obj, ArrayValue)):
+        return runtime_type_of(value)
     if isinstance(value, StrValue):
         return None if target == "str" else "a string"
     # A character is what a string is made of rather than a number or a

@@ -1,0 +1,7 @@
+error: 'i32' cannot hold Point
+  --> tests/output/let_holds_a_struct.ngpl:11:19
+    |
+ 11 |     let n : i32 = p
+    |                   ^
+ 12 |     std.println("{}", n)
+    |

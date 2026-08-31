@@ -262,6 +262,8 @@ struct Checker:
     toks : lex.Toks
     src : byte[]
     fnames : str[]
+    snm : str[]          // the structs' names, in their own order, so a
+                         // message writes what the program wrote
     curmod : str         // the module the function being checked lives in
     gnames : str[]
     gvals : i64[]
@@ -4382,7 +4384,7 @@ impl Checker:
     // file declared would name it by its index; the Ast carries the
     // marks, and the checker carries the Ast.
     fn tn(&self, t : i64) → str:
-        types.type_name_m(t, self.a.umarks)
+        types.type_name_m(t, self.a.umarks, self.snm, self.a.enames)
 
     // Whether a value measured `u` may go where `want` is asked for.
     // Its own measure always may; beyond that the decay chain is
@@ -6280,7 +6282,10 @@ fn check(a : ast.Ast, toks : lex.Toks, src : byte[]) → Chk:
         nlend.push(0)
         nmove.push(0)
         nfree.push(0)
-    let c : mut Checker = (Checker{a: a, toks: toks, src: src, fnames: fnames, curmod: "",
+    let snm : mut str[] = []
+    foreach sd := a.structs:
+        snm.push(sd.name)
+    let c : mut Checker = (Checker{a: a, toks: toks, src: src, fnames: fnames, snm: snm, curmod: "",
                                    gnames: gnames, gvals: [], ginit: [], ite: [],
                                    ntype: ntype, nslot: nslot, ncvt: ncvt,
                                    nrep: nrep, nlam: nlam, nhold: nhold, nfree: nfree,

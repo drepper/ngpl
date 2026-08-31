@@ -410,18 +410,18 @@ fn fnval_ret_ok(r : i64) → bool:
 fn names_int_type(name : str) → bool:
     #name >= 2 and ("i" ⊑ name or "u" ⊑ name) and (λi : i64 ¤ptrdiff |name| → bool: name[i] >= '0' and name[i] <= '9') ∀ 1…#name - 1 and (λi : i64 ¤ptrdiff |name| → bool: name[i] ≠ '0') ∃ 1…#name - 1
 
-// The name of a type, as a diagnostic writes it.  A measure the file
-// declared can only be named by a caller holding the file's marks, so
-// type_name_m takes them; type_name is the same thing for a caller with
-// no file to ask, and names such a measure by its index rather than
-// pretending to know it.
+// The name of a type, as a diagnostic writes it.  What the program
+// itself named -- a measure, a struct, an enum -- can only be written
+// by a caller holding the tables, so type_name_m takes them; type_name
+// is the same thing for a caller with no program to ask, and names
+// such a thing by its index rather than pretending to know it.
 @post(r: #r > 0)
 fn type_name(t0 : i64) → str:
-    type_name_m(t0, unit_marks())
+    type_name_m(t0, unit_marks(), [], [])
 
 @export
 @post(r: #r > 0)
-fn type_name_m(t0 : i64, marks : str[]) → str:
+fn type_name_m(t0 : i64, marks : str[], snames : str[], enames : str[]) → str:
     let r : i64 = ty_ref_kind(t0)
     let t : i64 = ty_strip_ref(t0)
     let prefix : str = if r = 0: "" else: (if r = 1: "&" else: "&mut ")
@@ -442,16 +442,18 @@ fn type_name_m(t0 : i64, marks : str[]) → str:
     if ty_is_var(t): return prefix ⧺ "a type variable"
     if t = TY_UNT: return "untyped integer"
     if t = TY_EMPTY: return "∅"
-    if ty_is_struct(t): return prefix ⧺ "struct #" ⧺ tokens.i64_str(ty_sidx(t))
+    if ty_is_struct(t):
+        return prefix ⧺ (if ty_sidx(t) < @dropunit(#snames): snames[ty_sidx(t) × 1¤ptrdiff] else: "struct #" ⧺ tokens.i64_str(ty_sidx(t)))
     if ty_is_enum(t):
-        // a builtin enum has a name every file knows; a file's own is
-        // named by its place, since this function has no file to ask
-        let bn := builtin_enum_names()
+        // The program's own names where the caller brought them; a
+        // builtin enum has a name every file knows, and beyond both a
+        // number, which says as much as this can honestly say.
+        let bn := if @dropunit(#enames) > 0: enames else: builtin_enum_names()
         return prefix ⧺ (if ty_eidx(t) < @dropunit(#bn): bn[ty_eidx(t) × 1¤ptrdiff] else: "enum #" ⧺ tokens.i64_str(ty_eidx(t)))
     if ty_is_tup(t): return prefix ⧺ "a tuple"
-    if ty_is_opt(t): return prefix ⧺ type_name_m(ty_opt_base(t), marks) ⧺ "?"
-    if ty_is_arr(t) and not ty_is_farr(t): return prefix ⧺ type_name_m(ty_elem(t), marks) ⧺ "[]"
-    if ty_is_hash(t): return prefix ⧺ "std.dict(" ⧺ type_name_m(ty_hkey(t), marks) ⧺ ", " ⧺ type_name_m(ty_hval(t), marks) ⧺ ")"
+    if ty_is_opt(t): return prefix ⧺ type_name_m(ty_opt_base(t), marks, snames, enames) ⧺ "?"
+    if ty_is_arr(t) and not ty_is_farr(t): return prefix ⧺ type_name_m(ty_elem(t), marks, snames, enames) ⧺ "[]"
+    if ty_is_hash(t): return prefix ⧺ "std.dict(" ⧺ type_name_m(ty_hkey(t), marks, snames, enames) ⧺ ", " ⧺ type_name_m(ty_hval(t), marks, snames, enames) ⧺ ")"
     if ty_is_tup(t): return prefix ⧺ "tuple #" ⧺ tokens.i64_str(ty_tidx(t))
     if ty_is_farr(t): return prefix ⧺ "sized array #" ⧺ tokens.i64_str(ty_fidx(t))
     if ty_is_iter(t): return prefix ⧺ "iterator #" ⧺ tokens.i64_str(ty_iidx(t))

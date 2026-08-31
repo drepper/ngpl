@@ -1,0 +1,3 @@
+tests/compile/refuse/let_holds_a_struct.ngpl:13:9: error: the binding says i32 but the value is Point
+  13 |     let n : i32 = p
+     |         ^

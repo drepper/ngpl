@@ -5,6 +5,16 @@ let types := @import("./types.ngpl")
 
 // ===========================================================================
 // AST dump, one node a line
+// The structs' names in their own order, which is what the type
+// printer wants where a type is one of them.  Built on the spot: this
+// is the tree dump, which runs when someone asks to see it.
+fn snames_of(a : ast.Ast) → str[]:
+    let out : mut str[] = []
+    foreach sd := a.structs:
+        out.push(sd.name)
+    out
+
+
 // ===========================================================================
 
 
@@ -77,7 +87,7 @@ fn dump_node(a : ast.Ast, id : i64, depth : i64, src : byte[], toks : lex.Toks):
         foreach i := 0…n:
             dump_node(a, a.extra[(na + 1 + i) × 1¤ptrdiff], depth + 1, src, toks)
     elif k = ast.NK_LET:
-        std.println("{}let {} mut={} ty={}", pad, ttext, nb, types.type_name_m(nc, a.umarks))
+        std.println("{}let {} mut={} ty={}", pad, ttext, nb, types.type_name_m(nc, a.umarks, snames_of(a), a.enames))
         dump_node(a, na, depth + 1, src, toks)
     elif k = ast.NK_ASSIGN:
         std.println("{}assign {}", pad, ttext)
@@ -152,16 +162,16 @@ fn dump_node(a : ast.Ast, id : i64, depth : i64, src : byte[], toks : lex.Toks):
 @impure
 fn dump_ast(a : ast.Ast, src : byte[], toks : lex.Toks):
     foreach g := a.globals:
-        std.println("global {} mut={} ty={}", g.name, g.is_mut, types.type_name_m(g.ty, a.umarks))
+        std.println("global {} mut={} ty={}", g.name, g.is_mut, types.type_name_m(g.ty, a.umarks, snames_of(a), a.enames))
         dump_node(a, g.init, 1, src, toks)
     foreach f := a.fns:
         std.println("fn {} ret={} impure={} start={}", f.name,
-                    types.type_name_m(f.ret, a.umarks), f.is_impure, f.is_start)
+                    types.type_name_m(f.ret, a.umarks, snames_of(a), a.enames), f.is_impure, f.is_start)
         let np : i64 ¤ptrdiff = a.extra[f.params_off] × 1¤ptrdiff
         foreach i := 0…np:
             let ptok : i64 = a.extra[f.params_off + 1 + i × 2]
             let pty : i64 = a.extra[f.params_off + 2 + i × 2]
-            std.println("  param {} : {}", tokens.run_str(src, toks.off[ptok × 1¤ptrdiff], toks.len[ptok × 1¤ptrdiff]), types.type_name_m(pty, a.umarks))
+            std.println("  param {} : {}", tokens.run_str(src, toks.off[ptok × 1¤ptrdiff], toks.len[ptok × 1¤ptrdiff]), types.type_name_m(pty, a.umarks, snames_of(a), a.enames))
         dump_node(a, f.body, 1, src, toks)
     // the recipe is not among the functions, so it is shown apart from
     // them; a dump that left it out would not be a view of the file

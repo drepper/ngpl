@@ -167,7 +167,7 @@ from interp.value import (
     check_bootstrap_argument, check_bootstrap_type, check_binding_settles,
     check_bootstrap_binding,
     UNTYPED, is_unwidthed, settle_untyped, apply_unit, convert_unit_value,
-    _scalar_kind_mismatch,
+    _scalar_kind_mismatch, is_scalar_value,
     CharValue, check_code_point, TRUE_VALUE, FALSE_VALUE,
     UnitValue, RefValue, Reference, ElementRef, Iterator, ArrayIterator,
     deep_copy_value, register_type_alias, alias_unit_spec, DISCARD_NAME,
@@ -8246,6 +8246,15 @@ class Evaluator:
                     f"{func_name}: return type is {ret_type}, but "
                     f"{strip_position_prefix(str(e))}")) from None
             return rewrap(settled) if rewrap is not None else settled
+        # A struct, a dictionary, a tuple or an enum is not a scalar of
+        # any width, so a signature naming one is not answered by it.
+        # What a binding refuses on the way in, a signature refuses on
+        # the way out.
+        if not is_scalar_value(inner) \
+                and _scalar_kind_mismatch(inner, check) is not None:
+            raise coded(2262, TypeError(
+                f"{func_name}: return type is {ret_type} "
+                f"but body evaluates to {self._value_type_name(inner)}"))
         if check in _TYPE_BITS or check == "int":
             if isinstance(inner, FloatValue):
                 raise coded(2261, TypeError(

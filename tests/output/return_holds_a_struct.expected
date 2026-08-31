@@ -1,0 +1,10 @@
+error: gives: return type is i32 but body evaluates to Point
+  --> tests/output/return_holds_a_struct.ngpl:9:20
+    |
+  9 |     Point{x: 1, y: 2}
+    |                    ^
+ 10 | 
+    |
+backtrace (innermost call first):
+  #0 gives at tests/output/return_holds_a_struct.ngpl:9:19
+  #1 main at tests/output/return_holds_a_struct.ngpl:14:22

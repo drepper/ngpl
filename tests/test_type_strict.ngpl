@@ -299,7 +299,7 @@ fn wants_a_number(x : i32):
     ∅
 
 @test
-@expect error 2015 "wants_a_number: argument 'x' expected i32, got StrValue"
+@expect error 2015 "wants_a_number: argument 'x' expected i32, got str"
 fn error_argument_of_another_kind():
     _ ← wants_a_number("hello")
 

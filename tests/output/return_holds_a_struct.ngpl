@@ -1,0 +1,14 @@
+// A signature says what leaves a function, and a struct is not a
+// number however the type is written: what a binding refuses on the
+// way in, a signature refuses on the way out.
+struct Point:
+    x : i64
+    y : i64
+
+fn gives() → i32:
+    Point{x: 1, y: 2}
+
+@start
+@impure
+fn main():
+    std.println("{}", gives())

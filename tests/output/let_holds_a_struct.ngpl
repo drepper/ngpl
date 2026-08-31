@@ -1,0 +1,12 @@
+// A binding says what it holds, and a struct is not a number however
+// the type is written: the kinds do not run together.
+struct Point:
+    x : i64
+    y : i64
+
+@start
+@impure
+fn main():
+    let p : Point = Point{x: 1, y: 2}
+    let n : i32 = p
+    std.println("{}", n)
