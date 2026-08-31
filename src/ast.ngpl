@@ -245,14 +245,16 @@ struct Mods:
     offs : i64 ¤byte[]
     fmod : i64[]
     names : str[]
+    roots : str[]        // … and the file each module is rooted in, which
+                         // is how a diagnostic names one
     bname : str[]
     bmod : i64[]
     bowner : i64[]
 
 @export
 fn no_mods() → Mods:
-    (Mods{offs: [0¤byte], fmod: [0], names: [""], bname: [], bmod: [],
-          bowner: []})
+    (Mods{offs: [0¤byte], fmod: [0], names: [""], roots: [""], bname: [],
+          bmod: [], bowner: []})
 
 // A struct literal writes a name and its fields; one of them names no
 // struct the program declares but the one the build system defines,
@@ -462,6 +464,9 @@ struct Ast:
     strs : str[]
     fns : FnDef[]
     qmods : str[]        // the module each qualified call names
+    mnames : str[]       // every module's name, and the file each one is
+    mroots : str[]       // rooted in, so a diagnostic names it as the
+                         // program's author would
     builds : FnDef[]     // the @build recipe, read while the program is
                          // built and never written into the image
     globals : GlobalDef[]

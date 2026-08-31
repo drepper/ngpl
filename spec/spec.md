@@ -9951,6 +9951,8 @@ error: the module ./geometry.ngpl does not let others name 'helper';
 @export says what leaves a module
 ```
 
+**A refusal names the module by the file it is rooted in**, in both implementations and in the same words.  A module's own name — the stem, which qualifies its symbols — is not what a reader can go and open, and two modules may share one; the file is what was written and what can be looked at.  A name the module does not define at all is refused the same way, with `defines no` in place of the clause about exporting.
+
 What a module did not export is still its own: a file reaches everything it defines, exported or not, by writing the name.  A bare name is looked for in the module in hand first, and then among the names that belong to nobody — the builtins and what `std` holds.  **It is never looked for in the module that bound this one.**  What the file a program is rooted in defines is that module's, the way any other module's names are its own; a module reaches it, if at all, by binding it and writing the name through the binding.
 
 **A module is not a value.**  It is reached with `.` and is nothing else — it cannot be bound to another name, passed to a function, or answered by one.  There is no value there, only a way in.

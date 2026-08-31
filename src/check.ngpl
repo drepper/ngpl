@@ -528,6 +528,15 @@ impl Checker:
             return self.a.structs[types.ty_sidx(types.ty_strip_ref(t)) × 1¤ptrdiff].name
         self.tn(t)
 
+    // The file a module is rooted in, which is how a diagnostic names
+    // one: a stem is not something a reader can go and open, and two
+    // modules may share one.
+    fn mod_file(&self, m : str) → str:
+        foreach i := 0¤ptrdiff…#self.a.mnames:
+            if self.a.mnames[i] = m:
+                return self.a.mroots[i]
+        m
+
     // A bare name as the module in hand writes it.  A module is a
     // file, so the whole name is that file's and the name itself, and
     // a program of one file writes the name and nothing else.
@@ -2640,11 +2649,11 @@ impl Checker:
                 self.derr(tok, "core-2 asks a module for a function by calling it; '" ⧺ path ⧺ "." ⧺ name ⧺ "' is named without being called")
                 self.set_type(id, types.TY_I64)
                 return
-            self.derrc(tok, 2910, "module '" ⧺ path ⧺ "' defines no '" ⧺ name ⧺ "'")
+            self.derrc(tok, 2910, "the module " ⧺ self.mod_file(path) ⧺ " defines no '" ⧺ name ⧺ "'")
             self.set_type(id, types.TY_I64)
             return
         if not self.a.globals[g × 1¤ptrdiff].is_export:
-            self.derrc(tok, 2911, "'" ⧺ whole ⧺ "' is not exported from module '" ⧺ path ⧺ "'; @export says what a module lets others name")
+            self.derrc(tok, 2911, "the module " ⧺ self.mod_file(path) ⧺ " does not let others name '" ⧺ name ⧺ "'; @export says what leaves a module")
         self.read_global(id, tok, g)
 
     fn check_field(&mut self, id : i64, tok : i64, na : i64):
@@ -3126,13 +3135,13 @@ impl Checker:
         let whole : str = path ⧺ "." ⧺ name
         let f : i64 = self.fn_in(whole)
         if f = ⁻1:
-            self.derrc(tok, 2910, "module '" ⧺ path ⧺ "' defines no '" ⧺ name ⧺ "'")
+            self.derrc(tok, 2910, "the module " ⧺ self.mod_file(path) ⧺ " defines no '" ⧺ name ⧺ "'")
             foreach i := 0…argc:
                 self.check_expr(self.a.extra[args_off + 1 + i], types.TY_UNIT)
             self.set_type(id, types.TY_I64)
             return
         if not self.a.fns[f × 1¤ptrdiff].is_export and self.curmod ≠ path:
-            self.derrc(tok, 2911, "'" ⧺ whole ⧺ "' is not exported from module '" ⧺ path ⧺ "'; @export says what a module lets others name")
+            self.derrc(tok, 2911, "the module " ⧺ self.mod_file(path) ⧺ " does not let others name '" ⧺ name ⧺ "'; @export says what leaves a module")
         self.check_resolved(id, tok, name, args_off, argc, f)
 
     // f(a) with fewer arguments than 'f' has parameters: a partial,

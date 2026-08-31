@@ -339,9 +339,10 @@ impl Parser:
             if bm ≠ "":
                 self.pos ← self.pos + 1
                 let tn : i64 = self.pos
-                name ← bm ⧺ "." ⧺ self.ttext(tn)
+                let own : str = self.ttext(tn)
+                name ← bm ⧺ "." ⧺ own
                 _ ← self.eat_name("the type asked of the module")
-                self.hold_export(tn, bm, name)
+                self.hold_export(tn, bm, own)
         let stdbase : mut i64 = ⁻1
         if name = "std":
             _ ← self.eat(tokens.TK_DOT, "'.' after std")
@@ -628,11 +629,21 @@ impl Parser:
                 return ⁻1
         self.sindex_ty(name)
 
+    // The file a module is rooted in, which is how a diagnostic names
+    // one: a stem is not something a reader can go and open, and two
+    // modules may share one.
+    fn mod_file(&self, m : str) → str:
+        foreach i := 0¤ptrdiff…#self.mtab.names:
+            if self.mtab.names[i] = m:
+                return self.mtab.roots[i]
+        m
+
     // A type another module holds is named only where that module said
     // it may be.  Answers nothing and complains where it may not: the
     // name is looked up anyway, so that one refusal is what is read
     // rather than a second about a type that was found all along.
-    fn hold_export(&mut self, at : i64, m : str, whole : str):
+    fn hold_export(&mut self, at : i64, m : str, name : str):
+        let whole : str = m ⧺ "." ⧺ name
         let e : i64 = self.enum_slot(whole)
         let ok : mut bool = true
         if e ≠ ⁻1:
@@ -645,7 +656,7 @@ impl Parser:
             if si ≠ ⁻1:
                 ok ← self.sexp[si × 1¤ptrdiff] = 1
         if not ok:
-            self.err_at(at, "'" ⧺ whole ⧺ "' is not exported from module '" ⧺ m ⧺ "'; @export says what a module lets others name")
+            self.errc_at(at, 2911, "the module " ⧺ self.mod_file(m) ⧺ " does not let others name '" ⧺ name ⧺ "'; @export says what leaves a module")
 
     fn sindex_ty(&self, name : str) → i64:
         // from NBUILTIN_ENUMS on: a builtin enum is a value under std,
@@ -1811,7 +1822,7 @@ impl Parser:
                 // arm names the enum as the subject knows it.
                 if self.toks.kind[(self.pos + 1) × 1¤ptrdiff] = tokens.TK_DOT and self.toks.kind[(self.pos + 2) × 1¤ptrdiff] = tokens.TK_IDENT and self.toks.kind[(self.pos + 3) × 1¤ptrdiff] = tokens.TK_DOT and self.bound_module(self.pos) ≠ "":
                     let bm2 : str = self.bound_module(self.pos)
-                    self.hold_export(self.pos + 2, bm2, bm2 ⧺ "." ⧺ self.ttext(self.pos + 2))
+                    self.hold_export(self.pos + 2, bm2, self.ttext(self.pos + 2))
                     self.pos ← self.pos + 2
                 let etok : i64 = self.pos
                 self.pos ← self.pos + 1
@@ -2490,7 +2501,7 @@ impl Parser:
         // only way into it.  The whole name rides with the node, since
         // the token spells only what was written after the dot.
         if self.peek() = tokens.TK_LBRACE:
-            self.hold_export(ntok, path, path ⧺ "." ⧺ self.ttext(ntok))
+            self.hold_export(ntok, path, self.ttext(ntok))
             self.qmods.push(path)
             let qm : i64 = @dropunit(#self.qmods)
             let off : i64 = self.parse_slit_fields()
@@ -2503,7 +2514,7 @@ impl Parser:
             // what was written after the dot.  An enum is answered for
             // here; a global is the checker's, which knows what it was
             // marked.
-            self.hold_export(ntok, path, path ⧺ "." ⧺ self.ttext(ntok))
+            self.hold_export(ntok, path, self.ttext(ntok))
             self.qmods.push(path)
             let qv : i64 = @dropunit(#self.qmods)
             return self.parse_postfix(self.mknode(ast.NK_VAR, ntok, 0, 0, qv))
@@ -3093,7 +3104,8 @@ fn parse_mode(toks : lex.Toks, src : byte[], lenient : bool, mods : ast.Mods) �
         assert(#p.nkind = #p.nb and #p.nkind = #p.nc, "node arrays in step")
     (ast.Ast{blets: p.blets, nkind: p.nkind, ntok: p.ntok, na: p.na, nb: p.nb, nc: p.nc,
          extra: p.extra, strs: p.toks.strs, fns: p.fns,
-         qmods: p.qmods, builds: p.builds,
+         qmods: p.qmods, mnames: mods.names, mroots: mods.roots,
+         builds: p.builds,
          globals: p.globals,
          structs: p.structs, tts: p.tts, ttl: p.ttl, tte: p.tte,
          fae: p.fae, fas: p.fas, hdty: p.hdty,
