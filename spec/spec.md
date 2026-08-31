@@ -721,6 +721,40 @@ Characters compare with each other by code point, with `=`, `≠`, `<`, `>`, `<=
 
 A character is written out as itself, the way a string is — `std.print("{}", c)` writes the character.  At the prompt it is *displayed* as `'a'`, quoted the way a character is written rather than the way a string of one would be, so the two are told apart when a value is read back.
 
+#### A Character and a Number
+
+A code point is a position, and two positions are a distance apart.  That is the whole of the arithmetic a character has:
+
+```
+'z' - 'a'          /* 25: the distance between them, a number */
+'a' + 1            /* 'b': the character that far on */
+1 + 'a'            /* 'b': the number may sit on either side */
+'z' + (0 - 25)     /* 'a': a negative number moves it back */
+```
+
+**A difference is a number, not a character**, and it is **untyped** — nothing about two code points says how wide the number between them should be, so it settles on whatever holds it, exactly as a literal does:
+
+```
+let wide : i64 = 'z' - 'a'
+let narrow : u8 = 'z' - 'a'
+```
+
+**A sum is judged where it is made.**  `c + n` asks the same question of its result that `.chr()` asks of what it is handed — below zero, past the last code point, or a surrogate — and stops the program with the same three answers.  So a `char` is always a character, whatever arithmetic reached it.
+
+**Nothing else works a character.**  Two of them do not add, a character does not scale or divide, `c - 1` is not written (a character moves by adding, including by adding a negative number), and the number that moves one carries no measure — a character three *bytes* on is not a character:
+
+```
+error: two characters subtract to the distance between them; no other
+operator works two of them
+
+error: a character and a number add to the character that far on, and
+two characters subtract to the distance between them; this operator does
+neither
+
+error: a character is not measured, so what moves it is a plain number;
+this one is i64 ¤B
+```
+
 #### Comparison with Other Languages
 
 | Language | Character type | What a string iterates |
@@ -732,7 +766,7 @@ A character is written out as itself, the way a string is — `std.print("{}", c
 | Python | none; a string of length 1 | one-character strings |
 | NGPL | `char`, a Unicode scalar value | characters |
 
-Rust's `char` is the closest: a scalar value, distinct from the integer that numbers it, with an explicit conversion each way.  Go's `rune` is an alias for `int32`, which makes arithmetic on characters silently possible; making the type distinct is what stops `c + 1` from being a character in disguise.
+Rust's `char` is the closest: a scalar value, distinct from the integer that numbers it, with an explicit conversion each way.  Go's `rune` is an alias for `int32`, so `c + 1` there is an integer that may be no character at all and nothing says so.  NGPL writes the same `c + 1` and means a character by it: the type stays distinct, and the sum is judged where it is made rather than found out later.
 
 
 ### Integer Overflow Semantics

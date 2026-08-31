@@ -134,7 +134,7 @@ fn parse_size(t : str) → i64:
         let c := t[i]
         if c < '0' or c > '9':
             return ⁻1
-        v ← v ⊠ 10 ⊞ (c.ord() - 48)
+        v ← v ⊠ 10 ⊞ (c - '0')
     v ⊠ scale
 
 // whether an argument is 'name=' and then whatever it carries

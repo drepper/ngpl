@@ -865,6 +865,13 @@ impl Lower:
             return av
         if k = NK_ADD:
             self.ir(if self.in_wrap > 0: IR_ADDW else: IR_ADD, av, bv, 0, d, w)
+            if self.tof(nid) = TY_CHAR:
+                // a character and a number make the character that far
+                // on, and what is no character stops the program: the
+                // same judgement .chr() makes, made where the sum is
+                let c9 : i64 = self.tmp()
+                self.ir(IR_CHR, d, 0, 0, c9, w)
+                return c9
         elif k = NK_SUB:
             self.ir(if self.in_wrap > 0: IR_SUBW else: IR_SUB, av, bv, 0, d, w)
         elif k = NK_MUL:

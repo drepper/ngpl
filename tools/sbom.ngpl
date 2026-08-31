@@ -101,7 +101,7 @@ fn num(n : i64) → str:
     let s : mut str = ""
     while v ≠ 0:
         let digit : i64 = @wrap(0 - (v % 10 ?? 0))
-        s ← (48 + digit).chr() ⧺ s
+        s ← ('0' + digit) ⧺ s
         v ← (v ÷ 10 ?? 0)
     if neg: ("-" ⧺ s) else: s
 

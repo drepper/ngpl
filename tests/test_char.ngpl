@@ -569,6 +569,79 @@ fn test_a_character_is_written_as_itself():
     let s := std.format(alloc, "{}", n.chr())
     assert(s = "λ")
 
+// ---------------------------------------------------------------------
+// A character and a number
+// ---------------------------------------------------------------------
+//
+// A character is a code point, and that is the whole of the
+// arithmetic: two of them are a distance apart, and one of them and a
+// number is the character that far on.  Everything else -- scaling a
+// character, adding two of them, measuring the number that moves one
+// -- is refused, since a character is what a string is made of and not
+// a number.
+
+@test
+fn test_two_characters_subtract_to_the_distance_between_them():
+    assert_eq('z' - 'a', 25)
+    assert_eq('a' - 'z', ⁻25)
+    assert_eq('a' - 'a', 0)
+
+// The distance is untyped, as a literal is: nothing about two code
+// points says how wide the number between them should be, so it
+// settles on whatever holds it.
+@test
+fn test_the_distance_settles_on_what_holds_it():
+    let wide : i64 = 'z' - 'a'
+    let narrow : u8 = 'z' - 'a'
+    let unsigned : u32 = 'z' - 'a'
+    assert_eq(wide, 25)
+    assert_eq(narrow, 25u8)
+    assert_eq(unsigned, 25u32)
+
+@test
+fn test_a_character_and_a_number_is_the_character_that_far_on():
+    let a : char = 'a'
+    assert((a + 1) = 'b')
+    assert((a + 25) = 'z')
+    assert((a + 0) = 'a')
+
+// The number moves the character whichever side it is written on, and
+// a negative one moves it back.
+@test
+fn test_the_number_may_sit_on_either_side():
+    let n : i64 = 2
+    assert(('a' + n) = 'c')
+    assert((n + 'a') = 'c')
+    assert(('z' + (0 - 25)) = 'a')
+
+// A code point is a code point: the letters are no more special to
+// this than any other character.
+@test
+fn test_it_is_the_code_point_that_moves():
+    let e : char = 'é'
+    assert_eq((e + 1).ord(), 234)
+    assert_eq((e + 1) - e, 1)
+
+// The sum is judged where it is made, exactly as .chr() judges what it
+// is handed, so no run holds a character that is not one.
+@test
+@expect error 2281 "a character and a number: 1114209 is past the last code point, which is 1114111 (0x10FFFF)"
+fn error_a_sum_past_the_last_code_point():
+    let n : i64 = 1114112
+    let c : char = 'a' + n
+
+@test
+@expect error 2280 "a character and a number: -103 is not a code point; a character is numbered from 0"
+fn error_a_sum_below_the_first_code_point():
+    let n : i64 = 0 - 200
+    let c : char = 'a' + n
+
+@test
+@expect error 2282 "a character and a number: 55296 is a surrogate, which encodes half of a character in UTF-16 rather than being one"
+fn error_a_sum_that_is_a_surrogate():
+    let n : i64 = 55296 - 97
+    let c : char = 'a' + n
+
 @start
 @impure
 fn main():

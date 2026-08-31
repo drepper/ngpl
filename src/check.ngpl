@@ -824,6 +824,16 @@ impl Checker:
                 self.adopt(tv, t)
             if ev ≠ ⁻1:
                 self.adopt(ev, t)
+        elif self.kind_of(id) = NK_SUB and self.ty_of(self.a.na[id × 1¤ptrdiff]) = TY_CHAR:
+            // The distance between two characters, which is worked out
+            // while the program runs rather than folded here.  It is
+            // untyped for the same reason a literal is -- nothing about
+            // two code points says how wide the number between them
+            // should be -- so it settles on what holds it, and the
+            // subtraction then runs at that width, where a difference
+            // the width cannot hold stops the program.
+            let settled : i64 = 0
+            _ ← settled
         else:
             self.derr(self.a.ntok[id × 1¤ptrdiff],
                       "this untyped computation cannot settle; ngplc folds only literals")
@@ -1564,7 +1574,12 @@ impl Checker:
             // wanted measure into its sides would have an untyped
             // number there come out measured -- which is how
             // 'n × 1¤ptrdiff' would end up adding a length to a count.
-            let side : i64 = if (k = NK_MUL or k = NK_SATMUL or k = NK_DIV or k = NK_MOD) and ty_is_int(want): ty_drop_unit(want) else: want
+            // A character wanted of the whole says nothing about the
+            // sides: one of them is the character and the other the
+            // number it moves by, and asking that number for a
+            // character would refuse it where it stands.
+            let want2 : i64 = if want = TY_CHAR: TY_UNIT else: want
+            let side : i64 = if (k = NK_MUL or k = NK_SATMUL or k = NK_DIV or k = NK_MOD) and ty_is_int(want2): ty_drop_unit(want2) else: want2
             self.check_expr(na, side)
             self.check_expr(nb, side)
             let tl : i64 = self.ty_of(na)
@@ -1584,6 +1599,9 @@ impl Checker:
                 if not self.enum_is_flag(tl):
                     self.derr(tok, "bit operations take a @flag enum; '" ⧺ self.a.enames[ty_eidx(tl) × 1¤ptrdiff] ⧺ "' counts rather than combines")
                 self.set_type(id, tl)
+                return
+            if tl = TY_CHAR or tr = TY_CHAR:
+                self.check_char_arith(id, tok, k, na, nb, tl, tr)
                 return
             if not (tl = TY_UNT or ty_is_int(tl) or ty_is_bigint(tl)) or not (tr = TY_UNT or ty_is_int(tr) or ty_is_bigint(tr)):
                 self.derr(tok, "this operator works numbers; the sides are " ⧺ self.tn(tl) ⧺ " and " ⧺ self.tn(tr))
@@ -1687,6 +1705,47 @@ impl Checker:
                   or self.stands_for(ty_unit(r), ty_unit(l))):
             self.derr(tok, "a value measured " ⧺ self.tn(l) ⧺ " does not meet one measured " ⧺ self.tn(r))
         self.set_type(id, TY_BOOL)
+
+    // + and - where one of the sides is a character.  A character is a
+    // code point: two of them are a distance apart, and one of them and
+    // a number is the character that far on.  The distance is a number
+    // and not a character, and is untyped, so it settles into whatever
+    // holds it as a literal would; the character that far on is judged
+    // where it is made, as .chr() judges one, so no run of the program
+    // holds a character that is not one.
+    //
+    // Nothing else of arithmetic reaches a character.  It is what a
+    // string is made of rather than a number, and the operators that
+    // scale or combine bits have nothing to say about a code point.
+    fn check_char_arith(&mut self, id : i64, tok : i64, k : i64, na : i64, nb : i64, tl : i64, tr : i64):
+        self.set_type(id, TY_CHAR)
+        if tl = TY_CHAR and tr = TY_CHAR:
+            if k ≠ NK_SUB:
+                self.derr(tok, """two characters subtract to the distance between them; no other
+                                " operator works two of them""")
+                return
+            self.set_type(id, TY_UNT)
+            return
+        if k ≠ NK_ADD:
+            self.derr(tok, """a character and a number add to the character that far on, and two
+                            " characters subtract to the distance between them; this operator does
+                            " neither""")
+            return
+        // the side that is not the character, and the node holding it
+        let other : i64 = if tl = TY_CHAR: tr else: tl
+        let onode : i64 = if tl = TY_CHAR: nb else: na
+        if other = TY_UNT:
+            // as a literal settles anywhere: what it is added to says
+            // nothing about how wide the number is, so it takes the
+            // widest there is
+            self.adopt(onode, TY_I64)
+            return
+        if not ty_is_int(other):
+            self.derr(tok, "a character moves by a number; this side is " ⧺ self.tn(other))
+            return
+        if ty_unit(other) ≠ 0:
+            self.derr(tok, """a character is not measured, so what moves it is a plain number; this
+                            " one is """ ⧺ self.tn(other))
 
     fn want_bool(&mut self, id : i64, what : str):
         if self.ty_of(id) ≠ TY_BOOL:

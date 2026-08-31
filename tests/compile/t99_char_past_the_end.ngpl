@@ -1,0 +1,19 @@
+// core-2: a character and a number that make no character stop the run.
+// The runner checks that both implementations refuse, not what they
+// print.
+//
+// The sum is judged where it is made, exactly as .chr() judges what it
+// is handed: the same three answers -- below zero, past the last code
+// point, or a surrogate -- and the same stop.
+
+fn moved(c : char, n : i64) → char:
+    c + n
+
+@start
+@impure
+fn main():
+    std.println("before")
+    let ok : char = moved('a', 1)
+    std.println("{}", ok.ord())
+    let bad : char = moved('a', 1114112)
+    std.println("never {}", bad.ord())

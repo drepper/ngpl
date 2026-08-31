@@ -1,0 +1,57 @@
+// core-2: a character and a number, and two characters.
+//
+// A character is a code point.  Two of them are a distance apart, and
+// that distance is a number rather than a character; a character and a
+// number are the character that far on.  Both implementations work
+// them the same way, which is what this checks.
+
+// The distance is untyped, as a literal is: nothing about two code
+// points says how wide the number between them should be, so it
+// settles on what holds it.
+fn gap(a : char, b : char) → i64:
+    b - a
+
+fn on(c : char, n : i64) → char:
+    c + n
+
+// A letter's place in the alphabet, counted from one, which is the
+// difference between two characters and nothing else.
+@pre(c >= 'a' and c <= 'z')
+@post(r: r >= 1 and r <= 26)
+fn place(c : char) → i64:
+    c - 'a' + 1
+
+// The same letter upper case: the two alphabets are the same distance
+// apart the whole way along, so the shift is a difference too.
+@pre(c >= 'a' and c <= 'z')
+fn upper(c : char) → char:
+    c + ('A' - 'a')
+
+@start
+@impure
+fn main():
+    std.println("{}", gap('a', 'z'))
+    std.println("{}", on('a', 1).ord())
+    std.println("{}", on('z', 0 - 25).ord())
+    // the number may sit on either side, and moves the character alike
+    let a : char = 'a'
+    let n : i64 = 2
+    std.println("{}", (a + n).ord())
+    std.println("{}", (n + a).ord())
+
+    // the distance settles on what holds it, whatever that is
+    let wide : i64 = 'z' - 'a'
+    let narrow : u8 = 'z' - 'a'
+    let unsigned : u32 = 'z' - 'a'
+    std.println("{} {} {}", wide, narrow, unsigned)
+
+    // and where nothing holds it, on the number a number is
+    std.println("{}", 'z' - 'a')
+
+    foreach c := "abc":
+        std.println("{} is letter {}", upper(c).ord(), place(c))
+
+    // a character past the ASCII letters moves like any other
+    let e : char = 'é'
+    std.println("{}", (e + 1).ord())
+    std.println("{}", (e + 1) - e)

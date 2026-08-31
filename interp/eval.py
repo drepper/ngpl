@@ -1252,6 +1252,20 @@ class Evaluator:
                                      may_underflow=False)
         if isinstance(lu, StrValue) and isinstance(ru, StrValue):
             return mk_str(lu.value + ru.value)
+        # A character and a number: the character that far on.  It is
+        # judged where it is made, as chr() judges one, so no run of
+        # the program holds a character that is not one.
+        if isinstance(lu, CharValue) and isinstance(ru, IntValue):
+            return CharValue(check_code_point(
+                lu.code + ru.value, "a character and a number", stop=True))
+        if isinstance(lu, IntValue) and isinstance(ru, CharValue):
+            return CharValue(check_code_point(
+                lu.value + ru.code, "a number and a character", stop=True))
+        if isinstance(lu, CharValue) and isinstance(ru, CharValue):
+            raise TypeError(
+                "two characters subtract to the distance between them; "
+                "adding them says nothing, since a character is not a "
+                "number")
         raise TypeError(f"addition expected int+int, float+float, or str+str, got {type(lu).__name__}+{type(ru).__name__}")
 
     def _op_sub(self, left, right):
@@ -1264,16 +1278,41 @@ class Evaluator:
                                    resolve_width(lu.width, ru.width))
             return mk_int(lu.value - ru.value,
                           resolve_width(lu.width, ru.width))
+        # Two characters are a distance apart, and the distance is a
+        # number rather than a character.  It is untyped, as a literal
+        # is, so it settles into whatever holds it.
+        if isinstance(lu, CharValue) and isinstance(ru, CharValue):
+            return mk_int(lu.code - ru.code)
+        if isinstance(lu, CharValue) or isinstance(ru, CharValue):
+            raise TypeError(
+                "two characters subtract to the distance between them, and "
+                "a character and a number add to the character that far on; "
+                "this subtraction is neither")
         ff = self._require_matching_numeric(lu, ru, "subtraction")
         if ff is not None:
             return self._float_arith(ff[0] - ff[1], ff[2], "-", ff[0], ff[1],
                                      may_underflow=False)
         raise TypeError(f"subtraction expected int+int or float+float, got {type(lu).__name__}+{type(ru).__name__}")
 
+    @staticmethod
+    def _no_char_arith(lu, ru):
+        """Refuse an operator that has nothing to say about a character.
+
+        A character is a code point, not a number: two of them are a
+        distance apart and one of them moves by a number, and every
+        other operator would be working a number that is not there.
+        """
+        if isinstance(lu, CharValue) or isinstance(ru, CharValue):
+            raise TypeError(
+                "a character and a number add to the character that far "
+                "on, and two characters subtract to the distance between "
+                "them; this operator does neither")
+
     def _op_mul(self, left, right):
         """Multiplication."""
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
+        self._no_char_arith(lu, ru)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             if self._wrapping:
                 return mk_int_wrap(lu.value * ru.value,
@@ -1540,6 +1579,7 @@ class Evaluator:
         """Division: integer (truncates toward zero, returns ExpectedValue) or float."""
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
+        self._no_char_arith(lu, ru)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             if ru.value == 0:
                 return self._division_error()
@@ -1562,6 +1602,7 @@ class Evaluator:
         """Remainder (truncation toward zero): a % b = a - trunc(a/b)*b.  Returns ExpectedValue."""
         lu = _unwrap_operand(left)
         ru = _unwrap_operand(right)
+        self._no_char_arith(lu, ru)
         if isinstance(lu, IntValue) and isinstance(ru, IntValue):
             if ru.value == 0:
                 return self._division_error()
@@ -3057,6 +3098,14 @@ class Evaluator:
         # larger of a length and a duration is not a question.
         if op in ("+", "-", "\N{SQUARED PLUS}", "\N{SQUARED MINUS}",
                   "\N{LEFT CEILING}", "\N{LEFT FLOOR}"):
+            # A character is not measured, so what moves one is a plain
+            # number: a character three bytes on is not a character.
+            if isinstance(l_inner, CharValue) or isinstance(r_inner, CharValue):
+                measured = r_unit if r_is_unit else l_unit
+                raise TypeError(
+                    "a character is not measured, so what moves it is a "
+                    f"plain number; this one is measured "
+                    f"{measured.display_name}")
             if l_is_unit and not r_is_unit:
                 if isinstance(r_inner, IntValue) \
                         and not is_unwidthed(r_inner.width):

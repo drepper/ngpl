@@ -1,0 +1,15 @@
+tests/compile/refuse/char_arith.ngpl:10:11: error: two characters subtract to the distance between them; no other operator works two of them
+  10 |     _ ← a + z
+     |           ^
+tests/compile/refuse/char_arith.ngpl:11:11: error: a character and a number add to the character that far on, and two characters subtract to the distance between them; this operator does neither
+  11 |     _ ← a - 1
+     |           ^
+tests/compile/refuse/char_arith.ngpl:12:11: error: a character and a number add to the character that far on, and two characters subtract to the distance between them; this operator does neither
+  12 |     _ ← a × 2
+     |           ^
+tests/compile/refuse/char_arith.ngpl:13:11: error: a character is not measured, so what moves it is a plain number; this one is i64 ¤B
+  13 |     _ ← a + n
+     |           ^
+tests/compile/refuse/char_arith.ngpl:14:11: error: two characters subtract to the distance between them; no other operator works two of them
+  14 |     _ ← a ⌈ z
+     |           ^

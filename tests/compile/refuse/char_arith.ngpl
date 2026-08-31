@@ -1,0 +1,14 @@
+// A character is a code point, not a number.  Two of them subtract to
+// the distance between them and one of them moves by a number; every
+// other way of working them is refused by name.
+@start
+@impure
+fn main():
+    let a : char = 'a'
+    let z : char = 'z'
+    let n : i64 ¤byte = 3¤byte
+    _ ← a + z
+    _ ← a - 1
+    _ ← a × 2
+    _ ← a + n
+    _ ← a ⌈ z
