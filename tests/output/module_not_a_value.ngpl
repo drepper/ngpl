@@ -1,0 +1,9 @@
+// A module is reached with '.' and is not a value: it cannot be bound
+// to another name, passed or answered.
+let lib := @import("./import/lib.ngpl")
+
+@start
+@impure
+fn main():
+    let other := lib
+    std.println("{}", other.twice(1))

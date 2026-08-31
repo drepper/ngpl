@@ -1,0 +1,7 @@
+error: the module tests/output/import/lib.ngpl defines no 'nothing'
+  --> tests/output/module_no_such_name.ngpl:7:26
+    |
+  7 |     std.println("{}", lib.nothing(1))
+    |                          ^
+  8 | // What the module_* output tests import.  Not a test of its own.
+    |

@@ -16,9 +16,12 @@ from interp.macros import (collect as macro_collect,
                            COMPTIME as MACRO_COMPTIME,
                            FUNCTIONS as MACRO_SEEN_FUNCTIONS)
 from interp.env import Env, Decl
+from interp.modules import (load as mod_load, prepare as mod_prepare,
+                            ModuleHandle)
 from interp.ast import (
     FuncDef as ASTFuncDef, EnumDef as ASTEnumDef, UnitDef as ASTUnitDef,
     VarDef as ASTVarDef, TypeDef as ASTTypeDef,
+    ImportExpr as ASTImportExpr,
     DestructureDef as ASTDestructureDef,
     StructDef as ASTStructDef, ImplBlock as ASTImplBlock,
 )
@@ -47,7 +50,7 @@ _KNOWN_READONLY_METHODS = frozenset({
     "get", "iterate", "next", "str", "ord", "chr", "chars", "shape",
 })
 from interp.layout import LayoutError, struct_layout, struct_lookup
-from interp.errors import (Contract, Level, format_diagnostic, extract_position,
+from interp.errors import (source_text, Contract, Level, format_diagnostic, extract_position,
                            strip_position_prefix, format_backtrace,
                            diagnostic_level, set_warnings_are_errors,
                            warnings_are_errors, set_contract_semantic,
@@ -3645,6 +3648,12 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 raise DefinitionError(
                     f"in '{defn.name}': {lambda_err}",
                     _finding_pos(lambda_err) or _node_pos(defn))
+            if isinstance(defn.init_expr, ASTImportExpr):
+                # A bound import is a binding and not an evaluation: a
+                # module is not a thing a program holds, and what the
+                # name is worth was settled when the program was loaded.
+                env.define(defn.name, ObjectValue(defn.import_handle))
+                continue
             if defn.name == DISCARD_NAME:
                 # Evaluated for its effects, then dropped; nothing is bound.
                 evaluator.eval_expr(defn.init_expr)
@@ -3653,7 +3662,10 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 raise DefinitionError(
                     f"fast type '{defn.type_annotation}' cannot be used in "
                     f"let definition '{defn.name}'", _node_pos(defn))
-            if not redefine_vars and defn.name in env._frames[0]:
+            # What a module holds is under its own key, so two modules
+            # may each have a SCALE and neither is the other's.
+            gkey = _module_qualify(getattr(defn, "module", ""), defn.name)
+            if not redefine_vars and gkey in env._frames[0]:
                 # A file defines a name once; a second let is a mistake
                 # rather than an update.  The REPL is the one place a
                 # definition may be replaced, entry by entry.
@@ -3700,10 +3712,10 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 raise DefinitionError(
                     f"in {defn.name}: {strip_position_prefix(str(e))}",
                     extract_position(e) or _node_pos(defn)) from None
-            env.unmark_global(defn.name)
-            env.define(defn.name, value,
+            env.unmark_global(gkey)
+            env.define(gkey, value,
                         Decl(evaluator._declared_type_of(defn, value), unit))
-            env.mark_global(defn.name, mutable=not defn.is_const)
+            env.mark_global(gkey, mutable=not defn.is_const)
 
     for defn in definitions:
         if isinstance(defn, ASTDestructureDef):
@@ -4058,6 +4070,15 @@ def _imports_of(text: str, path: str) -> list[tuple[str, int]]:
     return out
 
 
+def _import_or_raise(name: str, base: str, paths_asked, asked_from: str) -> str:
+    """Where a bound import is to be found, or the refusal that says why not."""
+    here = _import_resolve(name, base, paths_asked)
+    if here is None:
+        raise ImportError_(f"{asked_from}: cannot find '{name}'"
+                           + _import_looked(name))
+    return here
+
+
 def _read_program(roots: list[str],
                   paths_asked=()) -> tuple[str, list[int], list[str]]:
     """The whole program, from the file (or files) it is rooted in.
@@ -4190,10 +4211,17 @@ def main():
         # still works and means what it did: each is read in turn, and
         # nothing is read twice.
         try:
-            source, starts, read_paths = _read_program(
-                source_paths, split_path(args.path))
+            mods, source, starts, read_paths = mod_load(
+                source_paths, split_path(args.path), _read_program,
+                _import_or_raise, ImportError_, set_source)
         except ImportError_ as e:
             print(f"error: {e}", file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            # a mistake in a module is shown against the text it was
+            # written in, which the loader registered before lexing it
+            _show_error(e, source_text(), source_path,
+                        show_backtrace=args.interpreter_backtrace)
             sys.exit(1)
         source_paths = read_paths
 
@@ -4201,22 +4229,17 @@ def main():
         # finds the text to point into here rather than being handed it.
         set_source(source, source_path, starts, source_paths)
 
-        phase_end("start")
-        try:
-            tokens = process_indentation(tokenize(source))
-        except Exception as e:
-            _show_error(e, source, source_path,
-                        show_backtrace=args.interpreter_backtrace)
-            sys.exit(1)
-
         phase_end("read the sources")
+        # Each module was lexed and parsed on its own; what comes back
+        # is one list, every name already under the key its module puts
+        # it beneath.
         try:
-            parser = Parser(tokens)
-            definitions = parser.parse()
-        except Exception as e:
-            _show_error(e, source, source_path,
-                        show_backtrace=args.interpreter_backtrace)
+            definitions = mod_prepare(mods)
+        except KeyError as e:
+            # a name one module asked of another that it may not have
+            print(f"error: {e.args[0] if e.args else e}", file=sys.stderr)
             sys.exit(1)
+        module_keys = {m.prefix for m in mods if m.prefix}
 
         if not definitions and not args.repl:
             print("Warning: no definitions found in source file", file=sys.stderr)

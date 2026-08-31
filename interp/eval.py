@@ -175,6 +175,7 @@ from interp.value import (
     SyntaxValue,
 )
 from interp.env import Env, Decl
+from interp.modules import ModuleHandle as _ModHandle
 from interp.std import (std, DirFD, FileStream, Bytes, MmapAllocator,
                        Build as _BuildObj, Executable as _ExeObj,
                        Options as _OptsObj,
@@ -3916,8 +3917,18 @@ class Evaluator:
                 f"pure function '{self._pure_func_name}' cannot "
                 f"read mutable global variable '{node.name}'"))
         try:
-            val = self.env.lookup(node.name)
+            val = self._refuse_module_value(node.name,
+                                            self.env.lookup(node.name))
         except KeyError:
+            # A module's own name for something, which is what it is
+            # keyed under.  Only a module that binds an import has a
+            # key at all, so a program without one never asks.
+            if self._cur_module:
+                try:
+                    return self.env.lookup(
+                        f"{self._cur_module}.{node.name}")
+                except KeyError:
+                    pass
             # A type name stands for its type wherever it appears,
             # which is what lets @typeof be compared against it.
             if is_type_name(node.name):
@@ -4081,6 +4092,36 @@ class Evaluator:
         parts.reverse()
         return ".".join(parts)
 
+    def _module_binding(self, name: str):
+        """The module a name is bound to, or None where it is not one."""
+        try:
+            held = self.env.lookup(name)
+        except KeyError:
+            if self._cur_module:
+                try:
+                    held = self.env.lookup(f"{self._cur_module}.{name}")
+                except KeyError:
+                    return None
+            else:
+                return None
+        if isinstance(held, ObjectValue) and isinstance(held.obj, _ModHandle):
+            return held.obj
+        return None
+
+    def _call_in_module(self, handle, node):
+        """`m.f(…)`: a call of what one module lets another name."""
+        try:
+            func = self.env.lookup(handle.key(node.method))
+        except KeyError:
+            raise coded(2910, TypeError(
+                f"{handle.display()} defines no '{node.method}'")) from None
+        if node.method not in handle.exports:
+            raise coded(2911, TypeError(
+                f"{handle.display()} does not let others name "
+                f"'{node.method}'; @export says what leaves a module"))
+        args = [self.eval_expr(a) for a in node.args]
+        return self._do_call(func, args)
+
     def _visible_from_here(self, module: str) -> bool:
         """Whether this module hides nothing from where we are.
 
@@ -4090,6 +4131,14 @@ class Evaluator:
         return module in _ancestors_of(self._cur_module)
 
     def _ee_MethodCall(self, node):
+        # `m.f(…)` where m is a bound import: the module says where to
+        # look, and what it did not export cannot be named from outside
+        # it.  A module is reached this way and no other, so this is
+        # asked before anything else is.
+        if type(node.obj) is VarRef:
+            held = self._module_binding(node.obj.name)
+            if held is not None:
+                return self._call_in_module(held, node)
         # `a.b.f(…)` is a call of f in module a.b when a.b is a module.
         # It reads as a method on a.b until the name is looked at, which
         # is why the modules a program declares are known here.
@@ -4150,7 +4199,27 @@ class Evaluator:
         return result
 
     def _ee_GetAttr(self, node):
+        # `m.name` where m is a bound import: a module is reached by
+        # name and not by reading a value out of it, so the binding is
+        # asked before anything is evaluated.
+        if type(node.obj) is VarRef:
+            held = self._module_binding(node.obj.name)
+            if held is not None:
+                return self._read_in_module(held, node.attr)
         return self._c_getattr(node, self.eval_expr(node.obj))
+
+    def _read_in_module(self, handle, name: str):
+        """`m.name`: what one module lets another read of it."""
+        try:
+            held = self.env.lookup(handle.key(name))
+        except KeyError:
+            raise coded(2910, TypeError(
+                f"{handle.display()} defines no '{name}'")) from None
+        if name not in handle.exports:
+            raise coded(2911, TypeError(
+                f"{handle.display()} does not let others name '{name}'; "
+                f"@export says what leaves a module"))
+        return held
 
     def _c_sub_before(self, val):
         """What a subscript asks of the container before its index is
@@ -4814,12 +4883,32 @@ class Evaluator:
                 f"pure function '{self._pure_func_name}' cannot "
                 f"read mutable global variable '{name}'"))
 
+    @staticmethod
+    def _refuse_module_value(name, val):
+        """A module is reached with '.' and is nothing else.
+
+        It cannot be bound to another name, passed, compared or
+        answered: there is no value there, only a way in.
+        """
+        if isinstance(val, ObjectValue) and isinstance(val.obj, _ModHandle):
+            raise coded(2912, TypeError(
+                f"'{name}' is a module, which is reached with '.' and is "
+                f"not a value: it cannot be bound to another name, passed "
+                f"or answered"))
+        return val
+
     def _c_lookup(self, name):
         """A read the innermost frame did not answer: the environment,
-        and then a type name standing for its type."""
+        the module's own key for it, and then a type name standing for
+        its type."""
         try:
-            return self.env.lookup(name)
+            return self._refuse_module_value(name, self.env.lookup(name))
         except KeyError:
+            if self._cur_module:
+                try:
+                    return self.env.lookup(f"{self._cur_module}.{name}")
+                except KeyError:
+                    pass
             if is_type_name(name):
                 return TypeValue(name)
             raise
@@ -7170,7 +7259,13 @@ class Evaluator:
         Looks up the function in the environment, dispatching to user-defined
         functions (FuncValue) or builtins (BuiltinFunc/BuiltinBoundMethod).
         """
-        func = self._module_lookup(name) if MODULES else self.env.lookup(name)
+        # A module's own name for a function comes first: what a file
+        # keeps to itself is still its own to call.  A program of one
+        # module has no key at all and asks nothing extra.
+        if self._cur_module:
+            func = self._module_lookup(name)
+        else:
+            func = self._module_lookup(name) if MODULES else self.env.lookup(name)
         return self._do_call(func, args)
 
     def _call_method(self, obj: Value, method_name: str, args):

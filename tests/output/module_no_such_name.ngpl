@@ -1,0 +1,7 @@
+// A module says what it defines, and this is not one of them.
+let lib := @import("./import/lib.ngpl")
+
+@start
+@impure
+fn main():
+    std.println("{}", lib.nothing(1))

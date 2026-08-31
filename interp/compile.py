@@ -148,6 +148,12 @@ class _Emit:
             return t
         if cls is GetAttr:
             self.pos(d, node.pos)
+            if _into_module(self.ev, node):
+                # a name read out of a module, which the walk takes
+                # another way
+                t = self.temp()
+                self.line(d, f"{t} = ev.eval_expr({self.const(node)})")
+                return t
             o = self.expr(d, node.obj)
             t = self.temp()
             self.line(d, f"{t} = ev._c_getattr({self.const(node)}, {o})")
@@ -170,7 +176,7 @@ class _Emit:
             i = self.expr(d + 1, node.indices[0])
             self.line(d + 1, f"{t} = ev._c_sub_index({o}, {i})")
             return t
-        if cls is MethodCall and not (E.MODULES and self.ev._dotted_name(node.obj) in E.MODULES):
+        if cls is MethodCall and not _into_module(self.ev, node):
             # a call into a module is the one the walk takes another
             # way, and which it is is a matter of the node alone
             n = len(node.args)
@@ -341,3 +347,17 @@ def compile_block(ev, stmts):
 
 
 import interp.eval as E  # noqa: E402  (after the names above, which eval imports)
+
+
+def _into_module(ev, node) -> bool:
+    """Whether this call reaches into a module rather than onto a value.
+
+    Two shapes reach one: `m.f(…)` where m is a bound import, and the
+    older `a.b.f(…)` where a.b is a declared module.  Either is the
+    walk's to make, since what it looks up is a name and not a method.
+    """
+    if type(node.obj) is VarRef and ev._module_binding(node.obj.name) is not None:
+        return True
+    if not hasattr(node, "method"):
+        return False
+    return bool(E.MODULES) and ev._dotted_name(node.obj) in E.MODULES

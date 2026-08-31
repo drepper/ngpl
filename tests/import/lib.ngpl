@@ -1,0 +1,43 @@
+// What tests/test_import.ngpl imports.  Not a test of its own: it is
+// here to be imported, and what it lets others name is what it marks.
+//
+// The name a file is known by is the name it is bound to, so this file
+// says nothing about who reads it.
+
+@export
+struct Point:
+    x : i64
+    y : i64
+
+@export
+enum Level:
+    quiet
+    loud
+
+@export
+let SCALE : i64 = 7
+
+@export
+fn origin() → Point:
+    (Point{x: 0, y: 0})
+
+@export
+fn shifted(p : Point, by : i64) → Point:
+    (Point{x: p.x + by, y: p.y + by})
+
+@export
+fn describe(l : Level) → str:
+    if l = Level.quiet: "quiet" else: "loud"
+
+@export
+fn scaled(n : i64) → i64:
+    n × SCALE
+
+// Not marked, so nothing outside may name it -- and what is written
+// inside this file reaches it as any other name.
+fn hidden(n : i64) → i64:
+    n + 1
+
+@export
+fn reaches_its_own() → i64:
+    hidden(41)

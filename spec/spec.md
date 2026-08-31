@@ -10023,6 +10023,34 @@ A file says at its head which other files it is written against, and each of tho
 
 The compiler is handed one file and finds the rest.  That is the point: **the order the sources are read in is the program's own business**, written in the files that know it, rather than a list kept somewhere outside them and kept in step by hand.
 
+#### A File Bound to a Name Is a Module
+
+Binding the import is the other form, and it means something else:
+
+```
+let lib := @import("./geometry.ngpl")
+
+fn area(p : lib.Point) → i64:
+    lib.width(p) × lib.height(p)
+```
+
+**Nothing of that file is visible except through the name it was bound to**, and then only what it marked `@export`.  A name reached this way may be a function, a type, an enum, or a global — `lib.width(p)`, `lib.Point`, `lib.Point{x: 1, y: 2}`, `lib.Level.quiet`, `lib.SCALE` — and one the file did not export is refused where it is written:
+
+```
+error: the module ./geometry.ngpl does not let others name 'helper';
+@export says what leaves a module
+```
+
+What a module did not export is still its own: a file reaches everything it defines, exported or not, by writing the name.
+
+**A module is not a value.**  It is reached with `.` and is nothing else — it cannot be bound to another name, passed to a function, or answered by one.  There is no value there, only a way in.
+
+**Two imports of one file are two bindings of one module.**  The file is read once: its types are the same type, its globals the same storage, and its functions one copy in the binary, however many places bind it.  Binding the same file twice is never a mistake.
+
+**A ring of bound imports is not a contradiction**, and works: a bound import does not ask that the file be read *ahead* of anything, only that it be there.  A ring of the plain form below is still refused, because that form does ask exactly that.
+
+**The plain form is the older one** and is being withdrawn.  `@import("./x.ngpl")` written alone, as a statement, reads that file in ahead of this one and makes its names these names — one flat namespace, which is what an import meant here before a file could be a namespace.  It is what the compiler's own sources still use while they are migrated.
+
 **Where a name is looked for is what the name says**, and each place is tried as written and then with `.ngpl` after it — so a file may be asked for by the name it is known by rather than the name it is stored under:
 
 | the name | where it is looked for |

@@ -90,6 +90,7 @@ all_tests=(
     "$testdir"/test_build.ngpl
     "$testdir"/test_unit_decay.ngpl
     "$testdir"/test_module.ngpl
+    "$testdir"/test_import.ngpl
     "$testdir"/test_arena.ngpl
     "$testdir"/test_comptime_foreach.ngpl
     "$testdir"/test_comptime_introspect.ngpl

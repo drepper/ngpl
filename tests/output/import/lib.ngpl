@@ -1,0 +1,7 @@
+// What the module_* output tests import.  Not a test of its own.
+@export
+fn twice(n : i64) → i64:
+    n × 2
+
+fn hidden(n : i64) → i64:
+    n

@@ -10,6 +10,7 @@ indentation (INDENT/DEDENT tokens).
 
 from interp.errors import Level, coded
 from interp.ast import (
+    ImportExpr,
     IntLit, FloatLit, StrLit, CharLit, BoolLit, NoneLit, VarRef, RefExpr, BorrowExpr,
     BinOp, UnaryOp,
     IfStmt, WhileStmt, ReturnStmt, FuncDef, VarDef, DestructureDef, ExprStmt,
@@ -381,6 +382,10 @@ class Parser:
                 # stamped here rather than worked out again later.
                 if not isinstance(definition, ModuleDef):
                     definition.module = self.current_module
+                    if getattr(self, "_pending_export", False) \
+                            and not getattr(definition, "is_export", False):
+                        definition.is_export = True
+                self._pending_export = False
                 definitions.append(definition)
         return definitions
 
@@ -577,6 +582,12 @@ class Parser:
             raise ParseError(
                 f"{what} states a condition a function holds to, but none "
                 f"follows", self._cur())
+
+        # @export says what a module lets others name, and a module
+        # holds more than functions: the flag is kept here, before the
+        # first of the dispatches below, so that whatever this
+        # definition turns out to be carries it.
+        self._pending_export = is_export
 
         if self._check(TokenType.ENUM):
             return self._parse_enum_def(is_flag)
@@ -1189,6 +1200,16 @@ class Parser:
             self.pos += 1
             name += "." + self._eat(TokenType.IDENT).value
             return self._parse_type_arguments(name)
+        # `m.Name` where m is a bound import: a type of another module,
+        # named through the only way into it.  Nothing else puts a dot
+        # in a type, so the shape settles it here and which module it
+        # is is settled where the program is loaded.
+        if (self._check(TokenType.PUNCT) and self._cur().value == "."
+                and self.pos + 1 < len(self.tokens)
+                and self.tokens[self.pos + 1].type is TokenType.IDENT
+                and self.tokens[self.pos + 1].value[:1].isupper()):
+            self.pos += 1
+            name += "." + self._eat(TokenType.IDENT).value
         return name
 
     def _parse_type_arguments(self, name: str) -> str:
@@ -2884,6 +2905,17 @@ class Parser:
             self._skip_nl()
             self._eat(TokenType.PUNCT, ")")
             return EnumerateExpr(expr)
+        if self._check(TokenType.AT_IMPORT):
+            # A bound import: the file becomes a module of its own and
+            # this is the only way into it.  What it names is settled
+            # when the program is loaded, long before this runs.
+            tok = self._cur()
+            self._eat(TokenType.AT_IMPORT)
+            self._eat(TokenType.PUNCT, "(")
+            name = self._eat(TokenType.STR)
+            self._skip_nl()
+            self._eat(TokenType.PUNCT, ")")
+            return self._set_pos(ImportExpr(name.value), tok)
         if self._check(TokenType.TYPEOF):
             self._eat(TokenType.TYPEOF)
             self._eat(TokenType.PUNCT, "(")
@@ -3324,19 +3356,22 @@ class Parser:
             tok)
 
     def _maybe_exe_lit(self, node, dot_tok):
-        """std.Build.Executable{…} where the chain just spelled that name.
+        """A struct literal written under a dotted name.
 
-        It is the one struct literal written under a dotted name: the
-        build system defines the type rather than the program, so it is
-        spelled where it comes from.  Anything else is left as the
-        attribute reference it already is.
+        Two are: std.Build.Executable, which the build system defines
+        rather than the program, and `m.Name` where m is a bound import
+        -- a struct of another module, made through the only way into
+        it.  Nothing else puts a dot before a `{`, so the shape settles
+        it; anything else is left as the attribute reference it is.
         """
-        if (_dotted(node) != "std.Build.Executable"
-                or not self._check(TokenType.PUNCT)
-                or self._cur().value != "{"):
+        if not self._check(TokenType.PUNCT) or self._cur().value != "{":
             return node
-        return self._set_pos(self._parse_struct_lit("std.Build.Executable"),
-                             dot_tok)
+        spelled = _dotted(node)
+        if spelled != "std.Build.Executable":
+            head, dot, rest = spelled.partition(".")
+            if not dot or "." in rest or not rest[:1].isupper():
+                return node
+        return self._set_pos(self._parse_struct_lit(spelled), dot_tok)
 
     def _parse_postfix(self, node):
         """Chain .attr, [idx], and (args) postfix operators onto node."""

@@ -134,6 +134,11 @@ _file_starts: list[int] = []
 _file_names: list[str] = []
 
 
+def source_text() -> str:
+    """The text a diagnostic points into, as it stands."""
+    return _source_text
+
+
 def set_source(text: str, path: str,
                starts: list[int] | None = None,
                names: list[str] | None = None) -> None:
@@ -390,6 +395,9 @@ def format_diagnostic(
     if use_color is None:
         use_color = _is_tty()
     c = _Colors(use_color)
+
+    from interp.modules import as_written
+    message = as_written(message)
 
     lines = source.splitlines()
     if line < 1:

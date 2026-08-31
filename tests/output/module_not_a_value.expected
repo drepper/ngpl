@@ -1,0 +1,7 @@
+error: 'lib' is a module, which is reached with '.' and is not a value: it cannot be bound to another name, passed or answered
+  --> tests/output/module_not_a_value.ngpl:8:18
+    |
+  8 |     let other := lib
+    |                  ^^^
+  9 |     std.println("{}", other.twice(1))
+    |

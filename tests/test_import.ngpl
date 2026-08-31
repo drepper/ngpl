@@ -1,0 +1,64 @@
+// A file bound to a name is a module: nothing of it is visible except
+// through that name, and then only what it marked @export.
+//
+//     let lib := @import("./import/lib.ngpl")
+//
+// Two imports of one file are two bindings of one module, so its types
+// are the same type and its globals the same storage.
+
+@import("./import/deeper.ngpl")
+
+let lib := @import("./import/lib.ngpl")
+let again := @import("./import/lib.ngpl")
+
+@test
+fn test_a_function_is_reached_through_the_binding():
+    assert_eq(lib.scaled(6), 42)
+
+@test
+fn test_a_struct_crosses_the_boundary():
+    let p := lib.shifted(lib.origin(), 3)
+    assert_eq(p.x, 3)
+    assert_eq(p.y, 3)
+
+// A type of another module is written the way it is reached: through
+// the name it was bound to.
+@test
+fn test_a_type_is_named_through_the_binding():
+    let p : lib.Point = lib.Point{x: 2, y: 5}
+    assert_eq(p.x + p.y, 7)
+
+@test
+fn test_an_enum_is_named_through_the_binding():
+    assert(lib.describe(lib.Level.quiet) = "quiet")
+    assert(lib.describe(lib.Level.loud) = "loud")
+
+@test
+fn test_a_global_is_read_through_the_binding():
+    assert_eq(lib.SCALE, 7)
+
+// What a module keeps to itself is still its own to use: `hidden` is
+// not exported and the module reaches it without saying anything.
+@test
+fn test_a_module_reaches_what_it_did_not_export():
+    assert_eq(lib.reaches_its_own(), 42)
+
+// Two bindings of one file are one module: the same type, and the same
+// storage behind the same global.
+@test
+fn test_two_bindings_are_one_module():
+    let p : lib.Point = again.origin()
+    assert_eq(p.x, 0)
+    assert_eq(again.SCALE, lib.SCALE)
+
+// A file read in plainly may bind a module of its own, and what it
+// asks for is looked for beside itself -- tests/import/deeper.ngpl
+// binds ./sub/near.ngpl, which is nowhere near this file.
+@test
+fn test_a_binding_is_read_beside_the_file_that_asked():
+    assert_eq(near_five(), 5)
+
+@start
+@impure
+fn main():
+    std.println("import tests passed")

@@ -736,6 +736,20 @@ class CatchStmt:
         self.body = body
 
 
+class ImportExpr:
+    """`@import("name")` where a value is wanted.
+
+    A file bound to a name is a module of its own: nothing of it is
+    visible except through that name, and then only what it marked
+    @export.  The plain `@import("name")` statement is the older form
+    and means something else -- that file's names are this file's names
+    -- and is parsed elsewhere, as a definition rather than a value.
+    """
+
+    def __init__(self, name: str):
+        self.name = name
+
+
 class TypeOfExpr:
     """Type-of expression: @typeof(expr).
 

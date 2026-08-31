@@ -1216,16 +1216,19 @@ class EnumValue(Value):
         self.value = value
 
     def display(self) -> str:
+        # what the program wrote, not the key its module keeps it under
+        from interp.modules import as_written
         name = self.enum_type.values_to_names.get(self.value)
         if name is not None:
-            return f"{self.enum_type.name}.{name}"
+            return as_written(f"{self.enum_type.name}.{name}")
         if self.enum_type.is_flag and self.value != 0:
             parts = []
             remaining = self.value
             for member_name, member_val in sorted(
                     self.enum_type.members.items(), key=lambda x: x[1], reverse=True):
                 if member_val != 0 and (remaining & member_val) == member_val:
-                    parts.append(f"{self.enum_type.name}.{member_name}")
+                    parts.append(
+                        as_written(f"{self.enum_type.name}.{member_name}"))
                     remaining &= ~member_val
             if remaining == 0 and parts:
                 return " | ".join(reversed(parts))
