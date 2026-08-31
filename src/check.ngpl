@@ -470,7 +470,7 @@ impl Checker:
         let si : i64 = self.struct_index(nm)
         if si ≠ ⁻1:
             return mk_sty(si)
-        let ei : i64 = self.enum_index(nm)
+        let ei : i64 = self.enum_here(nm)
         if ei = ⁻1: ⁻1 else: mk_ety(ei)
 
     // A run of bytes is made of one of three things: bytes as they
@@ -584,6 +584,19 @@ impl Checker:
             if self.fnames[i] = name:
                 return @dropunit(i)
         ⁻1
+
+    // A global named from inside a module: its own first, then the
+    // names that belong to nobody, walking out as a call does.
+    fn global_here(&self, name : str) → i64:
+        let where : mut str = self.curmod
+        while true:
+            let cand : str = if where = "": name else: where ⧺ "." ⧺ name
+            let g : i64 = self.global_index(cand)
+            if g ≠ ⁻1:
+                return g
+            if where = "":
+                return ⁻1
+            where ← mod_parent(where)
 
     fn global_index(&self, name : str) → i64:
         if #self.gnames > 0:
@@ -1890,6 +1903,12 @@ impl Checker:
                 self.nrep[self.pnode_id[i] × 1¤ptrdiff] ← n
 
     fn check_var(&mut self, id : i64, tok : i64):
+        // A name asked of a module: the module says where to look, so
+        // no scope is walked and nothing it did not export is reached.
+        let qv : i64 = self.a.nc[id × 1¤ptrdiff]
+        if qv > 0:
+            self.check_qualified_name(id, tok, self.a.qmods[(qv - 1) × 1¤ptrdiff])
+            return
         let name := self.text(tok)
         if name = "_":
             self.derr(tok, "'_' holds nothing and cannot be read")
@@ -1919,7 +1938,7 @@ impl Checker:
             if ty_ref_kind(st0) ≠ 0 and ty_ref_kind(st0) ≠ 3 and not ty_is_arr(base0) and not ty_is_hash(base0) and not ty_is_struct(base0):
                 self.a.nb[id × 1¤ptrdiff] ← 1
             return
-        let g : i64 = self.global_index(name)
+        let g : i64 = self.global_here(name)
         if g = ⁻1:
             let fidx : i64 = self.fn_index(name)
             if fidx ≠ ⁻1:
@@ -1948,6 +1967,12 @@ impl Checker:
                 self.derr(tok, "'" ⧺ name ⧺ "' is not defined here")
             self.set_type(id, TY_I64)
             return
+        self.read_global(id, tok, g)
+
+    // What a read of a global settles, wherever the name came from:
+    // one written plainly, or one asked of a module.
+    fn read_global(&mut self, id : i64, tok : i64, g : i64):
+        let name : str = self.text(tok)
         let gd := self.a.globals[g × 1¤ptrdiff]
         if gd.is_mut and not self.a.fns[self.cur_fn × 1¤ptrdiff].is_impure:
             self.derr(tok, "a mutable global is an effect; reading '" ⧺ name ⧺ "' wants @impure")
@@ -2582,6 +2607,29 @@ impl Checker:
                 self.derr(tok, "the literal misses field '" ⧺ self.text(ftok) ⧺ "'")
         self.set_type(id, mk_sty(sidx))
 
+    // `m.NAME` where NAME is not called: a global the module holds.
+    // An enum of its is left alone here -- what follows the name says
+    // which member, and check_field is where that is settled.
+    fn check_qualified_name(&mut self, id : i64, tok : i64, path : str):
+        let name : str = self.text(tok)
+        let whole : str = path ⧺ "." ⧺ name
+        let g : i64 = self.global_index(whole)
+        if g = ⁻1:
+            if self.enum_index(whole) ≠ ⁻1:
+                // the enum itself, whose member follows
+                self.set_type(id, TY_UNIT)
+                return
+            if self.fn_in(whole) ≠ ⁻1:
+                self.derr(tok, "core-2 asks a module for a function by calling it; '" ⧺ path ⧺ "." ⧺ name ⧺ "' is named without being called")
+                self.set_type(id, TY_I64)
+                return
+            self.derrc(tok, 2910, "module '" ⧺ path ⧺ "' defines no '" ⧺ name ⧺ "'")
+            self.set_type(id, TY_I64)
+            return
+        if not self.a.globals[g × 1¤ptrdiff].is_export:
+            self.derrc(tok, 2911, "'" ⧺ whole ⧺ "' is not exported from module '" ⧺ path ⧺ "'; @export says what a module lets others name")
+        self.read_global(id, tok, g)
+
     fn check_field(&mut self, id : i64, tok : i64, na : i64):
         // Name.alignof, where Name is a struct's: the layout answers,
         // and does so before anything is evaluated
@@ -2600,11 +2648,14 @@ impl Checker:
             self.fold_bytes(id, aal)
             return
         // Name.enumerator, where Name is an enum's: what it stands for
-        // is its place in the list, settled here
+        // is its place in the list, settled here.  An enum asked of a
+        // module is named whole, which is what it is registered as.
         if self.kind_of(na) = NK_VAR:
-            let bn := self.text(self.a.ntok[na × 1¤ptrdiff])
-            if self.lookup(bn) = ⁻1:
-                let ei : i64 = self.enum_index(bn)
+            let qv : i64 = self.a.nc[na × 1¤ptrdiff]
+            let bn0 := self.text(self.a.ntok[na × 1¤ptrdiff])
+            let bn : str = if qv > 0: self.a.qmods[(qv - 1) × 1¤ptrdiff] ⧺ "." ⧺ bn0 else: bn0
+            if qv > 0 or self.lookup(bn) = ⁻1:
+                let ei : i64 = if qv > 0: self.enum_index(bn) else: self.enum_here(bn)
                 if ei ≠ ⁻1:
                     let m := self.text(tok)
                     let k : i64 = self.enum_member(ei, m)
@@ -2657,6 +2708,18 @@ impl Checker:
 
     // the enum a written name stands for; the builtins are reached
     // through std and so are not found here
+    // An enum named from inside a module, the same way
+    fn enum_here(&self, name : str) → i64:
+        let where : mut str = self.curmod
+        while true:
+            let cand : str = if where = "": name else: where ⧺ "." ⧺ name
+            let e : i64 = self.enum_index(cand)
+            if e ≠ ⁻1:
+                return e
+            if where = "":
+                return ⁻1
+            where ← mod_parent(where)
+
     fn enum_index(&self, name : str) → i64:
         if @dropunit(#self.a.enames) > NBUILTIN_ENUMS:
             foreach i := NBUILTIN_ENUMS × 1¤ptrdiff…#self.a.enames:
@@ -2720,7 +2783,7 @@ impl Checker:
         let n : i64 = self.a.extra[nb × 1¤ptrdiff]
         let dflt : i64 = self.a.extra[(nb + 1) × 1¤ptrdiff]
         let ename := self.text(self.a.extra[(nb + 2) × 1¤ptrdiff])
-        let ei : i64 = self.enum_index(ename)
+        let ei : i64 = self.enum_here(ename)
         if ei = ⁻1:
             self.derr(tok, "'" ⧺ ename ⧺ "' is not an enumeration")
             return
@@ -2951,7 +3014,7 @@ impl Checker:
         if vs9 ≠ ⁻1 and ty_is_lam(ty_strip_ref(self.stype[vs9 × 1¤ptrdiff])):
             self.check_lcall(id, tok, args_off, argc, vs9)
             return
-        let gl9 : i64 = self.global_index(name)
+        let gl9 : i64 = self.global_here(name)
         if gl9 ≠ ⁻1 and ty_is_lam(self.a.globals[gl9 × 1¤ptrdiff].ty):
             self.check_glcall(id, tok, args_off, argc, gl9)
             return
@@ -4376,7 +4439,7 @@ impl Checker:
         let name := self.text(self.a.ntok[base × 1¤ptrdiff])
         let s : i64 = self.lookup(name)
         if s = ⁻1:
-            let g : i64 = self.global_index(name)
+            let g : i64 = self.global_here(name)
             if g ≠ ⁻1 and not self.a.globals[g × 1¤ptrdiff].is_mut:
                 self.derr(tok, "'" ⧺ name ⧺ "' is not mut, so nothing may change it")
             return
@@ -5195,7 +5258,7 @@ impl Checker:
             self.own_keep(asl, na)
             self.walk_wrote(asl)
             if s = ⁻1:
-                let g : i64 = self.global_index(name)
+                let g : i64 = self.global_here(name)
                 if g = ⁻1:
                     self.derr(tok, "'" ⧺ name ⧺ "' is not defined here")
                     self.check_expr(na, TY_UNIT)

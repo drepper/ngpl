@@ -13,3 +13,7 @@ fn main():
     std.println("{}", geom.sum(p))
     std.println("{}", twice_over(p))
     std.println("{}", geom.sum(geom.shifted(geom.origin(), 3)))
+    // an enum member and a global are asked of the module the same way
+    std.println("{}", geom.describe(geom.Level.quiet))
+    std.println("{}", geom.describe(geom.Level.loud))
+    std.println("{}", geom.sum(geom.origin()) + geom.ORIGIN_SUM)

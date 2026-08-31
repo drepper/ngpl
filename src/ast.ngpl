@@ -309,6 +309,7 @@ struct GlobalDef:
     tok : i64
     ty : i64
     is_mut : bool
+    is_export : bool     // whether a module lets others name it
     init : i64
 
 struct Ast:

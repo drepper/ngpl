@@ -2349,7 +2349,8 @@ impl Parser:
         if @dropunit(#self.enames) >= 256:
             self.err("this file names more than 256 enums")
             return
-        self.enames.push(name)
+        // named by the module it is written in, as a struct is
+        self.enames.push(self.qual_type(name, name_tok))
         self.ewidth.push(w)
         self.estart.push(@dropunit(first))
         self.ecount.push(@dropunit(n))
@@ -2486,10 +2487,13 @@ impl Parser:
             if self.failed(): return 0
             return self.parse_postfix(self.mknode(NK_SLIT, ntok, off, SLIT_PLAIN, qm))
         if self.peek() ≠ TK_LPAR:
-            self.err_at(ntok, """core-2 asks a module for a function; '"""
-                              ⧺ self.ttext(at) ⧺ "." ⧺ self.ttext(ntok)
-                              ⧺ "' is named without being called")
-            return 0
+            // A name asked of a module that is not called: a global it
+            // holds, or an enum of its whose member follows.  The whole
+            // name rides with the node, since the token spells only
+            // what was written after the dot.
+            self.qmods.push(path)
+            let qv : i64 = @dropunit(#self.qmods)
+            return self.parse_postfix(self.mknode(NK_VAR, ntok, 0, 0, qv))
         let aoff : i64 = self.parse_args()
         self.qmods.push(path)
         self.mknode(NK_CALL, ntok, aoff, @dropunit(#self.qmods), 0)
@@ -2690,6 +2694,9 @@ impl Parser:
             self.pos ← self.pos + 1
 
     fn parse_global(&mut self, ignored : bool):
+        self.parse_global_x(ignored, false)
+
+    fn parse_global_x(&mut self, ignored : bool, is_exp : bool):
         // A bound import: `let m := @import("x")`.  The reader has
         // already found the file and read it, so there is nothing to
         // parse but the shape and nothing to keep: what the name
@@ -2713,9 +2720,10 @@ impl Parser:
             // @expect: parsed, remembered, left uncompiled
             self.ignored.push(self.ttext(tok))
             return
-        self.globals.push(GlobalDef{name: self.ttext(tok), modname: self.whole_mod(tok), tok: tok,
+        self.globals.push(GlobalDef{name: self.qual_type(self.ttext(tok), tok), modname: self.whole_mod(tok), tok: tok,
                                     ty: self.nc[stmt × 1¤ptrdiff],
                                     is_mut: self.nb[stmt × 1¤ptrdiff] = 1,
+                                    is_export: is_exp,
                                     init: self.na[stmt × 1¤ptrdiff]})
 
     // whether what is here is `let name := @import(`
@@ -2931,7 +2939,7 @@ impl Parser:
             if imp or is_start or is_noreturn or is_test or #pres > 0 or #posts > 0:
                 self.err("a global binding carries no annotations")
             else:
-                self.parse_global(expects > 0)
+                self.parse_global_x(expects > 0, is_exp)
         else:
             self.err("""core-2 has modules, functions, structs, impl blocks, enums, type names and
                       " global bindings at the top level""")

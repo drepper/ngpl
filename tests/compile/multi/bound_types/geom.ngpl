@@ -16,3 +16,15 @@ fn shifted(p : Point, by : i64) → Point:
 @export
 fn sum(p : Point) → i64:
     p.x + p.y
+
+@export
+enum Level:
+    quiet
+    loud
+
+@export
+let ORIGIN_SUM : i64 = 0
+
+@export
+fn describe(l : Level) → str:
+    if l = Level.quiet: "quiet" else: "loud"

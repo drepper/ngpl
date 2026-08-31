@@ -1,0 +1,3 @@
+tests/compile/refuse/module_global_hidden.ngpl:8:27: error[2911]: 'lib.KEPT' is not exported from module 'lib'; @export says what a module lets others name
+  8 |     std.println("{}", lib.KEPT)
+    |                           ^

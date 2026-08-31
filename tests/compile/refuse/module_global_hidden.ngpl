@@ -1,0 +1,8 @@
+// A global a module did not mark @export cannot be named from outside
+// it, any more than a function can.
+let lib := @import("./module/lib.ngpl")
+
+@start
+@impure
+fn main():
+    std.println("{}", lib.KEPT)

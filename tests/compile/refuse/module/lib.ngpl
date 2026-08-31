@@ -6,3 +6,5 @@ fn twice(n : i64) → i64:
 
 fn hidden(n : i64) → i64:
     n
+
+let KEPT : i64 = 3
