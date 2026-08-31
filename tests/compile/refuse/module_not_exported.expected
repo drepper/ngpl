@@ -1,0 +1,3 @@
+tests/compile/refuse/module_not_exported.ngpl:7:27: error[2911]: 'lib.hidden' is not exported from module 'lib'; @export says what a module lets others name
+  7 |     std.println("{}", lib.hidden(1))
+    |                           ^

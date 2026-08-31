@@ -1,0 +1,8 @@
+// What the module_* refusals import.  Not a refusal of its own: it is
+// here to be bound, and what it lets others name is what it marks.
+@export
+fn twice(n : i64) → i64:
+    n × 2
+
+fn hidden(n : i64) → i64:
+    n

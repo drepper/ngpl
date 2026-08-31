@@ -126,14 +126,47 @@ fn imp_named(b : byte[], at : i64 ¤byte, hi : i64 ¤byte) → str:
         return ""
     imp_str(b, lo, i)
 
+// `let m := @import("x")` written at the head of a line: the name it
+// binds, or "" where the line is not one.  A bound import is the file
+// becoming a module of its own, which nothing but that name reaches.
+fn imp_bound_name(b : byte[], at : i64 ¤byte, hi : i64 ¤byte) → str:
+    if not imp_has(b, at, "let "):
+        return ""
+    let lo : i64 ¤byte = at + 4¤byte
+    let i : mut i64 ¤byte = lo
+    while i < hi and b[i] ≠ IMP_SP:
+        i ← i + 1¤byte
+    if i >= hi or not imp_has(b, i, " := @import(\""):
+        return ""
+    imp_str(b, lo, i)
+
+// the file such a line names
+fn imp_bound_file(b : byte[], at : i64 ¤byte, hi : i64 ¤byte) → str:
+    let i : mut i64 ¤byte = at
+    while i < hi and not imp_has(b, i, "@import(\""):
+        i ← i + 1¤byte
+    if i >= hi:
+        return ""
+    imp_named(b, i, hi)
+
 // What a program is made of: the text of every file, in the order the
 // imports put them, and where each one begins.  `why` is empty while
 // the program could be read and says what stopped it otherwise.
+//
+// A module is a file and everything it reads in plainly; a bound
+// import starts another.  `fmod` says which module each file belongs
+// to, and the three binding arrays say what name reaches what module
+// from where.
 struct Program:
     why : str
     src : byte[]
     names : str[]
     offs : i64 ¤byte[]
+    fmod : i64[]
+    mroot : str[]
+    bname : str[]
+    bmod : i64[]
+    bowner : i64[]
 
 // the directory a path names something in, "" when it names something
 // in the working directory
@@ -158,6 +191,34 @@ fn imp_has_slash(name : str) → bool:
         if c = '/':
             return true
     false
+
+// What a module is called: the file it is rooted in, less its
+// directory and less the suffix a source file is stored under.  It is
+// what qualifies the module's names, and what a symbol in the binary
+// carries, so it is the file's own name and not a number.
+fn imp_stem(path : str) → str:
+    let d : str = dir_of(path)
+    let base : mut str = if d = "": path else: path[#d + 1¤ptrdiff…#path]
+    if #base > 5¤ptrdiff and base[#base - 5¤ptrdiff…#base] = ".ngpl":
+        base ← base[0¤ptrdiff…#base - 5¤ptrdiff]
+    base
+
+// The name each module is qualified by: the one a program is rooted in
+// takes none, so a program that binds nothing is exactly what it was.
+// A stem two modules share is told apart by which one it is.
+fn mod_names(roots : str[]) → str[]:
+    let out : mut str[] = []
+    foreach i := 0¤ptrdiff…#roots:
+        if i = 0¤ptrdiff:
+            out.push("")
+        else:
+            let stem : str = imp_stem(roots[i])
+            let dup : mut bool = false
+            foreach j := 0¤ptrdiff…i:
+                if out[j] = stem:
+                    dup ← true
+            out.push(if dup: stem ⧺ i64_str(@dropunit(i)) else: stem)
+    out
 
 // A name joined to the directory it is looked for in.  A name that
 // begins './' has already said "beside", so the two characters are cut
@@ -230,8 +291,19 @@ struct Reader:
     src : byte[]
     names : str[]
     offs : i64 ¤byte[]
-    done : str[]         // every file already read
+    fmod : i64[]         // the module each file belongs to
+    done : str[]         // every file already read, as "module:path"
     stack : str[]        // every file being read, the innermost last
+    cur : i64            // the module being read into
+    mroot : str[]        // the file each module is rooted in
+    // bindings met while reading, waiting to be followed
+    pend_name : str[]
+    pend_file : str[]
+    pend_from : str[]
+    pend_owner : i64[]
+    bname : str[]
+    bmod : i64[]
+    bowner : i64[]
 
 fn imp_holds(v : str[], want : str) → bool:
     foreach s := v:
@@ -257,7 +329,10 @@ impl Reader:
         if imp_holds(self.stack, path):
             self.why ← "these files import one another: " ⧺ imp_ring(self.stack, path)
             return
-        if imp_holds(self.done, path):
+        // a file is read once into each module that asks for it: what
+        // one module reads in plainly is that module's own
+        let mark : str = i64_str(self.cur) ⧺ ":" ⧺ path
+        if imp_holds(self.done, mark):
             return
         match std.fs.cwd().open_file(path):
             ⊨(file):
@@ -311,8 +386,30 @@ impl Reader:
                 _ ← self.stack.pop() ?? ""
                 self.names.push(path)
                 self.offs.push(#self.src)
+                self.fmod.push(self.cur)
+                // What the file binds: a module of its own, reached by
+                // the name and nothing else.  A binding is a top-level
+                // let, so the line begins where the line begins.
+                let m2 : mut i64 ¤byte = 0¤byte
+                let ln2 : mut i64 = 1
+                while m2 < #text:
+                    let hi2 : i64 ¤byte = imp_line_end(text, m2)
+                    let bn : str = imp_bound_name(text, m2, hi2)
+                    if bn ≠ "":
+                        let bf : str = imp_bound_file(text, m2, hi2)
+                        if bf = "":
+                            self.why ← path ⧺ ":" ⧺ i64_str(ln2) ⧺ """: @import takes one file name
+                                        " in quotes and nothing else, as
+                                        " @import(\"./tokens.ngpl\")"""
+                            return
+                        self.pend_name.push(bn)
+                        self.pend_file.push(bf)
+                        self.pend_from.push(path)
+                        self.pend_owner.push(self.cur)
+                    m2 ← hi2 + 1¤byte
+                    ln2 ← ln2 + 1
                 self.src ← self.src ⧺ text
-                self.done.push(path)
+                self.done.push(mark)
             ∅:
                 let where : str = if asked = "": "" else: asked ⧺ ": "
                 self.why ← where ⧺ "cannot open '" ⧺ path ⧺ "': no such file or it cannot be read"
@@ -321,10 +418,61 @@ impl Reader:
 // files still means what it always did -- each is read in turn, and
 // nothing twice -- so a program that has not been given imports yet is
 // read as it was.
+impl Reader:
+    // One module: the file it is rooted in and everything that file
+    // reads in plainly.  Answers which module it is, so that the name
+    // it was bound to can reach it.
+    @impure
+    fn take_module(&mut self, root : str, asked : str) → i64:
+        // a module is loaded once however many bindings name it, so
+        // that its types are one type and its globals one storage
+        foreach i := 0¤ptrdiff…#self.mroot:
+            if self.mroot[i] = root:
+                return @dropunit(i)
+        let me : i64 = @dropunit(#self.mroot)
+        self.mroot.push(root)
+        let outer : i64 = self.cur
+        self.cur ← me
+        self.take(root, asked)
+        self.cur ← outer
+        me
+
+    // Every module the program is made of, the root one first.  A
+    // binding met while reading is followed after the module holding
+    // it has been read, so that a ring of them is two modules and not
+    // a loop: a bound import asks that the file be there, not that it
+    // be read ahead of anything.
+    @impure
+    fn take_all(&mut self, roots : str[]):
+        foreach nm := roots:
+            _ ← self.take_module(nm, "")
+            if self.why ≠ "":
+                return
+        let at : mut i64 ¤ptrdiff = 0¤ptrdiff
+        while at < #self.pend_name:
+            let nm : str = self.pend_file[at]
+            let from : str = self.pend_from[at]
+            let where : str = imp_resolve(nm, dir_of(from), self.paths)
+            if where = "":
+                self.why ← from ⧺ ": cannot find '" ⧺ nm ⧺ "'" ⧺ imp_looked(nm)
+                return
+            let target : i64 = self.take_module(where, from)
+            if self.why ≠ "":
+                return
+            self.bname.push(self.pend_name[at])
+            self.bmod.push(target)
+            self.bowner.push(self.pend_owner[at])
+            at ← at + 1¤ptrdiff
+
 @impure
 fn read_program(roots : str[], paths : str[]) → Program:
     let r : mut Reader = (Reader{why: "", paths: paths, src: [], names: [],
-                                 offs: [], done: [], stack: []})
-    foreach nm := roots:
-        r.take(nm, "")
-    (Program{why: r.why, src: r.src, names: r.names, offs: r.offs})
+                                 offs: [], fmod: [], done: [], stack: [],
+                                 cur: 0, mroot: [], pend_name: [],
+                                 pend_file: [], pend_from: [],
+                                 pend_owner: [], bname: [], bmod: [],
+                                 bowner: []})
+    r.take_all(roots)
+    (Program{why: r.why, src: r.src, names: r.names, offs: r.offs,
+             fmod: r.fmod, mroot: r.mroot, bname: r.bname, bmod: r.bmod,
+             bowner: r.bowner})

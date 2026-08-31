@@ -127,6 +127,27 @@ let SB_ENVH : i64 = 12      // std.env.has(name) → bool
 let SB_IOV : i64 = 14       // std.iov(x) → the bytes of x, ready to be written
 let SB_PROC : i64 = 13      // std.process.<member>: nb names which
 
+// What the reader worked out about the modules, as the parser reads
+// it.  A module is a file and everything it reads in plainly; a bound
+// import starts another, and `bname` reaches it from `bowner`.
+//
+// `names` is what each module's definitions are qualified by: the file
+// it is rooted in, less its directory and its suffix.  The module a
+// program is rooted in is named "" and its definitions are not
+// qualified at all, so a program that binds nothing is exactly what it
+// was before there were modules.
+struct Mods:
+    offs : i64 ¤byte[]
+    fmod : i64[]
+    names : str[]
+    bname : str[]
+    bmod : i64[]
+    bowner : i64[]
+
+fn no_mods() → Mods:
+    (Mods{offs: [0¤byte], fmod: [0], names: [""], bname: [], bmod: [],
+          bowner: []})
+
 // A struct literal writes a name and its fields; one of them names no
 // struct the program declares but the one the build system defines,
 // std.Build.Executable, and this in nb is how the node says so.

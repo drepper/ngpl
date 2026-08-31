@@ -1,0 +1,3 @@
+tests/compile/refuse/module_named_uncalled.ngpl:8:27: error: core-2 asks a module for a function; 'lib.twice' is named without being called
+  8 |     std.println("{}", lib.twice)
+    |                           ^

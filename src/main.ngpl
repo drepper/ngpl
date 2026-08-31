@@ -402,7 +402,11 @@ fn compile_one(inputs : str[], outname : str, o : Options) → u8:
         dump_tokens(toks, src, files)
         return 0
 
-    let ast := parse(toks, src)
+    let mtab : Mods = (Mods{offs: prog.offs, fmod: prog.fmod,
+                            names: mod_names(prog.mroot),
+                            bname: prog.bname, bmod: prog.bmod,
+                            bowner: prog.bowner})
+    let ast := parse_mods(toks, src, mtab)
     if #ast.diags > 0:
         report(ast.diags, files, o.json, src)
         return 1

@@ -1,0 +1,13 @@
+// A module of its own: nothing of it is visible except through the
+// name it was bound to, and then only what it marks @export.
+@export
+fn twice(n : i64) → i64:
+    n × 2
+
+@export
+fn answer() → i64:
+    twice(21) - hidden()
+
+// Kept to itself, and still its own to call.
+fn hidden() → i64:
+    0

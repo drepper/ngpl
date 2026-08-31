@@ -10,6 +10,7 @@
 
 
 struct Parser:
+    mtab : Mods          // what the reader worked out about the modules
     blets : i64[]        // see Ast
     toks : Toks
     src : byte[]
@@ -79,6 +80,48 @@ struct Parser:
     poisoned : bool      // the statement at hand already misparsed
 
 impl Parser:
+    // The module a token was written in: the file it falls in says
+    // which, and the file it falls in is the last one that begins at
+    // or before it.  A handful of files, so the walk finds it in fewer
+    // steps than a search would take to set up.
+    fn mod_at(&self, at : i64) → str:
+        let off : i64 ¤byte = self.toks.off[at × 1¤ptrdiff] × 1¤byte
+        let k : mut i64 ¤ptrdiff = 0¤ptrdiff
+        while k + 1¤ptrdiff < #self.mtab.offs and self.mtab.offs[k + 1¤ptrdiff] <= off:
+            k ← k + 1¤ptrdiff
+        self.mtab.names[self.mtab.fmod[k] × 1¤ptrdiff]
+
+    // The whole module a definition lives in: the file's, and then the
+    // section a `module` line opened inside it.
+    // which module the file a token was written in is
+    fn modidx_at(&self, at : i64) → i64:
+        let off : i64 ¤byte = self.toks.off[at × 1¤ptrdiff] × 1¤byte
+        let k : mut i64 ¤ptrdiff = 0¤ptrdiff
+        while k + 1¤ptrdiff < #self.mtab.offs and self.mtab.offs[k + 1¤ptrdiff] <= off:
+            k ← k + 1¤ptrdiff
+        self.mtab.fmod[k]
+
+    // The module a name reaches from where it is written, or "" where
+    // it reaches none.  A binding belongs to the module it was written
+    // in: what one module binds is not another's to write.
+    fn bound_module(&self, at : i64) → str:
+        if #self.mtab.bname = 0¤ptrdiff:
+            return ""
+        let owner : i64 = self.modidx_at(at)
+        let nm : str = self.ttext(at)
+        foreach i := 0¤ptrdiff…#self.mtab.bname:
+            if self.mtab.bowner[i] = owner and self.mtab.bname[i] = nm:
+                return self.mtab.names[self.mtab.bmod[i] × 1¤ptrdiff]
+        ""
+
+    fn whole_mod(&self, at : i64) → str:
+        let f : str = self.mod_at(at)
+        if self.curmod = "":
+            return f
+        if f = "":
+            return self.curmod
+        f ⧺ "." ⧺ self.curmod
+
     fn peek(&self) → i64:
         self.toks.kind[self.pos × 1¤ptrdiff]
 
@@ -1044,6 +1087,12 @@ impl Parser:
             let qn : i64 = self.module_prefix(at)
             if qn ≠ ⁻1:
                 return self.parse_qualified(at, qn)
+            // `m.f(…)` where m is a bound import: the name reaches one
+            // module and the call is asked of that one.
+            if self.toks.kind[(at + 1) × 1¤ptrdiff] = TK_DOT:
+                let bm : str = self.bound_module(at)
+                if bm ≠ "":
+                    return self.parse_bound(at, bm)
             if name = "std":
                 self.pos ← self.pos + 1
                 _ ← self.eat(TK_DOT, "'.' after std")
@@ -2097,7 +2146,7 @@ impl Parser:
             // expectation itself, @test or not, as the interpreter
             // reports them
             self.igtests.push(name)
-            self.expects.push(FnDef{name: name, modname: self.curmod, tok: name_tok,
+            self.expects.push(FnDef{name: name, modname: self.whole_mod(name_tok), tok: name_tok,
                                     params_off: params_off,
                                     ret: ret, body: body, is_export: false,
                                     is_replaceable: false, is_impure: imp,
@@ -2143,7 +2192,7 @@ impl Parser:
                 self.err_at(name_tok, """the @build function answers nothing; it declares a build on
                                        " the std.Build it is handed""")
                 return
-            self.builds.push(FnDef{name: name, modname: self.curmod, tok: name_tok, params_off: params_off,
+            self.builds.push(FnDef{name: name, modname: self.whole_mod(name_tok), tok: name_tok, params_off: params_off,
                                    ret: ret, body: body, is_export: false,
                                    is_replaceable: false, is_impure: false,
                                    is_start: false, is_noreturn: false, is_ignorable: false,
@@ -2154,7 +2203,7 @@ impl Parser:
                                    ret_ref: 0, ret_from: ⁻1 × 1¤"aextra",
                             tok_lo: self.def_start, tok_hi: self.pos})
             return
-        self.fns.push(FnDef{name: name, modname: self.curmod, tok: name_tok, params_off: params_off,
+        self.fns.push(FnDef{name: name, modname: self.whole_mod(name_tok), tok: name_tok, params_off: params_off,
                             ret: ret, body: body, is_export: (mods » 1) & 1 = 1,
                             is_replaceable: mods & 1 = 1,
                             is_impure: imp,
@@ -2382,6 +2431,23 @@ impl Parser:
         self.qmods.push(path)
         self.mknode(NK_CALL, ntok, aoff, @dropunit(#self.qmods), 0)
 
+    // `m.name(args)` where m is a bound import: the same shape a
+    // qualified call has, with the module the binding names in place of
+    // the path written down.
+    fn parse_bound(&mut self, at : i64, path : str) → i64:
+        self.pos ← at + 1
+        _ ← self.eat(TK_DOT, "'.' and the name asked of the module")
+        let ntok : i64 = self.pos
+        _ ← self.eat_name("the name asked of the module")
+        if self.peek() ≠ TK_LPAR:
+            self.err_at(ntok, """core-2 asks a module for a function; '"""
+                              ⧺ self.ttext(at) ⧺ "." ⧺ self.ttext(ntok)
+                              ⧺ "' is named without being called")
+            return 0
+        let aoff : i64 = self.parse_args()
+        self.qmods.push(path)
+        self.mknode(NK_CALL, ntok, aoff, @dropunit(#self.qmods), 0)
+
     fn parse_module_def(&mut self):
         let kw : i64 = self.pos
         self.pos ← self.pos + 1
@@ -2576,6 +2642,21 @@ impl Parser:
             self.pos ← self.pos + 1
 
     fn parse_global(&mut self, ignored : bool):
+        // A bound import: `let m := @import("x")`.  The reader has
+        // already found the file and read it, so there is nothing to
+        // parse but the shape and nothing to keep: what the name
+        // reaches was settled before any of this was lexed.
+        if self.is_bound_import():
+            self.pos ← self.pos + 1
+            _ ← self.eat_name("the name the module is bound to")
+            _ ← self.eat(TK_DEFINE, "':=' before the module")
+            _ ← self.eat(TK_AT, "'@import'")
+            _ ← self.eat_word("'import'")
+            _ ← self.eat(TK_LPAR, "'(' after @import")
+            _ ← self.eat(TK_STR, "the file's name, in quotes")
+            _ ← self.eat(TK_RPAR, "')' closing @import")
+            self.end_stmt()
+            return
         // a top-level let: the same shape a local has
         let stmt : i64 = self.parse_let()
         if self.failed(): return
@@ -2584,10 +2665,22 @@ impl Parser:
             // @expect: parsed, remembered, left uncompiled
             self.ignored.push(self.ttext(tok))
             return
-        self.globals.push(GlobalDef{name: self.ttext(tok), modname: self.curmod, tok: tok,
+        self.globals.push(GlobalDef{name: self.ttext(tok), modname: self.whole_mod(tok), tok: tok,
                                     ty: self.nc[stmt × 1¤ptrdiff],
                                     is_mut: self.nb[stmt × 1¤ptrdiff] = 1,
                                     init: self.na[stmt × 1¤ptrdiff]})
+
+    // whether what is here is `let name := @import(`
+    fn is_bound_import(&self) → bool:
+        if self.peek() ≠ TK_LET:
+            return false
+        if self.toks.kind[(self.pos + 1) × 1¤ptrdiff] ≠ TK_IDENT:
+            return false
+        if self.toks.kind[(self.pos + 2) × 1¤ptrdiff] ≠ TK_DEFINE:
+            return false
+        if self.toks.kind[(self.pos + 3) × 1¤ptrdiff] ≠ TK_AT:
+            return false
+        self.ttext(self.pos + 4) = "import"
 
     fn parse_toplevel(&mut self):
         // where this definition begins, which is its first annotation
@@ -2797,7 +2890,11 @@ impl Parser:
 
 // The whole file, every definition understood or reported.
 fn parse(toks : Toks, src : byte[]) → Ast:
-    parse_mode(toks, src, false)
+    parse_mode(toks, src, false, no_mods())
+
+// The same, told what the reader worked out about the modules.
+fn parse_mods(toks : Toks, src : byte[], mods : Mods) → Ast:
+    parse_mode(toks, src, false, mods)
 
 // A recipe's own file, read before the sources it names are known.
 // Most of what is written beside the recipe cannot be understood yet --
@@ -2809,10 +2906,10 @@ fn parse(toks : Toks, src : byte[]) → Ast:
 // parse is not dropped: that is reported, since there is then nothing
 // to run.
 fn parse_recipe(toks : Toks, src : byte[]) → Ast:
-    parse_mode(toks, src, true)
+    parse_mode(toks, src, true, no_mods())
 
-fn parse_mode(toks : Toks, src : byte[], lenient : bool) → Ast:
-    let p : mut Parser = (Parser{toks: toks, src: src, pos: 0, blets: [],
+fn parse_mode(toks : Toks, src : byte[], lenient : bool, mods : Mods) → Ast:
+    let p : mut Parser = (Parser{mtab: mods, toks: toks, src: src, pos: 0, blets: [],
                                  nkind: [], ntok: [], na: [], nb: [], nc: [],
                                  extra: [], fns: [], curmod: "", mods: [], modtok: [], qmods: [],
                                  builds: [], globals: [], structs: [],

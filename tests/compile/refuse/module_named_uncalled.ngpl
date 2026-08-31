@@ -1,0 +1,8 @@
+// core-2 asks a module for a function, and a name asked of one without
+// being called is not that.
+let lib := @import("./module/lib.ngpl")
+
+@start
+@impure
+fn main():
+    std.println("{}", lib.twice)

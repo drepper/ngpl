@@ -1,0 +1,10 @@
+// A bound import: the file becomes a module and this name is the only
+// way into it.  Both implementations resolve it the same way, which is
+// what this checks.
+let lib := @import("./lib.ngpl")
+
+@start
+@impure
+fn main():
+    std.println("{}", lib.answer())
+    std.println("{}", lib.twice(3))

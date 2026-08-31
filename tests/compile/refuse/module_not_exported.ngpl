@@ -1,0 +1,7 @@
+// What a module did not mark @export cannot be named from outside it.
+let lib := @import("./module/lib.ngpl")
+
+@start
+@impure
+fn main():
+    std.println("{}", lib.hidden(1))
