@@ -188,15 +188,18 @@ fn build(b : &mut std.Build, o : &std.Options):
     // recipe lives in src/ and the binary belongs beside it, in build/.
     // What the command line said arrives as one std.Options, each of
     // its members ∅ where nothing was said: o.output names what this
-    // build is called and o.target what it is built for, and where
-    // neither said anything the recipe's own answers stand.  The
-    // compiler applies both to what a recipe adds in any case, so this
-    // says the same thing it would have done rather than a different
-    // one.
+    // build is called, o.target what it is built for, and o.optimize
+    // how hard to work on it -- and where none of them said anything
+    // the recipe's own answers stand, a compiler called ngplc built for
+    // the machine underfoot at the level every build starts from.  The
+    // compiler applies all three to what a recipe adds in any case, so
+    // this says the same thing it would have done rather than a
+    // different one.
     b.add_executable(std.Build.Executable{name: o.output ?? "ngplc",
                                           root_source_file: "main.ngpl",
                                           output_dir: "../build",
-                                          target: o.target ?? ""})
+                                          target: o.target ?? "",
+                                          optimize: o.optimize ?? 0})
 
 fn empty_recipe() → Recipe:
     (Recipe{names: [], roots: [], outdirs: [], targets: [], optimizes: [],
