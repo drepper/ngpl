@@ -1,0 +1,3 @@
+tests/compile/refuse/import_unbound.ngpl:4:1: error: @import answers a module and says nothing on its own; bind it, as let x := @import("./x.ngpl")
+  4 | @import("./module/lib.ngpl")
+    | ^

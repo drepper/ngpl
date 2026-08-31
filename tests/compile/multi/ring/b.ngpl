@@ -1,0 +1,7 @@
+// The other half of the ring: it names the file that named it, and
+// what it reaches there is what that file marked @export.
+let a := @import("./a.ngpl")
+
+@export
+fn two() → i64:
+    a.one() + 1

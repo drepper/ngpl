@@ -1,0 +1,9 @@
+// @import answers a module, and a module reaches nothing on its own:
+// what a file does not bind, it cannot name.  Asking for one and
+// throwing the answer away is the one thing @import is never for.
+@import("./module/lib.ngpl")
+
+@start
+@impure
+fn main():
+    std.println("never")

@@ -405,7 +405,7 @@ fn compile_one(inputs : str[], outname : str, o : Options) → u8:
         return 0
 
     let mtab : ast_m.Mods = (ast_m.Mods{offs: prog.offs, fmod: prog.fmod,
-                            names: imports.mod_names(prog.mroot),
+                            names: imports.mod_names(prog.mroot, prog.bmod),
                             bname: prog.bname, bmod: prog.bmod,
                             bowner: prog.bowner})
     let ast := parse.parse_mods(toks, src, mtab)

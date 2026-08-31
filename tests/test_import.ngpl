@@ -6,8 +6,6 @@
 // Two imports of one file are two bindings of one module, so its types
 // are the same type and its globals the same storage.
 
-@import("./import/deeper.ngpl")
-
 let lib := @import("./import/lib.ngpl")
 let again := @import("./import/lib.ngpl")
 
@@ -51,12 +49,12 @@ fn test_two_bindings_are_one_module():
     assert_eq(p.x, 0)
     assert_eq(again.SCALE, lib.SCALE)
 
-// A file read in plainly may bind a module of its own, and what it
-// asks for is looked for beside itself -- tests/import/deeper.ngpl
-// binds ./sub/near.ngpl, which is nowhere near this file.
+// A module binds modules of its own, and what it asks for is looked
+// for beside itself -- tests/import/lib.ngpl binds ./sub/near.ngpl,
+// which is nowhere near this file.
 @test
 fn test_a_binding_is_read_beside_the_file_that_asked():
-    assert_eq(near_five(), 5)
+    assert_eq(lib.near_five(), 5)
 
 // What a module did not bind is not its to name.  The library has its
 // own SCALE, and this file has another; the library's functions see

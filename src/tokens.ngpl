@@ -228,8 +228,6 @@ let TK_TYPE : i64 = 103      // type: a name standing for a type
 let TK_ENUM : i64 = 104      // enum
 @export
 let TK_UNIT : i64 = 105      // unit: a measure the file gives a name
-@export
-let TK_MODULE : i64 = 106    // module: where what follows it lives
 
 // The keyword table: one hash probe replaces a comparison ladder.  A
 // word the bootstrap language reserves but core-1 gives no meaning is
@@ -244,7 +242,7 @@ let KEYWORDS : std.dict(str, i64) = (⸨
     "opt": 99, "is": 99, "import": 99, "some": 99,
     "start": 99, "test": 99, "expect": 99, "wrap": 99, "enum": 104,
     "flag": 99, "replaceable": 99, "catch": 99, "comptime": 99,
-    "type": 103, "unit": 105, "module": 106, "impure": 99, "enumerate": 99,
+    "type": 103, "unit": 105, "module": 99, "impure": 99, "enumerate": 99,
     "macro": 99⸩)
 
 // The multi-byte glyphs, keyed by their UTF-8 bytes packed into one

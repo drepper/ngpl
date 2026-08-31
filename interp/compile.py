@@ -352,12 +352,8 @@ import interp.eval as E  # noqa: E402  (after the names above, which eval import
 def _into_module(ev, node) -> bool:
     """Whether this call reaches into a module rather than onto a value.
 
-    Two shapes reach one: `m.f(…)` where m is a bound import, and the
-    older `a.b.f(…)` where a.b is a declared module.  Either is the
-    walk's to make, since what it looks up is a name and not a method.
+    `m.f(…)` where m is a bound import does; it is the walk's to make,
+    since what it looks up is a name and not a method.
     """
-    if type(node.obj) is VarRef and ev._module_binding(node.obj.name) is not None:
-        return True
-    if not hasattr(node, "method"):
-        return False
-    return bool(E.MODULES) and ev._dotted_name(node.obj) in E.MODULES
+    return (type(node.obj) is VarRef
+            and ev._module_binding(node.obj.name) is not None)

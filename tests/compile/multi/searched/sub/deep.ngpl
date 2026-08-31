@@ -1,4 +1,5 @@
 // Found by a name that holds a '/', which is looked for beside the
 // file that asks for it and nowhere else.
+@export
 fn thrice(n : i64) → i64:
     n × 3

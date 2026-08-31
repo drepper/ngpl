@@ -1,0 +1,16 @@
+// Two files that bind one another.  A binding asks that the file be
+// there, not that it be read ahead of anything, so a ring of them is
+// two modules and not a loop: this one is the module the program is
+// rooted in, and the other reaches back into it by name like any
+// other.
+
+let b := @import("./b.ngpl")
+
+@export
+fn one() → i64:
+    1
+
+@start
+@impure
+fn main():
+    std.println("{} {}", b.two(), one())

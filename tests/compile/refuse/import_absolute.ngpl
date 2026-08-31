@@ -1,6 +1,6 @@
 // A name beginning with a slash says where the file is, so nothing is
 // searched: it is there or it is not.
-@import("/no/such/file/anywhere.ngpl")
+let far := @import("/no/such/file/anywhere.ngpl")
 
 @start
 @impure

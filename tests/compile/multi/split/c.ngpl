@@ -1,14 +1,15 @@
-// The third file completes the program, and is the one the program is
-// rooted in: it names the second, which names the first, and that is
-// the whole of what anything outside has to know.
+// The third file completes the program and is the one it is rooted in.
+// It binds both of the others: what a file needs it says for itself,
+// and a name reaching it through b would be b's to give away.
 
-@import("./b.ngpl")
+let a := @import("./a.ngpl")
+let b := @import("./b.ngpl")
 
-fn shout(l : Level) → str:
-    if l = Level.quiet: "world" else: "WORLD"
+fn shout(l : a.Level) → str:
+    if l = a.Level.quiet: "world" else: "WORLD"
 
 @start
 @impure
 fn main():
-    std.println("{}", announce(Level.quiet))
-    std.println("{}", announce(Level.loud))
+    std.println("{}", b.announce(a.Level.quiet, shout(a.Level.quiet)))
+    std.println("{}", b.announce(a.Level.loud, shout(a.Level.loud)))

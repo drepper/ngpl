@@ -1,0 +1,12 @@
+// What the file the program is rooted in defines is that module's.  A
+// module reaches the names that belong to nobody -- the builtins, what
+// std holds -- and never the ones belonging to whatever bound it.
+let lib := @import("./module/reaches.ngpl")
+
+fn secret() → i64:
+    7
+
+@start
+@impure
+fn main():
+    std.println("{}", lib.ask())

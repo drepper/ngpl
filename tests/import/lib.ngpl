@@ -2,7 +2,10 @@
 // here to be imported, and what it lets others name is what it marks.
 //
 // The name a file is known by is the name it is bound to, so this file
-// says nothing about who reads it.
+// says nothing about who reads it.  What it binds for itself is looked
+// for beside itself, a directory away from whoever bound this.
+
+let near := @import("./sub/near.ngpl")
 
 @export
 struct Point:
@@ -41,3 +44,10 @@ fn hidden(n : i64) → i64:
 @export
 fn reaches_its_own() → i64:
     hidden(41)
+
+// A module's own binding is looked for beside the file that asked for
+// it -- ./sub/near.ngpl is nowhere near the file this one is bound
+// from -- and what it answers is this module's, not that one's.
+@export
+fn near_five() → i64:
+    near.five()

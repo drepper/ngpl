@@ -65,27 +65,6 @@ fn enum_bare(whole : str) → str:
         return whole
     whole[cut + 1¤ptrdiff…#whole]
 
-// The module a module is written inside; "" for one written at the top.
-fn mod_parent(m : str) → str:
-    let cut : mut i64 ¤ptrdiff = ⁻1¤ptrdiff
-    foreach i := 0…#m:
-        if m[i] = '.':
-            cut ← i
-    if cut < 0:
-        return ""
-    m[0¤ptrdiff…cut]
-
-// whether `inner` is `outer` or is written inside it
-fn mod_within(inner : str, outer : str) → bool:
-    let m : mut str = inner
-    while true:
-        if m = outer:
-            return true
-        if m = "":
-            return false
-        m ← mod_parent(m)
-    false
-
 @export
 struct Chk:
     ntype : i64[]
@@ -547,18 +526,30 @@ impl Checker:
             return self.a.structs[types.ty_sidx(types.ty_strip_ref(t)) × 1¤ptrdiff].name
         self.tn(t)
 
+    // A bare name as the module in hand writes it.  A module is a
+    // file, so the whole name is that file's and the name itself, and
+    // a program of one file writes the name and nothing else.
+    @post(r: #r >= #name)
+    fn whole(&self, name : str) → str:
+        if self.curmod = "": name else: self.curmod ⧺ "." ⧺ name
+
+    // Whether a bare name may also be looked for as it was written.
+    // Only the root module's may: a bare key is where the root module
+    // holds its own names, and what a module did not bind is not its
+    // to name.  The builtins and what std holds are reached another
+    // way and are nobody's to hide.
+    fn bare_too(&self) → bool:
+        self.curmod = ""
+
     // A struct named from inside a module: its own first, then the
-    // names that belong to nobody.
+    // names that belong to nobody -- the builtins and what std holds.
     fn struct_here(&self, name : str) → i64:
-        let where : mut str = self.curmod
-        while true:
-            let cand : str = if where = "": name else: where ⧺ "." ⧺ name
-            let si : i64 = self.struct_index(cand)
-            if si ≠ ⁻1:
-                return si
-            if where = "":
-                return ⁻1
-            where ← mod_parent(where)
+        let si : i64 = self.struct_index(self.whole(name))
+        if si ≠ ⁻1:
+            return si
+        if not self.bare_too():
+            return ⁻1
+        self.struct_index(name)
 
     fn struct_index(&self, name : str) → i64:
         if #self.a.structs > 0:
@@ -584,22 +575,17 @@ impl Checker:
         let k : i64 = self.kind_of(id)
         k = ast.NK_SLIT or k = ast.NK_CALL or k = ast.NK_MCALL
 
-    // A name written unqualified, found the way its module sees it: the
-    // module in hand first, then the ones it is written inside, then
-    // the global module.  Nothing found this way can be hidden, since
-    // every candidate is in the current module or one it is written
-    // inside, and a module hides nothing from what it contains.
+    // A name written unqualified, found the way its module sees it:
+    // the module in hand first, then the names that belong to nobody.
+    // Nothing found this way can be hidden, since a module hides
+    // nothing from itself and what belongs to nobody is everyone's.
     fn fn_index_here(&self, name : str) → i64:
-        let where : mut str = self.curmod
-        while true:
-            let cand : str = if where = "": name else: where ⧺ "." ⧺ name
-            let f : i64 = self.fn_in(cand)
-            if f ≠ ⁻1:
-                return f
-            if where = "":
-                return ⁻1
-            where ← mod_parent(where)
-        ⁻1
+        let f : i64 = self.fn_in(self.whole(name))
+        if f ≠ ⁻1:
+            return f
+        if not self.bare_too():
+            return ⁻1
+        self.fn_in(name)
 
     // the function whose whole name is this, or ⁻1
     fn fn_in(&self, whole : str) → i64:
@@ -618,17 +604,14 @@ impl Checker:
         ⁻1
 
     // A global named from inside a module: its own first, then the
-    // names that belong to nobody, walking out as a call does.
+    // names that belong to nobody, as a call is found.
     fn global_here(&self, name : str) → i64:
-        let where : mut str = self.curmod
-        while true:
-            let cand : str = if where = "": name else: where ⧺ "." ⧺ name
-            let g : i64 = self.global_index(cand)
-            if g ≠ ⁻1:
-                return g
-            if where = "":
-                return ⁻1
-            where ← mod_parent(where)
+        let g : i64 = self.global_index(self.whole(name))
+        if g ≠ ⁻1:
+            return g
+        if not self.bare_too():
+            return ⁻1
+        self.global_index(name)
 
     fn global_index(&self, name : str) → i64:
         if #self.gnames > 0:
@@ -2742,15 +2725,12 @@ impl Checker:
     // through std and so are not found here
     // An enum named from inside a module, the same way
     fn enum_here(&self, name : str) → i64:
-        let where : mut str = self.curmod
-        while true:
-            let cand : str = if where = "": name else: where ⧺ "." ⧺ name
-            let e : i64 = self.enum_index(cand)
-            if e ≠ ⁻1:
-                return e
-            if where = "":
-                return ⁻1
-            where ← mod_parent(where)
+        let e : i64 = self.enum_index(self.whole(name))
+        if e ≠ ⁻1:
+            return e
+        if not self.bare_too():
+            return ⁻1
+        self.enum_index(name)
 
     fn enum_index(&self, name : str) → i64:
         if @dropunit(#self.a.enames) > types.NBUILTIN_ENUMS:
@@ -3149,7 +3129,7 @@ impl Checker:
                 self.check_expr(self.a.extra[args_off + 1 + i], types.TY_UNIT)
             self.set_type(id, types.TY_I64)
             return
-        if not self.a.fns[f × 1¤ptrdiff].is_export and not mod_within(self.curmod, path):
+        if not self.a.fns[f × 1¤ptrdiff].is_export and self.curmod ≠ path:
             self.derrc(tok, 2911, "'" ⧺ whole ⧺ "' is not exported from module '" ⧺ path ⧺ "'; @export says what a module lets others name")
         self.check_resolved(id, tok, name, args_off, argc, f)
 
@@ -6391,25 +6371,6 @@ fn check(a : ast.Ast, toks : lex.Toks, src : byte[]) → Chk:
     foreach f2 := a.fns:
         if f2.is_test:
             ntests ← ntests + 1
-    // A module is a promise that something in it is worth naming from
-    // outside; one that exports nothing keeps that promise to nobody,
-    // and is a mistake rather than a place to put things.  What a
-    // module inside it exports, it exports.
-    if #a.mods > 0:
-        foreach mi := 0…#a.mods:
-            let mname : str = a.mods[mi]
-            let seen : mut bool = false
-            if #a.fns > 0:
-                foreach fi := 0…#a.fns:
-                    let fd := a.fns[fi]
-                    if fd.is_export and mod_within(fd.modname, mname):
-                        seen ← true
-            if not seen:
-                let mt : i64 ¤ptrdiff = a.modtok[mi]
-                c.diags.push(diag.Diag{line: toks.line[mt], col: toks.col[mt],
-                                  msg: "module '" ⧺ mname ⧺ """' exports nothing, so nothing outside
-                                          " it can name anything in it; mark what it is for with
-                                          " @export""", level: diag.DIAG_ERROR, code: diag.DIAG_NONE})
     if starts = 0 and ntests = 0 and #a.igtests = 0:
         // a recipe is not a program: it says how to build one.  Someone
         // compiling a file that holds only a recipe has almost always

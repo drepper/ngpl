@@ -8,3 +8,8 @@ fn hidden(n : i64) → i64:
     n
 
 let KEPT : i64 = 3
+
+// Not marked either: a type is no more nameable from outside than a
+// function is.
+struct Kept:
+    n : i64

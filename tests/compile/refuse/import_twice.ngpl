@@ -1,9 +1,0 @@
-// Asking for the same file twice is a mistake rather than a request:
-// what an import asks for is that the file be there, and it is.
-@import("./import_not_found.ngpl")
-@import("./import_not_found.ngpl")
-
-@start
-@impure
-fn main():
-    std.println("never")

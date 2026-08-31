@@ -1,1 +1,0 @@
-ngplc: tests/compile/refuse/import_twice.ngpl:4: './import_not_found.ngpl' is imported here and already above; once is what it means

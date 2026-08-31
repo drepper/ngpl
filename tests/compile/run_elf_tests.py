@@ -808,20 +808,20 @@ def main() -> int:
                   check_segments(wv, 8 * 1024 * 1024),
                   check_sections(wv), None)[-1])
     def multi_bill():
-        # A program from several files, named by one: the third imports
-        # the second, which imports the first.  The bill names each one
-        # in the order they were read -- which is the order the imports
-        # put them in, each after what it is written against -- and
+        # A program of several modules, named by one: the file it is
+        # rooted in binds the two others.  The bill names each in the
+        # order they were read -- the root module first, then the
+        # modules its bindings named, in the order it named them -- and
         # then all of them together.
-        parts = [os.path.join("tests", "compile", "multi", "split", f)
-                 for f in ("a.ngpl", "b.ngpl", "c.ngpl")]
+        where = os.path.join("tests", "compile", "multi", "split")
+        parts = [os.path.join(where, f) for f in ("c.ngpl", "a.ngpl", "b.ngpl")]
         out = os.path.join(work, "probe_multi")
-        compile_probe(compiler, parts[2], out)
+        compile_probe(compiler, parts[0], out)
         return check_sbom(Elf(open(out, "rb").read()), parts)
 
     case("every binary carries its bill of materials",
          lambda: check_sbom(sym, [rel(sym_src)]))
-    case("a bill of imported sources keeps them in order", multi_bill)
+    case("a bill of a program of modules keeps them in order", multi_bill)
     case("readelf reads it", lambda: check_readelf(sym_bin))
     case("the reader written in NGPL reads it too",
          lambda: check_sbom_tool(sym, sym_bin))

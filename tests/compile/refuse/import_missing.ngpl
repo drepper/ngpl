@@ -1,6 +1,6 @@
 // A file that is not there is said so by name, and by the line that
 // asked for it.
-@import("./no_such_file.ngpl")
+let missing := @import("./no_such_file.ngpl")
 
 @start
 @impure

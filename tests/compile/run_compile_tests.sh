@@ -338,7 +338,6 @@ shared_tests=(
     test_if
     test_iterator
     test_lambda
-    test_module
     test_match_enum
     test_noreturn
     test_reshape
@@ -488,6 +487,11 @@ for r in "$testdir"/refuse/*.ngpl; do
     # here is what it said about the file under test, so the comparison
     # begins at the first line that names it.
     sed -n "\|$rel|,\$p" "$workdir/$name.raw" > "$workdir/$name.refuse"
+    # A refusal may be about a file the test binds rather than the test
+    # itself -- what a module may name is answered where the name is
+    # written -- and then nothing names the file under test.  What was
+    # said is then the whole of what was said.
+    [ -s "$workdir/$name.refuse" ] || cp "$workdir/$name.raw" "$workdir/$name.refuse"
     if [ $rc -eq 0 ]; then
         echo "FAIL refuse/$name: the compiler accepted it"
         fail=$((fail + 1))

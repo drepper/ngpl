@@ -1,7 +1,0 @@
-// Read plainly into tests/test_import.ngpl's module, and binding a
-// module of its own from where it sits rather than from where the
-// module it joins is rooted.
-let near := @import("./sub/near.ngpl")
-
-fn near_five() → i64:
-    near.five()

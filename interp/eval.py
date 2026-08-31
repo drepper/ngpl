@@ -1085,28 +1085,6 @@ _ARRAY_METHODS: dict[str, int] = {
 _NO_TEMPS: tuple = ()
 
 
-# The modules the program declares.  Program-wide rather than an
-# evaluator's own, as the units and the macros are: the definitions are
-# installed through one evaluator and the program runs through another,
-# and both have to see the same modules.
-MODULES: set = set()
-
-
-def register_modules(names) -> None:
-    """Record the modules a program declares, replacing any before."""
-    MODULES.clear()
-    MODULES.update(names)
-
-
-def _ancestors_of(module: str) -> list:
-    """A module and the ones it is written inside, innermost first."""
-    out = [module]
-    while module:
-        module = module.rsplit(".", 1)[0] if "." in module else ""
-        out.append(module)
-    return out
-
-
 # Says a target subexpression was not evaluated, which is every
 # target that has none: a bare name.
 _MISSING = object()
@@ -4081,19 +4059,6 @@ class Evaluator:
             return
         self._pending_lend = (fn_name, names, obj, how)
 
-    def _dotted_name(self, node):
-        """The name a chain of plain identifiers spells, or None."""
-        parts = []
-        n = node
-        while isinstance(n, GetAttr):
-            parts.append(n.attr)
-            n = n.obj
-        if not isinstance(n, VarRef):
-            return None
-        parts.append(n.name)
-        parts.reverse()
-        return ".".join(parts)
-
     def _module_binding(self, name: str):
         """The module a name is bound to, or None where it is not one."""
         try:
@@ -4124,14 +4089,6 @@ class Evaluator:
         args = [self.eval_expr(a) for a in node.args]
         return self._do_call(func, args)
 
-    def _visible_from_here(self, module: str) -> bool:
-        """Whether this module hides nothing from where we are.
-
-        A module hides nothing from itself or from what is written
-        inside it; everywhere else sees only what it exports.
-        """
-        return module in _ancestors_of(self._cur_module)
-
     def _ee_MethodCall(self, node):
         # `m.f(…)` where m is a bound import: the module says where to
         # look, and what it did not export cannot be named from outside
@@ -4141,25 +4098,6 @@ class Evaluator:
             held = self._module_binding(node.obj.name)
             if held is not None:
                 return self._call_in_module(held, node)
-        # `a.b.f(…)` is a call of f in module a.b when a.b is a module.
-        # It reads as a method on a.b until the name is looked at, which
-        # is why the modules a program declares are known here.
-        if MODULES:
-            qual = self._dotted_name(node.obj)
-            if qual is not None and qual in MODULES:
-                full = f"{qual}.{node.method}"
-                try:
-                    func = self.env.lookup(full)
-                except KeyError:
-                    raise coded(2910, TypeError(
-                        f"module '{qual}' defines no '{node.method}'")) from None
-                if not getattr(func, "is_export", False) \
-                        and not self._visible_from_here(qual):
-                    raise coded(2911, TypeError(
-                        f"'{full}' is not exported from module '{qual}'; "
-                        f"@export says what a module lets others name"))
-                args = [self.eval_expr(a) for a in node.args]
-                return self._do_call(func, args)
         if node.method in _ARRAY_MUTATORS:
             self._check_mutating_call(node)
         obj = self.eval_expr(node.obj)
@@ -7244,27 +7182,21 @@ class Evaluator:
     def _module_lookup(self, name: str):
         """A name written unqualified, found the way a module sees it.
 
-        The module in hand first, then the ones it is written inside,
-        then the global module.  Nothing found this way can be hidden:
-        every candidate is in the current module or one it is written
-        inside, and a module hides nothing from what it contains.
+        A module is a file: its own names first, then the bare key,
+        which is where the builtins and std live and where the root
+        module's own names are.  A module that is not the root may
+        reach the first of those and not the second -- what it did not
+        bind is not its to name.
         """
         where = self._cur_module
-        while True:
-            # The bare key is where the builtins and std live, and also
-            # where the root module's own names are.  A module that is
-            # not the root may reach the first and not the second: what
-            # it did not bind is not its to name.
-            if not where and self._cur_module and not _reachable_bare(name):
-                raise KeyError(f"undefined variable: {name}")
-            cand = f"{where}.{name}" if where else name
+        if where:
             try:
-                return self.env.lookup(cand)
+                return self.env.lookup(f"{where}.{name}")
             except KeyError:
                 pass
-            if not where:
+            if not _reachable_bare(name):
                 raise KeyError(f"undefined variable: {name}")
-            where = where.rsplit(".", 1)[0] if "." in where else ""
+        return self.env.lookup(name)
 
     def _call_func(self, name: str, args):
         """Call a function by name with given arguments.
@@ -7275,10 +7207,8 @@ class Evaluator:
         # A module's own name for a function comes first: what a file
         # keeps to itself is still its own to call.  A program of one
         # module has no key at all and asks nothing extra.
-        if self._cur_module:
-            func = self._module_lookup(name)
-        else:
-            func = self._module_lookup(name) if MODULES else self.env.lookup(name)
+        func = self._module_lookup(name) if self._cur_module \
+            else self.env.lookup(name)
         return self._do_call(func, args)
 
     def _call_method(self, obj: Value, method_name: str, args):

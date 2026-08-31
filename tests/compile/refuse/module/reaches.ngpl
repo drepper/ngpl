@@ -1,0 +1,5 @@
+// Written against nothing, and reaching for a name of the file that
+// bound it.
+@export
+fn ask() → i64:
+    secret()

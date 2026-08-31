@@ -99,14 +99,14 @@ Split along a seam that already exists -- a section banner, a phase, an
 architecture -- and cut contiguous slices so that concatenating them
 reproduces the original byte for byte, which makes the split checkable:
 the binaries compiled before and after must be identical on every
-target.  One consequence to remember: the order of the files is part
-of the program, since a unit must be declared before it is used while a
-struct, a function, a global and an enum need not.  The order is not
-written down anywhere outside the sources -- each file names at its
-head, with @import("./other.ngpl"), what it is written against, and the
-compiler is handed src/main.ngpl and finds the rest.  So a new file
-says what it needs and is named by whatever needs it; build/sources.sh
-holds the root file's name and nothing else.
+target.  Each file is a module: it names at its head, with
+`let other := @import("./other.ngpl")`, every file it is written
+against, writes `other.name` for everything it borrows, and marks
+`@export` on everything another file names of it.  The compiler is
+handed src/main.ngpl and finds the rest, so the order the sources are
+read in is written in the sources and nowhere else; build/sources.sh
+holds the root file's name and nothing else.  A new file says what it
+needs and is named by whatever needs it.
 
 Units policy: every variable in the NGPL source carries a unit.  A
 count of bytes is ¤byte, a bare array index is ¤ptrdiff, and an index

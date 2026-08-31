@@ -94,22 +94,23 @@ def as_written(message: str) -> str:
     return _KEY.sub("", message)
 
 
-def file_at(m, line: int) -> str:
-    """The file of a module a line falls in.
+def file_at(m, line: int) -> tuple:
+    """The file of a module a line falls in, and the line within it.
 
-    A module is its root file and everything it reads in plainly, read
-    into one text; which of them a definition was written in is the
-    last one that begins at or before it.  It matters because a name a
-    file asks for is looked for beside *that* file, not beside the one
-    the module happens to be rooted in.
+    A module is the file it is rooted in, and the command line may name
+    several for the root one; which of them a definition was written in
+    is the last one that begins at or before it.  It matters because a
+    name a file asks for is looked for beside *that* file, and because
+    a refusal names the line the way the file's own author counts it.
     """
     where = m.paths[0] if m.paths else m.root
+    start = m.starts[0] if m.starts else 1
     for k, st in enumerate(m.starts):
         if st <= line:
-            where = m.paths[k]
+            where, start = m.paths[k], st
         else:
             break
-    return where
+    return where, line - start + 1
 
 
 def module_of_path(mods, path: str):
@@ -192,10 +193,11 @@ def load(roots, paths_asked, read_program, resolve, import_error,
             if isinstance(d, VarDef) and isinstance(d.init_expr, ImportExpr):
                 # beside the file that asked, which is not always the
                 # file the module is rooted in
-                asked_in = file_at(m, d.pos[0]) if getattr(d, "pos", None) \
-                    else root
+                asked_in, ln = file_at(m, d.pos[0]) \
+                    if getattr(d, "pos", None) else (root, 0)
                 here = resolve(d.init_expr.name, os.path.dirname(asked_in),
-                               paths_asked, asked_in)
+                               paths_asked,
+                               f"{asked_in}:{ln}" if ln else asked_in)
                 m.bindings[d.name] = take(here, root, being + [real])
         return m.index
 
@@ -403,17 +405,13 @@ def prepare(mods):
                 if isinstance(d, (StructDef, EnumDef, TypeDef, SumTypeDef)):
                     d.name = m.qualify(d.name)
         for d in m.defs:
-            # a module line inside a file still sections it, and the
-            # module the file is stays outside that
-            own = getattr(d, "module", "")
             if m.prefix:
-                d.module = f"{m.prefix}.{own}" if own else m.prefix
+                d.module = m.prefix
                 # A method is written in the module its impl block is
                 # written in, and reaches that module's names the way
                 # any other function of it does.
                 for meth in getattr(d, "methods", ()) or ():
-                    mown = getattr(meth, "module", "")
-                    meth.module = f"{m.prefix}.{mown}" if mown else m.prefix
+                    meth.module = m.prefix
             if isinstance(d, VarDef) and isinstance(d.init_expr, ImportExpr):
                 target = mods[m.bindings[d.name]]
                 d.import_handle = ModuleHandle(

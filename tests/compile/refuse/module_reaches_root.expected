@@ -1,0 +1,3 @@
+tests/compile/refuse/module/reaches.ngpl:5:5: error: 'secret' is not a function this program defines
+  5 |     secret()
+    |     ^

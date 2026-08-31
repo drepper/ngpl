@@ -923,21 +923,25 @@ Compile-Time and Metaprogramming
 Module System
 -------------
 
-[x] modules that name and hide: `module a` is a section marker, not a block -- what follows
-    belongs to it until the next says otherwise.  A bare name nests in the module in hand, a
-    leading period starts from the outside, `module .` returns to the global module; C++'s
-    namespace rules with a period for the two colons.  A definition's whole name is its module
-    and its own, and a function's object-file symbol carries that and the signature.  Nothing
-    leaves a module without @export, and a module that exports nothing is refused.  Unqualified
-    names are looked for outward through the enclosing modules.  In both implementations, and
-    test_module is a shared test: compiled and run with --test, its output diffed against the
-    interpreter's.  tests/test_module.ngpl, spec Chapter 8.
+[x] a file is a module: `let m := @import("./x.ngpl")` answers one and binds it, and nothing
+    of that file is reachable except through the name and only what it marked @export.  A name
+    is a function, a type, an enum or a global -- `m.f(x)`, `m.S`, `m.S{…}`, `m.E.member`,
+    `m.G`.  Where a file is looked for is what its name says: absolute as written, one holding
+    a '/' beside the file that asks, a bare name beside it then along --path then in
+    /usr/share/ngpl/lib, each with and without the '.ngpl'.  Two bindings of one file are one
+    module -- the same types, the same globals, one copy of each function in the binary -- and
+    a ring of bindings works.  A definition's whole name is its module's and its own, and a
+    function's object-file symbol carries that and the signature.  In both implementations.
+    tests/test_import.ngpl, tests/compile/multi/, spec Chapter 8.
 
-[ ] [FULL] the rest of the module system: importing a module under a shorter name, asking a
-    module for something that is not a function (core-2 refuses `mod.name` unless it is
-    called), visibility narrower than exported-or-not, and separate compilation -- which is what would make a
-    module a unit of anything but naming.  Name mangling with module prefix is done (the
-    symbol is module.name(sig) → ret).
+    The `module a` section marker this replaced, and the plain including form of @import, are
+    both withdrawn: a file is the better unit, and an import that injects names is what the
+    module value exists to stop.
+
+[ ] [FULL] the rest of the module system: visibility narrower than exported-or-not, asking a
+    module for something core-2 does not let it answer, and separate compilation -- which is
+    what would make a module a unit of anything but naming.  Name mangling with module prefix
+    is done (the symbol is module.name(sig) → ret).
 
     The brief says the opposite of the mangling sentence above: since the language starts from
     scratch there is no reason to mangle, and a name in an object file can be the normalized,
@@ -945,12 +949,11 @@ Module System
     with the object-file encoding in TODO-compiler.md.
 
     The build function landed ahead of the module system, because the compiler's own sources
-    needed splitting before either existed: several files are read as if concatenated, each
-    naming with @import what it is written against, and a @build recipe names the one file a
-    build is rooted in.  Spec Chapter 8 describes what is there and says plainly that
-    it is a stand-in.  The module system subsumes two of its limitations -- that there is one
-    text rather than compilation units, and that the order of the file list is significant
-    because an enum and a unit must be declared before use.
+    needed splitting before either existed.  A @build recipe still names the one file a build
+    is rooted in, and the module system took over what an @import means: the sources are a
+    graph of modules rather than one text, and only the files of one module -- those named
+    together on one command line -- still depend on the order they are named in, because an
+    enum and a unit must be declared before use.
 
 
 Contract System

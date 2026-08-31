@@ -2,7 +2,7 @@
 // path --path gave, then where the library lives -- each as written
 // and with '.ngpl' after it.  A name nothing answers to is refused
 // where it is written, and the refusal says where it looked.
-@import("tokens.ngpl")
+let tokens := @import("tokens.ngpl")
 
 @start
 @impure

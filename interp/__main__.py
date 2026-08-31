@@ -3208,15 +3208,6 @@ def _module_qualify(module: str, name: str) -> str:
     return f"{module}.{name}" if module else name
 
 
-def _module_ancestors(module: str):
-    """A module and the ones it is written inside, innermost first."""
-    while True:
-        yield module
-        if not module:
-            return
-        module = module.rsplit(".", 1)[0] if "." in module else ""
-
-
 def install_definitions(definitions, env: Env, evaluator: Evaluator, *,
                         honor_start: bool = True,
                         redefine_vars: bool = False) -> LoadedProgram:
@@ -3348,31 +3339,6 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
     # Named types first: an alias, a sum, a global, or a signature
     # may refer to any of them, and each may be declared below
     # whatever names it.
-
-    # Which modules the program declares, and what each exports.  A
-    # module is a promise that something in it is worth naming from
-    # outside; one that exports nothing keeps that promise to nobody,
-    # and is a mistake rather than a place to put things.
-    declared: dict[str, object] = {}
-    exported: set[str] = set()
-    for defn in definitions:
-        if isinstance(defn, _ast.ModuleDef):
-            # `module .` names the global module, which is where a file
-            # starts and is nobody's to export from.
-            if defn.full:
-                declared.setdefault(defn.full, defn)
-        elif getattr(defn, "is_export", False):
-            exported.add(getattr(defn, "module", ""))
-    for name, where in declared.items():
-        # What a module inside it exports, it exports: a module holding
-        # nothing but a module that exports is doing its job.
-        if not any(e == name or e.startswith(name + ".") for e in exported):
-            raise DefinitionError(
-                f"module '{name}' exports nothing, so nothing outside it can "
-                f"name anything in it; mark what it is for with @export",
-                _node_pos(where))
-    from interp.eval import register_modules
-    register_modules(declared)
 
     # The measures a file names for itself register first: a global's
     # binding or a struct's field may state one, and both are installed
@@ -3993,9 +3959,6 @@ def report_times(total: float) -> None:
     print(f"{'total':<24}{total:>10.3f}{100.0:>7.1f}%", file=sys.stderr)
 
 
-_IMPORT_LINE = re.compile(r'^@import\("([^"]*)"\)\s*$')
-
-
 class ImportError_(Exception):
     """An @import that cannot be followed."""
 
@@ -4061,31 +4024,6 @@ def _import_looked(name: str) -> str:
             f"then in {IMPORT_LIB_DIR}, with or without '.ngpl'")
 
 
-def _imports_of(text: str, path: str) -> list[tuple[str, int]]:
-    """The files this one is written against, and where each is asked for.
-
-    They are the @import lines at the head of the file: a file says
-    what it needs before it says anything else, so the reader stops at
-    the first line that is neither blank, nor a comment, nor one of
-    them.  That also means nothing inside a string or a body can be
-    mistaken for one.
-    """
-    out: list[tuple[str, int]] = []
-    for lineno, line in enumerate(text.split("\n"), 1):
-        bare = line.strip()
-        if not bare or bare.startswith("//"):
-            continue
-        if not line.startswith("@import"):
-            break
-        m = _IMPORT_LINE.match(line.rstrip())
-        if m is None:
-            raise ImportError_(
-                f"{path}:{lineno}: @import takes one file name in quotes, "
-                f'as @import("./tokens.ngpl")')
-        out.append((m.group(1), lineno))
-    return out
-
-
 def _import_or_raise(name: str, base: str, paths_asked, asked_from: str) -> str:
     """Where a bound import is to be found, or the refusal that says why not."""
     here = _import_resolve(name, base, paths_asked)
@@ -4097,13 +4035,13 @@ def _import_or_raise(name: str, base: str, paths_asked, asked_from: str) -> str:
 
 def _read_program(roots: list[str],
                   paths_asked=()) -> tuple[str, list[int], list[str]]:
-    """The whole program, from the file (or files) it is rooted in.
+    """One module: the file, or the files, it is rooted in.
 
-    A file's imports are read first and spliced in ahead of it, each
-    file once: what a file is written against has to be there before
-    it, which is what makes the order of the sources the program's own
-    business rather than the command line's.  Answers the text, the
-    line each file begins on, and the files in the order they went in.
+    A file brings nothing in by being read: what it needs it binds,
+    and the loader reads the bound file as a module of its own.  Only
+    the command line names more than one file for one module, and that
+    is the whole of what is spliced here.  Answers the text, the line
+    each file begins on, and the files in the order they went in.
     """
     pieces: list[str] = []
     starts: list[int] = []
@@ -4111,13 +4049,9 @@ def _read_program(roots: list[str],
     done: dict[str, str] = {}          # real path -> the name it went in under
     lines = 0
 
-    def read(path: str, asked_from: str | None, stack: list[str],
-             reading: list[str]) -> None:
+    def read(path: str, asked_from: str | None) -> None:
         nonlocal lines
         real = os.path.realpath(path)
-        if real in stack:
-            ring = " imports ".join(list(reading) + [path])
-            raise ImportError_(f"these files import one another: {ring}")
         if real in done:
             return
         if not os.path.isfile(path):
@@ -4139,28 +4073,6 @@ def _read_program(roots: list[str],
         if text and not text.endswith("\n"):
             text += "\n"
 
-        # The head is read whole before anything in it is followed, so
-        # that what a file says about itself is answered for before
-        # what it names is opened.
-        seen: set[str] = set()
-        wanted = []
-        for name, lineno in _imports_of(text, path):
-            here = _import_resolve(name, os.path.dirname(path), paths_asked)
-            if here is None:
-                raise ImportError_(
-                    f"{path}:{lineno}: cannot find '{name}'"
-                    + _import_looked(name))
-            # the same file twice under two spellings is still the same
-            # file, so what is compared is what each name answered to
-            if here in seen:
-                raise ImportError_(
-                    f"{path}:{lineno}: '{name}' is imported here and "
-                    f"already above; once is what it means")
-            seen.add(here)
-            wanted.append((here, lineno))
-        for here, lineno in wanted:
-            read(here, f"{path}:{lineno}", stack + [real], reading + [path])
-
         done[real] = path
         starts.append(lines + 1)
         lines += text.count("\n")
@@ -4168,7 +4080,7 @@ def _read_program(roots: list[str],
         pieces.append(text)
 
     for root in roots:
-        read(root, None, [], [])
+        read(root, None)
     return "".join(pieces), starts, paths
 
 

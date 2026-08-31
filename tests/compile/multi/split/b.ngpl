@@ -1,9 +1,10 @@
-// The second file names Level, which the first declared, so it says so.
-// It also calls shout(), which the third defines: a function may be
-// written below whatever calls it, so nothing has to be said about
-// that.
+// The second file names Level, which the first declares, so it binds
+// the file that holds it and writes the name through that binding.
+// The enum it takes and the one the third file writes are one enum:
+// two bindings of a file are two names for one module.
 
-@import("./a.ngpl")
+let a := @import("./a.ngpl")
 
-fn announce(l : Level) → str:
-    greeting(l) ⧺ ", " ⧺ shout(l)
+@export
+fn announce(l : a.Level, loud : str) → str:
+    a.greeting(l) ⧺ ", " ⧺ loud

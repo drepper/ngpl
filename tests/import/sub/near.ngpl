@@ -1,6 +1,6 @@
-// Bound from tests/import/deeper.ngpl, which is a directory away from
-// the file the module is rooted in: what a name is looked for beside
-// is the file that asked for it.
+// Bound from tests/import/lib.ngpl, which is itself bound from a
+// directory away: what a name is looked for beside is the file that
+// asked for it, and never the one that asked for that.
 @export
 fn five() → i64:
     5

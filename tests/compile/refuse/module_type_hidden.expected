@@ -1,0 +1,3 @@
+tests/compile/refuse/module_type_hidden.ngpl:8:17: error: 'lib.Kept' is not exported from module 'lib'; @export says what a module lets others name
+  8 |     let p : lib.Kept = lib.Kept{n: 1}
+    |                 ^

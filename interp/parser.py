@@ -24,7 +24,7 @@ from interp.ast import (
     LambdaExpr, ReshapeExpr, MapExpr, QuantExpr, TupleLit, CatchStmt, EnumerateExpr,
     StaticAssert, StaticAssertEq, TypeOfExpr, ResultOfExpr, SizeOfExpr, FoldExpr,
     OperatorRef,
-    UnitExpr, UnitDef, ModuleDef, UnitName, UnitBinOp, UnitSqrt, UnitLit, SumTypeDef,
+    UnitExpr, UnitDef, UnitName, UnitBinOp, UnitSqrt, UnitLit, SumTypeDef,
     UnitOfExpr, UnitRefExpr,
     StructDef, ImplBlock, StructLit,
     MatchStmt, MatchArm, ExpErr,
@@ -40,7 +40,7 @@ from interp.lexer import Token, TokenType, KEYWORDS
 DEFINITION_STARTERS = frozenset({
     TokenType.START, TokenType.BUILD, TokenType.REPLACEABLE, TokenType.TEST, TokenType.FLAG, TokenType.IMPURE, TokenType.EXPECT, TokenType.REPR,
     TokenType.HOT, TokenType.COLD, TokenType.LISTABLE, TokenType.NORETURN, TokenType.PRE, TokenType.POST,
-    TokenType.ENUM, TokenType.STRUCT, TokenType.IMPL, TokenType.UNIT, TokenType.TYPE, TokenType.FN, TokenType.LET, TokenType.MODULE,
+    TokenType.ENUM, TokenType.STRUCT, TokenType.IMPL, TokenType.UNIT, TokenType.TYPE, TokenType.FN, TokenType.LET,
     TokenType.MACRO, TokenType.MACRO_RULES, TokenType.COMPTIME,
 })
 
@@ -159,7 +159,6 @@ class Parser:
         # line is not a block: it says where what follows lives, until
         # the next one says otherwise.  Empty is the global module,
         # which is where a file starts.
-        self.current_module = ""
         # Whether what is being parsed is held rather than run, which
         # is the only place a $ may stand.
         self._in_quote = False
@@ -377,14 +376,13 @@ class Parser:
                 self.pos += 1
             definition = self._parse_definition()
             if definition is not None:
-                # Where a definition lives is a property of the
-                # definition, not of the order it is read in, so it is
-                # stamped here rather than worked out again later.
-                if not isinstance(definition, ModuleDef):
-                    definition.module = self.current_module
-                    if getattr(self, "_pending_export", False) \
-                            and not getattr(definition, "is_export", False):
-                        definition.is_export = True
+                # Which module a definition lives in is the file's to
+                # say, and the loader stamps it once the file is known
+                # to be one; the root module's names carry no key.
+                definition.module = ""
+                if getattr(self, "_pending_export", False) \
+                        and not getattr(definition, "is_export", False):
+                    definition.is_export = True
                 self._pending_export = False
                 definitions.append(definition)
         return definitions
@@ -613,9 +611,6 @@ class Parser:
         if self._check(TokenType.MACRO):
             return self._parse_macro_func_def()
 
-        if self._check(TokenType.MODULE):
-            return self._parse_module_def()
-
         if self._check(TokenType.UNIT):
             return self._parse_unit_def()
 
@@ -637,17 +632,15 @@ class Parser:
         elif self._check(TokenType.LET):
             return self._parse_var_def()
         elif self._check(TokenType.AT_IMPORT):
-            # The reader has already spliced the file in, before any of
-            # this was lexed.  The line stays where it was written, so
-            # that a file says what it is written against and so that
-            # no line number moves; here there is nothing left to do
-            # but read past it.
-            self._eat(TokenType.AT_IMPORT)
-            self._eat(TokenType.PUNCT, "(")
-            self._eat(TokenType.STR)
-            self._eat(TokenType.PUNCT, ")")
-            self._try_eat(TokenType.NEWLINE)
-            return None
+            # A bound import is read where a global binding is, above.
+            # Reaching here means the answer was thrown away, which is
+            # the one thing @import cannot be asked for: a file brings
+            # nothing into the module that reads it, so what is not
+            # bound is not reachable.
+            raise ParseError(
+                "@import answers a module and says nothing on its own; "
+                'bind it, as let x := @import("./x.ngpl")',
+                self._cur())
         elif self._check(TokenType.IMPORT):
             raise ParseError(
                 "'import' is a full-language feature the bootstrap does "
@@ -1698,38 +1691,6 @@ class Parser:
         self._try_eat(TokenType.PUNCT, ";")
         return self._set_pos(
             TypeDef(name_tok.value, target, None, alias_unit), kw_tok)
-
-    def _parse_module_def(self):
-        """`module a`, `module .a`, `module .a.b`: where what follows lives.
-
-        A bare name is read against the module in hand, so `module b`
-        inside `a` is `a.b`; a leading period starts again from the
-        outside, so `module .c` is `c` wherever it is written.  These
-        are C++'s namespace rules with a period for the two colons.
-        """
-        kw_tok = self._eat(TokenType.MODULE)
-        absolute = False
-        if self._check(TokenType.PUNCT, "."):
-            self._eat(TokenType.PUNCT, ".")
-            absolute = True
-        # `module .` on its own is the way back out to the global
-        # module, which a section marker otherwise has no way to say.
-        parts = []
-        if not absolute or self._check(TokenType.IDENT):
-            parts.append(self._eat(TokenType.IDENT).value)
-            while self._check(TokenType.PUNCT, "."):
-                self._eat(TokenType.PUNCT, ".")
-                parts.append(self._eat(TokenType.IDENT).value)
-        self._try_eat(TokenType.NEWLINE)
-        written = ("." if absolute else "") + ".".join(parts)
-        if not parts:
-            full = ""
-        elif absolute or not self.current_module:
-            full = ".".join(parts)
-        else:
-            full = self.current_module + "." + ".".join(parts)
-        self.current_module = full
-        return self._set_pos(ModuleDef(full, written), kw_tok)
 
     def _parse_unit_def(self):
         """Parse: unit name [= formula]"""

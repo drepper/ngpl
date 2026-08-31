@@ -201,7 +201,7 @@ This document is organized into chapters, each covering a distinct aspect of the
 5. **Functions and Control Flow** — definitions, purity, closures, lambdas, conditionals, loops, coroutines, lazy evaluation
 6. **Concurrency and Address Spaces** — gangs, jobs, channels, execution contexts, address space model, memory sharing
 7. **Data Structures** — vectors, matrices, tensors, maps, sets, strings, slices, views, sparse and specialized forms
-8. **Modules and Build System** — module system, compilation units, build function, dependency management, SBOM generation
+8. **Modules and Build System** — a file as a module, `@import`, the build function, the bill of materials
 9. **Contracts, Assertions, and Documentation** — contract syntax, invariant checking, test integration, generated documentation
 10. **Memory Management** — ownership, lifetimes, reference counting, stack allocation, explicit control
 11. **Compile-Time Computation** — `comptime` semantics, metaprogramming, reflection, macro system, code generation
@@ -9926,112 +9926,22 @@ The `¤` syntax keeps unit annotations visually distinct from type annotations (
 Chapter 8: Modules and Build System — Source Files and the Build Function
 -------------------------------------------------------------------------
 
-### Several Files, One Program
+### A File Is a Module
 
-A compilation names one source file or several.  Several are read **as if they were one file, concatenated in the order they were named**:
-
-```
-ngplc src/lex.ngpl src/parse.ngpl src/check.ngpl -o out
-```
-
-There is no separate compilation and no linking here: what the files say together is the program, and a name defined in one is a name in all of them.  A file boundary is a line boundary — a file that does not end in a newline is given one — so a definition never spans two files.
-
-A diagnostic names the file it came from and the line within that file, not the line within the concatenation.  A file therefore reports the same positions whether it is compiled alone or beside twenty others, which is what makes the order below a matter of meaning rather than of message quality.
-
-#### The order is part of the program
-
-Most definitions may be written in any order.  A `struct` in particular may be declared below whatever names it, because the parser sweeps the token stream for struct names before it parses anything.
-
-Two kinds are not free, because they are registered as they are read:
-
-- an `enum` must be declared before its name is used as a type;
-- a `unit` must be declared before the measure is written.
-
-So the order of the file list is significant, and a build that lists its sources alphabetically — as a shell glob would — is not the same program as one that lists them in dependency order.  This is a limitation of the present implementation and not a property the language wants; when the module system of this chapter's roadmap arrives, it subsumes it.
-
-### Modules
-
-A `module` line says where the definitions after it live:
-
-```
-module shapes
-
-@export
-fn area(w : i64, h : i64) → i64:
-    scaled(w) × h
-
-fn scaled(v : i64) → i64:            // not exported
-    v
-```
-
-It is **not a block**.  There is no indentation and nothing to close: everything below the line belongs to that module until another `module` line says otherwise.  A file that is one module says so once, at the top.
-
-#### Naming
-
-The keyword takes a name, and the name may be a path of identifiers separated by `.`.  What it means depends on how it starts:
-
-- **A bare name is read against the module in hand.**  `module solid` written while inside `shapes` is `shapes.solid`.
-- **A leading period starts again from the outside.**  `module .counts` is `counts` wherever it is written, however deep.
-- **`module .` alone is the way back out**, to the global module a file starts in.
-
-These are C++'s namespace rules with a period in place of the two colons; `.counts` is what C++ writes `::counts`.
-
-A definition's whole name is its module, a period, and the name it was given.  For a function the object file's symbol carries the signature too, as it already did:
-
-```
-shapes.solid.volume(i64, i64, i64) → i64
-```
-
-#### What Leaves a Module
-
-**Nothing, unless it says so.**  `@export` is what says so:
-
-```
-module shapes
-@export
-fn area(w : i64, h : i64) → i64:     // shapes.area, nameable outside
-    …
-fn scaled(v : i64) → i64:            // shapes.scaled, not
-    …
-```
-
-A name is written from outside by its whole path — `shapes.area(3, 4)`, `shapes.solid.volume(2, 3, 4)` — and a name that was not exported cannot be written that way at all.
-
-Within a module nothing is hidden.  A name written unqualified is looked for in the module in hand, then in the ones that module is written inside, then in the global module — so `shapes.solid` calls `area` without qualifying it, and reaches `shapes.scaled` although nothing outside can.  A module hides nothing from what is written inside it.
-
-**A module that exports nothing is refused.**  A module is a promise that something in it is worth naming from outside; one that exports nothing keeps that promise to nobody, and is a mistake rather than a place to put things:
-
-```
-error: module 'empty' exports nothing, so nothing outside it can name
-       anything in it; mark what it is for with @export
-```
-
-A module whose own definitions are all private but which contains a module that exports is doing its job, and is not refused.
-
-#### What Is Not Here Yet
-
-What the design leaves for later: importing a module under a shorter name, asking a module for something that is not a function, visibility narrower than exported-or-not, and separate compilation — which is what would make a module a unit of anything but naming.
-
-### What a File Is Written Against
-
-A file says at its head which other files it is written against, and each of those is read in ahead of it:
-
-```
-@import("./tokens.ngpl")
-@import("./types.ngpl")
-```
-
-The compiler is handed one file and finds the rest.  That is the point: **the order the sources are read in is the program's own business**, written in the files that know it, rather than a list kept somewhere outside them and kept in step by hand.
-
-#### A File Bound to a Name Is a Module
-
-Binding the import is the other form, and it means something else:
+A file is the unit of naming.  What it defines is its own; what it wants from elsewhere it asks for by name, and what it lets others have it marks.  There is no separate compilation and no linking here — the program is still built from source in one go — but the namespace is no longer flat.
 
 ```
 let lib := @import("./geometry.ngpl")
 
 fn area(p : lib.Point) → i64:
     lib.width(p) × lib.height(p)
+```
+
+`@import` **answers a module**, and the answer has to be bound: a file brings nothing into the one that reads it, so an import whose answer is thrown away is refused where it is written.
+
+```
+error: @import answers a module and says nothing on its own; bind it,
+as let x := @import("./x.ngpl")
 ```
 
 **Nothing of that file is visible except through the name it was bound to**, and then only what it marked `@export`.  A name reached this way may be a function, a type, an enum, or a global — `lib.width(p)`, `lib.Point`, `lib.Point{x: 1, y: 2}`, `lib.Level.quiet`, `lib.SCALE` — and one the file did not export is refused where it is written:
@@ -10041,15 +9951,13 @@ error: the module ./geometry.ngpl does not let others name 'helper';
 @export says what leaves a module
 ```
 
-What a module did not export is still its own: a file reaches everything it defines, exported or not, by writing the name.
+What a module did not export is still its own: a file reaches everything it defines, exported or not, by writing the name.  A bare name is looked for in the module in hand first, and then among the names that belong to nobody — the builtins and what `std` holds.  **It is never looked for in the module that bound this one.**  What the file a program is rooted in defines is that module's, the way any other module's names are its own; a module reaches it, if at all, by binding it and writing the name through the binding.
 
 **A module is not a value.**  It is reached with `.` and is nothing else — it cannot be bound to another name, passed to a function, or answered by one.  There is no value there, only a way in.
 
 **Two imports of one file are two bindings of one module.**  The file is read once: its types are the same type, its globals the same storage, and its functions one copy in the binary, however many places bind it.  Binding the same file twice is never a mistake.
 
-**A ring of bound imports is not a contradiction**, and works: a bound import does not ask that the file be read *ahead* of anything, only that it be there.  A ring of the plain form below is still refused, because that form does ask exactly that.
-
-**The plain form is the older one** and is being withdrawn.  `@import("./x.ngpl")` written alone, as a statement, reads that file in ahead of this one and makes its names these names — one flat namespace, which is what an import meant here before a file could be a namespace.  It is what the compiler's own sources still use while they are migrated.
+**A ring of bound imports works.**  A binding does not ask that the file be read *ahead* of anything, only that it be there, so two files that bind one another are two modules and not a loop.  A file may even bind the one the program is rooted in.
 
 **Where a name is looked for is what the name says**, and each place is tried as written and then with `.ngpl` after it — so a file may be asked for by the name it is known by rather than the name it is stored under:
 
@@ -10058,6 +9966,8 @@ What a module did not export is still its own: a file reaches everything it defi
 | begins with `/` | as written, and nowhere else |
 | holds a `/` | beside the file that asks for it |
 | neither | beside the file that asks for it, then along `--path`, then in `/usr/share/ngpl/lib` |
+
+**Beside the file that asks** means the file the `@import` is written in, which is not always the file its module is rooted in: a module reached from two directories away asks for its own neighbours, not the root's.
 
 `--path=DIR:DIR` is written the way every other search path is, the parts separated by a colon; an empty part names the working directory, and nothing said names no directory at all.  The library's own directory is a constant in the compiler, so a distributor says where a library lives by building the compiler.  A recipe reads what was said as `o.path`.
 
@@ -10069,13 +9979,40 @@ this file, then along --path, then in /usr/share/ngpl/lib, with or
 without '.ngpl'
 ```
 
-**A file goes in once**, however many files ask for it — what an import asks for is that the file be there, and it is.  Asking for the same file twice *in one file* is a mistake rather than a request, and is refused; what is compared is the file each name answered to, so two spellings of one file are still one file.  Files that import one another in a ring are refused too: no order of them puts each after what it needs.
+#### What a Module Is Called
 
-**The head is where they go.**  The imports are read before the file has been lexed — the text has to be assembled before there is anything to lex — so the reader stops at the first line that is neither blank, nor a comment, nor an `@import`, and nothing further down can be mistaken for one.  The lines stay in the text, where the parser reads past them: a file that says what it needs should go on saying it, and leaving them in means no line number moves.
+A module's own name qualifies the names it defines, in the object file's symbols, in the bill of materials, and in a backtrace:
 
-**What has to come first is what a file names.**  A struct, a function, a global or an enum may be written below whatever uses it; a **unit** may not, because a unit is registered as it is read.  So a file that measures anything with `¤something` wants the file declaring that unit read first, which is what an import says.
+```
+check.fn_index(&Chk, str) → i64
+```
 
-Naming several files on the command line still works and still means what it did — each is read in turn, and nothing twice — so a program written before any of this compiles unchanged.
+The name is the file's stem; two modules that would share one are told apart.  **The module the program is rooted in takes no name at all**, so a program of one file is written down exactly as it was before any of this — and takes on the stem only where something binds the root file itself, since a binding reaches a module by name and the empty name reaches nothing.
+
+#### Several Files on One Command Line
+
+A compilation names one source file or several.  Several are read **as one module** — the root one — concatenated in the order they were named:
+
+```
+ngplc src/lex.ngpl src/parse.ngpl src/check.ngpl -o out
+```
+
+This is the one place a program says which files a module is made of without an `@import`, and it is there because it was there before modules were.  What the files say together is the program, and a name defined in one is a name in all of them.  A file boundary is a line boundary — a file that does not end in a newline is given one — so a definition never spans two files.
+
+A diagnostic names the file it came from and the line within that file, not the line within the concatenation.  A file therefore reports the same positions whether it is compiled alone or beside twenty others.
+
+#### The Order Is Part of the Program
+
+Most definitions may be written in any order.  A `struct` in particular may be declared below whatever names it, because the parser sweeps the token stream for struct names before it parses anything.
+
+Two kinds are not free, because they are registered as they are read:
+
+- an `enum` must be declared before its name is used as a type;
+- a `unit` must be declared before the measure is written.
+
+A **unit is one program-wide thing** — what a number counts is not a module's to keep — so a measure declared in one module is the measure written in another, and no module qualifies it.
+
+For the files of one module this makes the order they are named in significant.  Between modules it is the `@import` that settles it: the compiler is handed one file and finds the rest, which is the point — **the order the sources are read in is the program's own business**, written in the files that know it, rather than a list kept somewhere outside them and kept in step by hand.
 
 ### The Build Function
 
@@ -10165,7 +10102,7 @@ What the build itself holds:
 | `b.search_path(p)` | where a source is looked for |
 | `b.flag(f)` | a compiler flag |
 
-**One root per executable, not a list.**  What else a program is made of is written in the program, as the `@import` lines at the head of each file, so an executable names the file it is rooted in and no more.
+**One root per executable, not a list.**  What else a program is made of is written in the program, as the `@import` each file binds for what it is written against, so an executable names the file it is rooted in and no more.
 
 **Names are taken from where the recipe is.**  A relative `root_source_file` or `output_dir` is taken relative to the directory `FILE` is in, then — for a source — against each search path in the order declared, so a recipe means the same thing from whatever directory it is run.  A directory beginning with `/` is taken as it stands.  The compiler writes files and not directories, so a directory a recipe names has to exist; a build that cannot create its output says so and stops.
 
@@ -10387,7 +10324,7 @@ digests that say so.
 
 ### Roadmap
 
-Compilation units, imports, and dependency resolution are not yet designed.  What exists is the build function, which came first because the compiler's own sources needed it; modules, which name and hide but do not yet divide a program into separately compiled pieces; and the bill of materials above.
+Separate compilation is not yet designed.  What exists is the build function, which came first because the compiler's own sources needed it; modules, which name and hide and settle the order the sources are read in, but do not yet divide a program into separately compiled pieces; and the bill of materials above.
 
 
 Chapter 12: The Interpreter — The Interactive Read-Eval-Print Loop
@@ -10440,7 +10377,7 @@ fn build(b : &mut std.Build, o : &std.Options):
                                           root_source_file: "main.ngpl"})
 ```
 
-Each executable names the one file it is rooted in; the rest of the program is reached from it by the `@import` lines the sources carry.  A recipe is a program, not a table, so the names may be computed rather than written out.  Because the interpreter evaluates it with the same evaluator it runs everything else with, the recipes it accepts are a superset of the ones the compiler accepts; Chapter 8 says what the compiler's subset holds.
+Each executable names the one file it is rooted in; the rest of the program is reached from it by the modules the sources bind.  A recipe is a program, not a table, so the names may be computed rather than written out.  Because the interpreter evaluates it with the same evaluator it runs everything else with, the recipes it accepts are a superset of the ones the compiler accepts; Chapter 8 says what the compiler's subset holds.
 
 The interpreter builds nothing, so it hands the recipe a fresh `std.Build` and, where the recipe takes it, a `std.Options` that says nothing: no output and no target, each `∅`.  The signature is checked as the compiler checks it, and a program carries at most one recipe.
 
@@ -10887,7 +10824,7 @@ swap⟦t, u⟧                      // t is 2, u is 1
 
 The caller's variable is called `t` and so is the macro's temporary.  Without the renaming the macro's `t` would shadow the caller's and the swap would do nothing.
 
-The other half of hygiene — that a name a macro *reads* resolves where the macro was written rather than where it was invoked — is not distinguishable yet, there being one global namespace.  It becomes a real question with modules.
+The other half of hygiene — that a name a macro *reads* resolves where the macro was written rather than where it was invoked — is not settled yet.  A macro is expanded where it is written, so what it reads is looked for in that module; a macro passed between modules would make the question a real one.
 
 ### Rewrite Rules: `@macro_rules`
 
