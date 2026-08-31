@@ -10262,6 +10262,16 @@ A recipe reads what was asked for as `o.optimize` and says what it wants as an e
 
 Optimization never changes what a program means.  A level buys speed or size out of the same program; it does not buy a different one, and nothing a program is promised — a contract checked, an overflow caught, a character judged — is traded away for it.
 
+### What a Binary Holds
+
+**A function nothing reaches is in no binary.**  A program is its entry point and what that reaches — and its tests, when they are built — so a function that is written and never called leaves no code, no symbol, and no row in the bill of materials.  It is not an optimization the levels turn on: it is what the program is, at every level including 0.
+
+What reaches what is read off the tokens each function is written in, so a name that is not a call still counts: a function whose address is taken is reached by whatever holds the address.  A name written outside every function — a global's initialiser, an annotation — reaches what it names too.  Reaching too much is the safe direction and the one taken: a function kept that nothing calls costs bytes, and one dropped that something calls costs the program.
+
+A module changes nothing here except how much there is to drop: a file bound and used for one function of it brings that function, not the rest.  A module imported from two places is read once and its functions are written once.
+
+One consequence worth naming: adding a function nobody calls no longer disturbs an incremental build, because nothing about the binary moved.
+
 ### Compiling Only What Changed
 
 `--incremental` asks for a binary that a later build can write into

@@ -148,7 +148,10 @@ fn feed_token(c : i64, ready : u8[], held : i64, prev : i64,
 // build the digest of them together -- which is what this used to do.
 // A handle is fed a chunk at a time instead, so what is held is
 // SBOM_CHUNK and never the message.
-fn sbom_sources(a : Ast, t : Toks, src : byte[], files : Files) → SbomRow[]:
+// `live` says which functions the build is writing: a bill names what
+// the binary is made of, and a function nothing reached is not in it.
+fn sbom_sources(a : Ast, t : Toks, src : byte[], files : Files,
+                live : bool[]) → SbomRow[]:
     let rows : mut SbomRow[] = []
     let nf : i64 ¤ptrdiff = #files.names
     let ntok : i64 ¤ptrdiff = #t.kind
@@ -213,8 +216,9 @@ fn sbom_sources(a : Ast, t : Toks, src : byte[], files : Files) → SbomRow[]:
                 ffeed ← []
                 let d := a.fns[fnext - 1¤ptrdiff]
                 let nm : str = if d.modname = "": d.name else: d.modname ⧺ "." ⧺ d.name
-                fnrows.push(SbomRow{kind: Sbomkind.function, name: nm,
-                                    hash: hex_digest(fnh.digest())})
+                if live[(fnext - 1¤ptrdiff)]:
+                    fnrows.push(SbomRow{kind: Sbomkind.function, name: nm,
+                                        hash: hex_digest(fnh.digest())})
                 fopen ← false
             elif #ffeed >= SBOM_CHUNK:
                 fnh.update(ffeed)

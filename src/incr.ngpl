@@ -446,6 +446,98 @@ fn incr_regenerate(a : Ast, toks : Toks, src : byte[], prev : Prev,
     out
 
 // ---------------------------------------------------------------------------
+// What a build has to write down
+// ---------------------------------------------------------------------------
+
+// Which functions a build reaches.
+//
+// A program is its entry point and what that reaches: a function
+// nothing reaches is in no binary, however many files were read to
+// find it.  What reaches what is read off the tokens each function is
+// written in, the way the incremental build reads it -- a name that is
+// not a call still counts, which is what keeps a function whose
+// address is taken rather than called.
+//
+// Over-approximating is the safe direction: keeping a function nothing
+// reaches costs bytes, and dropping one something reaches costs the
+// program.  So a name written anywhere outside a function -- a
+// global's initialiser, an annotation -- is a root, and a name that
+// two modules share keeps both.
+// A backtrace names what is in the binary.  A function nothing
+// reached has no address, so it is left out of the table rather than
+// given one -- these two keep the names and the offsets in step while
+// dropping the same entries from each.
+fn bt_keep_offs(of : i64[]) → i64[]:
+    let out : mut i64[] = []
+    foreach v := of:
+        if v ≠ ⁻1:
+            out.push(v)
+    out
+
+@pre(#nm = #of)
+fn bt_keep_names(nm : str[], of : i64[]) → str[]:
+    let out : mut str[] = []
+    foreach i := 0¤ptrdiff…#of:
+        if of[i] ≠ ⁻1:
+            out.push(nm[i])
+    out
+
+// whether a name is a method's, which is written with the struct's
+fn name_holds_dot(nm : str) → bool:
+    foreach c := nm:
+        if c = '.':
+            return true
+    false
+
+@post(r: #r = #a.fns)
+fn reached_fns(a : Ast, toks : Toks, src : byte[]) → bool[]:
+    let nf : i64 ¤ptrdiff = #a.fns
+    let byname : mut Names = names_new(@dropunit(nf) + 1)
+    foreach i := 0¤ptrdiff…nf:
+        byname.add(a.fns[i].name)
+    let out : mut bool[] = []
+    foreach i := 0¤ptrdiff…nf:
+        let d := a.fns[i]
+        // Where a run begins: the entry point, and every test the
+        // driver calls.  A method is kept whatever else is found:
+        // it is written `Struct.method` and reached by writing
+        // `method`, which the scan below sees as a name of its own.
+        out.push(d.is_start or d.is_test or name_holds_dot(d.name))
+    // What is written outside every function is written for the
+    // program rather than for one of them, and what it names is
+    // reached.  The functions are in the order they were read, so one
+    // walk of the tokens passes each range once.
+    let ntok : i64 ¤ptrdiff = #toks.kind
+    let fi : mut i64 ¤ptrdiff = 0¤ptrdiff
+    let t : mut i64 ¤ptrdiff = 0¤ptrdiff
+    while t < ntok:
+        while fi < nf and a.fns[fi].tok_hi × 1¤ptrdiff <= t:
+            fi ← fi + 1¤ptrdiff
+        let inside : bool = fi < nf and a.fns[fi].tok_lo × 1¤ptrdiff <= t
+        if not inside and toks.kind[t] = TK_IDENT:
+            let g : i64 = byname.find(run_str(src, toks.off[t], toks.len[t]))
+            if g >= 0:
+                out[g × 1¤ptrdiff] ← true
+        t ← t + 1¤ptrdiff
+    // and then what those reach, to a fixed point
+    let changed : mut bool = true
+    while changed:
+        changed ← false
+        foreach i := 0¤ptrdiff…nf:
+            if not out[i]:
+                continue
+            let d := a.fns[i]
+            let k : mut i64 ¤ptrdiff = d.tok_lo × 1¤ptrdiff
+            while k < d.tok_hi × 1¤ptrdiff and k < ntok:
+                if toks.kind[k] = TK_IDENT:
+                    let g : i64 = byname.find(run_str(src, toks.off[k], toks.len[k]))
+                    if g >= 0 and not out[g × 1¤ptrdiff]:
+                        out[g × 1¤ptrdiff] ← true
+                        changed ← true
+                k ← k + 1¤ptrdiff
+    out
+
+// ---------------------------------------------------------------------------
 // What a build under --incremental is working against
 // ---------------------------------------------------------------------------
 

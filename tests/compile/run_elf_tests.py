@@ -667,8 +667,13 @@ def check_incremental(compiler, work: str) -> str:
           "the function that outgrew its room is not in the new section")
 
     # A function the previous build did not have has no slot at all,
-    # and no room is the one thing that is still a whole build.
-    open(src, "w").write(INCR_PROBE + """
+    # and no room is the one thing that is still a whole build.  It has
+    # to be reached to be in the build at all: a function nothing calls
+    # is in no binary, so adding one changes nothing and is no reason
+    # to write the whole file again.
+    open(src, "w").write(INCR_PROBE.replace(
+        'std.println("{}", shown())',
+        'std.println("{} {}", shown(), fourth(1))') + """
 fn fourth(n : i64) \u2192 i64:
     n + 4
 """)
@@ -676,7 +681,7 @@ fn fourth(n : i64) \u2192 i64:
     check(fell["decision"] == "incremental-fallback",
           f"a function the file did not have said {fell['decision']!r}")
     check(fell["why"], "the fallback did not say why")
-    check(incr_run(out) == "42", "the program built after a fallback is wrong")
+    check(incr_run(out) == "42 5", "the program built after a fallback is wrong")
 
     # A change that grows the read-only data -- here the jump table of
     # a dense dispatch that was written again -- goes into the room the
@@ -821,6 +826,40 @@ def main() -> int:
     case("the reader written in NGPL reads it too",
          lambda: check_sbom_tool(sym, sym_bin))
 
+    def uncalled_is_not_written():
+        """A function nothing reaches is in no binary.
+
+        Not an optimisation the mode turns on: it is what the program
+        is.  What the bill names is what the binary holds, so a
+        function that is written and never called leaves no row and no
+        symbol -- and adding one does not disturb an incremental build,
+        since nothing about the binary moved.
+        """
+        src2 = os.path.join(work, "unreached.ngpl")
+        out2 = os.path.join(work, "unreached")
+        open(src2, "w").write("""\
+fn used(n : i64) \u2192 i64:
+    n + 1
+
+fn never_called(n : i64) \u2192 i64:
+    n \u00d7 12345
+
+@start
+@impure
+fn main():
+    std.println("{}", used(41))
+""")
+        compile_probe(compiler, src2, out2)
+        elf2 = Elf(open(out2, "rb").read())
+        names = {s["name"] for s in elf2.symbols()}
+        check(not any(n.startswith("never_called") for n in names),
+              "a function nothing calls was written into the binary")
+        check(any(n.startswith("used") for n in names),
+              "the function that is called was left out")
+        rows = [r for r in sbom_rows(elf2) if r[0] == "function"]
+        check(not any("never_called" in r[1] for r in rows),
+              "the bill named a function the binary does not hold")
+
     def stack_option():
         out = os.path.join(work, "probe_stack")
         compile_probe(compiler, sym_src, out, ["--stack-size=16M"])
@@ -870,6 +909,7 @@ def main() -> int:
     case("--incremental writes only what changed",
          lambda: check_incremental(compiler, work))
     case("-O reaches the code generator", optimization_level)
+    case("a function nothing reaches is left out", uncalled_is_not_written)
     case("--stack-size reaches PT_GNU_STACK", stack_option)
     case("--guard-size is taken", guard_option)
     case("a size that is not one is refused", bad_options)

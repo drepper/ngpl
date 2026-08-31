@@ -661,8 +661,26 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     let dfr_np : mut i64[] = []
     let dfr_ir : mut IrFn[] = []
     let dfr_rt : mut i64[] = []        // the runtime it reaches, harvested
+    // A function nothing reaches is in no binary.  Its slot in the
+    // schedule stays, so every index into it still means what it meant
+    // -- the lambdas and the shims are numbered past the functions --
+    // and its offset is the one no call may land on, so a call that
+    // somehow reaches for it is caught where the calls are resolved
+    // rather than jumping into whatever stands at the front.
+    let live : bool[] = reached_fns(a, toks, src)
     foreach i := 0…#a.fns:
         let f : i64 = @dropunit(i)
+        if not live[i]:
+            if want_log:
+                lw.dlog.push("{\"function\": \"" ⧺ a.fns[i].name ⧺ "\", \"decision\": \"unreached\"}")
+            // Its slot stays, so every index into the schedule still
+            // means what it meant -- the lambdas and the shims are
+            // numbered past the functions -- and its offset is the one
+            // no call may land on, so a call that somehow reaches for
+            // it is caught where the calls are resolved rather than
+            // jumping into whatever stands at the front.
+            em.fn_off.push(⁻1)
+            continue
         // the space for a sized answer arrives as one more argument
         let np : i64 = a.extra[a.fns[i].params_off] + (if farr_is_packed(a, a.fns[i].ret): 1 else: 0)
         let symnm : str = fn_symbol(a, toks, src, f)
@@ -963,8 +981,10 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
         bt_at ← bt_base
         // in the order the code is laid out, which is not the order
         // the functions were parsed in once one of them has moved
-        let bt_nm : str[] = incr_reorder_names(bt_fn_names(a, ninit, @dropunit(#chk.lams), @dropunit(#chk.psfn)), placed)
-        let bt_of : i64[] = incr_reorder(em.fn_off, placed)
+        let bt_nm0 : str[] = incr_reorder_names(bt_fn_names(a, ninit, @dropunit(#chk.lams), @dropunit(#chk.psfn)), placed)
+        let bt_of0 : i64[] = incr_reorder(em.fn_off, placed)
+        let bt_nm : str[] = bt_keep_names(bt_nm0, bt_of0)
+        let bt_of : i64[] = bt_keep_offs(bt_of0)
         foreach c := bt_bytes(tgt, IMAGE_BASE + PAGE, bt_nm, bt_of,
                               bt_sizes(bt_of, @dropunit(#placed),
                                        bt_text_end(&em, text_size), text_size)):
@@ -1060,7 +1080,9 @@ fn codegen(a : Ast, toks : Toks, src : byte[], chk : Chk, tgt : Target,
     // that each symbol's size can go on being the distance to the
     // next one.
     foreach i := 0…#a.fns:
-        if not incr_moved(placed, @dropunit(i)):
+        // a function nothing reached is in no binary, and so is no
+        // symbol either -- as a runtime routine nobody reached is not
+        if not incr_moved(placed, @dropunit(i)) and em.fn_off[i] ≠ ⁻1:
             sname.push(fn_symbol(a, toks, src, @dropunit(i)))
             soffs.push(em.fn_off[i])
             sglob.push(a.fns[i].is_export)
