@@ -1,0 +1,15 @@
+// A type of another module is written the way it is reached: through
+// the name the module was bound to.  The struct is made here and taken
+// back there, so both implementations have to agree it is one type.
+let geom := @import("./geom.ngpl")
+
+fn twice_over(p : geom.Point) → i64:
+    geom.sum(p) × 2
+
+@start
+@impure
+fn main():
+    let p : geom.Point = geom.Point{x: 2, y: 5}
+    std.println("{}", geom.sum(p))
+    std.println("{}", twice_over(p))
+    std.println("{}", geom.sum(geom.shifted(geom.origin(), 3)))

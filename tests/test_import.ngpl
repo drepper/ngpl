@@ -58,6 +58,16 @@ fn test_two_bindings_are_one_module():
 fn test_a_binding_is_read_beside_the_file_that_asked():
     assert_eq(near_five(), 5)
 
+// What a module did not bind is not its to name.  The library has its
+// own SCALE, and this file has another; the library's functions see
+// their own, and nothing of this file reaches into it.
+@test
+fn test_a_module_sees_its_own_names_first():
+    assert_eq(lib.scaled(1), lib.SCALE)
+    assert_eq(SCALE, 2)
+
+let SCALE : i64 = 2
+
 @start
 @impure
 fn main():

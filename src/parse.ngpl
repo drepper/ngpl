@@ -114,6 +114,13 @@ impl Parser:
                 return self.mtab.names[self.mtab.bmod[i] × 1¤ptrdiff]
         ""
 
+    // A type's whole name: the module the file is, and then its own.
+    // A section a `module` line opened does not name a type, since a
+    // type has never carried one.
+    fn qual_type(&self, name : str, at : i64) → str:
+        let f : str = self.mod_at(at)
+        if f = "": name else: f ⧺ "." ⧺ name
+
     fn whole_mod(&self, at : i64) → str:
         let f : str = self.mod_at(at)
         if self.curmod = "":
@@ -319,8 +326,18 @@ impl Parser:
             self.err("'" ⧺ self.ttext(self.pos) ⧺ """' does not name a type; a type is written by
                                                    " name, as i64""")
             return TY_I64
-        let name := self.ttext(self.pos)
+        let ntok : i64 = self.pos
+        let name : mut str = self.ttext(self.pos)
         _ ← self.eat_name("a type name")
+        // `m.Name` where m is a bound import: a type of another module,
+        // named through the only way into it.  Nothing else puts a dot
+        // in a type, so the shape settles it.
+        if name ≠ "std" and self.peek() = TK_DOT and self.toks.kind[(self.pos + 1) × 1¤ptrdiff] = TK_IDENT:
+            let bm : str = self.bound_module(ntok)
+            if bm ≠ "":
+                self.pos ← self.pos + 1
+                name ← bm ⧺ "." ⧺ self.ttext(self.pos)
+                _ ← self.eat_name("the type asked of the module")
         let stdbase : mut i64 = ⁻1
         if name = "std":
             _ ← self.eat(TK_DOT, "'.' after std")
@@ -394,7 +411,7 @@ impl Parser:
                 self.err("a type variable travels by value")
                 return TY_I64
             return tv
-        let base0 : i64 = if stdbase ≠ ⁻1: stdbase else: (TYNAMES[name] ?? self.sindex_ty(name))
+        let base0 : i64 = if stdbase ≠ ⁻1: stdbase else: (TYNAMES[name] ?? self.sindex_here(name, ntok))
         if base0 = ⁻1:
             self.err("'" ⧺ name ⧺ "' is not a core-2 type")
             return TY_I64
@@ -581,6 +598,18 @@ impl Parser:
         at
 
     // the pre-scanned struct names answer for a name TYNAMES does not
+    // A type name written in a module: its own first, since what it
+    // did not bind is not its to name, and then the plain name, which
+    // is the root module's and the builtins'.  A program that binds no
+    // import has no module to try and asks once, as it always did.
+    fn sindex_here(&self, name : str, at : i64) → i64:
+        let m : str = self.mod_at(at)
+        if m ≠ "":
+            let mine : i64 = self.sindex_ty(m ⧺ "." ⧺ name)
+            if mine ≠ ⁻1:
+                return mine
+        self.sindex_ty(name)
+
     fn sindex_ty(&self, name : str) → i64:
         // from NBUILTIN_ENUMS on: a builtin enum is a value under std,
         // not a type a program may write down, which is how the
@@ -1262,24 +1291,9 @@ impl Parser:
                 let off : i64 = self.parse_args()
                 return self.parse_postfix(self.mknode(NK_CALL, at, off, 0, 0))
             if self.peek2() = TK_LBRACE and self.slit_ahead():
-                self.pos ← self.pos + 2
-                let items : mut i64[] = []
-                if self.peek() ≠ TK_RBRACE:
-                    while true:
-                        items.push(self.pos)
-                        _ ← self.eat_name("a field's name")
-                        _ ← self.eat(TK_COLON, "':' after the field's name")
-                        items.push(self.parse_expr())
-                        if self.failed(): return 0
-                        if self.peek() = TK_COMMA:
-                            self.pos ← self.pos + 1
-                        else:
-                            break
-                _ ← self.eat(TK_RBRACE, "'}' closing the struct literal")
-                let off : i64 = @dropunit(#self.extra)
-                self.extra.push(@dropunit(#items) ÷ 2 ?? 0)
-                foreach it := items:
-                    self.extra.push(it)
+                self.pos ← self.pos + 1
+                let off : i64 = self.parse_slit_fields()
+                if self.failed(): return 0
                 return self.parse_postfix(self.mknode(NK_SLIT, at, off, SLIT_PLAIN, 0))
             self.pos ← self.pos + 1
             return self.parse_postfix(self.mknode(NK_VAR, at, 0, 0, 0))
@@ -2434,11 +2448,43 @@ impl Parser:
     // `m.name(args)` where m is a bound import: the same shape a
     // qualified call has, with the module the binding names in place of
     // the path written down.
+    // The `{field: value, …}` of a struct literal, the name having
+    // been read already.  Answers where the fields were written down.
+    fn parse_slit_fields(&mut self) → i64:
+        _ ← self.eat(TK_LBRACE, "'{' opening the struct literal")
+        let items : mut i64[] = []
+        if self.peek() ≠ TK_RBRACE:
+            while true:
+                items.push(self.pos)
+                _ ← self.eat_name("a field's name")
+                _ ← self.eat(TK_COLON, "':' after the field's name")
+                items.push(self.parse_expr())
+                if self.failed(): return 0
+                if self.peek() = TK_COMMA:
+                    self.pos ← self.pos + 1
+                else:
+                    break
+        _ ← self.eat(TK_RBRACE, "'}' closing the struct literal")
+        let off : i64 = @dropunit(#self.extra)
+        self.extra.push(@dropunit(#items) ÷ 2 ?? 0)
+        foreach it := items:
+            self.extra.push(it)
+        off
+
     fn parse_bound(&mut self, at : i64, path : str) → i64:
         self.pos ← at + 1
         _ ← self.eat(TK_DOT, "'.' and the name asked of the module")
         let ntok : i64 = self.pos
         _ ← self.eat_name("the name asked of the module")
+        // `m.Name{…}`: a struct of another module, made through the
+        // only way into it.  The whole name rides with the node, since
+        // the token spells only what was written after the dot.
+        if self.peek() = TK_LBRACE:
+            self.qmods.push(path)
+            let qm : i64 = @dropunit(#self.qmods)
+            let off : i64 = self.parse_slit_fields()
+            if self.failed(): return 0
+            return self.parse_postfix(self.mknode(NK_SLIT, ntok, off, SLIT_PLAIN, qm))
         if self.peek() ≠ TK_LPAR:
             self.err_at(ntok, """core-2 asks a module for a function; '"""
                               ⧺ self.ttext(at) ⧺ "." ⧺ self.ttext(ntok)
@@ -2571,7 +2617,9 @@ impl Parser:
         let inv_off : mut i64 ¤"aextra" = ⁻1
         if #invs > 0:
             inv_off ← self.push_list(invs)
-        self.structs.push(SDef{name: name, tok: name_tok, fields_off: off,
+        // named by the module it is written in, as the sweep that
+        // gathered the names before parsing named it
+        self.structs.push(SDef{name: self.qual_type(name, name_tok), tok: name_tok, fields_off: off,
                                is_repr_c: repr_c, inv_off: inv_off})
 
     fn parse_impl(&mut self):
@@ -2852,9 +2900,9 @@ impl Parser:
                               + (if is_ignb: 16 else: 0),
                           expects > 0,
                           pres, post_toks, posts, "", 0)
-        elif is_exp:
-            self.err("""@export names what others may link against, and only a function is a symbol
-                      " yet""")
+        elif is_exp and not (self.peek() = TK_STRUCT or self.peek() = TK_ENUM or self.peek() = TK_LET or self.peek() = TK_TYPE):
+            self.err("""@export says what a module lets others name, and this is not something a
+                      " module holds""")
             return
         elif self.peek() = TK_STRUCT or self.peek() = TK_IMPL:
             if imp or is_start or is_noreturn or is_test or #pres > 0 or #posts > 0:
@@ -2941,10 +2989,17 @@ fn parse_mode(toks : Toks, src : byte[], lenient : bool, mods : Mods) → Ast:
     // a.b is a module.  The sweep replays the sectioning, since what a
     // bare name means depends on the module in hand when it is read.
     let here : mut str = ""
+    // and a struct is named by the module it is written in, so the
+    // sweep walks the files alongside the tokens
+    let mut_fi : mut i64 ¤ptrdiff = 0¤ptrdiff
     while i + 1 < n:
+        while mut_fi + 1¤ptrdiff < #mods.offs and mods.offs[mut_fi + 1¤ptrdiff] <= toks.off[i × 1¤ptrdiff] × 1¤byte:
+            mut_fi ← mut_fi + 1¤ptrdiff
+        let fmod : str = mods.names[mods.fmod[mut_fi] × 1¤ptrdiff]
         if toks.kind[i × 1¤ptrdiff] = TK_STRUCT and toks.kind[(i + 1) × 1¤ptrdiff] = TK_IDENT:
-            p.snames.push(run_str(src, toks.off[(i + 1) × 1¤ptrdiff],
-                                  toks.len[(i + 1) × 1¤ptrdiff]))
+            let sn : str = run_str(src, toks.off[(i + 1) × 1¤ptrdiff],
+                                   toks.len[(i + 1) × 1¤ptrdiff])
+            p.snames.push(if fmod = "": sn else: fmod ⧺ "." ⧺ sn)
         if toks.kind[i × 1¤ptrdiff] = TK_MODULE:
             let kw : i64 = i
             let j : mut i64 = i + 1

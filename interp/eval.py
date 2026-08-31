@@ -176,6 +176,7 @@ from interp.value import (
 )
 from interp.env import Env, Decl
 from interp.modules import ModuleHandle as _ModHandle
+from interp.modules import reachable_bare as _reachable_bare
 from interp.std import (std, DirFD, FileStream, Bytes, MmapAllocator,
                        Build as _BuildObj, Executable as _ExeObj,
                        Options as _OptsObj,
@@ -3916,19 +3917,20 @@ class Evaluator:
             raise coded(2239, TypeError(
                 f"pure function '{self._pure_func_name}' cannot "
                 f"read mutable global variable '{node.name}'"))
+        # A module's own name for something comes first; a program
+        # that binds no import has no key at all and never asks.
+        if self._cur_module:
+            try:
+                return self.env.lookup(f"{self._cur_module}.{node.name}")
+            except KeyError:
+                pass
+            if not _reachable_bare(node.name):
+                raise coded(2237, NameError(
+                    f"undefined variable: {node.name}"))
         try:
             val = self._refuse_module_value(node.name,
                                             self.env.lookup(node.name))
         except KeyError:
-            # A module's own name for something, which is what it is
-            # keyed under.  Only a module that binds an import has a
-            # key at all, so a program without one never asks.
-            if self._cur_module:
-                try:
-                    return self.env.lookup(
-                        f"{self._cur_module}.{node.name}")
-                except KeyError:
-                    pass
             # A type name stands for its type wherever it appears,
             # which is what lets @typeof be compared against it.
             if is_type_name(node.name):
@@ -4898,17 +4900,22 @@ class Evaluator:
         return val
 
     def _c_lookup(self, name):
-        """A read the innermost frame did not answer: the environment,
-        the module's own key for it, and then a type name standing for
-        its type."""
+        """A read the innermost frame did not answer.
+
+        A module's own name for something comes first: what it did not
+        bind is not its to name, and what is left under a bare key is
+        the builtins and std, which every module may reach.
+        """
+        if self._cur_module:
+            try:
+                return self.env.lookup(f"{self._cur_module}.{name}")
+            except KeyError:
+                pass
+            if not _reachable_bare(name):
+                raise KeyError(f"undefined variable: {name}")
         try:
             return self._refuse_module_value(name, self.env.lookup(name))
         except KeyError:
-            if self._cur_module:
-                try:
-                    return self.env.lookup(f"{self._cur_module}.{name}")
-                except KeyError:
-                    pass
             if is_type_name(name):
                 return TypeValue(name)
             raise
@@ -7244,6 +7251,12 @@ class Evaluator:
         """
         where = self._cur_module
         while True:
+            # The bare key is where the builtins and std live, and also
+            # where the root module's own names are.  A module that is
+            # not the root may reach the first and not the second: what
+            # it did not bind is not its to name.
+            if not where and self._cur_module and not _reachable_bare(name):
+                raise KeyError(f"undefined variable: {name}")
             cand = f"{where}.{name}" if where else name
             try:
                 return self.env.lookup(cand)

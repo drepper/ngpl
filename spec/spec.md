@@ -10049,7 +10049,7 @@ What a module did not export is still its own: a file reaches everything it defi
 
 **A ring of bound imports is not a contradiction**, and works: a bound import does not ask that the file be read *ahead* of anything, only that it be there.  A ring of the plain form below is still refused, because that form does ask exactly that.
 
-**What the compiler has of this so far**: a bound import, a call through it, and `@export` deciding what may be called.  A type, an enum member or a global reached through a module is refused by name — *core-2 asks a module for a function* — until the stage that gives the compiler per-module types.  The interpreter has all of it, and is the authority on what the language means.
+**What the compiler has of this so far**: a bound import, a call through it, a type and a struct literal named through it, and `@export` deciding what may be named.  An enum member or a global reached through a module is refused by name — *core-2 asks a module for a function* — until the stage that adds them.  The interpreter has all of it, and is the authority on what the language means.
 
 **The plain form is the older one** and is being withdrawn.  `@import("./x.ngpl")` written alone, as a statement, reads that file in ahead of this one and makes its names these names — one flat namespace, which is what an import meant here before a file could be a namespace.  It is what the compiler's own sources still use while they are migrated.
 

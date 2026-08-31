@@ -326,6 +326,21 @@ _TYPE_NAME_BY_CLASS = {
 }
 
 
+# Every name the root module put under a bare key.  A module of its
+# own must not see them: what it did not bind is not its to name, and a
+# bare key is where the builtins and std live too, which it may reach.
+ROOT_KEYS: set = set()
+
+
+def note_root_key(name: str) -> None:
+    ROOT_KEYS.add(name)
+
+
+def reachable_bare(name: str) -> bool:
+    """Whether a module that is not the root may read this bare name."""
+    return name not in ROOT_KEYS
+
+
 class ModuleHandle:
     """What a bound import is worth: a way into one module and no more.
 

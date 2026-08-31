@@ -17,7 +17,7 @@ from interp.macros import (collect as macro_collect,
                            FUNCTIONS as MACRO_SEEN_FUNCTIONS)
 from interp.env import Env, Decl
 from interp.modules import (load as mod_load, prepare as mod_prepare,
-                            ModuleHandle)
+                            ModuleHandle, note_root_key)
 from interp.ast import (
     FuncDef as ASTFuncDef, EnumDef as ASTEnumDef, UnitDef as ASTUnitDef,
     VarDef as ASTVarDef, TypeDef as ASTTypeDef,
@@ -3593,7 +3593,10 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
             fv.is_export = defn.is_export
             fv.ret_ref = getattr(defn, "ret_ref", None)
             fv.ret_origins = getattr(defn, "ret_origins", None)
-            env.define(_module_qualify(fv.module, defn.name), fv)
+            fkey = _module_qualify(fv.module, defn.name)
+            if not fv.module:
+                note_root_key(defn.name)
+            env.define(fkey, fv)
 
             if honor_start and defn.is_start:
                 if program.startup_func is not None:
@@ -3715,6 +3718,8 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
             env.unmark_global(gkey)
             env.define(gkey, value,
                         Decl(evaluator._declared_type_of(defn, value), unit))
+            if not getattr(defn, "module", ""):
+                note_root_key(defn.name)
             env.mark_global(gkey, mutable=not defn.is_const)
 
     for defn in definitions:

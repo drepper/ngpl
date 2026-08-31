@@ -1,0 +1,18 @@
+// A module holding a type as well as functions.  What it marks is what
+// another module may name; the rest is its own.
+@export
+struct Point:
+    x : i64
+    y : i64
+
+@export
+fn origin() → Point:
+    (Point{x: 0, y: 0})
+
+@export
+fn shifted(p : Point, by : i64) → Point:
+    (Point{x: p.x + by, y: p.y + by})
+
+@export
+fn sum(p : Point) → i64:
+    p.x + p.y
