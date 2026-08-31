@@ -12,13 +12,21 @@
 // rather than the command line's: the compiler is handed one file and
 // finds the rest.
 //
-// The rules are few.  A name begins with `./`, and names a file beside
-// the one importing it -- there is no search path and no package
-// anything, yet.  A file goes in once however many files ask for it,
-// since what they are asking for is that it be there.  Asking for the
-// same file twice in one file is a mistake rather than a request, and
-// is refused.  Files that import one another in a ring are refused,
-// because no order of them can put each after what it needs.
+// What a name says decides where it is looked for.  One that begins
+// with `/` says where it is and is taken as it stands.  One that holds
+// a `/` says where it is beside this file.  One that says neither is
+// looked for beside this file, then along the search path --path gave,
+// then where the library lives.  Each of those is tried as written and
+// then with `.ngpl` after it, so that a file may be asked for by the
+// name it is known by rather than by the name it is stored under.
+//
+// A file goes in once however many files ask for it, since what they
+// are asking for is that it be there.  Asking for the same file twice
+// in one file is a mistake rather than a request, and is refused --
+// what is compared is the file each name answered to, so two spellings
+// of one file are still one file.  Files that import one another in a
+// ring are refused, because no order of them can put each after what
+// it needs.
 //
 // The imports are read off the head of the file, before it has been
 // lexed -- the text has to be assembled before there is anything to
@@ -138,16 +146,87 @@ fn dir_of(path : str) → str:
         return ""
     path[0¤ptrdiff…cut]
 
-// A path beside another: `./x.ngpl` next to `dir/a.ngpl` is
-// `dir/x.ngpl`, and next to a file in the working directory it is
-// `x.ngpl`.
-@pre("./" ⊑ name)
-fn imp_beside(name : str, base : str) → str:
-    let bare : str = name[2¤ptrdiff…#name]
+// Where a name that says nothing about where it lives is looked for
+// after everything nearer has been tried.  One constant, so that a
+// distributor says where a library lives by building the compiler.
+fn import_lib_dir() → str:
+    "/usr/share/ngpl/lib"
+
+// Whether a name says anything about the directory it lives in.
+fn imp_has_slash(name : str) → bool:
+    foreach c := name:
+        if c = '/':
+            return true
+    false
+
+// A name joined to the directory it is looked for in.  A name that
+// begins './' has already said "beside", so the two characters are cut
+// and the file is known by the path it would have had anyway.
+fn imp_join(base : str, name : str) → str:
+    let bare : str = if "./" ⊑ name: name[2¤ptrdiff…#name] else: name
     if base = "": bare else: base ⧺ "/" ⧺ bare
+
+// Whether there is a file there to be read.  Asking costs an open and
+// a close, which is what reading it would have cost anyway; the answer
+// is asked for once per candidate and a candidate that answers is the
+// one that is then read.
+@impure
+fn imp_readable(p : str) → bool:
+    match std.fs.cwd().open_file(p):
+        ⊨(file):
+            file.close()
+            true
+        ∅:
+            false
+
+// A name looked for in one directory, as written and then with the
+// suffix a source file has.  "" where neither is there.
+@impure
+fn imp_try(base : str, name : str) → str:
+    let p : str = imp_join(base, name)
+    if imp_readable(p):
+        return p
+    let q : str = p ⧺ ".ngpl"
+    if imp_readable(q):
+        return q
+    ""
+
+// The file a name asks for, or "" where nothing answers to it.  What
+// the name says decides where it is looked for: one that begins with a
+// slash says where it is, one that holds a slash says where it is
+// beside this file, and one that says neither is looked for beside this
+// file, then along the search path the command line gave, then where
+// the library lives.
+@impure
+fn imp_resolve(name : str, base : str, paths : str[]) → str:
+    if "/" ⊑ name:
+        return imp_try("", name)
+    if imp_has_slash(name):
+        return imp_try(base, name)
+    let here : str = imp_try(base, name)
+    if here ≠ "":
+        return here
+    foreach d := paths:
+        let p : str = imp_try(d, name)
+        if p ≠ "":
+            return p
+    imp_try(import_lib_dir(), name)
+
+// where a name that answered to nothing was looked for, said in the
+// diagnostic so that the rule is read where it was applied
+fn imp_looked(name : str) → str:
+    if "/" ⊑ name:
+        return """; a name beginning with '/' is taken as it stands, with or without
+                 " '.ngpl'"""
+    if imp_has_slash(name):
+        return """; a name holding a '/' is looked for beside this file, with or without
+                 " '.ngpl'"""
+    """; a bare name is looked for beside this file, then along --path, then in
+     " """ ⧺ import_lib_dir() ⧺ ", with or without '.ngpl'"
 
 struct Reader:
     why : str
+    paths : str[]        // where --path said to look, in the order it said
     src : byte[]
     names : str[]
     offs : i64 ¤byte[]
@@ -210,20 +289,23 @@ impl Reader:
                         self.why ← path ⧺ ":" ⧺ i64_str(ln) ⧺ """: @import takes one file name in
                                     " quotes and nothing else, as @import(\"./tokens.ngpl\")"""
                         return
-                    if not ("./" ⊑ nm):
-                        self.why ← path ⧺ ":" ⧺ i64_str(ln) ⧺ ": an @import names a file beside this one, so its name begins with './'; this one is '" ⧺ nm ⧺ "'"
+                    let found : str = imp_resolve(nm, dir_of(path), self.paths)
+                    if found = "":
+                        self.why ← path ⧺ ":" ⧺ i64_str(ln) ⧺ ": cannot find '" ⧺ nm ⧺ "'" ⧺ imp_looked(nm)
                         return
-                    if imp_holds(want, nm):
+                    // the same file twice under two spellings is still
+                    // the same file, so what is compared is what each
+                    // one answered to
+                    if imp_holds(want, found):
                         self.why ← path ⧺ ":" ⧺ i64_str(ln) ⧺ ": '" ⧺ nm ⧺ "' is imported here and already above; once is what it means"
                         return
-                    want.push(nm)
+                    want.push(found)
                     wline.push(ln)
                     at ← hi + 1¤byte
                     ln ← ln + 1
                 self.stack.push(path)
                 foreach i := 0¤ptrdiff…#want:
-                    self.take(imp_beside(want[i], dir_of(path)),
-                              path ⧺ ":" ⧺ i64_str(wline[i]))
+                    self.take(want[i], path ⧺ ":" ⧺ i64_str(wline[i]))
                     if self.why ≠ "":
                         return
                 _ ← self.stack.pop() ?? ""
@@ -240,9 +322,9 @@ impl Reader:
 // nothing twice -- so a program that has not been given imports yet is
 // read as it was.
 @impure
-fn read_program(roots : str[]) → Program:
-    let r : mut Reader = (Reader{why: "", src: [], names: [], offs: [],
-                                 done: [], stack: []})
+fn read_program(roots : str[], paths : str[]) → Program:
+    let r : mut Reader = (Reader{why: "", paths: paths, src: [], names: [],
+                                 offs: [], done: [], stack: []})
     foreach nm := roots:
         r.take(nm, "")
     (Program{why: r.why, src: r.src, names: r.names, offs: r.offs})

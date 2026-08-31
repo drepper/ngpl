@@ -1,0 +1,10 @@
+// A bare name is looked for beside this file, then along the search
+// path --path gave, then where the library lives -- each as written
+// and with '.ngpl' after it.  A name nothing answers to is refused
+// where it is written, and the refusal says where it looked.
+@import("tokens.ngpl")
+
+@start
+@impure
+fn main():
+    std.println("never")

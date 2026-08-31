@@ -1170,15 +1170,16 @@ class Options:
     for reading it.
     """
 
-    __slots__ = ("_output", "_target", "_optimize")
+    __slots__ = ("_output", "_target", "_optimize", "_path")
 
-    MEMBERS: tuple[str, ...] = ("output", "target", "optimize")
+    MEMBERS: tuple[str, ...] = ("output", "target", "optimize", "path")
 
     def __init__(self, output: str | None = None, target: str | None = None,
-                 optimize: int | None = None):
+                 optimize: int | None = None, path: str | None = None):
         self._output = output
         self._target = target
         self._optimize = optimize
+        self._path = path
 
     @staticmethod
     def _said(what: str | None):
@@ -1194,6 +1195,10 @@ class Options:
     @property
     def target(self):
         return self._said(self._target)
+
+    @property
+    def path(self):
+        return self._said(self._path)
 
     @property
     def optimize(self):

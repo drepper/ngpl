@@ -1,0 +1,1 @@
+ngplc: tests/compile/refuse/import_absolute.ngpl:3: cannot find '/no/such/file/anywhere.ngpl'; a name beginning with '/' is taken as it stands, with or without '.ngpl'

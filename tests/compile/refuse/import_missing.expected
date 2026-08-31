@@ -1,1 +1,1 @@
-ngplc: tests/compile/refuse/import_missing.ngpl:3: cannot open 'tests/compile/refuse/no_such_file.ngpl': no such file or it cannot be read
+ngplc: tests/compile/refuse/import_missing.ngpl:3: cannot find './no_such_file.ngpl'; a name holding a '/' is looked for beside this file, with or without '.ngpl'

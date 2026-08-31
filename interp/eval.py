@@ -4252,8 +4252,9 @@ class Evaluator:
                     raise AttributeError(
                         f"'{node.attr}' is nothing the command line says; "
                         "output is what -o named, target what --target "
-                        "named and optimize the level -O asked for, each "
-                        "\N{EMPTY SET} where the command line said nothing")
+                        "named, optimize the level -O asked for and path "
+                        "where --path said to look, each \N{EMPTY SET} "
+                        "where the command line said nothing")
                 attr_val = getattr(unwrapped.obj, node.attr, None)
                 if attr_val is not None:
                     if isinstance(attr_val, Value):

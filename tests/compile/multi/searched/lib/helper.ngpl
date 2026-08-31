@@ -1,0 +1,4 @@
+// Found by a bare name along the search path, and found without the
+// suffix being written: 'helper' is what the importing file asks for.
+fn twice(n : i64) → i64:
+    n × 2

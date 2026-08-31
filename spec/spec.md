@@ -10023,9 +10023,25 @@ A file says at its head which other files it is written against, and each of tho
 
 The compiler is handed one file and finds the rest.  That is the point: **the order the sources are read in is the program's own business**, written in the files that know it, rather than a list kept somewhere outside them and kept in step by hand.
 
-**A name begins with `./`** and names a file beside the one importing it.  There is no search path here and no package anything; a name that begins otherwise is refused.
+**Where a name is looked for is what the name says**, and each place is tried as written and then with `.ngpl` after it — so a file may be asked for by the name it is known by rather than the name it is stored under:
 
-**A file goes in once**, however many files ask for it — what an import asks for is that the file be there, and it is.  Asking for the same file twice *in one file* is a mistake rather than a request, and is refused.  Files that import one another in a ring are refused too: no order of them puts each after what it needs.
+| the name | where it is looked for |
+|---|---|
+| begins with `/` | as written, and nowhere else |
+| holds a `/` | beside the file that asks for it |
+| neither | beside the file that asks for it, then along `--path`, then in `/usr/share/ngpl/lib` |
+
+`--path=DIR:DIR` is written the way every other search path is, the parts separated by a colon; an empty part names the working directory, and nothing said names no directory at all.  The library's own directory is a constant in the compiler, so a distributor says where a library lives by building the compiler.  A recipe reads what was said as `o.path`.
+
+A name nothing answers to is refused where it is written, and the refusal says where it looked:
+
+```
+error: prog.ngpl:1: cannot find 'sha2'; a bare name is looked for beside
+this file, then along --path, then in /usr/share/ngpl/lib, with or
+without '.ngpl'
+```
+
+**A file goes in once**, however many files ask for it — what an import asks for is that the file be there, and it is.  Asking for the same file twice *in one file* is a mistake rather than a request, and is refused; what is compared is the file each name answered to, so two spellings of one file are still one file.  Files that import one another in a ring are refused too: no order of them puts each after what it needs.
 
 **The head is where they go.**  The imports are read before the file has been lexed — the text has to be assembled before there is anything to lex — so the reader stops at the first line that is neither blank, nor a comment, nor an `@import`, and nothing further down can be mistaken for one.  The lines stay in the text, where the parser reads past them: a file that says what it needs should go on saying it, and leaving them in means no line number moves.
 
@@ -10054,6 +10070,7 @@ A recipe is **handed the build it declares on**, and its first parameter is that
 | `o.output` | the name `-o` gave, `∅` where it was not given |
 | `o.target` | the machine `--target` gave, `∅` likewise |
 | `o.optimize` | the level `-O` asked for, `∅` likewise |
+| `o.path` | where `--path` said to look, as it was written, `∅` likewise |
 
 Each is an optional — `str?` for the two names, a number for the level — and **`∅` says the command line said nothing** — the absence is the value, rather than an empty string standing in for it, so `??` gives what to use instead:
 

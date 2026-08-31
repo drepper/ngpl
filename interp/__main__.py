@@ -285,6 +285,10 @@ def _parse_args() -> argparse.Namespace:
                              "without any the interpreter starts a REPL.  "
                              "Name them together -- an option written between "
                              "two of them is not understood")
+    parser.add_argument("--path", metavar="DIR:DIR", default="",
+                        help="where an imported file is looked for, after "
+                             "the directory beside it and before the "
+                             "library's own")
     parser.add_argument("--repl", action="store_true",
                         help="enter the REPL after loading the source instead "
                              "of running the startup function")
@@ -3968,6 +3972,67 @@ class ImportError_(Exception):
     """An @import that cannot be followed."""
 
 
+# Where a name that says nothing about where it lives is looked for
+# after everything nearer has been tried.  One constant, so that a
+# distributor says where a library lives by installing it there.
+IMPORT_LIB_DIR = "/usr/share/ngpl/lib"
+
+
+def split_path(raw: str) -> list[str]:
+    """The directories a search path names, in the order it names them.
+
+    Written the way every other search path is, the parts separated by
+    a colon; an empty part names the working directory, as it does
+    there, and nothing said names no directory at all.
+    """
+    return raw.split(":") if raw else []
+
+
+def _import_try(base: str, name: str) -> str | None:
+    """A name looked for in one directory, as written and then with the
+    suffix a source file has."""
+    bare = name[2:] if name.startswith("./") else name
+    p = os.path.normpath(os.path.join(base, bare)) if base else bare
+    for cand in (p, p + ".ngpl"):
+        if os.path.isfile(cand):
+            return cand
+    return None
+
+
+def _import_resolve(name: str, base: str, paths) -> str | None:
+    """The file a name asks for, or None where nothing answers to it.
+
+    What the name says decides where it is looked for: one beginning
+    with a slash says where it is, one holding a slash says where it is
+    beside this file, and one that says neither is looked for beside
+    this file, then along the search path, then where the library lives.
+    """
+    if name.startswith("/"):
+        return _import_try("", name)
+    if "/" in name:
+        return _import_try(base or ".", name)
+    found = _import_try(base or ".", name)
+    if found is not None:
+        return found
+    for d in paths:
+        found = _import_try(d or ".", name)
+        if found is not None:
+            return found
+    return _import_try(IMPORT_LIB_DIR, name)
+
+
+def _import_looked(name: str) -> str:
+    """Where a name that answered to nothing was looked for."""
+    if name.startswith("/"):
+        return ("; a name beginning with '/' is taken as it stands, with or "
+                "without '.ngpl'")
+    if "/" in name:
+        return ("; a name holding a '/' is looked for beside this file, with "
+                "or without '.ngpl'")
+    return ("; a bare name is looked for beside this file, then along --path, "
+            f"then in {IMPORT_LIB_DIR}, with or without '.ngpl'")
+
+
 def _imports_of(text: str, path: str) -> list[tuple[str, int]]:
     """The files this one is written against, and where each is asked for.
 
@@ -3993,7 +4058,8 @@ def _imports_of(text: str, path: str) -> list[tuple[str, int]]:
     return out
 
 
-def _read_program(roots: list[str]) -> tuple[str, list[int], list[str]]:
+def _read_program(roots: list[str],
+                  paths_asked=()) -> tuple[str, list[int], list[str]]:
     """The whole program, from the file (or files) it is rooted in.
 
     A file's imports are read first and spliced in ahead of it, each
@@ -4040,21 +4106,22 @@ def _read_program(roots: list[str]) -> tuple[str, list[int], list[str]]:
         # that what a file says about itself is answered for before
         # what it names is opened.
         seen: set[str] = set()
-        wanted = _imports_of(text, path)
-        for name, lineno in wanted:
-            if not name.startswith("./"):
+        wanted = []
+        for name, lineno in _imports_of(text, path):
+            here = _import_resolve(name, os.path.dirname(path), paths_asked)
+            if here is None:
                 raise ImportError_(
-                    f"{path}:{lineno}: an @import names a file beside this "
-                    f"one, so its name begins with './'; this one is "
-                    f"'{name}'")
-            if name in seen:
+                    f"{path}:{lineno}: cannot find '{name}'"
+                    + _import_looked(name))
+            # the same file twice under two spellings is still the same
+            # file, so what is compared is what each name answered to
+            if here in seen:
                 raise ImportError_(
                     f"{path}:{lineno}: '{name}' is imported here and "
                     f"already above; once is what it means")
-            seen.add(name)
-        for name, lineno in wanted:
-            here = os.path.normpath(
-                os.path.join(os.path.dirname(path) or ".", name))
+            seen.add(here)
+            wanted.append((here, lineno))
+        for here, lineno in wanted:
             read(here, f"{path}:{lineno}", stack + [real], reading + [path])
 
         done[real] = path
@@ -4123,7 +4190,8 @@ def main():
         # still works and means what it did: each is read in turn, and
         # nothing is read twice.
         try:
-            source, starts, read_paths = _read_program(source_paths)
+            source, starts, read_paths = _read_program(
+                source_paths, split_path(args.path))
         except ImportError_ as e:
             print(f"error: {e}", file=sys.stderr)
             sys.exit(1)

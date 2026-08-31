@@ -1,0 +1,1 @@
+ngplc: tests/compile/refuse/import_not_found.ngpl:5: cannot find 'tokens.ngpl'; a bare name is looked for beside this file, then along --path, then in /usr/share/ngpl/lib, with or without '.ngpl'

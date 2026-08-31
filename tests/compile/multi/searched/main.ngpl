@@ -1,0 +1,10 @@
+// Where a name is looked for is what the name says.  This one asks for
+// a bare name, which is searched, and for one holding a directory,
+// which is not; neither writes the '.ngpl' the files are stored under.
+@import("helper")
+@import("./sub/deep")
+
+@start
+@impure
+fn main():
+    std.println("{} {}", twice(21), thrice(14))

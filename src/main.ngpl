@@ -154,6 +154,25 @@ fn parse_level(t : str) → i64:
         v ← v × 10 + (c - '0')
     v
 
+// The directories a search path names, in the order it names them.  A
+// path is written the way every other one is, the parts separated by a
+// colon; an empty part names the working directory, as it does there.
+fn split_path(raw : str) → str[]:
+    if #raw = 0¤ptrdiff:
+        // nothing said names no directory, where one empty part would
+        // name the working directory
+        return []
+    let out : mut str[] = []
+    let cur : mut str = ""
+    foreach c := raw:
+        if c = ':':
+            out.push(cur)
+            cur ← ""
+        else:
+            cur ← cur ⧺ c
+    out.push(cur)
+    out
+
 // whether an argument is 'name=' and then whatever it carries
 @pre(#name > 0)
 fn opt_matches(a : str, name : str) → bool:
@@ -240,7 +259,7 @@ fn recipe_failed():
 
 @impure
 fn read_build(path : str, json : bool, output : str, target : str,
-              host : str, optimize : i64) → Recipe:
+              host : str, optimize : i64, searched : str) → Recipe:
     if not is_ngpl_source(path):
         std.println("ngplc: cannot tell what '{}' is: an NGPL source file's name ends in '.ngpl'", path)
         recipe_failed()
@@ -262,7 +281,7 @@ fn read_build(path : str, json : bool, output : str, target : str,
     // The recipe runs without the checker having seen the file: what it
     // may contain is settled by the evaluator's own first pass, and no
     // global has been folded, so it reads none.
-    let plan := build_recipe(ast, toks, src, [], output, target, host, optimize)
+    let plan := build_recipe(ast, toks, src, [], output, target, host, optimize, searched)
     if #plan.diags > 0:
         report(plan.diags, files, json, src)
         recipe_failed()
@@ -302,6 +321,9 @@ fn help():
                   "                             them\n
                   "      --target=MACHINE       Compile for MACHINE rather than for the\n
                   "                             machine this compiler runs on\n
+                  "      --path=DIR:DIR         Look for an imported file in these\n
+                  "                             directories, after the one beside it and\n
+                  "                             before the library's own\n
                   "  -O[LEVEL]                  Work on the code at LEVEL, or at 1 where the\n
                   "                             level is left off; without -O the level is 0\n
                   "\n
@@ -345,6 +367,9 @@ struct Options:
     // there.  It reaches the phases that generate code, which ask
     // whether they are at a level rather than reading the number.
     optimize : i64
+    // where a name that says nothing about where it lives is looked
+    // for, in the order --path named the directories
+    path : str[]
     want_tokens : bool
     want_ast : bool
     want_log : bool
@@ -361,7 +386,7 @@ fn compile_one(inputs : str[], outname : str, o : Options) → u8:
     // The lexer sees one text and counts one set of line numbers over
     // it; `files` keeps what is needed to give a diagnostic back the
     // file it came from.
-    let prog := read_program(inputs)
+    let prog := read_program(inputs, o.path)
     if prog.why ≠ "":
         std.println("ngplc: {}", prog.why)
         return 1
@@ -416,7 +441,7 @@ fn compile_one(inputs : str[], outname : str, o : Options) → u8:
     // What the recipe says here is not acted on -- --build is where a
     // recipe is read for what it declares -- so it is handed nothing
     // the command line said, and reads it only to be held to the rules.
-    let recipe := build_recipe(ast, toks, src, chk.gvals, "", "", "", ⁻1)
+    let recipe := build_recipe(ast, toks, src, chk.gvals, "", "", "", ⁻1, "")
     if #recipe.diags > 0:
         report(recipe.diags, files, o.json, src)
         return 1
@@ -555,6 +580,9 @@ fn main() → u8:
     // compiler works at is 0 unless it says otherwise; the two are
     // told apart so that a recipe can be handed ∅ for "nothing said".
     let opt_level : mut i64 = ⁻1
+    // what --path said, as it said it: a recipe is handed the whole
+    // path rather than what the compiler made of it
+    let path_raw : mut str = ""
     let i : mut i64 ¤ptrdiff = 0
     while i < #argv:
         let a := argv[i]
@@ -587,6 +615,10 @@ fn main() → u8:
                 stack_size ← align_up(v, PAGE)
             else:
                 guard_size ← align_up(v, PAGE)
+            i ← i + 1
+            continue
+        if opt_matches(a, "--path"):
+            path_raw ← opt_value(a, "--path")
             i ← i + 1
             continue
         if opt_matches(a, "--target"):
@@ -637,7 +669,7 @@ fn main() → u8:
         return 1
     // The recipe is handed what the command line said, so it may act on
     // it; the compiler then applies -o to what the recipe added.
-    let plan : Recipe = if build_file ≠ "": read_build(build_file, json, output, target_name, host_target(), opt_level) else: empty_recipe()
+    let plan : Recipe = if build_file ≠ "": read_build(build_file, json, output, target_name, host_target(), opt_level, path_raw) else: empty_recipe()
     if build_file ≠ "":
         if #plan.names = 0:
             std.println("""ngplc: the @build recipe in '{}' adds no executable, so there is nothing
@@ -665,6 +697,7 @@ fn main() → u8:
     let opts : Options = (Options{tgt_index: tgt_index, stack_size: stack_size,
                                   guard_size: guard_size,
                                   optimize: opt_level ⌈ 0,
+                                  path: split_path(path_raw),
                                   want_tokens: want_tokens,
                                   want_ast: want_ast, want_log: want_log,
                                   werror: werror, json: json,
@@ -696,6 +729,7 @@ fn main() → u8:
         let one : Options = (Options{tgt_index: ti, stack_size: opts.stack_size,
                                      guard_size: opts.guard_size,
                                      optimize: olv,
+                                     path: opts.path,
                                      want_tokens: opts.want_tokens,
                                      want_ast: opts.want_ast, want_log: opts.want_log,
                                      werror: opts.werror, json: opts.json,

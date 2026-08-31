@@ -18,6 +18,10 @@ fn build(b : &mut std.Build, o : &std.Options):
     b.add_executable(std.Build.Executable{name: "prog-said",
                                           root_source_file: "one.ngpl",
                                           optimize: 2})
+    // and what --path said, which the harness does not say, so ∅
+    let searched : str = if (o.path ?? "") = "": "unsearched" else: "searched"
+    b.add_executable(std.Build.Executable{name: "prog-" ⧺ searched,
+                                          root_source_file: "one.ngpl"})
 
 @start
 @impure

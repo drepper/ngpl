@@ -1,8 +1,0 @@
-// An @import names a file beside the one importing it, so its name
-// begins with ./ -- there is no search path and no package anything.
-@import("tokens.ngpl")
-
-@start
-@impure
-fn main():
-    std.println("never")

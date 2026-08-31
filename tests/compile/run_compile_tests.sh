@@ -171,11 +171,17 @@ for d in "$testdir"/multi/*/; do
         [ -n "$f" ] && files+=("$d$f")
     done < "$d/root"
 
-    python -m interp --skip-tests "${files[@]}" \
+    # A directory may say where the files it imports are looked for,
+    # which is what a name that says nothing about its own directory
+    # asks of the search path.
+    pathopt=()
+    [ -f "$d/path" ] && pathopt=("--path=$(cat "$d/path")")
+
+    python -m interp "${pathopt[@]}" --skip-tests "${files[@]}" \
         > "$workdir/$name.interp.out" 2>/dev/null
     interp_rc=$?
 
-    if ! ngplc "${files[@]}" -o "$workdir/$name.bin" \
+    if ! ngplc "${pathopt[@]}" "${files[@]}" -o "$workdir/$name.bin" \
             > "$workdir/$name.ngplc.out" 2>&1; then
         echo "FAIL $name: ngplc refused it"
         sed 's/^/    /' "$workdir/$name.ngplc.out" | head -5
@@ -199,7 +205,7 @@ for d in "$testdir"/multi/*/; do
 
     recipe=$(grep -l '@build' "$d"*.ngpl 2>/dev/null | head -1)
     if [ -n "$recipe" ]; then
-        if ! ngplc --build "$recipe" -o "$workdir/$name.build.bin" \
+        if ! ngplc "${pathopt[@]}" --build "$recipe" -o "$workdir/$name.build.bin" \
                 > "$workdir/$name.build.out" 2>&1; then
             echo "FAIL $name: --build refused the recipe"
             sed 's/^/    /' "$workdir/$name.build.out" | head -5

@@ -123,6 +123,7 @@ struct Cev:
     // each becomes the ∅ a recipe reads
     opt_output : str
     opt_target : str
+    opt_path : str
     opt_optimize : i64
     outd : str              // b.output_dir: where an output that names none goes
     host : str              // b.host_target: what this compiler builds for by default
@@ -974,7 +975,7 @@ impl Cev:
             return cv_none()
         if om = OM_OPTIMIZE:
             return if self.opt_optimize < 0: cv_none() else: cv_int(self.opt_optimize)
-        let said : str = if om = OM_OUTPUT: self.opt_output else: self.opt_target
+        let said : str = if om = OM_OUTPUT: self.opt_output elif om = OM_TARGET: self.opt_target else: self.opt_path
         if said = "": cv_none() else: cv_str(said)
 
     fn ev_bfield(&mut self, tok : i64, name : str) → CVal:
@@ -998,7 +999,8 @@ impl Cev:
 // carrying its own diagnostics, and so does this.
 @post(r: #r.diags = 0 or (#r.names = 0 and #r.paths = 0 and #r.flags = 0))
 fn build_recipe(a : Ast, toks : Toks, src : byte[], gvals : i64[],
-                output : str, target : str, host : str, optimize : i64) → Recipe:
+                output : str, target : str, host : str, optimize : i64,
+                searched : str) → Recipe:
     if #a.builds = 0:
         return (Recipe{names: [], roots: [], outdirs: [], targets: [],
                        optimizes: [], paths: [], flags: [], diags: []})
@@ -1007,7 +1009,8 @@ fn build_recipe(a : Ast, toks : Toks, src : byte[], gvals : i64[],
                           names: [], vals: [], vmut: [], marks: [], floor: 0,
                           pool: [], cfg_name: [], cfg_root: [], cfg_outd: [],
                           cfg_tgt: [], cfg_opt: [], added: [], opt_output: output,
-                          opt_target: target, opt_optimize: optimize,
+                          opt_target: target, opt_path: searched,
+                          opt_optimize: optimize,
                           outd: "", host: host,
                           paths: [], flags: [],
                           steps: EV_STEPS, depth: 0, ret: cv_none(),
