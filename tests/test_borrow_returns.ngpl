@@ -57,7 +57,7 @@ fn test_two_origins_hold_both():
     assert_eq(#a.items + #c.items, 5)
 
 @test
-@expect error 2430 "'b' is lent out for reading to 'v' until line 52 and cannot be changed before then"
+@expect error 2430 "'b' is lent out for reading to 'v' until line 65 and cannot be changed before then"
 fn error_changing_a_lent_origin():
     let b : mut Bag = Bag{items: [1, 2, 3]}
     let v := b.view()

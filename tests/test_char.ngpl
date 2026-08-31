@@ -449,7 +449,7 @@ fn error_a_negative_index():
     let c : mut = s[⁻1]
 
 @test
-@expect error 2733 "string index 9 out of range (length 5)"
+@expect error 2733 "string index 10 out of range (length 5)"
 fn error_a_slice_past_the_end():
     let s := "hello"
     let sub : mut = s[1…10]

@@ -32,7 +32,7 @@ fn test_a_scalar_reads_the_same_way():
 // name it says the same thing in the place the language no longer
 // keeps for it, and is refused rather than quietly taken.
 @test
-@expect error 2022 "a measure is written against the type"
+@expect error 2022 "Line 37, col 10: a measure is written against the type, as 'let x : i64 ¤meter = …' -- or against nothing, as 'let x : ¤meter = …', where the right side says the type"
 fn error_the_measure_written_against_the_name():
     let d ¤meter : i64[] = [1, 2]
 
@@ -327,7 +327,7 @@ fn test_joining_arrays_that_agree():
 // compound type it would have to belong to the type itself, which is
 // the question a sum or product type raises.
 @test
-@expect error 2021 "Line 330, col 17: a unit belongs to a binding or to what an array holds; a type alias or a tuple element cannot state one yet"
+@expect error 2021 "Line 332, col 17: a unit belongs to a binding or to what an array holds; a type alias or a tuple element cannot state one yet"
 fn error_a_unit_in_a_tuple_element():
     let t : (i64 ¤meter, str) = (1, "a")
 

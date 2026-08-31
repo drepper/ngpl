@@ -146,7 +146,7 @@ fn test_incompatible_assign():
 fn test_a_range_with_two_measures_is_refused():
   let lo : i64 ¤meter = 0
   let hi : i64 ¤second = 4
-  @expect error 2328 "a range counts in one measure, or in none"
+  @expect error 2328 "…: the start is measured m and the end is measured s; a range counts in one measure, or in none"
   foreach i := lo…hi:
     _ ← i
 
@@ -155,7 +155,7 @@ fn test_a_stepped_range_with_two_measures_is_refused():
   let lo : i64 ¤meter = 0
   let st : i64 ¤second = 1
   let hi : i64 ¤meter = 4
-  @expect error 2328 "a range counts in one measure, or in none"
+  @expect error 2328 "…: the ends are measured m and the step is measured s; a range counts in one measure, or in none"
   foreach i := lo…st…hi:
     _ ← i
 
