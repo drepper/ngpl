@@ -1,0 +1,3 @@
+tests/compile/refuse/build_options_by_value.ngpl:4:45: error: a recipe reads what the command line said and does not change it; the parameter is written '&std.Options'
+  4 | fn build(b : &mut std.Build, o : std.Options):
+    |                                             ^

@@ -151,6 +151,24 @@ fn build_member(name : str) → i64:
     if name = "output_dir": return BM_OUTDIR
     ⁻1
 
+// What a recipe may read of the command line.  These are data members
+// of the std.Options it is handed, one per option whose value a recipe
+// could want; an option added later adds a member here and changes no
+// recipe's signature, which is the reason the options arrive as one
+// thing rather than as a parameter each.
+let OM_OUTPUT : i64 = 1     // o.output: what -o named, ∅ where it was not given
+let OM_TARGET : i64 = 2     // o.target: what --target named, ∅ likewise
+
+fn option_member(name : str) → i64:
+    if name = "output": return OM_OUTPUT
+    if name = "target": return OM_TARGET
+    ⁻1
+
+// what a std.Options holds, for the diagnostic that says it does not
+fn option_members() → str:
+    """output is what -o named and target what --target named, each ∅ where the command line
+     " said nothing"""
+
 // what a std.Build offers, for the diagnostic that says it does not
 fn build_members() → str:
     """add_executable() declares an output; search_path() and flag() say where a source is

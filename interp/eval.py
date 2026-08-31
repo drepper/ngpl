@@ -177,6 +177,7 @@ from interp.value import (
 from interp.env import Env, Decl
 from interp.std import (std, DirFD, FileStream, Bytes, MmapAllocator,
                        Build as _BuildObj, Executable as _ExeObj,
+                       Options as _OptsObj,
                        resolve_abort_signal)
 from interp.errors import (Contract, Level, attach_backtrace, diagnostic_level, coded,
                           strip_position_prefix, ContractError,
@@ -4180,6 +4181,17 @@ class Evaluator:
                         self._sizeof_result(d) if d is not None else none()
                         for d in array_shape(unwrapped.obj)])
             else:
+                if (isinstance(unwrapped.obj, _OptsObj)
+                        and node.attr not in _OptsObj.MEMBERS):
+                    # A member the command line has no option for reads
+                    # as nothing at all otherwise, and a recipe asking
+                    # for one has misremembered rather than asked about
+                    # something absent.
+                    raise AttributeError(
+                        f"'{node.attr}' is nothing the command line says; "
+                        "output is what -o named and target what --target "
+                        "named, each \N{EMPTY SET} where the command line "
+                        "said nothing")
                 attr_val = getattr(unwrapped.obj, node.attr, None)
                 if attr_val is not None:
                     if isinstance(attr_val, Value):

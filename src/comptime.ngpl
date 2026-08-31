@@ -35,6 +35,7 @@ let CV_STR : i64 = 3
 let CV_ARR : i64 = 4        // str[]: n where it starts in the pool, m how many
 let CV_BUILD : i64 = 5      // the std.Build a recipe was handed
 let CV_EXE : i64 = 6        // std.Build.Executable{…}: n indexes the configs
+let CV_OPTS : i64 = 7       // the std.Options a recipe reads the command line from
 
 // A value the recipe made.  Everything it may hold is a number, a truth
 // value, a string or a run of strings, so one struct with a tag says all
@@ -112,6 +113,11 @@ struct Cev:
     cfg_tgt : str[]
     // …and which of them were added, in the order they were added
     added : i64[]
+    // what the command line said, which the std.Options answers: the
+    // empty string is how the rest of the compiler carries "nothing
+    // said", and it becomes the ∅ a recipe reads
+    opt_output : str
+    opt_target : str
     outd : str              // b.output_dir: where an output that names none goes
     host : str              // b.host_target: what this compiler builds for by default
     paths : str[]
@@ -131,7 +137,7 @@ fn ev_spell(k : i64) → str:
     if k = NK_TUPLE: return "a tuple"
     if k = NK_LAMBDA or k = NK_BADLAM: return "a λ"
     if k = NK_FNVAL or k = NK_CALLV: return "a function value"
-    if k = NK_SOME or k = NK_EMPTYV or k = NK_DEFAULT or k = NK_TRY: return "an optional"
+    if k = NK_SOME or k = NK_TRY: return "an optional"
     if k = NK_MATCH or k = NK_MATCHE: return "a match"
     if k = NK_REF: return "a borrow"
     if k = NK_SLICE or k = NK_MSLICE: return "a slice"
@@ -166,12 +172,12 @@ fn sb_spell(sb : i64) → str:
 
 // what a recipe holds, said once and quoted wherever it is refused
 fn ev_subset() → str:
-    """a recipe binds names, tests them, loops, joins strings and calls the functions this file
-     " defines"""
+    """a recipe binds names, tests them, loops, joins strings, reads what the command line said
+     " with ??, and calls the functions this file defines"""
 
 // a node with nothing under it
 fn ev_is_leaf(k : i64) → bool:
-    if k = NK_INT or k = NK_BOOL or k = NK_STR: return true
+    if k = NK_INT or k = NK_BOOL or k = NK_STR or k = NK_EMPTYV: return true
     k = NK_VAR or k = NK_BREAK or k = NK_CONTINUE
 
 // How many of na, nb and nc hold a child, for the nodes that keep them
@@ -183,7 +189,7 @@ fn ev_nchildren(k : i64) → i64:
     if k = NK_LEN or k = NK_NEG or k = NK_NOT or k = NK_DROPU: return 1
     if k = NK_RETURN or k = NK_DISCARD or k = NK_EXPRSTMT: return 1
     if k = NK_LET or k = NK_ASSIGN: return 1
-    if k = NK_INDEX or k = NK_CCAT: return 2
+    if k = NK_INDEX or k = NK_CCAT or k = NK_DEFAULT: return 2
     if k >= NK_ADD and k <= NK_MOD: return 2
     if k >= NK_EQ and k <= NK_OR: return 2
     if k = NK_WHILE or k = NK_FOREACHA: return 2
@@ -409,6 +415,10 @@ impl Cev:
             let base : CVal = self.ev_expr(na)
             if self.halted():
                 return EV_STOP
+            if base.tag = CV_OPTS:
+                self.derr(tok, """what the command line said is read and not written; a recipe
+                                " answers it rather than changing it""")
+                return EV_STOP
             if base.tag ≠ CV_BUILD:
                 self.derr(tok, "a write through a path is not part of a build recipe; " ⧺ ev_subset())
                 return EV_STOP
@@ -555,6 +565,7 @@ impl Cev:
         if v.tag = CV_ARR: return "an array of strings"
         if v.tag = CV_BUILD: return "the build"
         if v.tag = CV_EXE: return "an executable"
+        if v.tag = CV_OPTS: return "what the command line said"
         "nothing"
 
     // -------------------------------------------------------------------
@@ -602,6 +613,8 @@ impl Cev:
             let base : CVal = self.ev_expr(na)
             if self.halted():
                 return cv_none()
+            if base.tag = CV_OPTS:
+                return self.ev_ofield(tok, self.text(tok))
             if base.tag ≠ CV_BUILD:
                 self.derr(tok, "a field is not part of a build recipe; " ⧺ ev_subset())
                 return cv_none()
@@ -620,6 +633,21 @@ impl Cev:
             return self.ev_index(tok, na, nb)
         if k = NK_CCAT:
             return self.ev_ccat(tok, na, nb)
+        if k = NK_EMPTYV:
+            // ∅, which is what a recipe reads where the command line
+            // said nothing
+            return cv_none()
+        if k = NK_DEFAULT:
+            // x ?? y: the value where there is one, and the other where
+            // there is not.  It is how a recipe reads what -o and
+            // --target said without having to say what ∅ would mean
+            // everywhere it is used.
+            let v : CVal = self.ev_expr(na)
+            if self.halted():
+                return cv_none()
+            if v.tag ≠ CV_NONE:
+                return v
+            return self.ev_expr(nb)
         if k = NK_NEG:
             let v : CVal = self.ev_expr(na)
             return cv_int(⁻v.n)
@@ -907,6 +935,17 @@ impl Cev:
         self.derr(tok, "'" ⧺ name ⧺ "' is nothing a std.Build does; " ⧺ build_members())
         cv_none()
 
+    fn ev_ofield(&mut self, tok : i64, name : str) → CVal:
+        // A data member of the command line, read.  Each is an optional
+        // string: ∅ where nothing was said, which is what the empty
+        // string the compiler carries stands for.
+        let om : i64 = option_member(name)
+        let said : str = if om = OM_OUTPUT: self.opt_output else: self.opt_target
+        if om = ⁻1:
+            self.derr(tok, "'" ⧺ name ⧺ "' is nothing the command line says; " ⧺ option_members())
+            return cv_none()
+        if said = "": cv_none() else: cv_str(said)
+
     fn ev_bfield(&mut self, tok : i64, name : str) → CVal:
         // A data member of the build, read.
         let bm : i64 = build_member(name)
@@ -936,7 +975,8 @@ fn build_recipe(a : Ast, toks : Toks, src : byte[], gvals : i64[],
     let ev : mut Cev = (Cev{a: a, toks: toks, src: src, gvals: gvals,
                           names: [], vals: [], vmut: [], marks: [], floor: 0,
                           pool: [], cfg_name: [], cfg_root: [], cfg_outd: [],
-                          cfg_tgt: [], added: [], outd: "", host: host,
+                          cfg_tgt: [], added: [], opt_output: output,
+                          opt_target: target, outd: "", host: host,
                           paths: [], flags: [],
                           steps: EV_STEPS, depth: 0, ret: cv_none(),
                           diags: []})
@@ -945,15 +985,18 @@ fn build_recipe(a : Ast, toks : Toks, src : byte[], gvals : i64[],
     ev.ev_scan(recipe.body)
     if #ev.diags = 0:
         ev.push_scope()
-        // what the recipe was handed: the build, and what the command
-        // line said, each under the name the recipe gave it.  There are
-        // three of them because a recipe with any other signature was
-        // refused where it was written, long before this.
-        assert(a.extra[recipe.params_off] = 3, "the recipe takes the three the build system hands it")
+        // What the recipe was handed, under the names the recipe gave
+        // them: the build always, and after it, where the recipe reads
+        // it, what the command line said.  A recipe with any other
+        // signature was refused where it was written, long before this,
+        // so there is one of them or two.
+        let np : i64 = a.extra[recipe.params_off]
+        assert(np >= 1 and np <= 2, "the recipe takes the build and, where it reads it, the command line")
         ev.bind(ev.text(a.extra[recipe.params_off + 1]),
                 (CVal{tag: CV_BUILD, n: 0, m: 0, s: ""}), false)
-        ev.bind(ev.text(a.extra[recipe.params_off + 3]), cv_str(output), false)
-        ev.bind(ev.text(a.extra[recipe.params_off + 5]), cv_str(target), false)
+        if np = 2:
+            ev.bind(ev.text(a.extra[recipe.params_off + 3]),
+                    (CVal{tag: CV_OPTS, n: 0, m: 0, s: ""}), false)
         _ ← ev.ev_stmt(recipe.body)
         ev.pop_scope()
     if #ev.diags > 0:

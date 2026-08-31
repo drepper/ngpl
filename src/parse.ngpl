@@ -313,9 +313,19 @@ impl Parser:
                               " it; the parameter is written '&mut std.Build'""")
                     return TY_I64
                 return TY_BUILD + 262144 × refk
+            if m = "Options":
+                // What the command line said, as a recipe reads it.  A
+                // recipe reads it and does not change it -- the command
+                // line is not a recipe's to rewrite -- so the borrow is
+                // the plain one.
+                if refk ≠ 1:
+                    self.err("""a recipe reads what the command line said and does not change it;
+                              " the parameter is written '&std.Options'""")
+                    return TY_I64
+                return TY_OPTIONS + 262144 × refk
             if m ≠ "iovec":
-                self.err("'std." ⧺ m ⧺ """' is not a core-2 type; std.dict(K, V), std.iovec and
-                          " std.Build are""")
+                self.err("'std." ⧺ m ⧺ """' is not a core-2 type; std.dict(K, V), std.iovec,
+                          " std.Build and std.Options are""")
                 return TY_I64
             // a run of bytes waiting to be written; what it holds is
             // settled where it is made, not where it is named, so the
@@ -2108,22 +2118,26 @@ impl Parser:
             if #self.builds > 0:
                 self.err_at(name_tok, "a program carries one @build function, and this is a second")
                 return
-            // A recipe is handed the build it declares on, and what the
-            // command line said about where the result goes and what it
-            // is built for -- each an empty string where it said nothing.
-            if #ptoks ≠ 3¤ptrdiff:
-                self.err_at(name_tok, """the @build function takes the build it declares on and what
-                                       " the command line said, as
-                                       " 'fn build(b : &mut std.Build, output : str, target : str)'""")
+            // A recipe is handed the build it declares on and, where it
+            // reads it, what the command line said -- one std.Options
+            // holding a member per option, rather than a parameter each,
+            // so that an option added later leaves every recipe's
+            // signature as it was.  A recipe that reads none of it
+            // leaves the second parameter off, and the compiler applies
+            // -o and --target to what the recipe adds either way.
+            if #ptoks = 0¤ptrdiff or #ptoks > 2¤ptrdiff:
+                self.err_at(name_tok, """the @build function takes the build it declares on and, where
+                                       " it reads it, what the command line said, as
+                                       " 'fn build(b : &mut std.Build, o : &std.Options)' -- the
+                                       " second left off where it is not read""")
                 return
             if ty_strip_ref(ptypes[0¤ptrdiff]) ≠ TY_BUILD:
                 self.err_at(ptoks[0¤ptrdiff],
                             "a recipe declares a build on what it is handed: '&mut std.Build'")
                 return
-            if ptypes[1¤ptrdiff] ≠ TY_STR or ptypes[2¤ptrdiff] ≠ TY_STR:
-                self.err_at(ptoks[1¤ptrdiff], """what the command line said reaches a recipe as two
-                                               " strings: the name -o gave and the target --target
-                                               " gave, each empty where it was not given""")
+            if #ptoks = 2¤ptrdiff and ty_strip_ref(ptypes[1¤ptrdiff]) ≠ TY_OPTIONS:
+                self.err_at(ptoks[1¤ptrdiff], """what the command line said reaches a recipe as one
+                                               " thing holding all of it: '&std.Options'""")
                 return
             if ret ≠ TY_UNIT:
                 self.err_at(name_tok, """the @build function answers nothing; it declares a build on

@@ -1,0 +1,11 @@
+// A recipe takes the build it declares on and, where it reads it, what
+// the command line said.  There is nothing third for the build system
+// to hand it: an option added later is a member of the std.Options,
+// never another parameter.
+@build
+fn build(b : &mut std.Build, o : &std.Options, mode : str?):
+    b.add_executable(std.Build.Executable{name: "a", root_source_file: "a.ngpl"})
+
+@start
+fn main():
+    _ ← 1

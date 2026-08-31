@@ -3,6 +3,9 @@
 // are named from where this file is, so the build means the same thing
 // from whatever directory it is run.
 //
+// It reads nothing of what the command line said, so it takes only the
+// build: the two strings after it are for a recipe that reads them.
+//
 // The name each output is given is worked out rather than written out,
 // which is what says a recipe is a program: `named` is called while the
 // build is being read, and no code for it is written into either binary.
@@ -11,7 +14,7 @@ fn named(stem : str) → str:
     "demo-" ⧺ stem
 
 @build
-fn build(b : &mut std.Build, output : str, target : str):
+fn build(b : &mut std.Build):
     b.output_dir ← "out"
     b.add_executable(std.Build.Executable{name: named("one"),
                                           root_source_file: "one.ngpl"})

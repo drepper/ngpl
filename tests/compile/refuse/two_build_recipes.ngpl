@@ -1,11 +1,11 @@
 // A program carries one recipe.  Two say different things about what
 // to build, and nothing chooses between them.
 @build
-fn build(b : &mut std.Build, output : str, target : str):
+fn build(b : &mut std.Build):
     b.add_executable(std.Build.Executable{name: "a", root_source_file: "a.ngpl"})
 
 @build
-fn build2(b : &mut std.Build, output : str, target : str):
+fn build2(b : &mut std.Build):
     b.add_executable(std.Build.Executable{name: "b", root_source_file: "b.ngpl"})
 
 @start

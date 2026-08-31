@@ -253,7 +253,9 @@ Outstanding
 
 [x] the interpreter reads the @build function before anything runs.  A recipe is handed the
     build it declares on and what the command line said --
-    `fn build(b : &mut std.Build, output : str, target : str)` -- and adds to it: an
+    `fn build(b : &mut std.Build, o : &std.Options)`, the second left off where the recipe
+    does not read it and each of its members ∅ where the command line said nothing -- and
+    adds to it: an
     executable per output through b.add_executable(std.Build.Executable{...}), the search
     paths and the compiler flags through b.search_path() and b.flag(), with b.output_dir
     written and b.host_target read.  At most one @build function, and that one signature.

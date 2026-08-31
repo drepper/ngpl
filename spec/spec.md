@@ -10005,13 +10005,37 @@ A program may carry one function annotated `@build`.  It is the build recipe: wh
 
 ```
 @build
-fn build(b : &mut std.Build, output : str, target : str):
+fn build(b : &mut std.Build):
     b.output_dir ← "build"
     b.add_executable(std.Build.Executable{name: "ngplc",
                                           root_source_file: "main.ngpl"})
 ```
 
-A recipe is **handed the build it declares on** and **what the command line said**, and its signature says exactly that: `b` is the build, `output` is the name `-o` gave and `target` the machine `--target` gave, each `""` where nothing was given.  Any other signature is refused where it is written.  The borrow is `&mut` because a recipe adds to what it is handed rather than answering something new.
+A recipe is **handed the build it declares on**, and its first parameter is that build.  The borrow is `&mut` because a recipe adds to what it is handed rather than answering something new.
+
+**What the command line said follows it, and only where the recipe reads it.**  A recipe may take a second parameter, `&std.Options`: one value holding **a member per option whose value a recipe could want**, read and not written.
+
+| on `std.Options` | is |
+|---|---|
+| `o.output` | the name `-o` gave, `∅` where it was not given |
+| `o.target` | the machine `--target` gave, `∅` likewise |
+
+Each is a `str?` and **`∅` says the command line said nothing** — the absence is the value, rather than an empty string standing in for it, so `??` gives what to use instead:
+
+```
+@build
+fn build(b : &mut std.Build, o : &std.Options):
+    b.add_executable(std.Build.Executable{name: o.output ?? "ngplc",
+                                          root_source_file: "main.ngpl",
+                                          output_dir: "../build",
+                                          target: o.target ?? ""})
+```
+
+**The options arrive as one thing so that the signature stops changing.**  An option added to the compiler later adds a member here and leaves every recipe ever written as it was; a parameter per option would break each one in turn.  For the same reason the borrow is the plain `&`: the command line is a recipe's to read, never to rewrite, and a `std.Options` copied into a recipe or written through is refused where it is written.
+
+A recipe that reads none of it, which is most of them, takes only the build.  Anything else — no parameters, a first that is not a `&mut std.Build`, a third, a second that is not a `&std.Options` — is refused where it is written.
+
+Reading the options changes nothing about what the compiler does with them: it applies `-o` and `--target` to what a recipe adds whether the recipe looked at them or not, as [below](#what-a-recipe-declares).  A recipe reads them to *say the same thing* — to name what it adds after what was asked for, or to work the target into several outputs at once — never to take the decision away.
 
 The recipe lives in the source, not in a file of its own — any source file may carry it.  A program carries **at most one**; a second is refused where it is written.
 
@@ -10040,8 +10064,10 @@ b.add_executable(std.Build.Executable{name: "sbom",
 |---|---|---|
 | `name` | what the file is called | required; an executable is named |
 | `root_source_file` | the one file the program is rooted in | required; a build has a root |
-| `output_dir` | where this one goes | `b.output_dir` |
+| `output_dir` | where this one goes | `b.output_dir`, the build's own |
 | `target` | what this one is built for | what `--target` said, else the machine underfoot |
+
+**Where each one goes is its own.**  `output_dir` is a field of the executable, and `b.output_dir` is only what an executable that names none falls back to — so one recipe can put its program in one directory and its tools in another without saying anything about the build as a whole.
 
 A recipe may add **as many executables as it likes**, and they are built in the order they were added.  One recipe can therefore build a program and its tools, or the same program for several machines, from one command.
 
@@ -10061,11 +10087,11 @@ What the build itself holds:
 
 Where the recipe and the command line say different things, **the command line wins**: it is the more specific statement of intent.  `-o` names the file to write instead of the one the recipe worked out, and is taken relative to where the compiler runs; because it names *one* file, a recipe that adds more than one executable and a command line that gives `-o` are refused together rather than one of them being guessed at.  `--target` applies to every executable that does not name a target of its own.  A flag the compiler does not have is refused rather than ignored, because accepting a directive and then doing something else is the one behaviour guaranteed to be wrong.
 
-The two strings a recipe is handed are the same statements, said to the recipe rather than around it: a recipe that wants to decide *itself* what `-o` or `--target` mean for what it adds reads `output` and `target` and works them into the executables it declares.
+What a `std.Options` holds is the same statements, said to the recipe rather than only around it: a recipe that wants to work what was asked for into the names it declares reads `o.output` and `o.target`, and what the compiler then does with `-o` and `--target` is unchanged.  This is why the parameter may be left off — a recipe that has nothing to say about the command line takes only the build rather than a name it never uses — and why each member holds an optional: a recipe asks `o.output ?? "ngplc"` and has said, in one place, both what to use and that nothing was given.
 
 #### What a Recipe May Say
 
-A recipe is a program, not a table — it may compute the names it declares — but it is a program in a subset.  A recipe binds names, tests them, loops, joins strings, and calls the functions its own file defines.  It holds integers, truth values, strings and arrays of strings, and the build it was handed.  `std.Build.Executable` is the one struct literal it may write: a recipe holds no program, so a program's struct is not one of the things it can make.
+A recipe is a program, not a table — it may compute the names it declares — but it is a program in a subset.  A recipe binds names, tests them, loops, joins strings, reads what the command line said with `∅` and `??`, and calls the functions its own file defines.  It holds integers, truth values, strings and arrays of strings, the build it was handed and the options beside it.  `std.Build.Executable` is the one struct literal it may write: a recipe holds no program, so a program's struct is not one of the things it can make.
 
 The interpreter reads a recipe with the same evaluator it runs everything else with, so it accepts recipes the compiler does not.  The compiler **refuses what it cannot do, by name**, rather than ignoring it — a recipe that the compiler accepts means the same thing under both, and a recipe that reaches past the subset is told which construct did it.
 
@@ -10294,17 +10320,17 @@ A program may carry one `@build` function: the build recipe, described in full i
 
 ```
 @build
-fn build(b : &mut std.Build, output : str, target : str):
+fn build(b : &mut std.Build, o : &std.Options):
     b.output_dir ← "build"
     b.search_path("vendor")
     b.flag("contracts=enforce")
-    b.add_executable(std.Build.Executable{name: "demo",
+    b.add_executable(std.Build.Executable{name: o.output ?? "demo",
                                           root_source_file: "main.ngpl"})
 ```
 
 Each executable names the one file it is rooted in; the rest of the program is reached from it by the `@import` lines the sources carry.  A recipe is a program, not a table, so the names may be computed rather than written out.  Because the interpreter evaluates it with the same evaluator it runs everything else with, the recipes it accepts are a superset of the ones the compiler accepts; Chapter 8 says what the compiler's subset holds.
 
-The interpreter builds nothing, so it hands the recipe a fresh `std.Build` and two empty strings: it names no output and no target, which is what a recipe reads `""` as meaning.  The signature is checked as the compiler checks it, and a program carries at most one recipe.
+The interpreter builds nothing, so it hands the recipe a fresh `std.Build` and, where the recipe takes it, a `std.Options` that says nothing: no output and no target, each `∅`.  The signature is checked as the compiler checks it, and a program carries at most one recipe.
 
 ### Entering the REPL
 

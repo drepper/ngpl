@@ -1,7 +1,10 @@
 // The @build function is read for what it declares before anything
-// runs.  A recipe is handed the build it declares on, and what the
-// command line said about where the result goes and what it is built
-// for; it adds an executable for each thing to be built, the paths a
+// runs.  A recipe is handed the build it declares on and, where it
+// reads it, what the command line said: one std.Options with a member
+// per option -- the name -o gave, the target --target gave -- each an
+// optional, ∅ where the command line said nothing.  A recipe that reads
+// none of it, as most do, takes only the build.  This one reads it, so
+// it takes both.  It adds an executable for each thing to be built, the paths a
 // source is looked for along, and the flags the compiler is asked for.
 // Acting on any of that belongs to the compiler; reading the recipe
 // does not.
@@ -17,25 +20,26 @@ fn rooted(dir : str, name : str) → str:
     if dir = "": name else: dir ⧺ "/" ⧺ name
 
 @build
-fn build(b : &mut std.Build, output : str, target : str):
+fn build(b : &mut std.Build, o : &std.Options):
     // where an executable that names no directory of its own goes
     b.output_dir ← "build"
     b.search_path("vendor")
     b.search_path(rooted("third_party", "ngpl"))
     b.flag("O1")
     b.flag("contracts=enforce")
-    // two outputs from one recipe, the second saying where it goes
-    b.add_executable(std.Build.Executable{name: "demo",
+    // Two outputs from one recipe, the second saying where it goes.
+    // What -o and --target said is read off the options, ∅ where
+    // nothing was said: the first output is called what -o asked for,
+    // and the second is built for what --target asked for.  The
+    // compiler applies both to what a recipe adds in any case, so a
+    // recipe reading them says the same thing rather than a different
+    // one.
+    b.add_executable(std.Build.Executable{name: o.output ?? "demo",
                                           root_source_file: suffixed("main", "ngpl")})
-    // What -o and --target said reaches a recipe as `output` and
-    // `target`, each empty where nothing was said.  This recipe leaves
-    // -o to the compiler and hands what --target said to the second of
-    // its outputs, which is the same thing the compiler would have done
-    // with it -- said here rather than around the recipe.
     b.add_executable(std.Build.Executable{name: "demo-tools",
                                           root_source_file: suffixed("tools", "ngpl"),
                                           output_dir: rooted("build", "tools"),
-                                          target: target})
+                                          target: o.target ?? ""})
 
 @test
 fn test_a_name_is_computed():

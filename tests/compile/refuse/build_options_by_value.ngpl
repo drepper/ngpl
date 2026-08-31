@@ -1,0 +1,9 @@
+// What the command line said is handed to a recipe, not copied into
+// it: one std.Options that the recipe reads and does not change.
+@build
+fn build(b : &mut std.Build, o : std.Options):
+    b.add_executable(std.Build.Executable{name: o.output ?? "a", root_source_file: "a.ngpl"})
+
+@start
+fn main():
+    _ ← 1

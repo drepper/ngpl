@@ -40,6 +40,8 @@ BUILTIN_TYPES: set[str] = {
     "std.iovec",
     # What a @build recipe declares the build on.
     "std.Build",
+    # What the command line said, as a @build recipe reads it.
+    "std.Options",
 }
 
 # Platform-specific fast type mapping (x86_64: sub-32 → 32, 32/64 → 64).

@@ -162,18 +162,24 @@ fn opt_value(a : str, name : str) → str:
 // cannot read this one; the two are checked against each other by the
 // bootstrap comparing the stage each built.
 @build
-fn build(b : &mut std.Build, output : str, target : str):
+fn build(b : &mut std.Build, o : &std.Options):
     // One file, and the program says the rest of itself: every source
     // names at its head what it is written against, so the list that
-    // used to live here lives in the files that know it.  What -o and
-    // --target said reaches here as `output` and `target`; this recipe
-    // leaves both to the compiler, which applies them to what it adds.
+    // used to live here lives in the files that know it.
     //
     // Where the compiler goes is named from where this file is: the
     // recipe lives in src/ and the binary belongs beside it, in build/.
-    b.output_dir ← "../build"
-    b.add_executable(std.Build.Executable{name: "ngplc",
-                                          root_source_file: "main.ngpl"})
+    // What the command line said arrives as one std.Options, each of
+    // its members ∅ where nothing was said: o.output names what this
+    // build is called and o.target what it is built for, and where
+    // neither said anything the recipe's own answers stand.  The
+    // compiler applies both to what a recipe adds in any case, so this
+    // says the same thing it would have done rather than a different
+    // one.
+    b.add_executable(std.Build.Executable{name: o.output ?? "ngplc",
+                                          root_source_file: "main.ngpl",
+                                          output_dir: "../build",
+                                          target: o.target ?? ""})
 
 fn empty_recipe() → Recipe:
     (Recipe{names: [], roots: [], outdirs: [], targets: [], paths: [],

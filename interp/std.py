@@ -1149,6 +1149,43 @@ def host_target() -> str:
     return _TARGET_SPELLING.get(machine, machine)
 
 
+class Options:
+    """What the command line said, as a recipe reads it.
+
+    One data member per option whose value a recipe could want, each an
+    optional: absent where the command line said nothing.  A recipe is
+    handed this rather than a parameter per option so that an option
+    added later leaves every recipe's signature as it was.
+
+    The interpreter builds nothing, so the one it hands over says
+    nothing: it is there to be read, and to hold a recipe to the rules
+    for reading it.
+    """
+
+    __slots__ = ("_output", "_target")
+
+    MEMBERS: tuple[str, ...] = ("output", "target")
+
+    def __init__(self, output: str | None = None, target: str | None = None):
+        self._output = output
+        self._target = target
+
+    @staticmethod
+    def _said(what: str | None):
+        """What the command line said, as the recipe reads it: ∅ where
+        it said nothing, and the string it said where it did."""
+        from interp.value import SomeValue, mk_str, none
+        return none() if what is None else SomeValue(mk_str(what))
+
+    @property
+    def output(self):
+        return self._said(self._output)
+
+    @property
+    def target(self):
+        return self._said(self._target)
+
+
 class Build:
     """What a @build recipe declares its build on.
 

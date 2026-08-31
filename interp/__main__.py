@@ -3598,20 +3598,28 @@ def _install_definitions(definitions, env: Env, evaluator: Evaluator,
                 if program.build_func is not None:
                     raise DefinitionError("multiple @build functions defined",
                                           _node_pos(defn))
-                # A recipe is handed the build it declares on, and what
-                # the command line said about where the result goes and
-                # what it is built for.
+                # A recipe is handed the build it declares on and,
+                # where it reads it, what the command line said: one
+                # std.Options holding a member per option, so that an
+                # option added later leaves every recipe's signature as
+                # it was.  A recipe that reads none of it takes only the
+                # build.
                 ptypes = [t for _n, t in defn.params]
-                if (len(defn.params) != 3
-                        or ptypes[0] != "std.Build"
-                        or defn.params[0][0] not in defn.param_refs
-                        or defn.params[0][0] not in defn.param_muts
-                        or ptypes[1] != "str" or ptypes[2] != "str"):
+                names = [n for n, _t in defn.params]
+                ok = (1 <= len(defn.params) <= 2
+                      and ptypes[0] == "std.Build"
+                      and names[0] in defn.param_refs
+                      and names[0] in defn.param_muts)
+                if ok and len(defn.params) == 2:
+                    ok = (ptypes[1] == "std.Options"
+                          and names[1] in defn.param_refs
+                          and names[1] not in defn.param_muts)
+                if not ok:
                     raise DefinitionError(
                         "the @build function takes the build it declares on "
-                        "and what the command line said, as "
-                        "'fn build(b : &mut std.Build, output : str, "
-                        "target : str)'",
+                        "and, where it reads it, what the command line said, "
+                        "as 'fn build(b : &mut std.Build, o : &std.Options)' "
+                        "-- the second left off where it is not read",
                         _node_pos(defn))
                 program.build_func = fv
 
@@ -4173,14 +4181,16 @@ def main():
         # executables, the search paths, the compiler flags -- before
         # anything runs.  Running a build recipe belongs to the
         # compiler; the interpreter names no output and no target, so
-        # the recipe is handed the two empty strings that say so.
-        from interp.std import Build, host_target
+        # what it hands over says nothing.
+        from interp.std import Build, Options, host_target
         held = Env()
         held.define("b", ObjectValue(Build(host_target())))
+        held.define("o", ObjectValue(Options()))
+        handed = [RefValue(held, "b"), RefValue(held, "o")]
         try:
             evaluator._call_user_func(
                 program.build_func,
-                [RefValue(held, "b"), mk_str(""), mk_str("")])
+                handed[:len(program.build_func.params)])
         except Exception as e:
             _show_error(e, source, source_path, evaluator,
                         show_backtrace=args.interpreter_backtrace)

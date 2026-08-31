@@ -1,7 +1,7 @@
 // What a recipe may say is a subset the compiler evaluates, and a
 // construct outside it is refused by name rather than passed over.
 @build
-fn build(b : &mut std.Build, output : str, target : str):
+fn build(b : &mut std.Build):
     let h : mut std.dict(str, i64) = ⸨⸩
     h["x"] ← 1
     b.add_executable(std.Build.Executable{name: "a", root_source_file: "a.ngpl"})

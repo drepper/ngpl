@@ -1164,7 +1164,8 @@ class Parser:
     def _parse_base_type_name(self) -> str:
         """Read the name a type starts with, container types and all.
 
-        Only std.dict, std.set, std.iovec and std.Build take the dot:
+        Only std.dict, std.set, std.iovec, std.Build and std.Options
+        take the dot:
         every other type is one name, and a dot after one means
         something else.
         """
@@ -1183,7 +1184,8 @@ class Parser:
                 and self.pos + 1 < len(self.tokens)
                 and self.tokens[self.pos + 1].type is TokenType.IDENT
                 and f"{name}.{self.tokens[self.pos + 1].value}"
-                in ("std.dict", "std.set", "std.iovec", "std.Build")):
+                in ("std.dict", "std.set", "std.iovec", "std.Build",
+                    "std.Options")):
             self.pos += 1
             name += "." + self._eat(TokenType.IDENT).value
             return self._parse_type_arguments(name)

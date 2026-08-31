@@ -1,0 +1,3 @@
+tests/compile/refuse/build_too_many_parameters.ngpl:6:4: error: the @build function takes the build it declares on and, where it reads it, what the command line said, as 'fn build(b : &mut std.Build, o : &std.Options)' -- the second left off where it is not read
+  6 | fn build(b : &mut std.Build, o : &std.Options, mode : str?):
+    |    ^
